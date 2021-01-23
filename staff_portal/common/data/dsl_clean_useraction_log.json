@@ -1,0 +1,40 @@
+{
+    "query": {
+        "bool": {
+            "must_not": [
+                {"bool": {
+                     "must": [
+                        {"match":  {"level": "INFO"}}
+                        ,
+                        {"nested": {
+                            "path":"msg_kv_pairs",
+                            "query": {
+                                "bool": {
+                                    "must": [
+                                        {"match":{"msg_kv_pairs.key": "action"}},
+                                        {"match":
+                                            {
+                                                "msg_kv_pairs.value":
+                                                {
+                                                    "query": "create update delete recover recover_username reset_password deactivate_account reactivate_account login logout",
+                                                    "operator":"or"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }}
+                     ]
+                }}
+            ],
+            "must": [
+                {"range": {
+                    "@timestamp": {
+                        "lte": "now-365d/d"
+                    }
+                }}
+            ]
+        }
+    }
+}

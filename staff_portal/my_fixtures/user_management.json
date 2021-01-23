@@ -1,0 +1,146 @@
+[
+{
+    "model": "auth.group",
+    "pk": 1,
+    "fields": {
+        "name": "base site superuser",
+        "permissions": []
+    }
+},
+{
+    "model": "auth.group",
+    "pk": 2,
+    "fields": {
+        "name": "base staff",
+        "permissions": []
+    }
+},
+{
+    "model": "auth.user",
+    "pk": 1,
+    "fields": {
+        "password": "bcrypt_sha256$$2b$12$1EHECVDTD0T4dABVZBxwu.QQW9gYnAOgIBvySJOAt9K9.tcPOXDES",
+        "last_login": "2021-01-16T16:35:46.740Z",
+        "is_superuser": true,
+        "username": "defaultsuperuser",
+        "is_staff": true,
+        "is_active": true,
+        "date_joined": "2020-10-11T16:24:17.082Z",
+        "user_permissions": []
+    }
+},
+{
+    "model": "auth.user",
+    "pk": 2,
+    "fields": {
+        "password": "bcrypt_sha256$$2b$12$2wDUSppwBFfUwNT.9OP/KelVaFb82aQ4lb2boX4kuscStOJ3n5RSG",
+        "last_login": "2021-01-16T16:01:11.931Z",
+        "is_superuser": false,
+        "username": "defaultstaff",
+        "is_staff": true,
+        "is_active": true,
+        "date_joined": "2020-10-24T08:30:33.834Z",
+        "user_permissions": []
+    }
+},
+{
+    "model": "user_management.genericuserprofile",
+    "pk": 2,
+    "fields": {
+        "time_deleted": null,
+        "first_name": "Default",
+        "last_name": "Staff",
+        "active": true,
+        "time_created": "2020-07-15T16:14:11.242Z",
+        "last_updated": "2020-12-09T07:31:47.897Z"
+    }
+},
+{
+    "model": "user_management.genericuserprofile",
+    "pk": 1,
+    "fields": {
+        "time_deleted": null,
+        "first_name": "Default",
+        "last_name": "Superuser",
+        "active": true,
+        "time_created": "2020-07-14T13:53:46.931Z",
+        "last_updated": "2020-12-26T18:46:02.781Z"
+    }
+},
+{
+    "model": "user_management.genericuserauthrelation",
+    "pk": 1,
+    "fields": {
+        "profile": 1,
+        "login": 1
+    }
+},
+{
+    "model": "user_management.genericuserauthrelation",
+    "pk": 2,
+    "fields": {
+        "profile": 2,
+        "login": 2
+    }
+},
+{
+    "model": "user_management.genericuserappliedrole",
+    "pk": 1,
+    "fields": {
+        "time_deleted": null,
+        "user_type": 10,
+        "user_id": 1,
+        "role": 1,
+        "last_updated": "2020-11-09T08:47:46.437Z",
+        "approved_by": 1
+    }
+},
+{
+    "model": "user_management.genericuserappliedrole",
+    "pk": 2,
+    "fields": {
+        "time_deleted": null,
+        "user_type": 10,
+        "user_id": 2,
+        "role": 2,
+        "last_updated": "2020-11-14T14:35:52.791Z",
+        "approved_by": 1
+    }
+},
+{
+    "model": "user_management.emailaddress",
+    "pk": 1,
+    "fields": {
+        "time_deleted": null,
+        "addr": "superuser@yourteam.org"
+    }
+},
+{
+    "model": "user_management.emailaddress",
+    "pk": 2,
+    "fields": {
+        "time_deleted": null,
+        "addr": "staff@yourteam.org"
+    }
+},
+{
+    "model": "user_management.useremailaddress",
+    "pk": 1,
+    "fields": {
+        "time_deleted": null,
+        "user_type": 10,
+        "user_id": 1,
+        "email": 1
+    }
+},
+{
+    "model": "user_management.useremailaddress",
+    "pk": 2,
+    "fields": {
+        "time_deleted": null,
+        "user_type": 10,
+        "user_id": 2,
+        "email": 2
+    }
+}
+]

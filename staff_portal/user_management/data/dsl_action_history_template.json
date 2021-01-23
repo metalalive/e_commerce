@@ -1,0 +1,61 @@
+{
+    "from": 0,
+    "size": 5,
+    "query": {
+        "bool": {
+            "must": [
+                {"match":  {"level": "INFO WARNING"} },
+                {"nested": {
+                       "path":"msg_kv_pairs",
+                       "query": {
+                            "bool": {
+                                "must": [
+                                    {"match":{"msg_kv_pairs.key": "action"} },
+                                    {"match":{
+                                            "msg_kv_pairs.value": {
+                                                "query": "create update delete recover login logout recover_username reset_password update_username update_password deactivate_account reactivate_account",
+                                                "operator":"or"
+                                            }
+                                    }}
+                                ]
+                            }
+                       }
+                }},
+                {"bool": {
+                     "should": [
+                        {"nested": {
+                               "path":"msg_kv_pairs",
+                               "query": {
+                                    "bool": {
+                                        "must": [
+                                            {"term":  {"msg_kv_pairs.key": "username"} },
+                                            {"match": {"msg_kv_pairs.value": "YOUR_USERNAME"} }
+                                        ]
+                                    }
+                               }
+                        }}
+                        ,
+                        {"nested": {
+                               "path":"msg_kv_pairs",
+                               "query": {
+                                    "bool": {
+                                        "must": [
+                                            {"term":  {"msg_kv_pairs.key": "profile_id"} },
+                                            {"term":  {"msg_kv_pairs.value": "-1"} }
+                                        ]
+                                    }
+                               }
+                        }}
+                     ]
+                }}
+            ]
+        }
+    },
+    "_source": {
+        "excludes": ["process", "thread", "request.uri.params", "code", "@version"]
+    },
+    "sort": [
+        {"@timestamp": "desc"},
+        "_score"
+    ]
+}
