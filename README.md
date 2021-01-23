@@ -1,3 +1,5 @@
+# Point Of Sale
+
 ## Introduction
 
 Point-of-sale backend system implemented with Python
