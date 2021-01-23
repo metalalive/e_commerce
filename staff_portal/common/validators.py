@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.utils.deconstruct import deconstructible
 from django.db.models import Model as DjangoModel
 
-from common.util.graph import is_graph_cyclic
+from common.util.python.graph import is_graph_cyclic
 
 _logger = logging.getLogger(__name__)
 

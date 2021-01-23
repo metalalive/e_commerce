@@ -24,8 +24,8 @@ from rest_framework.settings    import api_settings
 from common.validators          import  SelectIDsExistValidator, ClosureSingleTreeLoopValidator
 from common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer
 from common.serializers.mixins  import  ClosureTableMixin
-from common.util                import  get_fixture_pks
-from common.util.async_tasks    import  sendmail as async_send_mail
+from common.util.python         import  get_fixture_pks
+from common.util.python.async_tasks    import  sendmail as async_send_mail
 
 from ..models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, AuthUserResetRequest
 from ..models import GenericUserAuthRelation,  GenericUserGroupRelation

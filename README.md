@@ -1,3 +1,5 @@
+# Point Of Sale
+
 ## Introduction
 
 Point-of-sale backend system implemented with Python
@@ -32,7 +34,7 @@ Quick video demo
 * AdminLTE
 
 ## Documentation
-* [Build Guide](./BUIDE_GUIDE.md)
+* [Build Guide](./BUILD_GUIDE.md)
 * [User Guide](./USER_GUIDE.md)
 * Development Guide
 

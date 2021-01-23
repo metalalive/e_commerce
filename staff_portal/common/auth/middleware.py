@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from django.conf  import  settings
 from django.middleware.csrf import rotate_token, CsrfViewMiddleware
 
-from common.util  import get_header_name
+from common.util.python  import get_header_name
 
 
 # header name for CSRF token authentication

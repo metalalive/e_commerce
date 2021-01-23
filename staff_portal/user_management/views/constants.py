@@ -1,4 +1,4 @@
-from common.util      import get_fixture_pks
+from common.util.python   import get_fixture_pks
 
 from ..apps   import UserManagementConfig as UserMgtCfg
 

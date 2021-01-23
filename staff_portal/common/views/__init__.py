@@ -4,6 +4,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from rest_framework.generics    import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers   import TemplateHTMLRenderer, JSONRenderer
+from rest_framework.response    import Response as RestResponse
+from celery.result import AsyncResult
 
 from common.auth.backends import ExtendedSessionAuthentication, IsStaffUser
 from common.models.db     import db_conn_retry_wrapper
@@ -74,5 +76,18 @@ class AuthCommonAPIReadView(CommonAPIReadView):
     """  base view for authorized users to retrieve data through API  """
     authentication_classes = [ExtendedSessionAuthentication,]
     permission_classes = [IsAuthenticated, IsStaffUser]
+
+
+
+class AsyncTaskResultView(GenericAPIView):
+    renderer_classes = [JSONRenderer]
+
+    def get(self, request, *args, **kwargs):
+        # print("kwargs  : "+ str(kwargs))
+        r = AsyncResult(kwargs.pop('id', None))
+        status = None
+        headers = {}
+        s_data = {'status': r.status, 'result': r.result or '' }
+        return RestResponse(s_data, status=status, headers=headers)
 
 

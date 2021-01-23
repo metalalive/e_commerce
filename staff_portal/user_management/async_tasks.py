@@ -3,8 +3,8 @@ from datetime  import datetime, timedelta
 
 from django.db     import  IntegrityError, transaction
 
-from common.util.celery import app as celery_app
-from common.util.async_tasks import log_wrapper
+from common.util.python.celery import app as celery_app
+from common.util.python import log_wrapper
 
 from .models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile
 from .models import GenericUserAppliedRole, GenericUserGroupRelation, AuthUserResetRequest
@@ -12,7 +12,7 @@ from .models import GenericUserAppliedRole, GenericUserGroupRelation, AuthUserRe
 _logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, queue='usermgt_default')
 def update_roles_on_accounts(self, affected_groups, deleted=False):
     done = False
     affected_groups_origin = affected_groups
@@ -41,7 +41,7 @@ def update_roles_on_accounts(self, affected_groups, deleted=False):
 
 
 @celery_app.task
-@log_wrapper(loglevel=logging.INFO)
+@log_wrapper(logger=_logger, loglevel=logging.INFO)
 def clean_expired_auth_token(days):
     td = timedelta(days=days)
     t0 = datetime.now()

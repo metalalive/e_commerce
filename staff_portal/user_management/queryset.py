@@ -3,7 +3,7 @@ import logging
 
 from rest_framework import status as RestStatus
 
-from common.util.elasticsearch import ElasticSearchQuerySet
+from common.util.python.elasticsearch import ElasticSearchQuerySet
 
 _logger = logging.getLogger(__name__)
 

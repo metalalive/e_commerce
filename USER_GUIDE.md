@@ -7,9 +7,9 @@ switch to python virtual environment for following steps
 * create `django_migration` database table
 
 ```
-python3.9 manage.py migrate contenttypes  0002
-python3.9 manage.py migrate auth          0018
-python3.9 manage.py migrate user_management 0033
+python3.9 manage.py migrate contenttypes  0002   --settings user_management.settings  --database site_dba
+python3.9 manage.py migrate auth          0018   --settings user_management.settings  --database site_dba
+python3.9 manage.py migrate user_management 0033 --settings user_management.settings  --database site_dba 
 ```
 
 ### Run the system
@@ -39,22 +39,29 @@ Note :
 ```
 /PATH/TO/logstash -f  /PROJECT_HOME/configure/logstash_tcpin_elasticsearch.conf --path.settings /etc/logstash/
 ```
+Note logstash TCP input server operates with default port 5959
 
-* start task queue service (celery workers)
+* Switch to python virtual environment 
+
+* start task queue processes (celery workers) for each service
 ```
 cd ./staff_portal
-celery --app=common.util worker --loglevel=INFO -E -Q mailing,reporting,periodic_default,celery
+
+DJANGO_SETTINGS_MODULE='restaurant.global_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  -E  -Q mailing,periodic_default
+
+DJANGO_SETTINGS_MODULE='user_management.settings'  celery --app=common.util.python --config=user_management.celeryconfig  worker --loglevel=INFO --hostname=usermgt@%h  -E -Q usermgt_default
 ```
 
-* start cron job scheduler (celery beat)
+
+* start cron job scheduler (celery beat), collect all periodic tasks to run (gathered from all services)
 ```
 cd ./staff_portal
-celery --app=common.util  beat --loglevel=INFO
+celery --app=common.util.python  --config=common.util.python.celerybeatconfig  beat --loglevel=INFO
 ```
 
 * Finally, start backend application service
 ```
-python3.9 manage.py runserver  <YOUR_APP_SERVER_PORT>
+python3.9 manage.py runserver  --settings user_management.settings <YOUR_PORT_NUMBER>
 ```
 
 

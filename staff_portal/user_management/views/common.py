@@ -2,6 +2,7 @@ import logging
 
 from django.middleware     import csrf
 from django.core.exceptions     import ObjectDoesNotExist, MultipleObjectsReturned, PermissionDenied
+from django.contrib.auth.models import User as AuthUser
 from rest_framework.settings    import api_settings as drf_settings
 from rest_framework.response    import Response as RestResponse
 from rest_framework             import status as RestStatus
@@ -11,6 +12,21 @@ from ..models import AuthUserResetRequest, EmailAddress, GenericUserProfile
 from .constants    import LOGIN_URL
 
 _logger = logging.getLogger(__name__)
+
+class GetProfileIDMixin:
+    def get_profile_id(self, request):
+        # TODO, should be not-implemented error , let other apps subclass this mixin
+        account = request.user
+        if account and isinstance(account, AuthUser):
+            profile = account.genericuserauthrelation.profile
+            profile_id = profile.pk
+        else:
+            # which means unauthenticated accesses happened to model instances,
+            # application developers should analyze log data and determine whether this
+            # part of the system has been compromised.
+            profile_id = -1
+        return str(profile_id)
+
 
 def check_auth_req_token(fn_succeed, fn_failure):
     def inner(self, request, *args, **kwargs):

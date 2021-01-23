@@ -39,7 +39,7 @@ from ..permissions import AuthRolePermissions, AppliedRolePermissions, AppliedGr
 from ..permissions import UserDeactivationPermission, UserActivationPermission, UserProfilesPermissions
 
 from .constants import LOGIN_URL, _PRESERVED_ROLE_IDS, MAX_NUM_FORM
-
+from .common    import GetProfileIDMixin
 
 # * All classes within this module can share one logger, because logger is unique by given name
 #   as the argument on invoking getLogger(), that means subsequent call with the same logger name
@@ -49,22 +49,6 @@ from .constants import LOGIN_URL, _PRESERVED_ROLE_IDS, MAX_NUM_FORM
 # * It seems safe to load logger at module level, because django framework loads this module
 #   after parsing logging configuration at settings.py
 _logger = logging.getLogger(__name__)
-
-
-class GetProfileIDMixin:
-    def get_profile_id(self, request):
-        # TODO, should be not-implemented error , let other apps subclass this mixin
-        account = request.user
-        from django.contrib.auth.models import User as AuthUser
-        if account and isinstance(account, AuthUser):
-            profile = account.genericuserauthrelation.profile
-            profile_id = profile.pk
-        else:
-            # which means unauthenticated accesses happened to model instances,
-            # application developers should analyze log data and determine whether this
-            # part of the system has been compromised.
-            profile_id = -1
-        return str(profile_id)
 
 
 

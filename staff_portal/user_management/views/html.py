@@ -15,13 +15,13 @@ from rest_framework.generics    import GenericAPIView
 
 from common.views  import  BaseAuthHTMLView
 from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
-from common.util.async_tasks  import  sendmail as async_send_mail, default_error_handler as async_default_error_handler
+from common.util.python.async_tasks  import  sendmail as async_send_mail, default_error_handler as async_default_error_handler
 
 from ..serializers import AuthRoleSerializer, QuotaUsageTypeSerializer, GenericUserGroupSerializer, GenericUserProfileSerializer
 from ..serializers import LoginAccountSerializer, AuthUserResetRequestSerializer
 from ..apps        import UserManagementConfig as UserMgtCfg
 from .constants    import LOGIN_URL, _PRESERVED_ROLE_IDS, MAX_NUM_FORM
-from .common       import check_auth_req_token, LoginAccountCommonEntryMixin, get_profile_account_by_email
+from .common       import check_auth_req_token, LoginAccountCommonEntryMixin, get_profile_account_by_email, GetProfileIDMixin
 
 _logger = logging.getLogger(__name__)
 
@@ -261,7 +261,7 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
 
 
 
-class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkUpdateModelMixin):
+class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkUpdateModelMixin, GetProfileIDMixin):
     """ for unauthenticated users who registered but  forget their password """
     serializer_class = AuthUserResetRequestSerializer
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
