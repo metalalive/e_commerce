@@ -52,7 +52,6 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    ####'django.middleware.csrf.CsrfViewMiddleware',
     'common.auth.middleware.ExtendedCsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'common.sessions.middleware.OneSessionPerAccountMiddleware',
@@ -141,9 +140,10 @@ CSRF_HEADER_NAME = 'HTTP_X_ANTI_CSRF_TOK'
 
 CSRF_COOKIE_NAME = 'anticsrftok'
 
-# this project is a staff-only backend site for PoS system
-# the CSRF token inside browser cookie should expire as soon as the session expires
-CSRF_COOKIE_AGE  = 43 ## SESSION_COOKIE_AGE
+# the CSRF token is stored at client side (browser cookie) and should expire as soon as
+# the session expires (for logged-in users) , or each valid token should last 12 hours for
+# unauthentication accesses.
+CSRF_COOKIE_AGE  = 12 * 3600 ## 43
 
 
 CACHES = {

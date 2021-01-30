@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 import logging
 
 from django.conf   import  settings as django_settings
+from django.middleware.csrf     import rotate_token
 from django.views.generic.base  import View, ContextMixin, TemplateResponseMixin
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth        import authenticate, login
 from django.contrib.contenttypes.models  import ContentType
 from rest_framework.settings    import api_settings as drf_settings
 from rest_framework             import status as RestStatus
@@ -13,8 +13,10 @@ from rest_framework.renderers   import TemplateHTMLRenderer, JSONRenderer
 from rest_framework.views       import APIView
 from rest_framework.generics    import GenericAPIView
 
-from common.views  import  BaseAuthHTMLView
-from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
+
+from common.views  import  BaseAuthHTMLView, BaseLoginView
+from common.views.mixins     import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
+from common.auth.middleware  import  csrf_protect_m
 from common.util.python.async_tasks  import  sendmail as async_send_mail, default_error_handler as async_default_error_handler
 
 from ..serializers import AuthRoleSerializer, QuotaUsageTypeSerializer, GenericUserGroupSerializer, GenericUserProfileSerializer
@@ -226,10 +228,14 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
 
     def get(self, request, *args, **kwargs):
+        if "CSRF_COOKIE" not in request.META:
+            rotate_token(request=request)
+            request.csrf_cookie_age = 51
         context = {'formparams': {},}
         template_name = UserMgtCfg.template_name[self.__class__.__name__]
         return RestResponse(data=context, template_name=template_name)
 
+    @csrf_protect_m
     def post(self, request, *args, **kwargs):
         addr = request.data.get('addr', '').strip()
         useremail,  profile, account = get_profile_account_by_email(addr=addr, request=request)
@@ -267,10 +273,13 @@ class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkUpd
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
 
     def get(self, request, *args, **kwargs):
+        if "CSRF_COOKIE" not in request.META:
+            rotate_token(request=request)
         context = {'formparams': {},}
         template_name = UserMgtCfg.template_name[self.__class__.__name__]
         return RestResponse(data=context, template_name=template_name)
 
+    @csrf_protect_m
     def post(self, request, *args, **kwargs):
         addr = request.data.get('addr', '').strip()
         useremail, profile, account = get_profile_account_by_email(addr=addr, request=request)
@@ -349,44 +358,7 @@ class UnauthPasswordResetView(APIView, LoginAccountCommonEntryMixin, UserEditVie
 
 
 
-class BaseLoginView(APIView):
-    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
-    template_name = None
-    submit_url    = None
-    default_url_redirect = None
-    is_staff_only = False
-
-    def __new__(cls, *args, **kwargs):
-        assert cls.template_name and cls.submit_url and cls.default_url_redirect, \
-            "class variables not properly configured"
-        return super().__new__(cls, *args, **kwargs)
-
-    def get(self, request, *args, **kwargs):
-        redirect = request.query_params.get("redirect", self.default_url_redirect)
-        formparams = {'non_field_errors':drf_settings.NON_FIELD_ERRORS_KEY, 'submit_url': self.submit_url,
-                'redirect' : redirect, }
-        context = {'formparams': formparams, }
-        return RestResponse(data=context, template_name=self.template_name)
-
-    # TODO, apply CSRF protection
-    def post(self, request, *args, **kwargs):
-        username = request.data.get('username','')
-        password = request.data.get('password','')
-        user = authenticate(request, username=username, password=password, is_staff_only=self.is_staff_only)
-        log_msg = ['action', 'login', 'result', user is not None, 'username', username or '__EMPTY__']
-        if user:
-            login(request, user, backend=None)
-            status = RestStatus.HTTP_200_OK
-            context = {}
-            log_msg += ['profile_id', user.genericuserauthrelation.profile.pk]
-        else:
-            status = RestStatus.HTTP_401_UNAUTHORIZED
-            context = {drf_settings.NON_FIELD_ERRORS_KEY: ['authentication failure'], }
-        _logger.info(None, *log_msg, request=request)
-        return RestResponse(data=context, status=status)
-
-
-class LoginView(BaseLoginView):
+class LoginView(BaseLoginView, GetProfileIDMixin):
     template_name = UserMgtCfg.template_name[__qualname__]
     submit_url    = LOGIN_URL
     default_url_redirect =  "/{}/{}".format(UserMgtCfg.app_url, UserMgtCfg.api_url[DashBoardView.__name__])

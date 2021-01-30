@@ -174,6 +174,7 @@ class APIconsumer {
         }
         // do not send CSRF token to other domains, TODO: consider cross-domain cases
         this.props.req_opt.mode = 'same-origin';
+        // TODO, the code below only works for python Django, consider other web frameworks
         var name  = get_cookie("csrf_header_name");
         var tmp   = get_cookie("csrf_cookie_name");
         if(name && tmp) {

@@ -1,12 +1,18 @@
 import logging
 
+from django.contrib.auth        import authenticate, login
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.middleware.csrf     import rotate_token
+from rest_framework.settings    import api_settings as drf_settings
+from rest_framework.views       import APIView
 from rest_framework.generics    import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers   import TemplateHTMLRenderer, JSONRenderer
 from rest_framework.response    import Response as RestResponse
+from rest_framework             import status as RestStatus
 from celery.result import AsyncResult
 
+from common.auth.middleware import  csrf_protect_m
 from common.auth.backends import ExtendedSessionAuthentication, IsStaffUser
 from common.models.db     import db_conn_retry_wrapper
 
@@ -79,6 +85,47 @@ class AuthCommonAPIReadView(CommonAPIReadView):
 
 
 
+class BaseLoginView(APIView):
+    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
+    template_name = None
+    submit_url    = None
+    default_url_redirect = None
+    is_staff_only = False
+
+    def __new__(cls, *args, **kwargs):
+        assert cls.template_name and cls.submit_url and cls.default_url_redirect, \
+            "class variables not properly configured"
+        return super().__new__(cls, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        if "CSRF_COOKIE" not in request.META:
+            rotate_token(request=request)
+        redirect = request.query_params.get("redirect", self.default_url_redirect)
+        formparams = {'non_field_errors':drf_settings.NON_FIELD_ERRORS_KEY, 'submit_url': self.submit_url,
+                'redirect' : redirect, }
+        context = {'formparams': formparams, }
+        return RestResponse(data=context, template_name=self.template_name)
+
+    @csrf_protect_m
+    def post(self, request, *args, **kwargs):
+        username = request.data.get('username','')
+        password = request.data.get('password','')
+        user = authenticate(request, username=username, password=password, is_staff_only=self.is_staff_only)
+        log_msg = ['action', 'login', 'result', user is not None, 'username', username or '__EMPTY__']
+        if user:
+            login(request, user, backend=None)
+            status = RestStatus.HTTP_200_OK
+            context = {}
+            profile_id = self.get_profile_id(request=request) # request.user is automatically updated by login()
+            log_msg += ['profile_id', profile_id]
+        else:
+            status = RestStatus.HTTP_401_UNAUTHORIZED
+            context = {drf_settings.NON_FIELD_ERRORS_KEY: ['authentication failure'], }
+        _logger.info(None, *log_msg, request=request)
+        return RestResponse(data=context, status=status)
+
+
+# TODO, figure out appropriate use case for this view
 class AsyncTaskResultView(GenericAPIView):
     renderer_classes = [JSONRenderer]
 
