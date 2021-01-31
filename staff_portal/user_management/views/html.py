@@ -275,7 +275,7 @@ class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkUpd
 
     def get(self, request, *args, **kwargs):
         if "CSRF_COOKIE" not in request.META:
-            rotate_token(request=request)
+            rotate_token(request=request) 
         context = {'formparams': {},}
         template_name = UserMgtCfg.template_name[self.__class__.__name__]
         return RestResponse(data=context, template_name=template_name)
