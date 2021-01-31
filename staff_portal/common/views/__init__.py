@@ -84,6 +84,12 @@ class AuthCommonAPIReadView(CommonAPIReadView):
     permission_classes = [IsAuthenticated, IsStaffUser]
 
 
+class BaseLoginView(APIView):
+    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
+    template_name = None
+    submit_url    = None
+    default_url_redirect = None
+    is_staff_only = False
 
 class BaseLoginView(APIView):
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
