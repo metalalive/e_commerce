@@ -107,6 +107,9 @@ class APIconsumer {
         if(!props.num_retry) {
             props.num_retry = 10;
         }
+        if(!props.wait_interval_ms){
+            props.wait_interval_ms = 240;
+        }
         this.props = props;
         this._init_csrf();
     }
@@ -161,7 +164,7 @@ class APIconsumer {
                 function() {
                     consumer.start(props._bak_query_params);
                 },
-                80
+                props.wait_interval_ms
             );
         } else {
             console.log("fail to consume API, still got too many request");
@@ -173,7 +176,9 @@ class APIconsumer {
             return; // skip
         }
         // do not send CSRF token to other domains, TODO: consider cross-domain cases
-        this.props.req_opt.mode = 'same-origin';
+        if(this.props.req_opt.mode == undefined) {
+            this.props.req_opt.mode = 'same-origin';
+        }
         // TODO, the code below only works for python Django, consider other web frameworks
         var name  = get_cookie("csrf_header_name");
         var tmp   = get_cookie("csrf_cookie_name");
@@ -865,8 +870,14 @@ function on_submit_forms(evt)
     if(evt.target.finish_callbacks) {
         finish_callbacks = finish_callbacks.concat(evt.target.finish_callbacks)
     } // append extra callbacks specified by application caller
-    var headers = {'content-type':'application/json', 'accept':'application/json'}; 
+    var headers = {'content-type':'application/json', 'accept':'application/json, application/*'}; 
     var req_opt = {method:dataset.api_mthd, headers: headers,  body: body_data,};
+    if(dataset.mode) { // CORS setup
+        req_opt.mode = dataset.mode;
+    }
+    if(dataset.credentials) {
+        req_opt.credentials = dataset.credentials;
+    }
     var submit_api = new APIconsumer({api_base_url: dataset.api_base_url, req_opt:req_opt, forms:forms, caller:evt.target,
                          success_url_redirect: dataset.success_url_redirect, finish_cbs: finish_callbacks });
     submit_api.start(query_params);

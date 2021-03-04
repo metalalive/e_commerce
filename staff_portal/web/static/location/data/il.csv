@@ -1,0 +1,7 @@
+city_ascii,lat,lng,admin_name,capital
+Ramla,31.9167,34.8667,Central,admin
+Haifa,32.8204,34.98,Haifa,admin
+Nazareth,32.704,35.2955,Northern,admin
+Beersheba,31.25,34.83,Southern,admin
+Tel Aviv-Yafo,32.08,34.77,Tel Aviv,admin
+Jerusalem,31.7784,35.2066,,primary

@@ -49,8 +49,10 @@ class SerializerExcludeFieldsMixin:
         # note these functions needs to be executed only once during instance life cycle
         if hasattr(self, '_exclude_read_fields_done'):
             return # to prevent unessesary recursive calls
-        setattr(self, '_exclude_read_fields_done', True)
         req = self.context.get('request', None)
+        if req is None:
+            return
+        setattr(self, '_exclude_read_fields_done', True)
         allowed_fields = req.query_params.get('fields', None)
         if allowed_fields: # TODO: trim whitespace
             allowed_fields = allowed_fields.split(',')

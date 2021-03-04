@@ -1,11 +1,12 @@
 from time import sleep
 import logging
 
+from requests.status_codes import codes as requests_codes
 from MySQLdb._exceptions import OperationalError as MySqlOperationalError
 from MySQLdb.constants   import ER as MySqlErrorCode
 from django.conf       import settings as django_settings
+from django.http       import HttpResponse
 from django.db.utils   import OperationalError
-from rest_framework    import status as RestStatus
 
 _logger = logging.getLogger(__name__)
 
@@ -35,26 +36,54 @@ def db_conn_retry_wrapper(func):
     return inner #### end of db_conn_retry_wrapper()
 
 
-def _get_mysql_error_response(e, headers):
+def _get_mysql_error_response(e, headers, raise_if_not_handled):
     code = e.args[0]
     msg  = e.args[1]
     log_args = ['db_backend', 'mysql', 'code', code, 'msg', msg]
     if code == MySqlErrorCode.USER_LIMIT_REACHED:
         # tell client to delay 1 sec before making follow-up request
-        status = RestStatus.HTTP_429_TOO_MANY_REQUESTS
+        status = requests_codes['too_many_requests']
         headers['Retry-After'] = 1
     else:
         _logger.error(None, *log_args)
-        raise
+        if raise_if_not_handled:
+            raise
+        else:
+            status = requests_codes['internal_server_error']
         # TODO, handle error 1062 : duplicate entry `<PK_VALUE>` for key `<PK_FIELD_NAME>`
     _logger.info(None, *log_args)
     return status
 
 
 
-def get_db_error_response(e, headers:dict):
+def get_db_error_response(e, headers:dict, raise_if_not_handled=True):
+    status = requests_codes['internal_server_error']
     cause = e.__cause__
-    return _err_resp_map[type(cause)](e=cause, headers=headers)
+    if cause:
+        handler = _err_resp_map[type(cause)]
+        status = handler(e=cause, headers=headers, raise_if_not_handled=raise_if_not_handled)
+    return status
+
+
+def db_middleware_exception_handler(func):
+    def inner(self, *arg, **kwargs):
+        try:
+            response = func(self, *arg, **kwargs)
+        except OperationalError as e:
+            headers = {}
+            status = get_db_error_response(e=e, headers=headers)
+            # do NOT use DRF response since the request is being short-circuited by directly returning
+            # custom response at here and it won't invoke subsequent (including view) middlewares.
+            # Instead I use HttpResponse simply containing error response status without extra message
+            # in the response body.
+            response = HttpResponse(status=status)
+            for k,v in headers.items():
+                response[k] = v
+            err_msg = ' '.join(list(map(lambda x: str(x), e.args)))
+            log_msg = ['status', status, 'msg', err_msg]
+            _logger.warning(None, *log_msg)
+        return response
+    return inner
 
 
 class ServiceModelRouter:

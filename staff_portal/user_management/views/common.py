@@ -1,6 +1,5 @@
 import logging
 
-from django.middleware     import csrf
 from django.core.exceptions     import ObjectDoesNotExist, MultipleObjectsReturned, PermissionDenied
 from django.contrib.auth.models import User as AuthUser
 from rest_framework.settings    import api_settings as drf_settings
@@ -9,7 +8,7 @@ from rest_framework             import status as RestStatus
 
 from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models import AuthUserResetRequest, EmailAddress, GenericUserProfile
-from .constants    import LOGIN_URL
+from .constants import LOGIN_WEB_URL
 
 _logger = logging.getLogger(__name__)
 
@@ -30,48 +29,26 @@ class GetProfileIDMixin:
 
 def check_auth_req_token(fn_succeed, fn_failure):
     def inner(self, request, *args, **kwargs):
-        activate_token = self.kwargs.get('token', None)
+        activate_token = kwargs.get('token', None)
         auth_req = AuthUserResetRequest.is_token_valid(activate_token)
         if auth_req:
             kwargs['auth_req'] = auth_req
-            response_data, status, template_name = fn_succeed(self, request, *args, **kwargs)
+            resp_kwargs = fn_succeed(self, request, *args, **kwargs)
         else:
-            response_data, status, template_name = fn_failure(self, request, *args, **kwargs)
-        return RestResponse(data=response_data, status=status, template_name=template_name)
+            resp_kwargs = fn_failure(self, request, *args, **kwargs)
+        return RestResponse(**resp_kwargs)
     return inner
 
 
-class LoginAccountCommonEntryMixin:
-    def _get_token_valid(self, request, *args, **kwargs):
-        activate_token = self.kwargs.get('token', None)
-        template_name_list = UserMgtCfg.template_name[self.__class__.__name__]
-        template_name = template_name_list[0]
-        api_url = UserMgtCfg.api_url[self.__class__.__name__].split('/')
-        api_url.pop()
-        api_url = '/'.join(api_url)
-        formparams = {'non_field_errors':drf_settings.NON_FIELD_ERRORS_KEY,
-            'submit_url': "/{}/{}".format(UserMgtCfg.app_url, api_url),
-            'activate_token': activate_token,
-            'csrf_token': {'name': 'csrfmiddlewaretoken', 'value': csrf.get_token(request)},
-            'success_url_redirect' : LOGIN_URL,
-        }
-        context = {'formparams': formparams, }
-        status = None
-        return context, status, template_name
+class AuthTokenCheckMixin:
+    def token_valid(self, request, *args, **kwargs):
+        return {'data': {}, 'status':None, 'template_name': None}
 
-    def _get_token_expired(self, request, *args, **kwargs):
-        template_name_list = UserMgtCfg.template_name[self.__class__.__name__]
-        template_name = template_name_list[1]
-        context = {}
+    def token_expired(self, request, *args, **kwargs):
+        context = {drf_settings.NON_FIELD_ERRORS_KEY : ['invalid auth req token']}
         status = RestStatus.HTTP_401_UNAUTHORIZED
-        return context, status, template_name
+        return {'data':context, 'status':status}
 
-    get = check_auth_req_token(fn_succeed=_get_token_valid, fn_failure=_get_token_expired)
-
-    def _post_token_expired(self, request, *args, **kwargs):
-        response_data = {drf_settings.NON_FIELD_ERRORS_KEY : ['invalid activate token']}
-        status = RestStatus.HTTP_401_UNAUTHORIZED
-        return response_data, status, None
 
 
 ## --------------------------------------------------------------------------------------

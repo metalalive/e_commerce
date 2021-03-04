@@ -61,7 +61,9 @@ celery --app=common.util.python  --config=common.util.python.celerybeatconfig  b
 
 * Finally, start backend application service
 ```
-python3.9 manage.py runserver  --settings user_management.settings <YOUR_PORT_NUMBER>
+python3.9 manage.py runserver  --settings web.settings  8006
+python3.9 manage.py runserver  --settings api.settings  8007
+python3.9 manage.py runserver  --settings user_management.settings  8008
 ```
 
 

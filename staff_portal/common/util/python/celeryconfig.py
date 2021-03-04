@@ -17,6 +17,7 @@ def _get_amqp_url(secrets_path):
     with open(secrets_path, 'r') as f:
         secrets = json.load(f)
         secrets = secrets['amqp_broker']
+        secrets = secrets[0] # always use guest account (with password)
     assert secrets, "failed to load secrets from file"
     protocol = secrets['protocol']
     username = secrets['username']

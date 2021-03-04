@@ -3,14 +3,12 @@ import logging
 from django.core.validators  import EMPTY_VALUES
 from django.core.exceptions  import ObjectDoesNotExist, FieldError
 from django.db.utils         import OperationalError
-from django.contrib.auth.models import User as AuthUser
 from rest_framework.response    import Response as RestResponse
 from rest_framework             import status as RestStatus
 from rest_framework.settings    import api_settings
 from rest_framework.mixins      import CreateModelMixin, UpdateModelMixin, DestroyModelMixin
 
-from common.models.db  import db_conn_retry_wrapper, get_db_error_response
-from softdelete.models import SoftDeleteObjectMixin, SoftDeleteQuerySet
+from common.models.db  import db_conn_retry_wrapper
 
 _logger = logging.getLogger(__name__)
 
@@ -108,43 +106,38 @@ def _get_serializer_data(view, serializer):
 
 class ExtendedListModelMixin:
     def list(self, request, *args, **kwargs):
-        status = None
-        headers = {}
         s_data = {}
         page = None
-        try:
-            fetch_all = self.request.query_params.get('ids', None) is None
-            queryset = self.get_queryset(pk_param_name='ids', pk_field_name='id', fetch_all=fetch_all)
-            queryset = self.filter_queryset(queryset)
-            page = self.paginate_queryset(queryset=queryset)
-            serializer_kwargs = {'many': True, 'account': request.user,}
-            serializer_kwargs.update(kwargs.pop('serializer_kwargs', {}))
-            instances = page or queryset
-            serializer = self.get_serializer(instances, **serializer_kwargs)
-            s_data = _get_serializer_data(self, serializer)
-            if page: # following part is only for logging user activity
-                _id_list = [str(obj.pk) for obj in instances]
-                _id_list = ",".join(_id_list)
-            else:
-                _id_list = "FETCH_ALL"
-            model_cls_hier = "%s.%s" % (queryset.model.__module__ , queryset.model.__name__)
-            log_msg = ['action', 'view_list', 'profile_id', self.get_profile_id(request=request),
-                    'model_cls', model_cls_hier, 'IDs', _id_list,]
-            _logger.debug(None, *log_msg, request=request, stacklevel=1)
-        except OperationalError as e:
-            status = get_db_error_response(e=e, headers=headers)
-            _logger.error("%s", e, request=request)
-        if page is not None:
+        fetch_all = self.request.query_params.get('ids', None) is None
+        pk_skip_list = kwargs.pop('pk_skip_list', None)
+        queryset = self.get_queryset(pk_param_name='ids', pk_field_name='id', \
+                fetch_all=fetch_all, pk_skip_list=pk_skip_list)
+        queryset = self.filter_queryset(queryset)
+        page = self.paginate_queryset(queryset=queryset)
+        serializer_kwargs = {'many': True, 'account': request.user,}
+        serializer_kwargs.update(kwargs.pop('serializer_kwargs', {}))
+        instances = page or queryset
+        serializer = self.get_serializer(instances, **serializer_kwargs)
+        s_data = _get_serializer_data(self, serializer)
+        if page: # following part is only for logging user activity
+            _id_list = [str(obj.pk) for obj in instances]
+            _id_list = ",".join(_id_list)
+        else:
+            _id_list = "FETCH_ALL"
+        model_cls_hier = "%s.%s" % (queryset.model.__module__ , queryset.model.__name__)
+        log_msg = ['action', 'view_list', 'profile_id', self.get_profile_id(request=request),
+                'model_cls', model_cls_hier, 'IDs', _id_list,]
+        _logger.debug(None, *log_msg, request=request, stacklevel=1)
+        if page:
             resp = self.get_paginated_response(s_data)
         else:
-            resp = RestResponse(s_data, status=status, headers=headers)
+            resp = RestResponse(data=s_data)
         return resp
 
 
 class ExtendedRetrieveModelMixin:
     def retrieve(self, request, *args, **kwargs):
         status = None
-        headers = {}
         s_data = {}
         try:
             instance = self.get_object()
@@ -156,12 +149,9 @@ class ExtendedRetrieveModelMixin:
             log_msg = ['action', 'view_item', 'profile_id', self.get_profile_id(request=request),
                     'model_cls', model_cls_hier, 'ID', instance.pk,]
             _logger.debug(None, *log_msg, request=request)
-        except OperationalError as e:
-            status = get_db_error_response(e=e, headers=headers)
-            _logger.error("%s", e, request=request)
         except ObjectDoesNotExist as e:
             status = RestStatus.HTTP_404_NOT_FOUND
-        return RestResponse(s_data, status=status, headers=headers)
+        return RestResponse(s_data, status=status)
 
 
 class UserEditViewLogMixin:
@@ -295,6 +285,7 @@ class BulkDestroyModelMixin(DestroyModelMixin, UserEditViewLogMixin):
 
 
     def perform_destroy(self, instance, id_list):
+        from softdelete.models import SoftDeleteObjectMixin, SoftDeleteQuerySet
         is_softdelete = isinstance(instance, (SoftDeleteObjectMixin, SoftDeleteQuerySet))
         _logger.debug("is_softdelete = %s", is_softdelete, request=self.request)
         kwargs = {}

@@ -1,16 +1,15 @@
 import copy
-import operator
 import logging
+from datetime import datetime, timezone
 
 from django.conf   import  settings as django_settings
 from django.core.exceptions     import ValidationError
-from django.core.cache          import caches as DjangoBuiltinCaches
 from django.http.response    import HttpResponseBase
 from django.db.models        import Prefetch, Count, QuerySet
 from django.contrib.contenttypes.models  import ContentType
-from django.contrib.auth     import logout
 
 from rest_framework             import status as RestStatus
+from rest_framework.generics    import GenericAPIView
 from rest_framework.views       import APIView
 from rest_framework.viewsets    import ModelViewSet
 from rest_framework.filters     import BaseFilterBackend, OrderingFilter, SearchFilter
@@ -20,14 +19,12 @@ from rest_framework.permissions import DjangoModelPermissions, DjangoObjectPermi
 from rest_framework.settings    import api_settings as drf_settings
 
 from softdelete.views import RecoveryModelMixin
-from common.views.mixins      import  LimitQuerySetMixin
-from common.views.filters     import  DateTimeRangeFilter
-from common.views             import  AuthCommonAPIView, AuthCommonAPIReadView
-from common.auth.backends     import  IsSuperUser
+from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
+from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
+from common.util.python.async_tasks  import  sendmail as async_send_mail, default_error_handler as async_default_error_handler
 
 from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, UsermgtChangeSet
-from ..queryset import UserActionSet
 from ..async_tasks import update_roles_on_accounts
 
 from ..serializers import AuthPermissionSerializer, AuthRoleSerializer, QuotaUsageTypeSerializer, GenericUserGroupSerializer
@@ -38,8 +35,9 @@ from ..serializers import GenericUserAppliedRoleSerializer, GenericUserGroupRela
 from ..permissions import AuthRolePermissions, AppliedRolePermissions, AppliedGroupPermissions, UserGroupsPermissions
 from ..permissions import UserDeactivationPermission, UserActivationPermission, UserProfilesPermissions
 
-from .constants import LOGIN_URL, _PRESERVED_ROLE_IDS, MAX_NUM_FORM
-from .common    import GetProfileIDMixin
+from .constants import  _PRESERVED_ROLE_IDS, MAX_NUM_FORM, WEB_HOST
+from .common    import GetProfileIDMixin, check_auth_req_token, AuthTokenCheckMixin, get_profile_account_by_email
+
 
 # * All classes within this module can share one logger, because logger is unique by given name
 #   as the argument on invoking getLogger(), that means subsequent call with the same logger name
@@ -71,6 +69,11 @@ class AuthRoleAPIView(AuthCommonAPIView, GetProfileIDMixin):
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [AuthRolePermissions]
     PRESERVED_ROLE_IDS = _PRESERVED_ROLE_IDS
     queryset = serializer_class.Meta.model.objects.all()
+
+    def get(self, request, *args, **kwargs):
+        if request.query_params.get('skip_preserved_role', None) is not None:
+            kwargs['pk_skip_list'] = self.PRESERVED_ROLE_IDS
+        return  super().get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
         kwargs['many'] = True
@@ -133,6 +136,41 @@ class AppliedGroupReadAPIView(AuthCommonAPIReadView, GetProfileIDMixin):
 
 
 
+class QuotaMaterialReadAPIView(AuthCommonAPIView):
+    """
+    In quota arrangement, material simply represents source of supply,
+    e.g.
+    number of resources like database table rows, memory space, hardware
+    ... etc. which can be used by individual user or user group.
+
+    * Since quota arrangement is about restricting users' access to resources,
+      it makes sense to maintain the material types and the arrangement of
+      each user in this user management service.
+    * In this project , each material type represents one single model class,
+      and each material is tied to Django ContentType model because Django is
+      used to implement this service.
+    * Fortunately, Django ContentType can also record path of model classes
+      that are from other services implemented in different web frameworks and
+      languages, this gives flexibility to gather information of all model
+      classes from all other services for quota arrangment
+    """
+    # TODO:
+    # * There would be API endpoints (e.g. REST, RPC) in this view class for interal use
+    #   , so other downstream services are able to maintain materials which are linked to
+    #   the model classes installed in other services (possible use case ?)
+    def get(self, request, *args, **kwargs):
+        from django.contrib.contenttypes.models import ContentType
+        exclude_apps = ['admin','auth','contenttypes','sessions','softdelete']
+        app_models = ContentType.objects.values('id','app_label','model').exclude(app_label__in=exclude_apps)
+        out = {}
+        for item in app_models: # TODO, find better way of creating 2D array
+            app_label = item.pop('app_label')
+            if out.get(app_label, None) is None:
+                out[app_label] = []
+            out[app_label].append(item)
+        return RestResponse(data=out, status=None)
+
+
 class QuotaUsageTypeAPIView(AuthCommonAPIView, GetProfileIDMixin):
     serializer_class = QuotaUsageTypeSerializer
     filter_backends = [SearchFilter, OrderingFilter,]
@@ -190,7 +228,14 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin, GetProfileIDMixin
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
 
     def get(self, request, *args, **kwargs):
-        kwargs['serializer_kwargs'] = {'from_read_view':True, 'exc_rd_fields': ['ancestors__id'],}
+        exc_rd_fields = request.query_params.get('exc_rd_fields', None)
+        if exc_rd_fields is None:
+            exc_rd_fields = ['ancestors__id']
+        elif isinstance(exc_rd_fields, str):
+            exc_rd_fields = [exc_rd_fields, 'ancestors__id']
+        elif isinstance(exc_rd_fields, list):
+            exc_rd_fields.extend(['ancestors__id'])
+        kwargs['serializer_kwargs'] = {'from_read_view':True, 'exc_rd_fields': exc_rd_fields,}
         return super().get(request=request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -236,7 +281,10 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin, GetProfileIDMixi
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
 
     def get(self, request, *args, **kwargs):
-        kwargs['serializer_kwargs'] = {'from_read_view':True,}
+        exc_rd_fields = request.query_params.get('exc_rd_fields', [])
+        if exc_rd_fields and isinstance(exc_rd_fields, str):
+            exc_rd_fields = [exc_rd_fields]
+        kwargs['serializer_kwargs'] = {'from_read_view':True, 'exc_rd_fields': exc_rd_fields}
         return super().get(request=request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -289,7 +337,6 @@ class UserActivationView(AuthCommonAPIView, GetProfileIDMixin):
                 model_cls=profiles.model,  profile_id=_login_profile.pk)
 
     def _create_new_auth_req(self, request, *args, **kwargs):
-        from .html import LoginAccountCreateView
         resource_path = [UserMgtCfg.app_url] + UserMgtCfg.api_url[LoginAccountCreateView.__name__].split('/')
         resource_path.pop() # last one should be <slug:token>
         kwargs['many'] = True
@@ -302,10 +349,7 @@ class UserActivationView(AuthCommonAPIView, GetProfileIDMixin):
             # 'exc_rd_fields': ['id',],
             'msg_template_path': 'user_management/data/mail/body/user_activation_link_send.html',
             'subject_template' : 'user_management/data/mail/subject/user_activation_link_send.txt',
-            'url_host': "{protocol}://{hostname}".format(
-                protocol=request._request.scheme,
-                hostname=request._request._get_raw_host()
-            ),
+            'url_host': WEB_HOST,
             'url_resource':'/'.join(resource_path),
         }
         return self.update(request, *args, **kwargs)
@@ -359,20 +403,157 @@ class UserDeactivationView(AuthCommonAPIView, GetProfileIDMixin):
 
 
 ## --------------------------------------------------------------------------------------
-class LogoutView(APIView):
+class AuthTokenReadAPIView(APIView):
+    renderer_classes = [JSONRenderer]
+    get = check_auth_req_token(
+            fn_succeed=AuthTokenCheckMixin.token_valid,
+            fn_failure=AuthTokenCheckMixin.token_expired
+        )
+
+
+class LoginAccountCreateView(APIView, UserEditViewLogMixin):
+    renderer_classes = [JSONRenderer]
+
+    def _post_token_valid(self, request, *args, **kwargs):
+        response_data = {}
+        auth_req = kwargs.pop('auth_req', None)
+        account = auth_req.profile.account
+        if account is None:
+            serializer_kwargs = {
+                'mail_kwargs': {
+                    'msg_template_path': 'user_management/data/mail/body/user_activated.html',
+                    'subject_template' : 'user_management/data/mail/subject/user_activated.txt',
+                },
+                'data': request.data, 'passwd_required':True, 'confirm_passwd': True, 'uname_required': True,
+                'account': None, 'auth_req': auth_req,  'many': False,
+            }
+            _serializer = LoginAccountSerializer(**serializer_kwargs)
+            _serializer.is_valid(raise_exception=True)
+            profile_id = auth_req.profile.pk
+            account = _serializer.save()
+            self._log_action(action_type='create', request=request, affected_items=[account.minimum_info],
+                    model_cls=type(account),  profile_id=profile_id)
+            response_data['created'] = True
+        else:
+            response_data['created'] = False
+            response_data['reason'] = 'already created before'
+        return {'data': response_data, 'status':None}
+
+    post = check_auth_req_token(fn_succeed=_post_token_valid, fn_failure=AuthTokenCheckMixin.token_expired)
+
+
+class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
+    """ for unauthenticated users who registered but forget their username """
     renderer_classes = [JSONRenderer]
 
     def post(self, request, *args, **kwargs):
-        status = RestStatus.HTTP_401_UNAUTHORIZED
-        account = request.user
-        if account is not None and account.is_staff:
-            username = account.username
-            profile_id = account.genericuserauthrelation.profile.pk
-            logout(request)
-            status = RestStatus.HTTP_200_OK
-            log_msg = ['action', 'logout', 'username', username, 'profile_id', profile_id]
-            _logger.info(None, *log_msg, request=request)
-        return RestResponse(data={}, status=status)
+        addr = request.data.get('addr', '').strip()
+        useremail,  profile, account = get_profile_account_by_email(addr=addr, request=request)
+        self._send_recovery_mail(profile=profile, account=account, addr=addr)
+        # don't respond with success / failure status purposely, to avoid malicious email enumeration
+        return RestResponse(data=None, status=RestStatus.HTTP_202_ACCEPTED)
+
+    def _send_recovery_mail(self, profile, account, addr):
+        if profile is None or account is None:
+            return
+        # send email directly, no need to create auth user request
+        # note in this application, username is not PII (Personable Identifible Information)
+        # so username can be sent directly to user mailbox. TODO: how to handle it if it's PII ?
+        msg_data = {'first_name': profile.first_name, 'last_name': profile.last_name,
+                'username': account.username, 'request_time': datetime.now(timezone.utc), }
+        msg_template_path = 'user_management/data/mail/body/username_recovery.html'
+        subject_template  = 'user_management/data/mail/subject/username_recovery.txt'
+        to_addr = addr
+        from_addr = django_settings.DEFAULT_FROM_EMAIL
+        task_kwargs = {
+            'to_addrs': [to_addr], 'from_addr':from_addr, 'msg_data':msg_data,
+            'subject_template': subject_template, 'msg_template_path':msg_template_path,
+        }
+        # Do not return result backend or task ID to unauthorized frontend user.
+        # Log errors raising in async task
+        async_send_mail.apply_async( kwargs=task_kwargs, link_error=async_default_error_handler.s() )
+        self._log_action(action_type='recover_username', request=self.request, affected_items=[account.minimum_info],
+                model_cls=type(account),  profile_id=profile.pk)
+
+
+class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkUpdateModelMixin, GetProfileIDMixin):
+    """ for unauthenticated users who registered but  forget their password """
+    serializer_class = AuthUserResetRequestSerializer
+    renderer_classes = [JSONRenderer]
+
+    def post(self, request, *args, **kwargs):
+        addr = request.data.get('addr', '').strip()
+        useremail, profile, account = get_profile_account_by_email(addr=addr, request=request)
+        self._send_req_mail(request=request, kwargs=kwargs, profile=profile,
+                account=account, useremail=useremail, addr=addr)
+        # always respond OK status even if it failed, to avoid malicious email enumeration
+        return RestResponse(data=None, status=RestStatus.HTTP_202_ACCEPTED)  #  HTTP_401_UNAUTHORIZED
+
+    def _send_req_mail(self, request, kwargs, profile, account, useremail, addr):
+        if profile is None or account is None or useremail is None:
+            return
+        resource_path = [UserMgtCfg.app_url] + UserMgtCfg.api_url[UnauthPasswordResetView.__name__].split('/')
+        resource_path.pop() # last one should be <slug:token>
+        serializer_kwargs = {
+            'msg_template_path': 'user_management/data/mail/body/passwd_reset_request.html',
+            'subject_template' : 'user_management/data/mail/subject/passwd_reset_request.txt',
+            'url_host': WEB_HOST,  'url_resource':'/'.join(resource_path),
+        }
+        err_args = ["url_host", serializer_kwargs['url_host']]
+        _logger.debug(None, *err_args, request=request)
+        extra_kwargs = {
+            'many':False, 'return_data_after_done':True, 'pk_field_name':'profile', 'allow_create':True,
+            'status_ok':RestStatus.HTTP_202_ACCEPTED, 'pk_src':LimitQuerySetMixin.REQ_SRC_BODY_DATA,
+            'serializer_kwargs' :serializer_kwargs,
+        }
+        kwargs.update(extra_kwargs)
+        # do not use frontend request data in this view, TODO, find better way of modifying request data
+        request._full_data = {'profile': profile.pk, 'email': useremail.pk,}
+        # `many = False` indicates that the view gets single model instance by calling get_object(...)
+        # , which requires unique primary key value on URI, so I fake it by adding user profile ID field
+        # and value to kwargs, because frontend (unauthorized) user shouldn't be aware of any user profile ID
+        self.kwargs['profile'] = profile.pk
+        user_bak = request.user
+        try: # temporarily set request.user to the anonymous user who provide this valid email address
+            request.user = account
+            self.update(request, **kwargs)
+        except Exception as e:
+            fully_qualified_cls_name = '%s.%s' % (type(e).__module__, type(e).__qualname__)
+            log_msg = ['excpt_type', fully_qualified_cls_name, 'excpt_msg', e, 'email', addr,
+                    'email_id', useremail.pk, 'profile', profile.minimum_info]
+            _logger.error(None, *log_msg, exc_info=True, request=request)
+        request.user = user_bak
+
+
+class UnauthPasswordResetView(APIView, UserEditViewLogMixin):
+    renderer_classes = [JSONRenderer]
+
+    def _patch_token_valid(self, request, *args, **kwargs):
+        auth_req = kwargs.pop('auth_req')
+        account = auth_req.profile.account
+        if account:
+            serializer_kwargs = {
+                'mail_kwargs': {
+                    'msg_template_path': 'user_management/data/mail/body/unauth_passwd_reset.html',
+                    'subject_template' : 'user_management/data/mail/subject/unauth_passwd_reset.txt',
+                },
+                'data': request.data, 'passwd_required':True,  'confirm_passwd': True,
+                'account': request.user, 'auth_req': auth_req,  'many': False,
+            }
+            _serializer = LoginAccountSerializer(**serializer_kwargs)
+            _serializer.is_valid(raise_exception=True)
+            profile_id = auth_req.profile.pk
+            _serializer.save()
+            user_bak = request.user
+            request.user = account
+            self._log_action(action_type='reset_password', request=request, affected_items=[account.minimum_info],
+                    model_cls=type(account),  profile_id=profile_id)
+            request.user = user_bak
+        response_data = None
+        status = None # always return 200 OK even if the request is invalid
+        return {'data': response_data, 'status':status}
+
+    patch = check_auth_req_token(fn_succeed=_patch_token_valid, fn_failure=AuthTokenCheckMixin.token_expired)
 
 
 
@@ -411,115 +592,5 @@ class AuthPasswdEditAPIView(AuthCommonAPIView, CommonAuthAccountEditMixin, GetPr
             'account': request.user, 'auth_req': None,  'many': False,
         }
         return self.run(**serializer_kwargs)
-
-
-
-
-class UserActionHistoryAPIReadView(AuthCommonAPIReadView, GetProfileIDMixin):
-    queryset = None
-    serializer_class = None
-    max_page_size = 13
-    filter_backends  = [DateTimeRangeFilter,] #[OrderingFilter,]
-    #ordering_fields  = ['action', 'timestamp']
-    #search_fields  = ['action', 'ipaddr',]
-    search_field_map = {
-        DateTimeRangeFilter.search_param[0] : {'field_name':'timestamp', 'operator': operator.and_},
-    }
-
-    def get(self, request, *args, **kwargs):
-        # this API endpoint doesn't need to retrieve single action log
-        queryset = UserActionSet(request=request, paginator=self.paginator)
-        queryset = self.filter_queryset(queryset)
-        page = self.paginate_queryset(queryset=queryset)
-        log_args = ['user_action_page', page]
-        _logger.debug(None, *log_args, request=request)
-        return  self.paginator.get_paginated_response(data=page)
-
-
-class DynamicLoglevelAPIView(AuthCommonAPIView, GetProfileIDMixin):
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [IsSuperUser]
-    # unique logger name by each module hierarchy
-    def get(self, request, *args, **kwargs):
-        status = RestStatus.HTTP_200_OK
-        data = []
-        cache_loglvl_change = DjangoBuiltinCaches['log_level_change']
-        logger_names = django_settings.LOGGING['loggers'].keys()
-        for name in logger_names:
-            modified_setup = cache_loglvl_change.get(name, None)
-            if modified_setup:
-                level = modified_setup #['level']
-            else:
-                level = logging.getLogger(name).level
-            data.append({'name': name, 'level': level, 'modified': modified_setup is not None})
-        return RestResponse(data=data, status=status)
-
-    def _change_level(self, request):
-        status = RestStatus.HTTP_200_OK
-        logger_names = django_settings.LOGGING['loggers'].keys()
-        err_args = []
-        validated_data = {} if request.method == 'PUT' else []
-        for change in request.data:
-            err_arg = {}
-            logger_name = change.get('name', None)
-            new_level = change.get('level', None)
-            if not logger_name in logger_names:
-                err_arg['name'] = ['logger name not found']
-            if request.method == 'PUT':
-                try:
-                    new_level = int(new_level)
-                except (ValueError, TypeError) as e:
-                    err_arg['level'] = [str(e)]
-            if any(err_arg):
-                status = RestStatus.HTTP_400_BAD_REQUEST
-            else:
-                if request.method == 'PUT':
-                    validated_data[logger_name] = new_level
-                elif request.method == 'DELETE':
-                    validated_data.append(logger_name)
-            err_args.append(err_arg)
-
-        log_msg = ['action', 'set_log_level', 'request.method', request.method, 'request_data', request.data,
-                'validated_data', validated_data]
-        if status == RestStatus.HTTP_200_OK:
-            cache_loglvl_change = DjangoBuiltinCaches['log_level_change']
-            resp_data = None
-            if request.method == 'PUT':
-                cache_loglvl_change.set_many(validated_data)
-                for name,level in validated_data.items():
-                    logging.getLogger(name).setLevel(level)
-            elif request.method == 'DELETE':
-                resp_data = []
-                cache_loglvl_change.delete_many(validated_data)
-                for name in validated_data:
-                    level = django_settings.LOGGING['loggers'][name]['level']
-                    level = getattr(logging, level)
-                    logging.getLogger(name).setLevel(level)
-                    resp_data.append({'name': name, 'default_level':level})
-            loglevel = logging.INFO
-        else:
-            loglevel = logging.WARNING
-            resp_data = err_args
-        _logger.log(loglevel, None, *log_msg, request=request)
-        return RestResponse(data=resp_data, status=status)
-
-
-    def put(self, request, *args, **kwargs):
-        return self._change_level(request=request)
-
-    def delete(self, request, *args, **kwargs): # clean up cached log lovel
-        return self._change_level(request=request)
-
-
-class SessionManageAPIView(AuthCommonAPIView, GetProfileIDMixin):
-    """
-    Provide log-in user an option to view a list of sessions he/she started,
-    so user can invalidate any session of the list.
-    It depends on whether your application/site needs to restrict number of sessions on each logged-in users,
-    for this staff-only backend site, it would be better to restrict only one session per logged-in user,
-    while customer frontend portal could allow multiple sessions for each user, which implicitly means user
-    can log into customer frontend portal on different device (e.g. laptops/modile devices ... etc.)
-    """
-    # TODO, finish implementation
-    pass
 
 

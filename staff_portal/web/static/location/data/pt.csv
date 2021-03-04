@@ -1,0 +1,25 @@
+city_ascii,lat,lng,admin_name,capital
+Aveiro,40.641,-8.651,Aveiro,admin
+Ponta Delgada,37.7483,-25.6666,Azores,admin
+Angra do Heroismo,38.6504,-27.2167,Azores,
+Horta,38.5347,-28.6448,Azores,
+Beja,38.014,-7.863,Beja,admin
+Braga,41.555,-8.4213,Braga,admin
+Braganca,41.808,-6.755,Bragança,admin
+Castelo Branco,39.811,-7.488,Castelo Branco,admin
+Covilha,40.2833,-7.5,Castelo Branco,minor
+Coimbra,40.2004,-8.4167,Coimbra,admin
+Evora,38.56,-7.906,Évora,admin
+Portimao,37.1337,-8.5333,Faro,minor
+Faro,37.0171,-7.9333,Faro,admin
+Guarda,40.541,-7.262,Guarda,admin
+Leiria,39.739,-8.805,Leiria,admin
+Lisbon,38.7227,-9.1449,Lisboa,primary
+Funchal,32.65,-16.88,Madeira,admin
+Portalegre,39.29,-7.423,Portalegre,admin
+Porto,41.15,-8.62,Porto,admin
+Santarem,39.231,-8.682,Santarém,admin
+Setubal,38.53,-8.9,Setúbal,admin
+Viana do Castelo,41.6962,-8.8441,Viana do Castelo,admin
+Vila Real,41.294,-7.737,Vila Real,admin
+Viseu,40.657,-7.91,Viseu,admin

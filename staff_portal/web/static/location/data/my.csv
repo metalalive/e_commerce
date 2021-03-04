@@ -1,0 +1,34 @@
+city_ascii,lat,lng,admin_name,capital
+Johor Bahru,1.48,103.73,Johor,admin
+Batu Pahat,1.8504,102.9333,Johor,
+Muar,2.0337,102.5666,Johor,
+Kluang,2.0383,103.3179,Johor,
+Sungai Petani,5.6497,100.4793,Kedah,
+Alor Setar,6.1133,100.3729,Kedah,admin
+Kota Bharu,6.12,102.23,Kelantan,admin
+Kuala Lumpur,3.1667,101.7,Kuala Lumpur ,primary
+Labuan,5.2803,115.2475,Labuan,admin
+Melaka,2.2064,102.2465,Melaka,admin
+Seremban,2.7105,101.94,Negeri Sembilan,admin
+Kuantan,3.83,103.32,Pahang,admin
+Raub,3.7927,101.8423,Pahang,
+Kuala Lipis,4.184,102.042,Pahang,
+Ipoh,4.6,101.065,Perak,admin
+Taiping,4.865,100.72,Perak,
+Teluk Intan,4.0119,101.0314,Perak,
+Kangar,6.433,100.19,Perlis,admin
+George Town,5.4136,100.3294,Pulau Pinang,admin
+Butterworth,5.4171,100.4,Pulau Pinang,
+Putrajaya,2.914,101.7019,Putrajaya,admin
+Kota Kinabalu,5.98,116.11,Sabah,admin
+Sandakan,5.843,118.108,Sabah,
+Tawau,4.271,117.896,Sabah,
+Lahad Datu,5.0464,118.336,Sabah,
+Kuching,1.53,110.33,Sarawak,admin
+Miri,4.3999,113.9845,Sarawak,
+Sibu,2.303,111.843,Sarawak,
+Bintulu,3.1664,113.036,Sarawak,
+Klang,3.0204,101.55,Selangor,
+Shah Alam,3.0667,101.55,Selangor,admin
+Kuala Terengganu,5.3304,103.12,Terengganu,admin
+Cukai,4.2332,103.4479,Terengganu,

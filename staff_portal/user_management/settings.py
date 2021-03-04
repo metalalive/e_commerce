@@ -30,12 +30,8 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 # Application definition
 
 INSTALLED_APPS = [
-    #### 'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
     # configure each application by subclassing AppConfig in apps.py of
     # each application folder, give dotted path of the subclass at here
     # to complete application registry.
@@ -45,41 +41,20 @@ INSTALLED_APPS = [
     'user_management.apps.UserManagementConfig',
 ]
 
-# Note:
-# this project is staff-only backend site for PoS system, concurrent login
-# on individual account is prohibited.
+# TODO, apply domain name filter at IP layer, only accept requests from trusted proxy server
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'common.auth.middleware.ExtendedCsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'common.sessions.middleware.OneSessionPerAccountMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'user_management.root_urls'
+ROOT_URLCONF = 'user_management.urls'
 
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['my_templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
+TEMPLATES = []
 
 FIXTURE_DIRS = ['my_fixtures',]
 
-WSGI_APPLICATION = 'restaurant.wsgi.application'
+# referenced only by development server (`runserver` command)
+WSGI_APPLICATION = 'common.util.python.django.wsgi.application'
 
 
 # Database
@@ -120,53 +95,18 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-AUTHENTICATION_BACKENDS = ['common.auth.backends.ExtendedModelBackend']
-
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-# expire time may vary based on user groups or roles,
-# will need to configure this programmatically
-SESSION_COOKIE_AGE = 600
-
-### SESSION_ENGINE = 'django.contrib.sessions.backends.file'
-SESSION_ENGINE = 'common.sessions.backends.file'
-
-SESSION_SERIALIZER = 'common.sessions.serializers.ExtendedJSONSerializer'
-
-SESSION_FILE_PATH = os.path.join(BASE_DIR ,'tmp/sessions')
-
-# the name of request header used for CSRF authentication,
-# e.g. according to setting below, frontend may send request "anti-csrf-tok" in the header
-CSRF_HEADER_NAME = 'HTTP_X_ANTI_CSRF_TOK'
-
-CSRF_COOKIE_NAME = 'anticsrftok'
-
-# the CSRF token is stored at client side (browser cookie) and should expire as soon as
-# the session expires (for logged-in users) , or each valid token should last 12 hours for
-# unauthentication accesses.
-CSRF_COOKIE_AGE  = 12 * 3600 ## 43
+AUTHENTICATION_BACKENDS = ['common.auth.backends.ForwardClientBackend']
 
 
 CACHES = {
         'default': {
-            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-            'LOCATION': os.path.join(BASE_DIR ,'tmp/cache/django/default'),
             'TIMEOUT': 3600,
             'OPTIONS': {
                 'MAX_ENTRIES': 512,
                 # TODO, figure out how to use KEY_PREFIX and KEY_FUNCTION
                 },
             },
-        'user_session': {
-            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-            'LOCATION': os.path.join(BASE_DIR ,'tmp/cache/django/user_session'),
-            'TIMEOUT': 86400,
-            'OPTIONS': {
-                'MAX_ENTRIES': 512,
-                },
-            },
         'log_level_change': {
-            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-            'LOCATION': os.path.join(BASE_DIR ,'tmp/cache/django/log_level_change'),
             'TIMEOUT': None,
             'OPTIONS': {
                 'MAX_ENTRIES': 1024,
@@ -187,21 +127,6 @@ USE_L10N = True
 
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/dev/howto/static-files/
-##### print("BASE_DIR.parent : "+ str(BASE_DIR.parent))
-
-STATIC_ROOT = str(BASE_DIR.parent) + "/static"
-
-# it means the URL http://your_domain_name/static/
-STATIC_URL = '/static/'
-
-# besides static files for specific application, there are static files that
-# are commonly applied to multiple applications of a project. Here are paths
-# to the common static files
-COMMON_STATIC_PATH = os.path.join(BASE_DIR ,'common/static')
-STATICFILES_DIRS = [str(COMMON_STATIC_PATH),]
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 400
 
@@ -290,7 +215,7 @@ LOGGING = {
             },
         }, # end of handlers section
         'loggers': {
-            'common.views': {
+            'common.views.api': {
                 'level': 'INFO',
                 'handlers': ['dbg_views_file', 'dbg_views_logstash'],
             },
@@ -354,10 +279,6 @@ LOGGING = {
                 'level': 'INFO',
                 'handlers': ['dbg_base_logstash'],
             },
-            'user_management.views.html': {
-                'level': 'INFO',
-                'handlers': ['dbg_views_file', 'dbg_views_logstash'],
-            },
             'user_management.views.api': {
                 'level': 'INFO',
                 'handlers': ['dbg_views_file', 'dbg_views_logstash'],
@@ -408,6 +329,7 @@ LOGGING = {
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'EXCEPTION_HANDLER': 'common.views.api.exception_handler',
     #'PAGE_SIZE' : 40
 }
 
@@ -422,5 +344,8 @@ EMAIL_USE_TLS = True
 
 from common.util.python.django.setup  import setup_secrets
 
-setup_secrets(secrets_path='./common/data/secrets.json', module_path=__name__)
+setup_secrets(
+    secrets_path='./common/data/secrets.json', module_path=__name__,
+    portal_type='staff', interface_type='usermgt'
+)
 

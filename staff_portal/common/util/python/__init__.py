@@ -1,3 +1,4 @@
+import os
 import json
 import functools
 import logging
@@ -22,15 +23,27 @@ def get_fixture_pks(filepath:str, pkg_hierarchy:str):
 
 def get_header_name(name:str):
     """
-    normalize given input to valid header name that can be placed in HTTP request
+    translate given key in Django request.META to header name in HTTP form
     """
     from django.http.request    import HttpHeaders
     prefix = HttpHeaders.HTTP_PREFIX
-    assert name.startswith(prefix),  "{} should have prefix : {}".format(name, prefix)
-    out = name[len(prefix):]
-    out = out.replace('_', '-')
+    if name.startswith(prefix): # skip those in HttpHeaders.UNPREFIXED_HEADERS
+        name = name[len(prefix):]
+    out = name.replace('_', '-').lower()
     # print("get_header_name, out : "+ str(out))
     return out
+
+
+def get_request_meta_key(header_name:str):
+    """
+    translate given header name in HTTP form to accessible key in Django request.META
+    """
+    from django.http.request    import HttpHeaders
+    out = header_name.replace('-', '_').upper()
+    if out not in HttpHeaders.UNPREFIXED_HEADERS:
+        out = '%s%s' % (HttpHeaders.HTTP_PREFIX, out)
+    return out
+
 
 
 def log_wrapper(logger, loglevel=logging.DEBUG):
@@ -56,5 +69,98 @@ def log_wrapper(logger, loglevel=logging.DEBUG):
             return out
         return _inner
     return _wrapper
+
+
+def serial_kvpairs_to_dict(serial_kv:str, delimiter_pair=',', delimiter_kv=':'):
+    outlst = []
+    outdict = {}
+    kv_pairs = serial_kv.split(delimiter_pair)
+    for kv in kv_pairs:
+        if delimiter_kv in kv:
+            kv_lst = kv.split(delimiter_kv, 1)
+            kv_lst = list(map(str.strip, kv_lst))
+            outlst.append(kv_lst)
+    #print('outlst = %s' % outlst)
+    for pair in outlst:
+        key = pair[0]
+        if outdict.get(key, None) is None:
+            outdict[key] = [pair[1]]
+        else:
+            outdict[key].append(pair[1])
+    return outdict
+
+
+def accept_mimetypes_lookup(http_accept:str, expected_types):
+    # note that this is case-insensitive lookup
+    client_accept = http_accept.split(',')
+    client_accept = list(map(lambda x: x.strip().lower(), client_accept))
+    expected_types = list(map(lambda x: x.strip().lower(), expected_types))
+    result = filter(lambda x: x in expected_types, client_accept)
+    return list(result)
+
+
+class ExtendedDict(dict):
+    def __init__(self, *args, **kwargs):
+        self._modified = False
+        super().__init__(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        self._modified = True
+        super().__setitem__(key, value)
+
+    @property
+    def modified(self):
+        return self._modified
+
+    def update(self, new_kwargs, overwrite=True):
+        if overwrite is False:
+            common_keys = set(self.keys()) & set(new_kwargs.keys())
+            new_kwargs = {k:v for k,v in new_kwargs.items() if k not in common_keys}
+        return super().update(new_kwargs)
+## end of class ExtendedDict
+
+
+
+# class inheritance doesn't seem to work in metaclass
+class BaseLookupMeta(type):
+    def getitem(cls, key, _dict_name):
+        item = None
+        try:
+            _dict = getattr(cls, _dict_name)
+            item = _dict[key]
+        except (KeyError, AttributeError) as e:
+            err_msg = '[%s] %s when searching in %s, no such key : %s' % \
+                (cls.__name__ , type(e), _dict, key)
+            print(err_msg) # TODO, log to local file system
+        return item
+
+
+class BaseUriLookup(metaclass=BaseLookupMeta):
+    _urls = {}
+
+    def __getitem__(cls, key):
+        return type(cls).getitem(key, '_urls') # first argument implicitly sent by type(cls)
+
+    def __iter__(cls):
+        cls._iter_api_url = iter(cls._urls)
+        return cls
+
+    def __next__(cls):
+        key = next(cls._iter_api_url)
+        return (key, cls._urls[key])
+
+
+class BaseTemplateLookup(metaclass=BaseLookupMeta):
+    _template_names = {}
+    template_path  = ''
+
+    def __getitem__(cls, key):
+        item = BaseLookupMeta.getitem(cls, key, '_template_names')
+        if item is not None:
+            if isinstance(item, str):
+                item = os.path.join(cls.template_path, item)
+            elif isinstance(item, list):
+                item = [os.path.join(cls.template_path, x) for x in item]
+        return item
 
 

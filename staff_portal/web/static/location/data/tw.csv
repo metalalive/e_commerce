@@ -1,0 +1,30 @@
+city_ascii,lat,lng,admin_name,capital
+Changhua,24.0734,120.5134,Changhua,admin
+Chiayi,23.4755,120.4351,Chiayi,admin
+Taibao,23.45,120.3333,Chiayi,admin
+Pozi,23.4611,120.2419,Chiayi,
+Hsinchu,24.8168,120.9767,Hsinchu,admin
+Zhubei,24.8333,121.0119,Hsinchu,admin
+Hualien,23.9837,121.6,Hualien,admin
+Kaohsiung,22.6333,120.2666,Kaohsiung,admin
+Keelung,25.1333,121.7333,Keelung,admin
+Jincheng,24.4341,118.3171,Kinmen,admin
+Nangan,26.1504,119.9328,Lienchiang,admin
+Miaoli,24.57,120.82,Miaoli,admin
+Nantou,23.9167,120.6833,Nantou,admin
+Xinzhuang,25.0143,121.4672,New Taipei,
+Shulin,25.0143,121.4672,New Taipei,
+Banqiao,25.0143,121.4672,New Taipei,admin
+Magong,23.5667,119.5833,Penghu,admin
+Pingtung,22.6817,120.4817,Pingtung,admin
+Taichung,24.1521,120.6817,Taichung,admin
+Tainan,23,120.2,Tainan,admin
+Taipei,25.0358,121.5683,Taipei,primary
+Taitung,22.7554,121.14,Taitung,admin
+Zhongli,24.965,121.2168,Taoyuan,
+Taoyuan,24.9889,121.3111,Taoyuan,admin
+Pingzhen,24.9439,121.2161,Taoyuan,
+Yangmei,24.9167,121.15,Taoyuan,
+Bade,24.9575,121.2989,Taoyuan,
+Yilan,24.75,121.75,Yilan,admin
+Douliu,23.7075,120.5439,Yunlin,admin
