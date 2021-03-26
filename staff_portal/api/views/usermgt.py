@@ -1,5 +1,7 @@
-from .common import BaseRevProxyView
+from .constants import SERVICE_HOSTS
+from .common    import BaseRevProxyView
 from common.views.proxy.mixins import _render_url_path
+
 
 
 def _get_path_list_or_item_api(proxyview, request, key_vars):
@@ -14,7 +16,7 @@ def _get_path_list_or_item_api(proxyview, request, key_vars):
 
 
 class AppBaseProxyView(BaseRevProxyView):
-    dst_host = 'http://localhost:8008'
+    dst_host = SERVICE_HOSTS['usermgt'][0]
     authenticate_required = {
         'OPTIONS': True, 'GET': True, 'POST': True,
         'PUT': True,  'PATCH': True, 'DELETE': True,

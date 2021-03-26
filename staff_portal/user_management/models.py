@@ -256,11 +256,12 @@ class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
     class Meta(ClosureTableModelMixin.Meta):
         db_table = 'generic_user_group_closure'
 
-    ancestor = models.ForeignKey(GenericUserGroup, db_column='ancestor', null=True,
-                    on_delete=models.CASCADE, related_name='descendants')
-    descendant = models.ForeignKey(GenericUserGroup, db_column='descendant', null=True,
-                    on_delete=models.CASCADE, related_name='ancestors')
-
+    ##ancestor = models.ForeignKey(GenericUserGroup, db_column='ancestor', null=True,
+    ##                on_delete=models.CASCADE, related_name='descendants')
+    ##descendant = models.ForeignKey(GenericUserGroup, db_column='descendant', null=True,
+    ##                on_delete=models.CASCADE, related_name='ancestors')
+    ancestor   = ClosureTableModelMixin.asc_field(ref_cls=GenericUserGroup)
+    descendant = ClosureTableModelMixin.desc_field(ref_cls=GenericUserGroup)
 
 
 

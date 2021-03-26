@@ -10,14 +10,14 @@ from django.contrib.contenttypes.fields  import GenericForeignKey
 
 _logger = logging.getLogger(__name__)
 
-
+# TODO, figure out how to support soft-deleted instance which includes compound key (multi-column key)
 class ChangeSet(models.Model):
     class Meta:
         abstract = True
 
     ##done_by  = models.ForeignKey('user_management.GenericUserProfile', db_column='done_by', null=True,
     ##            on_delete=models.SET_NULL, related_name="softdel_cset")
-    done_by = models.CharField(max_length=128, null=False, blank=False, unique=False)
+    done_by = models.CharField(max_length=16, null=False, blank=False, unique=False)
     time_created = models.DateTimeField(default=timezone.now)
     content_type = models.ForeignKey(ContentType, db_column='content_type', on_delete=models.CASCADE)
     object_id = models.CharField(db_column='object_id', max_length=100)

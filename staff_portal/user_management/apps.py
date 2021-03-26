@@ -39,6 +39,9 @@ class UserManagementConfig(AppConfig):
         if celery_app.configured is False: # avoid re-configuration
             from . import celeryconfig
             celery_app.config_from_object(celeryconfig)
+
+        from common.models.db import monkeypatch_django_db
+        monkeypatch_django_db()
         # add --noreload to avoid django runserver from loading twice initially
 
 

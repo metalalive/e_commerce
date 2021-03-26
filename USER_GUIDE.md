@@ -3,13 +3,19 @@ switch to python virtual environment for following steps
 
 ### Migration
 
-* no need to run `django makemigrations`
+* For migrating database schema of default Django applications like `auth` and `contenttypes`, you do not need to run `django makemigrations`, instead you use existing migration files I generated.
 * create `django_migration` database table
 
 ```
+python3.9 manage.py makemigrations user_management  --settings user_management.settings
+python3.9 manage.py makemigrations product          --settings product.settings
+```
+If you do not specify migration name, each command above generates sequential number as the migration name. Then you run `migrate` command on each of the application :
+```
 python3.9 manage.py migrate contenttypes  0002   --settings user_management.settings  --database site_dba
 python3.9 manage.py migrate auth          0018   --settings user_management.settings  --database site_dba
-python3.9 manage.py migrate user_management 0033 --settings user_management.settings  --database site_dba 
+python3.9 manage.py migrate user_management  0001  --settings user_management.settings  --database site_dba
+python3.9 manage.py migrate product       0001  --settings product.settings  --database site_dba
 ```
 
 ### Run the system
@@ -61,8 +67,8 @@ celery --app=common.util.python  --config=common.util.python.celerybeatconfig  b
 
 * Finally, start backend application service
 ```
+DJANGO_SETTINGS_MODULE='api.settings' daphne -p 8007  common.util.python.django.asgi:application
 python3.9 manage.py runserver  --settings web.settings  8006
-python3.9 manage.py runserver  --settings api.settings  8007
 python3.9 manage.py runserver  --settings user_management.settings  8008
 ```
 

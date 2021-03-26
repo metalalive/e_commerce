@@ -284,7 +284,9 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin, GetProfileIDMixi
         exc_rd_fields = request.query_params.get('exc_rd_fields', [])
         if exc_rd_fields and isinstance(exc_rd_fields, str):
             exc_rd_fields = [exc_rd_fields]
+        kwargs = self.kwargs_map(request, kwargs)
         kwargs['serializer_kwargs'] = {'from_read_view':True, 'exc_rd_fields': exc_rd_fields}
+        #print('user profile get() , kwargs : %s, %s' % (kwargs, self.kwargs))
         return super().get(request=request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -312,6 +314,14 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin, GetProfileIDMixi
                 model=self.serializer_class.Meta.model.__name__)
         return self.recovery(request=request, *args, **kwargs)
 
+    def kwargs_map(self, request, kwargs):
+        # if the argument `pk` is `me`, then update the value to profile ID of current login user
+        if kwargs.get('pk', None) == 'me':
+            account = request.user
+            my_id = str(account.genericuserauthrelation.profile.pk)
+            kwargs['pk'] = my_id
+            self.kwargs['pk'] = my_id
+        return kwargs
 
 
 ## --------------------------------------------------------------------------------------

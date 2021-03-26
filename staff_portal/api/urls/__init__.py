@@ -8,6 +8,7 @@ urlpatterns = [
     path('activity_log',  UserActionHistoryAPIReadView.as_view() ),
     path('log_level',     DynamicLoglevelAPIView.as_view() ),
     path('usermgt/', include('api.urls.usermgt')),
+    path('product/', include('api.urls.productmgt')),
     ##re_path(r'.*', Gateway.as_view()),
 ]
 

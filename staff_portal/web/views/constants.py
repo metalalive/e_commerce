@@ -35,7 +35,8 @@ HTML_TEMPLATE_MAP = {
             ],
     },
     'productmgt': {
-        'DashBoardView'          : 'product/DashBoard.html'     ,
+        'DashBoardView'  : 'product/DashBoard.html',
+        'ProjectDevelopmentView': 'product/trello.html',
     },
 } # end of HTML_TEMPLATE_MAP
 

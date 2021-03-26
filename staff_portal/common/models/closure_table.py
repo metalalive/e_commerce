@@ -124,8 +124,7 @@ class ClosureTableModelMixin(models.Model):
     """
     class Meta:
         abstract = True
-        constraints = [models.UniqueConstraint(fields=['ancestor','descendant'], name="unique_path",
-            )]
+        constraints = [models.UniqueConstraint(fields=['ancestor','descendant'], name="unique_path",)]
 
     depth = models.PositiveIntegerField(db_column='depth', default=0)
 
@@ -139,5 +138,16 @@ class ClosureTableModelMixin(models.Model):
                 _logger.warning(None, *log_msg)
                 raise ValueError
         return super().save(*args, **kwargs)
+
+    @classmethod
+    def asc_field(cls, ref_cls):
+        return models.ForeignKey(ref_cls , db_column='ancestor', null=True,
+                        on_delete=models.CASCADE, related_name='descendants')
+
+    @classmethod
+    def desc_field(cls, ref_cls):
+        return models.ForeignKey(ref_cls , db_column='descendant', null=True,
+                        on_delete=models.CASCADE, related_name='ancestors')
+
 
 
