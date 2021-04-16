@@ -12,6 +12,8 @@ _logger = logging.getLogger(__name__)
 
 
 class RecoveryModelMixin:
+    # this mixin class has to work with any subclass of 
+    # common.views.proxy.mixins.BaseGetProfileIDMixin
     MAX_TIME_DELTA = timedelta(**{'days': 10, 'hours':12,})
     ZERO_TIME_DELTA = timedelta()
     TIME_UNIT = ['year', 'month', 'day', 'hour', 'minute']

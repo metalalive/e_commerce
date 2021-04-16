@@ -1,6 +1,6 @@
 from celery.schedules import crontab
 
-from .celeryconfig import _get_amqp_url
+from . import _get_amqp_url
 
 # data transfer between clients (producers) and workers (consumers)
 # needs to be serialized.

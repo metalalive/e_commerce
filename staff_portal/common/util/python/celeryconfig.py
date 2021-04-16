@@ -1,4 +1,5 @@
 import json
+from . import _get_amqp_url
 
 # TODO, import & register tasks dynamically from different services
 # explicitly indicate all tasks applied in this project
@@ -10,22 +11,6 @@ task_serializer = 'json'
 result_serializer = 'json'
 
 timezone = "Asia/Taipei"
-
-# use rabbitmqctl to manage accounts
-def _get_amqp_url(secrets_path):
-    secrets = None
-    with open(secrets_path, 'r') as f:
-        secrets = json.load(f)
-        secrets = secrets['amqp_broker']
-        secrets = secrets[0] # always use guest account (with password)
-    assert secrets, "failed to load secrets from file"
-    protocol = secrets['protocol']
-    username = secrets['username']
-    passwd = secrets['password']
-    host   = secrets['host']
-    port   = secrets['port']
-    out = '%s://%s:%s@%s:%s' % (protocol, username, passwd, host, port)
-    return out
 
 broker_url = _get_amqp_url(secrets_path="./common/data/secrets.json")
 

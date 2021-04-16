@@ -2,7 +2,10 @@ import logging
 from datetime  import datetime, timedelta
 
 from django.db     import  IntegrityError, transaction
+from django.contrib.auth.models import User as AuthUser
+from celery.backends.rpc import RPCBackend as CeleryRpcBackend
 
+from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
 from common.util.python.celery import app as celery_app
 from common.util.python import log_wrapper
 
@@ -52,5 +55,16 @@ def clean_expired_auth_token(days):
     expired.delete()
     return result
 
+
+
+@celery_app.task(backend=CeleryRpcBackend(app=celery_app), queue='rpc_usermgt_get_profile', exchange=RPC_EXCHANGE_DEFAULT_NAME, \
+        routing_key='rpc.user_management.get_profile')
+@log_wrapper(logger=_logger, loglevel=logging.WARNING)
+def get_profile(account_id, field_names):
+    account_id = int(account_id)
+    account = AuthUser.objects.get(pk=account_id)
+    profile = account.genericuserauthrelation.profile
+    data = profile.serializable(present=field_names)
+    return data
 
 

@@ -14,10 +14,12 @@ from common.csrf.middleware import  csrf_protect_m
 from common.auth import logout, login
 from common.auth.backends import ExtendedSessionAuthentication, ForwardClientAuthentication, IsStaffUser
 from common.models.db     import db_conn_retry_wrapper, get_db_error_response
+from common.views.proxy.mixins import RemoteGetProfileIDMixin
 from .mixins  import LimitQuerySetMixin, ExtendedListModelMixin, ExtendedRetrieveModelMixin
 from .mixins  import BulkCreateModelMixin, BulkUpdateModelMixin, BulkDestroyModelMixin
 
 _logger = logging.getLogger(__name__)
+auth_user_cls = get_user_model()
 
 
 class CommonAPIReadView(LimitQuerySetMixin, GenericAPIView, ExtendedListModelMixin, ExtendedRetrieveModelMixin):
@@ -56,6 +58,14 @@ class CommonAPIReadView(LimitQuerySetMixin, GenericAPIView, ExtendedListModelMix
             return self.list(request, *args, **kwargs)
 
 
+def _perform_authentication(view, request):
+    # override original function because account is required to make 
+    account = request.user
+    evt = view.get_profile(account=account)
+    #if not hasattr(request, '_unfinished_rpc_replies'):
+    #    setattr(request, '_unfinished_rpc_replies', [])
+    #request._unfinished_rpc_replies.append(evt)
+
 
 class BaseCommonAPIView(CommonAPIReadView, BulkCreateModelMixin, BulkUpdateModelMixin, BulkDestroyModelMixin):
     pass
@@ -64,24 +74,19 @@ class AuthCommonAPIView(BaseCommonAPIView):
     """ base view for authorized users to perform CRUD operation  """
     authentication_classes = [ExtendedSessionAuthentication, ForwardClientAuthentication]
     permission_classes = [IsAuthenticated, IsStaffUser] # api_settings.DEFAULT_PERMISSION_CLASSES
+    def perform_authentication(self, request):
+        _perform_authentication(view=self, request=request)
+
 
 class AuthCommonAPIReadView(CommonAPIReadView):
     """  base view for authorized users to retrieve data through API  """
     authentication_classes = [ExtendedSessionAuthentication, ForwardClientAuthentication]
     permission_classes = [IsAuthenticated, IsStaffUser]
+    def perform_authentication(self, request):
+        _perform_authentication(view=self, request=request)
 
 
-
-class GetProfileIDMixin:
-    def get_profile_id(self, request):
-        # TODO, make RPC to downstream usermgt service
-        # request.user is automatically updated by login()
-        ##account = request.user
-        ##out = account.genericuserauthrelation.profile.pk
-        ##raise NotImplementedError
-        return -1
-
-class BaseLoginView(APIView, GetProfileIDMixin):
+class BaseLoginView(APIView, RemoteGetProfileIDMixin):
     renderer_classes = [JSONRenderer]
     is_staff_only = False
     use_session   = False
@@ -94,10 +99,11 @@ class BaseLoginView(APIView, GetProfileIDMixin):
         user = authenticate(request, username=username, password=password, is_staff_only=self.is_staff_only)
         log_msg = ['action', 'login', 'result', user is not None, 'username', username or '__EMPTY__']
         if user:
+            reply_evt = self.get_profile(account=user) # make async RPC to usermgt service
             login(request, user, backend=None, use_session=self.use_session, use_token=self.use_token)
             status = RestStatus.HTTP_200_OK
             context = {}
-            profile_id = self.get_profile_id(request=request)
+            profile_id = self.get_profile_id(request=request, num_of_msgs_fetch=2)
             log_msg += ['profile_id', profile_id]
         else:
             status = RestStatus.HTTP_401_UNAUTHORIZED
@@ -106,9 +112,8 @@ class BaseLoginView(APIView, GetProfileIDMixin):
         return RestResponse(data=context, status=status)
 
 
-class BaseLogoutView(APIView, GetProfileIDMixin):
+class BaseLogoutView(APIView, RemoteGetProfileIDMixin):
     renderer_classes = [JSONRenderer]
-    auth_user_cls = get_user_model()
     use_session   = False
     use_token     = False
 
@@ -116,11 +121,12 @@ class BaseLogoutView(APIView, GetProfileIDMixin):
         # anonymous users are NOT allowed to consume this endpoint
         status = RestStatus.HTTP_401_UNAUTHORIZED
         account = request.user
-        if isinstance(account, self.auth_user_cls) :
+        if isinstance(account, auth_user_cls) :
+            self.get_profile(account=account)
             logout(request, use_token=self.use_token, use_session=self.use_session)
             status = RestStatus.HTTP_200_OK
             username = account.username
-            profile_id = self.get_profile_id(request=request)
+            profile_id = self.get_profile_id(request=request, num_of_msgs_fetch=2)
             log_msg = ['action', 'logout', 'username', username, 'profile_id', profile_id]
             _logger.info(None, *log_msg, request=request)
         return  RestResponse(data={}, status=status)

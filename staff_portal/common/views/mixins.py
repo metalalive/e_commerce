@@ -105,6 +105,8 @@ def _get_serializer_data(view, serializer):
 
 
 class ExtendedListModelMixin:
+    # this mixin class has to work with any subclass of 
+    # common.views.proxy.mixins.BaseGetProfileIDMixin
     def list(self, request, *args, **kwargs):
         s_data = {}
         page = None
@@ -136,6 +138,8 @@ class ExtendedListModelMixin:
 
 
 class ExtendedRetrieveModelMixin:
+    # this mixin class has to work with any subclass of 
+    # common.views.proxy.mixins.BaseGetProfileIDMixin
     def retrieve(self, request, *args, **kwargs):
         status = None
         s_data = {}
@@ -155,6 +159,8 @@ class ExtendedRetrieveModelMixin:
 
 
 class UserEditViewLogMixin:
+    # this mixin class has to work with any subclass of 
+    # common.views.proxy.mixins.BaseGetProfileIDMixin
     def log_action(self, action_type, request, many, serializer):
         ## self.get_serializer_class()
         if many: # instance should be either QuerySet or Model
@@ -257,6 +263,8 @@ class BulkUpdateModelMixin(UpdateModelMixin, UserEditViewLogMixin):
 
 
 class BulkDestroyModelMixin(DestroyModelMixin, UserEditViewLogMixin):
+    # this mixin class has to work with any subclass of 
+    # common.views.proxy.mixins.BaseGetProfileIDMixin
     def destroy(self, request, *args, **kwargs):
         many = kwargs.pop('many', False)
         status_ok = kwargs.pop('status_ok', RestStatus.HTTP_204_NO_CONTENT)

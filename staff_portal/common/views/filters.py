@@ -3,7 +3,7 @@ import logging
 from functools import reduce
 from datetime import datetime, timezone
 
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.db.models.constants import LOOKUP_SEP
 from rest_framework.filters     import BaseFilterBackend
 
@@ -105,10 +105,28 @@ class SimpleRangeFilter(BaseFilterBackend):
 #### end of SimpleRangeFilter
 
 
-
 class DateTimeRangeFilter(SimpleRangeFilter):
     search_param = ['date']
     def normalize(self, param):
         return datetime.fromisoformat(param)
+
+
+class ClosureTableFilter(BaseFilterBackend):
+    def filter_queryset(self, request, queryset, view):
+        # filter out the instance whose depth = 0 only in read view
+        closure_model_cls = getattr(view, 'closure_model_cls', None)
+        if closure_model_cls is None:
+            return queryset
+        closure_qset = closure_model_cls.objects.filter(depth__gt=0)
+        field_names  = request.query_params.get('fields', '').split(',')
+        prefetch_objs = []
+        if 'ancestors' in field_names :
+            prefetch_objs.append(Prefetch('ancestors',   queryset=closure_qset))
+        if 'descendants' in field_names :
+            prefetch_objs.append(Prefetch('descendants', queryset=closure_qset))
+        queryset = queryset.prefetch_related( *prefetch_objs )
+        ####err_args = ["low_level_prefetch_query", queryset.query] # TODO, find better way to log raw SQL
+        ####_logger.debug(None, *err_args, request=request)
+        return queryset
 
 

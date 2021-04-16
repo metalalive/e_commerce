@@ -4,7 +4,6 @@ import functools
 import logging
 
 
-
 def get_fixture_pks(filepath:str, pkg_hierarchy:str):
     assert pkg_hierarchy, "pkg_hierarchy must be fully-qualified model path"
     from django.conf  import  settings as django_settings
@@ -97,6 +96,23 @@ def accept_mimetypes_lookup(http_accept:str, expected_types):
     expected_types = list(map(lambda x: x.strip().lower(), expected_types))
     result = filter(lambda x: x in expected_types, client_accept)
     return list(result)
+
+
+def _get_amqp_url(secrets_path, idx=0):
+    # use rabbitmqctl to manage accounts
+    secrets = None
+    with open(secrets_path, 'r') as f:
+        secrets = json.load(f)
+        secrets = secrets['amqp_broker']
+        secrets = secrets[idx] # the default is to select index 0 as guest account (with password)
+    assert secrets, "failed to load secrets from file"
+    protocol = secrets['protocol']
+    username = secrets['username']
+    passwd = secrets['password']
+    host   = secrets['host']
+    port   = secrets['port']
+    out = '%s://%s:%s@%s:%s' % (protocol, username, passwd, host, port)
+    return out
 
 
 class ExtendedDict(dict):

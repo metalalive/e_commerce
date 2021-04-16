@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from django.db     import  models, IntegrityError, transaction
+from django.db.models.constants import LOOKUP_SEP
 from django.core.validators import RegexValidator
 from django.core.exceptions import EmptyResultSet, ObjectDoesNotExist, MultipleObjectsReturned
 from django.contrib import auth
@@ -478,6 +479,17 @@ class GenericUserProfile(SoftDeleteObjectMixin, MinimumInfoMixin):
                 'list_unchanged', list_unchanged]
         _logger.debug(None, *log_args)
 
+    def serializable(self, present=None):
+        out = {}
+        present = present or []
+        present = map(lambda x: x.split(LOOKUP_SEP) if x.find(LOOKUP_SEP) > 0 else x, present)
+        for field_name in present:
+            if not isinstance(field_name, (str,)):
+                continue # TODO, get fk, m2m related fields
+            value = getattr(self, field_name, None)
+            if value and isinstance(value, (str, int, float, bool)):
+                out[field_name] = value
+        return out
 #### end of GenericUserProfile
 
 

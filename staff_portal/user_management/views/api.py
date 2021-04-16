@@ -5,14 +5,14 @@ from datetime import datetime, timezone
 from django.conf   import  settings as django_settings
 from django.core.exceptions     import ValidationError
 from django.http.response    import HttpResponseBase
-from django.db.models        import Prefetch, Count, QuerySet
+from django.db.models        import Count
 from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework             import status as RestStatus
 from rest_framework.generics    import GenericAPIView
 from rest_framework.views       import APIView
 from rest_framework.viewsets    import ModelViewSet
-from rest_framework.filters     import BaseFilterBackend, OrderingFilter, SearchFilter
+from rest_framework.filters     import OrderingFilter, SearchFilter
 from rest_framework.renderers   import JSONRenderer
 from rest_framework.response    import Response as RestResponse
 from rest_framework.permissions import DjangoModelPermissions, DjangoObjectPermissions
@@ -21,6 +21,7 @@ from rest_framework.settings    import api_settings as drf_settings
 from softdelete.views import RecoveryModelMixin
 from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
 from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
+from common.views.filters  import  ClosureTableFilter
 from common.util.python.async_tasks  import  sendmail as async_send_mail, default_error_handler as async_default_error_handler
 
 from ..apps   import UserManagementConfig as UserMgtCfg
@@ -194,25 +195,6 @@ class QuotaUsageTypeAPIView(AuthCommonAPIView, GetProfileIDMixin):
         kwargs['many'] = True
         return self.destroy(request, *args, **kwargs)
 
-
-
-
-class ClosureTableFilter(BaseFilterBackend):
-    def filter_queryset(self, request, queryset, view):
-        # filter out the instance whose depth = 0 only in read view
-        if (not hasattr(view, 'closure_model_cls')) or (view.closure_model_cls is None):
-            return queryset
-        closure_qset = view.closure_model_cls.objects.filter(depth__gt=0)
-        field_names  = request.query_params.get('fields', '').split(',')
-        prefetch_objs = []
-        if 'ancestors' in field_names :
-            prefetch_objs.append(Prefetch('ancestors',   queryset=closure_qset))
-        if 'descendants' in field_names :
-            prefetch_objs.append(Prefetch('descendants', queryset=closure_qset))
-        queryset = queryset.prefetch_related( *prefetch_objs )
-        ####err_args = ["low_level_prefetch_query", queryset.query] # TODO, find better way to log raw SQL
-        ####_logger.debug(None, *err_args, request=request)
-        return queryset
 
 
 

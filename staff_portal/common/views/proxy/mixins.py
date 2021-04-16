@@ -2,8 +2,9 @@ import base64
 import requests
 from requests.exceptions import ConnectionError, SSLError, Timeout
 
-from common.auth.backends import FORWARDED_HEADER
 from common.util.python import get_request_meta_key
+from common.util.python.messaging.rpc       import RPCproxy
+from common.util.python.messaging.constants import AMQP_EXCHANGE_NAME_CONFIG_KEY, AMQP_EXCHANGE_TYPE_CONFIG_KEY
 from .settings import api_proxy_settings
 
 class DjangoProxyRequestMixin:
@@ -66,6 +67,7 @@ class DjangoProxyRequestMixin:
         # whether the forwarding request comes from trusted proxy server (perhaps by examining the domain name)
         # TODO: figure out how downstream app servers handle the authorization from proxy server
         if request.user.is_authenticated:
+            from common.auth.backends import FORWARDED_HEADER
             uname = request.user.get_username()
             headers[FORWARDED_HEADER] = 'by=%s;for=%s;host=%s;proto=%s' % \
                     ('proxy_api_gateway', uname, request.get_host(), request.scheme)
@@ -166,4 +168,63 @@ def _render_url_path(proxyview, request, key_vars):
         out = proxyview.path_pattern
     return out
 
+
+class BaseGetProfileIDMixin:
+    UNKNOWN_ID = -1
+
+    def get_account(self, request):
+        raise NotImplementedError
+
+    def get_account_id(self, account):
+        raise NotImplementedError
+
+    def get_profile_id(self, request, **kwargs):
+        raise NotImplementedError
+
+    def get_profile(self, account):
+        raise NotImplementedError
+
+
+class RemoteGetProfileIDMixin(BaseGetProfileIDMixin):
+    _usermgt_rpc = RPCproxy(app_name='user_management')
+    # currently get_account() and get_account_id() works with Django,
+    # both functions should be abstracted for other web frameworks
+    def get_account(self, request):
+        return request.user
+
+    def get_account_id(self, account):
+        return account.pk
+
+    def get_profile_id(self, request, **kwargs):
+        reply = self.get_profile(account=self.get_account(request))
+        if not reply.finished:
+            num_of_msgs_fetch = kwargs.pop('num_of_msgs_fetch',None)
+            reply.refresh(retry=reply.timeout, num_of_msgs_fetch=num_of_msgs_fetch)
+        result = reply.result
+        if result and isinstance(result, dict):
+            usr_prof = result.get('result', None)
+            if usr_prof and isinstance(usr_prof, dict):
+                _id = usr_prof.get('id', self.UNKNOWN_ID)
+            else:
+                _id = self.UNKNOWN_ID
+        else:
+            _id = self.UNKNOWN_ID
+        return str(_id)
+
+    def get_profile(self, account):
+        # make RPC call as internal communication to user-management service
+        if not hasattr(self, '_user_profile_reply'):
+            acc_id = self.get_account_id(account=account)
+            field_names = ['id', 'first_name', 'last_name']
+            self._user_profile_reply = self._usermgt_rpc.get_profile(account_id=acc_id,
+                    field_names=field_names)
+        # it is actually reply object, to retrieve return value of RPC
+        # application has to invoke reply.wait()
+        return self._user_profile_reply
+
+
+# from common.util.python.messaging.rpc       import RPCproxy
+# myrpc = RPCproxy(app_name='user_management')
+# evt = myrpc.get_profile(account_id=25, field_names=['id', 'first_name', 'last_name'])
+# evt2 = myrpc.xxXx(yui='249fye')
 

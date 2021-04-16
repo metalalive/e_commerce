@@ -1,7 +1,7 @@
 import json
 from celery.schedules import crontab
 
-from common.util.python.celeryconfig import _get_amqp_url
+from common.util.python import _get_amqp_url
 
 
 # TODO, import & register tasks dynamically from different services
@@ -40,7 +40,8 @@ result_persistent = False
 result_expires = 120
 
 task_queues = {
-    'usermgt_default': {'exchange':'usermgt_default', 'routing_key':'usermgt_default'},
+    #'usermgt_default': {'exchange':'usermgt_default', 'routing_key':'usermgt_default'},
+    #'rpc_usermgt_get_profile': {'exchange':'rpc-default-allapps', 'routing_key':'rpc.user_management.get_profile'},
 }
 
 task_routes = {
@@ -58,4 +59,22 @@ task_annotations = {
 task_track_started = True
 # task_ignore_result = True
 # result_expires , note the default is 24 hours
+
+def init_rpc(app):
+    import kombu
+    from kombu.pools import set_limit as kombu_pool_set_limit
+    from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME, RPC_EXCHANGE_DEFAULT_TYPE
+    exchange = kombu.Exchange(name=RPC_EXCHANGE_DEFAULT_NAME , type=RPC_EXCHANGE_DEFAULT_TYPE)
+    # determine a list of task queues used at here, you don't need to
+    # give option -Q at Celery command line
+    app.conf.task_queues = [
+        kombu.Queue('usermgt_default', routing_key='usermgt_default',
+            exchange=kombu.Exchange(name='usermgt_default', type='direct')),
+        #kombu.Queue('usermgt_rpc3_rx', routing_key='usermgt_rpc333_rx.*',
+        #    exchange=kombu.Exchange(name='usermgt_rpc3_rx', type='topic')),
+        kombu.Queue('rpc_usermgt_get_profile', exchange=exchange,
+            routing_key='rpc.user_management.get_profile')
+    ]
+    kombu_pool_set_limit(limit=2)
+
 

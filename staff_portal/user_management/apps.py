@@ -36,10 +36,13 @@ class UserManagementConfig(AppConfig):
 
     def ready(self):
         from common.util.python.celery import app as celery_app
+        from . import celeryconfig
         if celery_app.configured is False: # avoid re-configuration
-            from . import celeryconfig
             celery_app.config_from_object(celeryconfig)
+        celeryconfig.init_rpc(app=celery_app)
 
+        from common.util.python.messaging.monkeypatch import patch_kombu_pool
+        patch_kombu_pool()
         from common.models.db import monkeypatch_django_db
         monkeypatch_django_db()
         # add --noreload to avoid django runserver from loading twice initially

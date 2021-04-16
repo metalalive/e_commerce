@@ -19,8 +19,6 @@ Django==3.1
 djangorestframework==3.11.0
 dnspython==1.16.0
 elasticsearch==5.5.3
-eventlet==0.30.0
-greenlet==1.0.0
 hyperlink==21.0.0
 idna==2.10
 incremental==21.3.0
@@ -28,7 +26,6 @@ kombu==5.0.2
 limits==1.5.1
 mock==4.0.3
 mysqlclient==1.4.6
-nameko==2.13.0
 path==2.2
 path.py==12.5.0
 Pillow==7.2.0
@@ -51,6 +48,5 @@ txaio==21.2.1
 urllib3==1.26.2
 vine==5.0.0
 wcwidth==0.2.5
-Werkzeug==1.0.1
 wrapt==1.12.1
 zope.interface==5.2.0

@@ -6,24 +6,30 @@ from rest_framework.settings    import api_settings as drf_settings
 from rest_framework.response    import Response as RestResponse
 from rest_framework             import status as RestStatus
 
+from common.views.proxy.mixins import BaseGetProfileIDMixin
 from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models import AuthUserResetRequest, EmailAddress, GenericUserProfile
 from .constants import LOGIN_WEB_URL
 
 _logger = logging.getLogger(__name__)
 
-class GetProfileIDMixin:
-    def get_profile_id(self, request):
+class GetProfileIDMixin(BaseGetProfileIDMixin):
+    def get_profile(self, account):
+        if not hasattr(self, '_cache_profile'):
+            self._cache_profile = account.genericuserauthrelation.profile
+        return self._cache_profile
+
+    def get_profile_id(self, request, **kwargs):
         # TODO, should be not-implemented error , let other apps subclass this mixin
         account = request.user
         if account and isinstance(account, AuthUser):
-            profile = account.genericuserauthrelation.profile
+            profile = self.get_profile(account=account)
             profile_id = profile.pk
         else:
             # which means unauthenticated accesses happened to model instances,
             # application developers should analyze log data and determine whether this
             # part of the system has been compromised.
-            profile_id = -1
+            profile_id = self.UNKNOWN_ID
         return str(profile_id)
 
 
