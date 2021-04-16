@@ -72,5 +72,16 @@ class BaseRevProxyView(DjangoView, DjangoProxyRequestMixin):
                 continue
             response[name.lower()] = value
         return response
+## end of BaseRevProxyView
+
+
+def _get_path_list_or_item_api(proxyview, request, key_vars):
+    #full_path = request.get_full_path()
+    #print('check the full path from client %s' % (full_path))
+    if any(key_vars):
+        out = proxyview.path_pattern[1].format(**key_vars)
+    else:
+        out = proxyview.path_pattern[0]
+    return out
 
 

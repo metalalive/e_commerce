@@ -1,8 +1,8 @@
 from django.http.response          import HttpResponse
 
-from .constants import SERVICE_HOSTS
-from .common    import BaseRevProxyView
 from common.views.proxy.mixins import _render_url_path
+from .constants import SERVICE_HOSTS
+from .common    import BaseRevProxyView, _get_path_list_or_item_api
 
 
 class AppBaseProxyView(BaseRevProxyView):
@@ -35,5 +35,15 @@ class TrelloNotificationProxyView(AppBaseProxyView):
             return response
         response = HttpResponse(content='[]', status=None, content_type='application/json')
         return response
+
+
+class ProductTagProxyView(AppBaseProxyView):
+    authenticate_required = {
+        'OPTIONS': True, 'GET': True, 'POST': True,
+        'PUT': True,  'DELETE': True,
+    }
+    path_pattern = ['tags', 'tag/{tag_id}']
+    path_handler = _get_path_list_or_item_api
+    path_var_keys = ['tag_id']
 
 

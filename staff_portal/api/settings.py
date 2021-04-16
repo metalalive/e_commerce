@@ -5,7 +5,7 @@ from common.logging.logger import ExtendedLogger
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent
 
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
@@ -15,6 +15,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'rest_framework',
+    'api.apps.APIgatewayConfig',
 ]
 
 MIDDLEWARE = [
