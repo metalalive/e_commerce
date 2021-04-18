@@ -5,13 +5,14 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from django.db     import  models, IntegrityError, transaction
+from django.db.models.manager   import Manager
 from django.db.models.constants import LOOKUP_SEP
 from django.core.validators import RegexValidator
 from django.core.exceptions import EmptyResultSet, ObjectDoesNotExist, MultipleObjectsReturned
 from django.contrib import auth
 from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
-from django.contrib.auth.models import LoginAccountRoleRelation
+from django.contrib.auth.models import LoginAccountRoleRelation, Group as AuthRole
 
 from rest_framework.settings    import api_settings
 from rest_framework.exceptions  import PermissionDenied
@@ -19,14 +20,12 @@ from rest_framework.exceptions  import PermissionDenied
 from softdelete.models import SoftDeleteObjectMixin, ChangeSet, SoftDeleteRecord
 from location.models   import Location
 
-from common.models.mixins        import MinimumInfoMixin
+from common.util.python          import merge_partial_dup_listitem
+from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from common.models.mixins        import MinimumInfoMixin, SerializableMixin
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
 
 _logger = logging.getLogger(__name__)
-
-# TODO, parameterize preserved ID in AuthRole model
-ROLE_ID_SUPERUSER = 1
-ROLE_ID_STAFF = 2
 
 
 class UsermgtChangeSet(ChangeSet):
@@ -267,7 +266,7 @@ class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
 
 
 # TODO, should have default superuser account as fixture data
-class GenericUserProfile(SoftDeleteObjectMixin, MinimumInfoMixin):
+class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMixin):
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
     SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
     NONE = 0
@@ -479,16 +478,43 @@ class GenericUserProfile(SoftDeleteObjectMixin, MinimumInfoMixin):
                 'list_unchanged', list_unchanged]
         _logger.debug(None, *log_args)
 
-    def serializable(self, present=None):
-        out = {}
-        present = present or []
-        present = map(lambda x: x.split(LOOKUP_SEP) if x.find(LOOKUP_SEP) > 0 else x, present)
-        for field_name in present:
-            if not isinstance(field_name, (str,)):
-                continue # TODO, get fk, m2m related fields
-            value = getattr(self, field_name, None)
-            if value and isinstance(value, (str, int, float, bool)):
-                out[field_name] = value
+
+    def serializable(self, present):
+        related_field_map = {
+            'roles': (['id', 'name'], {
+                'perm_code': models.F('permissions__codename'),
+                'app_label': models.F('permissions__content_type__app_label'),
+            }),
+            'quota': (['maxnum'], { # TODO, fetch quota records from group hierarchy
+                'material_id': models.F('usage_type__material'),
+                'model_name' : models.F('usage_type__material__model'),
+                'app_label'  : models.F('usage_type__material__app_label'),
+            }),
+            'emails': ([], {})
+        }
+        def query_fn(fd_value, field_name, out):
+            qset = None
+            sub_fd_names = related_field_map.get(field_name, None)
+            # for roles, it is also necessary to fetch all extra roles
+            # which are inherited indirectly from the user group hierarchy
+            if field_name == 'roles':
+                qset = AuthRole.objects.filter(pk__in=self.all_roles)
+            elif isinstance(fd_value, Manager):
+                qset = fd_value.all()
+            if qset and sub_fd_names:
+                qset = qset.values(*sub_fd_names[0] , **sub_fd_names[1] )
+                out[field_name] =  list(qset)
+        # end of query_fn
+        out = super().serializable(present=present, query_fn=query_fn)
+        if out.get('roles', None):
+            for role in out['roles']:
+                app_label = role.pop('app_label', None)
+                perm_code = role.get('perm_code',None)
+                if app_label and perm_code:
+                    role['perm_code'] = '%s.%s' % (app_label, perm_code)
+            # further reduce duplicate data
+            merge_partial_dup_listitem( list_in=out['roles'], combo_key=('id', 'name',),\
+                    merge_keys=('perm_code',))
         return out
 #### end of GenericUserProfile
 

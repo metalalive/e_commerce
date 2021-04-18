@@ -114,6 +114,27 @@ def _get_amqp_url(secrets_path, idx=0):
     out = '%s://%s:%s@%s:%s' % (protocol, username, passwd, host, port)
     return out
 
+def merge_partial_dup_listitem(list_in, combo_key, merge_keys):
+    inter_dict = {}
+    for old_item in list_in:
+        inter_key = tuple([old_item.pop(k) for k in combo_key])
+        for mk in merge_keys:
+            if inter_dict.get(inter_key, None) is None:
+                inter_dict[inter_key] = {}
+            if inter_dict[inter_key].get(mk, None) is None:
+                inter_dict[inter_key][mk] = []
+            value = old_item.pop(mk, None)
+            if value:
+                inter_dict[inter_key][mk].append(value)
+    list_in.clear()
+    for inter_key, inter_value in inter_dict.items():
+        new_item = {}
+        for idx in range(len(inter_key)):
+            new_item[combo_key[idx]] = inter_key[idx]
+        for mk, merged_value in inter_value.items():
+            new_item[mk] = merged_value
+        list_in.append(new_item)
+
 
 class ExtendedDict(dict):
     def __init__(self, *args, **kwargs):

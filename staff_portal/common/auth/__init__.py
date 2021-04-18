@@ -120,7 +120,7 @@ def _get_backend(user, backend):
     return backend
 
 
-def _monkey_patch_baseusermgr():
+def monkeypatch_baseusermgr():
     """
     monkey patch BaseUserManager.get_queryset at server startup,
     because I attempt to minimize access permission to those django application
@@ -131,17 +131,15 @@ def _monkey_patch_baseusermgr():
 
     def monkey_patch_get_queryset(self):
         qset = origin_get_qset(self)
-        only_list = ['id','last_login', 'username']
+        only_list = ['id','last_login']
         qset = qset.only(*only_list)
         log_args = ['raw_sql', str(qset.query)]
         _logger.debug(None, *log_args)
         return qset
 
     is_usermgt_service = 'usermgt_service' in  django_settings.DATABASES.keys()
-    if not is_usermgt_service:
+    if not is_usermgt_service and not hasattr(BaseUserManager.get_queryset , '_patched'):
         BaseUserManager.get_queryset = monkey_patch_get_queryset
-
-
-_monkey_patch_baseusermgr()
+        setattr(BaseUserManager.get_queryset , '_patched', None)
 
 

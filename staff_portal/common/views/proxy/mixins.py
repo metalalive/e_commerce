@@ -195,7 +195,7 @@ class RemoteGetProfileIDMixin(BaseGetProfileIDMixin):
     def get_account_id(self, account):
         return account.pk
 
-    def get_profile_id(self, request, **kwargs):
+    def _ensure_get_profile_attr(self, request, field_name, default_value, **kwargs):
         reply = self.get_profile(account=self.get_account(request))
         if not reply.finished:
             num_of_msgs_fetch = kwargs.pop('num_of_msgs_fetch',None)
@@ -204,22 +204,32 @@ class RemoteGetProfileIDMixin(BaseGetProfileIDMixin):
         if result and isinstance(result, dict):
             usr_prof = result.get('result', None)
             if usr_prof and isinstance(usr_prof, dict):
-                _id = usr_prof.get('id', self.UNKNOWN_ID)
+                out = usr_prof.get(field_name, default_value)
             else:
-                _id = self.UNKNOWN_ID
+                out = default_value
         else:
-            _id = self.UNKNOWN_ID
+            out = default_value
+        return out
+
+    def get_profile_id(self, request, **kwargs):
+        _id = self._ensure_get_profile_attr(request=request, field_name='id',
+                default_value=self.UNKNOWN_ID, **kwargs)
         return str(_id)
+
+    def get_profile_roles(self, request, **kwargs):
+        roles = self._ensure_get_profile_attr(request=request, field_name='roles',
+                default_value=[], **kwargs)
+        return roles
 
     def get_profile(self, account):
         # make RPC call as internal communication to user-management service
         if not hasattr(self, '_user_profile_reply'):
             acc_id = self.get_account_id(account=account)
-            field_names = ['id', 'first_name', 'last_name']
+            field_names = ['id', 'first_name', 'last_name','roles','quota']
             self._user_profile_reply = self._usermgt_rpc.get_profile(account_id=acc_id,
                     field_names=field_names)
         # it is actually reply object, to retrieve return value of RPC
-        # application has to invoke reply.wait()
+        # application has to invoke reply.result()
         return self._user_profile_reply
 
 
