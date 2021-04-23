@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models.fields.related import RelatedField
 from django.db.models.fields.related_descriptors import ForwardManyToOneDescriptor, ManyToManyDescriptor
 from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
@@ -49,6 +50,7 @@ class ProductTag(_UserProfileMixin, MinimumInfoMixin):
     class Meta:
         db_table = 'product_tag'
     name   = models.CharField(max_length=64, unique=False)
+    min_info_field_names = ['id','name']
 
 
 class ProductTagClosure(ClosureTableModelMixin):
@@ -70,7 +72,34 @@ class _RelatedFieldMixin:
         related_descriptor = getattr(cls, field_name, None)
         assert related_descriptor and isinstance(related_descriptor, valid_list), \
                 'related_descriptor inproper type : %s' % related_descriptor
-        related_descriptor.field.remote_field.related_name = value
+
+        related_field = related_descriptor.field # has to be RelatedField
+        assert related_field and isinstance(related_field, RelatedField), \
+                'related_field should be RelatedField, but it is %s' % related_field
+        # There seems to be inconsistency in the Django ORM when you need to modify
+        # `related_name` of a RelatedField inherited from abstract parent model.
+        # The code below isn't perfect solution, because the related model of a
+        # RelatedField still adds reverse relationship attribute  with default
+        # `related_name` (e.g. `<YOUR_MODEL_NAME>_set`) ...
+        related_field.remote_field.related_name = value # removal will cause new migration
+        #related_field.contribute_to_class(cls=cls, name=value) # why this cause errors in makemigrations
+        related_model = related_field.remote_field.model
+        # With default `related_name` , it is extremely difficult to find out where in
+        # the code does Django ORM add reverse relationship attribute to the related model
+        # of a RelatedField (e.g. fk or m2m field) in a model.
+        # The hacky workaround below looks for relation attribute in the related model
+        # by default `related_name` value , then modify the key of the attribute. That
+        # means this function can be executed only once for each RelatedField in a
+        # concrete model at runtime.
+        default_related_name = '%s_set' % cls._meta.model_name
+        assert hasattr(related_model, default_related_name), 'the related_name of the related model `%s` has been modified to non-default value  since application started' % (related_model)
+
+        rev_rel_descriptor = getattr(related_model, default_related_name)
+        assert related_field is rev_rel_descriptor.field, 'both of them have to be the same object'
+
+        delattr(related_model, default_related_name)
+        setattr(related_model, value, rev_rel_descriptor)
+## end of  _RelatedFieldMixin
 
 
 class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfileMixin, _RelatedFieldMixin):
@@ -83,7 +112,7 @@ class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfile
     class Meta:
         abstract = True
     # one product item could have many tags, a tag includes several product items
-    tags = models.ManyToManyField(ProductTag, db_column='tags', related_name='tagged_abs_products')
+    tags = models.ManyToManyField(ProductTag, db_column='tags', )
     # global visible flag at front store (will be used at PoS service)
     visible  = models.BooleanField(default=False)
     # current price of this product or package item. this field value also means the base price
@@ -230,8 +259,7 @@ class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin):
                                   db_column='ingredient_type',  limit_choices_to=allowed_models)
     ingredient_id   = models.PositiveIntegerField(db_column='ingredient_id')
     ingredient_ref  = GenericForeignKey(ct_field='ingredient_type', fk_field='ingredient_id')
-    attr_type = models.ForeignKey(ProductAttributeType, db_column='attr_type', related_name='attr_val',
-                on_delete=models.CASCADE)
+    attr_type = models.ForeignKey(ProductAttributeType, db_column='attr_type', on_delete=models.CASCADE)
 
 
 class ProductAttributeValueStr(BaseProductAttributeValue):
