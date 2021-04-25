@@ -218,12 +218,14 @@ class SelectIDsExistValidator:
 
     def __call__(self, value):
         # the argument -- value here has to be a list of IDs
+        # note that application callers have to handle data type of ID
+        # or primary key in advance before running this validator
         if not isinstance(value ,list):
             value = [value]
         qset = self.queryset
         if not qset:
             try:
-                qset = self.model_cls.objects.filter(id__in=value)
+                qset = self.model_cls.objects.filter(pk__in=value)
             except ValueError:
                 err_msg = "The list of ID values contains incorrect data type: %s" % (value)
                 log_msg = ['err_msg', err_msg]
@@ -231,7 +233,7 @@ class SelectIDsExistValidator:
                 if self.err_field_name:
                     err_msg = {self.err_field_name:err_msg}
                 raise ValidationError(err_msg)
-        diff = set(value) - set([q.pk for q in qset])
+        diff = set(value) - set(qset.values_list('pk', flat=True))
         #### if len(value) != qset.count():
         if len(diff) > 0:
             err_msg = "There must be non-existing ID in the list : %s" % (diff)

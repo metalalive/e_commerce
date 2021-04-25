@@ -21,9 +21,8 @@ from rest_framework.validators  import UniqueTogetherValidator
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
 from rest_framework.settings    import api_settings
 
-from common.validators          import  SelectIDsExistValidator, ClosureSingleTreeLoopValidator
-from common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer
-from common.serializers.mixins  import  ClosureTableMixin
+from common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer, DjangoBaseClosureBulkSerializer
+from common.serializers.mixins  import  BaseClosureNodeMixin
 from common.util.python         import  get_fixture_pks
 from common.util.python.async_tasks    import  sendmail as async_send_mail
 
@@ -235,61 +234,24 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
 #### end of  GenericUserProfileSerializer
 
 
-class BulkGenericUserGroupSerializer(BulkUpdateListSerializer, ClosureTableMixin):
-
+class BulkGenericUserGroupSerializer(DjangoBaseClosureBulkSerializer):
     CLOSURE_MODEL_CLS     = GenericUserGroupClosureSerializer.Meta.model
     PK_FIELD_NAME         = GenericUserGroupClosureSerializer.Meta.model.id.field.name
     DEPTH_FIELD_NAME      = GenericUserGroupClosureSerializer.Meta.model.depth.field.name
     ANCESTOR_FIELD_NAME   = GenericUserGroupClosureSerializer.Meta.model.ancestor.field.name
     DESCENDANT_FIELD_NAME = GenericUserGroupClosureSerializer.Meta.model.descendant.field.name
 
-    def __init__(self, instance=None, data=empty, **kwargs):
-        super().__init__(instance=instance, data=data, **kwargs)
-        if hasattr(self, 'initial_data'):
-            v = self.prepare_cycle_detection_validators(forms=self.initial_data)
-            self.validators.append(v)
-
-    @property
-    def is_create(self):
-        return (self.instance is None)
-
-    def _get_field_data(self, form, key, default=None, remove_after_read=False):
-        if remove_after_read:
-            out = form.pop(key, default)
-        else:
-            out = form.get(key, default)
-        return out
-
-    def _set_field_data(self, form, key, val):
-        form[key] = val
-
-    def get_node_ID(self, node):
-        return node.pk
-
-    def create(self, validated_data):
-        validated_data = self.get_sorted_insertion_forms(forms=validated_data)
-        with transaction.atomic():
-            instances = super().create(validated_data=validated_data)
-            #raise IntegrityError("end of generic group bulk create ........")
-        return instances
-
     def update(self, instance, validated_data):
-        validated_data = self.get_sorted_update_forms(instances=instance, forms=validated_data)
-        ret = None
-        with transaction.atomic():
-            self.clean_dup_update_paths()
-            ret = super().update(instance=instance, validated_data=validated_data)
-            update_roles_on_accounts.delay(affected_groups=[g.pk for g in ret])
-            #raise IntegrityError("end of group bulk update ........")
+        ret = super().update(instance=instance, validated_data=validated_data)
+        # TODO, reliability test
+        update_roles_on_accounts.delay(affected_groups=[g.pk for g in ret])
         return ret
-#### end of  BulkGenericUserGroupSerializer
 
 
-class GenericUserGroupSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
-    class Meta(ExtendedModelSerializer.Meta):
+class GenericUserGroupSerializer(BaseClosureNodeMixin, ExtendedModelSerializer, UserSubformSetupMixin):
+    class Meta(BaseClosureNodeMixin.Meta, ExtendedModelSerializer.Meta):
         model = GenericUserGroup
         fields = ['id', 'name', 'ancestors', 'descendants', 'usr_cnt',]
-        validate_only_field_names = ['exist_parent', 'new_parent']
         list_serializer_class = BulkGenericUserGroupSerializer
 
     ancestors   = GenericUserGroupClosureSerializer(many=True, read_only=True) #
@@ -309,20 +271,7 @@ class GenericUserGroupSerializer(ExtendedModelSerializer, UserSubformSetupMixin)
         super().__init__(instance=instance, data=data, **kwargs)
 
     def to_representation(self, instance):
-        req = self.context.get('request', None)
-        parent_only = req.query_params.get('parent_only', None)
-        out = super().to_representation(instance=instance)
-        if parent_only:
-            _reduced = []
-            for a in out['ancestors']:
-                if a['depth'] == 1:
-                    _reduced.append(a)
-                    break
-            out['ancestors'] = _reduced
-            log_msg = ['grp_id', out['id'], 'grp_ancestors', out['ancestors'], 'parent_only', parent_only]
-            _logger.debug(None, *log_msg)
-        return out
-
+        return super().to_represent(instance=instance, _logger=_logger)
 
     def extra_setup_before_validation(self, instance, data):
         data['roles'] = self.fields['roles'].augment_write_data(target=instance, account=self._account,
@@ -334,83 +283,34 @@ class GenericUserGroupSerializer(ExtendedModelSerializer, UserSubformSetupMixin)
         log_msg = ['roles_data', data.get('roles')]
         _logger.debug(None, *log_msg)
 
-
     def validate(self, value):
-        """ serializer-level validation """
-        exist_parent = self._validate_only_fields.get('exist_parent','')
-        new_parent   = self._validate_only_fields.get('new_parent','')
-        if not exist_parent in validators.EMPTY_VALUES:
-            v = SelectIDsExistValidator(model_cls=self.Meta.model, err_field_name='exist_parent')
-            v(exist_parent)
-            if not self.instance is None and not self.instance.pk is None : # edit mode
-                model_cls = self.fields['ancestors'].child.Meta.model
-                v = ClosureSingleTreeLoopValidator( err_field_name='exist_parent',
-                        T2_root_id=self.instance.pk ,  closure_model=model_cls,
-                        ancestor_column_name   = model_cls.ancestor.field.name,
-                        descendant_column_name = model_cls.descendant.field.name,  )
-                v(exist_parent)
-        elif not new_parent in validators.EMPTY_VALUES:
-            if not new_parent.isdigit() : #TODO: replace with RestValidationError
-                raise ValidationError({"new_parent": "it must be integer"})
-        self._validate_only_fields['exist_parent'] = str(exist_parent)
-        value.update(self._validate_only_fields) # for later sorting operation at parent
-        log_msg = ['validated_quota', value['quota'], '_validate_only_fields', self._validate_only_fields]
-        _logger.debug(None, *log_msg)
-        return value
-
+        if _logger:
+            log_msg = ['validated_quota', value['quota']]
+            _logger.debug(None, *log_msg)
+        return super().validate(value=value, exception_cls=ValidationError, _logger=_logger)
 
     def create(self, validated_data):
         quota_data = validated_data.pop('quota', None)
         roles_data = validated_data.pop('roles', None)
-        exist_parent = validated_data.pop('exist_parent', '')
-        new_parent   = validated_data.pop('new_parent', '')
         instance = super().create(validated_data=validated_data)
         self.fields['quota'].create(validated_data=quota_data, usr=instance)
         self.fields['roles'].create(validated_data=roles_data, usr=instance)
-        # maintain group hierarchy
-        closure_tree = self.parent.get_insertion_ancestors(leaf_node=instance, \
-                exist_parent=exist_parent, new_parent=new_parent )
-        self.fields['ancestors'].create(validated_data=closure_tree)
         return instance
 
-
     def update(self, instance, validated_data):
-        exist_parent = validated_data.pop('exist_parent', '')
-        new_parent   = validated_data.pop('new_parent', '')
         quota_data = validated_data.pop('quota', None)
         roles_data = validated_data.pop('roles', None)
-        closure_tree = validated_data.pop('closure_tree', None)
         instance = super().update(instance=instance, validated_data=validated_data)
         quota_objs = self.fields['quota'].update(instance=instance.quota.all(), \
                 validated_data=quota_data, usr=instance, allow_insert=True, allow_delete=True)
         role_objs  = self.fields['roles'].update(instance=instance.roles.all(), \
                 validated_data=roles_data, usr=instance, allow_insert=True, allow_delete=True)
-        # For bulk update on group hierarchy, it's good to explicitly & separately specify
-        # which nodes (of closure table) should be created / updated / deleted 
-        if closure_tree:
-            self.fields['ancestors'].update( instance=closure_tree['update']['obj'],
-                    validated_data=closure_tree['update']['data'] )
-            self.fields['ancestors'].create(validated_data=closure_tree['create'])
         return instance
 
     #### usr_cnt = SerializerMethodField() # don't use this, it cannot be reordered
     #### def get_usr_cnt(self, obj):
     ####     return obj.profiles.count()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+## end of class GenericUserGroupSerializer
 
 
 

@@ -1,4 +1,4 @@
-from django.db import models
+from django.db     import  models, IntegrityError, transaction
 from django.db.models.fields.related import RelatedField
 from django.db.models.fields.related_descriptors import ForwardManyToOneDescriptor, ManyToManyDescriptor
 from django.contrib.contenttypes.models  import ContentType
@@ -43,14 +43,62 @@ class UniqueIdentifierMixin(models.Model):
     id = models.PositiveIntegerField(primary_key=True, unique=True, db_index=True, db_column='id',)
 
 
+
+class _TagQuerySet(models.QuerySet):
+    def get_ascs_descs_id(self, IDs, fetch_asc=True, fetch_desc=True, depth=None):
+        is_depth_int = depth and isinstance(depth, int) and depth.isdigit()
+        init_qset = self.model.objects.all()
+        if 'root' in IDs:
+            depth = int(depth) if is_depth_int and not fetch_asc else 0
+            qset = init_qset.annotate(asc_cnt=models.Count('ancestors'))
+            qset = qset.filter(asc_cnt=1).values_list('pk', flat=True)
+            depth_range  = models.Q(descendants__ancestor__in=qset) & models.Q(descendants__depth__lte=depth)
+        else:
+            depth = int(depth) if is_depth_int else 1
+            qset = init_qset.filter(pk__in=IDs).values_list('pk', flat=True)
+            depth_desc_range = models.Q()
+            depth_asc_range  = models.Q()
+            if fetch_desc:
+                depth_desc_range = (models.Q(descendants__depth__lte=depth) & models.Q(descendants__depth__gt=0))
+            if fetch_asc:
+                depth_asc_range  = (models.Q(ancestors__depth__lte=depth) & models.Q(ancestors__depth__gt=0))
+            depth_range = models.Q(descendants__ancestor__in=qset) & (depth_desc_range | depth_asc_range)
+        qset = init_qset.filter(depth_range)
+        IDs  = qset.values_list('descendants__descendant', flat=True)
+        return IDs
+
+    #@transaction.atomic
+    def delete(self, *args, **kwargs):
+        if not hasattr(self, '_descs_deletion_included'):
+            descs_id = self.values_list('descendants__descendant__pk', flat=True)
+            manager = self.model.objects
+            rec_qs = manager.filter(pk__in=descs_id)
+            rec_qs._descs_deletion_included = True
+            rec_qs.delete()
+        else:
+            super().delete(*args, **kwargs)
+
+class _TagManager(models.Manager):
+    def all(self, *args, **kwargs):
+        qset = super().all(*args, **kwargs)
+        qset.__class__ = _TagQuerySet
+        return qset
+
+    def filter(self, *args, **kwargs):
+        qset = super().filter(*args, **kwargs)
+        qset.__class__ = _TagQuerySet
+        return qset
+
+
 class ProductTag(_UserProfileMixin, MinimumInfoMixin):
     """
     hierarchical tags for product categories
     """
     class Meta:
         db_table = 'product_tag'
-    name   = models.CharField(max_length=64, unique=False)
+    objects = _TagManager()
     min_info_field_names = ['id','name']
+    name   = models.CharField(max_length=64, unique=False)
 
 
 class ProductTagClosure(ClosureTableModelMixin):

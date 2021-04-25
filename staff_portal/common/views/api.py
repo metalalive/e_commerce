@@ -61,7 +61,8 @@ class CommonAPIReadView(LimitQuerySetMixin, GenericAPIView, ExtendedListModelMix
 def _perform_authentication(view, request):
     # override original function because account is required to make 
     account = request.user
-    evt = view.get_profile(account=account)
+    if isinstance(account, auth_user_cls):
+        view.get_profile(account=account)
     #if not hasattr(request, '_unfinished_rpc_replies'):
     #    setattr(request, '_unfinished_rpc_replies', [])
     #request._unfinished_rpc_replies.append(evt)

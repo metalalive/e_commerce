@@ -42,8 +42,9 @@ class ProductTagProxyView(AppBaseProxyView):
         'OPTIONS': True, 'GET': True, 'POST': True,
         'PUT': True,  'DELETE': True,
     }
-    path_pattern = ['tags', 'tag/{tag_id}']
+    path_pattern = ['tags', 'tag/{tag_id}', 'tag/{tag_id}/ancestors', 'tag/{tag_id}/descendants']
     path_handler = _get_path_list_or_item_api
     path_var_keys = ['tag_id']
+
 
 

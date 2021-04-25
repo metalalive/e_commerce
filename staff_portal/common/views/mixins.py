@@ -3,6 +3,7 @@ import logging
 from django.core.validators  import EMPTY_VALUES
 from django.core.exceptions  import ObjectDoesNotExist, FieldError
 from django.db.utils         import OperationalError
+from django.db.models.constants import LOOKUP_SEP
 from rest_framework.response    import Response as RestResponse
 from rest_framework             import status as RestStatus
 from rest_framework.settings    import api_settings
@@ -56,7 +57,7 @@ class LimitQuerySetMixin:
                     pk_src=pk_src, pk_skip_list=pk_skip_list)
             if IDs :
                 try:
-                    pk_contain = "".join([pk_field_name, '__in'])
+                    pk_contain =  LOOKUP_SEP.join([pk_field_name, 'in'])
                     kwargs = {pk_contain: IDs}
                     queryset = manager.filter(**kwargs)
                 except (FieldError, ValueError) as e: # invalid data type in ID list, or invalid field name

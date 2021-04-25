@@ -35,9 +35,6 @@ INSTALLED_APPS = [
     'product.apps.ProductConfig',
 ]
 
-# Note:
-# this project is staff-only backend site for PoS system, concurrent login
-# on individual account is prohibited.
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -49,7 +46,7 @@ TEMPLATES = []
 
 FIXTURE_DIRS = ['my_fixtures',]
 
-WSGI_APPLICATION = 'common.util.python.django.wsgi.application'
+WSGI_APPLICATION = 'common.util.python.django.asgi.application'
 
 
 # Database
@@ -64,10 +61,15 @@ DATABASES = { # will be update with secrets at the bottom of file
         'ENGINE': 'django.db.backends.mysql',
         'CONN_MAX_AGE': 0,
     },
+    'limited_login_access': {
+        'ENGINE': 'django.db.backends.mysql',
+        'CONN_MAX_AGE': 0,
+        'reversed_app_label': ['auth',]
+    },
     'product_dev_service': {
         'ENGINE': 'django.db.backends.mysql',
         'CONN_MAX_AGE': 0,
-        'reversed_app_label': ['product']
+        'reversed_app_label': ['product',]
     } # if you uninstall the application `product` , you must also comment this setting off
 } # end of database settings
 
@@ -151,12 +153,12 @@ LOGGING = {
         },
         # pre-defined handler classes applied to this project
         'handlers': {
-            #'console': {
-            #    'level': 'ERROR',
-            #    'formatter': 'shortened_fmt',
-            #    'class': 'logging.StreamHandler',
-            #    'stream': 'ext://sys.stdout',
-            #},
+            'console': {
+                'level': 'ERROR',
+                'formatter': 'shortened_fmt',
+                'class': 'logging.StreamHandler',
+                'stream': 'ext://sys.stdout',
+            },
             "default_file": {
                 'level': 'WARNING',
                 'formatter': 'shortened_fmt',
@@ -203,9 +205,9 @@ LOGGING = {
             },
         }, # end of handlers section
         'loggers': {
-            'common.views': {
-                'level': 'INFO',
-                'handlers': ['dbg_views_file', 'dbg_views_logstash'],
+            'daphne': {
+                'level': 'DEBUG',
+                'handlers': ['console', 'default_file'],
             },
             'common.views.mixins': {
                 'level': 'INFO',

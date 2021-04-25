@@ -10,7 +10,7 @@ from rest_framework.exceptions  import ValidationError as RestValidationError, E
 from rest_framework.fields      import empty
 from rest_framework.settings    import api_settings
 
-from  .mixins       import  ValidationErrorCallbackMixin, SerializerExcludeFieldsMixin
+from  .mixins       import  ValidationErrorCallbackMixin, SerializerExcludeFieldsMixin,  ClosureTableMixin
 from ..validators   import  EditFormObjIdValidator
 from softdelete.models import SoftDeleteObjectMixin
 
@@ -160,5 +160,48 @@ class ExtendedModelSerializer(ModelSerializer, SerializerExcludeFieldsMixin):
         return out
 
 #### end of ExtendedModelSerializer
+
+
+class DjangoBaseClosureBulkSerializer(BulkUpdateListSerializer, ClosureTableMixin):
+    def __init__(self, instance=None, data=empty, **kwargs):
+        super().__init__(instance=instance, data=data, **kwargs)
+        if hasattr(self, 'initial_data'):
+            v = self.prepare_cycle_detection_validators(forms=self.initial_data)
+            self.validators.append(v)
+
+    @property
+    def is_create(self):
+        return (self.instance is None)
+
+    def _get_field_data(self, form, key, default=None, remove_after_read=False):
+        if remove_after_read:
+            out = form.pop(key, default)
+        else:
+            out = form.get(key, default)
+        return out
+
+    def _set_field_data(self, form, key, val):
+        form[key] = val
+
+    def get_node_ID(self, node):
+        return node.pk
+
+    def create(self, validated_data):
+        validated_data = self.get_sorted_insertion_forms(forms=validated_data)
+        with transaction.atomic():
+            instances = super().create(validated_data=validated_data)
+            #raise IntegrityError("end of generic group bulk create ........")
+        return instances
+
+    def update(self, instance, validated_data):
+        validated_data = self.get_sorted_update_forms(instances=instance, forms=validated_data)
+        ret = None
+        with transaction.atomic():
+            self.clean_dup_update_paths()
+            ret = super().update(instance=instance, validated_data=validated_data)
+            #raise IntegrityError("end of group bulk update ........")
+        return ret
+#### end of  DjangoBaseClosureBulkSerializer
+
 
 

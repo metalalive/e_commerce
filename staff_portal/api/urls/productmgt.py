@@ -10,5 +10,7 @@ urlpatterns = [
     path('trello/notifications',  TrelloNotificationProxyView.as_view()  ),
     path('tags',               ProductTagProxyView.as_view()  ),
     path('tag/<slug:tag_id>',  ProductTagProxyView.as_view()  ),
+    path('tag/<slug:tag_id>/ancestors',    ProductTagProxyView.as_view()  ),
+    path('tag/<slug:tag_id>/descendants',  ProductTagProxyView.as_view()  ),
 ]
 

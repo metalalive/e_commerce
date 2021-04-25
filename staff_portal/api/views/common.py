@@ -1,7 +1,7 @@
 from wsgiref.util import is_hop_by_hop
 from requests.status_codes import codes as requests_codes
 
-from django.http.response          import HttpResponse
+from django.http.response          import HttpResponse, Http404
 from django.views.generic.base     import View as DjangoView
 
 from common.views.api import BaseLoginView, BaseLogoutView
@@ -76,10 +76,17 @@ class BaseRevProxyView(DjangoView, DjangoProxyRequestMixin):
 
 
 def _get_path_list_or_item_api(proxyview, request, key_vars):
-    #full_path = request.get_full_path()
     #print('check the full path from client %s' % (full_path))
     if any(key_vars):
-        out = proxyview.path_pattern[1].format(**key_vars)
+        out = None
+        for pattern in proxyview.path_pattern[1:] :
+            formatted = pattern.format(**key_vars)
+            if request.path.endswith(formatted):
+                out = formatted
+                break
+        if not out:
+            raise Http404
+        #out = proxyview.path_pattern[1].format(**key_vars)
     else:
         out = proxyview.path_pattern[0]
     return out

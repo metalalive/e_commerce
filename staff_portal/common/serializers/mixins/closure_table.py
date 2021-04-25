@@ -1,14 +1,15 @@
 import logging
 from collections import OrderedDict
 
-from common.validators  import  ClosureSingleTreeLoopValidator, TreeNodesLoopValidator, ClosureCrossTreesLoopValidator
+from common.validators  import  SelectIDsExistValidator, ClosureSingleTreeLoopValidator, TreeNodesLoopValidator, ClosureCrossTreesLoopValidator
 from softdelete.models  import  SoftDeleteObjectMixin
 
+EMPTY_VALUES = (None, '', [], (), {})
 _logger = logging.getLogger(__name__)
 
 class ClosureTableMixin:
     """ generic class for maintaining closure-table data structure"""
-    EMPTY_VALUES = (None, '', [], (), {})
+    EMPTY_VALUES = EMPTY_VALUES
     CLOSURE_MODEL_CLS     = None
     PK_FIELD_NAME         = None
     DEPTH_FIELD_NAME      = None
@@ -477,7 +478,6 @@ class ClosureTableMixin:
 
         log_msg = ['update_path_log', update_path_log, 'create_path_log', create_path_log, 'delete_path_log', delete_path_log]
         _logger.debug(None, *log_msg)
-        #raise Exception
     #### end of _construct_edit_paths
 
 
@@ -571,7 +571,7 @@ class ClosureTableMixin:
             # clean up useless clsoure nodes prior to creating or updating other nodes
             # , in order not to violate unique constraint applied at model level
             for d in self._delete_path_objs:
-                delete_nodes_log.append(d['_obj'].pk)
+                delete_nodes_log.append(str(d['_obj'].pk))
                 kwargs = {}
                 if isinstance(d['_obj'], SoftDeleteObjectMixin):
                     kwargs['hard'] = True
@@ -589,7 +589,83 @@ class ClosureTableMixin:
         log_msg = ['deleted_unused_nodes', ','.join(delete_nodes_log)]
         _logger.info(None, *log_msg)
 
-
 #### end of class ClosureTableMixin
 
+
+class BaseClosureNodeMixin:
+    """
+    * this mixin should work with common.serializers.ExtendedModelSerializer
+      and be placed prior to ExtendedModelSerializer in MRO (module resolution
+      order in python class inheritance)
+    * any serializer that inherits this mixins should have list serializer which
+      also inherits ClosureTableMixin (as shown above)
+    """
+    class Meta:
+        validate_only_field_names = ['exist_parent', 'new_parent']
+
+    def to_represent(self, instance, _logger=None):
+        req = self.context.get('request', None)
+        parent_only = req.query_params.get('parent_only', None)
+        out = super().to_representation(instance=instance)
+        if parent_only:
+            _reduced = []
+            for a in out['ancestors']:
+                if a['depth'] == 1:
+                    _reduced.append(a)
+                    break
+            out['ancestors'] = _reduced
+            if _logger:
+                log_msg = ['grp_id', out['id'], 'grp_ancestors', out['ancestors'], \
+                        'parent_only', parent_only]
+                _logger.debug(None, *log_msg)
+        return out
+
+    def validate(self, value, _logger=None, exception_cls=Exception):
+        """ serializer-level validation """
+        exist_parent = self._validate_only_fields.get('exist_parent','')
+        new_parent   = self._validate_only_fields.get('new_parent','')
+        if not exist_parent in  EMPTY_VALUES:
+            if isinstance(exist_parent, str) and exist_parent.isdigit():
+                exist_parent = int(exist_parent)
+            v = SelectIDsExistValidator(model_cls=self.Meta.model, err_field_name='exist_parent')
+            v(exist_parent)
+            if not self.instance is None and not self.instance.pk is None : # edit mode
+                model_cls = self.fields['ancestors'].child.Meta.model
+                v = ClosureSingleTreeLoopValidator( err_field_name='exist_parent',
+                        T2_root_id=self.instance.pk ,  closure_model=model_cls,
+                        ancestor_column_name   = model_cls.ancestor.field.name,
+                        descendant_column_name = model_cls.descendant.field.name,  )
+                v(exist_parent)
+        elif not new_parent in  EMPTY_VALUES:
+            if not isinstance(new_parent, int) and not new_parent.isdigit() :
+                raise  exception_cls({"new_parent": "it must be integer"})
+        self._validate_only_fields['exist_parent'] = str(exist_parent)
+        value.update(self._validate_only_fields) # for later sorting operation at parent
+        if _logger:
+            log_msg = ['_validate_only_fields', self._validate_only_fields]
+            _logger.debug(None, *log_msg)
+        return value
+
+    def create(self, validated_data):
+        exist_parent = validated_data.pop('exist_parent', '')
+        new_parent   = validated_data.pop('new_parent', '')
+        instance = super().create(validated_data=validated_data)
+        # maintain group hierarchy
+        closure_tree = self.parent.get_insertion_ancestors(leaf_node=instance, \
+                exist_parent=exist_parent, new_parent=new_parent )
+        self.fields['ancestors'].create(validated_data=closure_tree)
+        return instance
+
+    def update(self, instance, validated_data):
+        exist_parent = validated_data.pop('exist_parent', '')
+        new_parent   = validated_data.pop('new_parent', '')
+        closure_tree = validated_data.pop('closure_tree', None)
+        instance = super().update(instance=instance, validated_data=validated_data)
+        # For bulk update on group hierarchy, it's good to explicitly & separately specify
+        # which nodes (of closure table) should be created / updated / deleted 
+        if closure_tree:
+            self.fields['ancestors'].update( instance=closure_tree['update']['obj'],
+                    validated_data=closure_tree['update']['data'] )
+            self.fields['ancestors'].create(validated_data=closure_tree['create'])
+        return instance
 

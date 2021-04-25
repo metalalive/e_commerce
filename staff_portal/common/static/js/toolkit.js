@@ -100,9 +100,6 @@ function event_handler_modal(evt)
 
 
 class APIconsumer {
-    // the HTTP error response status that can be handled internally at this class
-    err_http_resp_status = {429: this._handle_toomany_req};
-
     constructor(props) {
         if(!props.num_retry) {
             props.num_retry = 10;
@@ -110,6 +107,8 @@ class APIconsumer {
         if(!props.wait_interval_ms){
             props.wait_interval_ms = 240;
         }
+        // the HTTP error response status that can be handled internally at this class
+        this.err_http_resp_status = {429: this._handle_toomany_req};
         this.props = props;
         this._init_csrf();
     }
@@ -399,7 +398,7 @@ class ReactBaseForm extends React.Component {
             if(df.label != undefined) { prop_out[df.name].label = df.label; }
             if(df.value != undefined) { prop_out[df.name].defaultValue = df.value; }
             // init error list of all fields at here when this component is renderred at the first time
-            df.ref = React.createRef();
+            df.ref = React.createRef(); // this makes react element has reference to its component
             this._setup_errmsg_banner(df);
             prop_out[df.name].ref = df.ref;
             prop_out[df.name].key = this.get_unique_key();
