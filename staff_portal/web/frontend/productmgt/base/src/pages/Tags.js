@@ -44,6 +44,28 @@ function _refresh_root_nodes(evt) {
     tree_ref.refresh(evt);
 }
 
+function _instant_search(evt) {
+    let invoker = evt.nativeEvent.target;
+    var keyword = null;
+    var api_url = null;
+    if(invoker instanceof HTMLInputElement) {
+        if (evt.code == "Enter") {
+            console.log('start instant search ... keycode:'+ evt.code);
+            keyword = invoker.value;
+            api_url = invoker.dataset.api_url;
+        }
+    } else if(invoker instanceof HTMLButtonElement) {
+        var txtfield = invoker.parentNode.querySelector("input");
+        keyword = txtfield.value;
+        api_url = txtfield.dataset.api_url;
+    }
+    if (keyword && api_url) {
+        let tree_ref = this.current;
+        tree_ref.search(keyword, api_url);
+    }
+}
+
+
 function _save_tree_status(evt) {
     let tree_ref = this.current;
     // * collect list of added nodes and edited nodes
@@ -83,6 +105,7 @@ const Tags = (props) => {
                         fp_render_form={ _render_editform_modal.bind(refs.tag_edit_form) }
                         form_ref={ refs.tag_edit_form }  api_base_url={ api_base_url }
                         refresh_ro_fields={['item_cnt','pkg_cnt',]}
+                        search_ro_fields={['item_cnt','pkg_cnt','ancestors']}
                     />;
     let tag_edit_form = <TagContentEditForm  ref={refs.tag_edit_form}  form_id={form_id} />;
     return (
@@ -90,7 +113,7 @@ const Tags = (props) => {
           <div className="content">
           <div className="container-xl">
               <div className="row">
-              <div className="col-xl-10">
+              <div className="col-xl-12">
               <div className="card">
                 <div className="card-header">
                   <div className="d-flex">
@@ -113,12 +136,34 @@ const Tags = (props) => {
                     </button>
                     <Link className="btn btn-primary btn-pill ml-auto" to='/tags/import'> import from file </Link>
                     <Link className="btn btn-primary btn-pill ml-auto" to='/tags/export'> export to file </Link>
-                    <Link className="btn btn-primary btn-pill ml-auto" to='/tags/search'> advanced search </Link>
                   </div>
                 </div>
                 <div className="card-body">
-                    <h3 className="card-title">Hierarchical Tags applied to all saleable items</h3>
-                    { hier_data }
+                    <div className="row">
+                        <div className="col-6 col-sm-4 col-md-2 col-xl mb-3">
+                            <Link className="btn btn-primary btn-pill ml-auto" to='/tags/sortby'> sort by </Link>
+                        </div>
+                        <div className="col-6 col-sm-4 col-md-2 col-xl mb-3">
+                            <div className="mb-3 input-icon" id="searchbar">
+                              <input type="text" className="form-control col-l" placeholder="Search..."
+                                   onKeyUp={ _instant_search.bind(refs.hier_data) }
+                                   data-api_url={api_base_url.plural} />
+                              <span className="input-icon-addon"  onClick={ _instant_search.bind(refs.hier_data) }>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                      <path stroke="none" d="M0 0h24v24H0z"/>
+                                      <circle cx="10" cy="10" r="7" />
+                                      <line x1="21" y1="21" x2="15" y2="15" />
+                                  </svg>
+                              </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="row">
+                        <h3 className="card-title">Hierarchical Tags applied to all saleable items</h3>
+                    </div>
+                    <div className="row">
+                        { hier_data }
+                    </div>
                     { tag_edit_form }
                 </div>
               </div>

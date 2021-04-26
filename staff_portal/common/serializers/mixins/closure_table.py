@@ -603,22 +603,37 @@ class BaseClosureNodeMixin:
     class Meta:
         validate_only_field_names = ['exist_parent', 'new_parent']
 
-    def to_represent(self, instance, _logger=None):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        req = self.context.get('request', None)
+        parent_only = req.query_params.get('parent_only', None)
+        if parent_only:
+            allowed_fields = req.query_params.get('fields', '').split(',')
+            allowed_fields.extend(['ancestors', 'ancestor', 'depth', 'id'])
+            backup_mutable = req.query_params._mutable
+            req.query_params._mutable = True
+            req.query_params['fields'] = ','.join(allowed_fields)
+            req.query_params._mutable = backup_mutable
+
+    def to_representation(self, instance, _logger=None):
         req = self.context.get('request', None)
         parent_only = req.query_params.get('parent_only', None)
         out = super().to_representation(instance=instance)
+
         if parent_only:
             _reduced = []
-            for a in out['ancestors']:
-                if a['depth'] == 1:
+            for a in out.get('ancestors', []):
+                if a.get('depth', None) == 1:
                     _reduced.append(a)
                     break
-            out['ancestors'] = _reduced
+            if out.get('ancestors', None):
+                out['ancestors'] = _reduced
             if _logger:
                 log_msg = ['grp_id', out['id'], 'grp_ancestors', out['ancestors'], \
                         'parent_only', parent_only]
                 _logger.debug(None, *log_msg)
         return out
+
 
     def validate(self, value, _logger=None, exception_cls=Exception):
         """ serializer-level validation """

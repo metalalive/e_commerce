@@ -5,19 +5,39 @@ from django.db import models
 from rest_framework.filters     import OrderingFilter, SearchFilter
 from common.views.api     import  AuthCommonAPIView, AuthCommonAPIReadView
 from common.views.mixins  import  LimitQuerySetMixin
-from common.views.filters import  ClosureTableFilter
+from common.views.filters import  ClosureTableFilter, AggregateFieldOrderingFilter
 from common.views.proxy.mixins import RemoteGetProfileIDMixin
 
 from ..models.base import ProductTagClosure
 from ..serializers.base import TagSerializer
 from ..permissions import TagsPermissions
 
+class TagOrderFilter(AggregateFieldOrderingFilter):
+    _aggregate_fields  = {
+            'item_cnt' : ('tagged_products', models.Count('tagged_products')),
+            'pkg_cnt'  : ('tagged_packages', models.Count('tagged_packages')),
+        }
+
+TagOrderFilter.mirror()
+
+class TagSearchFilter(SearchFilter):
+    def filter_queryset(self, request, queryset, view):
+        origin_qs = queryset
+        queryset = super().filter_queryset(request=request, queryset=queryset, view=view)
+        if origin_qs is not queryset:
+            matched_ids = queryset.values_list('pk', flat=True)
+            ascs_ids = origin_qs.get_ascs_descs_id(IDs=matched_ids, fetch_asc=True,
+                    fetch_desc=False, depth=-1, self_exclude=False)
+            queryset = origin_qs.filter(pk__in=ascs_ids)
+        return queryset
+
+
 class TagView(AuthCommonAPIView, RemoteGetProfileIDMixin):
     serializer_class  = TagSerializer
-    filter_backends = [TagsPermissions, SearchFilter, ClosureTableFilter, OrderingFilter,] #  
+    filter_backends = [TagsPermissions, TagSearchFilter, ClosureTableFilter, TagOrderFilter,]
     closure_model_cls = ProductTagClosure
     ordering_fields  = ['id', 'name', 'item_cnt', 'pkg_cnt', 'desc_cnt']
-    search_fields  = ['ancestors__ancestor__name']
+    search_fields  = ['name']
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [TagsPermissions]
     queryset = serializer_class.Meta.model.objects.all()
         #annotate(
@@ -49,8 +69,9 @@ class TagView(AuthCommonAPIView, RemoteGetProfileIDMixin):
             query_params._mutable = True
             query_params['ids'] = kwargs.pop('pk', 'root')
             query_params._mutable = backup_mutable
-        #exc_rd_fields = ['ancestors__id', 'descendants__id']
-        #kwargs['serializer_kwargs'] = {'exc_rd_fields': exc_rd_fields,}
+        exc_rd_fields = ['ancestors__id', 'descendants__id', 'ancestors__ancestor__name',
+                'descendants__descendant__name']
+        kwargs['serializer_kwargs'] = {'exc_rd_fields': exc_rd_fields,}
         return super().get(request=request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):

@@ -45,26 +45,40 @@ class UniqueIdentifierMixin(models.Model):
 
 
 class _TagQuerySet(models.QuerySet):
-    def get_ascs_descs_id(self, IDs, fetch_asc=True, fetch_desc=True, depth=None):
-        is_depth_int = depth and isinstance(depth, int) and depth.isdigit()
+    def get_ascs_descs_id(self, IDs, fetch_asc=True, fetch_desc=True, depth=None,
+            self_exclude=True):
+        assert fetch_asc or fetch_desc, "either fetch_asc or fetch_desc must be enabled"
+        is_depth_int = depth and (isinstance(depth, int) or (isinstance(depth, str) and depth.isdigit()))
         init_qset = self.model.objects.all()
         if 'root' in IDs:
             depth = int(depth) if is_depth_int and not fetch_asc else 0
             qset = init_qset.annotate(asc_cnt=models.Count('ancestors'))
             qset = qset.filter(asc_cnt=1).values_list('pk', flat=True)
             depth_range  = models.Q(descendants__ancestor__in=qset) & models.Q(descendants__depth__lte=depth)
+            values_field = 'descendants__descendant'
         else:
+            DEPTH_UNLIMITED = -1
             depth = int(depth) if is_depth_int else 1
             qset = init_qset.filter(pk__in=IDs).values_list('pk', flat=True)
             depth_desc_range = models.Q()
             depth_asc_range  = models.Q()
             if fetch_desc:
-                depth_desc_range = (models.Q(descendants__depth__lte=depth) & models.Q(descendants__depth__gt=0))
+                depth_range = models.Q(descendants__ancestor__in=qset)
+                values_field = 'descendants__descendant'
+                if self_exclude:
+                    depth_desc_range = models.Q(descendants__depth__gt=0)
+                if depth > DEPTH_UNLIMITED:
+                    depth_desc_range = depth_desc_range & models.Q(descendants__depth__lte=depth)
             if fetch_asc:
-                depth_asc_range  = (models.Q(ancestors__depth__lte=depth) & models.Q(ancestors__depth__gt=0))
-            depth_range = models.Q(descendants__ancestor__in=qset) & (depth_desc_range | depth_asc_range)
+                depth_range = models.Q(ancestors__descendant__in=qset)
+                values_field = 'ancestors__ancestor'
+                if self_exclude:
+                    depth_asc_range = models.Q(ancestors__depth__gt=0)
+                if depth > DEPTH_UNLIMITED:
+                    depth_asc_range = depth_asc_range & models.Q(ancestors__depth__lte=depth)
+            depth_range = depth_range & ((depth_desc_range) | (depth_asc_range))
         qset = init_qset.filter(depth_range)
-        IDs  = qset.values_list('descendants__descendant', flat=True)
+        IDs  = qset.values_list(values_field, flat=True)
         return IDs
 
     #@transaction.atomic

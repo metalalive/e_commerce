@@ -49,11 +49,12 @@ class TagSerializer(BaseClosureNodeMixin, ExtendedModelSerializer):
     desc_cnt = IntegerField(read_only=True)
 
     def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
+        self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
         self.usrprof_id = kwargs.pop('usrprof_id', None)
         super().__init__(instance=instance, data=data, **kwargs)
 
     def to_representation(self, instance):
-        out = super().to_represent(instance=instance, _logger=_logger)
+        out = super().to_representation(instance=instance, _logger=_logger)
         field_names = self.fields.keys()
         if 'desc_cnt' in field_names:
             out['desc_cnt'] = instance.descendants.filter(depth=1).count()

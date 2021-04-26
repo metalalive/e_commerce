@@ -20,6 +20,7 @@ export default class HierarchicalData extends Component {
         this._uncommitted_nodes = {added: [],   edited: {},  removed: {},};
         this.node_ro_fields = ['children', 'expanded', '_dirty', 'parentId'];
         this._refresh_ro_fields = ['desc_cnt', ...props.refresh_ro_fields];
+        this._search_ro_fields  = ['desc_cnt', ...props.search_ro_fields];
         this._app_node_id_label = props._node_id_label ? props._node_id_label: 'id';
         var api_props = {num_retry: 4, wait_interval_ms: 385};
         this.api_caller = new APIconsumer(api_props);
@@ -355,7 +356,7 @@ export default class HierarchicalData extends Component {
             // get valid field names from the form, then add extra read-only fields at backend
             const form = this.props.form_ref.current;
             let valid_field_names = [...form.get_field_names(), ...this._refresh_ro_fields];
-            let query_params = {depth:depth, fields: valid_field_names,}
+            let query_params = {depth:depth, fields: valid_field_names, ordering: '-name'}
             let req_opt      = DEFAULT_API_REQUEST_OPTIONS.GET();
             let callbacks    = {
                 succeed    : [this._refresh_callback_succeed.bind(this)],
@@ -429,6 +430,51 @@ export default class HierarchicalData extends Component {
     _refresh_callback_unhandled_exception(data, res, props) {
         console.log("HierarchicalData._refresh_callback_unhandled_exception invoked");
     } // end of _refresh_callback_unhandled_exception
+
+    search(keyword, api_url) {
+        const form = this.props.form_ref.current;
+        let valid_field_names = [...form.get_field_names(), ...this._search_ro_fields];
+        let query_params = {fields: valid_field_names, ordering: '-item_cnt',
+                search: keyword, parent_only:'yes'}
+        let req_opt    = DEFAULT_API_REQUEST_OPTIONS.GET();
+        let callbacks  = {
+            succeed    : [this._search_callback_succeed.bind(this)],
+            server_busy: [this._refresh_callback_server_busy.bind(this)],
+            unhandled_error_response: [this._refresh_callback_unhandled_error_response.bind(this)],
+            unhandled_exception:      [this._refresh_callback_unhandled_exception.bind(this)],
+        };
+        let extra = {};
+        this.api_caller.start({base_url: BaseUrl.API_HOST + api_url, req_opt:req_opt,
+            callbacks:callbacks,  params: query_params, extra:extra});
+    } // end of search
+
+    _search_callback_succeed(data, res, props){
+        if (!data || data.length === 0) {
+            console.log('succeed callback, no descendants to fetch with the search keyword ...');
+            return;
+        }
+        data = data.map((item) => {
+            item.title = item.name;
+            item.expanded = true; 
+            item.children = [];
+            if (item.ancestors.length > 0) {
+                item.parentId = item.ancestors[0].ancestor.id;
+            } else {
+                item.parentId = null;
+            }
+            return item;
+        })
+        let new_tree = this.bound_tree_ops.load({
+            flatData: data,
+            getKey: this.getNodeAppID.bind(this) , // id or index ?
+            getParentKey: (node) => node.parentId, // default is `parentId`
+            rootKey: null, // must not be `undefined` , but it can be null
+        });
+        this.setState({treeData: new_tree});
+        this.bound_tree_ops.clear_array(this._uncommitted_nodes.added);
+        this.bound_tree_ops.clear_props_object(this._uncommitted_nodes.edited);
+        this.bound_tree_ops.clear_props_object(this._uncommitted_nodes.removed);
+    }
 
     render() {
         // * SortableTree is a function components, it does NOT have instance of React component

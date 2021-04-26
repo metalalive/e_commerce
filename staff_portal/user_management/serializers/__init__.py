@@ -271,7 +271,7 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, ExtendedModelSerializer, 
         super().__init__(instance=instance, data=data, **kwargs)
 
     def to_representation(self, instance):
-        return super().to_represent(instance=instance, _logger=_logger)
+        return super().to_representation(instance=instance, _logger=_logger)
 
     def extra_setup_before_validation(self, instance, data):
         data['roles'] = self.fields['roles'].augment_write_data(target=instance, account=self._account,

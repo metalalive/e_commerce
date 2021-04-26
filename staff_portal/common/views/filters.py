@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from django.db.models import Q, Prefetch
 from django.db.models.constants import LOOKUP_SEP
-from rest_framework.filters     import BaseFilterBackend
+from rest_framework.filters     import BaseFilterBackend, OrderingFilter, SearchFilter
 
 _logger = logging.getLogger(__name__)
 
@@ -127,6 +127,35 @@ class ClosureTableFilter(BaseFilterBackend):
         queryset = queryset.prefetch_related( *prefetch_objs )
         ####err_args = ["low_level_prefetch_query", queryset.query] # TODO, find better way to log raw SQL
         ####_logger.debug(None, *err_args, request=request)
+        return queryset
+
+class  AggregateFieldOrderingFilter(OrderingFilter):
+    _aggregate_fields  = {}
+    @classmethod
+    def mirror(cls):
+        # double the key set, use the same corresponding value for ordering rule in Django ORM.
+        # e.g. `field_name` defines ascending order , while `-field_name` defines descending order
+        ag = cls._aggregate_fields
+        negate = {}
+        for k,v in ag.items():
+            newkey = k[1:] if k.startswith('-') else '-%s' % k
+            negate[newkey] = v
+        ag.update(negate)
+
+    def filter_queryset(self, request, queryset, view):
+        ordering = self.get_ordering(request, queryset, view)
+        # currently the support of multiple aggregate in one queryset is limited
+        if ordering:
+            aggregate_included = set(ordering) & set(self._aggregate_fields.keys())
+            aggregate_fields  = {k:v[1] for k,v in self._aggregate_fields.items() if k in aggregate_included}
+            if aggregate_fields:
+                order_substitute  = {k:v[0] for k,v in self._aggregate_fields.items() if k in aggregate_included}
+                ordering = map(lambda v:order_substitute[v] if v in order_substitute.keys() else v , ordering)
+                ordering = list(ordering)
+                queryset = queryset.annotate( **aggregate_fields )
+            #import pdb
+            #pdb.set_trace()
+            return queryset.order_by(*ordering)
         return queryset
 
 
