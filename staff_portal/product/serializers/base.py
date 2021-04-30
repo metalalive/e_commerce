@@ -7,7 +7,7 @@ from rest_framework.fields      import IntegerField, CharField, BooleanField, em
 from common.util.python.messaging.rpc  import  RpcReplyEvent
 from common.serializers  import  BulkUpdateListSerializer, ExtendedModelSerializer, DjangoBaseClosureBulkSerializer
 from common.serializers.mixins  import  BaseClosureNodeMixin
-from ..models.base import ProductTag, ProductTagClosure
+from ..models.base import ProductTag, ProductTagClosure, ProductAttributeType
 
 _logger = logging.getLogger(__name__)
 
@@ -75,5 +75,11 @@ class TagSerializer(BaseClosureNodeMixin, ExtendedModelSerializer):
     def update(self, instance, validated_data):
         validated_data['usrprof'] = self.usrprof_id
         return  super().update(instance=instance, validated_data=validated_data)
+
+
+class AttributeTypeSerializer(ExtendedModelSerializer):
+    class Meta(ExtendedModelSerializer.Meta):
+        model = ProductAttributeType
+        fields = ['id', 'name', 'dtype',]
 
 

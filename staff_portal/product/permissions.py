@@ -41,15 +41,25 @@ class AppBasePermission(DRFBasePermission, DRFBaseFilterBackend):
 
 class TagsPermissions(AppBasePermission):
     perms_map = {
-        'GET': ['product.view_producttag'],
+        'GET': ['product.view_producttag', 'product.view_producttagclosure'],
         'OPTIONS': [],
         'HEAD': [],
-        'POST':   ['product.add_producttag'],
-        'PUT':    ['product.change_producttag'],
-        'PATCH':  ['product.change_producttag'],
-        'DELETE': ['product.delete_producttag'],
+        'POST':   ['product.add_producttag', 'product.add_producttagclosure'],
+        'PUT':    ['product.change_producttag', 'product.change_producttagclosure'],
+        'PATCH':  ['product.change_producttag', 'product.change_producttagclosure'],
+        'DELETE': ['product.delete_producttag', 'product.delete_producttagclosure'],
     }
 
+class AttributeTypePermissions(AppBasePermission):
+    perms_map = {
+        'GET': ['product.view_productattributetype'],
+        'OPTIONS': [],
+        'HEAD': [],
+        'POST':   ['product.add_productattributetype'],
+        'PUT':    ['product.change_productattributetype'],
+        'PATCH':  ['product.change_productattributetype'],
+        'DELETE': ['product.delete_productattributetype'],
+    }
 
 
 

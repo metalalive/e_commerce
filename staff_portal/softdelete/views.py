@@ -60,7 +60,9 @@ class RecoveryModelMixin:
         # check whether to apply recovery view from soft-delete module
         status = kwargs.pop('status_ok', RestStatus.HTTP_200_OK)
         return_params = {}
+        results = None
         resource_content_type = kwargs.pop('resource_content_type', None)
+        return_data_after_done = kwargs.get('return_data_after_done', False)
         loglevel = logging.INFO
         log_args = ['action', 'recover', 'resource_content_type', resource_content_type]
         if resource_content_type:
@@ -81,14 +83,15 @@ class RecoveryModelMixin:
                     delta_start, delta_end = self._get_time_range(first_cset=first_cset, time_start=body.get('time_start', ''))
                     cset = self.SOFTDELETE_CHANGESET_MODEL.objects.filter(content_type=resource_content_type.pk, time_created__lt=delta_end, \
                             done_by=profile_id, time_created__gt=delta_start).order_by("-time_created")
+                    _id_list = cset.values_list('object_id', flat=True)
+                    m_objs = m_cls.objects.filter(pk__in=_id_list , with_deleted=True)
+                    if return_data_after_done:
+                        _serializer =  self.get_serializer(many=True, instance=m_objs)
+                        results = _serializer.data
                     result = []
-                    content_type_ids = []
-                    for c in cset:   # recover items in opposite order in which they were deleted
-                        _id_list.append(c.object_id)
-                        content_type_ids.append('pk=%s, content_type=%s, object_id=%s' %
-                                (c.pk, c.content_type.pk, c.object_id))
-                        m_obj = m_cls.objects.get(pk=c.object_id)
-                        m_obj.undelete(changeset=c, profile_id=profile_id)
+                    content_type_ids = cset.values_list('pk','content_type','object_id')
+                    for m_obj in m_objs: # recover items in opposite order in which they were deleted
+                        m_obj.undelete(profile_id=profile_id)
                         result.append( m_obj.minimum_info )
                     log_args.extend(['affected_items', result, 'content_type_ids', content_type_ids])
                     if success_callback:
@@ -115,5 +118,7 @@ class RecoveryModelMixin:
         log_args.extend(['return_msg', return_msg, 'http_status', status])
         _logger.log(loglevel, None, *log_args, request=request)
         return_data = {'message':[return_msg], 'params':return_params}
+        if results:
+            return_data['results'] = results
         return RestResponse(return_data, status=status)
 

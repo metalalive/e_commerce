@@ -6,7 +6,7 @@ class WebAPIurl(BaseUriLookup):
     # URLs of web APIs , accessable to end client users
     _urls = {
         'TagView'           : ['tags', 'tag/<slug:pk>', 'tag/<slug:pk>/ancestors', 'tag/<slug:pk>/descendants'],
-        'AttributeTypeView' : 'attri_types',
+        'AttributeTypeView' : 'attrtypes',
     } # end of _urls
 
 

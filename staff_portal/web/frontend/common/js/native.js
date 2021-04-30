@@ -181,13 +181,34 @@ export class APIconsumer {
         // partial shallow copy on the callbacks
         const DEFAULT_CALLBACK_TYPES = ['unhandled_error_response', 'succeed', 'unhandled_exception', 'server_busy'];
         cp_types = cp_types.filter((t) => (DEFAULT_CALLBACK_TYPES.indexOf(t) >= 0));
-        var copied = {... origin}; // shallow copy all properties first
+        let _origin = origin;
+        if(_origin === undefined || _origin === null) {
+            _origin = {};
+        }
+        var copied = {... _origin}; // shallow copy all properties first
         for(var idx = 0; idx <= cp_types.length; idx++) {
             var prop = cp_types[idx];
-            var cp_item = origin[prop] ? [... origin[prop]]: []; // shallow copy to the array items
+            var cp_item = _origin[prop] ? [... _origin[prop]]: []; // shallow copy to the array items
             copied[prop] = cp_item;
         }
         return copied;
+    }
+
+    static serialize(objlist, valid_field_names) {
+        var out = null;
+        if(objlist.length === undefined) {
+            objlist = Object.entries(objlist).map(kv => kv[1]);
+        }
+        out = objlist.map((item) => {
+            var picked = {};
+            for(var key in item) {
+                if(valid_field_names.indexOf(key) >= 0) {
+                    picked[key] = item[key];
+                }
+            }
+            return picked;
+        });
+        return out.length > 0 ? JSON.stringify(out) : null;
     }
 } // end of class APIconsumer
 
@@ -205,4 +226,30 @@ export function patch_string_prototype() {
           });
     };
 }
+
+
+export function _instant_search(evt) {
+    let invoker = evt.nativeEvent.target;
+    var keyword = null;
+    var api_url = null;
+    if(invoker instanceof HTMLInputElement) {
+        if (evt.code == "Enter") {
+            console.log('start instant search ... keycode:'+ evt.code);
+            keyword = invoker.value;
+            api_url = invoker.dataset.api_url;
+        }
+    } else if(invoker instanceof HTMLButtonElement) {
+        var txtfield = invoker.parentNode.querySelector("input");
+        keyword = txtfield.value;
+        api_url = txtfield.dataset.api_url;
+    }
+    if (keyword && api_url) {
+        // this event handling function must be bound with any object
+        // that implements callable attribute `search_api_fn()`
+        //let tree_ref = this.current;
+        //tree_ref.search(keyword, api_url);
+        this.search_api_fn(keyword, api_url)
+    }
+}
+
 

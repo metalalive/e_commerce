@@ -1,10 +1,12 @@
+import enum
+
 from django.db     import  models, IntegrityError, transaction
 from django.db.models.fields.related import RelatedField
 from django.db.models.fields.related_descriptors import ForwardManyToOneDescriptor, ManyToManyDescriptor
 from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
 
-from common.models.enums   import UnitOfMeasurement
+from common.models.enums   import UnitOfMeasurement, TupleChoicesMeta
 from common.models.mixins  import MinimumInfoMixin
 from common.models.fields  import CompoundPrimaryKeyField
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
@@ -164,7 +166,7 @@ class _RelatedFieldMixin:
 ## end of  _RelatedFieldMixin
 
 
-class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfileMixin, _RelatedFieldMixin):
+class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfileMixin, _RelatedFieldMixin, MinimumInfoMixin):
     """
     Define abstract product model, it records generic product information that is required.
     this abstract class (model) can be inherited if user wants to :
@@ -181,6 +183,7 @@ class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfile
     # without discount and extra charge due to customization
     price = models.FloatField(default=0.00)
     # TODO, does this project require secondary index on `profile` column ?
+    min_info_field_names = ['id','name']
 
 
 class ProductSaleableItem(AbstractProduct):
@@ -256,17 +259,36 @@ class ProductSaleablePackageMedia(SoftDeleteObjectMixin):
     media = models.FileField(storage=_fs_pkg)
 
 
-class _ProductAttrValueDataType(models.TextChoices):
+
+class RelatedFieldChoicesMeta(TupleChoicesMeta):
+    @property
+    def related_field_name(cls):
+        _map = {member.name: member.value[0][1] for member in cls}
+        _attributes = _map
+        _map_cls = type('_map_cls', (), _attributes)
+        return _map_cls
+
+    def related_field_map(cls, dtype_code):
+        _map = {member.value[0][0]: member.value[0][1] for member in cls}
+        return _map.get(dtype_code, None)
+
+
+class _ProductAttrValueDataType(tuple, enum.Enum, metaclass=RelatedFieldChoicesMeta):
     """
     data type options for textual/numeric attributes of saleable item(s)
     """
-    STRING  = 'attr_val_str',
-    INTEGER = 'attr_val_int',
-    POSITIVE_INTEGER = 'attr_val_pos_int',
-    FLOAT = 'attr_val_float',
+    STRING           = (1, 'attr_val_str'    ),
+    INTEGER          = (2, 'attr_val_int'    ),
+    POSITIVE_INTEGER = (3, 'attr_val_pos_int'),
+    FLOAT            = (4, 'attr_val_float'  ),
+    # TODO: figure out why dict choices is not possible , is it unhashable ??
+    #STRING           = {'choice': 1, 'related_field':'attr_val_str'    },
+    #INTEGER          = {'choice': 2, 'related_field':'attr_val_int'    },
+    #POSITIVE_INTEGER = {'choice': 3, 'related_field':'attr_val_pos_int'},
+    #FLOAT            = {'choice': 4, 'related_field':'attr_val_float'  },
 
 
-class ProductAttributeType(SoftDeleteObjectMixin):
+class ProductAttributeType(SoftDeleteObjectMixin, MinimumInfoMixin):
     """
     this is EAV pattern, a schemaless design,
     in order to avoid mistakes that might be made by users :
@@ -289,14 +311,21 @@ class ProductAttributeType(SoftDeleteObjectMixin):
     """
     SOFTDELETE_CHANGESET_MODEL = ProductmgtChangeSet
     SOFTDELETE_RECORD_MODEL = ProductmgtSoftDeleteRecord
+    min_info_field_names = ['id','name','dtype']
 
     class Meta:
         db_table = 'product_attribute_type'
 
     # help text to describe how this attribute is used to a product
     name = models.CharField(max_length=64, unique=False, blank=False)
-    # the value can also be the name of the reverse field in this model
-    value_dtype = models.CharField(max_length=20, choices=_ProductAttrValueDataType.choices)
+    # data type of the attribute value, to convert to reverse field, you need _ProductAttrValueDataType.related_field_name
+    dtype = models.SmallIntegerField(choices=_ProductAttrValueDataType.choices)
+
+    @property
+    def attr_val_set(self):
+        related_field_name =  _ProductAttrValueDataType.related_field_map(dtype_code=self.dtype)
+        if related_field_name:
+            return getattr(self, related_field_name)
 
 
 class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin):
@@ -345,10 +374,10 @@ class ProductAttributeValueFloat(BaseProductAttributeValue):
     value  = models.FloatField()
 
 
-ProductAttributeValueStr.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.STRING )
-ProductAttributeValueInt.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.INTEGER)
-ProductAttributeValuePosInt.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.POSITIVE_INTEGER)
-ProductAttributeValueFloat.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.FLOAT)
+ProductAttributeValueStr.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.related_field_name.STRING )
+ProductAttributeValueInt.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.related_field_name.INTEGER)
+ProductAttributeValuePosInt.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.related_field_name.POSITIVE_INTEGER)
+ProductAttributeValueFloat.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.related_field_name.FLOAT)
 
 
 class ProductAppliedAttributePrice(SoftDeleteObjectMixin):

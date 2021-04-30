@@ -47,4 +47,7 @@ class ProductTagProxyView(AppBaseProxyView):
     path_var_keys = ['tag_id']
 
 
+class ProductAttrTypeProxyView(AppBaseProxyView):
+    path_pattern = 'attrtypes'
+
 

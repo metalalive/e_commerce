@@ -12,9 +12,9 @@ export default class HierarchicalData extends Component {
         // TODO, load initial tree data from backend
         this.state = {
             treeData: [
-                {title:'food',   name:'food',  id:278, expanded:false, subtitle:'eat/drink/cook', children:[]},
-                {title:'cooker', name:'cooker', id:51, expanded:false, subtitle:'cook helper', children:[]},
-                {title:'oven',   name:'fitz',  id:620 , expanded:false, subtitle:'cook helper', children:[]},
+                //{title:'food',   name:'food',  id:278, expanded:false, subtitle:'eat/drink/cook', children:[]},
+                //{title:'cooker', name:'cooker', id:51, expanded:false, subtitle:'cook helper', children:[]},
+                //{title:'oven',   name:'fitz',  id:620 , expanded:false, subtitle:'cook helper', children:[]},
             ],
         };
         this._uncommitted_nodes = {added: [],   edited: {},  removed: {},};
@@ -290,21 +290,8 @@ export default class HierarchicalData extends Component {
     }
 
     _serialize_nodes(nodeset, valid_field_names) {
-        var out = null;
-        if(nodeset.length === undefined) {
-            nodeset = Object.entries(nodeset).map(kv => kv[1]);
-        }
-        out = nodeset.map((item) => {
-            var picked = {};
-            for(var key in item) {
-                if(valid_field_names.indexOf(key) >= 0) {
-                    picked[key] = item[key];
-                }
-            }
-            return picked;
-        });
-        return out.length > 0 ? JSON.stringify(out) : null;
-    } // TODO, may be generalized
+        return APIconsumer.serialize(nodeset, valid_field_names);
+    }
 
     _save_callback_succeed(data, res, props) {
         var added  = this._uncommitted_nodes.added;
@@ -326,6 +313,7 @@ export default class HierarchicalData extends Component {
                     nodedata.exist_parent = this.getNodeAppID( new_parent_node ); // must not be undefined
                     delete nodedata.new_parent;
                 } // resolve parent of each node for add-edit dependency
+                return nodedata;
             });
             added.map(clear_dirty_flag_fn);
             clear_array(added);
@@ -373,13 +361,14 @@ export default class HierarchicalData extends Component {
     } // end of refresh
 
     _refresh_callback_succeed(data, res, props) {
-        if (!data || data.length === 0) {
+        if (!data || (data && data.result === undefined && data.length === 0) ||
+                (data && data.result !== undefined && data.results.length === 0)) {
             console.log('succeed callback, no descendants to fetch under the given node ');
             return;
         }
         let path = res.req_args.extra.node_key_path;
         let found_node_data = null;
-        if(path != undefined) {
+        if(path !== undefined) {
             path =   path.split(',').map(key => parseInt(key));
             found_node_data = this.get_node(path).node;
         }
