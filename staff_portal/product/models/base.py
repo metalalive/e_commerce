@@ -1,6 +1,6 @@
 import enum
 
-from django.db     import  models, IntegrityError, transaction
+from django.db     import  models
 from django.db.models.fields.related import RelatedField
 from django.db.models.fields.related_descriptors import ForwardManyToOneDescriptor, ManyToManyDescriptor
 from django.contrib.contenttypes.models  import ContentType
@@ -83,7 +83,6 @@ class _TagQuerySet(models.QuerySet):
         IDs  = qset.values_list(values_field, flat=True)
         return IDs
 
-    #@transaction.atomic
     def delete(self, *args, **kwargs):
         if not hasattr(self, '_descs_deletion_included'):
             descs_id = self.values_list('descendants__descendant__pk', flat=True)
@@ -93,6 +92,7 @@ class _TagQuerySet(models.QuerySet):
             rec_qs.delete()
         else:
             super().delete(*args, **kwargs)
+
 
 class _TagManager(models.Manager):
     def all(self, *args, **kwargs):
@@ -104,6 +104,32 @@ class _TagManager(models.Manager):
         qset = super().filter(*args, **kwargs)
         qset.__class__ = _TagQuerySet
         return qset
+
+    def annotate(self, *args, **kwargs):
+        qset = super().annotate(*args, **kwargs)
+        qset.__class__ = _TagQuerySet
+        return qset
+
+    def order_by(self, *field_names):
+        qset = super().order_by(*args, **kwargs)
+        qset.__class__ = _TagQuerySet
+        return qset
+
+    def only(self, *fields):
+        qset = super().only(*args, **kwargs)
+        qset.__class__ = _TagQuerySet
+        return qset
+
+    def defer(self, *fields):
+        qset = super().defer(*args, **kwargs)
+        qset.__class__ = _TagQuerySet
+        return qset
+
+    def reverse(self):
+        qset = super().reverse(*args, **kwargs)
+        qset.__class__ = _TagQuerySet
+        return qset
+
 
 
 class ProductTag(_UserProfileMixin, MinimumInfoMixin):
@@ -341,6 +367,7 @@ class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin):
     """
     SOFTDELETE_CHANGESET_MODEL = ProductmgtChangeSet
     SOFTDELETE_RECORD_MODEL = ProductmgtSoftDeleteRecord
+    DATATYPE = None
     class Meta:
         abstract = True
     allowed_models = models.Q(app_label='product', model='ProductSaleableItem') | \
@@ -357,21 +384,25 @@ class ProductAttributeValueStr(BaseProductAttributeValue):
     class Meta:
         db_table = 'product_attribute_value_str'
     value  = models.CharField(max_length=64, unique=False)
+    DATATYPE = _ProductAttrValueDataType.STRING.value[0][0]
 
 class ProductAttributeValuePosInt(BaseProductAttributeValue):
     class Meta:
         db_table = 'product_attribute_value_pos_int'
     value  = models.PositiveIntegerField()
+    DATATYPE = _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]
 
 class ProductAttributeValueInt(BaseProductAttributeValue):
     class Meta:
         db_table = 'product_attribute_value_int'
     value  = models.IntegerField()
+    DATATYPE = _ProductAttrValueDataType.INTEGER.value[0][0]
 
 class ProductAttributeValueFloat(BaseProductAttributeValue):
     class Meta:
         db_table = 'product_attribute_value_float'
     value  = models.FloatField()
+    DATATYPE = _ProductAttrValueDataType.FLOAT.value[0][0]
 
 
 ProductAttributeValueStr.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.related_field_name.STRING )
@@ -391,6 +422,7 @@ class ProductAppliedAttributePrice(SoftDeleteObjectMixin):
         db_table = 'product_applied_attribute_price'
 
     allowed_models = models.Q(app_label='product', model='ProductAttributeValueStr') | \
+                     models.Q(app_label='product', model='ProductAttributeValueFloat') | \
                      models.Q(app_label='product', model='ProductAttributeValuePosInt') | \
                      models.Q(app_label='product', model='ProductAttributeValueInt')
     attrval_type = models.ForeignKey(to=ContentType, on_delete=models.CASCADE, null=False,

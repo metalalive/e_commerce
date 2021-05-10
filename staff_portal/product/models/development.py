@@ -5,7 +5,8 @@ from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
 
 from softdelete.models import SoftDeleteObjectMixin
-from common.models.fields import CompoundPrimaryKeyField
+from common.models.fields  import CompoundPrimaryKeyField
+from common.models.mixins  import MinimumInfoMixin
 from common.util.python.django.storage import ExtendedFileSysStorage
 
 from .common import ProductmgtChangeSet, ProductmgtSoftDeleteRecord, _UserProfileMixin, BaseProductIngredient
@@ -32,15 +33,20 @@ class ProductDevIngredientType(models.IntegerChoices):
     EQUIPMENTS     = 5, # e.g. pot, stove, oven for restaurant
 
 
-class ProductDevIngredient(BaseProductIngredient):
+class ProductDevIngredient(BaseProductIngredient, MinimumInfoMixin):
     """
     ingredients used fpr product development/manufacture, not directly saleable,
     and only visible at staff site
     """
     class Meta:
         db_table = 'product_dev_ingredient'
+    min_info_field_names = ['id','name']
     # it can be saleable (finished goods) or not (e.g. raw material, consumable)
     category = models.PositiveSmallIntegerField(choices=ProductDevIngredientType.choices)
+
+    def _delete_relations(self, related_fields, *args, **kwargs):
+        kwargs['skip_model_types'] = [self.saleitems_applied.model,]
+        super()._delete_relations(related_fields, *args, **kwargs)
 
 # The classes below are used for kanban-style project management
 

@@ -1,6 +1,10 @@
+from functools import partial
 
-from django.db import models
-from softdelete.models import ChangeSet, SoftDeleteRecord, SoftDeleteObjectMixin
+from django.db import models, IntegrityError, transaction
+from django.contrib.contenttypes.fields  import GenericRelation
+from softdelete.models import ChangeSet, SoftDeleteRecord, SoftDeleteQuerySet,  SoftDeleteManager,  SoftDeleteObjectMixin
+
+_atomicity_fn = partial(transaction.atomic, using='product_dev_service')
 
 class ProductmgtChangeSet(ChangeSet):
     class Meta:
@@ -12,6 +16,23 @@ class ProductmgtSoftDeleteRecord(SoftDeleteRecord):
     changeset = ProductmgtChangeSet.foreignkey_fieldtype()
 
 
+class _BaseIngredientQuerySet(SoftDeleteQuerySet):
+    @_atomicity_fn()
+    def delete(self, *args, **kwargs):
+        deleted = super().delete(*args, **kwargs)
+        return deleted
+
+    @_atomicity_fn()
+    def undelete(self, *args, **kwargs):
+        result = super().undelete(*args, **kwargs)
+        return result
+
+
+class _BaseIngredientManager(SoftDeleteManager):
+    # subclasses of soft-delete manager can override its queryset class
+    default_qset_cls = _BaseIngredientQuerySet
+
+
 class BaseProductIngredient(SoftDeleteObjectMixin):
     """
     subclasses can extend from this class for saleable product/package item
@@ -19,12 +40,43 @@ class BaseProductIngredient(SoftDeleteObjectMixin):
     """
     SOFTDELETE_CHANGESET_MODEL = ProductmgtChangeSet
     SOFTDELETE_RECORD_MODEL = ProductmgtSoftDeleteRecord
+    objects = _BaseIngredientManager()
 
     class Meta:
         abstract = True
     name   = models.CharField(max_length=128, unique=False)
     # active item that can be viewed / edited (only) at staff site
     active   = models.BooleanField(default=False)
+    # relation fields to attribute types and values of different data types
+    attr_val_str     = GenericRelation('ProductAttributeValueStr',    object_id_field='ingredient_id', content_type_field='ingredient_type')
+    attr_val_pos_int = GenericRelation('ProductAttributeValuePosInt', object_id_field='ingredient_id', content_type_field='ingredient_type')
+    attr_val_int     = GenericRelation('ProductAttributeValueInt',   object_id_field='ingredient_id', content_type_field='ingredient_type')
+    attr_val_float   = GenericRelation('ProductAttributeValueFloat', object_id_field='ingredient_id', content_type_field='ingredient_type')
+
+    @_atomicity_fn()
+    def delete(self, *args, **kwargs):
+        new_changeset = False
+        hard_delete = kwargs.get('hard', False)
+        if not hard_delete:# let nested fields add in the same soft-deleted changeset
+            if kwargs.get('changeset', None) is None:
+                profile_id = kwargs.get('profile_id')
+                kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
+                new_changeset = True
+        deleted = super().delete(*args, **kwargs)
+        if not hard_delete:
+            self.attr_val_str.all().delete(*args, **kwargs)
+            self.attr_val_pos_int.all().delete(*args, **kwargs)
+            self.attr_val_int.all().delete(*args, **kwargs)
+            self.attr_val_float.all().delete(*args, **kwargs)
+            if new_changeset:
+                kwargs.pop('changeset', None)
+        return deleted
+
+    @_atomicity_fn()
+    def undelete(self, *args, **kwargs):
+        result = super().undelete(*args, **kwargs)
+        return result
+#### end of class BaseProductIngredient
 
 
 class _UserProfileMixin(models.Model):

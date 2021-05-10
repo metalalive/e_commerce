@@ -4,10 +4,10 @@ import pdb
 from django.core.exceptions     import ValidationError as DjangoValidationError
 from rest_framework.fields      import IntegerField, CharField, BooleanField, empty as DRFEmptyData
 
-from common.util.python.messaging.rpc  import  RpcReplyEvent
 from common.serializers  import  BulkUpdateListSerializer, ExtendedModelSerializer, DjangoBaseClosureBulkSerializer
-from common.serializers.mixins  import  BaseClosureNodeMixin
+from common.serializers.mixins  import  BaseClosureNodeMixin, NestedFieldSetupMixin
 from ..models.base import ProductTag, ProductTagClosure, ProductAttributeType
+from ..models.common import _atomicity_fn
 
 _logger = logging.getLogger(__name__)
 
@@ -19,6 +19,7 @@ class ConnectedTagField(ExtendedModelSerializer):
         read_only_fields = ['name']
 
 class TagClosureSerializer(ExtendedModelSerializer):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model = ProductTagClosure
         fields = ['id', 'depth', 'ancestor', 'descendant']
@@ -35,6 +36,7 @@ class BulkTagSerializer(DjangoBaseClosureBulkSerializer):
 
 
 class TagSerializer(BaseClosureNodeMixin, ExtendedModelSerializer):
+    atomicity = _atomicity_fn
     class Meta(BaseClosureNodeMixin.Meta, ExtendedModelSerializer.Meta):
         model = ProductTag
         fields = ['id', 'name', 'ancestors', 'descendants', 'usrprof',
@@ -78,8 +80,11 @@ class TagSerializer(BaseClosureNodeMixin, ExtendedModelSerializer):
 
 
 class AttributeTypeSerializer(ExtendedModelSerializer):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model = ProductAttributeType
         fields = ['id', 'name', 'dtype',]
+
+
 
 

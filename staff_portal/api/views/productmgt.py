@@ -50,4 +50,9 @@ class ProductTagProxyView(AppBaseProxyView):
 class ProductAttrTypeProxyView(AppBaseProxyView):
     path_pattern = 'attrtypes'
 
+class FabricationIngredientProxyView(AppBaseProxyView):
+    path_pattern = ['ingredients', 'ingredient/{ingre_id}',]
+    path_handler = _get_path_list_or_item_api
+    path_var_keys = ['ingre_id']
+
 

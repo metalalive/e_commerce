@@ -1,5 +1,5 @@
 import copy
-import pdb
+import logging
 
 from django.db import models
 from django.contrib.contenttypes.models  import ContentType
@@ -14,6 +14,8 @@ from ..models.base import ProductTagClosure
 from ..models.common import ProductmgtChangeSet
 from ..serializers.base import TagSerializer, AttributeTypeSerializer
 from ..permissions import TagsPermissions, AttributeTypePermissions
+
+_logger = logging.getLogger(__name__)
 
 class TagOrderFilter(AggregateFieldOrderingFilter):
     _aggregate_fields  = {

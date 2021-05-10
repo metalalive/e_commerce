@@ -194,7 +194,7 @@ export class APIconsumer {
         return copied;
     }
 
-    static serialize(objlist, valid_field_names) {
+    static serialize(objlist, valid_field_names, reducer) {
         var out = null;
         if(objlist.length === undefined) {
             objlist = Object.entries(objlist).map(kv => kv[1]);
@@ -204,11 +204,11 @@ export class APIconsumer {
             for(var key in item) {
                 if(valid_field_names.indexOf(key) >= 0) {
                     picked[key] = item[key];
-                }
+                } // TODO, would argument `valid_field_names` be unecessary ?
             }
             return picked;
         });
-        return out.length > 0 ? JSON.stringify(out) : null;
+        return out.length > 0 ? JSON.stringify(out, reducer) : null;
     }
 } // end of class APIconsumer
 
@@ -251,5 +251,16 @@ export function _instant_search(evt) {
         this.search_api_fn(keyword, api_url)
     }
 }
+
+export function toggle_visual_elm_showup(dom, menu_classname, dom_showup_classname) {
+    let target = dom.querySelector("."+menu_classname);
+    let class_list = Array.from(target.classList);
+    if(class_list.indexOf(dom_showup_classname) >= 0) {
+        target.classList.remove(dom_showup_classname);
+    } else {
+        target.classList.add(dom_showup_classname);
+    }
+}
+
 
 

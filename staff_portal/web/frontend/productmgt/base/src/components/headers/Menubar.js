@@ -39,6 +39,11 @@ const Menubar = (props) => {
                       </Link>
                     </li>
                     <li className="nav-item">
+                      <Link className="nav-link" onClick={_change_button_status} to="/ingredients" >
+                        <span className="nav-link-title"> ingredients </span>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
                       <Link className="nav-link" onClick={_change_button_status} to="/saleable_items" >
                         <span className="nav-link-title"> saleable items </span>
                       </Link>

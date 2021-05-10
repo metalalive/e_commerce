@@ -1,6 +1,6 @@
 import React from 'react';
 
-import {clear_array, _instant_search} from '../js/common/native.js';
+import {_instant_search} from '../js/common/native.js';
 import {BaseExtensibleForm} from '../js/common/react.js';
 
 
@@ -10,7 +10,8 @@ let refs = {form_items: React.createRef()};
 
 function _save_attr_types(evt) {
     let form_ref = this.current;
-    form_ref.save(api_base_url);
+    let kwargs = {urlpath:api_base_url};
+    form_ref.save(kwargs);
 }
 
 function _refresh_items(evt) {
@@ -41,10 +42,10 @@ function _new_empty_form(evt) {
 }
 
 
-class AttrTypeItems extends BaseExtensibleForm {
+export class AttrTypeItems extends BaseExtensibleForm {
     constructor(props) {
-        super(props);
-        this._valid_fields_name = ['name', 'dtype'];
+        let _valid_fields_name = ['name', 'dtype'];
+        super(props, _valid_fields_name);
     }
     
     componentDidMount() {

@@ -7,6 +7,7 @@ class WebAPIurl(BaseUriLookup):
     _urls = {
         'TagView'           : ['tags', 'tag/<slug:pk>', 'tag/<slug:pk>/ancestors', 'tag/<slug:pk>/descendants'],
         'AttributeTypeView' : 'attrtypes',
+        'FabricationIngredientView' : ['ingredients', 'ingredient/<slug:pk>',],
     } # end of _urls
 
 

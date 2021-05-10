@@ -80,49 +80,91 @@ export class BaseModalForm extends React.Component {
 
 
 export class BaseExtensibleForm extends React.Component {
-    constructor(props) {
+    constructor(props, _valid_fields_name) {
         super(props);
-        this._valid_fields_name = []; // has to be updated by subclasses
-        this.state = {saved: [], };
+        this._valid_fields_name = _valid_fields_name ; // []; // has to be updated by subclasses
+        this.state = {saved: undefined,};
+        this.state.saved = [];
         this._uncommitted_items = {added:[], edited:{}, removed:{},};
         this._app_item_id_label = props._app_item_id_label ? props._app_item_id_label: 'id';
         var default_api_props = {num_retry: 4, wait_interval_ms: 305};
         var api_props = props.api ? props.api: default_api_props;
         this.api_caller = new APIconsumer(api_props);
+        this._unique_key_increment = 1;
+        if(props.defaultValue) {
+            props.defaultValue.map((val) => {
+                this.new_item(val, true);
+                return val;
+            });
+        }
+    }
+
+    _diff_iter(val, idx) {
+        var _id = val[this._app_item_id_label];
+        let origin = {};
+        var modify = {refs: val.refs};
+        if(_id) {
+            origin[this._app_item_id_label] = _id;
+            modify[this._app_item_id_label] = _id;
+        }
+        this._valid_fields_name.map((key) => {
+            let elm = val.refs[key].current;
+            if((elm instanceof HTMLInputElement) ||
+                (elm instanceof HTMLSelectElement))
+            {
+                let normalize_fn = this['_normalize_fn_'+ key];
+                if(normalize_fn) {
+                    origin[key] = normalize_fn(val[key]);
+                    modify[key] = normalize_fn(elm.value);
+                } else {
+                    origin[key] = val[key];
+                    modify[key] = elm.value;
+                }
+            } else if(elm instanceof BaseExtensibleForm){
+                var difference = elm.differ();
+                origin[key] = difference.map((item) => (item.origin));
+                modify[key] = difference.map((item) => (item.modify));
+            } else {
+                throw "reach unsupported element when collecting edited values";
+            }
+        });
+        return {origin:origin , modify:modify};
+    } // end of _diff_iter
+
+    differ() {
+        return this.state.saved.map(this._diff_iter.bind(this));
     }
     
-    _gather_unsaved_item(val, idx) {
-        var origin = {};
-        var modify = {};
-        this._valid_fields_name.map((key) => {
-            let normalize_fn = this['_normalize_fn_'+ key];
-            if(normalize_fn) {
-                origin[key] = normalize_fn(val[key]);
-                modify[key] = normalize_fn(val.refs[key].current.value);
-            } else {
-                origin[key] = val[key];
-                modify[key] = val.refs[key].current.value;
-            }
-            return key;
-        });
-        var serialized_origin = JSON.stringify(origin);
-        var serialized_modify = JSON.stringify(modify);
-        var _id = val[this._app_item_id_label];
-        if(serialized_origin !== serialized_modify) {
-            if(_id) {
-                modify[this._app_item_id_label] = _id;
-                this._uncommitted_items.edited[_id] = modify;
-            } else {
-                this._uncommitted_items.added.push(modify);
-            }
-        }
-    } // end of _gather_unsaved_item
-
-    save(urlpath, callbacks) {
-        var skipped = true;
+    _serializer_reducer(key, value) {
+        var skip_fields = ["refs", "_order_idx"];
+        return skip_fields.indexOf(key) >= 0 ? undefined: value;
+    }
+    
+    gather_unsaved_items(difference) {
         clear_array(this._uncommitted_items.added);
         clear_props_object(this._uncommitted_items.edited);
-        this.state.saved.map(this._gather_unsaved_item.bind(this));
+        difference.map((item, idx) => {
+            // serialize the nested data for comparison, exclude non-serializable fields
+            var serialized_origin = JSON.stringify(item.origin);
+            var serialized_modify = JSON.stringify(item.modify, this._serializer_reducer);
+            if(serialized_origin !== serialized_modify) {
+                var _id = item.modify[this._app_item_id_label];
+                if(_id) {
+                    this._uncommitted_items.edited[_id] = item.modify;
+                } else {
+                    this._uncommitted_items.added.push(item.modify);
+                }
+            }
+            return item;
+        });
+    }
+
+    save(kwargs) {
+        var skipped = true;
+        var difference = this.differ();
+        this.gather_unsaved_items(difference);
+        let urlpath = kwargs.urlpath ;
+        let callbacks = kwargs.callbacks ;
         // append internal callback to the end of callback list for clearing
         //  uncommitted items when the API endpoint is successfully called
         var callbacks_copied = APIconsumer.copy_callbacks(callbacks, ['succeed']);
@@ -133,13 +175,24 @@ export class BaseExtensibleForm extends React.Component {
         // Note POST and PUT request will be sent concurrently , for extra check
         // between PUT and POST requests, application developers should overwrite
         // this method
+        let fetch_fields = null;
+        if(kwargs.fetch_fields) {
+            fetch_fields = kwargs.fetch_fields;
+        } else {
+            fetch_fields = [this._app_item_id_label];
+        }
         if(req_opt.post.body) {
+            // TODO: fetch new IDs of all nested data recursively and
+            // write them to newly-created item of the array state
+            let addlist = [...this._uncommitted_items.added];
             this.api_caller.start({base_url:url, req_opt:req_opt.post, callbacks:callbacks_copied,
-                params:{fields:[this._app_item_id_label]},});
+                params:{fields:fetch_fields}, extra:{addlist: addlist}, });
             skipped = false;
         }
         if(req_opt.put.body) {
-            this.api_caller.start({base_url:url, req_opt:req_opt.put, callbacks:callbacks_copied,});
+            let editlist = {...this._uncommitted_items.edited};
+            this.api_caller.start({base_url:url, req_opt:req_opt.put, callbacks:callbacks_copied,
+                 params:{fields:fetch_fields}, extra:{editlist: editlist}, });
             skipped = false;
         }
         return skipped;
@@ -152,45 +205,84 @@ export class BaseExtensibleForm extends React.Component {
             put : DEFAULT_API_REQUEST_OPTIONS.PUT(),
         };
         var valid_field_names = [this._app_item_id_label, ...this._valid_fields_name];
-        req_opt.post.body = APIconsumer.serialize(this._uncommitted_items.added,  valid_field_names);
-        req_opt.put.body  = APIconsumer.serialize(this._uncommitted_items.edited, valid_field_names);
+        req_opt.post.body = APIconsumer.serialize(this._uncommitted_items.added,  valid_field_names, this._serializer_reducer);
+        req_opt.put.body  = APIconsumer.serialize(this._uncommitted_items.edited, valid_field_names, this._serializer_reducer);
         return req_opt;
     } // end of _prepare_save_api_req
     
+
+    _saved_item_data_copy(item, data) {
+        // fetch new IDs of all nested data recursively and
+        // write them to newly-created item of the array state
+        if(data && data[this._app_item_id_label]) {
+            item[this._app_item_id_label] = data[this._app_item_id_label];
+        }
+        this._valid_fields_name.map((fieldname) => {
+            let elm = item.refs[fieldname].current;
+            if((elm instanceof HTMLInputElement) || (elm instanceof HTMLSelectElement))
+            {
+                item[fieldname] = elm.value;
+            } else if(elm instanceof BaseExtensibleForm){
+                let nested_data = data ? data[fieldname] : undefined;
+                if(nested_data) {
+                    if(!nested_data.length) {
+                        nested_data = [nested_data];
+                    }
+                    if(nested_data.length !== elm.state.saved.length) {
+                        throw "[_saved_item_data_copy] length does not match, nested_data.length: "+ 
+                            nested_data.length +", elm.state.saved.length:"+ elm.state.saved.length;
+                    }
+                }
+                item[fieldname] = [];
+                elm.state.saved.map((nested_saveditem, idx) => {
+                    let nested_dataitem = nested_data ? nested_data[idx]: undefined;
+                    elm._saved_item_data_copy(nested_saveditem, nested_dataitem);
+                    let saveditem_puredata = {};
+                    let copy_fields_name = [...elm._valid_fields_name];
+                    if(nested_saveditem[elm._app_item_id_label]) {
+                        copy_fields_name.push(elm._app_item_id_label);
+                    }
+                    copy_fields_name.map((nestfieldname) => {
+                        saveditem_puredata[nestfieldname] = nested_saveditem[nestfieldname];
+                    });
+                    item[fieldname].push(saveditem_puredata);
+                });
+            } else {
+                throw "[_saved_item_data_copy] unknown field type "+ elm;
+            }
+            return fieldname;
+        });
+    } // end of _saved_item_data_copy()
 
     _commit_callback_succeed(data, res, props) {
         var req_args = res.req_args;
         var req_mthd = req_args.req_opt.method ;
         if(req_mthd === 'POST') {
             this._uncommitted_items.added.map((val, idx) => {
-                val[this._app_item_id_label] = data[idx][this._app_item_id_label];
+                this._saved_item_data_copy(val.refs.saved_state_item, data[idx]);
                 return val;
             });
             clear_array(this._uncommitted_items.added);
+        } else if(req_mthd === 'PUT') {
+            var edited_array = Object.entries(this._uncommitted_items.edited).map(kv => kv[1]);
+            edited_array.map((val, idx) => {
+                this._saved_item_data_copy(val.refs.saved_state_item);
+                return val;
+            });
+            clear_props_object(this._uncommitted_items.edited);
         } else if(req_mthd === 'DELETE') {
             var varlist = req_args.extra.varlist;
             varlist.map((val, idx) => {
                 this.remove_item(val, false);
                 return val; 
             });
-            //this.state.saved.map((val) => {
-            //    var _id    = val[this._app_item_id_label];
-            //    var _name  = val.name;
-            //    console.log("after delete, state.saved, _id:"+ _id +" , _name:"+ _name);
-            //    return val;
-            //});
-            let tmp_shallow_clone = [...this.state.saved];
-            clear_array(this.state.saved);
-            this.setState({saved: this.state.saved});
-            this.state.saved.push(...tmp_shallow_clone);
-            this.setState({saved: this.state.saved});
         } else if(req_mthd === 'PATCH') {
             let datalist = data.results ? data.results: data;
             datalist.map((val, idx) => {
                 this.new_item(val, false);
             });
-            this.setState({saved: this.state.saved});
         }
+        this.setState({saved: this.state.saved});
     } // end of _commit_callback_succeed()
 
 
@@ -214,11 +306,15 @@ export class BaseExtensibleForm extends React.Component {
             }
             let req_opt    = DEFAULT_API_REQUEST_OPTIONS.GET();
             let callbacks  = null;
+            let bound_internal_callback = this._refresh_callback_succeed.bind(this);
             if(kwargs.callbacks) { // do partial copy, then add extra callback for internal use
                 callbacks = APIconsumer.copy_callbacks(kwargs.callbacks, ['succeed']);
-                callbacks.succeed.push(this._refresh_callback_succeed.bind(this));
+                // callbacks.succeed.push(bound_internal_callback);
+                // always insert this internal function at first callback list,
+                // always execute this internal function prior to all other caller-specified callbacks
+                callbacks.succeed.splice(0, 0, bound_internal_callback);
             } else {
-                callbacks = {succeed : [this._refresh_callback_succeed.bind(this)],};
+                callbacks = {succeed : [bound_internal_callback],};
             }
             let extra = kwargs.extra;
             this.api_caller.start({base_url: BaseUrl.API_HOST + api_url, req_opt:req_opt,
@@ -262,7 +358,7 @@ export class BaseExtensibleForm extends React.Component {
             var url = BaseUrl.API_HOST + urlpath ;
             var valid_field_names = kwargs.valid_field_names ? kwargs.valid_field_names: [this._app_item_id_label,];
             var req_opt = DEFAULT_API_REQUEST_OPTIONS.DELETE()
-            req_opt.body = APIconsumer.serialize(varlist,  valid_field_names);
+            req_opt.body = APIconsumer.serialize(varlist,  valid_field_names, this._serializer_reducer);
             this.api_caller.start({base_url:url, req_opt:req_opt, callbacks:callbacks,
                  extra:{varlist: varlist}});
         } else {
@@ -293,7 +389,10 @@ export class BaseExtensibleForm extends React.Component {
     
     new_item(val, update_state) {
         let saved = this.state.saved ;
-        let _new_state_item = {refs:{}};
+        let _new_state_item = {refs:{} , _order_idx: this._unique_key_increment};
+        // TODO: set up list of forbidden field names
+        _new_state_item.refs.saved_state_item = _new_state_item;
+        this._unique_key_increment += 1;
         if(val && val[this._app_item_id_label]) {
             _new_state_item[this._app_item_id_label] = val[this._app_item_id_label];
         }
@@ -304,7 +403,7 @@ export class BaseExtensibleForm extends React.Component {
             _new_state_item.refs[key] = React.createRef();
             return key;
         });
-        saved.push(_new_state_item);
+        saved.splice(0, 0, _new_state_item);
         if(update_state) {
             this.setState({saved: saved});
         }
@@ -312,22 +411,16 @@ export class BaseExtensibleForm extends React.Component {
     } // end of new_item()
 
     remove_item(val, update_state) {
-        let eq = (item) => {
-            var del_id  = val[this._app_item_id_label];
-            var item_id = item[this._app_item_id_label];
-            return del_id !== item_id;
-        };
-        let after_delete = this.state.saved.filter(eq);
-        // TRICKY , you're only allowed to send the same object reference
-        // of the state field, tell react.js that the `saved` field
-        // should be cleaned up and it will be re-rendered later on
-        clear_array(this.state.saved);
-        if(update_state) {
-            this.setState({saved: this.state.saved});
-        }
-        this.state.saved.push(...after_delete);
-        if(update_state) {
-            this.setState({saved: this.state.saved});
+        let idx = this.state.saved.indexOf(val);
+        if(idx >= 0) {
+            this.state.saved.splice(idx, 1);
+            if(update_state) {
+                this.setState((prev_state) => ({
+                    saved : this.state.saved,
+                }));
+            }
+        } else {
+            console.log("the given item "+ val +" does not exist in component state");
         }
     } // end of remove_item()
 
@@ -335,10 +428,19 @@ export class BaseExtensibleForm extends React.Component {
         throw "not implemented yet";
     }
 
+    _single_item_render_wrapper(val, idx) {
+        let result = this._single_item_render(val, idx);
+        // TRICKY , always set up unique-key field in each object for the
+        // array of objects in the component state.
+        // DO NOT use index of each array item as the unique key, React.JS
+        // doesn't seem to work well for unknown reason if you do so.
+        return (<div key={val._order_idx}>{ result }</div>);
+    }
+
     render() {
         return (
             <div className="row" id="dynamic_form_wrapper">
-            { this.state.saved.map(this._single_item_render) }
+            { this.state.saved.map(this._single_item_render_wrapper.bind(this)) }
             </div>
         );
     }
