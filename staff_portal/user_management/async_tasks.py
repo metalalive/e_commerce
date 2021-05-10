@@ -1,7 +1,6 @@
 import logging
 from datetime  import datetime, timedelta
 
-from django.db     import  IntegrityError, transaction
 from django.contrib.auth.models import User as AuthUser
 from celery.backends.rpc import RPCBackend as CeleryRpcBackend
 
@@ -9,7 +8,7 @@ from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
 from common.util.python.celery import app as celery_app
 from common.util.python import log_wrapper
 
-from .models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile
+from .models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, _atomicity_fn
 from .models import GenericUserAppliedRole, GenericUserGroupRelation, AuthUserResetRequest
 
 _logger = logging.getLogger(__name__)
@@ -34,7 +33,7 @@ def update_roles_on_accounts(self, affected_groups, deleted=False):
     _logger.info(None, *log_args)
     # load use profiles who have account (regardless of activation status)
     profiles = GenericUserProfile.objects.filter(pk__in=profile_ids, auth__isnull=False)
-    with transaction.atomic():
+    with _atomicity_fn():
         # TODO, may repeat the task after certain time interval if it failed in the middle
         # (until it's successfully completed)
         for prof in profiles:

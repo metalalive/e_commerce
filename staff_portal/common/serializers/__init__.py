@@ -1,7 +1,6 @@
 import logging
 from collections.abc import Iterable
 
-from django.db        import  IntegrityError, transaction
 from django.db.models import  QuerySet
 from django.core.exceptions  import ObjectDoesNotExist
 
@@ -56,7 +55,7 @@ class BulkUpdateListSerializer(ValidationErrorCallbackMixin, ListSerializer):
         srlz_cls_child  = '%s.%s' % (type(self.child).__module__, type(self.child).__qualname__)
         ret = []
         try:
-            with transaction.atomic():
+            with self.child.atomicity():
                 for pk, d in data_map.items():
                     obj = instance_map.pop(pk, None)
                     ret.append(self.child.update(obj, d))
@@ -78,7 +77,7 @@ class BulkUpdateListSerializer(ValidationErrorCallbackMixin, ListSerializer):
             if any(log_msg):
                 log_msg += ['srlz_cls_parent', srlz_cls_parent, 'srlz_cls_child', srlz_cls_child]
                 _logger.debug(None, *log_msg)
-        except Exception as e: # IntegrityError
+        except Exception as e: # including django.db.IntegrityError
             log_msg += ['srlz_cls_parent', srlz_cls_parent, 'srlz_cls_child', srlz_cls_child]
             log_msg += ['excpt_type', type(e).__qualname__, 'excpt_msg', e]
             _logger.error(None, *log_msg)
@@ -89,6 +88,9 @@ class BulkUpdateListSerializer(ValidationErrorCallbackMixin, ListSerializer):
 
 
 class ExtendedModelSerializer(ModelSerializer, SerializerExcludeFieldsMixin):
+    # callable object to guarantee atomicity of dataabse  transaction
+    atomicity = None
+
     class Meta:
         list_serializer_class = BulkUpdateListSerializer
         validate_only_field_names = []
@@ -188,18 +190,18 @@ class DjangoBaseClosureBulkSerializer(BulkUpdateListSerializer, ClosureTableMixi
 
     def create(self, validated_data):
         validated_data = self.get_sorted_insertion_forms(forms=validated_data)
-        with transaction.atomic():
+        with self.child.atomicity():
             instances = super().create(validated_data=validated_data)
-            #raise IntegrityError("end of generic group bulk create ........")
+            # end of generic group bulk create
         return instances
 
     def update(self, instance, validated_data):
         validated_data = self.get_sorted_update_forms(instances=instance, forms=validated_data)
         ret = None
-        with transaction.atomic():
+        with self.child.atomicity():
             self.clean_dup_update_paths()
             ret = super().update(instance=instance, validated_data=validated_data)
-            #raise IntegrityError("end of group bulk update ........")
+            # end of group bulk update
         return ret
 #### end of  DjangoBaseClosureBulkSerializer
 

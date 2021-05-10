@@ -315,15 +315,41 @@ class ClosureTableMixin:
                 edit_trees_in[v['dependency']]['new']['moving_subtree_root'].append(k)
             # For each edit tree, find the subtrees that will be moved out (to another edit tree)
             v['new']['move_out_subtree_root'] = []
+            # find subtrees that move internally , check the ancestor path from node `k` to
+            # node `k2`, there might be different ancestor(s) in the middle of the path
+            v['new']['move_internal_subtree_root'] = []
+            find_ancestor_fn = lambda x: str(x['obj'].pk) == str(k)
             for k2 in v['old']['moving_subtree_root']:
                 new_ancs = [str(a['obj'].pk) for a in edit_trees_in[k2]['new']['ancestors']]
                 if not k in new_ancs:
                     v['new']['move_out_subtree_root'].append(k2)
+                k_in_old_asc = list(filter(find_ancestor_fn, edit_trees_in[k2]['old']['ancestors']))
+                k_in_new_asc = list(filter(find_ancestor_fn, edit_trees_in[k2]['new']['ancestors']))
+                if any(k_in_old_asc) and any(k_in_new_asc):
+                    if len(k_in_old_asc) == 1 and len(k_in_new_asc) == 1:
+                        k_depth_in_old_asc = k_in_old_asc[0]['depth']
+                        k_depth_in_new_asc = k_in_new_asc[0]['depth']
+                        ## if k_depth_in_old_asc != k_depth_in_new_asc:
+                        ##     v['new']['move_internal_subtree_root'].append(k2)
+                        old_ascs_k_to_k2 = filter(lambda x: x['depth'] <= k_depth_in_old_asc,
+                            edit_trees_in[k2]['old']['ancestors'] )
+                        new_ascs_k_to_k2 = filter(lambda x: x['depth'] <= k_depth_in_new_asc,
+                            edit_trees_in[k2]['new']['ancestors'] )
+                        extract_fn = lambda x: (x['obj'].pk, x['depth'])
+                        old_ascs_k_to_k2 = set(map(extract_fn, old_ascs_k_to_k2))
+                        new_ascs_k_to_k2 = set(map(extract_fn, new_ascs_k_to_k2))
+                        diff = old_ascs_k_to_k2 ^ new_ascs_k_to_k2
+                        if any(diff):
+                             v['new']['move_internal_subtree_root'].append(k2)
+                    else: # TODO, log error
+                        raise ValueError
+        ## end of edit_trees_in.items() iteration
 
         # In each edit tree, get rid of the subtree(s) which meet the condition above.
         remove = []
         for k, v in edit_trees_in.items():
-            exc_ids = set(v['new']['moving_subtree_root']) | set(v['new']['move_out_subtree_root'])
+            exc_ids = set(v['new']['moving_subtree_root']) | set(v['new']['move_out_subtree_root']) \
+                    | set(v['new']['move_internal_subtree_root'])
             for w in exc_ids: # collect ID of all descendants in the subtree
                 remove += [str(d['obj'].pk) for d in edit_trees_in[w]['old']['descendants']]
             v['new']['descendants'] = [d for d in v['old']['descendants'] if not str(d['obj'].pk) in remove]
@@ -345,10 +371,12 @@ class ClosureTableMixin:
             v['old']['moving_subtree_root'].clear()
             v['new']['moving_subtree_root'].clear()
             v['new']['move_out_subtree_root'].clear()
+            v['new']['move_internal_subtree_root'].clear()
             v['old']['descendants'].clear()
             del v['old']['moving_subtree_root']
             del v['new']['moving_subtree_root']
             del v['new']['move_out_subtree_root']
+            del v['new']['move_internal_subtree_root']
             del v['old']['descendants']
     #### end of _construct_edit_descendants
 
@@ -373,6 +401,7 @@ class ClosureTableMixin:
                 asc_id  = getattr(obj, self.ANCESTOR_FIELD_NAME).pk
                 desc_id = getattr(obj, self.DESCENDANT_FIELD_NAME).pk
                 entire_obj_list[(asc_id, desc_id)] = obj
+
         path_keys_data = entire_data_list.keys()
         path_keys_obj  = entire_obj_list.keys()
         union = set(path_keys_data) & set(path_keys_obj)
@@ -382,6 +411,7 @@ class ClosureTableMixin:
             old_id = getattr(entire_obj_list[u], self.PK_FIELD_NAME)
             if old_id == new_id:
                 union_removed.append(u)
+
         union = union - set(union_removed)
         obj_map = map(lambda u: entire_obj_list[u], union)
         self._conflict_update_paths = list(obj_map)
@@ -664,23 +694,25 @@ class BaseClosureNodeMixin:
     def create(self, validated_data):
         exist_parent = validated_data.pop('exist_parent', '')
         new_parent   = validated_data.pop('new_parent', '')
-        instance = super().create(validated_data=validated_data)
-        # maintain group hierarchy
-        closure_tree = self.parent.get_insertion_ancestors(leaf_node=instance, \
-                exist_parent=exist_parent, new_parent=new_parent )
-        self.fields['ancestors'].create(validated_data=closure_tree)
+        with self.atomicity():
+            instance = super().create(validated_data=validated_data)
+            # maintain group hierarchy
+            closure_tree = self.parent.get_insertion_ancestors(leaf_node=instance, \
+                    exist_parent=exist_parent, new_parent=new_parent )
+            self.fields['ancestors'].create(validated_data=closure_tree)
         return instance
 
     def update(self, instance, validated_data):
         exist_parent = validated_data.pop('exist_parent', '')
         new_parent   = validated_data.pop('new_parent', '')
         closure_tree = validated_data.pop('closure_tree', None)
-        instance = super().update(instance=instance, validated_data=validated_data)
-        # For bulk update on group hierarchy, it's good to explicitly & separately specify
-        # which nodes (of closure table) should be created / updated / deleted 
-        if closure_tree:
-            self.fields['ancestors'].update( instance=closure_tree['update']['obj'],
-                    validated_data=closure_tree['update']['data'] )
-            self.fields['ancestors'].create(validated_data=closure_tree['create'])
+        with self.atomicity():
+            instance = super().update(instance=instance, validated_data=validated_data)
+            # For bulk update on group hierarchy, it's good to explicitly & separately specify
+            # which nodes (of closure table) should be created / updated / deleted 
+            if closure_tree:
+                self.fields['ancestors'].update( instance=closure_tree['update']['obj'],
+                        validated_data=closure_tree['update']['data'] )
+                self.fields['ancestors'].create(validated_data=closure_tree['create'])
         return instance
 

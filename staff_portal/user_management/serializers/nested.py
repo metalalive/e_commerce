@@ -7,10 +7,11 @@ from rest_framework.fields      import  empty
 
 from common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer
 from common.serializers.mixins  import  QuotaCheckerMixin
+from common.serializers.mixins.internal import AugmentEditFieldsMixin
 from common.validators          import  UniqueListItemsValidator
 from location.models   import Location
 
-from ..models import UserEmailAddress, EmailAddress, UserPhoneNumber, PhoneNumber, UserLocation
+from ..models import UserEmailAddress, EmailAddress, UserPhoneNumber, PhoneNumber, UserLocation, _atomicity_fn
 from ..models import UserQuotaRelation, QuotaUsageType,  GenericUserAppliedRole, GenericUserGroupRelation
 from  .common import ConnectedGroupField, ConnectedProfileField, UserSubformSetupMixin
 
@@ -19,6 +20,7 @@ _logger = logging.getLogger(__name__)
 
 
 class QuotaUsageTypeSerializer(ExtendedModelSerializer):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model  = QuotaUsageType
         fields = ['id', 'label', 'material']
@@ -33,6 +35,7 @@ class QuotaUsageTypeSerializer(ExtendedModelSerializer):
 
 
 class EmailSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model = EmailAddress
         fields = ['id', 'addr',]
@@ -40,6 +43,7 @@ class EmailSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
         self._mark_as_creation_on_update(pk_field_name='id', instance=instance, data=data)
 
 class PhoneNumberSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model = PhoneNumber
         fields = ['id', 'country_code', 'line_number',]
@@ -47,6 +51,7 @@ class PhoneNumberSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
         self._mark_as_creation_on_update(pk_field_name='id', instance=instance, data=data)
 
 class GeoLocationSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model = Location
         fields = ['id', 'country', 'province', 'locality', 'street', 'detail', 'floor', 'description',]
@@ -54,35 +59,13 @@ class GeoLocationSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
         self._mark_as_creation_on_update(pk_field_name='id', instance=instance, data=data)
 
 
-class AugmentUserRefMixin:
-    """
-    Internal mixin class for adding user reference before the valdated
-    data is written to backend database
-    """
-    _field_name_map = {}
-
-    def create(self, validated_data, **kwargs):
-        for item in validated_data: # process list of data that will be written
-            for k,v in self._field_name_map.items():
-                if kwargs.get(k):
-                    item[v] = kwargs.get(k)
-        return super().create(validated_data=validated_data)
-
-    #### def update(self, instance, validated_data, usr, allow_insert=False, allow_delete=False):
-    def update(self, instance, validated_data, allow_insert=False, allow_delete=False, **kwargs):
-        for item in validated_data: # process list of data that will be written
-            if item.get(self.child.pk_field_name, None) is None: # primary key may not be named `id`
-                for k,v in self._field_name_map.items():
-                    if kwargs.get(k):
-                        item[v] = kwargs.get(k)
-                #### item['_user_instance'] = usr
-        return super().update(instance=instance, validated_data=validated_data,
-                allow_insert=allow_insert, allow_delete=allow_delete)
+class AugmentUserRefMixin(AugmentEditFieldsMixin):
+    _field_name_map = {'usr' :'_user_instance', }
 
 
 class QuotaCheckerSerializer(QuotaCheckerMixin, AugmentUserRefMixin, BulkUpdateListSerializer):
     # ensure method resolution order meets application requirement : __mro__
-    _field_name_map = {'usr' :'_user_instance', }
+    pass
 
 
 class BulkUserQuotaRelationSerializer(AugmentUserRefMixin, BulkUpdateListSerializer):
@@ -97,12 +80,11 @@ class BulkUserQuotaRelationSerializer(AugmentUserRefMixin, BulkUpdateListSeriali
       e.g. have both usage-type-email=2 and usage-type-email=9 in client request)
     """
     default_validators = [UniqueListItemsValidator(fields=['usage_type']),]
-    _field_name_map = {'usr' :'_user_instance', }
-
 
 
 class CommonUserSubformSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
 
+    atomicity = _atomicity_fn
     # TODO, if nested_form_field is not listed in query parameter of client request
     # then self.fields[nested_form_field] will be thrown away which cause server
     # error in following functions, fix this issue
@@ -240,7 +222,6 @@ class UserQuotaRelationSerializer(CommonUserSubformSerializer):
 
 
 class BulkGenericUserAppliedRoleSerializer(AugmentUserRefMixin, BulkUpdateListSerializer):
-    _field_name_map = {'usr' :'_target_instance', }
 
     def augment_write_data(self, target, data, account):
         return self.child.augment_write_data(target=target, data=data, account=account)
@@ -279,6 +260,7 @@ class BulkGenericUserAppliedRoleSerializer(AugmentUserRefMixin, BulkUpdateListSe
 
 
 class BaseRoleAppliedSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         # subclasses must orverride these fields
         _apply_type = None
@@ -374,7 +356,7 @@ class GenericUserAppliedRoleSerializer(BaseRoleAppliedSerializer):
         return super().augment_write_data(data=data, account=account, filter_kwargs=filter_kwargs)
 
     def create(self, validated_data):
-        target = validated_data.pop('_target_instance', None)
+        target = validated_data.pop('_user_instance', None)
         validated_data['user_type'] = ContentType.objects.get_for_model(target)
         validated_data['user_id']   = target.pk
         validated_data['approved_by'] = self._account.genericuserauthrelation.profile
@@ -405,7 +387,7 @@ class GenericUserGroupRelationSerializer(BaseRoleAppliedSerializer):
         return super().augment_write_data(data=data, account=account, filter_kwargs=filter_kwargs)
 
     def create(self, validated_data):
-        target = validated_data.pop('_target_instance', None)
+        target = validated_data.pop('_user_instance', None)
         validated_data['profile'] = target
         validated_data['approved_by'] = self._account.genericuserauthrelation.profile
         log_msg = ['validated_data', validated_data]

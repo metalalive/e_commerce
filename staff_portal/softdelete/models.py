@@ -52,6 +52,7 @@ class SoftDeleteQuerySet(models.QuerySet):
 
 
 class SoftDeleteManager(models.Manager):
+    default_qset_cls = None
 
     def _get_base_queryset(self):
         return super(SoftDeleteManager, self).get_queryset()
@@ -61,12 +62,12 @@ class SoftDeleteManager(models.Manager):
 
     def get_queryset(self):
         qs = self._get_base_queryset().filter(time_deleted__isnull=True)
-        qs.__class__ = SoftDeleteQuerySet
+        qs.__class__ = self.default_qset_cls or  SoftDeleteQuerySet
         return qs
 
     def get_deleted_set(self):
         qs = self._get_base_queryset().filter(time_deleted__isnull=False)
-        qs.__class__ = SoftDeleteQuerySet
+        qs.__class__ = self.default_qset_cls or  SoftDeleteQuerySet
         return qs
 
     def all(self, with_deleted=False):
@@ -77,7 +78,7 @@ class SoftDeleteManager(models.Manager):
                 qs = qs.filter(**self.core_filters)
             # Originally the class is django queryset, but it has to be soft-delete specific 
             # queryset to caller
-            qs.__class__ = SoftDeleteQuerySet
+            qs.__class__ = self.default_qset_cls or  SoftDeleteQuerySet
         else:
             qs = super(SoftDeleteManager, self).all()
         return qs
@@ -97,8 +98,9 @@ class SoftDeleteManager(models.Manager):
             qs = self.all(with_deleted=True).filter(*args, **kwargs)
         else:
             qs = self._get_qset_common(kwargs.get('pk',None)).filter(*args, **kwargs)
-        qs.__class__ = SoftDeleteQuerySet
+        qs.__class__ = self.default_qset_cls or  SoftDeleteQuerySet
         return qs
+
 
 
 class SoftDeleteObjectMixin(models.Model):
@@ -139,7 +141,9 @@ class SoftDeleteObjectMixin(models.Model):
 
     def _delete_relations(self, related_fields, *args, **kwargs):
         softdel_model_types = tuple([SoftDeleteObjectMixin, SoftDeleteQuerySet])
-        skip_model_types = tuple([ChangeSet, SoftDeleteRecord])
+        skip_model_types = [ChangeSet, SoftDeleteRecord]
+        skip_model_types.extend(kwargs.pop('skip_model_types', []))
+        skip_model_types = tuple(skip_model_types)
         log_args = []
         loglevel = logging.DEBUG
         for f in related_fields:

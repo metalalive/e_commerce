@@ -1,6 +1,7 @@
 import secrets
 import hashlib
 import logging
+from functools import partial
 
 from datetime import datetime, timezone, timedelta
 
@@ -25,6 +26,9 @@ from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from common.models.mixins        import MinimumInfoMixin, SerializableMixin
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
 
+# note that atomicity fails siliently with incorrect database credential
+# that is why I use partial() to tie `using` argument with transaction.atomic(**kwargs)
+_atomicity_fn = partial(transaction.atomic, using='usermgt_service')
 _logger = logging.getLogger(__name__)
 
 
@@ -166,7 +170,7 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
     #phones    = GenericRelation(UserPhoneNumber,  object_id_field='user_id', content_type_field='user_type')
     #locations = GenericRelation(UserLocation,     object_id_field='user_id', content_type_field='user_type')
 
-    @transaction.atomic
+    @_atomicity_fn()
     def delete(self, *args, **kwargs):
         del_grp_id = self.pk
         hard_delete = kwargs.get('hard', False)
@@ -197,7 +201,7 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
         #raise IntegrityError
 
 
-    @transaction.atomic
+    @_atomicity_fn()
     def undelete(self, *args, **kwargs):
         if kwargs.get('changeset', None) is None:
             profile_id = kwargs.get('profile_id',None)
@@ -304,11 +308,11 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
         return out
 
 
-    @transaction.atomic
+    @_atomicity_fn()
     def delete(self, *args, **kwargs):
         del_prof_id = self.pk
         hard_delete = kwargs.get('hard', False)
-        if not hard_delete:
+        if not hard_delete: # let nested fields add in the same soft-deleted changeset
             if kwargs.get('changeset', None) is None:
                 profile_id = kwargs.get('profile_id')
                 kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
@@ -337,7 +341,7 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
         #raise IntegrityError("end of complex deletion ........")
 
 
-    @transaction.atomic
+    @_atomicity_fn()
     def undelete(self, *args, **kwargs):
         if kwargs.get('changeset', None) is None:
             profile_id = kwargs.get('profile_id',None)
@@ -352,7 +356,7 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
         #raise IntegrityError("end of complex recover ........")
 
 
-    @transaction.atomic
+    @_atomicity_fn()
     def activate(self, new_account_data):
         account = None
         self.active = True
@@ -369,7 +373,7 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
         return account
 
 
-    @transaction.atomic
+    @_atomicity_fn()
     def deactivate(self, remove_account=False):
         log_args = []
         if not self.pk:
@@ -663,7 +667,7 @@ class AuthUserResetRequest(models.Model, MinimumInfoMixin):
         _logger.debug(None, *log_args)
         return token, hashed_token
 
-    @transaction.atomic
+    @_atomicity_fn()
     def save(self, force_insert=False, force_update=False, using=None, update_fields=None, **kwargs):
         if not self.profile.active:
             self.profile.active = True

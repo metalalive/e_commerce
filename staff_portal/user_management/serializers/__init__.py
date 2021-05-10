@@ -6,7 +6,6 @@ import logging
 
 from django.conf      import  settings as django_settings
 from django.core      import  validators
-from django.db        import  IntegrityError, transaction
 from django.utils.deconstruct   import deconstructible
 from django.core.exceptions     import ValidationError, ObjectDoesNotExist, ImproperlyConfigured
 from django.contrib.auth.models import Permission as AuthPermission, Group as AuthRole, User as AuthUser
@@ -27,7 +26,7 @@ from common.util.python         import  get_fixture_pks
 from common.util.python.async_tasks    import  sendmail as async_send_mail
 
 from ..models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, AuthUserResetRequest
-from ..models import GenericUserAuthRelation,  GenericUserGroupRelation
+from ..models import GenericUserAuthRelation,  GenericUserGroupRelation, _atomicity_fn
 from ..async_tasks import update_roles_on_accounts
 
 from .common import ConnectedGroupField, ConnectedProfileField, UserSubformSetupMixin
@@ -38,6 +37,7 @@ _logger = logging.getLogger(__name__)
 
 
 class AuthPermissionSerializer(ExtendedModelSerializer):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model = AuthPermission
         fields = ['id', 'name', 'codename']
@@ -45,6 +45,7 @@ class AuthPermissionSerializer(ExtendedModelSerializer):
 
 
 class AuthRoleSerializer(ExtendedModelSerializer):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model  = AuthRole
         fields = ['id', 'name', 'permissions',]
@@ -67,6 +68,7 @@ class GenericUserGroupClosureSerializer(ExtendedModelSerializer):
         read_only_fields = ['depth']
     ancestor   = ConnectedGroupField(read_only=True)
     descendant = ConnectedGroupField(read_only=True)
+    atomicity = _atomicity_fn
 
 
 
@@ -81,6 +83,8 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
     # internally check roles and groups that will be applied
     # default value: 1 = superuser role, 2 = staff role
     PRESERVED_ROLE_IDS = get_fixture_pks(filepath='user_management.json', pkg_hierarchy='auth.group')
+    # overwrite atomicity function
+    atomicity = _atomicity_fn
 
     def __init__(self, instance=None, data=empty, **kwargs):
         self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
@@ -207,11 +211,10 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
     def create(self, validated_data):
         subform_keys = ['groups', 'roles', 'quota', 'emails','phones','locations']
         validated_subform_data = {k: validated_data.pop(k, None) for k in subform_keys}
-        with transaction.atomic():
+        with self.atomicity():
             instance = super().create(validated_data=validated_data)
             for k in subform_keys:
                 self.fields[k].create(validated_data=validated_subform_data[k], usr=instance)
-            #raise IntegrityError("end of complex bulk create ........")
         return instance
 
     def update(self, instance, validated_data):
@@ -228,7 +231,6 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
             field.update(instance=subform_qset, validated_data=validated_subform_data[k],
                     usr=instance, allow_insert=True, allow_delete=True)
         GenericUserProfile.update_account_privilege(profile=instance, account=instance.account)
-        #raise IntegrityError("end of complex bulk update ........")
         return instance
 
 #### end of  GenericUserProfileSerializer
@@ -257,6 +259,7 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, ExtendedModelSerializer, 
     ancestors   = GenericUserGroupClosureSerializer(many=True, read_only=True) #
     descendants = GenericUserGroupClosureSerializer(many=True, read_only=True)
     usr_cnt = IntegerField(read_only=True)
+    atomicity = _atomicity_fn
 
     def __init__(self, instance=None, data=empty, **kwargs):
         self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
@@ -328,6 +331,7 @@ class AuthUserResetRequestSerializer(ExtendedModelSerializer, UserSubformSetupMi
         list_serializer_class = BulkAuthUserRequestSerializer
 
     email = PrimaryKeyRelatedField(many=False, queryset=UserEmailRelationSerializer.Meta.model.objects.none() )
+    atomicity = _atomicity_fn
 
     def __init__(self, instance=None, data=empty, **kwargs):
         #### self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
@@ -561,7 +565,7 @@ class  LoginAccountSerializer(Serializer):
         profile = self._auth_req.profile
         email   = self._auth_req.email
         validated_data = self._clean_validate_only_fields(validated_data)
-        with transaction.atomic():
+        with _atomicity_fn():
             instance = profile.activate(new_account_data=validated_data)
             self._auth_req.delete()
         if self._mail_kwargs and email: # notify user again by email
@@ -572,7 +576,7 @@ class  LoginAccountSerializer(Serializer):
         profile = None
         email   = None
         validated_data = self._clean_validate_only_fields(validated_data)
-        with transaction.atomic():
+        with _atomicity_fn():
             for attr, value in validated_data.items():
                 if attr == "password":
                     instance.set_password(raw_password=value)
@@ -584,7 +588,6 @@ class  LoginAccountSerializer(Serializer):
                 email   = self._auth_req.email
                 self._auth_req.delete()
             # check instance.username and instance.password if necessary
-            #### raise IntegrityError("end of login account update ........")
         if self._mail_kwargs and email:
             self._mailing(profile=profile, mail_ref=email, username=instance.username)
         return instance
