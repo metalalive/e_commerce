@@ -59,6 +59,12 @@ class ExtendedLogger(logging.Logger):
         fullpath = rv[0]
         if fullpath.find(base_path, 0, len(fullpath)) == 0:
             rv[0] = fullpath[len(base_path):]
+        elif fullpath.startswith('.'):
+            # some python applications (e.g. Django Daphne) converts the absolute path to
+            # relative file path automatically (the string starts with `.`), which cause
+            # Logstash parsing error because there is no Grok pattern that allows
+            # relative file path , so here is a workaround for such case.
+            rv[0] = fullpath[1:]
         rv = tuple(rv)
         return rv
 

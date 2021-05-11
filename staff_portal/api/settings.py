@@ -131,8 +131,77 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',
 ]
 
-# logging , TODO
+# logging
+_LOG_BASE_DIR = os.path.join(BASE_DIR ,'tmp/log/staffsite')
+_LOG_FMT_DBG_BASE = ["{asctime}", "{levelname}", "{process:d}", "{thread:d}", "{pathname}", "{lineno:d}", "{message}"]
+_LOG_FMT_DBG_VIEW = ["{req_ip}", "{req_mthd}", "{uri}"] + _LOG_FMT_DBG_BASE
 
+LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'shortened_fmt': {
+                'format': "%(asctime)s %(levelname)s %(name)s %(lineno)d %(message)s",
+            },
+            'dbg_base_fmt': {
+                'format': ' '.join(_LOG_FMT_DBG_BASE),
+                'style': '{',
+            },
+            'dbg_view_fmt': {
+                'format': ' '.join(_LOG_FMT_DBG_VIEW),
+                'style': '{',
+            },
+        },
+        # pre-defined handler classes applied to this project
+        'handlers': {
+            "default_file": {
+                'level': 'WARNING',
+                'formatter': 'shortened_fmt',
+                'class': 'logging.handlers.TimedRotatingFileHandler',
+                'filename': str(os.path.join(_LOG_BASE_DIR, 'default.log')),
+                # daily log, keep all log files for one year
+                'backupCount': 366,
+                # new file is created every 0 am (local time)
+                'atTime': time(hour=0, minute=0, second=0),
+                'encoding': 'utf-8',
+                'delay': True, # lazy creation
+            },
+            "dbg_views_logstash": {
+                'level': 'DEBUG',
+                'formatter': 'dbg_view_fmt',
+                'class':    'logstash_async.handler.AsynchronousLogstashHandler',
+                'transport':'logstash_async.transport.TcpTransport',
+                'host': 'localhost',
+                'port': 5959,
+                'database_path': None,
+                # In this project logstash input server and django server are hosted in the
+                # same machine, therefore it's not necessary to enable secure connection.
+                'ssl_enable': False,
+            },
+            "dbg_base_logstash": {
+                'level': 'DEBUG',
+                'formatter': 'dbg_base_fmt',
+                'class':    'logstash_async.handler.AsynchronousLogstashHandler',
+                'transport':'logstash_async.transport.TcpTransport',
+                'host': 'localhost',
+                'port': 5959,
+                'database_path': None,
+                'ssl_enable': False,
+            },
+        }, # end of handler section
+        'loggers': {
+            'common.views.api': {
+                'level': 'INFO',
+                'handlers': ['dbg_views_logstash'],
+            },
+        }, # end of loggers section
+        'root': {
+            'level': 'ERROR',
+            'handlers': ['default_file'],
+        },
+} # end of LOGGING section
+
+# Django RESTful API framework
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
 }
