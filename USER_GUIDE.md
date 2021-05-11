@@ -53,10 +53,11 @@ Note logstash TCP input server operates with default port 5959
 ```
 cd ./staff_portal
 
-DJANGO_SETTINGS_MODULE='restaurant.global_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  -E  -Q mailing,periodic_default
+DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  -E  -Q mailing,periodic_default
 
 DJANGO_SETTINGS_MODULE='user_management.settings'  celery --app=common.util.python --config=user_management.celeryconfig  worker --loglevel=INFO --hostname=usermgt@%h  -E -Q usermgt_default
 ```
+Note that `-Q` is optional, without specifying `-Q`, Celery will enable all queues defined in celery configuration file (`celeryconfig`) on initialization.
 
 
 * start cron job scheduler (celery beat), collect all periodic tasks to run (gathered from all services)
@@ -70,6 +71,7 @@ celery --app=common.util.python  --config=common.util.python.celerybeatconfig  b
 DJANGO_SETTINGS_MODULE='api.settings' daphne -p 8007  common.util.python.django.asgi:application
 python3.9 manage.py runserver  --settings web.settings  8006
 python3.9 manage.py runserver  --settings user_management.settings  8008
+DJANGO_SETTINGS_MODULE='product.settings' daphne -p 8009  common.util.python.django.asgi:application
 ```
 
 
