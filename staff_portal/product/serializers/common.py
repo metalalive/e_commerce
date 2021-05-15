@@ -15,6 +15,7 @@ from ..models.common import _atomicity_fn
 _logger = logging.getLogger(__name__)
 
 src_field_label = {'_list':'attributes', 'type':'type', 'value':'value'}
+attribute_field_label = src_field_label
 
 class AugmentIngredientRefMixin(AugmentEditFieldsMixin):
     _field_name_map = {'ingredient' :'_ingredient_instance', }

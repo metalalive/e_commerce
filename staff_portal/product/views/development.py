@@ -3,7 +3,7 @@ import logging
 
 from django.contrib.contenttypes.models  import ContentType
 from rest_framework             import status as RestStatus
-from rest_framework.filters     import OrderingFilter, SearchFilter
+from rest_framework.filters     import OrderingFilter
 
 from common.views.mixins  import  LimitQuerySetMixin
 from common.views.api     import  AuthCommonAPIView, AuthCommonAPIReadView
@@ -14,13 +14,14 @@ from ..models.common import ProductmgtChangeSet
 #from ..serializers.base import  AttributeTypeSerializer
 from ..serializers.development import FabricationIngredientSerializer
 from ..permissions import FabricationIngredientPermissions
+from  .common import BaseIngredientSearchFilter
 
 _logger = logging.getLogger(__name__)
 
 
 class FabricationIngredientView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModelMixin):
     serializer_class  = FabricationIngredientSerializer
-    filter_backends = [SearchFilter, OrderingFilter,] # TODO, figure out how to search with attribute type/value
+    filter_backends = [BaseIngredientSearchFilter, OrderingFilter,] # TODO, figure out how to search with attribute type/value
     ordering_fields  = ['-id', 'name', 'category']
     search_fields  = ['name', 'category']
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [FabricationIngredientPermissions]

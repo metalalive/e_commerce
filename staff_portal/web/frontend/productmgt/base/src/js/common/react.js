@@ -304,6 +304,9 @@ export class BaseExtensibleForm extends React.Component {
                 query_params.page_size = kwargs.page_size;
                 query_params.page = kwargs.page ? kwargs.page: 1;
             }
+            if(kwargs.query_params) {
+                query_params = {...query_params, ...kwargs.query_params}
+            }
             let req_opt    = DEFAULT_API_REQUEST_OPTIONS.GET();
             let callbacks  = null;
             let bound_internal_callback = this._refresh_callback_succeed.bind(this);
@@ -315,6 +318,15 @@ export class BaseExtensibleForm extends React.Component {
                 callbacks.succeed.splice(0, 0, bound_internal_callback);
             } else {
                 callbacks = {succeed : [bound_internal_callback],};
+            }
+            if(kwargs.body) {
+                // TRICKY , javascript API-consumer functions like Request() or fetch()
+                // don't  allow client to send request with body data, which is
+                // very inconvenient, (while HTTP spec doesn't forbid you to do so), these
+                // functions silently cancel GET request with body data.
+                // So I need to encode the body data then put it to URI query parameter
+                // ,which has size limit ..... inconvenient again.
+                //req_opt.body = kwargs.body;
             }
             let extra = kwargs.extra;
             this.api_caller.start({base_url: BaseUrl.API_HOST + api_url, req_opt:req_opt,

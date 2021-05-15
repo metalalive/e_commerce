@@ -32,10 +32,24 @@ function _save_items(evt) {
 
 function _refresh_items(evt) {
     let form_ref = this.current;
+    let target = evt.nativeEvent.target;
+    let adv_search_cond  = target.dataset.adv_search_cond;
+    let adv_search_panel = target.dataset.adv_search_panel;
     let valid_field_names = [form_ref._app_item_id_label,
         'type', 'value', ...form_ref._valid_fields_name ];
     let kwargs = {api_url: api_base_url.plural, ordering: ['-id', 'unknown_field_name'],
         page_size: 10, valid_field_names:valid_field_names };
+    if(adv_search_cond && adv_search_panel) {
+        target = target.parentNode ;
+        while(target.id !== adv_search_panel) {
+            target = target.parentNode ;
+        }
+        // retrieve condition for advanced search
+        let condition_dom = target.querySelector("textarea[id="+ adv_search_cond +"]");
+        let adv_condition = encodeURIComponent(condition_dom.value);
+        kwargs.query_params = {body:adv_condition, advanced_search:'yes'};
+            // already serialized because it is textarea
+    }
     form_ref.refresh(kwargs);
 }
 
@@ -52,6 +66,14 @@ function _undelete_items(evt) {
 function _instant_search_call_api(keyword, api_url) {
     console.log('_instant_search_call_api not implemented yet');
 }
+
+function _switch_adv_search_panel(evt) {
+    let target = evt.nativeEvent.target;
+    let menu_classname = "dropdown-menu";
+    let dom_showup_classname = "show";
+    toggle_visual_elm_showup(target.parentNode, menu_classname, dom_showup_classname);
+}
+
 
 function _new_empty_form(evt) {
     let form_ref = this.current;
@@ -222,6 +244,27 @@ const Ingredients = (props) => {
                                 <line x1="21" y1="21" x2="15" y2="15" />
                             </svg>
                         </span>
+                      </div>
+                      <div className="list-item dropdown">
+                          <button className="btn btn-primary nav-link dropdown-toggle"
+                              onClick={ _switch_adv_search_panel }>
+                              advanced search
+                          </button>
+                          <div className="dropdown-menu " id="adv_search_panel">
+                              <label className="dropdown-item form-label">
+                                  enter the search condition in JSON form
+                                  <textarea className="form-control" id="adv_search_cond" />
+                              </label>
+                              <div className="row">
+                                  <div className="col-8">
+                                  </div>
+                                  <div className="col-4">
+                                      <button className="btn btn-primary" data-adv_search_cond="adv_search_cond"
+                                          data-adv_search_panel="adv_search_panel"
+                                          onClick={ _refresh_items.bind(refs.form_items) } > Go </button>
+                                  </div>
+                              </div>
+                          </div>
                       </div>
                   </div>
                 </div>
