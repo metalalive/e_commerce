@@ -1,9 +1,11 @@
 import logging
-from datetime  import datetime, timedelta
+from datetime  import datetime, timedelta, date
 
+from django.utils.module_loading import import_string
 from django.contrib.auth.models import User as AuthUser
 from celery.backends.rpc import RPCBackend as CeleryRpcBackend
 
+from common.auth.keystore import create_keystore_helper
 from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
 from common.util.python.celery import app as celery_app
 from common.util.python import log_wrapper
@@ -54,6 +56,28 @@ def clean_expired_auth_token(days):
     expired.delete()
     return result
 
+
+def _rotate_keystores_setup(module_setup):
+    keystore = create_keystore_helper(cfg=module_setup, import_fn=import_string)
+    key_size_in_bits = module_setup['key_size_in_bits']
+    num_keys = module_setup.get('num_keys', keystore.DEFAULT_NUM_KEYS)
+    date_limit = None
+    if module_setup.get('date_limit', None):
+        date_limit = date.fromisoformat(module_setup['date_limit'])
+    keygen_handler_module = import_string(module_setup['keygen_handler']['module_path'])
+    keygen_handler_kwargs = module_setup['keygen_handler'].get('init_kwargs', {})
+    keygen_handler = keygen_handler_module(**keygen_handler_kwargs)
+    return keystore.rotate(keygen_handler=keygen_handler, key_size_in_bits=key_size_in_bits,
+            num_keys=num_keys, date_limit=date_limit)
+
+
+@celery_app.task(queue='usermgt_default')
+@log_wrapper(logger=_logger, loglevel=logging.INFO)
+def rotate_keystores(modules_setup):
+    """ cron job to update given list of key stores periodically """
+    # TODO, clean up old files
+    results = map(_rotate_keystores_setup , modules_setup)
+    return list(results)
 
 
 @celery_app.task(backend=CeleryRpcBackend(app=celery_app), queue='rpc_usermgt_get_profile', exchange=RPC_EXCHANGE_DEFAULT_NAME, \

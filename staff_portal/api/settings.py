@@ -5,7 +5,7 @@ from common.logging.logger import ExtendedLogger
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent
 
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
@@ -80,7 +80,16 @@ CSRF_COOKIE_NAME = 'anticsrftok'
 # unauthentication accesses.
 CSRF_COOKIE_AGE  = 12 * 3600 ## 43
 
-JWT_COOKIE_NAME = 'jwt'
+# this project stores 2 JWTs to cookie in client's browser,
+# one of them is access token , the other one for renewing the access token
+JWT_NAME_ACCESS_TOKEN  = 'jwt_access_token'
+JWT_NAME_REFRESH_TOKEN = 'jwt_refresh_token'
+# Note:
+# * the valid period is estimated in seconds
+# * the period for refresh token is not configurable, it has to be the same as
+#   the period for session (used in web server)
+# * the period for access token has to be divisible by the period for refresh token
+JWT_ACCESS_TOKEN_VALID_PERIOD = 300
 
 CACHES = {
         'default': {
@@ -96,18 +105,30 @@ CACHES = {
                 'MAX_ENTRIES': 512,
                 },
             },
-        'jwt_secret': {
-            'TIMEOUT': 69283,
-            'OPTIONS': {
-                'MAX_ENTRIES': 512,
-                },
-        },
         'log_level_change': {
             'TIMEOUT': None,
             'OPTIONS': {
                 'MAX_ENTRIES': 1024,
                 },
             },
+}
+
+AUTH_KEYSTORE = {
+    'keystore': 'common.auth.keystore.BaseAuthKeyStore',
+    'persist_secret_handler': {
+        'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+        'init_kwargs': {
+            'filepath': './tmp/cache/production/jwks/privkey/current.json',
+            'name':'secret', 'expired_after_days': 7,
+        },
+    },
+    'persist_pubkey_handler': {
+        'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+        'init_kwargs': {
+            'filepath': './tmp/cache/production/jwks/pubkey/current.json',
+            'name':'pubkey', 'expired_after_days': 21,
+        },
+    },
 }
 
 # Internationalization
@@ -193,6 +214,18 @@ LOGGING = {
             'common.views.api': {
                 'level': 'INFO',
                 'handlers': ['dbg_views_logstash'],
+            },
+            'common.auth': {
+                'level': 'INFO',
+                'handlers': ['dbg_base_logstash'],
+            },
+            'common.auth.middleware': {
+                'level': 'INFO',
+                'handlers': ['dbg_base_logstash'],
+            },
+            'common.auth.keystore': {
+                'level': 'INFO',
+                'handlers': ['dbg_base_logstash'],
             },
         }, # end of loggers section
         'root': {

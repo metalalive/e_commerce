@@ -14,13 +14,17 @@ def _determine_expiry(user):
     determine session expiry time in seconds dynamically for different status of users
     e.g. superuser, staff, customers
     """
-    # TODO: find better way to idoing this
-    if user.is_superuser:
-        expiry_secs = django_settings.SESSION_COOKIE_AGE
-    elif  user.is_staff:
-        expiry_secs = django_settings.SESSION_COOKIE_AGE << 1
+    # TODO: find better way to doing this
+    from django.contrib.auth.models import User as AuthUser
+    if user and isinstance(user, AuthUser):
+        if user.is_superuser:
+            expiry_secs = django_settings.SESSION_COOKIE_AGE
+        elif  user.is_staff:
+            expiry_secs = django_settings.SESSION_COOKIE_AGE << 2
+        else:
+            expiry_secs = django_settings.SESSION_COOKIE_AGE << 4
     else:
-        expiry_secs = django_settings.SESSION_COOKIE_AGE << 2
+        expiry_secs = -1
     return expiry_secs
 
 
@@ -50,20 +54,25 @@ def sessionid_based_login(request, user, backend, log_args):
 
 def jwt_based_login(request, user, backend):
     from rest_framework.request  import Request as DRFRequest
-    from .middleware import JWT
+    from .middleware import JWT, gen_jwt_token_set
     if user is None:
         user = request.user
     backend = _get_backend(user, backend)
     acc_id = user._meta.pk.value_to_string(user)
-    _jwt = getattr(request, 'jwt', JWT()) # overwrite existing JWT or create new one
-    _jwt.payload['iat'] = datetime.utcnow()
-    _jwt.payload['acc_id'] = acc_id
-    _jwt.payload['bkn_id'] = backend
-    ##print('backend: %s , _jwt.payload : %s' % (backend, _jwt.payload))
+    now_time = datetime.utcnow()
+    # overwrite existing JWT or create new one
     http_req = request._request if isinstance(request, DRFRequest) else request
     if not hasattr(http_req, 'jwt'):
-        http_req.jwt = _jwt
-    ##print('http_req: %s, http_req.jwt at login() : %s' % (http_req, http_req.jwt))
+        http_req.jwt = gen_jwt_token_set(acs=None, rfr=None, user=None)
+    if not http_req.jwt.user:
+        http_req.jwt.user = user
+    for tok_name in http_req.jwt.valid_token_names:
+        if getattr(http_req.jwt , tok_name, None) is None:
+            token = JWT()
+            token.payload['iat'] = now_time
+            token.payload['acc_id'] = acc_id
+            token.payload['bkn_id'] = backend
+            setattr(http_req.jwt, tok_name, token)
     if hasattr(request, 'user'):
         request.user = user
     rotate_token(request) # CSRF token refresh, or http_req ?
@@ -92,7 +101,7 @@ def jwt_based_logout(request):
             http_req.jwt.destroy = True
     else:
         payld = jwt_httpreq_verify(request=http_req)
-        if payld and http_req.jwt.valid is True: # verified successfully
+        if payld: # verified successfully
             http_req.jwt.destroy = True
     if hasattr(request, 'user'):
         from django.contrib.auth.models import AnonymousUser

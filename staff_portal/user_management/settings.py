@@ -259,6 +259,10 @@ LOGGING = {
                 'level': 'INFO',
                 'handlers': ['default_file', 'dbg_base_logstash'],
             },
+            'common.auth.keystore': {
+                'level': 'INFO',
+                'handlers': ['dbg_base_logstash'],
+            },
             'common.auth.backends': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
