@@ -227,6 +227,10 @@ LOGGING = {
                 'level': 'INFO',
                 'handlers': ['dbg_base_logstash'],
             },
+            'api.views.security': {
+                'level': 'INFO',
+                'handlers': ['dbg_views_logstash'],
+            },
         }, # end of loggers section
         'root': {
             'level': 'ERROR',

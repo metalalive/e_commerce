@@ -1,9 +1,14 @@
 import copy
 import operator
 import logging
+import json
+import ijson
 
 from django.conf   import  settings as django_settings
 from django.core.cache          import caches as DjangoBuiltinCaches
+from django.views.generic.base  import View as DjangoView
+from django.http.response       import StreamingHttpResponse as DjangoStreamingHttpResponse
+
 from rest_framework             import status as RestStatus
 from rest_framework.response    import Response as RestResponse
 
@@ -11,6 +16,35 @@ from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
 from common.views.filters  import  DateTimeRangeFilter
 from common.auth.backends  import  IsSuperUser
 from ..queryset import UserActionSet
+
+_logger = logging.getLogger(__name__)
+
+def _stream_jwks_file(filepath):
+    buff = ['{"keys":[']
+    with open(filepath, mode='r') as f: # TODO, handle missing file error ?
+        iterator = ijson.kvitems(f, prefix='')
+        for k,v in iterator:
+            v['kid'] = k
+            buff.append(json.dumps(v))
+            yield ''.join(buff)
+            buff.clear()
+            buff.append(',')
+        buff.pop() # shouldn't have comma in last next item of the list
+    buff.append('], "test123": "value456"}')
+    yield ''.join(buff)
+
+class JWKSPublicKeyView(DjangoView):
+    def get(self, request, *args, **kwargs):
+        try:
+            filepath = django_settings.AUTH_KEYSTORE['persist_pubkey_handler']['init_kwargs']['filepath']
+            status = RestStatus.HTTP_200_OK
+        except (AttributeError, KeyError) as e:
+            status = RestStatus.HTTP_404_NOT_FOUND
+            filepath = ''
+            log_args = ['msg', e]
+            _logger.warning(None, *log_args, request=request)
+        return DjangoStreamingHttpResponse(streaming_content=_stream_jwks_file(filepath=filepath),
+                    content_type='application/json', status=status)
 
 class GetProfileIDMixin:
     pass
