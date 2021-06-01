@@ -92,7 +92,8 @@ class JWTbaseMiddleware:
         # encode backend module path to index
         default_backend_path = self._backend_map[self.DEFAULT_AUTH_BACKEND_INDEX]
         backend_path = jwtobj.payload.get('bkn_id', default_backend_path)
-        jwtobj.payload['bkn_id'] = self._backend_map[backend_path]
+        if isinstance(backend_path, str):
+            jwtobj.payload['bkn_id'] = self._backend_map[backend_path]
         # defaults some claims in header & payload section,
         issued_at = datetime.utcnow()
         expires = issued_at + timedelta(seconds=max_age)
@@ -156,13 +157,16 @@ def jwt_httpreq_verify(request):
     if encoded_acs_tok is not None: # verify access token first
         result = _jwt.verify(unverified=encoded_acs_tok, keystore=request._keystore)
     if result:
-        rfr = JWT(encoded=encoded_rfr_tok) if encoded_rfr_tok else None
-        request.jwt = gen_jwt_token_set(acs=_jwt, rfr=rfr)
+        request.jwt = gen_jwt_token_set(acs=_jwt, rfr=None) # no need to parse refresh token
     elif encoded_rfr_tok is not None: # verify refresh token if access token is invalid
         result = _jwt.verify(unverified=encoded_rfr_tok, keystore=request._keystore)
-        if result: # may refresh later on processing response
+        if result:
+            # issue new access token, also renew refresh token without changing
+            # its payload, both tokens will be signed with different secret key
+            # later on processing response
             acs = JWT()
             acs.payload['acc_id'] = _jwt.payload['acc_id']
+            _jwt.header['kid'] = '' # force to rotate refresh token
             request.jwt = gen_jwt_token_set(acs=acs, rfr=_jwt)
     return result
 
