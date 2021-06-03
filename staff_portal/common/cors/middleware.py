@@ -26,7 +26,7 @@ class CorsHeaderMiddleware:
         is_cross_site_req = origin is not None and origin != host
 
         if is_cross_site_req:
-            host_allowed = self._is_request_allowed(host=host, origin=origin)
+            host_allowed, host_label = self._is_request_allowed(host=host, origin=origin)
             if is_options_req: # circuit-break the preflight (OPTIONS request)
                 req_mthd_key = self._get_request_meta_key(ACCESS_CONTROL_REQUEST_METHOD)
                 request_method = request.META.get(req_mthd_key, None)
@@ -41,6 +41,7 @@ class CorsHeaderMiddleware:
             else: # second flight of cross-origin request
                 req_mthd_allowed = request.method in conf.ALLOWED_METHODS
                 if host_allowed and req_mthd_allowed:
+                    request.cors_host_label = host_label
                     response = self.get_response(request)
                 else:
                     response = HttpResponse(status='401')
@@ -52,8 +53,11 @@ class CorsHeaderMiddleware:
         return response
 
     def _is_request_allowed(self, host, origin):
-        host_exists   = host   in conf.ALLOWED_ORIGIN.values()
+        _fn = lambda x: x[1] == host
+        host_exists   = filter(_fn, conf.ALLOWED_ORIGIN.items())
+        host_exists   = list(host_exists)
         origin_exists = origin in conf.ALLOWED_ORIGIN.values()
-        return host_exists and origin_exists
+        label = host_exists[0][0] if host_exists else None
+        return (any(host_exists) and origin_exists, label)
 
 

@@ -23,7 +23,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
     'common.csrf.middleware.ExtendedCsrfViewMiddleware',
-    'common.auth.middleware.JWTbaseMiddleware',
+    'common.auth.django.middleware.JWTbaseMiddleware',
     'common.sessions.middleware.SessionSetupMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

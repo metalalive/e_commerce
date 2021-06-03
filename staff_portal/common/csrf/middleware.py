@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.core.exceptions import NON_FIELD_ERRORS
 
 from common.util.python  import get_header_name, accept_mimetypes_lookup
-from common.auth import _determine_expiry
+from common.auth.django.login import _determine_expiry
 
 # header name for CSRF token authentication
 csrf_header_name = get_header_name(name=django_settings.CSRF_HEADER_NAME)

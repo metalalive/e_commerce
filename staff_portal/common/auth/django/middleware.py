@@ -1,18 +1,18 @@
 from datetime import datetime, timedelta, timezone
 import math
-import secrets
 import logging
-import jwt
 
 from django.conf       import settings as django_settings
 from django.core.cache       import caches as DjangoBuiltinCaches
 from django.utils.http       import http_date
 from django.utils.cache      import patch_vary_headers
 from django.utils.module_loading import import_string
+from django.contrib.auth.models  import AnonymousUser
 
 from common.models.db import db_middleware_exception_handler
-from common.util.python  import ExtendedDict
 from common.auth.keystore import create_keystore_helper
+
+from ..jwt import JWT
 
 _logger = logging.getLogger(__name__)
 
@@ -114,7 +114,6 @@ class JWTbaseMiddleware:
 
 
     def process_request(self, request):
-        from django.contrib.auth.models  import AnonymousUser # cannot be imported initially ?
         user = None
         request._keystore  = self._keystore
         payld = jwt_httpreq_verify(request=request)
@@ -151,15 +150,18 @@ class JWTverifyMiddleware(JWTbaseMiddleware):
 
 def jwt_httpreq_verify(request):
     result = None
+    audience = getattr(request, 'cors_host_label', 'api')
     encoded_acs_tok = request.COOKIES.get(django_settings.JWT_NAME_ACCESS_TOKEN, None)
     encoded_rfr_tok = request.COOKIES.get(django_settings.JWT_NAME_REFRESH_TOKEN, None)
     _jwt = JWT()
     if encoded_acs_tok is not None: # verify access token first
-        result = _jwt.verify(unverified=encoded_acs_tok, keystore=request._keystore)
+        result = _jwt.verify(unverified=encoded_acs_tok, audience=[audience],
+                keystore=request._keystore)
     if result:
         request.jwt = gen_jwt_token_set(acs=_jwt, rfr=None) # no need to parse refresh token
     elif encoded_rfr_tok is not None: # verify refresh token if access token is invalid
-        result = _jwt.verify(unverified=encoded_rfr_tok, keystore=request._keystore)
+        result = _jwt.verify(unverified=encoded_rfr_tok, audience=[audience],
+                keystore=request._keystore)
         if result:
             # issue new access token, also renew refresh token without changing
             # its payload, both tokens will be signed with different secret key
@@ -172,7 +174,11 @@ def jwt_httpreq_verify(request):
 
 
 def gen_jwt_token_set(acs, rfr, user=None, **kwargs):
-    from . import _determine_expiry
+    """
+    generate a pair of JWT-based tokens , one for accessing resource,
+    the other one for refreshing the access token
+    """
+    from .login import _determine_expiry # avoid recursive import
     @property
     def valid(self):
         """ could be True, False, or None (not verified yet) """
@@ -204,108 +210,6 @@ def gen_jwt_token_set(acs, rfr, user=None, **kwargs):
     cls = type('_RequestTokenSet', (), attrs)
     return cls()
 ## end of gen_jwt_token_set
-
-
-class JWT:
-    """
-    internal wrapper class for detecting JWT write, verify, and generate encoded token,
-    in this wrapper, `acc_id` claim is required in payload
-    """
-
-    def __init__(self, encoded=None):
-        self.encoded = encoded
-        self._destroy = False
-        self._valid = None
-
-    @property
-    def encoded(self):
-        return self._encoded
-
-    @encoded.setter
-    def encoded(self, value):
-        self._encoded = value
-        if value:
-            header = jwt.get_unverified_header(value)
-            payld  = jwt.decode(value, options={'verify_signature':False})
-        else:
-            header = {}
-            payld  = {}
-        self._payld  = ExtendedDict(payld)
-        self._header = ExtendedDict(header)
-
-    @property
-    def payload(self):
-        return self._payld
-
-    @property
-    def header(self):
-        return self._header
-
-    @property
-    def modified(self):
-        return self.header.modified or self.payload.modified
-
-    @property
-    def valid(self):
-        """ could be True, False, or None (not verified yet) """
-        return self._valid
-
-    @property
-    def destroy(self):
-        return self._destroy
-
-    @destroy.setter
-    def destroy(self, value:bool):
-        self._destroy = value
-
-    def verify(self, keystore, unverified=None):
-        self._valid = False
-        if unverified:
-            self.encoded = unverified
-        alg = self.header.get('alg', '')
-        unverified_kid = self.header.get('kid', '')
-        keyitem = keystore.choose_pubkey(kid=unverified_kid)
-        pubkey = keyitem['key']
-        if not pubkey:
-            log_args = ['unverified_kid', unverified_kid, 'alg', alg,
-                    'msg', 'public key not found on verification',]
-            _logger.warning(None, *log_args) # log this because it may be security issue
-            return
-        try:
-            verified = jwt.decode(self.encoded, pubkey, algorithms=alg)
-            errmsg = 'data inconsistency, self.payload = %s , verified = %s'
-            assert self.payload == verified, errmsg % (self.payload, verified)
-            self._valid = True
-        except Exception as e:
-            log_args = ['encoded', self.encoded, 'pubkey', pubkey, 'err_msg', e]
-            _logger.warning(None, *log_args)
-            verified = None
-        return verified
-
-
-    def encode(self, keystore):
-        if self.modified:
-            log_args = []
-            unverified_kid = self.header.get('kid', '')
-            keyitem  = keystore.choose_secret(kid=unverified_kid, randomly=True)
-            if keyitem.get('kid', None) and unverified_kid != keyitem['kid']:
-                log_args.extend(['unverified_kid', unverified_kid, 'verified_kid', keyitem['kid']])
-            self.header['kid'] = keyitem.get('kid', unverified_kid)
-            # In PyJwt , alg can be `RS256` (for RSA key) or `HS256` (for HMAC key)
-            self.header['alg'] = keyitem['alg']
-            secret = keyitem['key']
-            if secret:
-                out = jwt.encode(self.payload, secret, algorithm=self.header['alg'],
-                        headers=self.header)
-            log_args.extend(['alg', keyitem['alg'], 'encode_succeed', any(out), 'secret_found', any(secret)])
-            _logger.debug(None, *log_args)
-        else:
-            out = self.encoded
-        return out
-
-    def default_claims(self, header_kwargs, payld_kwargs):
-        self.header.update(header_kwargs, overwrite=False)
-        self.payload.update(payld_kwargs, overwrite=False)
 
 
 

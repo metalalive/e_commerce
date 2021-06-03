@@ -2,8 +2,8 @@
     "ALLOWED_ORIGIN": {
         "web" : "http://localhost:8006",
         "api" : "http://localhost:8007",
-        "usermgt" :    "http://localhost:8008",
-        "productmgt" : "http://localhost:8009"
+        "usermgt" : "http://localhost:8008",
+        "product" : "http://localhost:8009"
     },
     "ALLOWED_METHODS": ["GET", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],
     "ALLOWED_HEADERS": ["content-type", "x-anti-csrf-tok"],

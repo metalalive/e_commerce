@@ -23,6 +23,6 @@ class ProductConfig(AppConfig):
         monkeypatch_django_db()
         from common.models.migrations import monkeypatch_django_migration
         monkeypatch_django_migration()
-        from common.auth import monkeypatch_baseusermgr
+        from common.auth.django.login import monkeypatch_baseusermgr
         monkeypatch_baseusermgr()
 

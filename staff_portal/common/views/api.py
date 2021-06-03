@@ -11,7 +11,7 @@ from rest_framework             import status as RestStatus
 from celery.result import AsyncResult
 
 from common.csrf.middleware import  csrf_protect_m
-from common.auth import logout, login
+from common.auth.django.login import logout, login
 from common.auth.backends import ExtendedSessionAuthentication, ForwardClientAuthentication, IsStaffUser
 from common.models.db     import db_conn_retry_wrapper, get_db_error_response
 from common.views.proxy.mixins import RemoteGetProfileIDMixin
