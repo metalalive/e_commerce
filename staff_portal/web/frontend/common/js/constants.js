@@ -6,6 +6,11 @@ export const BaseUrl = {
     API_HOST: 'http://localhost:8007',
     USERMGT_HOST   : 'http://localhost:8008',
     PRODUCTMGT_HOST: 'http://localhost:8009',
+    // in this project file-upload server host is as the same as image server
+    // , if your applition requires to handle high traffic caused by uploading files
+    //  and downloading images in short time period, it is better to seperate them
+    //  into different servers.
+    FILEUPLOAD_HOST: 'http://localhost:8010',
 };
 
 const _base_api_header  = {'content-type':'application/json', 'accept':'application/json, text/html'};

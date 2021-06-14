@@ -163,6 +163,7 @@ export class BaseExtensibleForm extends React.Component {
         var skipped = true;
         var difference = this.differ();
         this.gather_unsaved_items(difference);
+        let urlhost = kwargs.urlhost ;
         let urlpath = kwargs.urlpath ;
         let callbacks = kwargs.callbacks ;
         // append internal callback to the end of callback list for clearing
@@ -170,7 +171,8 @@ export class BaseExtensibleForm extends React.Component {
         var callbacks_copied = APIconsumer.copy_callbacks(callbacks, ['succeed']);
         callbacks_copied.succeed.push(this._commit_callback_succeed.bind(this));
 
-        var url = BaseUrl.API_HOST + urlpath ;
+        if(!urlhost) { urlhost = BaseUrl.API_HOST; }
+        var url = urlhost + urlpath ;
         var req_opt = this._prepare_save_api_req();
         // Note POST and PUT request will be sent concurrently , for extra check
         // between PUT and POST requests, application developers should overwrite
@@ -329,7 +331,9 @@ export class BaseExtensibleForm extends React.Component {
                 //req_opt.body = kwargs.body;
             }
             let extra = kwargs.extra;
-            this.api_caller.start({base_url: BaseUrl.API_HOST + api_url, req_opt:req_opt,
+            let urlhost = kwargs.urlhost ;
+            if(!urlhost) { urlhost = BaseUrl.API_HOST; }
+            this.api_caller.start({base_url: urlhost + api_url, req_opt:req_opt,
                 callbacks:callbacks,  params: query_params, extra:extra});
         } else {
             console.log("no URL for the API");
@@ -357,6 +361,8 @@ export class BaseExtensibleForm extends React.Component {
     }
     
     delete(kwargs) {
+        let urlhost = kwargs.urlhost ;
+        if(!urlhost) { urlhost = BaseUrl.API_HOST; }
         var urlpath = kwargs.api_url;
         var varlist = kwargs.varlist;
         if(varlist && varlist.length > 0 && urlpath) {
@@ -367,7 +373,7 @@ export class BaseExtensibleForm extends React.Component {
                 callbacks = {succeed:[]};
             }
             callbacks.succeed.push(this._commit_callback_succeed.bind(this));
-            var url = BaseUrl.API_HOST + urlpath ;
+            var url = urlhost + urlpath ;
             var valid_field_names = kwargs.valid_field_names ? kwargs.valid_field_names: [this._app_item_id_label,];
             var req_opt = DEFAULT_API_REQUEST_OPTIONS.DELETE()
             req_opt.body = APIconsumer.serialize(varlist,  valid_field_names, this._serializer_reducer);
@@ -388,7 +394,9 @@ export class BaseExtensibleForm extends React.Component {
                 callbacks = {succeed:[]};
             }
             callbacks.succeed.push(this._commit_callback_succeed.bind(this));
-            var url = BaseUrl.API_HOST + urlpath ;
+            let urlhost = kwargs.urlhost ;
+            if(!urlhost) { urlhost = BaseUrl.API_HOST; }
+            var url = urlhost + urlpath ;
             var valid_field_names = kwargs.valid_field_names ? kwargs.valid_field_names: [this._app_item_id_label,];
             let query_params = {fields: valid_field_names,}
             var req_opt = DEFAULT_API_REQUEST_OPTIONS.PATCH(); // req_opt.body = '';

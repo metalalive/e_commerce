@@ -11,6 +11,7 @@ import  SaleablePackages from './pages/SaleablePackages';
 import  ProjDev   from './pages/ProjDev';
 import  {patch_string_prototype} from './js/common/native.js';
 
+import '@yaireo/tagify/dist/tagify.css';
 import './css/tabler.min.css';
 import './css/App.css';
 import './js/bootstrap.bundle.min.js';

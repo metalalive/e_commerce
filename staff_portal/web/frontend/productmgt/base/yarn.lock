@@ -2154,6 +2154,11 @@
   resolved "https://registry.yarnpkg.com/@xtuc/long/-/long-4.2.2.tgz#d291c6a4e97989b5c61d9acf396ae4fe133a718d"
   integrity sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==
 
+"@yaireo/tagify@^4.1.4":
+  version "4.1.4"
+  resolved "https://registry.yarnpkg.com/@yaireo/tagify/-/tagify-4.1.4.tgz#bf83e83c987edc9497822b4655d9c2128c73e32c"
+  integrity sha512-DE+n9ib8unKH8X1Jid5/pBEpCl9ecUl0uHdykESoxLl46Ug1wjK1cjIlxYqZUtL2drPw09SeSrpI8I2Io9zAYg==
+
 abab@^2.0.3:
   version "2.0.5"
   resolved "https://registry.yarnpkg.com/abab/-/abab-2.0.5.tgz#c0b678fb32d60fc1219c784d6a826fe385aeb79a"

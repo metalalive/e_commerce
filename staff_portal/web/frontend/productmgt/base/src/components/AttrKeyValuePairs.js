@@ -51,11 +51,14 @@ export class AttrKeyValuePairs extends BaseExtensibleForm {
      }
     
     _single_item_render(val, idx) {
-        let attr_type_options = attr_types.results.map((item) => {
-            //console.log("this.state.attr_types name:"+ item.name +" , id:"+ item.id);
-            element_unique_key_increment += 1;
-            return <option key={element_unique_key_increment} value={item.id}>{item.name}</option>;
-        });
+        let attr_type_options = [];
+        if(attr_types.results) {
+            attr_type_options = attr_types.results.map((item) => {
+                //console.log("this.state.attr_types name:"+ item.name +" , id:"+ item.id);
+                element_unique_key_increment += 1;
+                return <option key={element_unique_key_increment} value={item.id}>{item.name}</option>;
+            });
+        }
         element_unique_key_increment += 1;
         let default_option = <option key={element_unique_key_increment} value=""> --- select attribute type --- </option>;
         attr_type_options.splice(0, 0, default_option);
