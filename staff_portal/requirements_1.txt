@@ -21,6 +21,7 @@ dnspython==1.16.0
 elasticsearch==5.5.3
 hyperlink==21.0.0
 idna==2.10
+ijson==3.1.4
 incremental==21.3.0
 kombu==5.0.2
 limits==1.5.1

@@ -84,5 +84,8 @@ class AuthPasswdEditProxyView(AppBaseProxyView):
     path_pattern = 'password/edit'
     authenticate_required = {'OPTIONS': True, 'PATCH': True,}
 
+class RemoteAuthProxyView(AppBaseProxyView):
+    authenticate_required = {'OPTIONS': True, 'POST': True,}
+    path_pattern = 'remote_auth'
 
 

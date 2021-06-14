@@ -149,6 +149,19 @@ def string_unprintable_check(value:str, extra_unprintable_set=None):
     return list(generator)
 
 
+def format_sqlalchemy_url(driver:str, db_credential):
+    """ format URL string used in SQLalchemy """
+    url_pattern = '{db_driver}://{username}:{passwd}@{db_host}:{db_port}/{db_name}'
+    return url_pattern.format(
+            db_driver=driver ,
+            username=db_credential['USER'] ,
+            passwd=db_credential['PASSWORD'] ,
+            db_host=db_credential['HOST'] ,
+            db_port=db_credential['PORT'] ,
+            db_name=db_credential['NAME'] ,
+        )
+
+
 class ExtendedDict(dict):
     def __init__(self, *args, **kwargs):
         self._modified = False
@@ -166,6 +179,8 @@ class ExtendedDict(dict):
         if overwrite is False:
             common_keys = set(self.keys()) & set(new_kwargs.keys())
             new_kwargs = {k:v for k,v in new_kwargs.items() if k not in common_keys}
+        if any(new_kwargs):
+            self._modified = True
         return super().update(new_kwargs)
 ## end of class ExtendedDict
 

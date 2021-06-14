@@ -190,21 +190,9 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
 
     def _estimate_hierarchy_quota(self, override, groups):
         override = {oq['usage_type'].material : oq['maxnum'] for oq in override}
-        merged_inhehited = {}
-        grps_inherited = []
-        for grp in groups:
-            grp_inherited = {}
-            for a in grp.ancestors.order_by('-depth'):
-                parent_quota = {aq.usage_type.material : aq.maxnum for aq in a.ancestor.quota.all()}
-                grp_inherited = grp_inherited | parent_quota
-            grps_inherited.append(grp_inherited)
-        for gq in grps_inherited:
-            for k,v in gq.items():
-                mv = merged_inhehited.get(k, None)
-                if mv is None or mv < v:
-                    merged_inhehited[k] = v
+        merged_inhehited = self.Meta.model.estimate_inherit_quota(groups=groups)
         final_applied = merged_inhehited | override
-        log_msg = ['grps_inherited', grps_inherited, 'merged_inhehited', merged_inhehited, 'final_applied', final_applied]
+        log_msg = ['override', override, 'final_applied', final_applied]
         _logger.debug(None, *log_msg)
         return final_applied
 

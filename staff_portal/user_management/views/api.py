@@ -1,11 +1,12 @@
 import copy
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from django.conf   import  settings as django_settings
 from django.core.exceptions     import ValidationError
 from django.http.response    import HttpResponseBase
 from django.db.models        import Count
+from django.utils.module_loading import import_string
 from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework             import status as RestStatus
@@ -16,9 +17,13 @@ from rest_framework.filters     import OrderingFilter, SearchFilter
 from rest_framework.renderers   import JSONRenderer
 from rest_framework.response    import Response as RestResponse
 from rest_framework.permissions import DjangoModelPermissions, DjangoObjectPermissions
+from rest_framework.exceptions  import PermissionDenied
 from rest_framework.settings    import api_settings as drf_settings
 
 from softdelete.views import RecoveryModelMixin
+from common.cors import config as cors_cfg
+from common.auth.jwt import JWT
+from common.auth.keystore import create_keystore_helper
 from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
 from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
 from common.views.filters  import  ClosureTableFilter
@@ -36,7 +41,7 @@ from ..serializers import GenericUserAppliedRoleSerializer, GenericUserGroupRela
 from ..permissions import AuthRolePermissions, AppliedRolePermissions, AppliedGroupPermissions, UserGroupsPermissions
 from ..permissions import UserDeactivationPermission, UserActivationPermission, UserProfilesPermissions
 
-from .constants import  _PRESERVED_ROLE_IDS, MAX_NUM_FORM, WEB_HOST
+from .constants import  _PRESERVED_ROLE_IDS, MAX_NUM_FORM, WEB_HOST, API_GATEWAY_HOST
 from .common    import GetProfileIDMixin, check_auth_req_token, AuthTokenCheckMixin, get_profile_account_by_email
 
 
@@ -584,5 +589,53 @@ class AuthPasswdEditAPIView(AuthCommonAPIView, CommonAuthAccountEditMixin, GetPr
             'account': request.user, 'auth_req': None,  'many': False,
         }
         return self.run(**serializer_kwargs)
+
+
+class RemoteAccessTokenAPIView(AuthCommonAPIView, GetProfileIDMixin):
+    """
+    API endpoint for authenticated user requesting a new access token
+    which is used only in specific service in different network domain
+    """
+    def post(self, request, *args, **kwargs):
+        audience = request.data.get('audience', [])
+        audience = self._filter_resource_services(audience, exclude=['web', 'api', 'usermgt'])
+        if audience:
+            signed = self._gen_signed_token(request=request, audience=audience)
+            data = {'access_token': signed}
+            status = RestStatus.HTTP_200_OK
+        else:
+            data = {drf_settings.NON_FIELD_ERRORS_KEY: 'invalid audience field'}
+            status = RestStatus.HTTP_400_BAD_REQUEST
+        return RestResponse(data=data, status=status)
+
+    def _filter_resource_services(self, audience, exclude=None):
+        exclude = exclude or []
+        allowed = cors_cfg.ALLOWED_ORIGIN.keys()
+        allowed = set(allowed) - set(exclude)
+        filtered = filter(lambda a: a in allowed, audience)
+        return list(filtered)
+
+    def _gen_signed_token(self, request, audience):
+        account = request.user
+        profile = self.get_profile(account=account)
+        profile_serial = profile.serializable(present=['id', 'roles','quota'], services_label=audience)
+        if not profile_serial['roles']:
+            errmsg = "the user does not have access to these resource services listed in audience field"
+            err_detail = {drf_settings.NON_FIELD_ERRORS_KEY: [errmsg],}
+            raise PermissionDenied(detail=err_detail) ##  SuspiciousOperation
+        keystore = create_keystore_helper(cfg=django_settings.AUTH_KEYSTORE, import_fn=import_string)
+        now_time = datetime.utcnow()
+        expiry = now_time + timedelta(seconds=django_settings.JWT_REMOTE_ACCESS_TOKEN_VALID_PERIOD)
+        token = JWT()
+        payload = {
+            'acc_id'  :account._meta.pk.value_to_string(account),
+            'prof_id' :profile_serial.pop('id'),
+            'jwks_url':'%s/jwks' % (API_GATEWAY_HOST), # link to fetch all valid JWK,
+            'aud':audience,  'iat':now_time,  'exp':expiry,
+        }
+        payload.update(profile_serial) # roles, quota
+        token.payload.update(payload)
+        return token.encode(keystore=keystore)
+
 
 

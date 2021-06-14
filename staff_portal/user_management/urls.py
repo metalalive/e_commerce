@@ -4,7 +4,7 @@ from .views.api  import AuthPermissionView, AuthRoleAPIView, AppliedRoleReadAPIV
 from .views.api  import QuotaUsageTypeAPIView, QuotaMaterialReadAPIView, UserGroupsAPIView, UserProfileAPIView
 
 from .views.api  import UserActivationView, UserDeactivationView, AuthPasswdEditAPIView, AuthUsernameEditAPIView
-from .views.api  import AuthTokenReadAPIView, LoginAccountCreateView
+from .views.api  import AuthTokenReadAPIView, LoginAccountCreateView, RemoteAccessTokenAPIView
 from .views.api  import UsernameRecoveryRequestView, UnauthPasswordResetRequestView, UnauthPasswordResetView
 
 from .apps import UserManagementConfig as UserMgtCfg
@@ -37,6 +37,7 @@ urlpatterns = [
 
     path(UserMgtCfg.api_url[AuthPasswdEditAPIView.__name__],  AuthPasswdEditAPIView.as_view()  ),
     path(UserMgtCfg.api_url[AuthUsernameEditAPIView.__name__],  AuthUsernameEditAPIView.as_view()  ),
+    path(UserMgtCfg.api_url[RemoteAccessTokenAPIView.__name__],  RemoteAccessTokenAPIView.as_view()  ),
 ] # end of urlpatterns
 
 

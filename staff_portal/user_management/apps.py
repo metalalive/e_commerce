@@ -25,6 +25,7 @@ class WebAPIurl(BaseUriLookup):
 
             'AuthUsernameEditAPIView': 'username/edit',
             'AuthPasswdEditAPIView':   'password/edit',
+            'RemoteAccessTokenAPIView': 'remote_auth',
     } # end of _urls
 #### end of WebAPIurlMeta
 

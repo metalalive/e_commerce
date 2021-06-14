@@ -89,7 +89,7 @@ JWT_NAME_REFRESH_TOKEN = 'jwt_refresh_token'
 # * the period for refresh token is not configurable, it has to be the same as
 #   the period for session (used in web server)
 # * the period for access token has to be divisible by the period for refresh token
-JWT_ACCESS_TOKEN_VALID_PERIOD = 300
+JWT_ACCESS_TOKEN_VALID_PERIOD = 120
 
 CACHES = {
         'default': {

@@ -83,11 +83,11 @@ def rotate_keystores(modules_setup):
 @celery_app.task(backend=CeleryRpcBackend(app=celery_app), queue='rpc_usermgt_get_profile', exchange=RPC_EXCHANGE_DEFAULT_NAME, \
         routing_key='rpc.user_management.get_profile')
 @log_wrapper(logger=_logger, loglevel=logging.WARNING)
-def get_profile(account_id, field_names):
+def get_profile(account_id, field_names, services_label=None):
     account_id = int(account_id)
     account = AuthUser.objects.get(pk=account_id)
     profile = account.genericuserauthrelation.profile
-    data = profile.serializable(present=field_names)
+    data = profile.serializable(present=field_names, services_label=services_label)
     return data
 
 

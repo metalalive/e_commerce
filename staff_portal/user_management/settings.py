@@ -114,6 +114,27 @@ CACHES = {
             },
 }
 
+AUTH_KEYSTORE = {
+    'keystore': 'common.auth.keystore.BaseAuthKeyStore',
+    'persist_secret_handler': {
+        'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+        'init_kwargs': {
+            'filepath': './tmp/cache/production/jwks/privkey/current.json',
+            'name':'secret', 'expired_after_days': 7,
+        },
+    },
+    'persist_pubkey_handler': {
+        'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+        'init_kwargs': {
+            'filepath': './tmp/cache/production/jwks/pubkey/current.json',
+            'name':'pubkey', 'expired_after_days': 21,
+        },
+    },
+}
+
+JWT_REMOTE_ACCESS_TOKEN_VALID_PERIOD = 660
+
+
 # Internationalization
 # https://docs.djangoproject.com/en/dev/topics/i18n/
 

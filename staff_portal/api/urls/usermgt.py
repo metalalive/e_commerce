@@ -4,7 +4,7 @@ from ..views.usermgt import UserGroupsProxyView, UserProfilesProxyView, AppliedR
 from ..views.usermgt import AuthRoleProxyView, UserQuotaProxyView, UserLowLvlPermProxyView
 from ..views.usermgt import AccountActivationProxyView, AccountDeactivationProxyView, AccountCreateProxyView
 from ..views.usermgt import UsernameRecoveryReqProxyView, UnauthPasswdRstReqProxyView, UnauthPasswdRstProxyView
-from ..views.usermgt import AuthUsernameEditProxyView, AuthPasswdEditProxyView
+from ..views.usermgt import AuthUsernameEditProxyView, AuthPasswdEditProxyView, RemoteAuthProxyView
 
 app_name = 'usermgt'
 
@@ -27,5 +27,6 @@ urlpatterns = [
     path('password/reset/<slug:token>',  UnauthPasswdRstProxyView.as_view()  ),
     path('username/edit', AuthUsernameEditProxyView.as_view()),
     path('password/edit', AuthPasswdEditProxyView.as_view()),
+    path('remote_auth',   RemoteAuthProxyView.as_view()  ),
 ]
 

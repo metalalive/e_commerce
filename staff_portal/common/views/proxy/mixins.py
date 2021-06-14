@@ -181,7 +181,7 @@ class BaseGetProfileIDMixin:
     def get_profile_id(self, request, **kwargs):
         raise NotImplementedError
 
-    def get_profile(self, account):
+    def get_profile(self, account, **kwargs):
         raise NotImplementedError
 
 
@@ -221,13 +221,13 @@ class RemoteGetProfileIDMixin(BaseGetProfileIDMixin):
                 default_value=[], **kwargs)
         return roles
 
-    def get_profile(self, account):
+    def get_profile(self, account, services_label=None):
         # make RPC call as internal communication to user-management service
         if not hasattr(self, '_user_profile_reply'):
             acc_id = self.get_account_id(account=account)
             field_names = ['id', 'first_name', 'last_name','roles','quota']
             self._user_profile_reply = self._usermgt_rpc.get_profile(account_id=acc_id,
-                    field_names=field_names)
+                    field_names=field_names, services_label=services_label)
         # it is actually reply object, to retrieve return value of RPC
         # application has to invoke reply.result()
         return self._user_profile_reply

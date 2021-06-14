@@ -14,7 +14,7 @@ from .constants import LOGIN_WEB_URL
 _logger = logging.getLogger(__name__)
 
 class GetProfileIDMixin(BaseGetProfileIDMixin):
-    def get_profile(self, account):
+    def get_profile(self, account, **kwargs):
         if not hasattr(self, '_cache_profile'):
             self._cache_profile = account.genericuserauthrelation.profile
         return self._cache_profile

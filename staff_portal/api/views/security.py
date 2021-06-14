@@ -30,7 +30,8 @@ def _stream_jwks_file(filepath):
             buff.clear()
             buff.append(',')
         buff.pop() # shouldn't have comma in last next item of the list
-    buff.append('], "test123": "value456"}')
+    buff.append(']}')
+    #buff.append('], "test123": "value456"}')
     yield ''.join(buff)
 
 class JWKSPublicKeyView(DjangoView):

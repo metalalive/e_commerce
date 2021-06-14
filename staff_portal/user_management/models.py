@@ -403,6 +403,41 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
             log_args.extend(['profile_id', self.pk])
             _logger.info(None, *log_args)
 
+    @classmethod
+    def estimate_inherit_quota(cls, groups):
+        """
+        the argument `groups` is iterable object of GenericUserGroup objects
+        """
+        merged_inhehited = {}
+        grps_inherited = []
+        for grp in groups:
+            grp_inherited = {}
+            for a in grp.ancestors.order_by('-depth'):
+                parent_quota = {aq.usage_type.material : aq.maxnum for aq in a.ancestor.quota.all()}
+                grp_inherited = grp_inherited | parent_quota
+            grps_inherited.append(grp_inherited)
+        for gq in grps_inherited:
+            for k,v in gq.items():
+                mv = merged_inhehited.get(k, None)
+                if mv is None or mv < v:
+                    merged_inhehited[k] = v
+        log_msg = ['grps_inherited', grps_inherited, 'merged_inhehited', merged_inhehited]
+        _logger.debug(None, *log_msg)
+        return merged_inhehited
+
+    @property
+    def inherit_quota(self):
+        grp_ids = self.groups.values_list('group__pk', flat=True)
+        grp_cls = self.groups.model.group.field.related_model
+        groups  = grp_cls.objects.filter(pk__in=grp_ids)
+        merged_inherited = type(self).estimate_inherit_quota(groups=groups)
+        return merged_inherited
+
+    @property
+    def all_quota(self):
+        direct_quota  = {q.usage_type.material : q.maxnum for q in self.quota.all()}
+        inherit_quota = self.inherit_quota
+        return inherit_quota | direct_quota
 
     @property
     def inherit_roles(self):
@@ -483,17 +518,18 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
         _logger.debug(None, *log_args)
 
 
-    def serializable(self, present):
+    def serializable(self, present, services_label=None):
+        services_label = services_label or []
         related_field_map = {
             'roles': (['id', 'name'], {
                 'perm_code': models.F('permissions__codename'),
                 'app_label': models.F('permissions__content_type__app_label'),
             }),
-            'quota': (['maxnum'], { # TODO, fetch quota records from group hierarchy
-                'material_id': models.F('usage_type__material'),
-                'model_name' : models.F('usage_type__material__model'),
-                'app_label'  : models.F('usage_type__material__app_label'),
-            }),
+            ## 'quota': (['maxnum'], {
+            ##     'material_id': models.F('usage_type__material'),
+            ##     'model_name' : models.F('usage_type__material__model'),
+            ##     'app_label'  : models.F('usage_type__material__app_label'),
+            ## }),
             'emails': ([], {})
         }
         def query_fn(fd_value, field_name, out):
@@ -503,22 +539,37 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
             # which are inherited indirectly from the user group hierarchy
             if field_name == 'roles':
                 qset = AuthRole.objects.filter(pk__in=self.all_roles)
+            elif field_name == 'quota':
+                pass # skip, process quota with inherited groups later
             elif isinstance(fd_value, Manager):
                 qset = fd_value.all()
             if qset and sub_fd_names:
                 qset = qset.values(*sub_fd_names[0] , **sub_fd_names[1] )
                 out[field_name] =  list(qset)
+
+        def _if_accept_app_fn(app_label):
+            return (not services_label) or (services_label and app_label in services_label)
+
         # end of query_fn
         out = super().serializable(present=present, query_fn=query_fn)
         if out.get('roles', None):
             for role in out['roles']:
                 app_label = role.pop('app_label', None)
                 perm_code = role.get('perm_code',None)
-                if app_label and perm_code:
+                if app_label and perm_code and _if_accept_app_fn(app_label=app_label):
                     role['perm_code'] = '%s.%s' % (app_label, perm_code)
+                else:
+                    role.pop('perm_code',None)
             # further reduce duplicate data
             merge_partial_dup_listitem( list_in=out['roles'], combo_key=('id', 'name',),\
                     merge_keys=('perm_code',))
+            # remove those roles whose `perm_code` is empty
+            out['roles'] = list(filter(lambda x: any(x['perm_code']), out['roles']))
+        if out.get('quota', None) is None:
+            all_quota = self.all_quota
+            all_quota = filter(lambda kv: _if_accept_app_fn(app_label=kv[0].app_label), all_quota.items())
+            all_quota = map(lambda kv: ('%s.%s' % (kv[0].app_label, kv[0].model) , kv[1]), all_quota)
+            out['quota'] = dict(all_quota)
         return out
 #### end of GenericUserProfile
 
