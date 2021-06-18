@@ -59,7 +59,7 @@ beat_schedule = {
                     },
                 },
                 'keygen_handler': {
-                    'module_path': 'common.auth.keystore.JwkRsaKeygenHandler',
+                    'module_path': 'common.auth.jwt.JwkRsaKeygenHandler',
                     'init_kwargs': {},
                 },
             }]

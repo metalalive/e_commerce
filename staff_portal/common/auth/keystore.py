@@ -5,39 +5,50 @@ import random
 import logging
 import uuid
 import json
-import ijson
 
 from common.util.python import string_unprintable_check
-from c_exts.util import keygen
 
 _logger = logging.getLogger(__name__)
 
-class AbstractCryptoKeyPersistHandler:
+class AbstractKeystorePersistReadMixin:
+    def __len__(self):
+        raise NotImplementedError
+
+    def __getitem__(self, key_id):
+        """
+        look for valid crypto-key item, clone it then return
+        """
+        raise NotImplementedError
+
+class AbstractCryptoKeyPersistHandler(AbstractKeystorePersistReadMixin):
     MAX_EXPIRED_AFTER_DAYS = 365
     DEFAULT_EXPIRED_AFTER_DAYS = 30
     FLUSH_THRESHOLD_NUM_ITEMS = 550
     """
-    the structure for the crypto-key in the data source should be like this :
+    the structure for the crypto-key in the data source may be like this :
     {
         "crypto-key-id-5678": {
             'exp': 'EXPIRY_DATE_IN_ISO_STRING_FORMAT',
             'alg': 'ALGORITHM_FOR_THE_KEY',
-            'key': 'CRYPTO_DATA_ITSELF',
+            'kty': 'CRYPTO_KEY_TYPE',
+            'use': 'HOW_DO_YOU_USE_THE_KEY',
         },
         "crypto-key-id-9012": {
             'exp': 'EXPIRY_DATE_IN_ISO_STRING_FORMAT',
             'alg': 'ALGORITHM_FOR_THE_KEY',
-            'key': 'CRYPTO_DATA_ITSELF',
+            'kty': 'CRYPTO_KEY_TYPE',
+            'use': 'HOW_DO_YOU_USE_THE_KEY',
         },
         "crypto-key-id-3456": {
             'exp': 'EXPIRY_DATE_IN_ISO_STRING_FORMAT',
             'alg': 'ALGORITHM_FOR_THE_KEY',
-            'key': 'CRYPTO_DATA_ITSELF',
+            'kty': 'CRYPTO_KEY_TYPE',
+            'use': 'HOW_DO_YOU_USE_THE_KEY',
         }
         .....
     }
     """
-    VALID_FIELDS = ['exp', 'alg', 'key']
+    VALID_FIELDS = ['exp', 'alg', 'kty', 'use']
 
     def __init__(self, name='default persist handler', expired_after_days=DEFAULT_EXPIRED_AFTER_DAYS,
             max_expired_after_days=MAX_EXPIRED_AFTER_DAYS):
@@ -74,10 +85,10 @@ class AbstractCryptoKeyPersistHandler:
         return num_keys
 
     def _set_item_error_check(self, key_id, item):
-        diff = set(self.VALID_FIELDS) ^ set(item.keys())
-        if diff:
-            errmsg = 'The fields of key item are limited to %s , but found %s' \
-                    % (self.VALID_FIELDS, item.keys())
+        min_field_cover = set(self.VALID_FIELDS) - set(item.keys())
+        if any(min_field_cover):
+            errmsg = 'The fields of key item should cover the minimum set %s , but found %s' \
+                    % (self.VALID_FIELDS, min_field_cover)
             raise ValueError(errmsg)
         expiry_user = date.fromisoformat(item['exp'])
         expiry_not_exceed = date.today() + timedelta(days=self.max_expired_after_days)
@@ -154,12 +165,6 @@ class AbstractCryptoKeyPersistHandler:
         """
         raise NotImplementedError
 
-    def __getitem__(self, key_id):
-        """
-        look for valid crypto-key item, clone it then return
-        """
-        raise NotImplementedError
-
     def random_choose(self):
         key_ids = self.iterate_key_ids()
         key_id  = None
@@ -167,11 +172,11 @@ class AbstractCryptoKeyPersistHandler:
         # load all of the items returned by the generator especially if
         # the generator will produce millions of items (e.g. read from 
         # big data source) , instead my approach here is to use a mini-function
-        # which returns true or false randomly.
+        # which returns true or false randonly.
         whether_to_take = lambda x: (random.randrange(x) & 0x1) == 0x1
         # Every time the generator returns an item, the mini-function
         # helps to decide whether to take this item or not, so I can take
-        # any subsequent item randomly.
+        # any subsequent item randonly.
         for k in key_ids:
             if key_id is None:
                 key_id = k
@@ -200,6 +205,8 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
     NUM_BACKUP_FILES_KEPT = 5
     def __init__(self, filepath, **kwargs):
         super().__init__(**kwargs)
+        import ijson
+        self._ijson = ijson
         self._file = open(filepath, mode='r')
 
     def __del__(self):
@@ -310,7 +317,7 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
 
     def iterate_key_ids(self):
         self._file.seek(0)
-        parse_evts = ijson.parse(self._file)
+        parse_evts = self._ijson.parse(self._file)
         for prefix, evt_label,value in parse_evts:
             if prefix == '' and evt_label == 'map_key':
                 yield value
@@ -319,7 +326,7 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
     def items(self, present_fields=None):
         self._file.seek(0)
         present_fields = present_fields or []
-        parse_evts = ijson.parse(self._file)
+        parse_evts = self._ijson.parse(self._file)
         key_id = ''
         tmp_field_name = ''
         yld_item = {}
@@ -341,7 +348,7 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
     def __getitem__(self, key_id):
         item = None
         self._file.seek(0)
-        generator = ijson.items(self._file, key_id)
+        generator = self._ijson.items(self._file, key_id)
         try:
             item = next(generator)
         except StopIteration:
@@ -357,6 +364,10 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
 
 class AbstractKeygenHandler:
     @property
+    def key_type(self):
+        raise NotImplementedError
+
+    @property
     def algorithm(self):
         raise NotImplementedError
 
@@ -364,10 +375,18 @@ class AbstractKeygenHandler:
     def asymmetric(self):
         raise NotImplementedError
 
-    def generate(self, key_size_in_bits):
+    def generate(self, key_size_in_bits, **kwargs):
         raise NotImplementedError
 
 class RSAKeygenHandler(AbstractKeygenHandler):
+    def __init__(self, **kwargs):
+        from c_exts.util import keygen
+        self._keygen = keygen
+
+    @property
+    def key_type(self):
+        return 'RSA'
+
     @property
     def algorithm(self):
         return 'RSA'
@@ -376,38 +395,24 @@ class RSAKeygenHandler(AbstractKeygenHandler):
     def asymmetric(self):
         return True
 
-    def generate(self, key_size_in_bits):
-        keys = keygen.RSA_keygen(key_size_in_bits)
-        attrs = {'private': keys[0], 'public': keys[1], 'size': key_size_in_bits,
-                'algorithm': self.algorithm, '__slots__':() }
-        keyset = type("RSAKeyset", (), attrs)()
-        return keyset
-
-
-class JwkRsaKeygenHandler(RSAKeygenHandler):
-    @property
-    def algorithm(self):
-        if hasattr(self, '_key_size_in_bits'):
-            out = 'RS%s' % (self._key_size_in_bits >> 3)
-        else:
-            out = super().algorithm
-        return out
-
-    def generate(self, key_size_in_bits):
-        self._key_size_in_bits = key_size_in_bits
-        out = super().generate(key_size_in_bits)
-        delattr(self, '_key_size_in_bits')
-        return out
+    def generate(self, key_size_in_bits, num_primes=2):
+        """
+        the RSA algorithm defaults to 2 primes , `num_primes` must NOT less than 2,
+        also multi-prime RSA key (`num_primes` > 2) has potential risk of being
+        compromised faster than typical 2-prime RSA key if application doesn't
+        appropriately configure it.
+        """
+        return self._keygen.RSA_keygen(key_size_in_bits, num_primes)
 
 
 class BaseAuthKeyStore:
     DEFAULT_NUM_KEYS = 2
-    # field description
-    # * key : string  or bytes which represent key (either secret or public key)
-    _key_item_template = {'key': None, 'exp':None, 'alg':None,}
+    # For the members which are associated with crypto key in application,
+    # such members should be added by concrete subclasses of AbstractKeygenHandler
+    _key_item_template = {field_name:None for field_name in AbstractCryptoKeyPersistHandler.VALID_FIELDS}
 
     def __init__(self, persist_secret_handler, persist_pubkey_handler=None):
-        # persist_pubkey_handler could be ignored if application callers apply symmetric key algorithm
+        # persist_pubkey_handler could be ignored if application callers apply symmetric-key algorithm
         self._persistence = {'secret': persist_secret_handler, 'pubkey': persist_pubkey_handler, }
 
     def _check_persist_secret_handler_exists(self):
@@ -418,12 +423,14 @@ class BaseAuthKeyStore:
         assert self._persistence['pubkey'] and len(self._persistence['pubkey']) > 0 , \
                 "Handler for persisting public keys has to be provided, it should also contain at least one key."
 
-    def _construct_serializable_keyitem(self, persist_handler, kid, key, alg, date_start):
+    def _construct_serializable_keyitem(self, persist_handler, kid, keyparser, alg, date_start, use, kty):
         new_item = self._key_item_template.copy()
-        new_item['key'] = key
+        new_item['use'] = use
+        new_item['kty'] = kty
         new_item['alg'] = alg
         expiry = date_start + persist_handler.expired_after_days
         new_item['exp'] = expiry.isoformat()
+        keyparser(new_item)
         try:
             persist_handler[kid] = new_item
             result = {'kid': kid, 'alg': new_item['alg'], 'exp': new_item['exp'],
@@ -451,15 +458,17 @@ class BaseAuthKeyStore:
             for idx in range(next_num_keys):
                 keyset = keygen_handler.generate(key_size_in_bits=key_size_in_bits)
                 result = None
-                while not result: # unlinkely to stuck at this loop, key-id collision happens rarely
+                while not result: # unlinkely to stuck at this loop, key_id collision happens rarely
                     kwargs_secret = {'persist_handler':self._persistence['secret'], 'date_start':date_start,
-                            'alg': keyset.algorithm, 'key': keyset.private, 'kid': str(uuid.uuid4())}
+                            'alg': keyset.algorithm, 'keyparser': keyset.private, 'kid': str(uuid.uuid4()),
+                            'use': 'sig', 'kty':keygen_handler.key_type}
                     result = self._construct_serializable_keyitem(**kwargs_secret)
                     if result:
                         out.append(result)
-                if keygen_handler.asymmetric: # key id has to be consistent among both of the persist handlers
+                if keygen_handler.asymmetric: # key_id has to be consistent among both of the persist handlers
                     kwargs_pubkey = {'persist_handler':self._persistence['pubkey'], 'date_start':date_start,
-                        'alg': keyset.algorithm, 'key':keyset.public, 'kid': result['kid']}
+                        'alg': keyset.algorithm, 'keyparser':keyset.public, 'kid': result['kid'],
+                        'use': 'sig', 'kty':keygen_handler.key_type}
                     out.append(self._construct_serializable_keyitem(**kwargs_pubkey))
         return out
 
@@ -484,23 +493,25 @@ class BaseAuthKeyStore:
             self._persistence['pubkey'].flush()
         return result
 
-    def _choose(self, persist_handler, kid, randomly):
+    def _choose(self, persist_handler, kid, randonly):
         item = None
         if kid:
             item = persist_handler[kid]
-        if not kid or (item and not item['key'] and randomly):
+        # TODO, how to detect if a key exists in the item while the field name is unknown ?
+        #if not kid or (item and not item['key'] and randonly):
+        if not kid or (not item and randonly):
             item = persist_handler.random_choose() # should return extra field `kid`
         return item # which contains `key` and `alg` fields
 
     def choose_pubkey(self, kid):
         assert kid, '`kid` has to be valid key identifier, but receive %s' % kid
         self._check_persist_pubkey_handler_exists()
-        return self._choose(persist_handler=self._persistence['pubkey'], kid=kid, randomly=False)
+        return self._choose(persist_handler=self._persistence['pubkey'], kid=kid, randonly=False)
 
-    def choose_secret(self, kid=None, randomly=False):
-        assert kid or randomly, 'if kid is null, randomly has to be set `True`'
+    def choose_secret(self, kid=None, randonly=False):
+        assert kid or randonly, 'if kid is null, randonly has to be set `True`'
         self._check_persist_secret_handler_exists()
-        item = self._choose(persist_handler=self._persistence['secret'], kid=kid, randomly=randomly)
+        item = self._choose(persist_handler=self._persistence['secret'], kid=kid, randonly=randonly)
         return item
 ## end of BaseAuthKeyStore
 
