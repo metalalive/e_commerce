@@ -6,8 +6,8 @@
         "product" : "http://localhost:8009"
     },
     "ALLOWED_METHODS": ["GET", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],
-    "ALLOWED_HEADERS": ["content-type", "x-anti-csrf-tok"],
-    "ALLOW_CREDENTIALS": "true",
+    "ALLOWED_HEADERS": ["authorization","content-type", "x-anti-csrf-tok", "accept"],
+    "ALLOW_CREDENTIALS": true,
     "PREFLIGHT_MAX_AGE": 8
 }
 

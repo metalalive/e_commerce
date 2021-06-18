@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import string
 import functools
@@ -147,6 +148,18 @@ def string_unprintable_check(value:str, extra_unprintable_set=None):
     _printable_char_set = set(string.printable) - set(extra_unprintable_set)
     generator = filter(lambda x: not x in _printable_char_set, value)
     return list(generator)
+
+
+def load_config_to_module(cfg_path, module_path):
+    _module = sys.modules[module_path]
+    data = None
+    with open(cfg_path, 'r') as f:
+        data = json.load(f)
+    assert data, "failed to load configuration from file %s" % cfg_path
+    for key in _module.__dict__.keys():
+        if data.get(key, None) is None:
+            continue
+        setattr(_module, key, data[key])
 
 
 def format_sqlalchemy_url(driver:str, db_credential):
