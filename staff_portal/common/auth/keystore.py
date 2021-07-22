@@ -411,7 +411,7 @@ class BaseAuthKeyStore:
     # such members should be added by concrete subclasses of AbstractKeygenHandler
     _key_item_template = {field_name:None for field_name in AbstractCryptoKeyPersistHandler.VALID_FIELDS}
 
-    def __init__(self, persist_secret_handler, persist_pubkey_handler=None):
+    def __init__(self, persist_secret_handler=None, persist_pubkey_handler=None):
         # persist_pubkey_handler could be ignored if application callers apply symmetric-key algorithm
         self._persistence = {'secret': persist_secret_handler, 'pubkey': persist_pubkey_handler, }
 
@@ -519,9 +519,10 @@ class BaseAuthKeyStore:
 def create_keystore_helper(cfg, import_fn):
     ks_kwargs = {}
     keystore_cls = import_fn(cfg['keystore'])
-    persist_handler_module = import_fn(cfg['persist_secret_handler']['module_path'])
-    persist_handler_kwargs = cfg['persist_secret_handler'].get('init_kwargs', {})
-    ks_kwargs['persist_secret_handler'] = persist_handler_module(**persist_handler_kwargs)
+    if cfg.get('persist_secret_handler', None):
+        persist_handler_module = import_fn(cfg['persist_secret_handler']['module_path'])
+        persist_handler_kwargs = cfg['persist_secret_handler'].get('init_kwargs', {})
+        ks_kwargs['persist_secret_handler'] = persist_handler_module(**persist_handler_kwargs)
     if cfg.get('persist_pubkey_handler', None):
         persist_handler_module = import_fn(cfg['persist_pubkey_handler']['module_path'])
         persist_handler_kwargs = cfg['persist_pubkey_handler'].get('init_kwargs', {})
