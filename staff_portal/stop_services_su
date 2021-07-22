@@ -1,0 +1,3 @@
+sudo service kibana stop
+sudo service elasticsearch stop
+sudo service rabbitmq-server stop

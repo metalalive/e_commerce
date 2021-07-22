@@ -1,10 +1,8 @@
 from time import sleep
+import functools
 import logging
 
-from requests.status_codes import codes as requests_codes
-from MySQLdb._exceptions import OperationalError as MySqlOperationalError
-from MySQLdb.constants   import ER as MySqlErrorCode
-from django.db.utils   import OperationalError
+from common.util.python import import_module_string,  format_sqlalchemy_url, get_credential_from_secrets
 
 _logger = logging.getLogger(__name__)
 
@@ -13,6 +11,8 @@ def db_conn_retry_wrapper(func):
     decorator for instance method that handles API call and requires database connection
     , define max_retry_db_conn and wait_intvl_sec as object variables in advance
     """
+    # TODO, rename to django_db_conn_retry_wrapper
+    from django.db.utils   import OperationalError
     def inner(self, *arg, **kwargs):
         out = None
         max_retry_db_conn = getattr(self, 'max_retry_db_conn', 3)
@@ -34,7 +34,60 @@ def db_conn_retry_wrapper(func):
     return inner #### end of db_conn_retry_wrapper()
 
 
+def sqlalchemy_init_engine(secrets_file_path, secret_map, base_folder, driver_label, conn_args=None):
+    import sqlalchemy as sa
+    conn_args = conn_args or {}
+    db_credentials = get_credential_from_secrets(base_folder=base_folder,
+            secret_path=secrets_file_path,  secret_map=dict([secret_map]))
+    url = format_sqlalchemy_url(driver=driver_label, db_credential=db_credentials[secret_map[0]])
+    # reminder: use engine.dispose() to free up all connections in its pool
+    return sa.create_engine(url, connect_args=conn_args)
+
+
+def sqlalchemy_db_conn(engine, enable_orm=False):
+    """
+    decorator for starting a database connection (either establishing new
+    one or grab from connection pool) in SQLAlchemy
+    """
+    assert engine, 'argument `engine` has to be SQLAlchemy engine instance \
+            , but receive invalid value %s' % (engine)
+    if enable_orm:
+        from sqlalchemy import orm  as sa_orm
+    def inner(func):
+        @functools.wraps(func)
+        def wrapped(*args, **kwargs):
+            result = None
+            if enable_orm:
+                with sa_orm.Session(engine) as session:
+                    kwargs['session'] = session
+                    result = func(*args, **kwargs)
+            else:
+                with engine.connect() as conn:
+                    kwargs['conn'] = conn
+                    result = func(*args, **kwargs)
+            return result
+        return wrapped
+    return inner
+
+
+def sqlalchemy_insert(model_cls_path:str, data:list, conn):
+    """
+    SQLAlchemy helper function for inserting new record to database
+    """
+    result = None
+    model_cls =  import_module_string(model_cls_path)
+    ins = model_cls.__table__.insert()
+    if len(data) == 1:
+        ins = ins.values(**data[0])
+        result = conn.execute(ins)
+    elif len(data) > 1:
+        result = conn.execute(ins, data)
+    return result
+
+
 def _get_mysql_error_response(e, headers, raise_if_not_handled):
+    from requests.status_codes import codes as requests_codes
+    from MySQLdb.constants   import ER as MySqlErrorCode
     code = e.args[0]
     msg  = e.args[1]
     log_args = ['db_backend', 'mysql', 'code', code, 'msg', msg]
@@ -55,9 +108,13 @@ def _get_mysql_error_response(e, headers, raise_if_not_handled):
 
 
 def get_db_error_response(e, headers:dict, raise_if_not_handled=True):
-    status = requests_codes['internal_server_error']
+    from MySQLdb._exceptions import OperationalError as MySqlOperationalError
+    status = 500 # defaults to internal_server_error
     cause = e.__cause__
     if cause:
+        _err_resp_map = {
+            MySqlOperationalError: _get_mysql_error_response
+        }
         handler = _err_resp_map[type(cause)]
         status = handler(e=cause, headers=headers, raise_if_not_handled=raise_if_not_handled)
     return status
@@ -65,6 +122,7 @@ def get_db_error_response(e, headers:dict, raise_if_not_handled=True):
 
 def db_middleware_exception_handler(func):
     from django.http  import HttpResponse
+    from django.db.utils   import OperationalError
     def inner(self, *arg, **kwargs):
         try:
             response = func(self, *arg, **kwargs)
@@ -407,7 +465,9 @@ class ServiceModelRouter:
         return None
 
 
-_err_resp_map = {
-    MySqlOperationalError: _get_mysql_error_response
-}
+class BaseDatabaseError(Exception):
+    pass
+
+class EmptyDataRowError(BaseDatabaseError):
+    pass
 

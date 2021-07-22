@@ -4,6 +4,8 @@ import json
 import string
 import functools
 import logging
+from pathlib import Path
+from importlib import import_module
 
 
 def get_fixture_pks(filepath:str, pkg_hierarchy:str):
@@ -162,6 +164,25 @@ def load_config_to_module(cfg_path, module_path):
         setattr(_module, key, data[key])
 
 
+def import_module_string(dotted_path:str):
+    """
+    Import a dotted module path and return the attribute/class designated by the
+    last name in the path. Raise ImportError if the import failed.
+    """
+    try:
+        module_path, class_name = dotted_path.rsplit('.', 1)
+    except ValueError as err:
+        raise ImportError("%s doesn't look like a module path" % dotted_path) from err
+
+    module = import_module(module_path)
+    try:
+        return getattr(module, class_name)
+    except AttributeError as err:
+        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (
+            module_path, class_name)
+        ) from err
+
+
 def format_sqlalchemy_url(driver:str, db_credential):
     """ format URL string used in SQLalchemy """
     url_pattern = '{db_driver}://{username}:{passwd}@{db_host}:{db_port}/{db_name}'
@@ -173,6 +194,29 @@ def format_sqlalchemy_url(driver:str, db_credential):
             db_port=db_credential['PORT'] ,
             db_name=db_credential['NAME'] ,
         )
+
+
+def get_credential_from_secrets(secret_map:dict, base_folder:str, secret_path:str):
+    _credentials = {}
+    base_path = Path(__file__).resolve(strict=True)
+    while not (base_path.is_dir() and base_path.name == base_folder):
+        base_path = base_path.parent
+    secret_path = os.path.join(base_path, secret_path)
+    with open(secret_path) as f:
+        secrets = json.load(f)
+        node = None
+        for k,v in secret_map.items():
+            node = secrets
+            hierarchy = v.split('.')
+            for v2 in hierarchy:
+                node = node.get(v2, None)
+            _credentials[k] = node
+        ##db_credentials = {
+        ##    'site_dba'           : secrets['backend_apps']['databases']['site_dba'] ,
+        ##    'usermgt_service'    : secrets['backend_apps']['databases']['usermgt_service'] ,
+        ##    'file_upload_service': secrets['backend_apps']['databases']['file_upload_service'] ,
+        ##}
+    return _credentials
 
 
 class ExtendedDict(dict):

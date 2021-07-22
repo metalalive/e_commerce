@@ -1,0 +1,1 @@
+FASTAPI_CONFIG_FILEPATH="./common/data/fastapi_cfg.json"  uvicorn --host 127.0.0.1 --port 8010  common.util.python.fastapi.main:app >& ./tmp/log/staffsite/fileupload_app.log &

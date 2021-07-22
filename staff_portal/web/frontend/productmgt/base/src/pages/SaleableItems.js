@@ -44,10 +44,10 @@ class SaleableItems extends CommonPresentableProductItemForm {
             {id:65, name:"skid row"},
         ];
         let pictures = [
-            {src:"./32t43094/t934it3rjf.jpg"},
-            {src:"./093ur20u/g2h43gi3q4.jpg"},
-            {src:"./RI49g3gf/MQOR43t34t.jpg"},
-            {src:"./94jgij3m/bb9jrmrqjl.jpg"},
+            {src:"blob:http://localhost:3000/32t43094.jpg", resource_id:"t934it3rjf"},
+            {src:"blob:http://localhost:3000/093ur20u.jpg", resource_id:"g2h43gi3q4"},
+            {src:"blob:http://localhost:3000/RI49g3gf.jpg", resource_id:"MQOR43t34t"},
+            {src:"blob:http://localhost:3000/94jgij3m.jpg", resource_id:"bb9jrmrqjl"},
         ];
         let val = {name:'pee meat ball',  id:51  , visible: true, price: 25.04,
             attributes:attributes, tags:tags, pictures:pictures};

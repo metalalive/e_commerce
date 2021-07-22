@@ -53,11 +53,13 @@ Note logstash TCP input server operates with default port 5959
 ```
 cd ./staff_portal
 
-DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  -E  -Q mailing,periodic_default
+DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  --logfile=./tmp/log/staffsite/common_celery.log  -E  -Q mailing,periodic_default
 
-DJANGO_SETTINGS_MODULE='user_management.settings'  celery --app=common.util.python --config=user_management.celeryconfig  worker --loglevel=INFO --hostname=usermgt@%h  -E -Q usermgt_default
+DJANGO_SETTINGS_MODULE='user_management.settings'  celery --app=common.util.python --config=user_management.celeryconfig  worker --loglevel=INFO --hostname=usermgt@%h  --logfile=./tmp/log/staffsite/usermgt_celery.log  -E -Q usermgt_default
 ```
-Note that `-Q` is optional, without specifying `-Q`, Celery will enable all queues defined in celery configuration file (`celeryconfig`) on initialization.
+Note:
+*  `-Q` is optional, without specifying `-Q`, Celery will enable all queues defined in celery configuration module (e.g. `user_management.celeryconfig`) on initialization.
+* `--logfile` is optional
 
 
 * start cron job scheduler (celery beat), collect all periodic tasks to run (gathered from all services)
@@ -66,12 +68,23 @@ cd ./staff_portal
 celery --app=common.util.python  --config=common.util.python.celerybeatconfig  beat --loglevel=INFO
 ```
 
-* Finally, start backend application service
+* Finally, start the backend applications shown as follows
 ```
 DJANGO_SETTINGS_MODULE='api.settings' daphne -p 8007  common.util.python.django.asgi:application
+
 python3.9 manage.py runserver  --settings web.settings  8006
+
 python3.9 manage.py runserver  --settings user_management.settings  8008
+
 DJANGO_SETTINGS_MODULE='product.settings' daphne -p 8009  common.util.python.django.asgi:application
+
+FASTAPI_CONFIG_FILEPATH="./common/data/fastapi_cfg.json"  uvicorn --host 127.0.0.1 --port 8010  common.util.python.fastapi.main:app 
+```
+
+### Background process
+It is optional to launch all these python applications as background processes by append the followings to any of the commands above :
+```
+<ANY_COMMAND_ABOVE>  >&  <PATH/TO/YOUR_LOG_FILE> &
 ```
 
 

@@ -80,7 +80,7 @@ export class APIconsumer {
 
     _parse_query_params(params) {
         var out = "";
-        if(params != null) {
+        if(params != null && params != undefined) {
             out += "?";
             out += Object.keys(params)
                     .map(k => encodeURIComponent(k) +"="+ encodeURIComponent(params[k]))
@@ -120,7 +120,14 @@ export class APIconsumer {
                         });
                     }
                 } else {
-                    inner_promise = res.json().then((data) => {
+                    let future = null;
+                    let content_type = res.headers.get("Content-Type");
+                    if(content_type == "application/json") { // TODO, json might have other mimetypes
+                        future = res.json();
+                    } else {
+                        future = res.blob();
+                    } 
+                    inner_promise = future.then((data) => {
                         this._run_callbacks(req_args.callbacks.succeed, data, res);
                     }).catch((e) => {
                         this._run_callbacks(req_args.callbacks.succeed, null, res);

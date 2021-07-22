@@ -1,0 +1,5 @@
+sudo service rabbitmq-server start
+sudo service elasticsearch start
+sudo service kibana start
+sudo /usr/share/logstash/bin/logstash -f ../configure/logstash_tcpin_elasticsearch.conf --path.settings /etc/logstash &
+

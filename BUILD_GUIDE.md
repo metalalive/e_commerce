@@ -12,7 +12,10 @@
 |virtualenv| 20.0.20 | N/A|
 |OpenSSL| 1.1.1 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
 
-and those required python libraries in [requirement.txt](./requirement.txt)
+For each virtual environment, install the python libraries recorded in following files
+* [environment #1, for web, authentication, product applications](./staff_portal/requirements_1.txt) 
+* [requirement #2, for file-uploading application](./staff_portal/requirements_2.txt) 
+
 Note
 * upgragde PIP to latest version after installing python
 * install virtualenv , create python virtual environment only for this backend system.
