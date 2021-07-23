@@ -8,7 +8,7 @@ from celery.backends.rpc import RPCBackend as CeleryRpcBackend
 from common.auth.keystore import create_keystore_helper
 from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
 from common.util.python.celery import app as celery_app
-from common.util.python import log_wrapper
+from common.logging.util  import log_fn_wrapper
 
 from .models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, _atomicity_fn
 from .models import GenericUserAppliedRole, GenericUserGroupRelation, AuthUserResetRequest
@@ -45,7 +45,7 @@ def update_roles_on_accounts(self, affected_groups, deleted=False):
 
 
 @celery_app.task
-@log_wrapper(logger=_logger, loglevel=logging.INFO)
+@log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
 def clean_expired_auth_token(days):
     td = timedelta(days=days)
     t0 = datetime.now()
@@ -72,7 +72,7 @@ def _rotate_keystores_setup(module_setup):
 
 
 @celery_app.task(queue='usermgt_default')
-@log_wrapper(logger=_logger, loglevel=logging.INFO)
+@log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
 def rotate_keystores(modules_setup):
     """ cron job to update given list of key stores periodically """
     # TODO, clean up old files
@@ -82,7 +82,7 @@ def rotate_keystores(modules_setup):
 
 @celery_app.task(backend=CeleryRpcBackend(app=celery_app), queue='rpc_usermgt_get_profile', exchange=RPC_EXCHANGE_DEFAULT_NAME, \
         routing_key='rpc.user_management.get_profile')
-@log_wrapper(logger=_logger, loglevel=logging.WARNING)
+@log_fn_wrapper(logger=_logger, loglevel=logging.WARNING, log_if_succeed=False)
 def get_profile(account_id, field_names, services_label=None):
     account_id = int(account_id)
     account = AuthUser.objects.get(pk=account_id)

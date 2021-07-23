@@ -8,7 +8,7 @@ from kombu.exceptions import ChannelError
 from kombu.pools import connections as KombuConnectionPool, producers as KombuProducerPool
 from kombu.mixins import ConsumerMixin as KombuConsumerMixin
 
-from common.util.python import log_wrapper
+from common.logging.util  import log_fn_wrapper
 from .constants import AMQP_SSL_CONFIG_KEY, AMQP_DEFAULT_CONSUMER_ACCEPT_TYPES, AMQP_DEFAULT_HEARTBEAT, AMQP_HEARTBEAT_CONFIG_KEY, AMQP_TRANSPORT_OPTIONS_CONFIG_KEY, AMQP_DEFAULT_TRANSPORT_OPTIONS, AMQP_DEFAULT_RETRY_POLICY, amqp_delivery_mode
 
 _logger = logging.getLogger(__name__)
@@ -133,7 +133,7 @@ class AMQPPublisher:
         self.publish_kwargs = publish_kwargs
 
 
-    @log_wrapper(logger=_logger, loglevel=logging.WARNING)
+    @log_fn_wrapper(logger=_logger, loglevel=logging.WARNING)
     def publish(self, payload, exchange, routing_key, conn=None , **kwargs):
         """
         Note :

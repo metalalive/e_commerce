@@ -6,7 +6,7 @@ from django.template   import Template, Context
 from django.utils.html import strip_tags
 
 from .celery import app as celery_app
-from . import log_wrapper
+from common.logging.util import log_fn_wrapper
 
 _logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ def remove_control_characters(str_in):
 
 
 @celery_app.task(bind=True, queue='mailing', routing_key='mail.defualt')
-@log_wrapper(logger=_logger)
+@log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
 def sendmail(self, to_addrs, from_addr, msg_template_path, msg_data, subject_template,
                 subject_data=None, attachment_paths=None,):
     assert isinstance(to_addrs,list) , "to_addrs %s must be list type" % to_addrs

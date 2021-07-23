@@ -6,20 +6,20 @@ from django.conf   import  settings as django_settings
 
 from .elasticsearch import es_client, get_dsl_template
 from .celery import app as celery_app
-from . import log_wrapper
+from common.logging.util import log_fn_wrapper
 
 
 _logger = logging.getLogger(__name__)
 
 @celery_app.task
-@log_wrapper(logger=_logger, loglevel=logging.INFO)
+@log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
 def clean_expired_web_session():
     engine = import_module(django_settings.SESSION_ENGINE)
     engine.SessionStore.clear_expired()
 
 
 @celery_app.task
-@log_wrapper(logger=_logger, loglevel=logging.INFO)
+@log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
 def clean_old_log_data(days=1, weeks=52, scroll_size=1000, requests_per_second=-1): # 365 days by default
     """
     clean up all log data created before current time minus time_delta
