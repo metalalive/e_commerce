@@ -32,19 +32,20 @@ class AugmentIngredientRefMixin(AugmentEditFieldsMixin):
 class AttrValueListSerializer(AugmentIngredientRefMixin, BulkUpdateListSerializer):
     # the field name that should be given in the client request body
     def _get_valid_types(self, src):
-        if not hasattr(self, '_valid_attr_types'):
-            _label = src_field_label
-            fn = lambda d:d.get(_label['type'])
-            valid_attrs = filter(fn, src)
-            attrtype_ids = list(map(fn, valid_attrs))
-            qset = self.child.fields['attr_type'].queryset
-            try:
-                qset = qset.filter(pk__in=attrtype_ids)
-                self._valid_attr_types = qset
-            except ValueError as ve:
-                errmsg = {_label['_list']: ['%s contains invalid data type of pk' % attrtype_ids]}
-                raise DjangoValidationError(errmsg)
-        return self._valid_attr_types
+        _label = src_field_label
+        fn = lambda d:d.get(_label['type'])
+        valid_attrs = filter(fn, src)
+        attrtype_ids = list(map(fn, valid_attrs))
+        qset = self.child.fields['attr_type'].queryset
+        try:
+            # NOTE: the result set should NOT be cached since there would be
+            # several attribute pairs in bulk ingredients received in one flight
+            # if you cache the result here, that will cause logic bug
+            qset = qset.filter(pk__in=attrtype_ids)
+            return qset
+        except ValueError as ve:
+            errmsg = {_label['_list']: ['%s contains invalid data type of pk' % attrtype_ids]}
+            raise DjangoValidationError(errmsg)
 
     def extract(self, data, dst_field_name):
         _label = src_field_label
