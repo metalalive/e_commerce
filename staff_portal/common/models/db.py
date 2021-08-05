@@ -143,6 +143,21 @@ def db_middleware_exception_handler(func):
     return inner
 
 
+def get_sql_table_pk_gap_ranges(db_table:str, pk_db_column:str, max_value:int):
+    raw_sql_subquery = 'SELECT m1.{pk_db_column} as lowerbound, MIN(m2.{pk_db_column}) as upperbound \
+            FROM {your_table} m1 INNER JOIN {your_table} AS m2 ON m1.{pk_db_column} < m2.{pk_db_column} \
+            GROUP BY m1.{pk_db_column} ORDER BY m1.{pk_db_column} ASC'.format(your_table=db_table, pk_db_column=pk_db_column)
+    raw_sql_queries = []
+    raw_sql_queries.append('SELECT 1 AS gap_from, {pk_db_column} - 1 AS gap_to FROM {your_table} WHERE {pk_db_column} \
+            > 1 ORDER BY {pk_db_column} ASC LIMIT 1'.format(your_table=db_table, pk_db_column=pk_db_column))
+    raw_sql_queries.append('SELECT m3.lowerbound + 1 AS gap_from, m3.upperbound - 1 AS gap_to FROM (%s) m3 WHERE \
+             m3.lowerbound < m3.upperbound - 1 LIMIT 8' % raw_sql_subquery)
+    raw_sql_queries.append('SELECT {pk_db_column} + 1 AS gap_from, {max_value} AS gap_to FROM {your_table} \
+            ORDER BY {pk_db_column} DESC LIMIT 1'.format(your_table=db_table, pk_db_column=pk_db_column,
+                max_value=max_value ))
+    return raw_sql_queries
+
+
 def monkeypatch_django_db_mysql_schema():
     from django.db.backends.mysql.schema import DatabaseSchemaEditor as MysqlDBschemaEditor
     origin_delete_unique_sql = MysqlDBschemaEditor._delete_unique_sql

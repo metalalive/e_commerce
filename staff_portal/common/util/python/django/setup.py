@@ -3,15 +3,17 @@ import sys
 import os
 
 def _refresh_test_enable():
-    out = False
     cmd_entry = 'manage.py'
     cmd_type  = 'test'
+    cmd_entry_detected = False
+    cmd_type_detected  = False
     #print('do we have test command ? %s' % sys.argv)
-    if cmd_entry in sys.argv:
-        entry_idx = sys.argv.index(cmd_entry)
-        if sys.argv[entry_idx + 1] == cmd_type:
-            out = True
-    return out
+    for arg in sys.argv:
+        if arg.endswith(cmd_entry):
+            cmd_entry_detected = True
+        elif arg == cmd_type and cmd_entry_detected:
+            cmd_type_detected = True
+    return  cmd_entry_detected and cmd_type_detected
 
 
 def setup_secrets(secrets_path, module_path, portal_type, interface_type):
@@ -39,10 +41,26 @@ def setup_secrets(secrets_path, module_path, portal_type, interface_type):
     for key, setup in _module.DATABASES.items():
         if setup.get('PASSWORD', None):
             continue
-        if test_enable:
-            key = 'site_dba'
+        if test_enable :
+            if key == 'default':
+                key = 'test_site_dba'
+            else:
+                continue
         secret = secrets['databases'][key]
         setup.update(secret)
+    if test_enable:
+        # in this project, I simply need different user credentials that access
+        # to the same database, however Django doesn't seem to recognize this
+        # when running test cases so it will attempt to create duplicate test
+        # databases using the same name but different user accounts from different
+        # aliases in settings.DATABASE dictionary.
+        # which is the reason I need to evict all other non-default database
+        # aliases when running Django tests .
+        _module.DATABASE_ROUTERS.clear()
+        db_keys = set(_module.DATABASES.keys()) - set(['default'])
+        list(map(lambda k: _module.DATABASES.pop(k), db_keys))
+    #import pdb
+    #pdb.set_trace()
 
     base_dir = _module.BASE_DIR
     dev_status = 'test' if test_enable else 'production'

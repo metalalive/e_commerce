@@ -22,4 +22,14 @@ Note
 * install C extension built for this project, by running `python ./common/util/c/setup.py install --record ./tmp/setuptools_install_files.txt` . Once you need to remove the installed extension , run `python -m pip uninstall my-c-extention-lib ; rm -rf ./build`
 * switch to the virtual environment you created above, before installing all other required libraries.
 
+### Test
+To run the test suite, execute following commands :
+```
+python3.9 ./manage.py test product.tests.integration.models    --settings product.settings --keepdb --verbosity=2
+```
+
+Note
+* For Django applications, you can also run specific test case by assigning full path of a test case function. Such as `product.tests.integration.models.SimpleSaleableItemDeletionTestCase.test_soft_delete_bulk_ok` along with the command `./manage.py test`
+* you can decide how much detail to print on console by setting different value to `--verbosity` option.
+* `--keepdb` keeps database schema after testing, for any test case related to database schema change, you may need to omit the option `--keepdb`
 

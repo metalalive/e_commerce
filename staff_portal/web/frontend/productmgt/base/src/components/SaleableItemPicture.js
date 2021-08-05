@@ -57,10 +57,31 @@ function _get_query_params_video(data) {
 
 export class SaleableItemPicture extends BaseExtensibleForm {
     constructor(props) {
-        let _valid_fields_name = ['src', 'resource_id'];
+        let _valid_fields_name = ['thumbnail', 'resource_id'];
         super(props, _valid_fields_name);
     }
-            
+
+    _normalize_fn_thumbnail(referrer) {
+        // `obj` could be dictionary object which stores old value
+        // , or DOM element which stores new value of a field.
+        // `thumbnail` flag should be ignored on submit, so this
+        //  normalization function always return the same empty value
+        return undefined;
+    }
+
+    _normalize_fn_resource_id(value) {
+        return String(value);
+    }
+
+    // _serializer_reducer(key, value) {
+    //     let value = BaseExtensibleForm.._serializer_reducer(this, key, value);
+    //     if(value) {
+    //         var skip_fields = ["thumbnail"];
+    //         value = skip_fields.includes(key) ? undefined: value;
+    //     }
+    //     return value;
+    // }
+
     _get_remote_access_token(props) {
         let url = api_base_url.remote_auth.host + api_base_url.remote_auth.path;
         let req_opt = DEFAULT_API_REQUEST_OPTIONS.POST();
@@ -138,7 +159,7 @@ export class SaleableItemPicture extends BaseExtensibleForm {
         // re-render this react component
         let local_url = URL.createObjectURL(data);
         let resource_id = res.req_args.base_url.split('/').pop();
-        let val = {src: local_url , resource_id:resource_id};
+        let val = {thumbnail: local_url , resource_id:resource_id};
         this.new_item(val, true);
     }
 
@@ -159,13 +180,25 @@ export class SaleableItemPicture extends BaseExtensibleForm {
         file_elm.click();
     }
 
+    _discard_files(evt) {
+        let clicked = this.state.saved.filter((item) => {
+            let chkbox_ref = item.refs.resource_id.current;
+            return chkbox_ref.checked;
+        });
+        clicked.map((val) => {
+            this.remove_item(val, true);
+        });
+    }
+
     _single_item_render(val, idx) {
         return (
             <div className="col-6 col-sm-4">
                 <label className="form-imagecheck mb-2">
-                    <input name="form-imagecheck" type="checkbox" value="1" className="form-imagecheck-input" />
+                    <input name="form-imagecheck" type="checkbox"  ref={val.refs.resource_id}
+                        defaultValue={val.resource_id} className="form-imagecheck-input" />
                     <span className="form-imagecheck-figure">
-                        <img src={val.src} ref={val.refs.src} alt="product image" className="form-imagecheck-image" />
+                        <img src={val.thumbnail} ref={val.refs.thumbnail} alt="product image"
+                            className="form-imagecheck-image" />
                     </span>
                 </label>
             </div>);
@@ -175,7 +208,9 @@ export class SaleableItemPicture extends BaseExtensibleForm {
         let uploaded_images = this.state.saved.map(this._single_item_render_wrapper.bind(this));
         return (
                 <div className="mb-3">
-                    <button className="btn btn-primary btn-pill ml-auto">Discard</button>
+                    <button className="btn btn-primary btn-pill ml-auto" onClick={this._discard_files.bind(this)}>
+                        Discard
+                    </button>
                     <div className="row row-sm">
                         {uploaded_images}
                         <div className="col-6 col-sm-4">

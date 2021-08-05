@@ -5,6 +5,7 @@ import {toggle_visual_elm_showup, _instant_search} from '../js/common/native.js'
 import {CommonPresentableProductItemForm} from './CommonPresentableProductItemForm.js';
 import {TagsAppliedToItem} from '../components/TagsAppliedToItem.js'
 import {SaleableItemPicture} from '../components/SaleableItemPicture.js'
+import {IngredientsAppliedToSaleableItem} from '../components/IngredientsAppliedToSaleableItem.js'
 
 
 let api_base_url = {
@@ -28,36 +29,44 @@ function _save_items(evt) {
 
 class SaleableItems extends CommonPresentableProductItemForm {
     constructor(props) {
-        let _valid_fields_name = ['visible', 'price', 'tags', 'ingredients',
-            'pictures', 'videos']; 
+        let _valid_fields_name = ['visible', 'price', 'tags', 'ingredients_applied', 'media_set']; 
         super(props, _valid_fields_name);
     }
 
     componentDidMount() {
         let attributes = [
-            {id:71,  type:10,  value:"goat",},
-            {id:75,  type:11,  value:2.711,},
-            {id:123, type:12,  value:-29,},
+            {id:71,  type:10,  value:"goat", extra_amount:0.5 },
+            {id:75,  type:11,  value:2.711,  extra_amount:0.7 },
+            {id:123, type:12,  value:-29,    extra_amount:1.3 },
         ];
         let tags = [
-            {id:61, name:"no-one"},
-            {id:65, name:"skid row"},
+            {id:2 , tag_id:100,},
+            {id:5 , tag_id:65,},
         ];
-        let pictures = [
-            {src:"blob:http://localhost:3000/32t43094.jpg", resource_id:"t934it3rjf"},
-            {src:"blob:http://localhost:3000/093ur20u.jpg", resource_id:"g2h43gi3q4"},
-            {src:"blob:http://localhost:3000/RI49g3gf.jpg", resource_id:"MQOR43t34t"},
-            {src:"blob:http://localhost:3000/94jgij3m.jpg", resource_id:"bb9jrmrqjl"},
+        let media_set = [
+            {thumbnail:"blob:http://localhost:3000/32t43094.jpg", resource_id:"t934it3rjf"},
+            {thumbnail:"blob:http://localhost:3000/093ur20u.jpg", resource_id:"g2h43gi3q4"},
+            {thumbnail:"blob:http://localhost:3000/RI49g3gf.jpg", resource_id:"MQOR43t34t"},
+            {thumbnail:"blob:http://localhost:3000/94jgij3m.jpg", resource_id:"bb9jrmrqjl"},
         ];
-        let val = {name:'pee meat ball',  id:51  , visible: true, price: 25.04,
-            attributes:attributes, tags:tags, pictures:pictures};
+        let ingredients_applied = [
+            {id: 20,  ingredient_id: 32,  unit:141,  quantity: 3.4},
+            {id: 185, ingredient_id: 30,  unit:1,    quantity: 8},
+            {id: 91,  ingredient_id: 4,   unit:199,  quantity: 12.7},
+        ];
+        let val = { name:'pee meat ball',  id:51, visible: true, price: 25.04, tags:tags,
+            attributes:attributes, media_set:media_set, ingredients_applied:ingredients_applied };
         this.new_item(val, true);
     }
 
     _normalize_fn_price(value) {
         return parseFloat(value);
     }
-    _normalize_fn_visible(value) {
+
+    _normalize_fn_visible(value, referrer) {
+        if(referrer instanceof HTMLInputElement) {
+            value = referrer.checked;
+        }
         return (value === "true" || value === true);
     }
 
@@ -95,31 +104,33 @@ class SaleableItems extends CommonPresentableProductItemForm {
                 <TagsAppliedToItem  defaultValue={val.tags} ref={val.refs.tags} />
             </label> ;
     }
-    _single_item_pictures_field_render(val, idx) {
+
+    _single_item_mediaset_field_render(val, idx) {
         return <div className="col-md-6 col-xl-12 ">
                 <label className="form-label"> Pictures</label>
-                <SaleableItemPicture defaultValue={val.pictures} ref={val.refs.pictures} />
+                <SaleableItemPicture defaultValue={val.media_set} ref={val.refs.media_set} />
             </div> ;
     }
-    _single_item_videos_field_render(val, idx) {
-        return <> </>;
-    }
+
     _single_item_ingredients_field_render(val, idx) {
-        return <> </>;
+        return <label className="form-label">
+                Ingredients applied to this product item
+                <IngredientsAppliedToSaleableItem  defaultValue={val.ingredients_applied}
+                    ref={val.refs.ingredients_applied} />
+            </label> ;
     }
 
     _single_item_menu_render(val, idx) {
         let name_field    = this._single_item_name_field_render(val, idx);
         let visible_field = this._single_item_visible_field_render(val, idx);
         let price_field   = this._single_item_price_field_render(val, idx);
-        let tags_field     = this._single_item_tags_field_render(val, idx);
-        let pictures_field = this._single_item_pictures_field_render(val, idx);
-        let videos_field   = this._single_item_videos_field_render(val, idx);
-        let attributes_field  = this._single_item_attributes_field_render(val, idx);
+        let tags_field    = this._single_item_tags_field_render(val, idx);
+        let media_field   = this._single_item_mediaset_field_render(val, idx);
+        let attributes_field  = this._single_item_attributes_field_render(val, idx, true);
         let ingredients_field = this._single_item_ingredients_field_render(val, idx);
         return (<>
                 {visible_field} {name_field} {price_field} {tags_field}
-                {pictures_field} {videos_field} {attributes_field} {ingredients_field}
+                {media_field} {attributes_field} {ingredients_field}
             </>);
     } // end of _single_item_menu_render()
 } // end of class SaleableItems

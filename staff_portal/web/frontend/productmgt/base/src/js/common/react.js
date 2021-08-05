@@ -100,22 +100,26 @@ export class BaseExtensibleForm extends React.Component {
     }
 
     _diff_iter(val, idx) {
-        var _id = val[this._app_item_id_label];
         let origin = {};
         var modify = {refs: val.refs};
+        let normalize_fn = undefined; // this['_normalize_fn_'+ this._app_item_id_label];
+        var _id = val[this._app_item_id_label];
         if(_id) {
             origin[this._app_item_id_label] = _id;
             modify[this._app_item_id_label] = _id;
         }
         this._valid_fields_name.map((key) => {
             let elm = val.refs[key].current;
+            normalize_fn = this['_normalize_fn_'+ key];
+            if(normalize_fn) {
+                normalize_fn = normalize_fn.bind(this);
+            }
             if((elm instanceof HTMLInputElement) ||
                 (elm instanceof HTMLSelectElement))
             {
-                let normalize_fn = this['_normalize_fn_'+ key];
                 if(normalize_fn) {
-                    origin[key] = normalize_fn(val[key]);
-                    modify[key] = normalize_fn(elm.value);
+                    origin[key] = normalize_fn(val[key], val);
+                    modify[key] = normalize_fn(elm.value, elm);
                 } else {
                     origin[key] = val[key];
                     modify[key] = elm.value;
@@ -125,9 +129,16 @@ export class BaseExtensibleForm extends React.Component {
                 origin[key] = difference.map((item) => (item.origin));
                 modify[key] = difference.map((item) => (item.modify));
             } else {
-                throw "reach unsupported element when collecting edited values";
+                // for any other type of javascript object, this function simply
+                // checks whether a normalization function is declared for the field
+                if(normalize_fn) {
+                    origin[key] = normalize_fn(val);
+                    modify[key] = normalize_fn(elm);
+                } else {
+                    throw "reach unsupported element when collecting edited values";
+                }
             }
-        });
+        }); // end of iteration over other fields
         return {origin:origin , modify:modify};
     } // end of _diff_iter
 

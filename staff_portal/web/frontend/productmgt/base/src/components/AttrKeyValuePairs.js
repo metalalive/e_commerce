@@ -30,7 +30,10 @@ _load_attr_types();
 
 export class AttrKeyValuePairs extends BaseExtensibleForm {
     constructor(props) {
-        let _valid_fields_name = ['type', 'value',];
+        let _valid_fields_name = ['type', 'value'];
+        if(props.extra_fields_name) {
+            _valid_fields_name = [..._valid_fields_name, ...props.extra_fields_name];
+        }
         super(props, _valid_fields_name);
     }
 
@@ -66,15 +69,22 @@ export class AttrKeyValuePairs extends BaseExtensibleForm {
         element_unique_key_increment += 1;
         let select_obj = <select className="form-select" defaultValue={val.type}
                         ref={val.refs.type} key={element_unique_key_increment} > {attr_type_options} </select> ;
+        let extra_amount_charge_elm = null;
+        if(this._valid_fields_name.includes("extra_amount")) {
+            extra_amount_charge_elm = <div className="col-2">
+                    <input type="number" className="form-control" ref={val.refs.extra_amount}
+                        defaultValue={val.extra_amount} /> </div>;
+        }
         return (
             <div className="row">
-                <div className="col-6">
+                <div className="col-4">
                     { select_obj }
                 </div>
-                <div className="col-4">
+                <div className="col-2">
                     <input type="text" className="form-control" ref={val.refs.value}
                         defaultValue={val.value} />
                 </div>
+                { extra_amount_charge_elm }
                 <div className="col-2">
                     <button className="btn btn-primary" onClick={this._remove_form.bind(bound_remove_obj)}>
                         remove

@@ -2,9 +2,13 @@ from functools import partial
 
 from django.db import models, IntegrityError, transaction
 from django.contrib.contenttypes.fields  import GenericRelation
-from softdelete.models import ChangeSet, SoftDeleteRecord, SoftDeleteQuerySet,  SoftDeleteManager,  SoftDeleteObjectMixin
 
-_atomicity_fn = partial(transaction.atomic, using='product_dev_service')
+from softdelete.models import ChangeSet, SoftDeleteRecord, SoftDeleteQuerySet,  SoftDeleteManager,  SoftDeleteObjectMixin
+from common.util.python.django.setup import test_enable as django_test_enable
+
+
+DB_ALIAS_APPLIED = 'default' if django_test_enable else 'product_dev_service'
+_atomicity_fn = partial(transaction.atomic, using=DB_ALIAS_APPLIED)
 
 class ProductmgtChangeSet(ChangeSet):
     class Meta:
@@ -44,9 +48,9 @@ class BaseProductIngredient(SoftDeleteObjectMixin):
 
     class Meta:
         abstract = True
-    name   = models.CharField(max_length=128, unique=False)
+    name   = models.CharField(max_length=128, unique=False, null=False)
     # active item that can be viewed / edited (only) at staff site
-    active   = models.BooleanField(default=False)
+    ##active   = models.BooleanField(default=False) # TODO, remove the field
     # relation fields to attribute types and values of different data types
     attr_val_str     = GenericRelation('ProductAttributeValueStr',    object_id_field='ingredient_id', content_type_field='ingredient_type')
     attr_val_pos_int = GenericRelation('ProductAttributeValuePosInt', object_id_field='ingredient_id', content_type_field='ingredient_type')
@@ -84,5 +88,6 @@ class _UserProfileMixin(models.Model):
         abstract = True
     # profile is linked to profile ID of each active user in user management service
     usrprof = models.PositiveIntegerField(unique=False, db_column='usrprof',)
+
 
 

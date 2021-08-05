@@ -106,11 +106,16 @@ export class CommonPresentableProductItemForm extends BaseExtensibleForm {
         );
     }
 
-    _single_item_attributes_field_render(val, idx) {
+    _single_item_attributes_field_render(val, idx, extra_amount) {
+        let extra_fields_name = null;
+        if (extra_amount) {
+            extra_fields_name = ["extra_amount"];
+        }
         return (
             <label className="form-label">
                 Attributes
-                <AttrKeyValuePairs defaultValue={val.attributes} ref={val.refs.attributes} />
+                <AttrKeyValuePairs defaultValue={val.attributes}  ref={val.refs.attributes}
+                    extra_fields_name={extra_fields_name} />
             </label>
         );
     }
