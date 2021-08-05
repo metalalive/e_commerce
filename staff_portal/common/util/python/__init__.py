@@ -5,6 +5,7 @@ import string
 import logging
 from pathlib import Path
 from importlib import import_module
+from collections.abc import Iterable
 
 
 def get_fixture_pks(filepath:str, pkg_hierarchy:str):
@@ -191,6 +192,14 @@ def get_credential_from_secrets(secret_map:dict, base_folder:str, secret_path:st
         ##    'file_upload_service': secrets['backend_apps']['databases']['file_upload_service'] ,
         ##}
     return _credentials
+
+
+def flatten_nested_iterable(list_):
+    for item in list_:
+        if isinstance(item, Iterable) and not isinstance(item, (str, bytes)):
+            yield from flatten_nested_iterable(item)
+        else:
+            yield item
 
 
 class ExtendedDict(dict):

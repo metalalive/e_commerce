@@ -1,3 +1,4 @@
+import json
 import logging
 
 from django.conf   import settings
@@ -10,16 +11,46 @@ from django.contrib.contenttypes.fields  import GenericForeignKey
 
 _logger = logging.getLogger(__name__)
 
-# TODO, figure out how to support soft-deleted instance which includes compound key (multi-column key)
-class ChangeSet(models.Model):
+class _SoftDeleteIdSerializerMixin:
+    """
+    To support soft-deleted instance with compound primary key (multi-column pkey)
+    , the pk value can be JSON-compilant, serializable list or dict. This mixin
+    declare serialize / deserialize methods to interact with soft-delete models.
+    """
+    @classmethod
+    def serialize_obj_id(cls, value):
+        if isinstance(value, (int, float)):
+            out = str(value)
+        else:
+            out = json.dumps(value, sort_keys=True)
+        return out
+
+    @classmethod
+    def deserialize_obj_id(cls, value):
+        if isinstance(value, (int,)):
+            out = int(value)
+        elif isinstance(value, (float,)):
+            out = float(value)
+        else:
+            out = json.loads(value) # TODO, ensure key order
+        return out
+
+    @property
+    def deserialized_obj_id(self):
+        return type(self).deserialize_obj_id(self.object_id)
+
+
+class ChangeSet(models.Model, _SoftDeleteIdSerializerMixin):
     class Meta:
         abstract = True
-
     ##done_by  = models.ForeignKey('user_management.GenericUserProfile', db_column='done_by', null=True,
     ##            on_delete=models.SET_NULL, related_name="softdel_cset")
     done_by = models.CharField(max_length=16, null=False, blank=False, unique=False)
     time_created = models.DateTimeField(default=timezone.now)
     content_type = models.ForeignKey(ContentType, db_column='content_type', on_delete=models.CASCADE)
+    # currently valid data type of `object_id` could be integer or serializable dictionary or list,
+    # all other data types will result in changeset lookup error. The same sulr is also applied
+    # to SoftDeleteRecord declared below
     object_id = models.CharField(db_column='object_id', max_length=100)
     record    = GenericForeignKey(ct_field='content_type', fk_field='object_id')
 
@@ -30,7 +61,7 @@ class ChangeSet(models.Model):
                 on_delete=models.CASCADE)
 
 
-class SoftDeleteRecord(models.Model):
+class SoftDeleteRecord(models.Model, _SoftDeleteIdSerializerMixin):
     class Meta:
         abstract = True
         unique_together = (('changeset','content_type','object_id'),)
@@ -198,7 +229,8 @@ class SoftDeleteObjectMixin(models.Model):
             profile_id = kwargs.pop('profile_id',None)
             cs = kwargs.get('changeset', None) or self.determine_change_set(profile_id=profile_id)
             kwargs['changeset'] = cs
-            self.SOFTDELETE_RECORD_MODEL.objects.get_or_create( changeset=cs, object_id=str(self.pk),
+            self.SOFTDELETE_RECORD_MODEL.objects.get_or_create( changeset=cs,
+                    object_id=self.SOFTDELETE_RECORD_MODEL.serialize_obj_id(value=self.pk),
                     content_type=ContentType.objects.get_for_model(self) )
             self.time_deleted = timezone.now()
             self.save()
@@ -223,7 +255,7 @@ class SoftDeleteObjectMixin(models.Model):
         filtered_fields = self.filter_before_recover(records_in=related_records)
         for f in  filtered_fields:
             model_cls = f.content_type.model_class()
-            rel = model_cls.objects.get(pk=int(f.object_id))
+            rel = model_cls.objects.get(pk=f.deserialized_obj_id)
             rel.time_deleted = None
             rel.save()
         changeset_id =  cs.pk
@@ -248,18 +280,22 @@ class SoftDeleteObjectMixin(models.Model):
         log_args = ['model_cls', type(self), 'model_id', self.pk, 'profile_id', profile_id]
         loglevel = logging.DEBUG
         try:
-            qs = self.SOFTDELETE_RECORD_MODEL.objects.filter(content_type=content_type, object_id=str(self.pk),
-                    changeset__done_by=profile_id )
+            serialized_object_id = self.SOFTDELETE_RECORD_MODEL.serialize_obj_id(value=self.pk)
+            qs = self.SOFTDELETE_RECORD_MODEL.objects.filter(content_type=content_type,
+                    object_id=serialized_object_id,  changeset__done_by=profile_id )
             qs = qs.latest('time_created').changeset
             log_args.extend(['msg', 'Found changeSet via latest recordset.'])
         except self.SOFTDELETE_RECORD_MODEL.DoesNotExist:
+            serialized_object_id = self.SOFTDELETE_CHANGESET_MODEL.serialize_obj_id(value=self.pk)
             try:
-                qs = self.SOFTDELETE_CHANGESET_MODEL.objects.filter(content_type=content_type, object_id=str(self.pk), done_by=profile_id)
+                qs = self.SOFTDELETE_CHANGESET_MODEL.objects.filter(content_type=content_type,
+                        object_id=serialized_object_id, done_by=profile_id)
                 qs = qs.latest('time_created')
                 log_args.extend(['msg', 'Found changeSet via changeset'])
             except self.SOFTDELETE_CHANGESET_MODEL.DoesNotExist:
                 if create:
-                    qs = self.SOFTDELETE_CHANGESET_MODEL.objects.create(content_type=content_type, object_id=str(self.pk), done_by=profile_id)
+                    qs = self.SOFTDELETE_CHANGESET_MODEL.objects.create(content_type=content_type,
+                            object_id=serialized_object_id,  done_by=profile_id)
                     log_args.extend(['msg', 'new changeSet created'])
                     loglevel = logging.INFO
                 else:
