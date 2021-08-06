@@ -1,47 +1,114 @@
 import random
-from functools import partial
+import math
+import copy
+import json
+from functools import partial, reduce
 
 from django.test import TransactionTestCase, TestCase
 from django.db import DEFAULT_DB_ALIAS
 from django.db.models import Q
-from django.db.utils import IntegrityError
+from django.core.exceptions import ObjectDoesNotExist
+from django.db.utils import IntegrityError, DataError
+from django.contrib.contenttypes.models  import ContentType
 
 from common.models.enums   import UnitOfMeasurement
-from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, ProductSaleableItem, ProductSaleableItemComposite
+from common.util.python import flatten_nested_iterable
+
+from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem, ProductSaleableItemComposite, ProductAppliedAttributePrice, ProductSaleableItemMedia
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 
 _fixtures = {
+    'ProductTag': [
+        {'id':30 , 'usrprof': 56,'name':'Food & Beverage'}               ,
+        {'id':31 , 'usrprof': 56,'name':'DIY hardware'}                  ,
+        {'id':32 , 'usrprof': 56,'name':'Dairy'}                         ,
+        {'id':33 , 'usrprof': 56,'name':'Farm Produce'}                  ,
+        {'id':34 , 'usrprof': 56,'name':'Embedded system device'}        ,
+        {'id':35 , 'usrprof': 56,'name':'semi-prepared food ingredient'} ,
+        {'id':36 , 'usrprof': 56,'name':'Veggie'}                        ,
+        {'id':37 , 'usrprof': 56,'name':'Fruit'}                         ,
+        {'id':38 , 'usrprof': 56,'name':'Debugging device'}              ,
+    ],
+    'ProductTagClosure': [
+        {'id':1, 'ancestor':30, 'descendant':30, 'depth':0},
+        {'id':2, 'ancestor':31, 'descendant':31, 'depth':0},
+        {'id':3, 'ancestor':32, 'descendant':32, 'depth':0},
+        {'id':4, 'ancestor':33, 'descendant':33, 'depth':0},
+        {'id':5, 'ancestor':34, 'descendant':34, 'depth':0},
+        {'id':6, 'ancestor':35, 'descendant':35, 'depth':0},
+        {'id':7, 'ancestor':36, 'descendant':36, 'depth':0},
+        {'id':8, 'ancestor':37, 'descendant':37, 'depth':0},
+        {'id':9, 'ancestor':30, 'descendant':32, 'depth':1},
+        {'id':10, 'ancestor':30, 'descendant':33, 'depth':1},
+        {'id':11, 'ancestor':30, 'descendant':35, 'depth':1},
+        {'id':12, 'ancestor':33, 'descendant':36, 'depth':1},
+        {'id':13, 'ancestor':33, 'descendant':37, 'depth':1},
+        {'id':14, 'ancestor':30, 'descendant':36, 'depth':2},
+        {'id':15, 'ancestor':30, 'descendant':37, 'depth':2},
+        {'id':16, 'ancestor':31, 'descendant':34, 'depth':1},
+        {'id':17, 'ancestor':38, 'descendant':38, 'depth':0},
+        {'id':18, 'ancestor':31, 'descendant':38, 'depth':1},
+    ],
+    'ProductAttributeType': [
+        {'id':20, 'name': 'toppings category', 'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
+        {'id':21, 'name': 'color', 'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
+        {'id':22, 'name': 'bread crust level', 'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
+        {'id':23, 'name': 'cache size (KBytes)', 'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
+        {'id':24, 'name': 'min. working temperature (celsius)', 'dtype': _ProductAttrValueDataType.INTEGER.value[0][0]},
+        {'id':25, 'name': 'Length of square (Ft.)', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
+        {'id':26, 'name': 'Diameter (In.)', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
+        {'id':27, 'name': 'max resistence voltage', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
+    ],
+    'ProductAttributeValueStr': ['sticky', 'crunchy', 'silky', 'chewy', 'crispy', 'meaty', 'eggy'],
+    'ProductAttributeValuePosInt': [5,2,35,42,9853,15,53,104,57,53,83],
+    'ProductAttributeValueInt': [-10,-23,-38,-4,-85,-7,-887,-960,-20,-515,-61,-34],
+    'ProductAttributeValueFloat': [1.2 , 3.45, 6.47, 8.901, 2.34, 50.6, 6.778, 9.01, 22.3],
+    'ProductAppliedAttributePrice': [10.4 , 59, 80.3, 19.4, 94.2],
     'ProductDevIngredient': [
-        {'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'tomato'},
-        {'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'all-purpose flour'},
-        {'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'bread flour'},
-        {'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'quail egg'},
-        {'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'dry yeast powder'},
-        {'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'poolish'},
-        {'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'tomato puree'},
-        {'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'LiPo Battery'},
-        {'category':ProductDevIngredientType.CONSUMABLES     , 'name':'bio gas'},
-        {'category':ProductDevIngredientType.EQUIPMENTS      , 'name':'oven'},
-        {'category':ProductDevIngredientType.EQUIPMENTS      , 'name':'RISC-V development board'},
-        {'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'Raspberry PI'},
-        {'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'GPS sensor'},
-        {'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'Pixhawk flight controller'},
+        {'id':2, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'tomato'},
+        {'id':3, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'all-purpose flour'},
+        {'id':4, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'bread flour'},
+        {'id':5, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'quail egg'},
+        {'id':6, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'dry yeast powder'},
+        {'id':7, 'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'poolish'},
+        {'id':8, 'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'tomato puree'},
+        {'id':9, 'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'LiPo Battery'},
+        {'id':10, 'category':ProductDevIngredientType.WORK_IN_PROGRESS  , 'name':'RISC-V SoC'},
+        {'id':11, 'category':ProductDevIngredientType.WORK_IN_PROGRESS  , 'name':'ARM Cortex-A72 SoC'},
+        {'id':12, 'category':ProductDevIngredientType.WORK_IN_PROGRESS  , 'name':'Pixhawk flight controller'},
+        {'id':13, 'category':ProductDevIngredientType.WORK_IN_PROGRESS  , 'name':'GPS sensor'},
+        {'id':14, 'category':ProductDevIngredientType.CONSUMABLES     , 'name':'bio gas'},
+        {'id':15, 'category':ProductDevIngredientType.EQUIPMENTS      , 'name':'oven'},
+        {'id':16, 'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'Soldering kit'},
+        {'id':17, 'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'Portable Oscilloscope'},
+        {'id':18, 'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'Logic Analyzer'},
+    ],
+    'ProductSaleableItemMedia': [
+        {'media':'384gaeirj4jg393P'},
+        {'media':'92u4t09u4tijq3oti'},
+        {'media':'2903tijtg3h4teg'},
+        {'media':'09fawgsdkmbiehob'},
+        {'media':'2093jti4jt0394ut'},
+        {'media':'0fwkbb0erwrw#rqrt'},
+        {'media':'309ur204t42jWh1'},
+        {'media':'eOy1r0j4SKuAYEre'},
     ],
     'ProductSaleableItem': [
-        {'name':'fruit fertilizer',    'price':3.88,  'usrprof':19},
+        {'name':'Raspberry PI 4 dev board', 'price':3.88,  'usrprof':19},
+        {'name':'SiFive HiFive Unmatched' , 'price':11.30, 'usrprof':28},
         {'name':'rough rice noddle',   'price':0.18,  'usrprof':22},
-        {'name':'RISC-V programming course', 'price':11.30, 'usrprof':28},
         {'name':'Mozzarella pizza', 'price':13.93, 'usrprof':79},
         {'name':'Pita dough', 'price':3.08, 'usrprof':79},
         {'name':'quad drone', 'price':17.02, 'usrprof':12},
     ],
-}
+} # end of _fixtures
 
 _load_init_params = lambda init_params, model_cls: model_cls(**init_params)
+_modelobj_list_to_map = lambda list_: {item.pk: item for item in list_}
 num_uom = len(UnitOfMeasurement.choices)
 
 
-def _create_one_essential_attrs_incomplete(testcase, instance, field_names):
+def _null_test_obj_attrs(testcase, instance, field_names):
     for fname in field_names:
         old_value = getattr(instance, fname)
         setattr(instance, fname, None)
@@ -50,7 +117,7 @@ def _create_one_essential_attrs_incomplete(testcase, instance, field_names):
         setattr(instance, fname, old_value)
 
 
-class SimpleSaleableItemCreationTestCase(TransactionTestCase):
+class SaleableItemSimpleCreationTestCase(TransactionTestCase):
     databases = {DEFAULT_DB_ALIAS}
 
     def __init__(self, *args, **kwargs):
@@ -71,10 +138,10 @@ class SimpleSaleableItemCreationTestCase(TransactionTestCase):
             removing_qset.delete(hard=True)
             self.instances.clear()
 
-    def test_create_one_essential_attrs_incomplete(self):
+    def test_null_test_obj_attrs(self):
         field_names = ['name', 'usrprof', 'visible', 'price']
         instance = self.instances[0]
-        _create_one_essential_attrs_incomplete(testcase=self,
+        _null_test_obj_attrs(testcase=self,
                 instance=instance, field_names=field_names)
 
     def test_create_onebyone_ok(self):
@@ -122,10 +189,10 @@ class SimpleSaleableItemCreationTestCase(TransactionTestCase):
         actual   = len(set(ids)) # test whether all ID numbers are distinct to each other
         self.assertGreater(actual, 0)
         self.assertEqual(expected, actual)
-## end of class SimpleSaleableItemCreationTestCase
+## end of class SaleableItemSimpleCreationTestCase
 
 
-class SimpleSaleableItemDeletionTestCase(TransactionTestCase):
+class SaleableItemSimpleDeletionTestCase(TransactionTestCase):
     # the test class covers both soft-delete and hard-delete
     def setUp(self):
         bound_fn = partial(_load_init_params, model_cls=ProductSaleableItem)
@@ -149,7 +216,7 @@ class SimpleSaleableItemDeletionTestCase(TransactionTestCase):
         exist = ProductSaleableItem.objects.filter(pk=chosen_id).exists()
         self.assertEqual(exist, True)
         # report error if not specifying `profile_id`  when soft-deleting an instance
-        with self.assertRaises(IntegrityError) as e:
+        with self.assertRaises(KeyError) as e:
             # expect to receive erro because caller does NOT provide `profile_id` argument
             self.instances[0].delete()
         self.instances[0].delete(profile_id=self.instances[0].usrprof)
@@ -186,25 +253,20 @@ class SimpleSaleableItemDeletionTestCase(TransactionTestCase):
         self.assertEqual(cnt, 0)
         cnt  = ProductSaleableItem.objects.filter(with_deleted=True, id__in=chosen_ids).count()
         self.assertEqual(cnt, num_deleting)
-## end of class SimpleSaleableItemDeletionTestCase
+## end of class SaleableItemSimpleDeletionTestCase
 
 
 class SaleableItemCompositeCreationTestCase(TransactionTestCase):
     def setUp(self):
         self.instances = {'ProductDevIngredient': None, 'ProductSaleableItem': None}
-        model_classes = [ProductDevIngredient, ProductSaleableItem]
-        for model_cls in model_classes:
-            bound_fn = partial(_load_init_params, model_cls=model_cls)
-            model_name = model_cls.__name__
-            params = _fixtures[model_name]
-            self.instances[model_name] = list(map(bound_fn, params))
-            model_cls.objects.bulk_create(self.instances[model_name])
-        self.instances['ProductDevIngredient'] = list(ProductDevIngredient.objects.all())
+        models_info = [ (ProductDevIngredient, len(_fixtures['ProductDevIngredient'])),
+                (ProductSaleableItem, len(_fixtures['ProductSaleableItem'])) ]
+        _common_instances_setup(out=self.instances, models_info=models_info)
 
     def tearDown(self):
         pass
 
-    def test_create_one_essential_attrs_incomplete(self):
+    def test_null_test_obj_attrs(self):
         instance = ProductSaleableItemComposite(
                 sale_item  = self.instances['ProductSaleableItem'][0],
                 ingredient = self.instances['ProductDevIngredient'][0],
@@ -212,8 +274,7 @@ class SaleableItemCompositeCreationTestCase(TransactionTestCase):
                 unit = UnitOfMeasurement.UNIT.value,
             )
         field_names = ['quantity', 'unit', 'sale_item', 'ingredient']
-        _create_one_essential_attrs_incomplete(testcase=self,
-                instance=instance, field_names=field_names)
+        _null_test_obj_attrs(testcase=self,  instance=instance, field_names=field_names)
 
     def test_create_one_ok(self):
         instance = ProductSaleableItemComposite(
@@ -253,28 +314,96 @@ class SaleableItemCompositeCreationTestCase(TransactionTestCase):
 
 
     def test_bulk_create_ok(self):
-        num_compo = 6
-        num_units = 3
+        num_compo = 20
+        min_num_chosen = num_compo << 4
+        max_num_chosen = min_num_chosen + 1
+        uom_gen = listitem_rand_assigner(list_=UnitOfMeasurement.choices, distinct=False,
+            min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
+        saleitem_gen = listitem_rand_assigner(list_=self.instances['ProductSaleableItem'],
+                distinct=False, min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
+        ingredient_gen = listitem_rand_assigner(list_=self.instances['ProductDevIngredient'],
+                distinct=False, min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
         saleitems_composite = []
-        for idx in range(num_compo):
-            instance = ProductSaleableItemComposite(
-                    sale_item  = self.instances['ProductSaleableItem'][idx % 2],
-                    ingredient = self.instances['ProductDevIngredient'][idx],
-                    unit = UnitOfMeasurement.KILOGRAM.value + (idx % num_units),
-                    quantity   = 30 + idx,
+        while len(saleitems_composite) < num_compo:
+            try:
+                instance = ProductSaleableItemComposite(
+                    sale_item  = next(saleitem_gen),
+                    ingredient = next(ingredient_gen),
+                    unit = next(uom_gen)[0],
+                    quantity   = random.randrange(1,30)
                 )
-            saleitems_composite.append(instance)
+                instance.save(force_insert=True)
+                saleitems_composite.append(instance)
+            except  IntegrityError as e:
+                pass
         sale_item_ids  = list(map(lambda obj:obj.sale_item.pk,  saleitems_composite))
         ingredient_ids = list(map(lambda obj:obj.ingredient.pk, saleitems_composite))
-
-        ProductSaleableItemComposite.objects.bulk_create(saleitems_composite)
         cond = Q(pk__isnull={'sale_item__in': sale_item_ids,  'ingredient__in': ingredient_ids})
         qset = ProductSaleableItemComposite.objects.filter(cond)
         self.assertEqual(qset.count(), num_compo)
+        self._assert_query_case_1(saleitems_composite, cond)
+        self._assert_query_case_2(saleitems_composite, cond)
+        self._assert_query_case_3(saleitems_composite)
+        self._assert_query_case_4(saleitems_composite)
+    ## end of test_bulk_create_ok()
 
-        cond = cond & Q(unit=UnitOfMeasurement.KILOGRAM)
-        qset = ProductSaleableItemComposite.objects.filter(cond)
-        self.assertEqual(qset.count(), int(num_compo / num_units))
+
+    def _assert_query_case_1(self, saleitems_composite, cond):
+        chosen_unit = saleitems_composite[-1].unit
+        cond = cond & Q(unit=chosen_unit)
+        actual = ProductSaleableItemComposite.objects.filter(cond)
+        expect = list(filter(lambda obj: obj.unit == chosen_unit, saleitems_composite))
+        self._assert_query_dict_equal(actual=actual, expect=expect)
+
+    def _assert_query_case_2(self, saleitems_composite, cond):
+        chosen_unit = saleitems_composite[0].unit
+        cond = cond & Q(unit__lte=chosen_unit)
+        actual = ProductSaleableItemComposite.objects.filter(cond)
+        expect = list(filter(lambda obj: obj.unit <= chosen_unit, saleitems_composite))
+        self._assert_query_dict_equal(actual=actual, expect=expect)
+
+    def _assert_query_case_3(self, saleitems_composite):
+        num_chosen_composites = len(saleitems_composite) >> 1
+        composite_gen = listitem_rand_assigner(list_=saleitems_composite, distinct=True,
+            min_num_chosen=num_chosen_composites, max_num_chosen=(num_chosen_composites + 1))
+        chosen_composites = list(composite_gen)
+        quantity_gen = map(lambda obj: obj.quantity, chosen_composites)
+        avg_quantity = reduce(lambda a,b: a+b, quantity_gen) / len(chosen_composites)
+        compo_ids = list(map(lambda obj: obj.pk, chosen_composites))
+        cond = Q(id__in=compo_ids) & Q(quantity__gt=avg_quantity)
+        actual = ProductSaleableItemComposite.objects.filter(cond)
+        expect = list(filter(lambda obj: obj.quantity > avg_quantity , chosen_composites))
+        self._assert_query_dict_equal(actual=actual, expect=expect)
+
+    def _assert_query_case_4(self, saleitems_composite):
+        compo_ids = list(map(lambda obj:  obj.pk, saleitems_composite))
+        sale_item_ids  = list(map(lambda item: item['sale_item'],   compo_ids))
+        ingredient_ids = list(map(lambda item: item['ingredient'] , compo_ids))
+        avg_saleitem_id   = reduce(lambda a,b: a+b, sale_item_ids ) / len(sale_item_ids )
+        avg_ingredient_id = reduce(lambda a,b: a+b, ingredient_ids) / len(ingredient_ids)
+        avg_saleitem_id   = math.ceil(avg_saleitem_id  )
+        avg_ingredient_id = math.ceil(avg_ingredient_id)
+        chosen_unit = saleitems_composite[-1].unit
+        cond = Q(pk={'sale_item__gt': avg_saleitem_id, 'ingredient__lt':avg_ingredient_id})
+        cond = cond | Q(unit=chosen_unit)
+        actual = ProductSaleableItemComposite.objects.filter(cond)
+        _filter_fn = lambda obj: (obj.unit == chosen_unit) or (obj.sale_item_id > avg_saleitem_id \
+                 and obj.ingredient_id < avg_ingredient_id)
+        expect = list(filter(_filter_fn, saleitems_composite))
+        self._assert_query_dict_equal(actual=actual, expect=expect)
+
+    def _assert_query_dict_equal(self, actual, expect):
+        self.assertGreater(len(expect), 0)
+        self.assertEqual(actual.count(), len(expect))
+        actual_dict = {tuple(obj.pk.values()): None for obj in actual}
+        expect_dict = {tuple(obj.pk.values()): None for obj in expect}
+        self.assertDictEqual(actual_dict, expect_dict)
+
+
+    ##def test_complex_query_with_composite_pk(self):
+    ##    cond = (Q(quantity__gt=2.7182) | Q(pk__isnull={'sale_item__gte': 8, 'ingredient__in': [2,13, 809], 'sale_item__lt': 29})) & Q(unit__lte=30)
+    ##    qset = ProductSaleableItemComposite.objects.filter(cond)
+    ##    self.assertEqual(qset.count() , 0)
 
 
     def test_edit_one_ok(self):
@@ -365,11 +494,6 @@ class SaleableItemCompositeCreationTestCase(TransactionTestCase):
             self.assertDictEqual(obj_from_db.pk , instance.pk)
             self.assertEqual(obj_from_db.quantity , instance.quantity)
     ## end of test_bulk_edit_ok()
-
-    def test_complex_query_with_composite_pk(self):
-        cond = (Q(quantity__gt=2.7182) | Q(pk__isnull={'sale_item__gte': 8, 'ingredient__in': [2,13, 809], 'sale_item__lt': 29})) & Q(unit__lte=30)
-        qset = ProductSaleableItemComposite.objects.filter(cond)
-        self.assertEqual(qset.count() , 0)
 ## end of class SaleableItemCompositeCreationTestCase
 
 
@@ -490,8 +614,486 @@ class SaleableItemCompositeDeletionTestCase(TransactionTestCase):
         self.assertEqual(undel_qset.count(), cnt_before_delete)
         for instance in undel_qset:
             self.assertEqual(instance.is_deleted(), False)
-
 ## end of class SaleableItemCompositeDeletionTestCase
+
+
+def _common_instances_setup(out:dict, models_info):
+    for model_cls, num_instance_required in models_info:
+        bound_fn = partial(_load_init_params, model_cls=model_cls)
+        model_name = model_cls.__name__
+        ##params = _fixtures[model_name][:num_instance_required]
+        params_gen = listitem_rand_assigner(list_=_fixtures[model_name],
+                min_num_chosen=num_instance_required,
+                max_num_chosen=(num_instance_required + 1))
+        objs = list(map(bound_fn, params_gen))
+        model_cls.objects.bulk_create(objs)
+        out[model_name] = list(model_cls.objects.all())
+
+
+def _gen_saleitem_attrvals(attrtype_ref, saleitem, idx):
+    saleitem_ct = ContentType.objects.get_for_model(saleitem)
+    model_cls = attrtype_ref.attr_val_set.model
+    num_limit = len(_fixtures[model_cls.__name__])
+    new_value = _fixtures[model_cls.__name__][idx % num_limit]
+    return model_cls(
+        ingredient_type = saleitem_ct,  ingredient_id = saleitem.pk,
+        attr_type = attrtype_ref,  value = new_value
+    )
+
+
+def _saleitem_attrvals_common_setup(attrtypes_gen_fn, saleitems):
+    _attrval_objs = {item[0][0]:{} for item in _ProductAttrValueDataType}
+    idx = 0
+    for saleitem in saleitems:
+        attrtypes_gen = attrtypes_gen_fn()
+        for attrtype_ref in attrtypes_gen:
+            if _attrval_objs[attrtype_ref.dtype].get(saleitem.pk) is None:
+                _attrval_objs[attrtype_ref.dtype][saleitem.pk] = []
+            attrval = _gen_saleitem_attrvals(attrtype_ref, saleitem, idx)
+            _attrval_objs[attrtype_ref.dtype][saleitem.pk].append(attrval)
+            idx += 1
+    for dtype, objmap in _attrval_objs.items():
+        related_field_name = _ProductAttrValueDataType.related_field_map(dtype_code=dtype)
+        related_field_mgr = getattr(saleitems[0], related_field_name)
+        objs = tuple(flatten_nested_iterable(list_=[x for x in objmap.values()]))
+        related_field_mgr.bulk_create(objs)
+    return _attrval_objs
+
+
+def _saleitem_attrvals_refresh_from_db(saleitems):
+    fresh_attrvals = [getattr(saleitem, dtype_item[0][1]).all() for saleitem in \
+            saleitems for dtype_item in _ProductAttrValueDataType]
+    fresh_attrvals = flatten_nested_iterable(list_=fresh_attrvals)
+    return tuple(fresh_attrvals)
+
+
+def listitem_rand_assigner(list_, min_num_chosen:int=2, max_num_chosen:int=-1, distinct:bool=True):
+    # utility for testing
+    assert any(list_), 'input list should not be empty'
+    assert min_num_chosen > 0, 'min_num_chosen = %s' % min_num_chosen
+    num_avail = len(list_)
+    if max_num_chosen > 0:
+        err_msg = 'max_num_chosen = %s, min_num_chosen = %s' % (max_num_chosen, min_num_chosen)
+        assert max_num_chosen > min_num_chosen, err_msg
+        if max_num_chosen > (num_avail + 1) and distinct is True:
+            err_msg = 'num_avail = %s, max_num_chosen = %s, distinct = %s' \
+                    % (num_avail, max_num_chosen, distinct)
+            raise ValueError(err_msg)
+    else:
+        err_msg =  'num_avail = %s , min_num_chosen = %s' % (num_avail, min_num_chosen)
+        assert num_avail >= min_num_chosen, err_msg
+        max_num_chosen = num_avail + 1
+    if distinct:
+        list_ = list(list_)
+    num_assigned = random.randrange(min_num_chosen, max_num_chosen)
+    for _ in range(num_assigned):
+        idx = random.randrange(num_avail)
+        yield list_[idx]
+        if distinct:
+            num_avail -= 1
+            del list_[idx]
+## end of listitem_rand_assigner
+
+
+
+class SaleableItemAttributeCreationTestCase(TransactionTestCase):
+    num_saleitems   = 3
+    num_attr_types  = len(_fixtures['ProductAttributeType'])
+    instances = {'ProductAttributeType': None, 'ProductSaleableItem': None,}
+
+    def setUp(self):
+        models_info = [
+                (ProductAttributeType, self.num_attr_types),
+                (ProductSaleableItem, self.num_saleitems)
+            ]
+        _common_instances_setup(out=self.instances , models_info=models_info)
+
+    def tearDown(self):
+        pass
+
+    def _choose_attr_type(self, dtype:int):
+        _fn = lambda x: x.dtype == dtype
+        filtered = tuple(filter(_fn, self.instances['ProductAttributeType']))
+        assert any(filtered), 'attribute type not found due to incorrect data type %s' % dtype
+        return filtered[0]
+
+    def test_create_one_with_invalid_attr_value(self):
+        saleitem = self.instances['ProductSaleableItem'][-1]
+        data_types = [
+            (_ProductAttrValueDataType.STRING.value[0], 'sticky'),
+            (_ProductAttrValueDataType.FLOAT.value[0], 2.7811),
+            (_ProductAttrValueDataType.INTEGER.value[0], -13),
+            (_ProductAttrValueDataType.POSITIVE_INTEGER.value[0], 29),
+        ]
+        attrval_objs = {}
+        for dtype_id, corresponding_test_value in data_types:
+            attrtype_ref = self._choose_attr_type(dtype=dtype_id[0])
+            instance = attrtype_ref.attr_val_set.model(
+                    ingredient_type = ContentType.objects.get_for_model(saleitem),
+                    ingredient_id = saleitem.pk,
+                    attr_type = attrtype_ref,
+                    value = corresponding_test_value,
+                )
+            field_names = ['ingredient_type', 'ingredient_id', 'attr_type', 'value']
+            _null_test_obj_attrs(testcase=self, instance=instance, field_names=field_names)
+            attrval_objs[dtype_id[0]] = instance
+
+        instance = attrval_objs[_ProductAttrValueDataType.INTEGER.value[0][0]]
+        # test integer sttribute with string value
+        with self.assertRaises(ValueError):
+            instance.value = 'xyz'
+            instance.save()
+        # since MariaDB is applied to this project, it implicitly converts 
+        # * float to integer for integer column
+        # * any number to string for varchar column
+        # so I am not able to test these cases
+        ##with self.assertRaises(IntegrityError):
+        ##    instance.value = 13.0838045
+        ##    instance.save()
+        instance = attrval_objs[_ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]]
+        with self.assertRaises(DataError) as e:
+            instance.value = -2
+            instance.save()
+        with self.assertRaises(ValueError):
+            instance.value = 'qwe'
+            instance.save()
+    ## end of test_create_one_with_invalid_attr_value()
+
+
+    def test_create_bulk_ok(self):
+        saleitems = self.instances['ProductSaleableItem'][:self.num_saleitems]
+        attrtypes = self.instances['ProductAttributeType']
+        attrtypes_gen_fn = partial(listitem_rand_assigner, list_=attrtypes)
+        _attrval_objs = _saleitem_attrvals_common_setup(saleitems=saleitems,
+                attrtypes_gen_fn=attrtypes_gen_fn)
+        for saleitem in saleitems:
+            for dtype_item in _ProductAttrValueDataType:
+                expect_objs = _attrval_objs[dtype_item[0][0]].get(saleitem.pk, [])
+                if not expect_objs:
+                    continue
+                related_field_mgr = getattr(saleitem, dtype_item[0][1])
+                actual_objs = related_field_mgr.all()
+                expected_cnt = len(expect_objs)
+                actual_cnt = actual_objs.count()
+                self.assertGreater(actual_cnt, 0)
+                self.assertEqual(expected_cnt, actual_cnt)
+                expected_values = [{'value':x.value, 'type':x.attr_type.pk, 'saleitem':x.ingredient_id} for x in expect_objs]
+                actual_values   = [{'value':x.value, 'type':x.attr_type.pk, 'saleitem':x.ingredient_id} for x in actual_objs]
+                expected_values = json.dumps(expected_values, sort_keys=True)
+                actual_values   = json.dumps(actual_values  , sort_keys=True)
+                self.assertEqual(expected_values, actual_values)
+    ## end of test_create_bulk_ok()
+## end of class SaleableItemAttributeCreationTestCase
+
+
+def _saleitem_attrvals_extracharge_setup(attrvals, retrieve_id=False):
+    attrvals_gen = listitem_rand_assigner(list_=attrvals, min_num_chosen=(len(attrvals) >> 1))
+    extra_charge_objs = [
+        ProductAppliedAttributePrice(
+            attrval_type = ContentType.objects.get_for_model(attrval),
+            attrval_id = attrval.pk,
+            amount = random.random() * 100
+        ) for attrval in attrvals_gen
+    ]
+    ProductAppliedAttributePrice.objects.bulk_create(extra_charge_objs)
+    if retrieve_id:
+        extra_charge_objs = list(ProductAppliedAttributePrice.objects.all())
+    return  extra_charge_objs
+
+
+_fn_key_replace = lambda obj: {'extra_charge' if k == '_extra_charge__amount'  else k: v for k,v in obj.items()}
+
+class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
+    num_saleitems   = len(_fixtures['ProductSaleableItem'])
+    num_attr_types  = len(_fixtures['ProductAttributeType'])
+    attrval_field_names = ['ingredient_type','ingredient_id','attr_type','value','id']
+    instances = {'ProductAttributeType': None, 'ProductSaleableItem': None,
+            'BaseProductAttributeValue':None, 'ProductAppliedAttributePrice':None}
+
+    def setUp(self):
+        models_info = [
+                (ProductAttributeType, self.num_attr_types),
+                (ProductSaleableItem, self.num_saleitems)
+            ]
+        _common_instances_setup(out=self.instances , models_info=models_info)
+        saleitems = self.instances['ProductSaleableItem']
+        attrtypes = self.instances['ProductAttributeType']
+        attrtypes_gen_fn = partial(listitem_rand_assigner, list_=attrtypes)
+        _saleitem_attrvals_common_setup(saleitems=saleitems, attrtypes_gen_fn=attrtypes_gen_fn)
+        self.instances['BaseProductAttributeValue'] = _saleitem_attrvals_refresh_from_db(saleitems)
+        self.instances['ProductAppliedAttributePrice'] = _saleitem_attrvals_extracharge_setup(
+                attrvals=self.instances['BaseProductAttributeValue'], )
+
+    def tearDown(self):
+        pass
+
+    def _retrieve_expect_deleted_data(self, qset):
+        model_cls = qset.model
+        deleted_ids = qset.values_list('pk', flat=True)
+        delated_ct = ContentType.objects.get_for_model(model_cls)
+        attrval_field_names_clone = ['extra_charge']
+        attrval_field_names_clone.extend(self.attrval_field_names)
+        def filter_fn(obj):
+            id_matched = obj.pk in deleted_ids
+            ct_matched = delated_ct.pk == ContentType.objects.get_for_model(obj).pk
+            return ct_matched and id_matched
+        def serialize_fn(obj):
+            return obj.serializable(present=attrval_field_names_clone, present_null=True)
+        out = filter(filter_fn, self.instances['BaseProductAttributeValue'])
+        out = map(serialize_fn, out)
+        return list(out)
+
+    def _assert_before_delete(self):
+        for saleitem in self.instances['ProductSaleableItem']:
+            for dtype_item in _ProductAttrValueDataType:
+                manager = getattr(saleitem, dtype_item[0][1])
+                qset = manager.all()
+                cnt_before_delete = qset.count()
+                if cnt_before_delete == 0:
+                    continue
+                expect_deleted_data = self._retrieve_expect_deleted_data(qset)
+                actual_deleted_data = qset.values('_extra_charge__amount',*self.attrval_field_names)
+                actual_deleted_data = list(map(_fn_key_replace, actual_deleted_data))
+                expect_deleted_data = sorted(expect_deleted_data, key=lambda x: x['id'])
+                actual_deleted_data = sorted(actual_deleted_data, key=lambda x: x['id'])
+                # list assertion function expects the items from both lists are
+                # in the same order by some kind of key value
+                self.assertListEqual(expect_deleted_data, actual_deleted_data)
+                yield manager, qset, cnt_before_delete, expect_deleted_data
+
+    def test_hard_delete_bulk_ok(self):
+        for manager, qset, _, _ in self._assert_before_delete():
+            qset.delete(hard=True)
+            qset = manager.all(with_deleted=True)
+            cnt_after_delete = qset.count()
+            self.assertEqual(cnt_after_delete, 0)
+
+    def test_soft_delete_bulk_ok(self):
+        profile_id = 345
+        for manager, qset, cnt_before_delete, expect_deleted_data in self._assert_before_delete():
+            qset.delete(profile_id=profile_id)
+            qset2 = manager.all()
+            self.assertEqual(qset2.count(), 0)
+            qset3 = manager.all(with_deleted=True)
+            cnt_after_delete = qset3.count()
+            self.assertGreater(cnt_after_delete, 0)
+            self.assertEqual(cnt_after_delete, cnt_before_delete)
+            # double-check soft-deleted instances
+            actual_deleted_data = qset3.values('_extra_charge__amount',*self.attrval_field_names)
+            actual_deleted_data = list(map(_fn_key_replace, actual_deleted_data))
+            actual_deleted_data = sorted(actual_deleted_data, key=lambda x: x['id'])
+            self.assertListEqual(expect_deleted_data, actual_deleted_data)
+            # un-delete
+            qset3.undelete(profile_id=profile_id)
+            qset4 = manager.all()
+            self.assertEqual(qset4.count(), cnt_before_delete)
+## end of class SaleableItemAttributeDeletionTestCase
+
+
+def _saleitem_tag_closure_setup(tag_map, data):
+    _gen_closure_node = lambda d :ProductTagClosure(
+            id    = d['id'],  depth = d['depth'],
+            ancestor   = tag_map[d['ancestor']]  ,
+            descendant = tag_map[d['descendant']]
+        )
+    nodes = list(map(_gen_closure_node, data))
+    ProductTagClosure.objects.bulk_create(nodes)
+    return nodes
+
+
+def _gen_saleitem_composite(idx, uom_gen, saleitem, ingredient_gen):
+    composite = ProductSaleableItemComposite()
+    composite.unit = next(uom_gen)[0]
+    composite.quantity = random.randrange(6,120)
+    composite.sale_item  = saleitem
+    composite.ingredient = next(ingredient_gen)
+    return composite
+
+def _saleitem_composites_common_setup(saleitem, out:dict, ingredients):
+    num_ingredients = len(ingredients)
+    num_composites = random.randrange(3, num_ingredients)
+    uom_gen = listitem_rand_assigner(list_=UnitOfMeasurement.choices, distinct=False,
+            min_num_chosen=num_composites, max_num_chosen=(num_composites + 1))
+    ingredient_gen = listitem_rand_assigner(list_=ingredients,  min_num_chosen=num_ingredients)
+    gen_compo_fn = partial(_gen_saleitem_composite, uom_gen=uom_gen, saleitem=saleitem,
+            ingredient_gen=ingredient_gen)
+    composites = list(map(gen_compo_fn, range(num_composites)))
+    ProductSaleableItemComposite.objects.bulk_create(composites)
+    out[saleitem.pk] = list(ProductSaleableItemComposite.objects.values('id', 'unit', 'quantity'))
+
+
+class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
+    num_saleitems = random.randrange(3, len(_fixtures['ProductSaleableItem']))
+    num_ingredients = len(_fixtures['ProductDevIngredient'])
+    num_attr_types  = len(_fixtures['ProductAttributeType'])
+    num_tags = len(_fixtures['ProductTag'])
+    instances = {'ProductAttributeType': None, 'ProductSaleableItem': None,
+            'ProductDevIngredient': None, 'ProductTag':None,  'ProductTagClosure':None,
+            'BaseProductAttributeValue':None,  'ProductAppliedAttributePrice':None,
+            'ProductSaleableItemComposite':{}, 'ProductSaleableItemMedia': {},
+            'tagged_saleitems': {},
+        }
+
+    def setUp(self):
+        models_info = [
+                (ProductTag,  self.num_tags),
+                (ProductAttributeType, self.num_attr_types),
+                (ProductSaleableItem, self.num_saleitems),
+                (ProductDevIngredient, self.num_ingredients)
+            ]
+        _common_instances_setup(out=self.instances , models_info=models_info)
+        # attribute values & extra charge
+        attrtypes_gen_fn = partial(listitem_rand_assigner, list_=self.instances['ProductAttributeType'])
+        _saleitem_attrvals_common_setup(saleitems=self.instances['ProductSaleableItem'], attrtypes_gen_fn=attrtypes_gen_fn,)
+        self.instances['BaseProductAttributeValue'] = _saleitem_attrvals_refresh_from_db(saleitems=self.instances['ProductSaleableItem'])
+        self.instances['ProductAppliedAttributePrice'] = _saleitem_attrvals_extracharge_setup(
+                attrvals=self.instances['BaseProductAttributeValue'], retrieve_id=True)
+        # composite & ingredient
+        bound_composites_setup = partial(_saleitem_composites_common_setup,
+                ingredients=self.instances['ProductDevIngredient'],
+                out=self.instances['ProductSaleableItemComposite'], )
+        tuple(map(bound_composites_setup, self.instances['ProductSaleableItem']))
+        # tag
+        self.instances['ProductTag'] = _modelobj_list_to_map(self.instances['ProductTag'])
+        self.instances['ProductTagClosure'] = _saleitem_tag_closure_setup(
+                tag_map=self.instances['ProductTag'], data=_fixtures['ProductTagClosure'])
+        for saleitem in self.instances['ProductSaleableItem']:
+            tags_gen = listitem_rand_assigner(list_=self.instances['ProductTag'].values())
+            applied_tags = list(tags_gen)
+            saleitem.tags.set(applied_tags)
+            self.instances['tagged_saleitems'][saleitem.pk] = list(saleitem.tags.all())
+        # media link
+        for saleitem in self.instances['ProductSaleableItem']:
+            _media_meta_gen = listitem_rand_assigner(list_=_fixtures['ProductSaleableItemMedia'])
+            [saleitem.media_set.create(media=m['media'])  for m in _media_meta_gen]
+            ##saleitem.media_set.set(media_meta_objs, bulk=False, clear=True) # like update_or_create()
+            # cannot use set() or add() cuz they actually perform update operations
+            qset = saleitem.media_set.values('id','sale_item','media')
+            self.instances['ProductSaleableItemMedia'][saleitem.pk] = list(qset)
+
+
+    def tearDown(self):
+        self.instances['ProductSaleableItemMedia'].clear()
+        self.instances['ProductSaleableItemComposite'].clear()
+        self.instances['tagged_saleitems'].clear()
+
+    def _assert_attr_fields_existence(self, saleitem_pk, _assert_fn):
+        filter_attrval_fn = lambda attrval: attrval.ingredient_id == saleitem_pk
+        filtered_attrvals = filter(filter_attrval_fn, self.instances['BaseProductAttributeValue'])
+        filter_extmnt_fn = lambda extracharge, attrval: (extracharge.attrval_type.pk == \
+                ContentType.objects.get_for_model(attrval).pk) and (extracharge.attrval_id == attrval.pk)
+        for attrval in filtered_attrvals:
+            _assert_fn(attrval)
+            bound_filter_extmnt_fn = partial(filter_extmnt_fn, attrval=attrval)
+            filtered_extmnts = filter(bound_filter_extmnt_fn, self.instances['ProductAppliedAttributePrice'])
+            for extracharge in filtered_extmnts:
+                _assert_fn(extracharge)
+
+    def _assert_composite_fields_existence(self, saleitem_pk, _assert_fn, with_deleted):
+        composites = self.instances['ProductSaleableItemComposite'][saleitem_pk]
+        composites_ids = list(map(lambda x: {'ingredient': x['ingredient_id'], 'sale_item':x['sale_item_id']}, composites))
+        qset = ProductSaleableItemComposite.objects.filter(with_deleted=with_deleted, id__in=composites_ids)
+        _assert_fn(actual_objs=qset, expect_objs=composites)
+
+    def _assert_media_link_fields_existence(self, saleitem_pk, _assert_fn, with_deleted):
+        media_meta = self.instances['ProductSaleableItemMedia'][saleitem_pk]
+        media_meta_ids = list(map(lambda x: x['id'] , media_meta))
+        qset = ProductSaleableItemMedia.objects.filter(with_deleted=with_deleted, id__in=media_meta_ids)
+        _assert_fn(actual_objs=qset, expect_objs=media_meta)
+
+
+    def test_hard_delete_bulk(self):
+        backup_saleitem_pks = list(map(lambda saleitem: saleitem.pk , self.instances['ProductSaleableItem']))
+        qset = ProductSaleableItem.objects.filter(pk__in=backup_saleitem_pks)
+        self.assertEqual(qset.count(), self.num_saleitems)
+        qset = qset[:(self.num_saleitems - 1)]
+        qset.delete(hard=True)
+        qset = ProductSaleableItem.objects.filter(with_deleted=True, pk__in=backup_saleitem_pks)
+        self.assertEqual(qset.count(), 1)
+        self.assertEqual((qset.first().pk in  backup_saleitem_pks), True)
+        backup_saleitem_pks.remove( qset.first().pk )
+        def _assert_att_fn(obj):
+            self.assertNotEqual(obj.pk, None)
+            with self.assertRaises(ObjectDoesNotExist):
+                obj.refresh_from_db()
+        def _assert_compo_fn(actual_objs, expect_objs):
+            self.assertEqual(actual_objs.exists(), False)
+        def _assert_media_fn(actual_objs, expect_objs):
+            self.assertEqual(actual_objs.exists(), False)
+        for saleitem_pk in backup_saleitem_pks:
+            self._assert_attr_fields_existence(saleitem_pk, _assert_att_fn)
+            self._assert_composite_fields_existence(saleitem_pk, _assert_compo_fn, with_deleted=True)
+            self._assert_media_link_fields_existence(saleitem_pk, _assert_media_fn, with_deleted=True)
+
+
+    def test_soft_delete_bulk(self):
+        def _assert_del_status_fn(obj):
+            self.assertNotEqual(obj.pk, None)
+            self.assertFalse(obj.is_deleted())
+            obj.refresh_from_db()
+            self.assertTrue(obj.is_deleted())
+
+        def _assert_undel_status_fn(obj):
+            self.assertNotEqual(obj.pk, None)
+            self.assertTrue(obj.is_deleted())
+            obj.refresh_from_db()
+            self.assertFalse(obj.is_deleted())
+
+        def _assert_tag_fn(obj):
+            tags = obj.tags.all()
+            self.assertFalse(tags.exists())
+
+        def _assert_compo_fn(actual_objs, expect_objs):
+            self.assertGreater(actual_objs.count(), 0)
+            self.assertEqual(actual_objs.count(), len(expect_objs))
+            actual_objs = actual_objs.values('id','unit', 'quantity')
+            actual_objs = sorted(actual_objs, key=lambda x: x['ingredient_id'])
+            expect_objs = sorted(expect_objs, key=lambda x: x['ingredient_id'])
+            self.assertListEqual(actual_objs, expect_objs)
+
+        def _assert_media_fn(actual_objs, expect_objs):
+            self.assertGreater(actual_objs.count(), 0)
+            self.assertEqual(actual_objs.count(), len(expect_objs))
+            actual_objs = actual_objs.values('id','sale_item','media')
+            actual_objs = sorted(actual_objs, key=lambda x: x['id'])
+            expect_objs = sorted(expect_objs, key=lambda x: x['id'])
+            self.assertListEqual(actual_objs, expect_objs)
+
+        profile_id = 91
+        backup_saleitem_pks = list(map(lambda saleitem: saleitem.pk , self.instances['ProductSaleableItem']))
+        qset = ProductSaleableItem.objects.filter(pk__in=backup_saleitem_pks)
+        self.assertEqual(qset.count(), self.num_saleitems)
+        qset = qset[:(self.num_saleitems - 1)]
+        # soft-delete
+        qset.delete(profile_id=profile_id)
+        tuple(map(lambda obj:self.assertTrue(obj.is_deleted()), qset)) # auto marked as deleted
+        tuple(map(_assert_tag_fn, qset))
+        qset2 = ProductSaleableItem.objects.filter(with_deleted=True, pk__in=backup_saleitem_pks)
+        self.assertEqual(qset2.count(), self.num_saleitems)
+        qset2 = ProductSaleableItem.objects.filter(pk__in=backup_saleitem_pks)
+        self.assertEqual(qset2.count(), 1)
+        self.assertEqual((qset2.first().pk in  backup_saleitem_pks), True)
+        soft_deleted_pks = copy.copy(backup_saleitem_pks)
+        soft_deleted_pks.remove( qset2.first().pk )
+        del qset2
+        qset = ProductSaleableItem.objects.get_deleted_set()
+        self.assertSetEqual(set(soft_deleted_pks) , set(qset.values_list('id', flat=True)))
+
+        for saleitem_pk in soft_deleted_pks:
+            self._assert_attr_fields_existence(saleitem_pk, _assert_del_status_fn)
+            self._assert_composite_fields_existence(saleitem_pk, _assert_compo_fn, with_deleted=True)
+            self._assert_media_link_fields_existence(saleitem_pk, _assert_media_fn, with_deleted=True)
+        # un-delete
+        self.assertEqual(qset.count(), len(soft_deleted_pks))
+        qset.undelete(profile_id=profile_id)
+        tuple(map(_assert_undel_status_fn , qset))
+        tuple(map(_assert_tag_fn, qset))
+        for saleitem_pk in soft_deleted_pks:
+            self._assert_attr_fields_existence(saleitem_pk, _assert_undel_status_fn)
+            self._assert_composite_fields_existence(saleitem_pk, _assert_compo_fn, with_deleted=False)
+            self._assert_media_link_fields_existence(saleitem_pk, _assert_media_fn, with_deleted=False)
+    ## end of test_soft_delete_bulk()
+## end of class SaleableItemAdvancedDeletionTestCase
 
 
 

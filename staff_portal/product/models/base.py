@@ -14,7 +14,7 @@ from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelati
 
 from common.models.db      import get_sql_table_pk_gap_ranges
 from common.models.enums   import UnitOfMeasurement, TupleChoicesMeta
-from common.models.mixins  import MinimumInfoMixin
+from common.models.mixins  import MinimumInfoMixin, SerializableMixin
 from common.models.fields  import CompoundPrimaryKeyField
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
 from softdelete.models import  SoftDeleteObjectMixin
@@ -338,6 +338,24 @@ class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfile
     # TODO, does this project require secondary index on `profile` column ?
     min_info_field_names = ['id','name']
 
+    @_atomicity_fn()
+    def delete(self, *args, **kwargs):
+        hard_delete = kwargs.get('hard', False)
+        if not hard_delete:
+            if kwargs.get('changeset', None) is None:
+                profile_id = kwargs['profile_id']
+                kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
+        SoftDeleteObjectMixin.delete(self, *args, **kwargs)
+        if not hard_delete:
+            # soft-delete mixin automatically mark all rows in `media_set`
+            # and `ingredients_applied` fields as deleted
+            attr_del_fn = lambda dtype_item: getattr(self, dtype_item[0][1]).all().delete(*args, **kwargs)
+            list(map(attr_del_fn, _ProductAttrValueDataType))
+            kwargs.pop('changeset', None)
+            kwargs.pop('profile_id', None)
+            self.tags.clear() # clear rows in m2m relation table, not tag table
+    ## end of delete()
+
 
 
 class ProductSaleableItem(AbstractProduct):
@@ -348,8 +366,10 @@ class ProductSaleablePackage(AbstractProduct):
     class Meta(AbstractProduct.Meta):
         db_table = 'product_saleable_package'
 
+
 ProductSaleableItem.set_related_name(field_name='tags', value='tagged_products')
 ProductSaleablePackage.set_related_name(field_name='tags', value='tagged_packages')
+
 
 class ProductSaleableItemComposite(SoftDeleteObjectMixin):
     """
@@ -484,7 +504,7 @@ class ProductAttributeType(SoftDeleteObjectMixin, MinimumInfoMixin):
             return getattr(self, related_field_name)
 
 
-class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin):
+class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin, SerializableMixin):
     """
     user-defined metadata for storing textual/numeric attributes applied to saleable items.
 
@@ -508,6 +528,39 @@ class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin):
     ingredient_id   = models.PositiveIntegerField(db_column='ingredient_id')
     ingredient_ref  = GenericForeignKey(ct_field='ingredient_type', fk_field='ingredient_id')
     attr_type = models.ForeignKey(ProductAttributeType, db_column='attr_type', on_delete=models.CASCADE)
+    _extra_charge = GenericRelation('ProductAppliedAttributePrice', object_id_field='attrval_id', \
+                content_type_field='attrval_type')
+
+    @property
+    def extra_charge(self):
+        qset = self._extra_charge.all(with_deleted=self.is_deleted())
+        if qset.exists(): # suppose to be only one instance that represents price
+            return qset.first().amount
+
+    def serializable(self, present, present_null:bool=False):
+        def query_fn(fd_value, field_name, out):
+            if isinstance(fd_value, models.Model):
+                out[field_name] = fd_value.pk
+            else:
+                raise TypeError('unable to serialize the field %s with value %s' \
+                        % (field_name, fd_value))
+        return super().serializable(present=present, query_fn=query_fn,
+                present_null=present_null)
+
+    @_atomicity_fn()
+    def delete(self, *args, **kwargs):
+        hard_delete = kwargs.get('hard', False)
+        if not hard_delete:
+            if kwargs.get('changeset', None) is None:
+                profile_id = kwargs['profile_id']
+                kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
+        SoftDeleteObjectMixin.delete(self, *args, **kwargs)
+        if not hard_delete:
+            self._extra_charge.all().delete(*args, **kwargs)
+            kwargs.pop('changeset', None)
+            kwargs.pop('profile_id', None)
+    ## end of delete()
+## end of class BaseProductAttributeValue
 
 
 class ProductAttributeValueStr(BaseProductAttributeValue):

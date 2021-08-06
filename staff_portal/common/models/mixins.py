@@ -14,7 +14,7 @@ class MinimumInfoMixin:
 
 
 class SerializableMixin:
-    def serializable(self, present, query_fn):
+    def serializable(self, present, query_fn, present_null:bool=False):
         out = {}
         present = present or []
         for field_name in present:
@@ -26,6 +26,8 @@ class SerializableMixin:
                     out[field_name] = fd_value
                 else:
                     query_fn(fd_value=fd_value, field_name=field_name, out=out)
+            elif present_null:
+                out[field_name] = None
         return out
 
 

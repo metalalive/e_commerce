@@ -192,14 +192,14 @@ class AbstractAdvancedSearchMixin:
     }
 
     def get_exception(self, **kwargs):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def is_enabled_adv_search(self, request):
         """
         check whether client attempts to enable advanced search function,
         return the check result.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_req_body(self, request):
         """
@@ -207,7 +207,7 @@ class AbstractAdvancedSearchMixin:
         it is a serialized JSON data in body section of client request,
         or it could be in the URL query parameter of the client request.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def get_advanced_search_condition(self, request):
         enable = self.is_enabled_adv_search(request=request)

@@ -462,8 +462,9 @@ def monkeypatch_queryset_lookup_values():
                 # TODO, figure out why Django uses f.attname instead of f.name
                 fields = tuple([f.attname for f in self.model._meta.concrete_fields])
             compo_fnames = [f.attname for f in pk_field._composite_fields]
-            replaced = [compo_fnames  if pk_field.attname in fields or 'pk' in fields \
-                    else fname for fname in fields]
+            origin_fields = fields
+            replaced = [compo_fnames  if fname in (pk_field.attname, 'pk') \
+                    else fname for fname in origin_fields]
             flattened = flatten_nested_iterable(list_=replaced)
             fields = tuple(dict.fromkeys(flattened))
         return old__values_fn(self, *fields, **expressions)

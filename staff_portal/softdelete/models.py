@@ -73,6 +73,7 @@ class SoftDeleteRecord(models.Model, _SoftDeleteIdSerializerMixin):
 
 
 class SoftDeleteQuerySet(models.QuerySet):
+    # TODO, ensure atomicity
     def delete(self, *args, **kwargs):
         for obj in self:
             obj.delete(*args, **kwargs)
