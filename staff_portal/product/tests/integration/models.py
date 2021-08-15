@@ -17,94 +17,9 @@ from common.util.python import flatten_nested_iterable
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem, ProductSaleableItemComposite, ProductAppliedAttributePrice, ProductSaleableItemMedia
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 
-_fixtures = {
-    'ProductTag': [
-        {'id':30 , 'usrprof': 56,'name':'Food & Beverage'}               ,
-        {'id':31 , 'usrprof': 56,'name':'DIY hardware'}                  ,
-        {'id':32 , 'usrprof': 56,'name':'Dairy'}                         ,
-        {'id':33 , 'usrprof': 56,'name':'Farm Produce'}                  ,
-        {'id':34 , 'usrprof': 56,'name':'Embedded system device'}        ,
-        {'id':35 , 'usrprof': 56,'name':'semi-prepared food ingredient'} ,
-        {'id':36 , 'usrprof': 56,'name':'Veggie'}                        ,
-        {'id':37 , 'usrprof': 56,'name':'Fruit'}                         ,
-        {'id':38 , 'usrprof': 56,'name':'Debugging device'}              ,
-    ],
-    'ProductTagClosure': [
-        {'id':1, 'ancestor':30, 'descendant':30, 'depth':0},
-        {'id':2, 'ancestor':31, 'descendant':31, 'depth':0},
-        {'id':3, 'ancestor':32, 'descendant':32, 'depth':0},
-        {'id':4, 'ancestor':33, 'descendant':33, 'depth':0},
-        {'id':5, 'ancestor':34, 'descendant':34, 'depth':0},
-        {'id':6, 'ancestor':35, 'descendant':35, 'depth':0},
-        {'id':7, 'ancestor':36, 'descendant':36, 'depth':0},
-        {'id':8, 'ancestor':37, 'descendant':37, 'depth':0},
-        {'id':9, 'ancestor':30, 'descendant':32, 'depth':1},
-        {'id':10, 'ancestor':30, 'descendant':33, 'depth':1},
-        {'id':11, 'ancestor':30, 'descendant':35, 'depth':1},
-        {'id':12, 'ancestor':33, 'descendant':36, 'depth':1},
-        {'id':13, 'ancestor':33, 'descendant':37, 'depth':1},
-        {'id':14, 'ancestor':30, 'descendant':36, 'depth':2},
-        {'id':15, 'ancestor':30, 'descendant':37, 'depth':2},
-        {'id':16, 'ancestor':31, 'descendant':34, 'depth':1},
-        {'id':17, 'ancestor':38, 'descendant':38, 'depth':0},
-        {'id':18, 'ancestor':31, 'descendant':38, 'depth':1},
-    ],
-    'ProductAttributeType': [
-        {'id':20, 'name': 'toppings category', 'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
-        {'id':21, 'name': 'color', 'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
-        {'id':22, 'name': 'bread crust level', 'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
-        {'id':23, 'name': 'cache size (KBytes)', 'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
-        {'id':24, 'name': 'min. working temperature (celsius)', 'dtype': _ProductAttrValueDataType.INTEGER.value[0][0]},
-        {'id':25, 'name': 'Length of square (Ft.)', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
-        {'id':26, 'name': 'Diameter (In.)', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
-        {'id':27, 'name': 'max resistence voltage', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
-    ],
-    'ProductAttributeValueStr': ['sticky', 'crunchy', 'silky', 'chewy', 'crispy', 'meaty', 'eggy'],
-    'ProductAttributeValuePosInt': [5,2,35,42,9853,15,53,104,57,53,83],
-    'ProductAttributeValueInt': [-10,-23,-38,-4,-85,-7,-887,-960,-20,-515,-61,-34],
-    'ProductAttributeValueFloat': [1.2 , 3.45, 6.47, 8.901, 2.34, 50.6, 6.778, 9.01, 22.3],
-    'ProductAppliedAttributePrice': [10.4 , 59, 80.3, 19.4, 94.2],
-    'ProductDevIngredient': [
-        {'id':2, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'tomato'},
-        {'id':3, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'all-purpose flour'},
-        {'id':4, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'bread flour'},
-        {'id':5, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'quail egg'},
-        {'id':6, 'category':ProductDevIngredientType.RAW_MATERIAL    , 'name':'dry yeast powder'},
-        {'id':7, 'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'poolish'},
-        {'id':8, 'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'tomato puree'},
-        {'id':9, 'category':ProductDevIngredientType.WORK_IN_PROGRESS, 'name':'LiPo Battery'},
-        {'id':10, 'category':ProductDevIngredientType.WORK_IN_PROGRESS  , 'name':'RISC-V SoC'},
-        {'id':11, 'category':ProductDevIngredientType.WORK_IN_PROGRESS  , 'name':'ARM Cortex-A72 SoC'},
-        {'id':12, 'category':ProductDevIngredientType.WORK_IN_PROGRESS  , 'name':'Pixhawk flight controller'},
-        {'id':13, 'category':ProductDevIngredientType.WORK_IN_PROGRESS  , 'name':'GPS sensor'},
-        {'id':14, 'category':ProductDevIngredientType.CONSUMABLES     , 'name':'bio gas'},
-        {'id':15, 'category':ProductDevIngredientType.EQUIPMENTS      , 'name':'oven'},
-        {'id':16, 'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'Soldering kit'},
-        {'id':17, 'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'Portable Oscilloscope'},
-        {'id':18, 'category':ProductDevIngredientType.EQUIPMENTS  , 'name':'Logic Analyzer'},
-    ],
-    'ProductSaleableItemMedia': [
-        {'media':'384gaeirj4jg393P'},
-        {'media':'92u4t09u4tijq3oti'},
-        {'media':'2903tijtg3h4teg'},
-        {'media':'09fawgsdkmbiehob'},
-        {'media':'2093jti4jt0394ut'},
-        {'media':'0fwkbb0erwrw#rqrt'},
-        {'media':'309ur204t42jWh1'},
-        {'media':'eOy1r0j4SKuAYEre'},
-    ],
-    'ProductSaleableItem': [
-        {'name':'Raspberry PI 4 dev board', 'price':3.88,  'usrprof':19},
-        {'name':'SiFive HiFive Unmatched' , 'price':11.30, 'usrprof':28},
-        {'name':'rough rice noddle',   'price':0.18,  'usrprof':22},
-        {'name':'Mozzarella pizza', 'price':13.93, 'usrprof':79},
-        {'name':'Pita dough', 'price':3.08, 'usrprof':79},
-        {'name':'quad drone', 'price':17.02, 'usrprof':12},
-    ],
-} # end of _fixtures
+from .common import _fixtures, listitem_rand_assigner, _common_instances_setup, _load_init_params, _modelobj_list_to_map, _product_tag_closure_setup, _dict_key_replace
 
-_load_init_params = lambda init_params, model_cls: model_cls(**init_params)
-_modelobj_list_to_map = lambda list_: {item.pk: item for item in list_}
+
 num_uom = len(UnitOfMeasurement.choices)
 
 
@@ -617,28 +532,18 @@ class SaleableItemCompositeDeletionTestCase(TransactionTestCase):
 ## end of class SaleableItemCompositeDeletionTestCase
 
 
-def _common_instances_setup(out:dict, models_info):
-    for model_cls, num_instance_required in models_info:
-        bound_fn = partial(_load_init_params, model_cls=model_cls)
-        model_name = model_cls.__name__
-        ##params = _fixtures[model_name][:num_instance_required]
-        params_gen = listitem_rand_assigner(list_=_fixtures[model_name],
-                min_num_chosen=num_instance_required,
-                max_num_chosen=(num_instance_required + 1))
-        objs = list(map(bound_fn, params_gen))
-        model_cls.objects.bulk_create(objs)
-        out[model_name] = list(model_cls.objects.all())
-
-
-def _gen_saleitem_attrvals(attrtype_ref, saleitem, idx):
+def _gen_saleitem_attrvals(attrtype_ref, saleitem, idx, extra_charge=None):
     saleitem_ct = ContentType.objects.get_for_model(saleitem)
     model_cls = attrtype_ref.attr_val_set.model
     num_limit = len(_fixtures[model_cls.__name__])
     new_value = _fixtures[model_cls.__name__][idx % num_limit]
-    return model_cls(
-        ingredient_type = saleitem_ct,  ingredient_id = saleitem.pk,
-        attr_type = attrtype_ref,  value = new_value
-    )
+    model_init_kwargs = {
+        'ingredient_type':saleitem_ct,  'ingredient_id':saleitem.pk,
+        'attr_type':attrtype_ref, 'value':new_value
+    }
+    if extra_charge and extra_charge > 0.0:
+        model_init_kwargs['extra_amount'] = extra_charge
+    return model_cls(**model_init_kwargs)
 
 
 def _saleitem_attrvals_common_setup(attrtypes_gen_fn, saleitems):
@@ -665,34 +570,6 @@ def _saleitem_attrvals_refresh_from_db(saleitems):
             saleitems for dtype_item in _ProductAttrValueDataType]
     fresh_attrvals = flatten_nested_iterable(list_=fresh_attrvals)
     return tuple(fresh_attrvals)
-
-
-def listitem_rand_assigner(list_, min_num_chosen:int=2, max_num_chosen:int=-1, distinct:bool=True):
-    # utility for testing
-    assert any(list_), 'input list should not be empty'
-    assert min_num_chosen > 0, 'min_num_chosen = %s' % min_num_chosen
-    num_avail = len(list_)
-    if max_num_chosen > 0:
-        err_msg = 'max_num_chosen = %s, min_num_chosen = %s' % (max_num_chosen, min_num_chosen)
-        assert max_num_chosen > min_num_chosen, err_msg
-        if max_num_chosen > (num_avail + 1) and distinct is True:
-            err_msg = 'num_avail = %s, max_num_chosen = %s, distinct = %s' \
-                    % (num_avail, max_num_chosen, distinct)
-            raise ValueError(err_msg)
-    else:
-        err_msg =  'num_avail = %s , min_num_chosen = %s' % (num_avail, min_num_chosen)
-        assert num_avail >= min_num_chosen, err_msg
-        max_num_chosen = num_avail + 1
-    if distinct:
-        list_ = list(list_)
-    num_assigned = random.randrange(min_num_chosen, max_num_chosen)
-    for _ in range(num_assigned):
-        idx = random.randrange(num_avail)
-        yield list_[idx]
-        if distinct:
-            num_avail -= 1
-            del list_[idx]
-## end of listitem_rand_assigner
 
 
 
@@ -760,6 +637,19 @@ class SaleableItemAttributeCreationTestCase(TransactionTestCase):
     ## end of test_create_one_with_invalid_attr_value()
 
 
+    def test_create_one_with_extra_charge(self):
+        saleitem = self.instances['ProductSaleableItem'][0]
+        def assert_new_object(attrtype):
+            limit = len(_fixtures['ProductAppliedAttributePrice'])
+            idx = random.randrange(0,1000)
+            extra_charge = _fixtures['ProductAppliedAttributePrice'][idx % limit]
+            self.assertNotEqual(extra_charge, None)
+            attrval = _gen_saleitem_attrvals(attrtype, saleitem, idx, extra_charge=extra_charge)
+            attrval.save(force_insert=True)
+            self.assertEqual(extra_charge, attrval.extra_charge)
+        tuple(map(assert_new_object, self.instances['ProductAttributeType']))
+
+
     def test_create_bulk_ok(self):
         saleitems = self.instances['ProductSaleableItem'][:self.num_saleitems]
         attrtypes = self.instances['ProductAttributeType']
@@ -801,7 +691,6 @@ def _saleitem_attrvals_extracharge_setup(attrvals, retrieve_id=False):
     return  extra_charge_objs
 
 
-_fn_key_replace = lambda obj: {'extra_charge' if k == '_extra_charge__amount'  else k: v for k,v in obj.items()}
 
 class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
     num_saleitems   = len(_fixtures['ProductSaleableItem'])
@@ -844,6 +733,7 @@ class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
         return list(out)
 
     def _assert_before_delete(self):
+        bound_dict_key_replace = partial(_dict_key_replace, to_='extra_charge', from_='_extra_charge__amount')
         for saleitem in self.instances['ProductSaleableItem']:
             for dtype_item in _ProductAttrValueDataType:
                 manager = getattr(saleitem, dtype_item[0][1])
@@ -853,7 +743,7 @@ class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
                     continue
                 expect_deleted_data = self._retrieve_expect_deleted_data(qset)
                 actual_deleted_data = qset.values('_extra_charge__amount',*self.attrval_field_names)
-                actual_deleted_data = list(map(_fn_key_replace, actual_deleted_data))
+                actual_deleted_data = list(map(bound_dict_key_replace, actual_deleted_data))
                 expect_deleted_data = sorted(expect_deleted_data, key=lambda x: x['id'])
                 actual_deleted_data = sorted(actual_deleted_data, key=lambda x: x['id'])
                 # list assertion function expects the items from both lists are
@@ -870,6 +760,7 @@ class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
 
     def test_soft_delete_bulk_ok(self):
         profile_id = 345
+        bound_dict_key_replace = partial(_dict_key_replace, to_='extra_charge', from_='_extra_charge__amount')
         for manager, qset, cnt_before_delete, expect_deleted_data in self._assert_before_delete():
             qset.delete(profile_id=profile_id)
             qset2 = manager.all()
@@ -880,7 +771,7 @@ class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
             self.assertEqual(cnt_after_delete, cnt_before_delete)
             # double-check soft-deleted instances
             actual_deleted_data = qset3.values('_extra_charge__amount',*self.attrval_field_names)
-            actual_deleted_data = list(map(_fn_key_replace, actual_deleted_data))
+            actual_deleted_data = list(map(bound_dict_key_replace, actual_deleted_data))
             actual_deleted_data = sorted(actual_deleted_data, key=lambda x: x['id'])
             self.assertListEqual(expect_deleted_data, actual_deleted_data)
             # un-delete
@@ -888,17 +779,6 @@ class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
             qset4 = manager.all()
             self.assertEqual(qset4.count(), cnt_before_delete)
 ## end of class SaleableItemAttributeDeletionTestCase
-
-
-def _saleitem_tag_closure_setup(tag_map, data):
-    _gen_closure_node = lambda d :ProductTagClosure(
-            id    = d['id'],  depth = d['depth'],
-            ancestor   = tag_map[d['ancestor']]  ,
-            descendant = tag_map[d['descendant']]
-        )
-    nodes = list(map(_gen_closure_node, data))
-    ProductTagClosure.objects.bulk_create(nodes)
-    return nodes
 
 
 def _gen_saleitem_composite(idx, uom_gen, saleitem, ingredient_gen):
@@ -955,7 +835,7 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
         tuple(map(bound_composites_setup, self.instances['ProductSaleableItem']))
         # tag
         self.instances['ProductTag'] = _modelobj_list_to_map(self.instances['ProductTag'])
-        self.instances['ProductTagClosure'] = _saleitem_tag_closure_setup(
+        self.instances['ProductTagClosure'] = _product_tag_closure_setup(
                 tag_map=self.instances['ProductTag'], data=_fixtures['ProductTagClosure'])
         for saleitem in self.instances['ProductSaleableItem']:
             tags_gen = listitem_rand_assigner(list_=self.instances['ProductTag'].values())

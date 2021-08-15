@@ -16,7 +16,12 @@ class NestedFieldSetupMixin:
         if isinstance(field, ListSerializer):
             try:
                 raw_subform = data.get(name,[])
-                ids = [d[pk_field_name] for d in raw_subform if d.get(pk_field_name, None)]
+                if isinstance(pk_field_name, str):
+                    ids = [d[pk_field_name] for d in raw_subform if d.get(pk_field_name, None)]
+                elif isinstance(pk_field_name, (list,tuple)): # composite key
+                    ids = [{col_name: d[col_name]  for col_name in pk_field_name
+                            if d.get(col_name, None)} for d in raw_subform]
+                    #raise NotImplementedError()
                 log_msg += ['IDs', ids]
                 if mgt:
                     field.instance = mgt.filter(pk__in=ids)

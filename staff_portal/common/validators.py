@@ -194,8 +194,9 @@ class EditFormObjIdValidator:
             err_msg = "The argument `value` should be a list of form data, and `caller.isntance` \
                        should be a list of object instances associated with each form."
             raise TypeError(err_msg)
-        form_ids = [item['id'] for item in value if item.get('id',None)] # + ['24', 24]
-        obj_ids  = [obj.pk for obj in caller.instance] # + [None]
+        assert hasattr(caller, 'instance_ids'), 'lack of property `instance_ids` on caller %s' % type(caller)
+        form_ids = caller.extract_form_ids(formdata=value, include_null=False)
+        obj_ids  = caller.instance_ids # should be framework independent
         diff = set(form_ids).symmetric_difference(obj_ids)
         if any(diff):
             log_msg = ['diff', diff, 'value', value, 'obj_ids', obj_ids, 'form_ids', form_ids,]

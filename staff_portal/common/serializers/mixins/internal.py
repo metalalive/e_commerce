@@ -98,25 +98,25 @@ class AugmentEditFieldsMixin:
     Internal mixin class for augmenting extra fields required in the model before writing
     validated data  to backend database.
     This mixins is used to override create() or update() methods of a list serializer
+    and supposed to work with common.serializers.BulkUpdateListSerializer
     """
     _field_name_map = {}
 
     def create(self, validated_data, **kwargs):
-        for item in validated_data: # process list of data that will be written
+        self._augment_fields_to_formdata(validated_data, kwargs)
+        return super().create(validated_data=validated_data)
+
+    def update(self, instance, validated_data, allow_insert=False, allow_delete=False, **kwargs):
+        new_validated_data = self._insert_data_map(data=validated_data)
+        self._augment_fields_to_formdata(new_validated_data, kwargs)
+        return super().update(instance=instance, validated_data=validated_data,
+                allow_insert=allow_insert, allow_delete=allow_delete)
+
+    def _augment_fields_to_formdata(self, new_validated_data, kwargs):
+        for item in new_validated_data: # process list of data that will be written
+            #if item.get(self.child.pk_field_name, None) is None: # primary key may not be named `id`
             for k,v in self._field_name_map.items():
                 if kwargs.get(k):
                     item[v] = kwargs.get(k)
-        return super().create(validated_data=validated_data)
-
-    #### def update(self, instance, validated_data, usr, allow_insert=False, allow_delete=False):
-    def update(self, instance, validated_data, allow_insert=False, allow_delete=False, **kwargs):
-        for item in validated_data: # process list of data that will be written
-            if item.get(self.child.pk_field_name, None) is None: # primary key may not be named `id`
-                for k,v in self._field_name_map.items():
-                    if kwargs.get(k):
-                        item[v] = kwargs.get(k)
-                #### item['_user_instance'] = usr
-        return super().update(instance=instance, validated_data=validated_data,
-                allow_insert=allow_insert, allow_delete=allow_delete)
 
 

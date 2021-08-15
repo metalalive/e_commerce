@@ -531,6 +531,10 @@ class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin, Seria
     _extra_charge = GenericRelation('ProductAppliedAttributePrice', object_id_field='attrval_id', \
                 content_type_field='attrval_type')
 
+    def __init__(self, *args, extra_amount=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.extra_amount = extra_amount
+
     @property
     def extra_charge(self):
         qset = self._extra_charge.all(with_deleted=self.is_deleted())
@@ -546,6 +550,24 @@ class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin, Seria
                         % (field_name, fd_value))
         return super().serializable(present=present, query_fn=query_fn,
                 present_null=present_null)
+
+    @_atomicity_fn()
+    def save(self, *args, **kwargs):
+        out = super().save(*args, **kwargs)
+        if self.extra_amount is not None and self.extra_amount > 0.0:
+            #self.refresh_from_db(fields=['pk']) # auto fetch ID at model level
+            qset = self._extra_charge.all(with_deleted=self.is_deleted())
+            obj = qset.first()
+            if not obj:
+                obj = self._extra_charge.model()
+                obj.attrval_type = ContentType.objects.get_for_model(self)
+                obj.attrval_id = self.pk
+            if obj.amount != self.extra_amount:
+                obj.amount = self.extra_amount
+                obj.save()
+            # set() cannot handle unsaved instances, doesn't seem to work for foreign key
+            # self._extra_charge.set([obj], clear=True)
+        return out
 
     @_atomicity_fn()
     def delete(self, *args, **kwargs):
@@ -611,6 +633,8 @@ class ProductAppliedAttributePrice(SoftDeleteObjectMixin):
     attrval_type = models.ForeignKey(to=ContentType, on_delete=models.CASCADE, null=False,
                                   db_column='attrval_type',  limit_choices_to=allowed_models)
     attrval_id   = models.PositiveIntegerField(db_column='attrval_id')
+    # TODO, how to use GenericForeignKey on one-to-one relationship
+    # (between attribute value class and  this class)
     attrval_ref  = GenericForeignKey(ct_field='attrval_type', fk_field='attrval_id')
     amount = models.FloatField(default=0.00)
 

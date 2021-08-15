@@ -3,7 +3,7 @@ import logging
 
 from django.core.exceptions   import ValidationError as DjangoValidationError
 from django.contrib.contenttypes.models  import ContentType
-from rest_framework.fields    import empty as DRFEmptyData
+from rest_framework.fields    import empty as DRFEmptyData, FloatField
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
 
 from common.serializers  import  ExtendedModelSerializer, BulkUpdateListSerializer
@@ -79,6 +79,10 @@ class AbstractAttrValueSerializer(ExtendedModelSerializer, NestedFieldSetupMixin
         read_only_fields = ['ingredient_type', 'ingredient_id']
         list_serializer_class = AttrValueListSerializer
 
+    def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
+        self.fields['extra_amount'] = FloatField(min_value=0.0)
+        super().__init__(instance=instance, data=data, **kwargs)
+
     @property
     def presentable_fields_name(self):
         out = super().presentable_fields_name
@@ -98,6 +102,7 @@ class AbstractAttrValueSerializer(ExtendedModelSerializer, NestedFieldSetupMixin
         return out
 
     def extra_setup_before_validation(self, instance, data):
+        self.fields['extra_amount'].required = data.get('extra_amount', None) is not None
         self._mark_as_creation_on_update(pk_field_name='id', instance=instance, data=data)
 
     def run_validation(self, data=DRFEmptyData):
@@ -146,6 +151,7 @@ class BaseIngredientSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
     atomicity = _atomicity_fn
 
     class Meta(ExtendedModelSerializer.Meta):
+        fields = []
         nested_fields = ['attr_val_str', 'attr_val_pos_int', 'attr_val_int', 'attr_val_float']
 
     def __init__(self, instance=None, data=DRFEmptyData, **kwargs):

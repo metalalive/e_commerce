@@ -8,6 +8,6 @@ _logger = logging.getLogger(__name__)
 class FabricationIngredientSerializer(BaseIngredientSerializer):
     class Meta(BaseIngredientSerializer.Meta):
         model =  ProductDevIngredient
-        fields = ['id', 'name', 'active', 'category']
+        fields = ['id', 'name', 'category']
 
 

@@ -37,15 +37,39 @@ class BulkUpdateListSerializer(ValidationErrorCallbackMixin, ListSerializer):
         super().__init__(instance=instance, data=data, **kwargs)
         if hasattr(self, 'initial_data') and self.instance: # validate only in bulk-update case
             self.validators.append(EditFormObjIdValidator())
+        self.pk_field_name = self.child.pk_field_name
+
+    @property
+    def instance_ids(self):
+        ids = self.instance.values_list(self.pk_field_name, flat=True)
+        return list(ids)
+
+    def extract_form_ids(self, formdata, include_null=True):
+        ids = [item[self.pk_field_name] for item in formdata if include_null \
+                or item.get(self.pk_field_name,None)]
+        return ids
+
+    def _update_instance_map(self, instance_set):
+        instance_map = {getattr(m, self.pk_field_name): m for m in instance_set}
+        return instance_map
+
+    def _update_data_map(self, data):
+        # construct dictionary by doing shallow copy from input form data
+        # for each item whose ID exists
+        return {item[self.pk_field_name]: item for item in data if \
+                item.get(self.pk_field_name, None) is not None}
+
+    def _insert_data_map(self, data):
+        # do shallow copy from input form data if there is no ID in each
+        # item of the form data
+        return [item for item in data if item.get(self.pk_field_name, None) is None]
 
     def update(self, instance, validated_data, allow_insert=False, allow_delete=False):
         assert isinstance(instance, Iterable) , ("the `instance` argument in BulkUpdateListSerializer \
                 update() has to be Iterable e.g. list of model instances, QuerySet ...etc, \
                 instead of single model instance")
-        pk_field_name = self.child.pk_field_name
-        instance_map = {m.pk: m for m in instance}
-        data_map  = {item[pk_field_name] :item  for item in validated_data \
-                if item.get(pk_field_name, None)}
+        instance_map = self._update_instance_map(instance)
+        data_map  = self._update_data_map(data=validated_data)
         log_msg = []
         if any(instance_map):
             log_msg += ['instance_map_keys', list(instance_map.keys()),]
@@ -66,7 +90,8 @@ class BulkUpdateListSerializer(ValidationErrorCallbackMixin, ListSerializer):
                             del_kwargs['hard'] = True  # apply hard delete if it is soft-delete model
                         m.delete(**del_kwargs)
                 if allow_insert:  # check whether caller allows extra insertion(s)
-                    data_map  = [item for item in validated_data if not item.get(pk_field_name, None)]
+                    pk_field_name = self.child.pk_field_name
+                    data_map  = self._insert_data_map(data=validated_data)
                     new_added_list = []
                     for d in data_map:
                         ret.append(self.child.create(d))
@@ -84,6 +109,19 @@ class BulkUpdateListSerializer(ValidationErrorCallbackMixin, ListSerializer):
             raise
         return ret
 
+    def create(self, *args, **kwargs):
+        log_msg = []
+        srlz_cls_parent = '%s.%s' % (type(self).__module__, type(self).__qualname__)
+        srlz_cls_child  = '%s.%s' % (type(self.child).__module__, type(self.child).__qualname__)
+        try:
+            with self.child.atomicity():
+                ret = super().create(*args, **kwargs)
+        except Exception as e: # including django.db.IntegrityError
+            log_msg += ['srlz_cls_parent', srlz_cls_parent, 'srlz_cls_child', srlz_cls_child]
+            log_msg += ['excpt_type', type(e).__qualname__, 'excpt_msg', e]
+            _logger.error(None, *log_msg)
+            raise
+        return ret
 #### end of BulkUpdateListSerializer
 
 
@@ -95,7 +133,7 @@ class ExtendedModelSerializer(ModelSerializer, SerializerExcludeFieldsMixin):
         list_serializer_class = BulkUpdateListSerializer
         validate_only_field_names = []
 
-    def __init__(self, instance=None, data=empty, account=None, **kwargs):
+    def __init__(self, instance=None, data=empty, account=None, pk_field_name='id',  **kwargs):
         """
         the init() will do extra work :
             * specify pk field name, which could be `pk`, `id`, `ID`, determined by caller
@@ -104,8 +142,8 @@ class ExtendedModelSerializer(ModelSerializer, SerializerExcludeFieldsMixin):
               to avoid this in bulk update, pk field will be editable temporarily by
               instantiating IntegerField
         """
-        self.pk_field_name = kwargs.pop('pk_field_name', 'id')
-        if (not data is empty) and instance and isinstance(instance, QuerySet):
+        self.pk_field_name = pk_field_name
+        if (data is not empty) and instance and isinstance(instance, QuerySet):
             # TODO, change field class type of primary key, until post/put request receipt
             self.fields[self.pk_field_name]  = IntegerField()
         self._validate_only_fields = {}
