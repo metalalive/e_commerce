@@ -1,10 +1,12 @@
 from collections.abc import Iterable
+import operator
 import logging
 
 from django.core.exceptions import ValidationError
 from django.utils.deconstruct import deconstructible
 from django.db.models import Model as DjangoModel
 
+from common.util.python       import string_unprintable_check
 from common.util.python.graph import is_graph_cyclic
 
 _logger = logging.getLogger(__name__)
@@ -177,6 +179,47 @@ class ClosureCrossTreesLoopValidator(TreeNodesLoopValidator):
         _logger.debug(None, *log_msg)
         return nodes
 
+
+class NumberBoundaryValidator:
+    requires_context = False
+    _comparison_fn = {
+        (False, False): operator.lt,
+        (False, True) : operator.le,
+        (True, False) : operator.gt,
+        (True, True)  : operator.ge,
+    }
+    _error_msg_pattern = "given value:%s, limit:%s, operator:%s"
+
+    def __init__(self, limit, larger_than:bool, include:bool):
+        self.limit = limit
+        self.larger_than = larger_than
+        self.include = include
+
+    def __call__(self, value):
+        key = (self.larger_than, self.include)
+        chosen_fn = self._comparison_fn[key]
+        if not chosen_fn(value, self.limit):
+            err_msg = self._error_msg_pattern % (value, self.limit, chosen_fn.__name__)
+            raise ValidationError(err_msg)
+
+
+class UnprintableCharValidator:
+    _error_msg_pattern = "unprintable characters found in given value list: %s"
+
+    def __init__(self, extra_unprintable_set):
+        self.extra_unprintable_set = extra_unprintable_set
+
+    def __call__(self, value):
+        unprintables = []
+        if isinstance(value, str):
+            value = [value]
+        for v in value:
+            unprintable = string_unprintable_check(v, self.extra_unprintable_set)
+            if unprintable:
+                unprintables.append(v)
+        if any(unprintables):
+            err_msg = self._error_msg_pattern % ', '.join(unprintables)
+            raise ValidationError(err_msg)
 
 
 @deconstructible

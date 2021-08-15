@@ -81,7 +81,7 @@ _fixtures = {
         {'media':'2903tijtg3h4teg'},
         {'media':'09fawgsdkmbiehob'},
         {'media':'2093jti4jt0394ut'},
-        {'media':'0fwkbb0erwrw#rqrt'},
+        {'media':'0fwkbb0erwrwXrqrt'},
         {'media':'309ur204t42jWh1'},
         {'media':'eOy1r0j4SKuAYEre'},
     ],

@@ -6,7 +6,10 @@ from functools import partial, reduce
 
 from django.test import TransactionTestCase, TestCase
 from django.contrib.auth.models import User as AuthUser
+from django.core.exceptions    import ValidationError as DjangoValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 
+from common.validators     import NumberBoundaryValidator, UnprintableCharValidator
 from common.models.enums   import UnitOfMeasurement
 from product.serializers.base import SaleableItemSerializer
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem
@@ -81,7 +84,7 @@ def assert_field_equal(fname, testcase, expect_dict, actual_obj):
     testcase.assertEqual(expect_val, actual_val)
 
 
-class BaseRequestDataMixin:
+class ExtendedTestCaseMixin:
     def customize_req_data_item(self, item, **kwargs):
         raise NotImplementedError()
 
@@ -93,8 +96,12 @@ class BaseRequestDataMixin:
         AuthUser.objects.bulk_create(new_users)
         return tuple(AuthUser.objects.all())
 
+    def reset_validation_result(self, serializer):
+        serializer._errors.clear()
+        delattr(serializer, '_validated_data')
 
-class SaleableItemCommonMixin(BaseRequestDataMixin):
+
+class SaleableItemCommonMixin(ExtendedTestCaseMixin):
     stored_models = {}
     num_users = 1
 
@@ -168,6 +175,7 @@ class SaleableItemCommonMixin(BaseRequestDataMixin):
                 expect_vals = json.dumps(expect_vals, sort_keys=True)
                 actual_vals = json.dumps(actual_vals, sort_keys=True)
                 self.assertEqual(expect_vals, actual_vals)
+
 ## end of class SaleableItemCommonMixin
 
 
@@ -176,23 +184,95 @@ class SaleableItemCreationTestCase(SaleableItemCommonMixin, TransactionTestCase)
         super().setUp()
         self.serializer_kwargs = {'data': self.request_data, 'many': True, 'account': self.users[0],}
 
-    def test_bulk_create_ok(self):
+    def test_bulk_ok(self):
         serializer = SaleableItemSerializer( **self.serializer_kwargs )
         serializer.is_valid(raise_exception=True)
         actual_instances = serializer.save()
         expect_data = self.serializer_kwargs['data']
         self.assert_after_serializer_save(serializer, actual_instances, expect_data)
 
-    def test_bulk_create_field_validate_error(self):
+    def test_fields_validate_error(self):
+        invalid_cases = [
+            ('name', None, 'This field may not be null.'),
+            ('name', '',   'This field may not be blank.'),
+            ('price', None,   'This field may not be null.'),
+            ('price', -0.3,  NumberBoundaryValidator._error_msg_pattern % (-0.3, 0.0, 'gt')),
+            ('price', -0.0,  NumberBoundaryValidator._error_msg_pattern % (-0.0, 0.0, 'gt')),
+            ('price',  0.0,  NumberBoundaryValidator._error_msg_pattern % ( 0.0, 0.0, 'gt')),
+            ('price',  '',    'A valid number is required.'),
+            ('price',  '19g', 'A valid number is required.'),
+            ('visible', None, 'This field may not be null.'),
+            ('tags',    None, 'This field may not be null.'),
+            ('tags',   'xxx', 'Expected a list of items but got type "str".'),
+            ('tags', [34, 37, 1234, 39, 5678, 33],  'Invalid pk "1234" - object does not exist.'),
+            ('media_set',   None, 'This field may not be null.'),
+            ('media_set', ['x8Ej','9u 2'], UnprintableCharValidator._error_msg_pattern % ('9u 2')),
+            ('media_set', ['x8Ej','9u 2', '8u%G', 'd8\'w'], UnprintableCharValidator._error_msg_pattern % ', '.join(['9u 2', 'd8\'w'])),
+            ('media_set', ['8Ej\\','9u2L', '@"$%', 'halo'], UnprintableCharValidator._error_msg_pattern % ', '.join(['8Ej\\', '@"$%'])),
+            # no need to verify `usrprof` field
+        ]
+        self.serializer_kwargs['data'] = self.request_data[:1]
+        req_data = self.serializer_kwargs['data'][0]
+        serializer = SaleableItemSerializer( **self.serializer_kwargs )
+        for field_name, invalid_value, expect_err_msg in invalid_cases:
+            origin_value = req_data[field_name]
+            req_data[field_name] = invalid_value
+            error_details = self._assert_serializer_validation_error(serializer)
+            req_data[field_name] = origin_value
+            self.assertEqual(len(error_details), 1)
+            error_details = error_details[0][field_name]
+            self.assertGreaterEqual(len(error_details), 1)
+            actual_err_msg = str(error_details[0])
+            self.assertEqual(expect_err_msg, actual_err_msg)
+
+    def test_ingredients_applied_validate_error(self):
+        invalid_cases = [
+            ('ingredient', None, 'This field may not be null.'),
+            ('ingredient', '',   'This field may not be null.'),
+            ('ingredient', -123, 'Invalid pk "-123" - object does not exist.'),
+            ('ingredient',  999, 'Invalid pk "999" - object does not exist.'),
+            ('ingredient', 'Gui','Incorrect type. Expected pk value, received str.'),
+            ('unit',       None, 'This field may not be null.'),
+            ('unit',        999, '"999" is not a valid choice.'),
+            ('unit',       '+-+-', '"+-+-" is not a valid choice.'),
+            ('quantity',   None, 'This field may not be null.'),
+            ('quantity', -0.3,  NumberBoundaryValidator._error_msg_pattern % (-0.3, 0.0, 'gt')),
+            ('quantity', -0.0,  NumberBoundaryValidator._error_msg_pattern % (-0.0, 0.0, 'gt')),
+            ('quantity',  0.0,  NumberBoundaryValidator._error_msg_pattern % ( 0.0, 0.0, 'gt')),
+        ]
+        self.serializer_kwargs['data'] = list(filter(lambda d: any(d['ingredients_applied']), self.request_data))
+        req_data = self.serializer_kwargs['data'][0]['ingredients_applied'][0]
+        serializer = SaleableItemSerializer( **self.serializer_kwargs )
+        for field_name, invalid_value, expect_err_msg in invalid_cases:
+            origin_value = req_data[field_name]
+            req_data[field_name] = invalid_value
+            error_details = self._assert_serializer_validation_error(serializer)
+            req_data[field_name] = origin_value
+            error_details = error_details[0]['ingredients_applied'][0][field_name]
+            self.assertGreaterEqual(len(error_details), 1)
+            actual_err_msg = str(error_details[0])
+            self.assertEqual(expect_err_msg, actual_err_msg)
+
+    def test_attributes_validate_error(self):
         pass
 
-    def test_bulk_create_nested_field_validate_error(self):
-        pass
+    def _assert_serializer_validation_error(self, serializer):
+        error_details = None
+        possible_exception_classes = (DjangoValidationError, DRFValidationError, AssertionError)
+        with self.assertRaises(possible_exception_classes):
+            try:
+                serializer.is_valid(raise_exception=True)
+            except possible_exception_classes as e:
+                error_details = e.detail
+                raise
+            finally:
+                self.reset_validation_result(serializer=serializer)
+        self.assertNotEqual(error_details, None)
+        return error_details
 ## end of class SaleableItemCreationTestCase
 
 
 class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
-    num_users = 2
 
     def setUp(self):
         super().setUp()
@@ -215,7 +295,7 @@ class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
         self.new_request_data = list(self.new_request_data)
         saleitem_ids = tuple(map(lambda obj:obj.pk, saved_saleitems))
         saved_saleitems = ProductSaleableItem.objects.filter(id__in=saleitem_ids)
-        self.serializer_kwargs = {'data': copy.deepcopy(self.new_request_data), 'account': self.users[0],
+        self.serializer_kwargs = {'data': self.new_request_data, 'account': self.users[0],
                 'instance': saved_saleitems, 'many': True}
 
     def test_bulk_update_ok(self):
@@ -225,15 +305,6 @@ class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
         expect_data = self.serializer_kwargs['data']
         self.assert_after_serializer_save(serializer, upadted_saleitems, expect_data)
 
-    def test_bulk_update_field_validate_error(self):
-        pass
-
-    def test_bulk_update_nested_field_validate_error(self):
-        pass
-
-    def test_bulk_update_security_validate_error(self):
-        # e.g. unauthorizad user A attempts to edit saleable items managed by user B
-        pass
 
 ## end of class SaleableItemUpdateTestCase
 

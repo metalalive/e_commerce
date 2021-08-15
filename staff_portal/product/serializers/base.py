@@ -6,6 +6,7 @@ from django.core.exceptions     import ValidationError as DjangoValidationError
 from rest_framework.fields      import IntegerField, CharField, BooleanField, empty as DRFEmptyData
 from rest_framework.serializers import PrimaryKeyRelatedField, ListField
 
+from common.validators   import  NumberBoundaryValidator, UnprintableCharValidator
 from common.serializers  import  BulkUpdateListSerializer, ExtendedModelSerializer, DjangoBaseClosureBulkSerializer
 from common.serializers.mixins  import  BaseClosureNodeMixin
 from common.serializers.mixins.internal import AugmentEditFieldsMixin
@@ -93,6 +94,11 @@ class AttributeTypeSerializer(ExtendedModelSerializer):
 class SaleItemMediaMetaField(ListField):
     model = ProductSaleableItemMedia
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        extra_unprintable_set = (' ', '"', '\'', '\\')
+        self.validators.append(UnprintableCharValidator(extra_unprintable_set))
+
     def create(self, validated_data, sale_item):
         validated_data = validated_data or []
         _new_obj_fn = lambda res_id: self.model(media=res_id, sale_item=sale_item)
@@ -113,6 +119,7 @@ class SaleItemMediaMetaField(ListField):
                 self.create(new_validated_data, sale_item)
         else:
             sale_item.media_set.all().delete(hard=True)
+## end of class SaleItemMediaMetaField
 
 
 class SaleItemIngredientsAppliedListSerializer(AugmentEditFieldsMixin, BulkUpdateListSerializer):
@@ -151,8 +158,8 @@ class SaleItemIngredientsAppliedSerializer(ExtendedModelSerializer):
         list_serializer_class = SaleItemIngredientsAppliedListSerializer
 
     def __init__(self, *args, data=DRFEmptyData, **kwargs):
-        # ignore `data` argument to parent class serializer to avoid creating
-        # default id field
+        # ignore `data` argument to parent class serializer to avoid creating default id field
+        self.fields['quantity'].validators.append(NumberBoundaryValidator(limit=0.0, larger_than=True, include=False))
         # the reference model has composite primary key, but there is no need to
         # pass `sale_item` field as part of pk_field_name
         super().__init__(*args, pk_field_name='ingredient', **kwargs)
@@ -174,6 +181,7 @@ class SaleableItemSerializer(BaseIngredientSerializer):
         self.fields['tags']  = PrimaryKeyRelatedField(many=True, queryset=ProductTag.objects.all())
         self.fields['media_set'] = SaleItemMediaMetaField(child=CharField(max_length=42))
         self.fields['ingredients_applied'] = SaleItemIngredientsAppliedSerializer(many=True, instance=instance)
+        self.fields['price'].validators.append(NumberBoundaryValidator(limit=0.0, larger_than=True, include=False))
         super().__init__(instance=instance, data=data, **kwargs)
 
     def extra_setup_before_validation(self, instance, data):
