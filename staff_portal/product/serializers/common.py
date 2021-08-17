@@ -1,3 +1,4 @@
+import json
 import copy
 import logging
 
@@ -9,7 +10,7 @@ from rest_framework.exceptions  import ValidationError as RestValidationError, E
 from common.serializers  import  ExtendedModelSerializer, BulkUpdateListSerializer
 from common.serializers.mixins  import NestedFieldSetupMixin
 from common.serializers.mixins.internal import AugmentEditFieldsMixin
-from ..models.base import ProductAttributeValueStr, ProductAttributeValuePosInt, ProductAttributeValueInt, ProductAttributeValueFloat
+from ..models.base import ProductAttributeType, ProductAttributeValueStr, ProductAttributeValuePosInt, ProductAttributeValueInt, ProductAttributeValueFloat, _ProductAttrValueDataType
 from ..models.common import _atomicity_fn
 
 _logger = logging.getLogger(__name__)
@@ -33,9 +34,9 @@ class AttrValueListSerializer(AugmentIngredientRefMixin, BulkUpdateListSerialize
     # the field name that should be given in the client request body
     def _get_valid_types(self, src):
         _label = src_field_label
-        fn = lambda d:d.get(_label['type'])
-        valid_attrs = filter(fn, src)
-        attrtype_ids = list(map(fn, valid_attrs))
+        fn_gather_type_id = lambda d:d.get(_label['type'])
+        valid_attrs = filter(fn_gather_type_id, src)
+        attrtype_ids = list(map(fn_gather_type_id, valid_attrs))
         qset = self.child.fields['attr_type'].queryset
         try:
             # NOTE: the result set should NOT be cached since there would be
@@ -44,8 +45,18 @@ class AttrValueListSerializer(AugmentIngredientRefMixin, BulkUpdateListSerialize
             qset = qset.filter(pk__in=attrtype_ids)
             return qset
         except ValueError as ve:
-            errmsg = {_label['_list']: ['%s contains invalid data type of pk' % attrtype_ids]}
-            raise DjangoValidationError(errmsg)
+            model_cls = qset.model
+            id_name = model_cls._meta.pk.name
+            value_error_msg_pattern = "Field '%s' expected a number but got %r."
+            fn_find_rootcause = lambda d: value_error_msg_pattern % (id_name, d.get('type')) == ve.args[0]
+            rootcause = tuple(filter(fn_find_rootcause, src))
+            if any(rootcause):
+                err_detail = {'data': rootcause, 'code': 'query_invalid_data_type',
+                        'model':model_cls.__name__ , 'field': id_name}
+                errmsg = {_label['_list']: [json.dumps(err_detail),]}
+                raise DjangoValidationError(errmsg)
+            else:
+                raise
 
     def extract(self, data, dst_field_name):
         _label = src_field_label
@@ -147,12 +158,13 @@ class AttrValueFloatSerializer(AbstractAttrValueSerializer):
         model = ProductAttributeValueFloat
 
 
+
 class BaseIngredientSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
     atomicity = _atomicity_fn
 
     class Meta(ExtendedModelSerializer.Meta):
         fields = []
-        nested_fields = ['attr_val_str', 'attr_val_pos_int', 'attr_val_int', 'attr_val_float']
+        nested_fields = tuple((opt[0][1] for  opt in _ProductAttrValueDataType))
 
     def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
         self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
@@ -185,26 +197,77 @@ class BaseIngredientSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
 
     def extra_setup_before_validation(self, instance, data):
         for s_name in self.Meta.nested_fields:
-            self.fields[s_name].extract(data=data, dst_field_name=s_name)
+            try:
+                self.fields[s_name].extract(data=data, dst_field_name=s_name)
+            except DjangoValidationError  as e:
+                serialized_rootcause_attrs = e.args[0]['attributes'][0]
+                rootcause = json.loads(serialized_rootcause_attrs)
+                if rootcause['code'] == 'query_invalid_data_type' and rootcause['model'] == \
+                        ProductAttributeType.__name__ and rootcause['field'] == 'id':
+                    rootcuase_attrs = rootcause['data']
+                else:
+                    rootcuase_attrs = data.get(src_field_label['_list'], [])
+                self._raise_unknown_attr_type_error(rootcuase_attrs)
             self._setup_subform_instance(name=s_name, instance=instance, data=data, pk_field_name='id')
             self.fields[s_name].append_ingredient(name=s_name, instance=instance, data=data)
         unclassified_attributes = data.get(src_field_label['_list'], [])
         if any(unclassified_attributes):
-            err_msg = 'request body contains unclassified attributes %s' % unclassified_attributes
-            err_detail = {src_field_label['_list']: [RestErrorDetail(err_msg)] }
-            raise RestValidationError(detail=err_detail)
+            self._raise_unknown_attr_type_error(unclassified_attributes)
+
+
+    def _raise_unknown_attr_type_error(self, unclassified_attributes):
+        details = []
+        for idx in range(self._num_attr_vals):
+            item = tuple(filter(lambda x:x.get('_seq_num', -1) == idx, unclassified_attributes))
+            detail = {}
+            if any(item):
+                err_detail = RestErrorDetail('unclassified attribute type `%s`' \
+                        % (item[0]['type']), code='unclassified_attributes')
+                detail['type'] = [err_detail]
+            details.append(detail)
+        raise RestValidationError(detail={src_field_label['_list']: details})
+
+
+    def _err_detail_invalid_attr_value(self, error, data):
+        err_attr_items = []
+        for s_name in self.Meta.nested_fields:
+            err_attr = error.detail.pop(s_name, [])
+            for idx in range(len(err_attr)):
+                if err_attr[idx]:
+                    _info = {'origin':data[s_name][idx], 'errobj':err_attr[idx]}
+                    err_attr_items.append(_info)
+        if any(err_attr_items):
+            details = []
+            for idx in range(self._num_attr_vals):
+                items = tuple(filter(lambda x:x['origin'].get('_seq_num', -1) == idx, err_attr_items))
+                detail = items[0]['errobj'] if any(items) else  {}
+                details.append(detail)
+            error.detail[src_field_label['_list']] = details
+
+
+    def _augment_seq_num_attrs(self, data):
+        _seq_num = 0
+        for d in data.get(src_field_label['_list'], []):
+            d['_seq_num'] = _seq_num
+            _seq_num += 1
+        self._num_attr_vals = _seq_num
+
+    def _remove_seq_num_attrs(self, data):
+        attr_field_names = self.Meta.nested_fields + (src_field_label['_list'],)
+        for name in attr_field_names:
+            for d in data.get(name, []):
+                d.pop('_seq_num', None)
+        delattr(self, '_num_attr_vals')
 
     def run_validation(self, data=DRFEmptyData):
         try:
+            self._augment_seq_num_attrs(data)
             validated_data = super().run_validation(data=data)
-        except RestValidationError as ve:
-            errs_attr = []
-            for s_name in self.Meta.nested_fields:
-                err_attr = ve.detail.pop(s_name, [])
-                errs_attr.extend(err_attr)
-            if any(errs_attr):
-                ve.detail[src_field_label['_list']] = errs_attr
+        except RestValidationError as e:
+            self._err_detail_invalid_attr_value(error=e, data=data)
             raise
+        finally:
+            self._remove_seq_num_attrs(data)
         return validated_data
 
 
@@ -231,4 +294,5 @@ class BaseIngredientSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
         #raise  IntegrityError
         return instance
 
+## end of class BaseIngredientSerializer
 
