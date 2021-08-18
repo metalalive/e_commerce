@@ -55,4 +55,8 @@ class FabricationIngredientProxyView(AppBaseProxyView):
     path_handler = _get_path_list_or_item_api
     path_var_keys = ['ingre_id']
 
+class SaleableItemProxyView(AppBaseProxyView):
+    path_pattern = ['saleableitems', 'saleableitems/{item_id}',]
+    path_handler = _get_path_list_or_item_api
+    path_var_keys = ['item_id']
 
