@@ -53,13 +53,14 @@ Note logstash TCP input server operates with default port 5959
 ```
 cd ./staff_portal
 
-DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  --logfile=./tmp/log/staffsite/common_celery.log  -E  -Q mailing,periodic_default
+DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  --concurrency=2 --logfile=./tmp/log/staffsite/common_celery.log  -E  -Q mailing,periodic_default
 
-DJANGO_SETTINGS_MODULE='user_management.settings'  celery --app=common.util.python --config=user_management.celeryconfig  worker --loglevel=INFO --hostname=usermgt@%h  --logfile=./tmp/log/staffsite/usermgt_celery.log  -E -Q usermgt_default
+DJANGO_SETTINGS_MODULE='user_management.settings'  celery --app=common.util.python --config=user_management.celeryconfig  worker --loglevel=INFO --hostname=usermgt@%h  --concurrency=2 --logfile=./tmp/log/staffsite/usermgt_celery.log  -E -Q usermgt_default
 ```
 Note:
 *  `-Q` is optional, without specifying `-Q`, Celery will enable all queues defined in celery configuration module (e.g. `user_management.celeryconfig`) on initialization.
 * `--logfile` is optional
+* `--concurrency` indicates number of celery processes to run at OS level, defaults to number of CPU on your host machine
 
 
 * start cron job scheduler (celery beat), collect all periodic tasks to run (gathered from all services)

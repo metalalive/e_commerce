@@ -3,6 +3,7 @@ import socket
 from datetime import datetime, timedelta
 from amqp.exceptions import ConsumerCancelled
 from kombu import Exchange as KombuExchange, Queue as KombuQueue
+from kombu.exceptions import OperationalError as KombuOperationalError
 
 from common.util.python import _get_amqp_url
 from .amqp import AMQPPublisher, AMQPQueueConsumer, get_connection, UndeliverableMessage
@@ -98,7 +99,7 @@ class RpcReplyEvent:
     valid_status_transitions = [
         # published successfully and remote server already received the RPC request
         (status_opt.INITED , status_opt.STARTED),
-        # failed to publish due to connectivity issues
+        # failed to publish due to connectivity issues to AMQP broker
         (status_opt.INITED , status_opt.FAIL_CONN),
         # failed to publish due to errors received from RPC server
         (status_opt.INITED , status_opt.FAIL_PUBLISH),
@@ -108,7 +109,8 @@ class RpcReplyEvent:
         (status_opt.STARTED , status_opt.REMOTE_ERROR),
     ]
 
-    valid_finish_status = [status_opt.FAIL_PUBLISH, status_opt.REMOTE_ERROR, status_opt.SUCCESS]
+    valid_finish_status = [status_opt.FAIL_CONN, status_opt.FAIL_PUBLISH,
+            status_opt.REMOTE_ERROR, status_opt.SUCCESS]
 
     def __init__(self, listener, timeout_s):
         self._listener = listener
@@ -221,6 +223,7 @@ class MethodProxy:
         correlation_id = str(uuid.uuid4())
         extra_headers = self.get_message_headers(id=correlation_id)
         reply_event = self._reply_listener.get_reply_event(correlation_id)
+        deliver_err_body = {'result': {'exchange': exchange.name, 'routing_key': routing_key, }}
         try:
             with get_connection(amqp_uri=_default_msg_broker_url, ssl=self.ssl) as conn:
                 self._reply_listener.queue_consumer.declare(conn=conn)
@@ -236,12 +239,17 @@ class MethodProxy:
                     conn=conn
                 )
         except UndeliverableMessage as ume:
-            err_body = {
-                    'status': reply_event.status_opt.FAIL_PUBLISH,
-                    'result': {'exchange': exchange.name, 'routing_key': routing_key,
-                        'error': str(ume)}
-                    }
-            reply_event.send(body=err_body)
+            deliver_err_body['status'] = reply_event.status_opt.FAIL_PUBLISH
+            deliver_err_body['error']  = ', '.join(ume.args)
+            reply_event.send(body=deliver_err_body)
+        except KombuOperationalError as k_op_e:
+            entire_err_msg = ', '.join(k_op_e.args)
+            if 'Errno 111' in entire_err_msg: # rabbitmq AMQP broker goes down
+                deliver_err_body['status'] = reply_event.status_opt.FAIL_CONN
+                deliver_err_body['error']  = entire_err_msg
+                reply_event.send(body=deliver_err_body)
+            else:
+                raise
         return reply_event
 
     def get_message_headers(self, id, content_type=MSG_PAYLOAD_DEFAULT_CONTENT_TYPE):
@@ -254,4 +262,5 @@ class MethodProxy:
         extra_headers['content_type'] = content_type
         extra_headers['task'] = RPC_DEFAULT_TASK_PATH_PATTERN % (self._app_name, self._method_name)
         return extra_headers
+## end of class MethodProxy
 

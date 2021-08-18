@@ -65,7 +65,7 @@ class JWT:
     def destroy(self, value:bool):
         self._destroy = value
 
-    def verify(self, keystore, audience, unverified=None):
+    def verify(self, keystore, audience, unverified=None, raise_if_failed=False):
         self._valid = False
         if unverified:
             self.encoded = unverified
@@ -86,9 +86,12 @@ class JWT:
             assert self.payload == verified, errmsg % (self.payload, verified)
             self._valid = True
         except Exception as e:
-            log_args = ['encoded', self.encoded, 'pubkey', pubkey.key, 'err_msg', e]
+            log_args = ['encoded', self.encoded, 'pubkey', pubkey.key, 'err_msg', ', '.join(e.args)]
             _logger.warning(None, *log_args)
-            verified = None
+            if raise_if_failed:
+                raise
+            else:
+                verified = None
         return verified
 
 

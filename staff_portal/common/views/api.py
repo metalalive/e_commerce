@@ -104,7 +104,7 @@ class BaseLoginView(APIView, RemoteGetProfileIDMixin):
         user = authenticate(request, username=username, password=password, is_staff_only=self.is_staff_only)
         log_msg = ['action', 'login', 'result', user is not None, 'username', username or '__EMPTY__']
         if user:
-            reply_evt = self.get_profile(account=user) # make async RPC to usermgt service
+            reply_evt = self.get_profile(account=user, services_label=['api']) # make async RPC to usermgt service
             login(request, user, backend=None, use_session=self.use_session, use_token=self.use_token)
             status = RestStatus.HTTP_200_OK
             context = {}
@@ -162,7 +162,7 @@ def exception_handler(exc, context):
         if status and status != RestStatus.HTTP_500_INTERNAL_SERVER_ERROR:
             response = RestResponse(data={}, status=status, headers=headers)
     _logger.error("%s", exc, request=context['request'])
-    print('RESTful exception handling : %s' % exc)
+    #print('RESTful exception handling : %s' % exc)
     return response
 
 

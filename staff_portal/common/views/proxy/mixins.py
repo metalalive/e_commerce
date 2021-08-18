@@ -120,6 +120,9 @@ class DjangoProxyRequestMixin:
             url = host
         return url
 
+    def _get_send_fn(self, request):
+        pass
+
     def collect(self, request, **kwargs):
         """
         collect everything that will be sent within a requests.request()
@@ -131,22 +134,23 @@ class DjangoProxyRequestMixin:
         body   = self._get_req_body(request)
         files  = self._get_req_files(request)
         url = self._get_req_url(request, **kwargs)
+        _send_fn = self._get_send_fn(request)
         return { 'params':params, 'headers':headers, 'cookies':cookies, 'verify':verify_ssl,
-                 'files':files, 'data':body, 'url':url, 'timeout': self.settings.TIMEOUT }
+                 'files':files, 'data':body, 'url':url, 'timeout': self.settings.TIMEOUT,
+                 'send_fn': _send_fn}
 
 
     def send(self, **pxy_req_kwargs):
         error_status_code = pxy_req_kwargs.pop('error_status_code', None)
-        send_fn = pxy_req_kwargs.pop('send_fn', requests.request)
+        send_fn = pxy_req_kwargs.pop('send_fn', None)
+        send_fn = send_fn or requests.request
         try:
             if pxy_req_kwargs.get('files', None):
-                pass # TODO, finish implementation
-            else:
-                # TODO, may consider streaming request/response in the future ?
+                err_msg = 'file upload through API gateway has not been supported yet'
+                raise NotImplementedError(err_msg)
+            else: # TODO, (1) streaming request/response (2) non-blocking requests
                 response = send_fn( **pxy_req_kwargs )
-                ##print('check headers after receiving from app server ? %s' % response.headers)
         except (ConnectionError, SSLError, Timeout) as e:
-            print('proxy goes wrong, exception = %s , response = %s' % (e, e.response))
             response = e.response
             if response is None:
                 response = requests.Response()
@@ -157,6 +161,7 @@ class DjangoProxyRequestMixin:
                 else:
                     response.status_code = requests.codes['bad_gateway']
         return response
+## end of class DjangoProxyRequestMixin
 
 
 # helper functions for proxy view class
@@ -193,7 +198,7 @@ class RemoteGetProfileIDMixin(BaseGetProfileIDMixin):
         return request.user
 
     def get_account_id(self, account):
-        return account.pk
+        return account.pk if account else self.UNKNOWN_ID
 
     def _ensure_get_profile_attr(self, request, field_name, default_value, **kwargs):
         reply = self.get_profile(account=self.get_account(request))
@@ -212,8 +217,10 @@ class RemoteGetProfileIDMixin(BaseGetProfileIDMixin):
         return out
 
     def get_profile_id(self, request, **kwargs):
+        account = self.get_account(request)
+        account_id = self.get_account_id(account)
         _id = self._ensure_get_profile_attr(request=request, field_name='id',
-                default_value=self.UNKNOWN_ID, **kwargs)
+                default_value=account_id, **kwargs)
         return str(_id)
 
     def get_profile_roles(self, request, **kwargs):
