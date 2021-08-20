@@ -335,4 +335,3 @@ class UnprivRevProxyTestCase(BaseAuthenticationTestFixture, TransactionTestCase)
                 self.assertIn(expect_key, jwk_item_keys)
 ## end of class UnprivRevProxyTestCase
 
-
