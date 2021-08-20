@@ -533,7 +533,15 @@ class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin, Seria
 
     def __init__(self, *args, extra_amount=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.extra_amount = extra_amount
+        self._extra_amount = extra_amount
+
+    @property
+    def extra_amount(self):
+        return self._extra_amount or self.extra_charge
+
+    @extra_amount.setter
+    def extra_amount(self, value):
+        self._extra_amount = value
 
     @property
     def extra_charge(self):

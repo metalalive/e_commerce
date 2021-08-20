@@ -91,9 +91,9 @@ _fixtures = {
         {'visible':  True, 'name':'rough rice noddle',   'price':0.18,  'usrprof':22},
         {'visible': False, 'name':'Mozzarella pizza', 'price':13.93, 'usrprof':79},
         {'visible':  True, 'name':'Pita dough', 'price':3.08, 'usrprof':79},
-        {'visible': False, 'name':'quad drone', 'price':17.02, 'usrprof':12},
-        {'visible':  True, 'name':'Industrial Fan', 'price':29.10, 'usrprof':3},
-        {'visible': False, 'name':'Trail runner shoes', 'price': 69.9, 'usrprof':5},
+        {'visible': False, 'name':'quad drone', 'price':17.02, 'usrprof':212},
+        {'visible':  True, 'name':'Industrial Fan', 'price':29.10, 'usrprof':33},
+        {'visible': False, 'name':'Trail runner shoes', 'price': 69.9, 'usrprof':50},
         {'visible':  True, 'name':'concrete soil', 'price': 5.6, 'usrprof':28},
     ],
 } # end of _fixtures

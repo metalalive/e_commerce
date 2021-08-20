@@ -7,6 +7,7 @@ from django.contrib.contenttypes.models  import ContentType
 from rest_framework.fields    import empty as DRFEmptyData, FloatField
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
 
+from common.validators   import  NumberBoundaryValidator
 from common.serializers  import  ExtendedModelSerializer, BulkUpdateListSerializer
 from common.serializers.mixins  import NestedFieldSetupMixin
 from common.serializers.mixins.internal import AugmentEditFieldsMixin
@@ -75,12 +76,7 @@ class AttrValueListSerializer(AugmentIngredientRefMixin, BulkUpdateListSerialize
             # times for validation, reset the read-only state if frontend send
             # some attribute types to store
             self.read_only = True # TODO, what if it is update operation ?
-        #if dst_field_name == 'attr_val_float':
-        #    import pdb
-        #    pdb.set_trace()
 
-    def run_validation(self, data=DRFEmptyData):
-        return super().run_validation(data=data)
 
 
 class AbstractAttrValueSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
@@ -92,14 +88,12 @@ class AbstractAttrValueSerializer(ExtendedModelSerializer, NestedFieldSetupMixin
 
     def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
         self.fields['extra_amount'] = FloatField(min_value=0.0)
+        self.fields['extra_amount'].validators.append(NumberBoundaryValidator(limit=0.0, larger_than=True, include=False))
         super().__init__(instance=instance, data=data, **kwargs)
 
     @property
     def presentable_fields_name(self):
-        out = super().presentable_fields_name
-        if not 'attr_type' in out:
-            out.extend(['attr_type'])
-        return out
+        return ['id', 'attr_type', 'value', 'extra_amount']
 
     def to_representation(self, instance):
         out = super().to_representation(instance=instance)
@@ -110,6 +104,8 @@ class AbstractAttrValueSerializer(ExtendedModelSerializer, NestedFieldSetupMixin
                     'id', out.get('id',None) , 'value',out.get('value',None) ]
             _logger.error(None, *log_msg)
         out[src_field_label['type']] = stored_attrtype
+        if out['extra_amount'] is None:
+            out.pop('extra_amount', None)
         return out
 
     def extra_setup_before_validation(self, instance, data):
@@ -187,7 +183,7 @@ class BaseIngredientSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
     def to_representation(self, instance):
         out = super().to_representation(instance=instance)
         presentable_fields_name = super().presentable_fields_name
-        if src_field_label['_list'] in  presentable_fields_name:
+        if (not presentable_fields_name) or (src_field_label['_list'] in  presentable_fields_name):
             gather_all_attrs = []
             for s_name in self.Meta.nested_fields:
                 attrs = out.pop(s_name, [])

@@ -99,6 +99,11 @@ class SaleItemMediaMetaField(ListField):
         extra_unprintable_set = (' ', '"', '\'', '\\')
         self.validators.append(UnprintableCharValidator(extra_unprintable_set))
 
+    def to_representation(self, instance):
+        assert instance.model is self.model, "model mismatch, failed to serialize media set"
+        data = instance.values_list('media', flat=True)
+        return list(data)
+
     def create(self, validated_data, sale_item):
         validated_data = validated_data or []
         _new_obj_fn = lambda res_id: self.model(media=res_id, sale_item=sale_item)
@@ -148,6 +153,7 @@ class SaleItemIngredientsAppliedListSerializer(AugmentEditFieldsMixin, BulkUpdat
         return super().update(instance=qset, validated_data=validated_data, sale_item=sale_item,
                 allow_insert=True, allow_delete=True, **kwargs)
 
+
 class SaleItemIngredientsAppliedSerializer(ExtendedModelSerializer):
     atomicity = _atomicity_fn
 
@@ -168,6 +174,10 @@ class SaleItemIngredientsAppliedSerializer(ExtendedModelSerializer):
         validated_value = super().run_validation(data=data, set_null_if_obj_not_found=True)
         return validated_value
 
+    @property
+    def presentable_fields_name(self):
+        return set(self.Meta.fields) - set(self.Meta.read_only_fields)
+## end of class SaleItemIngredientsAppliedSerializer
 
 
 class SaleableItemSerializer(BaseIngredientSerializer):
@@ -175,9 +185,11 @@ class SaleableItemSerializer(BaseIngredientSerializer):
 
     class Meta(BaseIngredientSerializer.Meta):
         model =  ProductSaleableItem
-        fields = ['id','name', 'visible', 'price',]
+        fields = ['id','name', 'visible', 'price','usrprof']
+        read_only_fields = ['usrprof']
 
-    def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
+    def __init__(self, instance=None, data=DRFEmptyData, usrprof_id=None, **kwargs):
+        self.usrprof_id = usrprof_id
         self.fields['tags']  = PrimaryKeyRelatedField(many=True, queryset=ProductTag.objects.all())
         self.fields['media_set'] = SaleItemMediaMetaField(child=CharField(max_length=42))
         self.fields['ingredients_applied'] = SaleItemIngredientsAppliedSerializer(many=True, instance=instance)
@@ -193,13 +205,6 @@ class SaleableItemSerializer(BaseIngredientSerializer):
         # reset the `required` flag at here.
         self._mark_as_creation_on_update(pk_field_name='id', instance=instance, data=data)
 
-    def run_validation(self, data=DRFEmptyData):
-        try:
-            validated_value = super().run_validation(data=data)
-        except Exception as e:
-            raise
-        return validated_value
-
     def extract_nested_form(self, formdata):
         nested_fields = ['tags','media_set','ingredients_applied']
         out = {fname: formdata.pop(fname, []) for fname in nested_fields}
@@ -207,7 +212,7 @@ class SaleableItemSerializer(BaseIngredientSerializer):
 
     def create(self, validated_data):
         nested_validated_data = self.extract_nested_form(formdata=validated_data)
-        validated_data['usrprof'] = self._account.pk
+        validated_data['usrprof'] = self.usrprof_id
         instance = super().create(validated_data=validated_data)
         instance.tags.set(nested_validated_data['tags'])
         self.fields['media_set'].create(nested_validated_data['media_set'], sale_item=instance)

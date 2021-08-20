@@ -3,6 +3,7 @@ import math
 import copy
 import json
 from functools import partial, reduce
+from unittest.mock import Mock
 
 from django.test import TransactionTestCase, TestCase
 from django.contrib.auth.models import User as AuthUser
@@ -78,9 +79,9 @@ def _gen_ingredient_composite(ingredient):
             'quantity': float(random.randrange(1,25))}
 
 
-def assert_field_equal(fname, testcase, expect_dict, actual_obj):
-    expect_val = expect_dict[fname]
-    actual_val = getattr(actual_obj, fname)
+def assert_field_equal(fname, testcase, expect_obj, actual_obj):
+    expect_val = expect_obj[fname] if isinstance(expect_obj, dict) else  getattr(expect_obj, fname)
+    actual_val = actual_obj[fname] if isinstance(actual_obj, dict) else  getattr(actual_obj, fname)
     testcase.assertEqual(expect_val, actual_val)
 
 
@@ -88,7 +89,7 @@ class ExtendedTestCaseMixin:
     def customize_req_data_item(self, item, **kwargs):
         raise NotImplementedError()
 
-    def gen_users(self, num=1):
+    def gen_users(self, num=1): # TODO, may be removed
         usr_gen   = listitem_rand_assigner(list_=model_fixtures['AuthUser'], min_num_chosen=num)
         new_users = list(map(lambda item: AuthUser(id=item['id'], username=item['username'],
                         password=item['password'], is_superuser=False, is_staff=item['is_staff'],
@@ -107,7 +108,7 @@ class SaleableItemCommonMixin(ExtendedTestCaseMixin):
 
     def setUp(self):
         _saleitem_related_instance_setup(self.stored_models)
-        self.users = self.gen_users(num=self.num_users)
+        self.profile_ids = [random.randrange(1,15) for _ in range(self.num_users)] # self.gen_users(num=self.num_users)
         saleitems_data_gen = listitem_rand_assigner(list_=model_fixtures['ProductSaleableItem'])
         self.request_data = rand_gen_request_body(customize_item_fn=self.customize_req_data_item,
                 data_gen=saleitems_data_gen,  template=mock_request_body_template['ProductSaleableItem'])
@@ -146,14 +147,17 @@ class SaleableItemCommonMixin(ExtendedTestCaseMixin):
             exp_sale_item = next(expect_data)
             check_fields = copy.copy(serializer.child.Meta.fields)
             check_fields.remove('id')
-            bound_assert_fn = partial(assert_field_equal, testcase=self,  expect_dict=exp_sale_item, actual_obj=ac_sale_item)
+            check_fields.remove('usrprof')
+            bound_assert_fn = partial(assert_field_equal, testcase=self,  expect_obj=exp_sale_item, actual_obj=ac_sale_item)
             tuple(map(bound_assert_fn, check_fields))
+            if serializer.child.usrprof_id:
+                self.assertEqual(ac_sale_item.usrprof , serializer.child.usrprof_id)
             expect_vals = exp_sale_item['tags']
             actual_vals = list(ac_sale_item.tags.values_list('pk', flat=True))
             self.assertSetEqual(set(expect_vals), set(actual_vals))
             expect_vals = exp_sale_item['media_set']
             actual_vals = list(ac_sale_item.media_set.values_list('media', flat=True))
-            diff = set(expect_vals).symmetric_difference(actual_vals)
+            #diff = set(expect_vals).symmetric_difference(actual_vals)
             self.assertSetEqual(set(expect_vals), set(actual_vals))
             expect_vals = exp_sale_item['ingredients_applied']
             actual_vals = list(ac_sale_item.ingredients_applied.values('ingredient','unit','quantity'))
@@ -175,14 +179,56 @@ class SaleableItemCommonMixin(ExtendedTestCaseMixin):
                 expect_vals = json.dumps(expect_vals, sort_keys=True)
                 actual_vals = json.dumps(actual_vals, sort_keys=True)
                 self.assertEqual(expect_vals, actual_vals)
+    ## end of  def assert_after_serializer_save()
 
+
+    def assert_after_serializer_save_2(self, serializer, actual_data, expect_data):
+        expect_data = iter(expect_data)
+        key_evict_condition = lambda kv: (kv[0] not in ('id', 'ingredient_type', 'ingredient_id')) \
+                and not (kv[0] == 'extra_amount' and kv[1] is None)
+        bound_dict_key_replace = partial(_dict_key_replace, to_='extra_amount', from_='_extra_charge__amount')
+        bound_dict_kv_pair_evict = partial(_dict_kv_pair_evict,  cond_fn=key_evict_condition)
+        for ac_sale_item in actual_data:
+            self.assertNotEqual(ac_sale_item['id'], None)
+            self.assertGreater(ac_sale_item['id'], 0)
+            exp_sale_item = next(expect_data)
+            check_fields = copy.copy(serializer.child.Meta.fields)
+            check_fields.remove('id')
+            check_fields.remove('usrprof')
+            bound_assert_fn = partial(assert_field_equal, testcase=self,  expect_obj=exp_sale_item, actual_obj=ac_sale_item)
+            tuple(map(bound_assert_fn, check_fields))
+            if serializer.child.usrprof_id:
+                self.assertEqual(ac_sale_item['usrprof'] , serializer.child.usrprof_id)
+            self.assertSetEqual(set(exp_sale_item['tags']), set(ac_sale_item['tags']))
+            self.assertSetEqual(set(exp_sale_item['media_set']), set(ac_sale_item['media_set']))
+            actual_vals = list(map(lambda d: dict(d), ac_sale_item['ingredients_applied']))
+            tuple(map(lambda d: d.pop('sale_item', None), actual_vals))
+            expect_vals = sorted(exp_sale_item['ingredients_applied'], key=lambda x:x['ingredient'])
+            actual_vals = sorted(actual_vals , key=lambda x:x['ingredient'])
+            self.assertListEqual(expect_vals, actual_vals)
+            # attributes check
+            for dtype_option in _ProductAttrValueDataType:
+                field_name = dtype_option.value[0][1]
+                expect_vals = exp_sale_item.get(field_name, None)
+                if not expect_vals:
+                    continue
+                expect_vals = list(map(bound_dict_kv_pair_evict, expect_vals))
+                actual_vals = ac_sale_item[field_name].values('attr_type', 'value', '_extra_charge__amount')
+                actual_vals = map(bound_dict_key_replace, actual_vals)
+                actual_vals = list(map(bound_dict_kv_pair_evict, actual_vals))
+                expect_vals = sorted(expect_vals, key=lambda x:x['attr_type'])
+                actual_vals = sorted(actual_vals, key=lambda x:x['attr_type'])
+                expect_vals = json.dumps(expect_vals, sort_keys=True)
+                actual_vals = json.dumps(actual_vals, sort_keys=True)
+                self.assertEqual(expect_vals, actual_vals)
+    ## end of  def assert_after_serializer_save_2()
 ## end of class SaleableItemCommonMixin
 
 
 class SaleableItemCreationTestCase(SaleableItemCommonMixin, TransactionTestCase):
     def setUp(self):
         super().setUp()
-        self.serializer_kwargs = {'data': self.request_data, 'many': True, 'account': self.users[0],}
+        self.serializer_kwargs = {'data': self.request_data, 'many': True, 'usrprof_id': self.profile_ids[0],}
 
     def test_bulk_ok(self):
         serializer = SaleableItemSerializer( **self.serializer_kwargs )
@@ -426,11 +472,10 @@ class SaleableItemCreationTestCase(SaleableItemCommonMixin, TransactionTestCase)
 
 
 class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
-
     def setUp(self):
         super().setUp()
         # create new instances first
-        serializer_kwargs_setup = {'data': self.request_data, 'many': True, 'account': self.users[0],}
+        serializer_kwargs_setup = {'data': self.request_data, 'many': True, 'usrprof_id': self.profile_ids[0],}
         serializer = SaleableItemSerializer( **serializer_kwargs_setup )
         serializer.is_valid(raise_exception=True)
         saved_saleitems = serializer.save()
@@ -448,7 +493,7 @@ class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
         self.new_request_data = list(self.new_request_data)
         saleitem_ids = tuple(map(lambda obj:obj.pk, saved_saleitems))
         saved_saleitems = ProductSaleableItem.objects.filter(id__in=saleitem_ids)
-        self.serializer_kwargs = {'data': self.new_request_data, 'account': self.users[0],
+        self.serializer_kwargs = {'data': self.new_request_data, 'usrprof_id': self.profile_ids[0],
                 'instance': saved_saleitems, 'many': True}
 
     def test_bulk_ok(self):
@@ -457,8 +502,82 @@ class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
         upadted_saleitems = serializer.save()
         expect_data = self.serializer_kwargs['data']
         self.assert_after_serializer_save(serializer, upadted_saleitems, expect_data)
-
-
 ## end of class SaleableItemUpdateTestCase
 
+
+class SaleableItemRepresentationTestCase(SaleableItemCommonMixin, TransactionTestCase):
+    def setUp(self):
+        super().setUp()
+        # create new instances
+        serializer_kwargs_setup = {'data': copy.deepcopy(self.request_data),
+                'many': True, 'usrprof_id': self.profile_ids[0],}
+        serializer = SaleableItemSerializer( **serializer_kwargs_setup )
+        serializer.is_valid(raise_exception=True)
+        self.saved_saleitems = serializer.save()
+        self._serializer = serializer
+
+    def test_represent_all(self):
+        actual_data = self._serializer.data
+        expect_data = self.request_data
+        self.assert_after_serializer_save_2(self._serializer, actual_data, expect_data)
+        # create another serializer with saved instance of saleable item
+        for idx in range(1, len(self.saved_saleitems)):
+            selected_instances = self.saved_saleitems[:idx]
+            serializer_kwargs = {'many': True, 'instance':selected_instances}
+            serializer_ro = SaleableItemSerializer( **serializer_kwargs )
+            actual_data = serializer_ro.data
+            expect_data = self.request_data[:idx] # serailizer should keep the order
+            self.assert_after_serializer_save_2(serializer_ro, actual_data, expect_data)
+
+    def test_represent_partial(self):
+        # sub case #1
+        def extra_check_subcase1(field_name, value):
+            if field_name in ('id', 'price'):
+                self.assertGreater(value, 0)
+        expect_fields = ['id', 'price', 'usrprof']
+        self._test_represent_partial(expect_fields=expect_fields, extra_check_fn=extra_check_subcase1)
+        # sub case #2
+        def extra_check_subcase2(field_name, value):
+            if field_name == 'tags':
+                actual_cnt = ProductTag.objects.filter(pk__in=value).count()
+                self.assertEqual(len(value), actual_cnt)
+            elif  field_name == 'media':
+                actual_resource_ids = tuple(filter(lambda rid: len(rid) > 1, value))
+                self.assertEqual(len(value), actual_resource_ids)
+        expect_fields = ['name', 'tags', 'media_set']
+        self._test_represent_partial(expect_fields=expect_fields, extra_check_fn=extra_check_subcase2)
+        # sub case #3
+        def extra_check_subcase3(field_name, value):
+            if field_name == 'ingredients_applied':
+                ingredient_ids = map(lambda d:d['ingredient'] , value)
+                actual_cnt = ProductDevIngredient.objects.filter(pk__in=ingredient_ids).count()
+                self.assertEqual(len(value), actual_cnt)
+        expect_fields = ['id', 'ingredients_applied']
+        self._test_represent_partial(expect_fields=expect_fields, extra_check_fn=extra_check_subcase3)
+        # sub case #4
+        def extra_check_subcase4(field_name, value):
+            if field_name == 'attributes':
+                attrtype_ids = map(lambda d:d['type'] , value)
+                actual_qset = ProductAttributeType.objects.filter(pk__in=attrtype_ids)
+                self.assertEqual(len(value), actual_qset.count())
+        expect_fields = ['id', 'attributes']
+        self._test_represent_partial(expect_fields=expect_fields, extra_check_fn=extra_check_subcase4)
+
+
+    def _test_represent_partial(self, expect_fields, extra_check_fn=None):
+        serializer_ro = SaleableItemSerializer(many=True, instance=self.saved_saleitems)
+        mocked_request = Mock()
+        mocked_request.query_params = {}
+        serializer_ro.context['request'] = mocked_request
+        serializer_ro.context['request'].query_params['fields'] = ','.join(expect_fields)
+        actual_data = serializer_ro.data
+        for ac_item in actual_data:
+            ac_item_cp = copy.deepcopy(ac_item)
+            for field_name in expect_fields:
+                value = ac_item_cp.pop(field_name, None)
+                self.assertNotEqual(value, None)
+                if extra_check_fn and callable(extra_check_fn):
+                    extra_check_fn(field_name=field_name, value=value)
+            self.assertDictEqual(ac_item_cp, {})
+## end of class SaleableItemRepresentationTestCase
 
