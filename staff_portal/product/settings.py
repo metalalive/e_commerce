@@ -102,14 +102,6 @@ CACHES = {
             },
 } # end of CACHES
 
-# media / file
-##DEFAULT_FILE_STORAGE = 
-##FILE_UPLOAD_HANDLERS = 
-##FILE_UPLOAD_MAX_MEMORY_SIZE = 
-##FILE_UPLOAD_DIRECTORY_PERMISSIONS = 
-##FILE_UPLOAD_TEMP_DIR = 
-##MEDIA_ROOT = os.path.join(BASE_DIR ,'filespace')
-
 
 # Internationalization
 # https://docs.djangoproject.com/en/dev/topics/i18n/
@@ -128,7 +120,7 @@ USE_TZ = True
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 400
 
 # use bcrypt + SHA256 as default password hashing function.
-PASSWORD_HASHERS = []
+PASSWORD_HASHERS = ['django.contrib.auth.hashers.BCryptSHA256PasswordHasher',]
 
 # logging
 _LOG_BASE_DIR = os.path.join(BASE_DIR ,'tmp/log/staffsite')

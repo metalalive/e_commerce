@@ -62,6 +62,7 @@ class LimitQuerySetMixin:
                     queryset = manager.filter(**kwargs)
                 except (FieldError, ValueError) as e: # invalid data type in ID list, or invalid field name
                     queryset = manager.none()
+                    queryset._error_msgs = e.args
                     fully_qualified_cls_name = '%s.%s' % (type(e).__module__, type(e).__qualname__)
                     err_args = ["field", pk_field_name, "value", IDs, "excpt_msg", e, "excpt_type", fully_qualified_cls_name]
                     _logger.warning(None, *err_args, request=self.request)
@@ -237,7 +238,10 @@ class BulkUpdateModelMixin(UpdateModelMixin, UserEditViewLogMixin):
             instance = self.get_object(pk_field_name=pk_field_name, skip_if_none=allow_create)
 
         if not instance and not allow_create:
-            return_data = {api_settings.NON_FIELD_ERRORS_KEY:["no instance found in update operation"]}
+            err_msgs = ["no instance found in update operation"]
+            if hasattr(instance, '_error_msgs'):
+                err_msgs.extend(instance._error_msgs)
+            return_data = {api_settings.NON_FIELD_ERRORS_KEY:err_msgs}
             status = RestStatus.HTTP_400_BAD_REQUEST
         else:
             exc_wr_fields = kwargs.pop('exc_wr_fields', None)

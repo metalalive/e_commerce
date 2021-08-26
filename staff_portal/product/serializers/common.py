@@ -7,10 +7,12 @@ from django.contrib.contenttypes.models  import ContentType
 from rest_framework.fields    import empty as DRFEmptyData, FloatField
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
 
-from common.validators   import  NumberBoundaryValidator
+from common.validators   import  NumberBoundaryValidator, UniqueListItemsValidator
 from common.serializers  import  ExtendedModelSerializer, BulkUpdateListSerializer
 from common.serializers.mixins  import NestedFieldSetupMixin
 from common.serializers.mixins.internal import AugmentEditFieldsMixin
+from common.views.error import DRFRequestDataConflictError
+
 from ..models.base import ProductAttributeType, ProductAttributeValueStr, ProductAttributeValuePosInt, ProductAttributeValueInt, ProductAttributeValueFloat, _ProductAttrValueDataType
 from ..models.common import _atomicity_fn
 
@@ -154,6 +156,14 @@ class AttrValueFloatSerializer(AbstractAttrValueSerializer):
         model = ProductAttributeValueFloat
 
 
+class BaseIngredientListSerializer(BulkUpdateListSerializer):
+    def validate(self, value, _logger=None, exception_cls=Exception):
+        id_required = self.child.fields['id'].required
+        if id_required:
+            unique_id_checker = UniqueListItemsValidator(fields=['id'], error_cls=DRFRequestDataConflictError)
+            unique_id_checker(value=value)
+        return value
+
 
 class BaseIngredientSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
     atomicity = _atomicity_fn
@@ -161,6 +171,7 @@ class BaseIngredientSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
     class Meta(ExtendedModelSerializer.Meta):
         fields = []
         nested_fields = tuple((opt[0][1] for  opt in _ProductAttrValueDataType))
+        list_serializer_class = BaseIngredientListSerializer
 
     def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
         self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)

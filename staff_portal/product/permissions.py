@@ -1,5 +1,6 @@
 import copy
 
+from django.db.models.constants import LOOKUP_SEP
 from rest_framework.permissions import BasePermission as DRFBasePermission
 from rest_framework.filters import BaseFilterBackend as DRFBaseFilterBackend
 
@@ -32,12 +33,43 @@ class AppBasePermission(DRFBasePermission, DRFBaseFilterBackend):
                 perms_required = perms_required - set(role['perm_code'])
         if not any(perms_required):
             result = True
-        #import pdb
-        #pdb.set_trace()
         return result
 
     def filter_queryset(self, request, queryset, view):
         return queryset
+## end of class AppBasePermission
+
+
+class InputDataOwnerPermissionMixin:
+    # currently the function only supports single-column key ID
+    def _http_put_delete_permission(self, request, view, id_label='id'):
+        result = False
+        fn = lambda x: x.get(id_label, None)
+        edit_ids = filter(fn, request.data)
+        edit_ids = set(map(fn, edit_ids))
+        if any(edit_ids):
+            profile_id = view.get_profile_id(request=request)
+            try:
+                lookup_kwargs = {LOOKUP_SEP.join([id_label,'in']):edit_ids, 'usrprof':profile_id}
+                qset = view.queryset.filter(**lookup_kwargs)
+                if qset.count() == len(edit_ids):
+                    result = True
+            except ValueError as e: # TODO, log the error 
+                # comes from invalid data type of ID, skip it for now,
+                # later the serializer will check the ID again then
+                # raise validation error and respond with 400 bad request
+                pass
+        return result
+
+    def _input_data_owner_check(self, request, view):
+        # TODO, consider the data which can be read only by small portion of clients
+        if request.method.lower() in ('get', 'post', 'patch',):
+            result = True
+        elif request.method.lower() in ('put', 'delete',):
+            result = self._http_put_delete_permission(request, view)
+        else:
+            result = False
+        return result
 
 
 class TagsPermissions(AppBasePermission):
@@ -110,11 +142,60 @@ class FabricationIngredientPermissions(BaseIngredientPermissions):
         'GET': copy.copy(BaseIngredientPermissions.perms_map['GET']) + ['product.view_productdevingredient',],
         'OPTIONS': [],
         'HEAD': [],
-        'POST':   copy.copy(BaseIngredientPermissions.perms_map['GET']) + ['product.add_productdevingredient',   ],
-        'PUT':    copy.copy(BaseIngredientPermissions.perms_map['PUT']) + ['product.change_productdevingredient',],
+        'POST':   copy.copy(BaseIngredientPermissions.perms_map['POST']) + ['product.add_productdevingredient',   ],
+        'PUT':    copy.copy(BaseIngredientPermissions.perms_map['PUT'])  + ['product.change_productdevingredient',],
         'PATCH':  copy.copy(BaseIngredientPermissions.perms_map['PATCH'])  + ['product.change_productdevingredient',],
         'DELETE': copy.copy(BaseIngredientPermissions.perms_map['DELETE']) + ['product.delete_productdevingredient',],
     }
 
+class SaleableItemPermissions(BaseIngredientPermissions, InputDataOwnerPermissionMixin):
+    perms_map = {
+        'GET': copy.copy(BaseIngredientPermissions.perms_map['GET']) + [
+            'product.view_productdevingredient',
+            'product.view_productsaleableitem',
+            'product.view_productsaleableitemcomposite',
+            'product.view_productsaleableitemmedia',
+            'product.view_productappliedattributeprice',
+        ],
+        'OPTIONS': [],
+        'HEAD': [],
+        'POST':   copy.copy(BaseIngredientPermissions.perms_map['POST']) + [
+            'product.view_productdevingredient',
+            'product.add_productsaleableitem',
+            'product.add_productsaleableitemcomposite', 'product.view_productsaleableitemcomposite',
+            'product.add_productsaleableitemmedia',     'product.view_productsaleableitemmedia',
+            'product.add_productappliedattributeprice', 'product.view_productappliedattributeprice',
+        ],
+        'PUT':    copy.copy(BaseIngredientPermissions.perms_map['PUT'])  + [
+            'product.view_productdevingredient',
+            'product.change_productsaleableitem',
+            'product.add_productsaleableitemcomposite',    'product.view_productsaleableitemcomposite',
+            'product.change_productsaleableitemcomposite', 'product.delete_productsaleableitemcomposite',
+            'product.add_productsaleableitemmedia',      'product.view_productsaleableitemmedia',
+            'product.change_productsaleableitemmedia',   'product.delete_productsaleableitemmedia',
+            'product.add_productappliedattributeprice',    'product.view_productappliedattributeprice',
+            'product.change_productappliedattributeprice', 'product.delete_productappliedattributeprice',
+        ],
+        'PATCH':  copy.copy(BaseIngredientPermissions.perms_map['PATCH'])  + [
+            'product.view_productdevingredient',
+            'product.change_productsaleableitem',
+            'product.change_productsaleableitemcomposite',
+            'product.change_productsaleableitemmedia',
+            'product.change_productappliedattributeprice',
+        ],
+        'DELETE': copy.copy(BaseIngredientPermissions.perms_map['DELETE']) + [
+            'product.delete_productsaleableitem',
+            'product.delete_productsaleableitemcomposite',
+            'product.delete_productsaleableitemmedia',
+            'product.delete_productappliedattributeprice',
+        ],
+    }
+
+    def has_permission(self, request, view):
+        result = super().has_permission(request=request, view=view)
+        if result is True:
+            result = self._input_data_owner_check(request, view)
+        return result
+## end of class SaleableItemPermissions
 
 

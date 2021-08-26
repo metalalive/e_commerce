@@ -42,7 +42,6 @@ class FabricationIngredientView(AuthCommonAPIView, RemoteGetProfileIDMixin, Reco
     def delete(self, request, *args, **kwargs):
         kwargs['many'] = True
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
-        kwargs['return_data_after_done'] = False
         kwargs['status_ok'] = RestStatus.HTTP_202_ACCEPTED
         return self.destroy(request, *args, **kwargs)
 

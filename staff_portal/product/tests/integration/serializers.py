@@ -6,222 +6,39 @@ from functools import partial, reduce
 from unittest.mock import Mock
 
 from django.test import TransactionTestCase, TestCase
-from django.contrib.auth.models import User as AuthUser
 from django.core.exceptions    import ValidationError as DjangoValidationError
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.settings import DEFAULTS as drf_default_settings
 
 from common.validators     import NumberBoundaryValidator, UnprintableCharValidator
-from common.models.enums   import UnitOfMeasurement
 from product.serializers.base import SaleableItemSerializer
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 
-from .common import _fixtures as model_fixtures, listitem_rand_assigner, _common_instances_setup, _load_init_params, _modelobj_list_to_map, _product_tag_closure_setup, _dict_key_replace, _dict_kv_pair_evict
+from .common import _fixtures as model_fixtures, listitem_rand_assigner, _load_init_params, _dict_key_replace, _dict_kv_pair_evict, _get_inst_attr, assert_field_equal, rand_gen_request_body, http_request_body_template, HttpRequestDataGenSaleableItem, _saleitem_related_instance_setup, SaleableItemVerificationMixin
 
-mock_request_body_template = {
-    'ProductSaleableItem': {
-        'name': None,  'id': None, 'visible': None, 'price': None,
-        'tags':[] ,
-        'media_set':[],
-        'attributes':[
-            #{'id':None, 'type':None, 'value': None, 'extra_amount':None},
-        ],
-        'ingredients_applied': [
-            #{'ingredient': None, 'unit': None, 'quantity': None},
-        ]
-    } # end of ProductSaleableItem
-} # end of mock_request_body_template
-
-
-def _saleitem_related_instance_setup(stored_models):
-    models_info = [
-            (ProductTag, len(model_fixtures['ProductTag'])),
-            (ProductAttributeType, len(model_fixtures['ProductAttributeType'])),
-            (ProductDevIngredient, len(model_fixtures['ProductDevIngredient'])),
-        ]
-    _common_instances_setup(out=stored_models, models_info=models_info)
-    tag_map = _modelobj_list_to_map(stored_models['ProductTag'])
-    stored_models['ProductTagClosure'] = _product_tag_closure_setup(
-            tag_map=tag_map, data=model_fixtures['ProductTagClosure'])
-
-
-def rand_gen_request_body(template, customize_item_fn, data_gen):
-    def rand_gen_single_req(data):
-        single_req_item = copy.deepcopy(template)
-        single_req_item.update(data)
-        customize_item_fn(single_req_item)
-        return single_req_item
-    return map(rand_gen_single_req, data_gen)
-
-
-def _gen_attr_val(attrtype, extra_amount_enabled):
-    nested_item = {'id':None, 'type':attrtype.pk, 'value': None,}
-    dtype_option = filter(lambda option: option.value[0][0] == attrtype.dtype, _ProductAttrValueDataType)
-    dtype_option = tuple(dtype_option)[0]
-    field_name = dtype_option.value[0][1]
-    field_descriptor = getattr(ProductSaleableItem, field_name)
-    attrval_cls_name = field_descriptor.field.related_model.__name__
-    value_list = model_fixtures[attrval_cls_name]
-    chosen_idx = random.randrange(0, len(value_list))
-    nested_item['value'] = value_list[chosen_idx]
-    rand_enable_extra_amount = random.randrange(0, 2)
-    if extra_amount_enabled and rand_enable_extra_amount > 0:
-        extra_amount_list = model_fixtures['ProductAppliedAttributePrice']
-        chosen_idx = random.randrange(0, len(extra_amount_list))
-        nested_item['extra_amount'] = float(extra_amount_list[chosen_idx])
-    return nested_item
-
-
-def _gen_ingredient_composite(ingredient):
-    chosen_idx = random.randrange(0, len(UnitOfMeasurement.choices))
-    chosen_unit = UnitOfMeasurement.choices[chosen_idx][0]
-    return {'ingredient': ingredient.pk, 'unit': chosen_unit,
-            'quantity': float(random.randrange(1,25))}
-
-
-def assert_field_equal(fname, testcase, expect_obj, actual_obj):
-    expect_val = expect_obj[fname] if isinstance(expect_obj, dict) else  getattr(expect_obj, fname)
-    actual_val = actual_obj[fname] if isinstance(actual_obj, dict) else  getattr(actual_obj, fname)
-    testcase.assertEqual(expect_val, actual_val)
 
 
 class ExtendedTestCaseMixin:
-    def customize_req_data_item(self, item, **kwargs):
-        raise NotImplementedError()
-
-    def gen_users(self, num=1): # TODO, may be removed
-        usr_gen   = listitem_rand_assigner(list_=model_fixtures['AuthUser'], min_num_chosen=num)
-        new_users = list(map(lambda item: AuthUser(id=item['id'], username=item['username'],
-                        password=item['password'], is_superuser=False, is_staff=item['is_staff'],
-                        is_active=item['is_active']), usr_gen))
-        AuthUser.objects.bulk_create(new_users)
-        return tuple(AuthUser.objects.all())
-
     def reset_validation_result(self, serializer):
         serializer._errors.clear()
         delattr(serializer, '_validated_data')
 
 
-class SaleableItemCommonMixin(ExtendedTestCaseMixin):
+class SaleableItemCommonMixin(ExtendedTestCaseMixin, HttpRequestDataGenSaleableItem, SaleableItemVerificationMixin):
     stored_models = {}
     num_users = 1
 
     def setUp(self):
         _saleitem_related_instance_setup(self.stored_models)
-        self.profile_ids = [random.randrange(1,15) for _ in range(self.num_users)] # self.gen_users(num=self.num_users)
+        self.profile_ids = [random.randrange(1,15) for _ in range(self.num_users)]
         saleitems_data_gen = listitem_rand_assigner(list_=model_fixtures['ProductSaleableItem'])
         self.request_data = rand_gen_request_body(customize_item_fn=self.customize_req_data_item,
-                data_gen=saleitems_data_gen,  template=mock_request_body_template['ProductSaleableItem'])
+                data_gen=saleitems_data_gen,  template=http_request_body_template['ProductSaleableItem'])
         self.request_data = list(self.request_data)
 
     def tearDown(self):
         self.stored_models.clear()
-
-    def customize_req_data_item(self, item):
-        applied_tag = listitem_rand_assigner(list_=self.stored_models['ProductTag'], min_num_chosen=0)
-        applied_tag = map(lambda obj:obj.pk, applied_tag)
-        item['tags'].extend(applied_tag)
-        applied_media = listitem_rand_assigner(list_=model_fixtures['ProductSaleableItemMedia'], min_num_chosen=0)
-        applied_media = map(lambda m: m['media'], applied_media)
-        item['media_set'].extend(applied_media)
-        num_attrvals    = random.randrange(0, len(self.stored_models['ProductAttributeType']))
-        attr_dtypes_gen = listitem_rand_assigner(list_=self.stored_models['ProductAttributeType'],
-                min_num_chosen=num_attrvals, max_num_chosen=(num_attrvals + 1))
-        bound_gen_attr_val = partial(_gen_attr_val, extra_amount_enabled=True)
-        item['attributes'] = list(map(bound_gen_attr_val, attr_dtypes_gen))
-        num_ingredients = random.randrange(0, len(self.stored_models['ProductDevIngredient']))
-        ingredient_composite_gen = listitem_rand_assigner(list_=self.stored_models['ProductDevIngredient'],
-                min_num_chosen=num_ingredients, max_num_chosen=(num_ingredients + 1))
-        item['ingredients_applied'] = list(map(_gen_ingredient_composite, ingredient_composite_gen))
-    ## end of customize_req_data_item()
-
-    def assert_after_serializer_save(self, serializer, actual_instances, expect_data):
-        expect_data = iter(expect_data)
-        key_evict_condition = lambda kv: (kv[0] not in ('id', 'ingredient_type', 'ingredient_id')) \
-                and not (kv[0] == 'extra_amount' and kv[1] is None)
-        bound_dict_key_replace = partial(_dict_key_replace, to_='extra_amount', from_='_extra_charge__amount')
-        bound_dict_kv_pair_evict = partial(_dict_kv_pair_evict,  cond_fn=key_evict_condition)
-        for ac_sale_item in actual_instances:
-            self.assertNotEqual(ac_sale_item.id, None)
-            self.assertGreater(ac_sale_item.id, 0)
-            exp_sale_item = next(expect_data)
-            check_fields = copy.copy(serializer.child.Meta.fields)
-            check_fields.remove('id')
-            check_fields.remove('usrprof')
-            bound_assert_fn = partial(assert_field_equal, testcase=self,  expect_obj=exp_sale_item, actual_obj=ac_sale_item)
-            tuple(map(bound_assert_fn, check_fields))
-            if serializer.child.usrprof_id:
-                self.assertEqual(ac_sale_item.usrprof , serializer.child.usrprof_id)
-            expect_vals = exp_sale_item['tags']
-            actual_vals = list(ac_sale_item.tags.values_list('pk', flat=True))
-            self.assertSetEqual(set(expect_vals), set(actual_vals))
-            expect_vals = exp_sale_item['media_set']
-            actual_vals = list(ac_sale_item.media_set.values_list('media', flat=True))
-            #diff = set(expect_vals).symmetric_difference(actual_vals)
-            self.assertSetEqual(set(expect_vals), set(actual_vals))
-            expect_vals = exp_sale_item['ingredients_applied']
-            actual_vals = list(ac_sale_item.ingredients_applied.values('ingredient','unit','quantity'))
-            expect_vals = sorted(expect_vals, key=lambda x:x['ingredient'])
-            actual_vals = sorted(actual_vals, key=lambda x:x['ingredient'])
-            self.assertListEqual(expect_vals, actual_vals)
-            # attributes check
-            for dtype_option in _ProductAttrValueDataType:
-                field_name = dtype_option.value[0][1]
-                expect_vals = exp_sale_item.get(field_name, None)
-                if not expect_vals:
-                    continue
-                expect_vals = list(map(bound_dict_kv_pair_evict, expect_vals))
-                actual_vals = getattr(ac_sale_item, field_name).values('attr_type', 'value', '_extra_charge__amount')
-                actual_vals = map(bound_dict_key_replace, actual_vals)
-                actual_vals = list(map(bound_dict_kv_pair_evict, actual_vals))
-                expect_vals = sorted(expect_vals, key=lambda x:x['attr_type'])
-                actual_vals = sorted(actual_vals, key=lambda x:x['attr_type'])
-                expect_vals = json.dumps(expect_vals, sort_keys=True)
-                actual_vals = json.dumps(actual_vals, sort_keys=True)
-                self.assertEqual(expect_vals, actual_vals)
-    ## end of  def assert_after_serializer_save()
-
-
-    def assert_after_serializer_save_2(self, serializer, actual_data, expect_data):
-        expect_data = iter(expect_data)
-        key_evict_condition = lambda kv: (kv[0] not in ('id', 'ingredient_type', 'ingredient_id')) \
-                and not (kv[0] == 'extra_amount' and kv[1] is None)
-        bound_dict_key_replace = partial(_dict_key_replace, to_='extra_amount', from_='_extra_charge__amount')
-        bound_dict_kv_pair_evict = partial(_dict_kv_pair_evict,  cond_fn=key_evict_condition)
-        for ac_sale_item in actual_data:
-            self.assertNotEqual(ac_sale_item['id'], None)
-            self.assertGreater(ac_sale_item['id'], 0)
-            exp_sale_item = next(expect_data)
-            check_fields = copy.copy(serializer.child.Meta.fields)
-            check_fields.remove('id')
-            check_fields.remove('usrprof')
-            bound_assert_fn = partial(assert_field_equal, testcase=self,  expect_obj=exp_sale_item, actual_obj=ac_sale_item)
-            tuple(map(bound_assert_fn, check_fields))
-            if serializer.child.usrprof_id:
-                self.assertEqual(ac_sale_item['usrprof'] , serializer.child.usrprof_id)
-            self.assertSetEqual(set(exp_sale_item['tags']), set(ac_sale_item['tags']))
-            self.assertSetEqual(set(exp_sale_item['media_set']), set(ac_sale_item['media_set']))
-            actual_vals = list(map(lambda d: dict(d), ac_sale_item['ingredients_applied']))
-            tuple(map(lambda d: d.pop('sale_item', None), actual_vals))
-            expect_vals = sorted(exp_sale_item['ingredients_applied'], key=lambda x:x['ingredient'])
-            actual_vals = sorted(actual_vals , key=lambda x:x['ingredient'])
-            self.assertListEqual(expect_vals, actual_vals)
-            # attributes check
-            for dtype_option in _ProductAttrValueDataType:
-                field_name = dtype_option.value[0][1]
-                expect_vals = exp_sale_item.get(field_name, None)
-                if not expect_vals:
-                    continue
-                expect_vals = list(map(bound_dict_kv_pair_evict, expect_vals))
-                actual_vals = ac_sale_item[field_name].values('attr_type', 'value', '_extra_charge__amount')
-                actual_vals = map(bound_dict_key_replace, actual_vals)
-                actual_vals = list(map(bound_dict_kv_pair_evict, actual_vals))
-                expect_vals = sorted(expect_vals, key=lambda x:x['attr_type'])
-                actual_vals = sorted(actual_vals, key=lambda x:x['attr_type'])
-                expect_vals = json.dumps(expect_vals, sort_keys=True)
-                actual_vals = json.dumps(actual_vals, sort_keys=True)
-                self.assertEqual(expect_vals, actual_vals)
-    ## end of  def assert_after_serializer_save_2()
 ## end of class SaleableItemCommonMixin
 
 
@@ -235,7 +52,7 @@ class SaleableItemCreationTestCase(SaleableItemCommonMixin, TransactionTestCase)
         serializer.is_valid(raise_exception=True)
         actual_instances = serializer.save()
         expect_data = self.serializer_kwargs['data']
-        self.assert_after_serializer_save(serializer, actual_instances, expect_data)
+        self.verify_objects(actual_instances, expect_data, usrprof_id=serializer.child.usrprof_id)
 
 
     def test_skip_given_id(self):
@@ -472,36 +289,156 @@ class SaleableItemCreationTestCase(SaleableItemCommonMixin, TransactionTestCase)
 
 
 class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
+    def saleitems_data_gen(self, saved_items, dataset):
+        dataset_limit = len(dataset)
+        field_names = tuple(dataset[0].keys())
+        for sale_item in saved_items:
+            new_item = {fname: dataset[random.randrange(0, dataset_limit)][fname] for fname in field_names}
+            new_item['id'] = sale_item.id
+            yield new_item
+
     def setUp(self):
         super().setUp()
         # create new instances first
         serializer_kwargs_setup = {'data': self.request_data, 'many': True, 'usrprof_id': self.profile_ids[0],}
         serializer = SaleableItemSerializer( **serializer_kwargs_setup )
         serializer.is_valid(raise_exception=True)
-        saved_saleitems = serializer.save()
-        # prepare for later update
-        def saleitems_data_gen():
-            dataset = model_fixtures['ProductSaleableItem']
-            dataset_limit = len(dataset)
-            field_names = tuple(dataset[0].keys())
-            for sale_item in saved_saleitems:
-                new_item = {fname: dataset[random.randrange(0, dataset_limit)][fname] for fname in field_names}
-                new_item['id'] = sale_item.id
-                yield new_item
-        self.new_request_data = rand_gen_request_body(customize_item_fn=self.customize_req_data_item,
-                data_gen=saleitems_data_gen(),  template=mock_request_body_template['ProductSaleableItem'])
-        self.new_request_data = list(self.new_request_data)
-        saleitem_ids = tuple(map(lambda obj:obj.pk, saved_saleitems))
-        saved_saleitems = ProductSaleableItem.objects.filter(id__in=saleitem_ids)
-        self.serializer_kwargs = {'data': self.new_request_data, 'usrprof_id': self.profile_ids[0],
-                'instance': saved_saleitems, 'many': True}
+        self._created_items = serializer.save()
+        req_data_iter = iter(self.request_data)
+        for instance in self._created_items:
+            item = next(req_data_iter)
+            item['id'] = instance.id
 
-    def test_bulk_ok(self):
-        serializer = SaleableItemSerializer( **self.serializer_kwargs )
+
+    def _refresh_edit_data(self, num_edit_items:int):
+        data_gen = self.saleitems_data_gen(saved_items=self._created_items[:num_edit_items],
+                    dataset = model_fixtures['ProductSaleableItem'])
+        new_request_data = rand_gen_request_body(
+                customize_item_fn=self.customize_req_data_item,  data_gen=data_gen,
+                template=http_request_body_template['ProductSaleableItem'])
+        return list(new_request_data)
+
+    def _refresh_saved_instance(self, num_edit_items:int):
+        saleitem_ids = tuple(map(lambda obj:obj.pk, self._created_items[:num_edit_items]))
+        return ProductSaleableItem.objects.filter(id__in=saleitem_ids)
+
+    def test_bulk_ok_all_items(self):
+        num_all_items = len(self.request_data)
+        self._test_bulk_ok_certain_num_of_items(num_edit_items=num_all_items)
+
+    def test_bulk_ok_some_items(self):
+        num_edit_items = random.randrange(1, len(self.request_data))
+        serializer, upadted_saleitems, _ = self._test_bulk_ok_certain_num_of_items(num_edit_items=num_edit_items)
+        # double-check the instances which were not updated
+        edited_ids = tuple(map(lambda x: x.pk, upadted_saleitems))
+        unedited_objs  = tuple(filter(lambda x: x.id not in edited_ids, self._created_items))
+        unedited_items = tuple(filter(lambda x: x['id'] not in edited_ids, self.request_data))
+        tuple(map(lambda obj:obj.refresh_from_db(), unedited_objs))
+        self.assertGreater(len(unedited_objs), 0)
+        self.assertGreater(len(unedited_items), 0)
+        self.assertEqual(len(unedited_items), len(unedited_objs))
+        self.verify_objects(unedited_objs, unedited_items, usrprof_id=serializer.child.usrprof_id)
+
+    def _test_bulk_ok_certain_num_of_items(self, num_edit_items):
+        new_request_data =  self._refresh_edit_data(num_edit_items=num_edit_items)
+        saved_items = self._refresh_saved_instance(num_edit_items=num_edit_items)
+        serializer_kwargs = {'data': new_request_data, 'usrprof_id': self.profile_ids[0],
+                'instance': saved_items, 'many': True}
+        serializer = SaleableItemSerializer( **serializer_kwargs )
         serializer.is_valid(raise_exception=True)
         upadted_saleitems = serializer.save()
-        expect_data = self.serializer_kwargs['data']
-        self.assert_after_serializer_save(serializer, upadted_saleitems, expect_data)
+        expect_data = serializer_kwargs['data']
+        upadted_saleitems_iter = iter(upadted_saleitems)
+        for expect_item in expect_data:
+            actual_obj = next(upadted_saleitems_iter)
+            self.assertEqual(expect_item['id'], actual_obj.id)
+        self.verify_objects(upadted_saleitems, expect_data, usrprof_id=serializer.child.usrprof_id)
+        return serializer, upadted_saleitems, expect_data
+
+
+    def test_edit_nested_field(self):
+        model_cls = type(self._created_items[0])
+        edit_objs = model_cls.objects.filter(pk=self._created_items[0].pk)
+        serializer_ro_kwargs = {'instance': edit_objs, 'many': True}
+        serializer_ro = SaleableItemSerializer( **serializer_ro_kwargs )
+        edit_data = dict(copy.deepcopy(serializer_ro.data[0]))
+        unadded = list(filter(lambda obj:obj.pk not in edit_data['tags'], self.stored_models['ProductTag']))
+        if len(edit_data['tags']) > 1:
+            edit_data['tags'].pop()
+        if any(unadded):
+            new_tag = unadded.pop()
+            edit_data['tags'].append(new_tag.pk)
+        unadded = list(filter(lambda obj:obj.pk not in edit_data['ingredients_applied'],  self.stored_models['ProductDevIngredient']))
+        if any(edit_data['ingredients_applied']):
+            edit_data['ingredients_applied'][0]['quantity'] = random.randrange(5,50)
+        if len(edit_data['ingredients_applied']) > 1:
+            edit_data['ingredients_applied'].pop()
+        if any(unadded):
+            new_item = self._gen_ingredient_composite(ingredient=unadded.pop())
+            edit_data['ingredients_applied'].append(new_item)
+        edit_data = [edit_data]
+        serializer_kwargs = {'data': copy.deepcopy(edit_data),  'instance': edit_objs,
+                'many': True, 'usrprof_id': self.profile_ids[0],}
+        serializer = SaleableItemSerializer( **serializer_kwargs )
+        serializer.is_valid(raise_exception=True)
+        edited_objs = serializer.save()
+        self.verify_objects(edited_objs, edit_data, usrprof_id=serializer.child.usrprof_id)
+
+
+    def test_editdata_instances_not_matched(self):
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        num_all_items = len(self.request_data)
+        new_request_data =  self._refresh_edit_data(num_edit_items=num_all_items)
+        saved_items = self._refresh_saved_instance(num_edit_items=num_all_items)
+        self.assertGreaterEqual(len(new_request_data) , 2)
+        discarded_id = new_request_data[-2]['id']
+        new_request_data[-2]['id'] = new_request_data[-1]['id']
+        serializer_kwargs = {'data': new_request_data, 'many': True,
+                'usrprof_id': self.profile_ids[0],  'instance': saved_items}
+        error_caught = None
+        with self.assertRaises(DRFValidationError):
+            try:
+                serializer = SaleableItemSerializer( **serializer_kwargs )
+                serializer.is_valid(raise_exception=True)
+            except DRFValidationError as e:
+                error_caught = e
+                raise
+        self.assertNotEqual(error_caught, None)
+        err_detail = error_caught.detail[non_field_err_key][0]
+        err_msg = str(err_detail)
+        self.assertGreater(err_msg.find(str(discarded_id)), 0)
+
+
+    def test_conflict_items(self):
+        # error handling when multiple edit items with the same ID
+        # are received at backend
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        num_all_items = len(self.request_data)
+        new_request_data =  self._refresh_edit_data(num_edit_items=num_all_items)
+        saved_items = self._refresh_saved_instance(num_edit_items=num_all_items)
+        self.assertGreaterEqual(len(new_request_data) , 2)
+        discarded_id = new_request_data[-2]['id']
+        new_request_data[-2]['id'] = new_request_data[-1]['id']
+        saved_items = saved_items.exclude(pk=discarded_id)
+        serializer_kwargs = {'data': new_request_data, 'many': True,
+                'usrprof_id': self.profile_ids[0],  'instance': saved_items}
+        error_caught = None
+        with self.assertRaises(DRFValidationError):
+            try:
+                serializer = SaleableItemSerializer( **serializer_kwargs )
+                serializer.is_valid(raise_exception=True)
+            except DRFValidationError as e:
+                error_caught = e
+                raise
+        self.assertNotEqual(error_caught, None)
+        self.assertEqual(error_caught.status_code, 400)
+        err_detail = error_caught.detail[non_field_err_key][0]
+        err_info = json.loads(str(err_detail))
+        self.assertEqual(err_detail.code, 'conflict')
+        self.assertEqual(err_info['message'], 'duplicate item found in the list')
+        self.assertEqual(err_info['field'], 'id')
+        self.assertNotIn(discarded_id, err_info['value'])
+        self.assertEqual(err_info['value'][-2], err_info['value'][-1])
 ## end of class SaleableItemUpdateTestCase
 
 
@@ -519,7 +456,7 @@ class SaleableItemRepresentationTestCase(SaleableItemCommonMixin, TransactionTes
     def test_represent_all(self):
         actual_data = self._serializer.data
         expect_data = self.request_data
-        self.assert_after_serializer_save_2(self._serializer, actual_data, expect_data)
+        self.verify_data(actual_data, expect_data, usrprof_id=self._serializer.child.usrprof_id)
         # create another serializer with saved instance of saleable item
         for idx in range(1, len(self.saved_saleitems)):
             selected_instances = self.saved_saleitems[:idx]
@@ -527,17 +464,17 @@ class SaleableItemRepresentationTestCase(SaleableItemCommonMixin, TransactionTes
             serializer_ro = SaleableItemSerializer( **serializer_kwargs )
             actual_data = serializer_ro.data
             expect_data = self.request_data[:idx] # serailizer should keep the order
-            self.assert_after_serializer_save_2(serializer_ro, actual_data, expect_data)
+            self.verify_data(actual_data, expect_data, usrprof_id=serializer_ro.child.usrprof_id)
 
-    def test_represent_partial(self):
-        # sub case #1
-        def extra_check_subcase1(field_name, value):
+    def test_represent_partial_1(self):
+        def field_check(field_name, value):
             if field_name in ('id', 'price'):
                 self.assertGreater(value, 0)
         expect_fields = ['id', 'price', 'usrprof']
-        self._test_represent_partial(expect_fields=expect_fields, extra_check_fn=extra_check_subcase1)
-        # sub case #2
-        def extra_check_subcase2(field_name, value):
+        self._test_represent_partial(expect_fields=expect_fields, field_check_fn=field_check)
+
+    def test_represent_partial_2(self):
+        def field_check(field_name, value):
             if field_name == 'tags':
                 actual_cnt = ProductTag.objects.filter(pk__in=value).count()
                 self.assertEqual(len(value), actual_cnt)
@@ -545,26 +482,51 @@ class SaleableItemRepresentationTestCase(SaleableItemCommonMixin, TransactionTes
                 actual_resource_ids = tuple(filter(lambda rid: len(rid) > 1, value))
                 self.assertEqual(len(value), actual_resource_ids)
         expect_fields = ['name', 'tags', 'media_set']
-        self._test_represent_partial(expect_fields=expect_fields, extra_check_fn=extra_check_subcase2)
-        # sub case #3
-        def extra_check_subcase3(field_name, value):
-            if field_name == 'ingredients_applied':
-                ingredient_ids = map(lambda d:d['ingredient'] , value)
-                actual_cnt = ProductDevIngredient.objects.filter(pk__in=ingredient_ids).count()
-                self.assertEqual(len(value), actual_cnt)
+        self._test_represent_partial(expect_fields=expect_fields, field_check_fn=field_check)
+
+    def test_represent_partial_3(self):
+        def item_check(value):
+            ingredient_ids = list(map(lambda d:d['ingredient'] , value['ingredients_applied']))
+            actual_cnt = ProductDevIngredient.objects.filter(pk__in=ingredient_ids).count()
+            self.assertEqual(len(value['ingredients_applied']), actual_cnt)
+            sale_item = ProductSaleableItem.objects.get(id=value['id'])
+            expect_composite = sale_item.ingredients_applied.values('quantity', 'unit', 'ingredient')
+            _sort_key_fn = lambda d: d['ingredient']
+            expect_composite = sorted(expect_composite, key=_sort_key_fn)
+            actual_composite = sorted(value['ingredients_applied'], key=_sort_key_fn)
+            self.assertListEqual(expect_composite, actual_composite)
         expect_fields = ['id', 'ingredients_applied']
-        self._test_represent_partial(expect_fields=expect_fields, extra_check_fn=extra_check_subcase3)
-        # sub case #4
-        def extra_check_subcase4(field_name, value):
-            if field_name == 'attributes':
-                attrtype_ids = map(lambda d:d['type'] , value)
-                actual_qset = ProductAttributeType.objects.filter(pk__in=attrtype_ids)
-                self.assertEqual(len(value), actual_qset.count())
+        self._test_represent_partial(expect_fields=expect_fields, item_check_fn=item_check)
+
+    def test_represent_partial_4(self):
+        def item_check(value):
+            attrtype_ids = map(lambda d:d['type'] , value['attributes'])
+            actual_qset = ProductAttributeType.objects.filter(pk__in=attrtype_ids)
+            self.assertEqual(len(value['attributes']), actual_qset.count())
+            sale_item = ProductSaleableItem.objects.get(id=value['id'])
+            for actual_attrval in value['attributes']:
+                expect_attrval = None
+                for dtype_option in _ProductAttrValueDataType:
+                    field_name = dtype_option.value[0][1]
+                    manager = getattr(sale_item, field_name, None)
+                    if not manager:
+                        continue
+                    qset = manager.filter(id=actual_attrval['id'])
+                    if qset.exists():
+                        expect_attrval = qset.first()
+                        break
+                self.assertNotEqual(expect_attrval, None)
+                self.assertEqual(expect_attrval.ingredient_id, value['id'])
+                self.assertEqual(expect_attrval.attr_type.id, actual_attrval['type'])
+                self.assertEqual(expect_attrval.value,        actual_attrval['value'])
+                self.assertEqual(expect_attrval.extra_amount, actual_attrval.get('extra_amount', None))
+            #import pdb
+            #pdb.set_trace()
         expect_fields = ['id', 'attributes']
-        self._test_represent_partial(expect_fields=expect_fields, extra_check_fn=extra_check_subcase4)
+        self._test_represent_partial(expect_fields=expect_fields, item_check_fn=item_check)
 
 
-    def _test_represent_partial(self, expect_fields, extra_check_fn=None):
+    def _test_represent_partial(self, expect_fields, field_check_fn=None, item_check_fn=None):
         serializer_ro = SaleableItemSerializer(many=True, instance=self.saved_saleitems)
         mocked_request = Mock()
         mocked_request.query_params = {}
@@ -576,8 +538,11 @@ class SaleableItemRepresentationTestCase(SaleableItemCommonMixin, TransactionTes
             for field_name in expect_fields:
                 value = ac_item_cp.pop(field_name, None)
                 self.assertNotEqual(value, None)
-                if extra_check_fn and callable(extra_check_fn):
-                    extra_check_fn(field_name=field_name, value=value)
+                if field_check_fn and callable(field_check_fn):
+                    field_check_fn(field_name=field_name, value=value)
             self.assertDictEqual(ac_item_cp, {})
+            if item_check_fn and callable(item_check_fn):
+                ac_item_cp = copy.deepcopy(ac_item)
+                item_check_fn(value=ac_item_cp)
 ## end of class SaleableItemRepresentationTestCase
 

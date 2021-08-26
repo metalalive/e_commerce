@@ -290,16 +290,19 @@ class SelectIDsExistValidator:
 
 @deconstructible
 class UniqueListItemsValidator:
-    def __init__(self, fields:list):
+    err_msg_pattern = '{"message":"duplicate item found in the list","field":"%s","value":%s}'
+
+    def __init__(self, fields:list, error_cls=ValidationError):
         self._unique_fields_among_children = fields
+        self._error_cls = error_cls
 
     def __call__(self, value):
         for fname in self._unique_fields_among_children :
             fvalue = [q[fname].pk if isinstance(q[fname], DjangoModel) else q[fname] for q in value]
             if len(fvalue) != len(set(fvalue)):
-                err_msg = "duplicate %s found in the list %s" % (fname, fvalue)
+                err_msg = self.err_msg_pattern  % (fname, fvalue)
                 log_msg = ['err_msg', err_msg]
                 _logger.info(None, *log_msg)
-                raise ValidationError(err_msg)
+                raise  self._error_cls(err_msg)
 
 

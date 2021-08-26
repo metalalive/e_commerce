@@ -162,7 +162,6 @@ def exception_handler(exc, context):
         if status and status != RestStatus.HTTP_500_INTERNAL_SERVER_ERROR:
             response = RestResponse(data={}, status=status, headers=headers)
     _logger.error("%s", exc, request=context['request'])
-    #print('RESTful exception handling : %s' % exc)
     return response
 
 

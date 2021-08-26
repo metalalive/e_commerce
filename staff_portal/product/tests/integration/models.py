@@ -17,7 +17,7 @@ from common.util.python import flatten_nested_iterable
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem, ProductSaleableItemComposite, ProductAppliedAttributePrice, ProductSaleableItemMedia
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 
-from .common import _fixtures, listitem_rand_assigner, _common_instances_setup, _load_init_params, _modelobj_list_to_map, _product_tag_closure_setup, _dict_key_replace
+from .common import _fixtures, listitem_rand_assigner, _common_instances_setup, _load_init_params, _modelobj_list_to_map, _product_tag_closure_setup, _dict_key_replace, assert_softdelete_items_exist
 
 
 num_uom = len(UnitOfMeasurement.choices)
@@ -857,6 +857,7 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
         self.instances['ProductSaleableItemComposite'].clear()
         self.instances['tagged_saleitems'].clear()
 
+
     def _assert_attr_fields_existence(self, saleitem_pk, _assert_fn):
         filter_attrval_fn = lambda attrval: attrval.ingredient_id == saleitem_pk
         filtered_attrvals = filter(filter_attrval_fn, self.instances['BaseProductAttributeValue'])
@@ -868,6 +869,7 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
             filtered_extmnts = filter(bound_filter_extmnt_fn, self.instances['ProductAppliedAttributePrice'])
             for extracharge in filtered_extmnts:
                 _assert_fn(extracharge)
+
 
     def _assert_composite_fields_existence(self, saleitem_pk, _assert_fn, with_deleted):
         composites = self.instances['ProductSaleableItemComposite'][saleitem_pk]
@@ -943,32 +945,26 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
         backup_saleitem_pks = list(map(lambda saleitem: saleitem.pk , self.instances['ProductSaleableItem']))
         qset = ProductSaleableItem.objects.filter(pk__in=backup_saleitem_pks)
         self.assertEqual(qset.count(), self.num_saleitems)
+        remain_id = qset.last().pk
         qset = qset[:(self.num_saleitems - 1)]
+        deleted_ids = list(qset.values_list('id', flat=True))
+        remain_ids  = [remain_id]
         # soft-delete
         qset.delete(profile_id=profile_id)
         tuple(map(lambda obj:self.assertTrue(obj.is_deleted()), qset)) # auto marked as deleted
         tuple(map(_assert_tag_fn, qset))
-        qset2 = ProductSaleableItem.objects.filter(with_deleted=True, pk__in=backup_saleitem_pks)
-        self.assertEqual(qset2.count(), self.num_saleitems)
-        qset2 = ProductSaleableItem.objects.filter(pk__in=backup_saleitem_pks)
-        self.assertEqual(qset2.count(), 1)
-        self.assertEqual((qset2.first().pk in  backup_saleitem_pks), True)
-        soft_deleted_pks = copy.copy(backup_saleitem_pks)
-        soft_deleted_pks.remove( qset2.first().pk )
-        del qset2
-        qset = ProductSaleableItem.objects.get_deleted_set()
-        self.assertSetEqual(set(soft_deleted_pks) , set(qset.values_list('id', flat=True)))
-
-        for saleitem_pk in soft_deleted_pks:
+        assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
+                model_cls_path='product.models.base.ProductSaleableItem',)
+        for saleitem_pk in deleted_ids:
             self._assert_attr_fields_existence(saleitem_pk, _assert_del_status_fn)
             self._assert_composite_fields_existence(saleitem_pk, _assert_compo_fn, with_deleted=True)
             self._assert_media_link_fields_existence(saleitem_pk, _assert_media_fn, with_deleted=True)
         # un-delete
-        self.assertEqual(qset.count(), len(soft_deleted_pks))
+        self.assertEqual(qset.count(), len(deleted_ids))
         qset.undelete(profile_id=profile_id)
         tuple(map(_assert_undel_status_fn , qset))
         tuple(map(_assert_tag_fn, qset))
-        for saleitem_pk in soft_deleted_pks:
+        for saleitem_pk in  deleted_ids:
             self._assert_attr_fields_existence(saleitem_pk, _assert_undel_status_fn)
             self._assert_composite_fields_existence(saleitem_pk, _assert_compo_fn, with_deleted=False)
             self._assert_media_link_fields_existence(saleitem_pk, _assert_media_fn, with_deleted=False)

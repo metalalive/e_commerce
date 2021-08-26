@@ -1,4 +1,14 @@
 
+from django.utils.translation import gettext_lazy as _
+from rest_framework.exceptions import APIException, ValidationError as DRFValidationError
+from rest_framework import status as DRFstatus
+
+class DRFRequestDataConflictError(DRFValidationError):
+    status_code = DRFstatus.HTTP_409_CONFLICT
+    default_detail = _('Conflict due to invalid input')
+    default_code = 'conflict'
+
+
 def monkeypatch_django_error_view_production():
     import json
     from urllib.parse import quote
@@ -78,7 +88,5 @@ def monkeypatch_django_error_view_production():
         defaults.server_error  = patched_server_error
         setattr(defaults.server_error , '_patched', None)
 ## end of monkeypatch_django_error_view_production
-
-
 
 

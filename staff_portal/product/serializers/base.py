@@ -220,6 +220,7 @@ class SaleableItemSerializer(BaseIngredientSerializer):
         return  instance
 
     def update(self, instance, validated_data):
+        validated_data.pop('usrprof', None)
         nested_validated_data = self.extract_nested_form(formdata=validated_data)
         instance = super().update(instance=instance, validated_data=validated_data)
         instance.tags.set(nested_validated_data['tags'])

@@ -29,6 +29,7 @@ python3.9 ./manage.py test api.tests.integration.views   --settings api.settings
 
 python3.9 ./manage.py test product.tests.integration.models       --settings product.settings --keepdb --verbosity=2
 python3.9 ./manage.py test product.tests.integration.serializers  --settings product.settings --keepdb --verbosity=2
+python3.9 ./manage.py test product.tests.integration.views        --settings product.settings --keepdb --verbosity=2
 ```
 
 Note

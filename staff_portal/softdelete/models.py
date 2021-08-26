@@ -300,9 +300,10 @@ class SoftDeleteObjectMixin(models.Model):
                     log_args.extend(['msg', 'new changeSet created'])
                     loglevel = logging.INFO
                 else:
-                    log_args.extend(['msg', 'changeset not found and NOT allowed to create new one'])
+                    err_msg = 'changeset not found and NOT allowed to create new one'
+                    log_args.extend(['msg', err_msg])
                     _logger.error(None, *log_args)
-                    raise ObjectDoesNotExist
+                    raise ObjectDoesNotExist(err_msg)
         log_args.extend(['changeset_id', qs.pk])
         _logger.log(loglevel, None, *log_args)
         return qs

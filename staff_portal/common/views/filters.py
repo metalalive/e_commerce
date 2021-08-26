@@ -165,7 +165,7 @@ class  AggregateFieldOrderingFilter(OrderingFilter):
 
 class AbstractAdvancedSearchMixin:
     enable_advanced_search_param = "advanced_search"
-    req_get_body_param = "body"
+    req_advsearch_cond_param = "adv_search_cond"
 
     UNLIMITED_OPERANDS = -1
 
@@ -201,7 +201,7 @@ class AbstractAdvancedSearchMixin:
         """
         raise NotImplementedError()
 
-    def get_req_body(self, request):
+    def get_adv_condition(self, request):
         """
         This is where you retrieve the source of advanced search condition, mostly
         it is a serialized JSON data in body section of client request,
@@ -212,7 +212,7 @@ class AbstractAdvancedSearchMixin:
     def get_advanced_search_condition(self, request):
         enable = self.is_enabled_adv_search(request=request)
         if enable:
-            cond = self.get_req_body(request=request)
+            cond = self.get_adv_condition(request=request)
             if not isinstance(cond, (dict, list,)):
                 try:  # de-serialize the seach condition placed in request body
                     cond = json.loads(cond)
@@ -237,7 +237,7 @@ class AbstractAdvancedSearchMixin:
                 non-leaf node refers to `operands` field as all its child nodes.
 
         Optional field in a node :
-            * `metadata` : metadata used to calculate condition for application
+            * `metadata` : provided as extra information to calculate condition for application
 
         The example of condition tree may look like :
 
@@ -331,13 +331,20 @@ class AdvancedSearchFilter(SearchFilter, AbstractAdvancedSearchMixin):
 
     def is_enabled_adv_search(self, request):
         enable = request.query_params.get(self.enable_advanced_search_param, '')
-        enable = enable.replace('\x00', '')  # strip null characters
+        unprintable_chars = [chr(idx) for idx in range(0x10)]
+        for u_char in unprintable_chars:
+            enable = enable.replace(u_char, '')  # strip unprintable characters
         return enable
 
-    def get_req_body(self, request):
+    def get_adv_condition(self, request):
         body = request.body
+        # note that HTTP protocol doesn't strictly deny GET request with body
+        # content, however JavaScript does, which is not convenient in web
+        # frontend apps, the only way for web frontend to acheive this is
+        # to URL-encode the (JSON) serialized advanced condition, then set
+        # it as URL query parameter
         if not body:
-            body = request.query_params.get(self.req_get_body_param, '')
+            body = request.query_params.get(self.req_advsearch_cond_param, '')
             # decode URI parameter
             body = urllib.parse.unquote(body)
         return body
@@ -374,6 +381,8 @@ class AdvancedSearchFilter(SearchFilter, AbstractAdvancedSearchMixin):
         if advanced_cond:
             try:
                 parsed_cond = self._parse_condition(condition=advanced_cond)
+                #import pdb
+                #pdb.set_trace()
                 queryset = queryset.filter(parsed_cond)
             except DjangoFieldError as e:
                 # do not expose valid field names on DjangoFieldError

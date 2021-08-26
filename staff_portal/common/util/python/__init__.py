@@ -202,6 +202,23 @@ def flatten_nested_iterable(list_):
             yield item
 
 
+def sort_nested_object(obj, key_fn_list=None, key_fn_dict=None):
+    if isinstance(obj, dict):
+        src = [(k, sort_nested_object(v)) for k, v in obj.items()]
+        args = [src]
+        if key_fn_dict and callable(key_fn_dict):
+            args.append(key_fn_dict)
+        return sorted(*args)
+    elif isinstance(obj, list):
+        src = [sort_nested_object(x) for x in obj]
+        args = [src]
+        if key_fn_list and callable(key_fn_list):
+            args.append(key_fn_list)
+        return sorted(*args)
+    else:
+        return obj
+
+
 class ExtendedDict(dict):
     def __init__(self, *args, **kwargs):
         self._modified = False

@@ -3,7 +3,9 @@ import logging
 
 from django.db import models
 from django.contrib.contenttypes.models  import ContentType
+from rest_framework             import status as RestStatus
 from rest_framework.filters     import OrderingFilter, SearchFilter
+
 from common.views.api     import  AuthCommonAPIView, AuthCommonAPIReadView
 from common.views.mixins  import  LimitQuerySetMixin
 from common.views.filters import  ClosureTableFilter, AggregateFieldOrderingFilter
@@ -12,8 +14,10 @@ from softdelete.views import RecoveryModelMixin
 
 from ..models.base import ProductTagClosure
 from ..models.common import ProductmgtChangeSet
-from ..serializers.base import TagSerializer, AttributeTypeSerializer
-from ..permissions import TagsPermissions, AttributeTypePermissions
+from ..serializers.base import TagSerializer, AttributeTypeSerializer, SaleableItemSerializer
+from ..permissions import TagsPermissions, AttributeTypePermissions, SaleableItemPermissions
+
+from .common import BaseIngredientSearchFilter
 
 _logger = logging.getLogger(__name__)
 
@@ -97,7 +101,6 @@ class TagView(AuthCommonAPIView, RemoteGetProfileIDMixin):
     def delete(self, request, *args, **kwargs):
         kwargs['many'] = True
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
-        kwargs['return_data_after_done'] = False
         return self.destroy(request, *args, **kwargs)
 
 
@@ -128,7 +131,6 @@ class AttributeTypeView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryMode
         # cannot have the deleted attribute from the point of time of the deletion on . 
         kwargs['many'] = True
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
-        kwargs['return_data_after_done'] = False
         return self.destroy(request, *args, **kwargs)
 
     def patch(self, request, *args, **kwargs):
@@ -136,5 +138,45 @@ class AttributeTypeView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryMode
                 model=self.serializer_class.Meta.model.__name__)
         kwargs['return_data_after_done'] = True
         return self.recovery(request=request, *args, **kwargs)
+
+
+class SaleableItemSearchFilter(BaseIngredientSearchFilter):
+    pass
+
+
+class SaleableItemView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModelMixin):
+    serializer_class  = SaleableItemSerializer
+    filter_backends = [SaleableItemSearchFilter, OrderingFilter,]
+    #### ordering_fields  = ['-id', 'name', 'category']
+    search_fields  = ['name',]
+    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [SaleableItemPermissions]
+    queryset = serializer_class.Meta.model.objects.all()
+    SOFTDELETE_CHANGESET_MODEL = ProductmgtChangeSet
+
+    def post(self, request, *args, **kwargs):
+        prof_id = self.get_profile_id(request=request, num_of_msgs_fetch=2)
+        kwargs['many'] = True
+        kwargs['return_data_after_done'] = True
+        kwargs['serializer_kwargs'] = {'usrprof_id': prof_id}
+        return  self.create(request, *args, **kwargs)
+
+    def put(self, request, *args, **kwargs):
+        kwargs['many'] = True
+        kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
+        kwargs['return_data_after_done'] = True
+        return  self.update(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        kwargs['many'] = True
+        kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
+        kwargs['status_ok'] = RestStatus.HTTP_202_ACCEPTED
+        return self.destroy(request, *args, **kwargs)
+
+    def patch(self, request, *args, **kwargs):
+        kwargs['resource_content_type'] = ContentType.objects.get(app_label='product',
+                model=self.serializer_class.Meta.model.__name__)
+        kwargs['return_data_after_done'] = True
+        return self.recovery(request=request, *args, **kwargs)
+
 
 
