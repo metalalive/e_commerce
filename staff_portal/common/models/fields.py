@@ -78,6 +78,7 @@ def monkeypatch_sqlquery_build_filter():
     from collections.abc import Iterator, Iterable
     from django.core.exceptions import FieldError
     from django.db.models import Q
+    from django.db.models.constants import LOOKUP_SEP
     from django.db.models.fields.related_lookups import MultiColSource
     from django.db.models.sql.where import (AND, OR, ExtraWhere, NothingNode, WhereNode,)
     from django.db.models.sql.datastructures import (BaseTable, Empty, Join, MultiJoin,)
@@ -172,6 +173,11 @@ def monkeypatch_sqlquery_build_filter():
         if isinstance(col, Iterable) and not isinstance(col, str):
             valid_fd_names = map(lambda c: (c.target.name, c.target.attname), col)
             valid_fd_names = tuple(flatten_nested_iterable(list_=valid_fd_names))
+            parent_related_fields = parts.copy()
+            pk_field = self.model._meta.pk
+            possible_pk_names = ('pk', pk_field.name, )
+            if parent_related_fields[-1] in possible_pk_names:
+                parent_related_fields.pop()
             # the value could also be list of dicts, queryset.bulk_update will also invoke
             # this function with pk__in condition, the monkeypatch code also needs to handle
             # such situation.
@@ -186,11 +192,11 @@ def monkeypatch_sqlquery_build_filter():
                 clause.connector = OR
                 for val_item in value:
                     nested_where_clause = self.where_class(connector=OR, negated=current_negated )
-                    self._build_filter_single_composite_pkey(value=val_item, col=col,
+                    self._build_filter_single_composite_pkey(value=val_item, col=col, parent_related_fields=parent_related_fields,
                             clause_out=nested_where_clause, valid_fd_names=valid_fd_names)
                     clause.add(nested_where_clause, OR)
             else: # must be dictionary
-                self._build_filter_single_composite_pkey(value=value, col=col,
+                self._build_filter_single_composite_pkey(value=value, col=col, parent_related_fields=parent_related_fields,
                         clause_out=clause, valid_fd_names=valid_fd_names)
             require_outer = False # TODO: currently not support isnull lookup
         else: # otherwise it is single-column key as usual
@@ -203,8 +209,12 @@ def monkeypatch_sqlquery_build_filter():
         return clause, used_joins if not require_outer else ()
     ## end of patched_build_filter()
 
-    def _build_filter_single_composite_pkey(self, value:dict, col, clause_out, valid_fd_names):
+    def _build_filter_single_composite_pkey(self, value:dict, col, parent_related_fields, clause_out, valid_fd_names):
+        full_path_field = parent_related_fields
         for nested_arg, nested_value in value.items():
+            full_path_field.append(nested_arg)
+            nested_arg = LOOKUP_SEP.join(full_path_field)
+            full_path_field.pop()
             lookup, fd_name, is_valid_name = self._build_filter_validate_fd_name(nested_arg, valid_fd_names)
             if not is_valid_name:
                 raise FieldError('Multi-column Key Field got invalid column names : {}'.format(nested_arg))
@@ -239,10 +249,10 @@ def monkeypatch_sqlquery_build_filter():
     def _build_filter_validate_fd_name(self, nested_arg, valid_field_names):
         # currently multi-column key ignores previously generated lookups,
         # and don't support reffed_expression
-        lookup, part, _ = self.solve_lookup_type(nested_arg)
-        if part:
-            is_valid = part[0] in valid_field_names
-            part = part[0]
+        lookup, parts, _ = self.solve_lookup_type(nested_arg)
+        if parts: # `parts` includes optional list of related fields to final non-relation field
+            is_valid = parts[-1] in valid_field_names
+            part = parts[-1]
         else:
             is_valid = False
         return lookup, part, is_valid
@@ -254,6 +264,58 @@ def monkeypatch_sqlquery_build_filter():
     Query._build_filter_validate_fd_name = _build_filter_validate_fd_name
     Query._build_filter_single_composite_pkey = _build_filter_single_composite_pkey
 ## end of monkeypatch_sqlquery_build_filter()
+
+
+def monkeypatch_sqlquery_add_fields():
+    from django.db.models.sql.query import Query, get_field_names_from_opts
+    old_fn = Query.add_fields
+    if hasattr(old_fn, '_patched'):
+        return # skip, already monkey-patched
+
+    from django.db.models.constants import LOOKUP_SEP
+    from django.db.models.sql.datastructures import MultiJoin
+    from django.core.exceptions import FieldError
+    def patched_add_fields(self, field_names, allow_m2m=True):
+        alias = self.get_initial_alias()
+        opts = self.get_meta()
+
+        try:
+            cols = []
+            for name in field_names:
+                # Join promotion note - we must not remove any rows here, so
+                # if there is no existing joins, use outer join.
+                join_info = self.setup_joins(name.split(LOOKUP_SEP), opts, alias, allow_many=allow_m2m)
+                targets, final_alias, joins = self.trim_joins(
+                    join_info.targets,
+                    join_info.joins,
+                    join_info.path,
+                )
+                for target in targets:
+                    col = join_info.transform_function(target, final_alias)
+                    if isinstance(col, (list,tuple)): # implicitly means a multi-column key
+                        cols.extend(col)
+                    else:
+                        cols.append(col)
+            if cols:
+                self.set_select(cols)
+        except MultiJoin:
+            raise FieldError("Invalid field name: '%s'" % name)
+        except FieldError:
+            if LOOKUP_SEP in name:
+                # For lookups spanning over relationships, show the error
+                # from the model on which the lookup failed.
+                raise
+            else:
+                names = sorted([
+                    *get_field_names_from_opts(opts), *self.extra,
+                    *self.annotation_select, *self._filtered_relations
+                ])
+                raise FieldError("Cannot resolve keyword %r into field. "
+                                 "Choices are: %s" % (name, ", ".join(names)))
+    # end of patched_add_fields()
+    patched_add_fields._patched = True
+    Query.add_fields = patched_add_fields
+## end of monkeypatch_sqlquery_add_fields()
 
 
 def monkeypatch_sql_insert_compiler():
@@ -455,9 +517,47 @@ def monkeypatch_queryset_lookup_values():
     if hasattr(old__values_fn, '_patched'):
         return
 
+    from django.db.models.constants import LOOKUP_SEP
+    from django.db.models.fields.related_descriptors import ReverseManyToOneDescriptor
+    def _parse_compo_pk_related_fields(self, fields_name):
+        # note this function does not handle composite pk field ended with `id` and `pk`
+        parsed_fields = []
+        for field_name in fields_name:
+            curr_traced_model = self.model
+            related_field_chain = field_name.split(LOOKUP_SEP)
+            def _extract_compo_pk_cols_fn(last_field):
+                chain_cp = related_field_chain.copy()
+                chain_cp.append(last_field)
+                return LOOKUP_SEP.join(chain_cp)
+            for rel_fd in related_field_chain:
+                fd_descriptor = getattr(curr_traced_model, rel_fd)
+                if isinstance(fd_descriptor, (ReverseManyToOneDescriptor,)):
+                    # each related field comes from either current model or related model,
+                    # which depends on how Django models and their relations are declared
+                    # in applications, so I simply check whether `related_model` or `model`
+                    # field is the same as currently found model.
+                    if curr_traced_model != fd_descriptor.field.related_model:
+                        curr_traced_model = fd_descriptor.field.related_model
+                    else:
+                        curr_traced_model = fd_descriptor.field.model
+                    if rel_fd == related_field_chain[-1]:
+                        pk_field = curr_traced_model._meta.pk
+                        is_compo_pk = pk_field.get_internal_type() == 'CompoundPrimaryKeyField'
+                        if is_compo_pk:
+                            compo_fnames = [f.attname for f in pk_field._composite_fields]
+                            compo_fnames = list(map(_extract_compo_pk_cols_fn, compo_fnames))
+                            parsed_fields.extend(compo_fnames)
+                        else:
+                            parsed_fields.append(field_name)
+                else:
+                    parsed_fields.append(field_name)
+                    break
+        return parsed_fields
+
     def patched__values_fn(self, *fields, **expressions):
         pk_field = self.model._meta.pk
-        if pk_field.get_internal_type() == 'CompoundPrimaryKeyField':
+        is_compo_pk = pk_field.get_internal_type() == 'CompoundPrimaryKeyField'
+        if is_compo_pk:
             if not fields: # note : don't use set, use tuple to remain the order of fields
                 # TODO, figure out why Django uses f.attname instead of f.name
                 fields = tuple([f.attname for f in self.model._meta.concrete_fields])
@@ -467,10 +567,14 @@ def monkeypatch_queryset_lookup_values():
                     else fname for fname in origin_fields]
             flattened = flatten_nested_iterable(list_=replaced)
             fields = tuple(dict.fromkeys(flattened))
+        else:
+            fields = self._parse_compo_pk_related_fields(fields)
+            #pass
         return old__values_fn(self, *fields, **expressions)
 
     patched__values_fn._patched = True
     DjangoQuerySet._values = patched__values_fn
+    DjangoQuerySet._parse_compo_pk_related_fields = _parse_compo_pk_related_fields
 ## end of monkeypatch_queryset_lookup_values()
 
 
@@ -494,6 +598,7 @@ def monkeypatch_aggregate_query():
 
 monkeypatch_sqlcompiler()
 monkeypatch_sqlquery_build_filter()
+monkeypatch_sqlquery_add_fields()
 monkeypatch_sql_insert_compiler()
 monkeypatch_deferred_attr()
 monkeypatch_django_model_ops()

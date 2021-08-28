@@ -7,6 +7,7 @@ from functools import partial, reduce
 from django.test import TransactionTestCase, TestCase
 from django.db import DEFAULT_DB_ALIAS
 from django.db.models import Q
+from django.db.models import Count
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models  import ContentType
@@ -171,7 +172,7 @@ class SaleableItemSimpleDeletionTestCase(TransactionTestCase):
 ## end of class SaleableItemSimpleDeletionTestCase
 
 
-class SaleableItemCompositeCreationTestCase(TransactionTestCase):
+class SaleableItemCompositeCreationMixin:
     def setUp(self):
         self.instances = {'ProductDevIngredient': None, 'ProductSaleableItem': None}
         models_info = [ (ProductDevIngredient, len(_fixtures['ProductDevIngredient'])),
@@ -181,6 +182,40 @@ class SaleableItemCompositeCreationTestCase(TransactionTestCase):
     def tearDown(self):
         pass
 
+    def _bulk_create(self, num_compo):
+        min_num_chosen = num_compo << 4
+        max_num_chosen = min_num_chosen + 1
+        uom_gen = listitem_rand_assigner(list_=UnitOfMeasurement.choices, distinct=False,
+            min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
+        saleitem_gen = listitem_rand_assigner(list_=self.instances['ProductSaleableItem'],
+                distinct=False, min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
+        ingredient_gen = listitem_rand_assigner(list_=self.instances['ProductDevIngredient'],
+                distinct=False, min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
+        saleitems_composite = []
+        while len(saleitems_composite) < num_compo:
+            try:
+                instance = ProductSaleableItemComposite(
+                    sale_item  = next(saleitem_gen),
+                    ingredient = next(ingredient_gen),
+                    unit = next(uom_gen)[0],
+                    quantity   = random.randrange(1,30)
+                )
+                instance.save(force_insert=True)
+                saleitems_composite.append(instance)
+            except  IntegrityError as e:
+                pass
+        return saleitems_composite
+
+    def _assert_query_dict_equal(self, actual, expect):
+        self.assertGreater(len(expect), 0)
+        self.assertEqual(actual.count(), len(expect))
+        actual_dict = {tuple(obj.pk.values()): None for obj in actual}
+        expect_dict = {tuple(obj.pk.values()): None for obj in expect}
+        self.assertDictEqual(actual_dict, expect_dict)
+## end of class SaleableItemCompositeCreationMixin
+
+
+class SaleableItemCompositeCreationTestCase(SaleableItemCompositeCreationMixin, TransactionTestCase):
     def test_null_test_obj_attrs(self):
         instance = ProductSaleableItemComposite(
                 sale_item  = self.instances['ProductSaleableItem'][0],
@@ -230,27 +265,7 @@ class SaleableItemCompositeCreationTestCase(TransactionTestCase):
 
     def test_bulk_create_ok(self):
         num_compo = 20
-        min_num_chosen = num_compo << 4
-        max_num_chosen = min_num_chosen + 1
-        uom_gen = listitem_rand_assigner(list_=UnitOfMeasurement.choices, distinct=False,
-            min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
-        saleitem_gen = listitem_rand_assigner(list_=self.instances['ProductSaleableItem'],
-                distinct=False, min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
-        ingredient_gen = listitem_rand_assigner(list_=self.instances['ProductDevIngredient'],
-                distinct=False, min_num_chosen=min_num_chosen, max_num_chosen=max_num_chosen)
-        saleitems_composite = []
-        while len(saleitems_composite) < num_compo:
-            try:
-                instance = ProductSaleableItemComposite(
-                    sale_item  = next(saleitem_gen),
-                    ingredient = next(ingredient_gen),
-                    unit = next(uom_gen)[0],
-                    quantity   = random.randrange(1,30)
-                )
-                instance.save(force_insert=True)
-                saleitems_composite.append(instance)
-            except  IntegrityError as e:
-                pass
+        saleitems_composite = self._bulk_create(num_compo)
         sale_item_ids  = list(map(lambda obj:obj.sale_item.pk,  saleitems_composite))
         ingredient_ids = list(map(lambda obj:obj.ingredient.pk, saleitems_composite))
         cond = Q(pk__isnull={'sale_item__in': sale_item_ids,  'ingredient__in': ingredient_ids})
@@ -258,8 +273,6 @@ class SaleableItemCompositeCreationTestCase(TransactionTestCase):
         self.assertEqual(qset.count(), num_compo)
         self._assert_query_case_1(saleitems_composite, cond)
         self._assert_query_case_2(saleitems_composite, cond)
-        self._assert_query_case_3(saleitems_composite)
-        self._assert_query_case_4(saleitems_composite)
     ## end of test_bulk_create_ok()
 
 
@@ -276,44 +289,6 @@ class SaleableItemCompositeCreationTestCase(TransactionTestCase):
         actual = ProductSaleableItemComposite.objects.filter(cond)
         expect = list(filter(lambda obj: obj.unit <= chosen_unit, saleitems_composite))
         self._assert_query_dict_equal(actual=actual, expect=expect)
-
-    def _assert_query_case_3(self, saleitems_composite):
-        num_chosen_composites = len(saleitems_composite) >> 1
-        composite_gen = listitem_rand_assigner(list_=saleitems_composite, distinct=True,
-            min_num_chosen=num_chosen_composites, max_num_chosen=(num_chosen_composites + 1))
-        chosen_composites = list(composite_gen)
-        quantity_gen = map(lambda obj: obj.quantity, chosen_composites)
-        avg_quantity = reduce(lambda a,b: a+b, quantity_gen) / len(chosen_composites)
-        compo_ids = list(map(lambda obj: obj.pk, chosen_composites))
-        cond = Q(id__in=compo_ids) & Q(quantity__gt=avg_quantity)
-        actual = ProductSaleableItemComposite.objects.filter(cond)
-        expect = list(filter(lambda obj: obj.quantity > avg_quantity , chosen_composites))
-        self._assert_query_dict_equal(actual=actual, expect=expect)
-
-    def _assert_query_case_4(self, saleitems_composite):
-        compo_ids = list(map(lambda obj:  obj.pk, saleitems_composite))
-        sale_item_ids  = list(map(lambda item: item['sale_item'],   compo_ids))
-        ingredient_ids = list(map(lambda item: item['ingredient'] , compo_ids))
-        avg_saleitem_id   = reduce(lambda a,b: a+b, sale_item_ids ) / len(sale_item_ids )
-        avg_ingredient_id = reduce(lambda a,b: a+b, ingredient_ids) / len(ingredient_ids)
-        avg_saleitem_id   = math.ceil(avg_saleitem_id  )
-        avg_ingredient_id = math.ceil(avg_ingredient_id)
-        chosen_unit = saleitems_composite[-1].unit
-        cond = Q(pk={'sale_item__gt': avg_saleitem_id, 'ingredient__lt':avg_ingredient_id})
-        cond = cond | Q(unit=chosen_unit)
-        actual = ProductSaleableItemComposite.objects.filter(cond)
-        _filter_fn = lambda obj: (obj.unit == chosen_unit) or (obj.sale_item_id > avg_saleitem_id \
-                 and obj.ingredient_id < avg_ingredient_id)
-        expect = list(filter(_filter_fn, saleitems_composite))
-        self._assert_query_dict_equal(actual=actual, expect=expect)
-
-    def _assert_query_dict_equal(self, actual, expect):
-        self.assertGreater(len(expect), 0)
-        self.assertEqual(actual.count(), len(expect))
-        actual_dict = {tuple(obj.pk.values()): None for obj in actual}
-        expect_dict = {tuple(obj.pk.values()): None for obj in expect}
-        self.assertDictEqual(actual_dict, expect_dict)
-
 
     ##def test_complex_query_with_composite_pk(self):
     ##    cond = (Q(quantity__gt=2.7182) | Q(pk__isnull={'sale_item__gte': 8, 'ingredient__in': [2,13, 809], 'sale_item__lt': 29})) & Q(unit__lte=30)
@@ -412,6 +387,92 @@ class SaleableItemCompositeCreationTestCase(TransactionTestCase):
 ## end of class SaleableItemCompositeCreationTestCase
 
 
+class SaleableItemCompositeQueryTestCase(SaleableItemCompositeCreationMixin, TransactionTestCase):
+    def setUp(self):
+        super().setUp()
+        self._saleitems_composite = self._bulk_create(num_compo=15)
+
+    def test_id_in_syntax(self):
+        saleitems_composite = self._saleitems_composite
+        num_chosen_composites = len(saleitems_composite) >> 1
+        composite_gen = listitem_rand_assigner(list_=saleitems_composite, distinct=True,
+            min_num_chosen=num_chosen_composites, max_num_chosen=(num_chosen_composites + 1))
+        chosen_composites = list(composite_gen)
+        quantity_gen = map(lambda obj: obj.quantity, chosen_composites)
+        avg_quantity = reduce(lambda a,b: a+b, quantity_gen) / len(chosen_composites)
+        compo_ids = list(map(lambda obj: obj.pk, chosen_composites))
+        cond = Q(id__in=compo_ids) & Q(quantity__gt=avg_quantity)
+        actual = ProductSaleableItemComposite.objects.filter(cond)
+        expect = list(filter(lambda obj: obj.quantity > avg_quantity , chosen_composites))
+        self._assert_query_dict_equal(actual=actual, expect=expect)
+
+    def test_multi_columns_compare(self):
+        saleitems_composite = self._saleitems_composite
+        compo_ids = list(map(lambda obj:  obj.pk, saleitems_composite))
+        sale_item_ids  = list(map(lambda item: item['sale_item'],   compo_ids))
+        ingredient_ids = list(map(lambda item: item['ingredient'] , compo_ids))
+        avg_saleitem_id   = reduce(lambda a,b: a+b, sale_item_ids ) / len(sale_item_ids )
+        avg_ingredient_id = reduce(lambda a,b: a+b, ingredient_ids) / len(ingredient_ids)
+        avg_saleitem_id   = math.ceil(avg_saleitem_id  )
+        avg_ingredient_id = math.ceil(avg_ingredient_id)
+        chosen_unit = saleitems_composite[-1].unit
+        cond = Q(pk={'sale_item__gt': avg_saleitem_id, 'ingredient__lt':avg_ingredient_id})
+        cond = cond | Q(unit=chosen_unit)
+        actual = ProductSaleableItemComposite.objects.filter(cond)
+        _filter_fn = lambda obj: (obj.unit == chosen_unit) or (obj.sale_item_id > avg_saleitem_id \
+                 and obj.ingredient_id < avg_ingredient_id)
+        expect = list(filter(_filter_fn, saleitems_composite))
+        self._assert_query_dict_equal(actual=actual, expect=expect)
+
+
+    def test_ingredients_applied_value(self):
+        field_names = ['ingredients_applied', 'ingredients_applied__unit', 'ingredients_applied__quantity']
+        # note composite pk is not fully supported,
+        # following use cases will lead to error on resolving aggregate expression
+        # * Count('ingredients_applied')
+        # * QuerySet.values('ingredients_applied__id')
+        # * QuerySet.values('ingredients_applied__pk')
+        actual_qset = ProductSaleableItem.objects.annotate(num_ingre=Count('ingredients_applied__ingredient')
+                ).filter(num_ingre__gt=0).values(*field_names)
+        for value in actual_qset:
+            compo_pk = {'ingredient': value['ingredients_applied__ingredient_id'],
+                    'sale_item': value['ingredients_applied__sale_item_id']}
+            saleitem = ProductSaleableItem.objects.get(id=value['ingredients_applied__sale_item_id'])
+            expect_composite = saleitem.ingredients_applied.filter(pk=compo_pk)
+            self.assertEqual(expect_composite.count(), 1)
+            expect_composite = expect_composite.first()
+            self.assertEqual(expect_composite.unit     , value['ingredients_applied__unit'])
+            self.assertEqual(expect_composite.quantity , value['ingredients_applied__quantity'])
+
+    def test_ingredients_applied_valuelist(self):
+        field_names = ['ingredients_applied__unit', 'ingredients_applied__quantity', 'ingredients_applied', ]
+        # note composite pk is not fully supported,
+        # following use cases will lead to error on resolving aggregate expression
+        # * QuerySet.values_list('ingredients_applied', flat=True) <-- `flat` is NOT
+        #   supported since  `ingredients_applied` is composite pk field
+        actual_qset = ProductSaleableItem.objects.annotate(num_ingre=Count('ingredients_applied__ingredient')
+                ).filter(num_ingre__gt=0).values_list(*field_names)
+        compo_fields = ProductSaleableItemComposite._meta.pk._composite_fields
+        compo_fields = [f.name for f in compo_fields]
+        for value in actual_qset:
+            compo_pk = {compo_fields[idx]: value[2 + idx] for idx in range(len(compo_fields))}
+            expect_composite = ProductSaleableItemComposite.objects.filter(id=compo_pk)
+            self.assertEqual(expect_composite.count(), 1)
+            expect_composite = expect_composite.first()
+            self.assertEqual(expect_composite.unit     , value[0])
+            self.assertEqual(expect_composite.quantity , value[1])
+
+    def test_ingredients_applied_filter(self):
+        base_qset = ProductSaleableItem.objects.annotate(num_ingre=Count('ingredients_applied__ingredient')
+                ).filter(num_ingre__gt=0)
+        for expect_compo in self._saleitems_composite:
+            actual_qset = base_qset.filter(ingredients_applied=expect_compo.id)
+            self.assertEqual(actual_qset.count(), 1)
+            actual_saleitem = actual_qset.first()
+            self.assertEqual(expect_compo.sale_item.id, actual_saleitem.id)
+## end of class SaleableItemCompositeQueryTestCase
+
+
 class SaleableItemCompositeDeletionTestCase(TransactionTestCase):
     # the test class covers both soft-delete and hard-delete
     num_saleitems   = 2
@@ -498,9 +559,6 @@ class SaleableItemCompositeDeletionTestCase(TransactionTestCase):
         cnt_after_delete  = saleitem.ingredients_applied.all(with_deleted=True).count()
         self.assertEqual(cnt_after_delete, 0)
 
-
-    ##def test_soft_delete_single_item_ok(self):
-    ##    pass
 
     def test_soft_delete_bulk_ok(self):
         saleitem = self._rand_choose_saleitem_instance()
