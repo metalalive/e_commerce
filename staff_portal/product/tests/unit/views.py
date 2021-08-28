@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from django.test import TransactionTestCase, Client as DjangoTestClient
 from django.db.models import Count
+from django.db.models.constants import LOOKUP_SEP
 from django.contrib.auth.models import User as AuthUser
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
@@ -596,12 +597,9 @@ class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableI
         self.min_num_applied_attrs = 1
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         qset = self._model_cls.objects.annotate(num_float_attr=Count('attr_val_float')).filter(num_float_attr__gt=0)
-        qset = qset.values('id', 'attr_val_float__attr_type__id', 'attr_val_float__attr_type__dtype', 'attr_val_float__value')
-        data = {v['id']: v  for v in qset}
-        adv_cond = {
-            'operator': 'or',
-            'operands': []
-        }
+        data = qset.values('id', 'attr_val_float__attr_type__id', 'attr_val_float__attr_type__dtype', 'attr_val_float__value')
+        data = {v['id']: v  for v in data}
+        adv_cond = {'operator': 'or', 'operands': []}
         variation = 1.0
         for d in data.values():
             upper_bound = d['attr_val_float__value'] + variation
@@ -633,22 +631,114 @@ class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableI
             }
             adv_cond['operands'].append(adv_cond_sub_clause)
         saleitems_found = self._test_advanced_search_common(adv_cond=adv_cond)
-        # TODO, the search condition will make Django backend return duplicate data
-        # figure out how it works and how to solve the problem
+        self.assertLessEqual(len(saleitems_found), len(self._created_items))
+        self.assertEqual(len(saleitems_found), qset.count())
+        self.verify_objects(actual_instances=qset, expect_data=saleitems_found)
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_advanced_search_tags(self, mock_get_profile):
-        pass
+        self.min_num_applied_tags = 1
+        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+        # note that distinct() works like set() to reduce duplicate
+        qset = self._model_cls.objects.filter(tags__isnull=False).values_list('tags__id', flat=True).distinct()
+        tag_ids = tuple(qset[:2])
+        adv_cond = {'operator': 'or', 'operands': []}
+        for tag_id in tag_ids:
+            adv_cond_sub_clause = {
+                'operator':'==',
+                'operands':['tags__id', tag_id],
+                'metadata':{}
+            }
+            adv_cond['operands'].append(adv_cond_sub_clause)
+        saleitems_found = self._test_advanced_search_common(adv_cond=adv_cond)
+        expected_objs   = self._model_cls.objects.filter(tags__id__in=tag_ids).distinct()
+        self.assertLessEqual(len(saleitems_found), len(self._created_items))
+        self.assertEqual(len(saleitems_found), expected_objs.count())
+        self.verify_objects(actual_instances=expected_objs, expect_data=saleitems_found)
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_advanced_search_ingredients_applied(self, mock_get_profile):
-        pass
+        self.min_num_applied_ingredients = 1
+        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+        qset = self._model_cls.objects.annotate(num_ingre=Count('ingredients_applied__ingredient'))
+        qset = qset.filter(num_ingre__gt=0)
+        values = qset.values('id','ingredients_applied')
+        limit = min(values.count() >> 1, 1)
+        values = values[:limit]
+        adv_cond = {'operator': 'or', 'operands': []}
+        for value in values:
+            adv_cond_sub_clause = {
+                'operator': 'and',
+                'operands': [
+                    {
+                        'operator':'==',
+                        'operands':['ingredients_applied__ingredient', value['ingredients_applied__ingredient_id']],
+                        'metadata':{}
+                    },
+                    {
+                        'operator':'==',
+                        'operands':['ingredients_applied__sale_item', value['id']],
+                        'metadata':{}
+                    },
+                ]
+            }
+            adv_cond['operands'].append(adv_cond_sub_clause)
+        saleitems_found = self._test_advanced_search_common(adv_cond=adv_cond)
+        expect_saleitems_found = list(dict.fromkeys([v['id'] for v in values]))
+        actual_saleitems_found = list(map(lambda v:v['id'], saleitems_found))
+        self.assertListEqual(sorted(actual_saleitems_found), sorted(expect_saleitems_found))
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_advanced_nested_search_mix(self, mock_get_profile):
-        pass
+        self.min_num_applied_attrs = 2
+        self.min_num_applied_tags = 2
+        self.min_num_applied_ingredients = 2
+        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+        aggregates_nested_fields = {'num_ingre': Count('ingredients_applied__ingredient'),
+                'num_tags': Count('tags'), }
+        filter_nested_fields = dict(map(lambda ag_fd: (LOOKUP_SEP.join([ag_fd, 'gt']), 0),
+                aggregates_nested_fields.keys()))
+        qset = self._model_cls.objects.annotate(**aggregates_nested_fields)
+        qset = qset.filter(**filter_nested_fields)
+        saleitem = qset.first()
+        ingredient_id = saleitem.ingredients_applied.first().ingredient.pk
+        tags    = saleitem.tags.all()
+        tag_ids = list(map(lambda x: x.pk, tags))
+        adv_cond = {
+            'operator': 'and',
+            'operands': [
+                {
+                    'operator':'==',
+                    'operands':['ingredients_applied__ingredient', ingredient_id],
+                    'metadata':{}
+                },
+                {
+                    'operator':'or',
+                    'operands': [
+                        {
+                            'operator':'==',
+                            'operands':['tags__id', tag_ids[0]],
+                            'metadata':{}
+                        },
+                        {
+                            'operator':'==',
+                            'operands':['tags__id', tag_ids[1]],
+                            'metadata':{}
+                        },
+                    ]
+                }
+            ]
+        }
+        saleitems_found = self._test_advanced_search_common(adv_cond=adv_cond)
+        actual_ids = list(map(lambda x:x['id'] , saleitems_found))
+        self.assertIn(saleitem.pk, actual_ids)
+        for found_item in saleitems_found:
+            diff = set(found_item['tags']) - set(tag_ids)
+            self.assertLess(len(diff), len(found_item['tags']))
+            ingredient_ids = tuple(map(lambda x:x['ingredient'] , found_item['ingredients_applied']))
+            self.assertIn(ingredient_id, ingredient_ids)
 
 

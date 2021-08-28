@@ -381,9 +381,8 @@ class AdvancedSearchFilter(SearchFilter, AbstractAdvancedSearchMixin):
         if advanced_cond:
             try:
                 parsed_cond = self._parse_condition(condition=advanced_cond)
-                #import pdb
-                #pdb.set_trace()
                 queryset = queryset.filter(parsed_cond)
+                queryset = queryset.distinct() # reduce duplicates
             except DjangoFieldError as e:
                 # do not expose valid field names on DjangoFieldError
                 _stop_from = "Choices are"
