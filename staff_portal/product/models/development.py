@@ -9,7 +9,7 @@ from common.models.fields  import CompoundPrimaryKeyField
 from common.models.mixins  import MinimumInfoMixin
 from common.util.python.django.storage import ExtendedFileSysStorage
 
-from .common import ProductmgtChangeSet, ProductmgtSoftDeleteRecord, _UserProfileMixin, BaseProductIngredient
+from .common import ProductmgtChangeSet, ProductmgtSoftDeleteRecord, _UserProfileMixin, BaseProductIngredient, _atomicity_fn
 
 _fs_board_img   = ExtendedFileSysStorage(
         location='filespace/product/development/board/{id}/img',
@@ -47,6 +47,19 @@ class ProductDevIngredient(BaseProductIngredient, MinimumInfoMixin):
     def _delete_relations(self, related_fields, *args, **kwargs):
         kwargs['skip_model_types'] = [self.saleitems_applied.model,]
         super()._delete_relations(related_fields, *args, **kwargs)
+
+    @_atomicity_fn()
+    def delete(self, *args, **kwargs):
+        hard_delete = kwargs.get('hard', False)
+        if not hard_delete:# let nested fields add in the same soft-deleted changeset
+            if kwargs.get('changeset', None) is None:
+                profile_id = kwargs['profile_id'] # kwargs.get('profile_id')
+                kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
+        deleted = super().delete(*args, **kwargs)
+        if not hard_delete:
+            self.saleitems_applied.all().delete(*args, **kwargs)
+            kwargs.pop('changeset', None)
+        return deleted
 
 # The classes below are used for kanban-style project management
 

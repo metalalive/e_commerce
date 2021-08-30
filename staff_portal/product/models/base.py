@@ -341,19 +341,9 @@ class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfile
     @_atomicity_fn()
     def delete(self, *args, **kwargs):
         hard_delete = kwargs.get('hard', False)
+        super().delete(*args, **kwargs)
         if not hard_delete:
-            if kwargs.get('changeset', None) is None:
-                profile_id = kwargs['profile_id']
-                kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
-        SoftDeleteObjectMixin.delete(self, *args, **kwargs)
-        if not hard_delete:
-            # soft-delete mixin automatically mark all rows in `media_set`
-            # and `ingredients_applied` fields as deleted
-            attr_del_fn = lambda dtype_item: getattr(self, dtype_item[0][1]).all().delete(*args, **kwargs)
-            list(map(attr_del_fn, _ProductAttrValueDataType))
-            kwargs.pop('changeset', None)
-            kwargs.pop('profile_id', None)
-            self.tags.clear() # clear rows in m2m relation table, not tag table
+            self.tags.clear() # still hard-delete rows in m2m relation table, not tag table itself
     ## end of delete()
 
 
@@ -361,6 +351,20 @@ class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfile
 class ProductSaleableItem(AbstractProduct):
     class Meta(AbstractProduct.Meta):
         db_table = 'product_saleable_item'
+
+    @_atomicity_fn()
+    def delete(self, *args, **kwargs):
+        hard_delete = kwargs.get('hard', False)
+        if not hard_delete:# let nested fields add in the same soft-deleted changeset
+            if kwargs.get('changeset', None) is None:
+                profile_id = kwargs['profile_id'] # kwargs.get('profile_id')
+                kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
+        deleted = super().delete(*args, **kwargs)
+        if not hard_delete:
+            self.ingredients_applied.all().delete(*args, **kwargs)
+            kwargs.pop('changeset', None)
+        return deleted
+
 
 class ProductSaleablePackage(AbstractProduct):
     class Meta(AbstractProduct.Meta):

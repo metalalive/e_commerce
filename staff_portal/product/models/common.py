@@ -63,7 +63,7 @@ class BaseProductIngredient(SoftDeleteObjectMixin):
         hard_delete = kwargs.get('hard', False)
         if not hard_delete:# let nested fields add in the same soft-deleted changeset
             if kwargs.get('changeset', None) is None:
-                profile_id = kwargs.get('profile_id')
+                profile_id = kwargs['profile_id'] # kwargs.get('profile_id')
                 kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
                 new_changeset = True
         deleted = super().delete(*args, **kwargs)
@@ -72,6 +72,8 @@ class BaseProductIngredient(SoftDeleteObjectMixin):
             self.attr_val_pos_int.all().delete(*args, **kwargs)
             self.attr_val_int.all().delete(*args, **kwargs)
             self.attr_val_float.all().delete(*args, **kwargs)
+            ##attr_del_fn = lambda dtype_item: getattr(self, dtype_item[0][1]).all().delete(*args, **kwargs)
+            ##list(map(attr_del_fn, _ProductAttrValueDataType))
             if new_changeset:
                 kwargs.pop('changeset', None)
         return deleted

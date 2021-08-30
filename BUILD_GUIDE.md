@@ -27,9 +27,10 @@ To run the test suite, execute following commands :
 ```
 python3.9 ./manage.py test api.tests.integration.views   --settings api.settings --keepdb --verbosity=2
 
-python3.9 ./manage.py test product.tests.integration.models       --settings product.settings --keepdb --verbosity=2
-python3.9 ./manage.py test product.tests.integration.serializers  --settings product.settings --keepdb --verbosity=2
-python3.9 ./manage.py test product.tests.integration.views        --settings product.settings --keepdb --verbosity=2
+python3.9 ./manage.py test product.tests.ingredient.models     --settings product.settings --keepdb --verbosity=2
+python3.9 ./manage.py test product.tests.saleitem.models       --settings product.settings --keepdb --verbosity=2
+python3.9 ./manage.py test product.tests.saleitem.serializers  --settings product.settings --keepdb --verbosity=2
+python3.9 ./manage.py test product.tests.saleitem.views        --settings product.settings --keepdb --verbosity=2
 ```
 
 Note

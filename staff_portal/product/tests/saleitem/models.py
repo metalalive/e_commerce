@@ -13,24 +13,16 @@ from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models  import ContentType
 
 from common.models.enums   import UnitOfMeasurement
-from common.util.python import flatten_nested_iterable
+from common.util.python import flatten_nested_iterable, sort_nested_object
 
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem, ProductSaleableItemComposite, ProductAppliedAttributePrice, ProductSaleableItemMedia
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 
+from product.tests.common import _null_test_obj_attrs, _gen_ingredient_attrvals, _ingredient_attrvals_common_setup
 from .common import _fixtures, listitem_rand_assigner, _common_instances_setup, _load_init_params, _modelobj_list_to_map, _product_tag_closure_setup, _dict_key_replace, assert_softdelete_items_exist
 
 
 num_uom = len(UnitOfMeasurement.choices)
-
-
-def _null_test_obj_attrs(testcase, instance, field_names):
-    for fname in field_names:
-        old_value = getattr(instance, fname)
-        setattr(instance, fname, None)
-        with testcase.assertRaises(IntegrityError) as e:
-            instance.save(force_insert=True)
-        setattr(instance, fname, old_value)
 
 
 class SaleableItemSimpleCreationTestCase(TransactionTestCase):
@@ -57,8 +49,7 @@ class SaleableItemSimpleCreationTestCase(TransactionTestCase):
     def test_null_test_obj_attrs(self):
         field_names = ['name', 'usrprof', 'visible', 'price']
         instance = self.instances[0]
-        _null_test_obj_attrs(testcase=self,
-                instance=instance, field_names=field_names)
+        _null_test_obj_attrs(testcase=self,  instance=instance, field_names=field_names)
 
     def test_create_onebyone_ok(self):
         self.assertEqual(self.instances[0].id, None)
@@ -590,39 +581,6 @@ class SaleableItemCompositeDeletionTestCase(TransactionTestCase):
 ## end of class SaleableItemCompositeDeletionTestCase
 
 
-def _gen_saleitem_attrvals(attrtype_ref, saleitem, idx, extra_charge=None):
-    saleitem_ct = ContentType.objects.get_for_model(saleitem)
-    model_cls = attrtype_ref.attr_val_set.model
-    num_limit = len(_fixtures[model_cls.__name__])
-    new_value = _fixtures[model_cls.__name__][idx % num_limit]
-    model_init_kwargs = {
-        'ingredient_type':saleitem_ct,  'ingredient_id':saleitem.pk,
-        'attr_type':attrtype_ref, 'value':new_value
-    }
-    if extra_charge and extra_charge > 0.0:
-        model_init_kwargs['extra_amount'] = extra_charge
-    return model_cls(**model_init_kwargs)
-
-
-def _saleitem_attrvals_common_setup(attrtypes_gen_fn, saleitems):
-    _attrval_objs = {item[0][0]:{} for item in _ProductAttrValueDataType}
-    idx = 0
-    for saleitem in saleitems:
-        attrtypes_gen = attrtypes_gen_fn()
-        for attrtype_ref in attrtypes_gen:
-            if _attrval_objs[attrtype_ref.dtype].get(saleitem.pk) is None:
-                _attrval_objs[attrtype_ref.dtype][saleitem.pk] = []
-            attrval = _gen_saleitem_attrvals(attrtype_ref, saleitem, idx)
-            _attrval_objs[attrtype_ref.dtype][saleitem.pk].append(attrval)
-            idx += 1
-    for dtype, objmap in _attrval_objs.items():
-        related_field_name = _ProductAttrValueDataType.related_field_map(dtype_code=dtype)
-        related_field_mgr = getattr(saleitems[0], related_field_name)
-        objs = tuple(flatten_nested_iterable(list_=[x for x in objmap.values()]))
-        related_field_mgr.bulk_create(objs)
-    return _attrval_objs
-
-
 def _saleitem_attrvals_refresh_from_db(saleitems):
     fresh_attrvals = [getattr(saleitem, dtype_item[0][1]).all() for saleitem in \
             saleitems for dtype_item in _ProductAttrValueDataType]
@@ -702,7 +660,7 @@ class SaleableItemAttributeCreationTestCase(TransactionTestCase):
             idx = random.randrange(0,1000)
             extra_charge = _fixtures['ProductAppliedAttributePrice'][idx % limit]
             self.assertNotEqual(extra_charge, None)
-            attrval = _gen_saleitem_attrvals(attrtype, saleitem, idx, extra_charge=extra_charge)
+            attrval = _gen_ingredient_attrvals(attrtype, saleitem, idx, extra_charge=extra_charge)
             attrval.save(force_insert=True)
             self.assertEqual(extra_charge, attrval.extra_charge)
         tuple(map(assert_new_object, self.instances['ProductAttributeType']))
@@ -712,7 +670,7 @@ class SaleableItemAttributeCreationTestCase(TransactionTestCase):
         saleitems = self.instances['ProductSaleableItem'][:self.num_saleitems]
         attrtypes = self.instances['ProductAttributeType']
         attrtypes_gen_fn = partial(listitem_rand_assigner, list_=attrtypes)
-        _attrval_objs = _saleitem_attrvals_common_setup(saleitems=saleitems,
+        _attrval_objs = _ingredient_attrvals_common_setup(ingredients=saleitems,
                 attrtypes_gen_fn=attrtypes_gen_fn)
         for saleitem in saleitems:
             for dtype_item in _ProductAttrValueDataType:
@@ -766,7 +724,7 @@ class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
         saleitems = self.instances['ProductSaleableItem']
         attrtypes = self.instances['ProductAttributeType']
         attrtypes_gen_fn = partial(listitem_rand_assigner, list_=attrtypes)
-        _saleitem_attrvals_common_setup(saleitems=saleitems, attrtypes_gen_fn=attrtypes_gen_fn)
+        _ingredient_attrvals_common_setup(ingredients=saleitems, attrtypes_gen_fn=attrtypes_gen_fn)
         self.instances['BaseProductAttributeValue'] = _saleitem_attrvals_refresh_from_db(saleitems)
         self.instances['ProductAppliedAttributePrice'] = _saleitem_attrvals_extracharge_setup(
                 attrvals=self.instances['BaseProductAttributeValue'], )
@@ -857,7 +815,9 @@ def _saleitem_composites_common_setup(saleitem, out:dict, ingredients):
             ingredient_gen=ingredient_gen)
     composites = list(map(gen_compo_fn, range(num_composites)))
     ProductSaleableItemComposite.objects.bulk_create(composites)
-    out[saleitem.pk] = list(ProductSaleableItemComposite.objects.values('id', 'unit', 'quantity'))
+    stored_composites = ProductSaleableItemComposite.objects.filter(sale_item=saleitem.id
+            ).values('id', 'unit', 'quantity')
+    out[saleitem.pk] = list(stored_composites)
 
 
 class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
@@ -882,7 +842,7 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
         _common_instances_setup(out=self.instances , models_info=models_info)
         # attribute values & extra charge
         attrtypes_gen_fn = partial(listitem_rand_assigner, list_=self.instances['ProductAttributeType'])
-        _saleitem_attrvals_common_setup(saleitems=self.instances['ProductSaleableItem'], attrtypes_gen_fn=attrtypes_gen_fn,)
+        _ingredient_attrvals_common_setup(ingredients=self.instances['ProductSaleableItem'], attrtypes_gen_fn=attrtypes_gen_fn,)
         self.instances['BaseProductAttributeValue'] = _saleitem_attrvals_refresh_from_db(saleitems=self.instances['ProductSaleableItem'])
         self.instances['ProductAppliedAttributePrice'] = _saleitem_attrvals_extracharge_setup(
                 attrvals=self.instances['BaseProductAttributeValue'], retrieve_id=True)
@@ -914,6 +874,26 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
         self.instances['ProductSaleableItemMedia'].clear()
         self.instances['ProductSaleableItemComposite'].clear()
         self.instances['tagged_saleitems'].clear()
+
+    def _check_remaining_saleitems_to_ingredients(self, saleitem_ids, is_deleted=False):
+        chosen_composites = dict(filter(lambda  kv: kv[0] in saleitem_ids,
+            self.instances['ProductSaleableItemComposite'].items()))
+        chosen_composites = [v2 for v in chosen_composites.values() for v2 in v]
+        # check saleable items which include the deleted ingredient
+        for ingredient in self.instances['ProductDevIngredient']:
+            init_qset = ingredient.saleitems_applied.get_deleted_set() if is_deleted \
+                    else ingredient.saleitems_applied.all()
+            qset = init_qset.filter(ingredient=ingredient.id, sale_item__in=saleitem_ids)
+            actual = list(qset.values('sale_item', 'unit', 'quantity'))
+            remain_composites = filter(lambda v: v['ingredient_id'] == ingredient.id, chosen_composites)
+            expect = list(map(lambda v: {'sale_item': v['sale_item_id'], 'unit': v['unit'],
+                'quantity': float(v['quantity']),}, remain_composites))
+            expect = sort_nested_object(obj=expect)
+            actual = sort_nested_object(obj=actual)
+            #if expect != actual:
+            #    import pdb
+            #    pdb.set_trace()
+            self.assertListEqual(expect, actual)
 
 
     def _assert_attr_fields_existence(self, saleitem_pk, _assert_fn):
@@ -1013,6 +993,8 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
         tuple(map(_assert_tag_fn, qset))
         assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
                 model_cls_path='product.models.base.ProductSaleableItem',)
+        self._check_remaining_saleitems_to_ingredients(saleitem_ids=deleted_ids, is_deleted=True)
+        self._check_remaining_saleitems_to_ingredients(saleitem_ids=remain_ids)
         for saleitem_pk in deleted_ids:
             self._assert_attr_fields_existence(saleitem_pk, _assert_del_status_fn)
             self._assert_composite_fields_existence(saleitem_pk, _assert_compo_fn, with_deleted=True)
@@ -1022,6 +1004,7 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
         qset.undelete(profile_id=profile_id)
         tuple(map(_assert_undel_status_fn , qset))
         tuple(map(_assert_tag_fn, qset))
+        self._check_remaining_saleitems_to_ingredients(saleitem_ids=deleted_ids)
         for saleitem_pk in  deleted_ids:
             self._assert_attr_fields_existence(saleitem_pk, _assert_undel_status_fn)
             self._assert_composite_fields_existence(saleitem_pk, _assert_compo_fn, with_deleted=False)
