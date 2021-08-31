@@ -202,21 +202,49 @@ def flatten_nested_iterable(list_):
             yield item
 
 
-def sort_nested_object(obj, key_fn_list=None, key_fn_dict=None):
+def _sort_nested_object(obj, key_fn_list=None, key_fn_dict=None):
+    # note this function recursively converts nested dictionary fields to a list of
+    # key-value pairs, which is essential during sorting operations because `dict`
+    # type does not support comparison operators like `>` or `<`
     if isinstance(obj, dict):
-        src = [(k, sort_nested_object(v)) for k, v in obj.items()]
+        src = [(k, _sort_nested_object(v)) for k, v in obj.items()]
         args = [src]
         if key_fn_dict and callable(key_fn_dict):
             args.append(key_fn_dict)
-        return sorted(*args)
+        sorted_src = sorted(*args)
+        src = ExtendedList(from_dict=True)
+        src.extend(sorted_src)
+        return src
     elif isinstance(obj, list):
-        src = [sort_nested_object(x) for x in obj]
+        src = [_sort_nested_object(x) for x in obj]
         args = [src]
         if key_fn_list and callable(key_fn_list):
             args.append(key_fn_list)
         return sorted(*args)
     else:
         return obj
+
+def _sort_nested_object_post_process(obj):
+    if isinstance(obj, list):
+        src = [_sort_nested_object_post_process(x) for x in obj]
+        if isinstance(obj, ExtendedList) and obj.from_dict:
+            src = dict(src)
+        return src
+    else:
+        return obj
+
+def sort_nested_object(obj, key_fn_list=None, key_fn_dict=None):
+    sorted_obj = _sort_nested_object(obj=obj, key_fn_list=key_fn_list, key_fn_dict=key_fn_dict)
+    return  _sort_nested_object_post_process(obj=sorted_obj)
+
+class ExtendedList(list):
+    def __init__(self, *args, from_dict=False, **kwargs):
+        self._converted_from_dict = from_dict
+        super().__init__(*args, **kwargs)
+
+    @property
+    def from_dict(self):
+        return self._converted_from_dict
 
 
 class ExtendedDict(dict):

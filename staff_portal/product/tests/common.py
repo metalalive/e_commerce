@@ -5,9 +5,11 @@ from functools import partial
 
 from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models  import ContentType
+from django.core.exceptions    import ValidationError as DjangoValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from common.util.python import flatten_nested_iterable
-from product.models.base import _ProductAttrValueDataType
+from common.util.python import flatten_nested_iterable, sort_nested_object
+from product.models.base import _ProductAttrValueDataType, ProductSaleableItem
 from product.models.development import ProductDevIngredientType
 
 _fixtures = {
@@ -112,6 +114,12 @@ _fixtures = {
 
 
 http_request_body_template = {
+    'ProductDevIngredient': {
+        'name': None,  'id': None, 'category': None,
+        'attributes':[
+            #{'id':None, 'type':None, 'value': None},
+        ],
+    },
     'ProductSaleableItem': {
         'name': None,  'id': None, 'visible': None, 'price': None,
         'tags':[] ,
@@ -186,11 +194,11 @@ def rand_gen_request_body(template, customize_item_fn, data_gen):
     return map(rand_gen_single_req, data_gen)
 
 
-def _get_inst_attr(obj, attname):
+def _get_inst_attr(obj, attname, default_value=None):
     if isinstance(obj, dict):
-        out = obj[attname]
+        out = obj.get(attname, default_value)
     else:
-        out = getattr(obj, attname)
+        out = getattr(obj, attname, default_value)
     return out
 
 
@@ -242,7 +250,278 @@ def _ingredient_attrvals_common_setup(attrtypes_gen_fn, ingredients):
     return _attrval_objs
 
 
+def reset_serializer_validation_result(serializer):
+    serializer._errors.clear()
+    delattr(serializer, '_validated_data')
+
+
 class HttpRequestDataGen:
     def customize_req_data_item(self, item, **kwargs):
         raise NotImplementedError()
+
+
+class AttributeDataGenMixin:
+    min_num_applied_attrs = 0
+    max_num_applied_attrs = len(_fixtures['ProductAttributeType'])
+
+    def _gen_attr_val(self, attrtype, extra_amount_enabled):
+        model_fixtures = _fixtures
+        nested_item = {'id':None, 'type':_get_inst_attr(attrtype,'id'), 'value': None,}
+        _fn = lambda option: option.value[0][0] == _get_inst_attr(attrtype,'dtype')
+        dtype_option = filter(_fn, _ProductAttrValueDataType)
+        dtype_option = tuple(dtype_option)[0]
+        field_name = dtype_option.value[0][1]
+        field_descriptor = getattr(ProductSaleableItem, field_name)
+        attrval_cls_name = field_descriptor.field.related_model.__name__
+        value_list = model_fixtures[attrval_cls_name]
+        chosen_idx = random.randrange(0, len(value_list))
+        nested_item['value'] = value_list[chosen_idx]
+        rand_enable_extra_amount = random.randrange(0, 2)
+        if extra_amount_enabled and rand_enable_extra_amount > 0:
+            extra_amount_list = model_fixtures['ProductAppliedAttributePrice']
+            chosen_idx = random.randrange(0, len(extra_amount_list))
+            nested_item['extra_amount'] = float(extra_amount_list[chosen_idx])
+        return nested_item
+
+    def gen_attr_vals(self, extra_amount_enabled):
+        num_attrvals    = random.randrange(self.min_num_applied_attrs, self.max_num_applied_attrs)
+        attr_dtypes_gen = listitem_rand_assigner(list_=_fixtures['ProductAttributeType'],
+                min_num_chosen=num_attrvals, max_num_chosen=(num_attrvals + 1))
+        bound_gen_attr_val = partial(self._gen_attr_val, extra_amount_enabled=extra_amount_enabled)
+        return list(map(bound_gen_attr_val, attr_dtypes_gen))
+## end of class AttributeDataGenMixin
+
+
+class BaseVerificationMixin:
+    serializer_class = None
+
+    def _get_non_nested_fields(self, skip_id=True):
+        check_fields = copy.copy(self.serializer_class.Meta.fields)
+        if skip_id:
+            check_fields.remove('id')
+        return check_fields
+
+    def _assert_simple_fields(self, check_fields,  exp_sale_item, ac_sale_item):
+        self.assertNotEqual(_get_inst_attr(ac_sale_item,'id'), None)
+        self.assertGreater(_get_inst_attr(ac_sale_item,'id'), 0)
+        bound_assert_fn = partial(assert_field_equal, testcase=self,  expect_obj=exp_sale_item, actual_obj=ac_sale_item)
+        tuple(map(bound_assert_fn, check_fields))
+
+    def _assert_serializer_validation_error(self, testcase, serializer, reset_validation_result=True):
+        error_details = None
+        possible_exception_classes = (DjangoValidationError, DRFValidationError, AssertionError)
+        with testcase.assertRaises(possible_exception_classes):
+            try:
+                serializer.is_valid(raise_exception=True)
+            except possible_exception_classes as e:
+                error_details = e.detail
+                raise
+            finally:
+                if reset_validation_result:
+                    reset_serializer_validation_result(serializer=serializer)
+        testcase.assertNotEqual(error_details, None)
+        return error_details
+
+    def _assert_single_invalid_case(self, testcase, field_name, invalid_value, expect_err_msg,
+            req_data, serializer, fn_choose_edit_item):
+        origin_value = req_data[field_name]
+        req_data[field_name] = invalid_value
+        origin_error_details = self._assert_serializer_validation_error(testcase=testcase, serializer=serializer)
+        req_data[field_name] = origin_value
+        error_details = fn_choose_edit_item(origin_error_details)
+        error_details = error_details[field_name]
+        testcase.assertGreaterEqual(len(error_details), 1)
+        actual_err_msg = str(error_details[0])
+        testcase.assertEqual(expect_err_msg, actual_err_msg)
+        return origin_error_details
+
+    def verify_objects(self, actual_instances, expect_data,  **kwargs):
+        raise NotImplementedError()
+
+    def verify_data(self, actual_data, expect_data, **kwargs):
+        raise NotImplementedError()
+## end of class BaseVerificationMixin
+
+
+class AttributeAssertionMixin:
+
+    def _assert_attributes_data_change(self, data_before_validate, data_after_validate, skip_attr_val_id=False):
+        # check data conversion between `attributes` field and internal attribute fields for specific data type
+        def _flatten_attr_vals(item):
+            evict_condition = lambda kv: kv[0] not in ('ingredient_type', 'ingredient_id')
+            attrtype_key_replace_fn = partial(_dict_key_replace, to_='type', from_='attr_type')
+            ingredient_ctype_kv_evict_fn = partial(_dict_kv_pair_evict, cond_fn=evict_condition)
+            flattened_attrvals = [attr_val for dtype_opt in _ProductAttrValueDataType \
+                    for attr_val in item.get(dtype_opt.value[0][1], [])]
+            flattened_attrvals = map(attrtype_key_replace_fn, flattened_attrvals)
+            flattened_attrvals = map(ingredient_ctype_kv_evict_fn, flattened_attrvals)
+            return list(flattened_attrvals)
+
+        def _evict_attr_val_id_fn(item):
+            evict_condition = lambda kv: kv[0] != 'id'
+            id_evict_fn = partial(_dict_kv_pair_evict, cond_fn=evict_condition)
+            item = map(id_evict_fn, item)
+            return list(item)
+
+        attrs_before_validate = list(map(lambda x:x['attributes'], data_before_validate))
+        attrs_after_validate  = list(map(_flatten_attr_vals, data_after_validate))
+        if skip_attr_val_id:
+            attrs_before_validate = list(map(_evict_attr_val_id_fn, attrs_before_validate))
+            attrs_after_validate  = list(map(_evict_attr_val_id_fn, attrs_after_validate ))
+        attrs_before_validate = sort_nested_object(obj=attrs_before_validate)
+        attrs_after_validate  = sort_nested_object(obj=attrs_after_validate)
+        expect_vals = json.dumps(attrs_before_validate, sort_keys=True)
+        actual_vals = json.dumps(attrs_after_validate , sort_keys=True)
+        self.assertEqual(expect_vals, actual_vals)
+
+
+    def _assert_product_attribute_fields(self, exp_sale_item, ac_sale_item):
+        # TODO, rename to `cpompare_attribute_fields`
+        key_evict_condition = lambda kv: (kv[0] not in ('id', 'ingredient_type', 'ingredient_id')) \
+                and not (kv[0] == 'extra_amount' and kv[1] is None)
+        bound_dict_kv_pair_evict = partial(_dict_kv_pair_evict,  cond_fn=key_evict_condition)
+        bound_dict_key_replace = partial(_dict_key_replace, to_='extra_amount', from_='_extra_charge__amount')
+        # compare attribute values based on its data type
+        for dtype_option in _ProductAttrValueDataType:
+            field_name = dtype_option.value[0][1]
+            expect_vals = exp_sale_item.get(field_name, None)
+            if not expect_vals:
+                continue
+            expect_vals = list(map(bound_dict_kv_pair_evict, expect_vals))
+            manager = _get_inst_attr(ac_sale_item, field_name)
+            actual_vals = manager.values('attr_type', 'value', '_extra_charge__amount')
+            actual_vals = map(bound_dict_key_replace, actual_vals)
+            actual_vals = list(map(bound_dict_kv_pair_evict, actual_vals))
+            expect_vals = sorted(expect_vals, key=lambda x:x['attr_type'])
+            actual_vals = sorted(actual_vals, key=lambda x:x['attr_type'])
+            expect_vals = json.dumps(expect_vals, sort_keys=True)
+            actual_vals = json.dumps(actual_vals, sort_keys=True)
+            self.assertEqual(expect_vals, actual_vals)
+        # compare attribute values in `attributes` field
+        ## exp_attrs = _get_inst_attr(exp_sale_item, 'attributes', [])
+        ## ac_attrs  = _get_inst_attr(ac_sale_item,  'attributes', [])
+        ## exp_attrs = sort_nested_object(obj=exp_attrs)
+        ## ac_attrs  = sort_nested_object(obj=ac_attrs )
+        ## exp_attrs = json.dumps(exp_attrs, sort_keys=True)
+        ## ac_attrs  = json.dumps(ac_attrs , sort_keys=True)
+        ## if exp_attrs != ac_attrs:
+        ##     import pdb
+        ##     pdb.set_trace()
+        ## self.assertEqual(exp_attrs, ac_attrs)
+
+
+    def _test_unclassified_attribute_error(self, testcase, serializer, request_data,
+            assert_single_invalid_case_fn):
+        invalid_cases = [
+            ('type',  None, 'unclassified attribute type `None`'),
+            ('type', 'Lo0p','unclassified attribute type `Lo0p`'),
+            ('type',  9999, 'unclassified attribute type `9999`'),
+            ('type',  99.9, 'unclassified attribute type `99.9`'),
+        ]
+        request_data = list(filter(lambda d: any(d['attributes']), request_data))
+        for field_name, invalid_value, expect_err_msg in invalid_cases:
+            for idx in range(len(request_data)):
+                # serializer data has to be entirely reset for next iteration because it
+                # reports the validation error for all list items in one go
+                serializer.initial_data = copy.deepcopy(request_data)
+                jdx = random.randrange(0, len(serializer.initial_data[idx]['attributes']))
+                fn_choose_edit_item = lambda x : x[idx]['attributes'][jdx]
+                req_data = fn_choose_edit_item(serializer.initial_data)
+                assert_single_invalid_case_fn(testcase=testcase, field_name=field_name, req_data=req_data,
+                        invalid_value=invalid_value, expect_err_msg=expect_err_msg, serializer=serializer,
+                        fn_choose_edit_item=fn_choose_edit_item)
+
+
+    def _test_unclassified_attributes_error(self, serializer, request_data, testcase,
+            assert_serializer_validation_error_fn, num_rounds=10, extra_invalid_cases=None,
+            field_name='type', expect_err_msg_pattern='unclassified attribute type `%s`'):
+        request_data = list(filter(lambda d: any(d['attributes']), request_data))
+        extra_invalid_cases = extra_invalid_cases or ()
+        invalid_cases = ( 9999, '9q98', 9997,) + extra_invalid_cases
+        num_invalid_cases = len(invalid_cases)
+        for _ in range(num_rounds):
+            serializer.initial_data = copy.deepcopy(request_data)
+            invalid_cases_iter = iter(invalid_cases)
+            idx_to_attrs = {}
+            while len(idx_to_attrs.keys()) < num_invalid_cases:
+                idx = random.randrange(0, len(request_data))
+                jdx = random.randrange(0, len(request_data[idx]['attributes']))
+                if idx_to_attrs.get((idx,jdx)) is None:
+                    idx_to_attrs[(idx,jdx)] = next(invalid_cases_iter)
+            fn_choose_edit_item = lambda x, idx, jdx : x[idx]['attributes'][jdx]
+            for key, invalid_value in idx_to_attrs.items():
+                req_data = fn_choose_edit_item(serializer.initial_data, key[0], key[1])
+                req_data[field_name] = invalid_value
+            error_details = assert_serializer_validation_error_fn(testcase=testcase, serializer=serializer)
+            # the number of error details varies because django reports only one error
+            # at a time even there are multiple errors in the serialized data , this test
+            # only ensures at least one error(s) can be reported by Django.
+            num_errors_catched = 0
+            for key, invalid_value in idx_to_attrs.items():
+                error_detail = fn_choose_edit_item(error_details, key[0], key[1])
+                if not error_detail:
+                    continue
+                error_detail = error_detail[field_name]
+                testcase.assertGreaterEqual(len(error_detail), 1)
+                actual_err_msg = str(error_detail[0])
+                expect_err_msg = expect_err_msg_pattern % invalid_value
+                testcase.assertEqual(expect_err_msg, actual_err_msg)
+                num_errors_catched += 1
+            testcase.assertGreaterEqual(num_errors_catched, 1)
+            testcase.assertLessEqual(num_errors_catched, num_invalid_cases)
+    ## end of _test_unclassified_attributes_error()
+
+
+    def _test_incorrect_attribute_value(self, serializer, request_data, testcase, assert_serializer_validation_error_fn,
+            num_rounds=10, field_name='value'):
+        _attr_fixture = {
+             'null' :( None, 'unclassified attribute type `None`'),
+             _ProductAttrValueDataType.STRING.value[0][0]           :'Lo0p',
+             _ProductAttrValueDataType.INTEGER.value[0][0]          : -999 ,
+             _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0] : 9999 ,
+             _ProductAttrValueDataType.FLOAT.value[0][0]            : 99.9 ,
+        }
+        _allowed_type_transitions = [
+            (_ProductAttrValueDataType.FLOAT.value[0][0], _ProductAttrValueDataType.INTEGER.value[0][0]),
+            (_ProductAttrValueDataType.FLOAT.value[0][0], _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]),
+            (_ProductAttrValueDataType.INTEGER[0][0], _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]),
+            (_ProductAttrValueDataType.STRING.value[0][0], _ProductAttrValueDataType.INTEGER.value[0][0]         ),
+            (_ProductAttrValueDataType.STRING.value[0][0], _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]),
+            (_ProductAttrValueDataType.STRING.value[0][0], _ProductAttrValueDataType.FLOAT.value[0][0]           ),
+        ]
+        expect_err_code = ('null', 'invalid', 'min_value')
+        num_attr_fixture = len(_attr_fixture)
+        request_data = list(filter(lambda d: any(d['attributes']), request_data))
+        for _ in range(num_rounds):
+            serializer.initial_data = copy.deepcopy(request_data)
+            idx_to_attrs = {}
+            while len(idx_to_attrs.keys()) < num_attr_fixture:
+                idx = random.randrange(0, len(serializer.initial_data))
+                jdx = random.randrange(0, len(serializer.initial_data[idx]['attributes']))
+                if idx_to_attrs.get((idx, jdx)) is None:
+                    attrtype_id = serializer.initial_data[idx]['attributes'][jdx]['type']
+                    attrtype = filter(lambda obj: obj.id == attrtype_id, testcase.stored_models['ProductAttributeType'])
+                    attrtype = tuple(attrtype)[0]
+                    dtype_keys = list(_attr_fixture.keys())
+                    dtype_keys.remove(attrtype.dtype) # create invalid case by giving different data type of value
+                    chosen_key = random.choice(dtype_keys)
+                    if (attrtype.dtype, chosen_key) not in _allowed_type_transitions:
+                        idx_to_attrs[(idx, jdx)] = (attrtype.dtype, chosen_key)
+            fn_choose_edit_item = lambda x, idx, jdx : x[idx]['attributes'][jdx]
+            for key, invalid_value in idx_to_attrs.items():
+                req_data = fn_choose_edit_item(serializer.initial_data, key[0], key[1])
+                req_data[field_name] = _attr_fixture[invalid_value[1]]
+            error_details =  assert_serializer_validation_error_fn(testcase=testcase, serializer=serializer)
+            for key, transition in idx_to_attrs.items():
+                error_detail = fn_choose_edit_item(error_details, key[0], key[1])
+                #if not error_detail:
+                #    import pdb
+                #    pdb.set_trace()
+                testcase.assertTrue(any(error_detail))
+                error_detail = error_detail[field_name]
+                testcase.assertGreaterEqual(len(error_detail), 1)
+                actual_err_code = error_detail[0].code
+                testcase.assertIn(actual_err_code, expect_err_code)
+## end of class AttributeAssertionMixin
+
 

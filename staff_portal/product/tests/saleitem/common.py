@@ -11,7 +11,7 @@ from product.models.base import ProductTag, ProductTagClosure, ProductAttributeT
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 from product.serializers.base import SaleableItemSerializer
 
-from product.tests.common import _fixtures, http_request_body_template, _load_init_params, _modelobj_list_to_map, _dict_key_replace, _dict_kv_pair_evict, listitem_rand_assigner, _common_instances_setup, rand_gen_request_body, _get_inst_attr, assert_field_equal, HttpRequestDataGen
+from product.tests.common import _fixtures, http_request_body_template, _load_init_params, _modelobj_list_to_map, _dict_key_replace, _dict_kv_pair_evict, listitem_rand_assigner, _common_instances_setup, rand_gen_request_body, _get_inst_attr, assert_field_equal, HttpRequestDataGen, AttributeDataGenMixin, BaseVerificationMixin, AttributeAssertionMixin
 
 
 
@@ -66,10 +66,9 @@ def assert_softdelete_items_exist(testcase, deleted_ids, remain_ids, model_cls_p
     testcase.assertSetEqual(set(deleted_ids) , set(qset.values_list(id_label, flat=True)))
 
 
-class HttpRequestDataGenSaleableItem(HttpRequestDataGen):
+class HttpRequestDataGenSaleableItem(HttpRequestDataGen, AttributeDataGenMixin):
     min_num_applied_tags = 0
     min_num_applied_media = 0
-    min_num_applied_attrs = 0
     min_num_applied_ingredients = 0
 
     def customize_req_data_item(self, item):
@@ -82,11 +81,7 @@ class HttpRequestDataGenSaleableItem(HttpRequestDataGen):
                 min_num_chosen=self.min_num_applied_media)
         applied_media = map(lambda m: m['media'], applied_media)
         item['media_set'].extend(applied_media)
-        num_attrvals    = random.randrange(self.min_num_applied_attrs, len(model_fixtures['ProductAttributeType']))
-        attr_dtypes_gen = listitem_rand_assigner(list_=model_fixtures['ProductAttributeType'],
-                min_num_chosen=num_attrvals, max_num_chosen=(num_attrvals + 1))
-        bound_gen_attr_val = partial(self._gen_attr_val, extra_amount_enabled=True)
-        item['attributes'] = list(map(bound_gen_attr_val, attr_dtypes_gen))
+        item['attributes'] = self.gen_attr_vals(extra_amount_enabled=True)
         num_ingredients = random.randrange(self.min_num_applied_ingredients,
                 len(model_fixtures['ProductDevIngredient']))
         ingredient_composite_gen = listitem_rand_assigner(list_=model_fixtures['ProductDevIngredient'],
@@ -94,25 +89,6 @@ class HttpRequestDataGenSaleableItem(HttpRequestDataGen):
         item['ingredients_applied'] = list(map(self._gen_ingredient_composite, ingredient_composite_gen))
     ## end of customize_req_data_item()
 
-
-    def _gen_attr_val(self, attrtype, extra_amount_enabled):
-        model_fixtures = _fixtures
-        nested_item = {'id':None, 'type':_get_inst_attr(attrtype,'id'), 'value': None,}
-        _fn = lambda option: option.value[0][0] == _get_inst_attr(attrtype,'dtype')
-        dtype_option = filter(_fn, _ProductAttrValueDataType)
-        dtype_option = tuple(dtype_option)[0]
-        field_name = dtype_option.value[0][1]
-        field_descriptor = getattr(ProductSaleableItem, field_name)
-        attrval_cls_name = field_descriptor.field.related_model.__name__
-        value_list = model_fixtures[attrval_cls_name]
-        chosen_idx = random.randrange(0, len(value_list))
-        nested_item['value'] = value_list[chosen_idx]
-        rand_enable_extra_amount = random.randrange(0, 2)
-        if extra_amount_enabled and rand_enable_extra_amount > 0:
-            extra_amount_list = model_fixtures['ProductAppliedAttributePrice']
-            chosen_idx = random.randrange(0, len(extra_amount_list))
-            nested_item['extra_amount'] = float(extra_amount_list[chosen_idx])
-        return nested_item
 
     def _gen_ingredient_composite(self, ingredient):
         chosen_idx = random.randrange(0, len(UnitOfMeasurement.choices))
@@ -122,46 +98,15 @@ class HttpRequestDataGenSaleableItem(HttpRequestDataGen):
 
 ## end of class HttpRequestDataGenSaleableItem
 
-class BaseVerificationMixin:
-    serializer_class = None
-    def verify_objects(self, actual_instances, expect_data,  **kwargs):
-        raise NotImplementedError()
 
-    def verify_data(self, actual_data, expect_data, **kwargs):
-        raise NotImplementedError()
-
-
-class SaleableItemVerificationMixin(BaseVerificationMixin):
+class SaleableItemVerificationMixin(BaseVerificationMixin, AttributeAssertionMixin):
     serializer_class = SaleableItemSerializer
 
     def _assert_simple_fields(self, check_fields,  exp_sale_item, ac_sale_item, usrprof_id=None):
-        self.assertNotEqual(_get_inst_attr(ac_sale_item,'id'), None)
-        self.assertGreater(_get_inst_attr(ac_sale_item,'id'), 0)
-        bound_assert_fn = partial(assert_field_equal, testcase=self,  expect_obj=exp_sale_item, actual_obj=ac_sale_item)
-        tuple(map(bound_assert_fn, check_fields))
+        super()._assert_simple_fields(check_fields=check_fields,  exp_sale_item=exp_sale_item,
+                ac_sale_item=ac_sale_item)
         if usrprof_id:
             self.assertEqual(_get_inst_attr(ac_sale_item,'usrprof'), usrprof_id)
-
-    def _assert_product_attribute_fields(self, exp_sale_item, ac_sale_item):
-        key_evict_condition = lambda kv: (kv[0] not in ('id', 'ingredient_type', 'ingredient_id')) \
-                and not (kv[0] == 'extra_amount' and kv[1] is None)
-        bound_dict_kv_pair_evict = partial(_dict_kv_pair_evict,  cond_fn=key_evict_condition)
-        bound_dict_key_replace = partial(_dict_key_replace, to_='extra_amount', from_='_extra_charge__amount')
-        for dtype_option in _ProductAttrValueDataType:
-            field_name = dtype_option.value[0][1]
-            expect_vals = exp_sale_item.get(field_name, None)
-            if not expect_vals:
-                continue
-            expect_vals = list(map(bound_dict_kv_pair_evict, expect_vals))
-            manager = _get_inst_attr(ac_sale_item, field_name)
-            actual_vals = manager.values('attr_type', 'value', '_extra_charge__amount')
-            actual_vals = map(bound_dict_key_replace, actual_vals)
-            actual_vals = list(map(bound_dict_kv_pair_evict, actual_vals))
-            expect_vals = sorted(expect_vals, key=lambda x:x['attr_type'])
-            actual_vals = sorted(actual_vals, key=lambda x:x['attr_type'])
-            expect_vals = json.dumps(expect_vals, sort_keys=True)
-            actual_vals = json.dumps(actual_vals, sort_keys=True)
-            self.assertEqual(expect_vals, actual_vals)
 
     def _assert_tag_fields(self, exp_sale_item, ac_sale_item):
         expect_vals = exp_sale_item['tags']
@@ -192,9 +137,7 @@ class SaleableItemVerificationMixin(BaseVerificationMixin):
         self.assertListEqual(expect_vals, actual_vals)
 
     def _get_non_nested_fields(self, skip_id=True, skip_usrprof=True):
-        check_fields = copy.copy(self.serializer_class.Meta.fields)
-        if skip_id:
-            check_fields.remove('id')
+        check_fields = super()._get_non_nested_fields(skip_id=skip_id)
         if skip_usrprof:
             check_fields.remove('usrprof')
         return check_fields
