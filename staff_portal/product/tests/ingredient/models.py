@@ -20,9 +20,9 @@ from product.tests.common import _fixtures, listitem_rand_assigner, _common_inst
 
 num_uom = len(UnitOfMeasurement.choices)
 
-def _validate_attr_vals(dtype_opt, testcase, ingredient, fixtures, expect_attrvals):
+def _validate_attr_vals(dtype_opt, testcase, ingredient, fixtures, expect_attrvals, is_deleted=False):
     manager = getattr(ingredient, dtype_opt.value[0][1])
-    qset = manager.all()
+    qset = manager.all(with_deleted=is_deleted)
     for attrval in qset:
         expect = type(ingredient)
         actual = attrval.ingredient_type.model_class()
@@ -37,7 +37,7 @@ def _validate_attr_vals(dtype_opt, testcase, ingredient, fixtures, expect_attrva
     ingre_id = ingredient.pk
     attrval_set = expect_attrvals[dtype_value].get(ingre_id, [])
     expect = list(map(lambda obj: {'attr_type': obj.attr_type.pk, 'value':obj.value}, attrval_set))
-    actual = list(manager.values('attr_type', 'value'))
+    actual = list(qset.values('attr_type', 'value'))
     expect = sort_nested_object(obj=expect)
     actual = sort_nested_object(obj=actual)
     testcase.assertListEqual(expect, actual)
@@ -179,6 +179,11 @@ class IngredientDeletionTestCase(TransactionTestCase):
         self.assertEqual(deleted_set.count(), len(delete_pks))
         self._post_bulk_delete(remain_pks)
         self._check_remaining_ingredients_in_saleitem(ingre_ids=delete_pks, is_deleted=True)
+        for deleted_ingredient in deleted_set:
+            bound_fn = partial(_validate_attr_vals, testcase=self, ingredient=deleted_ingredient,
+                    fixtures=_fixtures['ProductAttributeType'], expect_attrvals=self.attrval_objs,
+                    is_deleted=True)
+            tuple(map(bound_fn, _ProductAttrValueDataType))
 
         deleted_set.undelete(profile_id=profile_id)
         deleted_set = ProductDevIngredient.objects.get_deleted_set()

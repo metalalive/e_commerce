@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+import json
 import operator
 import logging
 
@@ -290,19 +291,27 @@ class SelectIDsExistValidator:
 
 @deconstructible
 class UniqueListItemsValidator:
-    err_msg_pattern = '{"message":"duplicate item found in the list","field":"%s","value":%s}'
+    default_err_msg_pattern = '{"message":"duplicate item found in the list","value":%s}'
 
-    def __init__(self, fields:list, error_cls=ValidationError):
+    def __init__(self, fields:list, error_cls=ValidationError, err_msg_pattern=None):
         self._unique_fields_among_children = fields
         self._error_cls = error_cls
+        self._err_msg_pattern = err_msg_pattern or self.default_err_msg_pattern
 
     def __call__(self, value):
-        for fname in self._unique_fields_among_children :
-            fvalue = [q[fname].pk if isinstance(q[fname], DjangoModel) else q[fname] for q in value]
-            if len(fvalue) != len(set(fvalue)):
-                err_msg = self.err_msg_pattern  % (fname, fvalue)
-                log_msg = ['err_msg', err_msg]
-                _logger.info(None, *log_msg)
-                raise  self._error_cls(err_msg)
+        extract_fn = lambda q, fname: q[fname].pk if isinstance(q.get(fname), DjangoModel) else q.get(fname)
+        fvalue  = [tuple([extract_fn(q, fname) for fname in self._unique_fields_among_children]) for q in value]
+        # TODO: let caller determine how to handle None value
+        fvalue_compare = list(filter(lambda fv: None not in fv, fvalue))
+        #if len(fvalue) != len(fvalue_compare):
+        #    import pdb
+        #    pdb.set_trace()
+        if len(fvalue_compare) != len(set(fvalue_compare)):
+            err_input_data = [{self._unique_fields_among_children[idx]:fv[idx] for idx in \
+                    range(len(self._unique_fields_among_children))} for fv in fvalue]
+            err_msg = self._err_msg_pattern  % json.dumps(err_input_data)
+            log_msg = ['err_msg', err_msg]
+            _logger.info(None, *log_msg)
+            raise  self._error_cls(err_msg)
 
 

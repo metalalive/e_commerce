@@ -36,7 +36,7 @@ class FabricationIngredientView(AuthCommonAPIView, RemoteGetProfileIDMixin, Reco
     def put(self, request, *args, **kwargs):
         kwargs['many'] = True
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
-        kwargs['return_data_after_done'] = False
+        kwargs['return_data_after_done'] = True
         return  self.update(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):

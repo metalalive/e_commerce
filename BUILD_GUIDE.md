@@ -25,13 +25,11 @@ Note
 ### Test
 To run the test suite, execute following commands :
 ```
-python3.9 ./manage.py test api.tests.integration.views   --settings api.settings --keepdb --verbosity=2
-
-python3.9 ./manage.py test product.tests.ingredient.models     --settings product.settings --keepdb --verbosity=2
-python3.9 ./manage.py test product.tests.saleitem.models       --settings product.settings --keepdb --verbosity=2
-python3.9 ./manage.py test product.tests.saleitem.serializers  --settings product.settings --keepdb --verbosity=2
-python3.9 ./manage.py test product.tests.saleitem.views        --settings product.settings --keepdb --verbosity=2
+source PATH/TO/YOUR_VIRTUAL_ENV/bin/activate
+cd ./staff_portal
+./run_unit_test
 ```
+You can also run any single test case by copying any line of command in the script file `run_unit_test`
 
 Note
 * For Django applications, you can also run specific test case by assigning full path of a test case function. Such as `product.tests.integration.models.SimpleSaleableItemDeletionTestCase.test_soft_delete_bulk_ok` along with the command `./manage.py test`

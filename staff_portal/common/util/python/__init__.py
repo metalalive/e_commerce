@@ -207,7 +207,7 @@ def _sort_nested_object(obj, key_fn_list=None, key_fn_dict=None):
     # key-value pairs, which is essential during sorting operations because `dict`
     # type does not support comparison operators like `>` or `<`
     if isinstance(obj, dict):
-        src = [(k, _sort_nested_object(v)) for k, v in obj.items()]
+        src = [[k, _sort_nested_object(v)] for k, v in obj.items()] # DO NOT use tuple
         args = [src]
         if key_fn_dict and callable(key_fn_dict):
             args.append(key_fn_dict)

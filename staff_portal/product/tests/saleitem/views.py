@@ -1,11 +1,10 @@
 import copy
 import json
 import time
-import urllib
 import functools
 from unittest.mock import Mock, patch
 
-from django.test import TransactionTestCase, Client as DjangoTestClient
+from django.test import TransactionTestCase
 from django.db.models import Count
 from django.db.models.constants import LOOKUP_SEP
 from django.contrib.auth.models import User as AuthUser
@@ -14,66 +13,20 @@ from rest_framework.settings import DEFAULTS as drf_default_settings
 from common.util.python import sort_nested_object
 from common.util.python.messaging.rpc import RpcReplyEvent
 from product.permissions import SaleableItemPermissions
-from .common import _fixtures as model_fixtures, listitem_rand_assigner, rand_gen_request_body, http_request_body_template, _saleitem_related_instance_setup, HttpRequestDataGenSaleableItem, assert_softdelete_items_exist, SaleableItemVerificationMixin
+
+from product.tests.common import _MockTestClientInfoMixin, assert_view_permission_denied, listitem_rand_assigner, rand_gen_request_body, http_request_body_template, assert_view_bulk_create_with_response, assert_view_unclassified_attributes, assert_edit_view_invalid_id, SoftDeleteCommonTestMixin
+from .common import _fixtures as model_fixtures, _saleitem_related_instance_setup, HttpRequestDataGenSaleableItem, SaleableItemVerificationMixin
 
 
-class _MockInfoMixin:
-    stored_models = {}
-    _json_mimetype = 'application/json'
-    _client = DjangoTestClient(enforce_csrf_checks=False, HTTP_ACCEPT=_json_mimetype)
-    _forwarded_pattern = 'by=proxy_api_gateway;for=%s;host=testserver;proto=http'
-    mock_profile_id = [123, 124]
-    permission_class = None
-
-    def _mock_rpc_succeed_reply_evt(self, succeed_amqp_msg):
-        reply_evt = RpcReplyEvent(listener=None, timeout_s=1)
-        init_amqp_msg = {'result': {}, 'status': RpcReplyEvent.status_opt.STARTED}
-        reply_evt.send(init_amqp_msg)
-        succeed_amqp_msg['status'] = RpcReplyEvent.status_opt.SUCCESS
-        reply_evt.send(succeed_amqp_msg)
-        return reply_evt
-
-    def _mock_get_profile(self, expect_usrprof, http_method):
-        mock_role = {'id': 126, 'perm_code': self.permission_class.perms_map[http_method][:]}
-        succeed_amqp_msg = {'result': {'id': expect_usrprof, 'roles':[mock_role]},}
-        return self._mock_rpc_succeed_reply_evt(succeed_amqp_msg)
-
-    def _send_request_to_backend(self, path, method='post', body=None, expect_shown_fields=None,
-            ids=None, extra_query_params=None):
-        if body is not None:
-            body = json.dumps(body).encode()
-        query_params = {}
-        if extra_query_params:
-            query_params.update(extra_query_params)
-        if expect_shown_fields:
-            query_params['fields'] = ','.join(expect_shown_fields)
-        if ids:
-            ids = tuple(map(str, ids))
-            query_params['ids'] = ','.join(ids)
-        querystrings = urllib.parse.urlencode(query_params)
-        path_with_querystring = '%s?%s' % (path, querystrings)
-        send_fn = getattr(self._client, method)
-        return send_fn(path=path_with_querystring, data=body,  content_type=self._json_mimetype,
-                HTTP_FORWARDED=self.http_forwarded)
-## end of class _MockInfoMixin
-
-
-class SaleableItemBaseViewTestCase(TransactionTestCase, _MockInfoMixin, HttpRequestDataGenSaleableItem):
+class SaleableItemBaseViewTestCase(TransactionTestCase, _MockTestClientInfoMixin, HttpRequestDataGenSaleableItem):
     permission_class = SaleableItemPermissions
-    rand_create = True
 
-    def _refresh_req_data(self):
-        fixture_source = model_fixtures['ProductSaleableItem']
-        if self.rand_create:
-            saleitems_data_gen = listitem_rand_assigner(list_=fixture_source)
-        else:
-            saleitems_data_gen = iter(fixture_source)
-        self._request_data = rand_gen_request_body(customize_item_fn=self.customize_req_data_item,
-                data_gen=saleitems_data_gen,  template=http_request_body_template['ProductSaleableItem'])
-        self._request_data = list(self._request_data)
+    def refresh_req_data(self):
+        return super().refresh_req_data(fixture_source=model_fixtures['ProductSaleableItem'],
+                http_request_body_template=http_request_body_template['ProductSaleableItem'])
 
     def setUp(self):
-        self._refresh_req_data()
+        self._request_data = self.refresh_req_data()
         # DO NOT create model instance in init() ,
         # in init() the test database hasn't been created yet
         self._user_info = model_fixtures['AuthUser'][0]
@@ -94,8 +47,10 @@ class SaleableItemBaseViewTestCase(TransactionTestCase, _MockInfoMixin, HttpRequ
             ids=None, extra_query_params=None, empty_body=False):
         if body is None and not empty_body:
             body = self._request_data
+        headers = {'HTTP_FORWARDED': self.http_forwarded,}
         return super()._send_request_to_backend( path=path, method=method, body=body, ids=ids,
-                expect_shown_fields=expect_shown_fields, extra_query_params=extra_query_params )
+                expect_shown_fields=expect_shown_fields, extra_query_params=extra_query_params,
+                headers=headers)
 
 ## end of class SaleableItemBaseViewTestCase
 
@@ -104,27 +59,12 @@ class SaleableItemCreationTestCase(SaleableItemBaseViewTestCase):
     path = '/saleableitems'
 
     def test_permission_denied(self):
-        body = json.dumps(self._request_data).encode()
-        # forwarded authentication failure
-        response = self._client.post(path=self.path, data=body, content_type=self._json_mimetype)
-        self.assertEqual(int(response.status_code), 403)
-        # failure because user authentication server is down
-        with patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile') as mock_get_profile:
-            fake_amqp_msg = {'result': {}, 'status': RpcReplyEvent.status_opt.FAIL_CONN}
-            mock_rpc_reply_evt = RpcReplyEvent(listener=None, timeout_s=1)
-            mock_rpc_reply_evt.send(fake_amqp_msg)
-            mock_get_profile.return_value = mock_rpc_reply_evt
-            response = self._client.post(path=self.path, data=body,  content_type=self._json_mimetype,
-                    HTTP_FORWARDED=self.http_forwarded)
-            self.assertEqual(int(response.status_code), 403)
-        # failure due to insufficient permission
-        with patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile') as mock_get_profile:
-            mock_role = {'id': 126, 'perm_code': SaleableItemPermissions.perms_map['POST'][:-2]}
-            succeed_amqp_msg = {'result': {'id': self.mock_profile_id[0], 'roles':[mock_role]},}
-            mock_get_profile.return_value = self._mock_rpc_succeed_reply_evt(succeed_amqp_msg)
-            response = self._client.post(path=self.path, data=body,  content_type=self._json_mimetype,
-                    HTTP_FORWARDED=self.http_forwarded)
-            self.assertEqual(int(response.status_code), 403)
+        assert_view_permission_denied(testcase=self, request_body_data=self._request_data,
+                path=self.path, content_type=self._json_mimetype, http_forwarded=self.http_forwarded,
+                mock_rpc_path='product.views.base.SaleableItemView._usermgt_rpc.get_profile',
+                permission_map=self.permission_class.perms_map['POST'],
+                return_profile_id=self.mock_profile_id[0],
+            )
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
@@ -154,37 +94,17 @@ class SaleableItemCreationTestCase(SaleableItemBaseViewTestCase):
         expect_hidden_fields = ['usrprof', 'visible', 'ingredients_applied', 'attributes']
         expect_usrprof = self.mock_profile_id[1]
         mock_get_profile.return_value = self._mock_get_profile(expect_usrprof, 'POST')
-        response = self._send_request_to_backend(path=self.path, expect_shown_fields=expect_shown_fields)
-        self.assertEqual(int(response.status_code), 201)
-        created_items = json.loads(response.content.decode())
-        for created_item in created_items:
-            for field_name in expect_shown_fields:
-                value = created_item.get(field_name, None)
-                self.assertNotEqual(value, None)
-            for field_name in expect_hidden_fields:
-                value = created_item.get(field_name, None)
-                self.assertEqual(value, None)
+        assert_view_bulk_create_with_response(testcase=self, expect_shown_fields=expect_shown_fields,
+                expect_hidden_fields=expect_hidden_fields, path=self.path)
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_validation_error_unclassified_attributes(self, mock_get_profile):
+        # don't create any attribute type instance in this case
         self.min_num_applied_attrs = 1
-        self._refresh_req_data()
+        new_request_data = self.refresh_req_data()
         mock_get_profile.return_value = self._mock_get_profile(self.mock_profile_id[1], 'POST')
-        response = self._send_request_to_backend(path=self.path)
-        self.assertEqual(int(response.status_code), 400)
-        err_items = json.loads(response.content.decode())
-        expect_items_iter = iter(self._request_data)
-        for err_item in err_items:
-            self.assertListEqual(['attributes'], list(err_item.keys()))
-            expect_item = next(expect_items_iter)
-            err_msg_pattern = 'unclassified attribute type `%s`'
-            expect_err_msgs = map(lambda x: err_msg_pattern % x['type'], expect_item['attributes'])
-            actual_err_msgs = map(lambda x: x['type'][0], err_item['attributes'])
-            expect_err_msgs = list(expect_err_msgs)
-            actual_err_msgs = list(actual_err_msgs)
-            self.assertGreater(len(actual_err_msgs), 0)
-            self.assertListEqual(expect_err_msgs, actual_err_msgs)
+        assert_view_unclassified_attributes(testcase=self, path=self.path, body=new_request_data)
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
@@ -192,7 +112,7 @@ class SaleableItemCreationTestCase(SaleableItemBaseViewTestCase):
         _saleitem_related_instance_setup(self.stored_models, num_tags=0, num_ingredients=0)
         self.min_num_applied_tags = 1
         self.min_num_applied_ingredients = 1
-        self._refresh_req_data()
+        self._request_data = self.refresh_req_data()
         mock_get_profile.return_value = self._mock_get_profile(self.mock_profile_id[1], 'POST')
         response = self._send_request_to_backend(path=self.path)
         self.assertEqual(int(response.status_code), 400)
@@ -230,26 +150,9 @@ class SaleableItemUpdateBaseTestCase(SaleableItemBaseViewTestCase):
 class SaleableItemUpdateTestCase(SaleableItemUpdateBaseTestCase):
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_invalid_id(self, mock_get_profile):
-        key = drf_default_settings['NON_FIELD_ERRORS_KEY']
-        edit_data = copy.deepcopy(self._request_data) # edit data without corrent ID
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
-        # sub case: lack id
-        edit_data[0].pop('id',None)
-        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
-        err_items = json.loads(response.content.decode())
-        self.assertEqual(int(response.status_code), 403)
-        # sub case: invalid data type of id
-        edit_data[0]['id'] = 99999
-        edit_data[-1]['id'] = 'string_id'
-        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
-        err_items = json.loads(response.content.decode())
-        self.assertEqual(int(response.status_code), 403)
-        # sub case: mix of valid id and invalid id
-        edit_data[0]['id'] = 'wrong_id'
-        edit_data[-1]['id'] = self._created_items[0]['id']
-        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
-        err_items = response.json()
-        self.assertEqual(int(response.status_code), 403)
+        assert_edit_view_invalid_id(testcase=self, edit_data=self._request_data,
+                path=self.path, expect_response_status=403)
 
 
     def _rand_gen_edit_data(self):
@@ -311,7 +214,7 @@ class SaleableItemUpdateTestCase(SaleableItemUpdateBaseTestCase):
 ## end of class SaleableItemUpdateTestCase
 
 
-class SaleableItemDeletionTestCase(SaleableItemUpdateBaseTestCase, SaleableItemVerificationMixin):
+class SaleableItemDeletionTestCase(SaleableItemUpdateBaseTestCase, SaleableItemVerificationMixin, SoftDeleteCommonTestMixin):
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_softdelete_permission_denied(self, mock_get_profile):
         another_usrprof = self.mock_profile_id[1]
@@ -329,7 +232,7 @@ class SaleableItemDeletionTestCase(SaleableItemUpdateBaseTestCase, SaleableItemV
         self.assertEqual(int(response.status_code), 202)
         deleted_ids = list(map(lambda x: x['id'], self._created_items[:num_delete]))
         remain_ids  = list(map(lambda x: x['id'], self._created_items[num_delete:]))
-        assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
+        self.assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
                 model_cls_path='product.models.base.ProductSaleableItem',)
 
 
@@ -342,45 +245,33 @@ class SaleableItemDeletionTestCase(SaleableItemUpdateBaseTestCase, SaleableItemV
             deleted_items.append(chosen_item)  # insert(0, chosen_item)
             deleted_ids = list(map(lambda x: x['id'], deleted_items))
             remain_ids  = list(map(lambda x: x['id'], remain_items ))
-            assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
+            self.assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
                     model_cls_path='product.models.base.ProductSaleableItem',)
-            print('.', end='')
             time.sleep(delay_interval_sec)
 
-    def _undelete_one(self, body={}, expect_resp_status=200, expect_resp_msg='recovery done'):
-        # note that body has to be at least {} or [], must not be null
-        # because the content-type is json 
-        empty_body = body is None
-        response = self._send_request_to_backend( path=self.path, method='patch',
-                body=body, empty_body=empty_body)
-        response_body = response.json()
-        self.assertEqual(int(response.status_code), expect_resp_status)
-        self.assertEqual(response_body['message'][0], expect_resp_msg)
-        if expect_resp_status != 200:
-            return
-        undeleted_items = response_body['affected_items']
+    def _verify_undeleted_items(self, undeleted_items):
         self.assertGreaterEqual(len(undeleted_items), 1)
         undeleted_items = sorted(undeleted_items, key=lambda x:x['id'])
         undeleted_ids  = tuple(map(lambda x:x['id'], undeleted_items))
-        undeleted_objs = self.serializer_class.Meta.model.objects.filter(
-                id__in=undeleted_ids).order_by('id')
+        undeleted_objs = self.serializer_class.Meta.model.objects.filter(id__in=undeleted_ids).order_by('id')
         self.verify_objects(actual_instances=undeleted_objs, expect_data=undeleted_items,
                 usrprof_id=self.expect_usrprof)
-        return undeleted_items
+
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_undelete_by_time(self, mock_get_profile):
         remain_items  = copy.copy(self._created_items)
         deleted_items = []
         # soft-delete one after another
-        for _ in range(5):
+        for _ in range(3):
             mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
             self._softdelete_one_by_one(remain_items, deleted_items, delay_interval_sec=2)
             # recover one by one based on the time at which each item was soft-deleted
             mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
             while any(deleted_items):
                 chosen_item = deleted_items.pop()
-                undeleted_items = self._undelete_one()
+                undeleted_items = self.perform_undelete(testcase=self, path=self.path)
+                self._verify_undeleted_items(undeleted_items)
                 self.assertEqual(chosen_item['id'] , undeleted_items[0]['id'])
                 remain_items.append(chosen_item)
             self.assertListEqual(self._created_items, remain_items)
@@ -390,7 +281,7 @@ class SaleableItemDeletionTestCase(SaleableItemUpdateBaseTestCase, SaleableItemV
     def test_undelete_specific_item(self, mock_get_profile):
         remain_items  = copy.copy(self._created_items)
         deleted_items = []
-        for _ in range(5):
+        for _ in range(3):
             mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
             self._softdelete_one_by_one(remain_items, deleted_items, delay_interval_sec=0)
             mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
@@ -399,20 +290,23 @@ class SaleableItemDeletionTestCase(SaleableItemUpdateBaseTestCase, SaleableItemV
             undeleting_items = list(undeleting_items_gen)
             half = len(undeleting_items) >> 1
             body = {'ids':[x['id'] for x in undeleting_items[:half]]}
-            affected_items = self._undelete_one(body=body)
+            affected_items = self.perform_undelete(body=body, testcase=self, path=self.path)
+            self._verify_undeleted_items(affected_items)
             body = {'ids':[x['id'] for x in undeleting_items[half:]]}
-            affected_items = self._undelete_one(body=body)
+            affected_items = self.perform_undelete(body=body, testcase=self, path=self.path)
+            self._verify_undeleted_items(affected_items)
             remain_items, deleted_items = deleted_items, remain_items # internally swap 2 lists
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_no_softdeleted_item(self, mock_get_profile):
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
-        kwargs = {'expect_resp_status':410, 'expect_resp_msg':'Nothing recovered'}
-        self._undelete_one(**kwargs)
+        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':410,
+                'expect_resp_msg':'Nothing recovered'}
+        self.perform_undelete(**kwargs)
         remain_items = self._created_items[:-1]
         kwargs['body'] = {'ids':[x['id'] for x in remain_items]}
-        self._undelete_one(**kwargs)
+        self.perform_undelete(**kwargs)
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
@@ -424,16 +318,18 @@ class SaleableItemDeletionTestCase(SaleableItemUpdateBaseTestCase, SaleableItemV
         self.assertGreater(len(deleted_items), 0)
         another_usrprof = self.mock_profile_id[1]
         mock_get_profile.return_value = self._mock_get_profile(another_usrprof, 'PATCH')
-        kwargs = {'expect_resp_status':403, 'expect_resp_msg':'user is not allowed to undelete the item(s)'}
+        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':403,
+                'expect_resp_msg':'user is not allowed to undelete the item(s)'}
         kwargs['body'] = {'ids':[x['id'] for x in deleted_items]}
-        self._undelete_one(**kwargs)
+        self.perform_undelete(**kwargs)
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_undelete_with_invalid_id(self, mock_get_profile):
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
-        kwargs = {'expect_resp_status':400, 'expect_resp_msg':'invalid data in request body'}
+        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':400,
+                    'expect_resp_msg':'invalid data in request body'}
         kwargs['body'] = {'ids':['wrong_id', 'fake_id']}
-        self._undelete_one(**kwargs)
+        self.perform_undelete(**kwargs)
 ## end of class SaleableItemDeletionTestCase
 
 
@@ -490,6 +386,9 @@ class SaleableItemQueryTestCase(SaleableItemUpdateBaseTestCase, SaleableItemVeri
 
 
 class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableItemVerificationMixin):
+    min_num_applied_attrs = 2
+    min_num_applied_tags = 2
+    min_num_applied_ingredients = 2
     rand_create = False
     _model_cls = SaleableItemVerificationMixin.serializer_class.Meta.model
 
@@ -524,121 +423,9 @@ class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableI
         self.assertGreaterEqual(len(actual_items), 1)
         return actual_items
 
-    @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
-    def test_advanced_search_attr_str(self, mock_get_profile):
-        # to ensure there will be at least 2 attribute values assigned to each saleable item
-        self.min_num_applied_attrs = 2
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
-        # construct search condition based on existing created saleable items, in
-        # order to ensure there is always something returned
-        qset = self._model_cls.objects.annotate(num_str_attr=Count('attr_val_str')).filter(num_str_attr__gt=0)
-        for expect_obj in qset:
-            for attrval in expect_obj.attr_val_str.all():
-                adv_cond = {
-                    'operator': 'and',
-                    'operands':[
-                        {
-                            'operator':'==',
-                            'operands':['attributes__type', attrval.attr_type.pk ],
-                            'metadata':{'dtype': attrval.attr_type.dtype}
-                        },
-                        {
-                            'operator':'contains',
-                            'operands':['attributes__value', attrval.value ],
-                            'metadata':{'dtype': attrval.attr_type.dtype}
-                        }
-                    ]
-                }  ## end of adv_cond
-                self._test_advanced_search_common(adv_cond=adv_cond)
-
-
-    @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
-    def test_advanced_search_attr_int(self, mock_get_profile):
-        self.min_num_applied_attrs = 2
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
-        variation = 100
-        qset = self._model_cls.objects.annotate(num_int_attr=Count('attr_val_int')).filter(num_int_attr__gt=0)
-        for expect_obj in qset:
-            for attrval in expect_obj.attr_val_int.all():
-                upper_bound = attrval.value + variation
-                lower_bound = attrval.value - variation
-                adv_cond = {
-                    'operator': 'and',
-                    'operands':[
-                        {
-                            'operator':'==',
-                            'operands':['attributes__type', attrval.attr_type.pk ],
-                            'metadata':{'dtype': attrval.attr_type.dtype}
-                        },
-                        {
-                            'operator': 'and',
-                            'operands':[
-                                {
-                                    'operator':'>',
-                                    'operands':['attributes__value', lower_bound],
-                                    'metadata':{'dtype': attrval.attr_type.dtype}
-                                },
-                                {
-                                    'operator':'<',
-                                    'operands':['attributes__value', upper_bound],
-                                    'metadata':{'dtype': attrval.attr_type.dtype}
-                                }
-                            ]
-                        }
-                    ]
-                }  ## end of adv_cond
-                actual_items = self._test_advanced_search_common(adv_cond=adv_cond)
-                search_result = tuple(filter(lambda x: x['id'] == expect_obj.id, actual_items))
-                self.assertEqual(len(search_result), 1)
-
-
-    @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
-    def test_advanced_search_attr_float(self, mock_get_profile):
-        self.min_num_applied_attrs = 1
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
-        qset = self._model_cls.objects.annotate(num_float_attr=Count('attr_val_float')).filter(num_float_attr__gt=0)
-        data = qset.values('id', 'attr_val_float__attr_type__id', 'attr_val_float__attr_type__dtype', 'attr_val_float__value')
-        data = {v['id']: v  for v in data}
-        adv_cond = {'operator': 'or', 'operands': []}
-        variation = 1.0
-        for d in data.values():
-            upper_bound = d['attr_val_float__value'] + variation
-            lower_bound = d['attr_val_float__value'] - variation
-            adv_cond_sub_clause = {
-                'operator': 'and',
-                'operands':[
-                    {
-                        'operator':'==',
-                        'operands':['attributes__type', d['attr_val_float__attr_type__id']],
-                        'metadata':{'dtype': d['attr_val_float__attr_type__dtype']}
-                    },
-                    {
-                        'operator': 'and',
-                        'operands':[
-                            {
-                                'operator':'>=',
-                                'operands':['attributes__value', lower_bound],
-                                'metadata':{'dtype': d['attr_val_float__attr_type__dtype']}
-                            },
-                            {
-                                'operator':'<=',
-                                'operands':['attributes__value', upper_bound],
-                                'metadata':{'dtype': d['attr_val_float__attr_type__dtype']}
-                            }
-                        ]
-                    }
-                ]
-            }
-            adv_cond['operands'].append(adv_cond_sub_clause)
-        saleitems_found = self._test_advanced_search_common(adv_cond=adv_cond)
-        self.assertLessEqual(len(saleitems_found), len(self._created_items))
-        self.assertEqual(len(saleitems_found), qset.count())
-        self.verify_objects(actual_instances=qset, expect_data=saleitems_found)
-
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_advanced_search_tags(self, mock_get_profile):
-        self.min_num_applied_tags = 1
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         # note that distinct() works like set() to reduce duplicate
         qset = self._model_cls.objects.filter(tags__isnull=False).values_list('tags__id', flat=True).distinct()
@@ -660,7 +447,6 @@ class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableI
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_advanced_search_ingredients_applied(self, mock_get_profile):
-        self.min_num_applied_ingredients = 1
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         qset = self._model_cls.objects.annotate(num_ingre=Count('ingredients_applied__ingredient'))
         qset = qset.filter(num_ingre__gt=0)
@@ -693,9 +479,6 @@ class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableI
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_advanced_nested_search_mix(self, mock_get_profile):
-        self.min_num_applied_attrs = 2
-        self.min_num_applied_tags = 2
-        self.min_num_applied_ingredients = 2
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         aggregates_nested_fields = {'num_ingre': Count('ingredients_applied__ingredient'),
                 'num_tags': Count('tags'), }

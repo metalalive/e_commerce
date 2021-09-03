@@ -6,6 +6,7 @@ from django.core.exceptions   import ValidationError as DjangoValidationError
 from django.contrib.contenttypes.models  import ContentType
 from rest_framework.fields    import empty as DRFEmptyData, FloatField
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
+from rest_framework.settings import DEFAULTS as drf_default_settings
 
 from common.validators   import  NumberBoundaryValidator, UniqueListItemsValidator
 from common.serializers  import  ExtendedModelSerializer, BulkUpdateListSerializer
@@ -65,7 +66,7 @@ class AttrValueListSerializer(AugmentIngredientRefMixin, BulkUpdateListSerialize
         _label = src_field_label
         src = data.get(_label['_list'], [])
         valid_types = self._get_valid_types(src=src)
-        valid_types = valid_types.filter(dtype=self.child.Meta.model.DATATYPE)
+        valid_types = valid_types.filter(dtype=self.child.Meta.model.DATATYPE.value[0][0])
         valid_types = valid_types.values_list('id', flat=True)
         extracted = [d for d in src if d.get(_label['type']) in valid_types]
         if any(extracted):
@@ -79,6 +80,17 @@ class AttrValueListSerializer(AugmentIngredientRefMixin, BulkUpdateListSerialize
             # some attribute types to store
             self.read_only = True # TODO, what if it is update operation ?
 
+    def validate(self, value, _logger=None, exception_cls=Exception):
+        id_required = self.child.fields['id'].required
+        if id_required:
+            err_msg_pattern = ['{"message":"duplicate ID found in ',
+                    self.child.Meta.model.DATATYPE.label.lower(),' attribute","value":%s}']
+            err_msg_pattern = ''.join(err_msg_pattern)
+            unique_id_checker = UniqueListItemsValidator( fields=['id'],
+                    error_cls=DRFRequestDataConflictError, err_msg_pattern=err_msg_pattern)
+            unique_id_checker(value=value)
+        return value
+## end of class AttrValueListSerializer
 
 
 class AbstractAttrValueSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
@@ -236,20 +248,27 @@ class BaseIngredientSerializer(ExtendedModelSerializer, NestedFieldSetupMixin):
 
 
     def _err_detail_invalid_attr_value(self, error, data):
-        err_attr_items = []
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        err_fields = []
+        err_non_field = []
         for s_name in self.Meta.nested_fields:
             err_attr = error.detail.pop(s_name, [])
-            for idx in range(len(err_attr)):
-                if err_attr[idx]:
-                    _info = {'origin':data[s_name][idx], 'errobj':err_attr[idx]}
-                    err_attr_items.append(_info)
-        if any(err_attr_items):
+            if isinstance(err_attr, dict):
+                err_non_field.extend(err_attr[non_field_err_key])
+            else: # list
+                for idx in range(len(err_attr)):
+                    if err_attr[idx]:
+                        _info = {'origin':data[s_name][idx], 'errobj':err_attr[idx]}
+                        err_fields.append(_info)
+        if any(err_fields):
             details = []
             for idx in range(self._num_attr_vals):
-                items = tuple(filter(lambda x:x['origin'].get('_seq_num', -1) == idx, err_attr_items))
+                items = tuple(filter(lambda x:x['origin'].get('_seq_num', -1) == idx, err_fields))
                 detail = items[0]['errobj'] if any(items) else  {}
                 details.append(detail)
             error.detail[src_field_label['_list']] = details
+        elif any(err_non_field):
+            error.detail[src_field_label['_list']] = {non_field_err_key: err_non_field}
 
 
     def _augment_seq_num_attrs(self, data):

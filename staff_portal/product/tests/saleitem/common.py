@@ -3,10 +3,7 @@ import json
 import random
 from functools import partial
 
-from django.db.models.constants import LOOKUP_SEP
-
 from common.models.enums   import UnitOfMeasurement
-from common.util.python  import import_module_string
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 from product.serializers.base import SaleableItemSerializer
@@ -44,26 +41,6 @@ def _saleitem_related_instance_setup(stored_models, num_tags=None, num_attrtypes
     tag_map = _modelobj_list_to_map(stored_models['ProductTag'])
     stored_models['ProductTagClosure'] = _product_tag_closure_setup(
         tag_map=tag_map, data=model_fixtures['ProductTagClosure'])
-
-
-def assert_softdelete_items_exist(testcase, deleted_ids, remain_ids, model_cls_path, id_label='id'):
-    model_cls = import_module_string(dotted_path=model_cls_path)
-    changeset = model_cls.SOFTDELETE_CHANGESET_MODEL
-    cset = changeset.objects.filter(object_id__in=deleted_ids)
-    testcase.assertEqual(cset.count(), len(deleted_ids))
-    all_ids = []
-    all_ids.extend(deleted_ids)
-    all_ids.extend(remain_ids)
-    query_id_key = LOOKUP_SEP.join([id_label, 'in'])
-    lookup_kwargs = {'with_deleted':True, query_id_key: all_ids}
-    qset = model_cls.objects.filter(**lookup_kwargs)
-    testcase.assertEqual(qset.count(), len(all_ids))
-    lookup_kwargs.pop('with_deleted')
-    qset = model_cls.objects.filter(**lookup_kwargs)
-    testcase.assertEqual(qset.count(), len(remain_ids))
-    testcase.assertSetEqual(set(qset.values_list(id_label, flat=True)), set(remain_ids))
-    qset = model_cls.objects.get_deleted_set()
-    testcase.assertSetEqual(set(deleted_ids) , set(qset.values_list(id_label, flat=True)))
 
 
 class HttpRequestDataGenSaleableItem(HttpRequestDataGen, AttributeDataGenMixin):

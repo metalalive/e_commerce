@@ -299,7 +299,7 @@ class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
         error_caught = None
         with self.assertRaises(DRFValidationError):
             try:
-                serializer = SaleableItemSerializer( **serializer_kwargs )
+                serializer = self.serializer_class( **serializer_kwargs )
                 serializer.is_valid(raise_exception=True)
             except DRFValidationError as e:
                 error_caught = e
@@ -310,9 +310,9 @@ class SaleableItemUpdateTestCase(SaleableItemCommonMixin, TransactionTestCase):
         err_info = json.loads(str(err_detail))
         self.assertEqual(err_detail.code, 'conflict')
         self.assertEqual(err_info['message'], 'duplicate item found in the list')
-        self.assertEqual(err_info['field'], 'id')
-        self.assertNotIn(discarded_id, err_info['value'])
-        self.assertEqual(err_info['value'][-2], err_info['value'][-1])
+        err_ids = [e['id'] for e in err_info['value']]
+        self.assertNotIn(discarded_id, err_ids)
+        self.assertDictEqual(err_info['value'][-2], err_info['value'][-1])
 ## end of class SaleableItemUpdateTestCase
 
 

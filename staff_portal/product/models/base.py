@@ -601,25 +601,25 @@ class ProductAttributeValueStr(BaseProductAttributeValue):
     class Meta:
         db_table = 'product_attribute_value_str'
     value  = models.CharField(max_length=64, unique=False)
-    DATATYPE = _ProductAttrValueDataType.STRING.value[0][0]
+    DATATYPE = _ProductAttrValueDataType.STRING
 
 class ProductAttributeValuePosInt(BaseProductAttributeValue):
     class Meta:
         db_table = 'product_attribute_value_pos_int'
     value  = models.PositiveIntegerField()
-    DATATYPE = _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]
+    DATATYPE = _ProductAttrValueDataType.POSITIVE_INTEGER
 
 class ProductAttributeValueInt(BaseProductAttributeValue):
     class Meta:
         db_table = 'product_attribute_value_int'
     value  = models.IntegerField()
-    DATATYPE = _ProductAttrValueDataType.INTEGER.value[0][0]
+    DATATYPE = _ProductAttrValueDataType.INTEGER
 
 class ProductAttributeValueFloat(BaseProductAttributeValue):
     class Meta:
         db_table = 'product_attribute_value_float'
     value  = models.FloatField()
-    DATATYPE = _ProductAttrValueDataType.FLOAT.value[0][0]
+    DATATYPE = _ProductAttrValueDataType.FLOAT
 
 
 ProductAttributeValueStr.set_related_name(field_name='attr_type', value=_ProductAttrValueDataType.related_field_name.STRING )

@@ -13,15 +13,8 @@ from common.util.python import sort_nested_object
 from product.models.base import ProductAttributeType, _ProductAttrValueDataType
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 
-from product.tests.common import _fixtures, _common_instances_setup, listitem_rand_assigner, rand_gen_request_body, http_request_body_template, reset_serializer_validation_result
+from product.tests.common import _fixtures, _get_inst_attr, _common_instances_setup, listitem_rand_assigner, rand_gen_request_body, http_request_body_template, reset_serializer_validation_result
 from .common import HttpRequestDataGenDevIngredient, DevIngredientVerificationMixin
-
-_attr_vals_fixture_map = {
-    _ProductAttrValueDataType.STRING.value[0][0]: _fixtures['ProductAttributeValueStr'],
-    _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]: _fixtures['ProductAttributeValuePosInt'],
-    _ProductAttrValueDataType.INTEGER.value[0][0]: _fixtures['ProductAttributeValueInt'],
-    _ProductAttrValueDataType.FLOAT.value[0][0]: _fixtures['ProductAttributeValueFloat'],
-}
 
 
 class DevIngredientCommonMixin(HttpRequestDataGenDevIngredient, DevIngredientVerificationMixin):
@@ -116,26 +109,7 @@ class DevIngredientUpdateTestCase(DevIngredientBaseUpdateTestCase):
         num_edit_data = len(self.request_data) >> 1
         self.editing_data    = copy.deepcopy(self.request_data[:num_edit_data])
         self.unaffected_data = self.request_data[num_edit_data:]
-        new_name_options = ('dill oil', 'transparent water pipe', 'needle', 'cocona powder')
-        name_gen = listitem_rand_assigner(list_=new_name_options, distinct=False,
-                min_num_chosen=num_edit_data , max_num_chosen=(num_edit_data + 1))
-        category_gen = listitem_rand_assigner(list_=ProductDevIngredientType.choices, distinct=False,
-                min_num_chosen=num_edit_data , max_num_chosen=(num_edit_data + 1))
-        for edit_item in self.editing_data:
-            edit_item['name'] = next(name_gen)
-            edit_item['category'] = next(category_gen)[0]
-            edit_attr = edit_item['attributes'][0]
-            old_attr_value = edit_attr['value']
-            is_text = isinstance(old_attr_value, str)
-            edit_attr['value'] = 'new value is a text' if is_text else (old_attr_value * 2)
-            added_attrtype_ids  = tuple(map(lambda x:x['type'], edit_item['attributes']))
-            unadded_attrtypes   = tuple(filter(lambda x:x['id'] not in added_attrtype_ids, _fixtures['ProductAttributeType']))
-            new_attrtype = unadded_attrtypes[0]
-            new_value_opts = _attr_vals_fixture_map[new_attrtype['dtype']]
-            new_attr = {'type':new_attrtype['id'], 'value': new_value_opts[0]}
-            edit_item['attributes'].pop()
-            edit_item['attributes'].append(new_attr)
-
+        self.rand_gen_edit_data(editing_data=self.editing_data)
         editing_ids = tuple(map(lambda x:x['id'], self.editing_data))
         self.edit_objs =  self.serializer_class.Meta.model.objects.filter(id__in=editing_ids)
     ## end of setUp()
@@ -159,7 +133,7 @@ class DevIngredientUpdateTestCase(DevIngredientBaseUpdateTestCase):
         actual_unaffected_data = json.dumps(actual_unaffected_data, sort_keys=True)
         self.assertEqual(expect_unaffected_data, actual_unaffected_data)
 
-    def test_conflict_items(self):
+    def test_conflict_ingredient_id(self):
         self.assertGreaterEqual(len(self.editing_data) , 2)
         discarded_id = self.editing_data[-2]['id']
         self.editing_data[-2]['id'] = self.editing_data[-1]['id']
@@ -179,10 +153,133 @@ class DevIngredientUpdateTestCase(DevIngredientBaseUpdateTestCase):
         err_info = json.loads(str(err_detail))
         self.assertEqual(err_detail.code, 'conflict')
         self.assertEqual(err_info['message'], 'duplicate item found in the list')
-        self.assertEqual(err_info['field'], 'id')
-        self.assertNotIn(discarded_id, err_info['value'])
+        err_ids = [e['id'] for e in err_info['value']]
+        self.assertNotIn(discarded_id, err_ids)
         self.assertEqual(err_info['value'][-2], err_info['value'][-1])
 ## end of class DevIngredientUpdateTestCase
+
+
+class DevIngredientUpdateAttributeConflictTestCase(DevIngredientBaseUpdateTestCase):
+    min_num_applied_attrs = 0
+    max_num_applied_attrs = 1 # disable random-generated attribute values
+    num_ingredients_created = 1
+
+    def setUp(self):
+        super().setUp()
+        editing_ids = tuple(map(lambda x:x['id'], self.request_data))
+        self.edit_objs =  self.serializer_class.Meta.model.objects.filter(id__in=editing_ids)
+        self.str_attr_type = tuple(filter(lambda x:x['dtype'] == _ProductAttrValueDataType.STRING.value[0][0] , _fixtures['ProductAttributeType']))
+        self.int_attr_type = tuple(filter(lambda x:x['dtype'] == _ProductAttrValueDataType.INTEGER.value[0][0], _fixtures['ProductAttributeType']))
+    ## end of setUp()
+
+    def test_same_attr_id_different_dtypes(self):
+        editing_data = self.request_data[0]
+        edit_objs = self.edit_objs.filter(pk=editing_data['id'])
+        attrs = [{'type': self.str_attr_type[0]['id'], 'value':'Wood cabin'},
+                {'type': self.int_attr_type[0]['id'], 'value':-543}]
+        editing_data['attributes'].extend(attrs)
+        serializer = self.serializer_class(data=[editing_data], many=True, instance=edit_objs)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # start testing
+        editing_data = copy.deepcopy(serializer.data)[0]
+        edit_attr_val = copy.deepcopy(editing_data['attributes'][0])
+        editing_data['attributes'][0]['id'] = editing_data['attributes'][1]['id']
+        reset_serializer_validation_result(serializer=serializer)
+        serializer.initial_data = [copy.deepcopy(editing_data)]
+        serializer.instance = edit_objs
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        edited_data = copy.deepcopy(serializer.data)[0]
+        # original attrval id should be discarded
+        attrval_manager = getattr(edit_objs.first(), _ProductAttrValueDataType.STRING.value[0][1])
+        discarded_attrval_exists = attrval_manager.filter(id=edit_attr_val['id']).exists()
+        self.assertFalse(discarded_attrval_exists)
+        # the content in edit_attr_val is deleted and created again with new attrval id
+        qset = attrval_manager.filter(attr_type=edit_attr_val['type'])
+        actual_new_attrval_id = list(qset.values_list('id', flat=True))
+        self.assertGreater(len(actual_new_attrval_id), 0)
+        expect_new_attrval_id = filter(lambda a: a['type'] == edit_attr_val['type'], edited_data['attributes'])
+        expect_new_attrval_id = list(map(lambda a: a['id'], expect_new_attrval_id))
+        self.assertGreater(len(expect_new_attrval_id), 0)
+        self.assertSetEqual(set(expect_new_attrval_id), set(actual_new_attrval_id))
+
+
+    def test_same_attr_id_and_dtype(self):
+        editing_data = self.request_data[0]
+        edit_objs = self.edit_objs.filter(pk=editing_data['id'])
+        attrvals = [
+                {'type': self.str_attr_type[0]['id'], 'value':'knowledge hoarder'},
+                {'type': self.str_attr_type[1]['id'], 'value':'team player'},
+                {'type': self.int_attr_type[0]['id'], 'value':-689},
+                {'type': self.int_attr_type[1]['id'], 'value':-302},
+            ]
+        editing_data['attributes'].extend(attrvals)
+        serializer = self.serializer_class(data=[editing_data], many=True, instance=edit_objs)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # start testing
+        editing_data = copy.deepcopy(serializer.data)[0]
+        editing_data['attributes'][0]['id'] = editing_data['attributes'][1]['id']
+        editing_data['attributes'][2]['id'] = editing_data['attributes'][3]['id']
+        reset_serializer_validation_result(serializer=serializer)
+        serializer.initial_data = [copy.deepcopy(editing_data)]
+        serializer.instance = edit_objs
+        error_caught = None
+        with self.assertRaises(DRFValidationError):
+            try: # this case will cause data loss, expect to receive error response
+                serializer.is_valid(raise_exception=True)
+            except DRFValidationError as e:
+                error_caught = e
+                raise
+        self.assertNotEqual(error_caught, None)
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        non_field_errors = error_caught.detail[0]['attributes'][non_field_err_key]
+        self.assertEqual(len(non_field_errors), 2)
+        str_attr_errs = tuple(filter(lambda e: str(e).find('string attribute')  > 0, non_field_errors))
+        int_attr_errs = tuple(filter(lambda e: str(e).find('integer attribute') > 0, non_field_errors))
+        self.assertEqual(len(str_attr_errs), 1)
+        self.assertEqual(len(int_attr_errs), 1)
+        dup_id = str(editing_data['attributes'][1]['id'])
+        self.assertGreater(str(str_attr_errs[0]).find(dup_id), 0)
+        dup_id = str(editing_data['attributes'][3]['id'])
+        self.assertGreater(str(int_attr_errs[0]).find(dup_id), 0)
+
+
+    def test_same_attr_id_and_attrtype(self):
+        editing_data = self.request_data[0]
+        edit_objs = self.edit_objs.filter(pk=editing_data['id'])
+        attrvals = [
+                {'type': self.str_attr_type[0]['id'], 'value':'knowledge hoarder'},
+                {'type': self.str_attr_type[1]['id'], 'value':'team player'},
+                {'type': self.str_attr_type[0]['id'], 'value':'critical thinker'},
+            ]
+        editing_data['attributes'].extend(attrvals)
+        serializer = self.serializer_class(data=[editing_data], many=True, instance=edit_objs)
+        # duplicate attribute types are allowed if they have distinct attribute value ID
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        editing_data = copy.deepcopy(serializer.data)[0]
+        editing_data['attributes'][0]['id'] = editing_data['attributes'][2]['id']
+        reset_serializer_validation_result(serializer=serializer)
+        serializer.initial_data = [copy.deepcopy(editing_data)]
+        serializer.instance = edit_objs
+        error_caught = None
+        with self.assertRaises(DRFValidationError):
+            try:
+                serializer.is_valid(raise_exception=True)
+            except DRFValidationError as e:
+                error_caught = e
+                raise
+        self.assertNotEqual(error_caught, None)
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        non_field_errors = error_caught.detail[0]['attributes'][non_field_err_key]
+        str_attr_errs = tuple(filter(lambda e: str(e).find('string attribute')  > 0, non_field_errors))
+        self.assertEqual(len(str_attr_errs), 1)
+        dup_id = str(editing_data['attributes'][1]['id'])
+        self.assertGreater(str(str_attr_errs[0]).find(dup_id), 0)
+
+## end of class DevIngredientUpdateAttributeConflictTestCase
 
 
 class DevIngredientRepresentationTestCase(DevIngredientBaseUpdateTestCase):
@@ -192,7 +289,30 @@ class DevIngredientRepresentationTestCase(DevIngredientBaseUpdateTestCase):
         serializer_ro = self.serializer_class(instance=created_objs, many=True)
         actual_data = serializer_ro.data
         expect_data = self.request_data
-        self.verify_data(actual_data, expect_data)
+        self.verify_objects(actual_data, expect_data, extra_check_fn=self._assert_attributes_field)
 
+    def test_represent_partial(self):
+        expect_fields = ['id', 'category', 'attributes']
+        mocked_request = Mock()
+        mocked_request.query_params = {'fields': ','.join(expect_fields)}
+        created_ids  = tuple(map(lambda x:x.id, self._created_items))
+        created_objs = self.serializer_class.Meta.model.objects.filter(id__in=created_ids)
+        serializer_ro = self.serializer_class(instance=created_objs, many=True)
+        serializer_ro.context['request'] = mocked_request
+        actual_data = serializer_ro.data
+        expect_data = self.request_data
+        self.verify_objects(actual_data, expect_data, extra_check_fn=self._assert_attributes_field,
+                non_nested_fields=['id', 'category'] )
+
+    def _assert_attributes_field(self, exp_item, ac_item):
+        # compare attribute values in `attributes` field
+        exp_attrs = _get_inst_attr(exp_item, 'attributes', [])
+        ac_attrs  = _get_inst_attr(ac_item,  'attributes', [])
+        exp_attrs = sort_nested_object(obj=exp_attrs)
+        ac_attrs  = sort_nested_object(obj=ac_attrs )
+        exp_attrs = json.dumps(exp_attrs, sort_keys=True)
+        ac_attrs  = json.dumps(ac_attrs , sort_keys=True)
+        self.assertEqual(exp_attrs, ac_attrs)
+## end of class DevIngredientRepresentationTestCase
 
 

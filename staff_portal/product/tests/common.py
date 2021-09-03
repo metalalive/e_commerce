@@ -1,14 +1,20 @@
 import copy
 import json
 import random
+import urllib
 from functools import partial
+from unittest.mock import Mock, patch
 
+from django.test import Client as DjangoTestClient
+from django.db.models.constants import LOOKUP_SEP
 from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models  import ContentType
 from django.core.exceptions    import ValidationError as DjangoValidationError
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.settings import DEFAULTS as drf_default_settings
 
-from common.util.python import flatten_nested_iterable, sort_nested_object
+from common.util.python import flatten_nested_iterable, sort_nested_object, import_module_string
+from common.util.python.messaging.rpc import RpcReplyEvent
 from product.models.base import _ProductAttrValueDataType, ProductSaleableItem
 from product.models.development import ProductDevIngredientType
 
@@ -51,15 +57,17 @@ _fixtures = {
     ],
     'ProductAttributeType': [
         {'id':20, 'name': 'toppings category', 'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
-        {'id':21, 'name': 'color', 'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
-        {'id':22, 'name': 'bread crust level', 'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
-        {'id':23, 'name': 'cache size (KBytes)', 'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
-        {'id':24, 'name': 'min. working temperature (celsius)', 'dtype': _ProductAttrValueDataType.INTEGER.value[0][0]},
-        {'id':25, 'name': 'min. dormant temperature (celsius)', 'dtype': _ProductAttrValueDataType.INTEGER.value[0][0]},
-        {'id':26, 'name': 'Length of square (Ft.)', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
-        {'id':27, 'name': 'Diameter (In.)', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
-        {'id':28, 'name': 'max resistence voltage', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
-        {'id':29, 'name': 'min distance between 2 metal wires (um)', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
+        {'id':21, 'name': 'color',             'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
+        {'id':22, 'name': 'surface material',  'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
+        {'id':23, 'name': 'bread crust level',   'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
+        {'id':24, 'name': 'cache size (KBytes)', 'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
+        {'id':25, 'name': 'speed limit (km/s)' , 'dtype': _ProductAttrValueDataType.POSITIVE_INTEGER.value[0][0]},
+        {'id':26, 'name': 'min. working temperature (celsius)', 'dtype': _ProductAttrValueDataType.INTEGER.value[0][0]},
+        {'id':27, 'name': 'min. dormant temperature (celsius)', 'dtype': _ProductAttrValueDataType.INTEGER.value[0][0]},
+        {'id':28, 'name': 'min. acidity (pH)',                  'dtype': _ProductAttrValueDataType.INTEGER.value[0][0]},
+        {'id':30, 'name': 'Diameter (In.)',         'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
+        {'id':31, 'name': 'max resistence voltage', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
+        {'id':32, 'name': 'min distance between 2 metal wires (um)', 'dtype': _ProductAttrValueDataType.FLOAT.value[0][0]},
     ],
     'ProductAttributeValueStr': ['sticky', 'crunchy', 'chubby', 'chewy', 'crispy', 'meaty', 'creepy'],
     'ProductAttributeValuePosInt': [random.randrange(1,10000) for _ in range(25)],
@@ -251,13 +259,150 @@ def _ingredient_attrvals_common_setup(attrtypes_gen_fn, ingredients):
 
 
 def reset_serializer_validation_result(serializer):
-    serializer._errors.clear()
-    delattr(serializer, '_validated_data')
+    if hasattr(serializer, '_errors'):
+        serializer._errors.clear()
+    if hasattr(serializer, '_validated_data'):
+        delattr(serializer, '_validated_data')
+    if hasattr(serializer, '_data'):
+        delattr(serializer, '_data')
+
+
+def assert_view_permission_denied(testcase, request_body_data, path, content_type, mock_rpc_path,
+        http_forwarded, permission_map, return_profile_id, http_method='post'):
+    body = json.dumps(request_body_data).encode()
+    send_req_fn = getattr(testcase._client, http_method)
+    # forwarded authentication failure
+    response = send_req_fn(path=path, data=body, content_type=content_type)
+    testcase.assertEqual(int(response.status_code), 403)
+    # failure because user authentication server is down
+    with patch(mock_rpc_path) as mock_get_profile:
+        fake_amqp_msg = {'result': {}, 'status': RpcReplyEvent.status_opt.FAIL_CONN}
+        mock_rpc_reply_evt = RpcReplyEvent(listener=None, timeout_s=1)
+        mock_rpc_reply_evt.send(fake_amqp_msg)
+        mock_get_profile.return_value = mock_rpc_reply_evt
+        response = send_req_fn(path=path, data=body, content_type=content_type,
+                     HTTP_FORWARDED=http_forwarded)
+        testcase.assertEqual(int(response.status_code), 403)
+    # failure due to insufficient permission
+    with patch(mock_rpc_path) as mock_get_profile:
+        mock_role = {'id': 126, 'perm_code': permission_map[:-2]}
+        succeed_amqp_msg = {'result': {'id': return_profile_id, 'roles':[mock_role]},}
+        mock_get_profile.return_value = testcase._mock_rpc_succeed_reply_evt(succeed_amqp_msg)
+        response = send_req_fn(path=path, data=body,  content_type=content_type,
+                     HTTP_FORWARDED=http_forwarded)
+        testcase.assertEqual(int(response.status_code), 403)
+
+
+def assert_view_bulk_create_with_response(testcase, expect_shown_fields, expect_hidden_fields, path, body=None, method='post'):
+    response = testcase._send_request_to_backend(path=path, body=body, method=method,
+            expect_shown_fields=expect_shown_fields)
+    testcase.assertEqual(int(response.status_code), 201)
+    created_items = json.loads(response.content.decode())
+    for created_item in created_items:
+        for field_name in expect_shown_fields:
+            value = created_item.get(field_name, None)
+            testcase.assertNotEqual(value, None)
+        for field_name in expect_hidden_fields:
+            value = created_item.get(field_name, None)
+            testcase.assertEqual(value, None)
+
+
+def assert_view_unclassified_attributes(testcase, path, body, method='post'):
+    response = testcase._send_request_to_backend(path=path, body=body, method=method)
+    testcase.assertEqual(int(response.status_code), 400)
+    err_items = json.loads(response.content.decode())
+    expect_items_iter = iter(body)
+    for err_item in err_items:
+        testcase.assertListEqual(['attributes'], list(err_item.keys()))
+        expect_item = next(expect_items_iter)
+        err_msg_pattern = 'unclassified attribute type `%s`'
+        expect_err_msgs = map(lambda x: err_msg_pattern % x['type'], expect_item['attributes'])
+        actual_err_msgs = map(lambda x: x['type'][0], err_item['attributes'])
+        expect_err_msgs = list(expect_err_msgs)
+        actual_err_msgs = list(actual_err_msgs)
+        testcase.assertGreater(len(actual_err_msgs), 0)
+        testcase.assertListEqual(expect_err_msgs, actual_err_msgs)
+
+def assert_edit_view_invalid_id(testcase, edit_data, path, expect_response_status, method='put'):
+    key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+    ##edit_data = copy.deepcopy(edit_data) # edit data without corrent ID
+    # sub case: lack id
+    edit_data[0].pop('id',None)
+    response = testcase._send_request_to_backend(path=path, method=method, body=edit_data)
+    err_items = json.loads(response.content.decode())
+    testcase.assertEqual(int(response.status_code), expect_response_status)
+    # sub case: invalid data type of id
+    edit_data[0]['id'] = 99999
+    edit_data[-1]['id'] = 'string_id'
+    response = testcase._send_request_to_backend(path=path, method=method, body=edit_data)
+    err_items = json.loads(response.content.decode())
+    testcase.assertEqual(int(response.status_code), expect_response_status)
+    # sub case: mix of valid id and invalid id
+    edit_data[0]['id'] = 'wrong_id'
+    edit_data[-1]['id'] = 123
+    response = testcase._send_request_to_backend(path=path, method=method, body=edit_data)
+    err_items = response.json()
+    testcase.assertEqual(int(response.status_code), expect_response_status)
+
+
+class SoftDeleteCommonTestMixin:
+    def assert_softdelete_items_exist(self, testcase, deleted_ids, remain_ids, model_cls_path, id_label='id'):
+        model_cls = import_module_string(dotted_path=model_cls_path)
+        changeset = model_cls.SOFTDELETE_CHANGESET_MODEL
+        ct_model_cls = changeset.content_type.field.related_model.objects.get_for_model(model_cls)
+        cset = changeset.objects.filter(content_type=ct_model_cls, object_id__in=deleted_ids)
+        testcase.assertEqual(cset.count(), len(deleted_ids))
+        all_ids = []
+        all_ids.extend(deleted_ids)
+        all_ids.extend(remain_ids)
+        query_id_key = LOOKUP_SEP.join([id_label, 'in'])
+        lookup_kwargs = {'with_deleted':True, query_id_key: all_ids}
+        qset = model_cls.objects.filter(**lookup_kwargs)
+        testcase.assertEqual(qset.count(), len(all_ids))
+        lookup_kwargs.pop('with_deleted')
+        qset = model_cls.objects.filter(**lookup_kwargs)
+        testcase.assertEqual(qset.count(), len(remain_ids))
+        testcase.assertSetEqual(set(qset.values_list(id_label, flat=True)), set(remain_ids))
+        qset = model_cls.objects.get_deleted_set()
+        testcase.assertSetEqual(set(qset.values_list(id_label, flat=True)), set(deleted_ids))
+
+    def perform_undelete(self, testcase, path, body=None, expect_resp_status=200, expect_resp_msg='recovery done'):
+        # note that body has to be at least {} or [], must not be null
+        # because the content-type is json
+        body = body or {}
+        response = testcase._send_request_to_backend( path=path, method='patch', body=body,)
+        response_body = response.json()
+        testcase.assertEqual(int(response.status_code), expect_resp_status)
+        if response_body.get('message'): # from softdelete app
+            actual_resp_msg = response_body['message'][0]
+        else: # from Django default
+            actual_resp_msg = response_body['detail']
+        testcase.assertEqual(actual_resp_msg, expect_resp_msg)
+        if expect_resp_status != 200:
+            return
+        undeleted_items = response_body['affected_items']
+        return undeleted_items
+## end of class SoftDeleteCommonTestMixin
 
 
 class HttpRequestDataGen:
+    rand_create = True
+
     def customize_req_data_item(self, item, **kwargs):
         raise NotImplementedError()
+
+    def refresh_req_data(self, fixture_source, http_request_body_template, num_create=None):
+        if self.rand_create:
+            kwargs = {'list_': fixture_source}
+            if num_create:
+                kwargs.update({'min_num_chosen': num_create, 'max_num_chosen':(num_create + 1)})
+            data_gen = listitem_rand_assigner(**kwargs)
+        else:
+            num_create = num_create or len(fixture_source)
+            data_gen = iter(fixture_source[:num_create])
+        out = rand_gen_request_body(customize_item_fn=self.customize_req_data_item,
+                data_gen=data_gen,  template=http_request_body_template)
+        return list(out)
 
 
 class AttributeDataGenMixin:
@@ -397,17 +542,6 @@ class AttributeAssertionMixin:
             expect_vals = json.dumps(expect_vals, sort_keys=True)
             actual_vals = json.dumps(actual_vals, sort_keys=True)
             self.assertEqual(expect_vals, actual_vals)
-        # compare attribute values in `attributes` field
-        ## exp_attrs = _get_inst_attr(exp_sale_item, 'attributes', [])
-        ## ac_attrs  = _get_inst_attr(ac_sale_item,  'attributes', [])
-        ## exp_attrs = sort_nested_object(obj=exp_attrs)
-        ## ac_attrs  = sort_nested_object(obj=ac_attrs )
-        ## exp_attrs = json.dumps(exp_attrs, sort_keys=True)
-        ## ac_attrs  = json.dumps(ac_attrs , sort_keys=True)
-        ## if exp_attrs != ac_attrs:
-        ##     import pdb
-        ##     pdb.set_trace()
-        ## self.assertEqual(exp_attrs, ac_attrs)
 
 
     def _test_unclassified_attribute_error(self, testcase, serializer, request_data,
@@ -523,5 +657,48 @@ class AttributeAssertionMixin:
                 actual_err_code = error_detail[0].code
                 testcase.assertIn(actual_err_code, expect_err_code)
 ## end of class AttributeAssertionMixin
+
+
+class _MockTestClientInfoMixin:
+    stored_models = {}
+    _json_mimetype = 'application/json'
+    _client = DjangoTestClient(enforce_csrf_checks=False, HTTP_ACCEPT=_json_mimetype)
+    _forwarded_pattern = 'by=proxy_api_gateway;for=%s;host=testserver;proto=http'
+    mock_profile_id = [123, 124]
+    permission_class = None
+
+    def _mock_rpc_succeed_reply_evt(self, succeed_amqp_msg):
+        reply_evt = RpcReplyEvent(listener=None, timeout_s=1)
+        init_amqp_msg = {'result': {}, 'status': RpcReplyEvent.status_opt.STARTED}
+        reply_evt.send(init_amqp_msg)
+        succeed_amqp_msg['status'] = RpcReplyEvent.status_opt.SUCCESS
+        reply_evt.send(succeed_amqp_msg)
+        return reply_evt
+
+    def _mock_get_profile(self, expect_usrprof, http_method, access_control=True):
+        perms = self.permission_class.perms_map[http_method][:] if access_control else []
+        mock_role = {'id': 126, 'perm_code': perms}
+        succeed_amqp_msg = {'result': {'id': expect_usrprof, 'roles':[mock_role]},}
+        return self._mock_rpc_succeed_reply_evt(succeed_amqp_msg)
+
+    def _send_request_to_backend(self, path, method='post', body=None, expect_shown_fields=None,
+            ids=None, extra_query_params=None, headers=None):
+        if body is not None:
+            body = json.dumps(body).encode()
+        query_params = {}
+        if extra_query_params:
+            query_params.update(extra_query_params)
+        if expect_shown_fields:
+            query_params['fields'] = ','.join(expect_shown_fields)
+        if ids:
+            ids = tuple(map(str, ids))
+            query_params['ids'] = ','.join(ids)
+        querystrings = urllib.parse.urlencode(query_params)
+        path_with_querystring = '%s?%s' % (path, querystrings)
+        send_fn = getattr(self._client, method)
+        headers = headers or {}
+        return send_fn(path=path_with_querystring, data=body,  content_type=self._json_mimetype,
+               **headers)
+## end of class _MockTestClientInfoMixin
 
 

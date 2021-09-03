@@ -18,8 +18,8 @@ from common.util.python import flatten_nested_iterable, sort_nested_object
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem, ProductSaleableItemComposite, ProductAppliedAttributePrice, ProductSaleableItemMedia
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 
-from product.tests.common import _null_test_obj_attrs, _gen_ingredient_attrvals, _ingredient_attrvals_common_setup
-from .common import _fixtures, listitem_rand_assigner, _common_instances_setup, _load_init_params, _modelobj_list_to_map, _product_tag_closure_setup, _dict_key_replace, assert_softdelete_items_exist
+from product.tests.common import _null_test_obj_attrs, _gen_ingredient_attrvals, _ingredient_attrvals_common_setup, SoftDeleteCommonTestMixin
+from .common import _fixtures, listitem_rand_assigner, _common_instances_setup, _load_init_params, _modelobj_list_to_map, _product_tag_closure_setup, _dict_key_replace
 
 
 num_uom = len(UnitOfMeasurement.choices)
@@ -820,7 +820,7 @@ def _saleitem_composites_common_setup(saleitem, out:dict, ingredients):
     out[saleitem.pk] = list(stored_composites)
 
 
-class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
+class SaleableItemAdvancedDeletionTestCase(TransactionTestCase, SoftDeleteCommonTestMixin):
     num_saleitems = random.randrange(3, len(_fixtures['ProductSaleableItem']))
     num_ingredients = len(_fixtures['ProductDevIngredient'])
     num_attr_types  = len(_fixtures['ProductAttributeType'])
@@ -991,7 +991,7 @@ class SaleableItemAdvancedDeletionTestCase(TransactionTestCase):
         qset.delete(profile_id=profile_id)
         tuple(map(lambda obj:self.assertTrue(obj.is_deleted()), qset)) # auto marked as deleted
         tuple(map(_assert_tag_fn, qset))
-        assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
+        self.assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
                 model_cls_path='product.models.base.ProductSaleableItem',)
         self._check_remaining_saleitems_to_ingredients(saleitem_ids=deleted_ids, is_deleted=True)
         self._check_remaining_saleitems_to_ingredients(saleitem_ids=remain_ids)
