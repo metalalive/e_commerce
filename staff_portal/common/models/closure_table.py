@@ -128,15 +128,14 @@ class ClosureTableModelMixin(models.Model):
 
     depth = models.PositiveIntegerField(db_column='depth', default=0)
 
-    def save(self, *args, **kwargs):
-        accept_null_node = kwargs.pop('accept_null_node',False)
+    def save(self, *args, accept_null_node=False, **kwargs):
         if accept_null_node is False:
             asc  = getattr(self, 'ancestor', None)
             desc = getattr(self, 'descendant', None)
             if asc is None or desc is None:
                 log_msg = ['accept_null_node', accept_null_node, 'asc', asc, 'desc', desc, 'node_pk', self.pk]
                 _logger.warning(None, *log_msg)
-                raise ValueError
+                raise ValueError('Null closure node not allowed')
         return super().save(*args, **kwargs)
 
     @classmethod

@@ -8,20 +8,8 @@ from product.models.base import ProductTag, ProductTagClosure, ProductAttributeT
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 from product.serializers.base import SaleableItemSerializer
 
-from product.tests.common import _fixtures, http_request_body_template, _load_init_params, _modelobj_list_to_map, _dict_key_replace, _dict_kv_pair_evict, listitem_rand_assigner, _common_instances_setup, rand_gen_request_body, _get_inst_attr, assert_field_equal, HttpRequestDataGen, AttributeDataGenMixin, BaseVerificationMixin, AttributeAssertionMixin
+from product.tests.common import _fixtures, http_request_body_template, _load_init_params, _modelobj_list_to_map, _dict_key_replace, _dict_kv_pair_evict, listitem_rand_assigner, _common_instances_setup, rand_gen_request_body, _get_inst_attr, assert_field_equal, HttpRequestDataGen, AttributeDataGenMixin, BaseVerificationMixin, AttributeAssertionMixin, _product_tag_closure_setup
 
-
-
-def _product_tag_closure_setup(tag_map, data):
-    _gen_closure_node = lambda d :ProductTagClosure(
-            id    = d['id'],  depth = d['depth'],
-            ancestor   = tag_map[d['ancestor']]  ,
-            descendant = tag_map[d['descendant']]
-        )
-    filtered_data = filter(lambda d: tag_map.get(d['ancestor']) , data)
-    nodes = list(map(_gen_closure_node, filtered_data))
-    ProductTagClosure.objects.bulk_create(nodes)
-    return nodes
 
 
 def _saleitem_related_instance_setup(stored_models, num_tags=None, num_attrtypes=None, num_ingredients=None):

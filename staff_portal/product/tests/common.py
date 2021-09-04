@@ -15,7 +15,7 @@ from rest_framework.settings import DEFAULTS as drf_default_settings
 
 from common.util.python import flatten_nested_iterable, sort_nested_object, import_module_string
 from common.util.python.messaging.rpc import RpcReplyEvent
-from product.models.base import _ProductAttrValueDataType, ProductSaleableItem
+from product.models.base import _ProductAttrValueDataType, ProductSaleableItem, ProductTagClosure
 from product.models.development import ProductDevIngredientType
 
 _fixtures = {
@@ -25,15 +25,28 @@ _fixtures = {
         {'id':10, 'is_staff':True,  'is_active':False, 'username': 'yusir003','password': 'if74w#gfy'} ,
     ],
     'ProductTag': [
-        {'id':30 , 'usrprof': 56,'name':'Food & Beverage'}               ,
-        {'id':31 , 'usrprof': 56,'name':'DIY hardware'}                  ,
-        {'id':32 , 'usrprof': 56,'name':'Dairy'}                         ,
-        {'id':33 , 'usrprof': 56,'name':'Farm Produce'}                  ,
-        {'id':34 , 'usrprof': 56,'name':'Embedded system device'}        ,
-        {'id':35 , 'usrprof': 56,'name':'semi-prepared food ingredient'} ,
-        {'id':36 , 'usrprof': 56,'name':'Veggie'}                        ,
-        {'id':37 , 'usrprof': 56,'name':'Fruit'}                         ,
-        {'id':38 , 'usrprof': 56,'name':'Debugging device'}              ,
+        {'id':30, 'usrprof': 56,'name':'Food & Beverage'}  ,
+        {'id':31, 'usrprof': 56,'name':'DIY hardware'}     ,
+        {'id':32, 'usrprof': 56,'name':'Dairy'}            ,
+        {'id':33, 'usrprof': 56,'name':'Farm Produce'}     ,
+        {'id':34, 'usrprof': 56,'name':'Debugging device'} ,
+        {'id':35, 'usrprof': 56,'name':'semi-prepared food ingredient'} ,
+        {'id':36, 'usrprof': 56,'name':'Veggie'}           ,
+        {'id':37, 'usrprof': 56,'name':'Fruit'}            ,
+        {'id':38, 'usrprof': 56,'name':'Embedded system device'} , # --------
+        {'id':39, 'usrprof': 56,'name':'Eletronics'}  ,
+        {'id':40, 'usrprof': 56,'name':'Computers'}   ,
+        {'id':41, 'usrprof': 56,'name':'Data storage'},
+        {'id':42, 'usrprof': 56,'name':'Scanner'}  ,
+        {'id':43, 'usrprof': 56,'name':'TV & Video'}  ,
+        {'id':44, 'usrprof': 56,'name':'Camera'}              ,
+        {'id':45, 'usrprof': 56,'name':'Vehicle Eletronics'}  ,
+        {'id':46, 'usrprof': 56,'name':'Headphones'} ,
+        {'id':47, 'usrprof': 56,'name':'Cheese'} ,
+        {'id':48, 'usrprof': 56,'name':'Cream'} ,
+        {'id':49, 'usrprof': 56,'name':'Development circuit board'} ,
+        {'id':50, 'usrprof': 56,'name':'RaspBerry PI'} ,
+        {'id':51, 'usrprof': 56,'name':'Node MCU'} ,
     ],
     'ProductTagClosure': [
         {'id':1, 'ancestor':30, 'descendant':30, 'depth':0},
@@ -54,6 +67,52 @@ _fixtures = {
         {'id':16, 'ancestor':31, 'descendant':34, 'depth':1},
         {'id':17, 'ancestor':38, 'descendant':38, 'depth':0},
         {'id':18, 'ancestor':31, 'descendant':38, 'depth':1},
+
+        {'id':19, 'ancestor':39, 'descendant':39, 'depth':0},
+        {'id':20, 'ancestor':43, 'descendant':43, 'depth':0},
+        {'id':21, 'ancestor':44, 'descendant':44, 'depth':0},
+        {'id':22, 'ancestor':45, 'descendant':45, 'depth':0},
+        {'id':23, 'ancestor':46, 'descendant':46, 'depth':0},
+        {'id':24, 'ancestor':39, 'descendant':43, 'depth':1},
+        {'id':25, 'ancestor':39, 'descendant':44, 'depth':1},
+        {'id':26, 'ancestor':39, 'descendant':45, 'depth':1},
+        {'id':27, 'ancestor':39, 'descendant':46, 'depth':1},
+        {'id':28, 'ancestor':31, 'descendant':39, 'depth':1},
+        {'id':29, 'ancestor':31, 'descendant':43, 'depth':2},
+        {'id':30, 'ancestor':31, 'descendant':44, 'depth':2},
+        {'id':31, 'ancestor':31, 'descendant':45, 'depth':2},
+        {'id':32, 'ancestor':31, 'descendant':46, 'depth':2},
+
+        {'id':33, 'ancestor':40, 'descendant':40, 'depth':0},
+        {'id':34, 'ancestor':41, 'descendant':41, 'depth':0},
+        {'id':35, 'ancestor':42, 'descendant':42, 'depth':0},
+        {'id':36, 'ancestor':40, 'descendant':41, 'depth':1},
+        {'id':37, 'ancestor':40, 'descendant':42, 'depth':1},
+        {'id':38, 'ancestor':31, 'descendant':40, 'depth':2},
+        {'id':39, 'ancestor':31, 'descendant':41, 'depth':3},
+        {'id':40, 'ancestor':31, 'descendant':42, 'depth':3},
+        {'id':41, 'ancestor':38, 'descendant':40, 'depth':1},
+        {'id':42, 'ancestor':38, 'descendant':41, 'depth':2},
+        {'id':43, 'ancestor':38, 'descendant':42, 'depth':2},
+
+        {'id':45, 'ancestor':47, 'descendant':47, 'depth':0},
+        {'id':46, 'ancestor':48, 'descendant':48, 'depth':0},
+        {'id':47, 'ancestor':32, 'descendant':47, 'depth':1},
+        {'id':48, 'ancestor':32, 'descendant':48, 'depth':1},
+        {'id':49, 'ancestor':30, 'descendant':47, 'depth':2},
+        {'id':50, 'ancestor':30, 'descendant':48, 'depth':2},
+
+        {'id':51, 'ancestor':49, 'descendant':49, 'depth':0},
+        {'id':52, 'ancestor':50, 'descendant':50, 'depth':0},
+        {'id':53, 'ancestor':51, 'descendant':51, 'depth':0},
+        {'id':54, 'ancestor':49, 'descendant':50, 'depth':1},
+        {'id':55, 'ancestor':49, 'descendant':51, 'depth':1},
+        {'id':56, 'ancestor':38, 'descendant':49, 'depth':1},
+        {'id':57, 'ancestor':38, 'descendant':50, 'depth':2},
+        {'id':58, 'ancestor':38, 'descendant':51, 'depth':2},
+        {'id':59, 'ancestor':31, 'descendant':49, 'depth':2},
+        {'id':60, 'ancestor':31, 'descendant':50, 'depth':3},
+        {'id':61, 'ancestor':31, 'descendant':51, 'depth':3},
     ],
     'ProductAttributeType': [
         {'id':20, 'name': 'toppings category', 'dtype': _ProductAttrValueDataType.STRING.value[0][0]},
@@ -223,6 +282,18 @@ def _null_test_obj_attrs(testcase, instance, field_names):
         with testcase.assertRaises(IntegrityError) as e:
             instance.save(force_insert=True)
         setattr(instance, fname, old_value)
+
+
+def _product_tag_closure_setup(tag_map, data):
+    _gen_closure_node = lambda d :ProductTagClosure(
+            id    = d['id'],  depth = d['depth'],
+            ancestor   = tag_map[d['ancestor']]  ,
+            descendant = tag_map[d['descendant']]
+        )
+    filtered_data = filter(lambda d: tag_map.get(d['ancestor']) , data)
+    nodes = list(map(_gen_closure_node, filtered_data))
+    ProductTagClosure.objects.bulk_create(nodes)
+    return nodes
 
 
 def _gen_ingredient_attrvals(attrtype_ref, ingredient, idx, extra_charge=None):

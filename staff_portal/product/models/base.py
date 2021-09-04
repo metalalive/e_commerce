@@ -1,6 +1,7 @@
 import enum
 import random
-from functools import partial
+import operator
+from functools import partial, reduce
 import pdb
 
 from MySQLdb.constants.ER import BAD_NULL_ERROR, DUP_ENTRY
@@ -167,39 +168,40 @@ class UniqueIdentifierMixin(models.Model, IdGapNumberFinderMixin):
 class _TagQuerySet(models.QuerySet):
     def get_ascs_descs_id(self, IDs, fetch_asc=True, fetch_desc=True, depth=None,
             self_exclude=True):
-        assert fetch_asc or fetch_desc, "either fetch_asc or fetch_desc must be enabled"
-        is_depth_int = depth and (isinstance(depth, int) or (isinstance(depth, str) and depth.isdigit()))
+        assert fetch_asc or fetch_desc, "either fetch_asc or fetch_desc must be enabled, but not both"
+        is_depth_int = depth is not None and (isinstance(depth, int) or (isinstance(depth, str) and depth.isdigit()))
         init_qset = self.model.objects.all()
         if 'root' in IDs:
             depth = int(depth) if is_depth_int and not fetch_asc else 0
             qset = init_qset.annotate(asc_cnt=models.Count('ancestors'))
             qset = qset.filter(asc_cnt=1).values_list('pk', flat=True)
             depth_range  = models.Q(descendants__ancestor__in=qset) & models.Q(descendants__depth__lte=depth)
-            values_field = 'descendants__descendant'
+            qset = init_qset.distinct().filter(depth_range).values_list('descendants__descendant', flat=True)
+            final_cond = models.Q(id__in=qset)
         else:
             DEPTH_UNLIMITED = -1
-            depth = int(depth) if is_depth_int else 1
-            qset = init_qset.filter(pk__in=IDs).values_list('pk', flat=True)
-            depth_desc_range = models.Q()
-            depth_asc_range  = models.Q()
+            depth = int(depth) if is_depth_int is True else 1
+            ids_qset = init_qset.filter(id__in=IDs).values_list('pk', flat=True)
+            aug_IDs = []
             if fetch_desc:
-                depth_range = models.Q(descendants__ancestor__in=qset)
-                values_field = 'descendants__descendant'
+                depth_desc_range = models.Q(descendants__ancestor__in=ids_qset)
                 if self_exclude:
-                    depth_desc_range = models.Q(descendants__depth__gt=0)
+                    depth_desc_range = depth_desc_range & models.Q(descendants__depth__gt=0)
                 if depth > DEPTH_UNLIMITED:
                     depth_desc_range = depth_desc_range & models.Q(descendants__depth__lte=depth)
+                qset = init_qset.distinct().filter(depth_desc_range).values_list('descendants__descendant', flat=True)
+                aug_IDs.append(models.Q(id__in=qset))
             if fetch_asc:
-                depth_range = models.Q(ancestors__descendant__in=qset)
-                values_field = 'ancestors__ancestor'
+                depth_asc_range = models.Q(ancestors__descendant__in=ids_qset)
                 if self_exclude:
-                    depth_asc_range = models.Q(ancestors__depth__gt=0)
+                    depth_asc_range = depth_asc_range & models.Q(ancestors__depth__gt=0)
                 if depth > DEPTH_UNLIMITED:
                     depth_asc_range = depth_asc_range & models.Q(ancestors__depth__lte=depth)
-            depth_range = depth_range & ((depth_desc_range) | (depth_asc_range))
-        qset = init_qset.filter(depth_range)
-        IDs  = qset.values_list(values_field, flat=True)
-        return IDs
+                qset = init_qset.distinct().filter(depth_asc_range).values_list('ancestors__ancestor', flat=True)
+                aug_IDs.append(models.Q(id__in=qset))
+            final_cond = reduce(operator.or_, aug_IDs)
+        aug_ids_qset = init_qset.filter(final_cond).values_list('id', flat=True)
+        return aug_ids_qset
 
     def delete(self, *args, **kwargs):
         if not hasattr(self, '_descs_deletion_included'):
@@ -210,6 +212,7 @@ class _TagQuerySet(models.QuerySet):
             rec_qs.delete()
         else:
             super().delete(*args, **kwargs)
+## end of class _TagQuerySet
 
 
 class _TagManager(models.Manager):
@@ -259,6 +262,12 @@ class ProductTag(_UserProfileMixin, MinimumInfoMixin):
     objects = _TagManager()
     min_info_field_names = ['id','name']
     name   = models.CharField(max_length=64, unique=False)
+
+    def delete(self, *args, **kwargs):
+        descs_id = self.descendants.values_list('descendant__id', flat=True)
+        qset = type(self).objects.filter(pk__in=descs_id)
+        qset._descs_deletion_included = True
+        qset.delete()
 
 
 class ProductTagClosure(ClosureTableModelMixin):
