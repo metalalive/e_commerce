@@ -181,6 +181,7 @@ _fixtures = {
 
 
 http_request_body_template = {
+    'ProductTag': {'name': None,  'id': None, 'exist_parent': None, 'new_parent':None},
     'ProductDevIngredient': {
         'name': None,  'id': None, 'category': None,
         'attributes':[

@@ -18,20 +18,22 @@ from .common import BaseIngredientSerializer
 _logger = logging.getLogger(__name__)
 
 
-class ConnectedTagField(ExtendedModelSerializer):
-    class Meta(ExtendedModelSerializer.Meta):
-        model = ProductTag
-        fields = ['id', 'name']
-        read_only_fields = ['name']
-
 class TagClosureSerializer(ExtendedModelSerializer):
     atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model = ProductTagClosure
-        fields = ['id', 'depth', 'ancestor', 'descendant']
+        fields = ['depth', 'ancestor', 'descendant']
         read_only_fields = ['depth']
-    ancestor   = ConnectedTagField(read_only=True)
-    descendant = ConnectedTagField(read_only=True)
+    ancestor   = PrimaryKeyRelatedField(many=False,  queryset=ProductTag.objects.all())
+    descendant = PrimaryKeyRelatedField(many=False,  queryset=ProductTag.objects.all())
+
+    def to_representation(self, instance):
+        if instance.depth > 0:
+            out = super().to_representation(instance=instance)
+        else:
+            out = {}
+        return out
+
 
 class BulkTagSerializer(DjangoBaseClosureBulkSerializer):
     CLOSURE_MODEL_CLS     = TagClosureSerializer.Meta.model
@@ -57,12 +59,13 @@ class TagSerializer(BaseClosureNodeMixin, ExtendedModelSerializer):
     desc_cnt = IntegerField(read_only=True)
 
     def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
-        self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
         self.usrprof_id = kwargs.pop('usrprof_id', None)
         super().__init__(instance=instance, data=data, **kwargs)
 
     def to_representation(self, instance):
         out = super().to_representation(instance=instance, _logger=_logger)
+        out['ancestors']   = list(filter(any, out['ancestors']))
+        out['descendants'] = list(filter(any, out['descendants']))
         field_names = self.fields.keys()
         if 'desc_cnt' in field_names:
             out['desc_cnt'] = instance.descendants.filter(depth=1).count()

@@ -97,11 +97,11 @@ class ClosureTableMixin:
             form = forms[idx]
             exist_parent = self._get_field_data(form, 'exist_parent', default='')
             new_parent   = self._get_field_data(form, 'new_parent', default='')
+            self._set_field_data(form=form, key='_sort_idx', val=idx)
             if exist_parent in self.EMPTY_VALUES:
                 if new_parent in self.EMPTY_VALUES:
                     sorted_forms.append(form)
                 else: # record the position the current form should be in sorted list
-                    self._set_field_data(form=form, key='_sort_idx', val=idx)
                     key =  idx
                     unsorted_forms.append(form)
                     insert_after[key] = forms[int(new_parent)]
@@ -117,10 +117,13 @@ class ClosureTableMixin:
                     self._set_field_data(form, 'new_parent', new_parent)
                     sorted_forms.append(form)
                     unsorted_forms.remove(form)
-                    self._get_field_data(form=form, key='_sort_idx', remove_after_read=True)
                 except ValueError as e:
                     # skip if parent form required hasn't been added yet to the sorted list.
                     seq_to_sorted_log.append( (key, -1) )
+        for form in sorted_forms:
+            self._get_field_data(form=form, key='_sort_idx', remove_after_read=True)
+        #import pdb
+        #pdb.set_trace()
         self._sorted_insertion_forms = sorted_forms
         log_msg = ['insert_after', insert_after_log, 'seq_to_sorted_log', seq_to_sorted_log]
         _logger.debug(None, *log_msg)
@@ -636,8 +639,11 @@ class BaseClosureNodeMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         req = self.context.get('request', None)
-        parent_only = req.query_params.get('parent_only', None)
-        if parent_only:
+        if req:
+            self._parent_only = req.query_params.get('parent_only', False)
+        else:
+            self._parent_only = False
+        if self._parent_only:
             allowed_fields = req.query_params.get('fields', '').split(',')
             allowed_fields.extend(['ancestors', 'ancestor', 'depth', 'id'])
             backup_mutable = req.query_params._mutable
@@ -646,11 +652,8 @@ class BaseClosureNodeMixin:
             req.query_params._mutable = backup_mutable
 
     def to_representation(self, instance, _logger=None):
-        req = self.context.get('request', None)
-        parent_only = req.query_params.get('parent_only', None)
         out = super().to_representation(instance=instance)
-
-        if parent_only:
+        if self._parent_only:
             _reduced = []
             for a in out.get('ancestors', []):
                 if a.get('depth', None) == 1:
@@ -660,7 +663,7 @@ class BaseClosureNodeMixin:
                 out['ancestors'] = _reduced
             if _logger:
                 log_msg = ['grp_id', out['id'], 'grp_ancestors', out['ancestors'], \
-                        'parent_only', parent_only]
+                        'parent_only', self._parent_only]
                 _logger.debug(None, *log_msg)
         return out
 
@@ -684,7 +687,7 @@ class BaseClosureNodeMixin:
         elif not new_parent in  EMPTY_VALUES:
             if not isinstance(new_parent, int) and not new_parent.isdigit() :
                 raise  exception_cls({"new_parent": "it must be integer"})
-        self._validate_only_fields['exist_parent'] = str(exist_parent)
+        self._validate_only_fields['exist_parent'] = '' if exist_parent in EMPTY_VALUES else str(exist_parent)
         value.update(self._validate_only_fields) # for later sorting operation at parent
         if _logger:
             log_msg = ['_validate_only_fields', self._validate_only_fields]

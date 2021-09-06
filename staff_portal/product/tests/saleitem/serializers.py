@@ -5,7 +5,7 @@ import json
 from functools import partial, reduce
 from unittest.mock import Mock
 
-from django.test import TransactionTestCase, TestCase
+from django.test import TransactionTestCase
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
