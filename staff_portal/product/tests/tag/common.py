@@ -5,6 +5,7 @@ from functools import partial
 
 from django.db.models import Q
 
+from common.util.python import ExtendedList
 from product.models.base import ProductTagClosure
 from product.serializers.base import TagSerializer
 
@@ -83,7 +84,9 @@ class TreeNodeMixin:
                 curr_node_pos = curr_node_pos.parent
             assert curr_node_pos == asc_node, 'corrupted closure node data: %s' % node_data
 
-        trees = list(filter(lambda t: t.parent is None, tmp_nodes.values()))
+        trees = ExtendedList()
+        trees.extend(list(filter(lambda t: t.parent is None, tmp_nodes.values())))
+        trees.entity_data = entity_data
         return trees
     ## end of gen_from_closure_data
 
@@ -155,9 +158,7 @@ class HttpRequestDataGenTag(HttpRequestDataGen):
             req_data = self._tree_to_req_data(curr_node=root, parent_data=None)
             out.extend(req_data)
         if shuffle:
-            num_req_data = len(out)
-            out = list(listitem_rand_assigner(list_=out, min_num_chosen=num_req_data,
-                max_num_chosen=(num_req_data + 1)))
+            random.shuffle(out)
         for d in out:
             if d['new_parent'] is not None:
                 idx = out.index(d['new_parent'])
@@ -183,16 +184,15 @@ class HttpRequestDataGenTag(HttpRequestDataGen):
 class TagVerificationMixin(BaseVerificationMixin):
     serializer_class = TagSerializer
 
-    def load_closure_data(self, actual_instances):
-        obj_ids = tuple(map(lambda obj: obj.pk, actual_instances))
+    def load_closure_data(self, node_ids):
         # load closure data from django ORM, not from DRF serializer because
         # serializer gets rid of unecessary data like closure id
         closure_node_cls = ProductTagClosure
         entity_cls = self.serializer_class.Meta.model
-        condition = Q(ancestor__id__in=obj_ids) | Q(descendant__id__in=obj_ids)
+        condition = Q(descendant__id__in=node_ids)
         closure_qset = closure_node_cls.objects.filter(condition).values(
                 'id', 'ancestor', 'descendant', 'depth')
-        entity_qset = entity_cls.objects.filter(id__in=obj_ids).values('id', 'name')
+        entity_qset = entity_cls.objects.filter(id__in=node_ids).values('id', 'name')
         return entity_qset, closure_qset
 
 

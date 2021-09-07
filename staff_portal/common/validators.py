@@ -65,9 +65,8 @@ class TreeNodesLoopValidator:
     # error message template
     default_err_msg = "The hierarchy tree contains a cycle in the list of nodes : {loop_node_list} ."
 
-    def __init__(self, **kwargs):
-        self._err_msg_cb = kwargs.pop('err_msg_cb', None)
-        tree_edge = kwargs['tree_edge']
+    def __init__(self, tree_edge, err_msg_cb=None, **kwargs):
+        self._err_msg_cb = err_msg_cb
         self._graph = self._build_graph(tree_edge)
         self._process_nodes_inbound()
 

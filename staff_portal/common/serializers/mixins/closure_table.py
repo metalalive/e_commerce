@@ -55,9 +55,11 @@ class ClosureTableMixin:
         init_kwargs = {'tree_edge':tree_edge, 'err_msg_cb': self._loopdetect_errmsg}
         for idx in range(len(forms)):
             form = forms[idx]
-            exist_parent = str(self._get_field_data(form, 'exist_parent', default=''))
+            exist_parent = self._get_field_data(form, 'exist_parent', default=None)
+            exist_parent = str(exist_parent) if exist_parent is not None else ''
             if self.is_create:
-                new_parent = str(self._get_field_data(form, 'new_parent', default=''))
+                new_parent = self._get_field_data(form, 'new_parent', default=None)
+                new_parent = str(new_parent) if new_parent is not None else ''
                 if (exist_parent in self.EMPTY_VALUES) and (not new_parent in self.EMPTY_VALUES):
                     parent_id = new_parent
                 else:
