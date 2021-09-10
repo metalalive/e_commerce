@@ -1,7 +1,8 @@
 import logging
 from collections import OrderedDict
 
-from common.validators  import  SelectIDsExistValidator, ClosureSingleTreeLoopValidator, TreeNodesLoopValidator, ClosureCrossTreesLoopValidator
+from common.util.python.graph import path_exists
+from common.validators  import  SelectIDsExistValidator, TreeNodesLoopValidator, ClosureCrossTreesLoopValidator
 from softdelete.models  import  SoftDeleteObjectMixin
 
 EMPTY_VALUES = (None, '', [], (), {})
@@ -72,7 +73,10 @@ class ClosureTableMixin:
                 if (exist_parent in self.EMPTY_VALUES):
                     exist_parent = TreeNodesLoopValidator.ROOT_OF_TREE
                 parent_id = exist_parent
-                tree_edge.append(tuple([parent_id, self._get_field_data(form, 'id') ]))
+                edge_dst = self._get_field_data(form, 'id')
+                assert edge_dst is not None, 'edge_dst must NOT be null'
+                edge_dst = str(edge_dst)
+                tree_edge.append(tuple([parent_id, edge_dst]))
         if self.is_create:
             validator_cls = TreeNodesLoopValidator
         else: # edit
@@ -82,6 +86,10 @@ class ClosureTableMixin:
             init_kwargs["descendant_column_name"] = self.DESCENDANT_FIELD_NAME
             validator_cls = ClosureCrossTreesLoopValidator
         vobj = validator_cls(**init_kwargs)
+        self._closure_nodes_dependency_graph = vobj.graph
+        #if not self.is_create:
+        #    import pdb
+        #    pdb.set_trace()
         return vobj
 
 
@@ -219,8 +227,15 @@ class ClosureTableMixin:
         for k,v in edit_trees_in.items(): # estimate update dependency
             if v['new']['obj']:
                 id_list.remove(k)
-                conditions = {asc_field_name:id_list}
-                qset = v['new']['obj'].ancestors.filter(**conditions).order_by(self.DEPTH_FIELD_NAME)
+                node_srcs = tuple(filter(lambda src: path_exists(graph=self._closure_nodes_dependency_graph, \
+                        node_src=src, node_dst=k), id_list))
+                #if set(id_list) != set(node_srcs):
+                #    import pdb
+                #    pdb.set_trace()
+                conditions = {asc_field_name: node_srcs}
+                qset = v['new']['obj'].ancestors.filter(**conditions).order_by(self.DEPTH_FIELD_NAME
+                        ).values_list(self.ANCESTOR_FIELD_NAME, flat=True)
+                qset = tuple(map(str,qset))
                 id_list.append(k)
             else:
                 qset = []
@@ -228,9 +243,9 @@ class ClosureTableMixin:
                 v['dependency'] = None
                 sorted_trees[k] = v
             else:
-                v['dependency'] = str(qset[0].ancestor.pk)
+                v['dependency'] = qset[0]
                 unsorted_trees[k] = v
-                update_after[k] = [str(q.ancestor.pk) for q in qset]
+                update_after[k] = qset
             dependency_log.append((k, v['dependency']))
         log_msg = ['dependency_log', dependency_log]
         _logger.debug(None, *log_msg)
@@ -245,6 +260,10 @@ class ClosureTableMixin:
                 if update_after[k] in self.EMPTY_VALUES:
                     sorted_trees[k] = v
                     remove.append(k)
+            #if not any(remove):
+            #    import pdb
+            #    pdb.set_trace()
+            assert any(remove), 'abort from infinite loop due to failure on sorting edit trees'
             for k in remove:
                 del unsorted_trees[k]
                 del update_after[k]
@@ -305,14 +324,15 @@ class ClosureTableMixin:
         This function estimates difference of all descendants before/after editing each tree in
         the edit list. Note the given edit list must be sorted by dependency.
         """
+        old_descs = {}
         edit_tree_roots = edit_trees_in.keys()
         # retrieve old descendants of each edit tree from model layer
         for k, v in edit_trees_in.items():
             qset_old_descs = v['obj'].descendants.all()
             v['old']['descendants'] = [{'obj': d.descendant, 'depth':d.depth} for d in qset_old_descs]
             # In each node, find the subtree which will be moving somewhere in edit list
-            old_descs = [str(d['obj'].pk)  for d in v['old']['descendants']]
-            v['old']['moving_subtree_root'] = [k2 for k2 in edit_tree_roots if k != k2 and k2 in old_descs]
+            old_descs[k] = [str(d['obj'].pk)  for d in v['old']['descendants']]
+            v['old']['moving_subtree_root'] = [k2 for k2 in edit_tree_roots if k != k2 and k2 in old_descs[k]]
             # find subtrees that will be (1) added to current edit tree from another edit tree
             # (2) still under the same tree, but in different position.
             v['new']['moving_subtree_root'] = []
@@ -356,9 +376,19 @@ class ClosureTableMixin:
             exc_ids = set(v['new']['moving_subtree_root']) | set(v['new']['move_out_subtree_root']) \
                     | set(v['new']['move_internal_subtree_root'])
             for w in exc_ids: # collect ID of all descendants in the subtree
-                remove += [str(d['obj'].pk) for d in edit_trees_in[w]['old']['descendants']]
-            v['new']['descendants'] = [d for d in v['old']['descendants'] if not str(d['obj'].pk) in remove]
+                excp_old_descs = [str(d['obj'].pk) for d in edit_trees_in[w]['old']['descendants']]
+                if k in excp_old_descs: # means a path is found from `w` to `k`
+                    has_path = path_exists(graph=self._closure_nodes_dependency_graph, node_src=w, node_dst=k)
+                    if has_path is False:
+                        excp_old_descs = list(filter(lambda n: n not in old_descs[k], excp_old_descs))
+                    #import pdb
+                    #pdb.set_trace()
+                remove += excp_old_descs
+            v['new']['descendants'] = list(filter(lambda d: str(d['obj'].pk) not in remove, v['old']['descendants']))
+            ## [d for d in v['old']['descendants'] if not str(d['obj'].pk) in remove]
             remove.clear()
+        #import pdb
+        #pdb.set_trace()
 
         descendant_compare_log = []
         for k, v in edit_trees_in.items():
@@ -679,13 +709,6 @@ class BaseClosureNodeMixin:
                 exist_parent = int(exist_parent)
             v = SelectIDsExistValidator(model_cls=self.Meta.model, err_field_name='exist_parent')
             v(exist_parent)
-            if not self.instance is None and not self.instance.pk is None : # edit mode
-                model_cls = self.fields['ancestors'].child.Meta.model
-                v = ClosureSingleTreeLoopValidator( err_field_name='exist_parent',
-                        T2_root_id=self.instance.pk ,  closure_model=model_cls,
-                        ancestor_column_name   = model_cls.ancestor.field.name,
-                        descendant_column_name = model_cls.descendant.field.name,  )
-                v(exist_parent)
         elif not new_parent in  EMPTY_VALUES:
             if not isinstance(new_parent, int) and not new_parent.isdigit() :
                 raise  exception_cls({"new_parent": "it must be integer"})

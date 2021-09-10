@@ -13,36 +13,28 @@ from .common import TreeNodeMixin, HttpRequestDataGenTag, TagVerificationMixin
 
 class TagCommonMixin(HttpRequestDataGenTag, TagVerificationMixin):
     err_msg_loop_detected = 'will form a loop, which is NOT allowed in closure table'
+    usrprof_id = 123
 
-    def setUp(self):
-        pass
+    def _write_value_fn(self, node):
+        out = {'name': self._gen_tag_name()}
+        node.value = out
 
-    def tearDown(self):
-        pass
+    def _value_compare_fn(self, val_a, val_b):
+        return val_a['name'] == val_b['name']
 
     def _gen_tag_name(self):
         num_valid_tags = len(_fixtures['ProductTag'])
         idx = random.randrange(0, num_valid_tags)
         return  _fixtures['ProductTag'][idx]['name']
 
-
-class TagCreationTestCase(TagCommonMixin, TransactionTestCase):
-    usrprof_id = 123
-
-    def setUp(self):
-        super().setUp()
-
-    def tearDown(self):
-        super().tearDown()
-
-    def test_create_new_trees(self):
-        num_rounds = 20
-        for _ in range(num_rounds):
-            self._init_new_trees()
-
-    def _init_new_trees(self, num_trees=3, min_num_nodes=2, max_num_nodes=15):
-        origin_trees = TreeNodeMixin.rand_gen_trees(num_trees=num_trees, min_num_nodes=min_num_nodes,
-                max_num_nodes=max_num_nodes, write_value_fn=self._write_value_fn)
+    def _init_new_trees(self, num_trees=3, min_num_nodes=2, max_num_nodes=15, min_num_siblings=1,
+            max_num_siblings=4, write_value_fn=None, value_compare_fn=None):
+        write_value_fn = write_value_fn or self._write_value_fn
+        value_compare_fn = value_compare_fn or self._value_compare_fn
+        origin_trees = TreeNodeMixin.rand_gen_trees(
+                num_trees=num_trees, min_num_nodes=min_num_nodes,
+                max_num_nodes=max_num_nodes, min_num_siblings=min_num_siblings,
+                max_num_siblings=max_num_siblings, write_value_fn=write_value_fn)
         req_data = self.trees_to_req_data(trees=origin_trees)
         serializer = self.serializer_class(many=True, data=req_data, usrprof_id=self.usrprof_id)
         serializer.is_valid(raise_exception=True)
@@ -51,20 +43,27 @@ class TagCreationTestCase(TagCommonMixin, TransactionTestCase):
         entity_data, closure_data = self.load_closure_data(node_ids=obj_ids) # serializer.data
         saved_trees = TreeNodeMixin.gen_from_closure_data(entity_data=entity_data, closure_data=closure_data)
         matched, not_matched = TreeNodeMixin.compare_trees(trees_a=origin_trees, trees_b=saved_trees,
-                value_compare_fn=self._value_compare_fn)
+                value_compare_fn=value_compare_fn)
         #if any(not_matched):
         #    import pdb
         #    pdb.set_trace()
         self.assertListEqual(not_matched, [])
         self.assertEqual(len(matched), len(origin_trees))
         return saved_trees
+## end of class TagCommonMixin
 
-    def _write_value_fn(self, node):
-        out = {'name': self._gen_tag_name()}
-        node.value = out
 
-    def _value_compare_fn(self, val_a, val_b):
-        return val_a['name'] == val_b['name']
+class TagCreationTestCase(TransactionTestCase, TagCommonMixin):
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        pass
+
+    def test_create_new_trees(self):
+        num_rounds = 20
+        for _ in range(num_rounds):
+            self._init_new_trees()
 
     def _append_new_trees_to_existing_nodes(self, existing_trees, appending_trees):
         appending_trees_iter = iter(appending_trees)
@@ -76,7 +75,6 @@ class TagCreationTestCase(TagCommonMixin, TransactionTestCase):
                     exist_parent = exist_parent.children[0]
                 appending_tree.value['exist_parent'] = exist_parent.value['id']
                 appending_tree.parent = exist_parent
-                exist_parent.children.append(appending_tree)
             except StopIteration as e:
                 break
         out = existing_trees.copy() # shallow copy should be enough
@@ -120,12 +118,10 @@ class TagCreationTestCase(TagCommonMixin, TransactionTestCase):
         origin_tree_nodes = [TreeNodeMixin(value={'name': 'tag %s' % (idx),}) \
                 for idx in range(num_nodes)]
         for idx in range(num_nodes - 1):
-            origin_tree_nodes[idx].children.append( origin_tree_nodes[idx+1] )
             origin_tree_nodes[idx+1].parent = origin_tree_nodes[idx]
         origin_trees = [origin_tree_nodes[0]]
         req_data = self.trees_to_req_data(trees=origin_trees)
         # make a loop
-        origin_tree_nodes[-1].children.append( origin_tree_nodes[0] )
         origin_tree_nodes[0].parent = origin_tree_nodes[-1]
         req_data[0]['new_parent'] = num_nodes - 1
         error_caught = None
@@ -187,6 +183,8 @@ class TagCreationTestCase(TagCommonMixin, TransactionTestCase):
         for asc_data in ascs_data:
             pattern_pos = err_info[0].find(form_label_pattern % asc_data['idx'])
             self.assertGreaterEqual(pattern_pos, 0)
+            if asc_data is loop_data_end:
+                break
     ## end of test_loop_detection_rand_gen_trees()
 
 
@@ -211,5 +209,329 @@ class TagCreationTestCase(TagCommonMixin, TransactionTestCase):
         self.assertEqual(actual_err_msg, expect_err_msg)
 
 ## end of class TagCreationTestCase
+
+
+class TagUpdateTestCase(TransactionTestCase, TagCommonMixin):
+    def setUp(self):
+        self.num_trees = 3
+        self.existing_trees = self._init_new_trees(num_trees=self.num_trees, min_num_nodes=30,
+                max_num_nodes=40, min_num_siblings=2, max_num_siblings=4,)
+
+    def tearDown(self):
+        pass
+
+    def _update_and_validate_tree(self, moving_nodes):
+        req_data = list(map(lambda node: {'id':node.value['id'], 'name':node.value['name'], \
+                    'exist_parent': node.parent.value['id'] if node.parent else None, \
+                    'new_parent':None}, moving_nodes))
+        random.shuffle(req_data) # `id` field should be unique value in each data item
+        tag_ids = list(map(lambda node:node.value['id'] ,moving_nodes))
+        tag_objs = self.serializer_class.Meta.model.objects.filter(id__in=tag_ids)
+        serializer = self.serializer_class(many=True, data=req_data, instance=tag_objs,
+                usrprof_id=self.usrprof_id)
+        serializer.is_valid(raise_exception=True)
+        actual_instances = serializer.save()
+        obj_ids = tuple(map(lambda d: d['id'], self.existing_trees.entity_data))
+        entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)
+        trees_after_save = TreeNodeMixin.gen_from_closure_data(entity_data=entity_data, closure_data=closure_data)
+        matched, not_matched = TreeNodeMixin.compare_trees(trees_a=self.existing_trees, trees_b=trees_after_save,
+                value_compare_fn=self._value_compare_fn)
+        #if any(not_matched):
+        #    import pdb
+        #    pdb.set_trace()
+        self.assertListEqual(not_matched, [])
+        self.assertEqual(len(matched), len(self.existing_trees))
+
+
+    def test_subtrees_move_out(self):
+        moving_nodes = []
+        for idx in range(self.num_trees):
+            parent_from = self.existing_trees[idx]
+            parent_to   = self.existing_trees[(idx+1)%self.num_trees]
+            moving_node = parent_from.children[0]
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+            # extract subtree from current moving node
+            parent_from = moving_node
+            parent_to   = self.existing_trees[idx]
+            moving_node = parent_from.children[0]
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+        self._update_and_validate_tree(moving_nodes)
+    ## end of test_nested_subtrees_out()
+
+
+    def test_subtrees_move_in(self):
+        moving_nodes = []
+        for idx in range(self.num_trees):
+            curr_node = self.existing_trees[idx]
+            while any(curr_node.children):
+                curr_node = curr_node.children[0]
+            moving_node = curr_node.parent
+            parent_to   = self.existing_trees[(idx+1)%self.num_trees]
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+            # extract subtree from current moving node
+            curr_node = self.existing_trees[(idx+1)%self.num_trees]
+            while any(curr_node.children):
+                curr_node = curr_node.children[0]
+            parent_to   = moving_node.children[0]
+            moving_node = curr_node.parent
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+        self._update_and_validate_tree(moving_nodes)
+
+
+    def test_subtrees_move_internal(self):
+        moving_nodes = []
+        for root in self.existing_trees:
+            parent_to   = root.children[0]
+            moving_node = root.children[-1]
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+            parent_to   = moving_node.children[-1]
+            moving_node = moving_node.children[0]
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+        self._update_and_validate_tree(moving_nodes)
+
+
+    def test_subtrees_move_mix(self):
+        self.assertGreaterEqual(self.num_trees, 3) # this test case requires at least 3 existing trees
+        moving_nodes = []
+        roots = self.existing_trees
+        #-------------------------------
+        parent_to   = roots[0].children[-1]
+        moving_node = roots[2].children[0]
+        moving_node.parent = parent_to
+        moving_nodes.append(moving_node)
+        #-------------------------------
+        moving_node_bak = moving_node
+        curr_node = moving_node_bak
+        while any(curr_node.children):
+            sorted_children = sorted(curr_node.children, key=lambda node:node.num_nodes)
+            curr_node = sorted_children[-1]
+        parent_to = curr_node
+        curr_node = roots[1]
+        while any(curr_node.children):
+            curr_node = curr_node.children[0]
+        moving_node = curr_node.parent
+        moving_node.parent = parent_to
+        moving_nodes.append(moving_node)
+        #-------------------------------
+        parent_to = roots[2]
+        curr_node = moving_node_bak
+        while any(curr_node.children):
+            curr_node = curr_node.children[0]
+        moving_node = curr_node.parent
+        moving_node.parent = parent_to
+        moving_nodes.append(moving_node)
+        #-------------------------------
+        parent_to = moving_node_bak
+        curr_node = moving_node_bak
+        while any(curr_node.children):
+            sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
+            curr_node = sorted_children[-1]
+        moving_node = curr_node.parent
+        if moving_node is parent_to:
+            #import pdb
+            #pdb.set_trace()
+            pass
+        else:
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+        #-------------------------------
+        self._update_and_validate_tree(moving_nodes)
+    ## end of test_nested_subtrees_mix()
+
+
+    def test_tree_chains(self):
+        self.assertGreaterEqual(self.num_trees, 2) # this test case requires at least 2 existing trees
+        moving_nodes = []
+        moving_node  = None
+        roots = self.existing_trees
+        curr_node = roots[0]
+        while any(curr_node.children):
+            curr_node = curr_node.children[-1]
+        parent_to = curr_node
+        while moving_node is not roots[1]:
+            # gradually extract subtrees of roots[1] and append it to roots[0]
+            curr_node = roots[1]
+            while any(curr_node.children):
+                curr_node = curr_node.children[0]
+            moving_node = curr_node.parent
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+            parent_to = moving_node.children[0]
+        #-------------------------------
+        self.existing_trees.remove(roots[1])
+        self._update_and_validate_tree(moving_nodes)
+
+
+    def test_all_merge_one(self):
+        self.assertGreaterEqual(self.num_trees, 3) # this test case requires at least 3 existing trees
+        moving_nodes = []
+        roots = self.existing_trees
+        #-------------------------------
+        for root in roots[1:] :
+            moving_node  = None
+            while moving_node is not root:
+                curr_node = roots[0]
+                while any(curr_node.children):
+                    rand_idx = random.randrange(0, len(curr_node.children))
+                    curr_node = curr_node.children[rand_idx]
+                parent_to = curr_node
+                # gradually extract subtrees of roots[1] and append it to roots[0]
+                curr_node = root
+                while any(curr_node.children):
+                    sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
+                    curr_node = sorted_children[-1]
+                moving_node = curr_node.parent
+                moving_node.parent = parent_to
+                moving_nodes.append(moving_node)
+                parent_to = moving_node.children[0]
+        #-------------------------------
+        self.existing_trees.remove(roots[2])
+        self.existing_trees.remove(roots[1])
+        self._update_and_validate_tree(moving_nodes)
+
+
+    def test_subtrees_to_new_root(self):
+        self.assertGreaterEqual(self.num_trees, 3) # this test case requires at least 3 existing trees
+        extracted_subtrees = []
+        moving_nodes = []
+        roots = self.existing_trees
+        #-------------------------------
+        for root in roots:
+            curr_node = root
+            while any(curr_node.children):
+                sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
+                curr_node = sorted_children[-1]
+            extracted_subtrees.append(curr_node.parent)
+        #-------------------------------
+        for subtree in extracted_subtrees[1:] :
+            curr_node = extracted_subtrees[0]
+            while any(curr_node.children):
+                rand_idx = random.randrange(0, len(curr_node.children))
+                curr_node = curr_node.children[rand_idx]
+            parent_to = curr_node
+            moving_node = subtree
+            moving_node.parent = parent_to
+            moving_nodes.append(moving_node)
+        extracted_subtrees[0].parent = None
+        moving_nodes.append(extracted_subtrees[0])
+        self.existing_trees.append(extracted_subtrees[0])
+        self._update_and_validate_tree(moving_nodes)
+
+
+    def test_loop_detection_in_one_tree(self):
+        error_caught = None
+        moving_nodes = []
+        root = self.existing_trees[0]
+        curr_node = root
+        while any(curr_node.children):
+            sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
+            curr_node = sorted_children[-1]
+        root.parent = curr_node
+        moving_nodes.append(root)
+        with self.assertRaises(DRFValidationError):
+            try:
+                self._update_and_validate_tree(moving_nodes)
+            except DRFValidationError as e:
+                error_caught = e
+                raise
+        self.assertNotEqual(error_caught, None)
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        err_info = error_caught.detail[non_field_err_key]
+        pattern_pos = err_info[0].find(self.err_msg_loop_detected)
+        self.assertGreater(pattern_pos, 0)
+        # --------------------------------
+        root.parent = None
+        origin_grand_parent = curr_node.parent.parent
+        curr_node.parent.parent = curr_node
+        moving_nodes.clear()
+        moving_nodes.append(curr_node.parent)
+        with self.assertRaises(DRFValidationError):
+            try:
+                self._update_and_validate_tree(moving_nodes)
+            except DRFValidationError as e:
+                error_caught = e
+                raise
+        self.assertNotEqual(error_caught, None)
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        err_info = error_caught.detail[non_field_err_key]
+        pattern_pos = err_info[0].find(self.err_msg_loop_detected)
+        self.assertGreater(pattern_pos, 0)
+
+
+    def test_loop_detection_across_2_trees(self):
+        self.assertGreaterEqual(self.num_trees, 2) # this test case requires at least 2 existing trees
+        moving_nodes = []
+        moving_node  = None
+        chosen_subtrees = []
+        roots = self.existing_trees[:2]
+        for root in roots:
+            curr_node = root
+            while any(curr_node.children):
+                sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
+                curr_node = sorted_children[-1]
+            chosen_subtrees.append(curr_node.parent)
+            moving_nodes.append(curr_node.parent)
+        expect_loop_nodes = [ chosen_subtrees[1], chosen_subtrees[0],
+                chosen_subtrees[1].children[0], chosen_subtrees[0].children[0]
+            ]
+        chosen_subtrees[0].parent, chosen_subtrees[1].parent = chosen_subtrees[1].children[0], chosen_subtrees[0].children[0]
+        with self.assertRaises(DRFValidationError):
+            try:
+                self._update_and_validate_tree(moving_nodes)
+            except DRFValidationError as e:
+                error_caught = e
+                raise
+        self.assertNotEqual(error_caught, None)
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        err_info = error_caught.detail[non_field_err_key]
+        pattern_pos = err_info[0].find(self.err_msg_loop_detected)
+        self.assertGreater(pattern_pos, 0)
+        for loop_node in expect_loop_nodes:
+            form_label_pattern = 'form #%s'
+            pattern_pos = err_info[0].find(form_label_pattern % loop_node.value['id'])
+            self.assertGreaterEqual(pattern_pos, 0)
+
+
+    def test_loop_detection_across_3_trees(self):
+        self.assertGreaterEqual(self.num_trees, 3) # this test case requires at least 3 existing trees
+        moving_nodes = []
+        moving_node  = None
+        chosen_subtrees = []
+        roots = self.existing_trees[:3]
+        for root in roots:
+            curr_node = root
+            while any(curr_node.children):
+                sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
+                curr_node = sorted_children[-1]
+            chosen_subtrees.append(curr_node.parent)
+            moving_nodes.append(curr_node.parent)
+        expect_loop_nodes = [ chosen_subtrees[2], chosen_subtrees[1], chosen_subtrees[0],
+                chosen_subtrees[2].children[0], chosen_subtrees[1].children[0],
+                chosen_subtrees[0].children[0]
+            ]
+        chosen_subtrees[0].parent, chosen_subtrees[1].parent, chosen_subtrees[2].parent = \
+                chosen_subtrees[1].children[0], chosen_subtrees[2].children[0], chosen_subtrees[0].children[0]
+        with self.assertRaises(DRFValidationError):
+            try:
+                self._update_and_validate_tree(moving_nodes)
+            except DRFValidationError as e:
+                error_caught = e
+                raise
+        self.assertNotEqual(error_caught, None)
+        non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        err_info = error_caught.detail[non_field_err_key]
+        pattern_pos = err_info[0].find(self.err_msg_loop_detected)
+        self.assertGreater(pattern_pos, 0)
+        for loop_node in expect_loop_nodes:
+            form_label_pattern = 'form #%s'
+            pattern_pos = err_info[0].find(form_label_pattern % loop_node.value['id'])
+            self.assertGreaterEqual(pattern_pos, 0)
+## end of class TagUpdateTestCase
 
 

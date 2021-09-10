@@ -13,39 +13,6 @@ from common.util.python.graph import is_graph_cyclic
 _logger = logging.getLogger(__name__)
 
 
-@deconstructible
-class ClosureSingleTreeLoopValidator:
-    """
-    A given tree T2 will form a loop if :
-    * the entire T2 becomes a child of a given node T1_n.
-    * T1_n is one of T2's descendants
-    Pre-requisite :
-        * Both T2 and T1_n come from the same database closure table.
-    """
-    def __init__(self, **kwargs):
-        self.T2_root_id    = kwargs['T2_root_id']
-        self.closure_model = kwargs['closure_model']
-        self.ancestor_column_name   = kwargs["ancestor_column_name"]
-        self.descendant_column_name = kwargs["descendant_column_name"]
-        self.err_field_name = kwargs.pop('err_field_name', None)
-
-    def __call__(self, value):
-        T1_node_id = value
-        filter_dict = {}
-        filter_dict[self.ancestor_column_name] = self.T2_root_id
-        filter_dict[self.descendant_column_name] = T1_node_id
-        T1_T2_path_cnt = self.closure_model.objects.filter(**filter_dict).count()
-        if T1_T2_path_cnt > 0:
-            log_msg = ['filter_dict', filter_dict, 'T1_node_id', T1_node_id,
-                    'T2_root_id', self.T2_root_id, 'T1_T2_path_cnt', T1_T2_path_cnt]
-            _logger.info(None, *log_msg)
-            err_msg = ["Loop detected, the selected parent of the node (ID ", str(self.T2_root_id), \
-                    ") must NOT be its descendant (ID ", str(T1_node_id) ,")"]
-            err_msg = "".join(err_msg)
-            if self.err_field_name:
-                err_msg = {self.err_field_name : err_msg}
-            raise ValidationError(err_msg)
-
 
 @deconstructible
 class TreeNodesLoopValidator:
@@ -70,6 +37,10 @@ class TreeNodesLoopValidator:
         self._graph = self._build_graph(tree_edge)
         self._process_nodes_inbound()
 
+    @property
+    def graph(self):
+        return self._graph
+
     def _build_graph(self, tree_edge):
         """ build graph from the given edges """
         log_msg = ['tree_edge', tree_edge,]
@@ -81,12 +52,12 @@ class TreeNodesLoopValidator:
                 err_msg = ["self-directed edge at (", str(n0), ",", str(n1), ") is NOT allowed"]
                 raise ValueError("".join(err_msg))
             if not nodes.get(n1):
-                nodes[n1] = {'outbound':[], 'inbound': self.NOT_UPDATE_YET}
+                nodes[n1] = {'outbound':set(), 'inbound': self.NOT_UPDATE_YET}
             if isinstance(n0, str): # if it's digit, it must be negative integer (ROOT_OF_TREE or NOT_UPDATE_YET)
-                nodes[n1]['inbound'] = {'path_len':1, "ID": n0}
+                nodes[n1]['inbound'] = {'path_len':1, "ID": n0, '_user_req': True}
                 if not nodes.get(n0):
-                    nodes[n0] = {'outbound':[], 'inbound': self.NOT_UPDATE_YET}
-                nodes[n0]['outbound'].append(n1)
+                    nodes[n0] = {'outbound':set(), 'inbound': self.NOT_UPDATE_YET}
+                nodes[n0]['outbound'].add(n1)
             else:
                 nodes[n1]['inbound'] = self.ROOT_OF_TREE
         log_msg.extend(['nodes', nodes])
@@ -101,17 +72,17 @@ class TreeNodesLoopValidator:
                 node['inbound'] = []
 
 
-    def __call__(self, caller=None):
-        is_directed = False # treated as undirected graph
-        result, loop_node_list = is_graph_cyclic(self._graph, is_directed)
+    def __call__(self, value):
+        result, loop_node_list = is_graph_cyclic(self._graph, is_directed=True)
         if result:
             if self._err_msg_cb :
                 err_msg = self._err_msg_cb(loop_node_list)
             else:
                 err_msg = self.default_err_msg.format(loop_node_list=str(loop_node_list))
-            log_msg = ['graph', self._graph, 'is_directed', is_directed, 'err_msg', err_msg]
+            log_msg = ['graph', self._graph, 'err_msg', err_msg]
             _logger.info(None, *log_msg)
             raise ValidationError(err_msg)
+## end of class TreeNodesLoopValidator
 
 
 @deconstructible
@@ -151,20 +122,27 @@ class ClosureCrossTreesLoopValidator(TreeNodesLoopValidator):
                             "{depth}__gt".format(depth=self.depth_column_name) : 0}
             query = self.closure_model.objects.values(self.depth_column_name, self.ancestor_column_name
                     ).filter(**filter_dict).order_by(self.depth_column_name)
-            if len(query) == 0:
+            if query.count() == 0:
                 node['inbound'] = self.ROOT_OF_TREE
-                continue
             log_msg.extend(['updating_node_key', key])
+            ##import pdb
+            ##pdb.set_trace()
             for q in query: # loop through each ancestor of current node
-                #### print(".... q : "+ str(q))
                 parent_key = str(q[self.ancestor_column_name])
-                # this function only looks for the ancestor which is present in the graph
-                if (nodes.get(parent_key, None) is None):
+                parent_node = nodes.get(parent_key, None)
+                # look for any ancestor presented in the graph
+                if parent_node is None:
                     continue
                 path_len = q[self.depth_column_name]
                 if node['inbound'] == self.NOT_UPDATE_YET:
+                    #grand_parent = parent_node['inbound']
+                    #if isinstance(grand_parent, dict) and grand_parent.get('_user_req', False) \
+                    #        and grand_parent['ID'] == key:
+                    #    import pdb
+                    #    pdb.set_trace()
+                    #    pass
                     node['inbound'] = {'path_len':path_len, "ID": parent_key}
-                    nodes[parent_key]['outbound'].append(key)
+                    parent_node['outbound'].add(key)
                     break
                 else: # TODO: is it possible to allow 2 parent nodes connecting to the same node ?
                     err_msg = "found second inbound node from %s to %s" % (parent_key, key)
@@ -174,7 +152,7 @@ class ClosureCrossTreesLoopValidator(TreeNodesLoopValidator):
                 # elif node['inbound']['path_len'] > path_len:
                 #     node['inbound']['path_len'] = path_len
                 #     node['inbound']["ID"] =  parent_key
-                #     nodes[parent_key]['outbound'].append(key)
+                #     nodes[parent_key]['outbound'].add(key)
         log_msg.extend(['nodes', nodes])
         _logger.debug(None, *log_msg)
         return nodes

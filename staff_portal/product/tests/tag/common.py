@@ -1,7 +1,8 @@
 import random
 import copy
 import json
-from functools import partial
+import operator
+from functools import partial, reduce
 
 from django.db.models import Q
 
@@ -14,8 +15,33 @@ from product.tests.common import _fixtures, http_request_body_template, HttpRequ
 class TreeNodeMixin:
     def __init__(self, value=None):
         self.value = value
-        self.parent = None
+        self._parent = None
         self.children = []
+
+    @property
+    def depth(self):
+        num_list = [t.depth for t in self.children]
+        max_depth = max(num_list) if any(num_list) else 0
+        return 1 + max_depth
+
+    @property
+    def num_nodes(self):
+        num_list = [t.num_nodes for t in self.children]
+        num_descs = reduce(operator.add , num_list) if any(num_list) else 0
+        return 1 + num_descs
+
+    @property
+    def parent(self):
+        return self._parent
+
+    @parent.setter
+    def parent(self, new_parent):
+        old_parent = self._parent
+        if old_parent:
+            old_parent.children.remove(self)
+        if new_parent:
+            new_parent.children.append(self)
+        self._parent = new_parent
 
     @classmethod
     def rand_gen_trees(cls, num_trees, min_num_nodes=2, max_num_nodes=15, min_num_siblings=1,
@@ -34,10 +60,9 @@ class TreeNodeMixin:
             try:
                 for curr_parent in parent_iter:
                     num_siblings = random.randrange(min_num_siblings, (max_num_siblings + 1))
-                    curr_parent.children = []
+                    #curr_parent.children = []
                     for _ in range(num_siblings):
                         curr_child = next(child_iter)
-                        curr_parent.children.append(curr_child)
                         curr_child.parent = curr_parent
             except StopIteration:
                 pass
@@ -68,7 +93,6 @@ class TreeNodeMixin:
                     'both of parent and child must not be null, node data: %s' % node_data
             assert (child_node.parent is None) and (child_node not in parent_node.children), \
                     'path duplicate ? depth:1, node data: %s' % node_data
-            parent_node.children.append(child_node)
             child_node.parent = parent_node
 
         nodes_data = closure_data.filter(depth__gte=2)
@@ -82,6 +106,9 @@ class TreeNodeMixin:
             curr_node_pos = desc_node
             for _ in range(node_data['depth']):
                 curr_node_pos = curr_node_pos.parent
+            if curr_node_pos != asc_node:
+                import pdb
+                pdb.set_trace()
             assert curr_node_pos == asc_node, 'corrupted closure node data: %s' % node_data
 
         trees = ExtendedList()
