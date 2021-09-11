@@ -45,16 +45,10 @@ class TagView(AuthCommonAPIView, RemoteGetProfileIDMixin):
     serializer_class  = TagSerializer
     filter_backends = [TagsPermissions, TagSearchFilter, ClosureTableFilter, TagOrderFilter,]
     closure_model_cls = ProductTagClosure
-    ordering_fields  = ['id', 'name', 'item_cnt', 'pkg_cnt', 'desc_cnt']
+    ordering_fields  = ['id', 'name', 'item_cnt', 'pkg_cnt', 'num_children']
     search_fields  = ['name']
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [TagsPermissions]
     queryset = serializer_class.Meta.model.objects.all()
-        #annotate(
-        #    item_cnt=models.Count('tagged_products'),
-        #    pkg_cnt=models.Count('tagged_packages'),
-        #    desc_cnt=models.Count('descendants'),
-        #    asc_cnt=models.Count('ancestors'),
-        #)
 
     def get_IDs(self, pk_param_name='pks', pk_field_name='pk', delimiter=',',
             pk_src=LimitQuerySetMixin.REQ_SRC_QUERY_PARAMS, pk_skip_list=None):

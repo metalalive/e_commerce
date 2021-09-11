@@ -48,7 +48,7 @@ class TagSerializer(BaseClosureNodeMixin, ExtendedModelSerializer):
     class Meta(BaseClosureNodeMixin.Meta, ExtendedModelSerializer.Meta):
         model = ProductTag
         fields = ['id', 'name', 'ancestors', 'descendants', 'usrprof',
-                'item_cnt', 'pkg_cnt', 'desc_cnt',]
+                'item_cnt', 'pkg_cnt', 'num_children',]
         read_only_fields = ['usrprof']
         list_serializer_class = BulkTagSerializer
 
@@ -56,7 +56,7 @@ class TagSerializer(BaseClosureNodeMixin, ExtendedModelSerializer):
     descendants = TagClosureSerializer(many=True, read_only=True)
     item_cnt = IntegerField(read_only=True)
     pkg_cnt  = IntegerField(read_only=True)
-    desc_cnt = IntegerField(read_only=True)
+    num_children = IntegerField(read_only=True)
 
     def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
         self.usrprof_id = kwargs.pop('usrprof_id', None)
@@ -64,11 +64,13 @@ class TagSerializer(BaseClosureNodeMixin, ExtendedModelSerializer):
 
     def to_representation(self, instance):
         out = super().to_representation(instance=instance, _logger=_logger)
-        out['ancestors']   = list(filter(any, out['ancestors']))
-        out['descendants'] = list(filter(any, out['descendants']))
+        if out.get('ancestors') is not None:
+            out['ancestors']   = list(filter(any, out['ancestors']))
+        if out.get('descendants') is not None:
+            out['descendants'] = list(filter(any, out['descendants'] ))
         field_names = self.fields.keys()
-        if 'desc_cnt' in field_names:
-            out['desc_cnt'] = instance.descendants.filter(depth=1).count()
+        if 'num_children' in field_names:
+            out['num_children'] = instance.descendants.filter(depth=1).count()
         if 'item_cnt' in field_names:
             out['item_cnt'] = instance.tagged_products.count()
         if 'pkg_cnt' in field_names:

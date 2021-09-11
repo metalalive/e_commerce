@@ -673,11 +673,21 @@ class BaseClosureNodeMixin:
         req = self.context.get('request', None)
         if req:
             self._parent_only = req.query_params.get('parent_only', False)
+            self._children_only = req.query_params.get('children_only', False)
         else:
             self._parent_only = False
+            self._children_only = False
         if self._parent_only:
-            allowed_fields = req.query_params.get('fields', '').split(',')
-            allowed_fields.extend(['ancestors', 'ancestor', 'depth', 'id'])
+            self._init_fields_adj_node(new_fields=['ancestors', 'ancestor', 'depth', 'id'])
+        if self._children_only:
+            self._init_fields_adj_node(new_fields=['descendants', 'descendant', 'depth', 'id'])
+
+    def _init_fields_adj_node(self, new_fields):
+        req = self.context.get('request', None)
+        allowed_fields = req.query_params.get('fields', '').split(',')
+        if any(allowed_fields):
+            allowed_fields.extend(new_fields)
+            allowed_fields = list(set(allowed_fields))
             backup_mutable = req.query_params._mutable
             req.query_params._mutable = True
             req.query_params['fields'] = ','.join(allowed_fields)
@@ -685,18 +695,19 @@ class BaseClosureNodeMixin:
 
     def to_representation(self, instance, _logger=None):
         out = super().to_representation(instance=instance)
+        _filter_fn = lambda a: a.get('depth', None) == 1
         if self._parent_only:
-            _reduced = []
-            for a in out.get('ancestors', []):
-                if a.get('depth', None) == 1:
-                    _reduced.append(a)
-                    break
+            _reduced = list(filter(_filter_fn, out.get('ancestors', [])))
             if out.get('ancestors', None):
                 out['ancestors'] = _reduced
             if _logger:
                 log_msg = ['grp_id', out['id'], 'grp_ancestors', out['ancestors'], \
                         'parent_only', self._parent_only]
                 _logger.debug(None, *log_msg)
+        if self._children_only:
+            _reduced = list(filter(_filter_fn, out.get('descendants', [])))
+            if out.get('descendants', None):
+                out['descendants'] = _reduced
         return out
 
 

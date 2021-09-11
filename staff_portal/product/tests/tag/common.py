@@ -106,14 +106,15 @@ class TreeNodeMixin:
             curr_node_pos = desc_node
             for _ in range(node_data['depth']):
                 curr_node_pos = curr_node_pos.parent
-            if curr_node_pos != asc_node:
-                import pdb
-                pdb.set_trace()
+            #if curr_node_pos != asc_node:
+            #    import pdb
+            #    pdb.set_trace()
             assert curr_node_pos == asc_node, 'corrupted closure node data: %s' % node_data
 
         trees = ExtendedList()
         trees.extend(list(filter(lambda t: t.parent is None, tmp_nodes.values())))
         trees.entity_data = entity_data
+        trees.closure_data = closure_data
         return trees
     ## end of gen_from_closure_data
 

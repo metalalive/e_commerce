@@ -2,12 +2,13 @@ import random
 import copy
 import json
 from functools import partial
+from unittest.mock import Mock
 
 from django.test import TransactionTestCase
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
-from common.util.python import sort_nested_object
+from common.util.python import ExtendedDict, sort_nested_object
 from product.tests.common import _fixtures, http_request_body_template
 from .common import TreeNodeMixin, HttpRequestDataGenTag, TagVerificationMixin
 
@@ -533,5 +534,133 @@ class TagUpdateTestCase(TransactionTestCase, TagCommonMixin):
             pattern_pos = err_info[0].find(form_label_pattern % loop_node.value['id'])
             self.assertGreaterEqual(pattern_pos, 0)
 ## end of class TagUpdateTestCase
+
+
+class TagRepresentationTestCase(TransactionTestCase, TagCommonMixin):
+    def setUp(self):
+        self.num_trees = 3
+        self.existing_trees = self._init_new_trees(num_trees=self.num_trees, min_num_nodes=20,
+                max_num_nodes=40, min_num_siblings=2, max_num_siblings=3,)
+
+    def tearDown(self):
+        pass
+
+    def test_all_descs_of_roots(self):
+        nodes = self.existing_trees
+        tag_ids = list(map(lambda node:node.value['id'], nodes))
+        tag_objs = self.serializer_class.Meta.model.objects.filter(id__in=tag_ids)
+        serializer = self.serializer_class(many=True, instance=tag_objs,
+                usrprof_id=self.usrprof_id)
+        actual_data = serializer.data
+        trees_iter = iter(nodes)
+        for data in actual_data:
+            tree = next(trees_iter)
+            self._assert_simple_fields(check_fields=['id','name'],  exp_sale_item=tree.value,
+                    ac_sale_item=data)
+            self.assertEqual(len(data['ancestors']), 0)
+            expect_children = list(map(lambda d:d.value['id'], tree.children))
+            actual_children = filter(lambda d: d['depth'] == 1, data['descendants'])
+            actual_children = list(map(lambda d:d['descendant'], actual_children))
+            self.assertSetEqual(set(expect_children), set(actual_children))
+            self.assertEqual(len(actual_children), data['num_children'])
+            expect_num_descs = nodes.closure_data.filter(ancestor=data['id'], depth__gt=0).count()
+            actual_num_descs = len(data['descendants'])
+            self.assertGreaterEqual(actual_num_descs, data['num_children'])
+            self.assertEqual(expect_num_descs, actual_num_descs)
+            # TODO, verify number of tagged saleable items
+
+
+    def _assert_adjacent_nodes(self, chosen_subtrees, mocked_request):
+        tag_ids = list(map(lambda node:node.value['id'], chosen_subtrees))
+        tag_objs = self.serializer_class.Meta.model.objects.filter(id__in=tag_ids).order_by('id')
+        serializer = self.serializer_class(many=True, instance=tag_objs,
+                context={'request': mocked_request}, usrprof_id=self.usrprof_id)
+        actual_data = serializer.data
+        chosen_subtrees = sorted(chosen_subtrees, key=lambda t:t.value['id'])
+        trees_iter = iter(chosen_subtrees)
+        for data in actual_data:
+            tree = next(trees_iter)
+            self._assert_simple_fields(check_fields=['id','name'],  exp_sale_item=tree.value,
+                    ac_sale_item=data)
+            self.assertEqual(len(data['ancestors']), 1)
+            self.assertEqual(data['ancestors'][0]['depth'], 1)
+            expect_children = list(map(lambda d:d.value['id'], tree.children))
+            actual_children = list(map(lambda d:d['descendant'], data['descendants']))
+            self.assertSetEqual(set(expect_children), set(actual_children))
+            self.assertEqual(len(actual_children), data['num_children'])
+
+    def test_adjacent_nodes_only(self):
+        mocked_request = Mock()
+        mocked_request.query_params = ExtendedDict()
+        mocked_request.query_params._mutable = True
+        mocked_request.query_params.update({'parent_only': 'yes', 'children_only':'yes'})
+        roots = self.existing_trees
+        chosen_subtrees = []
+        # --------------------------------
+        for root in roots:
+            sorted_children = sorted(root.children, key=lambda node:node.depth)
+            chosen_subtrees.append(sorted_children[-1])
+        self._assert_adjacent_nodes(chosen_subtrees, mocked_request)
+        # --------------------------------
+        chosen_subtrees.clear()
+        for root in roots:
+            curr_node = root
+            while any(curr_node.children):
+                sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
+                curr_node = sorted_children[-1]
+            chosen_subtrees.append(curr_node.parent)
+        self._assert_adjacent_nodes(chosen_subtrees, mocked_request)
+
+
+    def test_all_ascs_of_subtrees(self):
+        roots = self.existing_trees
+        chosen_subtrees = []
+        expect_ancestors = {}
+        for root in roots:
+            curr_node = root
+            ascs = []
+            while any(curr_node.children):
+                ascs.append(curr_node)
+                sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
+                curr_node = sorted_children[-1]
+            chosen_node = curr_node.parent
+            ascs.pop()
+            expect_ancestors[chosen_node.value['id']] = ascs
+            chosen_subtrees.append(chosen_node)
+        chosen_subtrees = sorted(chosen_subtrees, key=lambda t:t.value['id'])
+        tag_ids = list(map(lambda node:node.value['id'], chosen_subtrees))
+        tag_objs = self.serializer_class.Meta.model.objects.filter(id__in=tag_ids).order_by('id')
+        serializer = self.serializer_class(many=True, instance=tag_objs, usrprof_id=self.usrprof_id)
+        actual_data = serializer.data
+        trees_iter = iter(chosen_subtrees)
+        for data in actual_data:
+            tree = next(trees_iter)
+            self._assert_simple_fields(check_fields=['id','name'],  exp_sale_item=tree.value,
+                    ac_sale_item=data)
+            self.assertGreater(len(data['ancestors']), 1)
+            expect_ancestor = list(map(lambda d:d.value['id'], expect_ancestors[tree.value['id']] ))
+            actual_ancestor = list(map(lambda d:d['ancestor'], data['ancestors']))
+            self.assertSetEqual(set(expect_ancestor), set(actual_ancestor))
+
+
+    def test_partial_fields_roots(self):
+        roots = self.existing_trees[:2]
+        mocked_request = Mock()
+        mocked_request.query_params = ExtendedDict()
+        mocked_request.query_params._mutable = True
+        mocked_request.query_params.update({'fields': 'id,name,num_children',})
+        tag_ids = list(map(lambda node:node.value['id'], roots))
+        tag_objs = self.serializer_class.Meta.model.objects.filter(id__in=tag_ids).order_by('id')
+        serializer = self.serializer_class(many=True, instance=tag_objs, usrprof_id=self.usrprof_id,
+                context={'request': mocked_request},)
+        actual_data = serializer.data
+        def _gen_expect_data(node):
+            out = copy.deepcopy(node.value)
+            out['num_children'] = len(node.children)
+            return out
+        expect_data = list(map(_gen_expect_data, roots))
+        expect_data = sort_nested_object(expect_data)
+        actual_data = sort_nested_object(actual_data)
+        self.assertEqual(json.dumps(expect_data), json.dumps(actual_data))
 
 
