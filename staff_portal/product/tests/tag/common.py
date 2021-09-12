@@ -177,8 +177,25 @@ _auto_inc_gen =  _auto_increment_gen_fn()
 
 
 class HttpRequestDataGenTag(HttpRequestDataGen):
-    #def refresh_req_data(self, num_create=5):
-    #    pass
+    def refresh_req_data(self, trees=None, shuffle=False, num_trees=1, min_num_nodes=1,
+            max_num_nodes=1, min_num_siblings=1, max_num_siblings=1, write_value_fn=None):
+        if trees is None:
+            write_value_fn = write_value_fn or self._write_value_fn
+            trees = TreeNodeMixin.rand_gen_trees(
+                num_trees=num_trees, min_num_nodes=min_num_nodes,
+                max_num_nodes=max_num_nodes, min_num_siblings=min_num_siblings,
+                max_num_siblings=max_num_siblings, write_value_fn=write_value_fn)
+        req_data = self.trees_to_req_data(trees=trees, shuffle=shuffle)
+        return trees, req_data
+
+    def _gen_tag_name(self):
+        num_valid_tags = len(_fixtures['ProductTag'])
+        idx = random.randrange(0, num_valid_tags)
+        return  _fixtures['ProductTag'][idx]['name']
+
+    def _write_value_fn(self, node):
+        out = {'name': self._gen_tag_name()}
+        node.value = out
 
     def trees_to_req_data(self, trees, shuffle=False):
         out = []
@@ -211,6 +228,7 @@ class HttpRequestDataGenTag(HttpRequestDataGen):
 
 class TagVerificationMixin(BaseVerificationMixin):
     serializer_class = TagSerializer
+    err_msg_loop_detected = 'will form a loop, which is NOT allowed in closure table'
 
     def load_closure_data(self, node_ids):
         # load closure data from django ORM, not from DRF serializer because
@@ -222,5 +240,8 @@ class TagVerificationMixin(BaseVerificationMixin):
                 'id', 'ancestor', 'descendant', 'depth')
         entity_qset = entity_cls.objects.filter(id__in=node_ids).values('id', 'name')
         return entity_qset, closure_qset
+
+    def _value_compare_fn(self, val_a, val_b):
+        return val_a['name'] == val_b['name']
 
 

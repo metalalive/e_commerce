@@ -78,7 +78,11 @@ class TagsPermissions(AppBasePermission):
         'OPTIONS': [],
         'HEAD': [],
         'POST':   ['product.add_producttag', 'product.add_producttagclosure'],
-        'PUT':    ['product.change_producttag', 'product.change_producttagclosure'],
+        'PUT':    [
+            'product.add_producttag', 'product.change_producttag','product.delete_producttag',
+            'product.add_producttagclosure', 'product.change_producttagclosure',
+            'product.delete_producttagclosure'
+            ],
         'PATCH':  ['product.change_producttag', 'product.change_producttagclosure'],
         'DELETE': ['product.delete_producttag', 'product.delete_producttagclosure'],
     }

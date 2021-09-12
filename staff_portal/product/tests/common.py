@@ -377,6 +377,7 @@ def assert_view_bulk_create_with_response(testcase, expect_shown_fields, expect_
         for field_name in expect_hidden_fields:
             value = created_item.get(field_name, None)
             testcase.assertEqual(value, None)
+    return response
 
 
 def assert_view_unclassified_attributes(testcase, path, body, method='post'):

@@ -72,9 +72,6 @@ class TagView(AuthCommonAPIView, RemoteGetProfileIDMixin):
             query_params._mutable = True
             query_params['ids'] = kwargs.pop('pk', 'root')
             query_params._mutable = backup_mutable
-        exc_rd_fields = ['ancestors__id', 'descendants__id', 'ancestors__ancestor__name',
-                'descendants__descendant__name']
-        kwargs['serializer_kwargs'] = {'exc_rd_fields': exc_rd_fields,}
         return super().get(request=request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):

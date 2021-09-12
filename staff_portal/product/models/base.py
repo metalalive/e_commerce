@@ -169,7 +169,8 @@ class _TagQuerySet(models.QuerySet):
     def get_ascs_descs_id(self, IDs, fetch_asc=True, fetch_desc=True, depth=None,
             self_exclude=True):
         assert fetch_asc or fetch_desc, "either fetch_asc or fetch_desc must be enabled, but not both"
-        is_depth_int = depth is not None and (isinstance(depth, int) or (isinstance(depth, str) and depth.isdigit()))
+        is_depth_int = depth is not None and (isinstance(depth, int) or \
+                (isinstance(depth, str) and depth.lstrip('-').isdigit()))
         init_qset = self.model.objects.all()
         if 'root' in IDs:
             depth = int(depth) if is_depth_int and not fetch_asc else 0

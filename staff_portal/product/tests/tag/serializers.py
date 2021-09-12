@@ -13,20 +13,7 @@ from product.tests.common import _fixtures, http_request_body_template
 from .common import TreeNodeMixin, HttpRequestDataGenTag, TagVerificationMixin
 
 class TagCommonMixin(HttpRequestDataGenTag, TagVerificationMixin):
-    err_msg_loop_detected = 'will form a loop, which is NOT allowed in closure table'
     usrprof_id = 123
-
-    def _write_value_fn(self, node):
-        out = {'name': self._gen_tag_name()}
-        node.value = out
-
-    def _value_compare_fn(self, val_a, val_b):
-        return val_a['name'] == val_b['name']
-
-    def _gen_tag_name(self):
-        num_valid_tags = len(_fixtures['ProductTag'])
-        idx = random.randrange(0, num_valid_tags)
-        return  _fixtures['ProductTag'][idx]['name']
 
     def _init_new_trees(self, num_trees=3, min_num_nodes=2, max_num_nodes=15, min_num_siblings=1,
             max_num_siblings=4, write_value_fn=None, value_compare_fn=None):
@@ -235,8 +222,10 @@ class TagUpdateTestCase(TransactionTestCase, TagCommonMixin):
         obj_ids = tuple(map(lambda d: d['id'], self.existing_trees.entity_data))
         entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)
         trees_after_save = TreeNodeMixin.gen_from_closure_data(entity_data=entity_data, closure_data=closure_data)
-        matched, not_matched = TreeNodeMixin.compare_trees(trees_a=self.existing_trees, trees_b=trees_after_save,
-                value_compare_fn=self._value_compare_fn)
+        def _value_compare_fn(val_a, val_b):
+            return val_a['name'] == val_b['name'] and val_a['id'] == val_b['id']
+        matched, not_matched = TreeNodeMixin.compare_trees(trees_a=self.existing_trees,
+                trees_b=trees_after_save,  value_compare_fn=_value_compare_fn)
         #if any(not_matched):
         #    import pdb
         #    pdb.set_trace()
