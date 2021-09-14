@@ -372,6 +372,7 @@ class ProductSaleableItem(AbstractProduct):
         deleted = super().delete(*args, **kwargs)
         if not hard_delete:
             self.ingredients_applied.all().delete(*args, **kwargs)
+            self.pkgs_applied.all().delete(*args, **kwargs)
             kwargs.pop('changeset', None)
         return deleted
 
@@ -379,6 +380,20 @@ class ProductSaleableItem(AbstractProduct):
 class ProductSaleablePackage(AbstractProduct):
     class Meta(AbstractProduct.Meta):
         db_table = 'product_saleable_package'
+
+    @_atomicity_fn()
+    def delete(self, *args, **kwargs):
+        hard_delete = kwargs.get('hard', False)
+        if not hard_delete:# let nested fields add in the same soft-deleted changeset
+            if kwargs.get('changeset', None) is None:
+                profile_id = kwargs['profile_id'] # kwargs.get('profile_id')
+                kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
+        deleted = super().delete(*args, **kwargs)
+        if not hard_delete:
+            self.saleitems_applied.all().delete(*args, **kwargs)
+            kwargs.pop('changeset', None)
+        return deleted
+
 
 
 ProductSaleableItem.set_related_name(field_name='tags', value='tagged_products')

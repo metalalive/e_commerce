@@ -4,7 +4,7 @@ import copy
 import json
 from functools import partial, reduce
 
-from django.test import TransactionTestCase, TestCase
+from django.test import TransactionTestCase
 from django.db import DEFAULT_DB_ALIAS
 from django.db.models import Q
 from django.db.models import Count

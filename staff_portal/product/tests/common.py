@@ -177,6 +177,12 @@ _fixtures = {
         {'visible': False, 'name':'Banana PI dev board', 'price':1.04,  'usrprof':53},
         {'visible':  True, 'name':'Semi-prepared Beef Noodle Soup',  'price':6.49,  'usrprof':53},
     ],
+    'ProductSaleablePackage': [
+        {'visible':  True,  'name':'Drone DIY kit', 'price':104.95,  'usrprof':23},
+        {'visible':  False, 'name':'Quick cook - beef noodle soup', 'price': 6.6,  'usrprof':204},
+        {'visible':  True,  'name':'Quick cook - pizza set', 'price': 6.6,   'usrprof':49},
+        {'visible':  False, 'name':'Trail runner gear set', 'price': 899.63,  'usrprof':17},
+    ],
 } # end of _fixtures
 
 
