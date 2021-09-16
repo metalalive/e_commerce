@@ -54,13 +54,11 @@ class HttpRequestDataGenSaleableItem(HttpRequestDataGen, AttributeDataGenMixin):
         item['ingredients_applied'] = list(map(self._gen_ingredient_composite, ingredient_composite_gen))
     ## end of customize_req_data_item()
 
-
     def _gen_ingredient_composite(self, ingredient):
         chosen_idx = random.randrange(0, len(UnitOfMeasurement.choices))
         chosen_unit = UnitOfMeasurement.choices[chosen_idx][0]
         return {'ingredient': _get_inst_attr(ingredient,'id'), 'unit': chosen_unit,
                 'quantity': float(random.randrange(1,25))}
-
 ## end of class HttpRequestDataGenSaleableItem
 
 

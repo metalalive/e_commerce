@@ -11,12 +11,11 @@ from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models  import ContentType
 
 from common.models.enums   import UnitOfMeasurement
-from common.util.python  import sort_nested_object
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem, ProductSaleablePackage,  ProductSaleableItemMedia, ProductSaleableItemComposite, ProductSaleablePackageComposite, ProductSaleablePackageMedia,  ProductAppliedAttributePrice
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 
 from product.tests.common import _fixtures, _null_test_obj_attrs, _load_init_params, _common_instances_setup, _modelobj_list_to_map, _product_tag_closure_setup, listitem_rand_assigner, assert_field_equal
-from .common import _attr_vals_fixture_map
+from .common import _attr_vals_fixture_map, diff_created_ingredients
 
 num_uom = len(UnitOfMeasurement.choices)
 
@@ -185,82 +184,6 @@ def _salepkg_instances_setup(num_salepkgs, num_saleitems, num_ingredients):
             model_cls=ProductSaleablePackage, obj_attr_gen_fn=obj_attr_gen_fn,
             gen_mm_fn=_gen_salepkg_mediameta_obj,   gen_compo_fn=_gen_salepkg_composite_obj)
     return expect_data, actual_data
-
-
-def diff_attrvals(testcase, expect_d, actual_d):
-    for dtype_opt in _ProductAttrValueDataType:
-        expect_attrs = filter(lambda d:d['type'].dtype == dtype_opt.value[0][0], expect_d['nested']['attrvals'])
-        expect_value = [exp.copy() for exp in expect_attrs]
-        for exp in expect_value:
-            exp['type'] = exp['type'].id
-        mgr_field_name = dtype_opt.value[0][1]
-        field_names = ['attr_type','value', '_extra_charge__amount']
-        actual_value = list(getattr(actual_d, mgr_field_name).values(*field_names))
-        for ac in actual_value:
-            ac['type'] = ac.pop('attr_type')
-            extra_amount = ac.pop('_extra_charge__amount')
-            if extra_amount:
-                ac['extra_amount'] = extra_amount
-        expect_value = sort_nested_object(expect_value)
-        actual_value = sort_nested_object(actual_value)
-        expect_value = json.dumps(expect_value)
-        actual_value = json.dumps(actual_value)
-    testcase.assertEqual(actual_value, expect_value)
-
-
-def diff_composite(testcase, expect_d, actual_d, lower_elm_name, lower_elm_mgr_field):
-    if not lower_elm_name or not lower_elm_mgr_field:
-        return # skip
-    expect_compos = expect_d['nested'].get('composites',[])
-    expect_value  = [exp.copy() for exp in expect_compos]
-    for exp in expect_value:
-        exp['unit'] = exp['unit'][0]
-        lower_elm = exp[lower_elm_name]
-        exp[lower_elm_name] = lower_elm['obj'].id
-    if any(expect_value):
-        actual_value = getattr(actual_d, lower_elm_mgr_field).values('unit','quantity',lower_elm_name)
-        expect_value = sort_nested_object(expect_value)
-        actual_value = sort_nested_object(list(actual_value))
-        expect_value = json.dumps(expect_value)
-        actual_value = json.dumps(actual_value)
-        testcase.assertEqual(actual_value, expect_value)
-
-
-def diff_created_ingredients(testcase, expect_data, actual_data, lower_elm_names, lower_elm_mgr_fields):
-    expect_d_iter = iter(expect_data)
-    lower_elm_name  = lower_elm_names[0]
-    lower_elm_names = lower_elm_names[1:]
-    lower_elm_mgr_field  = lower_elm_mgr_fields[0]
-    lower_elm_mgr_fields = lower_elm_mgr_fields[1:]
-    for actual_d in actual_data:
-        expect_d = next(expect_d_iter)
-        testcase.assertTrue(actual_d == expect_d['obj'])
-        bound_assert_fn = partial(assert_field_equal, testcase=testcase,
-                actual_obj=actual_d,  expect_obj=expect_d['simple'])
-        tuple(map(bound_assert_fn, expect_d['simple'].keys()))
-        expect_value = expect_d['nested'].get('tags',[])
-        if any(expect_value):
-            actual_value = actual_d.tags.all()
-            testcase.assertSetEqual(set(actual_value), set(expect_value))
-        expect_value = tuple(map(lambda d:d['media'], expect_d['nested'].get('media', [])))
-        if any(expect_value):
-            actual_value = actual_d.media_set.values_list('media', flat=True)
-            testcase.assertSetEqual(set(actual_value), set(expect_value))
-        diff_attrvals(testcase, expect_d, actual_d)
-        diff_composite(testcase, expect_d, actual_d, lower_elm_name, lower_elm_mgr_field)
-        #import pdb
-        #pdb.set_trace()
-        # -------------------------------
-        if not any(lower_elm_names):
-            continue
-        expect_compos = expect_d['nested'].get('composites',[])
-        lower_elm_expect_data = list(map(lambda exp: exp[lower_elm_name], expect_compos))
-        lower_elm_expect_data = sorted(lower_elm_expect_data, key=lambda d:d['obj'].id)
-        lower_elm_actual_data = getattr(actual_d, lower_elm_mgr_field).order_by('id')
-        lower_elm_actual_data = list(map(lambda d: getattr(d, lower_elm_name), lower_elm_actual_data))
-        diff_created_ingredients(testcase, expect_data=lower_elm_expect_data, actual_data=lower_elm_actual_data,
-               lower_elm_names=lower_elm_names, lower_elm_mgr_fields=lower_elm_mgr_fields )
-## end of class diff_created_ingredients
 
 
 class SaleablePackageCreationTestCase(TransactionTestCase):

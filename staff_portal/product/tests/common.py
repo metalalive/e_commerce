@@ -182,6 +182,8 @@ _fixtures = {
         {'visible':  False, 'name':'Quick cook - beef noodle soup', 'price': 6.6,  'usrprof':204},
         {'visible':  True,  'name':'Quick cook - pizza set', 'price': 6.6,   'usrprof':49},
         {'visible':  False, 'name':'Trail runner gear set', 'price': 899.63,  'usrprof':17},
+        {'visible':  True,  'name':'Machine Learning crash Full-course', 'price':841.9,  'usrprof':37},
+        {'visible':  False, 'name':'North Face camp gear set', 'price': 12990.0,  'usrprof':701},
     ],
 } # end of _fixtures
 
@@ -204,7 +206,18 @@ http_request_body_template = {
         'ingredients_applied': [
             #{'ingredient': None, 'unit': None, 'quantity': None},
         ]
-    } # end of ProductSaleableItem
+    }, # end of ProductSaleableItem
+    'ProductSaleablePackage': {
+        'name': None,  'id': None, 'visible': None, 'price': None,
+        'tags':[] ,
+        'media_set':[],
+        'attributes':[
+            #{'id':None, 'type':None, 'value': None, 'extra_amount':None},
+        ],
+        'saleitems_applied': [
+            #{'sale_item': None, 'unit': None, 'quantity': None},
+        ]
+    }, # end of ProductSaleablePackage
 } # end of http_request_body_template
 
 
@@ -507,10 +520,14 @@ class AttributeDataGenMixin:
             nested_item['extra_amount'] = float(extra_amount_list[chosen_idx])
         return nested_item
 
-    def gen_attr_vals(self, extra_amount_enabled):
-        num_attrvals    = random.randrange(self.min_num_applied_attrs, self.max_num_applied_attrs)
-        attr_dtypes_gen = listitem_rand_assigner(list_=_fixtures['ProductAttributeType'],
-                min_num_chosen=num_attrvals, max_num_chosen=(num_attrvals + 1))
+    def gen_attr_vals(self, extra_amount_enabled, attr_type_src=None):
+        if attr_type_src:
+            num_attrvals  = random.randrange(self.min_num_applied_attrs, len(attr_type_src))
+        else:
+            attr_type_src = _fixtures['ProductAttributeType']
+            num_attrvals  = random.randrange(self.min_num_applied_attrs, self.max_num_applied_attrs)
+        attr_dtypes_gen = listitem_rand_assigner(list_=attr_type_src, min_num_chosen=num_attrvals,
+                max_num_chosen=(num_attrvals + 1))
         bound_gen_attr_val = partial(self._gen_attr_val, extra_amount_enabled=extra_amount_enabled)
         return list(map(bound_gen_attr_val, attr_dtypes_gen))
 ## end of class AttributeDataGenMixin
