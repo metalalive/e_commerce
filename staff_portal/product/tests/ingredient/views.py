@@ -2,7 +2,6 @@ import random
 import math
 import copy
 import json
-import time
 from functools import partial, reduce
 from unittest.mock import Mock, patch
 
@@ -16,7 +15,7 @@ from common.util.python import sort_nested_object
 from product.permissions import FabricationIngredientPermissions
 from product.models.base import ProductAttributeType, _ProductAttrValueDataType
 
-from product.tests.common import _MockTestClientInfoMixin,_fixtures as model_fixtures, listitem_rand_assigner, http_request_body_template, _common_instances_setup, assert_view_permission_denied, assert_view_bulk_create_with_response, assert_view_unclassified_attributes, assert_edit_view_invalid_id, SoftDeleteCommonTestMixin
+from product.tests.common import _MockTestClientInfoMixin,_fixtures as model_fixtures, listitem_rand_assigner, http_request_body_template, _common_instances_setup, assert_view_permission_denied, assert_view_bulk_create_with_response, assert_view_unclassified_attributes, SoftDeleteCommonTestMixin
 from .common import HttpRequestDataGenDevIngredient, DevIngredientVerificationMixin
 
 
@@ -125,8 +124,26 @@ class DevIngredientUpdateTestCase(DevIngredientUpdateBaseTestCase):
     @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
     def test_invalid_id(self, mock_get_profile):
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
-        assert_edit_view_invalid_id(testcase=self, edit_data=self._request_data,
-                path=self.path, expect_response_status=400)
+        edit_data = self._request_data
+        expect_response_status = 400
+        # sub case: lack id
+        key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        edit_data[0].pop('id',None)
+        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
+        err_items = response.json()
+        self.assertEqual(int(response.status_code), expect_response_status)
+        # sub case: invalid data type of id
+        edit_data[0]['id'] = 99999
+        edit_data[-1]['id'] = 'string_id'
+        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
+        err_items = response.json()
+        self.assertEqual(int(response.status_code), expect_response_status)
+        # sub case: mix of valid id and invalid id
+        edit_data[0]['id'] = 'wrong_id'
+        edit_data[-1]['id'] = 123
+        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
+        err_items = response.json()
+        self.assertEqual(int(response.status_code), expect_response_status)
 
 
     def _update_attr_val_id(self, src, dst):
@@ -232,23 +249,6 @@ class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteC
                model_cls_path='product.models.development.ProductDevIngredient',)
 
 
-    def _softdelete_by_half(self, remain_items, deleted_items):
-        delay_interval_sec = 2
-        half = len(remain_items) >> 1
-        chosen_items_set = (remain_items[:half] , remain_items[half:])
-        for chosen_items in chosen_items_set:
-            response = self._send_request_to_backend(path=self.path, method='delete',
-                    body=[{'id': c.id} for c in chosen_items] )
-            self.assertEqual(int(response.status_code), 202)
-            for c in chosen_items:
-                remain_items.remove(c)
-                deleted_items.append(c)
-            deleted_ids = list(map(lambda x: x.id, deleted_items))
-            remain_ids  = list(map(lambda x: x.id, remain_items ))
-            self.assert_softdelete_items_exist(testcase=self, deleted_ids=deleted_ids, remain_ids=remain_ids,
-                    model_cls_path='product.models.development.ProductDevIngredient',)
-            time.sleep(delay_interval_sec)
-
     def _verify_undeleted_items(self, undeleted_items):
         self.assertGreaterEqual(len(undeleted_items), 1)
         undeleted_items = sorted(undeleted_items, key=lambda x:x['id'])
@@ -261,7 +261,9 @@ class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteC
         remain_items  = list(self._created_items)
         deleted_items = []
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
-        self._softdelete_by_half(remain_items, deleted_items)
+        model_cls_path = 'product.models.development.ProductDevIngredient'
+        self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
+                model_cls_path=model_cls_path)
         # recover based on the time at which each item was soft-deleted, there may be more
         # than one item being undeleted at one API call.
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
@@ -280,7 +282,9 @@ class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteC
         remain_items  = list(self._created_items)
         deleted_items = []
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
-        self._softdelete_by_half(remain_items, deleted_items)
+        model_cls_path = 'product.models.development.ProductDevIngredient'
+        self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
+                model_cls_path=model_cls_path)
         # recover based on the time at which each item was soft-deleted, there may be more
         # than one item being undeleted at one API call.
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
@@ -322,7 +326,9 @@ class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteC
         remain_items  = list(self._created_items)
         deleted_items = []
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
-        self._softdelete_by_half(remain_items, deleted_items)
+        model_cls_path = 'product.models.development.ProductDevIngredient'
+        self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
+                model_cls_path=model_cls_path)
         self.assertGreater(len(deleted_items), 0)
         another_usrprof = self.mock_profile_id[1]
         mock_get_profile.return_value = self._mock_get_profile(another_usrprof, 'PATCH', access_control=False)

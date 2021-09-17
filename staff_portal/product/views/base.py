@@ -14,8 +14,8 @@ from softdelete.views import RecoveryModelMixin
 
 from ..models.base import ProductTagClosure
 from ..models.common import ProductmgtChangeSet
-from ..serializers.base import TagSerializer, AttributeTypeSerializer, SaleableItemSerializer
-from ..permissions import TagsPermissions, AttributeTypePermissions, SaleableItemPermissions
+from ..serializers.base import TagSerializer, AttributeTypeSerializer, SaleableItemSerializer, SaleablePackageSerializer
+from ..permissions import TagsPermissions, AttributeTypePermissions, SaleableItemPermissions, SaleablePackagePermissions
 
 from .common import BaseIngredientSearchFilter
 
@@ -131,17 +131,12 @@ class AttributeTypeView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryMode
         return self.recovery(request=request, *args, **kwargs)
 
 
-class SaleableItemSearchFilter(BaseIngredientSearchFilter):
-    pass
 
 
-class SaleableItemView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModelMixin):
-    serializer_class  = SaleableItemSerializer
-    filter_backends = [SaleableItemSearchFilter, OrderingFilter,]
-    #### ordering_fields  = ['-id', 'name', 'category']
+class SaleableBaseView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModelMixin):
+    filter_backends = [BaseIngredientSearchFilter, OrderingFilter,]
+    ordering_fields  = ['name', 'price']
     search_fields  = ['name',]
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [SaleableItemPermissions]
-    queryset = serializer_class.Meta.model.objects.all()
     SOFTDELETE_CHANGESET_MODEL = ProductmgtChangeSet
 
     def post(self, request, *args, **kwargs):
@@ -168,6 +163,17 @@ class SaleableItemView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModel
                 model=self.serializer_class.Meta.model.__name__)
         kwargs['return_data_after_done'] = True
         return self.recovery(request=request, *args, **kwargs)
+
+
+class SaleableItemView(SaleableBaseView):
+    serializer_class  = SaleableItemSerializer
+    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [SaleableItemPermissions]
+    queryset = serializer_class.Meta.model.objects.all()
+
+class SaleablePackageView(SaleableBaseView):
+    serializer_class  = SaleablePackageSerializer
+    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [SaleablePackagePermissions]
+    queryset = serializer_class.Meta.model.objects.all()
 
 
 

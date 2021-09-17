@@ -2,7 +2,7 @@
 from django.urls import  path
 from ..views.productmgt import TrelloMemberProxyView, TrelloNotificationProxyView
 from ..views.productmgt import ProductTagProxyView, ProductAttrTypeProxyView, FabricationIngredientProxyView
-from ..views.productmgt import SaleableItemProxyView
+from ..views.productmgt import SaleableItemProxyView, SaleablePackageProxyView
 
 app_name = 'productmgt'
 
@@ -18,7 +18,7 @@ urlpatterns = [
     path('ingredient/<slug:ingre_id>',  FabricationIngredientProxyView.as_view() ,name='FabricationIngredientProxyView1' ),
     path('saleableitems',               SaleableItemProxyView.as_view()  ),
     path('saleableitem/<slug:item_id>', SaleableItemProxyView.as_view()  ),
+    path('saleablepkgs',               SaleablePackageProxyView.as_view()  ),
+    path('saleablepkg/<slug:item_id>', SaleablePackageProxyView.as_view()  ),
 ]
-
-
 

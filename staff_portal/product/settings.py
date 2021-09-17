@@ -165,7 +165,7 @@ LOGGING = {
                 'delay': True, # lazy creation
             },
             "dbg_views_file": {
-                'level': 'INFO',
+                'level': 'WARNING',
                 'formatter': 'dbg_view_fmt',
                 'class': 'logging.handlers.TimedRotatingFileHandler',
                 'filename': str(os.path.join(_LOG_BASE_DIR, 'views.log')),
@@ -199,7 +199,7 @@ LOGGING = {
         }, # end of handlers section
         'loggers': {
             'daphne': {
-                'level': 'DEBUG',
+                'level': 'INFO',
                 'handlers': ['console', 'default_file'],
             },
             'common.views.mixins': {
@@ -262,8 +262,8 @@ LOGGING = {
                 'level': 'INFO',
                 'handlers': ['dbg_base_logstash'],
             },
-            'product.views.html': {
-                'level': 'INFO',
+            'product.views.base': {
+                'level': 'WARNING',
                 'handlers': ['dbg_views_file', 'dbg_views_logstash'],
             },
             'product.views.api': {

@@ -134,11 +134,11 @@ class BaseIngredientPermissions(AppBasePermission):
             'product.change_productattributevaluefloat',
         ],
         'DELETE': [
-            'product.delete_productattributevaluestr',
-            'product.delete_productattributevalueposint',
-            'product.delete_productattributevalueint',
-            'product.delete_productattributevaluefloat',
-        ],
+            'product.change_productattributevaluestr',
+            'product.change_productattributevalueposint',
+            'product.change_productattributevalueint',
+            'product.change_productattributevaluefloat',
+        ], # users should have access to change delete status, since its soft-delete
     }
 
 class FabricationIngredientPermissions(BaseIngredientPermissions):
@@ -149,7 +149,7 @@ class FabricationIngredientPermissions(BaseIngredientPermissions):
         'POST':   copy.copy(BaseIngredientPermissions.perms_map['POST']) + ['product.add_productdevingredient',   ],
         'PUT':    copy.copy(BaseIngredientPermissions.perms_map['PUT'])  + ['product.change_productdevingredient',],
         'PATCH':  copy.copy(BaseIngredientPermissions.perms_map['PATCH'])  + ['product.change_productdevingredient',],
-        'DELETE': copy.copy(BaseIngredientPermissions.perms_map['DELETE']) + ['product.delete_productdevingredient',],
+        'DELETE': copy.copy(BaseIngredientPermissions.perms_map['DELETE']) + ['product.change_productdevingredient',],
     }
 
 class SaleableItemPermissions(BaseIngredientPermissions, InputDataOwnerPermissionMixin):
@@ -188,11 +188,11 @@ class SaleableItemPermissions(BaseIngredientPermissions, InputDataOwnerPermissio
             'product.change_productappliedattributeprice',
         ],
         'DELETE': copy.copy(BaseIngredientPermissions.perms_map['DELETE']) + [
-            'product.delete_productsaleableitem',
-            'product.delete_productsaleableitemcomposite',
-            'product.delete_productsaleableitemmedia',
-            'product.delete_productappliedattributeprice',
-        ],
+            'product.change_productsaleableitem',
+            'product.change_productsaleableitemcomposite',
+            'product.change_productsaleableitemmedia',
+            'product.change_productappliedattributeprice',
+        ], # users should have access to change delete status, since its soft-delete
     }
 
     def has_permission(self, request, view):
@@ -202,4 +202,55 @@ class SaleableItemPermissions(BaseIngredientPermissions, InputDataOwnerPermissio
         return result
 ## end of class SaleableItemPermissions
 
+
+
+class SaleablePackagePermissions(BaseIngredientPermissions, InputDataOwnerPermissionMixin):
+    perms_map = {
+        'GET': copy.copy(BaseIngredientPermissions.perms_map['GET']) + [
+            'product.view_productsaleableitem',
+            'product.view_productsaleablepackage',
+            'product.view_productsaleablepackagecomposite',
+            'product.view_productsaleablepackagemedia',
+            'product.view_productappliedattributeprice',
+        ],
+        'OPTIONS': [],
+        'HEAD': [],
+        'POST':   copy.copy(BaseIngredientPermissions.perms_map['POST']) + [
+            'product.view_productsaleableitem',
+            'product.add_productsaleablepackage',
+            'product.add_productsaleablepackagecomposite', 'product.view_productsaleablepackagecomposite',
+            'product.add_productsaleablepackagemedia',     'product.view_productsaleablepackagemedia',
+            'product.add_productappliedattributeprice', 'product.view_productappliedattributeprice',
+        ],
+        'PUT':    copy.copy(BaseIngredientPermissions.perms_map['PUT'])  + [
+            'product.view_productsaleableitem',
+            'product.change_productsaleablepackage',
+            'product.add_productsaleablepackagecomposite',    'product.view_productsaleablepackagecomposite',
+            'product.change_productsaleablepackagecomposite', 'product.delete_productsaleablepackagecomposite',
+            'product.add_productsaleablepackagemedia',    'product.view_productsaleablepackagemedia',
+            'product.change_productsaleablepackagemedia', 'product.delete_productsaleablepackagemedia',
+            'product.add_productappliedattributeprice',    'product.view_productappliedattributeprice',
+            'product.change_productappliedattributeprice', 'product.delete_productappliedattributeprice',
+        ],
+        'PATCH':  copy.copy(BaseIngredientPermissions.perms_map['PATCH'])  + [
+            'product.view_productsaleableitem',
+            'product.change_productsaleablepackage',
+            'product.change_productsaleablepackagecomposite',
+            'product.change_productsaleablepackagemedia',
+            'product.change_productappliedattributeprice',
+        ],
+        'DELETE': copy.copy(BaseIngredientPermissions.perms_map['DELETE']) + [
+            'product.change_productsaleablepackage',
+            'product.change_productsaleablepackagecomposite',
+            'product.change_productsaleablepackagemedia',
+            'product.change_productappliedattributeprice',
+        ], # users should have access to change delete status, since its soft-delete
+    }
+
+    def has_permission(self, request, view):
+        result = super().has_permission(request=request, view=view)
+        if result is True:
+            result = self._input_data_owner_check(request, view)
+        return result
+## end of class SaleablePackagePermissions
 

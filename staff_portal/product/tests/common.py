@@ -1,5 +1,6 @@
 import copy
 import json
+import time
 import random
 import urllib
 from functools import partial
@@ -415,26 +416,6 @@ def assert_view_unclassified_attributes(testcase, path, body, method='post'):
         testcase.assertGreater(len(actual_err_msgs), 0)
         testcase.assertListEqual(expect_err_msgs, actual_err_msgs)
 
-def assert_edit_view_invalid_id(testcase, edit_data, path, expect_response_status, method='put'):
-    key = drf_default_settings['NON_FIELD_ERRORS_KEY']
-    ##edit_data = copy.deepcopy(edit_data) # edit data without corrent ID
-    # sub case: lack id
-    edit_data[0].pop('id',None)
-    response = testcase._send_request_to_backend(path=path, method=method, body=edit_data)
-    err_items = json.loads(response.content.decode())
-    testcase.assertEqual(int(response.status_code), expect_response_status)
-    # sub case: invalid data type of id
-    edit_data[0]['id'] = 99999
-    edit_data[-1]['id'] = 'string_id'
-    response = testcase._send_request_to_backend(path=path, method=method, body=edit_data)
-    err_items = json.loads(response.content.decode())
-    testcase.assertEqual(int(response.status_code), expect_response_status)
-    # sub case: mix of valid id and invalid id
-    edit_data[0]['id'] = 'wrong_id'
-    edit_data[-1]['id'] = 123
-    response = testcase._send_request_to_backend(path=path, method=method, body=edit_data)
-    err_items = response.json()
-    testcase.assertEqual(int(response.status_code), expect_response_status)
 
 
 class SoftDeleteCommonTestMixin:
@@ -457,6 +438,25 @@ class SoftDeleteCommonTestMixin:
         testcase.assertSetEqual(set(qset.values_list(id_label, flat=True)), set(remain_ids))
         qset = model_cls.objects.get_deleted_set()
         testcase.assertSetEqual(set(qset.values_list(id_label, flat=True)), set(deleted_ids))
+
+    def _softdelete_by_half(self, remain_items, deleted_items, testcase, model_cls_path, api_url):
+        # helper function to run soft-delete operation in bulk
+        delay_interval_sec = 2
+        half = len(remain_items) >> 1
+        chosen_items_set = (remain_items[:half] , remain_items[half:])
+        for chosen_items in chosen_items_set:
+            body = [{'id': _get_inst_attr(obj=c, attname='id')} for c in chosen_items]
+            response = testcase._send_request_to_backend(path=api_url, method='delete',
+                    body=body )
+            testcase.assertEqual(int(response.status_code), 202)
+            for c in chosen_items:
+                remain_items.remove(c)
+                deleted_items.append(c)
+            deleted_ids = list(map(lambda c: _get_inst_attr(obj=c, attname='id'), deleted_items))
+            remain_ids  = list(map(lambda c: _get_inst_attr(obj=c, attname='id'), remain_items ))
+            self.assert_softdelete_items_exist(testcase=testcase, deleted_ids=deleted_ids,
+                    remain_ids=remain_ids, model_cls_path=model_cls_path,)
+            time.sleep(delay_interval_sec)
 
     def perform_undelete(self, testcase, path, body=None, expect_resp_status=200, expect_resp_msg='recovery done'):
         # note that body has to be at least {} or [], must not be null

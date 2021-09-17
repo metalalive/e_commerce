@@ -9,6 +9,7 @@ class WebAPIurl(BaseUriLookup):
         'AttributeTypeView' : 'attrtypes',
         'FabricationIngredientView' : ['ingredients', 'ingredient/<slug:pk>',],
         'SaleableItemView'  : ['saleableitems', 'saleableitem/<slug:pk>'],
+        'SaleablePackageView': ['saleablepkgs', 'saleablepkg/<slug:pk>'],
     } # end of _urls
 
 

@@ -14,7 +14,7 @@ from common.util.python import sort_nested_object
 from common.util.python.messaging.rpc import RpcReplyEvent
 from product.permissions import SaleableItemPermissions
 
-from product.tests.common import _MockTestClientInfoMixin, assert_view_permission_denied, listitem_rand_assigner, rand_gen_request_body, http_request_body_template, assert_view_bulk_create_with_response, assert_view_unclassified_attributes, assert_edit_view_invalid_id, SoftDeleteCommonTestMixin
+from product.tests.common import _MockTestClientInfoMixin, assert_view_permission_denied, listitem_rand_assigner, rand_gen_request_body, http_request_body_template, assert_view_bulk_create_with_response, assert_view_unclassified_attributes, SoftDeleteCommonTestMixin
 from .common import _fixtures as model_fixtures, _saleitem_related_instance_setup, HttpRequestDataGenSaleableItem, SaleableItemVerificationMixin
 
 
@@ -144,15 +144,37 @@ class SaleableItemUpdateBaseTestCase(SaleableItemBaseViewTestCase):
             response = self._send_request_to_backend(path=self.path, method='post',
                     expect_shown_fields=expect_shown_fields)
             self.assertEqual(int(response.status_code), 201)
-            self._created_items = json.loads(response.content.decode())
+            self._created_items = response.json()
 
 
-class SaleableItemUpdateTestCase(SaleableItemUpdateBaseTestCase):
+class SaleableItemUpdateTestCase(SaleableItemUpdateBaseTestCase, SaleableItemVerificationMixin):
+
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
     def test_invalid_id(self, mock_get_profile):
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
-        assert_edit_view_invalid_id(testcase=self, edit_data=self._request_data,
-                path=self.path, expect_response_status=403)
+        created_ids = tuple(map(lambda x:x['id'], self._created_items))
+        created_objs = self.serializer_class.Meta.model.objects.filter(id__in=created_ids)
+        serializer_ro = self.serializer_class(many=True, instance=created_objs)
+        request_data = serializer_ro.data
+        # sub case: lack id
+        non_field_error_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
+        request_data[0].pop('id',None)
+        response = self._send_request_to_backend(path=self.path, method='put', body=request_data)
+        self.assertEqual(int(response.status_code), 400)
+        err_info = response.json()
+        err_msg = "cannot be mapped to existing instance, reason: Field 'id' expected a number but got"
+        pos = err_info[0][non_field_error_key].find( err_msg )
+        self.assertGreater(pos , 0)
+        # sub case: invalid data type of id
+        request_data[0]['id'] = 99999
+        request_data[-1]['id'] = 'string_id'
+        response = self._send_request_to_backend(path=self.path, method='put', body=request_data)
+        self.assertEqual(int(response.status_code), 403)
+        # sub case: mix of valid id and invalid id
+        request_data[0]['id'] = 'wrong_id'
+        request_data[-1]['id'] = 123
+        response = self._send_request_to_backend(path=self.path, method='put', body=request_data)
+        self.assertEqual(int(response.status_code), 403)
 
 
     def _rand_gen_edit_data(self):
@@ -425,7 +447,7 @@ class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableI
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
-    def test_advanced_search_tags(self, mock_get_profile):
+    def test_tags(self, mock_get_profile):
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         # note that distinct() works like set() to reduce duplicate
         qset = self._model_cls.objects.filter(tags__isnull=False).values_list('tags__id', flat=True).distinct()
@@ -446,12 +468,12 @@ class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableI
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
-    def test_advanced_search_ingredients_applied(self, mock_get_profile):
+    def test_ingredients_applied(self, mock_get_profile):
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         qset = self._model_cls.objects.annotate(num_ingre=Count('ingredients_applied__ingredient'))
         qset = qset.filter(num_ingre__gt=0)
         values = qset.values('id','ingredients_applied')
-        limit = min(values.count() >> 1, 1)
+        limit = max(values.count() >> 1, 1)
         values = values[:limit]
         adv_cond = {'operator': 'or', 'operands': []}
         for value in values:
@@ -478,7 +500,7 @@ class SaleableItemSearchFilterTestCase(SaleableItemUpdateBaseTestCase, SaleableI
 
 
     @patch('product.views.base.SaleableItemView._usermgt_rpc.get_profile')
-    def test_advanced_nested_search_mix(self, mock_get_profile):
+    def test_complex_condition(self, mock_get_profile):
         mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         aggregates_nested_fields = {'num_ingre': Count('ingredients_applied__ingredient'),
                 'num_tags': Count('tags'), }
