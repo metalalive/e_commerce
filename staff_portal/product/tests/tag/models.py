@@ -6,9 +6,9 @@ from functools import partial, reduce
 from django.test import TransactionTestCase
 from django.db.models import Q
 
-from product.models.base import ProductTag, ProductTagClosure
+from product.models.base import ProductTag, ProductTagClosure, ProductSaleableItem, ProductSaleablePackage
 
-from product.tests.common import _fixtures, _null_test_obj_attrs, _common_instances_setup, _modelobj_list_to_map, _product_tag_closure_setup
+from product.tests.common import _fixtures, _null_test_obj_attrs, listitem_rand_assigner, _common_instances_setup, _modelobj_list_to_map, _product_tag_closure_setup
 
 class TagCreationTestCase(TransactionTestCase):
     def setUp(self):
@@ -50,6 +50,33 @@ class TagCreationTestCase(TransactionTestCase):
         self.assertSetEqual(set(expect_tag_ids), set(actual_tag_ids))
         actual_closure_ascs = list(ProductTagClosure.objects.values_list('ancestor__id', flat=True))
         self.assertSetEqual(set(expect_tag_ids), set(actual_closure_ascs))
+
+    def test_tagged_saleable_items(self):
+        tag_map = {'pkg':{} , 'item':{}}
+        num_tags = 6
+        tags = list(map(lambda d:ProductTag(**d), _fixtures['ProductTag'][:num_tags]))
+        ProductTag.objects.bulk_create(tags)
+        num_tagged_saleable_items = 5
+        salable_items = list(map(lambda d: ProductSaleableItem(**d),    _fixtures['ProductSaleableItem'][:num_tagged_saleable_items]))
+        salable_pkgs  = list(map(lambda d: ProductSaleablePackage(**d), _fixtures['ProductSaleablePackage'][:num_tagged_saleable_items]))
+        ProductSaleableItem.objects.bulk_create(salable_items)
+        ProductSaleablePackage.objects.bulk_create(salable_pkgs)
+        for saleitem in salable_items:
+            chosen_tags = list(listitem_rand_assigner(list_=tags))
+            tag_map['item'][saleitem.id] = chosen_tags
+            saleitem.tags.set(chosen_tags)
+        for salepkg in salable_pkgs:
+            chosen_tags = list(listitem_rand_assigner(list_=tags))
+            tag_map['pkg'][salepkg.id] = chosen_tags
+            salepkg.tags.set(chosen_tags)
+        for tag in tags:
+            saleitem_ids = tag.tagged_products.values_list('id', flat=True)
+            salepkg_ids  = tag.tagged_packages.values_list('id', flat=True)
+            for sid in saleitem_ids:
+                self.assertIn(tag , tag_map['item'][sid])
+            for sid in salepkg_ids:
+                self.assertIn(tag , tag_map['pkg'][sid])
+## end of class TagCreationTestCase
 
 
 class TagDeletionTestCase(TransactionTestCase):

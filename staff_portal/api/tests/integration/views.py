@@ -264,6 +264,7 @@ class PrivRevProxyTestCase(BaseAuthenticationTestFixture, TransactionTestCase):
             ('GET', '/product/ingredients',   SERVICE_HOSTS['productmgt'][0]),
             ('GET', '/product/saleableitems', SERVICE_HOSTS['productmgt'][0]),
             ('POST','/product/saleablepkgs',  SERVICE_HOSTS['productmgt'][0]),
+            ('GET', '/product/tagged/543',    SERVICE_HOSTS['productmgt'][0]),
         ]
         with patch('common.views.proxy.mixins.requests.request') as mock_request:
             expect_call_cnt = 0

@@ -8,7 +8,7 @@ from django.contrib.auth.models import User as AuthUser
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
 from product.permissions import TagsPermissions
-from product.tests.common import _fixtures, _MockTestClientInfoMixin, assert_view_bulk_create_with_response, assert_view_permission_denied
+from product.tests.common import _fixtures, _MockTestClientInfoMixin, listitem_rand_assigner,  assert_view_bulk_create_with_response, assert_view_permission_denied
 from .common import TreeNodeMixin, HttpRequestDataGenTag, TagVerificationMixin
 
 class TagBaseViewTestCase(TransactionTestCase, _MockTestClientInfoMixin,  HttpRequestDataGenTag, TagVerificationMixin):
@@ -148,6 +148,7 @@ class TagUpdateBaseTestCase(TagBaseViewTestCase):
             tag_ids = tuple(map(lambda x:x['id'], created_items))
             entity_data, closure_data = self.load_closure_data(node_ids=tag_ids)
             self._origin_trees = TreeNodeMixin.gen_from_closure_data(entity_data=entity_data, closure_data=closure_data)
+            self.tag_ids = tag_ids
 
 
 
@@ -431,6 +432,60 @@ class TagQueryTestCase(TagUpdateBaseTestCase):
         self.assertEqual(int(response.status_code), 200)
         loaded_tags = response.json()
         self._diff(expect_objs=chosen_parents, actual_objs=loaded_tags)
+## end of class TagQueryTestCase
 
 
+
+class TaggedSaleableItemsQueryTestCase(TagUpdateBaseTestCase):
+    num_trees = 1
+    min_num_nodes = 7
+    max_num_nodes = 10
+    min_num_siblings = 1
+    max_num_siblings = 2
+    path = '/tagged/%s'
+
+    def setUp(self):
+        super().setUp()
+        from product.models.base import ProductSaleableItem, ProductSaleablePackage
+        tag_map = {'pkg':{} , 'item':{}}
+        self.tag_map = tag_map
+        num_tagged_saleable_items = 5
+        salable_items = list(map(lambda d: ProductSaleableItem(**d),    _fixtures['ProductSaleableItem'][:num_tagged_saleable_items]))
+        salable_pkgs  = list(map(lambda d: ProductSaleablePackage(**d), _fixtures['ProductSaleablePackage'][:num_tagged_saleable_items]))
+        ProductSaleableItem.objects.bulk_create(salable_items)
+        ProductSaleablePackage.objects.bulk_create(salable_pkgs)
+        for saleitem in salable_items:
+            chosen_tag_ids = list(listitem_rand_assigner(list_=self.tag_ids))
+            chosen_tags = self.serializer_class.Meta.model.objects.filter(id__in=chosen_tag_ids)
+            saleitem.tags.set(chosen_tags)
+            tag_map['item'][saleitem.id] = chosen_tag_ids
+        for salepkg in salable_pkgs:
+            chosen_tag_ids = list(listitem_rand_assigner(list_=self.tag_ids))
+            chosen_tags = self.serializer_class.Meta.model.objects.filter(id__in=chosen_tag_ids)
+            salepkg.tags.set(chosen_tags)
+            tag_map['pkg'][salepkg.id] = chosen_tag_ids
+
+
+    @patch('product.views.base.TaggedSaleableView._usermgt_rpc.get_profile')
+    def test(self, mock_get_profile):
+        expect_usrprof = self.mock_profile_id[0]
+        mock_get_profile.return_value = self._mock_get_profile(expect_usrprof, 'GET')
+        path = self.path % -87
+        response = self._send_request_to_backend(path=path, method='get')
+        self.assertEqual(int(response.status_code), 404)
+        path = self.path % 'invalid_tag_id'
+        response = self._send_request_to_backend(path=path, method='get')
+        self.assertEqual(int(response.status_code), 404)
+        for tag_id in  self.tag_ids:
+            path = self.path % tag_id
+            response = self._send_request_to_backend(path=path, method='get', expect_shown_fields=['id','name','price'])
+            self.assertEqual(int(response.status_code), 200)
+            actual_data = response.json()
+            actual_saleitem_ids = map(lambda d:d['id'], actual_data['items'])
+            actual_salepkg_ids  = map(lambda d:d['id'], actual_data['pkgs'])
+            for sid in actual_saleitem_ids:
+                self.assertIn(tag_id , self.tag_map['item'][sid])
+            for sid in actual_salepkg_ids:
+                self.assertIn(tag_id , self.tag_map['pkg'][sid])
+## end of class TaggedSaleableItemsQueryTestCase
 

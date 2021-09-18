@@ -46,6 +46,11 @@ class ProductTagProxyView(AppBaseProxyView):
     path_handler = _get_path_list_or_item_api
     path_var_keys = ['tag_id']
 
+class TaggedSaleableProxyView(AppBaseProxyView):
+    authenticate_required = {'OPTIONS': True, 'GET': True,}
+    path_pattern = 'tagged/{tag_id}'
+    path_handler =  _render_url_path
+    path_var_keys = ['tag_id']
 
 class ProductAttrTypeProxyView(AppBaseProxyView):
     path_pattern = 'attrtypes'

@@ -651,5 +651,5 @@ class TagRepresentationTestCase(TransactionTestCase, TagCommonMixin):
         expect_data = sort_nested_object(expect_data)
         actual_data = sort_nested_object(actual_data)
         self.assertEqual(json.dumps(expect_data), json.dumps(actual_data))
-
+## end of TagRepresentationTestCase
 

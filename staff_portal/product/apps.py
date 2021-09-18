@@ -6,6 +6,7 @@ class WebAPIurl(BaseUriLookup):
     # URLs of web APIs , accessable to end client users
     _urls = {
         'TagView'           : ['tags', 'tag/<slug:pk>', 'tag/<slug:pk>/ancestors', 'tag/<slug:pk>/descendants'],
+        'TaggedSaleableView': 'tagged/<slug:tag_id>',
         'AttributeTypeView' : 'attrtypes',
         'FabricationIngredientView' : ['ingredients', 'ingredient/<slug:pk>',],
         'SaleableItemView'  : ['saleableitems', 'saleableitem/<slug:pk>'],

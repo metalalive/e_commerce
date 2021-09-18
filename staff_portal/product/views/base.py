@@ -2,9 +2,11 @@ import copy
 import logging
 
 from django.db import models
+from django.core.exceptions  import ObjectDoesNotExist
 from django.contrib.contenttypes.models  import ContentType
-from rest_framework             import status as RestStatus
-from rest_framework.filters     import OrderingFilter, SearchFilter
+from rest_framework            import status as RestStatus
+from rest_framework.filters    import OrderingFilter, SearchFilter
+from rest_framework.exceptions import NotFound
 
 from common.views.api     import  AuthCommonAPIView, AuthCommonAPIReadView
 from common.views.mixins  import  LimitQuerySetMixin
@@ -131,6 +133,28 @@ class AttributeTypeView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryMode
         return self.recovery(request=request, *args, **kwargs)
 
 
+class TaggedSaleableView(AuthCommonAPIReadView, RemoteGetProfileIDMixin):
+    filter_backends = [BaseIngredientSearchFilter, OrderingFilter,]
+    ordering_fields  = ['name', 'price']
+    search_fields  = ['name',]
+    serializer_class  = None
+    queryset = None
+
+    def get(self, request, *args, **kwargs):
+        tag_id = kwargs.get('tag_id', None)
+        try:
+            tag_obj = TagSerializer.Meta.model.objects.get(id=tag_id)
+        except (ValueError, ObjectDoesNotExist) as e:
+            raise NotFound()
+        self.serializer_class = SaleableItemSerializer
+        self.queryset = tag_obj.tagged_products.all()
+        resp_saleitems = self.list(request, *args, **kwargs)
+        self.serializer_class = SaleablePackageSerializer
+        self.queryset = tag_obj.tagged_packages.all()
+        resp_salepkgs  = self.list(request, *args, **kwargs)
+        resp_data = {'items': resp_saleitems.data, 'pkgs':resp_salepkgs.data}
+        resp_saleitems.data = resp_data
+        return resp_saleitems
 
 
 class SaleableBaseView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModelMixin):
