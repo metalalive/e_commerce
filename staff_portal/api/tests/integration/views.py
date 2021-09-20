@@ -248,6 +248,7 @@ class PrivRevProxyTestCase(BaseAuthenticationTestFixture, TransactionTestCase):
     def test_endpoint_available(self):
         from api.views.constants import SERVICE_HOSTS
         data = [
+            ('GET', '/usermgt/quota_material', SERVICE_HOSTS['usermgt'][0]),
             ('GET', '/usermgt/quota',    SERVICE_HOSTS['usermgt'][0]),
             ('GET', '/usermgt/roles',    SERVICE_HOSTS['usermgt'][0]),
             ('GET', '/usermgt/usrgrps',  SERVICE_HOSTS['usermgt'][0]),

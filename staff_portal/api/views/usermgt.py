@@ -41,6 +41,9 @@ class AuthRoleProxyView(AppBaseProxyView):
     path_var_keys = ['rid']
 
 
+class QuotaMaterialProxyView(AppBaseProxyView):
+    path_pattern = 'quota_material'
+
 class UserQuotaProxyView(AppBaseProxyView):
     path_pattern = 'quota'
 

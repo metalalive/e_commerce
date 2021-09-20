@@ -1,7 +1,7 @@
 
 from django.urls import  path
 from ..views.usermgt import UserGroupsProxyView, UserProfilesProxyView, AppliedRoleProxyView, AppliedGroupProxyView
-from ..views.usermgt import AuthRoleProxyView, UserQuotaProxyView, UserLowLvlPermProxyView
+from ..views.usermgt import AuthRoleProxyView, UserQuotaProxyView, QuotaMaterialProxyView, UserLowLvlPermProxyView
 from ..views.usermgt import AccountActivationProxyView, AccountDeactivationProxyView, AccountCreateProxyView
 from ..views.usermgt import UsernameRecoveryReqProxyView, UnauthPasswdRstReqProxyView, UnauthPasswdRstProxyView
 from ..views.usermgt import AuthUsernameEditProxyView, AuthPasswdEditProxyView, RemoteAuthProxyView
@@ -10,7 +10,8 @@ app_name = 'usermgt'
 
 urlpatterns = [
     path('low_lvl_perms',    UserLowLvlPermProxyView.as_view()  ),
-    path('quota',            UserQuotaProxyView.as_view()  ),
+    path('quota_material',   QuotaMaterialProxyView.as_view() ),
+    path('quota',            UserQuotaProxyView.as_view() ),
     path('roles',            AuthRoleProxyView.as_view()  ),
     path('role/<slug:rid>',  AuthRoleProxyView.as_view()  ),
     path('usrgrps',                UserGroupsProxyView.as_view()  ),

@@ -115,12 +115,14 @@ def get_db_error_response(e, headers:dict, raise_if_not_handled=True):
         _err_resp_map = {
             MySqlOperationalError: _get_mysql_error_response
         }
-        handler = _err_resp_map[type(cause)]
-        status = handler(e=cause, headers=headers, raise_if_not_handled=raise_if_not_handled)
+        handler = _err_resp_map.get(type(cause))
+        if handler and callable(handler):
+            status = handler(e=cause, headers=headers, raise_if_not_handled=raise_if_not_handled)
     return status
 
 
 def db_middleware_exception_handler(func):
+    # a decorator for handling database errors in the process of middleware
     from django.http  import HttpResponse
     from django.db.utils   import OperationalError
     def inner(self, *arg, **kwargs):

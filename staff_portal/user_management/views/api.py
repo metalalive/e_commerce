@@ -38,7 +38,7 @@ from ..serializers import GenericUserProfileSerializer, AuthUserResetRequestSeri
 from ..serializers import LoginAccountSerializer
 from ..serializers import GenericUserAppliedRoleSerializer, GenericUserGroupRelationSerializer
 
-from ..permissions import AuthRolePermissions, AppliedRolePermissions, AppliedGroupPermissions, UserGroupsPermissions
+from ..permissions import AuthRolePermissions, AppliedRolePermissions, AppliedGroupPermissions, UserGroupsPermissions, QuotaMaterialPermissions
 from ..permissions import UserDeactivationPermission, UserActivationPermission, UserProfilesPermissions
 
 from .constants import  _PRESERVED_ROLE_IDS, MAX_NUM_FORM, WEB_HOST, API_GATEWAY_HOST
@@ -142,34 +142,35 @@ class AppliedGroupReadAPIView(AuthCommonAPIReadView, GetProfileIDMixin):
 
 
 
-class QuotaMaterialReadAPIView(AuthCommonAPIView):
+class QuotaMaterialReadAPIView(AuthCommonAPIReadView, GetProfileIDMixin):
     """
     In quota arrangement, material simply represents source of supply,
     e.g.
-    number of resources like database table rows, memory space, hardware
-    ... etc. which can be used by individual user or user group.
+    number of resources like database table rows, memory space, bus interconnect
+    other pieces of hardware ... etc. which can be used by individual user or group.
 
     * Since quota arrangement is about restricting users' access to resources,
       it makes sense to maintain the material types and the arrangement of
       each user in this user management service.
-    * In this project , each material type represents one single model class,
-      and each material is tied to Django ContentType model because Django is
-      used to implement this service.
-    * Fortunately, Django ContentType can also record path of model classes
-      that are from other services implemented in different web frameworks and
-      languages, this gives flexibility to gather information of all model
-      classes from all other services for quota arrangment
+    * In this project , each material type is presented as one single class
+      tied to Django ContentType model since Django is applied to this service.
+    * For other services implemented with different web framework or different language,
+      they can add records directly to the database table mapped to Django ContentType
+      model during schema migration, this gives flexibility to gather information of
+      all model classes from all other services for quota arrangment.
     """
-    # TODO:
-    # * There would be API endpoints (e.g. REST, RPC) in this view class for interal use
-    #   , so other downstream services are able to maintain materials which are linked to
-    #   the model classes installed in other services (possible use case ?)
+    permission_classes = copy.copy(AuthCommonAPIReadView.permission_classes) + [QuotaMaterialPermissions]
+
+    def get_queryset(self):
+        if not getattr(self, 'queryset', None):
+            self.queryset = ContentType.objects.all()
+        return self.queryset
+
     def get(self, request, *args, **kwargs):
-        from django.contrib.contenttypes.models import ContentType
         exclude_apps = ['admin','auth','contenttypes','sessions','softdelete']
-        app_models = ContentType.objects.values('id','app_label','model').exclude(app_label__in=exclude_apps)
+        app_models = self.queryset.exclude(app_label__in=exclude_apps).values('id','app_label','model')
         out = {}
-        for item in app_models: # TODO, find better way of creating 2D array
+        for item in app_models:
             app_label = item.pop('app_label')
             if out.get(app_label, None) is None:
                 out[app_label] = []
@@ -187,12 +188,12 @@ class QuotaUsageTypeAPIView(AuthCommonAPIView, GetProfileIDMixin):
 
     def post(self, request, *args, **kwargs):
         kwargs['many'] = True
-        kwargs['return_data_after_done'] = False
+        kwargs['return_data_after_done'] = True
         return  self.create(request, *args, **kwargs)
 
     def put(self, request, *args, **kwargs):
         kwargs['many'] = True
-        kwargs['return_data_after_done'] = False
+        kwargs['return_data_after_done'] = True
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
         return  self.update(request, *args, **kwargs)
 

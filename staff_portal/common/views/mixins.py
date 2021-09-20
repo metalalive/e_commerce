@@ -291,10 +291,15 @@ class BulkDestroyModelMixin(DestroyModelMixin, UserEditViewLogMixin):
             _id_list = [instance.pk]
             model_cls = type(instance)
             item_labels = [instance.minimum_info]
-        self.perform_destroy(instance=instance, id_list=_id_list)
-        self._log_action(action_type='delete', request=request, affected_items=item_labels,
-                model_cls=model_cls, profile_id=self.get_profile_id(request=request))
-        return RestResponse(status=status_ok)
+        if instance:
+            self.perform_destroy(instance=instance, id_list=_id_list)
+            self._log_action(action_type='delete', request=request, affected_items=item_labels,
+                    model_cls=model_cls, profile_id=self.get_profile_id(request=request))
+            return_data = None
+        else:
+            status_ok = RestStatus.HTTP_400_BAD_REQUEST
+            return_data = {api_settings.NON_FIELD_ERRORS_KEY: ['not specify any ID, no object is deleted']}
+        return RestResponse(return_data, status=status_ok)
 
 
     def perform_destroy(self, instance, id_list):

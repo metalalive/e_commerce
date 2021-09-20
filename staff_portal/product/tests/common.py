@@ -2,11 +2,9 @@ import copy
 import json
 import time
 import random
-import urllib
 from functools import partial
 from unittest.mock import Mock, patch
 
-from django.test import Client as DjangoTestClient
 from django.db.models.constants import LOOKUP_SEP
 from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models  import ContentType
@@ -18,6 +16,9 @@ from common.util.python import flatten_nested_iterable, sort_nested_object, impo
 from common.util.python.messaging.rpc import RpcReplyEvent
 from product.models.base import _ProductAttrValueDataType, ProductSaleableItem, ProductTagClosure
 from product.models.development import ProductDevIngredientType
+
+from tests.python.common import rand_gen_request_body, listitem_rand_assigner, HttpRequestDataGen
+from tests.python.common.django import  _BaseMockTestClientInfoMixin
 
 _fixtures = {
     'AuthUser': [
@@ -231,34 +232,6 @@ _dict_key_replace = lambda obj, from_, to_: {to_ if k == from_ else k: v for k,v
 _dict_kv_pair_evict = lambda obj, cond_fn: dict(filter(cond_fn, obj.items()))
 
 
-def listitem_rand_assigner(list_, min_num_chosen:int=2, max_num_chosen:int=-1, distinct:bool=True):
-    # utility for testing
-    assert any(list_), 'input list should not be empty'
-    assert min_num_chosen >= 0, 'min_num_chosen = %s' % min_num_chosen
-    num_avail = len(list_)
-    if max_num_chosen > 0:
-        err_msg = 'max_num_chosen = %s, min_num_chosen = %s' % (max_num_chosen, min_num_chosen)
-        assert max_num_chosen > min_num_chosen, err_msg
-        if max_num_chosen > (num_avail + 1) and distinct is True:
-            err_msg = 'num_avail = %s, max_num_chosen = %s, distinct = %s' \
-                    % (num_avail, max_num_chosen, distinct)
-            raise ValueError(err_msg)
-    else:
-        err_msg =  'num_avail = %s , min_num_chosen = %s' % (num_avail, min_num_chosen)
-        assert num_avail >= min_num_chosen, err_msg
-        max_num_chosen = num_avail + 1
-    if distinct:
-        list_ = list(list_)
-    num_assigned = random.randrange(min_num_chosen, max_num_chosen)
-    for _ in range(num_assigned):
-        idx = random.randrange(num_avail)
-        yield list_[idx]
-        if distinct:
-            num_avail -= 1
-            del list_[idx]
-## end of listitem_rand_assigner
-
-
 def _common_instances_setup(out:dict, models_info):
     """ create instances of given model classes in Django ORM """
     for model_cls, num_instance_required in models_info:
@@ -271,15 +244,6 @@ def _common_instances_setup(out:dict, models_info):
         objs = list(map(bound_fn, params_gen))
         model_cls.objects.bulk_create(objs)
         out[model_name] = list(model_cls.objects.all())
-
-
-def rand_gen_request_body(template, customize_item_fn, data_gen):
-    def rand_gen_single_req(data):
-        single_req_item = copy.deepcopy(template)
-        single_req_item.update(data)
-        customize_item_fn(single_req_item)
-        return single_req_item
-    return map(rand_gen_single_req, data_gen)
 
 
 def _get_inst_attr(obj, attname, default_value=None):
@@ -475,26 +439,6 @@ class SoftDeleteCommonTestMixin:
         undeleted_items = response_body['affected_items']
         return undeleted_items
 ## end of class SoftDeleteCommonTestMixin
-
-
-class HttpRequestDataGen:
-    rand_create = True
-
-    def customize_req_data_item(self, item, **kwargs):
-        raise NotImplementedError()
-
-    def refresh_req_data(self, fixture_source, http_request_body_template, num_create=None):
-        if self.rand_create:
-            kwargs = {'list_': fixture_source}
-            if num_create:
-                kwargs.update({'min_num_chosen': num_create, 'max_num_chosen':(num_create + 1)})
-            data_gen = listitem_rand_assigner(**kwargs)
-        else:
-            num_create = num_create or len(fixture_source)
-            data_gen = iter(fixture_source[:num_create])
-        out = rand_gen_request_body(customize_item_fn=self.customize_req_data_item,
-                data_gen=data_gen,  template=http_request_body_template)
-        return list(out)
 
 
 class AttributeDataGenMixin:
@@ -755,11 +699,7 @@ class AttributeAssertionMixin:
 ## end of class AttributeAssertionMixin
 
 
-class _MockTestClientInfoMixin:
-    stored_models = {}
-    _json_mimetype = 'application/json'
-    _client = DjangoTestClient(enforce_csrf_checks=False, HTTP_ACCEPT=_json_mimetype)
-    _forwarded_pattern = 'by=proxy_api_gateway;for=%s;host=testserver;proto=http'
+class _MockTestClientInfoMixin(_BaseMockTestClientInfoMixin):
     mock_profile_id = [123, 124]
     permission_class = None
 
@@ -776,25 +716,5 @@ class _MockTestClientInfoMixin:
         mock_role = {'id': 126, 'perm_code': perms}
         succeed_amqp_msg = {'result': {'id': expect_usrprof, 'roles':[mock_role]},}
         return self._mock_rpc_succeed_reply_evt(succeed_amqp_msg)
-
-    def _send_request_to_backend(self, path, method='post', body=None, expect_shown_fields=None,
-            ids=None, extra_query_params=None, headers=None):
-        if body is not None:
-            body = json.dumps(body).encode()
-        query_params = {}
-        if extra_query_params:
-            query_params.update(extra_query_params)
-        if expect_shown_fields:
-            query_params['fields'] = ','.join(expect_shown_fields)
-        if ids:
-            ids = tuple(map(str, ids))
-            query_params['ids'] = ','.join(ids)
-        querystrings = urllib.parse.urlencode(query_params)
-        path_with_querystring = '%s?%s' % (path, querystrings)
-        send_fn = getattr(self._client, method)
-        headers = headers or {}
-        return send_fn(path=path_with_querystring, data=body,  content_type=self._json_mimetype,
-               **headers)
-## end of class _MockTestClientInfoMixin
 
 

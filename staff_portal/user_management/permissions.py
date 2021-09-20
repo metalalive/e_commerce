@@ -15,8 +15,16 @@ _logger = logging.getLogger(__name__)
 permissions for views in staff-only backend site
 """
 
-class BaseValidObjectsMixin:
+class QuotaMaterialPermissions(DjangoModelPermissions):
+    # for GET method, the permission code should be contenttypes.view_contenttype
+    perms_map = {
+        'GET':     ['%(app_label)s.view_%(model_name)s'],
+        'OPTIONS': ['%(app_label)s.view_%(model_name)s'],
+        'HEAD':    ['%(app_label)s.view_%(model_name)s'],
+    }
 
+
+class BaseValidObjectsMixin:
     def _get_valid_roles(self, account, view):
         if not hasattr(view, '_valid_roles_pk'):
             view._valid_roles_pk = account.roles_applied.values_list('role__pk', flat=True)

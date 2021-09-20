@@ -1,8 +1,9 @@
 import logging
 
 from django.db.models import  Manager as DjangoModelManager
+from django.db.utils  import  IntegrityError
 from django.contrib.contenttypes.models  import ContentType
-from rest_framework.exceptions  import ValidationError as RestValidationError
+from rest_framework.exceptions  import  ErrorDetail as DRFErrorDetail, ValidationError as RestValidationError
 from rest_framework.fields      import  empty
 
 from common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer
@@ -19,11 +20,42 @@ from  .common import ConnectedGroupField, ConnectedProfileField, UserSubformSetu
 _logger = logging.getLogger(__name__)
 
 
+
+class QuotaUsageTypeListSerializer(BulkUpdateListSerializer):
+    def create(self, *args, **kwargs):
+        # even `material` is one-to-one field at model level, DRF validator
+        # still does not check uniquenes of material field, such unique
+        #  constraint check will be passed down to database level
+        try:
+            return super().create(*args, **kwargs)
+        except IntegrityError as e:
+            self._handle_dup_material(e)
+
+    def _handle_dup_material(self, error):
+        err_code = error.args[0]
+        err_msg = error.args[1].lower()
+        if ('duplicate entry' in err_msg) and ('material' in err_msg) and \
+                (self.child.Meta.model._meta.db_table in err_msg):
+            dup_id = err_msg.split()[2]
+            dup_id = dup_id.strip('\'')
+            dup_id = int(dup_id)
+            err_msg = '{"message":"duplicate entry","id":%s}' % dup_id
+            err_detail = DRFErrorDetail(err_msg, code='conflict')
+            occurences = list(filter(lambda d:d['material'] == dup_id, self.initial_data))
+            idx = self.initial_data.index(occurences[1])
+            err_details = [{} for _ in range(len(self.initial_data))]
+            err_details[idx]['material'] = [err_detail]
+            validation_error = RestValidationError(detail=err_details)
+            raise validation_error
+        else:
+            raise
+
 class QuotaUsageTypeSerializer(ExtendedModelSerializer):
     atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model  = QuotaUsageType
         fields = ['id', 'label', 'material']
+        list_serializer_class = QuotaUsageTypeListSerializer
 
     def to_representation(self, instance):
         out = super().to_representation(instance=instance)

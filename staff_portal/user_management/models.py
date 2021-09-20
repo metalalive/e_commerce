@@ -25,10 +25,12 @@ from common.util.python          import merge_partial_dup_listitem
 from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from common.models.mixins        import MinimumInfoMixin, SerializableMixin
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
+from common.util.python.django.setup import test_enable as django_test_enable
 
+DB_ALIAS_APPLIED = 'default' if django_test_enable else 'usermgt_service'
 # note that atomicity fails siliently with incorrect database credential
 # that is why I use partial() to tie `using` argument with transaction.atomic(**kwargs)
-_atomicity_fn = partial(transaction.atomic, using='usermgt_service')
+_atomicity_fn = partial(transaction.atomic, using=DB_ALIAS_APPLIED)
 _logger = logging.getLogger(__name__)
 
 

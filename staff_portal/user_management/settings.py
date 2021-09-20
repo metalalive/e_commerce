@@ -64,6 +64,7 @@ DATABASES = { # will be update with secrets at the bottom of file
     'default': { # only give minimal privilege to start django app server
         'ENGINE': 'django.db.backends.mysql',
         'CONN_MAX_AGE': 0, # set 0 only for debugging purpose
+        'TEST': {'NAME': 'test_Restaurant__app_usermgt'}
     },
     'site_dba': { # apply this setup only when you run management commands at backend server
         'ENGINE': 'django.db.backends.mysql',

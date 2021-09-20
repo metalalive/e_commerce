@@ -16,17 +16,20 @@ _logger = logging.getLogger(__name__)
 class GetProfileIDMixin(BaseGetProfileIDMixin):
     def get_profile(self, account, **kwargs):
         if not hasattr(self, '_cache_profile'):
-            self._cache_profile = account.genericuserauthrelation.profile
+            try:
+                self._cache_profile = account.genericuserauthrelation.profile
+            except ObjectDoesNotExist as e:
+                anonymous_profile_cls = type('anonymous_profile', (), {'id':self.UNKNOWN_ID})
+                self._cache_profile = anonymous_profile_cls()
         return self._cache_profile
 
     def get_profile_id(self, request, **kwargs):
-        # TODO, should be not-implemented error , let other apps subclass this mixin
         account = request.user
         if account and isinstance(account, AuthUser):
             profile = self.get_profile(account=account)
-            profile_id = profile.pk
+            profile_id = profile.id
         else:
-            # which means unauthenticated accesses happened to model instances,
+            # which means it is an unauthenticated access to the profile,
             # application developers should analyze log data and determine whether this
             # part of the system has been compromised.
             profile_id = self.UNKNOWN_ID

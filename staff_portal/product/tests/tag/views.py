@@ -251,6 +251,8 @@ class TagUpdateTestCase(TagUpdateBaseTestCase):
                 sorted_children = sorted(curr_node.children, key=lambda node:node.depth)
                 curr_node = sorted_children[-1]
             moving_node = curr_node.parent
+            if moving_node is None:
+                moving_node = curr_node
             moving_node.parent = parent_to
             moving_nodes.append(moving_node)
             parent_to = moving_node.children[0]

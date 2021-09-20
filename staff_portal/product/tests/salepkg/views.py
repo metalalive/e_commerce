@@ -14,7 +14,7 @@ from common.util.python import sort_nested_object
 from common.util.python.messaging.rpc import RpcReplyEvent
 from product.permissions import SaleablePackagePermissions
 
-from product.tests.common import _fixtures, _MockTestClientInfoMixin, assert_view_permission_denied, listitem_rand_assigner, rand_gen_request_body, http_request_body_template, assert_view_bulk_create_with_response, SoftDeleteCommonTestMixin
+from product.tests.common import _fixtures, _MockTestClientInfoMixin, assert_view_permission_denied, listitem_rand_assigner, http_request_body_template, assert_view_bulk_create_with_response, SoftDeleteCommonTestMixin
 from .common import diff_composite, HttpRequestDataGenSaleablePackage, SaleablePackageVerificationMixin
 
 
