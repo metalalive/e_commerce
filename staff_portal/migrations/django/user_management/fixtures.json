@@ -1,6 +1,6 @@
 [
 {
-    "model": "auth.group",
+    "model": "user_management.role",
     "pk": 1,
     "fields": {
         "name": "base site superuser",
@@ -8,7 +8,7 @@
     }
 },
 {
-    "model": "auth.group",
+    "model": "user_management.role",
     "pk": 2,
     "fields": {
         "name": "base staff",
@@ -16,31 +16,33 @@
     }
 },
 {
-    "model": "auth.user",
+    "model": "user_management.loginaccount",
     "pk": 1,
     "fields": {
-        "password": "bcrypt_sha256$$2b$12$1EHECVDTD0T4dABVZBxwu.QQW9gYnAOgIBvySJOAt9K9.tcPOXDES",
-        "last_login": "2021-01-16T16:35:46.740Z",
-        "is_superuser": true,
+        "profile": 1,
         "username": "defaultsuperuser",
+        "password": "bcrypt_sha256$$2b$12$1EHECVDTD0T4dABVZBxwu.QQW9gYnAOgIBvySJOAt9K9.tcPOXDES",
+        "is_superuser": true,
         "is_staff": true,
         "is_active": true,
+        "last_login":  "2021-09-16T16:35:46.740Z",
         "date_joined": "2020-10-11T16:24:17.082Z",
-        "user_permissions": []
+        "password_last_updated": "2021-09-11T16:24:17.082Z"
     }
 },
 {
-    "model": "auth.user",
+    "model": "user_management.loginaccount",
     "pk": 2,
     "fields": {
-        "password": "bcrypt_sha256$$2b$12$2wDUSppwBFfUwNT.9OP/KelVaFb82aQ4lb2boX4kuscStOJ3n5RSG",
-        "last_login": "2021-01-16T16:01:11.931Z",
-        "is_superuser": false,
+        "profile": 2,
         "username": "defaultstaff",
+        "password": "bcrypt_sha256$$2b$12$2wDUSppwBFfUwNT.9OP/KelVaFb82aQ4lb2boX4kuscStOJ3n5RSG",
+        "is_superuser": false,
         "is_staff": true,
         "is_active": true,
+        "last_login": "2021-01-16T16:01:11.931Z",
         "date_joined": "2020-10-24T08:30:33.834Z",
-        "user_permissions": []
+        "password_last_updated": "2021-09-11T16:24:17.082Z"
     }
 },
 {
@@ -68,27 +70,11 @@
     }
 },
 {
-    "model": "user_management.genericuserauthrelation",
-    "pk": 1,
-    "fields": {
-        "profile": 1,
-        "login": 1
-    }
-},
-{
-    "model": "user_management.genericuserauthrelation",
-    "pk": 2,
-    "fields": {
-        "profile": 2,
-        "login": 2
-    }
-},
-{
     "model": "user_management.genericuserappliedrole",
     "pk": 1,
     "fields": {
         "time_deleted": null,
-        "user_type": 10,
+        "user_type": -1,
         "user_id": 1,
         "role": 1,
         "last_updated": "2020-11-09T08:47:46.437Z",
@@ -100,7 +86,7 @@
     "pk": 2,
     "fields": {
         "time_deleted": null,
-        "user_type": 10,
+        "user_type": -1,
         "user_id": 2,
         "role": 2,
         "last_updated": "2020-11-14T14:35:52.791Z",
@@ -112,6 +98,8 @@
     "pk": 1,
     "fields": {
         "time_deleted": null,
+        "user_type": -1,
+        "user_id": 1,
         "addr": "superuser@yourteam.org"
     }
 },
@@ -120,27 +108,9 @@
     "pk": 2,
     "fields": {
         "time_deleted": null,
-        "addr": "staff@yourteam.org"
-    }
-},
-{
-    "model": "user_management.useremailaddress",
-    "pk": 1,
-    "fields": {
-        "time_deleted": null,
-        "user_type": 10,
-        "user_id": 1,
-        "email": 1
-    }
-},
-{
-    "model": "user_management.useremailaddress",
-    "pk": 2,
-    "fields": {
-        "time_deleted": null,
-        "user_type": 10,
+        "user_type": -1,
         "user_id": 2,
-        "email": 2
+        "addr": "staff@yourteam.org"
     }
 }
 ]

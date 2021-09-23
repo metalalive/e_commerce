@@ -10,27 +10,20 @@ from django.db.models.manager   import Manager
 from django.db.models.constants import LOOKUP_SEP
 from django.core.validators import RegexValidator
 from django.core.exceptions import EmptyResultSet, ObjectDoesNotExist, MultipleObjectsReturned
-from django.contrib import auth
 from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
-from django.contrib.auth.models import LoginAccountRoleRelation, Group as AuthRole
-
-from rest_framework.settings    import api_settings
-from rest_framework.exceptions  import PermissionDenied
 
 from softdelete.models import SoftDeleteObjectMixin, ChangeSet, SoftDeleteRecord
-from location.models   import Location
 
 from common.util.python          import merge_partial_dup_listitem
 from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from common.models.mixins        import MinimumInfoMixin, SerializableMixin
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
-from common.util.python.django.setup import test_enable as django_test_enable
 
-DB_ALIAS_APPLIED = 'default' if django_test_enable else 'usermgt_service'
-# note that atomicity fails siliently with incorrect database credential
-# that is why I use partial() to tie `using` argument with transaction.atomic(**kwargs)
-_atomicity_fn = partial(transaction.atomic, using=DB_ALIAS_APPLIED)
+from .common import _atomicity_fn
+from django.contrib import auth
+
+
 _logger = logging.getLogger(__name__)
 
 
@@ -45,30 +38,6 @@ class UsermgtSoftDeleteRecord(SoftDeleteRecord):
     changeset = UsermgtChangeSet.foreignkey_fieldtype()
 
 
-class UserReferenceCheckMixin:
-    def delete(self, *args, **kwargs):
-        # TODO, will check whether there's any other user relation instance referenced to
-        # of this deleting instance (e.g. email, phone, geo-location), if so, then the
-        # instance will NOT be deleted.
-        super().delete(*args, **kwargs)
-
-
-# each user may have more than one email addresses or phone numbers (or none)
-class EmailAddress(UserReferenceCheckMixin, SoftDeleteObjectMixin):
-    SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
-    SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
-    class Meta:
-        db_table = 'email_address'
-    addr = models.EmailField(max_length=160, default="notprovide@localhost", blank=False, null=False, unique=False)
-
-
-class PhoneNumber(UserReferenceCheckMixin, models.Model):
-    class Meta:
-        db_table = 'phone_number'
-    ccode_validator   = RegexValidator(regex=r"^\d{1,3}$", message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digit e.g. '91', '886' , from 1 digit up to 3 digits")
-    linenum_validator = RegexValidator(regex=r"^\+?1?\d{7,15}$", message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digits e.g. '9990099', from 7 digits up to 15 digits")
-    country_code = models.CharField(max_length=3,  validators=[ccode_validator],   unique=False)
-    line_number  = models.CharField(max_length=15, validators=[linenum_validator], unique=False)
 
 
 class AbstractUserRelation(models.Model):
@@ -83,7 +52,7 @@ class AbstractUserRelation(models.Model):
 
 
 # one email address belongs to a single user, or a single user group
-class UserEmailAddress(AbstractUserRelation, SoftDeleteObjectMixin):
+class EmailAddress(AbstractUserRelation, SoftDeleteObjectMixin):
     """
     use cases of mailing :
         -- for individual user (not user group)
@@ -102,39 +71,79 @@ class UserEmailAddress(AbstractUserRelation, SoftDeleteObjectMixin):
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
     SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
     class Meta:
-        db_table = 'user_email_address'
-    email = models.OneToOneField(EmailAddress, db_column='email', on_delete=models.CASCADE, related_name="useremail")
-
-    def delete(self, *args, **kwargs):
-        hard_delete = kwargs.get('hard', False)
-        super().delete(*args, **kwargs)
-        if hard_delete is False and kwargs.get('changeset', None) is None:
-            # simply test whether changeset is given in soft-deleting case
-            err_args = ['hard_delete', hard_delete, 'changeset', None]
-            _logger.error(None, *err_args)
-            raise KeyError
-        self.email.delete(*args, **kwargs)
+        db_table = 'email_address'
+    # each user may have more than one email addresses or phone numbers (or none)
+    addr = models.EmailField(max_length=160, default="notprovide@localhost", blank=False, null=False, unique=False)
 
 
-class UserPhoneNumber(AbstractUserRelation):
+
+class PhoneNumber(AbstractUserRelation):
     class Meta:
-        db_table = 'user_phone_number'
-    phone = models.OneToOneField(PhoneNumber, db_column='phone', on_delete=models.CASCADE, related_name="userphone")
+        db_table = 'phone_number'
+    ccode_validator   = RegexValidator(regex=r"^\d{1,3}$", message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digit e.g. '91', '886' , from 1 digit up to 3 digits")
+    linenum_validator = RegexValidator(regex=r"^\+?1?\d{7,15}$", message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digits e.g. '9990099', from 7 digits up to 15 digits")
+    country_code = models.CharField(max_length=3,  validators=[ccode_validator],   unique=False)
+    line_number  = models.CharField(max_length=15, validators=[linenum_validator], unique=False)
 
-    def delete(self, *args, **kwargs):
-        super().delete(*args, **kwargs)
-        self.phone.delete(*args, **kwargs)
 
 
 # it is possible that one user has multiple address locations to record
-class UserLocation(AbstractUserRelation):
+class GeoLocation(AbstractUserRelation):
+    """
+    record locations for generic business operations,
+    e.g.
+    your businuss may need to record :
+     * one or more outlets, for selling goods to end customers
+     * warehouse, you either rent a space from others, or build your own
+     * factory, if your finished goods is manufactured by your own company
+     * farm, in case your company contracts farmers who grow produce (raw
+       materials) for product manufacture.
+     * shipping addresses of customers and suppliers
+    """
     class Meta:
-        db_table = 'user_location'
-    address  = models.OneToOneField(Location, db_column='address', on_delete=models.CASCADE, related_name="usergeoloc")
+        db_table = 'geo_location'
 
-    def delete(self, *args, **kwargs):
-        super().delete(*args, **kwargs)
-        self.address.delete(*args, **kwargs)
+    class CountryCode(models.TextChoices):
+        AU = 'AU',
+        AT = 'AT',
+        CZ = 'CZ',
+        DE = 'DE',
+        HK = 'HK',
+        IN = 'IN',
+        ID = 'ID',
+        IL = 'IL',
+        MY = 'MY',
+        NZ = 'NZ',
+        PT = 'PT',
+        SG = 'SG',
+        TH = 'TH',
+        TW = 'TW',
+        US = 'US',
+
+    id = models.AutoField(primary_key=True,)
+
+    country = models.CharField(name='country', max_length=2, choices=CountryCode.choices, default=CountryCode.TW,)
+    province    = models.CharField(name='province', max_length=50,) # name of the province
+    locality    = models.CharField(name='locality', max_length=50,) # name of the city or town
+    street      = models.CharField(name='street',   max_length=50,) # name of the road, street, or lane
+    # extra detail of the location, e.g. the name of the building, which floor, etc.
+    # Note each record in this database table has to be mapped to a building of real world
+    detail      = models.CharField(name='detail', max_length=100,)
+    # if
+    # floor =  0, that's basement B1 floor
+    # floor = -1, that's basement B2 floor
+    # floor = -2, that's basement B3 floor ... etc
+    floor = models.SmallIntegerField(default=1, blank=True, null=True)
+    # simple words to describe what you do in the location for your business
+    description = models.CharField(name='description', blank=True, max_length=100,)
+
+    def __str__(self):
+        out = ["Nation:", None, ", city/town:", None,]
+        out[1] = self.country
+        out[3] = self.locality
+        return "".join(out)
+## end of class GeoLocation
+
 
 
 class QuotaUsageType(models.Model, MinimumInfoMixin):
@@ -167,10 +176,10 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
     #### parent = models.ForeignKey('self', db_column='parent', on_delete=models.CASCADE, null=True, blank=True)
     #roles = models.ManyToManyField(auth.models.Group, blank=True, db_table='generic_group_auth_role', related_name='user_groups')
     roles = GenericRelation('GenericUserAppliedRole', object_id_field='user_id', content_type_field='user_type')
-    quota = GenericRelation(UserQuotaRelation, object_id_field='user_id', content_type_field='user_type')
-    #emails    = GenericRelation(UserEmailAddress, object_id_field='user_id', content_type_field='user_type')
-    #phones    = GenericRelation(UserPhoneNumber,  object_id_field='user_id', content_type_field='user_type')
-    #locations = GenericRelation(UserLocation,     object_id_field='user_id', content_type_field='user_type')
+    quota     = GenericRelation(UserQuotaRelation, object_id_field='user_id', content_type_field='user_type')
+    emails    = GenericRelation(EmailAddress, object_id_field='user_id', content_type_field='user_type')
+    phones    = GenericRelation(PhoneNumber,  object_id_field='user_id', content_type_field='user_type')
+    locations = GenericRelation(GeoLocation,  object_id_field='user_id', content_type_field='user_type')
 
     @_atomicity_fn()
     def delete(self, *args, **kwargs):
@@ -262,10 +271,6 @@ class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
     class Meta(ClosureTableModelMixin.Meta):
         db_table = 'generic_user_group_closure'
 
-    ##ancestor = models.ForeignKey(GenericUserGroup, db_column='ancestor', null=True,
-    ##                on_delete=models.CASCADE, related_name='descendants')
-    ##descendant = models.ForeignKey(GenericUserGroup, db_column='descendant', null=True,
-    ##                on_delete=models.CASCADE, related_name='ancestors')
     ancestor   = ClosureTableModelMixin.asc_field(ref_cls=GenericUserGroup)
     descendant = ClosureTableModelMixin.desc_field(ref_cls=GenericUserGroup)
 
@@ -297,9 +302,9 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
     roles = GenericRelation('GenericUserAppliedRole', object_id_field='user_id', content_type_field='user_type')
     # reverse relations from related models e.g. emails / phone numbers / geographical locations
     quota     = GenericRelation(UserQuotaRelation, object_id_field='user_id', content_type_field='user_type')
-    emails    = GenericRelation(UserEmailAddress, object_id_field='user_id', content_type_field='user_type')
-    phones    = GenericRelation(UserPhoneNumber,  object_id_field='user_id', content_type_field='user_type')
-    locations = GenericRelation(UserLocation,     object_id_field='user_id', content_type_field='user_type')
+    emails    = GenericRelation(EmailAddress, object_id_field='user_id', content_type_field='user_type')
+    phones    = GenericRelation(PhoneNumber,  object_id_field='user_id', content_type_field='user_type')
+    locations = GenericRelation(GeoLocation,  object_id_field='user_id', content_type_field='user_type')
 
     @property
     def account(self):
@@ -369,8 +374,8 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
             account.is_active = True
             account.save()
         except ObjectDoesNotExist: # for first time to activate the account
-            account = auth.models.User.objects.create_user( **new_account_data )
-            GenericUserAuthRelation.objects.create(login=account, profile=self)
+            new_account_data['profile'] = self
+            account = auth.get_user_model().objects.create_user( **new_account_data )
             GenericUserProfile.update_account_privilege(profile=self, account=account)
         return account
 
@@ -508,9 +513,8 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
         if list_add:
             role_model_cls =  profile.roles.model.role.field.related_model
             _list_add = role_model_cls.objects.filter(pk__in=list_add)
-            for role in _list_add:
-                u = LoginAccountRoleRelation(role=role, account=account)
-                u.save()
+            #for role in _list_add:
+            #    u = LoginAccountRoleRelation.objects.create(role=role, account=account)
         if list_del:
             old_role_relations.filter(role__pk__in=list_del).delete()
         # account.roles_applied.set(update_list) # completely useless if not m2m field
@@ -540,7 +544,8 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
             # for roles, it is also necessary to fetch all extra roles
             # which are inherited indirectly from the user group hierarchy
             if field_name == 'roles':
-                qset = AuthRole.objects.filter(pk__in=self.all_roles)
+                from .auth import Role
+                qset = Role.objects.filter(pk__in=self.all_roles)
             elif field_name == 'quota':
                 pass # skip, process quota with inherited groups later
             elif isinstance(fd_value, Manager):
@@ -577,37 +582,6 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
 
 
 
-# not all user can login into system, e.g. ex-employees, customers who don't use computer,
-class GenericUserAuthRelation(models.Model):
-    class Meta:
-        db_table = 'generic_user_auth_relation'
-    profile = models.OneToOneField(GenericUserProfile, db_column='profile',  on_delete=models.CASCADE, related_name="auth")
-    login = models.OneToOneField(auth.get_user_model(), db_column='login',  on_delete=models.CASCADE)
-
-    def delete(self, *args, **kwargs):
-        self.check_admin_exist()
-        account = self.login
-        super().delete(*args, **kwargs)
-        account.delete()
-
-    def check_admin_exist(self):
-        account = self.login
-        # report error if frontend attempts to delete the only admin user in the backend site,
-        # if other words, there must be at least one admin user (superuser = True) ready for the backend site,
-        # (this seems difficult to be achieved by CheckConstraint)
-        if account.is_superuser:
-            num_superusers = type(account).objects.filter(is_superuser=True, is_active=True).count()
-            log_args = ['account_id', account.pk, 'profile_id', self.profile.pk, 'num_superusers', num_superusers]
-            if num_superusers <= 1:
-                errmsg = "Forbidden to delete/deactivate the account"
-                log_args.extend(['errmsg', errmsg])
-                _logger.warning(None, *log_args)
-                detail = {api_settings.NON_FIELD_ERRORS_KEY: [errmsg],}
-                raise PermissionDenied(detail=detail) ##  SuspiciousOperation
-            else:
-                _logger.info(None, *log_args)
-
-
 
 class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin):
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
@@ -619,7 +593,7 @@ class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin):
     # * set unique constraint on each pair of (role, user/group)
     # * in case the staff who approved these role requests are deleted, the approved_by field should be
     #   modified to default superuser. So  a profile for default superuser will be necessary
-    role = models.ForeignKey(auth.models.Group, blank=False, db_column='role', related_name='users_applied',
+    role = models.ForeignKey('Role', blank=False, db_column='role', related_name='users_applied',
                 on_delete=models.CASCADE,)
     # the approvement should expire after amount of time passed
     last_updated = models.DateTimeField(auto_now=True)
@@ -637,117 +611,5 @@ class GenericUserGroupRelation(SoftDeleteObjectMixin):
     profile = models.ForeignKey(GenericUserProfile, blank=False, on_delete=models.CASCADE, db_column='profile', related_name='groups')
     approved_by  = models.ForeignKey(GenericUserProfile, blank=True, null=True, db_column='approved_by',
         related_name="approval_group",  on_delete=models.SET_NULL,)
-
-
-
-
-
-
-
-
-
-
-
-class AuthUserResetRequest(models.Model, MinimumInfoMixin):
-    """
-    store token request for account reset operation, auto-incremented primary key is still required.
-    entire token string will NOT stored in database table, instead it stores hashed token for more
-    secure approach
-    """
-    class Meta:
-        db_table = 'auth_user_reset_request'
-
-    TOKEN_DELIMITER = '-'
-    MAX_TOKEN_VALID_TIME = 600
-    min_info_field_names = ['id']
-
-    profile  = models.OneToOneField(GenericUserProfile, blank=True, db_column='profile',
-                on_delete=models.CASCADE, related_name="auth_rst_req")
-    # TODO, build validator to check if the chosen email address is ONLY for one user,
-    # not shared by several people (would that happen in real cases ?)
-    email    = models.ForeignKey(UserEmailAddress, db_column='email', on_delete=models.SET_NULL, null=True, blank=True)
-    hashed_token = models.BinaryField(max_length=32, blank=True) # note: MySQL will refuse to set unique = True
-    time_created = models.DateTimeField(auto_now=True)
-
-    def is_token_expired(self):
-        result = True
-        t0 = self.time_created
-        if t0:
-            t0 += timedelta(seconds=self.MAX_TOKEN_VALID_TIME)
-            t1  = datetime.now(timezone.utc)
-            if t0 > t1:
-                result = False
-        return result
-
-    @classmethod
-    def is_token_valid(cls, token_urlencoded):
-        result = None
-        parts = token_urlencoded.split(cls.TOKEN_DELIMITER)
-        if len(parts) > 1:
-            try:
-                req_id = int(parts[0])
-            except ValueError:
-                req_id = -1
-            if req_id > 0:
-                hashed_token = cls._hash_token(token_urlencoded)
-                try:
-                    instance = cls.objects.get(pk=req_id , hashed_token=hashed_token)
-                except cls.DoesNotExist as e:
-                    instance = None
-                if instance:
-                    if instance.is_token_expired():
-                        pass #### instance.delete()
-                    else:
-                        result = instance
-                log_args = ['req_id', req_id, 'hashed_token', hashed_token, 'result', result]
-                _logger.info(None, *log_args)
-        return result
-
-    @classmethod
-    def _hash_token(cls, token):
-        hashobj = hashlib.sha256()
-        hashobj.update(token.encode('utf-8'))
-        return hashobj.digest()
-
-
-    def _new_token(self):
-        # generate random number + request id as token that will be sent within email
-        token = self.TOKEN_DELIMITER.join( [str(self.pk), secrets.token_urlsafe(32)] )
-        # hash the token (using SHA256, as minimum security requirement),
-        # then save the hash token to model instance.
-        hashed_token = self._hash_token(token)
-        log_args = ['new_token', token, 'new_hashed_token', hashed_token]
-        _logger.debug(None, *log_args)
-        return token, hashed_token
-
-    @_atomicity_fn()
-    def save(self, force_insert=False, force_update=False, using=None, update_fields=None, **kwargs):
-        if not self.profile.active:
-            self.profile.active = True
-            self.profile.save(update_fields=['active'])
-        # check if the user sent reset request before and the token is still valid,
-        # request from the same user cannot be duplicate in the model.
-        if self.pk is None:
-            self.hashed_token = b''
-            super().save(force_insert=force_insert, force_update=force_update, using=using, update_fields=update_fields, **kwargs)
-        self._token, hashed_token  = self._new_token()
-        self.hashed_token = hashed_token
-        super().save(force_insert=False, force_update=force_update, using=using, update_fields=['hashed_token', 'time_created'], **kwargs)
-
-    @property
-    def token(self):
-        if hasattr(self, '_token'):
-            return self._token
-        else:
-            return None
-
-    @property
-    def minimum_info(self):
-        out = super().minimum_info
-        extra = {'profile': self.profile.minimum_info, 'email': self.email.email.addr}
-        out.update(extra)
-        return out
-
-#### end of  AuthUserResetRequest
 
 
