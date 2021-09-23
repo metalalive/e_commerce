@@ -46,7 +46,7 @@ class CorsHeaderMiddleware:
         response = self._default_response_cls(status='200') # 200 ok
         response['content-length'] = '0'
         response[ACCESS_CONTROL_MAX_AGE] = conf.PREFLIGHT_MAX_AGE
-        response[ACCESS_CONTROL_ALLOW_HEADERS] = ', '.join(conf.ALLOWED_HEADERS)
+        response[ACCESS_CONTROL_ALLOW_HEADERS] = ','.join(conf.ALLOWED_HEADERS)
         if req_mthd_allowed:
             response[ACCESS_CONTROL_ALLOW_METHODS] = request_method
         return response
