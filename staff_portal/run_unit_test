@@ -14,5 +14,6 @@ python3.9 ./manage.py test product.tests.salepkg.views        --settings product
 python3.9 ./manage.py test user_management.tests.quota.views  --settings user_management.settings --keepdb --verbosity=2
 
 python3.9 ./manage.py test tests.python.middlewares.cors  --settings user_management.settings  --verbosity=2
+python3.9 ./manage.py test tests.python.middlewares.csrf  --settings user_management.settings  --verbosity=2
 python3.9 -m unittest tests.python.util.graph -v
 
