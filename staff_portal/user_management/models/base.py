@@ -13,30 +13,20 @@ from django.core.exceptions import EmptyResultSet, ObjectDoesNotExist, MultipleO
 from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
 
-from softdelete.models import SoftDeleteObjectMixin, ChangeSet, SoftDeleteRecord
+from softdelete.models import SoftDeleteObjectMixin
 
 from common.util.python          import merge_partial_dup_listitem
 from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from common.models.mixins        import MinimumInfoMixin, SerializableMixin
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
+from common.models.fields   import CompoundPrimaryKeyField
 
-from .common import _atomicity_fn
+
+from .common import _atomicity_fn, UsermgtChangeSet, UsermgtSoftDeleteRecord, AppCodeOptions
 from django.contrib import auth
 
 
 _logger = logging.getLogger(__name__)
-
-
-class UsermgtChangeSet(ChangeSet):
-    class Meta:
-        db_table = 'usermgt_soft_delete_changeset'
-
-
-class UsermgtSoftDeleteRecord(SoftDeleteRecord):
-    class Meta:
-        db_table = 'usermgt_soft_delete_record'
-    changeset = UsermgtChangeSet.foreignkey_fieldtype()
-
 
 
 
@@ -145,22 +135,49 @@ class GeoLocation(AbstractUserRelation):
 ## end of class GeoLocation
 
 
+class QuotaMaterial(models.Model):
+    """
+    In quota arrangement, material simply represents source of supply,
+    e.g.
+    number of resources like database table rows, memory space, bus interconnect
+    other pieces of hardware ... etc. which can be used by individual user or group.
 
-class QuotaUsageType(models.Model, MinimumInfoMixin):
-    min_info_field_names = ['id','label']
+    * Quota arrangement is about restricting users' access to resources,  it makes sense
+      to maintain the material types and the arrangement of each user in this user
+      management application.
+    * For any other application implemented with different backend framework or different
+      language, each application can add / edit / delete a set of new material types (used
+      under the scope of the application) to this model, by invoking internal RPC function
+      during schema migration.
+    * This model is NOT for frontend client that attempts to modify the content of this model
+    """
     class Meta:
-        db_table = 'quota_usage_type'
-    material = models.OneToOneField(to=ContentType, on_delete=models.CASCADE, db_column='material', )
-    label    = models.CharField(max_length=50, unique=False)
+        db_table = 'quota_material'
+
+    class _MatCodeOptions(models.IntegerChoices):
+        MAX_NUM_EMAILS = 1
+        MAX_NUM_PHONE_NUMBERS = 2
+        MAX_NUM_GEO_LOCATIONS = 3
+
+    app_code = models.PositiveSmallIntegerField(null=False, blank=False, choices=AppCodeOptions.choices)
+    mat_code = models.PositiveSmallIntegerField(null=False, blank=False)
+
+    @classmethod
+    def get_for_apps(cls, app_labels):
+        app_labels = app_labels or []
+        label_to_code_fn = lambda app_label: getattr(AppCodeOptions, app_label).value
+        _appcodes = tuple(map(label_to_code_fn , app_labels))
+        return cls.objects.filter(app_code__in=_appcodes)
 
 
 class UserQuotaRelation(AbstractUserRelation):
     """ where the system stores quota arrangements for each user (or user group) """
     class Meta:
         db_table = 'user_quota_relation'
-        constraints = [models.UniqueConstraint(fields=['user_id', 'user_type', 'usage_type'], name="unique_user_quota",)]
-    usage_type = models.ForeignKey(to=QuotaUsageType, db_column='usage_type',  on_delete=models.CASCADE, related_name="user_quota_rules")
-    maxnum = models.PositiveSmallIntegerField(default=1)
+    material = models.ForeignKey(to=QuotaMaterial, on_delete=models.CASCADE, null=False,
+                      blank=False, db_column='material', related_name='usr_relations')
+    maxnum   = models.PositiveSmallIntegerField(default=1)
+    id = CompoundPrimaryKeyField(inc_fields=['user_type', 'user_id', 'material'])
 
 
 class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
@@ -276,7 +293,6 @@ class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
 
 
 
-# TODO, should have default superuser account as fixture data
 class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMixin):
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
     SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
@@ -297,23 +313,12 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
     last_updated = models.DateTimeField(auto_now=True)
     # the group(s) the user belongs to
     ####groups = models.ManyToManyField(GenericUserGroup, blank=True, db_table='generic_user_group_relation', related_name='user_profiles')
-    # in case the user may have extra roles not specified by its groups
-    ####roles = models.ManyToManyField(auth.models.Group, blank=True, db_table='generic_user_prof_auth_role', related_name='user_profiles')
     roles = GenericRelation('GenericUserAppliedRole', object_id_field='user_id', content_type_field='user_type')
     # reverse relations from related models e.g. emails / phone numbers / geographical locations
     quota     = GenericRelation(UserQuotaRelation, object_id_field='user_id', content_type_field='user_type')
     emails    = GenericRelation(EmailAddress, object_id_field='user_id', content_type_field='user_type')
     phones    = GenericRelation(PhoneNumber,  object_id_field='user_id', content_type_field='user_type')
     locations = GenericRelation(GeoLocation,  object_id_field='user_id', content_type_field='user_type')
-
-    @property
-    def account(self):
-        try:
-            out = self.auth.login
-        except ObjectDoesNotExist:
-            out = None
-        return out
-
 
     @_atomicity_fn()
     def delete(self, *args, **kwargs):
@@ -415,25 +420,24 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
         """
         the argument `groups` is iterable object of GenericUserGroup objects
         """
-        merged_inhehited = {}
-        grps_inherited = []
-        for grp in groups:
-            grp_inherited = {}
-            for a in grp.ancestors.order_by('-depth'):
-                parent_quota = {aq.usage_type.material : aq.maxnum for aq in a.ancestor.quota.all()}
-                grp_inherited = grp_inherited | parent_quota
-            grps_inherited.append(grp_inherited)
-        for gq in grps_inherited:
-            for k,v in gq.items():
-                mv = merged_inhehited.get(k, None)
-                if mv is None or mv < v:
-                    merged_inhehited[k] = v
-        log_msg = ['grps_inherited', grps_inherited, 'merged_inhehited', merged_inhehited]
+        #['ancestors__ancestor__id',
+        # 'ancestors__ancestor__quota__material__app_code',
+        # 'ancestors__ancestor__quota__material__mat_code'
+        # 'ancestors__ancestor__quota__maxnum' ]
+        quota_mat_field = ['ancestors', 'ancestor', 'quota', 'material'] # QuotaMaterial.id field
+        quota_val_field = ['ancestors', 'ancestor', 'quota', 'maxnum']
+        quota_mat_field = LOOKUP_SEP.join(quota_mat_field)
+        quota_val_field = LOOKUP_SEP.join(quota_val_field)
+        qset = groups.values(quota_mat_field).annotate(max_num_chosen=models.Max(quota_val_field)
+            ).order_by(quota_mat_field).distinct().filter(max_num_chosen__gt=0)
+        merged_inhehited = {q[quota_mat_field]: q['max_num_chosen'] for q in qset}
+        log_msg = ['merged_inhehited', merged_inhehited]
         _logger.debug(None, *log_msg)
         return merged_inhehited
 
     @property
     def inherit_quota(self):
+        # this only returns quota value added to the groups inherited by the user
         grp_ids = self.groups.values_list('group__pk', flat=True)
         grp_cls = self.groups.model.group.field.related_model
         groups  = grp_cls.objects.filter(pk__in=grp_ids)
@@ -442,9 +446,13 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
 
     @property
     def all_quota(self):
-        direct_quota  = {q.usage_type.material : q.maxnum for q in self.quota.all()}
-        inherit_quota = self.inherit_quota
-        return inherit_quota | direct_quota
+        _all_quota = self.inherit_quota
+        qset = self.quota.values('material', 'maxnum')
+        for item in qset:
+            v1 = _all_quota.get(item['material'], -1)
+            if v1 < item['maxnum']:
+                _all_quota[item['material']] = item['maxnum']
+        return _all_quota
 
     @property
     def inherit_roles(self):
@@ -453,30 +461,42 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
             #    for ra in asc.ancestor.roles.all() ]
             grp_ct = ContentType.objects.get_for_model(GenericUserGroup)
             grp_ids = self.groups.values_list('group__pk', flat=True)
-            asc_ids = GenericUserGroupClosure.objects.filter(descendant__pk__in=grp_ids).values_list('ancestor__pk', flat=True)
-            role_ids = GenericUserAppliedRole.objects.filter(user_type=grp_ct, user_id__in=asc_ids).values_list('role__pk', flat=True)
-            self._inherit_roles = role_ids
-        #### retrieve role object from GenericUserAppliedRole
+            asc_ids = GenericUserGroupClosure.objects.filter(descendant__pk__in=grp_ids).values_list('ancestor__id', flat=True)
+            role_rel_cls = self.roles.model
+            role_ids = role_rel_cls.objects.filter(user_type=grp_ct, user_id__in=asc_ids).values_list('role__id', flat=True)
+            role_cls = role_rel_cls.role.field.related_model
+            roles = role_cls.objects.filter(id__in=role_ids)
+            self._inherit_roles = roles
         return self._inherit_roles
 
     @property
+    def direct_roles(self):
+        if not hasattr(self, '_direct_roles'):
+            role_rel_cls = self.roles.model
+            role_ids = self.roles.values_list('role__id', flat=True)
+            role_cls = role_rel_cls.role.field.related_model
+            roles = role_cls.objects.filter(id__in=role_ids)
+            self._direct_roles = roles
+        return self._direct_roles
+
+    @property
     def all_roles(self):
-        if not hasattr(self, '_all_roles'):
-            direct_roles  =  self.roles.values_list('role__pk', flat=True)
-            #### print("direct_roles : "+ str(direct_roles))
-            inherit_roles = self.inherit_roles
-            self._all_roles = direct_roles | inherit_roles
-        return self._all_roles
+        return {'direct':self.direct_roles, 'inherit':self.inherit_roles}
 
 
     @property
     def privilege_status(self):
         out = self.NONE
+        role_ids = (ROLE_ID_SUPERUSER, ROLE_ID_STAFF)
         all_roles = self.all_roles
-        if ROLE_ID_SUPERUSER in all_roles:
-            out = self.SUPERUSER
-        elif ROLE_ID_STAFF  in all_roles:
-            out = self.STAFF
+        for qset in all_roles.values():
+            fetched_ids = qset.filter(id__in=role_ids).values_list('id', flat=True)
+            if ROLE_ID_SUPERUSER in fetched_ids:
+                out = self.SUPERUSER
+                break
+            elif ROLE_ID_STAFF in fetched_ids:
+                out = self.STAFF
+                break
         return out
 
     @classmethod
@@ -522,62 +542,6 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
                 'old_roles', old_roles, 'list_add', list_add, 'list_del', list_del,
                 'list_unchanged', list_unchanged]
         _logger.debug(None, *log_args)
-
-
-    def serializable(self, present, services_label=None):
-        services_label = services_label or []
-        related_field_map = {
-            'roles': (['id', 'name'], {
-                'perm_code': models.F('permissions__codename'),
-                'app_label': models.F('permissions__content_type__app_label'),
-            }),
-            ## 'quota': (['maxnum'], {
-            ##     'material_id': models.F('usage_type__material'),
-            ##     'model_name' : models.F('usage_type__material__model'),
-            ##     'app_label'  : models.F('usage_type__material__app_label'),
-            ## }),
-            'emails': ([], {})
-        }
-        def query_fn(fd_value, field_name, out):
-            qset = None
-            sub_fd_names = related_field_map.get(field_name, None)
-            # for roles, it is also necessary to fetch all extra roles
-            # which are inherited indirectly from the user group hierarchy
-            if field_name == 'roles':
-                from .auth import Role
-                qset = Role.objects.filter(pk__in=self.all_roles)
-            elif field_name == 'quota':
-                pass # skip, process quota with inherited groups later
-            elif isinstance(fd_value, Manager):
-                qset = fd_value.all()
-            if qset and sub_fd_names:
-                qset = qset.values(*sub_fd_names[0] , **sub_fd_names[1] )
-                out[field_name] =  list(qset)
-
-        def _if_accept_app_fn(app_label):
-            return (not services_label) or (services_label and app_label in services_label)
-
-        # end of query_fn
-        out = super().serializable(present=present, query_fn=query_fn)
-        if out.get('roles', None):
-            for role in out['roles']:
-                app_label = role.pop('app_label', None)
-                perm_code = role.get('perm_code',None)
-                if app_label and perm_code and _if_accept_app_fn(app_label=app_label):
-                    role['perm_code'] = '%s.%s' % (app_label, perm_code)
-                else:
-                    role.pop('perm_code',None)
-            # further reduce duplicate data
-            merge_partial_dup_listitem( list_in=out['roles'], combo_key=('id', 'name',),\
-                    merge_keys=('perm_code',))
-            # remove those roles whose `perm_code` is empty
-            out['roles'] = list(filter(lambda x: any(x['perm_code']), out['roles']))
-        if out.get('quota', None) is None:
-            all_quota = self.all_quota
-            all_quota = filter(lambda kv: _if_accept_app_fn(app_label=kv[0].app_label), all_quota.items())
-            all_quota = map(lambda kv: ('%s.%s' % (kv[0].app_label, kv[0].model) , kv[1]), all_quota)
-            out['quota'] = dict(all_quota)
-        return out
 #### end of GenericUserProfile
 
 
@@ -600,6 +564,7 @@ class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin):
     # record the user who approved the reqeust (that a role can be granted to the group or individual user
     approved_by  = models.ForeignKey(GenericUserProfile, blank=True, null=True, db_column='approved_by',
         related_name="approval_role",  on_delete=models.SET_NULL,)
+    id = CompoundPrimaryKeyField(inc_fields=['user_type', 'user_id', 'role'])
 
 
 class GenericUserGroupRelation(SoftDeleteObjectMixin):
@@ -611,5 +576,6 @@ class GenericUserGroupRelation(SoftDeleteObjectMixin):
     profile = models.ForeignKey(GenericUserProfile, blank=False, on_delete=models.CASCADE, db_column='profile', related_name='groups')
     approved_by  = models.ForeignKey(GenericUserProfile, blank=True, null=True, db_column='approved_by',
         related_name="approval_group",  on_delete=models.SET_NULL,)
+    id = CompoundPrimaryKeyField(inc_fields=['group','profile'])
 
 

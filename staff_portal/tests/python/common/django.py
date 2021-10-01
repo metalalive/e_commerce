@@ -11,7 +11,7 @@ class _BaseMockTestClientInfoMixin:
     _forwarded_pattern = 'by=proxy_api_gateway;for=%s;host=testserver;proto=http'
 
     def _send_request_to_backend(self, path, method='post', body=None, expect_shown_fields=None,
-            ids=None, extra_query_params=None, headers=None):
+            ids=None, extra_query_params=None, enforce_csrf_checks=True, headers=None, cookies=None):
         if body is not None:
             body = json.dumps(body).encode()
         query_params = {}
@@ -26,7 +26,13 @@ class _BaseMockTestClientInfoMixin:
         path_with_querystring = '%s?%s' % (path, querystrings)
         send_fn = getattr(self._client, method)
         headers = headers or {}
-        return send_fn(path=path_with_querystring, data=body,  content_type=self._json_mimetype,
-               **headers)
+        cookies = cookies or {}
+        bak_csrf_checks = self._client.handler.enforce_csrf_checks
+        self._client.cookies.load(cookies) # do not use update()
+        self._client.handler.enforce_csrf_checks = enforce_csrf_checks
+        response = send_fn(path=path_with_querystring, data=body, content_type=self._json_mimetype,
+                       **headers)
+        self._client.handler.enforce_csrf_checks = bak_csrf_checks
+        return response
 ## end of class _BaseMockTestClientInfoMixin
 

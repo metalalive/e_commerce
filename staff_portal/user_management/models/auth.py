@@ -1,8 +1,10 @@
+
 from django.contrib import auth
 from django.contrib.auth.models import GroupManager, _user_get_permissions, _user_has_perm, _user_has_module_perms
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
+from django.db.models.constants import LOOKUP_SEP
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -11,15 +13,43 @@ from rest_framework.exceptions  import PermissionDenied
 
 # from project codebase
 from common.models.mixins import MinimumInfoMixin
+from common.models.constants  import  ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from .common import _atomicity_fn
 
 # note: many of models here are copied from django.contribs.auth , but I remove some fields which are no longer used
 
+class RoleQuerySet(models.QuerySet):
+    def get_permissions(self, app_labels):
+        ''' retrieve low-level permission instances from role queryset '''
+        always_fetch_roles = (ROLE_ID_SUPERUSER, ROLE_ID_STAFF,)
+        always_have_role_ids = models.Q(id__in=always_fetch_roles)
+        rel_field = ['permissions', 'content_type', 'app_label', 'in']
+        optional_role_ids = models.Q(**{LOOKUP_SEP.join(rel_field):app_labels})
+        final_condition = always_have_role_ids | optional_role_ids
+        role_qset = self.filter(final_condition).distinct()
+        perm_cls = self.model.permissions.field.related_model
+        perm_ids = role_qset.annotate(num_perms=models.Count('permissions')).filter(
+                num_perms__gt=0).values_list('permissions', flat=True)
+        perm_qset = perm_cls.objects.filter(id__in=perm_ids)
+        return perm_qset
+
+class RoleManager(GroupManager.from_queryset(RoleQuerySet)):
+    pass
+
 class Role(models.Model, MinimumInfoMixin):
+    # Role-Based Access Control is applied to this project, the name field here are
+    # referenced when the other application receives client request and check its
+    # permission . There should be methods which maintain consistency on this name field
+    # between authentication server (this user_management app) and all other resource servers
+    # (all other apps implemented in different tech stack)
     name = models.CharField(_('name'), max_length=100, unique=True)
+    # all other resource servers (might be implemented in different tech stack) can
+    # add custom low-level permissions to Django's auth.Permission on schema migration,
+    # so this authentication server has authorization information about all other apps
+    # in this project.
     permissions = models.ManyToManyField('auth.Permission', verbose_name=_('permissions'), blank=False,)
 
-    objects = GroupManager()
+    objects = RoleManager()
     min_info_field_names = ['id','name']
 
     class Meta:

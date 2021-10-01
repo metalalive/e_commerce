@@ -2,6 +2,7 @@ import base64
 import requests
 from requests.exceptions import ConnectionError, SSLError, Timeout
 
+from common.auth.abstract import BaseGetProfileMixin
 from common.util.python import get_request_meta_key
 from common.util.python.messaging.rpc       import RPCproxy
 from common.util.python.messaging.constants import AMQP_EXCHANGE_NAME_CONFIG_KEY, AMQP_EXCHANGE_TYPE_CONFIG_KEY
@@ -174,23 +175,8 @@ def _render_url_path(proxyview, request, key_vars):
     return out
 
 
-class BaseGetProfileIDMixin:
-    UNKNOWN_ID = -1
 
-    def get_account(self, request):
-        raise NotImplementedError
-
-    def get_account_id(self, account):
-        raise NotImplementedError
-
-    def get_profile_id(self, request, **kwargs):
-        raise NotImplementedError
-
-    def get_profile(self, account, **kwargs):
-        raise NotImplementedError
-
-
-class RemoteGetProfileIDMixin(BaseGetProfileIDMixin):
+class RemoteGetProfileIDMixin(BaseGetProfileMixin):
     _usermgt_rpc = RPCproxy(app_name='user_management')
     # currently get_account() and get_account_id() works with Django,
     # both functions should be abstracted for other web frameworks

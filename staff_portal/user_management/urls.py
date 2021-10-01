@@ -1,25 +1,23 @@
 from django.urls import path
 
-from .views.api  import AuthPermissionView, AuthRoleAPIView, AppliedRoleReadAPIView, AppliedGroupReadAPIView
-from .views.api  import QuotaUsageTypeAPIView, QuotaMaterialReadAPIView, UserGroupsAPIView, UserProfileAPIView
+from .views.base import RoleAPIView, AppliedRoleReadAPIView, AppliedGroupReadAPIView, UserGroupsAPIView, UserProfileAPIView, UserActivationView, UserDeactivationView
 
-from .views.api  import UserActivationView, UserDeactivationView, AuthPasswdEditAPIView, AuthUsernameEditAPIView
-from .views.api  import AuthTokenReadAPIView, LoginAccountCreateView, RemoteAccessTokenAPIView
-from .views.api  import UsernameRecoveryRequestView, UnauthPasswordResetRequestView, UnauthPasswordResetView
+from .views.auth  import AuthTokenReadAPIView, LoginAccountCreateView, RefreshAccessTokenView, UsernameRecoveryRequestView, UnauthPasswordResetRequestView, UnauthPasswordResetView, AuthPasswdEditAPIView, AuthUsernameEditAPIView, LoginView, LogoutView, PermissionView
 
 from .apps import UserManagementConfig as UserMgtCfg
 
 
 urlpatterns = [
-    path(UserMgtCfg.api_url[AuthPermissionView.__name__],  AuthPermissionView.as_view()),
+    path(UserMgtCfg.api_url[LoginView.__name__],  LoginView.as_view()),
+    path(UserMgtCfg.api_url[LogoutView.__name__], LogoutView.as_view()),
+    path(UserMgtCfg.api_url[RefreshAccessTokenView.__name__],  RefreshAccessTokenView.as_view()  ),
 
-    path(UserMgtCfg.api_url[AuthRoleAPIView.__name__][0],     AuthRoleAPIView.as_view() ),
-    path(UserMgtCfg.api_url[AuthRoleAPIView.__name__][1],     AuthRoleAPIView.as_view() ),
+    path(UserMgtCfg.api_url[PermissionView.__name__],  PermissionView.as_view()),
+    path(UserMgtCfg.api_url[RoleAPIView.__name__][0],  RoleAPIView.as_view() ),
+    path(UserMgtCfg.api_url[RoleAPIView.__name__][1],  RoleAPIView.as_view() ),
+
     path(UserMgtCfg.api_url[AppliedRoleReadAPIView.__name__], AppliedRoleReadAPIView.as_view() ),
     path(UserMgtCfg.api_url[AppliedGroupReadAPIView.__name__], AppliedGroupReadAPIView.as_view() ),
-
-    path(UserMgtCfg.api_url[QuotaUsageTypeAPIView.__name__],  QuotaUsageTypeAPIView.as_view()),
-    path(UserMgtCfg.api_url[QuotaMaterialReadAPIView.__name__],  QuotaMaterialReadAPIView.as_view()),
 
     path(UserMgtCfg.api_url[UserGroupsAPIView.__name__][0], UserGroupsAPIView.as_view()),
     path(UserMgtCfg.api_url[UserGroupsAPIView.__name__][1], UserGroupsAPIView.as_view()),
@@ -37,7 +35,6 @@ urlpatterns = [
 
     path(UserMgtCfg.api_url[AuthPasswdEditAPIView.__name__],  AuthPasswdEditAPIView.as_view()  ),
     path(UserMgtCfg.api_url[AuthUsernameEditAPIView.__name__],  AuthUsernameEditAPIView.as_view()  ),
-    path(UserMgtCfg.api_url[RemoteAccessTokenAPIView.__name__],  RemoteAccessTokenAPIView.as_view()  ),
 ] # end of urlpatterns
 
 

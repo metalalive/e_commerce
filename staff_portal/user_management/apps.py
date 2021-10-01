@@ -4,12 +4,15 @@ from common.util.python import BaseUriLookup, BaseTemplateLookup
 class WebAPIurl(BaseUriLookup):
     # URLs of web APIs , accessable to end client users
     _urls = {
-            'AuthPermissionView'  :'permissions',
-            'AuthRoleAPIView'        : ['authroles', 'authrole/<slug:pk>'],
+            'LoginView' :'login',
+            'LogoutView':'logout',
+            'RefreshAccessTokenView': 'refresh_access_token',
+
+            'PermissionView': 'permissions',
+            'RoleAPIView'   : ['roles', 'role/<slug:pk>'],
+
             'AppliedRoleReadAPIView' : 'applied_role/<slug:pk>',
             'AppliedGroupReadAPIView': 'applied_group/<slug:pk>',
-            'QuotaUsageTypeAPIView'  : "quota",
-            'QuotaMaterialReadAPIView': 'quota_material',
             'UserGroupsAPIView'      : ["usrgrps", "usrgrp/<slug:pk>"],
             #### '^usergrps/edit/(?P<IDs>[\d/]+)$',
             'UserProfileAPIView'     : ["usrprofs", "usrprof/<slug:pk>"],
@@ -25,7 +28,6 @@ class WebAPIurl(BaseUriLookup):
 
             'AuthUsernameEditAPIView': 'username/edit',
             'AuthPasswdEditAPIView':   'password/edit',
-            'RemoteAccessTokenAPIView': 'remote_auth',
     } # end of _urls
 #### end of WebAPIurlMeta
 

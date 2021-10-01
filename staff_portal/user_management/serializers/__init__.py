@@ -8,14 +8,14 @@ from django.conf      import  settings as django_settings
 from django.core      import  validators
 from django.utils.deconstruct   import deconstructible
 from django.core.exceptions     import ValidationError, ObjectDoesNotExist, ImproperlyConfigured
-from django.contrib.auth.models import Permission as AuthPermission, Group as AuthRole, User as AuthUser
-from django.contrib.auth        import password_validation
+from django.contrib.auth.models import Permission
+from django.contrib.auth        import password_validation, get_user_model
 from django.contrib.auth.hashers import check_password
 from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework             import status as RestStatus
 from rest_framework.fields      import CharField, BooleanField, ModelField, empty
-from rest_framework.serializers import BaseSerializer, Serializer, IntegerField, PrimaryKeyRelatedField
+from rest_framework.serializers import BaseSerializer, Serializer, ModelSerializer, IntegerField, PrimaryKeyRelatedField
 from rest_framework.validators  import UniqueTogetherValidator
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
 from rest_framework.settings    import api_settings
@@ -25,40 +25,55 @@ from common.serializers.mixins  import  BaseClosureNodeMixin
 from common.util.python         import  get_fixture_pks
 from common.util.python.async_tasks    import  sendmail as async_send_mail
 
-from ..models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, AuthUserResetRequest
-from ..models import GenericUserAuthRelation,  GenericUserGroupRelation, _atomicity_fn
+from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile,  GenericUserGroupRelation, _atomicity_fn
+from ..models.auth import Role, AccountResetRequest
 from ..async_tasks import update_roles_on_accounts
 
 from .common import ConnectedGroupField, ConnectedProfileField, UserSubformSetupMixin
-from .nested import QuotaUsageTypeSerializer, UserEmailRelationSerializer, UserPhoneRelationSerializer, UserLocationRelationSerializer
-from .nested import UserQuotaRelationSerializer, GenericUserAppliedRoleSerializer, GenericUserGroupRelationSerializer
+from .nested import EmailSerializer, PhoneNumberSerializer, GeoLocationSerializer
+from .nested import UserQuotaRelationSerializer, GenericUserRoleAssigner, GenericUserGroupRelationAssigner
 
 _logger = logging.getLogger(__name__)
 
 
-class AuthPermissionSerializer(ExtendedModelSerializer):
-    atomicity = _atomicity_fn
-    class Meta(ExtendedModelSerializer.Meta):
-        model = AuthPermission
-        fields = ['id', 'name', 'codename']
-        read_only_fields = ['name', 'codename']
+
+class PermissionSerializer(ModelSerializer):
+    class Meta:
+        model = Permission
+        fields = ['id', 'name',]
+        read_only_fields = ['id','name',]
+
+    def __init__(self, instance=None, data=empty, account=None, **kwargs):
+        # read-only serializer, frontend users are not allowed to edit
+        # permission model in this project
+        if not instance:
+            instance = type(self).get_default_queryset()
+        super().__init__(instance=instance, data=data, **kwargs)
+
+    @classmethod
+    def get_default_queryset(cls):
+        from django.db.models.constants import LOOKUP_SEP
+        app_labels = ['contenttypes', 'auth', 'sessions']
+        rel_field_name = ['content_type', 'app_label', 'in']
+        rel_field_name = LOOKUP_SEP.join(rel_field_name)
+        condition = {rel_field_name:app_labels}
+        queryset = cls.Meta.model.objects.exclude(**condition)
+        return queryset
 
 
-class AuthRoleSerializer(ExtendedModelSerializer):
+class RoleSerializer(ExtendedModelSerializer):
     atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
-        model  = AuthRole
+        model  = Role
         fields = ['id', 'name', 'permissions',]
 
     def __init__(self, instance=None, data=empty, **kwargs):
         # To reduce bytes transmitting from API caller, POST/PUT data only contains 
         # list of permission IDs for a role, no need to use customized serializer field
-        if data is empty:
-            self.fields['permissions'] = AuthPermissionSerializer(many=True, read_only=True)
+        self.fields['permissions'].child_relation.queryset = PermissionSerializer.get_default_queryset()
         kwargs['pk_field_name'] = 'id'
         super().__init__(instance=instance, data=data, **kwargs)
-
-#### end of AuthRoleSerializer
+#### end of RoleSerializer
 
 
 class GenericUserGroupClosureSerializer(ExtendedModelSerializer):
@@ -82,7 +97,7 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
     auth = BooleanField(read_only=True)
     # internally check roles and groups that will be applied
     # default value: 1 = superuser role, 2 = staff role
-    PRESERVED_ROLE_IDS = get_fixture_pks(filepath='user_management.json', pkg_hierarchy='auth.group')
+    PRESERVED_ROLE_IDS = get_fixture_pks(filepath='fixtures.json', pkg_hierarchy='user_management.role')
     # overwrite atomicity function
     atomicity = _atomicity_fn
 
@@ -97,17 +112,15 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
         # (4) estimate final quota arrangment for each user, using `groups` value and `quota` value
         # (5) take estimated value at previous step, to validate emails/phones/geo-locations fields
         #### TODO, load all applied groups regardless who approved it, only for read view
-        from_edit_view = kwargs.pop('from_edit_view', False)
-        from_read_view = kwargs.pop('from_read_view', False)
-        self.fields['groups'] = GenericUserGroupRelationSerializer(many=True, instance=instance,
-                data=data, from_edit_view=from_edit_view, from_read_view=from_read_view, account=kwargs.get('account'))
-        self.fields['roles'] = GenericUserAppliedRoleSerializer(many=True, instance=instance,
-                data=data, from_edit_view=from_edit_view, from_read_view=from_read_view, account=kwargs.get('account'))
+        self.fields['groups'] = GenericUserGroupRelationAssigner(many=True, instance=instance,
+                data=data, account=kwargs.get('account'))
+        self.fields['roles']  = GenericUserRoleAssigner(many=True, instance=instance, data=data,
+                    account=kwargs.get('account'))
         self.fields['quota']  = UserQuotaRelationSerializer(many=True, instance=instance, data=data,
                  _validation_error_callback=self._validate_quota_error_callback)
-        self.fields['emails'] = UserEmailRelationSerializer(many=True, instance=instance, data=data)
-        self.fields['phones'] = UserPhoneRelationSerializer(many=True, instance=instance, data=data)
-        self.fields['locations'] = UserLocationRelationSerializer(many=True, instance=instance, data=data)
+        self.fields['emails'] = EmailSerializer(many=True, instance=instance, data=data)
+        self.fields['phones'] = PhoneNumberSerializer(many=True, instance=instance, data=data)
+        self.fields['locations'] = GeoLocationSerializer(many=True, instance=instance, data=data)
         super().__init__(instance=instance, data=data, **kwargs)
         # When non-admin logged-in users edit their own profile, they cannot update `group`, `quota`,
         # and `role` fields, the data of all these fields are already assigned by someone at upper layer group
@@ -254,10 +267,8 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, ExtendedModelSerializer, 
         self.exc_wr_fields = kwargs.pop('exc_wr_fields', None)
         # TRICKY, set instance argument will set read_only = False at pk field of model serializer
         # so the pk value will come with other validated data without being dropped.
-        from_edit_view = kwargs.pop('from_edit_view', False)
-        from_read_view = kwargs.pop('from_read_view', False)
-        self.fields['roles'] = GenericUserAppliedRoleSerializer(many=True, instance=instance,
-                data=data, from_edit_view=from_edit_view, from_read_view=from_read_view, account=kwargs.get('account'))
+        self.fields['roles'] = GenericUserRoleAssigner(many=True, instance=instance,
+                data=data, account=kwargs.get('account'))
         self.fields['quota'] = UserQuotaRelationSerializer(many=True, instance=instance, data=data)
         super().__init__(instance=instance, data=data, **kwargs)
 
@@ -314,11 +325,11 @@ class BulkAuthUserRequestSerializer(BulkUpdateListSerializer):
 
 class AuthUserResetRequestSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
     class Meta(ExtendedModelSerializer.Meta):
-        model = AuthUserResetRequest
+        model = AccountResetRequest
         fields = ['id', 'email', 'profile']
         list_serializer_class = BulkAuthUserRequestSerializer
 
-    email = PrimaryKeyRelatedField(many=False, queryset=UserEmailRelationSerializer.Meta.model.objects.none() )
+    email = PrimaryKeyRelatedField(many=False, queryset=EmailSerializer.Meta.model.objects.none() )
     atomicity = _atomicity_fn
 
     def __init__(self, instance=None, data=empty, **kwargs):
@@ -335,7 +346,7 @@ class AuthUserResetRequestSerializer(ExtendedModelSerializer, UserSubformSetupMi
                 email_ids = [d['email'] for d in data if d.get('email',None)]
             else :
                 email_ids = [data.get('email', '')]
-            qset = UserEmailRelationSerializer.Meta.model.objects.filter(id__in=email_ids)
+            qset = EmailSerializer.Meta.model.objects.filter(id__in=email_ids)
             self.fields['email'].queryset = qset
         super().__init__(instance=instance, data=data, **kwargs)
 
@@ -421,7 +432,7 @@ class UsernameUniquenessValidator:
     associated with giving value in __call__ function
     """
     def __init__(self, account):
-        self._account = account or AuthUser()
+        self._account = account or get_user_model()()
 
     def __call__(self, value):
         errmsg = None
@@ -434,7 +445,7 @@ class UsernameUniquenessValidator:
             try: # invoke existing validator at model level
                 self._account.validate_unique()
             except ValidationError as e:
-                for item in e.error_dict.get(AuthUser.USERNAME_FIELD, None):
+                for item in e.error_dict.get(get_user_model().USERNAME_FIELD, None):
                     if item.message.find("exist") > 0:
                         errmsg = item.message
                         log_level = logging.WARNING
@@ -451,7 +462,7 @@ class UsernameUniquenessValidator:
 class PasswordComplexityValidator:
 
     def __init__(self, account, password_confirm=None):
-        self._account = account or AuthUser()
+        self._account = account or get_user_model()()
         if not password_confirm is None:
             self._password_confirm = password_confirm
 
@@ -517,7 +528,7 @@ class  LoginAccountSerializer(Serializer):
         self.fields['old_uname'].required = old_uname_required
         self.fields['old_passwd'].required = old_passwd_required
         log_msg = ['account', account]
-        if account and isinstance(account,AuthUser):
+        if account and isinstance(account, get_user_model()):
             old_uname_validator = StringEqualValidator(limit_value=account.username,
                      message="incorrect old username")
             old_passwd_validator = OldPasswdValidator(limit_value=account.password,

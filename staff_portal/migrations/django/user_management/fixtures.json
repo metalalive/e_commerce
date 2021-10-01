@@ -71,7 +71,7 @@
 },
 {
     "model": "user_management.genericuserappliedrole",
-    "pk": 1,
+    "pk": {"user_type": -1, "user_id": 1, "role": 1},
     "fields": {
         "time_deleted": null,
         "user_type": -1,
@@ -83,7 +83,7 @@
 },
 {
     "model": "user_management.genericuserappliedrole",
-    "pk": 2,
+    "pk": {"user_type": -1, "user_id": 2, "role": 2},
     "fields": {
         "time_deleted": null,
         "user_type": -1,
@@ -111,6 +111,30 @@
         "user_type": -1,
         "user_id": 2,
         "addr": "staff@yourteam.org"
+    }
+},
+{
+    "model": "user_management.quotamaterial",
+    "pk": 1,
+    "fields": {
+        "app_code": 1,
+        "mat_code": 1
+    }
+},
+{
+    "model": "user_management.quotamaterial",
+    "pk": 2,
+    "fields": {
+        "app_code": 1,
+        "mat_code": 2
+    }
+},
+{
+    "model": "user_management.quotamaterial",
+    "pk": 3,
+    "fields": {
+        "app_code": 1,
+        "mat_code": 3
     }
 }
 ]

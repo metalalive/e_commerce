@@ -1,45 +1,22 @@
 import logging
 
 from django.core.exceptions     import ObjectDoesNotExist, MultipleObjectsReturned, PermissionDenied
-from django.contrib.auth.models import User as AuthUser
 from rest_framework.settings    import api_settings as drf_settings
 from rest_framework.response    import Response as RestResponse
 from rest_framework             import status as RestStatus
 
-from common.views.proxy.mixins import BaseGetProfileIDMixin
 from ..apps   import UserManagementConfig as UserMgtCfg
-from ..models import AuthUserResetRequest, EmailAddress, GenericUserProfile
+from ..models.base import EmailAddress, GenericUserProfile
+from ..models.auth import AccountResetRequest
 from .constants import LOGIN_WEB_URL
 
 _logger = logging.getLogger(__name__)
-
-class GetProfileIDMixin(BaseGetProfileIDMixin):
-    def get_profile(self, account, **kwargs):
-        if not hasattr(self, '_cache_profile'):
-            try:
-                self._cache_profile = account.genericuserauthrelation.profile
-            except ObjectDoesNotExist as e:
-                anonymous_profile_cls = type('anonymous_profile', (), {'id':self.UNKNOWN_ID})
-                self._cache_profile = anonymous_profile_cls()
-        return self._cache_profile
-
-    def get_profile_id(self, request, **kwargs):
-        account = request.user
-        if account and isinstance(account, AuthUser):
-            profile = self.get_profile(account=account)
-            profile_id = profile.id
-        else:
-            # which means it is an unauthenticated access to the profile,
-            # application developers should analyze log data and determine whether this
-            # part of the system has been compromised.
-            profile_id = self.UNKNOWN_ID
-        return str(profile_id)
 
 
 def check_auth_req_token(fn_succeed, fn_failure):
     def inner(self, request, *args, **kwargs):
         activate_token = kwargs.get('token', None)
-        auth_req = AuthUserResetRequest.is_token_valid(activate_token)
+        auth_req = AccountResetRequest.is_token_valid(activate_token)
         if auth_req:
             kwargs['auth_req'] = auth_req
             resp_kwargs = fn_succeed(self, request, *args, **kwargs)
@@ -62,7 +39,7 @@ class AuthTokenCheckMixin:
 
 ## --------------------------------------------------------------------------------------
 # process single user at a time
-# create new request in AuthUserResetRequest for either changing username or password
+# create new request in AccountResetRequest for either changing username or password
 # Send mail with account-reset URL page to the user
 
 def get_profile_account_by_email(addr:str, request):

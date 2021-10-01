@@ -8,6 +8,7 @@ from rest_framework.response    import Response as RestResponse
 from rest_framework             import status as RestStatus
 from rest_framework.settings    import api_settings
 from rest_framework.mixins      import CreateModelMixin, UpdateModelMixin, DestroyModelMixin
+from rest_framework.exceptions  import ErrorDetail, ParseError
 
 from common.models.db  import db_conn_retry_wrapper
 
@@ -107,8 +108,6 @@ def _get_serializer_data(view, serializer):
 
 
 class ExtendedListModelMixin:
-    # this mixin class has to work with any subclass of 
-    # common.views.proxy.mixins.BaseGetProfileIDMixin
     def list(self, request, *args, **kwargs):
         s_data = {}
         page = None
@@ -129,7 +128,7 @@ class ExtendedListModelMixin:
         else:
             _id_list = "FETCH_ALL"
         model_cls_hier = "%s.%s" % (queryset.model.__module__ , queryset.model.__name__)
-        log_msg = ['action', 'view_list', 'profile_id', self.get_profile_id(request=request),
+        log_msg = ['action', 'view_list', 'profile_id', request.user.pk,
                 'model_cls', model_cls_hier, 'IDs', _id_list,]
         _logger.debug(None, *log_msg, request=request, stacklevel=1)
         if page:
@@ -140,8 +139,6 @@ class ExtendedListModelMixin:
 
 
 class ExtendedRetrieveModelMixin:
-    # this mixin class has to work with any subclass of 
-    # common.views.proxy.mixins.BaseGetProfileIDMixin
     def retrieve(self, request, *args, **kwargs):
         status = None
         s_data = {}
@@ -152,7 +149,7 @@ class ExtendedRetrieveModelMixin:
             serializer = self.get_serializer(instance, **serializer_kwargs)
             s_data = _get_serializer_data(self, serializer)
             model_cls_hier = "%s.%s" % (type(instance).__module__ , type(instance).__name__)
-            log_msg = ['action', 'view_item', 'profile_id', self.get_profile_id(request=request),
+            log_msg = ['action', 'view_item', 'profile_id', request.user.pk,
                     'model_cls', model_cls_hier, 'ID', instance.pk,]
             _logger.debug(None, *log_msg, request=request)
         except ObjectDoesNotExist as e:
@@ -161,8 +158,6 @@ class ExtendedRetrieveModelMixin:
 
 
 class UserEditViewLogMixin:
-    # this mixin class has to work with any subclass of 
-    # common.views.proxy.mixins.BaseGetProfileIDMixin
     def log_action(self, action_type, request, many, serializer):
         ## self.get_serializer_class()
         if many: # instance should be either QuerySet or Model
@@ -172,7 +167,7 @@ class UserEditViewLogMixin:
         else:
             item_labels = [serializer.instance.minimum_info]
             model_cls = type(serializer).Meta.model
-        profile_id = self.get_profile_id(request=request)
+        profile_id = request.user.pk
         self._log_action(action_type=action_type, request=request, affected_items=item_labels,
                 model_cls=model_cls, profile_id=profile_id, stacklevel=3)
 
@@ -197,12 +192,12 @@ class UserEditViewLogMixin:
 
 class BulkCreateModelMixin(CreateModelMixin, UserEditViewLogMixin):
     """ override create() method to add more arguments """
-    def create(self, request, *args, **kwargs):
-        many = kwargs.pop('many', False)
-        return_data_after_done = kwargs.pop('return_data_after_done', True)
-        exc_wr_fields = kwargs.pop('exc_wr_fields', None)
-        serializer_kwargs = {'data': request.data, 'many': many, 'account': request.user,}
-        serializer_kwargs.update(kwargs.pop('serializer_kwargs', {}))
+    def create(self, request, *args, many=False, return_data_after_done=True, exc_wr_fields=None,
+            serializer_kwargs=None, **kwargs):
+        if not request.data:
+            raise ParseError(detail=ErrorDetail('request data should not be empty'))
+        serializer_kwargs = serializer_kwargs or {}
+        serializer_kwargs.update({'data': request.data, 'many': many, 'account': request.user,})
         if exc_wr_fields:
             serializer_kwargs['exc_wr_fields'] = exc_wr_fields
         serializer = self.get_serializer( **serializer_kwargs )
@@ -221,16 +216,9 @@ class BulkCreateModelMixin(CreateModelMixin, UserEditViewLogMixin):
 
 class BulkUpdateModelMixin(UpdateModelMixin, UserEditViewLogMixin):
     """ override update() method to add more arguments """
-    def update(self, request, *args, **kwargs):
-        many = kwargs.pop('many', False)
-        return_data_after_done = kwargs.pop('return_data_after_done', True)
-        partial = kwargs.pop('partial', False)
-        allow_create = kwargs.pop('allow_create', False)
-
-        pk_src = kwargs.pop('pk_src', LimitQuerySetMixin.REQ_SRC_QUERY_PARAMS)
-        pk_param_name = kwargs.pop('pk_param_name', 'ids')
-        pk_field_name = kwargs.pop('pk_field_name', 'id')
-        pk_skip_list = kwargs.pop('pk_skip_list', None)
+    def update(self, request, *args, many=False, return_data_after_done=True, partial=False,
+            allow_create=False, pk_src=LimitQuerySetMixin.REQ_SRC_QUERY_PARAMS, pk_param_name='ids',
+            pk_field_name='id', pk_skip_list=None, exc_wr_fields=None, **kwargs):
         if many:
             instance = self.get_queryset(pk_param_name=pk_param_name, pk_field_name=pk_field_name,
                         pk_src=pk_src, pk_skip_list=pk_skip_list )
@@ -244,7 +232,6 @@ class BulkUpdateModelMixin(UpdateModelMixin, UserEditViewLogMixin):
             return_data = {api_settings.NON_FIELD_ERRORS_KEY:err_msgs}
             status = RestStatus.HTTP_400_BAD_REQUEST
         else:
-            exc_wr_fields = kwargs.pop('exc_wr_fields', None)
             serializer_kwargs = {'data': request.data, 'partial':partial,'many': many, 'account': request.user,}
             serializer_kwargs.update(kwargs.pop('serializer_kwargs', {}))
             if exc_wr_fields:
@@ -268,8 +255,6 @@ class BulkUpdateModelMixin(UpdateModelMixin, UserEditViewLogMixin):
 
 
 class BulkDestroyModelMixin(DestroyModelMixin, UserEditViewLogMixin):
-    # this mixin class has to work with any subclass of 
-    # common.views.proxy.mixins.BaseGetProfileIDMixin
     def destroy(self, request, *args, **kwargs):
         many = kwargs.pop('many', False)
         status_ok = kwargs.pop('status_ok', RestStatus.HTTP_204_NO_CONTENT)
@@ -294,7 +279,7 @@ class BulkDestroyModelMixin(DestroyModelMixin, UserEditViewLogMixin):
         if instance:
             self.perform_destroy(instance=instance, id_list=_id_list)
             self._log_action(action_type='delete', request=request, affected_items=item_labels,
-                    model_cls=model_cls, profile_id=self.get_profile_id(request=request))
+                    model_cls=model_cls, profile_id=request.user.pk)
             return_data = None
         else:
             status_ok = RestStatus.HTTP_400_BAD_REQUEST
@@ -308,7 +293,7 @@ class BulkDestroyModelMixin(DestroyModelMixin, UserEditViewLogMixin):
         _logger.debug("is_softdelete = %s", is_softdelete, request=self.request)
         kwargs = {}
         if is_softdelete:
-            kwargs['profile_id'] = self.get_profile_id(request=self.request)
+            kwargs['profile_id'] = self.request.user.pk
         # add callback accessibility because deletion is NOT handled by serializer
         failure_callback = getattr(self, 'delete_failure_callback', None)
         success_callback = getattr(self, 'delete_success_callback', None)

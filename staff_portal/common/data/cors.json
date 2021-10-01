@@ -2,8 +2,7 @@
     "ALLOWED_ORIGIN": {
         "fronted_dev" : "http://localhost:3000",
         "web" : "http://localhost:8006",
-        "api" : "http://localhost:8007",
-        "usermgt" : "http://localhost:8008",
+        "user_management" : "http://localhost:8008",
         "product" : "http://localhost:8009",
         "fileupload" : "http://localhost:8010"
     },

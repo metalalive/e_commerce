@@ -3,7 +3,7 @@ from django.contrib.contenttypes.models  import ContentType
 from common.serializers  import  ExtendedModelSerializer
 from common.serializers.mixins  import  NestedFieldSetupMixin
 
-from ..models import GenericUserGroup, GenericUserProfile
+from ..models.base import GenericUserGroup, GenericUserProfile
 
 
 class ConnectedGroupField(ExtendedModelSerializer):

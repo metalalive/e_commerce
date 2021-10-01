@@ -2,7 +2,6 @@ import logging
 from datetime  import datetime, timedelta, date
 
 from django.utils.module_loading import import_string
-from django.contrib.auth.models import User as AuthUser
 from celery.backends.rpc import RPCBackend as CeleryRpcBackend
 
 from common.auth.keystore import create_keystore_helper
@@ -10,8 +9,9 @@ from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
 from common.util.python.celery import app as celery_app
 from common.logging.util  import log_fn_wrapper
 
-from .models import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, _atomicity_fn
-from .models import GenericUserAppliedRole, GenericUserGroupRelation, AuthUserResetRequest
+from .models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, _atomicity_fn, GenericUserAppliedRole, GenericUserGroupRelation
+from .models.auth import AccountResetRequest
+from django.contrib import auth
 
 _logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def clean_expired_auth_token(days):
     td = timedelta(days=days)
     t0 = datetime.now()
     t0 = t0 - td
-    expired = AuthUserResetRequest.objects.filter(time_created__lt=t0)
+    expired = AccountResetRequest.objects.filter(time_created__lt=t0)
     result = expired.values('id', 'profile__pk', 'email__email__addr', 'time_created')
     result = list(result)
     expired.delete()
@@ -85,8 +85,8 @@ def rotate_keystores(modules_setup):
 @log_fn_wrapper(logger=_logger, loglevel=logging.WARNING, log_if_succeed=False)
 def get_profile(account_id, field_names, services_label=None):
     account_id = int(account_id)
-    account = AuthUser.objects.get(pk=account_id)
-    profile = account.genericuserauthrelation.profile
+    account = auth.get_user_model().objects.get(pk=account_id)
+    profile = account.profile
     data = profile.serializable(present=field_names, services_label=services_label)
     return data
 

@@ -36,22 +36,23 @@ INSTALLED_APPS = [
     # each application folder, give dotted path of the subclass at here
     # to complete application registry.
     'rest_framework',
-    'softdelete.apps.SoftdeleteConfig',
-    'location.apps.LocationConfig',
     'user_management.apps.UserManagementConfig',
 ]
 
 # TODO, apply domain name filter at IP layer, only accept requests from trusted proxy server
 MIDDLEWARE = [
+    'common.cors.middleware.CorsHeaderMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'common.csrf.middleware.ExtendedCsrfViewMiddleware',
+    #'django.middleware.clickjacking.XFrameOptionsMiddleware', # TODO, figure out do I really need this ?
 ]
 
 ROOT_URLCONF = 'user_management.urls'
 
 TEMPLATES = []
 
-FIXTURE_DIRS = ['my_fixtures',]
+FIXTURE_DIRS = ['migrations/django/user_management',]
 
 # referenced only by development server (`runserver` command)
 WSGI_APPLICATION = 'common.util.python.django.wsgi.application'
@@ -73,7 +74,7 @@ DATABASES = { # will be update with secrets at the bottom of file
     'usermgt_service': {
         'ENGINE': 'django.db.backends.mysql',
         'CONN_MAX_AGE': 0,
-        'reversed_app_label': ['user_management', 'auth', 'location']
+        'reversed_app_label': ['user_management', 'auth',]
     },
 } # end of database settings
 
@@ -95,8 +96,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+AUTH_USER_MODEL = 'user_management.LoginAccount'
 
-AUTHENTICATION_BACKENDS = ['common.auth.backends.ForwardClientBackend']
+AUTHENTICATION_BACKENDS = ['user_management.backends.ExtendedModelBackend']
 
 
 CACHES = {
@@ -133,7 +135,31 @@ AUTH_KEYSTORE = {
     },
 }
 
-JWT_REMOTE_ACCESS_TOKEN_VALID_PERIOD = 660
+# in this backend app, session will NOT be used, the parameter below is only for
+# synchronization of refresh token and CSRF token for authenticated users
+SESSION_COOKIE_AGE = 600
+# this project stores refresh JWT to cookie (with httponly flag) in frontend client,
+# while access token can be requested by another API endpoint with valid refresh token
+JWT_NAME_REFRESH_TOKEN = 'jwt_refresh_token'
+# Note:
+# * the valid period is estimated in seconds
+# * the period for refresh token is not configurable, it has to be the
+#   same as the period for session (SESSION_COOKIE_AGE, used in web app)
+# * the period for access token has to be divisible by the period for refresh token
+JWT_ACCESS_TOKEN_VALID_PERIOD = 120
+JWT_REFRESH_TOKEN_VALID_PERIOD = SESSION_COOKIE_AGE
+
+# the header name used for CSRF authentication,
+# e.g. according to setting below, frontend may send request "anti-csrf-tok" in the header
+CSRF_HEADER_NAME = 'HTTP_X_ANTI_CSRF_TOK'
+# In this project web app sends response with the header CSRF_COOKIE_NAME, which stores CSRF
+# token to client, the client would send other unsafe request with the same CSRF token at a later time.
+CSRF_COOKIE_NAME = 'anticsrftok'
+# the parameter below is only referrenced for unauthenticated accesses.
+# for authenticated accesses , the token expiry is bound to session expiry
+# (used by web app) and JWT token (used by all other backend apps)
+CSRF_COOKIE_AGE  = 12 * 3600
+CSRF_COOKIE_AGE_AUTHED_USER = SESSION_COOKIE_AGE
 
 
 # Internationalization

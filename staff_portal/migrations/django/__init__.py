@@ -72,11 +72,13 @@ def _render_usermgt_fixture(src):
         parts = item['model'].split('.')
         model_name = parts[-1]
         fields = item['fields']
+        pk = item['pk']
         if model_name == GenericUserProfile.__name__.lower():
             fields['time_created'] = now_time
             fields['last_updated'] = now_time
         elif model_name == GenericUserAppliedRole.__name__.lower():
             fields['last_updated'] = now_time
+            pk['user_type'] = item['fields']['user_type']
         elif model_name == LoginAccount.__name__.lower():
             fields['last_login'] = now_time
             fields['date_joined'] = now_time

@@ -10,6 +10,7 @@ from jwt.exceptions import PyJWKClientError
 
 from common.util.python  import ExtendedDict
 from common.auth.keystore import AbstractKeystorePersistReadMixin, RSAKeygenHandler
+
 _logger = logging.getLogger(__name__)
 
 

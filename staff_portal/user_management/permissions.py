@@ -5,23 +5,40 @@ from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework.settings   import api_settings
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import DjangoModelPermissions, DjangoObjectPermissions
+from rest_framework.permissions import BasePermission as DRFBasePermission, DjangoModelPermissions, DjangoObjectPermissions
 from rest_framework.filters import BaseFilterBackend
 
-from .models import GenericUserGroup,  GenericUserGroupClosure, GenericUserProfile, GenericUserGroupRelation
+from .models.base import GenericUserGroup,  GenericUserGroupClosure, GenericUserProfile, GenericUserGroupRelation
 
 _logger = logging.getLogger(__name__)
 """
 permissions for views in staff-only backend site
 """
 
-class QuotaMaterialPermissions(DjangoModelPermissions):
-    # for GET method, the permission code should be contenttypes.view_contenttype
+class JWTclaimPermissionMixin:
+    def _has_permission(self, tok_payld, method):
+        from common.models.constants  import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+        priv_status = tok_payld['priv_status']
+        if priv_status == ROLE_ID_SUPERUSER:
+            result = True
+        elif priv_status == ROLE_ID_STAFF:
+            perms_from_usr = list(map(lambda d:d['codename'] , tok_payld['perms']))
+            perms_required = self.perms_map.get(method, [])
+            covered = set(perms_required) - set(perms_from_usr)
+            result = not any(covered)
+        else:
+            result = False
+        return result
+
+
+class ModelLvlPermsPermissions(DRFBasePermission, JWTclaimPermissionMixin):
     perms_map = {
-        'GET':     ['%(app_label)s.view_%(model_name)s'],
-        'OPTIONS': ['%(app_label)s.view_%(model_name)s'],
-        'HEAD':    ['%(app_label)s.view_%(model_name)s'],
+        'GET': ['view_role'],
+        'OPTIONS': [],
     }
+
+    def has_permission(self, request, view):
+        return self._has_permission(tok_payld=request.auth, method=request.method)
 
 
 class BaseValidObjectsMixin:
@@ -54,15 +71,15 @@ class BaseRolePermission(DjangoModelPermissions, BaseFilterBackend, BaseValidObj
     message = {api_settings.NON_FIELD_ERRORS_KEY: ['you do not have permission to perform the operation']}
 
 
-class AuthRolePermissions(BaseRolePermission):
+class RolePermissions(BaseRolePermission, JWTclaimPermissionMixin):
     perms_map = {
-        'GET': ['auth.view_permission', '%(app_label)s.view_%(model_name)s'],
+        'GET': ['view_role',],
         'OPTIONS': [],
         'HEAD': [],
-        'POST':   ['auth.view_permission', '%(app_label)s.view_%(model_name)s', '%(app_label)s.add_%(model_name)s'],
-        'PUT':    ['auth.view_permission', '%(app_label)s.view_%(model_name)s', '%(app_label)s.change_%(model_name)s'],
-        'PATCH':  ['auth.view_permission', '%(app_label)s.view_%(model_name)s', '%(app_label)s.change_%(model_name)s'],
-        'DELETE': ['auth.view_permission', '%(app_label)s.view_%(model_name)s', '%(app_label)s.delete_%(model_name)s'],
+        'POST':   ['view_role', 'add_role',   ],
+        'PUT':    ['view_role', 'change_role',],
+        'PATCH':  ['view_role', 'change_role',],
+        'DELETE': ['view_role', 'delete_role',],
     }
 
     def filter_queryset(self, request, queryset, view):
@@ -71,25 +88,27 @@ class AuthRolePermissions(BaseRolePermission):
         except it's superuser
         """
         account = request.user
-        full_access = getattr(view, '_perms_full_access', False)
-        if not account.is_superuser and not full_access:
+        read_all = getattr(view, '_can_read_all_perms', False)
+        if not account.is_superuser and not read_all:
+            import pdb
+            pdb.set_trace()
             valid_roles = self._get_valid_roles(account=account, view=view)
             queryset = queryset.filter(pk__in=valid_roles)
         return queryset
 
     def has_permission(self, request, view):
-        result = super().has_permission(request=request, view=view)
-        view._perms_full_access = result
+        result = self._has_permission(tok_payld=request.auth, method=request.method)
         # still return true for safe method like GET, because unauthorized users still
         # can only view the roles granted to themselves, But NOT allowed to modify
+        view._can_read_all_perms = result
         if result is False and request.method == 'GET':
             result = True
         return result
 
     def has_object_permission(self, request, view, obj):
         account = request.user
-        full_access = getattr(view, '_perms_full_access', False)
-        if account.is_superuser or full_access:
+        read_all = getattr(view, '_can_read_all_perms', False)
+        if account.is_superuser or read_all:
             result = True
         else:
             valid_roles = self._get_valid_roles(account=account, view=view)
