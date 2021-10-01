@@ -45,8 +45,7 @@ class CommonAPIReadView(LimitQuerySetMixin, GenericAPIView, ExtendedListModelMix
     def paginate_queryset(self, queryset):
         return  super().paginate_queryset(queryset=queryset)
 
-    def get(self, request, *args, **kwargs):
-        pk = kwargs.get('pk', None)
+    def get(self, request, *args, pk=None, **kwargs):
         if pk:
             return self.retrieve(request, *args, **kwargs)
         else:

@@ -255,13 +255,10 @@ class BulkUpdateModelMixin(UpdateModelMixin, UserEditViewLogMixin):
 
 
 class BulkDestroyModelMixin(DestroyModelMixin, UserEditViewLogMixin):
-    def destroy(self, request, *args, **kwargs):
-        many = kwargs.pop('many', False)
-        status_ok = kwargs.pop('status_ok', RestStatus.HTTP_204_NO_CONTENT)
-        pk_src = kwargs.pop('pk_src', LimitQuerySetMixin.REQ_SRC_QUERY_PARAMS)
-        pk_param_name = kwargs.pop('pk_param_name', 'ids')
-        pk_field_name = kwargs.pop('pk_field_name', 'id')
-        pk_skip_list = kwargs.pop('pk_skip_list', None)
+    def destroy(self, request, *args, many=False, pk_src=LimitQuerySetMixin.REQ_SRC_QUERY_PARAMS,
+            pk_param_name='ids', pk_field_name='id', pk_skip_list=None,
+            status_ok=RestStatus.HTTP_204_NO_CONTENT, status_err=RestStatus.HTTP_400_BAD_REQUEST,
+            err_msg='not specify any ID, no object is deleted', **kwargs):
         extra_log_kwargs = {}
         if many:
             instance = self.get_queryset(pk_param_name=pk_param_name, pk_field_name=pk_field_name,
@@ -282,8 +279,8 @@ class BulkDestroyModelMixin(DestroyModelMixin, UserEditViewLogMixin):
                     model_cls=model_cls, profile_id=request.user.pk)
             return_data = None
         else:
-            status_ok = RestStatus.HTTP_400_BAD_REQUEST
-            return_data = {api_settings.NON_FIELD_ERRORS_KEY: ['not specify any ID, no object is deleted']}
+            status_ok = status_err
+            return_data = {api_settings.NON_FIELD_ERRORS_KEY: [err_msg]}
         return RestResponse(return_data, status=status_ok)
 
 

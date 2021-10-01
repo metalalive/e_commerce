@@ -1,6 +1,7 @@
 import logging
 
-from django.core.validators    import EMPTY_VALUES
+from django.core.validators   import EMPTY_VALUES
+from django.db.models         import Q
 from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework.settings   import api_settings
@@ -42,11 +43,6 @@ class ModelLvlPermsPermissions(DRFBasePermission, JWTclaimPermissionMixin):
 
 
 class BaseValidObjectsMixin:
-    def _get_valid_roles(self, account, view):
-        if not hasattr(view, '_valid_roles_pk'):
-            view._valid_roles_pk = account.roles_applied.values_list('role__pk', flat=True)
-        return view._valid_roles_pk
-
     def _get_valid_groups(self, account, view):
         if not hasattr(view, '_valid_groups_pk'):
             profile = account.genericuserauthrelation.profile
@@ -88,32 +84,36 @@ class RolePermissions(BaseRolePermission, JWTclaimPermissionMixin):
         except it's superuser
         """
         account = request.user
-        read_all = getattr(view, '_can_read_all_perms', False)
+        read_all = getattr(view, '_can_read_all_roles', False)
         if not account.is_superuser and not read_all:
-            import pdb
-            pdb.set_trace()
-            valid_roles = self._get_valid_roles(account=account, view=view)
-            queryset = queryset.filter(pk__in=valid_roles)
+            valid_roles = account.profile.all_roles
+            direct_role_ids  = valid_roles['direct'].values_list('id', flat=True)
+            inherit_role_ids = valid_roles['inherit'].values_list('id', flat=True)
+            condition = Q(id__in=direct_role_ids) | Q(id__in=inherit_role_ids)
+            queryset = queryset.filter(condition)
         return queryset
 
     def has_permission(self, request, view):
         result = self._has_permission(tok_payld=request.auth, method=request.method)
         # still return true for safe method like GET, because unauthorized users still
         # can only view the roles granted to themselves, But NOT allowed to modify
-        view._can_read_all_perms = result
+        view._can_read_all_roles = result
         if result is False and request.method == 'GET':
             result = True
         return result
 
     def has_object_permission(self, request, view, obj):
         account = request.user
-        read_all = getattr(view, '_can_read_all_perms', False)
+        read_all = getattr(view, '_can_read_all_roles', False)
         if account.is_superuser or read_all:
             result = True
         else:
-            valid_roles = self._get_valid_roles(account=account, view=view)
-            result = valid_roles.filter(role__pk=obj.pk).exists()
+            valid_roles = account.profile.all_roles
+            result_d = valid_roles['direct'].filter(id=obj.pk).exists()
+            result_i = valid_roles['inherit'].filter(id=obj.pk).exists()
+            result = result_d or result_i
         return result
+## end of class RolePermissions
 
 
 class AppliedRolePermissions(BaseRolePermission):
@@ -154,8 +154,10 @@ class AppliedRolePermissions(BaseRolePermission):
                 role_pk = view.kwargs.get('pk', 0)
                 log_args = ['role_pk', role_pk, 'account_id', account.pk]
                 if role_pk.isdigit():
-                    valid_roles = self._get_valid_roles(account=account, view=view)
-                    result = valid_roles.filter(role__pk=role_pk).exists()
+                    valid_roles = account.profile.all_roles
+                    result_d = valid_roles['direct'].filter(id=role_pk).exists()
+                    result_i = valid_roles['inherit'].filter(id=role_pk).exists()
+                    result = result_d or result_i
                     log_args.extend(['valid_roles', valid_roles])
                 else:
                     result = False
@@ -267,7 +269,7 @@ class UserGroupsPermissions(CommonUserPermissions):
         account = request.user
         method = request.method
         req_payld = request.data
-        valid_roles = self._get_valid_roles(account=account, view=view)
+        valid_roles = account.profile.all_roles
         valid_grps  = self._get_valid_groups(account=account, view=view)
         err_msgs = []
         log_args = ['request_method', method, 'valid_roles', valid_roles, 'valid_grps', valid_grps]
@@ -294,7 +296,8 @@ class UserGroupsPermissions(CommonUserPermissions):
                         err_msg['exist_parent'] = ["you must select parent for the group you currently edit"]
                 elif exist_parent and not valid_grps['all'].filter(descendant__pk=int(exist_parent)).exists():
                     err_msg['exist_parent'] = ["not allowed to select the parent group ID {}".format(exist_parent)]
-                num_valid_roles = valid_roles.filter(role__pk__in=roles).count()
+                num_valid_roles = valid_roles['direct'].filter(id__in=roles).count() + \
+                        valid_roles['inherit'].filter(id__in=roles).count()
                 if len(roles) != num_valid_roles:
                     # check whether the logged-in user has permission to grant all
                     # the roles to the edit subgroup
@@ -486,7 +489,7 @@ class UserProfilesPermissions(CommonUserPermissions):
         result = True
         account = request.user
         req_payld = request.data
-        valid_roles = self._get_valid_roles(account=account, view=view)
+        valid_roles = account.profile.all_roles
         valid_grps  = self._get_valid_groups(account=account, view=view)
         valid_profs = self._get_valid_profs(account=account, view=view)
         err_msgs = []
@@ -497,7 +500,9 @@ class UserProfilesPermissions(CommonUserPermissions):
                 grps  = data.get('groups', [])
                 roles = data.get('roles', [])
                 num_valid_grps  = valid_grps['all'].filter(descendant__pk__in=grps).count()
-                num_valid_roles = valid_roles.filter(role__pk__in=roles).count()
+                # TODO be aware of overlapping roles (the same role in both of user and group)
+                num_valid_roles = valid_roles['direct'].filter(id__in=roles).count() + \
+                            valid_roles['inherit'].filter(id__in=roles).count()
                 if pid and not valid_profs.filter(pk=int(pid)).exists():
                     err_msg[api_settings.NON_FIELD_ERRORS_KEY] = ["not allowed to edit the user profile (ID = {})".format(pid),]
                 if len(grps) != num_valid_grps:

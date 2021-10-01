@@ -19,6 +19,8 @@ from user_management.tests.common import _fixtures, client_req_csrf_setup, Authe
 
 non_fd_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 
+_srlz_fn = lambda role: {'id': role.id, 'name':role.name, 'permissions': list(role.permissions.values_list('id', flat=True))}
+
 
 def _setup_user_roles(profile, approved_by, extra_role_data=None):
     role_data = [
@@ -208,10 +210,15 @@ class _RoleBaseUpdateTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin,
         self.api_call_kwargs = client_req_csrf_setup()
         self._permissions = Permission.objects.all()
 
-    def _prepare_access_token(self, new_perms_info):
-        qset = Permission.objects.filter(content_type__app_label='user_management',
+    def tearDown(self):
+        self._client.cookies.clear()
+
+    def _prepare_access_token(self, new_perms_info, app_labels=None):
+        app_labels = app_labels or ['user_management']
+        qset = Permission.objects.filter(content_type__app_label__in=app_labels,
                 codename__in=new_perms_info)
-        self._roles[1].permissions.set(qset)
+        if qset.exists():
+            self._roles[1].permissions.set(qset)
         acs_tok_resp = self._refresh_access_token(testcase=self, audience=['user_management'])
         access_token = acs_tok_resp['access_token']
         self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
@@ -225,6 +232,8 @@ class RoleUpdateTestCase(_RoleBaseUpdateTestCase):
         self.api_call_kwargs.update({'path': self.path, 'method':'put'})
 
     def test_no_permission(self):
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 401)
         self._prepare_access_token(new_perms_info=['add_role', 'view_role'])
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 403)
@@ -280,8 +289,6 @@ class RoleUpdateTestCase(_RoleBaseUpdateTestCase):
 
     def test_bulk_ok(self):
         self._prepare_access_token(new_perms_info=['view_role','change_role'])
-        _srlz_fn = lambda role: {'id': role.id, 'name':role.name, 'permissions': \
-                list(role.permissions.values_list('id', flat=True))}
         body = list(map(_srlz_fn, self._roles[2:]))
         all_perm_ids = self._permissions.filter(codename__contains='generic').values_list('id', flat=True)
         for item in body:
@@ -306,17 +313,108 @@ class RoleUpdateTestCase(_RoleBaseUpdateTestCase):
 
 class RoleDeletionTestCase(_RoleBaseUpdateTestCase):
     path = '/roles'
+    def setUp(self):
+        super().setUp()
+        self.api_call_kwargs.update({'path': self.path, 'method':'delete'})
 
-    def test_delete_reserved_roles(self):
-        pass
+    def test_no_permission(self):
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 401)
+        self._prepare_access_token(new_perms_info=['view_emailaddress', 'view_role'])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 403)
+
+    def test_invalid_ids(self):
+        self._prepare_access_token(new_perms_info=['view_role', 'delete_role'])
+        # subcase #1 : attempt to delete reserved role(s)
+        delete_ids = list(map(lambda idx: self._roles[idx].id , [0,2,4]))
+        self.assertIn(ROLE_ID_STAFF, delete_ids)
+        self.api_call_kwargs['ids'] = delete_ids
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 409)
+        err_info = response.json()
+        expect_err_msg = 'not allowed to delete preserved role ID = {%s}' % ROLE_ID_STAFF
+        self.assertIn(expect_err_msg , err_info[non_fd_err_key])
+        # subcase #2 : text id which contains English letter
+        delete_ids.append('32s8')
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 400)
+        err_info = response.json()
+        self.assertEqual('ids field has to be a list of number', err_info['detail'])
 
     def test_bulk_ok(self):
-        #import pdb
-        #pdb.set_trace()
-        pass
+        self._prepare_access_token(new_perms_info=['view_role', 'delete_role'])
+        delete_ids = list(map(lambda idx: self._roles[idx].id , [2,4]))
+        self.api_call_kwargs['ids'] = delete_ids
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 204)
+        role_cnt = Role.objects.filter(id__in=delete_ids).count()
+        self.assertEqual(role_cnt , 0)
+
 
 class RoleQueryTestCase(_RoleBaseUpdateTestCase):
     path = ['/roles', '/role/%s']
 
+    def setUp(self):
+        super().setUp()
+        # create extra roles which are NOT applied to an user, user
+        # can all the existing roles including those unapplied only if
+        # the user has `view_role` low-level permission
+        extra_role_data = [
+            {'id':10, 'name':'unapplied role 001',},
+            {'id':11, 'name':'unapplied role 002',},
+            {'id':12, 'name':'unapplied role 003',},
+        ]
+        self._unapplied_roles  = tuple(map(lambda d:Role.objects.create(**d) , extra_role_data))
+        perms = self._permissions.filter(codename__contains='phone')
+        perms_iter = iter(perms)
+        for ur in self._unapplied_roles:
+            perm = next(perms_iter)
+            ur.permissions.set([perm])
+
+    def test_read_roles_applied_only(self):
+        self.api_call_kwargs.update({'path': self.path[0], 'method':'get'})
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 401)
+        self._prepare_access_token(new_perms_info=[])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        expect_result = list(map(_srlz_fn, self._roles))
+        actual_result = response.json()
+        expect_result = sort_nested_object(expect_result)
+        actual_result = sort_nested_object(actual_result)
+        self.assertListEqual(expect_result, actual_result)
+
+
+    def test_read_all_roles(self):
+        self.api_call_kwargs.update({'path': self.path[0], 'method':'get'})
+        self._prepare_access_token(new_perms_info=['view_role'])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        applied_role_data   = list(map(_srlz_fn, self._roles))
+        unapplied_role_data = list(map(_srlz_fn, self._unapplied_roles))
+        expect_result = []
+        expect_result.extend(applied_role_data)
+        expect_result.extend(unapplied_role_data)
+        actual_result = response.json()
+        expect_result = sort_nested_object(expect_result)
+        actual_result = sort_nested_object(actual_result)
+        self.assertListEqual(expect_result, actual_result)
+
+    def test_read_single_role(self):
+        chosen_role = self._unapplied_roles[0]
+        path = self.path[1] % chosen_role.id
+        self.api_call_kwargs.update({'path': path, 'method':'get'})
+        # subcase #1: read unapplied role without `view_role` permission
+        self._prepare_access_token(new_perms_info=[])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 403)
+        # subcase #2: read unapplied role with `view_role` permission
+        self._prepare_access_token(new_perms_info=['view_role'])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        expect_result = _srlz_fn(chosen_role)
+        actual_result = response.json()
+        self.assertDictEqual(expect_result, actual_result)
 
 

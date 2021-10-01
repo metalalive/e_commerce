@@ -16,7 +16,7 @@ from rest_framework.filters     import OrderingFilter, SearchFilter
 from rest_framework.renderers   import JSONRenderer
 from rest_framework.response    import Response as RestResponse
 from rest_framework.permissions import DjangoModelPermissions, DjangoObjectPermissions
-from rest_framework.exceptions  import PermissionDenied
+from rest_framework.exceptions  import PermissionDenied, ParseError
 from rest_framework.settings    import api_settings as drf_settings
 
 from softdelete.views import RecoveryModelMixin
@@ -60,11 +60,6 @@ class RoleAPIView(AuthCommonAPIView):
     PRESERVED_ROLE_IDS = _PRESERVED_ROLE_IDS
     queryset = serializer_class.Meta.model.objects.all()
 
-    def get(self, request, *args, **kwargs):
-        if request.query_params.get('skip_preserved_role', None) is not None:
-            kwargs['pk_skip_list'] = self.PRESERVED_ROLE_IDS
-        return  super().get(request, *args, **kwargs)
-
     def post(self, request, *args, **kwargs):
         kwargs['many'] = True
         kwargs['return_data_after_done'] = True
@@ -80,18 +75,23 @@ class RoleAPIView(AuthCommonAPIView):
         return  self.update(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):
+        try:
+            IDs = self.get_IDs(pk_param_name='ids', pk_field_name='id',)
+            IDs = list(map(int, IDs))
+        except (ValueError, TypeError) as e:
+            raise ParseError('ids field has to be a list of number')
         # conflict happenes if frontend attempts to delete preserved roles (e.g. admin role)
-        IDs = self.get_IDs(pk_param_name='ids', pk_field_name='id',)
-        diff = set(self.PRESERVED_ROLE_IDS) & set(IDs)
-        if diff:
-            errmsg = 'not allowed to delete preserved role ID = {}'.format(str(diff))
-            context = {drf_settings.NON_FIELD_ERRORS_KEY: errmsg}
+        reserved_role_ids = set(self.PRESERVED_ROLE_IDS) & set(IDs)
+        if reserved_role_ids:
+            errmsg = 'not allowed to delete preserved role ID = {}'.format(str(reserved_role_ids))
+            context = {drf_settings.NON_FIELD_ERRORS_KEY: [errmsg]}
             response = RestResponse(data=context, status=RestStatus.HTTP_409_CONFLICT)
         else:
             kwargs['many'] = True
             kwargs['pk_skip_list'] = self.PRESERVED_ROLE_IDS
             response = self.destroy(request, *args, **kwargs)
         return response
+## end of class RoleAPIView
 
 
 class AppliedRoleReadAPIView(AuthCommonAPIReadView):
