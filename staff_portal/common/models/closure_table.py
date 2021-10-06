@@ -22,15 +22,6 @@ def get_paths_through_processing_node(with_deleted=False):
         return wrapper
     return inner
 
-#all_descendants = self.descendants.filter(with_deleted=with_deleted, depth__gt=0)
-#all_ancestors   = self.ancestors.filter(with_deleted=with_deleted, depth__gt=0)
-#search_ancestor = [a.ancestor.pk  for a in all_ancestors]
-#for d in all_descendants:
-#    for a in d.descendant.ancestors.all(with_deleted=with_deleted):
-#        if a.ancestor.pk in search_ancestor:
-#            kwargs['closure_path'] = a
-#            process_fn(self, *args, **kwargs)
-#            kwargs.pop('closure_path',None)
 
 
 def filter_closure_nodes_recovery(records_in, app_label, model_name):
@@ -47,16 +38,15 @@ def filter_closure_nodes_recovery(records_in, app_label, model_name):
     node_cls = node_ct.model_class()
     del_node = node_cls.objects.get(pk=record.changeset.object_id)
     path_ct = ContentType.objects.get(app_label=app_label , model=model_name)
-    ####cset_path_ids = [r.object_id for r in records_in.filter(content_type=path_ct.pk)]
     cset_path_ids = records_in.filter(content_type=path_ct.pk).values_list('object_id', flat=True)
     check_failed = False
-    # (1). check whether all the ancestors are at the same position as they were (if exists before this node was deleted)
+    # (1). check whether all the ancestors are at the same position as they were before this node was soft-deleted
     del_asc  = del_node.ancestors.filter(with_deleted=True, depth__gt=0, pk__in=cset_path_ids).order_by('depth')
     del_desc = del_node.descendants.filter(with_deleted=True, depth__gt=0, pk__in=cset_path_ids)
     log_msg = ['node_cls', node_cls, 'app_label', app_label, 'model_name', model_name,
             'path_ct', path_ct, 'del_node', del_node.pk]
     loglevel = logging.DEBUG
-    if del_asc.exists() : #any(del_asc)
+    if del_asc.exists(): # if the soft-deleted node is not root of a tree
         del_asc_0 = del_asc.first()
         if del_asc_0.depth != 1:  ####assert del_asc[0].depth == 1, ""
             err_msg = "There must be at least one parent immediately connected to this node"
@@ -66,7 +56,7 @@ def filter_closure_nodes_recovery(records_in, app_label, model_name):
             raise AssertionError(err_msg)
         parent = del_asc_0.ancestor
         new_asc = parent.ancestors.all()
-        del_asc_set = [(a.ancestor.pk, a.depth)     for a in del_asc]
+        del_asc_set = list(del_asc.values_list('ancestor','depth'))
         new_asc_set = [(a.ancestor.pk, a.depth + 1) for a in new_asc]
         diff = list(set(del_asc_set).symmetric_difference(new_asc_set))
         log_msg.extend(['del_asc_0.ancestor', parent.pk, 'del_asc_set', del_asc_set, 'new_asc_set', new_asc_set])
@@ -74,10 +64,10 @@ def filter_closure_nodes_recovery(records_in, app_label, model_name):
             check_failed = True
             log_msg.extend(['asc_check_failed', check_failed, 'asc_diff', diff])
             loglevel = logging.WARNING
-    else:
+    else: # the soft-deleted node is a root of a tree, it makes sense to come without any parent node
         parent = None
 
-    # (2). check whether all the descendants are as it were (if exists before this node was deleted)
+    # (2). check whether all the descendants of the soft-deleted node are still at the same positions
     if not check_failed and del_desc.exists(): #any(del_desc)
         children = del_desc.filter(depth=1)
         if children.exists() is False:  ####assert any(children),""

@@ -204,7 +204,7 @@ def monkeypatch_sqlquery_build_filter():
             clause.add(condition_, AND)
             require_outer = self._build_filter_isnull_outer(condition_=condition_,
                     current_negated=current_negated, clause=clause, targets=targets,
-                    join_list=join_list, join_info=join_info)
+                    join_list=join_list, join_info=join_info, alias=alias)
 
         return clause, used_joins if not require_outer else ()
     ## end of patched_build_filter()
@@ -224,7 +224,7 @@ def monkeypatch_sqlquery_build_filter():
             clause_out.add(condition_, AND)
 
     def _build_filter_isnull_outer(self, condition_, current_negated, clause,
-                targets,  join_list, join_info):
+                targets,  join_list, join_info, alias):
         lookup_type = condition_.lookup_name
         require_outer = lookup_type == 'isnull' and condition_.rhs is True and not current_negated
         if current_negated and (lookup_type != 'isnull' or condition_.rhs is False) and condition_.rhs is not None:

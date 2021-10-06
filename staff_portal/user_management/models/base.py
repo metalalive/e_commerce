@@ -206,7 +206,7 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
             if kwargs.get('changeset', None) is None:
                 profile_id = kwargs.get('profile_id')
                 kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
-            self._decrease_subtree_pathlen(*args, **kwargs)
+        self._decrease_subtree_pathlen(*args, **kwargs)
         # delete this node
         SoftDeleteObjectMixin.delete(self, *args, **kwargs)
         if not hard_delete: # logs the soft-deleted instance
@@ -214,9 +214,14 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
             # instead developers have to soft-delete them explicitly by calling
             # Model.delete() or QuerySet.delete()
             self.roles.all().delete(*args, **kwargs)
+            self.emails.all().delete(*args, **kwargs)
+            changeset = kwargs.pop('changeset', None)
+            kwargs.pop('profile_id', None)
+            self.quota.all().delete(*args, **kwargs)
+            self.phones.all().delete(*args, **kwargs)
+            self.locations.all().delete(*args, **kwargs)
             if _logger.level <= logging.DEBUG:
                 del_set_exist = type(self).objects.get_deleted_set().filter(pk=del_grp_id).exists()
-                changeset = kwargs['changeset']
                 cond = models.Q(ancestor=del_grp_id) | models.Q(descendant=del_grp_id)
                 del_paths_qset = GenericUserGroupClosure.objects.get_deleted_set().filter(cond)
                 del_paths_qset = del_paths_qset.values('pk', 'ancestor__pk', 'descendant__pk', 'depth')
@@ -224,8 +229,6 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
                 log_args = ['changeset_id', changeset.pk, 'del_grp_id', del_grp_id, 'del_set_exist', del_set_exist,
                         'del_paths_qset', del_paths_qset, 'cset_records', cset_records]
                 _logger.debug(None, *log_args)
-            kwargs.pop('changeset', None)
-            kwargs.pop('profile_id', None)
         #raise IntegrityError
 
 
@@ -258,7 +261,6 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
                 raise IntegrityError
         affected_paths.model.objects.bulk_update(affected_paths ,['depth'])
         _logger.debug(None, *log_args)
-        #### a.delete(*args, **kwargs)
 
     @get_paths_through_processing_node()
     def _increase_subtree_pathlen(self, affected_paths):
