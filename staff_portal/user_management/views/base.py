@@ -96,7 +96,7 @@ class RoleAPIView(AuthCommonAPIView):
 
 class AppliedRoleReadAPIView(AuthCommonAPIReadView):
     serializer_class = GenericUserRoleAssigner
-    queryset =  serializer_class.Meta.model.objects.order_by('-last_updated')
+    queryset =  serializer_class.Meta.model.objects.order_by('-expiry')
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [AppliedRolePermissions]
     filter_backends = [AppliedRolePermissions,]
 

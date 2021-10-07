@@ -3,6 +3,7 @@ import json
 
 from django.test import TransactionTestCase
 from django.db.models import Q
+from django.utils  import timezone
 
 from tests.python.common import TreeNodeMixin
 from common.util.python import sort_nested_object
@@ -11,33 +12,9 @@ from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, GenericUserGroup, GenericUserGroupClosure,  QuotaMaterial, EmailAddress, PhoneNumber, GeoLocation, UserQuotaRelation, GenericUserAppliedRole
 from user_management.models.auth import Role
 
+from ..common import _fixtures
+
 _data = {
-    Role: [
-        {'id':4, 'name':'my role #1'},
-        {'id':5, 'name':'my role #2'},
-        {'id':6, 'name':'my role #3'},
-    ],
-    QuotaMaterial: [
-        {"id": 1, "app_code": AppCodeOptions.user_management, "mat_code": QuotaMaterial._MatCodeOptions.MAX_NUM_EMAILS} ,
-        {"id": 2, "app_code": AppCodeOptions.user_management, "mat_code": QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS} ,
-        {"id": 3, "app_code": AppCodeOptions.product,    "mat_code": 1} ,
-        {"id": 4, "app_code": AppCodeOptions.product,    "mat_code": 17} ,
-        {"id": 5, "app_code": AppCodeOptions.fileupload, "mat_code": 38} ,
-    ],
-    GenericUserGroup:[
-        {'id':3 , 'name':'rest of my career'},
-        {'id':4 , 'name':'avoid code smell'},
-        {'id':5 , 'name':'improve refacting ability'},
-        {'id':6 , 'name':'never be more than one reason'},
-        {'id':7 , 'name':'whats being done in the func'},
-        {'id':8 , 'name':'keep coupling and cohesion'},
-        {'id':9 , 'name':'range of coincidence'},
-        {'id':10, 'name':'coding block'},
-        {'id':11, 'name':'big class controling everything'},
-        {'id':12, 'name':'loosing related'},
-        {'id':13, 'name':'thats whole discussions'},
-        {'id':14, 'name':'problem of human design'},
-    ],
     GenericUserGroupClosure:[
         #
         #               3
@@ -86,22 +63,11 @@ _data = {
         {'id':36, 'depth':3, 'ancestor':GenericUserGroup(id=3 ), 'descendant':GenericUserGroup(id=13)},
         {'id':37, 'depth':3, 'ancestor':GenericUserGroup(id=3 ), 'descendant':GenericUserGroup(id=14)},
     ],
-    EmailAddress: [
-        {'id':2, 'addr':'xyz@pmo.com.tw'},
-        {'id':3, 'addr':'alive@i168.yaya'},
-        {'id':4, 'addr':'negativity@spread.tw'},
-    ],
-    PhoneNumber: [
-        {'id':3, 'country_code':'661', 'line_number':'390384711'},
-        {'id':4, 'country_code':'951', 'line_number':'92840562'},
-        {'id':5, 'country_code':'20',  'line_number':'208774042'},
-    ],
-    GeoLocation: [
-        {'id':3, 'country':'DE', 'province':'Hamburg', 'locality':'Heiderburg', 'street':'Generic Size', 'detail':'PitaProfession House', 'floor': 3, 'description':'AutoFarm101'},
-        {'id':4, 'country':'CZ', 'province':'Buno', 'locality':'Gurrigashee', 'street':'Old castle ave', 'detail':'Agile Lane, 4-8-1', 'floor':-1, 'description':'Smart connected Handle Bar studio'},
-        {'id':5, 'country':'SG', 'province':'', 'locality':'Chang-i', 'street':'Tok-Hua rd.', 'detail':'Tyson mansion', 'floor':8, 'description':'contexturize marshall language'},
-    ],
 } ## end of _fixtures
+
+extra_data_keys = (Role, GenericUserGroup, QuotaMaterial, EmailAddress, PhoneNumber, GeoLocation)
+for key in extra_data_keys:
+    _data[key] =_fixtures[key]
 
 
 class GroupDeletionTestCase(TransactionTestCase):
@@ -122,12 +88,12 @@ class GroupDeletionTestCase(TransactionTestCase):
         for loc_obj in objs[GeoLocation]:
             chosen_grp.locations.add(loc_obj, bulk=False)
         for quota_mat in objs[QuotaMaterial]:
-            d = {'material':quota_mat, 'maxnum':random.randrange(1,25)}
+            d = {'expiry': timezone.now(), 'material':quota_mat, 'maxnum':random.randrange(1,25)}
             quota_rel = UserQuotaRelation(**d)
             objs[UserQuotaRelation].append(quota_rel)
         profile = GenericUserProfile.objects.create(id=4, first_name='Knowledge', last_name='Hoarder')
         for role in objs[Role]:
-            d = {'last_updated':None, 'approved_by':profile, 'role':role}
+            d = {'expiry': timezone.now(), 'approved_by':profile, 'role':role}
             role_rel = GenericUserAppliedRole(**d)
             objs[GenericUserAppliedRole].append(role_rel)
         for role_rel in objs[GenericUserAppliedRole]:
@@ -288,7 +254,7 @@ class GroupDeletionTestCase(TransactionTestCase):
         actual_value = sort_nested_object(grp_hier_after_undelete)
         self.assertListEqual(expect_value, actual_value)
         # some related fields still perform hard-delete and shouldn't keep any data
-        related_field_names = ('phones','locations','quota',)
+        related_field_names = ('phones','locations',)
         for field_name in related_field_names:
             related_field = getattr(self._chosen_grp, field_name)
             expect_num    = related_field.all().count()
@@ -303,6 +269,10 @@ class GroupDeletionTestCase(TransactionTestCase):
         expect_undelete_role_rels = set(map(lambda obj:obj.role.id, self._objs[GenericUserAppliedRole]))
         actual_undelete_role_rels = set(self._chosen_grp.roles.all().values_list('role', flat=True))
         self.assertSetEqual(expect_undelete_role_rels, actual_undelete_role_rels)
+        # check soft-deleted quota arrangements
+        expect_undelete_quota_rels = set(map(lambda obj:(obj.material.id, obj.maxnum) , self._objs[UserQuotaRelation]))
+        actual_undelete_quota_rels = set(self._chosen_grp.quota.all().values_list('material', 'maxnum',))
+        self.assertSetEqual(expect_undelete_quota_rels, actual_undelete_quota_rels)
 
 
     def _bulk_undelete_evict_hierarchy(self, delete_grp_ids, delete_2nd_grp_id, expect_evict_ids):

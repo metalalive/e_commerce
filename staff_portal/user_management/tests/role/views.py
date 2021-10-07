@@ -1,5 +1,6 @@
 import random
 import json
+from datetime import timedelta
 
 from django.test import TransactionTestCase
 from django.utils import timezone as django_timezone
@@ -31,7 +32,8 @@ def _setup_user_roles(profile, approved_by, extra_role_data=None):
     role_data.extend(extra_role_data)
     roles = tuple(map(lambda d:Role.objects.create(**d) , role_data))
     for role in roles:
-        data = {'last_updated':django_timezone.now(), 'approved_by': approved_by, 'role': role}
+        expiry_time = django_timezone.now() + timedelta(minutes=5)
+        data = {'expiry':expiry_time, 'approved_by': approved_by, 'role': role}
         applied_role = GenericUserAppliedRole(**data)
         profile.roles.add(applied_role, bulk=False)
     return roles

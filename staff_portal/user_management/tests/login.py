@@ -1,5 +1,6 @@
 import random
 import json
+from datetime import timedelta
 
 from django.test import TransactionTestCase
 from django.conf import settings as django_settings
@@ -26,6 +27,7 @@ from user_management.tests.common import _fixtures, client_req_csrf_setup, Authe
 
 _keystore = create_keystore_helper(cfg=django_settings.AUTH_KEYSTORE,  import_fn=import_module_string)
 non_fd_err_key = drf_settings.NON_FIELD_ERRORS_KEY
+_expiry_time = django_timezone.now() + timedelta(minutes=5)
 
 class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin):
     path = '/login'
@@ -133,7 +135,7 @@ class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMix
             role = next(roles_iter)
             role.permissions.set(qset[:3])
         for role in roles:
-            data = {'last_updated':django_timezone.now(), 'approved_by':approved_by, 'role': role}
+            data = {'expiry':_expiry_time, 'approved_by':approved_by, 'role': role}
             applied_role = GenericUserAppliedRole(**data)
             self._profile.roles.add(applied_role, bulk=False)
         self.applied_perm_map = {AppCodeOptions.user_management.value: \

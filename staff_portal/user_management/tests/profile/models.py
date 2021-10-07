@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 from django.test import TransactionTestCase
 from django.utils import timezone as django_timezone
@@ -9,6 +10,8 @@ from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, GenericUserGroup, GenericUserGroupClosure, GenericUserGroupRelation, GenericUserAppliedRole, QuotaMaterial, UserQuotaRelation
 from user_management.models.auth import LoginAccount, Role
+
+_expiry_time = django_timezone.now() + timedelta(minutes=5)
 
 
 class ProfileCreationTestCase(TransactionTestCase):
@@ -97,10 +100,10 @@ class ProfileCreationTestCase(TransactionTestCase):
 
     def test_inherit_roles(self):
         grp_ct = ContentType.objects.get_for_model(GenericUserGroup)
-        data = {'last_updated':django_timezone.now(), 'approved_by':self._profile_2nd, 'role': self._roles[2],
+        data = {'expiry':_expiry_time, 'approved_by':self._profile_2nd, 'role': self._roles[2],
                 'user_type':grp_ct, 'user_id': self._groups[0].id}
         GenericUserAppliedRole.objects.create(**data)
-        data = {'last_updated':django_timezone.now(), 'approved_by':self._profile_2nd, 'role': self._roles[3],
+        data = {'expiry':_expiry_time, 'approved_by':self._profile_2nd, 'role': self._roles[3],
                 'user_type':grp_ct, 'user_id': self._groups[2].id}
         GenericUserAppliedRole.objects.create(**data)
         actual_roles = self._profile.inherit_roles
@@ -110,7 +113,7 @@ class ProfileCreationTestCase(TransactionTestCase):
 
     def test_direct_roles(self):
         for role in self._roles:
-            data = {'last_updated':django_timezone.now(), 'approved_by':self._profile_2nd, 'role': role}
+            data = {'expiry':_expiry_time, 'approved_by':self._profile_2nd, 'role': role}
             applied_role = GenericUserAppliedRole(**data)
             self._profile.roles.add(applied_role, bulk=False)
         actual_roles = self._profile.direct_roles
@@ -122,7 +125,7 @@ class ProfileCreationTestCase(TransactionTestCase):
         root_node_grp = self._groups[0]
         grp_ct  = ContentType.objects.get_for_model(GenericUserGroup)
         prof_ct = ContentType.objects.get_for_model(GenericUserProfile)
-        data = {'last_updated':django_timezone.now(), 'approved_by':self._profile_2nd, 'role': self._roles[2],
+        data = {'expiry':_expiry_time, 'approved_by':self._profile_2nd, 'role': self._roles[2],
                 'user_type':grp_ct, 'user_id': root_node_grp.id}
         GenericUserAppliedRole.objects.create(**data)
         actual_status = self._profile.privilege_status
@@ -197,5 +200,14 @@ class ProfileCreationTestCase(TransactionTestCase):
         expect_quota = dict(map(lambda d: (d['material'].id, d['maxnum']), filtered_quota_rel_data))
         actual_quota = self._profile.all_quota
         self.assertDictEqual(expect_quota, actual_quota)
+
+    def test_user_role_change(self):
+        # TODO, test GenericUserGroupRelation when testing GenericUserProfile
+        ## import pdb
+        ## pdb.set_trace()
+        pass
+
+    def test_user_quota_change(self):
+        pass
 ## end of class ProfileCreationTestCase
 

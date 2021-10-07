@@ -170,13 +170,17 @@ class QuotaMaterial(models.Model):
         return cls.objects.filter(app_code__in=_appcodes)
 
 
-class UserQuotaRelation(AbstractUserRelation):
+class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin):
     """ where the system stores quota arrangements for each user (or user group) """
     class Meta:
         db_table = 'user_quota_relation'
+    SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
+    SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
+
     material = models.ForeignKey(to=QuotaMaterial, on_delete=models.CASCADE, null=False,
                       blank=False, db_column='material', related_name='usr_relations')
     maxnum   = models.PositiveSmallIntegerField(default=1)
+    expiry   = models.DateTimeField(blank=True, null=True)
     id = CompoundPrimaryKeyField(inc_fields=['user_type', 'user_id', 'material'])
 
 
@@ -214,10 +218,10 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
             # instead developers have to soft-delete them explicitly by calling
             # Model.delete() or QuerySet.delete()
             self.roles.all().delete(*args, **kwargs)
+            self.quota.all().delete(*args, **kwargs)
             self.emails.all().delete(*args, **kwargs)
             changeset = kwargs.pop('changeset', None)
             kwargs.pop('profile_id', None)
-            self.quota.all().delete(*args, **kwargs)
             self.phones.all().delete(*args, **kwargs)
             self.locations.all().delete(*args, **kwargs)
             if _logger.level <= logging.DEBUG:
@@ -561,8 +565,8 @@ class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin):
     #   modified to default superuser. So  a profile for default superuser will be necessary
     role = models.ForeignKey('Role', blank=False, db_column='role', related_name='users_applied',
                 on_delete=models.CASCADE,)
-    # the approvement should expire after amount of time passed
-    last_updated = models.DateTimeField(auto_now=True)
+    # the approvement should expire after the given time passed
+    expiry = models.DateTimeField(blank=True, null=True)
     # record the user who approved the reqeust (that a role can be granted to the group or individual user
     approved_by  = models.ForeignKey(GenericUserProfile, blank=True, null=True, db_column='approved_by',
         related_name="approval_role",  on_delete=models.SET_NULL,)
