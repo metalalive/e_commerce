@@ -6,6 +6,7 @@ import logging
 
 from django.conf      import  settings as django_settings
 from django.core      import  validators
+from django.db.models.constants import LOOKUP_SEP
 from django.utils.deconstruct   import deconstructible
 from django.core.exceptions     import ValidationError, ObjectDoesNotExist, ImproperlyConfigured
 from django.contrib.auth.models import Permission
@@ -25,9 +26,9 @@ from common.serializers.mixins  import  BaseClosureNodeMixin
 from common.util.python         import  get_fixture_pks
 from common.util.python.async_tasks    import  sendmail as async_send_mail
 
-from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile,  GenericUserGroupRelation, _atomicity_fn
+from ..models.common import AppCodeOptions
+from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile,  GenericUserGroupRelation, _atomicity_fn, QuotaMaterial
 from ..models.auth import Role, AccountResetRequest
-from ..async_tasks import update_roles_on_accounts
 
 from .common import ConnectedGroupField, ConnectedProfileField, UserSubformSetupMixin
 from .nested import EmailSerializer, PhoneNumberSerializer, GeoLocationSerializer
@@ -52,7 +53,6 @@ class PermissionSerializer(ModelSerializer):
 
     @classmethod
     def get_default_queryset(cls):
-        from django.db.models.constants import LOOKUP_SEP
         app_labels = ['contenttypes', 'auth', 'sessions']
         rel_field_name = ['content_type', 'app_label', 'in']
         rel_field_name = LOOKUP_SEP.join(rel_field_name)
@@ -79,31 +79,21 @@ class RoleSerializer(ExtendedModelSerializer):
 class GenericUserGroupClosureSerializer(ExtendedModelSerializer):
     class Meta(ExtendedModelSerializer.Meta):
         model = GenericUserGroupClosure
-        fields = ['id', 'depth', 'ancestor', 'descendant']
-        read_only_fields = ['depth']
+        fields = ['depth', 'ancestor', 'descendant']
+        read_only_fields = ['depth', 'ancestor', 'descendant']
     ancestor   = ConnectedGroupField(read_only=True)
     descendant = ConnectedGroupField(read_only=True)
     atomicity = _atomicity_fn
 
 
 
-
-class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
-    class Meta(ExtendedModelSerializer.Meta):
-        model = GenericUserProfile
-        fields = ['id', 'first_name', 'last_name', 'active', 'time_created', 'last_updated', 'auth']
-    # This serializer doesn't (also shouldn't) fetch data from contrib.auth User model, instead it
-    # simply shows whether each user as login account or not.
-    auth = BooleanField(read_only=True)
-    # internally check roles and groups that will be applied
-    # default value: 1 = superuser role, 2 = staff role
-    PRESERVED_ROLE_IDS = get_fixture_pks(filepath='fixtures.json', pkg_hierarchy='user_management.role')
+class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
     # overwrite atomicity function
     atomicity = _atomicity_fn
 
+    # TRICKY, set instance argument will set read_only = False at pk field of model serializer
+    # so the pk value will come with other validated data without being dropped.
     def __init__(self, instance=None, data=empty, **kwargs):
-        self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
-        self.exc_wr_fields = kwargs.pop('exc_wr_fields', None)
         # the order of field name list affects order of fields to be validated,
         # this serializer requires specific fields order on validation described below :
         # (1) validate `groups` field first
@@ -111,76 +101,68 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
         # (3) validate `quota` field
         # (4) estimate final quota arrangment for each user, using `groups` value and `quota` value
         # (5) take estimated value at previous step, to validate emails/phones/geo-locations fields
-        #### TODO, load all applied groups regardless who approved it, only for read view
-        self.fields['groups'] = GenericUserGroupRelationAssigner(many=True, instance=instance,
-                data=data, account=kwargs.get('account'))
-        self.fields['roles']  = GenericUserRoleAssigner(many=True, instance=instance, data=data,
-                    account=kwargs.get('account'))
-        self.fields['quota']  = UserQuotaRelationSerializer(many=True, instance=instance, data=data,
-                 _validation_error_callback=self._validate_quota_error_callback)
+        self.fields['roles']  = GenericUserRoleAssigner(many=True, instance=instance, account=kwargs.get('account'))
+        self.fields['quota']  = UserQuotaRelationSerializer(many=True, instance=instance,
+                _validation_error_callback=self._validate_quota_error_callback)
         self.fields['emails'] = EmailSerializer(many=True, instance=instance, data=data)
         self.fields['phones'] = PhoneNumberSerializer(many=True, instance=instance, data=data)
         self.fields['locations'] = GeoLocationSerializer(many=True, instance=instance, data=data)
         super().__init__(instance=instance, data=data, **kwargs)
-        # When non-admin logged-in users edit their own profile, they cannot update `group`, `quota`,
-        # and `role` fields, the data of all these fields are already assigned by someone at upper layer group
-        # (or superuser),  each non-admin logged-in users cannot add a new role / group by themselves.
-        # In such case this serializer internally ignored the write data in `group`, `role`, `quota` field
-        self._skip_edit_permission_data = []
+
+    def run_validation(self, data=empty):
+        try:
+            value = super().run_validation(data=data)
+        except (RestValidationError,) as e:
+            emails_err_info = e.detail.get('emails')
+            phones_err_info = e.detail.get('phones')
+            locations_err_info = e.detail.get('locations')
+            if (emails_err_info or phones_err_info or locations_err_info) and hasattr(self, '_final_quota_list'):
+                log_msg = ['emails_err_info', str(emails_err_info), 'phones_err_info', str(phones_err_info), \
+                        'locations_err_info', str(locations_err_info), '_final_quota_list', str(self._final_quota_list)]
+                _logger.info(None, *log_msg)
+                delattr(self, '_final_quota_list')
+            raise
+        return value
+
+    def validate(self, value):
+        log_msg = ['validated_quota', value['quota']]
+        _logger.debug(None, *log_msg)
+        validated_value = super().validate(value=value, exception_cls=ValidationError, _logger=_logger)
+        return validated_value
 
     def extra_setup_before_validation(self, instance, data):
-        skip_edit_permission_data = False
-        if not self._account.is_superuser and self.instance:
-            logged_in_profile = self._account.genericuserauthrelation.profile
-            editing_profile = self.instance
-            if editing_profile.pk == logged_in_profile.pk:
-                skip_edit_permission_data = True
-            log_msg = ['skip_edit_permission_data', skip_edit_permission_data, 'editing_profile.pk', editing_profile.pk]
-            _logger.debug(None, *log_msg)
-        self._skip_edit_permission_data.append(skip_edit_permission_data)
-        if self._skip_edit_permission_data[-1]:
-            data['roles']  = []
-            data['groups'] = []
-            #data['quota']  = []
-        else:
-            data['roles'] = self.fields['roles'].augment_write_data(target=instance, account=self._account,
-                    data=data.get('roles', []),)
-            data['groups'] = self.fields['groups'].augment_write_data(target=instance, account=self._account,
-                    data=data.get('groups', []),)
-        subform_keys = [('groups', 'id'), ('roles','id'), ('quota','id'), ('emails','uid'), ('phones','uid'), ('locations','uid'),]
+        subform_keys = [
+                ('roles',('user_type', 'user_id', 'role')),
+                ('quota',('user_type', 'user_id', 'material')),
+                ('emails','id'), ('phones','id'), ('locations','id')
+            ]
         for s_name, pk_name in subform_keys:
             self._setup_subform_instance(name=s_name, instance=instance, data=data, pk_field_name=pk_name)
             self._append_user_field(name=s_name, instance=instance, data=data)
             # consider parent list serializer will call this function multiple
             # times for validation, reset the read-only state
             self.fields[s_name].read_only = False
+        log_msg = ['roles_data', data.get('roles')]
+        _logger.debug(None, *log_msg)
 
-    def validate_groups(self, value):
-        self._applied_groups = [v['group'] for v in value]
-        # load only when non-admin authenticated user edit group/role field of other user profile(s)
-        if not self._account.is_superuser and self.instance:
-            others_approved = GenericUserGroupRelation.objects.filter(profile=self.instance).exclude(
-                    approved_by=self._account.genericuserauthrelation.profile )
-            others_approved     = others_approved.values_list("group", flat=True)
-            others_approved     = GenericUserGroup.objects.filter(pk__in=others_approved)
-            gid_approved_this_user = list(map(lambda grp: grp.pk, self._applied_groups))
-            self._applied_groups = self._applied_groups + list(others_approved)
-            gid_approved_others    = list(map(lambda grp: grp.pk, others_approved))
-            log_msg = ['gid_approved_this_user', gid_approved_this_user, 'gid_approved_others', gid_approved_others]
-            _logger.debug(None, *log_msg)
-        return value
 
-    def validate_roles(self, value):
-        if not any(self._applied_groups):
-            superuser_role_id = self.PRESERVED_ROLE_IDS[0]
-            superuser_role = [v for v in value if str(v['role'].pk) == str(superuser_role_id)]
-            will_be_superuser = any(superuser_role)
-            if not will_be_superuser:
-                roles_id = list(map(lambda v: v['role'].pk, value))
-                log_msg = ['applied_group_exist', False, 'roles_id',  roles_id]
-                _logger.debug(None, *log_msg)
-                raise ValidationError("non-admin users must select at least one user group")
-        return value
+    def _instant_update_contact_quota(self, _final_quota):
+        usermgt_materials_code = tuple(map(lambda opt:opt.value , QuotaMaterial._MatCodeOptions))
+        orm_filter_kwargs = {'app_code':AppCodeOptions.user_management,
+                LOOKUP_SEP.join(['mat_code', 'in']) : usermgt_materials_code  }
+        mat_ids = QuotaMaterial.objects.filter(**orm_filter_kwargs).values('id','mat_code')
+        mat_id_map = {v['mat_code']:v['id'] for v in mat_ids}
+        subform_keys =  ['emails','phones','locations']
+        for k in subform_keys:
+            nested_field = self.fields[k]
+            mat_code = nested_field.child.Meta.model.quota_material.value
+            mat_id = mat_id_map[mat_code]
+            quota_val = _final_quota.get(mat_id, 0)
+            nested_field.applied_quota = quota_val
+        if not hasattr(self, '_final_quota_list'):
+            self._final_quota_list = []
+        self._final_quota_list.append(_final_quota) # for debug purpose 
+
 
     def _validate_quota_error_callback(self, exception):
         # skip validation on subsequent subform fields (if exists),
@@ -193,16 +175,110 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
         for k in subform_keys:
             self.fields[k].read_only = True
 
-    def validate_quota(self, value):
-        # TODO: save the quota calculation to file as cache for future use
-        self._final_quota = self._estimate_hierarchy_quota(override=value, groups=self._applied_groups)
-        subform_keys = ['emails','phones','locations']
+    def to_representation(self, instance):
+        return super().to_representation(instance=instance, _logger=_logger)
+
+    def create(self, validated_data):
+        subform_keys = ['roles', 'quota', 'emails','phones','locations']
+        validated_subform_data = {k: validated_data.pop(k, None) for k in subform_keys}
+        with self.atomicity():
+            instance = super().create(validated_data=validated_data)
+            for k in subform_keys:
+                self.fields[k].create(validated_data=validated_subform_data[k], usr=instance)
+        return instance
+
+    def update(self, instance, validated_data):
+        subform_keys = ['roles', 'quota','emails','phones','locations']
+        validated_subform_data = {k: validated_data.pop(k, None) for k in subform_keys}
+        instance = super().update(instance=instance, validated_data=validated_data)
         for k in subform_keys:
-            self.fields[k].applied_quota = self._final_quota
+            field = self.fields[k]
+            subform_qset = getattr(instance, k).all()
+            field.update(instance=subform_qset, validated_data=validated_subform_data[k],
+                    usr=instance, allow_insert=True, allow_delete=True)
+        return instance
+## end of class AbstractGenericUserSerializer
+
+
+
+class GenericUserProfileSerializer(AbstractGenericUserSerializer):
+    class Meta(AbstractGenericUserSerializer.Meta):
+        model = GenericUserProfile
+        fields = ['id', 'first_name', 'last_name', 'active', 'time_created', 'last_updated', 'auth']
+    # This serializer doesn't (also shouldn't) fetch data from contrib.auth User model, instead it
+    # simply shows whether each user as login account or not.
+    auth = BooleanField(read_only=True)
+    # internally check roles and groups that will be applied
+    # default value: 1 = superuser role, 2 = staff role
+    PRESERVED_ROLE_IDS = get_fixture_pks(filepath='fixtures.json', pkg_hierarchy='user_management.role')
+
+    def __init__(self, instance=None, data=empty, **kwargs):
+        #### TODO, load all applied groups regardless who approved it, only for read view
+        self.fields['groups'] = GenericUserGroupRelationAssigner(many=True, instance=instance,
+                data=data, account=kwargs.get('account'))
+        super().__init__(instance=instance, data=data, **kwargs)
+        # When non-superuser logged-in users edit their own profile, they cannot modify `group`, `quota`,
+        # and `role` fields, the data of all these fields are already assigned by someone at upper layer group
+        # (or superuser),  each non-admin logged-in users cannot add a new role / group by themselves.
+        # In such case this serializer internally ignored the write data in `group`, `role`, `quota` field
+        self._skip_edit_permission_data = []
+
+    def extra_setup_before_validation(self, instance, data):
+        skip_edit_permission_data = False
+        if not self._account.is_superuser and self.instance:
+            logged_in_profile = self._account.profile
+            editing_profile = self.instance
+            if editing_profile.pk == logged_in_profile.pk:
+                skip_edit_permission_data = True
+            log_msg = ['skip_edit_permission_data', skip_edit_permission_data, 'editing_profile.pk', editing_profile.pk]
+            _logger.debug(None, *log_msg)
+        self._skip_edit_permission_data.append(skip_edit_permission_data)
+        if self._skip_edit_permission_data[-1]:
+            data['roles']  = []
+            data['groups'] = []
+            #data['quota']  = [] # TODO, figure out why this can be ignored
+        subform_keys = [('groups', 'id'),]
+        for s_name, pk_name in subform_keys:
+            self._setup_subform_instance(name=s_name, instance=instance, data=data, pk_field_name=pk_name)
+            self._append_user_field(name=s_name, instance=instance, data=data)
+            self.fields[s_name].read_only = False
+        super().extra_setup_before_validation(instance=instance, data=data)
+
+    def validate_groups(self, value):
+        self._applied_groups = [v['group'] for v in value]
+        # load only when non-admin authenticated user edit group/role field of other user profile(s)
+        if not self._account.is_superuser and self.instance:
+            others_approved = GenericUserGroupRelation.objects.filter(profile=self.instance).exclude(
+                    approved_by=self._account.genericuserauthrelation.profile )
+            others_approved     = others_approved.values_list("group", flat=True)
+            others_approved     = GenericUserGroup.objects.filter(pk__in=others_approved)
+            gid_approved_this_user = list(map(lambda grp: grp.pk, self._applied_groups))
+            self._applied_groups = self._applied_groups + list(others_approved)
+            gid_approved_others  = list(others_approved.values_list('id', flat=True))
+            log_msg = ['gid_approved_this_user', gid_approved_this_user, 'gid_approved_others', gid_approved_others]
+            _logger.debug(None, *log_msg)
+        return value
+
+    def validate_roles(self, value):
+        if not any(self._applied_groups):
+            superuser_role_id = self.PRESERVED_ROLE_IDS[0]
+            superuser_role = tuple(filter(lambda v: v['role'].id == superuser_role_id, value))
+            if not any(superuser_role):
+                roles_id = list(map(lambda v: v['role'].id, value))
+                log_msg = ['applied_group_exist', False, 'roles_id',  roles_id]
+                _logger.debug(None, *log_msg)
+                raise ValidationError("non-admin users must select at least one user group")
+        return value
+
+    def validate_quota(self, value):
+        grp_ids = tuple(map(lambda obj:obj.id, self._applied_groups))
+        groups_qset = GenericUserGroup.objects.filter(id__in=grp_ids)
+        _final_quota = self._estimate_hierarchy_quota(override=value, groups=groups_qset)
+        self._instant_update_contact_quota(_final_quota)
         return value
 
     def _estimate_hierarchy_quota(self, override, groups):
-        override = {oq['usage_type'].material : oq['maxnum'] for oq in override}
+        override = {oq['material'].id : oq['maxnum'] for oq in override}
         merged_inhehited = self.Meta.model.estimate_inherit_quota(groups=groups)
         final_applied = merged_inhehited | override
         log_msg = ['override', override, 'final_applied', final_applied]
@@ -210,7 +286,7 @@ class GenericUserProfileSerializer(ExtendedModelSerializer, UserSubformSetupMixi
         return final_applied
 
     def create(self, validated_data):
-        subform_keys = ['groups', 'roles', 'quota', 'emails','phones','locations']
+        subform_keys = ['groups',]
         validated_subform_data = {k: validated_data.pop(k, None) for k in subform_keys}
         with self.atomicity():
             instance = super().create(validated_data=validated_data)
@@ -244,70 +320,28 @@ class BulkGenericUserGroupSerializer(DjangoBaseClosureBulkSerializer):
     ANCESTOR_FIELD_NAME   = GenericUserGroupClosureSerializer.Meta.model.ancestor.field.name
     DESCENDANT_FIELD_NAME = GenericUserGroupClosureSerializer.Meta.model.descendant.field.name
 
-    def update(self, instance, validated_data):
-        ret = super().update(instance=instance, validated_data=validated_data)
-        # TODO, reliability test
-        update_roles_on_accounts.delay(affected_groups=[g.pk for g in ret])
-        return ret
 
 
-class GenericUserGroupSerializer(BaseClosureNodeMixin, ExtendedModelSerializer, UserSubformSetupMixin):
-    class Meta(BaseClosureNodeMixin.Meta, ExtendedModelSerializer.Meta):
+class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerializer):
+    class Meta(BaseClosureNodeMixin.Meta, AbstractGenericUserSerializer.Meta):
         model = GenericUserGroup
         fields = ['id', 'name', 'ancestors', 'descendants', 'usr_cnt',]
         list_serializer_class = BulkGenericUserGroupSerializer
 
-    ancestors   = GenericUserGroupClosureSerializer(many=True, read_only=True) #
+    ancestors   = GenericUserGroupClosureSerializer(many=True, read_only=True)
     descendants = GenericUserGroupClosureSerializer(many=True, read_only=True)
     usr_cnt = IntegerField(read_only=True)
-    atomicity = _atomicity_fn
 
-    def __init__(self, instance=None, data=empty, **kwargs):
-        self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
-        self.exc_wr_fields = kwargs.pop('exc_wr_fields', None)
-        # TRICKY, set instance argument will set read_only = False at pk field of model serializer
-        # so the pk value will come with other validated data without being dropped.
-        self.fields['roles'] = GenericUserRoleAssigner(many=True, instance=instance,
-                data=data, account=kwargs.get('account'))
-        self.fields['quota'] = UserQuotaRelationSerializer(many=True, instance=instance, data=data)
-        super().__init__(instance=instance, data=data, **kwargs)
-
-    def to_representation(self, instance):
-        return super().to_representation(instance=instance, _logger=_logger)
-
-    def extra_setup_before_validation(self, instance, data):
-        data['roles'] = self.fields['roles'].augment_write_data(target=instance, account=self._account,
-                data=data.get('roles', []),)
-        subform_keys = [('roles','id'), ('quota','id'),]
-        for s_name, pk_name in subform_keys:
-            self._setup_subform_instance(name=s_name, instance=instance, data=data, pk_field_name=pk_name)
-            self._append_user_field(name=s_name, instance=instance, data=data)
-        log_msg = ['roles_data', data.get('roles')]
-        _logger.debug(None, *log_msg)
-
-    def validate(self, value):
-        if _logger:
-            log_msg = ['validated_quota', value['quota']]
-            _logger.debug(None, *log_msg)
-        return super().validate(value=value, exception_cls=ValidationError, _logger=_logger)
-
-    def create(self, validated_data):
-        quota_data = validated_data.pop('quota', None)
-        roles_data = validated_data.pop('roles', None)
-        instance = super().create(validated_data=validated_data)
-        self.fields['quota'].create(validated_data=quota_data, usr=instance)
-        self.fields['roles'].create(validated_data=roles_data, usr=instance)
-        return instance
-
-    def update(self, instance, validated_data):
-        quota_data = validated_data.pop('quota', None)
-        roles_data = validated_data.pop('roles', None)
-        instance = super().update(instance=instance, validated_data=validated_data)
-        quota_objs = self.fields['quota'].update(instance=instance.quota.all(), \
-                validated_data=quota_data, usr=instance, allow_insert=True, allow_delete=True)
-        role_objs  = self.fields['roles'].update(instance=instance.roles.all(), \
-                validated_data=roles_data, usr=instance, allow_insert=True, allow_delete=True)
-        return instance
+    def validate_quota(self, value):
+        # In order not to complicate the design, quota arrangements of a parent group will NOT be
+        # inherited by all its children and descendant groups.
+        # That is, if there's group A inherited by another group B, and a quota arrangement
+        # `max-num-emails = 4` is applied to group A, then group B will NOT automatically have
+        # the same quota arrangement.
+        _final_quota = {v['material'] if isinstance(v['material'], int) else \
+                v['material'].id: v['maxnum'] for v in value}
+        self._instant_update_contact_quota(_final_quota)
+        return value
 
     #### usr_cnt = SerializerMethodField() # don't use this, it cannot be reordered
     #### def get_usr_cnt(self, obj):

@@ -41,100 +41,6 @@ class AbstractUserRelation(models.Model):
     user_ref  = GenericForeignKey(ct_field='user_type', fk_field='user_id')
 
 
-# one email address belongs to a single user, or a single user group
-class EmailAddress(AbstractUserRelation, SoftDeleteObjectMixin):
-    """
-    use cases of mailing :
-        -- for individual user (not user group)
-        * create, or delete entire user profile (including login account)
-        * user activates, or deactivates their login account
-        * user reset username / password of their login account
-        -- for both of individual user and user group
-        * employee makes a purchase order to their supplier(s)
-        * customer makes, discards, or partially return a sale order
-        * customer makes payment
-        * customer gets full / partial refund
-        * customer books an item (e.g. table, room)
-        * customer cancels their booking
-        * customer in waitlist can book items released by someone else who gives up
-    """
-    SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
-    SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
-    class Meta:
-        db_table = 'email_address'
-    # each user may have more than one email addresses or phone numbers (or none)
-    addr = models.EmailField(max_length=160, default="notprovide@localhost", blank=False, null=False, unique=False)
-
-
-
-class PhoneNumber(AbstractUserRelation):
-    class Meta:
-        db_table = 'phone_number'
-    ccode_validator   = RegexValidator(regex=r"^\d{1,3}$", message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digit e.g. '91', '886' , from 1 digit up to 3 digits")
-    linenum_validator = RegexValidator(regex=r"^\+?1?\d{7,15}$", message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digits e.g. '9990099', from 7 digits up to 15 digits")
-    country_code = models.CharField(max_length=3,  validators=[ccode_validator],   unique=False)
-    line_number  = models.CharField(max_length=15, validators=[linenum_validator], unique=False)
-
-
-
-# it is possible that one user has multiple address locations to record
-class GeoLocation(AbstractUserRelation):
-    """
-    record locations for generic business operations,
-    e.g.
-    your businuss may need to record :
-     * one or more outlets, for selling goods to end customers
-     * warehouse, you either rent a space from others, or build your own
-     * factory, if your finished goods is manufactured by your own company
-     * farm, in case your company contracts farmers who grow produce (raw
-       materials) for product manufacture.
-     * shipping addresses of customers and suppliers
-    """
-    class Meta:
-        db_table = 'geo_location'
-
-    class CountryCode(models.TextChoices):
-        AU = 'AU',
-        AT = 'AT',
-        CZ = 'CZ',
-        DE = 'DE',
-        HK = 'HK',
-        IN = 'IN',
-        ID = 'ID',
-        IL = 'IL',
-        MY = 'MY',
-        NZ = 'NZ',
-        PT = 'PT',
-        SG = 'SG',
-        TH = 'TH',
-        TW = 'TW',
-        US = 'US',
-
-    id = models.AutoField(primary_key=True,)
-
-    country = models.CharField(name='country', max_length=2, choices=CountryCode.choices, default=CountryCode.TW,)
-    province    = models.CharField(name='province', max_length=50,) # name of the province
-    locality    = models.CharField(name='locality', max_length=50,) # name of the city or town
-    street      = models.CharField(name='street',   max_length=50,) # name of the road, street, or lane
-    # extra detail of the location, e.g. the name of the building, which floor, etc.
-    # Note each record in this database table has to be mapped to a building of real world
-    detail      = models.CharField(name='detail', max_length=100,)
-    # if
-    # floor =  0, that's basement B1 floor
-    # floor = -1, that's basement B2 floor
-    # floor = -2, that's basement B3 floor ... etc
-    floor = models.SmallIntegerField(default=1, blank=True, null=True)
-    # simple words to describe what you do in the location for your business
-    description = models.CharField(name='description', blank=True, max_length=100,)
-
-    def __str__(self):
-        out = ["Nation:", None, ", city/town:", None,]
-        out[1] = self.country
-        out[3] = self.locality
-        return "".join(out)
-## end of class GeoLocation
-
-
 class QuotaMaterial(models.Model):
     """
     In quota arrangement, material simply represents source of supply,
@@ -169,6 +75,106 @@ class QuotaMaterial(models.Model):
         _appcodes = tuple(map(label_to_code_fn , app_labels))
         return cls.objects.filter(app_code__in=_appcodes)
 
+    def __str__(self):
+        return 'Quota material ID %s' % self.id
+
+
+# one email address belongs to a single user, or a single user group
+class EmailAddress(AbstractUserRelation, SoftDeleteObjectMixin):
+    """
+    use cases of mailing :
+        -- for individual user (not user group)
+        * create, or delete entire user profile (including login account)
+        * user activates, or deactivates their login account
+        * user reset username / password of their login account
+        -- for both of individual user and user group
+        * employee makes a purchase order to their supplier(s)
+        * customer makes, discards, or partially return a sale order
+        * customer makes payment
+        * customer gets full / partial refund
+        * customer books an item (e.g. table, room)
+        * customer cancels their booking
+        * customer in waitlist can book items released by someone else who gives up
+    """
+    SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
+    SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
+    quota_material = QuotaMaterial._MatCodeOptions.MAX_NUM_EMAILS
+    class Meta:
+        db_table = 'email_address'
+    # each user may have more than one email addresses or phone numbers (or none)
+    addr = models.EmailField(max_length=160, default="notprovide@localhost", blank=False, null=False, unique=False)
+
+
+
+class PhoneNumber(AbstractUserRelation):
+    class Meta:
+        db_table = 'phone_number'
+    quota_material = QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS
+    ccode_validator   = RegexValidator(regex=r"^\d{1,3}$", message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digit e.g. '91', '886' , from 1 digit up to 3 digits")
+    linenum_validator = RegexValidator(regex=r"^\+?1?\d{7,15}$", message="non-digit character detected, or length of digits doesn't meet requirement. It must contain only digits e.g. '9990099', from 7 digits up to 15 digits")
+    country_code = models.CharField(max_length=3,  validators=[ccode_validator],   unique=False)
+    line_number  = models.CharField(max_length=15, validators=[linenum_validator], unique=False)
+
+
+
+# it is possible that one user has multiple address locations to record
+class GeoLocation(AbstractUserRelation):
+    """
+    record locations for generic business operations,
+    e.g.
+    your businuss may need to record :
+     * one or more outlets, for selling goods to end customers
+     * warehouse, you either rent a space from others, or build your own
+     * factory, if your finished goods is manufactured by your own company
+     * farm, in case your company contracts farmers who grow produce (raw
+       materials) for product manufacture.
+     * shipping addresses of customers and suppliers
+    """
+    class Meta:
+        db_table = 'geo_location'
+    quota_material = QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS
+
+    class CountryCode(models.TextChoices):
+        AU = 'AU',
+        AT = 'AT',
+        CZ = 'CZ',
+        DE = 'DE',
+        HK = 'HK',
+        IN = 'IN',
+        ID = 'ID',
+        IL = 'IL',
+        MY = 'MY',
+        NZ = 'NZ',
+        PT = 'PT',
+        SG = 'SG',
+        TH = 'TH',
+        TW = 'TW',
+        US = 'US',
+
+    id = models.AutoField(primary_key=True,)
+
+    country = models.CharField(name='country', max_length=2, choices=CountryCode.choices, default=CountryCode.TW,)
+    province = models.CharField(name='province', max_length=50,) # name of the province
+    locality = models.CharField(name='locality', max_length=50,) # name of the city or town
+    street   = models.CharField(name='street',   max_length=50,) # name of the road, street, or lane
+    # extra detail of the location, e.g. the name of the building, which floor, etc.
+    # Note each record in this database table has to be mapped to a building of real world
+    detail   = models.CharField(name='detail', max_length=100,)
+    # if
+    # floor =  0, that's basement B1 floor
+    # floor = -1, that's basement B2 floor
+    # floor = -2, that's basement B3 floor ... etc
+    floor = models.SmallIntegerField(default=1, blank=True, null=True)
+    # simple words to describe what you do in the location for your business
+    description = models.CharField(name='description', blank=True, max_length=100,)
+
+    def __str__(self):
+        out = ["Nation:", None, ", city/town:", None,]
+        out[1] = self.country
+        out[3] = self.locality
+        return "".join(out)
+## end of class GeoLocation
+
 
 class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin):
     """ where the system stores quota arrangements for each user (or user group) """
@@ -195,7 +201,6 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
     name  = models.CharField(max_length=50,  unique=False)
     # foreign key referencing to the same table
     #### parent = models.ForeignKey('self', db_column='parent', on_delete=models.CASCADE, null=True, blank=True)
-    #roles = models.ManyToManyField(auth.models.Group, blank=True, db_table='generic_group_auth_role', related_name='user_groups')
     roles = GenericRelation('GenericUserAppliedRole', object_id_field='user_id', content_type_field='user_type')
     quota     = GenericRelation(UserQuotaRelation, object_id_field='user_id', content_type_field='user_type')
     emails    = GenericRelation(EmailAddress, object_id_field='user_id', content_type_field='user_type')
@@ -296,7 +301,6 @@ class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
 
     ancestor   = ClosureTableModelMixin.asc_field(ref_cls=GenericUserGroup)
     descendant = ClosureTableModelMixin.desc_field(ref_cls=GenericUserGroup)
-
 
 
 class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMixin):
@@ -558,9 +562,6 @@ class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin):
     SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
     class Meta:
         db_table = 'generic_user_applied_role'
-
-    # TODO:
-    # * set unique constraint on each pair of (role, user/group)
     # * in case the staff who approved these role requests are deleted, the approved_by field should be
     #   modified to default superuser. So  a profile for default superuser will be necessary
     role = models.ForeignKey('Role', blank=False, db_column='role', related_name='users_applied',

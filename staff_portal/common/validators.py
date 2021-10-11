@@ -5,7 +5,6 @@ import logging
 
 from django.core.exceptions import ValidationError
 from django.utils.deconstruct import deconstructible
-from django.db.models import Model as DjangoModel
 
 from common.util.python       import string_unprintable_check
 from common.util.python.graph import is_graph_cyclic
@@ -125,8 +124,6 @@ class ClosureCrossTreesLoopValidator(TreeNodesLoopValidator):
             if query.count() == 0:
                 node['inbound'] = self.ROOT_OF_TREE
             log_msg.extend(['updating_node_key', key])
-            ##import pdb
-            ##pdb.set_trace()
             for q in query: # loop through each ancestor of current node
                 parent_key = str(q[self.ancestor_column_name])
                 parent_node = nodes.get(parent_key, None)
@@ -269,23 +266,21 @@ class SelectIDsExistValidator:
 @deconstructible
 class UniqueListItemsValidator:
     default_err_msg_pattern = '{"message":"duplicate item found in the list","value":%s}'
+    requires_context = True
 
     def __init__(self, fields:list, error_cls=ValidationError, err_msg_pattern=None):
-        self._unique_fields_among_children = fields
+        self._unique_fields = fields
         self._error_cls = error_cls
         self._err_msg_pattern = err_msg_pattern or self.default_err_msg_pattern
 
-    def __call__(self, value):
-        extract_fn = lambda q, fname: q[fname].pk if isinstance(q.get(fname), DjangoModel) else q.get(fname)
-        fvalue  = [tuple([extract_fn(q, fname) for fname in self._unique_fields_among_children]) for q in value]
+    def __call__(self, value, caller):
+        extract_fn = lambda q, fname: q.get(fname)
+        fvalue  = [tuple([extract_fn(q, fname) for fname in self._unique_fields]) for q in value]
         # TODO: let caller determine how to handle None value
         fvalue_compare = list(filter(lambda fv: None not in fv, fvalue))
-        #if len(fvalue) != len(fvalue_compare):
-        #    import pdb
-        #    pdb.set_trace()
         if len(fvalue_compare) != len(set(fvalue_compare)):
-            err_input_data = [{self._unique_fields_among_children[idx]:fv[idx] for idx in \
-                    range(len(self._unique_fields_among_children))} for fv in fvalue]
+            err_input_data = [{self._unique_fields[idx]: str(fv[idx]) for idx in \
+                    range(len(self._unique_fields))} for fv in fvalue]
             err_msg = self._err_msg_pattern  % json.dumps(err_input_data)
             log_msg = ['err_msg', err_msg]
             _logger.info(None, *log_msg)

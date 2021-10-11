@@ -99,7 +99,7 @@ class TreeNodeMixin:
             max_num_siblings=4, write_value_fn=None):
         # this method will generate number of trees, each tree has random number of nodes,
         # each non-leaf node has at least one child (might be random number of children)
-        trees = []
+        trees = ExtendedList()
         for _ in range(num_trees):
             tree = [cls() for _ in range(random.randrange(min_num_nodes, (max_num_nodes + 1))) ]
             if write_value_fn and callable(write_value_fn):
@@ -123,7 +123,7 @@ class TreeNodeMixin:
 
 
     @classmethod
-    def gen_from_closure_data(cls, entity_data, closure_data):
+    def gen_from_closure_data(cls, entity_data, closure_data, custom_value_setup_fn=None):
         tmp_nodes = {}
         nodes_data = closure_data.filter(depth=0) # tightly coupled with Django ORM
         for node_data in nodes_data:
@@ -132,7 +132,10 @@ class TreeNodeMixin:
             node = tmp_nodes.get(node_data['ancestor'])
             assert node is None, 'node conflict, depth:0, node data: %s' % node_data
             entity_dataitem = entity_data.get(id=node_data['ancestor'])
-            tmp_nodes[node_data['ancestor']] = cls(value=entity_dataitem)
+            if custom_value_setup_fn and callable(custom_value_setup_fn):
+                entity_dataitem = custom_value_setup_fn(entity_dataitem)
+            node_instance = cls(value=entity_dataitem)
+            tmp_nodes[node_data['ancestor']] = node_instance
 
         nodes_data = closure_data.filter(depth=1)
         for node_data in nodes_data:
@@ -163,7 +166,8 @@ class TreeNodeMixin:
             assert curr_node_pos == asc_node, 'corrupted closure node data: %s' % node_data
 
         trees = ExtendedList()
-        trees.extend(list(filter(lambda t: t.parent is None, tmp_nodes.values())))
+        flattened_nodes = list(tmp_nodes.values())
+        trees.extend(list(filter(lambda t: t.parent is None, flattened_nodes)))
         trees.entity_data = entity_data
         trees.closure_data = closure_data
         return trees

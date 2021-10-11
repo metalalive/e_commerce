@@ -58,7 +58,7 @@ class Role(models.Model, MinimumInfoMixin):
         verbose_name_plural = _('roles')
 
     def __str__(self):
-        return self.name
+        return 'Role ID %s, %s' % (self.id, self.name)
 
     def natural_key(self):
         return (self.name,)

@@ -54,14 +54,14 @@ class BulkUpdateListSerializer(ValidationErrorCallbackMixin, ListSerializer):
         return instance_map
 
     def _update_data_map(self, data):
-        # construct dictionary by doing shallow copy from input form data
-        # for each item whose ID exists
+        # construct data map for updates in bulk update operation, by doing shallow copy of 
+        # input form item whose ID exists
         return {item[self.pk_field_name]: item for item in data if \
                 item.get(self.pk_field_name, None) is not None}
 
     def _insert_data_map(self, data):
-        # do shallow copy from input form data if there is no ID in each
-        # item of the form data
+        # construct data map for insertions in bulk update operation, by doing shallow copy of 
+        # input form item whose ID doesn't exist
         return [item for item in data if item.get(self.pk_field_name, None) is None]
 
     def update(self, instance, validated_data, allow_insert=False, allow_delete=False):

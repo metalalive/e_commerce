@@ -38,8 +38,10 @@ class NestedFieldSetupMixin:
         """
         it is possible to craate new subform item(s) during bulk update operation
         """
-        # note that id field will be internally changed to Integer Field even I
-        # explicitly set it as ModelField instance
+        # note that ExtendModelSerializer internally changes the id field to Integer Field if data
+        # argument is given on initialization.
+        # this function works only for the instance which has auto-increment id field
+        # , TODO: rename function name
         pk_field = self.fields[pk_field_name]
         if not pk_field.read_only:
             if instance is None :
