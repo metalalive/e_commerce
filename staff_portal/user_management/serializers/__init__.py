@@ -76,14 +76,31 @@ class RoleSerializer(ExtendedModelSerializer):
 #### end of RoleSerializer
 
 
+class GenericUserGroupClosureListSerializer(BulkUpdateListSerializer):
+    def to_representation(self, instance):
+        condition = {LOOKUP_SEP.join(['depth','gt']): 0}
+        instance = instance.filter(**condition)
+        out =  super().to_representation(data=instance)
+        return out
+
+
 class GenericUserGroupClosureSerializer(ExtendedModelSerializer):
+    atomicity = _atomicity_fn
     class Meta(ExtendedModelSerializer.Meta):
         model = GenericUserGroupClosure
-        fields = ['depth', 'ancestor', 'descendant']
-        read_only_fields = ['depth', 'ancestor', 'descendant']
+        list_serializer_class = GenericUserGroupClosureListSerializer
+
+class GroupAncestorSerializer(GenericUserGroupClosureSerializer):
+    class Meta(GenericUserGroupClosureSerializer.Meta):
+        fields = ['depth', 'ancestor',]
+        read_only_fields = ['depth', 'ancestor']
     ancestor   = ConnectedGroupField(read_only=True)
+
+class GroupDescendantSerializer(GenericUserGroupClosureSerializer):
+    class Meta(GenericUserGroupClosureSerializer.Meta):
+        fields = ['depth', 'descendant']
+        read_only_fields = ['depth', 'descendant']
     descendant = ConnectedGroupField(read_only=True)
-    atomicity = _atomicity_fn
 
 
 
@@ -174,9 +191,6 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
         subform_keys = ['emails','phones','locations']
         for k in subform_keys:
             self.fields[k].read_only = True
-
-    def to_representation(self, instance):
-        return super().to_representation(instance=instance, _logger=_logger)
 
     def create(self, validated_data):
         subform_keys = ['roles', 'quota', 'emails','phones','locations']
@@ -328,8 +342,8 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerial
         fields = ['id', 'name', 'ancestors', 'descendants', 'usr_cnt',]
         list_serializer_class = BulkGenericUserGroupSerializer
 
-    ancestors   = GenericUserGroupClosureSerializer(many=True, read_only=True)
-    descendants = GenericUserGroupClosureSerializer(many=True, read_only=True)
+    ancestors   = GroupAncestorSerializer(many=True, read_only=True)
+    descendants = GroupDescendantSerializer(many=True, read_only=True)
     usr_cnt = IntegerField(read_only=True)
 
     def validate_quota(self, value):

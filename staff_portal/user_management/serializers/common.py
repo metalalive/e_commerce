@@ -1,6 +1,5 @@
 from django.contrib.contenttypes.models  import ContentType
 from rest_framework.serializers import ModelSerializer
-from common.serializers  import  ExtendedModelSerializer
 from common.serializers.mixins  import  NestedFieldSetupMixin
 
 from ..models.base import GenericUserGroup, GenericUserProfile
@@ -10,10 +9,10 @@ class ConnectedGroupField(ModelSerializer):
     class Meta:
         model = GenericUserGroup
         fields = ['id', 'name']
-        read_only_fields = ['name']
+        read_only_fields = ['id','name']
 
-class ConnectedProfileField(ExtendedModelSerializer):
-    class Meta(ExtendedModelSerializer.Meta):
+class ConnectedProfileField(ModelSerializer):
+    class Meta:
         model = GenericUserProfile
         fields = ['id', 'first_name', 'last_name']
         read_only_fields = ['id', 'first_name', 'last_name']

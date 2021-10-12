@@ -85,8 +85,13 @@ class BulkUserQuotaRelationSerializer(AugmentUserRefMixin, BulkUpdateListSeriali
 
 
 
+
 class CommonUserSubformSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
     atomicity = _atomicity_fn
+
+    @property
+    def presentable_fields_name(self):
+        return self.Meta.fields
 
     def run_validation(self, data=empty):
         value = super().run_validation(data=data, set_null_if_obj_not_found=True)
@@ -108,8 +113,7 @@ class CommonUserSubformSerializer(ExtendedModelSerializer, UserSubformSetupMixin
 class EmailSerializer(CommonUserSubformSerializer):
     class Meta(CommonUserSubformSerializer.Meta):
         model = EmailAddress
-        fields = ['id', 'user_type', 'user_id', 'addr']
-        read_only_fields = ['user_type', 'user_id']
+        fields = ['id', 'addr']
         list_serializer_class = QuotaCheckerSerializer
 
     def extra_setup_before_validation(self, instance, data):
@@ -119,8 +123,7 @@ class EmailSerializer(CommonUserSubformSerializer):
 class PhoneNumberSerializer(CommonUserSubformSerializer):
     class Meta(CommonUserSubformSerializer.Meta):
         model = PhoneNumber
-        fields = ['id', 'user_type', 'user_id', 'country_code', 'line_number',]
-        read_only_fields = ['user_type', 'user_id']
+        fields = ['id', 'country_code', 'line_number',]
         list_serializer_class = QuotaCheckerSerializer
 
     def extra_setup_before_validation(self, instance, data):
@@ -130,8 +133,7 @@ class PhoneNumberSerializer(CommonUserSubformSerializer):
 class GeoLocationSerializer(CommonUserSubformSerializer):
     class Meta(CommonUserSubformSerializer.Meta):
         model = GeoLocation
-        fields = ['id', 'user_type', 'user_id', 'country', 'province', 'locality', 'street', 'detail', 'floor', 'description',]
-        read_only_fields = ['user_type', 'user_id']
+        fields = ['id', 'country', 'province', 'locality', 'street', 'detail', 'floor', 'description',]
         list_serializer_class = QuotaCheckerSerializer
 
     def extra_setup_before_validation(self, instance, data):
@@ -141,8 +143,8 @@ class GeoLocationSerializer(CommonUserSubformSerializer):
 class UserQuotaRelationSerializer(CommonUserSubformSerializer):
     class Meta(CommonUserSubformSerializer.Meta):
         model = UserQuotaRelation
-        fields = ['user_type', 'user_id', 'material', 'maxnum', 'expiry']
-        read_only_fields = ['user_type', 'user_id']
+        fields = ['material', 'maxnum', 'expiry']
+        read_only_fields = []
         list_serializer_class = BulkUserQuotaRelationSerializer
 
     def __init__(self, *args, data=empty, **kwargs):
@@ -173,27 +175,11 @@ class UserQuotaRelationSerializer(CommonUserSubformSerializer):
         else:
             _logger.debug(None, *log_msg)
         return instance
-
+## end of class UserQuotaRelationSerializer
 
 
 
 class _BulkUserPriviledgeAssigner(AugmentUserRefMixin, BulkUpdateListSerializer):
-    def to_representation(self, data):
-        if isinstance(data, DjangoModelManager):
-            account = self.child._account
-            log_msg = []
-            if account:
-                profile = account.profile
-                if account.is_superuser:
-                    pass # only superusers can check all role(s)/group(s) applied to a  single user group / individual user
-                else: # For non-superuser logged-in accounts, fetch the role(s) / group(s) approved by themselves.
-                    data = data.filter(approved_by=profile.pk)
-                log_msg += ['superuser', account.is_superuser, 'approved_by', profile.pk]
-            else:
-                data = data.none()
-            _logger.debug(None, *log_msg)
-        out = super().to_representation(data=data)
-        return out
 
     def _retrieve_priv_ids(self, data):
         _fn = lambda d: d[self.pk_field_name]
@@ -239,12 +225,12 @@ class _BaseUserPriviledgeAssigner(ExtendedModelSerializer, UserSubformSetupMixin
         # converting to IntegerField at ExtendedModelSerializer
         super().__init__(*args, pk_field_name=self.Meta._apply_type, **kwargs)
 
-    def to_representation(self, instance):
-        out = super().to_representation(instance=instance)
-        return out
-
     def run_validation(self, data=empty):
         return super().run_validation(data=data, set_null_if_obj_not_found=True)
+
+    @property
+    def presentable_fields_name(self):
+        return self.Meta.fields
 
 
 class GenericUserRoleBulkAssigner(_BulkUserPriviledgeAssigner):
@@ -274,8 +260,8 @@ class GenericUserRoleAssigner(_BaseUserPriviledgeAssigner):
     class Meta(_BaseUserPriviledgeAssigner.Meta):
         _apply_type = 'role'
         model = GenericUserAppliedRole
-        fields = [_apply_type, 'user_type', 'user_id', 'expiry']
-        read_only_fields = ['user_type', 'user_id',]
+        fields = [_apply_type, 'expiry', 'approved_by']
+        read_only_fields = ['approved_by']
         list_serializer_class = GenericUserRoleBulkAssigner
 
     def __init__(self, *args, **kwargs):
@@ -284,6 +270,14 @@ class GenericUserRoleAssigner(_BaseUserPriviledgeAssigner):
         exp_validator = MinValueValidator(limit_value=django_timezone.now())
         self.fields['role'].validators.append(role_id_validator)
         self.fields['expiry'].validators.append(exp_validator)
+
+    def to_representation(self, instance):
+        if self.fields.get('approved_by'):
+            if not isinstance(self.fields['approved_by'], ConnectedProfileField):
+                self.fields['approved_by'] = ConnectedProfileField(many=False)
+            self.fields['approved_by'].instance = instance.approved_by
+        out = super().to_representation(instance=instance)
+        return out
 
     def create(self, validated_data):
         target = validated_data.pop('_user_instance', None)

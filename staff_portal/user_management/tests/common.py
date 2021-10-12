@@ -69,7 +69,7 @@ _fixtures = {
         {'id':5, 'country':'SG', 'province':'cannotBeEmpty', 'locality':'Chang-i', 'street':'Tok-Hua rd.', 'detail':'Tyson mansion', 'floor':8, 'description':'contexturize marshall language'},
         {'id':6, 'country':'PT', 'province':'Leewisky', 'locality':'Lisbon', 'street':'green straw st', 'detail':'Booming Lane 13-6', 'floor':7, 'description':'Herb nursery'},
         {'id':7, 'country':'ID', 'province':'Gunung Surawesi', 'locality':'Gyrueoq0', 'street':'Steamer road 199', 'detail':'Broken Bay', 'floor':1, 'description':'human resource agency'},
-        {'id':7, 'country':'IN', 'province':'Udaipur', 'locality':'Jenkistania', 'street':'Taiwan Independent ave. 426', 'detail':'be independent', 'floor':1, 'description':'Human Right NGO'},
+        {'id':8, 'country':'IN', 'province':'Udaipur', 'locality':'Jenkistania', 'street':'Taiwan Independent ave. 426', 'detail':'be independent', 'floor':1, 'description':'Human Right NGO'},
     ],
 } ## end of _fixtures
 

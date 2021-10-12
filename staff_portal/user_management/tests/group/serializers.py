@@ -4,6 +4,7 @@ import copy
 import json
 from functools import partial
 from datetime import timedelta
+from unittest.mock import Mock
 
 from django.test import TransactionTestCase
 from django.utils import timezone as django_timezone
@@ -46,10 +47,7 @@ class GroupCommonTestCase(TransactionTestCase, HttpRequestDataGenGroup, GroupVer
 
     def tearDown(self):
         pass
-## end of class GroupCommonTestCase
 
-
-class GroupCreationTestCase(GroupCommonTestCase):
     def _init_new_trees(self, num_trees=3, min_num_nodes=2, max_num_nodes=10, min_num_siblings=1,
             max_num_siblings=3, write_value_fn=None, value_compare_fn=None):
         write_value_fn = write_value_fn or self._write_value_fn
@@ -74,6 +72,10 @@ class GroupCreationTestCase(GroupCommonTestCase):
         self.assertEqual(len(matched), len(origin_trees))
         return saved_trees
 
+## end of class GroupCommonTestCase
+
+
+class GroupCreationTestCase(GroupCommonTestCase):
     def test_create_new_trees(self):
         num_rounds = 3
         for _ in range(num_rounds):
@@ -339,6 +341,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
     num_roles = 3
     num_quota = 3
 
+    # override parent class function
     def _init_new_trees(self, num_trees=3, min_num_nodes=2, max_num_nodes=10, min_num_siblings=1,  max_num_siblings=3 ):
         origin_num_quota = self.num_quota
         self.num_quota = 0
@@ -613,5 +616,91 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         pos = err_info[non_field_err_key][0].find(expect_errmsg_pattern)
         self.assertGreater(pos, 0)
 ## end of class GroupUpdateTestCase
+
+
+class GroupRepresentationTestCase(GroupCommonTestCase):
+    num_roles = 3
+    num_quota = 3
+
+    def tearDown(self):
+        super().tearDown()
+
+    def _validate_group(self, treenode, grps_data):
+        expect_data = treenode.value
+        filtered = filter(lambda d:d['id'] == expect_data['id'], grps_data)
+        actual_data = next(filtered)
+        is_equal = self._value_compare_fn(val_a=expect_data, val_b=actual_data)
+        self.assertTrue(is_equal)
+
+    def test_full_representation(self):
+        saved_trees = self._init_new_trees(num_trees=1, min_num_nodes=5, max_num_nodes=5,
+                min_num_siblings=2,  max_num_siblings=2)
+        grp_qset = saved_trees.entity_data
+        serializer = self.serializer_class(many=True, instance=grp_qset, account=self._login_user_profile.account)
+        grps_data = serializer.data
+        self._validate_group(grps_data=grps_data, treenode=saved_trees[0])
+        self._validate_group(grps_data=grps_data, treenode=saved_trees[0].children[0])
+        self._validate_group(grps_data=grps_data, treenode=saved_trees[0].children[1])
+        self._validate_group(grps_data=grps_data, treenode=saved_trees[0].children[0].children[0])
+        self._validate_group(grps_data=grps_data, treenode=saved_trees[0].children[0].children[1])
+        # ---------- check closure structure ---------
+        # root
+        filtered = filter(lambda d:d['id'] == saved_trees[0].value['id'], grps_data)
+        root_data = next(filtered)
+        self.assertFalse(any(root_data['ancestors']))
+        child_nodes = filter(lambda d:d['depth'] == 1, root_data['descendants'])
+        actual_child_ids = list(map(lambda d:d['descendant']['id'], child_nodes))
+        grandchild_nodes = filter(lambda d:d['depth'] == 2, root_data['descendants'])
+        actual_grandchild_ids = list(map(lambda d:d['descendant']['id'], grandchild_nodes))
+        self.assertIn(saved_trees[0].children[0].value['id'] , actual_child_ids)
+        self.assertIn(saved_trees[0].children[1].value['id'] , actual_child_ids)
+        self.assertIn(saved_trees[0].children[0].children[0].value['id'] , actual_grandchild_ids)
+        self.assertIn(saved_trees[0].children[0].children[1].value['id'] , actual_grandchild_ids)
+        # child non-leaf node 0
+        filtered = filter(lambda d:d['id'] == saved_trees[0].children[0].value['id'], grps_data)
+        node_data = next(filtered)
+        self.assertEqual( node_data['ancestors'][0]['ancestor']['id'] , saved_trees[0].value['id'] )
+        child_nodes = filter(lambda d:d['depth'] == 1, node_data['descendants'])
+        actual_child_ids = list(map(lambda d:d['descendant']['id'], child_nodes))
+        self.assertIn(saved_trees[0].children[0].children[0].value['id'] , actual_child_ids)
+        self.assertIn(saved_trees[0].children[0].children[1].value['id'] , actual_child_ids)
+        # child leaf node 1
+        filtered = filter(lambda d:d['id'] == saved_trees[0].children[1].value['id'], grps_data)
+        node_data = next(filtered)
+        self.assertFalse(any(node_data['descendants']))
+        self.assertEqual( node_data['ancestors'][0]['ancestor']['id'] , saved_trees[0].value['id'] )
+        # grandchild leaf node 0, 1
+        filtered = filter(lambda d:d['id'] == saved_trees[0].children[0].children[0].value['id'], grps_data)
+        node_data = next(filtered)
+        self.assertFalse(any(node_data['descendants']))
+        parent_nodes_data = sorted(node_data['ancestors'], key=lambda d:d['depth'])
+        self.assertEqual( parent_nodes_data[0]['ancestor']['id'] , saved_trees[0].children[0].value['id'] )
+        self.assertEqual( parent_nodes_data[1]['ancestor']['id'] , saved_trees[0].value['id'] )
+
+    def test_partial_representation(self):
+        hidden_fields = ('name', 'quota', 'phones')
+        expect_fields = ('id', 'roles', 'emails', 'locations',)
+        mocked_request = Mock()
+        mocked_request.query_params = {'fields':','.join(expect_fields)}
+        saved_trees = GroupUpdateTestCase._init_new_trees(self, num_trees=1, min_num_nodes=1,
+                max_num_nodes=1, min_num_siblings=1,  max_num_siblings=1)
+        grp_qset = saved_trees.entity_data
+        serializer = self.serializer_class(many=True, instance=grp_qset, account=self._login_user_profile.account)
+        serializer.context['request'] = mocked_request
+        grps_data = serializer.data
+        filtered = filter(lambda d:d['id'] == saved_trees[0].value['id'], grps_data)
+        node_data = next(filtered)
+        for field in hidden_fields:
+            with self.assertRaises(KeyError):
+                node_data[field]
+        is_equal = self._value_compare_roles_fn(val_a=node_data, val_b=saved_trees[0].value)
+        self.assertTrue(is_equal)
+        is_equal = self._value_compare_contact_fn(val_a=node_data['emails'], compare_id=True,
+                val_b=saved_trees[0].value['emails'], _fields_compare=_nested_field_names['emails'])
+        self.assertTrue(is_equal)
+        is_equal = self._value_compare_contact_fn(val_a=node_data['locations'], compare_id=True,
+                val_b=saved_trees[0].value['locations'], _fields_compare=_nested_field_names['locations'])
+        self.assertTrue(is_equal)
+
 
 

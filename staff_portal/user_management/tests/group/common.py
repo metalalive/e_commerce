@@ -4,7 +4,7 @@ import operator
 from functools import reduce
 from datetime import timedelta
 
-from django.utils  import timezone
+from django.utils  import timezone as django_timezone
 from django.db.models.constants import LOOKUP_SEP
 
 from user_management.models.common import AppCodeOptions
@@ -31,6 +31,8 @@ def _auto_increment_gen_fn(num=0):
 
 _auto_inc_gen =  _auto_increment_gen_fn()
 
+_curr_timezone = django_timezone.get_current_timezone()
+
 
 class HttpRequestDataGenGroup(HttpRequestDataGen):
     num_roles = 0
@@ -48,7 +50,9 @@ class HttpRequestDataGenGroup(HttpRequestDataGen):
     def _gen_expiry_time(self):
         minutes_valid = random.randrange(0,60)
         if minutes_valid > 5:
-            expiry_time = timezone.now() + timedelta(minutes=minutes_valid)
+            expiry_time = django_timezone.now() + timedelta(minutes=minutes_valid)
+            # timezone has to be consistent
+            expiry_time = expiry_time.astimezone(_curr_timezone)
             expiry_time = expiry_time.isoformat()
         else:
             expiry_time = None
@@ -186,12 +190,14 @@ class GroupVerificationMixin:
         for d in value['roles']:
             if not d['expiry']:
                 continue
+            d['expiry'] = d['expiry'].astimezone(_curr_timezone)
             d['expiry'] = d['expiry'].isoformat()
         _fields_compare = _nested_field_names['quota']
         value['quota'] = list(node.quota.values(*_fields_compare))
         for d in value['quota']:
             if not d['expiry']:
                 continue
+            d['expiry'] = d['expiry'].astimezone(_curr_timezone)
             d['expiry'] = d['expiry'].isoformat()
         _fields_compare = _nested_field_names['emails']
         value['emails'] = list(node.emails.values(*_fields_compare))
@@ -216,7 +222,7 @@ class GroupVerificationMixin:
     def _value_compare_roles_fn(self, val_a, val_b):
         _fields_compare = _nested_field_names['roles']
         expect_val = list(map(lambda d: {fname:d[fname] for fname in _fields_compare}, val_a['roles']))
-        actual_val = val_b['roles']
+        actual_val = list(map(lambda d: {fname:d[fname] for fname in _fields_compare}, val_b['roles']))
         expect_val = sorted(expect_val, key=lambda d:d['role'])
         actual_val = sorted(actual_val, key=lambda d:d['role'])
         return actual_val == expect_val
@@ -224,7 +230,7 @@ class GroupVerificationMixin:
     def _value_compare_quota_fn(self, val_a, val_b):
         _fields_compare = _nested_field_names['quota']
         expect_val = list(map(lambda d: {fname:d[fname] for fname in _fields_compare}, val_a['quota']))
-        actual_val = val_b['quota']
+        actual_val = list(map(lambda d: {fname:d[fname] for fname in _fields_compare}, val_b['quota']))
         expect_val = sorted(expect_val, key=lambda d:d['material'])
         actual_val = sorted(actual_val, key=lambda d:d['material'])
         return actual_val == expect_val
