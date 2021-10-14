@@ -45,14 +45,14 @@ task_queues = {
 }
 
 task_routes = {
-    'user_management.async_tasks.update_roles_on_accounts': {
+    'user_management.async_tasks.update_accounts_privilege': {
         'queue':'usermgt_default', ## celery
     },
 } # end of task routes
 
 # set rate limit, at most 10 tasks to process in a single minute.
 task_annotations = {
-    'user_management.async_tasks.update_roles_on_accounts': {'rate_limit': '7/m'},
+    'user_management.async_tasks.update_accounts_privilege': {'rate_limit': '7/m'},
 }
 
 # following 3 parameters affects async result sent from a running task

@@ -11,22 +11,22 @@ from user_management.models.common import AppCodeOptions
 from user_management.models.auth import LoginAccount, Role
 from user_management.models.base import GenericUserProfile, GenericUserGroup, QuotaMaterial, EmailAddress, PhoneNumber, GeoLocation
 
+num_login_profiles = 29
+
 _fixtures = {
     LoginAccount: [
-        {'is_superuser':False, 'is_staff':True,  'is_active':True,  'username': 'AltinGun','password': '93rutGrPt'} ,
-        {'is_superuser':False, 'is_staff':False, 'is_active':True,  'username': 'KingGizz','password': '39rjfR@et'} ,
-        {'is_superuser':False, 'is_staff':True,  'is_active':False, 'username': 'Imarhan', 'password': 'if74w#gfy'} ,
-        {'is_superuser':True,  'is_staff':False, 'is_active':True,  'username': 'yuk0p1ano', 'password': 'anti@s0cia1'} ,
-        {'is_superuser':True,  'is_staff':False, 'is_active':False, 'username': 'remoteCtrl','password': '9rJ3yf740fM'} ,
+        {'is_superuser':False, 'is_staff':False,  'is_active':False, \
+                'username': ''.join(random.choices(string.ascii_letters, k=10)), \
+                'password': ''.join(random.choices(string.ascii_letters, k=16)) \
+        } for _ in range(num_login_profiles)
     ],
     GenericUserProfile: [
-        {'id':3, 'first_name':'Jon', 'last_name':'Snow'},
-        {'id':4, 'first_name':'Shelton', 'last_name':'Cooper'},
-        {'id':5, 'first_name':'Kenny',  'last_name':'McCormick'},
-        {'id':6, 'first_name':'Shaun',  'last_name':'Merphy'},
+        {'id':idx, 'first_name':''.join(random.choices(string.ascii_letters, k=5)),
+            'last_name':''.join(random.choices(string.ascii_letters, k=8)) }  for idx in range(1, 1 + num_login_profiles)
     ],
-    Role: [
-        {'id':idx, 'name':'my role %s' % ''.join(random.choices(string.ascii_letters, k=8)) } for idx in range(4, 14)
+    Role: [ # including superuser role and staff role
+        {'id':idx, 'name':'my role %s' % ''.join(random.choices(string.ascii_letters, k=8)) } \
+                for idx in range(GenericUserProfile.STAFF, 15)
     ],
     QuotaMaterial: [
         {"id": 1, "app_code": AppCodeOptions.user_management, "mat_code": QuotaMaterial._MatCodeOptions.MAX_NUM_EMAILS.value} ,

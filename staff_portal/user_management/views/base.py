@@ -28,7 +28,7 @@ from common.util.python.async_tasks  import  sendmail as async_send_mail, defaul
 
 from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, UsermgtChangeSet
-from ..async_tasks import update_roles_on_accounts
+from ..async_tasks import update_accounts_privilege
 
 from ..serializers import RoleSerializer, GenericUserGroupSerializer
 from ..serializers import GenericUserProfileSerializer, AuthUserResetRequestSerializer
@@ -169,10 +169,10 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
         return self.recovery(request=request, *args, **kwargs)
 
     def delete_success_callback(self, id_list):
-        update_roles_on_accounts.delay(affected_groups=id_list, deleted=True)
+        update_accounts_privilege.delay(affected_groups=id_list, deleted=True)
 
     def recover_success_callback(self, id_list):
-        update_roles_on_accounts.delay(affected_groups=id_list, deleted=False)
+        update_accounts_privilege.delay(affected_groups=id_list, deleted=False)
 
 
 

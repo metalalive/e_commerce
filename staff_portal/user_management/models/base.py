@@ -12,6 +12,7 @@ from django.core.validators import RegexValidator
 from django.core.exceptions import EmptyResultSet, ObjectDoesNotExist, MultipleObjectsReturned
 from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
+from django.utils import timezone as django_timezone
 
 from softdelete.models import SoftDeleteObjectMixin
 
@@ -39,6 +40,25 @@ class AbstractUserRelation(models.Model):
                                   db_column='user_type',  limit_choices_to=allowed_models)
     user_id   = models.PositiveIntegerField(db_column='user_id')
     user_ref  = GenericForeignKey(ct_field='user_type', fk_field='user_id')
+
+
+class _ExpiryFieldMixin(models.Model):
+    class Meta:
+        abstract = True
+    # the approvement should expire after the given time passed
+    expiry = models.DateTimeField(blank=True, null=True)
+
+    @classmethod
+    def expiry_condition(self, field_name:list=None):
+        field_name = field_name or ['expiry']
+        field_gte    = field_name.copy()
+        field_isnull = field_name.copy()
+        field_gte.append('gte')
+        field_isnull.append('isnull')
+        field_gte    = LOOKUP_SEP.join(field_gte   )
+        field_isnull = LOOKUP_SEP.join(field_isnull)
+        now_time = django_timezone.now()
+        return (models.Q(**{field_gte:now_time}) | models.Q(**{field_isnull:True}))
 
 
 class QuotaMaterial(models.Model):
@@ -176,7 +196,7 @@ class GeoLocation(AbstractUserRelation):
 ## end of class GeoLocation
 
 
-class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin):
+class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin, _ExpiryFieldMixin):
     """ where the system stores quota arrangements for each user (or user group) """
     class Meta:
         db_table = 'user_quota_relation'
@@ -186,22 +206,16 @@ class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin):
     material = models.ForeignKey(to=QuotaMaterial, on_delete=models.CASCADE, null=False,
                       blank=False, db_column='material', related_name='usr_relations')
     maxnum   = models.PositiveSmallIntegerField(default=1)
-    expiry   = models.DateTimeField(blank=True, null=True)
     id = CompoundPrimaryKeyField(inc_fields=['user_type', 'user_id', 'material'])
 
 
-class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
+class GenericUserCommonFieldsMixin(SoftDeleteObjectMixin):
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
     SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
-    min_info_field_names = ['id','name']
-
-    class Meta(SoftDeleteObjectMixin.Meta):
-        db_table = 'generic_user_group'
-
-    name  = models.CharField(max_length=50,  unique=False)
-    # foreign key referencing to the same table
-    #### parent = models.ForeignKey('self', db_column='parent', on_delete=models.CASCADE, null=True, blank=True)
+    class Meta:
+        abstract = True
     roles = GenericRelation('GenericUserAppliedRole', object_id_field='user_id', content_type_field='user_type')
+    # reverse relations from related models e.g. emails / phone numbers / geographical locations
     quota     = GenericRelation(UserQuotaRelation, object_id_field='user_id', content_type_field='user_type')
     emails    = GenericRelation(EmailAddress, object_id_field='user_id', content_type_field='user_type')
     phones    = GenericRelation(PhoneNumber,  object_id_field='user_id', content_type_field='user_type')
@@ -209,15 +223,13 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
 
     @_atomicity_fn()
     def delete(self, *args, **kwargs):
-        del_grp_id = self.pk
         hard_delete = kwargs.get('hard', False)
         if not hard_delete:
             if kwargs.get('changeset', None) is None:
                 profile_id = kwargs.get('profile_id')
                 kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
-        self._decrease_subtree_pathlen(*args, **kwargs)
         # delete this node
-        SoftDeleteObjectMixin.delete(self, *args, **kwargs)
+        super().delete(*args, **kwargs)
         if not hard_delete: # logs the soft-deleted instance
             # all GenericRelation instances e.g. roles, quotas, will NOT be soft-deleted automatically,
             # instead developers have to soft-delete them explicitly by calling
@@ -227,19 +239,10 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
             self.emails.all().delete(*args, **kwargs)
             changeset = kwargs.pop('changeset', None)
             kwargs.pop('profile_id', None)
+            # Sensitive personal data like phones and geo-locations must be hard-deleted.
             self.phones.all().delete(*args, **kwargs)
             self.locations.all().delete(*args, **kwargs)
-            if _logger.level <= logging.DEBUG:
-                del_set_exist = type(self).objects.get_deleted_set().filter(pk=del_grp_id).exists()
-                cond = models.Q(ancestor=del_grp_id) | models.Q(descendant=del_grp_id)
-                del_paths_qset = GenericUserGroupClosure.objects.get_deleted_set().filter(cond)
-                del_paths_qset = del_paths_qset.values('pk', 'ancestor__pk', 'descendant__pk', 'depth')
-                cset_records = changeset.soft_delete_records.all().values('pk', 'content_type__pk', 'object_id')
-                log_args = ['changeset_id', changeset.pk, 'del_grp_id', del_grp_id, 'del_set_exist', del_set_exist,
-                        'del_paths_qset', del_paths_qset, 'cset_records', cset_records]
-                _logger.debug(None, *log_args)
-        #raise IntegrityError
-
+            return changeset
 
     @_atomicity_fn()
     def undelete(self, *args, **kwargs):
@@ -249,14 +252,53 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
         changeset_id = kwargs['changeset'].pk
         # recover this node first
         status = super().undelete(*args, **kwargs)
+        kwargs.pop('changeset', None)
+        kwargs.pop('profile_id', None)
+        log_args = ['changeset_id', changeset_id, 'status', status, 'obj_id', self.pk,
+                'obj_type', str(type(self))]
+        _logger.debug(None, *log_args)
+        return status
+
+
+
+class GenericUserGroup(GenericUserCommonFieldsMixin, MinimumInfoMixin):
+    min_info_field_names = ['id','name']
+
+    class Meta(SoftDeleteObjectMixin.Meta):
+        db_table = 'generic_user_group'
+
+    name  = models.CharField(max_length=50,  unique=False)
+    # foreign key referencing to the same table
+    #### parent = models.ForeignKey('self', db_column='parent', on_delete=models.CASCADE, null=True, blank=True)
+
+    @_atomicity_fn()
+    def delete(self, *args, **kwargs):
+        del_grp_id = self.pk
+        self._decrease_subtree_pathlen(*args, **kwargs)
+        profile_id  = kwargs.get('profile_id', None)
+        hard_delete = kwargs.get('hard', False)
+        changeset = super().delete(*args, **kwargs)
+        if not hard_delete: # logs the soft-deleted instance
+            if 'profile_id' not in kwargs.keys():
+                kwargs['profile_id'] = profile_id
+            self.profiles.all().delete(*args, changeset=changeset, **kwargs)
+            if _logger.level <= logging.DEBUG:
+                del_set_exist = type(self).objects.get_deleted_set().filter(pk=del_grp_id).exists()
+                cond = models.Q(ancestor=del_grp_id) | models.Q(descendant=del_grp_id)
+                del_paths_qset = GenericUserGroupClosure.objects.get_deleted_set().filter(cond)
+                del_paths_qset = del_paths_qset.values('pk', 'ancestor__pk', 'descendant__pk', 'depth')
+                cset_records = changeset.soft_delete_records.all().values('pk', 'content_type__pk', 'object_id')
+                log_args = ['changeset_id', changeset.pk, 'del_grp_id', del_grp_id, 'del_set_exist', del_set_exist,
+                        'del_paths_qset', del_paths_qset, 'cset_records', cset_records]
+                _logger.debug(None, *log_args)
+
+
+    @_atomicity_fn()
+    def undelete(self, *args, **kwargs):
+        status = super().undelete(*args, **kwargs)
         # then recover all its deleted relations,
         if status is SoftDeleteObjectMixin.DONE_FULL_RECOVERY:
             self._increase_subtree_pathlen(*args, **kwargs)
-        log_args = ['changeset_id', changeset_id, 'undel_grp_id', self.pk,]
-        _logger.debug(None, *log_args)
-        kwargs.pop('changeset', None)
-        kwargs.pop('profile_id', None)
-        #raise IntegrityError
 
     @get_paths_through_processing_node(with_deleted=False)
     def _decrease_subtree_pathlen(self, affected_paths):
@@ -290,6 +332,31 @@ class GenericUserGroup(SoftDeleteObjectMixin, MinimumInfoMixin):
         return filter_closure_nodes_recovery(records_in=records_in, app_label='user_management',
                 model_name='GenericUserGroupClosure')
 
+    @classmethod
+    def update_accounts_privilege(cls, grp_ids, deleted):
+        done = False
+        affected_groups_origin = grp_ids
+        if deleted:
+            qset = GenericUserGroupClosure.objects.get_deleted_set()
+        else:
+            qset = GenericUserGroupClosure.objects.all()
+        qset = qset.filter(ancestor__pk__in=grp_ids)
+        affected_groups = qset.values_list('descendant__pk', flat=True)
+        # always update privilege in all user accounts including deactivated accounts
+        kwargs_prof = {'group__pk__in': affected_groups, 'with_deleted':True}
+        qset = GenericUserGroupRelation.objects.filter(**kwargs_prof)
+        profile_ids = qset.values_list('profile__pk', flat=True)
+        log_args = ['affected_groups', affected_groups, 'profile_ids', profile_ids,
+                'affected_groups_origin', affected_groups_origin]
+        _logger.info(None, *log_args)
+        # load user profiles that already activated their accounts
+        profiles = GenericUserProfile.objects.filter(pk__in=profile_ids, account__isnull=False)
+        with _atomicity_fn():
+            for profile in profiles:
+                profile.update_account_privilege()
+            done = True
+        return done
+## end of class GenericUserGroup
 
 
 class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
@@ -303,9 +370,7 @@ class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
     descendant = ClosureTableModelMixin.desc_field(ref_cls=GenericUserGroup)
 
 
-class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMixin):
-    SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
-    SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
+class GenericUserProfile(GenericUserCommonFieldsMixin, SerializableMixin, MinimumInfoMixin):
     NONE = 0
     SUPERUSER = ROLE_ID_SUPERUSER
     STAFF = ROLE_ID_STAFF
@@ -316,83 +381,45 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
 
     first_name = models.CharField(max_length=32, blank=False, unique=False)
     last_name  = models.CharField(max_length=32, blank=False, unique=False)
-    # users may be active or not (e.g. newly registered users who haven't activate their account)
-    active = models.BooleanField(default=False)
     time_created = models.DateTimeField(auto_now_add=True)
     # record last time this user used (or logined to) the system
     last_updated = models.DateTimeField(auto_now=True)
     # the group(s) the user belongs to
     ####groups = models.ManyToManyField(GenericUserGroup, blank=True, db_table='generic_user_group_relation', related_name='user_profiles')
-    roles = GenericRelation('GenericUserAppliedRole', object_id_field='user_id', content_type_field='user_type')
-    # reverse relations from related models e.g. emails / phone numbers / geographical locations
-    quota     = GenericRelation(UserQuotaRelation, object_id_field='user_id', content_type_field='user_type')
-    emails    = GenericRelation(EmailAddress, object_id_field='user_id', content_type_field='user_type')
-    phones    = GenericRelation(PhoneNumber,  object_id_field='user_id', content_type_field='user_type')
-    locations = GenericRelation(GeoLocation,  object_id_field='user_id', content_type_field='user_type')
 
     @_atomicity_fn()
     def delete(self, *args, **kwargs):
         del_prof_id = self.pk
+        profile_id  = kwargs.get('profile_id', None)
         hard_delete = kwargs.get('hard', False)
-        if not hard_delete: # let nested fields add in the same soft-deleted changeset
-            if kwargs.get('changeset', None) is None:
-                profile_id = kwargs.get('profile_id')
-                kwargs['changeset'] = self.determine_change_set(profile_id=profile_id)
         self.deactivate(remove_account=False)
-        super().delete(*args, **kwargs)
+        changeset = super().delete(*args, **kwargs)
         if not hard_delete:
-            # emails are soft-deleted for potential login account re-activation in the future
-            self.emails.all().delete(*args, **kwargs)
-            self.roles.all().delete(*args, **kwargs) # self.groups.all() soft-deleted automatically
-            kwargs.pop('hard', False)
-            kwargs.pop('profile_id', None)
-            changeset = kwargs.pop('changeset', None)
-            # Sensitive personal data like phones and geo-locations must be hard-deleted.
-            self.phones.all().delete(*args, **kwargs)
-            self.locations.all().delete(*args, **kwargs)
+            if 'profile_id' not in kwargs.keys():
+                kwargs['profile_id'] = profile_id
+            self.groups.all().delete(*args, changeset=changeset, **kwargs)
             if _logger.level <= logging.DEBUG:
                 del_set_exist = type(self).objects.get_deleted_set().filter(pk=del_prof_id).exists()
                 phones_exist = self.phones.all().exists()
                 geoloc_exist = self.locations.all().exists()
-                quota_count  = self.quota.count() # quota is not soft-delete model, should remain unchanged
                 cset_records = changeset.soft_delete_records.all().values('pk', 'content_type__pk', 'object_id')
                 log_args = ['del_prof_id', del_prof_id, 'del_set_exist', del_set_exist, 'cset_records', cset_records,
-                        'changeset_id', changeset.pk, 'phones_exist', phones_exist, 'geoloc_exist', geoloc_exist,
-                        'quota_count', quota_count]
+                        'changeset_id', changeset.pk, 'phones_exist', phones_exist, 'geoloc_exist', geoloc_exist ]
                 _logger.debug(None, *log_args)
-        #raise IntegrityError("end of complex deletion ........")
-
-
-    @_atomicity_fn()
-    def undelete(self, *args, **kwargs):
-        if kwargs.get('changeset', None) is None:
-            profile_id = kwargs.get('profile_id',None)
-            kwargs['changeset'] = SoftDeleteObjectMixin.determine_change_set(self, profile_id=profile_id, create=False)
-        changeset_id = kwargs['changeset'].pk
-        undel_prof_id = self.pk
-        status = super().undelete(*args, **kwargs)
-        kwargs.pop('changeset', None)
-        kwargs.pop('profile_id', None)
-        log_args = ['undel_prof_id', undel_prof_id, 'changeset_id', changeset_id, 'status', status]
-        _logger.debug(None, *log_args)
-        #raise IntegrityError("end of complex recover ........")
 
 
     @_atomicity_fn()
     def activate(self, new_account_data):
         account = None
-        self.active = True
-        self.save(update_fields=['active'])
         try:
-            auth_rel = self.auth
-            account  = auth_rel.login
+            account  = self.account
             account.is_active = True
-            account.save()
+            account.save(update_fields=['is_active'])
         except ObjectDoesNotExist: # for first time to activate the account
-            new_account_data['profile'] = self
-            account = auth.get_user_model().objects.create_user( **new_account_data )
-            GenericUserProfile.update_account_privilege(profile=self, account=account)
-        return account
+            new_account_data.update({'profile': self, 'is_active': True})
+            self.account = auth.get_user_model().objects.create_user( **new_account_data )
+            self.update_account_privilege()
+        return self.account
 
 
     @_atomicity_fn()
@@ -403,22 +430,19 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
             log_args.extend(['msg', err_msg])
             _logger.error(None, *log_args)
             raise ValueError(err_msg)
-        self.active = False
-        self.save(update_fields=['active'])
         try:
-            req = self.auth_rst_req
+            req = self.auth_rst_req # TODO: rename to unauth_edit_acc_req
             req.delete()
         except ObjectDoesNotExist:
             log_args.extend(['msg', 'no auth-related request issued to the user'])
         try:
-            auth_rel = self.auth
-            account  = auth_rel.login
-            auth_rel.check_admin_exist()
+            account  = self.account
             if remove_account:
-                auth_rel.delete()
+                account.delete()
             else:
+                account.check_admin_exist()
                 account.is_active = False
-                account.save()
+                account.save(update_fields=['is_active'])
         except ObjectDoesNotExist:
             log_args.extend(['msg', 'no login account for the user'])
         if any(log_args):
@@ -436,10 +460,14 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
         # 'ancestors__ancestor__quota__maxnum' ]
         quota_mat_field = ['ancestors', 'ancestor', 'quota', 'material'] # QuotaMaterial.id field
         quota_val_field = ['ancestors', 'ancestor', 'quota', 'maxnum']
+        quota_exp_field = ['ancestors', 'ancestor', 'quota', 'expiry']
         quota_mat_field = LOOKUP_SEP.join(quota_mat_field)
         quota_val_field = LOOKUP_SEP.join(quota_val_field)
-        qset = groups.values(quota_mat_field).annotate(max_num_chosen=models.Max(quota_val_field)
-            ).order_by(quota_mat_field).distinct().filter(max_num_chosen__gt=0)
+        cond_before_groupby = UserQuotaRelation.expiry_condition(field_name=quota_exp_field)
+        cond_after_groupby  = models.Q(max_num_chosen__gt=0)
+        qset = groups.filter( cond_before_groupby ).values(quota_mat_field).annotate(
+                max_num_chosen=models.Max(quota_val_field)
+            ).order_by(quota_mat_field).distinct().filter( cond_after_groupby )
         merged_inhehited = {q[quota_mat_field]: q['max_num_chosen'] for q in qset}
         log_msg = ['merged_inhehited', merged_inhehited]
         _logger.debug(None, *log_msg)
@@ -473,7 +501,8 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
             grp_ids = self.groups.values_list('group__pk', flat=True)
             asc_ids = GenericUserGroupClosure.objects.filter(descendant__pk__in=grp_ids).values_list('ancestor__id', flat=True)
             role_rel_cls = self.roles.model
-            role_ids = role_rel_cls.objects.filter(user_type=grp_ct, user_id__in=asc_ids).values_list('role__id', flat=True)
+            valid_role_rel_cond = models.Q(user_type=grp_ct) & models.Q(user_id__in=asc_ids) & role_rel_cls.expiry_condition()
+            role_ids = role_rel_cls.objects.filter(valid_role_rel_cond).values_list('role__id', flat=True)
             role_cls = role_rel_cls.role.field.related_model
             roles = role_cls.objects.filter(id__in=role_ids)
             self._inherit_roles = roles
@@ -483,7 +512,8 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
     def direct_roles(self):
         if not hasattr(self, '_direct_roles'):
             role_rel_cls = self.roles.model
-            role_ids = self.roles.values_list('role__id', flat=True)
+            valid_role_rel_cond = role_rel_cls.expiry_condition()
+            role_ids = self.roles.filter(valid_role_rel_cond).values_list('role__id', flat=True)
             role_cls = role_rel_cls.role.field.related_model
             roles = role_cls.objects.filter(id__in=role_ids)
             self._direct_roles = roles
@@ -509,55 +539,36 @@ class GenericUserProfile(SoftDeleteObjectMixin, SerializableMixin, MinimumInfoMi
                 break
         return out
 
-    @classmethod
-    def update_account_privilege(cls, profile, account):
+    def update_account_privilege(self, auto_save=True):
         """
-        private class method to update privilege (is_superuser, is_staff flags)
-        in django.contrib.auth.User account, note this function is NOT thread-safe
+        update privilege (is_superuser, is_staff flags)  in LoginAccount,
+        the method should run after this instance of the class is already saved
         """
-        if (profile is None) or (account is None):
-            return
-        privilege = profile.privilege_status
-        if privilege == cls.SUPERUSER:
-            account.is_superuser = True
-            account.is_staff = True
-        elif privilege == cls.STAFF:
-            account.is_superuser = False
-            account.is_staff = True
-        else: # TODO, force such users logout if they were staff before the change
-            account.is_superuser = False
-            account.is_staff = False
-        account.save(update_fields=['is_superuser','is_staff'])
-
-        # update roles applied,
-        new_roles = profile.all_roles
-        old_role_relations = account.roles_applied.all()
-        old_roles = old_role_relations.values_list('role__pk', flat=True)
-
-        new_roles = set(new_roles)
-        old_roles = set(old_roles)
-        list_add = new_roles - old_roles
-        list_del = old_roles - new_roles
-        list_unchanged = old_roles & new_roles
-
-        if list_add:
-            role_model_cls =  profile.roles.model.role.field.related_model
-            _list_add = role_model_cls.objects.filter(pk__in=list_add)
-            #for role in _list_add:
-            #    u = LoginAccountRoleRelation.objects.create(role=role, account=account)
-        if list_del:
-            old_role_relations.filter(role__pk__in=list_del).delete()
-        # account.roles_applied.set(update_list) # completely useless if not m2m field
-        log_args = ['profile_id', profile.pk, 'privilege', privilege, 'new_roles', new_roles,
-                'old_roles', old_roles, 'list_add', list_add, 'list_del', list_del,
-                'list_unchanged', list_unchanged]
+        log_args = ['auto_save', auto_save, 'profile_id', self.pk,]
+        try:
+            self.account # test whether the account exists
+            privilege = self.privilege_status
+            if privilege == self.SUPERUSER:
+                self.account.is_superuser = True
+                self.account.is_staff = True
+            elif privilege == self.STAFF:
+                self.account.is_superuser = False
+                self.account.is_staff = True
+            else: # TODO, force such users logout if they were staff before the change
+                self.account.is_superuser = False
+                self.account.is_staff = False
+            if auto_save:
+                self.account.save(update_fields=['is_superuser','is_staff'])
+            log_args.extend(['privilege', privilege])
+        except ObjectDoesNotExist as e: # for first time to activate the account
+            log_args.extend(['errmsg', ' '.join(e.args)])
         _logger.debug(None, *log_args)
 #### end of GenericUserProfile
 
 
 
 
-class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin):
+class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin, _ExpiryFieldMixin):
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
     SOFTDELETE_RECORD_MODEL = UsermgtSoftDeleteRecord
     class Meta:
@@ -566,8 +577,6 @@ class GenericUserAppliedRole(AbstractUserRelation, SoftDeleteObjectMixin):
     #   modified to default superuser. So  a profile for default superuser will be necessary
     role = models.ForeignKey('Role', blank=False, db_column='role', related_name='users_applied',
                 on_delete=models.CASCADE,)
-    # the approvement should expire after the given time passed
-    expiry = models.DateTimeField(blank=True, null=True)
     # record the user who approved the reqeust (that a role can be granted to the group or individual user
     approved_by  = models.ForeignKey(GenericUserProfile, blank=True, null=True, db_column='approved_by',
         related_name="approval_role",  on_delete=models.SET_NULL,)

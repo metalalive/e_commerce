@@ -14,6 +14,10 @@ class Migration(migrations.Migration):
             model_name='genericuserappliedrole',
             name='last_updated',
         ),
+        migrations.RemoveField(
+            model_name='genericuserprofile',
+            name='active',
+        ),
         migrations.AddField(
             model_name='genericuserappliedrole',
             name='expiry',

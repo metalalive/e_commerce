@@ -9,7 +9,7 @@ from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
 from common.util.python.celery import app as celery_app
 from common.logging.util  import log_fn_wrapper
 
-from .models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, _atomicity_fn, GenericUserAppliedRole, GenericUserGroupRelation
+from .models.base import GenericUserGroup
 from .models.auth import AccountResetRequest
 from django.contrib import auth
 
@@ -17,31 +17,10 @@ _logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, queue='usermgt_default')
-def update_roles_on_accounts(self, affected_groups, deleted=False):
-    done = False
-    affected_groups_origin = affected_groups
-    if deleted:
-        qset = GenericUserGroupClosure.objects.get_deleted_set()
-    else:
-        qset = GenericUserGroupClosure.objects.all()
-    qset = qset.filter(ancestor__pk__in=affected_groups)
-    affected_groups = qset.values_list('descendant__pk', flat=True)
-    # always update roles in soft-deleted / deactivated user accounts
-    kwargs_prof = {'group__pk__in': affected_groups, 'with_deleted':True}
-    qset = GenericUserGroupRelation.objects.filter(**kwargs_prof)
-    profile_ids = qset.values_list('profile__pk', flat=True)
-    log_args = ['affected_groups', affected_groups, 'profile_ids', profile_ids,
-            'affected_groups_origin', affected_groups_origin]
-    _logger.info(None, *log_args)
-    # load use profiles who have account (regardless of activation status)
-    profiles = GenericUserProfile.objects.filter(pk__in=profile_ids, auth__isnull=False)
-    with _atomicity_fn():
-        # TODO, may repeat the task after certain time interval if it failed in the middle
-        # (until it's successfully completed)
-        for prof in profiles:
-            GenericUserProfile.update_account_privilege(profile=prof, account=prof.account)
-        done = True
-    return done
+def update_accounts_privilege(self, affected_groups, deleted=False):
+    # TODO, may repeat the task after certain time interval if it failed in the middle
+    # (until it's successfully completed)
+    return GenericUserGroup.update_accounts_privilege(grp_ids=affected_groups, deleted=deleted)
 
 
 @celery_app.task

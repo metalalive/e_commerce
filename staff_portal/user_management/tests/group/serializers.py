@@ -4,7 +4,7 @@ import copy
 import json
 from functools import partial
 from datetime import timedelta
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from django.test import TransactionTestCase
 from django.utils import timezone as django_timezone
@@ -16,6 +16,7 @@ from tests.python.common import TreeNodeMixin
 from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, QuotaMaterial
 from user_management.models.auth import LoginAccount, Role
+from user_management.async_tasks import update_accounts_privilege
 
 from ..common import  _fixtures
 from  .common import  HttpRequestDataGenGroup, GroupVerificationMixin, _nested_field_names
@@ -27,14 +28,15 @@ class GroupCommonTestCase(TransactionTestCase, HttpRequestDataGenGroup, GroupVer
     num_roles = 2
     num_quota = 3
 
-    def _setup_login_account(self, account_data, profile_obj):
+    def _setup_login_account(self, account_data, profile_obj, roles=None):
         account_data = account_data.copy()
         login_user_profile = profile_obj
         account_data['profile'] = login_user_profile
         account_data['password_last_updated'] = django_timezone.now()
         LoginAccount.objects.create_user(**account_data)
         # assume that the logged-in user has access to assign all the roles to groups
-        for role in self._primitives[Role]:
+        roles = roles or []
+        for role in roles:
             data_kwargs = {'expiry': self._gen_expiry_time(), 'role':role, 'approved_by':login_user_profile,}
             login_user_profile.roles.create(**data_kwargs)
         login_user_profile.refresh_from_db()
@@ -42,8 +44,10 @@ class GroupCommonTestCase(TransactionTestCase, HttpRequestDataGenGroup, GroupVer
 
     def setUp(self):
         self.init_primitive()
+        roles_without_superuser = self._primitives[Role]
         self._login_user_profile = self._setup_login_account(account_data=_fixtures[LoginAccount][0],
-                profile_obj=self._primitives[GenericUserProfile][1] )
+                profile_obj=self._primitives[GenericUserProfile][0] , roles=roles_without_superuser )
+        self.assertEqual(self._login_user_profile.privilege_status , GenericUserProfile.STAFF)
 
     def tearDown(self):
         pass
@@ -337,6 +341,18 @@ class GroupCreationTestCase(GroupCommonTestCase):
 ## end of class GroupCreationTestCase
 
 
+def _moving_nodes_to_req_data(moving_nodes):
+    field_names = tuple(_nested_field_names.keys()) + ('id', 'name',)
+    req_data = []
+    for node in moving_nodes:
+        data = {fname: node.value[fname] for fname in field_names}
+        data['exist_parent'] = node.parent.value['id'] if node.parent else None
+        data['new_parent'] = None
+        req_data.append(data)
+    random.shuffle(req_data) # `id` field should be unique value in each data item
+    return req_data
+
+
 class GroupUpdateTestCase(GroupCommonTestCase):
     num_roles = 3
     num_quota = 3
@@ -376,29 +392,24 @@ class GroupUpdateTestCase(GroupCommonTestCase):
 
     def setUp(self):
         super().setUp()
-        self.existing_trees = self._init_new_trees(num_trees=3, min_num_nodes=3, max_num_nodes=4,
-                min_num_siblings=1,  max_num_siblings=2)
+        self.existing_trees = self._init_new_trees(num_trees=3, min_num_nodes=4, max_num_nodes=4,
+                min_num_siblings=2,  max_num_siblings=2)
 
+    def tearDown(self):
+        super().tearDown()
 
-    def _moving_nodes_to_req_data(self, moving_nodes):
-        field_names = tuple(_nested_field_names.keys()) + ('id', 'name',)
-        req_data = []
-        for node in moving_nodes:
-            data = {fname: node.value[fname] for fname in field_names}
-            data['exist_parent'] = node.parent.value['id'] if node.parent else None
-            data['new_parent'] = None
-            req_data.append(data)
-        random.shuffle(req_data) # `id` field should be unique value in each data item
-        return req_data
 
     def _perform_update(self, moving_nodes, account):
-        req_data = self._moving_nodes_to_req_data(moving_nodes)
+        req_data = _moving_nodes_to_req_data(moving_nodes)
         grp_ids = list(map(lambda node:node.value['id'] ,moving_nodes))
         grp_objs = self.serializer_class.Meta.model.objects.filter(id__in=grp_ids)
         serializer = self.serializer_class(many=True, data=req_data, instance=grp_objs,
                 account=account )
         serializer.is_valid(raise_exception=True)
-        actual_instances = serializer.save()
+        # Note: temporarily force the async function synchronous, only for testing purpose
+        with patch('user_management.async_tasks.update_accounts_privilege.apply_async') as mocked_async_task:
+            actual_instances = serializer.save()
+            self.assertEqual(mocked_async_task.call_count , 1)
         obj_ids = self.existing_trees.entity_data.values_list('id', flat=True)
         entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)
         edited_trees = TreeNodeMixin.gen_from_closure_data(entity_data=entity_data, closure_data=closure_data,
@@ -464,8 +475,9 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         evicted = root_node.value['roles'].pop()
         root_node.value['roles'].append(new_data)
         # -----------------------------------------------
+        roles_without_superuser = self._primitives[Role]
         another_login_profile = self._setup_login_account(account_data=_fixtures[LoginAccount][2],
-                profile_obj=self._primitives[GenericUserProfile][2] )
+                profile_obj=self._primitives[GenericUserProfile][2] , roles=roles_without_superuser )
         edited_tree  = self._perform_update([root_node], account=another_login_profile.account)
         expect_value = root_node.value
         actual_value = edited_tree[0].value
@@ -492,8 +504,9 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         evicted =  root_node.value['quota'].pop()
         root_node.value['quota'].append(new_data)
         # -----------------------------------------------
+        roles_without_superuser = self._primitives[Role]
         another_login_profile = self._setup_login_account(account_data=_fixtures[LoginAccount][2],
-                profile_obj=self._primitives[GenericUserProfile][2] )
+                profile_obj=self._primitives[GenericUserProfile][2] , roles=roles_without_superuser )
         edited_tree  = self._perform_update([root_node], account=another_login_profile.account)
         expect_value = root_node.value
         actual_value = edited_tree[0].value
@@ -616,6 +629,131 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         pos = err_info[non_field_err_key][0].find(expect_errmsg_pattern)
         self.assertGreater(pos, 0)
 ## end of class GroupUpdateTestCase
+
+
+class UpdateAccountPrivilegeTestCase(GroupCommonTestCase):
+    num_roles = 0
+    num_quota = 0
+
+    def _init_new_trees(self):
+        origin_trees = TreeNodeMixin.rand_gen_trees( num_trees=6, min_num_nodes=5, max_num_nodes=5,
+                min_num_siblings=2, max_num_siblings=2,  write_value_fn=self._write_value_fn )
+        root2 = origin_trees[2]
+        root2.value['roles'].append({'role': self._primitives[Role][0].id, 'approved_by': self._login_user_profile.id})
+        root3 = origin_trees[3]
+        root3.value['roles'].append({'role': self._primitives[Role][0].id, 'approved_by': self._login_user_profile.id})
+        root4 = origin_trees[4]
+        root4.value['roles'].append({'role': self.su_role.id, 'approved_by': self._login_user_profile.id})
+        req_data = self.trees_to_req_data(trees=origin_trees)
+        serializer = self.serializer_class(many=True, data=req_data, account=self._login_user_profile.account)
+        serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
+        actual_instances = serializer.save()
+        obj_ids = tuple(map(lambda obj: obj.pk, actual_instances))
+        entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)
+        saved_trees = TreeNodeMixin.gen_from_closure_data(entity_data=entity_data, closure_data=closure_data,
+                custom_value_setup_fn=self._closure_node_value_setup )
+        return saved_trees, actual_instances
+
+    def _setup_user_group_relation(self, trees, groups):
+        generic_profiles = self._primitives[GenericUserProfile][1:]
+        accounts_data = iter(_fixtures[LoginAccount][1:])
+        login_profiles = []
+        for generic_profile in generic_profiles:
+            account_data = next(accounts_data)
+            login_profile = self._setup_login_account(account_data=account_data, profile_obj=generic_profile )
+            login_profiles.append(login_profile)
+        login_profiles_iter = iter(login_profiles)
+        for root in  trees:
+            node_traversal = (root, root.children[0], root.children[1],
+                   root.children[0].children[0],  root.children[0].children[1] )
+            for curr_node in node_traversal:
+                filtered = filter(lambda obj:obj.id == curr_node.value['id'], groups)
+                grp_obj = next(filtered)
+                data = {'group':grp_obj, 'approved_by' : self._login_user_profile}
+                try:
+                    login_profile = next(login_profiles_iter)
+                    login_profile.groups.create(**data)
+                except StopIteration as e:
+                    break
+        return login_profiles
+
+    def setUp(self):
+        # Note: temporarily force the async function synchronous, only for testing purpose
+        update_accounts_privilege.app.conf.task_always_eager = True
+        super().setUp()
+        # gain superuser role to the default login user
+        self.su_role = Role.objects.create(id=GenericUserProfile.SUPERUSER, name='mock superuser role')
+        self._login_user_profile.roles.create(role=self.su_role, approved_by=self._login_user_profile)
+        # generate group hierarchy and other login users included in the groups
+        self.existing_trees, self._created_groups = self._init_new_trees()
+        self._other_login_profiles = self._setup_user_group_relation(self.existing_trees, self._created_groups)
+
+    def tearDown(self):
+        super().tearDown()
+        update_accounts_privilege.app.conf.task_always_eager = False
+
+    def _perform_update(self):
+        moving_nodes = self.existing_trees.copy()
+        req_data = _moving_nodes_to_req_data(moving_nodes)
+        grp_ids = list(map(lambda node:node.value['id'] , moving_nodes))
+        grp_objs = self.serializer_class.Meta.model.objects.filter(id__in=grp_ids)
+        serializer = self.serializer_class(many=True, data=req_data, instance=grp_objs,
+                account=self._login_user_profile.account )
+        serializer.is_valid(raise_exception=True)
+        edited_groups = serializer.save()
+        for profile in self._other_login_profiles:
+            profile.account.refresh_from_db()
+
+    def test_priv_change_by_group_hierarchy(self):
+        profiles_guest2su = self._other_login_profiles[0:5]
+        profiles_guest2staff = self._other_login_profiles[5:10]
+        profiles_staff2su = self._other_login_profiles[10:15]
+        profiles_staff2guest = self._other_login_profiles[15:20]
+        profiles_su2staff = self._other_login_profiles[20:25]
+        profiles_guest_unchanged = self._other_login_profiles[25:30]
+        # save the root nodes without modifying anything
+        # the updates on account privilege will NOT be done at model level, since it could be time-consuming
+        self._perform_update()
+        for profile in tuple(profiles_guest2su) + tuple(profiles_guest2staff) + tuple(profiles_guest_unchanged):
+            self.assertEqual(profile.privilege_status, GenericUserProfile.NONE)
+            self.assertFalse(profile.account.is_superuser)
+            self.assertFalse(profile.account.is_staff)
+        for profile in tuple(profiles_su2staff):
+            self.assertEqual(profile.privilege_status, GenericUserProfile.SUPERUSER)
+            self.assertTrue(profile.account.is_superuser)
+            self.assertTrue(profile.account.is_staff)
+        for profile in tuple(profiles_staff2su) + tuple(profiles_staff2guest):
+            self.assertEqual(profile.privilege_status, GenericUserProfile.STAFF)
+            self.assertFalse(profile.account.is_superuser)
+            self.assertTrue(profile.account.is_staff)
+        # save the root nodes with  modified content
+        root0 = self.existing_trees[0]
+        root0.value['roles'].append({'role': self.su_role.id, 'approved_by': self._login_user_profile.id})
+        root1 = self.existing_trees[1]
+        root1.value['roles'].append({'role': self._primitives[Role][0].id, 'approved_by': self._login_user_profile.id})
+        root2 = self.existing_trees[2]
+        root2.value['roles'][0]['role'] = self.su_role.id
+        root3 = self.existing_trees[3]
+        root3.value['roles'].clear()
+        root4 = self.existing_trees[4]
+        root4.value['roles'][0]['role'] = self._primitives[Role][0].id
+        self.existing_trees[-1].value['name'] = 'modified group name'
+        self._perform_update()
+        for profile in tuple(profiles_guest2su) + tuple(profiles_staff2su):
+            self.assertEqual(profile.privilege_status, GenericUserProfile.SUPERUSER)
+            self.assertTrue(profile.account.is_superuser)
+            self.assertTrue(profile.account.is_staff)
+        for profile in tuple(profiles_guest2staff) + tuple(profiles_su2staff):
+            self.assertEqual(profile.privilege_status, GenericUserProfile.STAFF)
+            self.assertFalse(profile.account.is_superuser)
+            self.assertTrue(profile.account.is_staff)
+        for profile in tuple(profiles_staff2guest) + tuple(profiles_guest_unchanged):
+            self.assertEqual(profile.privilege_status, GenericUserProfile.NONE)
+            self.assertFalse(profile.account.is_superuser)
+            self.assertFalse(profile.account.is_staff)
+## end of class AccountGainPrivilegeTestCase
+
 
 
 class GroupRepresentationTestCase(GroupCommonTestCase):

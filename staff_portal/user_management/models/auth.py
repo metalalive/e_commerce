@@ -1,3 +1,4 @@
+import logging
 
 from django.contrib import auth
 from django.contrib.auth.models import GroupManager, _user_get_permissions, _user_has_perm, _user_has_module_perms
@@ -16,6 +17,7 @@ from common.models.mixins import MinimumInfoMixin
 from common.models.constants  import  ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from .common import _atomicity_fn
 
+_logger = logging.getLogger(__name__)
 # note: many of models here are copied from django.contribs.auth , but I remove some fields which are no longer used
 
 class RoleQuerySet(models.QuerySet):
@@ -295,7 +297,7 @@ class LoginAccount(AbstractUser):
 ## end of class LoginAccount
 
 
-
+# TODO: rename to UnauthEditAccountRequest
 class AccountResetRequest(models.Model, MinimumInfoMixin):
     """
     store token request for account reset operation, auto-incremented primary key is still required.
@@ -310,7 +312,7 @@ class AccountResetRequest(models.Model, MinimumInfoMixin):
     min_info_field_names = ['id']
 
     profile  = models.OneToOneField('user_management.GenericUserProfile', blank=True, db_column='profile',
-                on_delete=models.CASCADE, related_name="auth_rst_req")
+                on_delete=models.CASCADE, related_name="auth_rst_req")# TODO: rename to unauth_edit_acc_req
     # TODO, build validator to check if the chosen email address is ONLY for one user,
     # not shared by several people (would that happen in real cases ?)
     email    = models.ForeignKey('user_management.EmailAddress', db_column='email', on_delete=models.SET_NULL, null=True, blank=True)

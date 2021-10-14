@@ -26,6 +26,7 @@ from common.serializers.mixins  import  BaseClosureNodeMixin
 from common.util.python         import  get_fixture_pks
 from common.util.python.async_tasks    import  sendmail as async_send_mail
 
+from ..async_tasks import update_accounts_privilege
 from ..models.common import AppCodeOptions
 from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile,  GenericUserGroupRelation, _atomicity_fn, QuotaMaterial
 from ..models.auth import Role, AccountResetRequest
@@ -321,7 +322,6 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
             subform_qset = getattr(instance, k).all()
             field.update(instance=subform_qset, validated_data=validated_subform_data[k],
                     usr=instance, allow_insert=True, allow_delete=True)
-        GenericUserProfile.update_account_privilege(profile=instance, account=instance.account)
         return instance
 
 #### end of  GenericUserProfileSerializer
@@ -334,6 +334,11 @@ class BulkGenericUserGroupSerializer(DjangoBaseClosureBulkSerializer):
     ANCESTOR_FIELD_NAME   = GenericUserGroupClosureSerializer.Meta.model.ancestor.field.name
     DESCENDANT_FIELD_NAME = GenericUserGroupClosureSerializer.Meta.model.descendant.field.name
 
+    def update(self, instance, validated_data, **kwargs):
+        instance = super().update(instance=instance, validated_data=validated_data , **kwargs)
+        grp_ids = list(map(lambda obj:obj.id, instance))
+        update_accounts_privilege.delay(affected_groups=grp_ids, deleted=False)
+        return instance
 
 
 class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerializer):
