@@ -6,7 +6,8 @@ from functools import partial, reduce
 from common.util.python import ExtendedList
 
 
-def rand_gen_request_body(template, customize_item_fn, data_gen):
+def rand_gen_request_body(customize_item_fn, data_gen, template=None):
+    template = template or {}
     def rand_gen_single_req(data):
         single_req_item = copy.deepcopy(template)
         single_req_item.update(data)

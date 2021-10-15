@@ -236,9 +236,13 @@ class _BaseUserPriviledgeAssigner(ExtendedModelSerializer, UserSubformSetupMixin
 class GenericUserRoleBulkAssigner(_BulkUserPriviledgeAssigner):
     default_validators = [UniqueListItemsValidator(fields=['role']),]
 
+class GenericUserGroupRelBulkAssigner(_BulkUserPriviledgeAssigner):
+    default_validators = [UniqueListItemsValidator(fields=['group']),]
+
 
 class RoleAssignValidator:
     requires_context = True
+    err_msg_pattern = 'Role is NOT assigned to current login user: %s'
 
     def __init__(self, profile):
         self._profile = profile
@@ -251,8 +255,27 @@ class RoleAssignValidator:
         role_exist_direct  = roles_available['direct' ].filter(id=role_id).exists()
         role_exist_inherit = roles_available['inherit'].filter(id=role_id).exists()
         if not (role_exist_direct or role_exist_inherit):
-            err_msg = 'Role is NOT assigned to current login user: %s' \
-                    % (value.id)
+            err_msg = self.err_msg_pattern % (value.id)
+            raise RestValidationError(err_msg)
+
+
+class GroupAssignValidator:
+    requires_context = True
+    err_msg_pattern = 'Current login user does NOT belong to this group : %s'
+
+    def __init__(self, profile):
+        self._profile = profile
+
+    def __call__(self, value, caller):
+        if self._profile.privilege_status == type(self._profile).SUPERUSER:
+            return
+        grp_id = value.id
+        field_name = LOOKUP_SEP.join(['group', 'descendants', 'descendant', 'id'])
+        qset = self._profile.groups.filter(**{field_name:grp_id})
+        #qset = qset.values_list(field_name, flat=True)
+        grp_exist = qset.exists()
+        if not grp_exist:
+            err_msg = self.err_msg_pattern % (value.id)
             raise RestValidationError(err_msg)
 
 
@@ -310,8 +333,14 @@ class GenericUserGroupRelationAssigner(_BaseUserPriviledgeAssigner):
     class Meta(_BaseUserPriviledgeAssigner.Meta):
         _apply_type = 'group'
         model = GenericUserGroupRelation
-        fields = [_apply_type, 'profile',]
-        read_only_fields = ['profile',]
+        fields = [_apply_type,'approved_by']
+        read_only_fields = ['approved_by']
+        list_serializer_class = GenericUserGroupRelBulkAssigner
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        grp_id_validator = GroupAssignValidator(profile=self._account.profile)
+        self.fields['group'].validators.append(grp_id_validator)
 
     def create(self, validated_data):
         target = validated_data.pop('_user_instance', None)

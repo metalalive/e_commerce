@@ -1,5 +1,6 @@
 import string
 import random
+from datetime import timedelta
 
 from django.conf import settings as django_settings
 from django.middleware.csrf import _get_new_csrf_token
@@ -10,6 +11,10 @@ from common.cors.middleware import conf as cors_conf
 from user_management.models.common import AppCodeOptions
 from user_management.models.auth import LoginAccount, Role
 from user_management.models.base import GenericUserProfile, GenericUserGroup, QuotaMaterial, EmailAddress, PhoneNumber, GeoLocation
+
+from tests.python.common import listitem_rand_assigner
+
+_curr_timezone = django_timezone.get_current_timezone()
 
 num_login_profiles = 29
 
@@ -74,6 +79,34 @@ _fixtures = {
 } ## end of _fixtures
 
 
+def gen_expiry_time(minutes_valid=None):
+    minutes_valid = minutes_valid or random.randrange(0,60)
+    if minutes_valid > 5:
+        expiry_time = django_timezone.now() + timedelta(minutes=minutes_valid)
+        # timezone has to be consistent
+        expiry_time = expiry_time.astimezone(_curr_timezone)
+        expiry_time = expiry_time.isoformat()
+    else:
+        expiry_time = None
+    return expiry_time
+
+
+def _setup_login_account(account_data, profile_obj, roles=None, expiry=None):
+    account_data = account_data.copy()
+    login_user_profile = profile_obj
+    account_data['profile'] = login_user_profile
+    account_data['password_last_updated'] = django_timezone.now()
+    LoginAccount.objects.create_user(**account_data)
+    # assume that the logged-in user has access to assign all the roles to groups
+    roles = roles or []
+    for role in roles:
+        data_kwargs = {'expiry': gen_expiry_time(minutes_valid=expiry),
+                'role':role, 'approved_by':login_user_profile,}
+        login_user_profile.roles.create(**data_kwargs)
+    login_user_profile.refresh_from_db()
+    return login_user_profile
+
+
 def client_req_csrf_setup():
     usermgt_host_url = cors_conf.ALLOWED_ORIGIN['user_management']
     scheme_end_pos = usermgt_host_url.find('://') + 3
@@ -114,5 +147,141 @@ class AuthenticateUserMixin:
         response = testcase._send_request_to_backend(**api_call_kwargs)
         testcase.assertEqual(int(response.status_code), 200)
         return response.json()
+
+
+class UserNestedFieldSetupMixin:
+    num_roles = 0
+    num_quota = 0
+
+    def _gen_roles(self, role_objs, num=None):
+        if num is None:
+            num = self.num_roles
+        out = []
+        if num > 0:
+            roles_gen = listitem_rand_assigner(list_=role_objs, min_num_chosen=num,
+                    max_num_chosen=(num + 1))
+            for role in roles_gen:
+                data = {'expiry': gen_expiry_time(), 'role':role.id,
+                        'approved_by': random.randrange(3,1000), # will NOT write this field to model
+                        }
+                out.append(data)
+        return out
+
+    def _gen_quota(self, quota_mat_objs, num=None):
+        if num is None:
+            num = self.num_quota
+        self.num_locations = 0
+        self.num_emails = 0
+        self.num_phones = 0
+        out = []
+        if num > 0:
+            materials_gen = listitem_rand_assigner(list_=quota_mat_objs, min_num_chosen=num,
+                    max_num_chosen=(num + 1))
+            for material in materials_gen:
+                maxnum = random.randrange(1,10)
+                if material.app_code == AppCodeOptions.user_management:
+                    if material.mat_code == QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS.value:
+                        self.num_phones = maxnum
+                    elif material.mat_code == QuotaMaterial._MatCodeOptions.MAX_NUM_EMAILS.value:
+                        self.num_emails = maxnum
+                    elif material.mat_code == QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS.value:
+                        self.num_locations = maxnum
+                data = {'expiry':gen_expiry_time(), 'material':material.id, 'maxnum':maxnum}
+                out.append(data)
+        return out
+
+    def _gen_locations(self, num=None):
+        if num is None:
+            num = min(self.num_locations, len(_fixtures[GeoLocation]))
+        out = []
+        if num > 0:
+            data_gen = listitem_rand_assigner(list_=_fixtures[GeoLocation], min_num_chosen=num,
+                    max_num_chosen=(num + 1))
+            out = list(data_gen)
+        return out
+
+    def _gen_emails(self, num=None):
+        if num is None:
+            num = min(self.num_emails, len(_fixtures[EmailAddress]))
+        out = []
+        if num > 0:
+            data_gen = listitem_rand_assigner(list_=_fixtures[EmailAddress], min_num_chosen=num,
+                    max_num_chosen=(num + 1))
+            out = list(data_gen)
+        return out
+
+    def _gen_phones(self, num=None):
+        if num is None:
+            num = min(self.num_phones, len(_fixtures[PhoneNumber]))
+        out = []
+        if num > 0:
+            data_gen = listitem_rand_assigner(list_=_fixtures[PhoneNumber], min_num_chosen=num,
+                    max_num_chosen=(num + 1))
+            out = list(data_gen)
+        return out
+
+
+
+class UserNestedFieldVerificationMixin:
+    _nested_field_names = None
+
+    def load_group_from_instance(self, obj):
+        value = {'id': obj.id,}
+        _fields_compare = self._nested_field_names['roles']
+        value['roles'] = list(obj.roles.values(*_fields_compare))
+        for d in value['roles']:
+            if not d['expiry']:
+                continue
+            d['expiry'] = d['expiry'].astimezone(_curr_timezone)
+            d['expiry'] = d['expiry'].isoformat()
+        _fields_compare = self._nested_field_names['quota']
+        value['quota'] = list(obj.quota.values(*_fields_compare))
+        for d in value['quota']:
+            if not d['expiry']:
+                continue
+            d['expiry'] = d['expiry'].astimezone(_curr_timezone)
+            d['expiry'] = d['expiry'].isoformat()
+        _fields_compare = self._nested_field_names['emails']
+        value['emails'] = list(obj.emails.values(*_fields_compare))
+        _fields_compare = self._nested_field_names['phones']
+        value['phones'] = list(obj.phones.values(*_fields_compare))
+        _fields_compare = self._nested_field_names['locations']
+        value['locations'] = list(obj.locations.values(*_fields_compare))
+        return value
+
+    def _value_compare_fn(self, val_a, val_b):
+        fields_eq = {}
+        fields_eq['roles']  = self._value_compare_roles_fn(val_a=val_a, val_b=val_b)
+        fields_eq['quota']  = self._value_compare_quota_fn(val_a=val_a, val_b=val_b)
+        for k in ('emails', 'phones', 'locations'):
+            fields_eq[k] = self._value_compare_contact_fn(val_a=val_a[k], val_b=val_b[k],
+                    _fields_compare=self._nested_field_names[k])
+        return fields_eq
+
+    def _value_compare_roles_fn(self, val_a, val_b):
+        _fields_compare = self._nested_field_names['roles']
+        expect_val = list(map(lambda d: {fname:d[fname] for fname in _fields_compare}, val_a['roles']))
+        actual_val = list(map(lambda d: {fname:d[fname] for fname in _fields_compare}, val_b['roles']))
+        expect_val = sorted(expect_val, key=lambda d:d['role'])
+        actual_val = sorted(actual_val, key=lambda d:d['role'])
+        return actual_val == expect_val
+
+    def _value_compare_quota_fn(self, val_a, val_b):
+        _fields_compare = self._nested_field_names['quota']
+        expect_val = list(map(lambda d: {fname:d[fname] for fname in _fields_compare}, val_a['quota']))
+        actual_val = list(map(lambda d: {fname:d[fname] for fname in _fields_compare}, val_b['quota']))
+        expect_val = sorted(expect_val, key=lambda d:d['material'])
+        actual_val = sorted(actual_val, key=lambda d:d['material'])
+        return actual_val == expect_val
+
+    def _value_compare_contact_fn(self, val_a, val_b, _fields_compare, compare_id=False):
+        if not compare_id:
+            _fields_compare = _fields_compare.copy()
+            _fields_compare.remove('id')
+        expect_val = list(map(lambda d: tuple([d[fname] for fname in _fields_compare]), val_a))
+        actual_val = list(map(lambda d: tuple([d[fname] for fname in _fields_compare]), val_b))
+        expect_val = sorted(expect_val)
+        actual_val = sorted(actual_val)
+        return actual_val == expect_val
 
 

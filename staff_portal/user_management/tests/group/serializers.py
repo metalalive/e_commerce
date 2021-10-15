@@ -18,7 +18,7 @@ from user_management.models.base import GenericUserProfile, QuotaMaterial
 from user_management.models.auth import LoginAccount, Role
 from user_management.async_tasks import update_accounts_privilege
 
-from ..common import  _fixtures
+from ..common import _fixtures, _setup_login_account, gen_expiry_time
 from  .common import  HttpRequestDataGenGroup, GroupVerificationMixin, _nested_field_names
 
 non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
@@ -28,24 +28,10 @@ class GroupCommonTestCase(TransactionTestCase, HttpRequestDataGenGroup, GroupVer
     num_roles = 2
     num_quota = 3
 
-    def _setup_login_account(self, account_data, profile_obj, roles=None):
-        account_data = account_data.copy()
-        login_user_profile = profile_obj
-        account_data['profile'] = login_user_profile
-        account_data['password_last_updated'] = django_timezone.now()
-        LoginAccount.objects.create_user(**account_data)
-        # assume that the logged-in user has access to assign all the roles to groups
-        roles = roles or []
-        for role in roles:
-            data_kwargs = {'expiry': self._gen_expiry_time(), 'role':role, 'approved_by':login_user_profile,}
-            login_user_profile.roles.create(**data_kwargs)
-        login_user_profile.refresh_from_db()
-        return login_user_profile
-
     def setUp(self):
         self.init_primitive()
         roles_without_superuser = self._primitives[Role]
-        self._login_user_profile = self._setup_login_account(account_data=_fixtures[LoginAccount][0],
+        self._login_user_profile = _setup_login_account(account_data=_fixtures[LoginAccount][0],
                 profile_obj=self._primitives[GenericUserProfile][0] , roles=roles_without_superuser )
         self.assertEqual(self._login_user_profile.privilege_status , GenericUserProfile.STAFF)
 
@@ -278,7 +264,7 @@ class GroupCreationTestCase(GroupCommonTestCase):
             item = _info_map.get(mat_dataitem['mat_code'])
             if not item:
                 continue
-            data = {'expiry':self._gen_expiry_time(), 'material': mat_dataitem['id'], 'maxnum':item['maxnum']}
+            data = {'expiry':gen_expiry_time(), 'material': mat_dataitem['id'], 'maxnum':item['maxnum']}
             item['node'].value['quota'].append(data)
             item['node'].value[item['field']].extend(item['data'])
         req_data = self.trees_to_req_data(trees=trees)
@@ -321,7 +307,7 @@ class GroupCreationTestCase(GroupCommonTestCase):
             item = _info_map.get(mat_dataitem['mat_code'])
             if not item:
                 continue
-            data = {'expiry':self._gen_expiry_time(), 'material': mat_dataitem['id'], 'maxnum':contact_quota_maxnum}
+            data = {'expiry':gen_expiry_time(), 'material': mat_dataitem['id'], 'maxnum':contact_quota_maxnum}
             treenode.value['quota'].append(data)
             for nested_dataitem in item['data']:
                 nested_dataitem['id'] = invalid_id_nested_field
@@ -370,9 +356,9 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         other_apps_material_data = filter(lambda d:d['app_code'] != AppCodeOptions.user_management, _fixtures[QuotaMaterial])
         other_apps_material_data = next(other_apps_material_data)
         for root in origin_trees:
-            quota_data = list(map(lambda d: {'expiry':self._gen_expiry_time(), 'material': d['id'], \
+            quota_data = list(map(lambda d: {'expiry':gen_expiry_time(), 'material': d['id'], \
                     'maxnum':contact_quota_maxnum } , self.usermgt_material_data))
-            quota_data.append({'expiry':self._gen_expiry_time(), 'maxnum':random.randrange(3,30), \
+            quota_data.append({'expiry':gen_expiry_time(), 'maxnum':random.randrange(3,30), \
                     'material': other_apps_material_data['id'],})
             root.value['quota'].extend(quota_data)
             root.value['emails'].extend(self._gen_emails(num=contact_quota_maxnum))
@@ -425,16 +411,16 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             applied_roles = tuple(map(lambda d:d['role'], root.value['roles']))
             available_roles = filter(lambda role: role.id not in applied_roles, self._primitives[Role])
             new_role = next(available_roles)
-            new_data = {'expiry': self._gen_expiry_time(), 'role':new_role.id}
-            root.value['roles'][0]['expiry'] = self._gen_expiry_time()
+            new_data = {'expiry': gen_expiry_time(), 'role':new_role.id}
+            root.value['roles'][0]['expiry'] = gen_expiry_time()
             evicted = root.value['roles'].pop()
             root.value['roles'].append(new_data)
             # --- quota ---
             applied_quota_mats = tuple(map(lambda d:d['material'], root.value['quota']))
             available_quota_mats = filter(lambda material: material.id not in applied_quota_mats, self._primitives[QuotaMaterial])
             new_quo_mat = next(available_quota_mats)
-            new_data = {'expiry':self._gen_expiry_time(), 'material': new_quo_mat.id, 'maxnum':random.randrange(2,19)}
-            root.value['quota'][0]['expiry'] = self._gen_expiry_time()
+            new_data = {'expiry':gen_expiry_time(), 'material': new_quo_mat.id, 'maxnum':random.randrange(2,19)}
+            root.value['quota'][0]['expiry'] = gen_expiry_time()
             root.value['quota'][0]['maxnum'] = random.randrange(3,19)
             evicted =  root.value['quota'].pop()
             root.value['quota'].append(new_data)
@@ -470,13 +456,13 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         applied_roles = tuple(map(lambda d:d['role'], root_node.value['roles']))
         available_roles = filter(lambda role: role.id not in applied_roles, self._primitives[Role])
         new_role = next(available_roles)
-        new_data = {'expiry': self._gen_expiry_time(), 'role':new_role.id}
-        root_node.value['roles'][0]['expiry'] = self._gen_expiry_time()
+        new_data = {'expiry': gen_expiry_time(), 'role':new_role.id}
+        root_node.value['roles'][0]['expiry'] = gen_expiry_time()
         evicted = root_node.value['roles'].pop()
         root_node.value['roles'].append(new_data)
         # -----------------------------------------------
         roles_without_superuser = self._primitives[Role]
-        another_login_profile = self._setup_login_account(account_data=_fixtures[LoginAccount][2],
+        another_login_profile = _setup_login_account(account_data=_fixtures[LoginAccount][2],
                 profile_obj=self._primitives[GenericUserProfile][2] , roles=roles_without_superuser )
         edited_tree  = self._perform_update([root_node], account=another_login_profile.account)
         expect_value = root_node.value
@@ -498,14 +484,14 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         applied_quota_mats = tuple(map(lambda d:d['material'], root_node.value['quota']))
         available_quota_mats = filter(lambda material: material.id not in applied_quota_mats, self._primitives[QuotaMaterial])
         new_quo_mat = next(available_quota_mats)
-        new_data = {'expiry':self._gen_expiry_time(), 'material': new_quo_mat.id, 'maxnum':random.randrange(2,19)}
-        root_node.value['quota'][0]['expiry'] = self._gen_expiry_time()
+        new_data = {'expiry':gen_expiry_time(), 'material': new_quo_mat.id, 'maxnum':random.randrange(2,19)}
+        root_node.value['quota'][0]['expiry'] = gen_expiry_time()
         root_node.value['quota'][0]['maxnum'] = random.randrange(4,19)
         evicted =  root_node.value['quota'].pop()
         root_node.value['quota'].append(new_data)
         # -----------------------------------------------
         roles_without_superuser = self._primitives[Role]
-        another_login_profile = self._setup_login_account(account_data=_fixtures[LoginAccount][2],
+        another_login_profile = _setup_login_account(account_data=_fixtures[LoginAccount][2],
                 profile_obj=self._primitives[GenericUserProfile][2] , roles=roles_without_superuser )
         edited_tree  = self._perform_update([root_node], account=another_login_profile.account)
         expect_value = root_node.value
@@ -661,7 +647,7 @@ class UpdateAccountPrivilegeTestCase(GroupCommonTestCase):
         login_profiles = []
         for generic_profile in generic_profiles:
             account_data = next(accounts_data)
-            login_profile = self._setup_login_account(account_data=account_data, profile_obj=generic_profile )
+            login_profile = _setup_login_account(account_data=account_data, profile_obj=generic_profile )
             login_profiles.append(login_profile)
         login_profiles_iter = iter(login_profiles)
         for root in  trees:
