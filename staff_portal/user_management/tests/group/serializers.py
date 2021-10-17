@@ -567,15 +567,10 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         self.assertIsNotNone(error_caught)
         err_info = error_caught.detail
         expect_errmsg_pattern = 'number of items provided exceeds the limit: %s'
-        expect_value = expect_errmsg_pattern % expect_new_limits['emails']
-        actual_value = error_caught.detail[0]['emails'][non_field_err_key][0]
-        self.assertEqual(expect_value, actual_value)
-        expect_value = expect_errmsg_pattern % expect_new_limits['phones']
-        actual_value = error_caught.detail[0]['phones'][non_field_err_key][0]
-        self.assertEqual(expect_value, actual_value)
-        expect_value = expect_errmsg_pattern % expect_new_limits['locations']
-        actual_value = error_caught.detail[0]['locations'][non_field_err_key][0]
-        self.assertEqual(expect_value, actual_value)
+        for field_name, expect_limit in expect_new_limits.items():
+            expect_value = expect_errmsg_pattern % expect_limit
+            actual_value = error_caught.detail[0][field_name][non_field_err_key][0]
+            self.assertEqual(expect_value, actual_value)
 
 
     def test_tree_chains(self):

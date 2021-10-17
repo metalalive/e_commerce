@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Iterable
 
-from django.db.models import  QuerySet
+from django.db.models import Model as DjangoModel, QuerySet
 from django.core.exceptions  import ObjectDoesNotExist
 
 from rest_framework.serializers import ModelSerializer,  ListSerializer, IntegerField
@@ -143,8 +143,8 @@ class ExtendedModelSerializer(ModelSerializer, SerializerExcludeFieldsMixin):
               instantiating IntegerField
         """
         self.pk_field_name = pk_field_name
-        if (data is not empty) and instance and isinstance(instance, QuerySet):
-            # TODO, change field class type of primary key, until post/put request receipt
+        if (data is not empty) and instance and isinstance(instance, (DjangoModel, QuerySet)):
+            # TODO, change the class of primary key field until validation starts (post/put request received)
             self.fields[self.pk_field_name]  = IntegerField()
         self._validate_only_fields = {}
         self._validation_error_callback = kwargs.pop('_validation_error_callback', None)

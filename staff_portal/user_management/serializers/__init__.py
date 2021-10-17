@@ -6,6 +6,7 @@ import logging
 
 from django.conf      import  settings as django_settings
 from django.core      import  validators
+from django.db.models           import IntegerChoices
 from django.db.models.constants import LOOKUP_SEP
 from django.utils.deconstruct   import deconstructible
 from django.core.exceptions     import ValidationError, ObjectDoesNotExist, ImproperlyConfigured
@@ -15,7 +16,7 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework             import status as RestStatus
-from rest_framework.fields      import CharField, BooleanField, ModelField, empty
+from rest_framework.fields      import CharField, ChoiceField, ModelField, empty
 from rest_framework.serializers import BaseSerializer, Serializer, ModelSerializer, IntegerField, PrimaryKeyRelatedField
 from rest_framework.validators  import UniqueTogetherValidator
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
@@ -201,6 +202,8 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
         instance = super().update(instance=instance, validated_data=validated_data)
         for k in subform_keys:
             field = self.fields[k]
+            if field.read_only:
+                continue
             subform_qset = getattr(instance, k).all()
             field.update(instance=subform_qset, validated_data=validated_subform_data[k],
                     usr=instance, allow_insert=True, allow_delete=True)
@@ -208,18 +211,54 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
 ## end of class AbstractGenericUserSerializer
 
 
+class BulkGenericUserProfileSerializer(BulkUpdateListSerializer):
+    def update(self, instance, validated_data, **kwargs):
+        instance = super().update(instance=instance, validated_data=validated_data , **kwargs)
+        # TODO, check whether any editing profile contains superuser or staff role, for
+        # refreshing is_staff , is_superuser flags in users' login account
+        self.child.Meta.model.update_accounts_privilege(profiles=instance)
+        return instance
+
+
+class LoginAccountExistField(ChoiceField):
+    class activation_status(IntegerChoices):
+        ACCOUNT_NON_EXISTENT = 1
+        ACTIVATION_REQUEST  = 2
+        ACCOUNT_ACTIVATED  = 3
+        ACCOUNT_DEACTIVATED = 4
+
+    def __init__(self, **kwargs):
+        super().__init__(choices=self.activation_status.choices, **kwargs)
+
+    def to_representation(self, instance):
+        try:
+            account = instance.account
+            if account.is_active:
+                out = self.activation_status.ACCOUNT_ACTIVATED.value
+            else:
+                out = self.activation_status.ACCOUNT_DEACTIVATED.value
+        except ObjectDoesNotExist as e:
+            try:
+                rst_req = instance.auth_rst_req
+                out = self.activation_status.ACTIVATION_REQUEST.value
+            except ObjectDoesNotExist as e:
+                out = self.activation_status.ACCOUNT_NON_EXISTENT.value
+        return out
+
 
 class GenericUserProfileSerializer(AbstractGenericUserSerializer):
     class Meta(AbstractGenericUserSerializer.Meta):
         model = GenericUserProfile
-        fields = ['id', 'first_name', 'last_name', 'auth']
+        fields = ['id', 'first_name', 'last_name', 'last_updated', 'time_created', 'auth']
+        read_only_fields = ['last_updated', 'time_created',]
+        list_serializer_class = BulkGenericUserProfileSerializer
     # This serializer doesn't (also shouldn't) fetch data from contrib.auth User model, instead it
     # simply shows whether each user as login account or not.
-    auth = BooleanField(read_only=True)
+    auth = LoginAccountExistField(read_only=True)
 
     def __init__(self, instance=None, data=empty, **kwargs):
         self.fields['groups'] = GenericUserGroupRelationAssigner(many=True, instance=instance,
-                data=data, account=kwargs.get('account'))
+                account=kwargs.get('account'))
         super().__init__(instance=instance, data=data, **kwargs)
         # Non-superuser logged-in users are NOT allowed to modify `group`, `quota`, `role` fields when
         # editing their profile, the data of all these fields are already assigned by someone at upper
@@ -229,25 +268,32 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
         self._applied_groups = []
 
     def extra_setup_before_validation(self, instance, data):
-        skip_edit_permission_data = False
-        if not self._account.is_superuser and self.instance:
-            logged_in_profile = self._account.profile
-            editing_profile = self.instance
-            if editing_profile.pk == logged_in_profile.pk:
-                skip_edit_permission_data = True
-            log_msg = ['skip_edit_permission_data', skip_edit_permission_data, 'editing_profile.pk', editing_profile.pk]
-            _logger.debug(None, *log_msg)
-        self._skip_edit_permission_data.append(skip_edit_permission_data)
-        if self._skip_edit_permission_data[-1]:
-            data['roles']  = []
-            data['groups'] = []
-            #data['quota']  = [] # TODO, figure out why this can be ignored
+        super().extra_setup_before_validation(instance=instance, data=data)
         subform_keys = [('groups', ('group', 'profile')),]
         for s_name, pk_name in subform_keys:
             self._setup_subform_instance(name=s_name, instance=instance, data=data, pk_field_name=pk_name)
             self._append_user_field(name=s_name, instance=instance, data=data)
             self.fields[s_name].read_only = False
-        super().extra_setup_before_validation(instance=instance, data=data)
+        skip_edit_permission_data = False
+        if not self._account.is_superuser and self.instance:
+            logged_in_profile = self._account.profile
+            editing_profile = self.instance
+            skip_edit_permission_data =  editing_profile.pk == logged_in_profile.pk
+            log_msg = ['skip_edit_permission_data', skip_edit_permission_data, 'editing_profile.pk', editing_profile.pk]
+            _logger.debug(None, *log_msg)
+        self._skip_edit_permission_data.append(skip_edit_permission_data)
+        self.fields['roles'].read_only  = skip_edit_permission_data
+        self.fields['groups'].read_only = skip_edit_permission_data
+        self.fields['quota'].read_only  = skip_edit_permission_data
+        # user contact fields rely on quota field, in case that the current user is NOT
+        # allowed to modify their own quota, I need to estimate quota arrangements by
+        # loading the settings in database
+        if skip_edit_permission_data:
+            grp_ids = self.instance.groups.values_list('group', flat=True)
+            groups_qset = GenericUserGroup.objects.filter(id__in=grp_ids)
+            direct_quota_arrangements = dict(self.instance.quota.values_list('material', 'maxnum'))
+            _final_quota = self._estimate_hierarchy_quota(override=direct_quota_arrangements, groups=groups_qset)
+            self._instant_update_contact_quota(_final_quota)
 
     def validate_groups(self, value):
         self._applied_groups.clear()
@@ -262,12 +308,12 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
     def validate_quota(self, value):
         grp_ids = tuple(map(lambda obj:obj.id, self._applied_groups))
         groups_qset = GenericUserGroup.objects.filter(id__in=grp_ids)
-        _final_quota = self._estimate_hierarchy_quota(override=value, groups=groups_qset)
+        override = {oq['material'].id : oq['maxnum'] for oq in value}
+        _final_quota = self._estimate_hierarchy_quota(override=override, groups=groups_qset)
         self._instant_update_contact_quota(_final_quota)
         return value
 
     def _estimate_hierarchy_quota(self, override, groups):
-        override = {oq['material'].id : oq['maxnum'] for oq in override}
         merged_inhehited = self.Meta.model.estimate_inherit_quota(groups=groups)
         final_applied = merged_inhehited | override
         log_msg = ['override', override, 'final_applied', final_applied]
@@ -285,19 +331,28 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
 
     def update(self, instance, validated_data):
         # remind: parent list serializer will set atomic transaction, no need to set it at here
-        subform_keys = ['groups', 'roles', 'quota','emails','phones','locations']
+        subform_keys = ['groups',]
         validated_subform_data = {k: validated_data.pop(k, None) for k in subform_keys}
+        # discard permission data e.g. `groups`, `roles`, `quota`
+        self.fields['roles'].read_only  = self._skip_edit_permission_data[0]
+        self.fields['groups'].read_only = self._skip_edit_permission_data[0]
+        self.fields['quota'].read_only  = self._skip_edit_permission_data[0]
         instance = super().update(instance=instance, validated_data=validated_data)
-        if self._skip_edit_permission_data[0]: # discard permission data e.g. `groups`, `roles`, `quota`
-            subform_keys = ['emails','phones','locations']
-        self._skip_edit_permission_data.remove(self._skip_edit_permission_data[0])
         for k in subform_keys:
             field = self.fields[k]
+            if field.read_only:
+                continue
             subform_qset = getattr(instance, k).all()
             field.update(instance=subform_qset, validated_data=validated_subform_data[k],
                     usr=instance, allow_insert=True, allow_delete=True)
+        self._skip_edit_permission_data = self._skip_edit_permission_data[1:]
         return instance
 
+    def to_representation(self, instance):
+        out = super().to_representation(instance=instance)
+        if self.fields.get('auth'):
+            out['auth'] = self.fields['auth'].to_representation(instance=instance)
+        return out
 #### end of  GenericUserProfileSerializer
 
 
@@ -311,6 +366,8 @@ class BulkGenericUserGroupSerializer(DjangoBaseClosureBulkSerializer):
     def update(self, instance, validated_data, **kwargs):
         instance = super().update(instance=instance, validated_data=validated_data , **kwargs)
         grp_ids = list(map(lambda obj:obj.id, instance))
+        # TODO, check whether any editing group contains superuser or staff role, for
+        # refreshing is_staff , is_superuser flags in users' login account
         update_accounts_privilege.delay(affected_groups=grp_ids, deleted=False)
         return instance
 

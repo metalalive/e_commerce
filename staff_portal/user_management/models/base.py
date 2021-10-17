@@ -333,8 +333,7 @@ class GenericUserGroup(GenericUserCommonFieldsMixin, MinimumInfoMixin):
                 model_name='GenericUserGroupClosure')
 
     @classmethod
-    def update_accounts_privilege(cls, grp_ids, deleted):
-        done = False
+    def get_profiles_under_groups(cls, grp_ids, deleted):
         affected_groups_origin = grp_ids
         if deleted:
             qset = GenericUserGroupClosure.objects.get_deleted_set()
@@ -351,11 +350,7 @@ class GenericUserGroup(GenericUserCommonFieldsMixin, MinimumInfoMixin):
         _logger.info(None, *log_args)
         # load user profiles that already activated their accounts
         profiles = GenericUserProfile.objects.filter(pk__in=profile_ids, account__isnull=False)
-        with _atomicity_fn():
-            for profile in profiles:
-                profile.update_account_privilege()
-            done = True
-        return done
+        return profiles
 ## end of class GenericUserGroup
 
 
@@ -386,6 +381,11 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, SerializableMixin, Minimu
     last_updated = models.DateTimeField(auto_now=True)
     # the group(s) the user belongs to
     ####groups = models.ManyToManyField(GenericUserGroup, blank=True, db_table='generic_user_group_relation', related_name='user_profiles')
+    @classmethod
+    def update_accounts_privilege(cls, profiles):
+        with _atomicity_fn():
+            for profile in profiles:
+                profile.update_account_privilege()
 
     @_atomicity_fn()
     def delete(self, *args, **kwargs):

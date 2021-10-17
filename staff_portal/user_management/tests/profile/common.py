@@ -92,7 +92,7 @@ class ProfileVerificationMixin(UserNestedFieldVerificationMixin):
         fields_eq['groups']  = self._value_compare_groups_fn(val_a=val_a, val_b=val_b)
         self.assertNotIn(False, fields_eq.values())
 
-    def verify_data(self, actual_data, expect_data, profile):
+    def verify_data(self, actual_data, expect_data):
         actual_data = self._load_profiles_from_instances(objs=actual_data)
         actual_data_iter = iter(actual_data)
         for expect_value in expect_data:

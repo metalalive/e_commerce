@@ -9,7 +9,7 @@ from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
 from common.util.python.celery import app as celery_app
 from common.logging.util  import log_fn_wrapper
 
-from .models.base import GenericUserGroup
+from .models.base import GenericUserGroup, GenericUserProfile
 from .models.auth import AccountResetRequest
 from django.contrib import auth
 
@@ -20,7 +20,9 @@ _logger = logging.getLogger(__name__)
 def update_accounts_privilege(self, affected_groups, deleted=False):
     # TODO, may repeat the task after certain time interval if it failed in the middle
     # (until it's successfully completed)
-    return GenericUserGroup.update_accounts_privilege(grp_ids=affected_groups, deleted=deleted)
+    profiles = GenericUserGroup.get_profiles_under_groups(grp_ids=affected_groups, deleted=deleted)
+    GenericUserProfile.update_accounts_privilege(profiles)
+    return True
 
 
 @celery_app.task

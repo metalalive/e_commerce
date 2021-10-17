@@ -232,6 +232,14 @@ class _BaseUserPriviledgeAssigner(ExtendedModelSerializer, UserSubformSetupMixin
     def presentable_fields_name(self):
         return self.Meta.fields
 
+    def to_representation(self, instance):
+        if self.fields.get('approved_by'):
+            if not isinstance(self.fields['approved_by'], ConnectedProfileField):
+                self.fields['approved_by'] = ConnectedProfileField(many=False)
+            self.fields['approved_by'].instance = instance.approved_by
+        out = super().to_representation(instance=instance)
+        return out
+
 
 class GenericUserRoleBulkAssigner(_BulkUserPriviledgeAssigner):
     default_validators = [UniqueListItemsValidator(fields=['role']),]
@@ -294,14 +302,6 @@ class GenericUserRoleAssigner(_BaseUserPriviledgeAssigner):
         self.fields['role'].validators.append(role_id_validator)
         self.fields['expiry'].validators.append(exp_validator)
 
-    def to_representation(self, instance):
-        if self.fields.get('approved_by'):
-            if not isinstance(self.fields['approved_by'], ConnectedProfileField):
-                self.fields['approved_by'] = ConnectedProfileField(many=False)
-            self.fields['approved_by'].instance = instance.approved_by
-        out = super().to_representation(instance=instance)
-        return out
-
     def create(self, validated_data):
         target = validated_data.pop('_user_instance', None)
         validated_data['user_type'] = ContentType.objects.get_for_model(target)
@@ -355,11 +355,11 @@ class GenericUserGroupRelationAssigner(_BaseUserPriviledgeAssigner):
         log_msg = []
         try:
             d_type = validated_data[self.Meta._apply_type]
-            log_msg += ['apply_type', d_type]
+            log_msg.extend(['apply_type', d_type])
             assert getattr(instance, self.Meta._apply_type) == d_type
             # content will be the same , no need to update
         except (ValueError, KeyError, AssertionError) as e:
-            log_msg += ['excpt_msg', e]
+            log_msg.extend(['excpt_msg', e])
             _logger.error(None, *log_msg)
         return instance
 
