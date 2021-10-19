@@ -18,9 +18,23 @@ _curr_timezone = django_timezone.get_current_timezone()
 
 num_login_profiles = 29
 
+
+def gen_expiry_time(minutes_valid=None):
+    minutes_valid = minutes_valid or random.randrange(0,60)
+    if minutes_valid > 5:
+        expiry_time = django_timezone.now() + timedelta(minutes=minutes_valid)
+        # timezone has to be consistent
+        expiry_time = expiry_time.astimezone(_curr_timezone)
+        expiry_time = expiry_time.isoformat()
+    else:
+        expiry_time = None
+    return expiry_time
+
+
 _fixtures = {
     LoginAccount: [
-        {'is_superuser':False, 'is_staff':False,  'is_active':False, \
+        {'is_superuser':False, 'is_staff':False,  'is_active':False, 'profile':None, \
+                'password_last_updated': gen_expiry_time(minutes_valid=8), \
                 'username': ''.join(random.choices(string.ascii_letters, k=10)), \
                 'password': ''.join(random.choices(string.ascii_letters, k=16)) \
         } for _ in range(num_login_profiles)
@@ -79,18 +93,6 @@ _fixtures = {
 } ## end of _fixtures
 
 
-def gen_expiry_time(minutes_valid=None):
-    minutes_valid = minutes_valid or random.randrange(0,60)
-    if minutes_valid > 5:
-        expiry_time = django_timezone.now() + timedelta(minutes=minutes_valid)
-        # timezone has to be consistent
-        expiry_time = expiry_time.astimezone(_curr_timezone)
-        expiry_time = expiry_time.isoformat()
-    else:
-        expiry_time = None
-    return expiry_time
-
-
 def _setup_login_account(account_data, profile_obj, roles=None, expiry=None):
     account_data = account_data.copy()
     login_user_profile = profile_obj
@@ -123,12 +125,13 @@ def client_req_csrf_setup():
 
 
 class AuthenticateUserMixin:
-    def _auth_setup(self, testcase, is_staff=True, is_active=True, is_superuser=False):
+    def _auth_setup(self, testcase, profile=None, is_staff=True, is_active=True, is_superuser=False):
         api_login_kwargs = client_req_csrf_setup()
         api_login_kwargs['path'] = '/login'
         api_login_kwargs['method'] = 'post'
-        profile_data = {'id': 3, 'first_name':'Brooklynn', 'last_name':'Jenkins'}
-        profile = GenericUserProfile.objects.create(**profile_data)
+        if profile is None:
+            profile_data = {'id': 3, 'first_name':'Brooklynn', 'last_name':'Jenkins'}
+            profile = GenericUserProfile.objects.create(**profile_data)
         account_data = {'username':'ImStaff', 'password':'dontexpose', 'is_active':is_active,
                 'is_staff':is_staff, 'is_superuser':is_superuser, 'profile':profile,
                 'password_last_updated':django_timezone.now(), }

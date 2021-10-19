@@ -83,6 +83,17 @@ class HttpRequestDataGenGroup(HttpRequestDataGen, UserNestedFieldSetupMixin):
             child_req_data = self._tree_to_req_data(curr_node=child, parent_data=req_data)
             out.extend(child_req_data)
         return out
+
+    def _moving_nodes_to_req_data(self, moving_nodes):
+        field_names = tuple(_nested_field_names.keys()) + ('id', 'name',)
+        req_data = []
+        for node in moving_nodes:
+            data = {fname: node.value[fname] for fname in field_names}
+            data['exist_parent'] = node.parent.value['id'] if node.parent else None
+            data['new_parent'] = None
+            req_data.append(data)
+        random.shuffle(req_data) # `id` field should be unique value in each data item
+        return req_data
 ## end of class HttpRequestDataGenGroup
 
 

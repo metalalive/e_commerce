@@ -252,13 +252,18 @@ class RoleAssignValidator:
     requires_context = True
     err_msg_pattern = 'Role is NOT assigned to current login user: %s'
 
-    def __init__(self, profile):
-        self._profile = profile
+    @property
+    def profile(self):
+        return getattr(self, '_profile', None)
+
+    @profile.setter
+    def profile(self, value):
+        setattr(self, '_profile', value)
 
     def __call__(self, value, caller):
-        if self._profile.privilege_status == type(self._profile).SUPERUSER:
+        if self.profile.privilege_status == type(self.profile).SUPERUSER:
             return
-        roles_available = self._profile.all_roles
+        roles_available = self.profile.all_roles
         role_id = getattr(value, 'id')
         role_exist_direct  = roles_available['direct' ].filter(id=role_id).exists()
         role_exist_inherit = roles_available['inherit'].filter(id=role_id).exists()
@@ -271,15 +276,20 @@ class GroupAssignValidator:
     requires_context = True
     err_msg_pattern = 'Current login user does NOT belong to this group : %s'
 
-    def __init__(self, profile):
-        self._profile = profile
+    @property
+    def profile(self):
+        return getattr(self, '_profile', None)
+
+    @profile.setter
+    def profile(self, value):
+        setattr(self, '_profile', value)
 
     def __call__(self, value, caller):
-        if self._profile.privilege_status == type(self._profile).SUPERUSER:
+        if self.profile.privilege_status == type(self.profile).SUPERUSER:
             return
         grp_id = value.id
         field_name = LOOKUP_SEP.join(['group', 'descendants', 'descendant', 'id'])
-        qset = self._profile.groups.filter(**{field_name:grp_id})
+        qset = self.profile.groups.filter(**{field_name:grp_id})
         #qset = qset.values_list(field_name, flat=True)
         grp_exist = qset.exists()
         if not grp_exist:
@@ -297,10 +307,15 @@ class GenericUserRoleAssigner(_BaseUserPriviledgeAssigner):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        role_id_validator = RoleAssignValidator(profile=self._account.profile)
+        role_id_validator = RoleAssignValidator()
         exp_validator = MinValueValidator(limit_value=django_timezone.now())
         self.fields['role'].validators.append(role_id_validator)
         self.fields['expiry'].validators.append(exp_validator)
+        self._role_id_validator = role_id_validator
+
+    def run_validation(self, data=empty):
+        self._role_id_validator.profile = self._account.profile
+        return super().run_validation(data=data)
 
     def create(self, validated_data):
         target = validated_data.pop('_user_instance', None)
@@ -339,8 +354,13 @@ class GenericUserGroupRelationAssigner(_BaseUserPriviledgeAssigner):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        grp_id_validator = GroupAssignValidator(profile=self._account.profile)
+        grp_id_validator = GroupAssignValidator()
         self.fields['group'].validators.append(grp_id_validator)
+        self._grp_id_validator = grp_id_validator
+
+    def run_validation(self, data=empty):
+        self._grp_id_validator.profile = self._account.profile
+        return super().run_validation(data=data)
 
     def create(self, validated_data):
         target = validated_data.pop('_user_instance', None)

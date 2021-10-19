@@ -60,6 +60,10 @@ class GroupCommonTestCase(TransactionTestCase, HttpRequestDataGenGroup, GroupVer
                 value_compare_fn=value_compare_fn)
         self.assertListEqual(not_matched, [])
         self.assertEqual(len(matched), len(origin_trees))
+        self._login_user_profile.refresh_from_db()
+        applied_grp_ids = self._login_user_profile.groups.values_list('group', flat=True)
+        grp_ids_uncovered = set(obj_ids) - set(applied_grp_ids)
+        self.assertFalse(any(grp_ids_uncovered))
         return saved_trees
 
 ## end of class GroupCommonTestCase
@@ -327,17 +331,6 @@ class GroupCreationTestCase(GroupCommonTestCase):
 ## end of class GroupCreationTestCase
 
 
-def _moving_nodes_to_req_data(moving_nodes):
-    field_names = tuple(_nested_field_names.keys()) + ('id', 'name',)
-    req_data = []
-    for node in moving_nodes:
-        data = {fname: node.value[fname] for fname in field_names}
-        data['exist_parent'] = node.parent.value['id'] if node.parent else None
-        data['new_parent'] = None
-        req_data.append(data)
-    random.shuffle(req_data) # `id` field should be unique value in each data item
-    return req_data
-
 
 class GroupUpdateTestCase(GroupCommonTestCase):
     num_roles = 3
@@ -386,7 +379,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
 
 
     def _perform_update(self, moving_nodes, account):
-        req_data = _moving_nodes_to_req_data(moving_nodes)
+        req_data = self._moving_nodes_to_req_data(moving_nodes)
         grp_ids = list(map(lambda node:node.value['id'] ,moving_nodes))
         grp_objs = self.serializer_class.Meta.model.objects.filter(id__in=grp_ids)
         serializer = self.serializer_class(many=True, data=req_data, instance=grp_objs,
@@ -676,7 +669,7 @@ class UpdateAccountPrivilegeTestCase(GroupCommonTestCase):
 
     def _perform_update(self):
         moving_nodes = self.existing_trees.copy()
-        req_data = _moving_nodes_to_req_data(moving_nodes)
+        req_data = self._moving_nodes_to_req_data(moving_nodes)
         grp_ids = list(map(lambda node:node.value['id'] , moving_nodes))
         grp_objs = self.serializer_class.Meta.model.objects.filter(id__in=grp_ids)
         serializer = self.serializer_class(many=True, data=req_data, instance=grp_objs,

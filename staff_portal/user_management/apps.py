@@ -10,10 +10,8 @@ class WebAPIurl(BaseUriLookup):
 
             'PermissionView': 'permissions',
             'RoleAPIView'   : ['roles', 'role/<slug:pk>'],
+            'UserGroupsAPIView'      : ["groups", "group/<slug:pk>"],
 
-            'AppliedRoleReadAPIView' : 'applied_role/<slug:pk>',
-            'AppliedGroupReadAPIView': 'applied_group/<slug:pk>',
-            'UserGroupsAPIView'      : ["usrgrps", "usrgrp/<slug:pk>"],
             #### '^usergrps/edit/(?P<IDs>[\d/]+)$',
             'UserProfileAPIView'     : ["usrprofs", "usrprof/<slug:pk>"],
 

@@ -399,6 +399,12 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerial
         validated_value = super().validate(value=value, exception_cls=ValidationError, _logger=_logger)
         return validated_value
 
+    def create(self, validated_data, **kwargs):
+        with self.atomicity():
+            instance = super().create(validated_data=validated_data, **kwargs)
+            self._account.profile.groups.create(group=instance, approved_by=self._account.profile)
+        return instance
+
     #### usr_cnt = SerializerMethodField() # don't use this, it cannot be reordered
     #### def get_usr_cnt(self, obj):
     ####     return obj.profiles.count()

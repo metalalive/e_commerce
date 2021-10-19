@@ -2,6 +2,7 @@ import logging
 
 from django.core.validators   import EMPTY_VALUES
 from django.db.models         import Q
+from django.db.models.constants import LOOKUP_SEP
 from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework.settings   import api_settings
@@ -42,32 +43,8 @@ class ModelLvlPermsPermissions(DRFBasePermission, JWTclaimPermissionMixin):
         return self._has_permission(tok_payld=request.auth, method=request.method)
 
 
-class BaseValidObjectsMixin:
-    def _get_valid_groups(self, account, view):
-        if not hasattr(view, '_valid_groups_pk'):
-            profile = account.genericuserauthrelation.profile
-            view._valid_groups_pk = {}
-            grp_set = profile.groups.values_list('group', flat=True)
-            closure = GenericUserGroupClosure.objects.filter(ancestor__in=grp_set)
-            view._valid_groups_pk['all'] = closure.values_list('descendant__pk', flat=True)
-            closure = closure.filter(depth__gt=0)
-            view._valid_groups_pk['descendant'] = closure.values_list('descendant__pk', flat=True)
-        return view._valid_groups_pk
-
-    def _get_valid_profs(self, account, view):
-        if not hasattr(view, '_valid_profs_pk'):
-            valid_grps = self._get_valid_groups(account=account, view=view)
-            applied_grp_set = GenericUserGroupRelation.objects.filter(group__pk__in=valid_grps['all'])
-            valid_prof_set = GenericUserProfile.objects.filter(pk__in=applied_grp_set.values_list('profile__pk', flat=True))
-            view._valid_profs_pk = valid_prof_set.values_list('pk', flat=True)
-        return view._valid_profs_pk
-
-
-class BaseRolePermission(DjangoModelPermissions, BaseFilterBackend, BaseValidObjectsMixin):
+class RolePermissions(DjangoModelPermissions, BaseFilterBackend, JWTclaimPermissionMixin):
     message = {api_settings.NON_FIELD_ERRORS_KEY: ['you do not have permission to perform the operation']}
-
-
-class RolePermissions(BaseRolePermission, JWTclaimPermissionMixin):
     perms_map = {
         'GET': ['view_role',],
         'OPTIONS': [],
@@ -116,96 +93,22 @@ class RolePermissions(BaseRolePermission, JWTclaimPermissionMixin):
 ## end of class RolePermissions
 
 
-class AppliedRolePermissions(BaseRolePermission):
-    def _get_all_valid_groups(self, account, view):
-        out = self._get_valid_groups(account=account, view=view)
-        return out['all']
+def _get_valid_groups(account):
+    field_name = LOOKUP_SEP.join(['group', 'descendants', 'descendant', 'id'])
+    return  account.profile.groups.values_list(field_name, flat=True)
 
-    def filter_queryset(self, request, queryset, view):
-        _valid_seek_types = {
-            'groups':   {'model_cls':GenericUserGroup,   'fn':self._get_all_valid_groups },
-            'profiles': {'model_cls':GenericUserProfile, 'fn':self._get_valid_profs },
-        }
-        seek_type = request.query_params.get('type', None)
-        if seek_type in _valid_seek_types.keys() :
-            account = request.user
-            model_cls = _valid_seek_types[seek_type]['model_cls']
-            ct_cls = ContentType.objects.get_for_model(model_cls)
-            filter_kwargs = {'user_type':ct_cls,}
-            log_args = ['account_id', account.pk, 'seek_type', seek_type]
-            if not account.is_superuser:
-                # TODO, what if the user does not have permissions to view other profiles ?
-                fn = _valid_seek_types[seek_type]['fn']
-                valid_ids = fn(account=account, view=view)
-                filter_kwargs['user_id__in'] = valid_ids
-            queryset = queryset.filter(**filter_kwargs)
-            log_args.extend(['filter_kwargs', filter_kwargs])
-            _logger.debug(None, *log_args, request=request)
-        else:
-            queryset = queryset.none()
-        return queryset
-
-    def has_permission(self, request, view):
-        if request.method == 'GET':
-            account = request.user
-            if account.is_superuser:
-                result = True
-            else:
-                role_pk = view.kwargs.get('pk', 0)
-                log_args = ['role_pk', role_pk, 'account_id', account.pk]
-                if role_pk.isdigit():
-                    valid_roles = account.profile.all_roles
-                    result_d = valid_roles['direct'].filter(id=role_pk).exists()
-                    result_i = valid_roles['inherit'].filter(id=role_pk).exists()
-                    result = result_d or result_i
-                    log_args.extend(['valid_roles', valid_roles])
-                else:
-                    result = False
-                log_args.extend(['result', result])
-                loglevel = logging.DEBUG if result else logging.WARNING
-                _logger.log(loglevel, None, *log_args, request=request)
-        else:
-            result = False
-        return result
-
-
-class AppliedGroupPermissions(BaseRolePermission):
-    def filter_queryset(self, request, queryset, view):
-        account = request.user
-        ct_cls = ContentType.objects.get_for_model(GenericUserProfile)
-        if not account.is_superuser:
-            valid_ids = self._get_valid_profs(account=account, view=view)
-            filter_kwargs = {'profile__pk__in':valid_ids}
-            queryset = queryset.filter(**filter_kwargs)
-            log_args = ['filter_kwargs', filter_kwargs, 'account_id', account.pk]
-            _logger.debug(None, *log_args, request=request)
-        return queryset
-
-    def has_permission(self, request, view):
-        if request.method == 'GET':
-            account = request.user
-            if account.is_superuser:
-                result = True
-            else:
-                grp_id = view.kwargs.get('pk', 0)
-                log_args = ['grp_id', grp_id, 'account_id', account.pk]
-                if grp_id.isdigit():
-                    valid_grps = self._get_valid_groups(account=account, view=view)
-                    result = valid_grps['all'].filter(descendant__pk=grp_id).exists()
-                    log_args.extend(['valid_grps_all', valid_grps['all']])
-                else:
-                    result = False
-                log_args.extend(['result', result])
-                loglevel = logging.DEBUG if result else logging.WARNING
-                _logger.log(loglevel, None, *log_args, request=request)
-        else:
-            result = False
-        return result
+def _get_valid_profs(self, account, view):
+    if not hasattr(view, '_valid_profs_pk'):
+        valid_grps = _get_valid_groups(account=account)
+        applied_grp_set = GenericUserGroupRelation.objects.filter(group__pk__in=valid_grps['all'])
+        valid_prof_set = GenericUserProfile.objects.filter(pk__in=applied_grp_set.values_list('profile__pk', flat=True))
+        view._valid_profs_pk = valid_prof_set.values_list('pk', flat=True)
+    return view._valid_profs_pk
 
 
 
-class CommonUserPermissions(DjangoObjectPermissions, BaseValidObjectsMixin, BaseFilterBackend):
 
+class CommonUserPermissions(DjangoObjectPermissions, BaseFilterBackend):
     message = {api_settings.NON_FIELD_ERRORS_KEY: ['not allowed to perform this action on the profile(s) or group(s)']}
 
     # In Django default implementation, APIView.check_permissions() is automatically called
@@ -220,148 +123,39 @@ class CommonUserPermissions(DjangoObjectPermissions, BaseValidObjectsMixin, Base
 
 
 
-class UserGroupsPermissions(CommonUserPermissions):
+class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermissionMixin):
+    message = {api_settings.NON_FIELD_ERRORS_KEY: ['not allowed to perform this action on the profile(s) or group(s)']}
     perms_map = {
-        'GET': [
-            #### '%(app_label)s.view_%(model_name)s',
-            #### '%(app_label)s.view_genericusergroupclosure',
-            #### '%(app_label)s.view_userquotarelation',
-            #### '%(app_label)s.view_quotausagetype',
-            #### 'auth.view_group',
-            ],
+        'GET': ['view_genericusergroup'],
         'OPTIONS': [],
         'HEAD': [],
-        'POST':   [
-            '%(app_label)s.add_%(model_name)s',
-            '%(app_label)s.add_genericusergroupclosure',
-            '%(app_label)s.add_userquotarelation',
-            '%(app_label)s.view_quotausagetype',
-            'auth.view_group',
-            ],
-        'PUT': [
-            '%(app_label)s.change_%(model_name)s',
-            '%(app_label)s.add_genericusergroupclosure',
-            '%(app_label)s.change_genericusergroupclosure',
-            '%(app_label)s.delete_genericusergroupclosure',
-            '%(app_label)s.add_userquotarelation',
-            '%(app_label)s.change_userquotarelation',
-            '%(app_label)s.delete_userquotarelation',
-            '%(app_label)s.view_quotausagetype',
-            'auth.view_group',
-            ],
-        'PATCH':  [ # used as undelete / recovery API
-            '%(app_label)s.change_%(model_name)s',
-            '%(app_label)s.change_genericusergroupclosure',
-            '%(app_label)s.delete_genericusergroupclosure',
-            'auth.view_group',
-            ],
-        'DELETE': [
-            '%(app_label)s.change_%(model_name)s', # consider soft-delete cases
-            '%(app_label)s.delete_%(model_name)s',
-            '%(app_label)s.change_genericusergroupclosure',
-            '%(app_label)s.delete_genericusergroupclosure',
-            '%(app_label)s.delete_userquotarelation',
-            ],
+        'POST':   ['view_genericusergroup', 'add_genericusergroup',   ],
+        'PUT':    ['view_genericusergroup', 'change_genericusergroup',],
+        'PATCH':  ['view_genericusergroup', 'change_genericusergroup',],
+        'DELETE': ['view_genericusergroup', 'delete_genericusergroup',],
     }
 
     def has_edit_permission(self, request, view):
-        result = True
         account = request.user
-        method = request.method
-        req_payld = request.data
-        valid_roles = account.profile.all_roles
-        valid_grps  = self._get_valid_groups(account=account, view=view)
-        err_msgs = []
-        log_args = ['request_method', method, 'valid_roles', valid_roles, 'valid_grps', valid_grps]
-
-        try:
-            for data in req_payld:
-                err_msg = {}
-                # Each applied group itself has to be read-only, while all its descendants
-                # can be  modified , TODO, re-factor
-                gid = data.get('id')
-                exist_parent = data.get('exist_parent')
-                new_parent = data.get('new_parent', None)
-                roles = set(data.get('roles', []))
-                log_args.extend(['gid', gid, 'exist_parent', exist_parent])
-                if gid and not valid_grps['descendant'].filter(descendant__pk=int(gid)).exists():
-                    err_msg[api_settings.NON_FIELD_ERRORS_KEY] = ["not allowed to edit group {}".format(gid)]
-                elif not exist_parent:
-                    parent_not_included = False
-                    if method == 'POST' and not new_parent:
-                        parent_not_included = True
-                    elif method == 'PUT':
-                        parent_not_included = True
-                    if parent_not_included:
-                        err_msg['exist_parent'] = ["you must select parent for the group you currently edit"]
-                elif exist_parent and not valid_grps['all'].filter(descendant__pk=int(exist_parent)).exists():
-                    err_msg['exist_parent'] = ["not allowed to select the parent group ID {}".format(exist_parent)]
-                num_valid_roles = valid_roles['direct'].filter(id__in=roles).count() + \
-                        valid_roles['inherit'].filter(id__in=roles).count()
-                if len(roles) != num_valid_roles:
-                    # check whether the logged-in user has permission to grant all
-                    # the roles to the edit subgroup
-                    err_msg['roles'] = ["list of roles contains invalid ID {}".format(str(roles)) ]
-                if any(err_msg):
-                    result = False
-                err_msgs.append(err_msg)
-        except (ValueError, TypeError) as e:
-            # still return 403 to frontend, but log this frontend input error (TODO)
-            err_msgs = {api_settings.NON_FIELD_ERRORS_KEY: ["unknown error from frontend input"]}
-            result = False
-        if not result:
-            self.message = err_msgs
-            log_args.extend(['err_msgs', err_msgs])
+        valid_grp_ids = _get_valid_groups(account=account)
+        valid_grp_ids = set(valid_grp_ids)
+        req_grp_ids = filter(lambda d:d.get('id'), request.data)
+        req_grp_ids = set(map(lambda d:d['id'], req_grp_ids))
+        uncovered_grp_ids = req_grp_ids - valid_grp_ids
+        result = not any(uncovered_grp_ids)
+        log_args = ['valid_grp_ids', valid_grp_ids, 'req_grp_ids', req_grp_ids]
         log_args.extend(['result', result])
         loglevel = logging.DEBUG if result else logging.WARNING
         _logger.log(loglevel, None, *log_args, request=request)
         return result
 
-
-    def has_delete_permission(self, request, view):
-        result = True
-        err_msgs = {}
-        log_args = []
-        try:  # supposed to get list of IDs from URL
-            IDs = request.query_params.get('ids', '')
-            IDs = IDs.split(',')
-            IDs = [int(i) for i in IDs if not i in EMPTY_VALUES]
-            valid_grps  = self._get_valid_groups(account=request.user, view=view)
-            num_valid_IDs = valid_grps['descendant'].filter(descendant__pk__in=IDs).count()
-            log_args.extend(['frontend_IDs', IDs, 'valid_grps_descendant', valid_grps['descendant'],
-                'num_valid_IDs', num_valid_IDs])
-            if len(IDs) != num_valid_IDs:
-                err_msgs = {api_settings.NON_FIELD_ERRORS_KEY: "The list %s contains invalid ID" % IDs}
-                result = False
-        except (ValueError, TypeError) as e:
-            err_msgs = {api_settings.NON_FIELD_ERRORS_KEY: "unknown error from frontend input"}
-            result = False
-        if not result:
-            self.message = err_msgs
-            log_args.extend(['err_msgs', err_msgs])
-        log_args.extend(['result', result])
-        loglevel = logging.DEBUG if result else logging.WARNING
-        _logger.log(loglevel, None, *log_args, request=request)
-        return result
-
-
-    # is it good practice to skip check on recovery permission ?
-    _unsafe_methods = ['POST', 'PUT', 'DELETE'] # 'PATCH', 
-
-    _extra_check_func = {
-        'POST': has_edit_permission,
-        'PUT': has_edit_permission,
-        'DELETE': has_delete_permission,
-    }
 
     def has_permission(self, request, view):
-        result = super().has_permission(request=request, view=view)
+        result = self._has_permission(tok_payld=request.auth, method=request.method)
         if result is True:
             account = request.user
-            if not account.is_superuser:
-                fn = self._extra_check_func.get(request.method)
-                if fn:
-                    result = fn(self=self, request=request, view=view,)
+            if not account.is_superuser and request.method.upper() in ('PUT', 'DELETE'):
+                result = self.has_edit_permission(request=request, view=view,)
         return result
 
     def has_object_permission(self, request, view, obj):
@@ -372,7 +166,7 @@ class UserGroupsPermissions(CommonUserPermissions):
         else:
             # conventionally this function is called for reading one specific object, not for updating
             # , so it is allowed to view all groups 
-            valid_grps = self._get_valid_groups(account=account, view=view)
+            valid_grps = _get_valid_groups(account=account, view=view)
             result = valid_grps['all'].filter(descendant__pk=obj.pk).exists()
         return result
 
@@ -381,14 +175,10 @@ class UserGroupsPermissions(CommonUserPermissions):
     def filter_queryset(self, request, queryset, view):
         account = request.user
         if not account.is_superuser:
-            valid_grps = self._get_valid_groups(account=account, view=view)
-            if request.method in self._unsafe_methods:
-                all_valid_grps = valid_grps['descendant']
-            else:
-                all_valid_grps = valid_grps['all']
+            valid_grps = _get_valid_groups(account=account, view=view)
+            all_valid_grps = valid_grps
             queryset = queryset.filter(pk__in=all_valid_grps)
         return queryset
-
 #### end of UserGroupsPermissions
 
 
@@ -490,8 +280,8 @@ class UserProfilesPermissions(CommonUserPermissions):
         account = request.user
         req_payld = request.data
         valid_roles = account.profile.all_roles
-        valid_grps  = self._get_valid_groups(account=account, view=view)
-        valid_profs = self._get_valid_profs(account=account, view=view)
+        valid_grps  = _get_valid_groups(account=account, view=view)
+        valid_profs = _get_valid_profs(account=account, view=view)
         err_msgs = []
         try:
             for data in req_payld:
@@ -551,8 +341,6 @@ class UserProfilesPermissions(CommonUserPermissions):
         _logger.log(loglevel, None, *log_args, request=request)
         return result
 
-
-    _unsafe_methods = ['POST', 'PUT', 'DELETE']
 
     _extra_check_func = {
         'POST': has_edit_permission,
@@ -631,7 +419,7 @@ class UserProfilesPermissions(CommonUserPermissions):
 #### end of UserProfilesPermissions
 
 
-class UserDeactivationPermission(DjangoModelPermissions, BaseValidObjectsMixin):
+class UserDeactivationPermission(DjangoModelPermissions):
     perms_map = {
         'GET': ['ALWAYS_INVALID'],
         'OPTIONS': ['ALWAYS_INVALID'],

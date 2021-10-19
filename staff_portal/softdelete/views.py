@@ -6,6 +6,7 @@ from django.core.validators  import EMPTY_VALUES
 
 from rest_framework             import status as RestStatus
 from rest_framework.response    import Response as RestResponse
+from rest_framework.exceptions  import ParseError
 from rest_framework.settings    import api_settings
 
 _logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class RecoveryModelMixin:
         return  delta_start, delta_end
 
 
-    def recovery(self, request, *args, status_ok=RestStatus.HTTP_200_OK, resource_content_type=None,
+    def recovery(self, request, profile_id, *args, status_ok=RestStatus.HTTP_200_OK, resource_content_type=None,
             return_data_after_done=False, **kwargs):
         # check whether to apply recovery view from soft-delete module
         status = status_ok
@@ -63,11 +64,13 @@ class RecoveryModelMixin:
         loglevel = logging.INFO
         log_args = ['action', 'recover', 'resource_content_type', resource_content_type]
         if resource_content_type:
-            profile_id = self.get_profile_id(request=request)
             m_cls = resource_content_type.model_class()
             model_cls_hier = "%s.%s" % (m_cls.__module__ , m_cls.__qualname__)
             log_args.extend(['profile_id', profile_id,'model_cls', model_cls_hier])
-            body = request.data or {}
+            try:
+                body = request.data or {}
+            except ParseError as e:
+                body = {}
             if isinstance(body, dict):
                 ids = body.get('ids', [])
                 time_start = body.get('time_start', '')
@@ -116,6 +119,7 @@ class RecoveryModelMixin:
                         time_created__lt=delta_end, done_by=profile_id, time_created__gt=delta_start
                         ).order_by("-time_created")
                 _id_list = cset.values_list('object_id', flat=True)
+                _id_list = list(_id_list) # do not do this after un-delete the instances
                 m_objs = model_cls.objects.filter(pk__in=_id_list , with_deleted=True)
                 content_type_ids = cset.values_list('pk','content_type','object_id')
                 m_objs.undelete(profile_id=profile_id)

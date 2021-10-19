@@ -35,7 +35,7 @@ from ..serializers import GenericUserProfileSerializer, AuthUserResetRequestSeri
 from ..serializers import LoginAccountSerializer
 from ..serializers import GenericUserRoleAssigner, GenericUserGroupRelationAssigner
 
-from ..permissions import RolePermissions, AppliedRolePermissions, AppliedGroupPermissions, UserGroupsPermissions
+from ..permissions import RolePermissions, UserGroupsPermissions
 from ..permissions import UserDeactivationPermission, UserActivationPermission, UserProfilesPermissions
 
 from .constants import  _PRESERVED_ROLE_IDS, MAX_NUM_FORM, WEB_HOST
@@ -94,34 +94,6 @@ class RoleAPIView(AuthCommonAPIView):
 ## end of class RoleAPIView
 
 
-class AppliedRoleReadAPIView(AuthCommonAPIReadView):
-    serializer_class = GenericUserRoleAssigner
-    queryset =  serializer_class.Meta.model.objects.order_by('-expiry')
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [AppliedRolePermissions]
-    filter_backends = [AppliedRolePermissions,]
-
-    def get(self, request, *args, **kwargs):
-        # filter before calling get(), which makes get() invoke list()
-        role_id = kwargs.pop('pk', 0)
-        self.queryset = self.queryset.filter(role__pk=role_id)
-        err_args = ["role_id", role_id, "num_grps_profs_apply_this_role", self.queryset.count(),]
-        _logger.debug(None, *err_args, request=request)
-        return super().get(request, *args, **kwargs)
-
-
-class AppliedGroupReadAPIView(AuthCommonAPIReadView):
-    serializer_class = GenericUserGroupRelationAssigner
-    queryset = serializer_class.Meta.model.objects.order_by('-id')
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [AppliedGroupPermissions]
-    filter_backends = [AppliedGroupPermissions]
-
-    def get(self, request, *args, **kwargs):
-        # filter before calling get(), which makes get() invoke list()
-        grp_id = kwargs.pop('pk', 0)
-        self.queryset = self.queryset.filter(group__pk=grp_id)
-        return super().get(request, *args, **kwargs)
-
-
 
 class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
     serializer_class = GenericUserGroupSerializer
@@ -147,8 +119,7 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
 
     def post(self, request, *args, **kwargs):
         kwargs['many'] = True
-        kwargs['return_data_after_done'] = False
-        kwargs['exc_wr_fields'] = ['quota__user_type', 'quota__user_id']
+        kwargs['return_data_after_done'] = True
         return  self.create(request, *args, **kwargs)
 
     def put(self, request, *args, **kwargs):
@@ -159,14 +130,16 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
 
     def delete(self, request, *args, **kwargs):
         kwargs['many'] = True
+        kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
         kwargs['status_ok'] = RestStatus.HTTP_202_ACCEPTED
         # semantic: accepted, will be deleted after a point of time which no undelete operation is performed
         return self.destroy(request, *args, **kwargs)
 
     def patch(self, request, *args, **kwargs):
+        kwargs['return_data_after_done'] = True
         kwargs['resource_content_type'] = ContentType.objects.get(app_label='user_management',
                 model=self.serializer_class.Meta.model.__name__)
-        return self.recovery(request=request, *args, **kwargs)
+        return self.recovery(request=request, profile_id=request.user.profile.id, *args, **kwargs)
 
     def delete_success_callback(self, id_list):
         update_accounts_privilege.delay(affected_groups=id_list, deleted=True)
