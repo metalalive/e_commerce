@@ -8,11 +8,12 @@ from django.contrib.auth.models import Permission
 from rest_framework.settings    import api_settings as drf_settings
 
 from user_management.models.common import AppCodeOptions
-from user_management.models.base import GenericUserProfile, QuotaMaterial
+from user_management.models.base import GenericUserProfile, GenericUserGroup, QuotaMaterial
 from user_management.models.auth import Role, LoginAccount
 from user_management.serializers.nested import RoleAssignValidator
 from user_management.async_tasks import update_accounts_privilege
 
+from common.util.python import sort_nested_object
 from tests.python.common import TreeNodeMixin
 from tests.python.common.django import _BaseMockTestClientInfoMixin
 
@@ -38,10 +39,14 @@ class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Authen
         role_rel_data = {'expiry':gen_expiry_time(minutes_valid=10), 'approved_by': approved_by,}
         tuple(map(lambda role: profile.roles.create(role=role, **role_rel_data), roles))
 
-    def _prepare_access_token(self, new_perms_info):
-        qset = Permission.objects.filter(content_type__app_label='user_management',
-                codename__in=new_perms_info)
-        self._primitives[Role][1].permissions.set(qset)
+    def _prepare_access_token(self, new_perms_info=None, chosen_role=None):
+        chosen_role = chosen_role or self._primitives[Role][1]
+        if new_perms_info:
+            qset = Permission.objects.filter(content_type__app_label='user_management',
+                    codename__in=new_perms_info)
+            chosen_role.permissions.set(qset)
+        else:
+            chosen_role.permissions.clear()
         acs_tok_resp = self._refresh_access_token(testcase=self, audience=['user_management'])
         return acs_tok_resp['access_token']
 
@@ -437,30 +442,215 @@ class GroupDeletionTestCase(GroupBaseUpdateTestCase):
                 self.saved_trees[2],
                 self.saved_trees[0].children[0],
             ]
-        expect_new_root_grps = list(map(lambda node:node.value['id'], expect_new_root_grps))
-        uncovered_root_grps = set(expect_new_root_grps) - set(actual_root_grps)
+        expect_new_root_grp_ids = list(map(lambda node:node.value['id'], expect_new_root_grps))
+        uncovered_root_grps = set(expect_new_root_grp_ids) - set(actual_root_grps)
         self.assertFalse(any(uncovered_root_grps))
-        origin_tree_roots = expect_new_root_grps[4:]
+        self.assertSetEqual(set(expect_new_root_grp_ids) , set(actual_root_grps))
+        sorted_actual_roots = sorted(trees_after_delete, key=lambda node:node.value['id'])
+        sorted_expect_roots = sorted(expect_new_root_grps, key=lambda node:node.value['id'])
+        expect_roots_iter = iter(sorted_expect_roots)
+        for actual_root in sorted_actual_roots:
+            expect_root = next(expect_roots_iter)
+            result = self._value_compare_fn(val_a=actual_root.value, val_b=expect_root.value)
+            self.assertTrue(result)
+        origin_tree_roots = expect_new_root_grp_ids[4:]
         for root_grp_id in origin_tree_roots:
             filtered = filter(lambda node:node.value['id'] == root_grp_id, trees_after_delete)
             root_node = next(filtered)
             self.assertTrue(any(root_node.children))
+
+
+    def test_undelete_by_different_account(self):
+        deleting_node_sets = self._test_softdelete_nodes_sequence()
+        # assume first user logs out, then 2nd user logs in
+        self._client.cookies.clear()
+        self._setup_user_roles(profile=self._profile_2nd, approved_by=self._profile_2nd,
+                roles=self._primitives[Role][:])
+        self._auth_setup(testcase=self, profile=self._profile_2nd, is_superuser=False,
+                new_account_data=_fixtures[LoginAccount][2].copy())
+        # refresh access token for 2nd user
+        access_token = self._prepare_access_token(new_perms_info=['view_genericusergroup',
+            'change_genericusergroup'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        self.api_call_kwargs.update({'method':'patch',  'expect_shown_fields':['id','name',]})
+        grp_ids = list(map(lambda node: node.value['id'], deleting_node_sets[0]))
+        self.api_call_kwargs['body'] = {'ids': grp_ids}
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 403)
+        err_info = response.json()
+        expect_errmsg = 'user is not allowed to undelete the item(s)'
+        actual_errmsg = err_info['message'][0]
+        self.assertEqual(expect_errmsg, actual_errmsg)
 ## end of class GroupDeletionTestCase
 
+
 class GroupQueryTestCase(GroupBaseUpdateTestCase):
-    path = '/groups'
+    paths = ['/groups', '/group/%s']
+
+    def setUp(self):
+        super().setUp()
+        self.api_call_kwargs = client_req_csrf_setup()
+
+    def _compare_single_group(self, response_body, chosen_node):
+        compare_result = self._value_compare_fn(val_a=response_body, val_b=chosen_node.value)
+        self.assertTrue(compare_result)
+        filtered = filter(lambda d:d['depth'] == 1, response_body['ancestors'])
+        actual_parent_data = next(filtered)['ancestor']
+        expect_parent_data = {k: chosen_node.parent.value[k] for k in ['id','name']}
+        self.assertDictEqual(actual_parent_data, expect_parent_data)
+        filtered = filter(lambda d:d['depth'] == 1, response_body['descendants'])
+        actual_child_data = list(map(lambda d:d['descendant'], filtered))
+        expect_child_data = [{k: node.value[k] for k in ['id','name']} for node in chosen_node.children]
+        actual_child_data = sort_nested_object(actual_child_data)
+        expect_child_data = sort_nested_object(expect_child_data)
+        self.assertListEqual(actual_child_data, expect_child_data)
+
     def test_single_group(self):
-        pass
+        chosen_node = self.saved_trees[-1].children[0]
+        grp_id = chosen_node.value['id']
+        path = self.paths[1] % grp_id
+        self.api_call_kwargs.update({'path': path, 'method':'get'})
+        # subcase #1, the user that have `view_genericusergroup` permission
+        access_token = self._prepare_access_token(new_perms_info=['view_genericusergroup'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        self._compare_single_group(response_body=response.json(), chosen_node=chosen_node)
+        # subcase #2, the user that does NOT have `view_genericusergroup` permission, read valid group data
+        self._client.cookies.clear()
+        self._setup_user_roles(profile=self._profile_2nd, approved_by=self._profile_2nd, roles=self._primitives[Role][1:2])
+        chosen_group = GenericUserGroup.objects.get(id=grp_id)
+        self._profile_2nd.groups.create(group=chosen_group, approved_by=self._profile_2nd)
+        self._auth_setup(testcase=self, profile=self._profile_2nd, is_superuser=False,
+                new_account_data=_fixtures[LoginAccount][2].copy())
+        access_token = self._prepare_access_token(new_perms_info=['view_role'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        self._compare_single_group(response_body=response.json(), chosen_node=chosen_node)
+        # subcase #3, the user that does NOT have `view_genericusergroup` permission, read invalid group data
+        chosen_node = chosen_node.parent
+        grp_id = chosen_node.value['id']
+        path = self.paths[1] % grp_id
+        self.api_call_kwargs.update({'path': path})
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 403)
+
 
     def test_multiple_groups(self):
-        pass
+        chosen_nodes = list(map(lambda node: node.children[0], self.saved_trees))
+        chosen_nodes = sorted(chosen_nodes, key=lambda node:node.value['id'])
+        grp_ids = list(map(lambda node: node.value['id'], chosen_nodes))
+        path = self.paths[0]
+        self.api_call_kwargs.update({'path': path, 'method':'get', 'ids':grp_ids})
+        # subcase #1, the user that have `view_genericusergroup` permission
+        access_token = self._prepare_access_token(new_perms_info=['view_genericusergroup'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetched_group_data = sorted(response.json(), key=lambda d:d['id'])
+        self._compare_single_group(response_body=fetched_group_data[0], chosen_node=chosen_nodes[0])
+        self._compare_single_group(response_body=fetched_group_data[1], chosen_node=chosen_nodes[1])
+        self._compare_single_group(response_body=fetched_group_data[-1], chosen_node=chosen_nodes[-1])
+        for actual_grp_data in fetched_group_data:
+            self.assertEqual(actual_grp_data['usr_cnt'], 1) # _profile , _profile_2nd
+        # subcase #2, the user that does NOT have `view_genericusergroup` permission, read valid group data
+        self._client.cookies.clear()
+        self._setup_user_roles(profile=self._profile_2nd, approved_by=self._profile_2nd, roles=self._primitives[Role][1:2])
+        chosen_groups = GenericUserGroup.objects.filter(id__in=grp_ids)
+        for chosen_group in chosen_groups:
+            self._profile_2nd.groups.create(group=chosen_group, approved_by=self._profile_2nd)
+        self._auth_setup(testcase=self, profile=self._profile_2nd, is_superuser=False,
+                new_account_data=_fixtures[LoginAccount][2].copy())
+        access_token = self._prepare_access_token(new_perms_info=['view_role'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetched_group_data = sorted(response.json(), key=lambda d:d['id'])
+        self._compare_single_group(response_body=fetched_group_data[0], chosen_node=chosen_nodes[0])
+        self._compare_single_group(response_body=fetched_group_data[1], chosen_node=chosen_nodes[1])
+        self._compare_single_group(response_body=fetched_group_data[-1], chosen_node=chosen_nodes[-1])
+        for actual_grp_data in fetched_group_data:
+            self.assertEqual(actual_grp_data['usr_cnt'], 2) # _profile , _profile_2nd
+        # subcase #3, the user that does NOT have `view_genericusergroup` permission, read invalid group data
+        chosen_nodes.pop()
+        chosen_nodes.append(self.saved_trees[-1])
+        grp_ids = list(map(lambda node: node.value['id'], chosen_nodes))
+        self.api_call_kwargs.update({'ids':grp_ids})
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)  # still return ok status, but filter out invalid groups
+        fetched_group_data = sorted(response.json(), key=lambda d:d['id'])
+        self.assertEqual(len(fetched_group_data) + 1, len(chosen_nodes))
+        self._compare_single_group(response_body=fetched_group_data[0], chosen_node=chosen_nodes[0])
+        self._compare_single_group(response_body=fetched_group_data[1], chosen_node=chosen_nodes[1])
 
-    def test_ancestors(self):
-        pass
 
-    def test_descendants(self):
-        pass
+    def test_order_by_usr_cnt(self):
+        tree_root = self.saved_trees[0]
+        valid_profiles = self._primitives[GenericUserProfile][2:]
+        expect_groups_order = {
+            tree_root : valid_profiles[0:6],
+            tree_root.children[0] : valid_profiles[5:9],
+            tree_root.children[1] : valid_profiles[9:12],
+            tree_root.children[0].children[0] : valid_profiles[12:14],
+            tree_root.children[0].children[1] : valid_profiles[14:15],
+        }
+        expect_response = []
+        for node, profiles in expect_groups_order.items():
+            group = self.saved_trees.entity_data.get(id=node.value['id'])
+            for profile in profiles:
+                group.profiles.create(profile=profile, approved_by=self._profile)
+            expect_response_item = {fd:node.value[fd] for fd in ('id', 'name')}
+            expect_response_item['usr_cnt'] = len(profiles) + 1 # plus self._profile who created the group
+            expect_response.append(expect_response_item)
+        access_token = self._prepare_access_token(new_perms_info=['view_genericusergroup'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        extra_api_call_kwargs = {'path': self.paths[0], 'method':'get', 'expect_shown_fields':['id','name','usr_cnt']
+                , 'extra_query_params': {'ordering':'-usr_cnt'}}
+        self.api_call_kwargs.update(extra_api_call_kwargs)
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetched_group_data = response.json()
+        # only look at the first 6 fetched items
+        actual_response = fetched_group_data[:len(expect_groups_order.keys())]
+        self.assertListEqual(expect_response, actual_response)
+## end of class GroupQueryTestCase
 
-    def test_group_privilege(self):
-        pass
+
+class GroupSearchTestCase(GroupBaseUpdateTestCase):
+    path = '/groups'
+
+    def setUp(self):
+        super().setUp()
+        self.api_call_kwargs = client_req_csrf_setup()
+
+    def test_search_ancestors(self):
+        keyword = 'God'
+        expect_groups_name = {
+            self.saved_trees[2].children[1] : 'God father',
+            self.saved_trees[0].children[0] : 'Thanks God It is Monday',
+            self.saved_trees[0].children[0].children[0] : 'For God Sake',
+            self.saved_trees[1].children[0] : 'Golden Goddess',
+            self.saved_trees[1].children[0].children[1] : 'Godaddy',
+        }
+        expect_response = []
+        for node, new_name in expect_groups_name.items():
+            group = self.saved_trees.entity_data.get(id=node.value['id'])
+            group.name = new_name
+            group.save()
+        access_token = self._prepare_access_token(new_perms_info=['view_genericusergroup'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        extra_api_call_kwargs = {'path': self.path, 'method':'get',
+                'expect_shown_fields':['id','name', 'ancestors','ancestor','depth'],
+                'extra_query_params': {'search':keyword}}
+        self.api_call_kwargs.update(extra_api_call_kwargs)
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetched_group_data = response.json()
+        fetched_group_data = list(filter(lambda d:d['name'].find(keyword) < 0, fetched_group_data))
+        for data in fetched_group_data:
+            ancestor_hit = filter(lambda d:d['ancestor']['name'].find(keyword) >= 0, data['ancestors'])
+            ancestor_hit = list(ancestor_hit)
+            self.assertTrue(any(ancestor_hit))
+
 

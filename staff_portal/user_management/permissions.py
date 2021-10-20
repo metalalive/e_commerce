@@ -152,32 +152,37 @@ class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermis
 
     def has_permission(self, request, view):
         result = self._has_permission(tok_payld=request.auth, method=request.method)
+        # logged-in users that do not have read permission can only view the groups assigned
+        # to themselves, then set result to True for GET request
+        request._can_view_all_groups = result
         if result is True:
             account = request.user
             if not account.is_superuser and request.method.upper() in ('PUT', 'DELETE'):
                 result = self.has_edit_permission(request=request, view=view,)
+        else:
+            if request.method.upper() == 'GET':
+                result = True
         return result
 
     def has_object_permission(self, request, view, obj):
         result = False
-        account = request.user
-        if account.is_superuser:
+        can_view_all_groups = getattr(request, '_can_view_all_groups', False)
+        if can_view_all_groups:
             result = True
         else:
-            # conventionally this function is called for reading one specific object, not for updating
-            # , so it is allowed to view all groups 
-            valid_grps = _get_valid_groups(account=account, view=view)
-            result = valid_grps['all'].filter(descendant__pk=obj.pk).exists()
+            account = request.user
+            valid_grps = _get_valid_groups(account=account)
+            result = obj.id in valid_grps
         return result
 
 
     # only for handling queryset permissions
     def filter_queryset(self, request, queryset, view):
-        account = request.user
-        if not account.is_superuser:
-            valid_grps = _get_valid_groups(account=account, view=view)
-            all_valid_grps = valid_grps
-            queryset = queryset.filter(pk__in=all_valid_grps)
+        can_view_all_groups = getattr(request, '_can_view_all_groups', False)
+        if not can_view_all_groups:
+            account = request.user
+            valid_grps = _get_valid_groups(account=account)
+            queryset = queryset.filter(pk__in=valid_grps)
         return queryset
 #### end of UserGroupsPermissions
 

@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings as django_settings
 from django.middleware.csrf import _get_new_csrf_token
+from django.core.exceptions import  ObjectDoesNotExist
 from django.utils import timezone as django_timezone
 
 from common.cors.middleware import conf as cors_conf
@@ -125,18 +126,28 @@ def client_req_csrf_setup():
 
 
 class AuthenticateUserMixin:
-    def _auth_setup(self, testcase, profile=None, is_staff=True, is_active=True, is_superuser=False):
+    def _auth_setup(self, testcase, profile=None, login_password=None, new_account_data=None,
+            is_staff=True, is_active=True, is_superuser=False):
         api_login_kwargs = client_req_csrf_setup()
         api_login_kwargs['path'] = '/login'
         api_login_kwargs['method'] = 'post'
         if profile is None:
             profile_data = {'id': 3, 'first_name':'Brooklynn', 'last_name':'Jenkins'}
             profile = GenericUserProfile.objects.create(**profile_data)
-        account_data = {'username':'ImStaff', 'password':'dontexpose', 'is_active':is_active,
-                'is_staff':is_staff, 'is_superuser':is_superuser, 'profile':profile,
-                'password_last_updated':django_timezone.now(), }
-        account = LoginAccount.objects.create_user(**account_data)
-        api_login_kwargs['body'] = {key: account_data[key] for key in ('username','password')}
+        try:
+            account = profile.account
+            assert login_password, 'login_password has to be given'
+        except ObjectDoesNotExist as e:
+            if not new_account_data:
+                new_account_data = {'username':'ImStaff', 'password':'dontexpose',
+                    'is_superuser':is_superuser}
+            new_account_data.update({'profile': profile, 'is_active':is_active, 'is_staff':is_staff,})
+            ## account = LoginAccount.objects.create_user(**new_account_data)
+            profile =  _setup_login_account(account_data=new_account_data, profile_obj=profile,
+                   roles=None, expiry=None)
+            account = profile.account
+            login_password = new_account_data['password']
+        api_login_kwargs['body'] = {'username': account.username, 'password':login_password }
         # first login request
         response = testcase._send_request_to_backend(**api_login_kwargs)
         testcase.assertEqual(int(response.status_code), 200)

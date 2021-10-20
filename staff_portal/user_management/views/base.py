@@ -99,22 +99,14 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
     serializer_class = GenericUserGroupSerializer
     filter_backends = [UserGroupsPermissions, SearchFilter, ClosureTableFilter, OrderingFilter,] #  
     closure_model_cls = GenericUserGroupClosure
-    ordering_fields  = ['id', 'name', 'usr_cnt']
+    ordering_fields  = ['id', 'usr_cnt']
     # `ancestors__ancestor__name` already covers `name` field of each model instance
     search_fields  = ['ancestors__ancestor__name']
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [UserGroupsPermissions]
-    queryset = serializer_class.Meta.model.objects.annotate(usr_cnt=Count('profiles__profile'))
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
 
     def get(self, request, *args, **kwargs):
-        exc_rd_fields = request.query_params.get('exc_rd_fields', None)
-        if exc_rd_fields is None:
-            exc_rd_fields = ['ancestors__id']
-        elif isinstance(exc_rd_fields, str):
-            exc_rd_fields = [exc_rd_fields, 'ancestors__id']
-        elif isinstance(exc_rd_fields, list):
-            exc_rd_fields.extend(['ancestors__id'])
-        kwargs['serializer_kwargs'] = {'from_read_view':True, 'exc_rd_fields': exc_rd_fields,}
+        self.queryset = self.serializer_class.Meta.model.objects.annotate(usr_cnt=Count('profiles__profile'))
         return super().get(request=request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):

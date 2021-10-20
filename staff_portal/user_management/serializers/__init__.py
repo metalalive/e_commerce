@@ -405,6 +405,11 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerial
             self._account.profile.groups.create(group=instance, approved_by=self._account.profile)
         return instance
 
+    def to_representation(self, instance):
+        out = super().to_representation(instance=instance)
+        if self.fields.get('usr_cnt'):
+            out['usr_cnt'] = instance.profiles.count()
+        return out
     #### usr_cnt = SerializerMethodField() # don't use this, it cannot be reordered
     #### def get_usr_cnt(self, obj):
     ####     return obj.profiles.count()
