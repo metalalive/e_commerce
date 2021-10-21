@@ -97,34 +97,18 @@ def _get_valid_groups(account):
     field_name = LOOKUP_SEP.join(['group', 'descendants', 'descendant', 'id'])
     return  account.profile.groups.values_list(field_name, flat=True)
 
-def _get_valid_profs(self, account, view):
-    if not hasattr(view, '_valid_profs_pk'):
-        valid_grps = _get_valid_groups(account=account)
-        applied_grp_set = GenericUserGroupRelation.objects.filter(group__pk__in=valid_grps['all'])
-        valid_prof_set = GenericUserProfile.objects.filter(pk__in=applied_grp_set.values_list('profile__pk', flat=True))
-        view._valid_profs_pk = valid_prof_set.values_list('pk', flat=True)
-    return view._valid_profs_pk
+def _get_valid_profs(account):
+    valid_grp_ids = _get_valid_groups(account=account)
+    field_name = LOOKUP_SEP.join(['group', 'id', 'in'])
+    applied_grp_set = GenericUserGroupRelation.objects.filter(**{field_name: valid_grp_ids})
+    valid_prof_ids = applied_grp_set.values_list('profile__id', flat=True)
+    return valid_prof_ids
 
-
-
-
-class CommonUserPermissions(DjangoObjectPermissions, BaseFilterBackend):
-    message = {api_settings.NON_FIELD_ERRORS_KEY: ['not allowed to perform this action on the profile(s) or group(s)']}
-
-    # In Django default implementation, APIView.check_permissions() is automatically called
-    # prior to method handling function (e.g. GET, POST ... etc) ,
-    # while APIView.check_object_permissions() is called only when invoking View.get_object()
-    # , for performance reason, generic view will NOT automatically call check_object_permissions()
-    # to check permission on each object in a queryset, instead one could filter the queryset
-    # appropriately before checking permission
-
-    def has_object_permission(self, request, view, obj):
-        raise NotImplementedError
 
 
 
 class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermissionMixin):
-    message = {api_settings.NON_FIELD_ERRORS_KEY: ['not allowed to perform this action on the profile(s) or group(s)']}
+    message = {api_settings.NON_FIELD_ERRORS_KEY: ['not allowed to perform this action on the group(s)']}
     perms_map = {
         'GET': ['view_genericusergroup'],
         'OPTIONS': [],
@@ -187,187 +171,51 @@ class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermis
 #### end of UserGroupsPermissions
 
 
+class UserProfilesPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermissionMixin):
+    message = {api_settings.NON_FIELD_ERRORS_KEY: ['not allowed to perform this action on the profile(s)']}
+    # In Django default implementation, APIView.check_permissions() is automatically called
+    # prior to method handling function (e.g. GET, POST ... etc) ,
+    # while APIView.check_object_permissions() is called only when invoking View.get_object()
+    # , for performance reason, generic view will NOT automatically call check_object_permissions()
+    # to check permission on each object in a queryset, instead one could filter the queryset
+    # appropriately before checking permission
 
-class UserProfilesPermissions(CommonUserPermissions):
     perms_map = {
-        'GET': [
-            '%(app_label)s.view_%(model_name)s',
-            '%(app_label)s.view_genericusergroup',
-            'auth.view_group',
-            '%(app_label)s.view_userquotarelation',
-            '%(app_label)s.view_useremailaddress',
-            '%(app_label)s.view_userphonenumber',
-            '%(app_label)s.view_userlocation',
-            '%(app_label)s.view_quotausagetype',
-            '%(app_label)s.view_emailaddress',
-            '%(app_label)s.view_phonenumber',
-            'location.view_location',
-            ],
+        'GET': ['view_genericuserprofile'],
         'OPTIONS': [],
         'HEAD': [],
-        'POST':   [
-            '%(app_label)s.add_%(model_name)s',
-            '%(app_label)s.view_genericusergroup',
-            'auth.view_group',
-            '%(app_label)s.add_genericuserappliedrole',
-            '%(app_label)s.add_genericusergrouprelation',
-            '%(app_label)s.add_userquotarelation',
-            '%(app_label)s.add_useremailaddress',
-            '%(app_label)s.add_userphonenumber',
-            '%(app_label)s.add_userlocation',
-            '%(app_label)s.view_quotausagetype',
-            '%(app_label)s.add_emailaddress',
-            '%(app_label)s.add_phonenumber',
-            'location.add_location',
-            ],
-        'PUT': [
-            '%(app_label)s.change_%(model_name)s',
-            '%(app_label)s.view_genericusergroup',
-
-            'auth.view_group',
-            '%(app_label)s.add_genericuserappliedrole',
-            '%(app_label)s.add_genericusergrouprelation',
-            '%(app_label)s.change_genericuserappliedrole',
-            '%(app_label)s.change_genericusergrouprelation',
-            '%(app_label)s.delete_genericuserappliedrole',
-            '%(app_label)s.delete_genericusergrouprelation',
-
-            '%(app_label)s.add_userquotarelation',
-            '%(app_label)s.add_useremailaddress',
-            '%(app_label)s.add_userphonenumber',
-            '%(app_label)s.add_userlocation',
-            '%(app_label)s.change_userquotarelation',
-            '%(app_label)s.change_useremailaddress',
-            '%(app_label)s.change_userphonenumber',
-            '%(app_label)s.change_userlocation',
-            '%(app_label)s.delete_userquotarelation',
-            '%(app_label)s.delete_useremailaddress',
-            '%(app_label)s.delete_userphonenumber',
-            '%(app_label)s.delete_userlocation',
-
-            '%(app_label)s.view_quotausagetype',
-            '%(app_label)s.add_emailaddress',
-            '%(app_label)s.add_phonenumber',
-            'location.add_location',
-            '%(app_label)s.change_emailaddress',
-            '%(app_label)s.change_phonenumber',
-            'location.change_location',
-            '%(app_label)s.delete_emailaddress',
-            '%(app_label)s.delete_phonenumber',
-            'location.delete_location',
-            ],
-        'PATCH':  [ # used as undelete / recovery API
-            '%(app_label)s.change_%(model_name)s',
-            '%(app_label)s.view_genericusergroup',
-            'auth.view_group',
-            '%(app_label)s.change_useremailaddress',
-            '%(app_label)s.change_emailaddress',
-            ],
-        'DELETE': [
-            '%(app_label)s.change_%(model_name)s', # consider soft-delete cases
-            '%(app_label)s.delete_%(model_name)s',
-
-            '%(app_label)s.change_useremailaddress',
-            '%(app_label)s.delete_userquotarelation',
-            '%(app_label)s.delete_useremailaddress',
-            '%(app_label)s.delete_userphonenumber',
-            '%(app_label)s.delete_userlocation',
-
-            '%(app_label)s.change_emailaddress',
-            '%(app_label)s.delete_emailaddress',
-            '%(app_label)s.delete_phonenumber',
-            'location.delete_location',
-            ],
+        'POST':   ['view_genericuserprofile', 'add_genericuserprofile',   ],
+        'PUT':    ['view_genericuserprofile', 'change_genericuserprofile',],
+        'PATCH':  ['view_genericuserprofile', 'change_genericuserprofile',],
+        'DELETE': ['view_genericuserprofile', 'delete_genericuserprofile',],
     }
 
     def has_edit_permission(self, request, view):
-        result = True
         account = request.user
-        req_payld = request.data
-        valid_roles = account.profile.all_roles
-        valid_grps  = _get_valid_groups(account=account, view=view)
-        valid_profs = _get_valid_profs(account=account, view=view)
-        err_msgs = []
-        try:
-            for data in req_payld:
-                err_msg = {}
-                pid   = data.get('id')
-                grps  = data.get('groups', [])
-                roles = data.get('roles', [])
-                num_valid_grps  = valid_grps['all'].filter(descendant__pk__in=grps).count()
-                # TODO be aware of overlapping roles (the same role in both of user and group)
-                num_valid_roles = valid_roles['direct'].filter(id__in=roles).count() + \
-                            valid_roles['inherit'].filter(id__in=roles).count()
-                if pid and not valid_profs.filter(pk=int(pid)).exists():
-                    err_msg[api_settings.NON_FIELD_ERRORS_KEY] = ["not allowed to edit the user profile (ID = {})".format(pid),]
-                if len(grps) != num_valid_grps:
-                    err_msg['groups'] = ["list of groups contains invalid ID {}".format(str(grps)) ]
-                if len(roles) != num_valid_roles:
-                    err_msg['roles'] = ["list of roles contains invalid ID {}".format(str(roles)) ]
-                if any(err_msg):
-                    result = False
-                err_msgs.append(err_msg)
-        except (ValueError, TypeError) as e:
-            err_msgs = {api_settings.NON_FIELD_ERRORS_KEY: "caused by frontend input error"}
-            result = False
-        if not result:
-            self.message = err_msgs
-        return result
-
-
-    def _get_delete_ids(self, request):
-        IDs = request.query_params.get('ids', '')
-        IDs = IDs.split(',')
-        IDs = [int(i) for i in IDs if i.isdigit()]
-        return IDs
-
-    def has_delete_permission(self, request, view):
-        result = True
-        account = request.user
-        err_msgs = {}
-        log_args = []
-        try:  # supposed to get list of IDs from URL
-            IDs = self._get_delete_ids(request=request)
-            valid_profs = self._get_valid_profs(account=account, view=view)
-            num_valid_IDs = valid_profs.filter(pk__in=IDs).count()
-            log_args.extend(['frontend_IDs', IDs, 'num_valid_IDs', num_valid_IDs])
-            if len(IDs) != num_valid_IDs:
-                err_msgs = {api_settings.NON_FIELD_ERRORS_KEY: "The list %s contains invalid IDs" % IDs}
-                result = False
-        except (ValueError, TypeError) as e:
-            err_msgs = {api_settings.NON_FIELD_ERRORS_KEY: "unknown error from frontend input"}
-            result = False
-            log_args.extend(['excpt_msg', e])
-        if not result:
-            self.message = err_msgs
-            log_args.extend(['err_msgs', err_msgs])
+        valid_prof_ids = _get_valid_profs(account=account)
+        valid_prof_ids = set(valid_prof_ids)
+        req_ids = filter(lambda d:d.get('id'), request.data)
+        req_ids = set(map(lambda d:d['id'], req_ids))
+        uncovered_ids = req_ids - valid_prof_ids
+        result = not any(uncovered_ids)
+        log_args = ['valid_prof_ids', valid_prof_ids, 'req_ids', req_ids]
         log_args.extend(['result', result])
         loglevel = logging.DEBUG if result else logging.WARNING
         _logger.log(loglevel, None, *log_args, request=request)
         return result
 
-
-    _extra_check_func = {
-        'POST': has_edit_permission,
-        'PUT' : has_edit_permission,
-        'DELETE': has_delete_permission,
-    }
-
     def has_permission(self, request, view):
-        result = super().has_permission(request=request, view=view)
+        result = self._has_permission(tok_payld=request.auth, method=request.method)
         account = request.user
         # a user at any group can edit their own profile, except applied groups and roles
         # which can only be edited by anyone granted `profile manager role`
         # at ancestor group.
         if result:
-            if not account.is_superuser:
-                fn = self._extra_check_func.get(request.method)
-                if fn:
-                    result = fn(self=self, request=request, view=view,)
+            if not account.is_superuser and request.method.upper() in ('PUT', 'DELETE'):
+                result = self.has_edit_permission(request=request, view=view,)
         else:
-            # if a user is not assigned with `profile manager role`, then this
-            # user is only allowed to view/edit/delete their own profile.
-            account_prof_id = str(account.genericuserauthrelation.profile.pk)
+            # logged-in users that do not have access permission can only read/write his/her own profile
+            account_prof_id = str(account.profile.id)
             log_args = []
             if request.method == 'PUT' and len(request.data) == 1:
                 data = request.data[0]
@@ -383,7 +231,8 @@ class UserProfilesPermissions(CommonUserPermissions):
                     view._edit_personal_profile = True
                 log_args.extend(['req_prof_id', req_prof_id])
             elif request.method == 'DELETE':
-                IDs = self._get_delete_ids(request=request)
+                req_ids = filter(lambda d:d.get('id'), request.data)
+                IDs = set(map(lambda d:d['id'], req_ids))
                 log_args.extend(['IDs', IDs])
                 # TODO, how to recover if a logged-in user deleted its own account ? recovered by superuser ?
                 if len(IDs) == 1 and str(IDs[0]) == account_prof_id:
@@ -406,7 +255,7 @@ class UserProfilesPermissions(CommonUserPermissions):
             if getattr(view, '_edit_personal_profile', False):
                 result = account.genericuserauthrelation.profile.pk == obj.pk
             else:
-                all_valid_profs = self._get_valid_profs(account=account, view=view)
+                all_valid_profs = _get_valid_profs(account=account)
                 result = all_valid_profs.filter(pk=obj.pk).exists()
         return result
 
@@ -417,10 +266,9 @@ class UserProfilesPermissions(CommonUserPermissions):
             if getattr(view, '_edit_personal_profile', False):
                 all_valid_profs = [account.genericuserauthrelation.profile.pk]
             else:
-                all_valid_profs = self._get_valid_profs(account=account, view=view)
+                all_valid_profs = _get_valid_profs(account=account)
             queryset = queryset.filter(pk__in=all_valid_profs)
         return queryset
-
 #### end of UserProfilesPermissions
 
 
@@ -444,7 +292,7 @@ class UserDeactivationPermission(DjangoModelPermissions):
             if not account.is_superuser:
                 log_args = ['perm_cls', type(self).__name__]
                 err_msgs = {}
-                valid_profs = self._get_valid_profs(account=account, view=view)
+                valid_profs = _get_valid_profs(account=account)
                 pids = list(map(lambda d: d.get(self.pk_field_name, None), request.data))
                 log_args.extend(['pids', pids])
                 try:

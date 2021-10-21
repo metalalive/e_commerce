@@ -9,11 +9,11 @@ class WebAPIurl(BaseUriLookup):
             'RefreshAccessTokenView': 'refresh_access_token',
 
             'PermissionView': 'permissions',
-            'RoleAPIView'   : ['roles', 'role/<slug:pk>'],
-            'UserGroupsAPIView'      : ["groups", "group/<slug:pk>"],
+            'RoleAPIView'        : ['roles', 'role/<slug:pk>'],
+            'UserGroupsAPIView'  : ["groups", "group/<slug:pk>"],
+            'UserProfileAPIView' : ["profiles", "profile/<slug:pk>"],
 
             #### '^usergrps/edit/(?P<IDs>[\d/]+)$',
-            'UserProfileAPIView'     : ["usrprofs", "usrprof/<slug:pk>"],
 
             'UserActivationView'     : 'account/activate',
             'UserDeactivationView'   : 'account/deactivate',

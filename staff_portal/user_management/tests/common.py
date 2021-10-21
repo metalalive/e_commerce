@@ -114,6 +114,11 @@ def client_req_csrf_setup():
     usermgt_host_url = cors_conf.ALLOWED_ORIGIN['user_management']
     scheme_end_pos = usermgt_host_url.find('://') + 3
     valid_csrf_token = _get_new_csrf_token()
+    # (1) assume every request from this application is cross-origin reference.
+    # (2) Django's test client sets `testserver` to host name of each reqeust
+    #     , which cause error in CORS middleware, I fixed the problem by adding
+    #    SERVER_NAME header directly passing in Django's test client (it is only
+    #    for testing purpose)
     base_headers = {
         'SERVER_NAME': usermgt_host_url[scheme_end_pos:],
         'HTTP_ORIGIN': cors_conf.ALLOWED_ORIGIN['web'],

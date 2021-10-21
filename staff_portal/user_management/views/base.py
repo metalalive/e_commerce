@@ -147,10 +147,10 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
     ordering_fields  = ['id', 'time_created', 'last_updated', 'first_name', 'last_name']
     search_fields  = ['first_name', 'last_name']
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [UserProfilesPermissions]
-    queryset = serializer_class.Meta.model.objects.order_by('-time_created')
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
 
     def get(self, request, *args, **kwargs):
+        self.queryset = self.serializer_class.Meta.model.objects.order_by('-time_created')
         exc_rd_fields = request.query_params.get('exc_rd_fields', [])
         if exc_rd_fields and isinstance(exc_rd_fields, str):
             exc_rd_fields = [exc_rd_fields]
@@ -161,9 +161,7 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
 
     def post(self, request, *args, **kwargs):
         kwargs['many'] = True
-        kwargs['return_data_after_done'] = False
-        kwargs['exc_wr_fields'] = ['quota__user_type', 'quota__user_id', 'emails__user_type', 'emails__user_id',
-                'phones__user_type', 'phones__user_id','locations__user_type', 'locations__user_id',]
+        kwargs['return_data_after_done'] = True
         return  self.create(request, *args, **kwargs)
 
     def put(self, request, *args, **kwargs):
@@ -175,12 +173,14 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
     def delete(self, request, *args, **kwargs):
         kwargs['many'] = True
         kwargs['status_ok'] = RestStatus.HTTP_202_ACCEPTED
+        kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
         return self.destroy(request, *args, **kwargs)
 
     def patch(self, request, *args, **kwargs):
+        kwargs['return_data_after_done'] = True
         kwargs['resource_content_type'] = ContentType.objects.get(app_label='user_management',
                 model=self.serializer_class.Meta.model.__name__)
-        return self.recovery(request=request, *args, **kwargs)
+        return self.recovery(request=request, profile_id=request.user.profile.id, *args, **kwargs)
 
     def kwargs_map(self, request, kwargs):
         # if the argument `pk` is `me`, then update the value to profile ID of current login user

@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from django.test import TransactionTestCase
 from django.contrib.auth.models import Permission
-from rest_framework.settings    import api_settings as drf_settings
 
 from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, GenericUserGroup, QuotaMaterial

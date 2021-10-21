@@ -25,52 +25,9 @@ non_field_err_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
 class ProfileCommonTestCase(TransactionTestCase, HttpRequestDataGenProfile, ProfileVerificationMixin):
     usermgt_material_data = tuple(filter(lambda d:d['app_code'] == AppCodeOptions.user_management, _fixtures[QuotaMaterial]))
 
-    def _setup_groups(self):
-        """
-        the tree structure of the group hierarchy in this test file
-
-                   3             8         11
-                 /    \        /  \       /  \
-                4      5      9   10     12   13
-               / \                           /
-              6   7                         14
-
-        """
-        grp_obj_map = dict(map(lambda obj: (obj.id, obj), self._primitives[GenericUserGroup]))
-        group_closure_data = [
-            {'id':1,  'depth':0, 'ancestor':grp_obj_map[3], 'descendant':grp_obj_map[3]},
-            {'id':2,  'depth':0, 'ancestor':grp_obj_map[4], 'descendant':grp_obj_map[4]},
-            {'id':3,  'depth':0, 'ancestor':grp_obj_map[5], 'descendant':grp_obj_map[5]},
-            {'id':4,  'depth':0, 'ancestor':grp_obj_map[6], 'descendant':grp_obj_map[6]},
-            {'id':5,  'depth':0, 'ancestor':grp_obj_map[7], 'descendant':grp_obj_map[7]},
-            {'id':6,  'depth':1, 'ancestor':grp_obj_map[3], 'descendant':grp_obj_map[4]},
-            {'id':7,  'depth':1, 'ancestor':grp_obj_map[3], 'descendant':grp_obj_map[5]},
-            {'id':8,  'depth':1, 'ancestor':grp_obj_map[4], 'descendant':grp_obj_map[6]},
-            {'id':9,  'depth':1, 'ancestor':grp_obj_map[4], 'descendant':grp_obj_map[7]},
-            {'id':10, 'depth':2, 'ancestor':grp_obj_map[3], 'descendant':grp_obj_map[6]},
-            {'id':11, 'depth':2, 'ancestor':grp_obj_map[3], 'descendant':grp_obj_map[7]},
-            # ---------
-            {'id':12, 'depth':0, 'ancestor':grp_obj_map[8],  'descendant':grp_obj_map[8]},
-            {'id':13, 'depth':0, 'ancestor':grp_obj_map[9],  'descendant':grp_obj_map[9]},
-            {'id':14, 'depth':0, 'ancestor':grp_obj_map[10], 'descendant':grp_obj_map[10]},
-            {'id':15, 'depth':1, 'ancestor':grp_obj_map[8],  'descendant':grp_obj_map[9]},
-            {'id':16, 'depth':1, 'ancestor':grp_obj_map[8],  'descendant':grp_obj_map[10]},
-            # ---------
-            {'id':17, 'depth':0, 'ancestor':grp_obj_map[11],  'descendant':grp_obj_map[11]},
-            {'id':18, 'depth':0, 'ancestor':grp_obj_map[12],  'descendant':grp_obj_map[12]},
-            {'id':19, 'depth':0, 'ancestor':grp_obj_map[13],  'descendant':grp_obj_map[13]},
-            {'id':20, 'depth':0, 'ancestor':grp_obj_map[14],  'descendant':grp_obj_map[14]},
-            {'id':21, 'depth':1, 'ancestor':grp_obj_map[11],  'descendant':grp_obj_map[12]},
-            {'id':22, 'depth':1, 'ancestor':grp_obj_map[11],  'descendant':grp_obj_map[13]},
-            {'id':23, 'depth':1, 'ancestor':grp_obj_map[13],  'descendant':grp_obj_map[14]},
-            {'id':24, 'depth':2, 'ancestor':grp_obj_map[11],  'descendant':grp_obj_map[14]},
-        ]
-        list(map(lambda d: GenericUserGroupClosure.objects.create(**d) , group_closure_data))
-        return grp_obj_map
-
     def setUp(self):
         self.init_primitive()
-        self._grp_map = self._setup_groups()
+        self._grp_map = self._setup_groups_hierarchy()
         roles_without_superuser = self._primitives[Role]
         self._default_login_profile = _setup_login_account(account_data=_fixtures[LoginAccount][0],
                 profile_obj=self._primitives[GenericUserProfile][0] , roles=roles_without_superuser )
@@ -83,12 +40,6 @@ class ProfileCommonTestCase(TransactionTestCase, HttpRequestDataGenProfile, Prof
 
     def tearDown(self):
         pass
-
-    def _refresh_applied_groups(self, profile, groups):
-        approved_by = self._primitives[GenericUserProfile][1]
-        profile.groups.all(with_deleted=True).delete(hard=True)
-        for grp_obj in groups:
-            profile.groups.create(group=grp_obj, approved_by=approved_by)
 
     def _test_edit_profile_without_groups(self, instance=None):
         req_data = self.request_data
