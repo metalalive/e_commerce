@@ -407,6 +407,41 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, SerializableMixin, Minimu
                         'changeset_id', changeset.pk, 'phones_exist', phones_exist, 'geoloc_exist', geoloc_exist ]
                 _logger.debug(None, *log_args)
 
+    @_atomicity_fn()
+    def undelete(self, *args, **kwargs):
+        hard_delete = kwargs.get('hard', False)
+        ops_prof_id  = kwargs.get('profile_id', None)
+        try:
+            status = super().undelete(*args, **kwargs)
+        except ObjectDoesNotExist as e:
+            err_msg = e.args[0]
+            if hard_delete or (not ops_prof_id) or err_msg != self._changeset_not_found_err_msg:
+                raise
+            prof_cls_ct = ContentType.objects.get_for_model(self)
+            qset = self.SOFTDELETE_CHANGESET_MODEL.objects.filter(content_type=prof_cls_ct, object_id=self.pk)
+            if not qset.exists():
+                raise
+            changeset = qset.first()
+            if int(changeset.done_by) != self.pk:
+                raise # TODO, logging
+            ops_prof = type(self).objects.get(id=ops_prof_id)
+            ops_prof_can_undelete = ops_prof.privilege_status == ops_prof.SUPERUSER
+            if not ops_prof_can_undelete:
+                related_field_name = LOOKUP_SEP.join(['group', 'descendants', 'descendant', 'id'])
+                valid_grp_ids = ops_prof.groups.values_list(related_field_name, flat=True)
+                related_field_name = LOOKUP_SEP.join(['group', 'id', 'in'])
+                applied_grp_set = GenericUserGroupRelation.objects.all(with_deleted=True)
+                qset = applied_grp_set.filter(**{related_field_name: valid_grp_ids, 'profile':self})
+                ops_prof_can_undelete = qset.exists()
+            if ops_prof_can_undelete:
+                try:
+                    kwargs['profile_id'] = self.pk
+                    status = super().undelete(*args, **kwargs)
+                finally:
+                    kwargs['profile_id'] = ops_prof_id
+            else:
+                raise
+
 
     @_atomicity_fn()
     def activate(self, new_account_data):
@@ -494,30 +529,24 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, SerializableMixin, Minimu
 
     @property
     def inherit_roles(self):
-        if not hasattr(self, '_inherit_roles'):
-            #self._inherit_roles = [ra.role for grpa in self.groups.all()  for asc in grpa.group.ancestors.all()
-            #    for ra in asc.ancestor.roles.all() ]
-            grp_ct = ContentType.objects.get_for_model(GenericUserGroup)
-            grp_ids = self.groups.values_list('group__pk', flat=True)
-            asc_ids = GenericUserGroupClosure.objects.filter(descendant__pk__in=grp_ids).values_list('ancestor__id', flat=True)
-            role_rel_cls = self.roles.model
-            valid_role_rel_cond = models.Q(user_type=grp_ct) & models.Q(user_id__in=asc_ids) & role_rel_cls.expiry_condition()
-            role_ids = role_rel_cls.objects.filter(valid_role_rel_cond).values_list('role__id', flat=True)
-            role_cls = role_rel_cls.role.field.related_model
-            roles = role_cls.objects.filter(id__in=role_ids)
-            self._inherit_roles = roles
-        return self._inherit_roles
+        grp_ct = ContentType.objects.get_for_model(GenericUserGroup)
+        grp_ids = self.groups.values_list('group__pk', flat=True)
+        asc_ids = GenericUserGroupClosure.objects.filter(descendant__pk__in=grp_ids).values_list('ancestor__id', flat=True)
+        role_rel_cls = self.roles.model
+        valid_role_rel_cond = models.Q(user_type=grp_ct) & models.Q(user_id__in=asc_ids) & role_rel_cls.expiry_condition()
+        role_ids = role_rel_cls.objects.filter(valid_role_rel_cond).values_list('role__id', flat=True)
+        role_cls = role_rel_cls.role.field.related_model
+        roles = role_cls.objects.filter(id__in=role_ids)
+        return roles
 
     @property
     def direct_roles(self):
-        if not hasattr(self, '_direct_roles'):
-            role_rel_cls = self.roles.model
-            valid_role_rel_cond = role_rel_cls.expiry_condition()
-            role_ids = self.roles.filter(valid_role_rel_cond).values_list('role__id', flat=True)
-            role_cls = role_rel_cls.role.field.related_model
-            roles = role_cls.objects.filter(id__in=role_ids)
-            self._direct_roles = roles
-        return self._direct_roles
+        role_rel_cls = self.roles.model
+        valid_role_rel_cond = role_rel_cls.expiry_condition()
+        role_ids = self.roles.filter(valid_role_rel_cond).values_list('role__id', flat=True)
+        role_cls = role_rel_cls.role.field.related_model
+        roles = role_cls.objects.filter(id__in=role_ids)
+        return roles
 
     @property
     def all_roles(self):

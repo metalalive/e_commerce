@@ -232,7 +232,7 @@ class UserProfilesPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPerm
                 log_args.extend(['req_prof_id', req_prof_id])
             elif request.method == 'DELETE':
                 req_ids = filter(lambda d:d.get('id'), request.data)
-                IDs = set(map(lambda d:d['id'], req_ids))
+                IDs = list(map(lambda d:d['id'], req_ids))
                 log_args.extend(['IDs', IDs])
                 # TODO, how to recover if a logged-in user deleted its own account ? recovered by superuser ?
                 if len(IDs) == 1 and str(IDs[0]) == account_prof_id:

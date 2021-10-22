@@ -158,7 +158,7 @@ class RecoveryModelMixin:
             m_objs = model_cls.objects.none()
             status = RestStatus.HTTP_400_BAD_REQUEST
             return_msg = "invalid data in request body"
-            if failure_callback:
+            if failure_callback and callable(failure_callback):
                 failure_callback(err=e, id_list=ids)
         if m_objs.exists():
             try:
@@ -168,7 +168,7 @@ class RecoveryModelMixin:
                 if return_data_after_done:
                     _serializer =  self.get_serializer(many=True, instance=m_objs)
                     affected_items = _serializer.data
-                if success_callback:
+                if success_callback and callable(success_callback):
                     success_callback(id_list=ids)
                 return_msg = "recovery done"
             except ObjectDoesNotExist as e: # changeset not found

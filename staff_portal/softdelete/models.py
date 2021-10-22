@@ -149,6 +149,7 @@ class SoftDeleteObjectMixin(models.Model):
     objects = SoftDeleteManager()
     time_deleted = models.DateTimeField(blank=True, null=True, default=None, editable=False) # db_index=True
 
+    _changeset_not_found_err_msg = 'changeset not found and NOT allowed to create new one'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -300,7 +301,7 @@ class SoftDeleteObjectMixin(models.Model):
                     log_args.extend(['msg', 'new changeSet created'])
                     loglevel = logging.INFO
                 else:
-                    err_msg = 'changeset not found and NOT allowed to create new one'
+                    err_msg = self._changeset_not_found_err_msg
                     log_args.extend(['msg', err_msg])
                     _logger.error(None, *log_args)
                     raise ObjectDoesNotExist(err_msg)

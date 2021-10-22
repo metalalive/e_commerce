@@ -174,13 +174,30 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
         kwargs['many'] = True
         kwargs['status_ok'] = RestStatus.HTTP_202_ACCEPTED
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
-        return self.destroy(request, *args, **kwargs)
+        kwargs['return_data_after_done'] = False
+        response = self.destroy(request, *args, **kwargs)
+        if getattr(self, '_force_logout', False):
+            jwt_name_refresh_token = django_settings.JWT_NAME_REFRESH_TOKEN
+            response.set_cookie(
+                key=jwt_name_refresh_token, value='',  max_age=0, domain=None,
+                path=django_settings.SESSION_COOKIE_PATH,
+                secure=django_settings.SESSION_COOKIE_SECURE or None,
+                samesite=django_settings.SESSION_COOKIE_SAMESITE,
+                httponly=True
+            )
+            response.data = {'message':'force logout'}
+        return response
 
     def patch(self, request, *args, **kwargs):
         kwargs['return_data_after_done'] = True
         kwargs['resource_content_type'] = ContentType.objects.get(app_label='user_management',
                 model=self.serializer_class.Meta.model.__name__)
         return self.recovery(request=request, profile_id=request.user.profile.id, *args, **kwargs)
+
+    def delete_success_callback(self, id_list):
+        account = self.request.user
+        profile_id = account.profile.id
+        self._force_logout = profile_id in id_list
 
     def kwargs_map(self, request, kwargs):
         # if the argument `pk` is `me`, then update the value to profile ID of current login user

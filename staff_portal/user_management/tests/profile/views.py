@@ -245,19 +245,21 @@ class ProfileDeletionTestCase(ProfileBaseUpdateTestCase):
         fields_eq['groups']  = self._value_compare_groups_fn(val_a=val_a, val_b=val_b)
         return fields_eq
 
+    def _setup_another_login_account(self, account_data, profile, roles, new_perms):
+        account_data.update({'is_active':True, 'is_staff':True})
+        _setup_login_account(account_data=account_data,  profile_obj=profile, roles=roles , expiry=None)
+        top_grps = (self._grp_map[3], self._grp_map[8], self._grp_map[11])
+        self._refresh_applied_groups(profile=profile, groups=top_grps)
+        role_rel =  profile.roles.first()
+        role_rel.role.permissions.set(new_perms)
+
     def test_bulk_ok(self):
         new_perms_info = ('view_genericuserprofile', 'change_genericuserprofile', 'delete_genericuserprofile',)
         perms_qset = Permission.objects.filter(content_type__app_label='user_management', codename__in=new_perms_info)
-        profile_2nd_account_data = _fixtures[LoginAccount][1]
-        profile_2nd_account_data.update({'is_active':True, 'is_staff':True})
-        _setup_login_account(account_data=profile_2nd_account_data,  profile_obj=self._profile_2nd,
-                roles=self._primitives[Role][:3], expiry=None)
-        top_grps = (self._grp_map[3], self._grp_map[8], self._grp_map[11])
-        self._refresh_applied_groups(profile=self._profile_2nd, groups=top_grps)
         role_rel = self._profile.roles.first()
         role_rel.role.permissions.set(perms_qset)
-        role_rel = self._profile_2nd.roles.first()
-        role_rel.role.permissions.set(perms_qset)
+        self._setup_another_login_account( account_data=_fixtures[LoginAccount][1], profile=self._profile_2nd,
+                roles=self._primitives[Role][:3], new_perms=perms_qset )
         # ---------------------------------
         behavior_sequence = [
             {'profile':self._profile,     'req_data':self.request_data[0:2], 'login_password':_fixtures[LoginAccount][0]['password']},
@@ -271,7 +273,7 @@ class ProfileDeletionTestCase(ProfileBaseUpdateTestCase):
             self._single_undel_operation(**del_kwargs)
 
 
-    def _single_softdel_operation(self, profile, req_data, login_password):
+    def _single_softdel_operation(self, profile, req_data, login_password, delay_interval_sec = 2):
         self._client.cookies.clear()
         self._auth_setup(testcase=self, profile=profile, login_password=login_password)
         acs_tok_resp = self._refresh_access_token(testcase=self, audience=['user_management'])
@@ -286,8 +288,8 @@ class ProfileDeletionTestCase(ProfileBaseUpdateTestCase):
         self.assertFalse(qset.exists())
         qset = GenericUserProfile.objects.get_deleted_set().filter(id__in=deleted_prof_ids)
         self.assertSetEqual(set(qset.values_list('id', flat=True)), set(deleted_prof_ids))
-        delay_interval_sec = 2
         time.sleep(delay_interval_sec)
+        return response
 
     def _single_undel_operation(self, profile, req_data, login_password):
         self._client.cookies.clear()
@@ -308,19 +310,55 @@ class ProfileDeletionTestCase(ProfileBaseUpdateTestCase):
             expect_item = next(expect_items_iter)
             compare_result = self._value_compare_fn(val_a=actual_item, val_b=expect_item)
             self.assertTrue(compare_result)
+        return response
+
 
     def test_self_removal(self):
-        pass
-
-    def test_superuser_removal(self):
-        pass
+        # current user attempts to delete his/her own login account
+        origin_profiles_data = self._load_profiles_from_instances(objs=[self._profile])
+        response = self._single_softdel_operation(profile=self._profile, req_data=origin_profiles_data,
+                login_password=_fixtures[LoginAccount][0]['password'], delay_interval_sec=0)
+        result = response.json()
+        self.assertEqual(result['message'], 'force logout')
+        error_caught = None
+        with self.assertRaises(AssertionError):
+            try: # current user deleted his/her own profile and account, unable to login
+                self._client.cookies.clear()
+                self._auth_setup(testcase=self, profile=self._profile, login_password=_fixtures[LoginAccount][0]['password'])
+            except AssertionError as e:
+                error_caught = e
+                raise
+        self.assertIsNotNone(error_caught)
+        self.assertEqual('401 != 200', error_caught.args[0])
+        # recover the profile by the other user who has recover permission at the same or parent group
+        new_perms_info = ('view_genericuserprofile', 'change_genericuserprofile',)
+        perms_qset = Permission.objects.filter(content_type__app_label='user_management', codename__in=new_perms_info)
+        self._setup_another_login_account( account_data=_fixtures[LoginAccount][1], profile=self._profile_2nd,
+                roles=self._primitives[Role][:4], new_perms=perms_qset )
+        self._single_undel_operation(profile=self._profile_2nd, req_data=origin_profiles_data,
+                login_password=_fixtures[LoginAccount][1]['password'] )
+## end of class ProfileDeletionTestCase
 
 
 class ProfileQueryTestCase(ProfileBaseUpdateTestCase):
     paths = ['/profiles', '/profile/%s']
+    num_roles = 2
+    num_quota = 3
+    num_groups = 3
+    num_profiles = 4
+
+    def test_single_full_fields(self):
+        chosen_profile_data = self.request_data[-1]
+        path = self.paths[1] % chosen_profile_data['id']
+        pass
+
+    def test_bulk_partial_fields(self):
+        pass
 
 
 class ProfileSearchTestCase(ProfileBaseUpdateTestCase):
     path = '/profiles'
 
+    def test_search(self):
+        pass
 

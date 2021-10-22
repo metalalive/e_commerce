@@ -88,12 +88,12 @@ class ProfileCommonTestCase(TransactionTestCase):
         return quota_mat
 
     def setUp(self):
-        profile_data = {'id': 3, 'first_name':'Brooklynn', 'last_name':'Jenkins'}
+        profile_data = _fixtures[GenericUserProfile][0]
         profile = GenericUserProfile.objects.create(**profile_data)
         account_data = {'username':'ImStaff', 'password':'dontexpose', 'is_active':True, 'is_staff':True,
                 'is_superuser':False, 'profile':profile, 'password_last_updated':django_timezone.now(), }
         account = LoginAccount.objects.create_user(**account_data)
-        profile_2nd_data = {'id': 4, 'first_name':'Texassal', 'last_name':'Bovaski'}
+        profile_2nd_data = _fixtures[GenericUserProfile][1]
         profile_2nd = GenericUserProfile.objects.create(**profile_2nd_data)
         self._profile = profile
         self._profile_2nd = profile_2nd
@@ -129,8 +129,6 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
         # subcase #2 : add new group to user profile and new role to parent group, see how roles change
         self._profile.groups.create(group=self._groups[10], approved_by=self._profile_2nd)
         self._groups[9].roles.create(expiry=None, approved_by=self._profile_2nd, role=self._roles[4])
-        if hasattr(self._profile, '_inherit_roles'):
-            delattr(self._profile, '_inherit_roles') # clean up previous calculation
         actual_roles = self._profile.inherit_roles
         expect_roles = self._roles[2:5]
         self.assertSetEqual(set(actual_roles), set(expect_roles))
@@ -140,8 +138,6 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
         saved_role_rel.expiry = expired_time
         saved_role_rel.save(update_fields=['expiry'])
         self._groups[3].roles.create(expiry=expired_time, approved_by=self._profile_2nd, role=self._roles[5])
-        if hasattr(self._profile, '_inherit_roles'):
-            delattr(self._profile, '_inherit_roles') # clean up previous calculation
         actual_roles = self._profile.inherit_roles
         expect_roles = self._roles[3:5]
         self.assertSetEqual(set(actual_roles), set(expect_roles))
@@ -161,8 +157,6 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
         for role_rel in saved_roles_rel:
             role_rel.expiry = expired_time
         saved_roles_rel.bulk_update(saved_roles_rel, fields=['expiry'])
-        if hasattr(self._profile, '_direct_roles'):
-            delattr(self._profile, '_direct_roles') # clean up previous calculation
         expect_roles = self._roles[2:-1]
         actual_roles = self._profile.direct_roles
         self.assertSetEqual(set(actual_roles), set(expect_roles))
@@ -345,11 +339,51 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
         self.assertSetEqual(set(softdel_grp_ids), set(grp_ids))
         # undelete
         profile = GenericUserProfile.objects.get_deleted_set().get(id=prof_id)
+        # In typical case, the user who deleted a profile is the only one to recover the soft-deleted profile
         profile.undelete(profile_id=self._profile_2nd.id)
         self._profile.refresh_from_db()
         self.assertFalse(self._profile.is_deleted())
         grp_ids = self._profile.groups.values_list('group', flat=True)
         self.assertSetEqual(set(softdel_grp_ids), set(grp_ids))
+
+
+    def test_self_removal(self):
+        # 3rd user profile
+        profile_3rd = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][2])
+        # 4th user profile
+        profile_4th = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][3])
+        # 5th user profile, superuser
+        profile_5th = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][4])
+        profile_5th.roles.create(role=self._roles[0], approved_by=profile_5th, expiry=None)
+        # set up group relations
+        grp_rel_data = [
+            {'group':self._groups[5], 'profile':self._profile_2nd, 'approved_by':profile_3rd},
+            {'group':self._groups[3], 'profile':profile_3rd, 'approved_by':profile_5th},
+            {'group':self._groups[7], 'profile':profile_4th, 'approved_by':profile_5th},
+        ]
+        for data in grp_rel_data:
+            GenericUserGroupRelation.objects.create(**data)
+        # start deleting ...
+        revomal_sequence = (self._profile, self._profile_2nd, profile_3rd, profile_4th)
+        for profile in revomal_sequence:
+            profile.delete(profile_id=profile.id)
+            profile.refresh_from_db()
+        # undelete sequence
+        profile_4th.undelete(profile_id=profile_5th.id)
+        with self.assertRaises(ObjectDoesNotExist):  # 4th user does not have recovery permission on 2nd user
+            self._profile_2nd.undelete(profile_id=profile_4th.id)
+        profile_3rd.undelete(profile_id=profile_5th.id)
+        self._profile_2nd.undelete(profile_id=profile_3rd.id)
+        self._profile.undelete(profile_id=self._profile_2nd.id)
+        for profile in revomal_sequence:
+            profile.refresh_from_db()
+            self.assertFalse(profile.is_deleted())
+        # --------------
+        self._profile.delete(profile_id=self._profile.id)
+        self._profile.refresh_from_db()
+        self._profile.undelete(profile_id=profile_4th.id)
+        self._profile.refresh_from_db()
+        self.assertFalse(self._profile.is_deleted())
 
 ## end of class ProfileDeletionTestCase
 
