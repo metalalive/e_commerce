@@ -12,6 +12,7 @@ from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, GenericUserGroup, QuotaMaterial
 from user_management.models.auth import Role, LoginAccount
 from user_management.async_tasks import update_accounts_privilege
+from user_management.serializers import LoginAccountExistField
 
 from tests.python.common        import  listitem_rand_assigner, rand_gen_request_body
 from tests.python.common.django import _BaseMockTestClientInfoMixin
@@ -343,22 +344,165 @@ class ProfileDeletionTestCase(ProfileBaseUpdateTestCase):
 class ProfileQueryTestCase(ProfileBaseUpdateTestCase):
     paths = ['/profiles', '/profile/%s']
     num_roles = 2
-    num_quota = 3
-    num_groups = 3
+    num_quota = 4
     num_profiles = 4
+    num_groups = 2
 
-    def test_single_full_fields(self):
+    def setUp(self):
+        super().setUp()
+        self.api_call_kwargs = client_req_csrf_setup()
+        self.hidden_fields = ('first_name', 'last_name', 'roles', 'phones', 'quota')
+        self.expect_fields = ('id', 'groups', 'emails', 'locations', 'auth')
+        self.api_call_kwargs.update({'expect_shown_fields':self.expect_fields})
+        # the user does NOT have `view_genericuserprofile` permission and not belong to
+        # the same group as the same profile does
+        self._profile.groups.filter(group__id=3).delete(hard=True)
+        access_token =  self._prepare_access_token(new_perms_info=['view_role'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        # set up account status
+        profile_ids = list(map(lambda d:d['id'], self.request_data))
+        profiles = GenericUserProfile.objects.filter(id__in=profile_ids)
+        _info = [(profiles[idx], _fixtures[LoginAccount][2 + idx]) for idx in range(1, len(profile_ids))]
+        for profile, account_data in _info:
+            _setup_login_account(account_data=account_data,  profile_obj=profile)
+        last_account = profiles.last().account
+        last_account.is_active = True
+        last_account.save(update_fields=['is_active'])
+        self._test_profiles = profiles
+
+    def _gen_quota(self, num=None):
+        contact_quota_maxnum = 2
+        self.num_locations = contact_quota_maxnum
+        self.num_emails = contact_quota_maxnum
+        self.num_phones = contact_quota_maxnum
+        other_apps_material_data = filter(lambda d:d['app_code'] != AppCodeOptions.user_management, _fixtures[QuotaMaterial])
+        other_apps_material_data = next(other_apps_material_data)
+        out = list(map(lambda d: {'expiry':gen_expiry_time(), 'material': d['id'], \
+                    'maxnum':contact_quota_maxnum } , self.usermgt_material_data))
+        out.append({'expiry':gen_expiry_time(), 'maxnum':random.randrange(3,30), \
+                    'material': other_apps_material_data['id'],})
+        return out
+
+    def _value_compare_fn(self, val_a, val_b):
+        for field in self.hidden_fields:
+            with self.assertRaises(KeyError):
+                val_a[field]
+        fields_eq = {}
+        fields_eq['id'] = val_a['id'] == val_b['id']
+        fields_eq['groups']  = self._value_compare_groups_fn(val_a=val_a, val_b=val_b)
+        for k in ('emails', 'locations'):
+            fields_eq[k] = self._value_compare_contact_fn(val_a=val_a[k], val_b=val_b[k],
+                    _fields_compare=self._nested_field_names[k])
+        self.assertNotIn(False, fields_eq.values())
+
+    def test_single_item_partial(self):
         chosen_profile_data = self.request_data[-1]
+        chosen_profile = self._test_profiles.get(id=chosen_profile_data['id'])
         path = self.paths[1] % chosen_profile_data['id']
-        pass
+        self.api_call_kwargs.update({'path': path, 'method':'get'})
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetch_profile_data = response.json()
+        self.verify_data(actual_data=[chosen_profile], expect_data=[fetch_profile_data])
+        self.assertEqual(fetch_profile_data['auth'], LoginAccountExistField.activation_status.ACCOUNT_ACTIVATED)
 
-    def test_bulk_partial_fields(self):
-        pass
+    def test_multiple_items_partial(self):
+        profile_ids = list(map(lambda d:d['id'], self.request_data))
+        self.api_call_kwargs.update({'path': self.paths[0], 'method':'get', 'ids':profile_ids})
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetch_profiles_data = response.json()
+        self.verify_data(actual_data=self._test_profiles, expect_data=fetch_profiles_data)
+        self.assertEqual(fetch_profiles_data[0]['auth'], LoginAccountExistField.activation_status.ACCOUNT_NON_EXISTENT)
+        self.assertEqual(fetch_profiles_data[1]['auth'], LoginAccountExistField.activation_status.ACCOUNT_DEACTIVATED)
+        self.assertEqual(fetch_profiles_data[2]['auth'], LoginAccountExistField.activation_status.ACCOUNT_DEACTIVATED)
+        self.assertEqual(fetch_profiles_data[3]['auth'], LoginAccountExistField.activation_status.ACCOUNT_ACTIVATED)
 
 
 class ProfileSearchTestCase(ProfileBaseUpdateTestCase):
     path = '/profiles'
+    num_roles = 2
+    num_quota = 3
+    num_profiles = 3
+    num_groups = 2
+
+    def setUp(self):
+        super().setUp()
+        self.api_call_kwargs = client_req_csrf_setup()
+        # the user does NOT have `view_genericuserprofile` permission
+        access_token =  self._prepare_access_token(new_perms_info=['view_role'])
+        self.api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        self.api_call_kwargs.update({'path': self.path, 'method':'get'})
+
+    def _gen_quota(self, num=None):
+        contact_quota_maxnum = 2
+        self.num_locations = contact_quota_maxnum
+        self.num_emails = contact_quota_maxnum
+        self.num_phones = contact_quota_maxnum
+        out = list(map(lambda d: {'expiry':gen_expiry_time(), 'material': d['id'], \
+                    'maxnum':contact_quota_maxnum } , self.usermgt_material_data))
+        return out
+
 
     def test_search(self):
-        pass
+        self.api_call_kwargs.update({'extra_query_params':{}})
+        # -----------------
+        keyword = self.request_data[-1]['last_name']
+        self.api_call_kwargs['extra_query_params']['search'] = keyword
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetch_profiles_data = response.json()
+        self.assertTrue(any(fetch_profiles_data))
+        pos = fetch_profiles_data[0]['last_name'].find(keyword)
+        self.assertGreaterEqual(pos, 0)
+        # -----------------
+        keyword = self.request_data[1]['emails'][0]['addr']
+        self.api_call_kwargs['extra_query_params']['search'] = keyword
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetch_profiles_data = response.json()
+        self.assertTrue(any(fetch_profiles_data))
+        self.assertTrue(any(fetch_profiles_data[0]['emails']))
+        found = False
+        for fetch_profile_data in fetch_profiles_data:
+            for email_data in fetch_profile_data['emails']:
+                pos = email_data['addr'].find(keyword)
+                if pos >= 0:
+                    found = True
+                    break
+        self.assertTrue(found)
+        # -----------------
+        keyword = self.request_data[-1]['locations'][-1]['locality']
+        self.api_call_kwargs['extra_query_params']['search'] = keyword
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetch_profiles_data = response.json()
+        self.assertTrue(any(fetch_profiles_data))
+        self.assertTrue(any(fetch_profiles_data[0]['locations']))
+        found = False
+        for fetch_profile_data in fetch_profiles_data:
+            for geoloc_data in fetch_profile_data['locations']:
+                pos = geoloc_data['locality'].find(keyword)
+                if pos >= 0:
+                    found = True
+                    break
+        self.assertTrue(found)
+        # ----------------- search user profiles that belong to given group name
+        chosen_grp_id = self.request_data[0]['groups'][0]['group']
+        chosen_group = next(filter(lambda obj:obj.id == chosen_grp_id, self._primitives[GenericUserGroup]))
+        keyword = chosen_group.name
+        self.api_call_kwargs['extra_query_params']['search'] = keyword
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        fetch_profiles_data = response.json()
+        self.assertTrue(any(fetch_profiles_data))
+        self.assertTrue(any(fetch_profiles_data[0]['groups']))
+        found = False
+        for fetch_profile_data in fetch_profiles_data:
+            for grp_data in fetch_profile_data['groups']:
+                if grp_data['group'] == chosen_grp_id:
+                    found = True
+                    break
+        self.assertTrue(found)
+
 

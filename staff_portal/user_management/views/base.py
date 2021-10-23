@@ -101,7 +101,8 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
     closure_model_cls = GenericUserGroupClosure
     ordering_fields  = ['id', 'usr_cnt']
     # `ancestors__ancestor__name` already covers `name` field of each model instance
-    search_fields  = ['ancestors__ancestor__name']
+    search_fields  = ['ancestors__ancestor__name', 'emails__addr', 'locations__locality', 'roles__role__name',
+            'locations__street', 'locations__detail', ]
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [UserGroupsPermissions]
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
 
@@ -143,20 +144,21 @@ class UserGroupsAPIView(AuthCommonAPIView, RecoveryModelMixin):
 
 class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
     serializer_class = GenericUserProfileSerializer
-    filter_backends  = [UserProfilesPermissions, SearchFilter, OrderingFilter,]
+    filter_backends  = [SearchFilter, OrderingFilter,]
     ordering_fields  = ['id', 'time_created', 'last_updated', 'first_name', 'last_name']
-    search_fields  = ['first_name', 'last_name']
+    search_fields  = ['first_name', 'last_name', 'emails__addr', 'locations__province', 'locations__locality',
+            'locations__street', 'locations__detail', 'groups__group__name', 'roles__role__name']
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [UserProfilesPermissions]
     SOFTDELETE_CHANGESET_MODEL = UsermgtChangeSet
 
     def get(self, request, *args, **kwargs):
         self.queryset = self.serializer_class.Meta.model.objects.order_by('-time_created')
-        exc_rd_fields = request.query_params.get('exc_rd_fields', [])
-        if exc_rd_fields and isinstance(exc_rd_fields, str):
-            exc_rd_fields = [exc_rd_fields]
-        kwargs = self.kwargs_map(request, kwargs)
-        kwargs['serializer_kwargs'] = {'from_read_view':True, 'exc_rd_fields': exc_rd_fields}
-        #print('user profile get() , kwargs : %s, %s' % (kwargs, self.kwargs))
+        # if the argument `pk` is `me`, then update the value to profile ID of current login user
+        if kwargs.get('pk', None) == 'me':
+            account = request.user
+            my_id = str(account.profile.pk)
+            kwargs['pk'] = my_id
+            self.kwargs['pk'] = my_id
         return super().get(request=request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -199,14 +201,6 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
         profile_id = account.profile.id
         self._force_logout = profile_id in id_list
 
-    def kwargs_map(self, request, kwargs):
-        # if the argument `pk` is `me`, then update the value to profile ID of current login user
-        if kwargs.get('pk', None) == 'me':
-            account = request.user
-            my_id = str(account.genericuserauthrelation.profile.pk)
-            kwargs['pk'] = my_id
-            self.kwargs['pk'] = my_id
-        return kwargs
 
 
 ## --------------------------------------------------------------------------------------

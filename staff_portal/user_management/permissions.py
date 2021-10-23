@@ -95,13 +95,13 @@ class RolePermissions(DjangoModelPermissions, BaseFilterBackend, JWTclaimPermiss
 
 def _get_valid_groups(account):
     field_name = LOOKUP_SEP.join(['group', 'descendants', 'descendant', 'id'])
-    return  account.profile.groups.values_list(field_name, flat=True)
+    return  account.profile.groups.values_list(field_name, flat=True).distinct()
 
 def _get_valid_profs(account):
     valid_grp_ids = _get_valid_groups(account=account)
     field_name = LOOKUP_SEP.join(['group', 'id', 'in'])
     applied_grp_set = GenericUserGroupRelation.objects.filter(**{field_name: valid_grp_ids})
-    valid_prof_ids = applied_grp_set.values_list('profile__id', flat=True)
+    valid_prof_ids = applied_grp_set.values_list('profile__id', flat=True).distinct()
     return valid_prof_ids
 
 
@@ -119,7 +119,7 @@ class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermis
         'DELETE': ['view_genericusergroup', 'delete_genericusergroup',],
     }
 
-    def has_edit_permission(self, request, view):
+    def has_hierarchy_permission(self, request):
         account = request.user
         valid_grp_ids = _get_valid_groups(account=account)
         valid_grp_ids = set(valid_grp_ids)
@@ -133,7 +133,6 @@ class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermis
         _logger.log(loglevel, None, *log_args, request=request)
         return result
 
-
     def has_permission(self, request, view):
         result = self._has_permission(tok_payld=request.auth, method=request.method)
         # logged-in users that do not have read permission can only view the groups assigned
@@ -142,12 +141,18 @@ class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermis
         if result is True:
             account = request.user
             if not account.is_superuser and request.method.upper() in ('PUT', 'DELETE'):
-                result = self.has_edit_permission(request=request, view=view,)
+                result = self.has_hierarchy_permission(request=request)
         else:
             if request.method.upper() == 'GET':
                 result = True
         return result
 
+    # In Django default implementation, APIView.check_permissions() is automatically called
+    # prior to method handling function (e.g. GET, POST ... etc) ,
+    # while APIView.check_object_permissions() is called only when invoking View.get_object()
+    # , for performance reason, generic view will NOT automatically call check_object_permissions()
+    # to check permission on each object in a queryset, instead one could filter the queryset
+    # appropriately before checking permission
     def has_object_permission(self, request, view, obj):
         result = False
         can_view_all_groups = getattr(request, '_can_view_all_groups', False)
@@ -171,17 +176,10 @@ class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermis
 #### end of UserGroupsPermissions
 
 
-class UserProfilesPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermissionMixin):
+class UserProfilesPermissions(DRFBasePermission, JWTclaimPermissionMixin):
     message = {api_settings.NON_FIELD_ERRORS_KEY: ['not allowed to perform this action on the profile(s)']}
-    # In Django default implementation, APIView.check_permissions() is automatically called
-    # prior to method handling function (e.g. GET, POST ... etc) ,
-    # while APIView.check_object_permissions() is called only when invoking View.get_object()
-    # , for performance reason, generic view will NOT automatically call check_object_permissions()
-    # to check permission on each object in a queryset, instead one could filter the queryset
-    # appropriately before checking permission
-
     perms_map = {
-        'GET': ['view_genericuserprofile'],
+        'GET': [],  # TODO: implement field-level visibility
         'OPTIONS': [],
         'HEAD': [],
         'POST':   ['view_genericuserprofile', 'add_genericuserprofile',   ],
@@ -190,7 +188,7 @@ class UserProfilesPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPerm
         'DELETE': ['view_genericuserprofile', 'delete_genericuserprofile',],
     }
 
-    def has_edit_permission(self, request, view):
+    def has_hierarchy_permission(self, request):
         account = request.user
         valid_prof_ids = _get_valid_profs(account=account)
         valid_prof_ids = set(valid_prof_ids)
@@ -212,63 +210,32 @@ class UserProfilesPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPerm
         # at ancestor group.
         if result:
             if not account.is_superuser and request.method.upper() in ('PUT', 'DELETE'):
-                result = self.has_edit_permission(request=request, view=view,)
+                result = self.has_hierarchy_permission(request=request)
         else:
             # logged-in users that do not have access permission can only read/write his/her own profile
             account_prof_id = str(account.profile.id)
             log_args = []
-            if request.method == 'PUT' and len(request.data) == 1:
+            if request.method.upper() == 'PUT' and len(request.data) == 1:
                 data = request.data[0]
                 req_prof_id = str(data.get('id', ''))
                 if req_prof_id == account_prof_id:
                     result = True
-                    view._edit_personal_profile = True
                 log_args.extend(['req_prof_id', req_prof_id])
-            elif request.method == 'GET':
-                req_prof_id = view.kwargs.get('pk', None)
-                if req_prof_id is None or str(req_prof_id) == account_prof_id:
-                    result = True
-                    view._edit_personal_profile = True
-                log_args.extend(['req_prof_id', req_prof_id])
-            elif request.method == 'DELETE':
+            elif request.method.upper() == 'DELETE':
                 req_ids = filter(lambda d:d.get('id'), request.data)
                 IDs = list(map(lambda d:d['id'], req_ids))
                 log_args.extend(['IDs', IDs])
                 # TODO, how to recover if a logged-in user deleted its own account ? recovered by superuser ?
                 if len(IDs) == 1 and str(IDs[0]) == account_prof_id:
                     result = True
-                    view._edit_personal_profile = True
             log_args.extend(['result', result, 'account_prof_id', account_prof_id])
-            if hasattr(view, '_edit_personal_profile'):
-                log_args.extend(['_edit_personal_profile', view._edit_personal_profile])
             loglevel = logging.DEBUG if result else logging.WARNING
             _logger.log(loglevel, None, *log_args, request=request)
         return result
 
 
     def has_object_permission(self, request, view, obj):
-        result = False
-        account = request.user
-        if account.is_superuser:
-            result = True
-        else:
-            if getattr(view, '_edit_personal_profile', False):
-                result = account.genericuserauthrelation.profile.pk == obj.pk
-            else:
-                all_valid_profs = _get_valid_profs(account=account)
-                result = all_valid_profs.filter(pk=obj.pk).exists()
-        return result
-
-
-    def filter_queryset(self, request, queryset, view):
-        account = request.user
-        if not account.is_superuser:
-            if getattr(view, '_edit_personal_profile', False):
-                all_valid_profs = [account.genericuserauthrelation.profile.pk]
-            else:
-                all_valid_profs = _get_valid_profs(account=account)
-            queryset = queryset.filter(pk__in=all_valid_profs)
-        return queryset
+        return request.method.upper() == 'GET'
 #### end of UserProfilesPermissions
 
 
