@@ -7,7 +7,7 @@ from rest_framework             import status as RestStatus
 
 from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models.base import EmailAddress, GenericUserProfile
-from ..models.auth import AccountResetRequest
+from ..models.auth import UnauthResetAccountRequest
 from .constants import LOGIN_WEB_URL
 
 _logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ _logger = logging.getLogger(__name__)
 def check_auth_req_token(fn_succeed, fn_failure):
     def inner(self, request, *args, **kwargs):
         activate_token = kwargs.get('token', None)
-        auth_req = AccountResetRequest.is_token_valid(activate_token)
+        auth_req = UnauthResetAccountRequest.is_token_valid(activate_token)
         if auth_req:
             kwargs['auth_req'] = auth_req
             resp_kwargs = fn_succeed(self, request, *args, **kwargs)
@@ -39,7 +39,7 @@ class AuthTokenCheckMixin:
 
 ## --------------------------------------------------------------------------------------
 # process single user at a time
-# create new request in AccountResetRequest for either changing username or password
+# create new request in UnauthResetAccountRequest for either changing username or password
 # Send mail with account-reset URL page to the user
 
 def get_profile_account_by_email(addr:str, request):

@@ -1,6 +1,7 @@
 import logging
 from datetime  import datetime, timedelta, date
 
+from django.utils import timezone as django_timezone
 from django.utils.module_loading import import_string
 from celery.backends.rpc import RPCBackend as CeleryRpcBackend
 
@@ -10,7 +11,7 @@ from common.util.python.celery import app as celery_app
 from common.logging.util  import log_fn_wrapper
 
 from .models.base import GenericUserGroup, GenericUserProfile
-from .models.auth import AccountResetRequest
+from .models.auth import UnauthResetAccountRequest
 from django.contrib import auth
 
 _logger = logging.getLogger(__name__)
@@ -27,12 +28,12 @@ def update_accounts_privilege(self, affected_groups, deleted=False):
 
 @celery_app.task
 @log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
-def clean_expired_auth_token(days):
-    td = timedelta(days=days)
-    t0 = datetime.now()
+def clean_expired_reset_requests(days, hours=0, minutes=0):
+    td = timedelta(days=days, hours=hours, minutes=minutes)
+    t0 = django_timezone.now()
     t0 = t0 - td
-    expired = AccountResetRequest.objects.filter(time_created__lt=t0)
-    result = expired.values('id', 'profile__pk', 'email__email__addr', 'time_created')
+    expired = UnauthResetAccountRequest.objects.filter(time_created__lt=t0)
+    result = expired.values('email__user_id','email__user_type', 'email__addr', 'time_created')
     result = list(result)
     expired.delete()
     return result

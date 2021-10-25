@@ -27,7 +27,7 @@ beat_schedule = {
         'args':(),
     },
     'expired-auth-req-cleanup': {
-        'task':'user_management.async_tasks.clean_expired_auth_token',
+        'task':'user_management.async_tasks.clean_expired_reset_requests',
         'options': {'queue': 'usermgt_default'},
         'schedule': crontab(hour=3, minute=00), ## daily 3:00 am
         ##'schedule':30,

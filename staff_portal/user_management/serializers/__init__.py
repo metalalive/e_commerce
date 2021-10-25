@@ -29,7 +29,7 @@ from common.util.python.async_tasks    import  sendmail as async_send_mail
 from ..async_tasks import update_accounts_privilege
 from ..models.common import AppCodeOptions
 from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile,  GenericUserGroupRelation, _atomicity_fn, QuotaMaterial
-from ..models.auth import Role, AccountResetRequest
+from ..models.auth import Role, UnauthResetAccountRequest
 
 from .common import ConnectedGroupField, ConnectedProfileField, UserSubformSetupMixin
 from .nested import EmailSerializer, PhoneNumberSerializer, GeoLocationSerializer
@@ -238,10 +238,10 @@ class LoginAccountExistField(ChoiceField):
             else:
                 out = self.activation_status.ACCOUNT_DEACTIVATED.value
         except ObjectDoesNotExist as e:
-            try:
-                rst_req = instance.auth_rst_req
+            rst_req_exists = instance.emails.filter(rst_account_reqs__isnull=False).distinct().exists()
+            if rst_req_exists:
                 out = self.activation_status.ACTIVATION_REQUEST.value
-            except ObjectDoesNotExist as e:
+            else:
                 out = self.activation_status.ACCOUNT_NON_EXISTENT.value
         return out
 
@@ -426,7 +426,7 @@ class BulkAuthUserRequestSerializer(BulkUpdateListSerializer):
 
 class AuthUserResetRequestSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
     class Meta(ExtendedModelSerializer.Meta):
-        model = AccountResetRequest
+        model = UnauthResetAccountRequest
         fields = ['id', 'email', 'profile']
         list_serializer_class = BulkAuthUserRequestSerializer
 

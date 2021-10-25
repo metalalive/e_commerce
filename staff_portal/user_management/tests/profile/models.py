@@ -317,6 +317,7 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
         super().setUp()
 
     def test_hard_delete(self):
+        self._profile.account
         prof_id = self._profile.id
         grp_ids = self._profile.groups.values_list('group', flat=True)
         self.assertSetEqual({6,8}, set(grp_ids))
@@ -325,18 +326,24 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
         self.assertFalse(qset.exists())
         qset = GenericUserProfile.objects.all(with_deleted=True).filter(id=prof_id)
         self.assertFalse(qset.exists())
+        qset = LoginAccount.objects.filter(profile__id=prof_id)
+        self.assertFalse(qset.exists())
 
     def test_soft_delete(self):
+        self._profile.account
         prof_id = self._profile.id
         grp_ids = self._profile.groups.values_list('group', flat=True)
         self.assertSetEqual({6,8}, set(grp_ids))
         self._profile.delete(profile_id=self._profile_2nd.id)
+        self._profile.refresh_from_db()
         qset = GenericUserGroupRelation.objects.filter(id={'profile': prof_id, 'group__in':grp_ids})
         self.assertFalse(qset.exists())
         qset = GenericUserGroupRelation.objects.all(with_deleted=True).filter(id={'profile': prof_id, 'group__in':grp_ids})
         self.assertTrue(qset.exists())
         softdel_grp_ids = qset.values_list('group', flat=True)
         self.assertSetEqual(set(softdel_grp_ids), set(grp_ids))
+        with self.assertRaises(ObjectDoesNotExist):
+            self._profile.account
         # undelete
         profile = GenericUserProfile.objects.get_deleted_set().get(id=prof_id)
         # In typical case, the user who deleted a profile is the only one to recover the soft-deleted profile
@@ -345,6 +352,8 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
         self.assertFalse(self._profile.is_deleted())
         grp_ids = self._profile.groups.values_list('group', flat=True)
         self.assertSetEqual(set(softdel_grp_ids), set(grp_ids))
+        with self.assertRaises(ObjectDoesNotExist):
+            self._profile.account
 
 
     def test_self_removal(self):

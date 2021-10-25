@@ -1,5 +1,3 @@
-import secrets
-import hashlib
 import logging
 from functools import partial
 
@@ -392,8 +390,8 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, SerializableMixin, Minimu
         del_prof_id = self.pk
         profile_id  = kwargs.get('profile_id', None)
         hard_delete = kwargs.get('hard', False)
-        self.deactivate(remove_account=False)
-        changeset = super().delete(*args, **kwargs)
+        self.clean_reset_account_requests()
+        changeset = super().delete(*args, **kwargs) # login account will be automatically deleted
         if not hard_delete:
             if 'profile_id' not in kwargs.keys():
                 kwargs['profile_id'] = profile_id
@@ -465,11 +463,7 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, SerializableMixin, Minimu
             log_args.extend(['msg', err_msg])
             _logger.error(None, *log_args)
             raise ValueError(err_msg)
-        try:
-            req = self.auth_rst_req # TODO: rename to unauth_edit_acc_req
-            req.delete()
-        except ObjectDoesNotExist:
-            log_args.extend(['msg', 'no auth-related request issued to the user'])
+        self.clean_reset_account_requests()
         try:
             account  = self.account
             if remove_account:
@@ -483,6 +477,10 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, SerializableMixin, Minimu
         if any(log_args):
             log_args.extend(['profile_id', self.pk])
             _logger.info(None, *log_args)
+
+    def clean_reset_account_requests(self):
+        for email in self.emails.all():
+            email.rst_account_reqs.all().delete()
 
     @classmethod
     def estimate_inherit_quota(cls, groups):

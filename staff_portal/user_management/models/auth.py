@@ -1,4 +1,7 @@
+import secrets
+import hashlib
 import logging
+from datetime import datetime, timedelta
 
 from django.contrib import auth
 from django.contrib.auth.models import GroupManager, _user_get_permissions, _user_has_perm, _user_has_module_perms
@@ -6,7 +9,7 @@ from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
 from django.db.models.constants import LOOKUP_SEP
-from django.utils import timezone
+from django.utils import timezone as django_timezone
 from django.utils.translation import gettext_lazy as _
 
 from rest_framework.settings    import api_settings
@@ -234,7 +237,7 @@ class AbstractUser(AbstractBaseUser, PermissionsMixin, MinimumInfoMixin):
             'Unselect this instead of deleting accounts.'
         ),
     )
-    date_joined = models.DateTimeField(_('date joined'), default=timezone.now)
+    date_joined = models.DateTimeField(_('date joined'), default=django_timezone.now)
     password_last_updated = models.DateTimeField(_('password last updated'), blank=False, null=False)
 
     objects = UserManager()
@@ -297,60 +300,50 @@ class LoginAccount(AbstractUser):
 ## end of class LoginAccount
 
 
-# TODO: rename to UnauthEditAccountRequest
-class AccountResetRequest(models.Model, MinimumInfoMixin):
+class UnauthResetAccountRequest(models.Model, MinimumInfoMixin):
     """
     store token request for account reset operation, auto-incremented primary key is still required.
     entire token string will NOT stored in database table, instead it stores hashed token for more
     secure approach
     """
     class Meta:
-        db_table = 'account_reset_request'
+        managed = False
+        db_table = 'unauth_reset_account_request'
 
     TOKEN_DELIMITER = '-'
     MAX_TOKEN_VALID_TIME = 600
-    min_info_field_names = ['id']
+    min_info_field_names = ['hashed_token']
 
-    profile  = models.OneToOneField('user_management.GenericUserProfile', blank=True, db_column='profile',
-                on_delete=models.CASCADE, related_name="auth_rst_req")# TODO: rename to unauth_edit_acc_req
-    # TODO, build validator to check if the chosen email address is ONLY for one user,
-    # not shared by several people (would that happen in real cases ?)
-    email    = models.ForeignKey('user_management.EmailAddress', db_column='email', on_delete=models.SET_NULL, null=True, blank=True)
-    hashed_token = models.BinaryField(max_length=32, blank=True) # note: MySQL will refuse to set unique = True
-    time_created = models.DateTimeField(auto_now=True)
+    email = models.ForeignKey('user_management.EmailAddress', db_column='email', on_delete=models.CASCADE,
+            related_name='rst_account_reqs', null=False, blank=False)
+    hashed_token = models.BinaryField(primary_key=True, max_length=32, blank=True) # note: MySQL will refuse to set unique = True
+    time_created = models.DateTimeField(auto_now_add=True)
 
-    def is_token_expired(self):
+    @property
+    def is_expired(self):
         result = True
         t0 = self.time_created
         if t0:
             t0 += timedelta(seconds=self.MAX_TOKEN_VALID_TIME)
-            t1  = datetime.now(timezone.utc)
+            t1  = django_timezone.now()
             if t0 > t1:
                 result = False
         return result
 
     @classmethod
-    def is_token_valid(cls, token_urlencoded):
+    def get_request(cls, token_urlencoded):
         result = None
-        parts = token_urlencoded.split(cls.TOKEN_DELIMITER)
-        if len(parts) > 1:
-            try:
-                req_id = int(parts[0])
-            except ValueError:
-                req_id = -1
-            if req_id > 0:
-                hashed_token = cls._hash_token(token_urlencoded)
-                try:
-                    instance = cls.objects.get(pk=req_id , hashed_token=hashed_token)
-                except cls.DoesNotExist as e:
-                    instance = None
-                if instance:
-                    if instance.is_token_expired():
-                        pass #### instance.delete()
-                    else:
-                        result = instance
-                log_args = ['req_id', req_id, 'hashed_token', hashed_token, 'result', result]
-                _logger.info(None, *log_args)
+        hashed_token = cls._hash_token(token_urlencoded)
+        try:
+            instance = cls.objects.get(hashed_token=hashed_token)
+            if instance.is_expired:
+                instance.delete()
+            else:
+                result = instance
+        except cls.DoesNotExist as e:
+            result = None
+        log_args = ['hashed_token', hashed_token, 'result', result]
+        _logger.info(None, *log_args)
         return result
 
     @classmethod
@@ -361,45 +354,39 @@ class AccountResetRequest(models.Model, MinimumInfoMixin):
 
 
     def _new_token(self):
-        # generate random number + request id as token that will be sent within email
-        token = self.TOKEN_DELIMITER.join( [str(self.pk), secrets.token_urlsafe(32)] )
-        # hash the token (using SHA256, as minimum security requirement),
-        # then save the hash token to model instance.
-        hashed_token = self._hash_token(token)
+        while True:
+            # generate cryptographically secure random number as token that will be sent within email
+            token = secrets.token_urlsafe(32)
+            # hash the token (using SHA256, as minimum security requirement),
+            # then save the hash token to model instance.
+            hashed_token = self._hash_token(token)
+            qset = type(self).objects.filter(hashed_token=hashed_token)
+            if not qset.exists():
+                break
         log_args = ['new_token', token, 'new_hashed_token', hashed_token]
         _logger.debug(None, *log_args)
         return token, hashed_token
 
     @_atomicity_fn()
     def save(self, force_insert=False, force_update=False, using=None, update_fields=None, **kwargs):
-        if not self.profile.active:
-            self.profile.active = True
-            self.profile.save(update_fields=['active'])
-        # check if the user sent reset request before and the token is still valid,
-        # request from the same user cannot be duplicate in the model.
-        if self.pk is None:
-            self.hashed_token = b''
-            super().save(force_insert=force_insert, force_update=force_update, using=using, update_fields=update_fields, **kwargs)
-        self._token, hashed_token  = self._new_token()
-        self.hashed_token = hashed_token
-        super().save(force_insert=False, force_update=force_update, using=using, update_fields=['hashed_token', 'time_created'], **kwargs)
+        assert self.email.user_type.model.lower() == 'genericuserprofile', 'it has to be individual user \
+                requesting account reset, not a group or any other class type'
+        # always avoid caller from setting token that is NOT cryptographically strong enough .
+        if not force_update:
+            self._token, self.hashed_token = self._new_token()
+        super().save(force_insert=force_insert, force_update=force_update, using=using,
+                update_fields=update_fields, **kwargs)
+        ## update_fields = ['hashed_token', 'time_created']
 
     @property
     def token(self):
-        if hasattr(self, '_token'):
-            return self._token
-        else:
-            return None
+        return  getattr(self, '_token', None)
 
     @property
     def minimum_info(self):
         out = super().minimum_info
-        extra = {'profile': self.profile.minimum_info, 'email': self.email.email.addr}
+        extra = {'profile': self.email.user_id, 'email': self.email.addr}
         out.update(extra)
         return out
-
-#### end of  AccountResetRequest
-
-
-
+#### end of  UnauthResetAccountRequest
 

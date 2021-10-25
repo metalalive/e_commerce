@@ -234,18 +234,21 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='AccountResetRequest',
+            name='UnauthResetAccountRequest',
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('hashed_token', models.BinaryField(blank=True, max_length=32)),
+                ('hashed_token', models.BinaryField(primary_key=True, blank=True, max_length=32)),
                 ('time_created', models.DateTimeField(auto_now=True)),
-                ('email', models.ForeignKey(blank=True, db_column='email', null=True, on_delete=django.db.models.deletion.SET_NULL, to='user_management.emailaddress')),
-                ('profile', models.OneToOneField(blank=True, db_column='profile', on_delete=django.db.models.deletion.CASCADE, related_name='auth_rst_req', to='user_management.genericuserprofile')),
+                ('email', models.ForeignKey(blank=False, db_column='email', null=False, on_delete=django.db.models.deletion.CASCADE, to='user_management.emailaddress')),
             ],
             options={
-                'db_table': 'account_reset_request',
+                'managed': False,
+                'db_table': 'unauth_reset_account_request',
             },
             bases=(models.Model, common.models.mixins.MinimumInfoMixin),
+        ),
+        migrations.RunSQL(
+            sql='CREATE TABLE `unauth_reset_account_request` ( `hashed_token` longblob NOT NULL, `time_created` datetime(6) NOT NULL, `email` int(11) NOT NULL, PRIMARY KEY (`hashed_token`(32)), KEY `account_reset_request_email_6d24344f_fk_email_address_id` (`email`),  CONSTRAINT `account_reset_request_email_6d24344f_fk_email_address_id` FOREIGN KEY (`email`) REFERENCES `email_address` (`id`)  )  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',
+            reverse_sql='DROP TABLE `unauth_reset_account_request`'
         ),
         migrations.AddConstraint(
             model_name='genericusergroupclosure',
