@@ -12,14 +12,13 @@ class WebAPIurl(BaseUriLookup):
             'RoleAPIView'        : ['roles', 'role/<slug:pk>'],
             'UserGroupsAPIView'  : ["groups", "group/<slug:pk>"],
             'UserProfileAPIView' : ["profiles", "profile/<slug:pk>"],
+            'AccountActivationView'   : 'account/activate',
+            'AccountDeactivationView' : 'account/deactivate',
+            'LoginAccountCreateView'  : 'account/create/<slug:token>',
 
             #### '^usergrps/edit/(?P<IDs>[\d/]+)$',
 
-            'UserActivationView'     : 'account/activate',
-            'UserDeactivationView'   : 'account/deactivate',
-
             'AuthTokenReadAPIView'    : 'authtoken/<slug:token>',
-            'LoginAccountCreateView'  : 'account/create/<slug:token>',
             'UsernameRecoveryRequestView'     : 'username/recovery',
             'UnauthPasswordResetRequestView'  : 'password/reset',
             'UnauthPasswordResetView'         : 'password/reset/<slug:token>',

@@ -6,6 +6,7 @@ from django.conf   import  settings as django_settings
 from django.core.exceptions     import ValidationError
 from django.http.response    import HttpResponseBase
 from django.db.models        import Count
+from django.db.models.constants import LOOKUP_SEP
 from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework             import status as RestStatus
@@ -30,13 +31,13 @@ from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, UsermgtChangeSet
 from ..async_tasks import update_accounts_privilege
 
-from ..serializers import RoleSerializer, GenericUserGroupSerializer
-from ..serializers import GenericUserProfileSerializer, AuthUserResetRequestSerializer
-from ..serializers import LoginAccountSerializer
+from ..serializers import RoleSerializer, GenericUserGroupSerializer, GenericUserProfileSerializer
 from ..serializers import GenericUserRoleAssigner, GenericUserGroupRelationAssigner
+from ..serializers import LoginAccountSerializer
+from ..serializers.auth import UnauthRstAccountReqSerializer
 
 from ..permissions import RolePermissions, UserGroupsPermissions
-from ..permissions import UserDeactivationPermission, UserActivationPermission, UserProfilesPermissions
+from ..permissions import AccountDeactivationPermission, AccountActivationPermission, UserProfilesPermissions
 
 from .constants import  _PRESERVED_ROLE_IDS, MAX_NUM_FORM, WEB_HOST
 
@@ -204,71 +205,73 @@ class UserProfileAPIView(AuthCommonAPIView, RecoveryModelMixin):
 
 
 ## --------------------------------------------------------------------------------------
-class UserActivationView(AuthCommonAPIView):
-    serializer_class = AuthUserResetRequestSerializer
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [UserActivationPermission]
+class AccountActivationView(AuthCommonAPIView):
+    serializer_class = UnauthRstAccountReqSerializer
+    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [AccountActivationPermission]
 
-    def _reactivate_existing_account(self, req_body):
-        _map = {str(x['profile']) : x for x in req_body if x.get('profile', None)}
-        IDs = [str(x['profile']) for x in req_body if x.get('profile', None)]
-        IDs = [int(x) for x in IDs if x.isdigit()]
-        filter_kwargs = {'auth__isnull': False, 'pk__in': IDs,}
-        profiles = GenericUserProfile.objects.filter( **filter_kwargs )
-        for prof in profiles:
-            prof.activate(new_account_data=None)
-            data_item = _map.get(str(prof.pk), None)
-            if data_item:
-                req_body.remove(data_item)
-        if profiles.exists():
-            affected_items = list(profiles.values(*profiles.model.min_info_field_names))
-            _login_profile = self.request.user.genericuserauthrelation.profile
-            self._log_action(action_type='reactivate_account', request=self.request, affected_items=affected_items,
-                model_cls=profiles.model,  profile_id=_login_profile.pk)
+    def _reactivate_existing_account(self, request):
+        req_body = request.data
+        _get_id_fn = lambda d:d.get('profile')
+        IDs = filter(_get_id_fn, req_body)
+        IDs = list(map(_get_id_fn , IDs))
+        filter_kwargs = { LOOKUP_SEP.join(['account','isnull']): False,  LOOKUP_SEP.join(['id','in']): IDs, }
+        try:
+            profiles = GenericUserProfile.objects.filter( **filter_kwargs )
+            for prof in profiles:
+                prof.activate(new_account_data=None)
+            remove_req_items = filter(lambda d: profiles.filter(id=d.get('profile')).exists(), req_body)
+            for req_item in remove_req_items:
+                req_body.remove(req_item)
+            log_args = ["rest_of_request_body", request.data]
+            _logger.debug(None, *log_args, request=request)
+            if profiles.exists():
+                affected_items = list(profiles.values('id','first_name','last_name'))
+                _login_profile = request.user.profile
+                self._log_action(action_type='reactivate_account', request=request, affected_items=affected_items,
+                    model_cls=profiles.model,  profile_id=_login_profile.id)
+        except ValueError as e:
+            err_args = ["err_msg", e.args[0]]
+            _logger.debug(None, *err_args, request=request)
+            raise ParseError()
 
     def _create_new_auth_req(self, request, *args, **kwargs):
-        resource_path = [UserMgtCfg.app_url] + UserMgtCfg.api_url[LoginAccountCreateView.__name__].split('/')
+        resource_path = UserMgtCfg.api_url['LoginAccountCreateView'].split('/')
         resource_path.pop() # last one should be <slug:token>
         kwargs['many'] = True
         kwargs['return_data_after_done'] = True
         kwargs['status_ok'] = RestStatus.HTTP_202_ACCEPTED
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
-        kwargs['pk_field_name'] = 'profile'
-        kwargs['allow_create'] = True
         kwargs['serializer_kwargs'] = {
-            # 'exc_rd_fields': ['id',],
             'msg_template_path': 'user_management/data/mail/body/user_activation_link_send.html',
             'subject_template' : 'user_management/data/mail/subject/user_activation_link_send.txt',
             'url_host': WEB_HOST,
             'url_resource':'/'.join(resource_path),
         }
-        return self.update(request, *args, **kwargs)
+        return self.create(request, *args, **kwargs)
 
 
     def post(self, request, *args, **kwargs):
         """
-        Activate login account by admin, frontend has to provide:
-        * user profile ID (only admin knows the profile ID)
-        * chosen email ID that belongs to the profile, in order to send email with activation URL
+        Activate login account of given users in admin site, frontend client has to provide:
+        * user profile ID
+        * chosen email ID recorded in the user profile
         Once validation succeeds, backend has to do the following :
-        * Turn on user profile active field
-        * create new request in AuthUserResetRequest, for creating login account by the user later
+        * create new request in UnauthResetAccountRequest, for creating login account for the user
         * Send mail with activation URL to notify the users
         """
-        self._reactivate_existing_account(req_body=request.data)
+        self._reactivate_existing_account(request=request)
         if any(request.data):
-            err_args = ["rest_of_request_body", request.data]
-            _logger.debug(None, *err_args, request=request)
             response = self._create_new_auth_req(request=request, *args, **kwargs)
         else:
             return_data = []
-            response = RestResponse(return_data, status=RestStatus.HTTP_202_ACCEPTED)
+            response = RestResponse(return_data, status=RestStatus.HTTP_200_OK)
         return response
 
 
 
-class UserDeactivationView(AuthCommonAPIView):
+class AccountDeactivationView(AuthCommonAPIView):
     serializer_class = GenericUserProfileSerializer
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [UserDeactivationPermission]
+    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [AccountDeactivationPermission]
 
     def post(self, request, *args, **kwargs):
         """
@@ -276,12 +279,14 @@ class UserDeactivationView(AuthCommonAPIView):
         delete valid auth request issued by the user (if exists)
         optionally delete login accounts
         """
+        pk_field_name = 'profile'
         # each authorized user can only deactivate his/her own account,
         # while superuser can deactivate several accounts (of other users) in one API call.
-        prof_qset = self.get_queryset(pk_field_name='id', pk_src=LimitQuerySetMixin.REQ_SRC_BODY_DATA)
-        _map = {str(x['id']) : x.get('remove_account', False) for x in request.data if x.get('id',None) is not None}
+        prof_qset = self.get_queryset(pk_field_name=pk_field_name, pk_src=LimitQuerySetMixin.REQ_SRC_BODY_DATA)
+        _map = {x[pk_field_name] : x.get('remove_account', False) for x in request.data \
+                if x.get(pk_field_name,None) }
         for prof in prof_qset:
-            remove_account = _map[str(prof.pk)]
+            remove_account = _map.get(prof.pk, False)
             prof.deactivate(remove_account=remove_account)
 
         _profile = request.user.genericuserauthrelation.profile

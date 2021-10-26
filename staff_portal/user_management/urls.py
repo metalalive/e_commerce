@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views.base import RoleAPIView, UserGroupsAPIView, UserProfileAPIView, UserActivationView, UserDeactivationView
+from .views.base import RoleAPIView, UserGroupsAPIView, UserProfileAPIView, AccountActivationView, AccountDeactivationView
 
 from .views.auth  import AuthTokenReadAPIView, LoginAccountCreateView, RefreshAccessTokenView, UsernameRecoveryRequestView, UnauthPasswordResetRequestView, UnauthPasswordResetView, AuthPasswdEditAPIView, AuthUsernameEditAPIView, LoginView, LogoutView, PermissionView
 
@@ -21,8 +21,8 @@ urlpatterns = [
     path(UserMgtCfg.api_url[UserProfileAPIView.__name__][0], UserProfileAPIView.as_view()  ),
     path(UserMgtCfg.api_url[UserProfileAPIView.__name__][1], UserProfileAPIView.as_view()  ),
 
-    path(UserMgtCfg.api_url[UserActivationView.__name__],    UserActivationView.as_view()  ),
-    path(UserMgtCfg.api_url[UserDeactivationView.__name__],  UserDeactivationView.as_view()),
+    path(UserMgtCfg.api_url[AccountActivationView.__name__],  AccountActivationView.as_view()),
+    path(UserMgtCfg.api_url[AccountDeactivationView.__name__],  AccountDeactivationView.as_view()),
 
     path(UserMgtCfg.api_url[AuthTokenReadAPIView.__name__],  AuthTokenReadAPIView.as_view()  ),
     path(UserMgtCfg.api_url[LoginAccountCreateView.__name__],  LoginAccountCreateView.as_view()  ),

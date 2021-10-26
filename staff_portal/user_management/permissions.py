@@ -7,7 +7,7 @@ from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework.settings   import api_settings
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import BasePermission as DRFBasePermission, DjangoModelPermissions, DjangoObjectPermissions
+from rest_framework.permissions import BasePermission as DRFBasePermission, DjangoModelPermissions
 from rest_framework.filters import BaseFilterBackend
 
 from .models.base import GenericUserGroup,  GenericUserGroupClosure, GenericUserProfile, GenericUserGroupRelation
@@ -176,6 +176,21 @@ class UserGroupsPermissions(DRFBasePermission, BaseFilterBackend, JWTclaimPermis
 #### end of UserGroupsPermissions
 
 
+def _profile_has_hierarchy_permission(request, pk_field_name):
+    account = request.user
+    valid_prof_ids = _get_valid_profs(account=account)
+    valid_prof_ids = set(valid_prof_ids)
+    req_ids = filter(lambda d:d.get(pk_field_name), request.data)
+    req_ids = set(map(lambda d:d[pk_field_name], req_ids))
+    uncovered_ids = req_ids - valid_prof_ids
+    result = not any(uncovered_ids)
+    log_args = ['valid_prof_ids', valid_prof_ids, 'req_ids', req_ids]
+    log_args.extend(['result', result])
+    loglevel = logging.DEBUG if result else logging.WARNING
+    _logger.log(loglevel, None, *log_args, request=request)
+    return result
+
+
 class UserProfilesPermissions(DRFBasePermission, JWTclaimPermissionMixin):
     message = {api_settings.NON_FIELD_ERRORS_KEY: ['not allowed to perform this action on the profile(s)']}
     perms_map = {
@@ -188,20 +203,6 @@ class UserProfilesPermissions(DRFBasePermission, JWTclaimPermissionMixin):
         'DELETE': ['view_genericuserprofile', 'delete_genericuserprofile',],
     }
 
-    def has_hierarchy_permission(self, request):
-        account = request.user
-        valid_prof_ids = _get_valid_profs(account=account)
-        valid_prof_ids = set(valid_prof_ids)
-        req_ids = filter(lambda d:d.get('id'), request.data)
-        req_ids = set(map(lambda d:d['id'], req_ids))
-        uncovered_ids = req_ids - valid_prof_ids
-        result = not any(uncovered_ids)
-        log_args = ['valid_prof_ids', valid_prof_ids, 'req_ids', req_ids]
-        log_args.extend(['result', result])
-        loglevel = logging.DEBUG if result else logging.WARNING
-        _logger.log(loglevel, None, *log_args, request=request)
-        return result
-
     def has_permission(self, request, view):
         result = self._has_permission(tok_payld=request.auth, method=request.method)
         account = request.user
@@ -210,7 +211,7 @@ class UserProfilesPermissions(DRFBasePermission, JWTclaimPermissionMixin):
         # at ancestor group.
         if result:
             if not account.is_superuser and request.method.upper() in ('PUT', 'DELETE'):
-                result = self.has_hierarchy_permission(request=request)
+                result = _profile_has_hierarchy_permission(request=request, pk_field_name='id')
         else:
             # logged-in users that do not have access permission can only read/write his/her own profile
             account_prof_id = str(account.profile.id)
@@ -239,49 +240,51 @@ class UserProfilesPermissions(DRFBasePermission, JWTclaimPermissionMixin):
 #### end of UserProfilesPermissions
 
 
-class UserDeactivationPermission(DjangoModelPermissions):
+class AccountDeactivationPermission(DRFBasePermission, JWTclaimPermissionMixin):
     perms_map = {
         'GET': ['ALWAYS_INVALID'],
         'OPTIONS': ['ALWAYS_INVALID'],
         'HEAD'   : ['ALWAYS_INVALID'],
-        'POST'   : [],
+        'POST'   : ['delete_unauthresetaccountrequest',],
         'PUT'    : ['ALWAYS_INVALID'],
         'PATCH'  : ['ALWAYS_INVALID'],
         'DELETE' : ['ALWAYS_INVALID'],
     }
 
-    pk_field_name = 'id'
-
     def has_permission(self, request, view):
-        result = super().has_permission(request=request, view=view)
+        result = self._has_permission(tok_payld=request.auth, method=request.method)
         account = request.user
-        if result:
-            if not account.is_superuser:
-                log_args = ['perm_cls', type(self).__name__]
-                err_msgs = {}
-                valid_profs = _get_valid_profs(account=account)
-                pids = list(map(lambda d: d.get(self.pk_field_name, None), request.data))
-                log_args.extend(['pids', pids])
-                try:
-                    num_valid_IDs = valid_profs.filter(pk__in=pids).count()
-                    log_args.extend(['num_valid_IDs', num_valid_IDs])
-                    if num_valid_IDs != len(pids):
-                        err_msgs = {api_settings.NON_FIELD_ERRORS_KEY: 'The list %s contains invalid ID' % pids}
-                        result = False
-                except (ValueError, TypeError) as e:
-                    err_msgs = {api_settings.NON_FIELD_ERRORS_KEY: 'unknown error from frontend input'}
-                    result = False
-                    log_args.extend(['excpt_msg', e])
-                if not result:
-                    self.message = err_msgs
-                    log_args.extend(['err_msgs', err_msgs[api_settings.NON_FIELD_ERRORS_KEY]])
-                log_args.extend(['result', result])
-                loglevel = logging.DEBUG if result else logging.WARNING
-                _logger.log(loglevel, None, *log_args, request=request)
+        if result and not account.is_superuser:
+            result = _profile_has_hierarchy_permission(request=request, pk_field_name='profile')
         return result
 
 
-class UserActivationPermission(UserDeactivationPermission):
-    pk_field_name = 'profile'
+class AccountActivationPermission(AccountDeactivationPermission):
+    perms_map = {
+        'GET': ['ALWAYS_INVALID'],
+        'OPTIONS': ['ALWAYS_INVALID'],
+        'HEAD'   : ['ALWAYS_INVALID'],
+        'POST'   : ['add_unauthresetaccountrequest', 'change_loginaccount'],
+        'PUT'    : ['ALWAYS_INVALID'],
+        'PATCH'  : ['ALWAYS_INVALID'],
+        'DELETE' : ['ALWAYS_INVALID'],
+    }
 
+    def has_permission(self, request, view):
+        result = super().has_permission(request=request, view=view)
+        req_items = list(filter(lambda d: not d.get('profile'), request.data))
+        if result and any(req_items):
+            email_ids = set(map(lambda d:d.get('email'), req_items))
+            valid_prof_ids = _get_valid_profs(account=request.user)
+            filter_kwargs = {
+                LOOKUP_SEP.join(['id','in']): valid_prof_ids,
+                LOOKUP_SEP.join(['emails','id','in']):email_ids
+            }
+            try:
+                qset = GenericUserProfile.objects.filter(**filter_kwargs).distinct()
+                existing_email_ids = qset.values_list(LOOKUP_SEP.join(['emails','id']), flat=True)
+                result =  email_ids == set(existing_email_ids)
+            except ValueError as e:
+                result = False
+        return result
 
