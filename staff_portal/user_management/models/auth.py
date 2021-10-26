@@ -374,6 +374,7 @@ class UnauthResetAccountRequest(models.Model, MinimumInfoMixin):
         # always avoid caller from setting token that is NOT cryptographically strong enough .
         if not force_update:
             self._token, self.hashed_token = self._new_token()
+        type(self).objects.filter(email=self.email).delete()
         super().save(force_insert=force_insert, force_update=force_update, using=using,
                 update_fields=update_fields, **kwargs)
         ## update_fields = ['hashed_token', 'time_created']

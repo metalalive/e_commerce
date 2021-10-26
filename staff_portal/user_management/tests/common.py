@@ -77,7 +77,7 @@ _fixtures = {
             ''.join(random.choices(string.ascii_letters, k=10)), \
             ''.join(random.choices(string.ascii_letters, k=3)) \
             )
-        } for idx in range(20, 30)
+        } for idx in range(3, 25)
     ],
     PhoneNumber: [
         {'id':idx, 'country_code':str(random.randrange(1,999)),

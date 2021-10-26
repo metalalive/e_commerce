@@ -50,7 +50,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'user_management.urls'
 
-TEMPLATES = []
+TEMPLATES = [
+    { # will be used when rendering email content
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+    }
+]
 
 FIXTURE_DIRS = ['migrations/django/user_management',]
 

@@ -30,14 +30,12 @@ def sendmail(self, to_addrs, from_addr, msg_template_path, msg_data, subject_tem
     assert subject , "Error occured on reading file %s" % subject_template
     assert msg_html, "Error occured on reading file %s" % msg_template_path
     subject_data = subject_data or {}
-
     subject = remove_control_characters(subject)
     subject = subject.format(**subject_data)
     template = Template(msg_html)
     context  = Context(msg_data)
     msg_html = template.render(context)
     msg_plaintext = strip_tags(msg_html)
-
     mailobj = mail.message.EmailMultiAlternatives(subject=subject, body=msg_plaintext,
             from_email=from_addr, to=to_addrs,)
     mailobj.attach_alternative(msg_html, 'text/html')

@@ -30,7 +30,8 @@ from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
 from ..apps        import UserManagementConfig
 from ..models.common import AppCodeOptions
 from ..models.base import QuotaMaterial
-from ..serializers import AuthUserResetRequestSerializer, PermissionSerializer
+from ..serializers import PermissionSerializer
+from ..serializers.auth import UnauthRstAccountReqSerializer
 from ..permissions import ModelLvlPermsPermissions
 from .common    import check_auth_req_token, AuthTokenCheckMixin, get_profile_account_by_email
 
@@ -124,7 +125,7 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
 
 class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkUpdateModelMixin):
     """ for unauthenticated users who registered but  forget their password """
-    serializer_class = AuthUserResetRequestSerializer
+    serializer_class = UnauthRstAccountReqSerializer
     renderer_classes = [JSONRenderer]
 
     def post(self, request, *args, **kwargs):

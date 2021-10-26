@@ -17,7 +17,7 @@ from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework             import status as RestStatus
 from rest_framework.fields      import CharField, ChoiceField, ModelField, empty
-from rest_framework.serializers import BaseSerializer, Serializer, ModelSerializer, IntegerField, PrimaryKeyRelatedField
+from rest_framework.serializers import BaseSerializer, Serializer, ModelSerializer, IntegerField
 from rest_framework.validators  import UniqueTogetherValidator
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
 from rest_framework.settings    import api_settings
@@ -415,112 +415,6 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerial
     ####     return obj.profiles.count()
 ## end of class GenericUserGroupSerializer
 
-
-
-class BulkAuthUserRequestSerializer(BulkUpdateListSerializer):
-    def update(self, instance, validated_data):
-        instance = super().update(instance=instance, allow_insert=True,
-                validated_data=validated_data)
-        return instance
-
-
-class AuthUserResetRequestSerializer(ExtendedModelSerializer, UserSubformSetupMixin):
-    class Meta(ExtendedModelSerializer.Meta):
-        model = UnauthResetAccountRequest
-        fields = ['id', 'email', 'profile']
-        list_serializer_class = BulkAuthUserRequestSerializer
-
-    email = PrimaryKeyRelatedField(many=False, queryset=EmailSerializer.Meta.model.objects.none() )
-    atomicity = _atomicity_fn
-
-    def __init__(self, instance=None, data=empty, **kwargs):
-        #### self.exc_rd_fields = kwargs.pop('exc_rd_fields', None)
-        # Following variables will be used for mailing with user authentication link
-        # the user auth link could be for (1) account activation (2) username reset
-        # (3) password reset
-        self._msg_template_path = kwargs.pop('msg_template_path', None)
-        self._subject_template  = kwargs.pop('subject_template', None)
-        self._url_host          = kwargs.pop('url_host', None)
-        self._url_resource      = kwargs.pop('url_resource', None)
-        if not data is empty:
-            if isinstance(data, list):
-                email_ids = [d['email'] for d in data if d.get('email',None)]
-            else :
-                email_ids = [data.get('email', '')]
-            qset = EmailSerializer.Meta.model.objects.filter(id__in=email_ids)
-            self.fields['email'].queryset = qset
-        super().__init__(instance=instance, data=data, **kwargs)
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance=instance)
-        if hasattr(self, '_async_tasks_id'):
-            # will work ONLY after saving validated data and issuing asynchronous mailing task
-            # , the argument `instance` should be model instance
-            task_id = self._async_tasks_id[instance.profile.pk]
-            data['async_task'] = task_id
-        return data
-
-    def run_validation(self, data=empty):
-        pk_condition = {'profile': data.get('profile', '')}
-        return super().run_validation(data=data, pk_condition=pk_condition,
-                set_null_if_obj_not_found=True)
-
-    def extra_setup_before_validation(self, instance, data):
-        self._mark_as_creation_on_update(pk_field_name='id', instance=instance, data=data)
-        if instance:
-            # don't use auth reuqest ID from clients even when they are provided, client
-            # applications search auth-user reuqest instance using `user profile ID` instead.
-            data['id'] = instance.pk
-
-    def validate(self, value): # check if the given email ID is related to the user profile
-        profile = value['profile']
-        email   = value['email']
-        cnt = profile.emails.filter(pk=email.pk).count()
-        if cnt != 1:
-            errmsg = "User doesn't have the chosen email"
-            log_msg = ['errmsg', errmsg, 'email_id', email.pk, 'profile_id', profile.pk]
-            _logger.warning(None, *log_msg)
-            raise RestValidationError(errmsg)
-        return value
-
-    def create(self, validated_data):
-        instance = super().create(validated_data=validated_data)
-        self._mailing(validated_data=validated_data, req=instance)
-        return instance
-
-    def update(self, instance, validated_data):
-        instance = super().update(instance=instance, validated_data=validated_data)
-        self._mailing(validated_data=validated_data, req=instance)
-        return instance
-
-    def _mailing(self, validated_data, req):
-        """
-        get mail plaintext (instead of passing model instance as task argument),
-        get mail template, and data to render, place all of them to task queue
-        , the mailing process will be done asynchronously by another service program
-        """
-        profile = validated_data['profile']
-        mail_ref = validated_data.get('email', None)
-        if mail_ref is None: # skip if not provided
-            return
-        subject_data = {'first_name': profile.first_name}
-        msg_data = {'first_name': profile.first_name, 'last_name': profile.last_name,
-            'url_host': self._url_host, 'url_resource': self._url_resource, 'token':req.token,
-            'expire_before': str(int(self.Meta.model.MAX_TOKEN_VALID_TIME / 60)),
-        }
-        to_addr = mail_ref.email.addr
-        from_addr = django_settings.DEFAULT_FROM_EMAIL
-
-        result = async_send_mail.delay(to_addrs=[to_addr], from_addr=from_addr,
-                    subject_template=self._subject_template, subject_data=subject_data,
-                    msg_template_path=self._msg_template_path,  msg_data=msg_data, )
-        if not hasattr(self, '_async_tasks_id'):
-            self._async_tasks_id = {}
-        self._async_tasks_id[profile.pk] = result.task_id
-        log_msg = ['_async_tasks_id', self._async_tasks_id]
-        _logger.debug(None, *log_msg)
-
-#### end of AuthUserResetRequestSerializer
 
 
 
