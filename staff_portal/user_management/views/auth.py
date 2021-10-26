@@ -24,16 +24,17 @@ from common.auth.django.login import  jwt_based_login
 from common.auth.django.authentication import RefreshJWTauthentication, IsStaffUser
 from common.cors import config as cors_cfg
 from common.csrf.middleware    import  csrf_protect_m
-from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
+from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkCreateModelMixin
 from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
 
-from ..apps        import UserManagementConfig
+from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models.common import AppCodeOptions
 from ..models.base import QuotaMaterial
 from ..serializers import PermissionSerializer
 from ..serializers.auth import UnauthRstAccountReqSerializer
 from ..permissions import ModelLvlPermsPermissions
-from .common    import check_auth_req_token, AuthTokenCheckMixin, get_profile_account_by_email
+from .common    import check_auth_req_token, AuthTokenCheckMixin, get_profile_by_email
+from .constants import WEB_HOST
 
 _logger = logging.getLogger(__name__)
 
@@ -95,14 +96,15 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
 
     def post(self, request, *args, **kwargs):
         addr = request.data.get('addr', '').strip()
-        useremail,  profile, account = get_profile_account_by_email(addr=addr, request=request)
-        self._send_recovery_mail(profile=profile, account=account, addr=addr)
+        email, profile = get_profile_by_email(addr=addr, request=request)
+        self._send_recovery_mail(profile=profile, email=email)
         # don't respond with success / failure status purposely, to avoid malicious email enumeration
         return RestResponse(data=None, status=RestStatus.HTTP_202_ACCEPTED)
 
-    def _send_recovery_mail(self, profile, account, addr):
-        if profile is None or account is None:
+    def _send_recovery_mail(self, profile, email):
+        if not profile:
             return
+        account = profile.account
         # send email directly, no need to create auth user request
         # note in this application, username is not PII (Personable Identifible Information)
         # so username can be sent directly to user mailbox. TODO: how to handle it if it's PII ?
@@ -110,7 +112,7 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
                 'username': account.username, 'request_time': datetime.now(timezone.utc), }
         msg_template_path = 'user_management/data/mail/body/username_recovery.html'
         subject_template  = 'user_management/data/mail/subject/username_recovery.txt'
-        to_addr = addr
+        to_addr = email.addr
         from_addr = django_settings.DEFAULT_FROM_EMAIL
         task_kwargs = {
             'to_addrs': [to_addr], 'from_addr':from_addr, 'msg_data':msg_data,
@@ -123,23 +125,22 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
                 model_cls=type(account),  profile_id=profile.pk)
 
 
-class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkUpdateModelMixin):
+class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkCreateModelMixin):
     """ for unauthenticated users who registered but  forget their password """
     serializer_class = UnauthRstAccountReqSerializer
     renderer_classes = [JSONRenderer]
 
     def post(self, request, *args, **kwargs):
         addr = request.data.get('addr', '').strip()
-        useremail, profile, account = get_profile_account_by_email(addr=addr, request=request)
-        self._send_req_mail(request=request, kwargs=kwargs, profile=profile,
-                account=account, useremail=useremail, addr=addr)
+        email, profile = get_profile_by_email(addr=addr, request=request)
+        self._send_req_mail(request=request, kwargs=kwargs, profile=profile, email=email)
         # always respond OK status even if it failed, to avoid malicious email enumeration
         return RestResponse(data=None, status=RestStatus.HTTP_202_ACCEPTED)  #  HTTP_401_UNAUTHORIZED
 
-    def _send_req_mail(self, request, kwargs, profile, account, useremail, addr):
-        if profile is None or account is None or useremail is None:
+    def _send_req_mail(self, request, kwargs, profile, email):
+        if not profile or not email:
             return
-        resource_path = [UserMgtCfg.app_url] + UserMgtCfg.api_url[UnauthPasswordResetView.__name__].split('/')
+        resource_path = UserMgtCfg.api_url[UnauthPasswordResetView.__name__].split('/')
         resource_path.pop() # last one should be <slug:token>
         serializer_kwargs = {
             'msg_template_path': 'user_management/data/mail/body/passwd_reset_request.html',
@@ -149,27 +150,19 @@ class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkUpd
         err_args = ["url_host", serializer_kwargs['url_host']]
         _logger.debug(None, *err_args, request=request)
         extra_kwargs = {
-            'many':False, 'return_data_after_done':True, 'pk_field_name':'profile', 'allow_create':True,
-            'status_ok':RestStatus.HTTP_202_ACCEPTED, 'pk_src':LimitQuerySetMixin.REQ_SRC_BODY_DATA,
-            'serializer_kwargs' :serializer_kwargs,
+            'many':False, 'return_data_after_done':False, 'serializer_kwargs' :serializer_kwargs,
+            'pk_src':LimitQuerySetMixin.REQ_SRC_BODY_DATA,
         }
         kwargs.update(extra_kwargs)
         # do not use frontend request data in this view, TODO, find better way of modifying request data
-        request._full_data = {'profile': profile.pk, 'email': useremail.pk,}
-        # `many = False` indicates that the view gets single model instance by calling get_object(...)
-        # , which requires unique primary key value on URI, so I fake it by adding user profile ID field
-        # and value to kwargs, because frontend (unauthorized) user shouldn't be aware of any user profile ID
-        self.kwargs['profile'] = profile.pk
-        user_bak = request.user
-        try: # temporarily set request.user to the anonymous user who provide this valid email address
-            request.user = account
-            self.update(request, **kwargs)
+        request._full_data = {'email': email.id}
+        try:
+            self.create(request, **kwargs)
         except Exception as e:
             fully_qualified_cls_name = '%s.%s' % (type(e).__module__, type(e).__qualname__)
-            log_msg = ['excpt_type', fully_qualified_cls_name, 'excpt_msg', e, 'email', addr,
-                    'email_id', useremail.pk, 'profile', profile.minimum_info]
+            log_msg = ['excpt_type', fully_qualified_cls_name, 'excpt_msg', e.args[0], 'email', email.addr,
+                    'email_id', email.id, 'profile', profile.id]
             _logger.error(None, *log_msg, exc_info=True, request=request)
-        request.user = user_bak
 
 
 class UnauthPasswordResetView(APIView, UserEditViewLogMixin):
@@ -331,7 +324,7 @@ class RefreshAccessTokenView(APIView):
         audience = self._filter_resource_services(audience, exclude=['web',])
         if audience:
             signed = self._gen_signed_token(request=request, audience=audience)
-            app_label = UserManagementConfig.name
+            app_label = UserMgtCfg.name
             # To be compilant with OAuth2 specification, the toekn response should
             # at least contain `access_token` and `token_type` field in JSON form
             data = {'access_token': signed, 'token_type': 'bearer',

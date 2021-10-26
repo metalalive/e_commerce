@@ -16,12 +16,12 @@ class WebAPIurl(BaseUriLookup):
             'AccountDeactivationView' : 'account/deactivate',
             'LoginAccountCreateView'  : 'account/create/<slug:token>',
 
+            'UnauthPasswordResetRequestView'  : 'account/password/reset',
+            'UnauthPasswordResetView'         : 'account/password/reset/<slug:token>',
             #### '^usergrps/edit/(?P<IDs>[\d/]+)$',
 
             'AuthTokenReadAPIView'    : 'authtoken/<slug:token>',
             'UsernameRecoveryRequestView'     : 'username/recovery',
-            'UnauthPasswordResetRequestView'  : 'password/reset',
-            'UnauthPasswordResetView'         : 'password/reset/<slug:token>',
 
             'AuthUsernameEditAPIView': 'username/edit',
             'AuthPasswdEditAPIView':   'password/edit',

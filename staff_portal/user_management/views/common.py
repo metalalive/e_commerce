@@ -42,27 +42,21 @@ class AuthTokenCheckMixin:
 # create new request in UnauthResetAccountRequest for either changing username or password
 # Send mail with account-reset URL page to the user
 
-def get_profile_account_by_email(addr:str, request):
-    # TODO, handle concurrent identical request sent at the same time from the same client,
-    # perhaps using CSRF token, or hash request body, to indentify that the first request is
-    # processing while the second one comes in for both of concurrent and identical requests.
+def get_profile_by_email(addr:str, request):
     try:
         email = EmailAddress.objects.get(addr=addr)
-        useremail = email.useremail
-        prof_cls = useremail.user_type.model_class()
-        if not prof_cls is  GenericUserProfile:
+        prof_cls = email.user_type.model_class()
+        if prof_cls is not GenericUserProfile:
             raise MultipleObjectsReturned("invalid class type for individual user profile")
-        profile = prof_cls.objects.get(pk=useremail.user_id)
-        if not profile.active:
+        profile = prof_cls.objects.get(pk=email.user_id)
+        if not profile.account.is_active:
             raise PermissionDenied("not allowed to query account of a deactivated user")
-        account = profile.auth.login # may raise ObjectDoesNotExist exception
     except (ObjectDoesNotExist, MultipleObjectsReturned, PermissionDenied) as e:
         fully_qualified_cls_name = '%s.%s' % (type(e).__module__, type(e).__qualname__)
-        err_args = ["email", addr, "excpt_type", fully_qualified_cls_name, "excpt_msg", e,]
+        err_args = ["email", addr, "excpt_type", fully_qualified_cls_name, "excpt_msg", e.args[0]]
         _logger.warning(None, *err_args, request=request)
-        useremail = None
+        email = None
         profile = None
-        account = None
-    return useremail, profile, account
+    return email, profile
 
 

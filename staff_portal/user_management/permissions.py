@@ -245,7 +245,7 @@ class AccountDeactivationPermission(DRFBasePermission, JWTclaimPermissionMixin):
         'GET': ['ALWAYS_INVALID'],
         'OPTIONS': ['ALWAYS_INVALID'],
         'HEAD'   : ['ALWAYS_INVALID'],
-        'POST'   : ['delete_unauthresetaccountrequest',],
+        'POST'   : ['delete_unauthresetaccountrequest', 'change_loginaccount', 'delete_loginaccount'],
         'PUT'    : ['ALWAYS_INVALID'],
         'PATCH'  : ['ALWAYS_INVALID'],
         'DELETE' : ['ALWAYS_INVALID'],
@@ -254,6 +254,8 @@ class AccountDeactivationPermission(DRFBasePermission, JWTclaimPermissionMixin):
     def has_permission(self, request, view):
         result = self._has_permission(tok_payld=request.auth, method=request.method)
         account = request.user
+        # each authorized user can only deactivate his/her own account,
+        # while superuser can deactivate several accounts (of other users) in one API call.
         if result and not account.is_superuser:
             result = _profile_has_hierarchy_permission(request=request, pk_field_name='profile')
         return result

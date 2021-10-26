@@ -270,29 +270,25 @@ class AccountActivationView(AuthCommonAPIView):
 
 
 class AccountDeactivationView(AuthCommonAPIView):
-    serializer_class = GenericUserProfileSerializer
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [AccountDeactivationPermission]
 
     def post(self, request, *args, **kwargs):
         """
-        set active field to `False` in selected user profile
-        delete valid auth request issued by the user (if exists)
-        optionally delete login accounts
+        * delete valid reset requests associated to the user (if exists)
+        * either deleting login accounts or setting `is_active` field to false
         """
         pk_field_name = 'profile'
-        # each authorized user can only deactivate his/her own account,
-        # while superuser can deactivate several accounts (of other users) in one API call.
-        prof_qset = self.get_queryset(pk_field_name=pk_field_name, pk_src=LimitQuerySetMixin.REQ_SRC_BODY_DATA)
+        prof_ids  = self.get_IDs(pk_field_name=pk_field_name, pk_src=LimitQuerySetMixin.REQ_SRC_BODY_DATA)
+        prof_qset = GenericUserProfile.objects.filter(id__in=prof_ids)
         _map = {x[pk_field_name] : x.get('remove_account', False) for x in request.data \
                 if x.get(pk_field_name,None) }
         for prof in prof_qset:
             remove_account = _map.get(prof.pk, False)
             prof.deactivate(remove_account=remove_account)
 
-        _profile = request.user.genericuserauthrelation.profile
-        _item_list = prof_qset.values( *prof_qset.model.min_info_field_names )
+        _profile = request.user.profile
+        _item_list = prof_qset.values('id','first_name','last_name')
         self._log_action(action_type='deactivate_account', request=request, affected_items=list(_item_list),
                 model_cls=type(_profile),  profile_id=_profile.pk)
         return RestResponse(status=None)
-
 
