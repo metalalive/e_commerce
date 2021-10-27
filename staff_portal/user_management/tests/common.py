@@ -37,7 +37,7 @@ _fixtures = {
         {'is_superuser':False, 'is_staff':False,  'is_active':False, 'profile':None, \
                 'password_last_updated': gen_expiry_time(minutes_valid=8), \
                 'username': ''.join(random.choices(string.ascii_letters, k=10)), \
-                'password': ''.join(random.choices(string.ascii_letters, k=16)) \
+                'password': ''.join(random.choices(string.ascii_letters, k=16) + ['@']) \
         } for _ in range(num_login_profiles)
     ],
     GenericUserProfile: [

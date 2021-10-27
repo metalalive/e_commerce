@@ -1,23 +1,18 @@
-import re
 from copy     import copy, deepcopy
 from datetime import datetime, timezone
 #### from collections     import OrderedDict
 import logging
 
 from django.conf      import  settings as django_settings
-from django.core      import  validators
 from django.db.models           import IntegerChoices
 from django.db.models.constants import LOOKUP_SEP
-from django.utils.deconstruct   import deconstructible
-from django.core.exceptions     import ValidationError, ObjectDoesNotExist, ImproperlyConfigured
+from django.core.exceptions     import ValidationError, ObjectDoesNotExist
 from django.contrib.auth.models import Permission
-from django.contrib.auth        import password_validation, get_user_model
-from django.contrib.auth.hashers import check_password
 from django.contrib.contenttypes.models  import ContentType
 
 from rest_framework             import status as RestStatus
-from rest_framework.fields      import CharField, ChoiceField, ModelField, empty
-from rest_framework.serializers import BaseSerializer, Serializer, ModelSerializer, IntegerField
+from rest_framework.fields      import ChoiceField, ModelField, empty
+from rest_framework.serializers import BaseSerializer, ModelSerializer, IntegerField
 from rest_framework.validators  import UniqueTogetherValidator
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
 from rest_framework.settings    import api_settings
@@ -415,195 +410,5 @@ class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerial
     ####     return obj.profiles.count()
 ## end of class GenericUserGroupSerializer
 
-
-
-
-
-# ----------------------------------------------------------------------
-@deconstructible
-class UsernameUniquenessValidator:
-    """
-    give model class and name of a field, check record uniqueness
-    associated with giving value in __call__ function
-    """
-    def __init__(self, account):
-        self._account = account or get_user_model()()
-
-    def __call__(self, value):
-        errmsg = None
-        log_level = logging.INFO
-        if self._account.pk and (self._account.username == value):
-            errmsg = "your new username should be different from original one"
-        else:
-            backup = self._account.username
-            self._account.username = value
-            try: # invoke existing validator at model level
-                self._account.validate_unique()
-            except ValidationError as e:
-                for item in e.error_dict.get(get_user_model().USERNAME_FIELD, None):
-                    if item.message.find("exist") > 0:
-                        errmsg = item.message
-                        log_level = logging.WARNING
-                        break
-            self._account.username = backup
-        if errmsg: #TODO: replace with RestValidationError
-            log_msg = ['errmsg', errmsg, 'value', value, 'account_id', self._account.pk,
-                    'account_username', self._account.username,]
-            _logger.log(log_level, None, *log_msg)
-            raise ValidationError(message=errmsg)
-
-
-@deconstructible
-class PasswordComplexityValidator:
-
-    def __init__(self, account, password_confirm=None):
-        self._account = account or get_user_model()()
-        if not password_confirm is None:
-            self._password_confirm = password_confirm
-
-    def __call__(self, value):
-        errs = []
-        if hasattr(self, '_password_confirm'):
-            if self._password_confirm != value:
-                msg = "'password' field doesn't match 'confirm password' field."
-                errs.append(ValidationError(message=msg))
-        if re.search("[^\w]", value) is None:
-            msg = "new password must contain at least one special symbol e.g. @, $, +, ...."
-            errs.append(ValidationError(message=msg))
-        try:
-            password_validation.validate_password(value, self._account)
-        except ValidationError as e:
-            errs = errs + e.error_list
-        if len(errs) > 0: #TODO: replace with RestValidationError
-            log_msg = ['errs', errs]
-            _logger.info(None, *log_msg)
-            raise ValidationError(message=errs)
-
-
-@deconstructible
-class StringEqualValidator(validators.BaseValidator):
-    def compare(self, a, b):
-        return a != b
-
-@deconstructible
-class OldPasswdValidator(validators.BaseValidator):
-    def compare(self, a, b):
-        # check password without saving it
-        return not check_password(password=a , encoded=b)
-
-
-class  LoginAccountSerializer(Serializer):
-    """
-    There are case scenarios that will invoke this serializer :
-        case #1: New users activate their own login account at the first time
-        case #2: Unauthorized users forget their username, and request to reset
-        case #3: Unauthorized users forget their password, and request to reset
-        case #4: Authorized users change their username, within valid login session
-        case #5: Authorized users change their password, within valid login session
-        case #6: Login authentication
-    """
-    old_uname = CharField(required=True, max_length=128)
-    old_passwd = CharField(required=True, max_length=128)
-    username  = CharField(required=True, max_length=128, min_length=6, )
-    password  = CharField(required=True, max_length=128, min_length=10,)
-    password2 = CharField(required=True, max_length=128)
-
-    # case #1: auth_req = non-null, account = null
-    # case #2: auth_req = non-null, account = null, but can be derived from auth_req
-    # case #3: auth_req = non-null, account = null, but can be derived from auth_req
-    # case #4: auth_req = null, account = non-null
-    # case #5: auth_req = null, account = non-null
-    def __init__(self, data, account, auth_req, confirm_passwd=False, uname_required=False,
-            old_uname_required=False,  old_passwd_required=False, passwd_required=False, **kwargs):
-        self._auth_req = auth_req
-        self._mail_kwargs = kwargs.pop('mail_kwargs',None)
-        self.fields['username'].required = uname_required
-        self.fields['password'].required = passwd_required
-        self.fields['password2'].required = confirm_passwd
-        self.fields['old_uname'].required = old_uname_required
-        self.fields['old_passwd'].required = old_passwd_required
-        log_msg = ['account', account]
-        if account and isinstance(account, get_user_model()):
-            old_uname_validator = StringEqualValidator(limit_value=account.username,
-                     message="incorrect old username")
-            old_passwd_validator = OldPasswdValidator(limit_value=account.password,
-                     message="incorrect old password")
-            self.fields['old_uname'].validators.append(old_uname_validator)
-            self.fields['old_passwd'].validators.append(old_passwd_validator)
-        elif auth_req:
-            account = auth_req.profile.account
-        else:
-            errmsg = "caller must provide `account` or `auth_req`, both of them must NOT be null"
-            log_msg.extend(['errmsg', errmsg])
-            _logger.error(None, *log_msg)
-            raise ImproperlyConfigured(errmsg)
-
-        passwd2 = data.get('password2', '') if confirm_passwd  else None
-
-        uname_validator  = UsernameUniquenessValidator(account=account)
-        passwd_validator = PasswordComplexityValidator(account=account, password_confirm=passwd2)
-        self.fields['username'].validators.append(uname_validator)
-        self.fields['password'].validators.append(passwd_validator)
-        _logger.debug(None, *log_msg)
-        super().__init__(instance=account, data=data, **kwargs)
-
-
-    def _clean_validate_only_fields(self, validated_data):
-        for key in ['password2','old_uname','old_passwd']:
-            validated_data.pop(key, None)
-        log_msg = ['validated_data', validated_data]
-        _logger.debug(None, *log_msg)
-        return validated_data
-
-    def create(self, validated_data):
-        profile = self._auth_req.profile
-        email   = self._auth_req.email
-        validated_data = self._clean_validate_only_fields(validated_data)
-        with _atomicity_fn():
-            instance = profile.activate(new_account_data=validated_data)
-            self._auth_req.delete()
-        if self._mail_kwargs and email: # notify user again by email
-            self._mailing(profile=profile, mail_ref=email, username=instance.username)
-        return instance
-
-    def update(self, instance, validated_data):
-        profile = None
-        email   = None
-        validated_data = self._clean_validate_only_fields(validated_data)
-        with _atomicity_fn():
-            for attr, value in validated_data.items():
-                if attr == "password":
-                    instance.set_password(raw_password=value)
-                else:
-                    setattr(instance, attr, value)
-            instance.save() # password will be hashed in AuthUser model before save
-            if self._auth_req:
-                profile = self._auth_req.profile
-                email   = self._auth_req.email
-                self._auth_req.delete()
-            # check instance.username and instance.password if necessary
-        if self._mail_kwargs and email:
-            self._mailing(profile=profile, mail_ref=email, username=instance.username)
-        return instance
-
-
-    def _mailing(self, profile, mail_ref, username):
-        event_time = datetime.now(timezone.utc)
-        masked_username = username[:3]
-        msg_data = {'first_name': profile.first_name, 'last_name': profile.last_name,
-            'event_time': event_time, 'masked_username': masked_username,
-        }
-        to_addr = mail_ref.email.addr
-        from_addr = django_settings.DEFAULT_FROM_EMAIL
-
-        result = async_send_mail.delay(to_addrs=[to_addr], from_addr=from_addr,
-                    subject_template=self._mail_kwargs['subject_template'],
-                    msg_template_path=self._mail_kwargs['msg_template_path'],
-                    msg_data=msg_data, )
-        if not hasattr(self, '_async_tasks_id'):
-            self._async_tasks_id = {}
-        self._async_tasks_id[profile.pk] = result.task_id
-
-#### end of LoginAccountSerializer
 
 

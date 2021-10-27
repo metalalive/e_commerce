@@ -102,9 +102,9 @@ class ResetRequestDeletionTestCase(TransactionTestCase):
             self._profile_2nd.emails.last().rst_account_reqs.first(),
         ]
         req_valid_secs = UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(5,15)
-        mocked_nowtime = django_timezone.now() - timedelta(seconds=req_valid_secs)
+        mocked_expired_time = django_timezone.now() - timedelta(seconds=req_valid_secs)
         with patch('django.utils.timezone.now') as mock_nowtime_fn:
-            mock_nowtime_fn.return_value = mocked_nowtime
+            mock_nowtime_fn.return_value = mocked_expired_time
             for rst_req in expect_expired_reqs:
                  rst_req.save()
         deleted_items = clean_expired_reset_requests(days=0, hours=0,
@@ -112,6 +112,9 @@ class ResetRequestDeletionTestCase(TransactionTestCase):
         expect_value = set(map(lambda obj: (obj.email.user_id, obj.email.addr), expect_expired_reqs))
         actual_value = set(map(lambda d: (d['email__user_id'], d['email__addr']) , deleted_items))
         self.assertSetEqual(expect_value, actual_value)
+        req_hashed_tokens = tuple(map(lambda obj: obj.hashed_token, expect_expired_reqs))
+        qset = UnauthResetAccountRequest.objects.filter(hashed_token__in=req_hashed_tokens)
+        self.assertFalse(qset.exists())
 
 
 

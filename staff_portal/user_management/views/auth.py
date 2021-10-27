@@ -31,7 +31,7 @@ from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models.common import AppCodeOptions
 from ..models.base import QuotaMaterial
 from ..serializers import PermissionSerializer
-from ..serializers.auth import UnauthRstAccountReqSerializer
+from ..serializers.auth import UnauthRstAccountReqSerializer, LoginAccountSerializer
 from ..permissions import ModelLvlPermsPermissions
 from .common    import check_auth_req_token, AuthTokenCheckMixin, get_profile_by_email
 from .constants import WEB_HOST

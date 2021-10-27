@@ -33,7 +33,6 @@ from ..async_tasks import update_accounts_privilege
 
 from ..serializers import RoleSerializer, GenericUserGroupSerializer, GenericUserProfileSerializer
 from ..serializers import GenericUserRoleAssigner, GenericUserGroupRelationAssigner
-from ..serializers import LoginAccountSerializer
 from ..serializers.auth import UnauthRstAccountReqSerializer
 
 from ..permissions import RolePermissions, UserGroupsPermissions
