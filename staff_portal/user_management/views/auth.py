@@ -24,6 +24,7 @@ from common.auth.django.login import  jwt_based_login
 from common.auth.django.authentication import RefreshJWTauthentication, IsStaffUser
 from common.cors import config as cors_cfg
 from common.csrf.middleware    import  csrf_protect_m
+from common.util.python.async_tasks  import sendmail as async_send_mail , default_error_handler as async_default_error_handler
 from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkCreateModelMixin
 from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
 
@@ -33,7 +34,7 @@ from ..models.base import QuotaMaterial
 from ..serializers import PermissionSerializer
 from ..serializers.auth import UnauthRstAccountReqSerializer, LoginAccountSerializer
 from ..permissions import ModelLvlPermsPermissions
-from .common    import check_auth_req_token, AuthTokenCheckMixin, get_profile_by_email
+from .common    import check_auth_req_token, get_profile_by_email
 from .constants import WEB_HOST
 
 _logger = logging.getLogger(__name__)
@@ -50,44 +51,44 @@ class PermissionView(AuthCommonAPIReadView):
     queryset = serializer_class.get_default_queryset()
 
 
+def _rst_req_token_expired(view, request, *args, **kwargs):
+    context = {drf_settings.NON_FIELD_ERRORS_KEY : ['invalid token']}
+    status = RestStatus.HTTP_401_UNAUTHORIZED
+    return {'data':context, 'status':status}
 
-class AuthTokenReadAPIView(APIView):
-    renderer_classes = [JSONRenderer]
-    get = check_auth_req_token(
-            fn_succeed=AuthTokenCheckMixin.token_valid,
-            fn_failure=AuthTokenCheckMixin.token_expired
-        )
 
 
 class LoginAccountCreateView(APIView, UserEditViewLogMixin):
     renderer_classes = [JSONRenderer]
 
-    def _post_token_valid(self, request, *args, **kwargs):
+    def _post_token_valid(self, request, *args, rst_req=None, **kwargs):
         response_data = {}
-        auth_req = kwargs.pop('auth_req', None)
-        account = auth_req.profile.account
-        if account is None:
+        prof_model_cls = rst_req.email.user_type.model_class()
+        profile = prof_model_cls.objects.get(id=rst_req.email.user_id)
+        try:
+            account = profile.account
+        except type(profile).account.RelatedObjectDoesNotExist as e:
+            account = None
+        if account:
+            response_data.update({'created':False, 'reason':'already created before'})
+        else:
             serializer_kwargs = {
                 'mail_kwargs': {
                     'msg_template_path': 'user_management/data/mail/body/user_activated.html',
                     'subject_template' : 'user_management/data/mail/subject/user_activated.txt',
                 },
                 'data': request.data, 'passwd_required':True, 'confirm_passwd': True, 'uname_required': True,
-                'account': None, 'auth_req': auth_req,  'many': False,
+                'account': None, 'rst_req': rst_req,  'many': False,
             }
             _serializer = LoginAccountSerializer(**serializer_kwargs)
             _serializer.is_valid(raise_exception=True)
-            profile_id = auth_req.profile.pk
             account = _serializer.save()
-            self._log_action(action_type='create', request=request, affected_items=[account.minimum_info],
-                    model_cls=type(account),  profile_id=profile_id)
+            self._log_action(action_type='create', request=request, affected_items=[account.pk],
+                    model_cls=type(account),  profile_id=profile.id)
             response_data['created'] = True
-        else:
-            response_data['created'] = False
-            response_data['reason'] = 'already created before'
         return {'data': response_data, 'status':None}
 
-    post = check_auth_req_token(fn_succeed=_post_token_valid, fn_failure=AuthTokenCheckMixin.token_expired)
+    post = check_auth_req_token(fn_succeed=_post_token_valid, fn_failure=_rst_req_token_expired)
 
 
 class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
@@ -97,12 +98,12 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
     def post(self, request, *args, **kwargs):
         addr = request.data.get('addr', '').strip()
         email, profile = get_profile_by_email(addr=addr, request=request)
-        self._send_recovery_mail(profile=profile, email=email)
+        self._send_recovery_mail(request, profile=profile, email=email)
         # don't respond with success / failure status purposely, to avoid malicious email enumeration
         return RestResponse(data=None, status=RestStatus.HTTP_202_ACCEPTED)
 
-    def _send_recovery_mail(self, profile, email):
-        if not profile:
+    def _send_recovery_mail(self, request, profile, email):
+        if not profile or not email:
             return
         account = profile.account
         # send email directly, no need to create auth user request
@@ -121,8 +122,8 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
         # Do not return result backend or task ID to unauthorized frontend user.
         # Log errors raising in async task
         async_send_mail.apply_async( kwargs=task_kwargs, link_error=async_default_error_handler.s() )
-        self._log_action(action_type='recover_username', request=self.request, affected_items=[account.minimum_info],
-                model_cls=type(account),  profile_id=profile.pk)
+        self._log_action(action_type='recover_username', request=request, affected_items=[account.pk],
+                model_cls=type(account),  profile_id=profile.id)
 
 
 class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkCreateModelMixin):
@@ -168,32 +169,39 @@ class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkCre
 class UnauthPasswordResetView(APIView, UserEditViewLogMixin):
     renderer_classes = [JSONRenderer]
 
-    def _patch_token_valid(self, request, *args, **kwargs):
-        auth_req = kwargs.pop('auth_req')
-        account = auth_req.profile.account
-        if account:
+    def _patch_token_valid(self, request, rst_req=None, *args, **kwargs):
+        prof_model_cls = rst_req.email.user_type.model_class()
+        profile = prof_model_cls.objects.get(id=rst_req.email.user_id)
+        try:
+            account = profile.account
+        except type(profile).account.RelatedObjectDoesNotExist as e:
+            account = None
+        if account and account.is_active:
             serializer_kwargs = {
                 'mail_kwargs': {
                     'msg_template_path': 'user_management/data/mail/body/unauth_passwd_reset.html',
                     'subject_template' : 'user_management/data/mail/subject/unauth_passwd_reset.txt',
                 },
                 'data': request.data, 'passwd_required':True,  'confirm_passwd': True,
-                'account': request.user, 'auth_req': auth_req,  'many': False,
+                'account': account, 'rst_req': rst_req,  'many': False,
             }
-            _serializer = LoginAccountSerializer(**serializer_kwargs)
-            _serializer.is_valid(raise_exception=True)
-            profile_id = auth_req.profile.pk
-            _serializer.save()
-            user_bak = request.user
-            request.user = account
-            self._log_action(action_type='reset_password', request=request, affected_items=[account.minimum_info],
-                    model_cls=type(account),  profile_id=profile_id)
-            request.user = user_bak
-        response_data = None
-        status = None # always return 200 OK even if the request is invalid
+            serializer = LoginAccountSerializer(**serializer_kwargs)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            self._log_action(action_type='reset_password', request=request, affected_items=[account.pk],
+                    model_cls=type(account),  profile_id=profile.id)
+            response_data = None
+            status = None # 200 OK
+        else:
+            # this should be considered as suspicious operation because an user who doesn't have login
+            # account (or with inactive account) should NOT have reset token, and all requests acquired
+            # by this user are deleted when deactivating the user account. so current request has to be deleted
+            rst_req.delete()
+            response_data = {drf_settings.NON_FIELD_ERRORS_KEY : ['reset failure']}
+            status = RestStatus.HTTP_403_FORBIDDEN
         return {'data': response_data, 'status':status}
 
-    patch = check_auth_req_token(fn_succeed=_patch_token_valid, fn_failure=AuthTokenCheckMixin.token_expired)
+    patch = check_auth_req_token(fn_succeed=_patch_token_valid, fn_failure=_rst_req_token_expired)
 
 
 
@@ -201,11 +209,11 @@ class UnauthPasswordResetView(APIView, UserEditViewLogMixin):
 class CommonAuthAccountEditMixin:
     def run(self, **kwargs):
         account = kwargs.get('account', None)
-        profile_id = account.genericuserauthrelation.profile.pk
-        _serializer = LoginAccountSerializer(**kwargs)
-        _serializer.is_valid(raise_exception=True)
-        _serializer.save()
-        self._log_action(action_type=self.log_action_type, request=self.request, affected_items=[account.minimum_info],
+        profile_id = account.profile.id
+        serializer = LoginAccountSerializer(**kwargs)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        self._log_action(action_type=self.log_action_type, request=self.request, affected_items=[account.pk],
                     model_cls=type(account),  profile_id=profile_id)
         return RestResponse(data={}, status=None)
 
@@ -218,7 +226,7 @@ class AuthUsernameEditAPIView(AuthCommonAPIView, CommonAuthAccountEditMixin):
     def patch(self, request, *args, **kwargs):
         serializer_kwargs = {
             'data': request.data, 'uname_required':True,  'old_uname_required': True,
-            'account': request.user, 'auth_req': None,  'many': False,
+            'account': request.user, 'rst_req': None,  'many': False,
         }
         return self.run(**serializer_kwargs)
 
@@ -230,7 +238,7 @@ class AuthPasswdEditAPIView(AuthCommonAPIView, CommonAuthAccountEditMixin):
     def patch(self, request, *args, **kwargs):
         serializer_kwargs = {
             'data': request.data, 'passwd_required':True,  'confirm_passwd': True, 'old_passwd_required': True,
-            'account': request.user, 'auth_req': None,  'many': False,
+            'account': request.user, 'rst_req': None,  'many': False,
         }
         return self.run(**serializer_kwargs)
 

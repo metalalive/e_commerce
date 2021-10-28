@@ -25,7 +25,6 @@ from common.auth.jwt import JWT
 from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
 from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
 from common.views.filters  import  ClosureTableFilter
-from common.util.python.async_tasks  import  sendmail as async_send_mail, default_error_handler as async_default_error_handler
 
 from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, UsermgtChangeSet

@@ -1,9 +1,12 @@
 import copy
+from datetime import timedelta
 from unittest.mock import  patch
 
 from django.test import TransactionTestCase
 from django.contrib.auth.models import Permission
+from django.utils import timezone as django_timezone
 from django.core.exceptions import ObjectDoesNotExist
+from rest_framework.settings    import api_settings as drf_settings
 
 from common.util.python.async_tasks  import sendmail as async_send_mail
 from user_management.views.constants import  WEB_HOST
@@ -13,6 +16,8 @@ from user_management.models.auth import Role, LoginAccount, UnauthResetAccountRe
 from tests.python.common.django import _BaseMockTestClientInfoMixin
 
 from ..common import _fixtures, gen_expiry_time, client_req_csrf_setup, AuthenticateUserMixin
+
+non_field_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 
 
 class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin):
@@ -27,6 +32,7 @@ class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Authen
     def tearDown(self):
         self._client.cookies.clear()
         async_send_mail.app.conf.task_always_eager = False
+        UnauthResetAccountRequest.objects.all().delete()
 
 
 class AccountActivationTestCase(BaseViewTestCase):
@@ -65,9 +71,6 @@ class AccountActivationTestCase(BaseViewTestCase):
         api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', default_user_access_token])
         self.api_call_kwargs = api_call_kwargs
 
-    def tearDown(self):
-        super().tearDown()
-        UnauthResetAccountRequest.objects.all().delete()
 
     def test_activate_first_time(self):
         body = list(map(lambda profile:{'profile':profile.id, 'email':profile.emails.last().id}, self._test_profiles))
@@ -199,6 +202,100 @@ class AccountDeactivationTestCase(BaseViewTestCase):
         self.assertEqual(int(response.status_code), 403)
 
 
+
+class AccountCreationTestCase(BaseViewTestCase):
+    path = '/account/create/%s'
+
+    def setUp(self):
+        super().setUp()
+        profile = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][0])
+        email_data = _fixtures[EmailAddress][0]
+        profile.emails.create(**email_data)
+        self._profile = profile
+        self._rst_req = UnauthResetAccountRequest.objects.create(email=profile.emails.first())
+        api_call_kwargs = client_req_csrf_setup()
+        path = self.path % self._rst_req.token
+        api_call_kwargs.update({'path': path, 'method':'post'})
+        self.api_call_kwargs = api_call_kwargs
+
+
+    @patch('django.core.mail.message.EmailMultiAlternatives')
+    def test_create_ok(self, mocked_email_obj):
+        body = _fixtures[LoginAccount][0].copy()
+        body['password2'] = body['password']
+        self.api_call_kwargs['body'] = body
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        result = response.json()
+        self.assertTrue(result['created'])
+        self._profile.refresh_from_db()
+        actual_account = self._profile.account
+        self.assertEqual( actual_account.username , body['username'] )
+        self.assertTrue( actual_account.check_password(body['password']) )
+        with self.assertRaises(ObjectDoesNotExist):
+            self._rst_req.refresh_from_db()
+
+    @patch('django.core.mail.message.EmailMultiAlternatives')
+    def test_invalid_reset_request(self, mocked_email_obj):
+        self.api_call_kwargs['body'] = _fixtures[LoginAccount][0].copy()
+        # subcase #1, token expired
+        exceed_valid_secs = 3 + UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME
+        mocked_nowtime = django_timezone.now() + timedelta(seconds=exceed_valid_secs)
+        with patch('user_management.models.auth.django_timezone.now') as mock_nowtime_fn:
+            mock_nowtime_fn.return_value = mocked_nowtime
+            response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 401)
+        err_info = response.json()
+        self.assertIn('invalid token', err_info[non_field_err_key])
+        # subcase #2, invalid token
+        path = self.path % 'invalid_token'
+        self.api_call_kwargs['path'] = path
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 401)
+        err_info = response.json()
+        self.assertIn('invalid token', err_info[non_field_err_key])
+
+
+class UsernameRecoveryTestCase(BaseViewTestCase):
+    path = '/account/username/recovery'
+
+    def setUp(self):
+        super().setUp()
+        profile = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][0])
+        email_data = _fixtures[EmailAddress][0]
+        profile.emails.create(**email_data)
+        account_data = _fixtures[LoginAccount][0]
+        profile.activate(new_account_data=account_data)
+        self._account_data = account_data
+        self._profile = profile
+        api_call_kwargs = client_req_csrf_setup()
+        api_call_kwargs.update({'path': self.path, 'method':'post'})
+        self.api_call_kwargs = api_call_kwargs
+
+
+    @patch('django.core.mail.message.EmailMultiAlternatives')
+    def test_recover_done(self, mocked_email_obj):
+        expect_addr = self._profile.emails.first().addr
+        self.api_call_kwargs['body'] = {'addr': expect_addr}
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 202)
+        self.assertEqual(1, mocked_email_obj.call_count)
+        mocked_email_obj = mocked_email_obj.call_args.kwargs
+        self.assertIn(expect_addr, mocked_email_obj['to'])
+        expect_username = self._account_data['username']
+        pos = mocked_email_obj['body'].find(expect_username)
+        self.assertGreater(pos, 0)
+
+    @patch('django.core.mail.message.EmailMultiAlternatives')
+    def test_inactive_account(self, mocked_email_obj):
+        self._profile.deactivate()
+        expect_addr = self._profile.emails.first().addr
+        self.api_call_kwargs['body'] = {'addr': expect_addr}
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 202)
+        self.assertEqual(0, mocked_email_obj.call_count)
+
+
 class UnauthPasswdRstReqTestCase(BaseViewTestCase):
     path = '/account/password/reset'
 
@@ -214,10 +311,6 @@ class UnauthPasswdRstReqTestCase(BaseViewTestCase):
         api_call_kwargs = client_req_csrf_setup()
         api_call_kwargs.update({'path': self.path, 'method':'post'})
         self.api_call_kwargs = api_call_kwargs
-
-    def tearDown(self):
-        super().tearDown()
-        UnauthResetAccountRequest.objects.all().delete()
 
     @patch('django.core.mail.message.EmailMultiAlternatives')
     def test_request_ok(self, mocked_email_obj):
@@ -252,5 +345,136 @@ class UnauthPasswdRstReqTestCase(BaseViewTestCase):
         self.assertEqual(0, mocked_email_obj.call_count)
         qset = UnauthResetAccountRequest.objects.all()
         self.assertFalse(qset.exists())
+
+    @patch('django.core.mail.message.EmailMultiAlternatives')
+    def test_inactive_account(self, mocked_email_obj):
+        self._profile.deactivate(remove_account=False)
+        expect_addr = self._profile.emails.first().addr
+        body = {'addr': expect_addr}
+        self.api_call_kwargs['body'] = body
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 202)
+        self.assertEqual(0, mocked_email_obj.call_count)
+        #  token not exists
+        qset = UnauthResetAccountRequest.objects.all()
+        self.assertFalse(qset.exists())
+
+
+class UnauthPasswordResetTestCase(BaseViewTestCase):
+    path = '/account/password/reset/%s'
+
+    def setUp(self):
+        super().setUp()
+        profile = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][0])
+        email_data = _fixtures[EmailAddress][0]
+        profile.emails.create(**email_data)
+        account_data = _fixtures[LoginAccount][0]
+        profile.activate(new_account_data=account_data)
+        self._profile = profile
+        self._old_passwd = account_data['password']
+        self._rst_req = UnauthResetAccountRequest.objects.create(email=profile.emails.first())
+        api_call_kwargs = client_req_csrf_setup()
+        path = self.path % self._rst_req.token
+        api_call_kwargs.update({'path': path, 'method':'patch'})
+        self.api_call_kwargs = api_call_kwargs
+
+    @patch('django.core.mail.message.EmailMultiAlternatives')
+    def test_reset_done(self, mocked_email_obj):
+        account = self._profile.account
+        expect_username = account.username
+        new_passwd = _fixtures[LoginAccount][1]['password']
+        self.assertNotEqual(self._old_passwd, new_passwd)
+        self.assertFalse( account.check_password(new_passwd) )
+        body = {'password2':new_passwd, 'password':new_passwd}
+        self.api_call_kwargs['body'] = body
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        self._profile.refresh_from_db()
+        account.refresh_from_db()
+        self.assertEqual( account.username , expect_username )
+        self.assertTrue( account.check_password(new_passwd) )
+        with self.assertRaises(ObjectDoesNotExist):
+            self._rst_req.refresh_from_db()
+
+    @patch('django.core.mail.message.EmailMultiAlternatives')
+    def test_invalid_reset_request(self, mocked_email_obj):
+        self.api_call_kwargs['body'] = {}
+        # subcase #1, token expired
+        exceed_valid_secs = 3 + UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME
+        mocked_nowtime = django_timezone.now() + timedelta(seconds=exceed_valid_secs)
+        with patch('user_management.models.auth.django_timezone.now') as mock_nowtime_fn:
+            mock_nowtime_fn.return_value = mocked_nowtime
+            response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 401)
+        err_info = response.json()
+        self.assertIn('invalid token', err_info[non_field_err_key])
+        # subcase #2, invalid token
+        path = self.path % 'invalid_token'
+        self.api_call_kwargs['path'] = path
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 401)
+        err_info = response.json()
+        self.assertIn('invalid token', err_info[non_field_err_key])
+
+    @patch('django.core.mail.message.EmailMultiAlternatives')
+    def test_inactive_account(self, mocked_email_obj):
+        self._profile.account.is_active = False
+        self._profile.account.save(update_fields=['is_active'])
+        self.api_call_kwargs['body'] = {}
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 403)
+        err_info = response.json()
+        self.assertIn('reset failure', err_info[non_field_err_key])
+        with self.assertRaises(ObjectDoesNotExist):
+            self._rst_req.refresh_from_db()
+
+
+class AuthEditAccountTestCase(BaseViewTestCase):
+    def setUp(self):
+        super().setUp()
+        roles = list(map(lambda d: Role.objects.create(**d) , _fixtures[Role][:2]))
+        perm_objs = Permission.objects.filter(content_type__app_label='user_management', codename__in=['view_quotamaterial'])
+        roles[1].permissions.set(perm_objs)
+        profile = GenericUserProfile.objects.create(**_fixtures[GenericUserProfile][0])
+        self._setup_user_roles(profile=profile, approved_by=profile, roles=roles,)
+        account_data = _fixtures[LoginAccount][0].copy()
+        profile.activate(new_account_data=account_data)
+        self._profile = profile
+        self._account_data = account_data
+        self._auth_setup(testcase=self, profile=profile, is_superuser=False, login_password=account_data['password'])
+        acs_tok_resp = self._refresh_access_token(testcase=self, audience=['user_management'])
+        access_token = acs_tok_resp['access_token']
+        api_call_kwargs = client_req_csrf_setup()
+        api_call_kwargs['headers']['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        self.api_call_kwargs = api_call_kwargs
+
+    def test_modify_username_ok(self):
+        old_uname = self._account_data['username']
+        new_uname = 'NoRoom4error'
+        body = {'username': new_uname, 'old_uname':old_uname}
+        self.api_call_kwargs.update({'body':body, 'path':'/account/username', 'method':'patch'})
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        self._profile.refresh_from_db()
+        self.assertEqual(self._profile.account.username, new_uname)
+
+    def test_modify_password_ok(self):
+        old_passwd = self._account_data['password']
+        new_passwd = 'c0vid@sTay#safe'
+        body = {'password': new_passwd, 'password2':new_passwd, 'old_passwd':old_passwd}
+        self.api_call_kwargs.update({'body':body, 'path':'/account/password', 'method':'patch'})
+        response = self._send_request_to_backend(**self.api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        self._client.cookies.clear()
+        error_caught = None
+        with self.assertRaises(AssertionError):
+            try:
+                self._auth_setup(testcase=self, profile=self._profile, login_password=old_passwd)
+            except AssertionError as e:
+                error_caught = e
+                raise
+        self.assertEqual('401 != 200', error_caught.args[0])
+        _, response = self._auth_setup(testcase=self, profile=self._profile, login_password=new_passwd)
+        self.assertEqual(int(response.status_code), 200)
 
 

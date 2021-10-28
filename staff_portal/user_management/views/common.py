@@ -15,25 +15,15 @@ _logger = logging.getLogger(__name__)
 
 def check_auth_req_token(fn_succeed, fn_failure):
     def inner(self, request, *args, **kwargs):
-        activate_token = kwargs.get('token', None)
-        auth_req = UnauthResetAccountRequest.is_token_valid(activate_token)
-        if auth_req:
-            kwargs['auth_req'] = auth_req
+        token = kwargs.get('token', None)
+        rst_req = UnauthResetAccountRequest.get_request(token_urlencoded=token)
+        if rst_req:
+            kwargs['rst_req'] = rst_req
             resp_kwargs = fn_succeed(self, request, *args, **kwargs)
         else:
             resp_kwargs = fn_failure(self, request, *args, **kwargs)
         return RestResponse(**resp_kwargs)
     return inner
-
-
-class AuthTokenCheckMixin:
-    def token_valid(self, request, *args, **kwargs):
-        return {'data': {}, 'status':None, 'template_name': None}
-
-    def token_expired(self, request, *args, **kwargs):
-        context = {drf_settings.NON_FIELD_ERRORS_KEY : ['invalid auth req token']}
-        status = RestStatus.HTTP_401_UNAUTHORIZED
-        return {'data':context, 'status':status}
 
 
 

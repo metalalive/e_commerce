@@ -2,7 +2,7 @@ from django.urls import path
 
 from .views.base import RoleAPIView, UserGroupsAPIView, UserProfileAPIView, AccountActivationView, AccountDeactivationView
 
-from .views.auth  import AuthTokenReadAPIView, LoginAccountCreateView, RefreshAccessTokenView, UsernameRecoveryRequestView, UnauthPasswordResetRequestView, UnauthPasswordResetView, AuthPasswdEditAPIView, AuthUsernameEditAPIView, LoginView, LogoutView, PermissionView
+from .views.auth  import LoginAccountCreateView, RefreshAccessTokenView, UsernameRecoveryRequestView, UnauthPasswordResetRequestView, UnauthPasswordResetView, AuthPasswdEditAPIView, AuthUsernameEditAPIView, LoginView, LogoutView, PermissionView
 
 from .apps import UserManagementConfig as UserMgtCfg
 
@@ -24,7 +24,6 @@ urlpatterns = [
     path(UserMgtCfg.api_url[AccountActivationView.__name__],  AccountActivationView.as_view()),
     path(UserMgtCfg.api_url[AccountDeactivationView.__name__],  AccountDeactivationView.as_view()),
 
-    path(UserMgtCfg.api_url[AuthTokenReadAPIView.__name__],  AuthTokenReadAPIView.as_view()  ),
     path(UserMgtCfg.api_url[LoginAccountCreateView.__name__],  LoginAccountCreateView.as_view()  ),
     path(UserMgtCfg.api_url[UsernameRecoveryRequestView.__name__],  UsernameRecoveryRequestView.as_view()  ),
     path(UserMgtCfg.api_url[UnauthPasswordResetRequestView.__name__],  UnauthPasswordResetRequestView.as_view()  ),
