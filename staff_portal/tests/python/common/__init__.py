@@ -44,6 +44,19 @@ def listitem_rand_assigner(list_, min_num_chosen:int=2, max_num_chosen:int=-1, d
 ## end of listitem_rand_assigner
 
 
+def capture_error(testcase, err_cls, exe_fn, exe_kwargs=None):
+    error_caught = None
+    with testcase.assertRaises(err_cls):
+        try:
+            exe_kwargs = exe_kwargs or {}
+            exe_fn(**exe_kwargs)
+        except err_cls as e:
+            error_caught = e
+            raise
+    testcase.assertIsNotNone(error_caught)
+    return error_caught
+
+
 class HttpRequestDataGen:
     rand_create = True
 

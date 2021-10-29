@@ -51,10 +51,13 @@ class AbstractCryptoKeyPersistHandler(AbstractKeystorePersistReadMixin):
     VALID_FIELDS = ['exp', 'alg', 'kty', 'use']
 
     def __init__(self, name='default persist handler', expired_after_days=DEFAULT_EXPIRED_AFTER_DAYS,
-            max_expired_after_days=MAX_EXPIRED_AFTER_DAYS):
+            max_expired_after_days=MAX_EXPIRED_AFTER_DAYS, flush_threshold=FLUSH_THRESHOLD_NUM_ITEMS,
+            auto_flush=True):
         self.name = name
         self.expired_after_days = expired_after_days
         self.max_expired_after_days = max_expired_after_days
+        self._flush_threshold_num_items = flush_threshold
+        self._auto_flush = auto_flush
         self._uncommitted_add = {}
         self._uncommitted_delete = set() #[]
 
@@ -67,6 +70,22 @@ class AbstractCryptoKeyPersistHandler(AbstractKeystorePersistReadMixin):
     def expired_after_days(self, value):
         assert value > 0 and isinstance(value, int), "expired_after_days has to be positive integer, but receive %s" % value
         self._expired_after_days = timedelta(days=value)
+
+    @property
+    def auto_flush(self):
+        return self._auto_flush
+
+    @auto_flush.setter
+    def auto_flush(self, value:bool):
+        self._auto_flush = value
+
+    @property
+    def flush_threshold(self):
+        return self._flush_threshold_num_items
+
+    @flush_threshold.setter
+    def flush_threshold(self, value:int):
+        self._flush_threshold_num_items = value
 
     def __len__(self):
         """ subclasses should return number of crypto keys available """
@@ -108,15 +127,17 @@ class AbstractCryptoKeyPersistHandler(AbstractKeystorePersistReadMixin):
         self._set_item_error_check(key_id=key_id , item=item)
         key_ids = self.iterate_key_ids()
         if key_id in key_ids:
-            errmsg = 'key_id %s already exists, callers have to remove it before overwriting it' % key_id
-            raise KeyError(errmsg)
+            self._remove(key_ids=[key_id])
         self._uncommitted_add[key_id] = item
         self._flush_if_full()
 
     def remove(self, key_ids):
+        self._remove(key_ids=key_ids)
+        self._flush_if_full()
+
+    def _remove(self, key_ids):
         key_ids = key_ids or []
         self._uncommitted_delete = self._uncommitted_delete | set(key_ids)
-        self._flush_if_full()
 
     def evict_expired_keys(self, date_limit=None):
         result = [] # used to log evicted key items
@@ -134,10 +155,14 @@ class AbstractCryptoKeyPersistHandler(AbstractKeystorePersistReadMixin):
         self.remove(key_ids=evict)
         return result
 
-    def _flush_if_full(self):
+    @property
+    def is_full(self):
         num_adding = len(self._uncommitted_add.keys())
         num_deleting = len(self._uncommitted_delete)
-        if (num_adding + num_deleting) >= self.FLUSH_THRESHOLD_NUM_ITEMS :
+        return (num_adding + num_deleting) >= self.flush_threshold
+
+    def _flush_if_full(self):
+        if self.is_full and self.auto_flush:
             self.flush()
         else:
             # TODO, log if number of uncommitted items don't meet the threshold
@@ -203,6 +228,9 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
           of key-value pair, whose the value part is a nested JSON object
     """
     NUM_BACKUP_FILES_KEPT = 5
+    JSONFILE_START_LINE  = '{\n' # left  curly bracket
+    JSONFILE_END_LINE    = '}\n' # right curly bracket
+
     def __init__(self, filepath, **kwargs):
         super().__init__(**kwargs)
         import ijson
@@ -216,8 +244,6 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
     def flush(self):
         if not self._uncommitted_add and not self._uncommitted_delete:
             return
-        JSONFILE_START_LINE  = '{\n' # left  curly bracket
-        JSONFILE_END_LINE = '}\n' # right curly bracket
         tmp_wr_file_name = '%s.new' % self._file.name
         pos_add = 0
         prev_wr_rawline = ''
@@ -229,11 +255,11 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
             # telling position tell() on read file is disabled when iterating
             # each line in the file object
             for rawline in self._file:
-                if rawline == JSONFILE_START_LINE:
+                if rawline == self.JSONFILE_START_LINE:
                     prev_wr_rawline = rawline
                     prev_wr_file_pos = tmp_wr_file.tell()
                     tmp_wr_file.write(rawline)
-                elif rawline == JSONFILE_END_LINE: # adjust comma in last object
+                elif rawline == self.JSONFILE_END_LINE: # adjust comma in last object
                     self._adjust_comma_on_flush_deletion(wr_file=tmp_wr_file, prev_wr_file_pos=prev_wr_file_pos,
                             prev_wr_rawline=prev_wr_rawline)
                 else:
@@ -250,7 +276,7 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
                         prev_wr_file_pos = tmp_wr_file.tell() # record current position before writing this line
                         tmp_wr_file.write(rawline)
             self._add_items_on_flush(wr_file=tmp_wr_file) # add new objects
-            tmp_wr_file.write(JSONFILE_END_LINE)
+            tmp_wr_file.write(self.JSONFILE_END_LINE)
         self._switch_files_on_flush(wr_file_path=tmp_wr_file_name)
         self._uncommitted_delete.clear()
         self._uncommitted_add.clear()
@@ -343,9 +369,11 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
             elif evt_label == 'end_map':
                 if key_id and prefix == key_id:
                     yield key_id, yld_item # TODO:clone the item or not ?
+                    # callers cannot use dict() or tuple() etc. to fetch all the data
                     yld_item.clear()
 
     def __getitem__(self, key_id):
+        # currently this function limits to fetch those items which are already committed & stored 
         item = None
         self._file.seek(0)
         generator = self._ijson.items(self._file, key_id)
