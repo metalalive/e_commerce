@@ -22,6 +22,7 @@ class WebAPIurl(BaseUriLookup):
             #### '^usergrps/edit/(?P<IDs>[\d/]+)$',
             'AuthUsernameEditAPIView': 'account/username',
             'AuthPasswdEditAPIView':   'account/password',
+            'JWKSPublicKeyView': 'jwks',
     } # end of _urls
 #### end of WebAPIurlMeta
 

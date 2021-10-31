@@ -1,9 +1,12 @@
 import copy
+import json
+import ijson
 import logging
 from datetime import datetime, timezone, timedelta
 
 from django.conf   import  settings as django_settings
 from django.core.exceptions     import ValidationError
+from django.http.response       import StreamingHttpResponse as DjangoStreamingHttpResponse
 from django.utils.http          import http_date
 from django.utils.module_loading import import_string
 from django.contrib.contenttypes.models  import ContentType
@@ -393,4 +396,35 @@ class RefreshAccessTokenView(APIView):
         payload.update(profile_serial) # roles, quota
         token.payload.update(payload)
         return token.encode(keystore=keystore)
+## end of class RefreshAccessTokenView
+
+
+def _stream_jwks_file(filepath):
+    buff = ['{"keys":[']
+    with open(filepath, mode='r') as f: # TODO, handle missing file error ?
+        iterator = ijson.kvitems(f, prefix='')
+        for k,v in iterator:
+            v['kid'] = k
+            buff.append(json.dumps(v))
+            yield ''.join(buff)
+            buff.clear()
+            buff.append(',')
+        buff.pop() # shouldn't have comma in last next item of the list
+    buff.append(']}')
+    #buff.append('], "test123": "value456"}')
+    yield ''.join(buff)
+
+
+class JWKSPublicKeyView(APIView):
+    def get(self, request, *args, **kwargs):
+        try:
+            filepath = django_settings.AUTH_KEYSTORE['persist_pubkey_handler']['init_kwargs']['filepath']
+            status = RestStatus.HTTP_200_OK
+        except (AttributeError, KeyError) as e:
+            status = RestStatus.HTTP_404_NOT_FOUND
+            filepath = ''
+            log_args = ['msg', e]
+            _logger.warning(None, *log_args, request=request)
+        return DjangoStreamingHttpResponse(streaming_content=_stream_jwks_file(filepath=filepath),
+                    content_type='application/json', status=status)
 

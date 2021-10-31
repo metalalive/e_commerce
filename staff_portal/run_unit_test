@@ -28,5 +28,6 @@ python3.9 ./manage.py test tests.python.middlewares.cors  --settings user_manage
 python3.9 ./manage.py test tests.python.middlewares.csrf  --settings user_management.settings  --verbosity=2
 python3.9 -m unittest tests.python.keystore.persistence  -v
 python3.9 -m unittest tests.python.keystore.keygen  -v
+python3.9 -m unittest tests.python.keystore.manager  -v
 python3.9 -m unittest tests.python.util.graph -v
 

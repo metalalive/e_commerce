@@ -1,6 +1,7 @@
 import random
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.test import TransactionTestCase
 from django.conf import settings as django_settings
@@ -9,9 +10,10 @@ from django.contrib.contenttypes.models  import ContentType
 from django.contrib.auth.models import Permission as ModelLevelPermission
 from rest_framework.settings    import api_settings as drf_settings
 from jwt.exceptions import MissingRequiredClaimError, InvalidAudienceError
+from jwt.api_jwk import PyJWK
 
 from common.auth.keystore import create_keystore_helper
-from common.auth.jwt import JWT
+from common.auth.jwt import JWT, JwkRsaKeygenHandler
 from common.cors.middleware import conf as cors_cfg, ACCESS_CONTROL_REQUEST_METHOD, ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN,  ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_MAX_AGE
 from common.util.python import sort_nested_object, import_module_string
 from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
@@ -25,21 +27,67 @@ from tests.python.common.django import _BaseMockTestClientInfoMixin
 from user_management.tests.common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin
 
 
-_keystore = create_keystore_helper(cfg=django_settings.AUTH_KEYSTORE,  import_fn=import_module_string)
 non_fd_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 _expiry_time = django_timezone.now() + timedelta(minutes=5)
 
-class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin):
+
+class KeystoreMixin:
+    _init_config = {
+        'keystore': 'common.auth.keystore.BaseAuthKeyStore',
+        'persist_secret_handler': {
+            'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+            'init_kwargs': {
+                'filepath': './tmp/cache/test/jwks/privkey/current.json',
+                'name':'secret', 'expired_after_days': 7, 'flush_threshold':4,
+            },
+        },
+        'persist_pubkey_handler': {
+            'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+            'init_kwargs': {
+                'filepath': './tmp/cache/test/jwks/pubkey/current.json',
+                'name':'pubkey', 'expired_after_days': 9, 'flush_threshold':4,
+            },
+        },
+    }
+
+    def _setup_keystore(self):
+        from tests.python.keystore.persistence import _setup_keyfile
+        persist_labels = ('persist_pubkey_handler', 'persist_secret_handler')
+        self.tear_down_files = {}
+        for label in persist_labels:
+            filepath = self._init_config[label]['init_kwargs']['filepath']
+            del_dir, del_file = _setup_keyfile(filepath=filepath)
+            item = {'del_dir':del_dir, 'del_file':del_file, 'filepath':filepath}
+            self.tear_down_files[label] = item
+        num_keys = self._init_config['persist_secret_handler']['init_kwargs']['flush_threshold']
+        keystore = create_keystore_helper(cfg=self._init_config, import_fn=import_module_string)
+        keygen_handler = JwkRsaKeygenHandler()
+        result = keystore.rotate(keygen_handler=keygen_handler, key_size_in_bits=2048,
+                    num_keys=num_keys, date_limit=None)
+        self._keys_metadata = result['new']
+        self._keystore = keystore
+        ## create_keystore_helper(cfg=django_settings.AUTH_KEYSTORE,  import_fn=import_module_string)
+
+    def _teardown_keystore(self):
+        from tests.python.keystore.persistence import _teardown_keyfile
+        for item in self.tear_down_files.values():
+            _teardown_keyfile( filepath=item['filepath'], del_dir=item['del_dir'],
+                del_file=item['del_file'] )
+
+
+class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreMixin):
     path = '/login'
     expect_err_msg = 'authentication failure'
 
     def setUp(self):
+        self._setup_keystore()
         self.api_call_kwargs = client_req_csrf_setup()
         self.api_call_kwargs['path'] = self.path
         self.api_call_kwargs['method'] = 'post'
 
     def tearDown(self):
         self._client.cookies.clear()
+        self._teardown_keystore()
 
     def test_auth_failure(self):
         profile_data = [
@@ -75,7 +123,6 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin):
             self.assertEqual(err_info[non_fd_err_key][0], self.expect_err_msg)
     ## end of test_auth_failure()
 
-
     def test_ok(self):
         profile_data = {'id': 4, 'first_name':'Mathihi', 'last_name':'Raj'}
         profile = GenericUserProfile.objects.create(**profile_data)
@@ -84,7 +131,8 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin):
         account = LoginAccount.objects.create_user(**account_data)
         self.api_call_kwargs['body'] = {'username':'ImStaff', 'password':'dontexpose'}
         # first login request
-        response = self._send_request_to_backend(**self.api_call_kwargs)
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
         csrf_token = response.cookies.get(django_settings.CSRF_COOKIE_NAME, None)
         refresh_jwt = response.cookies.get(django_settings.JWT_NAME_REFRESH_TOKEN, None)
@@ -110,15 +158,15 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin):
         self.assertIn(_jwt.header['alg'] , ('RS256', 'RS384', 'RS512'))
         payld_unverified = _jwt.payload
         with self.assertRaises(MissingRequiredClaimError):
-            payld_verified = _jwt.verify(keystore=_keystore, audience=['sale', 'payment'], raise_if_failed=True)
-        payld_verified = _jwt.verify(keystore=_keystore, audience=None, raise_if_failed=True)
+            payld_verified = _jwt.verify(keystore=self._keystore, audience=['sale', 'payment'], raise_if_failed=True)
+        payld_verified = _jwt.verify(keystore=self._keystore, audience=None, raise_if_failed=True)
         self.assertNotEqual(payld_verified , None)
         self.assertIsNone(payld_verified.get('aud')) # refresh token doesn't include `aud` field
         return payld_verified
 ## end of class LoginTestCase
 
 
-class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin):
+class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin, KeystoreMixin):
     path = '/refresh_access_token'
 
     def _setup_role(self, profile, approved_by):
@@ -161,7 +209,9 @@ class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMix
         return  material_data
 
     def setUp(self):
-        self._profile, _ = self._auth_setup(testcase=self)
+        self._setup_keystore()
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            self._profile, _ = self._auth_setup(testcase=self)
         self.api_call_kwargs = client_req_csrf_setup()
         self.api_call_kwargs.update({'path':self.path, 'method':'get'})
         profile_2nd_data = {'id': 4, 'first_name':'Texassal', 'last_name':'Bovaski'}
@@ -171,12 +221,13 @@ class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMix
 
     def tearDown(self):
         self._client.cookies.clear()
-
+        self._teardown_keystore()
 
     def test_ok(self):
         expect_audience = ['user_management']
         self.api_call_kwargs['extra_query_params'] = {'audience': ','.join(expect_audience)}
-        response = self._send_request_to_backend(**self.api_call_kwargs)
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
         result = response.json()
         expect_jwks_url = '%s/jwks' % (cors_cfg.ALLOWED_ORIGIN['user_management'])
@@ -220,7 +271,8 @@ class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMix
     def test_invalid_app_labels(self):
         expect_audience = ['non_existent_app_1', 'non_existent_app_2']
         self.api_call_kwargs['extra_query_params'] = {'audience': ','.join(expect_audience)}
-        response = self._send_request_to_backend(**self.api_call_kwargs)
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 400)
         result = response.json()
         self.assertEqual(result[non_fd_err_key][0] , 'invalid audience field')
@@ -230,7 +282,8 @@ class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMix
         self._profile.roles.filter(role__id=ROLE_ID_STAFF).delete(hard=True)
         expect_audience = ['non_existent_app_1', 'fileupload']
         self.api_call_kwargs['extra_query_params'] = {'audience': ','.join(expect_audience)}
-        response = self._send_request_to_backend(**self.api_call_kwargs)
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            response = self._send_request_to_backend(**self.api_call_kwargs)
         result = response.json()
         self.assertEqual(int(response.status_code), 403)
         self.assertEqual(result[non_fd_err_key][0] , 'the user does not have access to these resource services listed in audience field')
@@ -242,8 +295,8 @@ class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMix
         self.assertIn(_jwt.header['alg'] , ('RS256', 'RS384', 'RS512'))
         payld_unverified = _jwt.payload
         with self.assertRaises(InvalidAudienceError):
-            payld_verified = _jwt.verify(keystore=_keystore, audience=['delivery', 'payment'], raise_if_failed=True)
-        payld_verified = _jwt.verify(keystore=_keystore, audience=expect_audience, raise_if_failed=True)
+            payld_verified = _jwt.verify(keystore=self._keystore, audience=['delivery', 'payment'], raise_if_failed=True)
+        payld_verified = _jwt.verify(keystore=self._keystore, audience=expect_audience, raise_if_failed=True)
         self.assertNotEqual(payld_verified , None)
         self.assertIsNotNone(payld_verified.get('aud')) # access token should include `aud` field
         return payld_verified
@@ -251,16 +304,50 @@ class RefreshAccessTokenTestCase(TransactionTestCase, _BaseMockTestClientInfoMix
 
 
 
-class LogoutTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin):
+class LogoutTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin, KeystoreMixin):
     path = '/logout'
     def setUp(self):
-        self._profile, _ = self._auth_setup(testcase=self)
+        self._setup_keystore()
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            self._profile, _ = self._auth_setup(testcase=self)
         self.api_call_kwargs = client_req_csrf_setup()
         self.api_call_kwargs.update({'path':self.path, 'method':'post'})
 
+    def tearDown(self):
+        self._client.cookies.clear()
+        self._teardown_keystore()
+
     def test_ok(self):
-        response = self._send_request_to_backend(**self.api_call_kwargs)
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
-        response = self._send_request_to_backend(**self.api_call_kwargs)
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 403)
+
+
+class JwksPublicKeyTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreMixin):
+    path = '/jwks'
+
+    def setUp(self):
+        self._setup_keystore()
+
+    def tearDown(self):
+        self._teardown_keystore()
+
+    def test_ok(self):
+        api_call_kwargs = client_req_csrf_setup()
+        api_call_kwargs.update({'path':self.path, 'method':'get'})
+        with patch('django.conf.settings.AUTH_KEYSTORE', self._init_config) as mocked_obj:
+            response = self._send_request_to_backend(**api_call_kwargs)
+        self.assertEqual(int(response.status_code), 200)
+        rawdata = []
+        for content in response.streaming_content:
+            rawdata.append(content.decode())
+        rawdata = ''.join(rawdata)
+        jwks_dict = json.loads(rawdata)
+        for jwk_dict in jwks_dict['keys']:
+            jwk_pub  = PyJWK(jwk_data=jwk_dict)
+            self.assertEqual(jwk_dict['kid'], jwk_pub.key_id)
+
 
