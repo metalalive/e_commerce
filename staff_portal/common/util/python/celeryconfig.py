@@ -55,11 +55,11 @@ task_routes = {
     {
         'queue':'periodic_default',
     },
-    'common.util.python.periodic_tasks.clean_expired_web_session':
+    'common.util.python.periodic_tasks.clean_old_log_localhost':
     {
         'queue':'periodic_default',
     },
-    'common.util.python.periodic_tasks.clean_old_log_data':
+    'common.util.python.periodic_tasks.clean_old_log_elasticsearch':
     {
         'queue':'periodic_default',
     },

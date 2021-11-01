@@ -52,7 +52,6 @@
         "time_deleted": null,
         "first_name": "Default",
         "last_name": "Staff",
-        "active": true,
         "time_created": "2020-07-15T16:14:11.242Z",
         "last_updated": "2020-12-09T07:31:47.897Z"
     }
@@ -64,7 +63,6 @@
         "time_deleted": null,
         "first_name": "Default",
         "last_name": "Superuser",
-        "active": true,
         "time_created": "2020-07-14T13:53:46.931Z",
         "last_updated": "2020-12-26T18:46:02.781Z"
     }
@@ -77,7 +75,7 @@
         "user_type": -1,
         "user_id": 1,
         "role": 1,
-        "last_updated": "2020-11-09T08:47:46.437Z",
+        "expiry": null,
         "approved_by": 1
     }
 },
@@ -89,7 +87,7 @@
         "user_type": -1,
         "user_id": 2,
         "role": 2,
-        "last_updated": "2020-11-14T14:35:52.791Z",
+        "expiry": null,
         "approved_by": 1
     }
 },

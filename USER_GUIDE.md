@@ -1,37 +1,6 @@
 
 switch to python virtual environment for following steps
 
-### Schema Migration
-#### Python/Django
-
-* create `django_migration` database table, Django does this in its very first migration operation
-
-* For migrating database schema of default Django applications like `auth` and `contenttypes`, you should run `django_init_migration.py` instead of `manage.py makemigrations` provided by Django.
-```
-DJANGO_SETTINGS_MODULE='user_management.settings' python3.9 ./django_init_migration.py
-```
-
-`django_init_migration.py` copies hand-written migration files for  `django.contribs.auth` and `django.contribs.contenttypes` to the OS path of the applications, that is, `<DJANGO_INSTALL_PATH>/django/contribs/auth/migrations`. I need to do this to :
-* Avoid database table creation like `auth_user` or `auth_group` which will no longer used in this project.
-* Each backend application includes distinct database user acting as supervisor at model level, I need to assign proper read/write permission to each datbaase user that belongs to each application.
-
-* Use existing migration files, do not genearte it by yourself.
-
-By default Django provides a command which generates migration file template as shown below:
-
-```
-python3.9 manage.py makemigrations user_management  --settings user_management.settings
-python3.9 manage.py makemigrations product          --settings product.settings
-```
-
-But I add extra script to migration file, which helps to automatically grant accesses to appropriate database user when running `migrate` command in Django. please use existing migration files instead of genearting it by yourself
-
-* Then you run `migrate` command on each of the application :
-
-```
-python3.9 manage.py migrate user_management  0001  --settings user_management.settings  --database site_dba
-python3.9 manage.py migrate product       0004  --settings product.settings  --database site_dba
-```
 
 
 

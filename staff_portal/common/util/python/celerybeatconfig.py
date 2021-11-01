@@ -19,14 +19,15 @@ beat_schedule = {
         'schedule':7200,
         'args':(),
     },
-    'expired-web-session-cleanup': {
-        'task':'common.util.python.periodic_tasks.clean_expired_web_session',
+    'old-log-localdisk-cleanup': {
+        'task':'common.util.python.periodic_tasks.clean_old_log_localhost',
         'options': {'queue': 'periodic_default'},
-        'schedule': crontab(hour=2, minute=0, day_of_week='tue,thu'), # every Thursday and Thursday, 2 am
-        ##'schedule':30,
+        'schedule': crontab(hour=2, minute=0, day_of_week='tue,thu,sat'), # every Thursday and Thursday, 2 am
+        #'schedule':20,
         'args':(),
+        'kwargs': {'max_days_keep':30},
     },
-    'expired-auth-req-cleanup': {
+    'expired-rst-req-cleanup': {
         'task':'user_management.async_tasks.clean_expired_reset_requests',
         'options': {'queue': 'usermgt_default'},
         'schedule': crontab(hour=3, minute=00), ## daily 3:00 am
@@ -65,8 +66,8 @@ beat_schedule = {
             }]
         },
     }, ## end of periodic task rotate-auth-keystores
-    'old-log-data-cleanup': {
-        'task':'common.util.python.periodic_tasks.clean_old_log_data',
+    'old-log-es-cleanup': {
+        'task':'common.util.python.periodic_tasks.clean_old_log_elasticsearch',
         'options': {'queue': 'periodic_default'},
         'schedule': crontab(hour=3, minute=30), # daily 3:30 am
         'kwargs': {'days':7, 'weeks':0, 'scroll_size': 1200, 'requests_per_second':-1},

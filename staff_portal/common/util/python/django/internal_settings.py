@@ -28,31 +28,26 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 
 # Application definition
-INSTALLED_APPS = [
-    #### 'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-]
+INSTALLED_APPS = []
 
 # Note:
 # this project is staff-only backend site for PoS system, concurrent login
 # on individual account is prohibited.
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'common.auth.middleware.ExtendedCsrfViewMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
 ]
 
 # no URL is allowed
 ROOT_URLCONF = None
 
-TEMPLATES = []
+TEMPLATES = [
+    { # will be used when rendering email content
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+    }
+]
 
-FIXTURE_DIRS = ['my_fixtures',]
+FIXTURE_DIRS = []
 
 WSGI_APPLICATION = 'restaurant.wsgi.application'
 
@@ -64,10 +59,6 @@ DATABASES = { # will be update with secrets at the bottom of file
     'default': { # only give minimal privilege to start django app server
         'ENGINE': 'django.db.backends.mysql',
         'CONN_MAX_AGE': 0, # set 0 only for debugging purpose
-    },
-    'site_dba': { # apply this setup only when you run management commands at backend server
-        'ENGINE': 'django.db.backends.mysql',
-        'CONN_MAX_AGE': 0,
     },
 } # end of database settings
 
@@ -81,9 +72,6 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
     },
-    # {
-    #     'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    # },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
     },
@@ -93,27 +81,10 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-AUTHENTICATION_BACKENDS = ['common.auth.backends.ExtendedModelBackend']
-
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-# expire time may vary based on user groups or roles,
-# will need to configure this programmatically
-SESSION_COOKIE_AGE = 600
-
-### SESSION_ENGINE = 'django.contrib.sessions.backends.file'
-SESSION_ENGINE = 'common.sessions.backends.file'
-
-SESSION_SERIALIZER = 'common.sessions.serializers.ExtendedJSONSerializer'
-
-SESSION_FILE_PATH = os.path.join(BASE_DIR ,'tmp/sessions')
+AUTHENTICATION_BACKENDS = []
 
 # the name of request header used for CSRF authentication,
 # e.g. according to setting below, frontend may send request "anti-csrf-tok" in the header
-CSRF_HEADER_NAME = 'HTTP_X_ANTI_CSRF_TOK'
-
-CSRF_COOKIE_NAME = 'anticsrftok'
-
-CSRF_COOKIE_AGE  = 4
 
 
 CACHES = {
@@ -124,14 +95,6 @@ CACHES = {
             'OPTIONS': {
                 'MAX_ENTRIES': 512,
                 # TODO, figure out how to use KEY_PREFIX and KEY_FUNCTION
-                },
-            },
-        'user_session': {
-            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-            'LOCATION': os.path.join(BASE_DIR ,'tmp/cache/django/user_session'),
-            'TIMEOUT': 86400,
-            'OPTIONS': {
-                'MAX_ENTRIES': 512,
                 },
             },
         'log_level_change': {
@@ -329,12 +292,6 @@ LOGGING = {
 } # end of LOGGING
 
 
-REST_FRAMEWORK = {
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    #'PAGE_SIZE' : 40
-}
-
-
 
 # mailing function setup
 DEFAULT_FROM_EMAIL = 'system@yourproject.io'
@@ -345,6 +302,6 @@ EMAIL_USE_TLS = True
 from common.util.python.django.setup  import setup_secrets
 
 setup_secrets(secrets_path='./common/data/secrets.json', module_path=__name__, \
-       portal_type='staff', interface_type='api' )
+       portal_type='staff', interface_type='internal' )
 
 

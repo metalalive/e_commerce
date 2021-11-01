@@ -1,5 +1,6 @@
+import os as builtin_os
 from importlib import import_module
-from datetime  import date, time, timedelta
+from datetime  import datetime, date, time, timedelta
 import logging
 
 from django.conf   import  settings as django_settings
@@ -13,14 +14,26 @@ _logger = logging.getLogger(__name__)
 
 @celery_app.task
 @log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
-def clean_expired_web_session():
-    engine = import_module(django_settings.SESSION_ENGINE)
-    engine.SessionStore.clear_expired()
-
+def clean_old_log_localhost(max_days_keep=100):
+    num_removed = 0
+    curr_pos = django_settings.BASE_DIR
+    while curr_pos.name != 'staff_portal':
+        curr_pos = curr_pos.parent
+    log_path = curr_pos.joinpath('./tmp/log/staffsite')
+    if log_path.exists():
+        for curr_node in log_path.iterdir():
+            stat = curr_node.stat()
+            t0 = datetime.utcnow() - timedelta(days=max_days_keep)
+            t1 = datetime.utcfromtimestamp(stat.st_mtime)
+            if t0 > t1:
+                if curr_node.is_file:
+                    builtin_os.remove(curr_node)
+                    num_removed += 1
+    return num_removed
 
 @celery_app.task
 @log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
-def clean_old_log_data(days=1, weeks=52, scroll_size=1000, requests_per_second=-1): # 365 days by default
+def clean_old_log_elasticsearch(days=1, weeks=52, scroll_size=1000, requests_per_second=-1): # 365 days by default
     """
     clean up all log data created before current time minus time_delta
     """
@@ -73,6 +86,6 @@ def clean_old_log_data(days=1, weeks=52, scroll_size=1000, requests_per_second=-
         response['total_deleted'] = total_deleted
         responses.append(response)
     return responses
-# end of clean_old_log_data
+# end of clean_old_log_elasticsearch
 
 

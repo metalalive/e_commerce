@@ -18,7 +18,7 @@ from common.logging.logger import ExtendedLogger
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve(strict=True).parent.parent
+BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -68,17 +68,20 @@ WSGI_APPLICATION = 'common.util.python.django.wsgi.application'
 DATABASES = { # will be update with secrets at the bottom of file
     'default': { # only give minimal privilege to start django app server
         'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'ecommerce_usermgt',
         'CONN_MAX_AGE': 0, # set 0 only for debugging purpose
-        'TEST': {'NAME': 'test_Restaurant__app_usermgt'}
+        'TEST': {'NAME': 'test_ecommerce_usermgt'}
     },
     'site_dba': { # apply this setup only when you run management commands at backend server
         'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'ecommerce_usermgt',
         'CONN_MAX_AGE': 0,
     },
     'usermgt_service': {
         'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'ecommerce_usermgt',
         'CONN_MAX_AGE': 0,
-        'reversed_app_label': ['user_management', 'auth',]
+        'reversed_app_label': ['user_management',] # 'auth',
     },
 } # end of database settings
 

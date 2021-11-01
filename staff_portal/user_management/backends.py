@@ -18,8 +18,6 @@ def _get_role_permissions(user_obj):
     user_groups_query = '__'.join(related_names)
     # retrieve all low-level permissions granted to the given user
     # default query would be group__account_applied__account
-    import pdb
-    pdb.set_trace()
     return Permission.objects.filter(**{user_groups_query: user_obj})
 
 

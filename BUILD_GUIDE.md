@@ -22,6 +22,44 @@ Note
 * install C extension built for this project, by running `python ./common/util/c/setup.py install --record ./tmp/setuptools_install_files.txt` . Once you need to remove the installed extension , run `python -m pip uninstall my-c-extention-lib ; rm -rf ./build`
 * switch to the virtual environment you created above, before installing all other required libraries.
 
+
+### Schema Migration
+#### Python/Django
+
+set `managed = False` in `User` and `Group` class in `django.contrib.auth.models` , this project does not need the 2 models provided by Django, users need to avoid database table creation like `auth_user` or `auth_group` which will no longer used in this project.
+
+For initializing database schema, run the command below.
+```
+python3.9 -m  user_management.setup
+```
+The module `user_management.setup` automatically performs following operations :
+* create `django_migration` database table
+* create migration file(s) in the 2 Django applications: `contenttypes` and `auth`
+* copy hand-written migration file(s) for  `user_management` application path of the applications, that is, `user_management/migrations`. since there are raw SQL statements required during the migration.
+* migrate to database
+* auto-generate fixture data (which includes default roles, default login users ... etc.) for data migrations in `user_management` application
+
+For de-initializing database schema, run the command below.
+```
+python3.9 -m  user_management.setup reverse
+```
+
+##### Side note
+By default Django provides a command which generates migration file template as shown below, the commands below are covered by `user_management.setup` so you do not need to run them manually :
+```
+python3.9 manage.py makemigrations user_management  --settings user_management.settings.migration
+python3.9 manage.py makemigrations product          --settings product.settings.migration
+```
+
+* Then you run `migrate` command on each of the application :
+
+```
+python3.9 manage.py migrate user_management  0001  --settings user_management.settings  --database site_dba
+python3.9 manage.py migrate product       0004  --settings product.settings  --database site_dba
+```
+
+
+
 ### Test
 To run the test suite, execute following commands :
 ```
