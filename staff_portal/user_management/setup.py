@@ -64,13 +64,13 @@ def init_migration():
 def deinit_migration():
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'user_management.settings.migration')
     setup()
-    from django.contrib import contenttypes, auth
+    from django.contrib import auth
     import user_management
     options = {'database':'site_dba',}
     call_command('migrate', 'user_management', 'zero', **options)
     call_command('migrate', 'auth', 'zero', **options)
     call_command('migrate', 'contenttypes', 'zero', **options)
-    apps = (user_management, auth, contenttypes,)
+    apps = (user_management, auth,)
     for app in apps:
         app_path = Path(app.__file__).resolve(strict=True)
         migration_path = app_path.parent.joinpath('migrations')

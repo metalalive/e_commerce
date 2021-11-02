@@ -28,19 +28,21 @@ Note
 
 set `managed = False` in `User` and `Group` class in `django.contrib.auth.models` , this project does not need the 2 models provided by Django, users need to avoid database table creation like `auth_user` or `auth_group` which will no longer used in this project.
 
-For initializing database schema, run the command below.
+For initializing database schema, run the commands below in following order.
 ```
 python3.9 -m  user_management.setup
+python3.9 -m  product.setup
 ```
-The module `user_management.setup` automatically performs following operations :
+The modules above automatically performs following operations :
 * create `django_migration` database table
 * create migration file(s) in the 2 Django applications: `contenttypes` and `auth`
 * copy hand-written migration file(s) for  `user_management` application path of the applications, that is, `user_management/migrations`. since there are raw SQL statements required during the migration.
 * migrate to database
 * auto-generate fixture data (which includes default roles, default login users ... etc.) for data migrations in `user_management` application
 
-For de-initializing database schema, run the command below.
+For de-initializing database schema, run the commands below.
 ```
+python3.9 -m  product.setup reverse
 python3.9 -m  user_management.setup reverse
 ```
 

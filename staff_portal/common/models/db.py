@@ -476,7 +476,7 @@ class ServiceModelRouter:
         else:
             return db_tag_1 == db_tag_2
 
-    def allow_migrate(self, db, app_label, **hints):
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
         #log_args = ['db', db, 'hints', hints, 'app_label', app_label]
         #_logger.debug(None, *log_args)
         return None

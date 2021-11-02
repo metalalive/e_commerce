@@ -20,7 +20,7 @@ from common.models.fields  import CompoundPrimaryKeyField
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
 from softdelete.models import  SoftDeleteObjectMixin
 
-from .common import ProductmgtChangeSet, ProductmgtSoftDeleteRecord, _BaseIngredientManager, _BaseIngredientQuerySet , BaseProductIngredient, _UserProfileMixin, DB_ALIAS_APPLIED, _atomicity_fn
+from .common import ProductmgtChangeSet, ProductmgtSoftDeleteRecord, _BaseIngredientManager, _BaseIngredientQuerySet , BaseProductIngredient, _UserProfileMixin, DB_ALIAS_APPLIED, _atomicity_fn, _MatCodeOptions
 # The term "product" here means :
 # * items for sale (saleable)
 # * items bought from suppliers, and then used as material of your product (non-saleable)
@@ -359,6 +359,7 @@ class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfile
 
 
 class ProductSaleableItem(AbstractProduct):
+    quota_material = _MatCodeOptions.MAX_NUM_SALE_ITEMS
     class Meta(AbstractProduct.Meta):
         db_table = 'product_saleable_item'
 
@@ -378,6 +379,7 @@ class ProductSaleableItem(AbstractProduct):
 
 
 class ProductSaleablePackage(AbstractProduct):
+    quota_material = _MatCodeOptions.MAX_NUM_SALE_PKGS
     class Meta(AbstractProduct.Meta):
         db_table = 'product_saleable_package'
 

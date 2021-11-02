@@ -228,7 +228,7 @@ LOGGING = {
                 'level': 'WARNING',
                 'formatter': 'shortened_fmt',
                 'class': 'logging.handlers.TimedRotatingFileHandler',
-                'filename': str(os.path.join(_LOG_BASE_DIR, 'default.log')),
+                'filename': str(os.path.join(_LOG_BASE_DIR, 'usermgt_default.log')),
                 # daily log, keep all log files for one year
                 'backupCount': 366,
                 # new file is created every 0 am (local time)
@@ -240,7 +240,7 @@ LOGGING = {
                 'level': 'INFO',
                 'formatter': 'dbg_view_fmt',
                 'class': 'logging.handlers.TimedRotatingFileHandler',
-                'filename': str(os.path.join(_LOG_BASE_DIR, 'views.log')),
+                'filename': str(os.path.join(_LOG_BASE_DIR, 'usermgt_views.log')),
                 'backupCount': 150,
                 'atTime': time(hour=0, minute=0, second=0),
                 'encoding': 'utf-8',

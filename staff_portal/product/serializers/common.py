@@ -88,7 +88,7 @@ class AttrValueListSerializer(AugmentIngredientRefMixin, BulkUpdateListSerialize
             err_msg_pattern = ''.join(err_msg_pattern)
             unique_id_checker = UniqueListItemsValidator( fields=['id'],
                     error_cls=DRFRequestDataConflictError, err_msg_pattern=err_msg_pattern)
-            unique_id_checker(value=value)
+            unique_id_checker(value=value, caller=self)
         return value
 ## end of class AttrValueListSerializer
 
@@ -173,7 +173,7 @@ class BaseIngredientListSerializer(BulkUpdateListSerializer):
         id_required = self.child.fields['id'].required
         if id_required:
             unique_id_checker = UniqueListItemsValidator(fields=['id'], error_cls=DRFRequestDataConflictError)
-            unique_id_checker(value=value)
+            unique_id_checker(value=value, caller=self)
         return value
 
 

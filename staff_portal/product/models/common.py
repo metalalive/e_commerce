@@ -5,6 +5,7 @@ from django.contrib.contenttypes.fields  import GenericRelation
 
 from softdelete.models import ChangeSet, SoftDeleteRecord, SoftDeleteQuerySet,  SoftDeleteManager,  SoftDeleteObjectMixin
 from common.util.python.django.setup import test_enable as django_test_enable
+from common.models.db import ServiceModelRouter
 
 
 DB_ALIAS_APPLIED = 'default' if django_test_enable else 'product_dev_service'
@@ -92,4 +93,26 @@ class _UserProfileMixin(models.Model):
     usrprof = models.PositiveIntegerField(unique=False, db_column='usrprof',)
 
 
+class _MatCodeOptions(models.IntegerChoices):
+    MAX_NUM_INGREDIENTS = 1
+    MAX_NUM_SALE_ITEMS = 2
+    MAX_NUM_SALE_PKGS  = 3
+
+
+class ModelRouter(ServiceModelRouter):
+    # TRICKY ! Django's makemigration command also invokes this function without any hints
+    # see the descriptions :
+    #     https://www.algotech.solutions/blog/python/django-migrations-and-how-to-manage-conflicts/
+    #     https://docs.djangoproject.com/en/dev/topics/db/multi-db/#allow_migrate
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
+        out = None
+        # the router has to let this product app know there are custom migration operations for the
+        # another database usermgt_service (in usermgt app), and usermgt app doesn't require all the
+        # models declared in this product app, 
+        if db == 'usermgt_service' and any(hints):
+            if app_label == 'contenttypes':
+                out = False
+            elif app_label == 'product':
+                out = False
+        return out
 

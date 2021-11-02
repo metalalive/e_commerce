@@ -153,6 +153,9 @@ class AbstractSaleableCompositeListSerializer(AugmentEditFieldsMixin, BulkUpdate
         return qset
 
     def _update_data_map(self, data):
+        # the model of this serializer has compound key which consists 2 referential fields that always exists.
+        # I cannot rely on the same function at parent class to determine whether an input data item should
+        # go to insertion map or update map, therefore override the same function at here
         ingredient_ids = self._retrieve_ingredient_ids(data)
         return {item[self.pk_field_name]: item for item in data if \
                 item[self.pk_field_name].pk in ingredient_ids}
@@ -209,7 +212,7 @@ class SaleItemIngredientsAppliedSerializer(AbstractSaleableCompositeSerializer):
         # ignore `data` argument to parent class serializer to avoid creating default id field
         self.fields['quantity'].validators.append(NumberBoundaryValidator(limit=0.0, larger_than=True, include=False))
         # the reference model has composite primary key, but there is no need to
-        # pass `sale_item` field as part of pk_field_name
+        # pass `sale_item` field as part of pk_field_name, also DO NOT pass `data` to ExtendedModelSerializer
         super().__init__(*args, pk_field_name='ingredient', **kwargs)
 
 

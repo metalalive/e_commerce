@@ -18,8 +18,7 @@ from common.logging.logger import ExtendedLogger
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve(strict=True).parent.parent
-
+BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -28,23 +27,23 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 # Application definition
 INSTALLED_APPS = [
-    'django.contrib.auth',
     'django.contrib.contenttypes',
     'rest_framework',
-    'softdelete.apps.SoftdeleteConfig',
     'product.apps.ProductConfig',
 ]
 
 MIDDLEWARE = [
+    'common.cors.middleware.CorsHeaderMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'common.csrf.middleware.ExtendedCsrfViewMiddleware',
 ]
 
 ROOT_URLCONF = 'product.urls'
 
 TEMPLATES = []
 
-FIXTURE_DIRS = ['my_fixtures',]
+FIXTURE_DIRS = ['migrations/django/product',]
 
 WSGI_APPLICATION = 'common.util.python.django.asgi.application'
 
@@ -55,33 +54,37 @@ WSGI_APPLICATION = 'common.util.python.django.asgi.application'
 DATABASES = { # will be update with secrets at the bottom of file
     'default': { # only give minimal privilege to start django app server
         'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'ecommerce_product',
         'CONN_MAX_AGE': 0, # set 0 only for debugging purpose
-        'TEST': {'NAME': 'test_Restaurant__app_product'}
+        'TEST': {'NAME': 'test_ecommerce_product'}
     },
     'site_dba': { # apply this setup only when you run management commands at backend server
         'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'ecommerce_product',
         'CONN_MAX_AGE': 0,
-    },
-    'limited_login_access': {
-        'ENGINE': 'django.db.backends.mysql',
-        'CONN_MAX_AGE': 0,
-        'reversed_app_label': ['auth',]
     },
     'product_dev_service': {
         'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'ecommerce_product',
         'CONN_MAX_AGE': 0,
         'reversed_app_label': ['product',],
-    } # if you uninstall the application `product` , you must also comment this setting off
+    }, # if you uninstall the application `product` , you must also comment this setting off
+    'usermgt_service': { # used for migrations
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'ecommerce_usermgt',
+        'CONN_MAX_AGE': 0,
+    },
 } # end of database settings
 
-DATABASE_ROUTERS = ['common.models.db.ServiceModelRouter']
+DATABASE_ROUTERS = ['product.models.common.ModelRouter']
 
 
 # Password validation
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = []
-AUTHENTICATION_BACKENDS = ['common.auth.backends.ForwardClientBackend']
+AUTHENTICATION_BACKENDS = []
+AUTH_USER_MODEL = 'product.RemoteUserAccount'
 
 
 CACHES = {
@@ -120,7 +123,7 @@ USE_TZ = True
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 400
 
 # use bcrypt + SHA256 as default password hashing function.
-PASSWORD_HASHERS = ['django.contrib.auth.hashers.BCryptSHA256PasswordHasher',]
+PASSWORD_HASHERS = []
 
 # logging
 _LOG_BASE_DIR = os.path.join(BASE_DIR ,'tmp/log/staffsite')
@@ -156,7 +159,7 @@ LOGGING = {
                 'level': 'WARNING',
                 'formatter': 'shortened_fmt',
                 'class': 'logging.handlers.TimedRotatingFileHandler',
-                'filename': str(os.path.join(_LOG_BASE_DIR, 'default.log')),
+                'filename': str(os.path.join(_LOG_BASE_DIR, 'productmgt_default.log')),
                 # daily log, keep all log files for one year
                 'backupCount': 366,
                 # new file is created every 0 am (local time)
@@ -168,7 +171,7 @@ LOGGING = {
                 'level': 'WARNING',
                 'formatter': 'dbg_view_fmt',
                 'class': 'logging.handlers.TimedRotatingFileHandler',
-                'filename': str(os.path.join(_LOG_BASE_DIR, 'views.log')),
+                'filename': str(os.path.join(_LOG_BASE_DIR, 'productmgt_views.log')),
                 'backupCount': 150,
                 'atTime': time(hour=0, minute=0, second=0),
                 'encoding': 'utf-8',
@@ -199,7 +202,7 @@ LOGGING = {
         }, # end of handlers section
         'loggers': {
             'daphne': {
-                'level': 'INFO',
+                'level': 'WARNING',
                 'handlers': ['console', 'default_file'],
             },
             'common.views.mixins': {

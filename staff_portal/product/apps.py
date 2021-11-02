@@ -24,8 +24,4 @@ class ProductConfig(AppConfig):
         patch_kombu_pool()
         from common.models.db import monkeypatch_django_db
         monkeypatch_django_db()
-        from common.models.migrations import monkeypatch_django_migration
-        monkeypatch_django_migration()
-        from common.auth.django.login import monkeypatch_baseusermgr
-        monkeypatch_baseusermgr()
 
