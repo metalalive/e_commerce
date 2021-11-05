@@ -1,6 +1,7 @@
 from functools import partial
 from django.db  import models, transaction
 
+from common.models.enums import AppCodeOptions
 from common.util.python.django.setup import test_enable as django_test_enable
 from softdelete.models import ChangeSet, SoftDeleteRecord
 
@@ -19,12 +20,4 @@ class UsermgtSoftDeleteRecord(SoftDeleteRecord):
         db_table = 'usermgt_soft_delete_record'
     changeset = UsermgtChangeSet.foreignkey_fieldtype()
 
-
-class AppCodeOptions(models.IntegerChoices):
-    user_management = 1
-    product = 2
-    fileupload = 3
-    purchase = 4
-    sale = 5
-    inventory = 6
 

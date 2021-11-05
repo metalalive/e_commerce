@@ -12,6 +12,7 @@ from rest_framework.settings import DEFAULTS as drf_default_settings
 from common.util.python import sort_nested_object
 from common.util.python.messaging.rpc import RpcReplyEvent
 from product.permissions import SaleableItemPermissions
+from product.models.common import _MatCodeOptions
 
 from product.tests.common import _MockTestClientInfoMixin, assert_view_permission_denied, listitem_rand_assigner, rand_gen_request_body, http_request_body_template, assert_view_bulk_create_with_response, assert_view_unclassified_attributes, SoftDeleteCommonTestMixin
 
@@ -22,8 +23,9 @@ from  .common import _fixtures as model_fixtures, _saleitem_related_instance_set
 class SaleableItemBaseViewTestCase(TransactionTestCase, _MockTestClientInfoMixin, HttpRequestDataGenSaleableItem):
     permission_class = SaleableItemPermissions
 
-    def refresh_req_data(self):
-        return super().refresh_req_data(fixture_source=model_fixtures['ProductSaleableItem'],
+    def refresh_req_data(self, fixture_source=None):
+        fixture_source = fixture_source or model_fixtures['ProductSaleableItem']
+        return super().refresh_req_data(fixture_source=fixture_source,
                 http_request_body_template=http_request_body_template['ProductSaleableItem'])
 
     def setUp(self):
@@ -43,6 +45,10 @@ class SaleableItemBaseViewTestCase(TransactionTestCase, _MockTestClientInfoMixin
 
 class SaleableItemCreationTestCase(SaleableItemBaseViewTestCase):
     path = '/saleableitems'
+
+    def tearDown(self):
+        self.rand_create = True
+        super().tearDown()
 
     def test_permission_denied(self):
         assert_view_permission_denied( testcase=self, request_body_data=self._request_data, http_method='post',
@@ -111,6 +117,39 @@ class SaleableItemCreationTestCase(SaleableItemBaseViewTestCase):
             err_msg = err_item['ingredients_applied'][0]['ingredient'][0]
             patt_pos = err_msg.startswith('object does not exist')
             self.assertGreaterEqual(patt_pos, 0)
+
+
+    def test_quota_exceed_limit(self):
+        _saleitem_related_instance_setup(self.stored_models)
+        self.min_num_applied_tags = 2
+        self.min_num_applied_ingredients = 2
+        self.rand_create = False
+        saleitem_ids = []
+        expect_shown_fields = ['id', 'name',]
+        expect_usrprof = 71
+        expect_max_limit = 6
+        permissions = ['view_productsaleableitem', 'add_productsaleableitem']
+        access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff,
+            'quotas':[{'app_code':app_code_product, 'mat_code': _MatCodeOptions.MAX_NUM_SALE_ITEMS, 'maxnum':expect_max_limit}],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        access_token = self.gen_access_token(profile=access_tok_payld, audience=['product'])
+        request_data = self.refresh_req_data(fixture_source=model_fixtures['ProductSaleableItem'][0:3])
+        response = self._send_request_to_backend(path=self.path, body=request_data,
+                access_token=access_token, expect_shown_fields=expect_shown_fields)
+        self.assertEqual(int(response.status_code), 201)
+        saleitem_ids.extend(list(map(lambda d:d['id'], response.json())))
+        request_data = self.refresh_req_data(fixture_source=model_fixtures['ProductSaleableItem'][3:7])
+        response = self._send_request_to_backend(path=self.path, body=request_data,
+                access_token=access_token, expect_shown_fields=expect_shown_fields)
+        self.assertEqual(int(response.status_code), 403)
+        request_data = self.refresh_req_data(fixture_source=model_fixtures['ProductSaleableItem'][3:6])
+        response = self._send_request_to_backend(path=self.path, body=request_data,
+                access_token=access_token, expect_shown_fields=expect_shown_fields)
+        self.assertEqual(int(response.status_code), 201)
+        saleitem_ids.extend(list(map(lambda d:d['id'], response.json())))
+        saleitem_model_cls = SaleableItemVerificationMixin.serializer_class.Meta.model
+        qset = saleitem_model_cls.objects.filter(id__in=saleitem_ids)
+        self.assertEqual(qset.count(), expect_max_limit)
 ## end of class SaleableItemCreationTestCase
 
 

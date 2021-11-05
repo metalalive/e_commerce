@@ -15,6 +15,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
 from common.cors.middleware import conf as cors_conf
+from common.models.enums import AppCodeOptions
 from common.util.python import flatten_nested_iterable, sort_nested_object, import_module_string
 from common.util.python.messaging.rpc import RpcReplyEvent
 from product.models.base import _ProductAttrValueDataType, ProductSaleableItem, ProductTagClosure
@@ -194,7 +195,7 @@ _fixtures = {
 
 # TODO, will read these variables from config file
 priv_status_staff = 2
-app_code_product = 2
+app_code_product = AppCodeOptions.product
 
 http_request_body_template = {
     'ProductTag': {'name': None,  'id': None, 'exist_parent': None, 'new_parent':None},

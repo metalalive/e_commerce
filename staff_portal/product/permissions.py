@@ -4,6 +4,7 @@ from django.db.models.constants import LOOKUP_SEP
 from rest_framework.permissions import BasePermission as DRFBasePermission
 from rest_framework.filters import BaseFilterBackend as DRFBaseFilterBackend
 
+from common.models.enums import AppCodeOptions
 from common.auth.jwt import JWTclaimPermissionMixin
 
 class AppBasePermission(DRFBasePermission, DRFBaseFilterBackend, JWTclaimPermissionMixin):
@@ -47,6 +48,29 @@ class InputDataOwnerPermissionMixin:
         return result
 
 
+class _QuotaCheckMixin:
+    _error_message_pattern = 'Quota exceeds, limit:%s, stored:%s, new_added: %s'
+
+    def _quota_check(self, request, view, id_label='id'):
+        result = True
+        app_code = AppCodeOptions.product.value
+        mat_code = view.queryset.model.quota_material.value
+        _fn = lambda d: d['app_code'] == app_code and d['mat_code'] == mat_code
+        token_payld = request.auth
+        quotas_found = list(filter(_fn, token_payld.get('quota', [])))
+        if any(quotas_found):
+            quota = quotas_found[0]
+            profile_id = request.user.profile
+            max_items_limit = quota['maxnum']
+            num_new_items = len(request.data)
+            num_existing_items = view.queryset.filter(usrprof=profile_id).count()
+            num_items_used = num_new_items + num_existing_items
+            if max_items_limit < num_items_used:
+                self.message = self._error_message_pattern % (max_items_limit, num_existing_items, num_new_items)
+                result = False
+        return result
+
+
 class TagsPermissions(AppBasePermission):
     perms_map = {
         'GET':    [],
@@ -81,7 +105,7 @@ class FabricationIngredientPermissions(AppBasePermission):
         'DELETE': ['view_productdevingredient', 'delete_productdevingredient',],
     }
 
-class SaleableItemPermissions(AppBasePermission, InputDataOwnerPermissionMixin):
+class SaleableItemPermissions(AppBasePermission, InputDataOwnerPermissionMixin, _QuotaCheckMixin):
     perms_map = {
         'GET':  [], # TODO, skip applied ingredients if the user doesn't have the view permission on that
         'OPTIONS': [],
@@ -96,11 +120,13 @@ class SaleableItemPermissions(AppBasePermission, InputDataOwnerPermissionMixin):
         result = super().has_permission(request=request, view=view)
         if result is True:
             result = self._input_data_owner_check(request, view)
+        if result is True and request.method.lower() == 'post':
+            result = self._quota_check(request, view)
         return result
 ## end of class SaleableItemPermissions
 
 
-class SaleablePackagePermissions(AppBasePermission, InputDataOwnerPermissionMixin):
+class SaleablePackagePermissions(AppBasePermission, InputDataOwnerPermissionMixin, _QuotaCheckMixin):
     perms_map = {
         'GET':  [],
         'OPTIONS': [],
@@ -115,6 +141,8 @@ class SaleablePackagePermissions(AppBasePermission, InputDataOwnerPermissionMixi
         result = super().has_permission(request=request, view=view)
         if result is True:
             result = self._input_data_owner_check(request, view)
+        if result is True and request.method.lower() == 'post':
+            result = self._quota_check(request, view)
         return result
 ## end of class SaleablePackagePermissions
 

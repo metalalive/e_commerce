@@ -11,8 +11,8 @@ from rest_framework.settings import DEFAULTS as drf_default_settings
 
 from common.util.python import sort_nested_object
 from common.util.python.messaging.rpc import RpcReplyEvent
-from product.permissions import SaleablePackagePermissions
-
+from product.models.common import _MatCodeOptions
+from product.permissions import SaleablePackagePermissions, _QuotaCheckMixin
 from product.tests.common import _fixtures, _MockTestClientInfoMixin, assert_view_permission_denied, listitem_rand_assigner, http_request_body_template, assert_view_bulk_create_with_response, SoftDeleteCommonTestMixin
 
 from ..common import app_code_product, priv_status_staff
@@ -47,6 +47,10 @@ class SaleablePkgCreationTestCase(SaleablePkgBaseViewTestCase, SaleablePackageVe
     def setUp(self):
         super().setUp()
         self.request_data = self.refresh_req_data(num_create=3)
+
+    def tearDown(self):
+        self.rand_create = True
+        super().tearDown()
 
     def test_permission_denied(self):
         kwargs = { 'testcase':self, 'request_body_data':self.request_data, 'path':self.path,
@@ -115,6 +119,38 @@ class SaleablePkgCreationTestCase(SaleablePkgBaseViewTestCase, SaleablePackageVe
         self.assertEqual(expect_err_msg, err_info[-1]['saleitems_applied'][-1]['unit'][0])
         expect_err_msg = 'Invalid pk "%s" - object does not exist.' % invalid_saleitem_id
         self.assertEqual(expect_err_msg, err_info[-1]['saleitems_applied'][-1]['sale_item'][0])
+
+
+    def test_quota_exceed_limit(self):
+        self.rand_create = False
+        salepkg_ids = []
+        expect_shown_fields = ['id', 'name',]
+        expect_usrprof = 71
+        expect_max_limit = 4
+        permissions = ['view_productsaleablepackage', 'add_productsaleablepackage']
+        access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff,
+            'quotas':[{'app_code':app_code_product, 'mat_code': _MatCodeOptions.MAX_NUM_SALE_PKGS, 'maxnum':expect_max_limit}],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        access_token = self.gen_access_token(profile=access_tok_payld, audience=['product'])
+        request_data = self.refresh_req_data(num_create=2)
+        response = self._send_request_to_backend(path=self.path, body=request_data,
+                access_token=access_token, expect_shown_fields=expect_shown_fields)
+        self.assertEqual(int(response.status_code), 201)
+        salepkg_ids.extend(list(map(lambda d:d['id'], response.json())))
+        request_data = self.refresh_req_data(num_create=3)
+        response = self._send_request_to_backend(path=self.path, body=request_data,
+                access_token=access_token, expect_shown_fields=expect_shown_fields)
+        self.assertEqual(int(response.status_code), 403)
+        expect_errmsg = _QuotaCheckMixin._error_message_pattern % (expect_max_limit, 2, 3)
+        actual_errmsg = response.json()['detail']
+        self.assertEqual(expect_errmsg, actual_errmsg)
+        request_data = self.refresh_req_data(num_create=2)
+        response = self._send_request_to_backend(path=self.path, body=request_data,
+                access_token=access_token, expect_shown_fields=expect_shown_fields)
+        self.assertEqual(int(response.status_code), 201)
+        salepkg_ids.extend(list(map(lambda d:d['id'], response.json())))
+        qset = self.serializer_class.Meta.model.objects.filter(id__in=salepkg_ids)
+        self.assertEqual(qset.count(), expect_max_limit)
 ## end of class SaleablePkgCreationTestCase
 
 

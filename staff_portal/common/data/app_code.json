@@ -1,0 +1,8 @@
+{
+    "user_management" : [1, "user management"],
+    "product"   : [2, "product management"],
+    "fileupload": [3, "file upload"],
+    "purchase"  : [4, "purchase"],
+    "sale"      : [5, "sale"],
+    "inventory" : [6, "inventory"]
+}

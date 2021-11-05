@@ -45,3 +45,6 @@ class UnitOfMeasurement(IntegerChoices, metaclass=JsonFileChoicesMeta):
     filepath = './common/data/unit_of_measurement.json'
 
 
+class AppCodeOptions(IntegerChoices, metaclass=JsonFileChoicesMeta):
+    filepath = './common/data/app_code.json'
+
