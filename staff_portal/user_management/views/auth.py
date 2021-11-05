@@ -21,7 +21,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions  import PermissionDenied
 from rest_framework.settings    import api_settings as drf_settings
 
-from common.auth.jwt      import JWT
+from common.auth.jwt      import JWT, stream_jwks_file
 from common.auth.keystore import create_keystore_helper
 from common.auth.django.login import  jwt_based_login
 from common.auth.django.authentication import RefreshJWTauthentication, IsStaffUser
@@ -399,22 +399,6 @@ class RefreshAccessTokenView(APIView):
 ## end of class RefreshAccessTokenView
 
 
-def _stream_jwks_file(filepath):
-    buff = ['{"keys":[']
-    with open(filepath, mode='r') as f: # TODO, handle missing file error ?
-        iterator = ijson.kvitems(f, prefix='')
-        for k,v in iterator:
-            v['kid'] = k
-            buff.append(json.dumps(v))
-            yield ''.join(buff)
-            buff.clear()
-            buff.append(',')
-        buff.pop() # shouldn't have comma in last next item of the list
-    buff.append(']}')
-    #buff.append('], "test123": "value456"}')
-    yield ''.join(buff)
-
-
 class JWKSPublicKeyView(APIView):
     def get(self, request, *args, **kwargs):
         try:
@@ -425,6 +409,6 @@ class JWKSPublicKeyView(APIView):
             filepath = ''
             log_args = ['msg', e]
             _logger.warning(None, *log_args, request=request)
-        return DjangoStreamingHttpResponse(streaming_content=_stream_jwks_file(filepath=filepath),
+        return DjangoStreamingHttpResponse(streaming_content=stream_jwks_file(filepath=filepath),
                     content_type='application/json', status=status)
 

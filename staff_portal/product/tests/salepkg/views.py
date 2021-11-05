@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 from django.test import TransactionTestCase
 from django.db.models import Count
 from django.db.models.constants import LOOKUP_SEP
-from django.contrib.auth.models import User as AuthUser
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
 from common.util.python import sort_nested_object
@@ -15,8 +14,9 @@ from common.util.python.messaging.rpc import RpcReplyEvent
 from product.permissions import SaleablePackagePermissions
 
 from product.tests.common import _fixtures, _MockTestClientInfoMixin, assert_view_permission_denied, listitem_rand_assigner, http_request_body_template, assert_view_bulk_create_with_response, SoftDeleteCommonTestMixin
-from .common import diff_composite, HttpRequestDataGenSaleablePackage, SaleablePackageVerificationMixin
 
+from ..common import app_code_product, priv_status_staff
+from .common import diff_composite, HttpRequestDataGenSaleablePackage, SaleablePackageVerificationMixin
 
 class SaleablePkgBaseViewTestCase(TransactionTestCase, _MockTestClientInfoMixin, HttpRequestDataGenSaleablePackage):
     permission_class = SaleablePackagePermissions
@@ -27,28 +27,18 @@ class SaleablePkgBaseViewTestCase(TransactionTestCase, _MockTestClientInfoMixin,
                 num_create=num_create)
 
     def setUp(self):
-        _user_info = _fixtures['AuthUser'][0]
-        account = AuthUser(**_user_info)
-        account.set_password(_user_info['password'])
-        account.save()
+        self._setup_keystore()
         # for django app, header name has to start with `HTTP_XXXX`
-        self.http_forwarded = self._forwarded_pattern % _user_info['username']
         self._refresh_tags(num=10)
         self._refresh_attrtypes(num=len(_fixtures['ProductAttributeType']))
         self._refresh_saleitems(num=7)
 
     def tearDown(self):
+        self._teardown_keystore()
         self._client.cookies.clear()
         self.min_num_applied_attrs = 0
         self.min_num_applied_tags = 0
         self.min_num_applied_ingredients = 0
-
-    def _send_request_to_backend(self, path, method='post', body=None, expect_shown_fields=None,
-            ids=None, extra_query_params=None):
-        headers = {'HTTP_FORWARDED': self.http_forwarded,}
-        return super()._send_request_to_backend( path=path, method=method, body=body, ids=ids,
-                expect_shown_fields=expect_shown_fields, extra_query_params=extra_query_params,
-                headers=headers)
 ## end of class SaleablePkgBaseViewTestCase
 
 
@@ -60,27 +50,21 @@ class SaleablePkgCreationTestCase(SaleablePkgBaseViewTestCase, SaleablePackageVe
 
     def test_permission_denied(self):
         kwargs = { 'testcase':self, 'request_body_data':self.request_data, 'path':self.path,
-            'content_type':self._json_mimetype, 'http_forwarded':self.http_forwarded,
-            'mock_rpc_path':'product.views.base.SaleablePackageView._usermgt_rpc.get_profile',
-            'permission_map': self.permission_class.perms_map['POST'], 'http_method':'post',
-            'return_profile_id': self.mock_profile_id[0],
+            'permissions': self.permission_class.perms_map['POST'], 'http_method':'post',
         }
         assert_view_permission_denied(**kwargs)
-        kwargs['permission_map'] = self.permission_class.perms_map['PUT']
+        kwargs['permissions'] = self.permission_class.perms_map['PUT']
         kwargs['http_method'] = 'put'
         assert_view_permission_denied(**kwargs)
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_bulk_ok_with_partial_response(self, mock_get_profile):
+    def test_bulk_ok_with_partial_response(self):
         expect_shown_fields  = ['id', 'name', 'visible', 'saleitems_applied',]
         expect_hidden_fields = ['usrprof', 'price', 'tags', 'media_set', 'attributes']
-        expect_usrprof = self.mock_profile_id[0]
-        mock_get_profile.return_value = self._mock_get_profile(expect_usrprof, 'POST')
-        response = assert_view_bulk_create_with_response(testcase=self, expect_shown_fields=expect_shown_fields,
+        created_pkgs = assert_view_bulk_create_with_response(testcase=self, expect_shown_fields=expect_shown_fields,
                 expect_hidden_fields=expect_hidden_fields, path=self.path, body=self.request_data,
-                method='post')
-        pkgs_data = sorted(response.json(), key=lambda d:d['id'])
+                method='post', permissions=['view_productsaleablepackage', 'add_productsaleablepackage',])
+        pkgs_data = sorted(created_pkgs, key=lambda d:d['id'])
         pkg_ids  = tuple(map(lambda d:d['id'], pkgs_data))
         pkg_objs = self.serializer_class.Meta.model.objects.filter(id__in=pkg_ids).order_by('id')
         pkgs_data_iter = iter(pkgs_data)
@@ -90,23 +74,25 @@ class SaleablePkgCreationTestCase(SaleablePkgBaseViewTestCase, SaleablePackageVe
                 lower_elm_name='sale_item', lower_elm_mgr_field='saleitems_applied')
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_bulk_ok_with_full_response(self, mock_get_profile):
+    def test_bulk_ok_with_full_response(self):
         expect_shown_fields  = ['id', 'name', 'visible', 'saleitems_applied', \
                 'usrprof', 'price', 'tags', 'media_set', 'attributes']
-        expect_usrprof = self.mock_profile_id[0]
-        mock_get_profile.return_value = self._mock_get_profile(expect_usrprof, 'POST')
-        response = assert_view_bulk_create_with_response(testcase=self, path=self.path, method='post',
-                body=self.request_data, expect_shown_fields=expect_shown_fields, expect_hidden_fields=[] )
-        pkgs_data = sorted(response.json(), key=lambda d:d['id'])
+        expect_usrprof = 321
+        created_pkgs = assert_view_bulk_create_with_response(testcase=self, path=self.path, method='post',
+                body=self.request_data, expect_shown_fields=expect_shown_fields, expect_hidden_fields=[],
+                permissions=['view_productsaleablepackage', 'add_productsaleablepackage'])
+        pkgs_data = sorted(created_pkgs, key=lambda d:d['id'])
         pkg_ids  = tuple(map(lambda d:d['id'], pkgs_data))
         pkg_objs = self.serializer_class.Meta.model.objects.filter(id__in=pkg_ids).order_by('id')
         self.verify_data(actual_data=pkg_objs, expect_data=pkgs_data, usrprof_id=expect_usrprof, verify_id=True)
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_validation_error_unknown_references(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.mock_profile_id[1], 'POST')
+    def test_validation_error_unknown_references(self):
+        expect_usrprof = 71
+        permissions = ['view_productsaleablepackage', 'add_productsaleablepackage']
+        access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff, 'quotas':[],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        access_token = self.gen_access_token(profile=access_tok_payld, audience=['product'])
         invalid_tag_id  = -345
         invalid_unit_id = -346
         invalid_saleitem_id = -347
@@ -119,7 +105,8 @@ class SaleablePkgCreationTestCase(SaleablePkgBaseViewTestCase, SaleablePackageVe
         else:
             item = {'sale_item': invalid_saleitem_id, 'quantity': 1.23, 'unit':invalid_unit_id}
             edit_data['saleitems_applied'].append(item)
-        response = self._send_request_to_backend(path=self.path, method='post', body=self.request_data)
+        response = self._send_request_to_backend(path=self.path, method='post', body=self.request_data,
+                    access_token=access_token )
         self.assertEqual(int(response.status_code), 400)
         err_info = response.json()
         expect_err_msg = 'Invalid pk "%s" - object does not exist.' % invalid_tag_id
@@ -137,29 +124,39 @@ class SaleablePkgUpdateBaseTestCase(SaleablePkgBaseViewTestCase, SaleablePackage
     def setUp(self):
         num_pkgs = 4
         super().setUp()
-        self.expect_usrprof = self.mock_profile_id[0]
-        with patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile') as mock_get_profile:
-            mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'POST')
-            request_data = self.refresh_req_data(num_create=num_pkgs)
-            response = self._send_request_to_backend(path=self.path, method='post',
-                     body=request_data, expect_shown_fields=['id', 'name',])
-            self.assertEqual(int(response.status_code), 201)
-            created_items = response.json()
-            created_ids = tuple(map(lambda x:x['id'], created_items))
-            self.created_objs = self.serializer_class.Meta.model.objects.filter(id__in=created_ids)
-            serializer_ro = self.serializer_class(many=True, instance=self.created_objs)
-            self.request_data = serializer_ro.data
+        expect_usrprof = 71
+        permissions = ['view_productsaleablepackage', 'add_productsaleablepackage']
+        access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff, 'quotas':[],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        access_token = self.gen_access_token(profile=access_tok_payld, audience=['product'])
+        request_data = self.refresh_req_data(num_create=num_pkgs)
+        response = self._send_request_to_backend(path=self.path, method='post', body=request_data,
+                     expect_shown_fields=['id', 'name',], access_token=access_token)
+        self.assertEqual(int(response.status_code), 201)
+        created_items = response.json()
+        created_ids = tuple(map(lambda x:x['id'], created_items))
+        self.created_objs = self.serializer_class.Meta.model.objects.filter(id__in=created_ids)
+        serializer_ro = self.serializer_class(many=True, instance=self.created_objs)
+        self.request_data = serializer_ro.data
 
 
 class SaleablePkgUpdateTestCase(SaleablePkgUpdateBaseTestCase):
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_invalid_id(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
+    def setUp(self):
+        super().setUp()
+        expect_usrprof = 71
+        permissions = ['view_productsaleablepackage', 'change_productsaleablepackage']
+        access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff, 'quotas':[],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        self._access_token = self.gen_access_token(profile=access_tok_payld, audience=['product'])
+        self._access_tok_payld = access_tok_payld
+
+    def test_invalid_id(self):
         request_data = self.request_data
         # sub case: lack id
         non_field_error_key = drf_default_settings['NON_FIELD_ERRORS_KEY']
         request_data[0].pop('id',None)
-        response = self._send_request_to_backend(path=self.path, method='put', body=request_data)
+        response = self._send_request_to_backend(path=self.path, method='put', body=request_data,
+                access_token=self._access_token)
         self.assertEqual(int(response.status_code), 400)
         err_info = response.json()
         err_msg = "cannot be mapped to existing instance, reason: Field 'id' expected a number but got"
@@ -168,26 +165,27 @@ class SaleablePkgUpdateTestCase(SaleablePkgUpdateBaseTestCase):
         # sub case: invalid data type of id
         request_data[0]['id'] = 99999
         request_data[-1]['id'] = 'string_id'
-        response = self._send_request_to_backend(path=self.path, method='put', body=request_data)
+        response = self._send_request_to_backend(path=self.path, method='put', body=request_data,
+                access_token=self._access_token)
         self.assertEqual(int(response.status_code), 403)
         # sub case: mix of valid id and invalid id
         request_data[0]['id'] = 'wrong_id'
         request_data[-1]['id'] = 123
-        response = self._send_request_to_backend(path=self.path, method='put', body=request_data)
+        response = self._send_request_to_backend(path=self.path, method='put', body=request_data,
+                access_token=self._access_token)
         self.assertEqual(int(response.status_code), 403)
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_bulk_ok(self, mock_get_profile):
+    def test_bulk_ok(self):
         expect_shown_fields = ['id', 'name', 'price', 'media_set', 'saleitems_applied']
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
+        expect_usrprof = self._access_tok_payld['id']
         num_rounds = 5
         num_edit = len(self.request_data) >> 1
         edit_data = self.request_data[:num_edit]
         for _ in range(num_rounds):
             self.rand_gen_edit_data(editing_data=edit_data)
-            response = self._send_request_to_backend(path=self.path, method='put',
-                    body=edit_data,  expect_shown_fields=expect_shown_fields)
+            response = self._send_request_to_backend(path=self.path, method='put', body=edit_data,
+                   access_token=self._access_token,  expect_shown_fields=expect_shown_fields)
             edited_items = response.json()
             self.assertEqual(int(response.status_code), 200)
             fn = lambda x:{key:x[key] for key in expect_shown_fields}
@@ -198,28 +196,28 @@ class SaleablePkgUpdateTestCase(SaleablePkgUpdateBaseTestCase):
             self.assertListEqual(expect_edited_items, actual_edited_items)
         [obj.refresh_from_db() for obj in self.created_objs]
         self.verify_data(actual_data=self.created_objs[:num_edit], expect_data=edit_data,
-                usrprof_id=self.expect_usrprof, verify_id=True)
+                usrprof_id=expect_usrprof, verify_id=True)
         self.verify_data(actual_data=self.created_objs[num_edit:], expect_data=self.request_data[num_edit:],
-                usrprof_id=self.expect_usrprof, verify_id=True)
+                usrprof_id=expect_usrprof, verify_id=True)
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_different_user_denied(self, mock_get_profile):
-        another_usrprof = self.mock_profile_id[1]
+    def test_different_user_denied(self):
+        another_usrprof = self._access_tok_payld['id'] + 1
+        self._access_tok_payld['id'] = another_usrprof
+        access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
         edit_data = self.request_data[:1]
         edit_data[0]['id'] = self.request_data[1]['id']
-        mock_get_profile.return_value = self._mock_get_profile(another_usrprof, 'PUT')
-        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data,)
+        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data,
+                 access_token=access_token )
         self.assertEqual(int(response.status_code), 403)
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_conflict_error(self, mock_get_profile):
+    def test_conflict_error(self):
         key = drf_default_settings['NON_FIELD_ERRORS_KEY']
         edit_data = self.request_data
         discarded_id  = edit_data[0]['id']
         edit_data[0]['id'] = edit_data[1]['id']
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
-        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data,)
+        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data,
+                access_token=self._access_token)
         self.assertEqual(int(response.status_code), 400)
         err_info = response.json()
         err_msg = err_info[key][0]
@@ -232,13 +230,20 @@ class SaleablePkgUpdateTestCase(SaleablePkgUpdateBaseTestCase):
 
 
 class SaleablePkgDeletionTestCase(SaleablePkgUpdateBaseTestCase, SoftDeleteCommonTestMixin):
+    def setUp(self):
+        super().setUp()
+        expect_usrprof = 71
+        permissions = ['view_productsaleablepackage', 'change_productsaleablepackage', 'delete_productsaleablepackage']
+        access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff, 'quotas':[],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        self._access_token = self.gen_access_token(profile=access_tok_payld, audience=['product'])
+        self._access_tok_payld = access_tok_payld
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_softdelete_ok(self, mock_get_profile):
+    def test_softdelete_ok(self):
         num_delete = len(self.request_data) >> 1
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
         deleted_ids = list(map(lambda x: {'id':x['id']}, self.request_data[:num_delete]))
-        response = self._send_request_to_backend(path=self.path, method='delete', body=deleted_ids)
+        response = self._send_request_to_backend(path=self.path, method='delete', body=deleted_ids,
+                access_token=self._access_token)
         self.assertEqual(int(response.status_code), 202)
         deleted_ids = list(map(lambda x: x['id'], self.request_data[:num_delete]))
         remain_ids  = list(map(lambda x: x['id'], self.request_data[num_delete:]))
@@ -246,28 +251,25 @@ class SaleablePkgDeletionTestCase(SaleablePkgUpdateBaseTestCase, SoftDeleteCommo
                 model_cls_path='product.models.base.ProductSaleablePackage',)
 
 
-    def _verify_undeleted_items(self, undeleted_items):
+    def _verify_undeleted_items(self, undeleted_items, expect_usrprof):
         self.assertGreaterEqual(len(undeleted_items), 1)
         undeleted_items = sorted(undeleted_items, key=lambda d:d['id'])
         undeleted_ids  = tuple(map(lambda d:d['id'], undeleted_items))
         undeleted_objs = self.serializer_class.Meta.model.objects.filter(id__in=undeleted_ids).order_by('id')
         self.verify_data(actual_data=undeleted_objs, expect_data=undeleted_items,
-                usrprof_id=self.expect_usrprof, verify_id=True)
+                usrprof_id=expect_usrprof, verify_id=True)
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_undelete_by_time(self, mock_get_profile):
+    def test_undelete_by_time(self):
         num_items_original = len(self.request_data)
         remain_items  = self.request_data
         deleted_items = []
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
         model_cls_path = 'product.models.base.ProductSaleablePackage'
         self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
-                model_cls_path=model_cls_path)
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
+                model_cls_path=model_cls_path, access_token=self._access_token)
         while any(deleted_items):
-            undeleted_items = self.perform_undelete(testcase=self, path=self.path)
-            self._verify_undeleted_items(undeleted_items)
+            undeleted_items = self.perform_undelete(testcase=self, path=self.path, access_token=self._access_token)
+            self._verify_undeleted_items(undeleted_items, self._access_tok_payld['id'])
             undeleted_ids  = tuple(map(lambda d:d['id'], undeleted_items))
             moving_gen = tuple(filter(lambda d: d['id'] in undeleted_ids, deleted_items))
             for item in moving_gen:
@@ -276,21 +278,18 @@ class SaleablePkgDeletionTestCase(SaleablePkgUpdateBaseTestCase, SoftDeleteCommo
         self.assertEqual(len(self.request_data), num_items_original)
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_undelete_specific_item(self, mock_get_profile):
+    def test_undelete_specific_item(self):
         remain_items  = self.request_data
         deleted_items = []
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
         model_cls_path = 'product.models.base.ProductSaleablePackage'
         self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
-                model_cls_path=model_cls_path)
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
+                model_cls_path=model_cls_path, access_token=self._access_token )
         num_undelete = len(deleted_items) >> 1
         undeleting_items_gen = listitem_rand_assigner(list_=deleted_items, min_num_chosen=num_undelete,
                     max_num_chosen=(num_undelete + 1))
         body = {'ids':[d['id'] for d in undeleting_items_gen]}
-        affected_items = self.perform_undelete(body=body, testcase=self, path=self.path)
-        self._verify_undeleted_items(affected_items)
+        affected_items = self.perform_undelete(body=body, testcase=self, path=self.path, access_token=self._access_token)
+        self._verify_undeleted_items(affected_items, self._access_tok_payld['id'])
         expect_undel_ids = body['ids']
         actual_undel_ids = tuple(map(lambda d:d['id'], affected_items))
         self.assertSetEqual(set(expect_undel_ids), set(actual_undel_ids))
@@ -303,76 +302,85 @@ class SaleablePkgDeletionTestCase(SaleablePkgUpdateBaseTestCase, SoftDeleteCommo
             self.assertTrue(obj.is_deleted())
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_no_softdeleted_item(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
+    def test_no_softdeleted_item(self):
         kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':410,
-                'expect_resp_msg':'Nothing recovered'}
+                'expect_resp_msg':'Nothing recovered', 'access_token':self._access_token}
         self.perform_undelete(**kwargs)
         remain_items = self.request_data[:2]
         kwargs['body'] = {'ids':[d['id'] for d in remain_items]}
         self.perform_undelete(**kwargs)
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_softdelete_permission_denied(self, mock_get_profile):
-        another_usrprof = self.mock_profile_id[1]
-        mock_get_profile.return_value = self._mock_get_profile(another_usrprof, 'DELETE')
+    def test_softdelete_permission_denied(self):
+        another_usrprof = self._access_tok_payld['id'] + 1
+        self._access_tok_payld['id'] = another_usrprof
+        access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
         deleted_ids = list(map(lambda x: {'id':x['id']}, self.request_data))
-        response = self._send_request_to_backend(path=self.path, method='delete', body=deleted_ids)
+        response = self._send_request_to_backend(path=self.path, method='delete', body=deleted_ids,
+                access_token=access_token)
         self.assertEqual(int(response.status_code), 403)
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_undelete_permission_denied(self, mock_get_profile):
+    def test_undelete_permission_denied(self):
         remain_items  = self.request_data
         deleted_items = []
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
         model_cls_path = 'product.models.base.ProductSaleablePackage'
         self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
-                model_cls_path=model_cls_path)
+                model_cls_path=model_cls_path, access_token=self._access_token)
         self.assertGreater(len(deleted_items), 0)
-        another_usrprof = self.mock_profile_id[1]
-        mock_get_profile.return_value = self._mock_get_profile(another_usrprof, 'PATCH', access_control=False)
-        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':403,
-                'expect_resp_msg':'You do not have permission to perform this action.'}
+        another_usrprof = self._access_tok_payld['id'] + 1
+        self._access_tok_payld['id'] = another_usrprof
+        access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
+        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':403, 'access_token':access_token,
+                'expect_resp_msg':'user is not allowed to undelete the item(s)'}
         kwargs['body'] = {'ids':[d['id'] for d in deleted_items]}
         self.perform_undelete(**kwargs)
 ## end of class SaleablePkgDeletionTestCase
 
 
 class SaleablePkgQueryTestCase(SaleablePkgUpdateBaseTestCase):
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_order(self, mock_get_profile):
+    def setUp(self):
+        super().setUp()
+        expect_usrprof = 71
+        permissions = ['view_xxxxxx']
+        access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff, 'quotas':[],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        self._access_token = self.gen_access_token(profile=access_tok_payld, audience=['product'])
+        self._access_tok_payld = access_tok_payld
+
+    def test_order(self):
         order_field = 'price'
         expect_shown_fields = ['id','name','price']
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         extra_query_params = {'ordering': order_field}
-        response = self._send_request_to_backend(path=self.path, method='get',
+        response = self._send_request_to_backend(path=self.path, method='get', access_token=self._access_token,
                 expect_shown_fields=expect_shown_fields, extra_query_params=extra_query_params)
         actual_items = response.json()
         expect_items = self.serializer_class.Meta.model.objects.order_by(order_field).values(*expect_shown_fields)
         actual_items = json.dumps(actual_items)
         expect_items = json.dumps(list(expect_items))
-        if actual_items != expect_items:
-            import pdb
-            pdb.set_trace()
         self.assertEqual(actual_items , expect_items)
 
 
 class SaleablePkgAdvancedSearchTestCase(SaleablePkgUpdateBaseTestCase):
     min_num_applied_tags = 2
 
+    def setUp(self):
+        super().setUp()
+        expect_usrprof = 71
+        permissions = ['view_xxxxxx']
+        access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff, 'quotas':[],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        self._access_token = self.gen_access_token(profile=access_tok_payld, audience=['product'])
+        self._access_tok_payld = access_tok_payld
+
     def _test_advanced_search_common(self, adv_cond):
         extra_query_params = {'advanced_search': 'yes', 'adv_search_cond': json.dumps(adv_cond)}
-        response = self._send_request_to_backend(path=self.path, method='get',
-                extra_query_params=extra_query_params)
+        response = self._send_request_to_backend( path=self.path, method='get', extra_query_params=extra_query_params,
+                access_token=self._access_token )
         actual_items = response.json()
         self.assertEqual(int(response.status_code), 200)
         self.assertGreaterEqual(len(actual_items), 1)
         return actual_items
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_saleitems_applied(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+    def test_saleitems_applied(self):
         qset = self.serializer_class.Meta.model.objects.annotate(num_compo=Count('saleitems_applied__sale_item'))
         qset = qset.filter(num_compo__gt=0)
         values = qset.values('id','saleitems_applied')
@@ -402,9 +410,7 @@ class SaleablePkgAdvancedSearchTestCase(SaleablePkgUpdateBaseTestCase):
         self.assertListEqual(sorted(actual_pkgs_found), sorted(expect_pkgs_found))
 
 
-    @patch('product.views.base.SaleablePackageView._usermgt_rpc.get_profile')
-    def test_complex_condition(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+    def test_complex_condition(self):
         aggregates_nested_fields = {'num_compo': Count('saleitems_applied__sale_item'),
                 'num_tags': Count('tags'), }
         filter_nested_fields = {'num_tags__gte':2 , 'num_compo__gt':0}

@@ -1,9 +1,13 @@
 import random
+import json
 import copy
 import operator
+from datetime import datetime, timedelta
 from functools import partial, reduce
 
-from common.util.python import ExtendedList
+from common.util.python import ExtendedList, import_module_string
+from common.auth.keystore import create_keystore_helper
+from common.auth.jwt      import JWT, JwkRsaKeygenHandler, stream_jwks_file
 
 
 def rand_gen_request_body(customize_item_fn, data_gen, template=None):
@@ -235,4 +239,80 @@ class TreeNodeMixin:
         #    pdb.set_trace()
         return matched, not_matched
 ## end of class TreeNodeMixin
+
+
+class KeystoreMixin:
+    _keystore_init_config = {
+        'keystore': 'common.auth.keystore.BaseAuthKeyStore',
+        'persist_secret_handler': {
+            'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+            'init_kwargs': {
+                'filepath': './tmp/cache/test/jwks/privkey/current.json',
+                'name':'secret', 'expired_after_days': 7, 'flush_threshold':4,
+            },
+        },
+        'persist_pubkey_handler': {
+            'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+            'init_kwargs': {
+                'filepath': './tmp/cache/test/jwks/pubkey/current.json',
+                'name':'pubkey', 'expired_after_days': 9, 'flush_threshold':4,
+            },
+        },
+    }
+
+    def _setup_keystore(self):
+        from tests.python.keystore.persistence import _setup_keyfile
+        persist_labels = ('persist_pubkey_handler', 'persist_secret_handler')
+        self.tear_down_files = {}
+        for label in persist_labels:
+            filepath = self._keystore_init_config[label]['init_kwargs']['filepath']
+            del_dir, del_file = _setup_keyfile(filepath=filepath)
+            item = {'del_dir':del_dir, 'del_file':del_file, 'filepath':filepath}
+            self.tear_down_files[label] = item
+        num_keys = self._keystore_init_config['persist_secret_handler']['init_kwargs']['flush_threshold']
+        keystore = create_keystore_helper(cfg=self._keystore_init_config, import_fn=import_module_string)
+        keygen_handler = JwkRsaKeygenHandler()
+        result = keystore.rotate(keygen_handler=keygen_handler, key_size_in_bits=2048,
+                    num_keys=num_keys, date_limit=None)
+        self._keys_metadata = result['new']
+        self._keystore = keystore
+
+    def _teardown_keystore(self):
+        from tests.python.keystore.persistence import  _teardown_keyfile
+        for item in self.tear_down_files.values():
+            _teardown_keyfile( filepath=item['filepath'], del_dir=item['del_dir'],
+                del_file=item['del_file'] )
+
+    def _access_token_serialize_auth_info(self, audience, profile, superuser_status=1):
+        role_extract_fn  = lambda d: {key:d[key] for key in ('app_code', 'codename')}
+        quota_extract_fn = lambda d: {key:d[key] for key in ('app_code', 'mat_code', 'maxnum')}
+        out = {'id':profile['id'] , 'priv_status': profile['privilege_status'],
+                'perms': list(map(role_extract_fn, profile['roles'])) ,
+                'quota': list(map(quota_extract_fn, profile['quotas'])) ,
+            }
+        if not any(out['perms']) and out['priv_status'] != superuser_status:
+            errmsg = "the user does not have access to these resource services listed in audience field"
+            raise ValueError(errmsg)
+        return out
+
+    def gen_access_token(self, profile, audience, ks_cfg=None, access_token_valid_seconds=300):
+        ks_cfg = ks_cfg or self._keystore_init_config
+        profile_serial = self._access_token_serialize_auth_info(audience=audience, profile=profile)
+        keystore = create_keystore_helper(cfg=ks_cfg, import_fn=import_module_string)
+        now_time = datetime.utcnow()
+        expiry = now_time + timedelta(seconds=access_token_valid_seconds)
+        token = JWT()
+        payload = {
+            'profile' :profile_serial.pop('id'),
+            'aud':audience,  'iat':now_time,  'exp':expiry,
+        }
+        payload.update(profile_serial) # roles, quota
+        token.payload.update(payload)
+        return token.encode(keystore=keystore)
+
+    def _mocked_get_jwks(self):
+        filepath =  self._keystore_init_config['persist_pubkey_handler']['init_kwargs']['filepath']
+        full_response_body = list(stream_jwks_file(filepath=filepath))
+        full_response_body = ''.join(full_response_body)
+        return json.loads(full_response_body)
 

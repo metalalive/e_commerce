@@ -375,27 +375,23 @@ class SaleableItemRepresentationTestCase(SaleableItemCommonMixin, TransactionTes
     def test_represent_partial_4(self):
         def item_check(value):
             attrtype_ids = map(lambda d:d['type'] , value['attributes'])
-            actual_qset = ProductAttributeType.objects.filter(pk__in=attrtype_ids)
-            self.assertEqual(len(value['attributes']), actual_qset.count())
+            attrtype_qset = ProductAttributeType.objects.filter(pk__in=attrtype_ids)
+            self.assertEqual(len(value['attributes']), attrtype_qset.count())
             sale_item = ProductSaleableItem.objects.get(id=value['id'])
             for actual_attrval in value['attributes']:
-                expect_attrval = None
-                for dtype_option in _ProductAttrValueDataType:
-                    field_name = dtype_option.value[0][1]
-                    manager = getattr(sale_item, field_name, None)
-                    if not manager:
-                        continue
-                    qset = manager.filter(id=actual_attrval['id'])
-                    if qset.exists():
-                        expect_attrval = qset.first()
-                        break
-                self.assertNotEqual(expect_attrval, None)
-                self.assertEqual(expect_attrval.ingredient_id, value['id'])
-                self.assertEqual(expect_attrval.attr_type.id, actual_attrval['type'])
-                self.assertEqual(expect_attrval.value,        actual_attrval['value'])
-                self.assertEqual(expect_attrval.extra_amount, actual_attrval.get('extra_amount', None))
-            #import pdb
-            #pdb.set_trace()
+                chosen_dtype = attrtype_qset.get(id=actual_attrval['type']).dtype
+                chosen_dtype_opt = next(filter(lambda opt: opt.value[0][0] == chosen_dtype, _ProductAttrValueDataType))
+                field_name = chosen_dtype_opt.value[0][1]
+                manager = getattr(sale_item, field_name, None)
+                self.assertIsNotNone(manager)
+                expect_attrval = manager.get(id=actual_attrval['id'])
+                try:
+                    self.assertEqual(expect_attrval.ingredient_id, value['id'])
+                    self.assertEqual(expect_attrval.attr_type.id, actual_attrval['type'])
+                    self.assertEqual(expect_attrval.value,        actual_attrval['value'])
+                    self.assertEqual(expect_attrval.extra_amount, actual_attrval.get('extra_amount', None))
+                except Exception as e:
+                    raise
         expect_fields = ['id', 'attributes']
         self._test_represent_partial(expect_fields=expect_fields, item_check_fn=item_check)
 

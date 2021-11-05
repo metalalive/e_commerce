@@ -3,6 +3,7 @@ import logging
 from django.conf import settings as django_settings
 from django.apps import apps as django_apps
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
+from django.utils.translation import gettext_lazy as _
 from rest_framework import HTTP_HEADER_ENCODING
 from rest_framework.permissions import BasePermission
 from rest_framework.exceptions  import AuthenticationFailed
@@ -10,7 +11,8 @@ from rest_framework.exceptions  import AuthenticationFailed
 from common.auth.abstract import BaseGetProfileMixin
 from common.auth.keystore import create_keystore_helper
 from common.auth.jwt    import JWT
-from common.cors.middleware import conf as cors_conf
+from common.models.constants  import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from common.cors.middleware   import conf as cors_conf
 from common.util.python import import_module_string
 
 _logger = logging.getLogger(__name__)
@@ -142,4 +144,99 @@ class AccessJWTauthentication(DjangoGetProfileMixin):
 
     def authenticate_header(self, request):
         return self.keyword
+## end of class
+
+
+class RemoteAccessJWTauthentication(AccessJWTauthentication):
+    def authenticate_credentials(self, encoded_acs_tok, audience):
+        account, payld_verified = super().authenticate_credentials(encoded_acs_tok=encoded_acs_tok, audience=audience)
+        priv_status = payld_verified['priv_status']
+        if ROLE_ID_SUPERUSER == priv_status:
+            account.is_superuser = True
+            account.is_staff = True
+        elif ROLE_ID_STAFF == priv_status:
+            account.is_superuser = False
+            account.is_staff = True
+        else:
+            account.is_superuser = False
+            account.is_staff = False
+        return (account, payld_verified)
+
+
+class AnonymousUser:
+    # mostly comes from Django auth app, this class is used for other Django apps which
+    # do NOT install Django auth app
+    id = None
+    pk = None
+    username = 'Anonymous'
+    is_staff = False
+    is_active = False
+    is_superuser = False
+    _groups = None ## EmptyManager(Group)
+    _user_permissions = None ## EmptyManager(Permission)
+
+    def __str__(self):
+        return 'AnonymousUser'
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__)
+
+    def __hash__(self):
+        return 1  # instances always return the same hash value
+
+    def __int__(self):
+        raise TypeError('Cannot cast AnonymousUser to int. Are you trying to use it in place of User?')
+
+    def save(self):
+        raise NotImplementedError("Django doesn't provide a DB representation for AnonymousUser.")
+
+    def delete(self):
+        raise NotImplementedError("Django doesn't provide a DB representation for AnonymousUser.")
+
+    def set_password(self, raw_password):
+        raise NotImplementedError("Django doesn't provide a DB representation for AnonymousUser.")
+
+    def check_password(self, raw_password):
+        raise NotImplementedError("Django doesn't provide a DB representation for AnonymousUser.")
+
+    @property
+    def groups(self):
+        return self._groups
+
+    @property
+    def user_permissions(self):
+        return self._user_permissions
+
+    def get_user_permissions(self, obj=None):
+        ## return _user_get_permissions(self, obj, 'user')
+        return set()
+
+    def get_group_permissions(self, obj=None):
+        return set()
+
+    def get_all_permissions(self, obj=None):
+        ## return _user_get_permissions(self, obj, 'all')
+        return set()
+
+    def has_perm(self, perm, obj=None):
+        ## return _user_has_perm(self, perm, obj=obj)
+        return False
+
+    def has_perms(self, perm_list, obj=None):
+        return all(self.has_perm(perm, obj) for perm in perm_list)
+
+    def has_module_perms(self, module):
+        ## return _user_has_module_perms(self, module)
+        return False
+
+    @property
+    def is_anonymous(self):
+        return True
+
+    @property
+    def is_authenticated(self):
+        return False
+
+    def get_username(self):
+        return self.username
 

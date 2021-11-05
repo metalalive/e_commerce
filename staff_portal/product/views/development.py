@@ -5,9 +5,9 @@ from django.contrib.contenttypes.models  import ContentType
 from rest_framework             import status as RestStatus
 from rest_framework.filters     import OrderingFilter
 
+from common.auth.django.authentication import RemoteAccessJWTauthentication
 from common.views.mixins  import  LimitQuerySetMixin
 from common.views.api     import  AuthCommonAPIView, AuthCommonAPIReadView
-from common.views.proxy.mixins import RemoteGetProfileIDMixin
 from softdelete.views import RecoveryModelMixin
 
 from ..models.common import ProductmgtChangeSet
@@ -19,11 +19,12 @@ from  .common import BaseIngredientSearchFilter
 _logger = logging.getLogger(__name__)
 
 
-class FabricationIngredientView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModelMixin):
+class FabricationIngredientView(AuthCommonAPIView, RecoveryModelMixin):
     serializer_class  = FabricationIngredientSerializer
     filter_backends = [BaseIngredientSearchFilter, OrderingFilter,] # TODO, figure out how to search with attribute type/value
     ordering_fields  = ['-id', 'name', 'category']
     search_fields  = ['name', 'category']
+    authentication_classes = [RemoteAccessJWTauthentication]
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [FabricationIngredientPermissions]
     queryset = serializer_class.Meta.model.objects.all()
     SOFTDELETE_CHANGESET_MODEL = ProductmgtChangeSet
@@ -49,7 +50,7 @@ class FabricationIngredientView(AuthCommonAPIView, RemoteGetProfileIDMixin, Reco
         kwargs['resource_content_type'] = ContentType.objects.get(app_label='product',
                 model=self.serializer_class.Meta.model.__name__)
         kwargs['return_data_after_done'] = True
-        return self.recovery(request=request, *args, **kwargs)
+        return self.recovery(request=request, *args, profile_id=request.user.profile, **kwargs)
 
 
 

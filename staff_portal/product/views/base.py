@@ -8,10 +8,10 @@ from rest_framework            import status as RestStatus
 from rest_framework.filters    import OrderingFilter, SearchFilter
 from rest_framework.exceptions import NotFound
 
+from common.auth.django.authentication import RemoteAccessJWTauthentication
 from common.views.api     import  AuthCommonAPIView, AuthCommonAPIReadView
 from common.views.mixins  import  LimitQuerySetMixin
 from common.views.filters import  ClosureTableFilter, AggregateFieldOrderingFilter
-from common.views.proxy.mixins import RemoteGetProfileIDMixin
 from softdelete.views import RecoveryModelMixin
 
 from ..models.base import ProductTagClosure
@@ -43,12 +43,13 @@ class TagSearchFilter(SearchFilter):
         return queryset
 
 
-class TagView(AuthCommonAPIView, RemoteGetProfileIDMixin):
+class TagView(AuthCommonAPIView):
     serializer_class  = TagSerializer
     filter_backends = [TagsPermissions, TagSearchFilter, ClosureTableFilter, TagOrderFilter,]
     closure_model_cls = ProductTagClosure
     ordering_fields  = ['id', 'name', 'item_cnt', 'pkg_cnt', 'num_children']
     search_fields  = ['name']
+    authentication_classes = [RemoteAccessJWTauthentication]
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [TagsPermissions]
     queryset = serializer_class.Meta.model.objects.all()
 
@@ -77,18 +78,16 @@ class TagView(AuthCommonAPIView, RemoteGetProfileIDMixin):
         return super().get(request=request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        prof_id = self.get_profile_id(request=request, num_of_msgs_fetch=2)
         kwargs['many'] = True
         kwargs['return_data_after_done'] = True
-        kwargs['serializer_kwargs'] = {'usrprof_id': prof_id}
+        kwargs['serializer_kwargs'] = {'usrprof_id': request.user.profile}
         return  self.create(request, *args, **kwargs)
 
     def put(self, request, *args, **kwargs):
-        prof_id = self.get_profile_id(request=request, num_of_msgs_fetch=2)
         kwargs['many'] = True
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
         kwargs['return_data_after_done'] = False
-        kwargs['serializer_kwargs'] = {'usrprof_id': prof_id}
+        kwargs['serializer_kwargs'] = {'usrprof_id': request.user.profile}
         return  self.update(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):
@@ -97,12 +96,13 @@ class TagView(AuthCommonAPIView, RemoteGetProfileIDMixin):
         return self.destroy(request, *args, **kwargs)
 
 
-class AttributeTypeView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModelMixin):
+class AttributeTypeView(AuthCommonAPIView, RecoveryModelMixin):
     serializer_class  = AttributeTypeSerializer
     # TODO, ffigure out whether I can use AggregateFieldOrderingFilter
     filter_backends = [SearchFilter, OrderingFilter,]
     ordering_fields  = ['id', 'name', 'dtype',]
     search_fields  = ['name']
+    authentication_classes = [RemoteAccessJWTauthentication]
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [AttributeTypePermissions]
     queryset = serializer_class.Meta.model.objects.all()
     SOFTDELETE_CHANGESET_MODEL = ProductmgtChangeSet
@@ -130,13 +130,14 @@ class AttributeTypeView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryMode
         kwargs['resource_content_type'] = ContentType.objects.get(app_label='product',
                 model=self.serializer_class.Meta.model.__name__)
         kwargs['return_data_after_done'] = True
-        return self.recovery(request=request, *args, **kwargs)
+        return self.recovery(request=request, *args, profile_id=request.user.profile, **kwargs)
 
 
-class TaggedSaleableView(AuthCommonAPIReadView, RemoteGetProfileIDMixin):
+class TaggedSaleableView(AuthCommonAPIReadView):
     filter_backends = [BaseIngredientSearchFilter, OrderingFilter,]
     ordering_fields  = ['name', 'price']
     search_fields  = ['name',]
+    authentication_classes = [RemoteAccessJWTauthentication]
     serializer_class  = None
     queryset = None
 
@@ -157,17 +158,17 @@ class TaggedSaleableView(AuthCommonAPIReadView, RemoteGetProfileIDMixin):
         return resp_saleitems
 
 
-class SaleableBaseView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModelMixin):
+class SaleableBaseView(AuthCommonAPIView, RecoveryModelMixin):
     filter_backends = [BaseIngredientSearchFilter, OrderingFilter,]
     ordering_fields  = ['name', 'price']
     search_fields  = ['name',]
+    authentication_classes = [RemoteAccessJWTauthentication]
     SOFTDELETE_CHANGESET_MODEL = ProductmgtChangeSet
 
     def post(self, request, *args, **kwargs):
-        prof_id = self.get_profile_id(request=request, num_of_msgs_fetch=2)
         kwargs['many'] = True
         kwargs['return_data_after_done'] = True
-        kwargs['serializer_kwargs'] = {'usrprof_id': prof_id}
+        kwargs['serializer_kwargs'] = {'usrprof_id': request.user.profile}
         return  self.create(request, *args, **kwargs)
 
     def put(self, request, *args, **kwargs):
@@ -186,18 +187,20 @@ class SaleableBaseView(AuthCommonAPIView, RemoteGetProfileIDMixin, RecoveryModel
         kwargs['resource_content_type'] = ContentType.objects.get(app_label='product',
                 model=self.serializer_class.Meta.model.__name__)
         kwargs['return_data_after_done'] = True
-        return self.recovery(request=request, *args, **kwargs)
+        return self.recovery(request=request, *args, profile_id=request.user.profile, **kwargs)
 
 
 class SaleableItemView(SaleableBaseView):
     serializer_class  = SaleableItemSerializer
-    permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [SaleableItemPermissions]
+    permission_classes = AuthCommonAPIView.permission_classes.copy() + [SaleableItemPermissions]
     queryset = serializer_class.Meta.model.objects.all()
+    ordering_fields = SaleableBaseView.ordering_fields.copy() + ['ingredients_applied__ingredient__category']
+    search_fields = SaleableBaseView.search_fields.copy() + ['ingredients_applied__ingredient__name', 'pkgs_applied__package__name']
 
 class SaleablePackageView(SaleableBaseView):
     serializer_class  = SaleablePackageSerializer
     permission_classes = copy.copy(AuthCommonAPIView.permission_classes) + [SaleablePackagePermissions]
     queryset = serializer_class.Meta.model.objects.all()
-
+    search_fields = SaleableBaseView.search_fields.copy() + ['saleitems_applied__sale_item__name']
 
 

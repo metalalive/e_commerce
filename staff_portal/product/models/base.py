@@ -678,6 +678,47 @@ class ProductAppliedAttributePrice(SoftDeleteObjectMixin):
     amount = models.FloatField(default=0.00)
 
 
+class RemoteUserAccountManager(models.Manager):
+    def get(self, profile):
+        instance = self.model(profile=profile)
+        return instance
+
+
+class RemoteUserAccount(models.Model):
+    # read-only model to represent LoginAccount in user_management app
+    # Note this app doesn't install Django auth app, so I cannot simply use proxy
+    # model on LoginAccount 
+    class Meta:
+        managed = False
+        swappable = 'AUTH_USER_MODEL'
+        db_table = 'login_account'
+    objects = RemoteUserAccountManager()
+
+    profile = models.PositiveIntegerField(primary_key=True)
+
+    is_superuser = models.BooleanField(
+        ('superuser status'),
+        default=False,
+        help_text=(
+            'Designates that this user has all permissions without '
+            'explicitly assigning them.'
+        ),
+    )
+    is_staff = models.BooleanField(
+        ('staff status'),
+        default=False,
+        help_text=('Designates whether the user can log into this admin site.'),
+    )
+
+    @property
+    def is_active(self):
+        return True
+
+    @property
+    def is_authenticated(self):
+        return True
+
+
 
 # class ProductPriceHistory(models.Model):
 #     class Meta:

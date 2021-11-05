@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 
 from django.test import TransactionTestCase
 from django.db.models import Count
-from django.contrib.auth.models import User as AuthUser
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
@@ -16,7 +15,9 @@ from product.permissions import FabricationIngredientPermissions
 from product.models.base import ProductAttributeType, _ProductAttrValueDataType
 
 from product.tests.common import _MockTestClientInfoMixin,_fixtures as model_fixtures, listitem_rand_assigner, http_request_body_template, _common_instances_setup, assert_view_permission_denied, assert_view_bulk_create_with_response, assert_view_unclassified_attributes, SoftDeleteCommonTestMixin
-from .common import HttpRequestDataGenDevIngredient, DevIngredientVerificationMixin
+
+from ..common import app_code_product, priv_status_staff
+from  .common import HttpRequestDataGenDevIngredient, DevIngredientVerificationMixin
 
 
 def _related_instance_setup(stored_models, num_attrtypes=None):
@@ -35,26 +36,15 @@ class DevIngredientBaseViewMixin(TransactionTestCase, _MockTestClientInfoMixin, 
                 num_create=num_create)
 
     def setUp(self):
-        self._request_data = self.refresh_req_data()
-        _user_info = model_fixtures['AuthUser'][0]
-        account = AuthUser(**_user_info)
-        account.set_password(_user_info['password'])
-        account.save()
-        # for django app, header name has to start with `HTTP_XXXX`
-        self.http_forwarded = self._forwarded_pattern % _user_info['username']
+        self._setup_keystore()
+        self._request_data = self.refresh_req_data(num_create=5)
 
     def tearDown(self):
+        self._teardown_keystore()
         self._client.cookies.clear()
         self.min_num_applied_attrs = 0
         self.min_num_applied_tags = 0
         self.min_num_applied_ingredients = 0
-
-    def _send_request_to_backend(self, path, method='post', body=None, expect_shown_fields=None,
-            ids=None, extra_query_params=None):
-        headers = {'HTTP_FORWARDED': self.http_forwarded,}
-        return super()._send_request_to_backend( path=path, method=method, body=body, ids=ids,
-                expect_shown_fields=expect_shown_fields, extra_query_params=extra_query_params,
-                headers=headers)
 ## end of class DevIngredientBaseViewMixin
 
 
@@ -63,36 +53,28 @@ class DevIngredientCreationTestCase(DevIngredientBaseViewMixin):
 
     def test_permission_denied(self):
         kwargs = { 'testcase':self, 'request_body_data':self._request_data, 'path':self.path,
-            'content_type':self._json_mimetype, 'http_forwarded':self.http_forwarded,
-            'mock_rpc_path':'product.views.development.FabricationIngredientView._usermgt_rpc.get_profile',
-            'permission_map': self.permission_class.perms_map['POST'], 'http_method':'post',
-            'return_profile_id': self.mock_profile_id[0],
+            'permissions': self.permission_class.perms_map['POST'], 'http_method':'post',
         }
         assert_view_permission_denied(**kwargs)
-        kwargs['permission_map'] = self.permission_class.perms_map['PUT']
+        kwargs['permissions'] = self.permission_class.perms_map['PUT']
         kwargs['http_method'] = 'put'
         assert_view_permission_denied(**kwargs)
 
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_bulk_ok_with_partial_response(self, mock_get_profile):
+    def test_bulk_ok_with_partial_response(self):
         _related_instance_setup(self.stored_models)
         expect_shown_fields = ['id', 'name', 'attributes']
         expect_hidden_fields = ['category']
-        expect_usrprof = self.mock_profile_id[0]
-        mock_get_profile.return_value = self._mock_get_profile(expect_usrprof, 'POST')
-        assert_view_bulk_create_with_response(testcase=self, expect_shown_fields=expect_shown_fields,
+        created_items = assert_view_bulk_create_with_response(testcase=self, expect_shown_fields=expect_shown_fields,
                 expect_hidden_fields=expect_hidden_fields, path=self.path, body=self._request_data,
-                method='post')
+                permissions=['view_productdevingredient', 'add_productdevingredient'], method='post')
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_validation_error_unclassified_attributes(self, mock_get_profile):
+    def test_validation_error_unclassified_attributes(self):
         # don't create any attribute type instance in this case
         self.min_num_applied_attrs = 1
         new_request_data = self.refresh_req_data()
-        mock_get_profile.return_value = self._mock_get_profile(self.mock_profile_id[1], 'POST')
-        assert_view_unclassified_attributes(testcase=self, path=self.path, method='post',
-                body=new_request_data)
+        assert_view_unclassified_attributes(testcase=self, path=self.path, method='post',  body=new_request_data,
+                permissions=['view_productdevingredient', 'add_productdevingredient'] )
 ## end of class DevIngredientCreationTestCase
 
 
@@ -102,18 +84,19 @@ class DevIngredientUpdateBaseTestCase(DevIngredientBaseViewMixin, DevIngredientV
     def setUp(self):
         super().setUp()
         _related_instance_setup(stored_models=self.stored_models)
-        self.expect_usrprof = self.mock_profile_id[0]
-        with patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile') as mock_get_profile:
-            mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'POST')
-            response = self._send_request_to_backend(path=self.path, body=self._request_data,
-                    method='post', expect_shown_fields=['id', 'name',])
-            self.assertEqual(int(response.status_code), 201)
-            created_items = response.json()
-            created_ids = tuple(map(lambda x:x['id'], created_items))
-            self._created_items = self.serializer_class.Meta.model.objects.filter(id__in=created_ids)
-            serializer_ro = self.serializer_class(many=True, instance=self._created_items)
-            self._old_request_data = self._request_data
-            self._request_data = serializer_ro.data
+        permissions = ['view_productdevingredient', 'add_productdevingredient']
+        self._access_tok_payld = { 'id':71, 'privilege_status': priv_status_staff, 'quotas':[],
+            'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+        access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
+        response = self._send_request_to_backend(path=self.path, body=self._request_data,
+                method='post', expect_shown_fields=['id', 'name',], access_token=access_token)
+        self.assertEqual(int(response.status_code), 201)
+        created_items = response.json()
+        created_ids = tuple(map(lambda x:x['id'], created_items))
+        self._created_items = self.serializer_class.Meta.model.objects.filter(id__in=created_ids)
+        serializer_ro = self.serializer_class(many=True, instance=self._created_items)
+        self._old_request_data = self._request_data
+        self._request_data = serializer_ro.data
 
 
 class DevIngredientUpdateTestCase(DevIngredientUpdateBaseTestCase):
@@ -121,27 +104,34 @@ class DevIngredientUpdateTestCase(DevIngredientUpdateBaseTestCase):
     min_num_applied_attrs = 4
     max_num_applied_attrs = 6
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_invalid_id(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
+    def setUp(self):
+        super().setUp()
+        permissions = ['view_productdevingredient', 'change_productdevingredient']
+        self._access_tok_payld['roles'] = [{'app_code':app_code_product, 'codename':codename} for codename in permissions]
+        self._access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
+
+    def test_invalid_id(self):
         edit_data = self._request_data
         expect_response_status = 400
         # sub case: lack id
         key = drf_default_settings['NON_FIELD_ERRORS_KEY']
         edit_data[0].pop('id',None)
-        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
+        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data,
+                access_token=self._access_token)
         err_items = response.json()
         self.assertEqual(int(response.status_code), expect_response_status)
         # sub case: invalid data type of id
         edit_data[0]['id'] = 99999
         edit_data[-1]['id'] = 'string_id'
-        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
+        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data,
+                access_token=self._access_token)
         err_items = response.json()
         self.assertEqual(int(response.status_code), expect_response_status)
         # sub case: mix of valid id and invalid id
         edit_data[0]['id'] = 'wrong_id'
         edit_data[-1]['id'] = 123
-        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data)
+        response = self._send_request_to_backend(path=self.path, method='put', body=edit_data,
+                access_token=self._access_token)
         err_items = response.json()
         self.assertEqual(int(response.status_code), expect_response_status)
 
@@ -160,16 +150,14 @@ class DevIngredientUpdateTestCase(DevIngredientUpdateBaseTestCase):
             edit_dst = v[None]
             edit_dst['id'] = new_attr_ids[0]
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_bulk_ok(self, mock_get_profile):
+    def test_bulk_ok(self):
         expect_shown_fields = ['id', 'name', 'category', 'attributes']
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
         num_edit_data = len(self._request_data) >> 1
         editing_data    = self._request_data[:num_edit_data]
         unaffected_data = self._request_data[num_edit_data:]
         self.rand_gen_edit_data(editing_data=editing_data)
-        response = self._send_request_to_backend(path=self.path, method='put',
-                body=editing_data,  expect_shown_fields=expect_shown_fields)
+        response = self._send_request_to_backend(path=self.path, method='put', body=editing_data,
+                expect_shown_fields=expect_shown_fields, access_token=self._access_token)
         self.assertEqual(int(response.status_code), 200)
         edited_data = response.json()
         self._update_attr_val_id(src=edited_data, dst=editing_data)
@@ -180,16 +168,15 @@ class DevIngredientUpdateTestCase(DevIngredientUpdateBaseTestCase):
         self.assertEqual(expect_edited_data, actual_edited_data)
 
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_conflict_ingredient_id(self, mock_get_profile):
+    def test_conflict_ingredient_id(self):
         key = drf_default_settings['NON_FIELD_ERRORS_KEY']
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
         editing_data = self._request_data
         self.rand_gen_edit_data(editing_data=editing_data)
         # conflict ingredient id
         discarded_id  = editing_data[0]['id']
         editing_data[0]['id'] = editing_data[1]['id']
-        response = self._send_request_to_backend(path=self.path, method='put', body=editing_data,)
+        response = self._send_request_to_backend(path=self.path, method='put', body=editing_data,
+                 access_token=self._access_token)
         self.assertEqual(int(response.status_code), 400)
         err_info = response.json()
         err_msg = err_info[key][0]
@@ -198,9 +185,7 @@ class DevIngredientUpdateTestCase(DevIngredientUpdateBaseTestCase):
         pos = err_msg.find(str(discarded_id))
         self.assertLess(pos, 0)
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_conflict_attribute_id_different_dtypes(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PUT')
+    def test_conflict_attribute_id_different_dtypes(self):
         editing_data = self._request_data[:1]
         editing_attrs = editing_data[0]['attributes']
         discarded_attrval_id = editing_attrs[0]['id']
@@ -211,7 +196,8 @@ class DevIngredientUpdateTestCase(DevIngredientUpdateBaseTestCase):
                 != discarded_attr_type_obj.dtype, editing_attrs))
         chosen_attr = chosen_attr[0]
         editing_attrs[0]['id'] = chosen_attr['id']
-        response = self._send_request_to_backend(path=self.path, method='put', body=editing_data,)
+        response = self._send_request_to_backend(path=self.path, method='put', body=editing_data,
+                access_token=self._access_token)
         # conflict attribute value id will NOT cause any error , the product backend
         # app simply skips the incorrect id
         edited_data = response.json()
@@ -236,12 +222,17 @@ class DevIngredientUpdateTestCase(DevIngredientUpdateBaseTestCase):
 
 class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteCommonTestMixin):
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_softdelete_ok(self, mock_get_profile):
+    def setUp(self):
+        super().setUp()
+        permissions = ['view_productdevingredient', 'change_productdevingredient', 'delete_productdevingredient']
+        self._access_tok_payld['roles'] = [{'app_code':app_code_product, 'codename':codename} for codename in permissions]
+        self._access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
+
+    def test_softdelete_ok(self):
         num_delete = 2
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
         deleted_ids = list(map(lambda x: {'id':x.id}, self._created_items[:num_delete]))
-        response = self._send_request_to_backend(path=self.path, method='delete', body=deleted_ids)
+        response = self._send_request_to_backend(path=self.path, method='delete',
+                body=deleted_ids, access_token=self._access_token)
         self.assertEqual(int(response.status_code), 202)
         deleted_ids = list(map(lambda x: x.id, self._created_items[:num_delete]))
         remain_ids  = list(map(lambda x: x.id, self._created_items[num_delete:]))
@@ -256,19 +247,16 @@ class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteC
         undeleted_objs = self.serializer_class.Meta.model.objects.filter(id__in=undeleted_ids).order_by('id')
         self.verify_objects(actual_instances=undeleted_objs, expect_data=undeleted_items)
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_undelete_by_time(self, mock_get_profile):
+    def test_undelete_by_time(self):
         remain_items  = list(self._created_items)
         deleted_items = []
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
         model_cls_path = 'product.models.development.ProductDevIngredient'
         self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
-                model_cls_path=model_cls_path)
+                model_cls_path=model_cls_path, access_token=self._access_token)
         # recover based on the time at which each item was soft-deleted, there may be more
         # than one item being undeleted at one API call.
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
         while any(deleted_items):
-            undeleted_items = self.perform_undelete(testcase=self, path=self.path)
+            undeleted_items = self.perform_undelete(testcase=self, path=self.path, access_token=self._access_token)
             self._verify_undeleted_items(undeleted_items)
             undeleted_ids  = tuple(map(lambda x:x['id'], undeleted_items))
             moving_gen = tuple(filter(lambda obj: obj.id in undeleted_ids, deleted_items))
@@ -277,22 +265,19 @@ class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteC
                 deleted_items.remove(item)
         self.assertSetEqual(set(self._created_items), set(remain_items))
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_undelete_specific_item(self, mock_get_profile):
+    def test_undelete_specific_item(self):
         remain_items  = list(self._created_items)
         deleted_items = []
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
         model_cls_path = 'product.models.development.ProductDevIngredient'
         self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
-                model_cls_path=model_cls_path)
+                model_cls_path=model_cls_path, access_token=self._access_token)
         # recover based on the time at which each item was soft-deleted, there may be more
         # than one item being undeleted at one API call.
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
         num_undelete = len(deleted_items) >> 1
         undeleting_items_gen = listitem_rand_assigner(list_=deleted_items, min_num_chosen=num_undelete,
                     max_num_chosen=(num_undelete + 1))
         body = {'ids':[obj.id for obj in undeleting_items_gen]}
-        affected_items = self.perform_undelete(body=body, testcase=self, path=self.path)
+        affected_items = self.perform_undelete(body=body, testcase=self, path=self.path, access_token=self._access_token)
         self._verify_undeleted_items(affected_items)
         expect_undel_ids = body['ids']
         actual_undel_ids = tuple(map(lambda x:x['id'], affected_items))
@@ -303,36 +288,35 @@ class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteC
             self.assertEqual(obj.is_deleted(), expect_del)
 
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_no_softdeleted_item(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'PATCH')
-        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':410,
+    def test_no_softdeleted_item(self):
+        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':410, 'access_token':self._access_token,
                 'expect_resp_msg':'Nothing recovered'}
         self.perform_undelete(**kwargs)
         remain_items = self._created_items[:2]
         kwargs['body'] = {'ids':[obj.id for obj in remain_items]}
         self.perform_undelete(**kwargs)
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_softdelete_permission_denied(self, mock_get_profile):
-        another_usrprof = self.mock_profile_id[1]
-        mock_get_profile.return_value = self._mock_get_profile(another_usrprof, 'DELETE', access_control=False)
+    def test_softdelete_permission_denied(self):
+        permissions = ['delete_productdevingredient']
+        self._access_tok_payld['roles'] = [{'app_code':app_code_product, 'codename':codename} for codename in permissions]
+        access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
         deleted_ids = list(map(lambda obj: {'id': obj.id}, self._created_items))
-        response = self._send_request_to_backend(path=self.path, method='delete', body=deleted_ids)
+        response = self._send_request_to_backend(path=self.path, method='delete', body=deleted_ids,
+                 access_token=access_token)
         self.assertEqual(int(response.status_code), 403)
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_undelete_permission_denied(self, mock_get_profile):
+    def test_undelete_permission_denied(self):
+        permissions = ['view_productdevingredient', 'delete_productdevingredient']
+        self._access_tok_payld['roles'] = [{'app_code':app_code_product, 'codename':codename} for codename in permissions]
+        access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
         remain_items  = list(self._created_items)
         deleted_items = []
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'DELETE')
         model_cls_path = 'product.models.development.ProductDevIngredient'
         self._softdelete_by_half(remain_items, deleted_items, testcase=self, api_url=self.path,
-                model_cls_path=model_cls_path)
+                model_cls_path=model_cls_path, access_token=access_token)
         self.assertGreater(len(deleted_items), 0)
-        another_usrprof = self.mock_profile_id[1]
-        mock_get_profile.return_value = self._mock_get_profile(another_usrprof, 'PATCH', access_control=False)
-        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':403,
+        # ----------------
+        kwargs = {'testcase': self, 'path':self.path, 'expect_resp_status':403, 'access_token':access_token,
                 'expect_resp_msg':'You do not have permission to perform this action.'}
         kwargs['body'] = {'ids':[obj.id for obj in deleted_items]}
         self.perform_undelete(**kwargs)
@@ -340,15 +324,19 @@ class DevIngredientDeletionTestCase(DevIngredientUpdateBaseTestCase, SoftDeleteC
 
 
 class DevIngredientQueryTestCase(DevIngredientUpdateBaseTestCase, DevIngredientVerificationMixin):
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_bulk_items_partial_info(self, mock_get_profile):
+    def setUp(self):
+        super().setUp()
+        permissions = ['view_productdevingredient']
+        self._access_tok_payld['roles'] = [{'app_code':app_code_product, 'codename':codename} for codename in permissions]
+        self._access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
+
+    def test_bulk_items_partial_info(self):
         expect_shown_fields = ['id','name','attributes']
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
         num_read = len(self._created_items) - 1
         read_items_gen = listitem_rand_assigner(list_=self._created_items, max_num_chosen=(num_read + 1))
         created_ids = tuple(map(lambda obj: obj.id, read_items_gen))
-        response = self._send_request_to_backend(path=self.path, method='get',
-                expect_shown_fields=expect_shown_fields, ids=created_ids,)
+        response = self._send_request_to_backend(path=self.path, method='get', ids=created_ids,
+                expect_shown_fields=expect_shown_fields, access_token=self._access_token)
         actual_items = response.json()
         expect_items = self._created_items.filter(id__in=created_ids)
         self.assertEqual(int(response.status_code), 200)
@@ -360,22 +348,22 @@ class DevIngredientAdvancedSearchTestCase(DevIngredientUpdateBaseTestCase, DevIn
     min_num_applied_attrs = 4
     _model_cls = DevIngredientVerificationMixin.serializer_class.Meta.model
 
-    def refresh_req_data(self):
-        return super().refresh_req_data(num_create=5)
+    def setUp(self):
+        super().setUp()
+        permissions = ['view_productdevingredient']
+        self._access_tok_payld['roles'] = [{'app_code':app_code_product, 'codename':codename} for codename in permissions]
+        self._access_token = self.gen_access_token(profile=self._access_tok_payld, audience=['product'])
 
     def _test_advanced_search_common(self, adv_cond):
         extra_query_params = {'advanced_search': 'yes', 'adv_search_cond': json.dumps(adv_cond)}
         response = self._send_request_to_backend(path=self.path, method='get',
-                extra_query_params=extra_query_params)
+                extra_query_params=extra_query_params, access_token=self._access_token)
         actual_items = response.json()
         self.assertEqual(int(response.status_code), 200)
         self.assertGreaterEqual(len(actual_items), 1)
         return actual_items
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_advanced_search_attr_str(self, mock_get_profile):
-        # to ensure there will be at least 2 attribute values assigned to each saleable item
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+    def test_advanced_search_attr_str(self):
         # construct search condition based on existing created saleable items, in
         # order to ensure there is always something returned
         qset = self._model_cls.objects.annotate(num_str_attr=Count('attr_val_str')).filter(num_str_attr__gt=0)
@@ -398,9 +386,7 @@ class DevIngredientAdvancedSearchTestCase(DevIngredientUpdateBaseTestCase, DevIn
                 }  ## end of adv_cond
                 self._test_advanced_search_common(adv_cond=adv_cond)
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_advanced_search_attr_int(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+    def test_advanced_search_attr_int(self):
         variation = 100
         qset = self._model_cls.objects.annotate(num_int_attr=Count('attr_val_int')).filter(num_int_attr__gt=0)
         for expect_obj in qset:
@@ -437,9 +423,7 @@ class DevIngredientAdvancedSearchTestCase(DevIngredientUpdateBaseTestCase, DevIn
                 self.assertEqual(len(search_result), 1)
 
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_advanced_search_attr_float(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+    def test_advanced_search_attr_float(self):
         qset = self._model_cls.objects.annotate(num_float_attr=Count('attr_val_float')).filter(num_float_attr__gt=0)
         data = qset.values('id', 'attr_val_float__attr_type__id', 'attr_val_float__attr_type__dtype', 'attr_val_float__value')
         data = {v['id']: v  for v in data}
@@ -480,9 +464,7 @@ class DevIngredientAdvancedSearchTestCase(DevIngredientUpdateBaseTestCase, DevIn
         self.verify_objects(actual_instances=qset, expect_data=items_found)
 
 
-    @patch('product.views.development.FabricationIngredientView._usermgt_rpc.get_profile')
-    def test_advanced_nested_search_mix(self, mock_get_profile):
-        mock_get_profile.return_value = self._mock_get_profile(self.expect_usrprof, 'GET')
+    def test_advanced_nested_search_mix(self):
         qset = self._model_cls.objects.all()
         attr_choices = {ingredient.id: {dtype_opt.value[0]: \
             list(getattr(ingredient, dtype_opt.value[0][1]).values('id', 'attr_type','value')) \

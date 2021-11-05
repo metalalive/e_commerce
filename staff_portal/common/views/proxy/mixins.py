@@ -176,6 +176,7 @@ def _render_url_path(proxyview, request, key_vars):
 
 
 
+# TODO, refactor to get profile contacts remotely
 class RemoteGetProfileIDMixin(BaseGetProfileMixin):
     _usermgt_rpc = RPCproxy(app_name='user_management')
     # currently get_account() and get_account_id() works with Django,

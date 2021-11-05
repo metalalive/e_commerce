@@ -86,6 +86,19 @@ AUTH_PASSWORD_VALIDATORS = []
 AUTHENTICATION_BACKENDS = []
 AUTH_USER_MODEL = 'product.RemoteUserAccount'
 
+AUTH_KEYSTORE = {
+    'keystore': 'common.auth.keystore.BaseAuthKeyStore',
+    'persist_pubkey_handler': {
+        "module_path": "common.auth.jwt.RemoteJWKSPersistHandler",
+        "init_kwargs": {"url": "http://localhost:8008/jwks", "name":"remote_pubkey"}
+    },
+}
+
+SESSION_COOKIE_AGE = 600
+CSRF_HEADER_NAME = 'HTTP_X_ANTI_CSRF_TOK'
+CSRF_COOKIE_NAME = 'anticsrftok'
+CSRF_COOKIE_AGE  = 12 * 3600
+CSRF_COOKIE_AGE_AUTHED_USER = SESSION_COOKIE_AGE
 
 CACHES = {
         'default': {
@@ -304,6 +317,7 @@ LOGGING = {
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'EXCEPTION_HANDLER': 'common.views.api.exception_handler',
+    'UNAUTHENTICATED_USER': 'common.auth.django.authentication.AnonymousUser',
 }
 
 

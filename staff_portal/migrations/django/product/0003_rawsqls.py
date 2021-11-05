@@ -53,7 +53,7 @@ class Migration(migrations.Migration):
     @classmethod
     def _load_ops(cls):
         auth_classes = (ProductTag, ProductSaleableItem, ProductSaleablePackage, ProductAttributeType, ProductDevIngredient)
-        quota_mat_classes = (ProductSaleableItem, ProductSaleablePackage, ProductDevIngredient)
+        quota_mat_classes = (ProductSaleableItem, ProductSaleablePackage,)
         insert_contenttype_pattern = 'INSERT INTO `{db_table}` (`app_label`, `model`) VALUES (\'{app_label}\', \'%s\')'
         insert_contenttype_pattern = insert_contenttype_pattern.format(db_table=ContentType._meta.db_table, app_label=ProductSaleableItem._meta.app_label)
         delete_contenttype_pattern = 'DELETE FROM `{db_table}` WHERE `app_label` = \'{app_label}\' AND `model` = \'%s\''

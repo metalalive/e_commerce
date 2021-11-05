@@ -10,27 +10,13 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission as DRFBasePermission, DjangoModelPermissions
 from rest_framework.filters import BaseFilterBackend
 
+from common.auth.jwt import JWTclaimPermissionMixin
 from .models.base import GenericUserGroup,  GenericUserGroupClosure, GenericUserProfile, GenericUserGroupRelation
 
 _logger = logging.getLogger(__name__)
 """
 permissions for views in staff-only backend site
 """
-
-class JWTclaimPermissionMixin:
-    def _has_permission(self, tok_payld, method):
-        from common.models.constants  import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
-        priv_status = tok_payld['priv_status']
-        if priv_status == ROLE_ID_SUPERUSER:
-            result = True
-        elif priv_status == ROLE_ID_STAFF:
-            perms_from_usr = list(map(lambda d:d['codename'] , tok_payld['perms']))
-            perms_required = self.perms_map.get(method, [])
-            covered = set(perms_required) - set(perms_from_usr)
-            result = not any(covered)
-        else:
-            result = False
-        return result
 
 
 class ModelLvlPermsPermissions(DRFBasePermission, JWTclaimPermissionMixin):

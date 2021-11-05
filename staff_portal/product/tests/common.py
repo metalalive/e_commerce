@@ -5,6 +5,8 @@ import random
 from functools import partial
 from unittest.mock import Mock, patch
 
+from django.conf import settings as django_settings
+from django.middleware.csrf import _get_new_csrf_token
 from django.db.models.constants import LOOKUP_SEP
 from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models  import ContentType
@@ -12,12 +14,13 @@ from django.core.exceptions    import ValidationError as DjangoValidationError
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
+from common.cors.middleware import conf as cors_conf
 from common.util.python import flatten_nested_iterable, sort_nested_object, import_module_string
 from common.util.python.messaging.rpc import RpcReplyEvent
 from product.models.base import _ProductAttrValueDataType, ProductSaleableItem, ProductTagClosure
 from product.models.development import ProductDevIngredientType
 
-from tests.python.common import rand_gen_request_body, listitem_rand_assigner, HttpRequestDataGen
+from tests.python.common import rand_gen_request_body, listitem_rand_assigner, HttpRequestDataGen, KeystoreMixin
 from tests.python.common.django import  _BaseMockTestClientInfoMixin
 
 _fixtures = {
@@ -189,6 +192,9 @@ _fixtures = {
     ],
 } # end of _fixtures
 
+# TODO, will read these variables from config file
+priv_status_staff = 2
+app_code_product = 2
 
 http_request_body_template = {
     'ProductTag': {'name': None,  'id': None, 'exist_parent': None, 'new_parent':None},
@@ -221,7 +227,6 @@ http_request_body_template = {
         ]
     }, # end of ProductSaleablePackage
 } # end of http_request_body_template
-
 
 _load_init_params = lambda init_params, model_cls: model_cls(**init_params)
 
@@ -323,51 +328,53 @@ def reset_serializer_validation_result(serializer):
         delattr(serializer, '_data')
 
 
-def assert_view_permission_denied(testcase, request_body_data, path, content_type, mock_rpc_path,
-        http_forwarded, permission_map, return_profile_id, http_method='post'):
-    body = json.dumps(request_body_data).encode()
-    send_req_fn = getattr(testcase._client, http_method)
-    # forwarded authentication failure
-    response = send_req_fn(path=path, data=body, content_type=content_type)
+def assert_view_permission_denied(testcase, request_body_data, path, permissions, http_method='post'):
+    # subcase 1, missing token authentication
+    response = testcase._send_request_to_backend(path=path, method=http_method, body=request_body_data)
+    testcase.assertEqual(int(response.status_code), 401)
+    # subcase 2, failure because user authentication server is down and cannot consume JWKS endpoint
+    extra_headers = {}
+    profile = { 'id':321, 'privilege_status': priv_status_staff, 'quotas':[],
+        'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+    access_token = testcase.gen_access_token(profile=profile, audience=['product'])
+    fn_mocked_empty_jwks = lambda _ : {'keys':[]}
+    response = testcase._send_request_to_backend(path=path, method=http_method, body=request_body_data,
+            access_token=access_token, extra_headers=extra_headers, fn_mocked_get_jwks=fn_mocked_empty_jwks)
+    testcase.assertEqual(int(response.status_code), 401)
+    # subcase 3, failure due to insufficient permission
+    profile['roles'].pop()
+    access_token = testcase.gen_access_token(profile=profile, audience=['product'])
+    response = testcase._send_request_to_backend(path=path, method=http_method, body=request_body_data,
+            access_token=access_token)
     testcase.assertEqual(int(response.status_code), 403)
-    # failure because user authentication server is down
-    with patch(mock_rpc_path) as mock_get_profile:
-        fake_amqp_msg = {'result': {}, 'status': RpcReplyEvent.status_opt.FAIL_CONN}
-        mock_rpc_reply_evt = RpcReplyEvent(listener=None, timeout_s=1)
-        mock_rpc_reply_evt.send(fake_amqp_msg)
-        mock_get_profile.return_value = mock_rpc_reply_evt
-        response = send_req_fn(path=path, data=body, content_type=content_type,
-                     HTTP_FORWARDED=http_forwarded)
-        testcase.assertEqual(int(response.status_code), 403)
-    # failure due to insufficient permission
-    with patch(mock_rpc_path) as mock_get_profile:
-        mock_role = {'id': 126, 'perm_code': permission_map[:-2]}
-        succeed_amqp_msg = {'result': {'id': return_profile_id, 'roles':[mock_role]},}
-        mock_get_profile.return_value = testcase._mock_rpc_succeed_reply_evt(succeed_amqp_msg)
-        response = send_req_fn(path=path, data=body,  content_type=content_type,
-                     HTTP_FORWARDED=http_forwarded)
-        testcase.assertEqual(int(response.status_code), 403)
 
 
-def assert_view_bulk_create_with_response(testcase, expect_shown_fields, expect_hidden_fields, path, body=None, method='post'):
-    response = testcase._send_request_to_backend(path=path, body=body, method=method,
+def assert_view_bulk_create_with_response(testcase, expect_shown_fields, expect_hidden_fields, path,
+        permissions, body=None, method='post'):
+    profile = { 'id':321, 'privilege_status': priv_status_staff, 'quotas':[],
+        'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+    access_token = testcase.gen_access_token(profile=profile, audience=['product'])
+    response = testcase._send_request_to_backend(path=path, body=body, method=method, access_token=access_token,
             expect_shown_fields=expect_shown_fields)
     testcase.assertEqual(int(response.status_code), 201)
-    created_items = json.loads(response.content.decode())
+    created_items = response.json()
     for created_item in created_items:
         for field_name in expect_shown_fields:
             value = created_item.get(field_name, None)
-            testcase.assertNotEqual(value, None)
+            testcase.assertIsNotNone(value)
         for field_name in expect_hidden_fields:
             value = created_item.get(field_name, None)
-            testcase.assertEqual(value, None)
-    return response
+            testcase.assertIsNone(value)
+    return  created_items
 
 
-def assert_view_unclassified_attributes(testcase, path, body, method='post'):
-    response = testcase._send_request_to_backend(path=path, body=body, method=method)
+def assert_view_unclassified_attributes(testcase, path, body, permissions, method='post'):
+    profile = { 'id':321, 'privilege_status': priv_status_staff, 'quotas':[],
+        'roles':[{'app_code':app_code_product, 'codename':codename} for codename in permissions] }
+    access_token = testcase.gen_access_token(profile=profile, audience=['product'])
+    response = testcase._send_request_to_backend(path=path, body=body, method=method, access_token=access_token)
     testcase.assertEqual(int(response.status_code), 400)
-    err_items = json.loads(response.content.decode())
+    err_items = response.json()
     expect_items_iter = iter(body)
     for err_item in err_items:
         testcase.assertListEqual(['attributes'], list(err_item.keys()))
@@ -379,6 +386,7 @@ def assert_view_unclassified_attributes(testcase, path, body, method='post'):
         actual_err_msgs = list(actual_err_msgs)
         testcase.assertGreater(len(actual_err_msgs), 0)
         testcase.assertListEqual(expect_err_msgs, actual_err_msgs)
+    return err_items
 
 
 
@@ -403,7 +411,7 @@ class SoftDeleteCommonTestMixin:
         qset = model_cls.objects.get_deleted_set()
         testcase.assertSetEqual(set(qset.values_list(id_label, flat=True)), set(deleted_ids))
 
-    def _softdelete_by_half(self, remain_items, deleted_items, testcase, model_cls_path, api_url):
+    def _softdelete_by_half(self, remain_items, deleted_items, testcase, model_cls_path, api_url, access_token):
         # helper function to run soft-delete operation in bulk
         delay_interval_sec = 2
         half = len(remain_items) >> 1
@@ -411,7 +419,7 @@ class SoftDeleteCommonTestMixin:
         for chosen_items in chosen_items_set:
             body = [{'id': _get_inst_attr(obj=c, attname='id')} for c in chosen_items]
             response = testcase._send_request_to_backend(path=api_url, method='delete',
-                    body=body )
+                    body=body, access_token=access_token )
             testcase.assertEqual(int(response.status_code), 202)
             for c in chosen_items:
                 remain_items.remove(c)
@@ -422,11 +430,12 @@ class SoftDeleteCommonTestMixin:
                     remain_ids=remain_ids, model_cls_path=model_cls_path,)
             time.sleep(delay_interval_sec)
 
-    def perform_undelete(self, testcase, path, body=None, expect_resp_status=200, expect_resp_msg='recovery done'):
+    def perform_undelete(self, testcase, path, access_token, body=None, expect_resp_status=200, expect_resp_msg='recovery done'):
         # note that body has to be at least {} or [], must not be null
         # because the content-type is json
         body = body or {}
-        response = testcase._send_request_to_backend( path=path, method='patch', body=body,)
+        response = testcase._send_request_to_backend( path=path, method='patch', body=body,
+                access_token=access_token )
         response_body = response.json()
         testcase.assertEqual(int(response.status_code), expect_resp_status)
         if response_body.get('message'): # from softdelete app
@@ -699,22 +708,57 @@ class AttributeAssertionMixin:
 ## end of class AttributeAssertionMixin
 
 
-class _MockTestClientInfoMixin(_BaseMockTestClientInfoMixin):
+class _MockTestClientInfoMixin(_BaseMockTestClientInfoMixin, KeystoreMixin):
     mock_profile_id = [123, 124]
     permission_class = None
 
-    def _mock_rpc_succeed_reply_evt(self, succeed_amqp_msg):
-        reply_evt = RpcReplyEvent(listener=None, timeout_s=1)
-        init_amqp_msg = {'result': {}, 'status': RpcReplyEvent.status_opt.STARTED}
-        reply_evt.send(init_amqp_msg)
-        succeed_amqp_msg['status'] = RpcReplyEvent.status_opt.SUCCESS
-        reply_evt.send(succeed_amqp_msg)
-        return reply_evt
+    def _send_request_to_backend(self, path, method='post', body=None, expect_shown_fields=None,
+            ids=None, extra_query_params=None, access_token='', extra_headers=None, fn_mocked_get_jwks=None):
+        extra_headers = extra_headers or {}
+        fn_mocked_get_jwks = fn_mocked_get_jwks or  self._mocked_get_jwks
+        base_params = client_req_csrf_setup()
+        headers = base_params['headers']
+        headers.update(extra_headers)
+        # for django app, header name has to start with `HTTP_XXXX`
+        headers['HTTP_AUTHORIZATION'] = ' '.join(['Bearer', access_token])
+        with patch('jwt.PyJWKClient.fetch_data', fn_mocked_get_jwks) as mocked_obj:
+            response = super()._send_request_to_backend( path=path, method=method, body=body, ids=ids,
+                expect_shown_fields=expect_shown_fields, extra_query_params=extra_query_params,
+                headers=headers, enforce_csrf_checks=base_params['enforce_csrf_checks'],
+                cookies=base_params['cookies'] )
+        return response
 
-    def _mock_get_profile(self, expect_usrprof, http_method, access_control=True):
-        perms = self.permission_class.perms_map[http_method][:] if access_control else []
-        mock_role = {'id': 126, 'perm_code': perms}
-        succeed_amqp_msg = {'result': {'id': expect_usrprof, 'roles':[mock_role]},}
-        return self._mock_rpc_succeed_reply_evt(succeed_amqp_msg)
+    ## def _mock_rpc_succeed_reply_evt(self, succeed_amqp_msg):
+    ##     reply_evt = RpcReplyEvent(listener=None, timeout_s=1)
+    ##     init_amqp_msg = {'result': {}, 'status': RpcReplyEvent.status_opt.STARTED}
+    ##     reply_evt.send(init_amqp_msg)
+    ##     succeed_amqp_msg['status'] = RpcReplyEvent.status_opt.SUCCESS
+    ##     reply_evt.send(succeed_amqp_msg)
+    ##     return reply_evt
 
+    ## def _mock_get_profile(self, expect_usrprof, http_method, access_control=True):
+    ##     perms = self.permission_class.perms_map[http_method][:] if access_control else []
+    ##     mock_role = {'id': 126, 'perm_code': perms}
+    ##     succeed_amqp_msg = {'result': {'id': expect_usrprof, 'roles':[mock_role]},}
+    ##     return self._mock_rpc_succeed_reply_evt(succeed_amqp_msg)
+
+
+def client_req_csrf_setup():
+    usermgt_host_url = cors_conf.ALLOWED_ORIGIN['product']
+    scheme_end_pos = usermgt_host_url.find('://') + 3
+    valid_csrf_token = _get_new_csrf_token()
+    # (1) assume every request from this application is cross-origin reference.
+    # (2) Django's test client sets `testserver` to host name of each reqeust
+    #     , which cause error in CORS middleware, I fixed the problem by adding
+    #    SERVER_NAME header directly passing in Django's test client (it is only
+    #    for testing purpose)
+    base_headers = {
+        'SERVER_NAME': usermgt_host_url[scheme_end_pos:],
+        'HTTP_ORIGIN': cors_conf.ALLOWED_ORIGIN['web'],
+        django_settings.CSRF_HEADER_NAME: valid_csrf_token,
+    }
+    base_cookies = {
+        django_settings.CSRF_COOKIE_NAME: valid_csrf_token,
+    } # mock CSRF token previously received from web app
+    return { 'headers': base_headers, 'cookies': base_cookies, 'enforce_csrf_checks':True }
 

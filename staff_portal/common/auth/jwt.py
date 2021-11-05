@@ -2,14 +2,16 @@ from datetime import datetime, timedelta, timezone
 from functools import partial
 import math
 import logging
+import json
 import jwt
 from jwt import PyJWKClient
 from jwt.api_jwk import PyJWK
 from jwt.utils import to_base64url_uint
-from jwt.exceptions import PyJWKClientError
+from jwt.exceptions import PyJWKClientError, PyJWKSetError
 
 from common.util.python  import ExtendedDict
 from common.auth.keystore import AbstractKeystorePersistReadMixin, RSAKeygenHandler
+from common.models.constants  import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 
 _logger = logging.getLogger(__name__)
 
@@ -72,11 +74,15 @@ class JWT:
             self.encoded = unverified
         alg = self.header.get('alg', '')
         unverified_kid = self.header.get('kid', '')
-        keyitem = keystore.choose_pubkey(kid=unverified_kid)
-        pubkey = keyitem if isinstance(keyitem, PyJWK) else PyJWK(jwk_data=keyitem)
+        log_args = ['unverified_kid', unverified_kid, 'alg', alg]
+        try:
+            keyitem = keystore.choose_pubkey(kid=unverified_kid)
+            pubkey = keyitem if isinstance(keyitem, PyJWK) else PyJWK(jwk_data=keyitem)
+        except AssertionError as e:
+            log_args.extend(['err_msg', ', '.join(e.args)])
+            pubkey = None
         if not pubkey:
-            log_args = ['unverified_kid', unverified_kid, 'alg', alg,
-                    'msg', 'public key not found on verification',]
+            log_args.extend(['msg', 'public key not found on verification'])
             _logger.warning(None, *log_args) # log this because it may be security issue
             return
         try:
@@ -87,7 +93,7 @@ class JWT:
             assert self.payload == verified, errmsg % (self.payload, verified)
             self._valid = True
         except Exception as e:
-            log_args = ['encoded', self.encoded, 'pubkey', pubkey.key, 'err_msg', ', '.join(e.args)]
+            log_args.extend(['encoded', self.encoded, 'pubkey', pubkey.key, 'err_msg', ', '.join(e.args)])
             _logger.warning(None, *log_args)
             if raise_if_failed:
                 raise
@@ -162,16 +168,34 @@ class JwkRsaKeygenHandler(RSAKeygenHandler):
         return  type("JwkRsaKeyset", (), attrs)()
 
 
+def stream_jwks_file(filepath):
+    import ijson
+    buff = ['{"keys":[']
+    with open(filepath, mode='r') as f: # TODO, handle missing file error ?
+        iterator = ijson.kvitems(f, prefix='')
+        for k,v in iterator:
+            v['kid'] = k
+            buff.append(json.dumps(v))
+            yield ''.join(buff)
+            buff.clear()
+            buff.append(',')
+        buff.pop() # shouldn't have comma in last next item of the list
+    buff.append(']}')
+    #buff.append('], "test123": "value456"}')
+    yield ''.join(buff)
+
+
 class RemoteJWKSPersistHandler(AbstractKeystorePersistReadMixin):
     def __init__(self, url, name='default persist handler'):
         self._jwk_client = PyJWKClient(url)
         self._name = name
 
     def _get_signing_keys(self):
-        # TODO, cache response body of jwks
-        if not hasattr(self, '_signing_keys'):
-            self._signing_keys = self._jwk_client.get_signing_keys()
-        return self._signing_keys
+        try: # TODO, cache response body of jwks
+            keys = self._jwk_client.get_signing_keys()
+        except PyJWKSetError as e: # TODO, logging error
+            keys = []
+        return keys
 
     def __len__(self):
         signing_keys = self._get_signing_keys()
@@ -186,4 +210,27 @@ class RemoteJWKSPersistHandler(AbstractKeystorePersistReadMixin):
             )
         return signing_key[0]
 
+
+class JWTclaimPermissionMixin:
+    perms_map = {
+        'GET': [],
+        'OPTIONS': [],
+        'HEAD': [],
+        'POST':   [],
+        'PUT':    [],
+        'PATCH':  [],
+        'DELETE': [],
+    }
+    def _has_permission(self, tok_payld, method):
+        priv_status = tok_payld['priv_status']
+        if priv_status == ROLE_ID_SUPERUSER:
+            result = True
+        elif priv_status == ROLE_ID_STAFF:
+            perms_from_usr = list(map(lambda d:d['codename'] , tok_payld['perms']))
+            perms_required = self.perms_map.get(method, [])
+            covered = set(perms_required) - set(perms_from_usr)
+            result = not any(covered)
+        else:
+            result = False
+        return result
 

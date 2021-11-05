@@ -8,10 +8,11 @@ class _BaseMockTestClientInfoMixin:
     stored_models = {}
     _json_mimetype = 'application/json'
     _client = DjangoTestClient(enforce_csrf_checks=False, HTTP_ACCEPT=_json_mimetype)
-    _forwarded_pattern = 'by=proxy_api_gateway;for=%s;host=testserver;proto=http'
+    ## _forwarded_pattern = 'by=proxy_api_gateway;for=%s;host=testserver;proto=http'
 
     def _send_request_to_backend(self, path, method='post', body=None, expect_shown_fields=None,
-            ids=None, extra_query_params=None, enforce_csrf_checks=True, headers=None, cookies=None):
+            ids=None, extra_query_params=None, enforce_csrf_checks=True, headers=None, cookies=None,
+            content_type=None):
         if body is not None:
             body = json.dumps(body).encode()
         query_params = {}
@@ -30,7 +31,8 @@ class _BaseMockTestClientInfoMixin:
         bak_csrf_checks = self._client.handler.enforce_csrf_checks
         self._client.cookies.load(cookies) # do not use update()
         self._client.handler.enforce_csrf_checks = enforce_csrf_checks
-        response = send_fn(path=path_with_querystring, data=body, content_type=self._json_mimetype,
+        content_type = content_type or self._json_mimetype
+        response = send_fn(path=path_with_querystring, data=body, content_type=content_type,
                        **headers)
         self._client.handler.enforce_csrf_checks = bak_csrf_checks
         return response
