@@ -13,21 +13,3 @@ class MinimumInfoMixin:
         return {fname: getattr(self, fname) for fname in field_names}
 
 
-class SerializableMixin:
-    def serializable(self, present, query_fn, present_null:bool=False):
-        out = {}
-        present = present or []
-        for field_name in present:
-            if not isinstance(field_name, (str,)):
-                continue
-            fd_value = getattr(self, field_name, None)
-            if fd_value:
-                if isinstance(fd_value, (str, int, float, bool)):
-                    out[field_name] = fd_value
-                else:
-                    query_fn(fd_value=fd_value, field_name=field_name, out=out)
-            elif present_null:
-                out[field_name] = None
-        return out
-
-

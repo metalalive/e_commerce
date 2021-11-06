@@ -16,7 +16,7 @@ from softdelete.models import SoftDeleteObjectMixin
 
 from common.util.python          import merge_partial_dup_listitem
 from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
-from common.models.mixins        import MinimumInfoMixin, SerializableMixin
+from common.models.mixins        import MinimumInfoMixin
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
 from common.models.fields   import CompoundPrimaryKeyField
 
@@ -363,7 +363,7 @@ class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
     descendant = ClosureTableModelMixin.desc_field(ref_cls=GenericUserGroup)
 
 
-class GenericUserProfile(GenericUserCommonFieldsMixin, SerializableMixin, MinimumInfoMixin):
+class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
     NONE = 0
     SUPERUSER = ROLE_ID_SUPERUSER
     STAFF = ROLE_ID_STAFF

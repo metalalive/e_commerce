@@ -10,6 +10,8 @@ python3.9 ./manage.py test product.tests.saleitem.views        --settings produc
 python3.9 ./manage.py test product.tests.salepkg.models       --settings product.settings.test --keepdb --verbosity=2
 python3.9 ./manage.py test product.tests.salepkg.serializers  --settings product.settings.test --keepdb --verbosity=2
 python3.9 ./manage.py test product.tests.salepkg.views        --settings product.settings.test --keepdb --verbosity=2
+python3.9 ./manage.py test product.tests.attrtype.models   --settings product.settings.test --keepdb --verbosity=2
+python3.9 ./manage.py test product.tests.attrtype.views    --settings product.settings.test --keepdb --verbosity=2
 
 python3.9 ./manage.py test user_management.tests.login    --settings user_management.settings.test --keepdb  --verbosity=2
 python3.9 ./manage.py test user_management.tests.role.views   --settings user_management.settings.test --keepdb --verbosity=2

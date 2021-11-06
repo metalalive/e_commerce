@@ -736,14 +736,15 @@ class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
         model_cls = qset.model
         deleted_ids = qset.values_list('pk', flat=True)
         delated_ct = ContentType.objects.get_for_model(model_cls)
-        attrval_field_names_clone = ['extra_charge']
+        attrval_field_names_clone = ['_extra_charge__amount']
         attrval_field_names_clone.extend(self.attrval_field_names)
         def filter_fn(obj):
             id_matched = obj.pk in deleted_ids
             ct_matched = delated_ct.pk == ContentType.objects.get_for_model(obj).pk
             return ct_matched and id_matched
         def serialize_fn(obj):
-            return obj.serializable(present=attrval_field_names_clone, present_null=True)
+            qset = type(obj).objects.filter(id=obj.id).values(*attrval_field_names_clone)
+            return  qset.first()
         out = filter(filter_fn, self.instances['BaseProductAttributeValue'])
         out = map(serialize_fn, out)
         return list(out)
@@ -759,6 +760,7 @@ class SaleableItemAttributeDeletionTestCase(TransactionTestCase):
                     continue
                 expect_deleted_data = self._retrieve_expect_deleted_data(qset)
                 actual_deleted_data = qset.values('_extra_charge__amount',*self.attrval_field_names)
+                expect_deleted_data = list(map(bound_dict_key_replace, expect_deleted_data))
                 actual_deleted_data = list(map(bound_dict_key_replace, actual_deleted_data))
                 expect_deleted_data = sorted(expect_deleted_data, key=lambda x: x['id'])
                 actual_deleted_data = sorted(actual_deleted_data, key=lambda x: x['id'])

@@ -15,7 +15,7 @@ from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelati
 
 from common.models.db      import get_sql_table_pk_gap_ranges
 from common.models.enums   import UnitOfMeasurement, TupleChoicesMeta
-from common.models.mixins  import MinimumInfoMixin, SerializableMixin
+from common.models.mixins  import MinimumInfoMixin
 from common.models.fields  import CompoundPrimaryKeyField
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
 from softdelete.models import  SoftDeleteObjectMixin
@@ -535,7 +535,7 @@ class ProductAttributeType(SoftDeleteObjectMixin, MinimumInfoMixin):
             return getattr(self, related_field_name)
 
 
-class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin, SerializableMixin):
+class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin):
     """
     user-defined metadata for storing textual/numeric attributes applied to saleable items.
 
@@ -579,16 +579,6 @@ class BaseProductAttributeValue(SoftDeleteObjectMixin, _RelatedFieldMixin, Seria
         qset = self._extra_charge.all(with_deleted=self.is_deleted())
         if qset.exists(): # suppose to be only one instance that represents price
             return qset.first().amount
-
-    def serializable(self, present, present_null:bool=False):
-        def query_fn(fd_value, field_name, out):
-            if isinstance(fd_value, models.Model):
-                out[field_name] = fd_value.pk
-            else:
-                raise TypeError('unable to serialize the field %s with value %s' \
-                        % (field_name, fd_value))
-        return super().serializable(present=present, query_fn=query_fn,
-                present_null=present_null)
 
     @_atomicity_fn()
     def save(self, *args, **kwargs):
