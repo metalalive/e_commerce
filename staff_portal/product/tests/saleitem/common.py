@@ -3,7 +3,7 @@ import json
 import random
 from functools import partial
 
-from common.models.enums   import UnitOfMeasurement
+from common.models.enums.django   import UnitOfMeasurement
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 from product.serializers.base import SaleableItemSerializer

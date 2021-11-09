@@ -16,6 +16,7 @@ from softdelete.models import SoftDeleteObjectMixin
 
 from common.util.python          import merge_partial_dup_listitem
 from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from common.models.enums.django  import JsonFileChoicesMeta
 from common.models.mixins        import MinimumInfoMixin
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
 from common.models.fields   import CompoundPrimaryKeyField
@@ -152,22 +153,8 @@ class GeoLocation(AbstractUserRelation):
         db_table = 'geo_location'
     quota_material = QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS
 
-    class CountryCode(models.TextChoices):
-        AU = 'AU',
-        AT = 'AT',
-        CZ = 'CZ',
-        DE = 'DE',
-        HK = 'HK',
-        IN = 'IN',
-        ID = 'ID',
-        IL = 'IL',
-        MY = 'MY',
-        NZ = 'NZ',
-        PT = 'PT',
-        SG = 'SG',
-        TH = 'TH',
-        TW = 'TW',
-        US = 'US',
+    class CountryCode(models.TextChoices, metaclass=JsonFileChoicesMeta):
+        filepath = './common/data/nationality_code.json'
 
     id = models.AutoField(primary_key=True,)
 

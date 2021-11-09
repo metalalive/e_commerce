@@ -1,0 +1,17 @@
+{
+    "AU" : ["AU", "Australia"],
+    "AT" : ["AT", "Austria"],
+    "CZ" : ["CZ", "Czechia"],
+    "DE" : ["DE", "Deutsch"],
+    "HK" : ["HK", "Hong Kong"],
+    "IN" : ["IN", "India"],
+    "ID" : ["ID", "Indonesia"],
+    "IL" : ["IL", "Israel"],
+    "MY" : ["MY", "Malaysia"],
+    "NZ" : ["NZ", "New Zealand"],
+    "PT" : ["PT", "Portugal"],
+    "SG" : ["SG", "Singapore"],
+    "TH" : ["TH", "Thailand"],
+    "TW" : ["TW", "Taiwan"],
+    "US" : ["US", "Unit State"]
+}

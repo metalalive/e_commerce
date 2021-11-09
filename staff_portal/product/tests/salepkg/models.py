@@ -10,7 +10,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models  import ContentType
 
-from common.models.enums   import UnitOfMeasurement
+from common.models.enums.django import UnitOfMeasurement
 from product.models.base import ProductTag, ProductTagClosure, ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem, ProductSaleablePackage,  ProductSaleableItemMedia, ProductSaleableItemComposite, ProductSaleablePackageComposite, ProductSaleablePackageMedia,  ProductAppliedAttributePrice
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 

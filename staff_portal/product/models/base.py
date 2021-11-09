@@ -14,7 +14,7 @@ from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
 
 from common.models.db      import get_sql_table_pk_gap_ranges
-from common.models.enums   import UnitOfMeasurement, TupleChoicesMeta
+from common.models.enums.django import UnitOfMeasurement, TupleChoicesMeta
 from common.models.mixins  import MinimumInfoMixin
 from common.models.fields  import CompoundPrimaryKeyField
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
@@ -362,6 +362,8 @@ class ProductSaleableItem(AbstractProduct):
     quota_material = _MatCodeOptions.MAX_NUM_SALE_ITEMS
     class Meta(AbstractProduct.Meta):
         db_table = 'product_saleable_item'
+
+    unit = models.SmallIntegerField(blank=False, null=False, choices=UnitOfMeasurement.choices)
 
     @_atomicity_fn()
     def delete(self, *args, **kwargs):

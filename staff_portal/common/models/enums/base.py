@@ -1,0 +1,27 @@
+import enum
+import json
+
+def load_json_enums(in_:enum._EnumDict, filepath:str):
+    with open(filepath, 'r') as f:
+        extra = json.load(f)
+        for key, value in extra.items():
+            in_[key] = value
+
+class JsonFileChoicesMetaMixin:
+    """ load enum options from external json file  """
+    @classmethod
+    def __prepare__(metacls, cls, bases):
+        classdict = metacls.__base__.__prepare__(cls, bases)
+        #import pdb
+        #pdb.set_trace()
+        classdict._ignore.append('filepath')
+        return classdict
+
+    def __new__(metacls, classname, bases, classdict):
+        filepath = classdict.get('filepath', '')
+        load_json_enums(classdict, filepath)
+        return super().__new__(metacls, classname, bases, classdict)
+
+class JsonFileChoicesMeta(JsonFileChoicesMetaMixin, enum.EnumMeta):
+    pass
+

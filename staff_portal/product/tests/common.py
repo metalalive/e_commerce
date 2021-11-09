@@ -15,7 +15,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
 from common.cors.middleware import conf as cors_conf
-from common.models.enums import AppCodeOptions
+from common.models.enums.django import AppCodeOptions, UnitOfMeasurement
 from common.util.python import flatten_nested_iterable, sort_nested_object, import_module_string
 from common.util.python.messaging.rpc import RpcReplyEvent
 from product.models.base import _ProductAttrValueDataType, ProductSaleableItem, ProductTagClosure
@@ -23,6 +23,7 @@ from product.models.development import ProductDevIngredientType
 
 from tests.python.common import rand_gen_request_body, listitem_rand_assigner, HttpRequestDataGen, KeystoreMixin
 from tests.python.common.django import  _BaseMockTestClientInfoMixin
+
 
 _fixtures = {
     'AuthUser': [
@@ -171,17 +172,17 @@ _fixtures = {
         {'media':'eOy1r0j4SKuAYEre'},
     ],
     'ProductSaleableItem': [
-        {'visible':  True, 'name':'Raspberry PI 4 Dev board', 'price':3.88,  'usrprof':19},
-        {'visible': False, 'name':'SiFive HiFive Unmatched' , 'price':11.30, 'usrprof':212},
-        {'visible':  True, 'name':'rough rice noOdle',   'price':0.18,  'usrprof':212},
-        {'visible': False, 'name':'Mozzarella pizza', 'price':13.93, 'usrprof':79},
-        {'visible':  True, 'name':'Pita dough', 'price':3.08, 'usrprof':79},
-        {'visible': False, 'name':'quad drone', 'price':17.02, 'usrprof':212},
-        {'visible':  True, 'name':'Industrial Fan', 'price':29.10, 'usrprof':53},
-        {'visible': False, 'name':'Trail runner shoes', 'price': 69.9, 'usrprof':79},
-        {'visible':  True, 'name':'concrete soil', 'price': 5.6, 'usrprof':28},
-        {'visible': False, 'name':'Banana PI dev board', 'price':1.04,  'usrprof':53},
-        {'visible':  True, 'name':'Semi-prepared Beef Noodle Soup',  'price':6.49,  'usrprof':53},
+        {'visible':  True, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'Raspberry PI 4 Dev board', 'price':3.88,  'usrprof':19},
+        {'visible': False, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'SiFive HiFive Unmatched' , 'price':11.30, 'usrprof':212},
+        {'visible':  True, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'rough rice noOdle',   'price':0.18,  'usrprof':212},
+        {'visible': False, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'Mozzarella pizza', 'price':13.93, 'usrprof':79},
+        {'visible':  True, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'Pita dough', 'price':3.08, 'usrprof':79},
+        {'visible': False, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'quad drone', 'price':17.02, 'usrprof':212},
+        {'visible':  True, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'Industrial Fan', 'price':29.10, 'usrprof':53},
+        {'visible': False, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'Trail runner shoes', 'price': 69.9, 'usrprof':79},
+        {'visible':  True, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'concrete soil', 'price': 5.6, 'usrprof':28},
+        {'visible': False, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'Banana PI dev board', 'price':1.04,  'usrprof':53},
+        {'visible':  True, 'unit': random.choice(UnitOfMeasurement.choices)[0], 'name':'Semi-prepared Beef Noodle Soup',  'price':6.49,  'usrprof':53},
     ],
     'ProductSaleablePackage': [
         {'visible':  True,  'name':'Drone DIY kit', 'price':104.95,  'usrprof':23},
@@ -206,7 +207,7 @@ http_request_body_template = {
         ],
     },
     'ProductSaleableItem': {
-        'name': None,  'id': None, 'visible': None, 'price': None,
+        'name': None,  'id': None, 'visible': None, 'price': None, 'unit':None,
         'tags':[] ,
         'media_set':[],
         'attributes':[

@@ -1,7 +1,7 @@
 from functools import partial
 from django.db  import models, transaction
 
-from common.models.enums import AppCodeOptions
+from common.models.enums.django import AppCodeOptions
 from common.util.python.django.setup import test_enable as django_test_enable
 from softdelete.models import ChangeSet, SoftDeleteRecord
 

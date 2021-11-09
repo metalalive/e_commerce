@@ -56,7 +56,7 @@ class SaleableItemCreationTestCase(SaleableItemBaseViewTestCase):
 
     def test_bulk_ok_with_full_response(self):
         _saleitem_related_instance_setup(self.stored_models)
-        expect_field_names = ['id', 'usrprof', 'name', 'visible', 'price', 'tags', 'media_set', 'ingredients_applied', 'attributes']
+        expect_field_names = ['id', 'usrprof', 'name', 'visible', 'price', 'unit', 'tags', 'media_set', 'ingredients_applied', 'attributes']
         expect_usrprof = 71
         permissions = ['view_productsaleableitem', 'add_productsaleableitem']
         access_tok_payld = { 'id':expect_usrprof, 'privilege_status': priv_status_staff, 'quotas':[],
@@ -80,7 +80,7 @@ class SaleableItemCreationTestCase(SaleableItemBaseViewTestCase):
     def test_bulk_ok_with_partial_response(self):
         _saleitem_related_instance_setup(self.stored_models)
         expect_shown_fields = ['id', 'name', 'price', 'tags', 'media_set']
-        expect_hidden_fields = ['usrprof', 'visible', 'ingredients_applied', 'attributes']
+        expect_hidden_fields = ['usrprof', 'unit', 'visible', 'ingredients_applied', 'attributes']
         assert_view_bulk_create_with_response(testcase=self, expect_shown_fields=expect_shown_fields,
             permissions=['view_productsaleableitem', 'add_productsaleableitem'],
             expect_hidden_fields=expect_hidden_fields, path=self.path, body=self._request_data )

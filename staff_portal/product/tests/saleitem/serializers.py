@@ -75,6 +75,8 @@ class SaleableItemCreationTestCase(SaleableItemCommonMixin, TransactionTestCase)
             ('price',  '',    'A valid number is required.'),
             ('price',  '19g', 'A valid number is required.'),
             ('visible', None, 'This field may not be null.'),
+            ('unit',    None, 'This field may not be null.'),
+            ('unit',    9999, '"9999" is not a valid choice.'),
             ('tags',    None, 'This field may not be null.'),
             ('tags',   'xxx', 'Expected a list of items but got type "str".'),
             ('tags', [34, 37, 1234, 39, 5678, 33],  'Invalid pk "1234" - object does not exist.'),
@@ -342,9 +344,9 @@ class SaleableItemRepresentationTestCase(SaleableItemCommonMixin, TransactionTes
 
     def test_represent_partial_1(self):
         def field_check(field_name, value):
-            if field_name in ('id', 'price'):
+            if field_name in ('id', 'price', 'unit'):
                 self.assertGreater(value, 0)
-        expect_fields = ['id', 'price', 'usrprof']
+        expect_fields = ['id', 'price', 'unit', 'usrprof']
         self._test_represent_partial(expect_fields=expect_fields, field_check_fn=field_check)
 
     def test_represent_partial_2(self):

@@ -273,6 +273,7 @@ class AbstractSaleableSerializer(BaseIngredientSerializer):
 class SaleableItemSerializer(AbstractSaleableSerializer):
     class Meta(AbstractSaleableSerializer.Meta):
         model =  ProductSaleableItem
+        fields = AbstractSaleableSerializer.Meta.fields.copy() + ['unit',]
 
     def __init__(self, instance=None, data=DRFEmptyData, **kwargs):
         self.fields['media_set'] = CommonSaleableMediaMetaField(child=CharField(max_length=42),

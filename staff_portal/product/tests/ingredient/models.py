@@ -11,7 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.utils import IntegrityError, DataError
 
 from common.util.python   import sort_nested_object
-from common.models.enums  import UnitOfMeasurement
+from common.models.enums.django  import UnitOfMeasurement
 from product.models.base import ProductAttributeType, _ProductAttrValueDataType, ProductSaleableItem
 from product.models.development import ProductDevIngredientType, ProductDevIngredient
 

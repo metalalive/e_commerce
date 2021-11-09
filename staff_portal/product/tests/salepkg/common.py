@@ -6,7 +6,7 @@ from common.util.python  import sort_nested_object
 from product.models.base import _ProductAttrValueDataType, ProductTag, ProductAttributeType, ProductSaleableItem
 from product.serializers.base import SaleablePackageSerializer
 
-from common.models.enums   import UnitOfMeasurement
+from common.models.enums.django  import UnitOfMeasurement
 from product.tests.common import _fixtures, http_request_body_template, _load_init_params, _modelobj_list_to_map, _dict_key_replace, _dict_kv_pair_evict, listitem_rand_assigner, _common_instances_setup, rand_gen_request_body, _get_inst_attr, assert_field_equal, HttpRequestDataGen, AttributeDataGenMixin, BaseVerificationMixin, AttributeAssertionMixin, _product_tag_closure_setup
 
 

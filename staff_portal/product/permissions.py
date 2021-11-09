@@ -4,7 +4,7 @@ from django.db.models.constants import LOOKUP_SEP
 from rest_framework.permissions import BasePermission as DRFBasePermission
 from rest_framework.filters import BaseFilterBackend as DRFBaseFilterBackend
 
-from common.models.enums import AppCodeOptions
+from common.models.enums.django import AppCodeOptions
 from common.auth.jwt import JWTclaimPermissionMixin
 
 class AppBasePermission(DRFBasePermission, DRFBaseFilterBackend, JWTclaimPermissionMixin):

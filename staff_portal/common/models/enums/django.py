@@ -1,6 +1,6 @@
-import enum
-import json
 from django.db.models.enums import IntegerChoices, ChoicesMeta
+
+from .base import JsonFileChoicesMetaMixin
 
 
 class TupleChoicesMeta(ChoicesMeta):
@@ -13,26 +13,8 @@ class TupleChoicesMeta(ChoicesMeta):
         return empty + [(member.value[0][0], member.label) for member in cls]
 
 
-def load_json_enums(in_:enum._EnumDict, filepath:str):
-    with open(filepath, 'r') as f:
-        extra = json.load(f)
-        for key, value in extra.items():
-            in_[key] = value
-
-
-class JsonFileChoicesMeta(ChoicesMeta):
-    """ load enum options from external json file  """
-    @classmethod
-    def __prepare__(metacls, cls, bases):
-        classdict =  ChoicesMeta.__prepare__(cls, bases)
-        classdict._ignore.append('filepath')
-        return classdict
-
-    def __new__(metacls, classname, bases, classdict):
-        filepath = classdict.get('filepath', '')
-        load_json_enums(classdict, filepath)
-        return super().__new__(metacls, classname, bases, classdict)
-
+class JsonFileChoicesMeta(JsonFileChoicesMetaMixin, ChoicesMeta):
+    pass
 
 class UnitOfMeasurement(IntegerChoices, metaclass=JsonFileChoicesMeta):
     """
