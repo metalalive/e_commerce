@@ -34,12 +34,16 @@ def db_conn_retry_wrapper(func):
     return inner #### end of db_conn_retry_wrapper()
 
 
-def sqlalchemy_init_engine(secrets_file_path, secret_map, base_folder, driver_label, conn_args=None):
+def sqlalchemy_init_engine(secrets_file_path, secret_map, base_folder, driver_label,
+        db_name='', conn_args=None):
     import sqlalchemy as sa
     conn_args = conn_args or {}
     db_credentials = get_credential_from_secrets(base_folder=base_folder,
             secret_path=secrets_file_path,  secret_map=dict([secret_map]))
-    url = format_sqlalchemy_url(driver=driver_label, db_credential=db_credentials[secret_map[0]])
+    chosen_db_credential = db_credentials[secret_map[0]]
+    if db_name:
+        chosen_db_credential['NAME'] = db_name
+    url = format_sqlalchemy_url(driver=driver_label, db_credential=chosen_db_credential)
     # reminder: use engine.dispose() to free up all connections in its pool
     return sa.create_engine(url, connect_args=conn_args)
 

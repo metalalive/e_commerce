@@ -4,6 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from common.util.python import flatten_nested_iterable
 from common.util.python.django.setup import test_enable as django_test_enable
+from common.models.enums.django import AppCodeOptions
 
 from product.models.base import ProductTag, ProductSaleableItem, ProductSaleablePackage, ProductAttributeType
 from product.models.development import ProductDevIngredient
@@ -28,7 +29,7 @@ def _render_perms_sql(model_cls):
         ops.append(op)
     return ops
 
-def _render_quota_material_sql(model_cls, app_code=2):
+def _render_quota_material_sql(model_cls, app_code=AppCodeOptions.product.value):
     insert_pattern = 'INSERT INTO `quota_material` (`app_code`, `mat_code`) VALUES (%s, %s)'
     delete_pattern = 'DELETE FROM `quota_material` WHERE `app_code` = %s AND `mat_code` = %s'
     mat_code = model_cls.quota_material.value

@@ -25,3 +25,6 @@ class JsonFileChoicesMetaMixin:
 class JsonFileChoicesMeta(JsonFileChoicesMetaMixin, enum.EnumMeta):
     pass
 
+class AppCodeOptions(enum.Enum, metaclass=JsonFileChoicesMeta):
+    filepath = './common/data/app_code.json'
+
