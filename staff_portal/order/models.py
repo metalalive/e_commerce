@@ -7,6 +7,8 @@ from sqlalchemy.orm import declarative_base, declarative_mixin, declared_attr, v
 
 from common.models.db import sqlalchemy_init_engine, sqlalchemy_db_conn, EmptyDataRowError
 from common.models.enums.base import JsonFileChoicesMeta
+from common.models.contact.sqlalchemy import EmailMixin, PhoneMixin, LocationMixin
+
 from . import settings
 
 sa_engine = sqlalchemy_init_engine(
@@ -21,6 +23,16 @@ lowlvl_db_conn = partial(sqlalchemy_db_conn, engine=sa_engine)
 
 # served as base of ORM mapped classes
 Base = declarative_base()
+
+class BuyerEmailMixin(EmailMixin):
+    pass
+
+class BuyerPhoneMixin(PhoneMixin):
+    pass
+
+class BuyerLocationMixin(LocationMixin):
+    pass
+
 
 class LoggingTimeMixin:
     # the time at which you created the item
@@ -38,71 +50,15 @@ class TradeOrder(Base, LoggingTimeMixin):
     description = Column(Text)
     # each order (either purchase order or sale order) corresponds to only one seller
     # (supplier / vendor / whole-seller) and one buyer (end-customer / retailer)
-    # both of them should come from GenericUserProfile in user_management app
-    # (offline user not accepted)
-    # Note seller could be individual user or store ID (TODO: build store app)
-    seller = Column(Integer, nullable=False)
+    # Buyers should come from GenericUserProfile in user_management app  (offline user not accepted)
     buyer  = Column(Integer, nullable=False)
+    # Sellers should come from StoreProfile in store app
+    seller = Column(Integer, nullable=False)
     # TODO: add coupon / discount functionalities
     def _rand_gen_id(self):
         raise NotImplementedError()
     # TODO: randomly generate available ID for the new order
     id = Column(Integer, primary_key=True, autoincrement=False, default=_rand_gen_id)
-
-
-class BuyerEmailMixin:
-    # subclasses should extend the white list based on application requirements
-    domain_whitelist = ['localhost']
-    # the content comes from either snapshot of buyer's email in user_management app
-    # or custom email address only for specific order.
-    # The snapshot is essential in case the buyer modifies the contact after he/she creates the order
-    addr = Column(String(160), nullable=False,)
-
-    @validates('addr')
-    def _validate_email_addr(self, key, value):
-        err_msg = 'invalid email format'
-        user_part, domain_part = value.rsplit('@', 1)
-        user_regex = _lazy_re_compile(
-            r"(^[-!#$%&'*+/=?^_`{}|~0-9A-Z]+(\.[-!#$%&'*+/=?^_`{}|~0-9A-Z]+)*\Z"  # dot-atom
-            r'|^"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"\Z)',  # quoted-string
-            re.IGNORECASE)
-        if not user_regex.match(user_part):
-            raise ValueError(err_msg)
-        if (domain_part not in self.domain_whitelist and
-                not self.validate_domain_part(domain_part)):
-            raise ValueError(err_msg)
-
-
-class BuyerPhoneMixin:
-    country_code = Column(String(3 ), nullable=False)
-    line_number  = Column(String(15), nullable=False)
-
-    @validates('country_code')
-    def _validate_country_code(self, key, value):
-        err_msg = "non-digit character detected, or length of digits doesn't meet requirement. It must contain only digit e.g. '91', '886' , from 1 digit up to 3 digits"
-        regex_patt = r"^\d{1,3}$"
-        raise NotImplementedError()
-
-    @validates('line_number')
-    def _validate_line_number(self, key, value):
-        err_msg = "non-digit character detected, or length of digits doesn't meet requirement. It must contain only digits e.g. '9990099', from 7 digits up to 15 digits"
-        regex_patt = r"^\+?1?\d{7,15}$"
-        raise NotImplementedError()
-
-
-class CountryCodeEnum(enum.Enum, metaclass=JsonFileChoicesMeta):
-    filepath = 'common/data/nationality_code.json'
-
-class BuyerLocationMixin:
-    # billing / shipping address for buyer recieving invoice / receipt / purchased items from seller.
-    # the content comes from either snapshot of buyer's location in user_management app
-    # or custom location  only for specific order.
-    # The snapshot is essential in case the buyer modifies the contact after he/she creates the order.
-    country  = Column(sqlalchemy_enum(CountryCodeEnum), nullable=False)
-    locality = Column(String(50), nullable=False)
-    street   = Column(String(50), nullable=False)
-    detail   = Column(Text)
-    floor = Column(SmallInteger, default=1, nullable=False)
 
 
 class OrderInvoiceStateEnum(enum.Enum):

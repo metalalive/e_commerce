@@ -66,9 +66,9 @@ def run_migrations_online():
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, target_metadata=target_metadata,
+            version_table=config.get_main_option('version_table'),
         )
-
         with context.begin_transaction():
             context.run_migrations()
 
