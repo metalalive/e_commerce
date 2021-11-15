@@ -13,9 +13,8 @@ from django.db.models.fields.related_descriptors import ForwardManyToOneDescript
 from django.contrib.contenttypes.models  import ContentType
 from django.contrib.contenttypes.fields  import GenericForeignKey, GenericRelation
 
-from common.models.db      import get_sql_table_pk_gap_ranges
 from common.models.enums.django import UnitOfMeasurement, TupleChoicesMeta
-from common.models.mixins  import MinimumInfoMixin
+from common.models.mixins  import MinimumInfoMixin, IdGapNumberFinder
 from common.models.fields  import CompoundPrimaryKeyField
 from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
 from softdelete.models import  SoftDeleteObjectMixin
@@ -24,111 +23,7 @@ from .common import ProductmgtChangeSet, ProductmgtSoftDeleteRecord, _BaseIngred
 # The term "product" here means :
 # * items for sale (saleable)
 # * items bought from suppliers, and then used as material of your product (non-saleable)
-#
 
-
-class IdGapNumberFinderMixin:
-    MAX_VALUE = pow(2,32) - 1
-
-    def _assert_any_dup_id(self, instances, id_field_name='id'):
-        ids = tuple(map(lambda instance: getattr(instance, id_field_name), instances))
-        ids = tuple(filter(lambda x: x is not None, ids))
-        distinct = set(ids)
-        if len(ids) != len(distinct):
-            errmsg = 'Detect duplicate IDs from application caller'
-            raise ValueError(errmsg)
-
-    def save_with_rand_id(self, save_instance_fn, objs):
-        self._assert_any_dup_id(objs)
-        try:
-            self._set_random_id(objs, self.MAX_VALUE)
-            result = save_instance_fn()
-        except IntegrityError as e:
-            # currently the following condition is MySQL-specific (TODO)
-            mysql_pk_dup_error = lambda x : x.args[0] == DUP_ENTRY and 'PRIMARY' in x.args[1]
-            if (e.args[0] == BAD_NULL_ERROR  and 'id' in e.args[1]) or  mysql_pk_dup_error(e):
-                gap_ranges = self.get_gap_ranges(db_conn=db_conns_map[DB_ALIAS_APPLIED],
-                        model_cls=type(objs[0]), max_value=self.MAX_VALUE)
-                assert any(gap_ranges), 'no gap ranges found'
-                error = e
-                while True: # may try different ID number in case race condition happens
-                    try: # current id is duplicate, change to another one
-                        self._rand_gap_id(objs, gap_ranges, error=error)
-                        result = save_instance_fn()
-                    except IntegrityError as e2:
-                        # concurrent client requests happens to contend for the same ID number,
-                        # however only one request succeed to gain the number as its new ID,
-                        # and rest of the requests will have to try other different ID numbers
-                        # in next iteration.
-                        if mysql_pk_dup_error(e2):
-                            error = e2 # then try again
-                        else:
-                            raise
-                    else: # succeed to get the ID number
-                        break
-            else:
-                raise
-        return result
-
-    def _set_random_id(self, instances, max_value):
-        for instance in instances:
-            if instance.pk is None:
-                instance.pk = random.randrange(max_value)
-
-    def get_gap_ranges(self, db_conn, model_cls, max_value, id_field_name='id', pk_db_column='id'): # TODO, cache result
-        """
-        return pairs of range value available for assigning numeric ID to new instance
-        of class type given as `model_cls`, each of which has the format
-        (`lowerbound`, `upperbound`)
-        """
-        if hasattr(self, '_gap_ranges'):
-            return self._gap_ranges
-        if not pk_db_column:
-            deferred_attr = getattr(model_cls, id_field_name, None)
-            pk_field = deferred_attr.field
-            pk_db_column = pk_field.db_column or pk_field.name
-        out = []
-        db_table = model_cls._meta.db_table
-        raw_sql_queries = get_sql_table_pk_gap_ranges(db_table=db_table,
-                pk_db_column=pk_db_column, max_value=max_value)
-        # execute 3 SELECT statements in one round trip to database server
-        with db_conn.cursor() as cursor:
-            cursor.execute(';'.join(raw_sql_queries))
-            row = cursor.fetchone()
-            if row:
-                out.append(row)
-            cursor.nextset()
-            out.extend(cursor.fetchall())
-            cursor.nextset()
-            row = cursor.fetchone()
-            if row:
-                out.append(row)
-        self._gap_ranges = out
-        # in case race condition happens to concurrent requests
-        # asking for the same ID number
-        self._recent_invalid_ids = []
-        return out
-
-    def _rand_gap_id(self, instances, gap_ranges, error, id_field_name='id'):
-        chosen_id = 0
-        # find out the objects which have duplicate id, then give each of them distinct ID number
-        dup_id = mysql_extract_dup_id_from_error(error)
-        find_dup_obj = lambda obj: getattr(obj, id_field_name) == dup_id
-        dup_instance = tuple(filter(find_dup_obj, instances))
-        dup_instance = dup_instance[0]
-        while True:
-            idx = random.randrange(len(gap_ranges))
-            lower, upper = gap_ranges[idx]
-            if lower == upper:
-                chosen_id = lower
-            else:
-                chosen_id = random.randrange(start=lower , stop=upper+1)
-            if not chosen_id in self._recent_invalid_ids:
-                break
-        old_id = getattr(dup_instance, id_field_name)
-        self._recent_invalid_ids.append(old_id)
-        setattr(dup_instance, id_field_name, chosen_id)
-## end of class IdGapNumberFinderMixin
 
 def mysql_extract_dup_id_from_error(error):
     # MySQL database reports each error for only one single duplicate primary
@@ -143,7 +38,46 @@ def mysql_extract_dup_id_from_error(error):
     return int(dup_id)
 
 
-class UniqueIdentifierMixin(models.Model, IdGapNumberFinderMixin):
+class AppIdGapNumberFinder(IdGapNumberFinder):
+    def expected_db_errors(self):
+        return (IntegrityError,)
+
+    def is_db_err_recoverable(self, error):
+        # currently the following condition is MySQL-specific (TODO)
+        mysql_pk_dup_error = lambda x : x.args[0] == DUP_ENTRY and 'PRIMARY' in x.args[1]
+        recoverable = (error.args[0] == BAD_NULL_ERROR  and 'id' in error.args[1]) or  mysql_pk_dup_error(error)
+        return recoverable
+
+    def low_lvl_get_gap_range(self, raw_sql_queries) -> list:
+        out = []
+        db_conn = db_conns_map[DB_ALIAS_APPLIED]
+        with db_conn.cursor() as cursor: # the connection has to be DB-API 2.0 compliant
+            cursor.execute(';'.join(raw_sql_queries))
+            row = cursor.fetchone()
+            if row:
+                out.append(row)
+            cursor.nextset()
+            out.extend(cursor.fetchall())
+            cursor.nextset()
+            row = cursor.fetchone()
+            if row:
+                out.append(row)
+        return out
+
+    def get_pk_db_column(self, model_cls) -> str:
+        id_field_name = 'id'
+        deferred_attr = getattr(model_cls, id_field_name, None)
+        pk_field = deferred_attr.field
+        return  pk_field.db_column or pk_field.name
+
+    def get_db_table_name(self, model_cls) -> str:
+        return  model_cls._meta.db_table
+
+    def extract_dup_id_from_error(self, error):
+        return  mysql_extract_dup_id_from_error(error)
+
+
+class UniqueIdentifierMixin(models.Model):
     """
     the mixin provides 4-byte integer as primary key, key generating function,
     collision handling function on insertion/update to guarantee uniqueness.
@@ -159,9 +93,13 @@ class UniqueIdentifierMixin(models.Model, IdGapNumberFinderMixin):
         abstract = True
     id = models.PositiveIntegerField(primary_key=True, unique=True, db_index=True, db_column='id')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._id_gap_finder = AppIdGapNumberFinder(orm_model_class=type(self))
+
     def save(self, *args, **kwargs):
         save_instance_fn = partial(super().save, *args, **kwargs)
-        return self.save_with_rand_id(save_instance_fn, objs=[self])
+        return self._id_gap_finder.save_with_rand_id(save_instance_fn, objs=[self])
 ## end of class UniqueIdentifierMixin
 
 
@@ -320,13 +258,17 @@ class _RelatedFieldMixin:
 ## end of  _RelatedFieldMixin
 
 
-class _SaleableItemQuerySet(_BaseIngredientQuerySet, IdGapNumberFinderMixin):
+class _SaleableItemQuerySet(_BaseIngredientQuerySet):
     def bulk_create(self, objs, *args, **kwargs):
         save_instance_fn = partial(super().bulk_create, objs, *args, **kwargs)
-        return self.save_with_rand_id(save_instance_fn, objs=objs)
+        if not hasattr(self, '_id_gap_finder'):
+            self._id_gap_finder = AppIdGapNumberFinder(orm_model_class=self.model)
+        return self._id_gap_finder.save_with_rand_id(save_instance_fn, objs=objs)
+
 
 class _SaleableItemManager(_BaseIngredientManager):
     default_qset_cls = _SaleableItemQuerySet
+
 
 class AbstractProduct(BaseProductIngredient, UniqueIdentifierMixin, _UserProfileMixin, _RelatedFieldMixin, MinimumInfoMixin):
     """

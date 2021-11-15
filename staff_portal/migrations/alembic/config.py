@@ -25,9 +25,9 @@ class ExtendedConfig(Config):
 
 
 
-def _setup_db_credential(secret_path):
+def _setup_db_credential(secret_path, db_usr_alias):
     _secret_map = {
-        'site_dba'        : 'backend_apps.databases.site_dba' ,
+        db_usr_alias      : 'backend_apps.databases.%s' % db_usr_alias,
         'usermgt_service' : 'backend_apps.databases.usermgt_service' ,
     }
     out_map = get_credential_from_secrets(base_folder='staff_portal',
@@ -47,23 +47,29 @@ def _copy_migration_scripts(src, dst):
 DEFAULT_VERSION_TABLE = 'alembic_version'
 
 
-def _init_common_params(app_base_path, secret_path):
+def _init_common_params(app_base_path, secret_path, db_usr_alias):
     migration_base_path = app_base_path.joinpath('migrations')
     cfg_file_path  = app_base_path.joinpath('alembic.ini')
     template_base_path = app_base_path.parent.joinpath('migrations/alembic/templates')
     alembic_cfg = ExtendedConfig(cfg_file_path, template_base_path=template_base_path)
-    db_credentials = _setup_db_credential(secret_path)
+    db_credentials = _setup_db_credential(secret_path, db_usr_alias)
     return migration_base_path, alembic_cfg, db_credentials
 
 
-def init_migration(app_settings, orm_base_cls_path, app_init_rev_id='000001', auth_init_rev_id='000002'):
-    migration_base_path, alembic_cfg, db_credentials = _init_common_params( \
-            secret_path=app_settings.SECRETS_FILE_PATH, app_base_path=app_settings.APP_BASE_PATH)
+def init_migration(app_settings, app_init_rev_id='000001', auth_init_rev_id='000002'):
+    db_usr_alias = app_settings.DB_USER_ALIAS
+    orm_base_cls_path = app_settings.ORM_BASE_CLASSES
+    migration_base_path, alembic_cfg, db_credentials = _init_common_params(
+            secret_path=app_settings.SECRETS_FILE_PATH,
+            app_base_path=app_settings.APP_BASE_PATH,
+            db_usr_alias=db_usr_alias
+        )
     command.init(config=alembic_cfg, directory=migration_base_path)
-    alembic_cfg.set_main_option(name='app.orm_base', value=orm_base_cls_path)
+    alembic_cfg.set_main_option(name='app.orm_base', value=','.join(orm_base_cls_path))
     # ------------------
-    db_credentials['site_dba']['NAME'] = app_settings.DB_NAME
-    alembic_cfg.set_url(db_credential=db_credentials['site_dba'], driver_label=app_settings.DRIVER_LABEL)
+    chosen_db_credential = db_credentials[db_usr_alias]
+    chosen_db_credential['NAME'] = app_settings.DB_NAME
+    alembic_cfg.set_url(db_credential=chosen_db_credential, driver_label=app_settings.DRIVER_LABEL)
     alembic_cfg.set_main_option(name='version_table', value=DEFAULT_VERSION_TABLE)
     result = command.revision( config=alembic_cfg, message='create initial tables',
                 autogenerate=True, rev_id=app_init_rev_id, depends_on=None, )
@@ -71,23 +77,31 @@ def init_migration(app_settings, orm_base_cls_path, app_init_rev_id='000001', au
     command.upgrade(config=alembic_cfg, revision=app_init_rev_id)
     # ------------------
     _copy_migration_scripts(src=app_settings.AUTH_MIGRATION_PATH, dst=migration_base_path.joinpath('versions'))
-    db_credentials['site_dba']['NAME'] = app_settings.AUTH_DB_NAME
-    alembic_cfg.set_url(db_credential=db_credentials['site_dba'], driver_label=app_settings.DRIVER_LABEL)
+    chosen_db_credential['NAME'] = app_settings.AUTH_DB_NAME
+    alembic_cfg.set_url(db_credential=chosen_db_credential, driver_label=app_settings.DRIVER_LABEL)
     alembic_cfg.set_main_option(name='version_table', value=app_settings.VERSION_TABLE_AUTH_APP)
     command.upgrade(config=alembic_cfg, revision=auth_init_rev_id)
 
 
-def deinit_migration(app_settings, orm_base_cls_path):
-    migration_base_path, alembic_cfg, db_credentials = _init_common_params( \
-            secret_path=app_settings.SECRETS_FILE_PATH, app_base_path=app_settings.APP_BASE_PATH)
-    alembic_cfg.set_main_option(name='app.orm_base', value=orm_base_cls_path)
+def deinit_migration(app_settings):
+    db_usr_alias = app_settings.DB_USER_ALIAS
+    orm_base_cls_path = app_settings.ORM_BASE_CLASSES
+    migration_base_path, alembic_cfg, db_credentials = _init_common_params(
+            secret_path=app_settings.SECRETS_FILE_PATH,
+            app_base_path=app_settings.APP_BASE_PATH,
+            db_usr_alias=db_usr_alias
+        )
+    alembic_cfg.set_main_option(name='app.orm_base', value=','.join(orm_base_cls_path))
+    chosen_db_credential = db_credentials[db_usr_alias]
     try:
-        db_credentials['site_dba']['NAME'] = app_settings.AUTH_DB_NAME
-        alembic_cfg.set_url(db_credential=db_credentials['site_dba'], driver_label=app_settings.DRIVER_LABEL)
+        # ------------------
+        chosen_db_credential['NAME'] = app_settings.AUTH_DB_NAME
+        alembic_cfg.set_url(db_credential=chosen_db_credential, driver_label=app_settings.DRIVER_LABEL)
         alembic_cfg.set_main_option(name='version_table', value=app_settings.VERSION_TABLE_AUTH_APP)
         command.downgrade(config=alembic_cfg, revision='base')
-        db_credentials['site_dba']['NAME'] = app_settings.DB_NAME
-        alembic_cfg.set_url(db_credential=db_credentials['site_dba'], driver_label=app_settings.DRIVER_LABEL)
+        # ------------------
+        chosen_db_credential['NAME'] = app_settings.DB_NAME
+        alembic_cfg.set_url(db_credential=chosen_db_credential, driver_label=app_settings.DRIVER_LABEL)
         alembic_cfg.set_main_option(name='version_table', value=DEFAULT_VERSION_TABLE) # must not be NULL or empty string
         command.downgrade(config=alembic_cfg, revision='base')
     except CommandError as e:

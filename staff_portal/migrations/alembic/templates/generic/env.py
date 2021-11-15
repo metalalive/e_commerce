@@ -18,8 +18,9 @@ fileConfig(config.config_file_name)
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-app_metadata_path = config.get_main_option("app.orm_base")
-target_metadata = import_module_string(dotted_path=app_metadata_path).metadata
+app_metadata_paths = config.get_main_option("app.orm_base")
+app_metadata_paths = app_metadata_paths.split(',')
+target_metadata = list(map(lambda path: import_module_string(dotted_path=path).metadata , app_metadata_paths))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

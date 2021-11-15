@@ -7,7 +7,6 @@ from functools import partial, reduce
 
 from common.util.python import ExtendedList, import_module_string
 from common.auth.keystore import create_keystore_helper
-from common.auth.jwt      import JWT, JwkRsaKeygenHandler, stream_jwks_file
 
 
 def rand_gen_request_body(customize_item_fn, data_gen, template=None):
@@ -261,6 +260,7 @@ class KeystoreMixin:
     }
 
     def _setup_keystore(self):
+        from common.auth.jwt import JwkRsaKeygenHandler
         from tests.python.keystore.persistence import _setup_keyfile
         persist_labels = ('persist_pubkey_handler', 'persist_secret_handler')
         self.tear_down_files = {}
@@ -296,6 +296,7 @@ class KeystoreMixin:
         return out
 
     def gen_access_token(self, profile, audience, ks_cfg=None, access_token_valid_seconds=300):
+        from common.auth.jwt import JWT
         ks_cfg = ks_cfg or self._keystore_init_config
         profile_serial = self._access_token_serialize_auth_info(audience=audience, profile=profile)
         keystore = create_keystore_helper(cfg=ks_cfg, import_fn=import_module_string)
@@ -311,6 +312,7 @@ class KeystoreMixin:
         return token.encode(keystore=keystore)
 
     def _mocked_get_jwks(self):
+        from common.auth.jwt import stream_jwks_file
         filepath =  self._keystore_init_config['persist_pubkey_handler']['init_kwargs']['filepath']
         full_response_body = list(stream_jwks_file(filepath=filepath))
         full_response_body = ''.join(full_response_body)

@@ -2,8 +2,8 @@
 if __name__ == '__main__':
     import sys
     from migrations.alembic.config import init_migration, deinit_migration
-    from . import settings
-    kwargs = {'app_settings':settings, 'orm_base_cls_path':'store.models.Base'}
+    from .settings import migration as settings
+    kwargs = {'app_settings':settings,}
     if sys.argv[-1] == 'reverse':
         deinit_migration(**kwargs)
     else:

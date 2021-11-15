@@ -169,7 +169,7 @@ def format_sqlalchemy_url(driver:str, db_credential):
             passwd=db_credential['PASSWORD'] ,
             db_host=db_credential['HOST'] ,
             db_port=db_credential['PORT'] ,
-            db_name=db_credential['NAME'] ,
+            db_name=db_credential.get('NAME', '')
         )
 
 

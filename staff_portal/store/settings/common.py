@@ -1,15 +1,16 @@
 import enum
 from pathlib import Path
 
-APP_BASE_PATH = Path(__file__).resolve(strict=True).parent
+APP_BASE_PATH = Path(__file__).resolve(strict=True).parent.parent
 
 AUTH_MIGRATION_PATH = APP_BASE_PATH.parent.joinpath('migrations/alembic/store')
 
 SECRETS_FILE_PATH = 'common/data/secrets.json'
 
 DB_NAME = 'ecommerce_store'
-AUTH_DB_NAME = 'ecommerce_usermgt'
-VERSION_TABLE_AUTH_APP = 'alembic_version_store'
+DB_USER_ALIAS = None
+
+ORM_BASE_CLASSES = ['store.models.Base']
 
 DRIVER_LABEL = 'mariadb+mariadbconnector'
 
