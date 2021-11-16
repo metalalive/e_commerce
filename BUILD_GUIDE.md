@@ -32,6 +32,8 @@ For initializing database schema, run the commands below in following order.
 ```
 python3.9 -m  user_management.setup
 python3.9 -m  product.setup
+python3.9 -m  store.setup
+python3.9 -m  order.setup
 ```
 The modules above automatically performs following operations :
 * create `django_migration` database table
@@ -42,6 +44,8 @@ The modules above automatically performs following operations :
 
 For de-initializing database schema, run the commands below.
 ```
+python3.9 -m  order.setup reverse
+python3.9 -m  store.setup reverse
 python3.9 -m  product.setup reverse
 python3.9 -m  user_management.setup reverse
 ```
