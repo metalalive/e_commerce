@@ -1,9 +1,11 @@
 import random
 import string
+from datetime import timedelta
+
 import pytest
 
-from store.models import StoreProfile, StoreEmail, StorePhone, OutletLocation, HourOfOperation
-from store.tests.common import db_engine_resource, session_for_test, session_for_setup, store_data, email_data, phone_data, loc_data, opendays_data
+from store.models import StoreProfile, StoreEmail, StorePhone, OutletLocation, HourOfOperation, StoreStaff, StoreProductAvailable
+from store.tests.common import db_engine_resource, session_for_test, session_for_setup, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data
 
 # module-level test setup / teardown
 def setup_module(module):
@@ -13,23 +15,26 @@ def teardown_module(module):
     pass
 
 
-def _saved_obj_gen(store_data_gen, email_data_gen, phone_data_gen, session):
+def _saved_obj_gen(store_data_gen, email_data_gen, phone_data_gen, loc_data_gen, session, staff_data_gen, product_avail_data_gen):
     num_emails_per_store = 2
     num_phones_per_store = 3
     num_staff_per_store = 4
     num_products_per_store = 5
     while True:
         new_item = next(store_data_gen)
+        new_item['location'] = OutletLocation(**next(loc_data_gen))
         new_item['emails'] = [StoreEmail(**next(email_data_gen)) for _ in range(num_emails_per_store)]
         new_item['phones'] = [StorePhone(**next(phone_data_gen)) for _ in range(num_phones_per_store)]
+        new_item['staff']  = [StoreStaff(**next(staff_data_gen)) for _ in range(num_staff_per_store)]
+        new_item['products'] = [StoreProductAvailable(**next(product_avail_data_gen)) for _ in range(num_products_per_store)]
         obj = StoreProfile(**new_item)
         StoreProfile.bulk_insert([obj], session=session)
         yield obj
 
 @pytest.fixture
-def saved_store_objs(store_data, email_data, phone_data, session_for_setup):
-    return _saved_obj_gen(store_data, email_data_gen=email_data, phone_data_gen=phone_data,
-            session=session_for_setup)
+def saved_store_objs(session_for_setup, store_data, email_data, phone_data, loc_data, staff_data, product_avail_data):
+    return _saved_obj_gen(store_data, email_data_gen=email_data, phone_data_gen=phone_data, loc_data_gen=loc_data,
+            session=session_for_setup, staff_data_gen=staff_data, product_avail_data_gen=product_avail_data)
 
 
 
@@ -161,15 +166,54 @@ class TestCreation: # class name must start with TestXxxx
 
 
 class TestUpdate:
-    def test_edit_contact(self, session_for_test, email_data, phone_data, saved_store_objs):
-        import pdb
-        pdb.set_trace()
-        pass
+    def test_edit_contact(self, session_for_test, email_data, phone_data, loc_data, saved_store_objs):
+        obj = next(saved_store_objs)
+        query = session_for_test.query(StoreProfile).filter(StoreProfile.id == obj.id)
+        obj = query.first()
+        stats_before_update = StorePhone.quota_stats([], session=session_for_test, target_ids=[obj.id])
+        evicted_email_obj = obj.emails.pop()
+        evicted_phone_obj = obj.phones.pop()
+        new_email_objs = [StoreEmail(**next(email_data)) for _ in range(2)]
+        new_phone_objs = [StorePhone(**next(phone_data)) for _ in range(2)]
+        new_loc_data = next(loc_data)
+        tuple(map(lambda kv: setattr(obj.location, kv[0], kv[1]), new_loc_data.items()))
+        obj.emails.extend(new_email_objs)
+        obj.phones.extend(new_phone_objs)
+        session_for_test.commit()
+        obj = query.first()
+        stats_after_update = StorePhone.quota_stats([], session=session_for_test, target_ids=[obj.id])
 
-    def test_edit_staff(self):
-        pass
+        for expect_new_email in  new_email_objs:
+            actual_new_email = next(filter(lambda e:e.seq == expect_new_email.seq, obj.emails))
+            assert expect_new_email.addr == actual_new_email.addr
+        for expect_new_phone in  new_phone_objs:
+            actual_new_phone = next(filter(lambda p:p.seq == expect_new_phone.seq, obj.phones))
+            assert expect_new_phone.country_code == actual_new_phone.country_code
+            assert expect_new_phone.line_number == actual_new_phone.line_number
+        for field_name, expect_value in new_loc_data.items():
+            actual_value = getattr(obj.location, field_name)
+            assert expect_value == actual_value
 
-    def test_edit_product(self):
-        pass
+        assert (1 + stats_before_update[obj.id]['num_existing_items']) == stats_after_update[obj.id]['num_existing_items']
+
+
+    def test_edit_staff(self, session_for_test, staff_data, saved_store_objs):
+        obj = next(saved_store_objs)
+        query = session_for_test.query(StoreProfile).filter(StoreProfile.id == obj.id)
+        obj = query.first()
+        evicted_staff_obj = obj.staff.pop()
+        new_staff_objs = [StoreStaff(**next(staff_data)) for _ in range(3)]
+        obj.staff.extend(new_staff_objs)
+        obj.staff[0].end_before += timedelta(hours=random.randrange(14,28))
+        edited_staff_id = obj.staff[0].staff_id
+        new_end_datetime = obj.staff[0].end_before
+        session_for_test.commit()
+        obj = query.first()
+        filtered = tuple(filter(lambda s:s.staff_id == evicted_staff_obj.staff_id, obj.staff))
+        assert not any(filtered)
+        edited_staff = next(filter(lambda s:s.staff_id == edited_staff_id, obj.staff))
+        assert edited_staff.end_before == new_end_datetime
+
+
 
 

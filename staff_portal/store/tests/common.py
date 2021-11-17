@@ -1,6 +1,6 @@
 import random
 import string
-from datetime import time
+from datetime import time, datetime, timedelta
 
 import pytest
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from common.models.contact.sqlalchemy import CountryCodeEnum
 from common.util.python import import_module_string
 from tests.python.common.sqlalchemy import init_test_database, deinit_test_database, clean_test_data
 
-from store.models import EnumWeekDay
+from store.models import EnumWeekDay, SaleableTypeEnum, AppIdGapNumberFinder
 
 
 metadata_objs = list(map(lambda path: import_module_string(dotted_path=path).metadata , settings.ORM_BASE_CLASSES))
@@ -160,5 +160,44 @@ def _opendays_data_gen():
 @pytest.fixture(scope='session')
 def opendays_data():
     return  _opendays_data_gen()
+
+
+def _gen_time_period():
+    start_minute = random.randrange(2, 100)
+    day_length = random.randrange(365)
+    start_after = datetime.utcnow() + timedelta(minutes=start_minute)
+    end_before = start_after + timedelta(days=day_length)
+    return start_after, end_before
+
+
+def _staff_data_gen():
+    staff_id = 3
+    while True:
+        start_after, end_before = _gen_time_period()
+        new_data = {
+            'staff_id': staff_id, 'start_after':start_after, 'end_before':end_before,
+        }
+        yield new_data
+        staff_id += 1
+
+@pytest.fixture(scope='session')
+def staff_data():
+    return  _staff_data_gen()
+
+
+def _product_avail_data_gen():
+    sale_types = [opt for opt in SaleableTypeEnum]
+    while True:
+        start_after, end_before = _gen_time_period()
+        new_data = {
+            'product_type': random.choice(sale_types),
+            'product_id': random.randrange(1, AppIdGapNumberFinder.MAX_GAP_VALUE),
+            'start_after':start_after,  'end_before':end_before,
+        }
+        yield new_data
+
+@pytest.fixture(scope='session')
+def product_avail_data():
+    return  _product_avail_data_gen()
 
 

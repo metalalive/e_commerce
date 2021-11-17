@@ -7,6 +7,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.event import listens_for
 from sqlalchemy.exc   import IntegrityError
 from sqlalchemy.orm   import declarative_base, declarative_mixin, declared_attr, relationship
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER
 
@@ -104,10 +105,12 @@ class StoreProfile(Base, QuotaStatisticsMixin):
     supervisor_id = Column(MYSQL_INTEGER(unsigned=True), autoincrement=False)
     active = Column(Boolean)
     # bidirectional relationship has to be declared on both sides of the models
-    emails = relationship('StoreEmail', back_populates='store_applied', cascade='all, delete')
-    phones = relationship('StorePhone', back_populates='store_applied', cascade='all, delete')
-    location = relationship('OutletLocation', back_populates='store_applied', cascade='all, delete', uselist=False)
-    open_days = relationship('HourOfOperation', back_populates='store_applied', cascade='all, delete')
+    emails = relationship('StoreEmail', back_populates='store_applied', cascade='save-update, merge, delete, delete-orphan')
+    phones = relationship('StorePhone', back_populates='store_applied', cascade='save-update, merge, delete, delete-orphan')
+    location = relationship('OutletLocation', back_populates='store_applied', cascade='save-update, merge, delete, delete-orphan', uselist=False)
+    open_days = relationship('HourOfOperation', back_populates='store_applied', cascade='save-update, merge, delete, delete-orphan')
+    staff    = relationship('StoreStaff', back_populates='store_applied', cascade='save-update, merge, delete, delete-orphan')
+    products = relationship('StoreProductAvailable', back_populates='store_applied', cascade='save-update, merge, delete, delete-orphan')
 
     @classmethod
     def quota_stats(cls, objs, session, target_ids):
@@ -130,15 +133,16 @@ class StoreProfile(Base, QuotaStatisticsMixin):
 ## end of class StoreProfile
 
 
+@listens_for(StoreProfile, 'before_update')
 @listens_for(StoreProfile, 'before_insert')
-def _init_seq_num(mapper, conn, target):
+def _reset_seq_num(mapper, conn, target):
+    # set_committed_value() is used to avoid the SAwarning described in https://stackoverflow.com/q/38074244/9853105
     for idx in range(len(target.emails)):
         email = target.emails[idx]
-        email.seq = idx
+        set_committed_value(email, 'seq', idx)
     for idx in range(len(target.phones)):
         phone = target.phones[idx]
-        phone.seq = idx
-
+        set_committed_value(phone, 'seq', idx)
 
 
 class TimePeriodValidMixin:
@@ -154,6 +158,7 @@ class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
     store_id  = Column(MYSQL_INTEGER(unsigned=True), ForeignKey('store_profile.id', ondelete='CASCADE'), primary_key=True)
     # come from GenericUserProfile in user_management app
     staff_id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True, autoincrement=False)
+    store_applied = relationship('StoreProfile', back_populates='staff')
     @classmethod
     def quota_stats(cls, objs, session, target_ids):
         return super().quota_stats(objs, session, target_ids, attname='store_id')
@@ -165,7 +170,6 @@ class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
     store_id  = Column(MYSQL_INTEGER(unsigned=True), ForeignKey('store_profile.id', ondelete='CASCADE'), primary_key=True)
     seq  = Column(SmallInteger, primary_key=True, default=0, autoincrement=False)
     store_applied = relationship('StoreProfile', back_populates='emails')
-
     @classmethod
     def quota_stats(cls, objs, session, target_ids):
         return super().quota_stats(objs, session, target_ids, attname='store_id')
@@ -190,7 +194,7 @@ class OutletLocation(Base, LocationMixin):
     store_applied = relationship('StoreProfile', back_populates='location')
 
 
-class _SaleableTypeEnum(enum.Enum):
+class SaleableTypeEnum(enum.Enum):
     ITEM = 1
     PACKAGE = 2
 
@@ -200,8 +204,9 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
     __tablename__ = 'store_product_available'
     store_id  = Column(MYSQL_INTEGER(unsigned=True), ForeignKey('store_profile.id', ondelete='CASCADE'), primary_key=True)
     # following 2 fields come from product app
-    product_type = Column(sqlalchemy_enum(_SaleableTypeEnum), primary_key=True)
+    product_type = Column(sqlalchemy_enum(SaleableTypeEnum), primary_key=True)
     product_id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True)
+    store_applied = relationship('StoreProfile', back_populates='products')
     # NOTE, don't record inventory data at this app, do it in inventory app
     @classmethod
     def quota_stats(cls, objs, session, target_ids):
