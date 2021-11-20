@@ -1,5 +1,6 @@
 import logging
 from datetime  import datetime, timedelta, date
+from typing    import List
 
 from django.utils import timezone as django_timezone
 from django.utils.module_loading import import_string
@@ -10,9 +11,8 @@ from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
 from common.util.python.celery import app as celery_app
 from common.logging.util  import log_fn_wrapper
 
-from .models.base import GenericUserGroup, GenericUserProfile
+from .models.base import GenericUserGroup, GenericUserProfile, QuotaMaterial
 from .models.auth import UnauthResetAccountRequest
-from django.contrib import auth
 
 _logger = logging.getLogger(__name__)
 
@@ -62,14 +62,34 @@ def rotate_keystores(modules_setup):
     return list(results)
 
 
-@celery_app.task(backend=CeleryRpcBackend(app=celery_app), queue='rpc_usermgt_get_profile', exchange=RPC_EXCHANGE_DEFAULT_NAME, \
-        routing_key='rpc.user_management.get_profile')
+@celery_app.task(backend=CeleryRpcBackend(app=celery_app), queue='rpc_usermgt_get_profile', bind=True, \
+         exchange=RPC_EXCHANGE_DEFAULT_NAME, routing_key='rpc.user_management.get_profile')
 @log_fn_wrapper(logger=_logger, loglevel=logging.WARNING, log_if_succeed=False)
-def get_profile(account_id, field_names, services_label=None):
-    account_id = int(account_id)
-    account = auth.get_user_model().objects.get(pk=account_id)
-    profile = account.profile
-    data = profile.serializable(present=field_names, services_label=services_label)
+def get_profile(self, ids:List[int], fields:List[str]):
+    from .serializers import GenericUserProfileSerializer
+    from .serializers.common import serialize_profile_quota, serialize_profile_permissions
+    present_quota = 'quota' in fields
+    present_roles = 'roles' in fields
+    if present_quota:
+        fields.remove('quota')
+    if present_roles:
+        fields.remove('roles')
+    if 'id' not in fields:
+        fields.append('id')
+    qset = GenericUserProfile.objects.filter(id__in=ids)
+    req = self.request # retrieve extra headers from celery task context
+    src_app_label = req.headers['src_app']
+    class fake_request:
+        query_params = {'fields':','.join(fields)}
+    extra_context = {'request': fake_request}
+    serializer = GenericUserProfileSerializer(many=True, instance=qset, context=extra_context)
+    data = serializer.data
+    for d in data:
+        profile = qset.get(id=d['id'])
+        if present_quota:
+            d['quota'] = serialize_profile_quota(profile, app_labels=[src_app_label])
+        if present_roles:
+            d['perms'] = serialize_profile_permissions(profile, app_labels=[src_app_label])
     return data
 
 

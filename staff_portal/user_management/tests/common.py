@@ -20,13 +20,14 @@ _curr_timezone = django_timezone.get_current_timezone()
 num_login_profiles = 29
 
 
-def gen_expiry_time(minutes_valid=None):
+def gen_expiry_time(minutes_valid=None, serializable=True):
     minutes_valid = minutes_valid or random.randrange(0,60)
     if minutes_valid > 5:
         expiry_time = django_timezone.now() + timedelta(minutes=minutes_valid)
         # timezone has to be consistent
         expiry_time = expiry_time.astimezone(_curr_timezone)
-        expiry_time = expiry_time.isoformat()
+        if serializable:
+            expiry_time = expiry_time.isoformat()
     else:
         expiry_time = None
     return expiry_time
@@ -56,6 +57,12 @@ _fixtures = {
         {"id": 5, "app_code": AppCodeOptions.product,    "mat_code": 2} ,
         {"id": 6, "app_code": AppCodeOptions.fileupload, "mat_code": 3} ,
         {"id": 7, "app_code": AppCodeOptions.fileupload, "mat_code": 5} ,
+        {"id": 8, "app_code": AppCodeOptions.store,  "mat_code": 1} ,
+        {"id": 9, "app_code": AppCodeOptions.store,  "mat_code": 2} ,
+        {"id":10, "app_code": AppCodeOptions.store,  "mat_code": 3} ,
+        {"id":11, "app_code": AppCodeOptions.store,  "mat_code": 4} ,
+        {"id":12, "app_code": AppCodeOptions.order,  "mat_code": 2} ,
+        {"id":13, "app_code": AppCodeOptions.order,  "mat_code": 3} ,
     ],
     GenericUserGroup:[
         {'id':3 , 'name':'rest of my career'},
@@ -172,7 +179,7 @@ class UserNestedFieldSetupMixin:
     num_roles = 0
     num_quota = 0
 
-    def _gen_roles(self, role_objs, num=None):
+    def _gen_roles(self, role_objs, num=None, serializable=True):
         if num is None:
             num = self.num_roles
         out = []
@@ -180,13 +187,15 @@ class UserNestedFieldSetupMixin:
             roles_gen = listitem_rand_assigner(list_=role_objs, min_num_chosen=num,
                     max_num_chosen=(num + 1))
             for role in roles_gen:
-                data = {'expiry': gen_expiry_time(), 'role':role.id,
+                if serializable:
+                    role = role.id
+                data = {'expiry': gen_expiry_time(serializable=serializable), 'role':role,
                         'approved_by': random.randrange(3,1000), # will NOT write this field to model
                         }
                 out.append(data)
         return out
 
-    def _gen_quota(self, quota_mat_objs, num=None):
+    def _gen_quota(self, quota_mat_objs, num=None, serializable=True):
         if num is None:
             num = self.num_quota
         self.num_locations = 0
@@ -205,7 +214,9 @@ class UserNestedFieldSetupMixin:
                         self.num_emails = maxnum
                     elif material.mat_code == QuotaMaterial._MatCodeOptions.MAX_NUM_GEO_LOCATIONS.value:
                         self.num_locations = maxnum
-                data = {'expiry':gen_expiry_time(), 'material':material.id, 'maxnum':maxnum}
+                if serializable:
+                    material = material.id
+                data = {'expiry':gen_expiry_time(serializable=serializable), 'material':material, 'maxnum':maxnum}
                 out.append(data)
         return out
 

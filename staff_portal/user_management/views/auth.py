@@ -32,10 +32,10 @@ from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, Bul
 from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
 
 from ..apps   import UserManagementConfig as UserMgtCfg
-from ..models.common import AppCodeOptions
 from ..models.base import QuotaMaterial
 from ..serializers import PermissionSerializer
 from ..serializers.auth import UnauthRstAccountReqSerializer, LoginAccountSerializer
+from ..serializers.common import serialize_profile_quota, serialize_profile_permissions
 from ..permissions import ModelLvlPermsPermissions
 from .common    import check_auth_req_token, get_profile_by_email
 from .constants import WEB_HOST
@@ -354,31 +354,15 @@ class RefreshAccessTokenView(APIView):
         return list(filtered)
 
     def _serialize_auth_info(self, audience, profile):
-        role_types = ('direct', 'inherit')
-        out = {'id':profile.id , 'priv_status':profile.privilege_status, 'perms': [], 'quota':[] }
+        out = {'id':profile.id , 'priv_status':profile.privilege_status, 'perms': None, 'quota':None}
         # --- fetch low-level permissions relevant to the audience ---
-        all_roles = profile.all_roles
-        for role_type in role_types:
-            perm_qset = all_roles[role_type].get_permissions(app_labels=audience)
-            vals = perm_qset.values_list('content_type__app_label', 'codename')
-            vals = filter(lambda d: getattr(AppCodeOptions, d[0], None), vals)
-            vals = map(lambda d: {'app_code':getattr(AppCodeOptions, d[0]).value, 'codename':d[1]}, vals)
-            out['perms'].extend(vals)
+        out['perms'] = serialize_profile_permissions(profile, app_labels=audience)
         if not any(out['perms']) and out['priv_status'] != type(profile).SUPERUSER:
             errmsg = "the user does not have access to these resource services listed in audience field"
             err_detail = {drf_settings.NON_FIELD_ERRORS_KEY: [errmsg],}
             raise PermissionDenied(detail=err_detail) ##  SuspiciousOperation
         # --- fetch quota ---
-        mat_qset = QuotaMaterial.get_for_apps(app_labels=audience)
-        mat_qset = mat_qset.values('id', 'app_code', 'mat_code')
-        quota_mat_map = dict(map(lambda d: (d['id'], d), mat_qset))
-        fetch_mat_ids = quota_mat_map.keys()
-        all_quota = profile.all_quota
-        filtered_quota = filter(lambda kv: kv[0] in fetch_mat_ids, all_quota.items())
-        filtered_quota = map(lambda kv: {'app_code': quota_mat_map[kv[0]]['app_code'], \
-            'mat_code': quota_mat_map[kv[0]]['mat_code'], 'maxnum': kv[1]} , filtered_quota)
-        filtered_quota = list(filtered_quota)
-        out['quota'].extend(filtered_quota)
+        out['quota'] = serialize_profile_quota(profile, app_labels=audience)
         return out
 
     def _gen_signed_token(self, request, audience):

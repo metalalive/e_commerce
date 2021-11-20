@@ -169,13 +169,15 @@ class RPCproxy:
     # not each amqp connection, not system initialization
     _rpc_reply_listener = ReplyListener()
 
-    def __init__(self, app_name, **options):
-        self._app_name = app_name
+    def __init__(self, dst_app_name, src_app_name, **options):
+        self._dst_app_name = dst_app_name
+        self._src_app_name = src_app_name
         self._options = options
 
     def __getattr__(self, name):
         return MethodProxy(
-                app_name=self._app_name,
+                dst_app_name=self._dst_app_name,
+                src_app_name=self._src_app_name,
                 method_name=name,
                 reply_listener=self._rpc_reply_listener,
                 **self._options
@@ -184,8 +186,9 @@ class RPCproxy:
 class MethodProxy:
     publisher_cls = AMQPPublisher
 
-    def __init__(self, app_name, method_name, reply_listener, **options):
-        self._app_name = app_name
+    def __init__(self, dst_app_name, src_app_name, method_name, reply_listener, **options):
+        self._dst_app_name = dst_app_name
+        self._src_app_name = src_app_name
         self._method_name = method_name
         self._reply_listener = reply_listener
         self._config = options.pop('config', {})
@@ -218,10 +221,10 @@ class MethodProxy:
         payld_metadata = {'callbacks': None, 'errbacks': None, 'chain': None, 'chord': None}
         payload = [args, kwargs, payld_metadata]
         exchange = get_rpc_exchange(self._config)
-        routing_key = RPC_ROUTE_KEY_PATTERN_SEND % (self._app_name, self._method_name)
+        routing_key = RPC_ROUTE_KEY_PATTERN_SEND % (self._dst_app_name, self._method_name)
         reply_to =  self._reply_listener.routing_key
         correlation_id = str(uuid.uuid4())
-        extra_headers = self.get_message_headers(id=correlation_id)
+        context = self.get_message_context(id=correlation_id, src_app=self._src_app_name)
         reply_event = self._reply_listener.get_reply_event(correlation_id)
         deliver_err_body = {'result': {'exchange': exchange.name, 'routing_key': routing_key, }}
         try:
@@ -235,7 +238,7 @@ class MethodProxy:
                     #immediate=True,
                     reply_to=reply_to,
                     correlation_id=correlation_id,
-                    extra_headers=extra_headers,
+                    extra_headers=context,
                     conn=conn
                 )
         except UndeliverableMessage as ume:
@@ -252,15 +255,16 @@ class MethodProxy:
                 raise
         return reply_event
 
-    def get_message_headers(self, id, content_type=MSG_PAYLOAD_DEFAULT_CONTENT_TYPE):
+    def get_message_context(self, id, src_app, content_type=MSG_PAYLOAD_DEFAULT_CONTENT_TYPE):
         # in this project , the RPC services are managed by Celery, which reference
-        # eatra headers :
+        # extra headers :
         # * id : uuid4  string sequence
         # * task : python hierarchical path to Celery task function 
-        extra_headers = {}
-        extra_headers['id'] = id
-        extra_headers['content_type'] = content_type
-        extra_headers['task'] = RPC_DEFAULT_TASK_PATH_PATTERN % (self._app_name, self._method_name)
-        return extra_headers
+        out = {}
+        out['id'] = id
+        out['content_type'] = content_type
+        out['task'] = RPC_DEFAULT_TASK_PATH_PATTERN % (self._dst_app_name, self._method_name)
+        out['headers'] = {'src_app':src_app} # AMQP message headers
+        return out
 ## end of class MethodProxy
 

@@ -12,6 +12,7 @@ with open(secrets_path, 'r') as f:
 # Django test only uses `default` alias , which does NOT allow users to switch
 # between different database credentials
 DATABASES['default'].update(secrets)
+DATABASES['default']['NAME'] = DATABASES['default']['TEST']['NAME']
 ## does NOT work for testing
 ##DATABASES['usermgt_service'].update(secrets)
 DATABASE_ROUTERS.clear()

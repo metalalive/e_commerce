@@ -4,8 +4,6 @@ from requests.exceptions import ConnectionError, SSLError, Timeout
 
 from common.auth.abstract import BaseGetProfileMixin
 from common.util.python import get_request_meta_key
-from common.util.python.messaging.rpc       import RPCproxy
-from common.util.python.messaging.constants import AMQP_EXCHANGE_NAME_CONFIG_KEY, AMQP_EXCHANGE_TYPE_CONFIG_KEY
 from .settings import api_proxy_settings
 
 class DjangoProxyRequestMixin:
@@ -174,61 +172,4 @@ def _render_url_path(proxyview, request, key_vars):
         out = proxyview.path_pattern
     return out
 
-
-
-# TODO, refactor to get profile contacts remotely
-class RemoteGetProfileIDMixin(BaseGetProfileMixin):
-    _usermgt_rpc = RPCproxy(app_name='user_management')
-    # currently get_account() and get_account_id() works with Django,
-    # both functions should be abstracted for other web frameworks
-    def get_account(self, request):
-        return request.user
-
-    def get_account_id(self, account):
-        return account.pk if account else self.UNKNOWN_ID
-
-    def _ensure_get_profile_attr(self, request, field_name, default_value, **kwargs):
-        reply = self.get_profile(account=self.get_account(request))
-        if not reply.finished:
-            num_of_msgs_fetch = kwargs.pop('num_of_msgs_fetch',None)
-            reply.refresh(retry=reply.timeout, num_of_msgs_fetch=num_of_msgs_fetch)
-        result = reply.result
-        if result and isinstance(result, dict):
-            usr_prof = result.get('result', None)
-            if usr_prof and isinstance(usr_prof, dict):
-                out = usr_prof.get(field_name, default_value)
-            else:
-                out = default_value
-        else:
-            out = default_value
-        return out
-
-    def get_profile_id(self, request, **kwargs):
-        account = self.get_account(request)
-        account_id = self.get_account_id(account)
-        _id = self._ensure_get_profile_attr(request=request, field_name='id',
-                default_value=account_id, **kwargs)
-        return str(_id)
-
-    def get_profile_roles(self, request, **kwargs):
-        roles = self._ensure_get_profile_attr(request=request, field_name='roles',
-                default_value=[], **kwargs)
-        return roles
-
-    def get_profile(self, account, services_label=None):
-        # make RPC call as internal communication to user-management service
-        if not hasattr(self, '_user_profile_reply'):
-            acc_id = self.get_account_id(account=account)
-            field_names = ['id', 'first_name', 'last_name','roles','quota']
-            self._user_profile_reply = self._usermgt_rpc.get_profile(account_id=acc_id,
-                    field_names=field_names, services_label=services_label)
-        # it is actually reply object, to retrieve return value of RPC
-        # application has to invoke reply.result()
-        return self._user_profile_reply
-
-
-# from common.util.python.messaging.rpc       import RPCproxy
-# myrpc = RPCproxy(app_name='user_management')
-# evt = myrpc.get_profile(account_id=25, field_names=['id', 'first_name', 'last_name'])
-# evt2 = myrpc.xxXx(yui='249fye')
 
