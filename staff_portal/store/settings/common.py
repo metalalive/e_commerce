@@ -21,3 +21,24 @@ class _MatCodeOptions(enum.Enum):
     MAX_NUM_PHONES = 4
     MAX_NUM_PRODUCTS = 5
 
+
+from common.cors import config as cors_config
+
+APP_HOST = cors_config.ALLOWED_ORIGIN['store']
+
+AUTH_APP_HOST = cors_config.ALLOWED_ORIGIN['user_management']
+
+REFRESH_ACCESS_TOKEN_API_URL = '%s/refresh_access_token' % AUTH_APP_HOST
+
+ROUTERS = ['store.views.router']
+
+KEYSTORE = {
+    "keystore": "common.auth.keystore.BaseAuthKeyStore",
+    "persist_pubkey_handler": {
+        "module_path": "common.auth.jwt.RemoteJWKSPersistHandler",
+        "init_kwargs": {"url": "http://localhost:8008/jwks", "name":"remote_pubkey"}
+    }
+}
+
+NUM_RETRY_RPC_RESPONSE = 5
+

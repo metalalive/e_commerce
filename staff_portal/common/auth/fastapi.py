@@ -6,30 +6,30 @@ from jwt.exceptions import (
 
 from common.auth.keystore import create_keystore_helper
 from common.util.python import import_module_string
-from common.util.python.fastapi.settings import settings as fa_settings
 from common.auth.jwt import JWT
 
-def base_authentication(token:str, audience, error_obj=None):
-    ks_cfg = fa_settings.keystore_config
+def base_authentication(token:str, audience, ks_cfg, error_obj=None):
+    payld = None
     keystore = create_keystore_helper(cfg=ks_cfg, import_fn=import_module_string)
-    jwt = JWT(encoded=token)
     try:
+        jwt = JWT(encoded=token)
         payld = jwt.verify(keystore=keystore, audience=audience)
         if not payld:
             raise DecodeError("payload of jwt token is null, authentication failure")
-        return payld
     except (TypeError, DecodeError, ExpiredSignatureError, ImmatureSignatureError, InvalidAudienceError, \
             InvalidIssuedAtError, InvalidIssuerError, MissingRequiredClaimError,) as e:
         if error_obj:
             raise error_obj # TODO, log error
-        return None
+        payld = None
+    return payld
 
 
-def base_permission_check(user:dict, required_roles:set, error_obj):
-    actual_roles = user.get('roles', [])
-    for x in actual_roles:
-        required_roles = required_roles - set(x['perm_code'])
-    if any(required_roles):
+def base_permission_check(user:dict, app_code:int, required_perm_codes:set, error_obj):
+    granted_perms = user.get('perms', [])
+    granted_perms = filter(lambda d:d['app_code'] == app_code, granted_perms)
+    granted_perm_codes = set(map(lambda d:d['codename'], granted_perms))
+    coverage = required_perm_codes - granted_perm_codes
+    if any(coverage):
         raise error_obj
     return user
 

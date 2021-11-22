@@ -6,17 +6,34 @@ import pytest
 from sqlalchemy.orm import Session
 from mariadb.constants.CLIENT import MULTI_STATEMENTS
 
-from store.settings import test as settings
+from fastapi.testclient import TestClient
 
 from common.models.db import sqlalchemy_init_engine
 from common.models.contact.sqlalchemy import CountryCodeEnum
 from common.util.python import import_module_string
+
+from tests.python.common import KeystoreMixin
 from tests.python.common.sqlalchemy import init_test_database, deinit_test_database, clean_test_data
 
+from store.entry import app
+from store.settings import test as settings
 from store.models import EnumWeekDay, SaleableTypeEnum, AppIdGapNumberFinder
 
 
 metadata_objs = list(map(lambda path: import_module_string(dotted_path=path).metadata , settings.ORM_BASE_CLASSES))
+
+class _Keystore(KeystoreMixin):
+    pass
+
+@pytest.fixture(scope='session')
+def keystore():
+    ks = _Keystore()
+    ks._setup_keystore()
+    try:
+        yield ks
+    finally:
+        ks._teardown_keystore()
+
 
 @pytest.fixture(scope='session', autouse=True)
 def db_engine_resource(request):
@@ -200,4 +217,8 @@ def _product_avail_data_gen():
 def product_avail_data():
     return  _product_avail_data_gen()
 
+@pytest.fixture(scope='session')
+def test_client():
+    _client = TestClient(app=app, base_url=settings.APP_HOST, raise_server_exceptions=True)
+    yield  _client
 
