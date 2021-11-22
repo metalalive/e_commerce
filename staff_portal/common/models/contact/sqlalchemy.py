@@ -16,16 +16,6 @@ class PhoneMixin:
     # NOTE, validation is handled at API view level, not at model level
     country_code = Column(String(3 ), nullable=False)
     line_number  = Column(String(15), nullable=False)
-    regex_patt = {
-        'country_code': r"^\d{1,3}$",
-        'line_number': r"^\+?1?\d{7,15}$",
-    }
-    err_msg = {
-        'country_code': "non-digit character detected, or length of digits doesn't meet requirement. It must contain only digit e.g. '91', '886' , from 1 digit up to 3 digits",
-        'line_number': "non-digit character detected, or length of digits doesn't meet requirement. It must contain only digits e.g. '9990099', from 7 digits up to 15 digits",
-    }
-
-
 
 
 class CountryCodeEnum(enum.Enum, metaclass=JsonFileChoicesMeta):

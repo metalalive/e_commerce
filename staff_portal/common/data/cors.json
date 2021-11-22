@@ -4,6 +4,7 @@
         "web" : "http://localhost:8006",
         "user_management" : "http://localhost:8008",
         "product" : "http://localhost:8009",
+        "store"   : "http://localhost:8011",
         "fileupload" : "http://localhost:8010"
     },
     "ALLOWED_METHODS": ["GET", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],

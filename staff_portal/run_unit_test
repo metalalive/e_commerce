@@ -33,5 +33,6 @@ python3.9 -m unittest tests.python.keystore.keygen  -v
 python3.9 -m unittest tests.python.keystore.manager  -v
 python3.9 -m unittest tests.python.util.graph -v
 
-pytest -v -s --keepdb  ./store/tests/storeprofile/models.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/models.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/views.py
 

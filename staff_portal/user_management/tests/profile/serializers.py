@@ -534,7 +534,7 @@ class ProfileRepresentationTestCase(ProfileUpdateBaseTestCase):
             is_equal = self._value_compare_contact_fn(val_a=actual_d['phones'], compare_id=True,
                     val_b=expect_d['phones'], _fields_compare=_nested_field_names['phones'])
             self.assertTrue(is_equal)
-            expect_active_status = LoginAccountExistField.activation_status.ACCOUNT_NON_EXISTENT.value
+            expect_active_status = LoginAccountExistField._activation_status.ACCOUNT_NON_EXISTENT.value
             actual_active_status = actual_d['auth']
             self.assertEqual(expect_active_status, actual_active_status)
 

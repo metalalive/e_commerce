@@ -28,3 +28,9 @@ class JsonFileChoicesMeta(JsonFileChoicesMetaMixin, enum.EnumMeta):
 class AppCodeOptions(enum.Enum, metaclass=JsonFileChoicesMeta):
     filepath = './common/data/app_code.json'
 
+class ActivationStatus(enum.Enum):
+    ACCOUNT_NON_EXISTENT = 1
+    ACTIVATION_REQUEST  = 2
+    ACCOUNT_ACTIVATED  = 3
+    ACCOUNT_DEACTIVATED = 4
+

@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 import logging
 
 from django.conf      import  settings as django_settings
-from django.db.models           import IntegerChoices
 from django.db.models.constants import LOOKUP_SEP
 from django.core.exceptions     import ValidationError, ObjectDoesNotExist
 from django.contrib.auth.models import Permission
@@ -19,6 +18,7 @@ from rest_framework.settings    import api_settings
 
 from common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer, DjangoBaseClosureBulkSerializer
 from common.serializers.mixins  import  BaseClosureNodeMixin
+from common.models.enums.base          import  ActivationStatus
 from common.util.python.async_tasks    import  sendmail as async_send_mail
 
 from ..async_tasks import update_accounts_privilege
@@ -216,28 +216,25 @@ class BulkGenericUserProfileSerializer(BulkUpdateListSerializer):
 
 
 class LoginAccountExistField(ChoiceField):
-    class activation_status(IntegerChoices):
-        ACCOUNT_NON_EXISTENT = 1
-        ACTIVATION_REQUEST  = 2
-        ACCOUNT_ACTIVATED  = 3
-        ACCOUNT_DEACTIVATED = 4
+    _activation_status = ActivationStatus
 
     def __init__(self, **kwargs):
-        super().__init__(choices=self.activation_status.choices, **kwargs)
+        choices = [(opt.value, opt.name) for opt in self._activation_status]
+        super().__init__(choices=choices, **kwargs)
 
     def to_representation(self, instance):
         try:
             account = instance.account
             if account.is_active:
-                out = self.activation_status.ACCOUNT_ACTIVATED.value
+                out = self._activation_status.ACCOUNT_ACTIVATED.value
             else:
-                out = self.activation_status.ACCOUNT_DEACTIVATED.value
+                out = self._activation_status.ACCOUNT_DEACTIVATED.value
         except ObjectDoesNotExist as e:
             rst_req_exists = instance.emails.filter(rst_account_reqs__isnull=False).distinct().exists()
             if rst_req_exists:
-                out = self.activation_status.ACTIVATION_REQUEST.value
+                out = self._activation_status.ACTIVATION_REQUEST.value
             else:
-                out = self.activation_status.ACCOUNT_NON_EXISTENT.value
+                out = self._activation_status.ACCOUNT_NON_EXISTENT.value
         return out
 
 

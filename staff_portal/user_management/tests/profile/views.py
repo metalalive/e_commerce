@@ -404,7 +404,7 @@ class ProfileQueryTestCase(ProfileBaseUpdateTestCase):
         self.assertEqual(int(response.status_code), 200)
         fetch_profile_data = response.json()
         self.verify_data(actual_data=[chosen_profile], expect_data=[fetch_profile_data])
-        self.assertEqual(fetch_profile_data['auth'], LoginAccountExistField.activation_status.ACCOUNT_ACTIVATED)
+        self.assertEqual(fetch_profile_data['auth'], LoginAccountExistField._activation_status.ACCOUNT_ACTIVATED.value)
 
     def test_multiple_items_partial(self):
         profile_ids = list(map(lambda d:d['id'], self.request_data))
@@ -413,10 +413,10 @@ class ProfileQueryTestCase(ProfileBaseUpdateTestCase):
         self.assertEqual(int(response.status_code), 200)
         fetch_profiles_data = response.json()
         self.verify_data(actual_data=self._test_profiles, expect_data=fetch_profiles_data)
-        self.assertEqual(fetch_profiles_data[0]['auth'], LoginAccountExistField.activation_status.ACCOUNT_NON_EXISTENT)
-        self.assertEqual(fetch_profiles_data[1]['auth'], LoginAccountExistField.activation_status.ACCOUNT_DEACTIVATED)
-        self.assertEqual(fetch_profiles_data[2]['auth'], LoginAccountExistField.activation_status.ACCOUNT_DEACTIVATED)
-        self.assertEqual(fetch_profiles_data[3]['auth'], LoginAccountExistField.activation_status.ACCOUNT_ACTIVATED)
+        self.assertEqual(fetch_profiles_data[0]['auth'], LoginAccountExistField._activation_status.ACCOUNT_NON_EXISTENT.value)
+        self.assertEqual(fetch_profiles_data[1]['auth'], LoginAccountExistField._activation_status.ACCOUNT_DEACTIVATED.value)
+        self.assertEqual(fetch_profiles_data[2]['auth'], LoginAccountExistField._activation_status.ACCOUNT_DEACTIVATED.value)
+        self.assertEqual(fetch_profiles_data[3]['auth'], LoginAccountExistField._activation_status.ACCOUNT_ACTIVATED.value)
 
 
 class ProfileSearchTestCase(ProfileBaseUpdateTestCase):
