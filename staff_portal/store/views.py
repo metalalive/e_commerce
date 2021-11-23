@@ -9,7 +9,6 @@ from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTP
 from fastapi.security  import OAuth2AuthorizationCodeBearer
 from pydantic import BaseModel as PydanticBaseModel, PositiveInt, constr, EmailStr, validator, ValidationError
 from pydantic.errors import StrRegexError
-
 from sqlalchemy.orm import Session
 
 from common.auth.fastapi import base_authentication, base_permission_check
