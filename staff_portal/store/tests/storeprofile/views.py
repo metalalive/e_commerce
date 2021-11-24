@@ -8,7 +8,7 @@ from common.models.enums.base import AppCodeOptions, ActivationStatus
 from common.util.python.messaging.rpc import RpcReplyEvent
 
 from store.models import StoreProfile, StorePhone, StoreEmail
-from store.tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data
+from store.tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -274,5 +274,215 @@ class TestCreation:
                 for err in result['detail']:
                     pos = err['supervisor_id'][0].find('Limit exceeds')
                     assert pos >= 0
+
+
+class TestUpdateContact:
+    # class name must start with TestXxxx
+    url = '/profile/{store_id}'
+    _auth_data_pattern = { 'id':-1, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
+        'roles':[
+            {'app_code':app_code, 'codename':'view_storeprofile'},
+            {'app_code':app_code, 'codename':'change_storeprofile'}
+        ],
+    }
+
+    def test_ok(self, session_for_test, keystore, test_client, saved_store_objs, email_data, phone_data, loc_data):
+        obj = next(saved_store_objs)
+        body = {'label': 'edited_label' , 'active':not obj.active}
+        body['emails'] = list(map(lambda e:{'addr':e.addr}, obj.emails[1:]))
+        body['phones'] = list(map(lambda e:{'country_code':e.country_code , 'line_number':e.line_number}, obj.phones[1:]))
+        body['emails'].append(next(email_data))
+        body['phones'].append(next(phone_data))
+        body['location'] = next(loc_data)
+        body['location']['country'] = body['location']['country'].value
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = obj.supervisor_id
+        auth_data['quotas'] = [
+                {'app_code':app_code, 'mat_code':StoreEmail.quota_material.value, 'maxnum':len(body['emails'])} ,
+                {'app_code':app_code, 'mat_code':StorePhone.quota_material.value, 'maxnum':len(body['phones'])} ,
+            ]
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        url = self.url.format(store_id=obj.id)
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            response = test_client.patch(url, headers=headers, json=body)
+        assert response.status_code == 200
+        obj = session_for_test.query(StoreProfile).filter(StoreProfile.id == obj.id).first()
+        assert obj.label == body['label']
+        assert obj.active == body['active']
+        expect_value = set(map(lambda e:e.addr, obj.emails))
+        actual_value = set(map(lambda e:e['addr'], body['emails']))
+        assert expect_value == actual_value
+        expect_value = set(map(lambda p:(p.country_code, p.line_number), obj.phones))
+        actual_value = set(map(lambda p:(p['country_code'], p['line_number']), body['phones']))
+        assert expect_value == actual_value
+        assert obj.location.country.value == body['location']['country']
+        for col_name in ('locality', 'street', 'detail', 'floor'):
+            assert getattr(obj.location, col_name) == body['location'][col_name]
+
+
+    def test_quota_limit_exceeds(self, session_for_test, keystore, test_client, saved_store_objs, email_data, phone_data):
+        max_num_emails = 4
+        max_num_phones = 5
+        obj = next(saved_store_objs)
+        body = {'label': 'edited_label' , 'active':not obj.active}
+        body['emails'] = [next(email_data) for _ in range(max_num_emails + 1)]
+        body['phones'] = [next(phone_data) for _ in range(max_num_phones + 1)]
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = obj.supervisor_id
+        auth_data['quotas'] = [
+                {'app_code':app_code, 'mat_code':StoreEmail.quota_material.value, 'maxnum':max_num_emails} ,
+                {'app_code':app_code, 'mat_code':StorePhone.quota_material.value, 'maxnum':max_num_phones} ,
+            ]
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        url = self.url.format(store_id=obj.id)
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            response = test_client.patch(url, headers=headers, json=body)
+        assert response.status_code == 403
+        result = response.json()
+        assert result['detail']['emails'][0].startswith('Limit exceeds')
+        body['emails'].pop()
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            response = test_client.patch(url, headers=headers, json=body)
+        assert response.status_code == 403
+        result = response.json()
+        assert result['detail']['phones'][0].startswith('Limit exceeds')
+
+
+    def test_invalid_id(self, session_for_test, keystore, test_client):
+        invalid_supervisor_id = -9876
+        body = {'label': 'edited label' , 'active':True}
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = invalid_supervisor_id
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            invalid_store_id = 'b99'
+            url = self.url.format(store_id=invalid_store_id)
+            response = test_client.patch(url, headers=headers, json=body)
+            assert response.status_code == 422
+            invalid_store_id = -998
+            url = self.url.format(store_id=invalid_store_id)
+            response = test_client.patch(url, headers=headers, json=body)
+            assert response.status_code == 422
+            invalid_store_id = 1 # there should not be any store profile in database in the test case
+            url = self.url.format(store_id=invalid_store_id)
+            response = test_client.patch(url, headers=headers, json=body)
+            assert response.status_code == 404
+            assert response.json()['detail'] == 'Store not exists'
+
+
+    def test_invalid_supervisor(self, session_for_test, keystore, test_client, saved_store_objs):
+        obj = next(saved_store_objs)
+        invalid_supervisor_id = obj.supervisor_id + 9999
+        body = {'label': 'edited label' , 'active':not obj.active}
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = invalid_supervisor_id
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            url = self.url.format(store_id=obj.id)
+            response = test_client.patch(url, headers=headers, json=body)
+            assert response.status_code == 403
+            assert response.json()['detail'] == 'Not allowed to edit the store profile'
+
+
+class TestSwitchSupervisor:
+    url = '/profile/{store_id}/supervisor'
+    _auth_data_pattern = { 'id':-1, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
+        'roles':[
+            {'app_code':app_code, 'codename':'view_storeprofile'},
+            {'app_code':app_code, 'codename':'change_storeprofile'}
+        ],
+    }
+
+    def _mocked_rpc_reply_refresh(self, *args, **kwargs):
+        # skip receiving message from RPC-reply-queue
+        pass
+
+    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    def test_ok(self, session_for_test, keystore, test_client, saved_store_objs):
+        obj = next(saved_store_objs)
+        old_supervisor_id = obj.supervisor_id
+        new_supervisor_id = 5566
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = old_supervisor_id
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        body = {'supervisor_id': new_supervisor_id}
+        url = self.url.format(store_id=obj.id)
+        reply_event = RpcReplyEvent(listener=self, timeout_s=7)
+        reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
+        reply_event.resp_body['result'] = [{
+            'id':new_supervisor_id, 'auth':ActivationStatus.ACCOUNT_ACTIVATED.value, \
+            'quota':[{'app_code':app_code, 'mat_code':StoreProfile.quota_material.value, \
+                'maxnum':random.randrange(3,6)}]
+        }]
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+                # skip publishing message to RPC queue
+                mocked_rpc_proxy_call.return_value = reply_event
+                response = test_client.patch(url, headers=headers, json=body)
+        assert response.status_code == 200
+        obj = session_for_test.query(StoreProfile).filter(StoreProfile.id == obj.id).first()
+        assert obj.supervisor_id == new_supervisor_id
+
+
+    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    def test_quota_limit_exceeds(self, session_for_test, keystore, test_client, saved_store_objs, store_data):
+        max_num_stores = 5
+        objs = [next(saved_store_objs) for _ in range(max_num_stores)]
+        new_supervisor_id = 5566
+        body = {'supervisor_id': new_supervisor_id}
+        reply_event = RpcReplyEvent(listener=self, timeout_s=7)
+        reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
+        reply_event.resp_body['result'] = [{
+            'id':new_supervisor_id, 'auth':ActivationStatus.ACCOUNT_ACTIVATED.value, \
+            'quota':[{'app_code':app_code, 'mat_code':StoreProfile.quota_material.value, 'maxnum': (max_num_stores - 1)}]
+        }]
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+                mocked_rpc_proxy_call.return_value = reply_event
+                for obj in objs:
+                    old_supervisor_id = obj.supervisor_id
+                    auth_data = self._auth_data_pattern
+                    auth_data['id'] = old_supervisor_id
+                    encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+                    headers = {'Authorization': 'Bearer %s' % encoded_token}
+                    url = self.url.format(store_id=obj.id)
+                    response = test_client.patch(url, headers=headers, json=body)
+                    expect_status_code = 403 if obj is objs[-1] else 200
+                    assert response.status_code == expect_status_code
+        query = session_for_test.query(StoreProfile.id)
+        query = query.filter(StoreProfile.supervisor_id == new_supervisor_id)
+        actual_data = set(map(lambda v:v[0], query.all()))
+        expect_data = set(map(lambda obj:obj.id, objs[:-1]))
+        assert expect_data == actual_data
+
+
+    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    def test_deactivated_supervisor(self, session_for_test, keystore, test_client, saved_store_objs):
+        obj = next(saved_store_objs)
+        old_supervisor_id = obj.supervisor_id
+        new_supervisor_id = 5566
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = old_supervisor_id
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        body = {'supervisor_id': new_supervisor_id}
+        url = self.url.format(store_id=obj.id)
+        reply_event = RpcReplyEvent(listener=self, timeout_s=7)
+        reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
+        reply_event.resp_body['result'] = [{ 'id':new_supervisor_id, 'quota':[],
+            'auth':ActivationStatus.ACCOUNT_DEACTIVATED.value, }]
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+                # skip publishing message to RPC queue
+                mocked_rpc_proxy_call.return_value = reply_event
+                response = test_client.patch(url, headers=headers, json=body)
+        assert response.status_code ==400
+        result = response.json()
+        assert result['detail']['supervisor_id'][0] == 'unable to login'
 
 

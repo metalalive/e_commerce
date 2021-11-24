@@ -18,6 +18,7 @@ from tests.python.common.sqlalchemy import init_test_database, deinit_test_datab
 from store.entry import app
 from store.settings import test as settings
 from store.models import EnumWeekDay, SaleableTypeEnum, AppIdGapNumberFinder
+from store.models import StoreProfile, StoreEmail, StorePhone, OutletLocation, HourOfOperation, StoreStaff, StoreProductAvailable
 
 
 metadata_objs = list(map(lambda path: import_module_string(dotted_path=path).metadata , settings.ORM_BASE_CLASSES))
@@ -64,6 +65,8 @@ def db_engine_resource(request):
     kwargs.pop('createdb_sql', None)
     kwargs.pop('metadata_objs', None)
     deinit_test_database(**kwargs)
+    default_db_engine.dispose()
+    default_dbs_engine.dispose()
 
 
 @pytest.fixture
@@ -121,9 +124,9 @@ def _email_data_gen():
     while True:
         new_data = {
             'addr':'%s@%s.%s' % (
-                ''.join(random.choices(string.ascii_letters, k=8)),
                 ''.join(random.choices(string.ascii_letters, k=10)),
-                ''.join(random.choices(string.ascii_letters, k=3))
+                ''.join(random.choices(string.ascii_lowercase, k=8)),
+                ''.join(random.choices(string.ascii_lowercase, k=3))
             )
         }
         yield new_data
@@ -221,4 +224,26 @@ def product_avail_data():
 def test_client():
     _client = TestClient(app=app, base_url=settings.APP_HOST, raise_server_exceptions=True)
     yield  _client
+
+
+def _saved_obj_gen(store_data_gen, email_data_gen, phone_data_gen, loc_data_gen, session, staff_data_gen, product_avail_data_gen):
+    num_emails_per_store = 2
+    num_phones_per_store = 3
+    num_staff_per_store = 4
+    num_products_per_store = 5
+    while True:
+        new_item = next(store_data_gen)
+        new_item['location'] = OutletLocation(**next(loc_data_gen))
+        new_item['emails'] = [StoreEmail(**next(email_data_gen)) for _ in range(num_emails_per_store)]
+        new_item['phones'] = [StorePhone(**next(phone_data_gen)) for _ in range(num_phones_per_store)]
+        new_item['staff']  = [StoreStaff(**next(staff_data_gen)) for _ in range(num_staff_per_store)]
+        new_item['products'] = [StoreProductAvailable(**next(product_avail_data_gen)) for _ in range(num_products_per_store)]
+        obj = StoreProfile(**new_item)
+        StoreProfile.bulk_insert([obj], session=session)
+        yield obj
+
+@pytest.fixture
+def saved_store_objs(session_for_setup, store_data, email_data, phone_data, loc_data, staff_data, product_avail_data):
+    return _saved_obj_gen(store_data, email_data_gen=email_data, phone_data_gen=phone_data, loc_data_gen=loc_data,
+            session=session_for_setup, staff_data_gen=staff_data, product_avail_data_gen=product_avail_data)
 

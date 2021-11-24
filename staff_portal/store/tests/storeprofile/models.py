@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 from store.models import StoreProfile, StoreEmail, StorePhone, OutletLocation, HourOfOperation, StoreStaff, StoreProductAvailable
-from store.tests.common import db_engine_resource, session_for_test, session_for_setup, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data
+from store.tests.common import db_engine_resource, session_for_test, session_for_setup, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
 
 # module-level test setup / teardown
 def setup_module(module):
@@ -13,29 +13,6 @@ def setup_module(module):
 
 def teardown_module(module):
     pass
-
-
-def _saved_obj_gen(store_data_gen, email_data_gen, phone_data_gen, loc_data_gen, session, staff_data_gen, product_avail_data_gen):
-    num_emails_per_store = 2
-    num_phones_per_store = 3
-    num_staff_per_store = 4
-    num_products_per_store = 5
-    while True:
-        new_item = next(store_data_gen)
-        new_item['location'] = OutletLocation(**next(loc_data_gen))
-        new_item['emails'] = [StoreEmail(**next(email_data_gen)) for _ in range(num_emails_per_store)]
-        new_item['phones'] = [StorePhone(**next(phone_data_gen)) for _ in range(num_phones_per_store)]
-        new_item['staff']  = [StoreStaff(**next(staff_data_gen)) for _ in range(num_staff_per_store)]
-        new_item['products'] = [StoreProductAvailable(**next(product_avail_data_gen)) for _ in range(num_products_per_store)]
-        obj = StoreProfile(**new_item)
-        StoreProfile.bulk_insert([obj], session=session)
-        yield obj
-
-@pytest.fixture
-def saved_store_objs(session_for_setup, store_data, email_data, phone_data, loc_data, staff_data, product_avail_data):
-    return _saved_obj_gen(store_data, email_data_gen=email_data, phone_data_gen=phone_data, loc_data_gen=loc_data,
-            session=session_for_setup, staff_data_gen=staff_data, product_avail_data_gen=product_avail_data)
-
 
 
 class TestCreation: # class name must start with TestXxxx
