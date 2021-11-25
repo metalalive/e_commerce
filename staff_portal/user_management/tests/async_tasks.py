@@ -13,12 +13,14 @@ from django.contrib.contenttypes.models  import ContentType
 from django.contrib.auth.models import Permission as ModelLevelPermission
 
 from common.models.enums.django import AppCodeOptions
-from user_management.models.auth import Role
-from user_management.models.base import QuotaMaterial, GenericUserProfile, GenericUserGroup
-from user_management.serializers.common import serialize_profile_quota, serialize_profile_permissions
-from user_management.async_tasks import get_profile
+from common.util.python import flatten_nested_iterable
 
-from .common import _fixtures, UserNestedFieldSetupMixin, UserNestedFieldVerificationMixin
+from user_management.models.auth import Role, LoginAccount
+from user_management.models.base import QuotaMaterial, GenericUserProfile, GenericUserGroup, GenericUserGroupClosure
+from user_management.serializers.common import serialize_profile_quota, serialize_profile_permissions
+from user_management.async_tasks import get_profile, profile_descendant_validity
+
+from .common import _fixtures, _setup_login_account, UserNestedFieldSetupMixin, UserNestedFieldVerificationMixin
 
 
 class GetProfileCase(TransactionTestCase, UserNestedFieldSetupMixin, UserNestedFieldVerificationMixin):
@@ -181,5 +183,116 @@ class GetProfileCase(TransactionTestCase, UserNestedFieldSetupMixin, UserNestedF
 ## from common.util.python.messaging.rpc import RPCproxy
 ## auth_app_rpc = RPCproxy(dst_app_name='user_management', src_app_name='store')
 ## reply_evt = auth_app_rpc.get_profile(ids=[2,3,4] , fields=['id', 'roles', 'quota'])
-## reply_evt.refresh(retry=False, timeout=0.6)
+## reply_evt.refresh(retry=False, timeout=0.6, num_of_msgs_fetch=1)
 ## reply_evt.result['result']
+
+
+class ProfileDescendantValidityCase(TransactionTestCase):
+    def _setup_groups_hierarchy(self, grp_obj_map):
+        """
+        the tree structure of the group hierarchy in this test case
+                   3            10
+                 /    \        /  \
+                4      5      11  12
+               / \    / \    /  \
+              6   7  8   9  13   14
+        """
+        group_closure_data = [
+            {'id':1 ,  'depth':0, 'ancestor':grp_obj_map[3 ], 'descendant':grp_obj_map[3 ]},
+            {'id':2 ,  'depth':0, 'ancestor':grp_obj_map[4 ], 'descendant':grp_obj_map[4 ]},
+            {'id':3 ,  'depth':0, 'ancestor':grp_obj_map[5 ], 'descendant':grp_obj_map[5 ]},
+            {'id':4 ,  'depth':0, 'ancestor':grp_obj_map[6 ], 'descendant':grp_obj_map[6 ]},
+            {'id':5 ,  'depth':0, 'ancestor':grp_obj_map[7 ], 'descendant':grp_obj_map[7 ]},
+            {'id':6 ,  'depth':0, 'ancestor':grp_obj_map[8 ], 'descendant':grp_obj_map[8 ]},
+            {'id':7 ,  'depth':0, 'ancestor':grp_obj_map[9 ], 'descendant':grp_obj_map[9 ]},
+            {'id':8 ,  'depth':0, 'ancestor':grp_obj_map[10], 'descendant':grp_obj_map[10]},
+            {'id':9 ,  'depth':0, 'ancestor':grp_obj_map[11], 'descendant':grp_obj_map[11]},
+            {'id':10,  'depth':0, 'ancestor':grp_obj_map[12], 'descendant':grp_obj_map[12]},
+            {'id':11,  'depth':0, 'ancestor':grp_obj_map[13], 'descendant':grp_obj_map[13]},
+            {'id':12,  'depth':0, 'ancestor':grp_obj_map[14], 'descendant':grp_obj_map[14]},
+            {'id':13,  'depth':1, 'ancestor':grp_obj_map[3 ], 'descendant':grp_obj_map[4 ]},
+            {'id':14,  'depth':1, 'ancestor':grp_obj_map[3 ], 'descendant':grp_obj_map[5 ]},
+            {'id':15,  'depth':1, 'ancestor':grp_obj_map[4 ], 'descendant':grp_obj_map[6 ]},
+            {'id':16,  'depth':1, 'ancestor':grp_obj_map[4 ], 'descendant':grp_obj_map[7 ]},
+            {'id':17,  'depth':1, 'ancestor':grp_obj_map[5 ], 'descendant':grp_obj_map[8 ]},
+            {'id':18,  'depth':1, 'ancestor':grp_obj_map[5 ], 'descendant':grp_obj_map[9 ]},
+            {'id':19,  'depth':1, 'ancestor':grp_obj_map[10], 'descendant':grp_obj_map[11]},
+            {'id':20,  'depth':1, 'ancestor':grp_obj_map[10], 'descendant':grp_obj_map[12]},
+            {'id':21,  'depth':1, 'ancestor':grp_obj_map[11], 'descendant':grp_obj_map[13]},
+            {'id':22,  'depth':1, 'ancestor':grp_obj_map[11], 'descendant':grp_obj_map[14]},
+            {'id':23,  'depth':2, 'ancestor':grp_obj_map[3 ], 'descendant':grp_obj_map[6 ]},
+            {'id':24,  'depth':2, 'ancestor':grp_obj_map[3 ], 'descendant':grp_obj_map[7 ]},
+            {'id':25,  'depth':2, 'ancestor':grp_obj_map[3 ], 'descendant':grp_obj_map[8 ]},
+            {'id':26,  'depth':2, 'ancestor':grp_obj_map[3 ], 'descendant':grp_obj_map[9 ]},
+            {'id':27,  'depth':2, 'ancestor':grp_obj_map[10], 'descendant':grp_obj_map[13]},
+            {'id':28,  'depth':2, 'ancestor':grp_obj_map[10], 'descendant':grp_obj_map[14]},
+        ]
+        list(map(lambda d: GenericUserGroupClosure.objects.create(**d) , group_closure_data))
+
+
+    def init_primitive(self):
+        objs = {}
+        grp_objs = list(map(lambda d:GenericUserGroup(**d), _fixtures[GenericUserGroup]))
+        GenericUserGroup.objects.bulk_create(grp_objs)
+        grp_obj_map = dict(map(lambda obj: (obj.id, obj), grp_objs))
+        objs[GenericUserGroup] = grp_obj_map
+        # the profiles that were already created, will be used to create another new profiles
+        # through serializer or API endpoint
+        self.num_profiles = len(grp_objs)
+        default_profile_data = _fixtures[GenericUserProfile][:self.num_profiles]
+        objs[GenericUserProfile] = list(map(lambda d: GenericUserProfile(**d), default_profile_data))
+        GenericUserProfile.objects.bulk_create(objs[GenericUserProfile])
+        account_data_iter = iter(_fixtures[LoginAccount])
+        for obj in objs[GenericUserProfile]:
+            account_data = next(account_data_iter)
+            _setup_login_account(account_data, profile_obj=obj)
+        return objs
+
+
+    def setUp(self):
+        profile_descendant_validity.app.conf.task_always_eager = True
+        self._primitives = self.init_primitive()
+        self._setup_groups_hierarchy(grp_obj_map=self._primitives[GenericUserGroup])
+        approved_by = self._primitives[GenericUserProfile][0]
+        profiles_iter = iter(self._primitives[GenericUserProfile])
+        for grp in self._primitives[GenericUserGroup].values():
+            prof = next(profiles_iter)
+            data = {'group':grp, 'approved_by':approved_by}
+            prof.groups.create(**data)
+
+    def tearDown(self):
+        profile_descendant_validity.app.conf.task_always_eager = False
+
+    def test_ok(self):
+        # subcase 1, non-existent profile ID
+        input_kwargs = {'asc': -999, 'descs':[-997, -996]}
+        eager_result = profile_descendant_validity.apply_async(kwargs=input_kwargs)
+        self.assertEqual(eager_result.state, CeleryStates.FAILURE)
+        self.assertTrue(isinstance(eager_result.result, AssertionError))
+        self.assertEqual(eager_result.result.args[0], 'invalid profile ID for ancestor')
+        # subcase 2, correct profile ID, return descendant
+        grp   = self._primitives[GenericUserGroup][4]
+        grp_2 = self._primitives[GenericUserGroup][11]
+        prof = grp.profiles.first().profile
+        prof.groups.create(group=grp_2, approved_by=prof)
+        all_prof_ids = set(map(lambda obj:obj.id, self._primitives[GenericUserProfile]))
+        descs = list( all_prof_ids - {prof.id} )
+        descs.extend([-995, -994, -993])
+        input_kwargs = {'asc': prof.id, 'descs':descs}
+        eager_result = profile_descendant_validity.apply_async(kwargs=input_kwargs)
+        self.assertEqual(eager_result.state, CeleryStates.SUCCESS)
+        actual_value = sorted(eager_result.result)
+        expect_grp_ids = (4,6,7,11,13,14)
+        expect_grps = map(lambda gid: self._primitives[GenericUserGroup][gid], expect_grp_ids)
+        expect_prof_ids = map(lambda g:list(g.profiles.values_list('profile__pk', flat=True)), expect_grps)
+        expect_prof_ids = flatten_nested_iterable(list_=expect_prof_ids)
+        expect_value = list( set(expect_prof_ids) - {prof.id} )
+        expect_value = sorted(expect_value)
+        self.assertListEqual(actual_value, expect_value)
+        # subcase 3, correct profile ID, return empty
+        input_kwargs = {'asc': prof.id, 'descs':[-995, -994, -993]}
+        eager_result = profile_descendant_validity.apply_async(kwargs=input_kwargs)
+        self.assertEqual(eager_result.state, CeleryStates.SUCCESS)
+        self.assertFalse(any(eager_result.result))
+
+

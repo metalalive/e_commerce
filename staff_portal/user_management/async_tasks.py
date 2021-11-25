@@ -93,3 +93,14 @@ def get_profile(self, ids:List[int], fields:List[str]):
     return data
 
 
+@celery_app.task(backend=CeleryRpcBackend(app=celery_app), queue='rpc_usermgt_profile_descendant_validity', \
+         exchange=RPC_EXCHANGE_DEFAULT_NAME, routing_key='rpc.user_management.profile_descendant_validity')
+@log_fn_wrapper(logger=_logger, loglevel=logging.WARNING, log_if_succeed=False)
+def profile_descendant_validity(asc:int, descs:List[int]) -> List[int]:
+    asc_prof = GenericUserProfile.objects.filter(id=asc).first()
+    assert asc_prof, 'invalid profile ID for ancestor'
+    grps_applied = asc_prof.groups.values_list('group__id', flat=True)
+    valid_desc_profs = GenericUserGroup.get_profiles_under_groups(grp_ids=grps_applied, deleted=False)
+    valid_desc_ids = valid_desc_profs.filter(id__in=descs).values_list('id', flat=True)
+    return list(valid_desc_ids)
+

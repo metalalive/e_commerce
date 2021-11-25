@@ -73,6 +73,7 @@ class Authorization:
 add_profile_authorization  = Authorization(app_code=app_code, perm_codes=['view_storeprofile', 'add_storeprofile'])
 edit_profile_authorization = Authorization(app_code=app_code, perm_codes=['view_storeprofile', 'change_storeprofile'])
 switch_supervisor_authorization = Authorization(app_code=app_code, perm_codes=['view_storeprofile', 'change_storeprofile'])
+delete_profile_authorization = Authorization(app_code=app_code, perm_codes=['view_storeprofile', 'delete_storeprofile'])
 
 
 class StoreEmailBody(PydanticBaseModel):
@@ -245,6 +246,39 @@ class NewStoreProfilesReqBody(PydanticBaseModel):
         return new_stores
 ## end of class NewStoreProfilesReqBody()
 
+
+class DeleteStoreProfilesReqBody(PydanticBaseModel):
+    ids : List[PositiveInt]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        db_engine = _init_db_engine()
+        session = Session(bind=db_engine)
+        self.metadata =  {'db_engine': db_engine, 'session':session}
+        query = session.query(StoreProfile).filter(StoreProfile.id.in_(self.ids))
+        objs = query.all()
+        actual_ids = set(map(lambda obj:obj.id , objs))
+        missing = set(self.ids) - actual_ids
+        if missing:
+            raise FastApiHTTPException( detail='Some of stores do not exist, ID = %s' % missing,
+                    headers={}, status_code=FastApiHTTPstatus.HTTP_410_GONE )
+        self.metadata['deleting_objs'] = objs
+
+    def __del__(self):
+        _metadata = getattr(self, 'metadata', {})
+        session = _metadata.get('session')
+        if session:
+            session.close()
+        db_engine = _metadata.get('db_engine')
+        if db_engine:
+            db_engine.dispose()
+
+    def __setattr__(self, name, value):
+        if name == 'metadata':
+            # the attribute is for internal use, skip type checking
+            self.__dict__[name] = value
+        else:
+            super().__setattr__(name, value)
 
 
 class ExistingStoreProfileReqBody(PydanticBaseModel):
@@ -419,5 +453,13 @@ def switch_supervisor(store_id:PositiveInt, request:StoreSupervisorReqBody, user
         session.commit()
     return None
 
+@router.delete('/profiles', status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT)
+def delete_profile(request:DeleteStoreProfilesReqBody, user:dict=FastapiDepends(delete_profile_authorization)):
+    session = request.metadata['session']
+    deleting_objs = request.metadata['deleting_objs']
+    for obj in deleting_objs:
+        session.delete(obj)
+    session.commit()
+    return None
 
 

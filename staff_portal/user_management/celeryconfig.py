@@ -73,7 +73,9 @@ def init_rpc(app):
         #kombu.Queue('usermgt_rpc3_rx', routing_key='usermgt_rpc333_rx.*',
         #    exchange=kombu.Exchange(name='usermgt_rpc3_rx', type='topic')),
         kombu.Queue('rpc_usermgt_get_profile', exchange=exchange,
-            routing_key='rpc.user_management.get_profile')
+            routing_key='rpc.user_management.get_profile') ,
+        kombu.Queue('rpc_usermgt_profile_descendant_validity', exchange=exchange,
+            routing_key='rpc.user_management.profile_descendant_validity') ,
     ]
     kombu_pool_set_limit(limit=2)
 

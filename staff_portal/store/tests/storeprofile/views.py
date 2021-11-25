@@ -481,8 +481,33 @@ class TestSwitchSupervisor:
                 # skip publishing message to RPC queue
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
-        assert response.status_code ==400
+        assert response.status_code == 400
         result = response.json()
         assert result['detail']['supervisor_id'][0] == 'unable to login'
+
+
+class TestDeletion:
+    url = '/profiles'
+    _auth_data_pattern = { 'id':-1, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
+        'roles':[
+            {'app_code':app_code, 'codename':'view_storeprofile'},
+            {'app_code':app_code, 'codename':'delete_storeprofile'}
+        ],
+    }
+
+    def test_bulk_ok(self, session_for_test, keystore, test_client, saved_store_objs):
+        num_items = 7
+        num_deleting = 4
+        objs = [next(saved_store_objs) for _ in range(num_items)]
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = 214
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        body = {'ids': random.sample(list(map(lambda obj:obj.id, objs)), num_deleting)}
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            response = test_client.delete(self.url, headers=headers, json=body)
+            assert response.status_code == 204
+            response = test_client.delete(self.url, headers=headers, json=body)
+            assert response.status_code == 410
 
 
