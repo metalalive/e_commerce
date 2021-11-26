@@ -4,4 +4,5 @@ DJANGO_SETTINGS_MODULE='product.settings.development' daphne -p 8009  common.uti
 
 DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings'  celery --app=common.util.python --config=common.util.python.celeryconfig  worker  --concurrency 1 --loglevel=INFO  --logfile=./tmp/log/staffsite/common_celery.log --hostname=common@%h -E -Q mailing,periodic_default &
 DJANGO_SETTINGS_MODULE='user_management.settings.development'  celery --app=common.util.python --config=user_management.celeryconfig  worker --concurrency 1 --loglevel=INFO --logfile=./tmp/log/staffsite/usermgt_celery.log --hostname=usermgt@%h  -E &
+DJANGO_SETTINGS_MODULE='product.settings.development'  celery --app=common.util.python --config=product.celeryconfig  worker --concurrency 1 --loglevel=INFO --logfile=./tmp/log/staffsite/productmgt_celery.log --hostname=productmgt@%h  -E &
 

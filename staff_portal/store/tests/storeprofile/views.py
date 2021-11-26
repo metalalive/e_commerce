@@ -133,7 +133,7 @@ class TestCreation:
                     response = test_client.post(self.url, headers=headers, json=body)
                     result = response.json()
                     assert response.status_code == 503
-                    assert result['detail'] == 'Authentication service is currently down'
+                    assert result['detail'] == {'app_code':[AppCodeOptions.user_management.value[0]]}
 
 
     @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
@@ -370,7 +370,7 @@ class TestUpdateContact:
             url = self.url.format(store_id=invalid_store_id)
             response = test_client.patch(url, headers=headers, json=body)
             assert response.status_code == 404
-            assert response.json()['detail'] == 'Store not exists'
+            assert response.json()['detail'] == {'code': 'not_exist'}
 
 
     def test_invalid_supervisor(self, session_for_test, keystore, test_client, saved_store_objs):

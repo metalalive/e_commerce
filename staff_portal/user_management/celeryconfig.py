@@ -1,11 +1,5 @@
-import json
-from celery.schedules import crontab
-
 from common.util.python import _get_amqp_url
 
-
-# TODO, import & register tasks dynamically from different services
-# explicitly indicate all tasks applied in this project
 imports = ['user_management.async_tasks']
 
 # data transfer between clients (producers) and workers (consumers)

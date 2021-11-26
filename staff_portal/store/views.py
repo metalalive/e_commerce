@@ -1,4 +1,5 @@
 import os
+from datetime import datetime , time as py_time
 from functools import partial
 from typing import Optional, List, Any
 from importlib import import_module
@@ -18,7 +19,7 @@ from common.models.enums.base import AppCodeOptions, ActivationStatus
 from common.models.contact.sqlalchemy import CountryCodeEnum
 from common.util.python.messaging.rpc import RPCproxy
 
-from .models import StoreProfile, StoreEmail, StorePhone, OutletLocation
+from .models import StoreProfile, StoreEmail, StorePhone, OutletLocation, StoreStaff, EnumWeekDay, HourOfOperation, SaleableTypeEnum, StoreProductAvailable
 
 settings_module_path = os.getenv('APP_SETTINGS', 'store.settings.common')
 settings = import_module(settings_module_path)
@@ -38,6 +39,7 @@ router = APIRouter(
         )
 
 auth_app_rpc = RPCproxy(dst_app_name='user_management', src_app_name='store')
+product_app_rpc = RPCproxy(dst_app_name='product', src_app_name='store')
 
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
         authorizationUrl="no_auth_url",
@@ -74,6 +76,7 @@ add_profile_authorization  = Authorization(app_code=app_code, perm_codes=['view_
 edit_profile_authorization = Authorization(app_code=app_code, perm_codes=['view_storeprofile', 'change_storeprofile'])
 switch_supervisor_authorization = Authorization(app_code=app_code, perm_codes=['view_storeprofile', 'change_storeprofile'])
 delete_profile_authorization = Authorization(app_code=app_code, perm_codes=['view_storeprofile', 'delete_storeprofile'])
+edit_products_authorization = Authorization(app_code=app_code, perm_codes=['add_storeproductavailable', 'change_storeproductavailable', 'delete_storeproductavailable'])
 
 
 class StoreEmailBody(PydanticBaseModel):
@@ -130,8 +133,8 @@ def _get_supervisor_auth(prof_ids):
     rpc_response = reply_evt.result
     if rpc_response['status'] != reply_evt.status_opt.SUCCESS :
         raise FastApiHTTPException(
-                status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,
-                detail='Authentication service is currently down',  headers={}
+                status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,  headers={},
+                detail={'app_code':[AppCodeOptions.user_management.value[0]]}
             )
     return rpc_response['result']
 
@@ -340,6 +343,137 @@ class StoreSupervisorReqBody(PydanticBaseModel):
 
 
 
+class StoreStaffReqBody(PydanticBaseModel):
+    staff_id : PositiveInt
+    start_after : datetime
+    end_before  : datetime
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.start_after > self.end_before:
+            err_detail = {'code':'invalid_time_period'}
+            raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+
+
+class StoreStaffsReqBody(PydanticBaseModel):
+    __root__ : List[StoreStaffReqBody]
+
+    @validator('__root__')
+    def validate_list_items(cls, values):
+        staff_ids = set(map(lambda obj:obj.staff_id , values))
+        if len(staff_ids) != len(values):
+            err_detail = {'code':'duplicate', 'field':['staff_id']}
+            raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+        return values
+
+    def validate_staff(self, supervisor_id:int):
+        staff_ids = list(map(lambda obj:obj.staff_id , self.__root__))
+        reply_evt = auth_app_rpc.profile_descendant_validity(asc=supervisor_id, descs=staff_ids)
+        if not reply_evt.finished:
+            for _ in range(settings.NUM_RETRY_RPC_RESPONSE): # TODO, (1) async task (2) integration test
+                reply_evt.refresh(retry=False, timeout=0.4, num_of_msgs_fetch=1)
+                if reply_evt.finished:
+                    break
+                else:
+                    pass
+        rpc_response = reply_evt.result
+        if rpc_response['status'] != reply_evt.status_opt.SUCCESS :
+            raise FastApiHTTPException(
+                    status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,  headers={},
+                    detail={'app_code':[AppCodeOptions.user_management.value[0]]}
+                )
+        validated_staff_ids = rpc_response['result']
+        diff = set(staff_ids) - set(validated_staff_ids)
+        if any(diff):
+            err_detail = {'code':'invalid_descendant', 'supervisor_id':supervisor_id , 'staff_ids': list(diff)}
+            raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+        return validated_staff_ids
+
+
+class BusinessHoursDayReqBody(PydanticBaseModel):
+    day  : EnumWeekDay
+    time_open  : py_time
+    time_close : py_time
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.time_open > self.time_close:
+            err_detail = {'code':'invalid_time_period'}
+            raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+
+class BusinessHoursDaysReqBody(PydanticBaseModel):
+    __root__ : List[BusinessHoursDayReqBody]
+
+    @validator('__root__')
+    def validate_list_items(cls, values):
+        days = set(map(lambda obj:obj.day , values))
+        if len(days) != len(values):
+            err_detail = {'code':'duplicate', 'field':['day']}
+            raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+        return values
+
+
+class AvailProductReqBody(PydanticBaseModel):
+    product_type : SaleableTypeEnum
+    product_id   : PositiveInt
+    start_after : datetime
+    end_before  : datetime
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.start_after > self.end_before:
+            err_detail = {'code':'invalid_time_period'}
+            raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+
+
+class AvailProductsReqBody(PydanticBaseModel):
+    __root__ : List[AvailProductReqBody]
+
+    @validator('__root__')
+    def validate_list_items(cls, values):
+        prod_ids = set(map(lambda obj:(obj.product_type.value , obj.product_id) , values))
+        if len(prod_ids) != len(values):
+            err_detail = {'code':'duplicate', 'field':['product_type', 'product_id']}
+            raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+        return values
+
+    def validate_products(self, staff_id:int):
+        filtered = filter(lambda obj:obj.product_type == SaleableTypeEnum.ITEM , self.__root__)
+        item_ids = list(map(lambda obj:obj.product_id , filtered))
+        filtered = filter(lambda obj:obj.product_type == SaleableTypeEnum.PACKAGE , self.__root__)
+        pkg_ids  = list(map(lambda obj:obj.product_id , filtered))
+        fields_present = ['id',]
+        reply_evt = product_app_rpc.get_product(item_ids=item_ids, pkg_ids=pkg_ids, profile=staff_id,
+                item_fields=fields_present, pkg_fields=fields_present)
+        if not reply_evt.finished:
+            for _ in range(settings.NUM_RETRY_RPC_RESPONSE): # TODO, (1) async task (2) integration test
+                reply_evt.refresh(retry=False, timeout=0.4, num_of_msgs_fetch=1)
+                if reply_evt.finished:
+                    break
+                else:
+                    pass
+        rpc_response = reply_evt.result
+        if rpc_response['status'] != reply_evt.status_opt.SUCCESS :
+            raise FastApiHTTPException(
+                    status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,  headers={},
+                    detail={'app_code':[AppCodeOptions.product.value[0]]}
+                )
+        validated_data = rpc_response['result']
+        validated_item_ids = set(map(lambda d:d['id'], validated_data['item']))
+        validated_pkg_ids  = set(map(lambda d:d['id'], validated_data['pkg']))
+        diff_item = set(item_ids) - validated_item_ids
+        diff_pkg  = set(pkg_ids)  - validated_pkg_ids
+        err_detail = {'code':'invalid', 'field':[]}
+        if any(diff_item):
+            diff_item = map(lambda v:{'product_type':SaleableTypeEnum.ITEM.value, 'product_id':v}, diff_item)
+            err_detail['field'].extend( list(diff_item) )
+        if any(diff_pkg):
+            diff_pkg = map(lambda v:{'product_type':SaleableTypeEnum.PACKAGE.value, 'product_id':v}, diff_pkg)
+            err_detail['field'].extend( list(diff_pkg) )
+        if any(err_detail['field']):
+            raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+
+
 def _get_quota_arrangement_helper(supervisor_data, prof_id, quota_arrangement):
     quota_material_models = (StoreProfile, StoreEmail, StorePhone)
     err_detail = []
@@ -360,7 +494,6 @@ def _get_quota_arrangement_helper(supervisor_data, prof_id, quota_arrangement):
             quota_arrangement[prof_id][model_cls] = maxnum
     err_detail = {'supervisor_id':err_detail} if any(err_detail) else {}
     return  err_detail
-
 
 
 class StoreProfileResponseBody(PydanticBaseModel):
@@ -399,7 +532,7 @@ def _store_supervisor_validity(session, store_id:PositiveInt, usr_auth:dict):
     query = session.query(StoreProfile).filter(StoreProfile.id == store_id)
     saved_obj = query.first()
     if not saved_obj:
-        raise FastApiHTTPException( detail='Store not exists',  headers={},
+        raise FastApiHTTPException( detail={'code':'not_exist'},  headers={},
                 status_code=FastApiHTTPstatus.HTTP_404_NOT_FOUND )
     if usr_auth['priv_status'] != ROLE_ID_SUPERUSER and saved_obj.supervisor_id != usr_auth['profile']:
         raise FastApiHTTPException( detail='Not allowed to edit the store profile',  headers={},
@@ -461,5 +594,61 @@ def delete_profile(request:DeleteStoreProfilesReqBody, user:dict=FastapiDepends(
         session.delete(obj)
     session.commit()
     return None
+
+
+@router.patch('/profile/{store_id}/staff',)
+def edit_staff(store_id:PositiveInt, request:StoreStaffsReqBody, user:dict=FastapiDepends(edit_profile_authorization)):
+    request.validate_staff(supervisor_id=user['profile'])
+    db_engine = _init_db_engine()
+    try:
+        with Session(bind=db_engine) as session:
+            saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
+            new_staff = list(map(lambda d:StoreStaff(**d.dict()), request.__root__ ))
+            saved_obj.staff.clear()
+            saved_obj.staff.extend(new_staff)
+            session.commit()
+    finally:
+        db_engine.dispose()
+    return None
+
+
+@router.patch('/profile/{store_id}/business_hours',)
+def edit_hours_operation(store_id:PositiveInt, request:BusinessHoursDaysReqBody, \
+        user:dict=FastapiDepends(edit_profile_authorization)):
+    db_engine = _init_db_engine()
+    try:
+        with Session(bind=db_engine) as session:
+            saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
+            new_time = list(map(lambda d:HourOfOperation(**d.dict()), request.__root__))
+            saved_obj.open_days.clear()
+            saved_obj.open_days.extend(new_time)
+            session.commit()
+    finally:
+        db_engine.dispose()
+
+
+@router.patch('/profile/{store_id}/products',)
+def edit_products_available(store_id:PositiveInt, request: AvailProductsReqBody, \
+        user:dict=FastapiDepends(edit_products_authorization)):
+    request.validate_products(staff_id=user['profile'])
+    db_engine = _init_db_engine()
+    try:
+        with Session(bind=db_engine) as session:
+            query = session.query(StoreProfile).filter(StoreProfile.id == store_id)
+            saved_obj = query.first()
+            if not saved_obj:
+                raise FastApiHTTPException( detail={'code':'not_exist'},  headers={},
+                        status_code=FastApiHTTPstatus.HTTP_404_NOT_FOUND )
+            valid_staff_ids = list(map(lambda o:o.staff_id, saved_obj.staff))
+            valid_staff_ids.append(saved_obj.supervisor_id)
+            if user['profile'] not in valid_staff_ids:
+                raise FastApiHTTPException( detail='Not allowed to edit the store products',  headers={},
+                        status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
+            new_prod_objs = list(map(lambda d: StoreProductAvailable(**d.dict()), request.__root__ ))
+            saved_obj.products.clear()
+            saved_obj.products.extend(new_prod_objs)
+            session.commit()
+    finally:
+        db_engine.dispose()
 
 

@@ -185,7 +185,8 @@ def opendays_data():
 def _gen_time_period():
     start_minute = random.randrange(2, 100)
     day_length = random.randrange(365)
-    start_after = datetime.utcnow() + timedelta(minutes=start_minute)
+    start_after = datetime.utcnow().replace(microsecond=0)
+    start_after += timedelta(minutes=start_minute)
     end_before = start_after + timedelta(days=day_length)
     return start_after, end_before
 

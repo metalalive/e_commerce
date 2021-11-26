@@ -239,13 +239,14 @@ _dict_key_replace = lambda obj, from_, to_: {to_ if k == from_ else k: v for k,v
 _dict_kv_pair_evict = lambda obj, cond_fn: dict(filter(cond_fn, obj.items()))
 
 
-def _common_instances_setup(out:dict, models_info):
+def _common_instances_setup(out:dict, models_info, data:dict=None):
     """ create instances of given model classes in Django ORM """
+    data = data or _fixtures
     for model_cls, num_instance_required in models_info:
         bound_fn = partial(_load_init_params, model_cls=model_cls)
         model_name = model_cls.__name__
         ##params = _fixtures[model_name][:num_instance_required]
-        params_gen = listitem_rand_assigner(list_=_fixtures[model_name],
+        params_gen = listitem_rand_assigner(list_=data[model_name],
                 min_num_chosen=num_instance_required,
                 max_num_chosen=(num_instance_required + 1))
         objs = list(map(bound_fn, params_gen))

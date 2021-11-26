@@ -12,6 +12,7 @@ python3.9 ./manage.py test product.tests.salepkg.serializers  --settings product
 python3.9 ./manage.py test product.tests.salepkg.views        --settings product.settings.test --keepdb --verbosity=2
 python3.9 ./manage.py test product.tests.attrtype.models   --settings product.settings.test --keepdb --verbosity=2
 python3.9 ./manage.py test product.tests.attrtype.views    --settings product.settings.test --keepdb --verbosity=2
+python3.9 ./manage.py test product.tests.async_tasks       --settings product.settings.test --keepdb --verbosity=2
 
 python3.9 ./manage.py test user_management.tests.login    --settings user_management.settings.test --keepdb  --verbosity=2
 python3.9 ./manage.py test user_management.tests.role.views   --settings user_management.settings.test --keepdb --verbosity=2
@@ -35,4 +36,7 @@ python3.9 -m unittest tests.python.util.graph -v
 
 APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/models.py
 APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/views.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/staff.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/business_hours.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/products.py
 
