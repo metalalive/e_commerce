@@ -80,10 +80,14 @@ edit_products_authorization = Authorization(app_code=app_code, perm_codes=['add_
 
 
 class StoreEmailBody(PydanticBaseModel):
+    class Config:
+        orm_mode =True
     addr :EmailStr
 
 
 class StorePhoneBody(PydanticBaseModel):
+    class Config:
+        orm_mode =True
     country_code : constr(regex=r"^\d{1,3}$")
     line_number : constr(regex=r"^\+?1?\d{7,15}$")
 
@@ -105,6 +109,8 @@ class StorePhoneBody(PydanticBaseModel):
 
 
 class OutletLocationBody(PydanticBaseModel):
+    class Config:
+        orm_mode =True
     country  :CountryCodeEnum
     locality :str
     street   :str
@@ -119,6 +125,7 @@ class NewStoreProfileReqBody(PydanticBaseModel):
     emails : Optional[List[StoreEmailBody]] = []
     phones : Optional[List[StorePhoneBody]] = []
     location : Optional[OutletLocationBody] = None
+
 
 
 def _get_supervisor_auth(prof_ids):
@@ -344,6 +351,8 @@ class StoreSupervisorReqBody(PydanticBaseModel):
 
 
 class StoreStaffReqBody(PydanticBaseModel):
+    class Config:
+        orm_mode =True
     staff_id : PositiveInt
     start_after : datetime
     end_before  : datetime
@@ -394,6 +403,8 @@ class BusinessHoursDayReqBody(PydanticBaseModel):
     day  : EnumWeekDay
     time_open  : py_time
     time_close : py_time
+    class Config:
+        orm_mode =True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -403,6 +414,8 @@ class BusinessHoursDayReqBody(PydanticBaseModel):
 
 class BusinessHoursDaysReqBody(PydanticBaseModel):
     __root__ : List[BusinessHoursDayReqBody]
+    class Config:
+        orm_mode =True
 
     @validator('__root__')
     def validate_list_items(cls, values):
@@ -418,6 +431,8 @@ class AvailProductReqBody(PydanticBaseModel):
     product_id   : PositiveInt
     start_after : datetime
     end_before  : datetime
+    class Config:
+        orm_mode =True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -428,6 +443,8 @@ class AvailProductReqBody(PydanticBaseModel):
 
 class AvailProductsReqBody(PydanticBaseModel):
     __root__ : List[AvailProductReqBody]
+    class Config:
+        orm_mode =True
 
     @validator('__root__')
     def validate_list_items(cls, values):
@@ -501,6 +518,19 @@ class StoreProfileResponseBody(PydanticBaseModel):
     supervisor_id :  PositiveInt
 
 
+class StoreProfileReadResponseBody(PydanticBaseModel):
+    class Config:
+        orm_mode =True
+    label  : str
+    active : bool
+    supervisor_id :  PositiveInt
+    emails : Optional[List[StoreEmailBody]] = []
+    phones : Optional[List[StorePhoneBody]] = []
+    location : Optional[OutletLocationBody] = None
+    staff     : Optional[List[StoreStaffReqBody]] = []
+    open_days : Optional[List[BusinessHoursDayReqBody]] = []
+
+
 def _init_db_engine(conn_args:Optional[dict]=None):
     kwargs = {
         'secrets_file_path':settings.SECRETS_FILE_PATH, 'base_folder':'staff_portal',
@@ -515,6 +545,33 @@ def _init_db_engine(conn_args:Optional[dict]=None):
     return sqlalchemy_init_engine(**kwargs)
 
 
+def _store_existence_validity(session, store_id:PositiveInt):
+    query = session.query(StoreProfile).filter(StoreProfile.id == store_id)
+    saved_obj = query.first()
+    if not saved_obj:
+        raise FastApiHTTPException( detail={'code':'not_exist'},  headers={},
+                status_code=FastApiHTTPstatus.HTTP_404_NOT_FOUND )
+    return saved_obj
+
+
+def _store_supervisor_validity(session, store_id:PositiveInt, usr_auth:dict):
+    saved_obj = _store_existence_validity(session, store_id)
+    if usr_auth['priv_status'] != ROLE_ID_SUPERUSER and saved_obj.supervisor_id != usr_auth['profile']:
+        raise FastApiHTTPException( detail='Not allowed to edit the store profile',  headers={},
+                status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
+    return saved_obj
+
+
+def _store_staff_validity(session, store_id:PositiveInt, usr_auth:dict):
+    saved_obj = _store_existence_validity(session, store_id)
+    valid_staff_ids = list(map(lambda o:o.staff_id, saved_obj.staff))
+    valid_staff_ids.append(saved_obj.supervisor_id)
+    if usr_auth['profile'] not in valid_staff_ids:
+        raise FastApiHTTPException( detail='Not allowed to edit the store products',  headers={},
+                status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
+    return saved_obj
+
+
 @router.post('/profiles', status_code=FastApiHTTPstatus.HTTP_201_CREATED, response_model=List[StoreProfileResponseBody])
 def add_profiles(request:NewStoreProfilesReqBody, user:dict=FastapiDepends(add_profile_authorization)):
     db_engine = request.metadata['db_engine']
@@ -526,18 +583,6 @@ def add_profiles(request:NewStoreProfilesReqBody, user:dict=FastapiDepends(add_p
             resp_data = list(map(_fn, sa_new_stores))
     return resp_data
 ## def add_profiles()
-
-
-def _store_supervisor_validity(session, store_id:PositiveInt, usr_auth:dict):
-    query = session.query(StoreProfile).filter(StoreProfile.id == store_id)
-    saved_obj = query.first()
-    if not saved_obj:
-        raise FastApiHTTPException( detail={'code':'not_exist'},  headers={},
-                status_code=FastApiHTTPstatus.HTTP_404_NOT_FOUND )
-    if usr_auth['priv_status'] != ROLE_ID_SUPERUSER and saved_obj.supervisor_id != usr_auth['profile']:
-        raise FastApiHTTPException( detail='Not allowed to edit the store profile',  headers={},
-                status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
-    return saved_obj
 
 
 @router.patch('/profile/{store_id}',)
@@ -627,6 +672,8 @@ def edit_hours_operation(store_id:PositiveInt, request:BusinessHoursDaysReqBody,
         db_engine.dispose()
 
 
+
+# TODO, divide to 3 separate endpoints for adding/editing/deleting operations
 @router.patch('/profile/{store_id}/products',)
 def edit_products_available(store_id:PositiveInt, request: AvailProductsReqBody, \
         user:dict=FastapiDepends(edit_products_authorization)):
@@ -634,16 +681,7 @@ def edit_products_available(store_id:PositiveInt, request: AvailProductsReqBody,
     db_engine = _init_db_engine()
     try:
         with Session(bind=db_engine) as session:
-            query = session.query(StoreProfile).filter(StoreProfile.id == store_id)
-            saved_obj = query.first()
-            if not saved_obj:
-                raise FastApiHTTPException( detail={'code':'not_exist'},  headers={},
-                        status_code=FastApiHTTPstatus.HTTP_404_NOT_FOUND )
-            valid_staff_ids = list(map(lambda o:o.staff_id, saved_obj.staff))
-            valid_staff_ids.append(saved_obj.supervisor_id)
-            if user['profile'] not in valid_staff_ids:
-                raise FastApiHTTPException( detail='Not allowed to edit the store products',  headers={},
-                        status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
+            saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
             new_prod_objs = list(map(lambda d: StoreProductAvailable(**d.dict()), request.__root__ ))
             saved_obj.products.clear()
             saved_obj.products.extend(new_prod_objs)
@@ -651,4 +689,27 @@ def edit_products_available(store_id:PositiveInt, request: AvailProductsReqBody,
     finally:
         db_engine.dispose()
 
+
+@router.get('/profile/{store_id}', response_model=StoreProfileReadResponseBody)
+def read_profile(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
+    db_engine = _init_db_engine()
+    try:
+        with Session(bind=db_engine) as session:
+            saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
+            response = StoreProfileReadResponseBody.from_orm(saved_obj)
+    finally:
+        db_engine.dispose()
+    return response
+
+
+@router.get('/profile/{store_id}/products', response_model=AvailProductsReqBody)
+def read_profile_products(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
+    db_engine = _init_db_engine()
+    try: # TODO, figure out how to handle large dataset, pagination or other techniques
+        with Session(bind=db_engine) as session:
+            saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
+            response = AvailProductsReqBody.from_orm(saved_obj.products)
+    finally:
+        db_engine.dispose()
+    return response
 

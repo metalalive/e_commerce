@@ -511,3 +511,46 @@ class TestDeletion:
             assert response.status_code == 410
 
 
+class TestRead:
+    url = '/profile/{store_id}'
+    _auth_data_pattern = { 'id':-1, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
+        'roles':[
+            {'app_code':app_code, 'codename':'view_storeprofile'},
+        ],
+    }
+
+    def test_ok(self, session_for_test, keystore, test_client, saved_store_objs):
+        obj = next(saved_store_objs)
+        url = self.url.format(store_id=obj.id)
+        auth_data = self._auth_data_pattern
+        # subcase 1, outsider access will be denied
+        auth_data['id'] = 56789
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            response = test_client.get(url, headers=headers)
+        assert response.status_code == 403
+        # subcase 2, valid staff access
+        auth_data['id'] = obj.staff[-1].staff_id
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            response = test_client.get(url, headers=headers)
+        assert response.status_code == 200
+        result = response.json()
+        for field in ('label', 'supervisor_id', 'active'):
+            assert getattr(obj, field) == result[field]
+        expect_data = list(map(lambda obj: {k:getattr(obj,k) for k in ('country_code', 'line_number')}, obj.phones))
+        actual_data = result['phones']
+        assert expect_data == actual_data
+        expect_data = list(map(lambda obj: {k:getattr(obj,k) for k in ('staff_id', 'start_after', 'end_before')}, obj.staff))
+        for item in expect_data:
+            item['start_after'] = item['start_after'].isoformat()
+            item['end_before'] = item['end_before'].isoformat()
+        actual_data = result['staff']
+        assert expect_data == actual_data
+        for field in ('locality','street','detail', 'floor'):
+            assert result['location'][field] == getattr(obj.location, field)
+
+
+

@@ -208,14 +208,19 @@ def staff_data():
 
 def _product_avail_data_gen():
     sale_types = [opt for opt in SaleableTypeEnum]
+    base_range = 10
+    product_id_start = 1
     while True:
+        product_id_end = product_id_start + base_range
         start_after, end_before = _gen_time_period()
         new_data = {
             'product_type': random.choice(sale_types),
-            'product_id': random.randrange(1, AppIdGapNumberFinder.MAX_GAP_VALUE),
+            # AppIdGapNumberFinder.MAX_GAP_VALUE
+            'product_id': random.randrange(product_id_start, product_id_end),
             'start_after':start_after,  'end_before':end_before,
         }
         yield new_data
+        product_id_start += base_range
 
 @pytest.fixture(scope='session')
 def product_avail_data():

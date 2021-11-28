@@ -1,4 +1,5 @@
 import random
+from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -126,6 +127,41 @@ class TestUpdate:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 403
+## end of class TestUpdate
 
 
+class TestRead:
+    url = '/profile/{store_id}/products'
+    _auth_data_pattern = { 'id':-1, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
+        'roles':[
+            {'app_code':app_code, 'codename':'view_storeproductavailable'},
+        ],
+    }
+
+    def _mocked_rpc_reply_refresh(self, *args, **kwargs):
+        # skip receiving message from RPC-reply-queue
+        pass
+
+    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    def test_ok(self, session_for_setup, session_for_test, keystore, test_client, saved_store_objs, product_avail_data):
+        obj = next(saved_store_objs)
+        new_products_avail = [StoreProductAvailable(**next(product_avail_data)) for _ in range(20) ]
+        obj.products.extend(new_products_avail)
+        session_for_setup.commit()
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = random.choice(obj.staff).staff_id
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        url = self.url.format(store_id=obj.id)
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            response = test_client.get(url, headers=headers)
+        assert response.status_code == 200
+        result = response.json()
+        expect_sale_types = [opt.value for opt in SaleableTypeEnum]
+        for item in result:
+            assert item.get('product_id') > 0
+            assert item.get('product_type') in expect_sale_types
+            start_after = datetime.fromisoformat(result[-1]['start_after'])
+            end_before  = datetime.fromisoformat(result[-1]['end_before'])
+            assert start_after < end_before
 
