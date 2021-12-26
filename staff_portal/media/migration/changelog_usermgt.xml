@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.6.xsd
+    http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-4.6.xsd ">
+    <changeSet id="init" author="Haam">
+        <tagDatabase tag="0.0.0" />
+    </changeSet>
+    <changeSet id="add_content_type" author="Haam">
+        <sql dbms="mariadb">
+            INSERT INTO django_content_type (`app_label`, `model`) VALUES ('media', 'uploaded_file');
+            INSERT INTO django_content_type (`app_label`, `model`) VALUES ('media', 'file_access_control');
+        </sql>
+        <rollback>
+            DELETE FROM django_content_type WHERE `app_label` = 'media' AND `model` IN ('uploaded_file', 'file_access_control');
+        </rollback>
+    </changeSet>
+    <changeSet id="add_low_level_permission" author="Haam">
+        <sql dbms="mariadb">
+            INSERT INTO auth_permission (`name`, `codename`, `content_type_id`) VALUES (
+                'Can upload files', 'upload_files',
+                (SELECT `id` FROM django_content_type WHERE `app_label` = 'media' AND `model` = 'uploaded_file')
+            );
+            INSERT INTO auth_permission (`name`, `codename`, `content_type_id`) VALUES (
+                'Can edit ACL of uploaded files', 'edit_file_access_control',
+                (SELECT `id` FROM django_content_type WHERE `app_label` = 'media' AND `model` = 'file_access_control')
+            );
+        </sql>
+        <rollback>
+            DELETE FROM auth_permission WHERE `content_type_id` IN (SELECT `id` FROM django_content_type WHERE `app_label` = 'media')
+        </rollback>
+    </changeSet>
+    <changeSet id="add_quota_meterial" author="Haam">
+        <sql dbms="mariadb">
+            INSERT INTO quota_material (`app_code`, `mat_code`) VALUES (3, 1)
+        </sql>
+        <rollback>
+            DELETE FROM quota_material WHERE `app_code` = 3 AND `mat_code` = 1
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.1" author="Haam">
+        <tagDatabase tag="0.0.1" />
+    </changeSet>
+</databaseChangeLog>
+

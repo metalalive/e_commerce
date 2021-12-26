@@ -1,7 +1,7 @@
 {
     "user_management" : [1, "user management"],
     "product"   : [2, "product management"],
-    "fileupload": [3, "file upload"],
+    "media"  : [3, "media"],
     "order"  : [4, "purchase/sale order"],
     "store"  : [5, "front store"],
     "inventory" : [6, "inventory"]

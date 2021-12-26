@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.6.xsd
+    http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-4.6.xsd ">
+    <changeSet id="init" author="Haam">
+        <tagDatabase tag="0.0.0" />
+    </changeSet>
+    <changeSet id="add_table__uploaded_file" author="Haam">
+        <sql dbms="mariadb">
+            CREATE TABLE uploaded_file (
+                `id`        VARCHAR(8) PRIMARY KEY , 
+                `usr_id`    INT UNSIGNED NOT NULL,
+                `mimetype_toplvl` VARCHAR(11) NOT NULL,
+                `mimetype_sub`    VARCHAR(9)  NOT NULL,
+                `checksum`        BINARY(20)     NULL,
+                `last_update`     DATETIME   NOT NULL
+            )
+        </sql>
+        <rollback>
+            DROP TABLE uploaded_file
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__file_access_control" author="Haam">
+        <sql dbms="mariadb">
+            CREATE TABLE file_access_control (
+                `file_id`   VARCHAR(8) NOT NULL, 
+                `usr_id`    INT UNSIGNED NOT NULL,
+                `usr_type`  TINYINT UNSIGNED NOT NULL,
+                PRIMARY KEY (`file_id`, `usr_type`, `usr_id`),
+                CONSTRAINT `c_fk0_uploadfile_id` FOREIGN KEY (`file_id`) REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                `rd_flg`     BOOLEAN NOT NULL, 
+                `renew_flg`  BOOLEAN NOT NULL, 
+                `rd_acl_flg` BOOLEAN NOT NULL
+            )
+        </sql>
+        <rollback>
+            DROP TABLE file_access_control
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.1" author="Haam">
+        <tagDatabase tag="0.0.1" />
+    </changeSet>
+    <changeSet id="add_table__uncommitted_upload_request" author="Haam">
+        <sql dbms="mariadb">
+            CREATE TABLE uncommitted_upload_request (
+                `file_id`   VARCHAR(8) NOT NULL, 
+                `upld_id`   BINARY(20) NOT NULL, 
+                PRIMARY KEY (`file_id`, `upld_id`),
+                CONSTRAINT `c_fk1_uploadfile_id` FOREIGN KEY (`file_id`) REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                `usr_id`    INT UNSIGNED NOT NULL,
+                `time_created`  DATETIME NOT NULL
+            )
+        </sql>
+        <rollback>
+            DROP TABLE uncommitted_upload_request
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__uncommitted_upload_chunk" author="Haam">
+        <sql dbms="mariadb">
+            CREATE TABLE  uncommitted_upload_chunk (
+                `file_id`   VARCHAR(8) NOT NULL, 
+                `upld_id`   BINARY(20) NOT NULL, 
+                `part`      SMALLINT UNSIGNED NOT NULL,
+                PRIMARY KEY (`file_id`, `upld_id`, `part`),
+                CONSTRAINT `c_fk_uncmt_upload_req_id` FOREIGN KEY (`file_id`, `upld_id`) REFERENCES `uncommitted_upload_request`(`file_id`,`upld_id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                `checksum`  BINARY(20) NOT NULL,
+                `size_kb`   INT UNSIGNED  NOT NULL
+            )
+        </sql>
+        <rollback>
+            DROP TABLE uncommitted_upload_chunk
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.2" author="Haam">
+        <tagDatabase tag="0.0.2" />
+    </changeSet>
+</databaseChangeLog>
+
