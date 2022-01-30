@@ -1,0 +1,14 @@
+[
+    {
+        "usr_id":70411,    "usr_type":9,
+        "access_control": {"transcode":false,  "renew":true,  "edit_acl":false}
+    },
+    {
+        "usr_id":4234,    "usr_type":10,
+        "access_control": {"transcode":true,  "renew":false,  "edit_acl":false}
+    },
+    {
+        "usr_id":10573,    "usr_type":11,
+        "access_control": {"transcode":true,  "renew":true }
+    }
+]

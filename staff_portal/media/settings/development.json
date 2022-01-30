@@ -1,0 +1,68 @@
+{
+    "pid_file" : "tmp/proc/media_server.pid",
+    "error_log": "tmp/log/staffsite/media_server.err",
+    "access_log": {
+        "path":"tmp/log/staffsite/media_server.access.log",
+        "format":"%H %h %l %t \"%r\" %s %b"
+    },
+    "listen": [
+        {
+            "port": 8010,
+            "host":"localhost",
+            "ssl":{
+                "cert_file"   : "media/data/certs/development/localhost_8010.crt",
+                "privkey_file": "media/data/certs/development/localhost_8010.private.key",
+                "cipher_suites": "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384",
+                "min_version": 772
+            },
+            "routes": [
+                {"path":"/upload/multipart/initiate", "entry_fn":"initiate_multipart_upload"},
+                {"path":"/upload/multipart/part"    , "entry_fn":"upload_part"},
+                {"path":"/upload/multipart/complete", "entry_fn":"complete_multipart_upload"},
+                {"path":"/upload/multipart/abort"   , "entry_fn":"abort_multipart_upload"},
+                {"path":"/upload"        , "entry_fn":"single_chunk_upload"},
+                {"path":"/file/transcode", "entry_fn":"start_transcoding_file"},
+                {"path":"/job"     , "entry_fn":"discard_ongoing_job"},
+                {"path":"/job"     , "entry_fn":"monitor_job_progress"},
+                {"path":"/file"    , "entry_fn":"fetch_entire_file"},
+                {"path":"/file"    , "entry_fn":"discard_file"},
+                {"path":"/file/playback" , "entry_fn":"get_next_media_segment"},
+                {"path":"/file/acl", "entry_fn":"edit_file_acl"},
+                {"path":"/file/acl", "entry_fn":"read_file_acl"}
+            ]
+        },
+        {
+            "port": 8020,
+            "host":"localhost",
+            "ssl":{
+                "cert_file"   : "media/data/certs/development/localhost_8020.crt",
+                "privkey_file": "media/data/certs/development/localhost_8020.private.key",
+                "cipher_suites": "TLS_AES_128_CCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_8_SHA256",
+                "min_version": 772
+            },
+            "routes": []
+        },
+        {
+            "port": 8021,
+            "host":"localhost",
+            "ssl":{
+                "cert_file"   : "media/data/certs/development/localhost_8021.crt",
+                "privkey_file": "media/data/certs/development/localhost_8021.private.key",
+                "cipher_suites": "TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_8_SHA256",
+                "min_version": 772
+            }
+        }
+    ],
+    "ca":{
+        "cert_file"   : "media/data/certs/development/ca.crt",
+        "privkey_file": "media/data/certs/development/ca.private.key"
+    },
+    "max_connections": 256,
+    "limit_req_body_in_bytes": 10485760,
+    "num_workers": 1,
+    "tcp_fastopen_queue_size": 113,
+    "tmp_buf": {
+        "path": "tmp/buffer/media/development",
+        "threshold_in_bytes": 102400
+    }
+}
