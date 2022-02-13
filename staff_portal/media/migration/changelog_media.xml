@@ -9,13 +9,20 @@
         <tagDatabase tag="0.0.0" />
     </changeSet>
     <changeSet id="add_table__uploaded_file" author="Haam">
+        <comment>
+            for multipart upload request, the field `last_upld_req` indicates latest committed
+            reqeust from `uncommitted_upload_request` so it becomes observable to end user.
+            The field `last_upld_req`  may be also set to NULL for single-flight upload API.
+        </comment>
         <sql dbms="mariadb">
             CREATE TABLE uploaded_file (
                 `id`        VARCHAR(8) PRIMARY KEY , 
                 `usr_id`    INT UNSIGNED NOT NULL,
                 `mimetype_toplvl` VARCHAR(11) NOT NULL,
                 `mimetype_sub`    VARCHAR(9)  NOT NULL,
-                `checksum`        BINARY(20)     NULL,
+                `checksum`        BINARY(20)  NOT NULL,
+                `size_bytes`      INT UNSIGNED NOT NULL,
+                `last_upld_req`   BINARY(20)  NULL, 
                 `last_update`     DATETIME   NOT NULL
             )
         </sql>
@@ -23,17 +30,49 @@
             DROP TABLE uploaded_file
         </rollback>
     </changeSet>
+    <changeSet id="add_table__transcoded_file" author="Haam">
+        <comment>
+            * the field `version` labels transcoded version of the original media file pointed to by `file_id`,
+              the primary key identifies specific file set (with lower quality) transcoded from
+              original media file (for improving user experience).
+            * the `size_bytes` could also be sum of all generated files when transcoding
+              original media file.
+            * All attributes of the transcoded file are calculated on-the-fly whenever new client
+              request comes
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE transcoded_file (
+                `file_id`   VARCHAR(8) NOT NULL, 
+                `version`   VARCHAR(2) NOT NULL, 
+                `size_bytes`  INT UNSIGNED NOT NULL,
+                CONSTRAINT `c_fk0_uploadfile_id` FOREIGN KEY (`file_id`) REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                PRIMARY KEY (`file_id`, `version`)
+            )
+        </sql>
+        <rollback>
+            DROP TABLE transcoded_file
+        </rollback>
+    </changeSet>
     <changeSet id="add_table__file_access_control" author="Haam">
+        <comment>
+            access control flags available :
+            * can renew / discard the originally uploaded file
+            * can transcode the original media file to other formats
+            * can view / edit access control list of other users (e.g. file owner)
+            implicit access control flag :
+            * users can read the file whenever a record associated with the user ID
+              is found in this database table
+        </comment>
         <sql dbms="mariadb">
             CREATE TABLE file_access_control (
                 `file_id`   VARCHAR(8) NOT NULL, 
                 `usr_id`    INT UNSIGNED NOT NULL,
                 `usr_type`  TINYINT UNSIGNED NOT NULL,
                 PRIMARY KEY (`file_id`, `usr_type`, `usr_id`),
-                CONSTRAINT `c_fk0_uploadfile_id` FOREIGN KEY (`file_id`) REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE,
-                `rd_flg`     BOOLEAN NOT NULL, 
-                `renew_flg`  BOOLEAN NOT NULL, 
-                `rd_acl_flg` BOOLEAN NOT NULL
+                CONSTRAINT `c_fk1_uploadfile_id` FOREIGN KEY (`file_id`) REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                `renew_flg`      BOOLEAN NOT NULL, 
+                `transcode_flg`  BOOLEAN NOT NULL, 
+                `edit_acl_flg`   BOOLEAN NOT NULL
             )
         </sql>
         <rollback>
@@ -44,12 +83,18 @@
         <tagDatabase tag="0.0.1" />
     </changeSet>
     <changeSet id="add_table__uncommitted_upload_request" author="Haam">
+        <comment>
+            when uploading a large file, authorized users should initiate a upload request by inserting
+            a new record to this table, use the the temporary request ID (`upld_id` column) as the
+            identification when :
+            * uploading each chunk of the file
+            * finalizing / committing the request to make your new upload observable by other authorized
+              users,  by inserting or modifying a given record in `uploaded_file` table
+        </comment>
         <sql dbms="mariadb">
             CREATE TABLE uncommitted_upload_request (
-                `file_id`   VARCHAR(8) NOT NULL, 
                 `upld_id`   BINARY(20) NOT NULL, 
-                PRIMARY KEY (`file_id`, `upld_id`),
-                CONSTRAINT `c_fk1_uploadfile_id` FOREIGN KEY (`file_id`) REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                PRIMARY KEY (`upld_id`),
                 `usr_id`    INT UNSIGNED NOT NULL,
                 `time_created`  DATETIME NOT NULL
             )
@@ -61,13 +106,12 @@
     <changeSet id="add_table__uncommitted_upload_chunk" author="Haam">
         <sql dbms="mariadb">
             CREATE TABLE  uncommitted_upload_chunk (
-                `file_id`   VARCHAR(8) NOT NULL, 
                 `upld_id`   BINARY(20) NOT NULL, 
                 `part`      SMALLINT UNSIGNED NOT NULL,
-                PRIMARY KEY (`file_id`, `upld_id`, `part`),
-                CONSTRAINT `c_fk_uncmt_upload_req_id` FOREIGN KEY (`file_id`, `upld_id`) REFERENCES `uncommitted_upload_request`(`file_id`,`upld_id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                PRIMARY KEY (`upld_id`, `part`),
+                CONSTRAINT `c_fk_uncmt_upload_req_id` FOREIGN KEY (`upld_id`) REFERENCES `uncommitted_upload_request`(`upld_id`) ON UPDATE CASCADE ON DELETE CASCADE,
                 `checksum`  BINARY(20) NOT NULL,
-                `size_kb`   INT UNSIGNED  NOT NULL
+                `size_bytes` INT UNSIGNED NOT NULL
             )
         </sql>
         <rollback>
