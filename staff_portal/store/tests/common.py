@@ -24,7 +24,12 @@ from store.models import StoreProfile, StoreEmail, StorePhone, OutletLocation, H
 metadata_objs = list(map(lambda path: import_module_string(dotted_path=path).metadata , settings.ORM_BASE_CLASSES))
 
 class _Keystore(KeystoreMixin):
-    pass
+    _keystore_init_config = {
+        'keystore': settings.KEYSTORE['keystore'],
+        'persist_secret_handler': settings.KEYSTORE['persist_secret_handler_test'],
+        'persist_pubkey_handler': settings.KEYSTORE['persist_pubkey_handler_test'],
+    }
+
 
 @pytest.fixture(scope='session')
 def keystore():

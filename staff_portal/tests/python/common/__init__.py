@@ -241,23 +241,25 @@ class TreeNodeMixin:
 
 
 class KeystoreMixin:
-    _keystore_init_config = {
-        'keystore': 'common.auth.keystore.BaseAuthKeyStore',
-        'persist_secret_handler': {
-            'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
-            'init_kwargs': {
-                'filepath': './tmp/cache/test/jwks/privkey/current.json',
-                'name':'secret', 'expired_after_days': 7, 'flush_threshold':4,
-            },
-        },
-        'persist_pubkey_handler': {
-            'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
-            'init_kwargs': {
-                'filepath': './tmp/cache/test/jwks/pubkey/current.json',
-                'name':'pubkey', 'expired_after_days': 9, 'flush_threshold':4,
-            },
-        },
-    }
+    _keystore_init_config = None
+    ## alwasy use `JWKSFilePersistHandler` to run the test cases , for example :
+    ## {
+    ##     'keystore': 'common.auth.keystore.BaseAuthKeyStore',
+    ##     'persist_secret_handler': {
+    ##         'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+    ##         'init_kwargs': {
+    ##             'filepath': './tmp/cache/service_name/test_or_dev/jwks/privkey/current.json',
+    ##             'name':'secret', 'expired_after_days': 7, 'flush_threshold':4,
+    ##         },
+    ##     },
+    ##     'persist_pubkey_handler': {
+    ##         'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+    ##         'init_kwargs': {
+    ##             'filepath': './tmp/cache/service_name/test_or_dev/jwks/pubkey/current.json',
+    ##             'name':'pubkey', 'expired_after_days': 9, 'flush_threshold':4,
+    ##         },
+    ##     },
+    ## }
 
     def _setup_keystore(self):
         from common.auth.jwt import JwkRsaKeygenHandler

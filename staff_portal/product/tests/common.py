@@ -712,6 +712,12 @@ class AttributeAssertionMixin:
 
 
 class _MockTestClientInfoMixin(_BaseMockTestClientInfoMixin, KeystoreMixin):
+    # the setting here works only for mocking the remote keystore in the test, DO NOT use django_settings.AUTH_KEYSTORE
+    _keystore_init_config = {
+        'keystore': django_settings.AUTH_KEYSTORE['keystore'],
+        'persist_secret_handler': django_settings.AUTH_KEYSTORE['persist_secret_handler_test'],
+        'persist_pubkey_handler': django_settings.AUTH_KEYSTORE['persist_pubkey_handler_test'],
+    }
     mock_profile_id = [123, 124]
     permission_class = None
 

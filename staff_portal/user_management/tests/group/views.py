@@ -24,6 +24,7 @@ class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Authen
     usermgt_material_data = tuple(filter(lambda d:d['app_code'] == AppCodeOptions.user_management, _fixtures[QuotaMaterial]))
     def setUp(self):
         self.init_primitive()
+        self._setup_keystore()
         self._profile = self._primitives[GenericUserProfile][0]
         self._profile_2nd = self._primitives[GenericUserProfile][1]
         self._setup_user_roles(profile=self._profile, approved_by=self._profile_2nd,
@@ -32,6 +33,7 @@ class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Authen
 
     def tearDown(self):
         self._client.cookies.clear()
+        self._teardown_keystore()
 
     def _setup_user_roles(self, profile, approved_by, roles=None):
         roles = roles or []

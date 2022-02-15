@@ -13,7 +13,7 @@ from user_management.models.common import AppCodeOptions
 from user_management.models.auth import LoginAccount, Role
 from user_management.models.base import GenericUserProfile, GenericUserGroup, QuotaMaterial, EmailAddress, PhoneNumber, GeoLocation
 
-from tests.python.common import listitem_rand_assigner
+from tests.python.common import listitem_rand_assigner, KeystoreMixin
 
 _curr_timezone = django_timezone.get_current_timezone()
 
@@ -55,8 +55,8 @@ _fixtures = {
         {"id": 3, "app_code": AppCodeOptions.user_management, "mat_code": QuotaMaterial._MatCodeOptions.MAX_NUM_PHONE_NUMBERS.value} ,
         {"id": 4, "app_code": AppCodeOptions.product,    "mat_code": 1} ,
         {"id": 5, "app_code": AppCodeOptions.product,    "mat_code": 2} ,
-        {"id": 6, "app_code": AppCodeOptions.fileupload, "mat_code": 3} ,
-        {"id": 7, "app_code": AppCodeOptions.fileupload, "mat_code": 5} ,
+        {"id": 6, "app_code": AppCodeOptions.media, "mat_code": 3} ,
+        {"id": 7, "app_code": AppCodeOptions.media, "mat_code": 5} ,
         {"id": 8, "app_code": AppCodeOptions.store,  "mat_code": 1} ,
         {"id": 9, "app_code": AppCodeOptions.store,  "mat_code": 2} ,
         {"id":10, "app_code": AppCodeOptions.store,  "mat_code": 3} ,
@@ -137,7 +137,9 @@ def client_req_csrf_setup():
     return { 'headers': base_headers, 'cookies': base_cookies, 'enforce_csrf_checks':True }
 
 
-class AuthenticateUserMixin:
+class AuthenticateUserMixin(KeystoreMixin):
+    _keystore_init_config = django_settings.AUTH_KEYSTORE
+
     def _auth_setup(self, testcase, profile=None, login_password=None, new_account_data=None,
             is_staff=True, is_active=True, is_superuser=False):
         api_login_kwargs = client_req_csrf_setup()
@@ -173,6 +175,7 @@ class AuthenticateUserMixin:
         response = testcase._send_request_to_backend(**api_call_kwargs)
         testcase.assertEqual(int(response.status_code), 200)
         return response.json()
+## end of class AuthenticateUserMixin
 
 
 class UserNestedFieldSetupMixin:

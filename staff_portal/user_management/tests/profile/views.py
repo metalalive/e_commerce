@@ -27,6 +27,7 @@ class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Authen
 
     def setUp(self):
         self.init_primitive()
+        self._setup_keystore()
         self._grp_map = self._setup_groups_hierarchy()
         self._profile = self._primitives[GenericUserProfile][0]
         self._profile_2nd = self._primitives[GenericUserProfile][1]
@@ -38,6 +39,7 @@ class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Authen
 
     def tearDown(self):
         self._client.cookies.clear()
+        self._teardown_keystore()
 
     def _setup_user_roles(self, profile, approved_by, roles=None):
         roles = roles or []

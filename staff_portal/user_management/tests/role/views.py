@@ -14,7 +14,7 @@ from user_management.serializers import PermissionSerializer
 from user_management.models.base import GenericUserProfile, GenericUserAppliedRole
 from user_management.models.auth import LoginAccount, Role
 
-from tests.python.common import HttpRequestDataGen
+from tests.python.common import HttpRequestDataGen, KeystoreMixin
 from tests.python.common.django import _BaseMockTestClientInfoMixin
 from user_management.tests.common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin
 
@@ -43,6 +43,7 @@ class PermissionTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Auth
     path = '/permissions'
 
     def setUp(self):
+        self._setup_keystore()
         self._profile, _ = self._auth_setup(testcase=self, is_superuser=False)
         profile_2nd_data = {'id': 5, 'first_name':'Bigbrother', 'last_name':'Iswatching'}
         self._profile_2nd = GenericUserProfile.objects.create(**profile_2nd_data)
@@ -52,6 +53,7 @@ class PermissionTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Auth
 
     def tearDown(self):
         self._client.cookies.clear()
+        self._teardown_keystore()
 
     def test_no_permission(self):
         qset = Permission.objects.filter(content_type__app_label='user_management', codename='view_quotamaterial')
@@ -90,6 +92,7 @@ class RoleCreationTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Au
     path = '/roles'
 
     def setUp(self):
+        self._setup_keystore()
         self._profile, _ = self._auth_setup(testcase=self, is_superuser=False)
         profile_2nd_data = {'id': 6, 'first_name':'Stan', 'last_name':'Marsh'}
         self._profile_2nd = GenericUserProfile.objects.create(**profile_2nd_data)
@@ -100,6 +103,7 @@ class RoleCreationTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Au
 
     def tearDown(self):
         self._client.cookies.clear()
+        self._teardown_keystore()
 
     def _prepare_access_token(self, new_perms_info):
         qset = Permission.objects.filter(content_type__app_label='user_management',
@@ -194,6 +198,7 @@ class RoleCreationTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Au
 
 class _RoleBaseUpdateTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin):
     def setUp(self):
+        self._setup_keystore()
         self._profile, _ = self._auth_setup(testcase=self, is_superuser=False)
         profile_2nd_data = {'id': 5, 'first_name':'Kyo', 'last_name':'Direnger'}
         self._profile_2nd = GenericUserProfile.objects.create(**profile_2nd_data)
@@ -214,6 +219,7 @@ class _RoleBaseUpdateTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin,
 
     def tearDown(self):
         self._client.cookies.clear()
+        self._teardown_keystore()
 
     def _prepare_access_token(self, new_perms_info, app_labels=None):
         app_labels = app_labels or ['user_management']

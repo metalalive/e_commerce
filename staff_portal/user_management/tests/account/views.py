@@ -27,12 +27,14 @@ class BaseViewTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, Authen
         tuple(map(lambda role: profile.roles.create(role=role, **role_rel_data), roles))
 
     def setUp(self):
+        self._setup_keystore()
         async_send_mail.app.conf.task_always_eager = True
 
     def tearDown(self):
         self._client.cookies.clear()
         async_send_mail.app.conf.task_always_eager = False
         UnauthResetAccountRequest.objects.all().delete()
+        self._teardown_keystore()
 
 
 class AccountActivationTestCase(BaseViewTestCase):
