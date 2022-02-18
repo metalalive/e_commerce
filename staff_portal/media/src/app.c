@@ -42,14 +42,20 @@ static app_cfg_t _app_cfg = {
     .shutdown_requested = 0,
     .workers_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
     .state = {.num_curr_sessions=0},
+    .jwks = {.handle = NULL, .src_url=NULL, .last_update = 0},
 }; // end of _app_cfg
 
 
 static void deinit_app_cfg(app_cfg_t *app_cfg) {
     int idx = 0;
-    for(idx = 0; app_cfg->listeners[idx] != NULL; idx++) {
-        free_listener(app_cfg->listeners[idx]);
-        app_cfg->listeners[idx] = NULL;
+    if(app_cfg->listeners) {
+        for(idx = 0; app_cfg->listeners[idx] != NULL; idx++)
+        {
+            free_listener(app_cfg->listeners[idx]);
+            app_cfg->listeners[idx] = NULL;
+        }
+        free(app_cfg->listeners);
+        app_cfg->listeners = NULL;
     }
     // TODO, deallocate space assigned to worker threads
     h2o_config_dispose(&app_cfg->server_glb_cfg);
@@ -65,6 +71,14 @@ static void deinit_app_cfg(app_cfg_t *app_cfg) {
         close(app_cfg->error_log_fd);
         app_cfg->error_log_fd = -1;
     } // should be done lastly
+    if(app_cfg->jwks.handle != NULL) {
+        r_jwks_free(app_cfg->jwks.handle);
+        app_cfg->jwks.handle = NULL;
+    }
+    if(app_cfg->jwks.src_url != NULL) {
+        free(app_cfg->jwks.src_url);
+        app_cfg->jwks.src_url = NULL;
+    }
 } // end of deinit_app_cfg
 
 
@@ -222,6 +236,12 @@ static void worker_init_accept_ctx(app_ctx_listener_t *ctx, const app_cfg_t *cfg
             .libmemcached_receiver = NULL
         };
     } // end of listener iteration
+    // some context-scope data is required for each http request
+    assert(http_ctx->storage.capacity == 0);
+    assert(http_ctx->storage.size == 0);
+    h2o_vector_reserve(NULL, &http_ctx->storage , 1);
+    http_ctx->storage.entries[0] = (h2o_context_storage_item_t) {.dispose = NULL, .data = (void *)cfg->jwks.handle };
+    http_ctx->storage.size = 1;
 } // end of worker_init_accept_ctx
 
 
@@ -367,6 +387,7 @@ int start_application(const char *cfg_file_path, const char *exe_path)
     _app_cfg.exe_path = exe_path;
     atomic_init(&_app_cfg.state.num_curr_connections , 0);
     h2o_config_init(&_app_cfg.server_glb_cfg);
+    r_global_init(); // rhonabwy JWT library
     err = init_security();
     if(err) { goto done; }
     err = parse_cfg_params(cfg_file_path, &_app_cfg);
@@ -376,6 +397,7 @@ int start_application(const char *cfg_file_path, const char *exe_path)
     err = start_workers(&_app_cfg);
 done:
     deinit_app_cfg(&_app_cfg);
+    r_global_close(); // rhonabwy JWT library
     return err;
 } // end of start_application
 

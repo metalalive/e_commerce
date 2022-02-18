@@ -1,0 +1,10 @@
+With a union, you're only supposed to use one of
+ the elements, because they're all stored at the same spot. This makes
+--it useful when you want to store something that could be one of
+-several types. A struct, on the other hand, has a separate memory
+--location for each of its elements and they all can be used at once.
+---Why are the two values the same? Because the last 3 bytes of the
+----int 3 are all zero, so it's also read as 99. If we put in a larger
+--number for x.a, you'll see that this is not always the case
+-You can clearly see where the 0x22 overwrote the 0xEF Write your name
+ by using array as each element as character.

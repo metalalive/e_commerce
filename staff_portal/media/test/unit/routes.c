@@ -1,7 +1,12 @@
 #include <h2o.h>
 #include <h2o/serverutil.h>
 #include <cgreen/cgreen.h>
+#include "datatypes.h"
 #include "routes.h"
+
+#define RESTAPI_ENDPOINT_HANDLER(func_name, http_method, hdlr_var, req_var) \
+    static __attribute__((optimize("O0"))) int func_name(RESTAPI_HANDLER_ARGS(hdlr_var, req_var))
+
 
 RESTAPI_ENDPOINT_HANDLER(_test_service_xyz_action_add, POST, self, req)
 {   // dummy for test

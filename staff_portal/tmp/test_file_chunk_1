@@ -1,0 +1,20 @@
+It's technically legal.
+The MIT (Expat) license places a few restrictions on
+ you. These are a subset of the GPL license. Therefore, if you relicensetheCodeUnder
+ the GPL, and keep the MIT notice, then you've satisfied the
+-TermsOfThe MIT license and may legally redistribute the code.
+--NoteThatYou may not claim copyright ownership; you'll have to
+---AcknowledgeOriginal copyright.
+
+
+[edit] Some people don't seem to understand how F/OSS works in conjunction
+----withCopyrightAnd license law. Everything starts with copyright, if only
+--BecauseThatIs the default. Under the copyright doctrine
+, the author gets the right to make copies of source code. Under the MIT license, that right is granted to me
+-asWellAs the right to recursively grant it to others. Note that the MIT license explicitly includes the right
+--ToSublicense. Quoting: "the rights to use, copy, modify, merge, publish,
+-distribute, sublicense, and/or sell"
+
+When I sublicense code, I cannot grant rights that I didn't originally have.
+--In the case of the GPL, I am explicitly forbidden to sublicense only some rights.
+ But neither in law nor in the MIT license do I have an obligation to sublicense all rights as a whole.

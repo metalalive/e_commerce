@@ -152,6 +152,33 @@ error:
 } // end of parse_cfg_tmp_buf
 
 
+static int parse_cfg_auth_keystore(json_t *obj, app_cfg_t *app_cfg) {
+    const char *url = json_string_value(obj);
+    if(!url) {
+        goto error;
+    }
+    if(!app_cfg->jwks.handle) {
+        r_jwks_init(&app_cfg->jwks.handle);
+        assert(app_cfg->jwks.handle);
+    }
+    if(r_jwks_import_from_uri(app_cfg->jwks.handle, url, 0) != RHN_OK)
+    {
+        h2o_error_printf("[parsing] failed to preload JWKS from given URI: %s \n", url);
+        goto error;
+    }
+    if(r_jwks_is_valid(app_cfg->jwks.handle) != RHN_OK)
+    {
+        h2o_error_printf("[parsing] failed to decode to JWKS format, URI: %s \n", url);
+        goto error;
+    }
+    app_cfg->jwks.src_url = strdup(url);
+    time(&app_cfg->jwks.last_update);
+    return 0;
+error:
+    return EX_CONFIG;
+} // end of parse_cfg_auth_keystore
+
+
 int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *obj)
 {
     SSL_CTX *ssl_ctx = NULL;
@@ -336,6 +363,8 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
     result_error = parse_cfg_listeners(json_object_get((const json_t *)root, "listen"), _app_cfg);
     if (result_error) {  goto error; }
     result_error = parse_cfg_tmp_buf(json_object_get((const json_t *)root, "tmp_buf"), _app_cfg);
+    if (result_error) {  goto error; }
+    result_error = parse_cfg_auth_keystore(json_object_get((const json_t *)root, "auth_keystore"), _app_cfg);
     if (result_error) {  goto error; }
     json_decref(root);
     return 0;

@@ -10,12 +10,20 @@ extern "C" {
 #include <openssl/crypto.h>
 #include <openssl/x509_vfy.h>
 #include <h2o.h>
+#include <rhonabwy.h>
 
+// TODO: find better way to synchronize from common/data/app_code.json
+#define APP_CODE  3
 #define APP_LABEL "media"
-#define APP_LABEL_LEN 5
+#define APP_LABEL_LEN  (sizeof(APP_LABEL) - 1) // 5
+
+// valid code options represented for quota arrangement in this application
+typedef enum {
+    MAX_KBYTES_CONSUMED_SPACE = 1,
+    MAX_TRANSCODING_JOBS  = 2
+} quota_mat_code_options;
 
 typedef void (*h2o_uv_socket_cb)(uv_stream_t *listener, int status);
-
 
 typedef enum en_run_mode_t {
     RUN_MODE_MASTER = 0,
@@ -73,6 +81,11 @@ typedef struct {
         char *path;
         unsigned int threshold_bytes;
     } tmp_buf; // in case of handling huge data of concurrently incoming requests
+    struct {
+        jwks_t *handle;
+        char   *src_url;
+        time_t  last_update;
+    } jwks;
 } app_cfg_t;
 
 
@@ -97,6 +110,8 @@ typedef struct {
     int  ai_socktype;
     int  ai_protocol;
 } uv_nt_handle_data;
+
+#define RESTAPI_HANDLER_ARGS(hdlr_var, req_var)    h2o_handler_t *hdlr_var, h2o_req_t *req_var
 
 #ifdef __cplusplus
 } // end of extern C clause

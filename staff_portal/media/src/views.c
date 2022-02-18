@@ -1,8 +1,4 @@
-#include <stdio.h>
-#include <h2o.h>
-#include <jansson.h>
-
-#include "routes.h"
+#include "views.h"
 
 RESTAPI_ENDPOINT_HANDLER(initiate_multipart_upload, POST, self, req)
 {
@@ -25,6 +21,7 @@ RESTAPI_ENDPOINT_HANDLER(initiate_multipart_upload, POST, self, req)
         h2o_send(req, &body, bufcnt, H2O_SEND_STATE_FINAL);
     }
     json_decref(res_body);
+    app_run_next_middleware(self, req, node);
     return 0;
 } // end of initiate_multipart_upload
 
@@ -81,6 +78,7 @@ RESTAPI_ENDPOINT_HANDLER(upload_part, POST, self, req)
     }
     json_decref(res_body);
     json_decref(qparams);
+    app_run_next_middleware(self, req, node);
     return 0;
 } // end of upload_part()
 
@@ -116,6 +114,7 @@ done:
     }
     json_decref(res_body);
     json_decref(qparams);
+    app_run_next_middleware(self, req, node);
     return 0;
 } // end of complete_multipart_upload()
 
@@ -127,6 +126,7 @@ RESTAPI_ENDPOINT_HANDLER(abort_multipart_upload, DELETE, self, req)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));
     // DELETE request cannot include response body in libh2o ?
     h2o_send_inline(req, "", 0);
+    app_run_next_middleware(self, req, node);
     return 0;
 }
 
@@ -154,6 +154,7 @@ RESTAPI_ENDPOINT_HANDLER(single_chunk_upload, POST, self, req)
         h2o_send_inline(req, body_raw, nwrite);
     }
     json_decref(res_body);
+    app_run_next_middleware(self, req, node);
     return 0;
 }
 
@@ -174,6 +175,7 @@ RESTAPI_ENDPOINT_HANDLER(start_transcoding_file, POST, self, req)
         h2o_send_inline(req, body_raw, nwrite);
     }
     json_decref(res_body);
+    app_run_next_middleware(self, req, node);
     return 0;
 }
 
@@ -193,6 +195,7 @@ RESTAPI_ENDPOINT_HANDLER(discard_ongoing_job, DELETE, self, req)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
     h2o_send_inline(req, "", 0);
     json_decref(qparams);
+    app_run_next_middleware(self, req, node);
     return 0;
 }
 
@@ -213,6 +216,7 @@ RESTAPI_ENDPOINT_HANDLER(monitor_job_progress, GET, self, req)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
     h2o_send_inline(req, body, strlen(body));
     json_decref(qparams);
+    app_run_next_middleware(self, req, node);
     return 0;
 }
 
@@ -235,6 +239,7 @@ RESTAPI_ENDPOINT_HANDLER(fetch_entire_file, GET, self, req)
     const char *body = "";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/oct-stream"));    
     h2o_send_inline(req, body, strlen(body));
+    app_run_next_middleware(self, req, node);
     return 0;
 } // end of fetch_entire_file
 
@@ -255,6 +260,7 @@ RESTAPI_ENDPOINT_HANDLER(get_next_media_segment, GET, self, req)
     }
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/oct-stream"));    
     h2o_send_inline(req, body, strlen(body));
+    app_run_next_middleware(self, req, node);
     return 0;
 }
 
@@ -274,6 +280,7 @@ RESTAPI_ENDPOINT_HANDLER(discard_file, DELETE, self, req)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
     h2o_send_inline(req, body, strlen(body));
     // h2o_send_inline(req, "", 0);
+    app_run_next_middleware(self, req, node);
     return 0;
 }
 
@@ -317,6 +324,7 @@ done:
     }
     json_decref(req_body);
     json_decref(qparams);
+    app_run_next_middleware(self, req, node);
     return 0;
 } // end of edit_file_acl
 
@@ -337,6 +345,7 @@ RESTAPI_ENDPOINT_HANDLER(read_file_acl, GET, self, req)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
     h2o_send_inline(req, body, strlen(body));
     json_decref(qparams);
+    app_run_next_middleware(self, req, node);
     return 0;
 }
 

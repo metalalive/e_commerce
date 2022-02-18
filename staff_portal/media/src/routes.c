@@ -6,7 +6,10 @@
 #include <h2o.h>
 #include <h2o/serverutil.h>
 
+#include "datatypes.h"
 #include "routes.h"
+
+typedef int (*restapi_endpoint_handle_fn)(RESTAPI_HANDLER_ARGS(self, req));
 
 
 static int compare_from_longer_paths(const void *x, const void *y) {

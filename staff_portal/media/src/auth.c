@@ -1,0 +1,216 @@
+#include <rhonabwy.h>
+#include "auth.h"
+
+#define H2O_STATUS_ERROR_401  H2O_STATUS_ERROR_403
+H2O_SEND_ERROR_XXX(401)
+
+static  char* extract_header_auth_token(h2o_req_t *req, size_t found_idx)
+{ // extract encoded JWT, e.g. `Authorization` header should contain : Bearer 401f7ac837da42b97f613d789819ff93537bee6a
+    h2o_iovec_t *rawdata = &req->headers.entries[found_idx].value;
+    if(!rawdata || !rawdata->base) {
+        return NULL;
+    }
+    char *ptr = NULL;
+    char *bearer = strtok_r(rawdata->base,  " ", &ptr);
+    if(strncmp(bearer, "Bearer", sizeof("Bearer") - 1) || !ptr) {
+        return NULL;
+    }
+    return strtok_r(NULL, " ", &ptr);
+} // end of extract_header_auth_token
+
+
+static int verify_jwt_claim_audience(jwt_t *jwt) {
+    json_t *audiences = r_jwt_get_claim_json_t_value(jwt, "aud");
+    int result = RHN_ERROR;
+    if(audiences && json_is_array(audiences)) {
+        int idx = 0;
+        json_t *item = NULL;
+        json_array_foreach(audiences, idx, item) {
+            const char* curr_aud = json_string_value(item);
+            if(strncmp(curr_aud, APP_LABEL, (size_t)APP_LABEL_LEN) == 0) {
+                result = RHN_OK;
+                break;
+            }
+        }
+    }
+    return result;
+} // end of verify_jwt_claim_audience
+
+
+static json_t *perform_jwt_authentication(jwks_t *keyset, const char *encoded)
+{
+    // In this application , auth server (user_management) always issue new access token with `kid` field
+    jwk_t  *pubkey = NULL;
+    json_t *claims = NULL;
+    jwt_t  *jwt   = NULL;
+    int result = RHN_OK;
+    result = r_jwt_init(&jwt);
+    if(result != RHN_OK || !jwt) {
+        goto done;
+    }
+    // only parse header & payload portion wihtout signature verification
+    result = r_jwt_parse(jwt, encoded, R_FLAG_IGNORE_REMOTE);
+    if(result != RHN_OK) {
+        goto done;
+    }
+    // check whether essential claims exist prior to validating signature,
+    result = verify_jwt_claim_audience(jwt);
+    if(result != RHN_OK) {
+        goto done;
+    }
+    int typ =  r_jwt_get_type(jwt);
+    if(typ != R_JWT_TYPE_SIGN) {
+        goto done;
+    } // TODO, support both encryption and signature on jwt (in auth server)
+    const char *kid = r_jwt_get_header_str_value(jwt, "kid");
+    if(!kid) {
+        goto done;
+    }
+    pubkey =  r_jwks_get_by_kid(keyset, (const char *)kid);
+    if(!pubkey) {
+        goto done;
+    }
+    result = r_jwk_is_valid(pubkey);
+    if(result != RHN_OK) {
+        goto done;
+    }
+    result = r_jwt_verify_signature(jwt, pubkey, 0);
+    if(result != RHN_OK) {
+        goto done;
+    }
+    result = r_jwt_validate_claims(jwt,
+            R_JWT_CLAIM_EXP, R_JWT_CLAIM_NOW,
+            R_JWT_CLAIM_IAT, R_JWT_CLAIM_NOW,
+            R_JWT_CLAIM_NOP);
+    if(result != RHN_OK) {
+        goto done;
+    }
+    claims = r_jwt_get_full_claims_json_t(jwt); // do I need to copy it ?
+done:
+    if(jwt) {
+        r_jwt_free(jwt);
+        jwt = NULL;
+    }
+    if(pubkey) {
+        r_jwk_free(pubkey);
+        pubkey = NULL;
+    }
+    return claims;
+} // end of perform_jwt_authentication
+
+
+static void * fetch_from_hashmap(struct hsearch_data *hmap, ENTRY keyword) {
+    ENTRY *found = NULL;
+    int result = hsearch_r(keyword, FIND, &found, hmap);
+    if(result && found && found->data) {
+        return found->data;
+    } else {
+        return NULL;
+    }
+}
+
+int app_deinit_auth_jwt_claims(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
+{
+    ENTRY  e = {.key = "auth", .data = NULL};
+    json_t *jwt_claims = (json_t *)fetch_from_hashmap(node->data, e);
+    if(jwt_claims) {
+        json_decref(jwt_claims);
+        ENTRY *e_ret = NULL;
+        e.data = NULL;
+        hsearch_r(e, ENTER, &e_ret, node->data);
+    }
+    app_run_next_middleware(self, req, node);
+    return 0;
+} // end of app_deinit_auth_jwt_claims
+
+
+int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
+{
+#define AUTH_HEADER_NAME  "authorization"
+    char   *encoded = NULL;
+    json_t *decoded = NULL;
+    size_t  name_len = sizeof(AUTH_HEADER_NAME) - 1; // exclude final byte which represent NULL-terminating character
+    if(!self || !req || !node) {
+        goto error;
+    }
+    int found_idx = (int)h2o_find_header_by_str(&req->headers, AUTH_HEADER_NAME, name_len, -1);
+    if(found_idx == -1) { // not found
+        goto error;
+    }
+    encoded = extract_header_auth_token(req, found_idx);
+    if(!encoded) {
+        goto error;
+    }
+    decoded = perform_jwt_authentication((jwks_t *)req->conn->ctx->storage.entries[0].data, encoded);
+    if(!decoded) { // authentication failure
+        goto error;
+    }
+    ENTRY  e = {.key = "auth", .data = (void*)decoded };
+    ENTRY *e_ret = NULL;
+    // add new item to the given hash map
+    if(hsearch_r(e, ENTER, &e_ret, node->data)) {
+        // next middleware function will take turn ...
+        app_run_next_middleware(self, req, node);
+    } else {
+        h2o_send_error_500(req, "internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);
+        h2o_error_printf("[auth] failed to save JWT claims (0x%lx) to given hash map \n",
+                (unsigned long int)decoded );
+        json_decref(decoded);
+    }
+    goto done;
+error:
+    h2o_send_error_401(req, "authentication failure", "", H2O_SEND_ERROR_KEEP_HEADERS);
+    if(decoded) {
+        json_decref(decoded);
+    } // TODO, de-initialize the jwt claims in asynchronous way
+done:
+    return 0;
+#undef AUTH_HEADER_NAME
+} // end of app_authenticate_user
+
+
+int app_basic_permission_check(struct hsearch_data *hmap)
+{
+    int result = 1; // default to return error
+    ENTRY keyword = {.key=NULL, .data=NULL};
+    keyword.key = "expect_perm";
+    // type casting the array of permission codes : (const char *(*) [ARRAY_SIZE]) to (const char **)
+    // the number of elements in expect_perms is unknown, the latest item has to be NULL
+    const char **expect_perms = (const char **) fetch_from_hashmap(hmap, keyword);
+    keyword.key = "auth";
+    json_t *jwt_claims = (json_t *)fetch_from_hashmap(hmap, keyword);
+    if(!expect_perms || !jwt_claims) {
+        goto done;
+    }
+    // the claim is compilcated so it is unable to verify it simply using
+    // `r_jwt_validate_claims(...)`
+    json_t *perms = json_object_get(jwt_claims, "perms");
+    if(!perms || !json_is_array(perms)) {
+        goto done;
+    }
+    json_t *perm  = NULL;
+    int idx = 0, jdx = 0;
+    for(idx = 0; expect_perms[idx]; idx++) {
+        int matched = 0;
+        const char *expect_perm = expect_perms[idx];
+        size_t  expect_perm_len = strlen(expect_perm);
+        json_array_foreach(perms, jdx, perm) {
+            int app_code = (int)json_integer_value(json_object_get(perm, "app_code"));
+            if(app_code != APP_CODE) {
+                continue;
+            }
+            const char *actual_perm = json_string_value(json_object_get(perm, "codename"));
+            if(strncmp(actual_perm, expect_perm, expect_perm_len) == 0) {
+                matched = 1;
+                break;
+            }
+        } // end of iterating expected permissions
+        if(!matched) {
+            goto done;
+        }
+    } // end of iterating expected permissions
+    result = 0; // done successfully
+done:
+    return result;
+} // end of app_basic_permission_check
+

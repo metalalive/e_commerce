@@ -43,6 +43,10 @@ Library Dependencies (for application)
 * [H2O](https://github.com/h2o/h2o) >= 2.3.0-DEV
 * [brotli](https://github.com/google/brotli)
 * [jansson](https://github.com/akheron/jansson) >= 2.14
+* [rhonabwy](https://github.com/babelouest/rhonabwy) >= 1.1.2
+* [gnutls](https://github.com/gnutls/gnutls) >= 3.7.2
+* [nettle](https://github.com/gnutls/nettle) >= 3.7.2, automatically built when building `gnutls`
+* [p11-kit](https://github.com/p11-glue/p11-kit) >= 0.24.0
 
 Library Dependencies (for testing)
 * [cgreen](https://github.com/cgreen-devs/cgreen) >= 2.14
@@ -67,11 +71,15 @@ CC="/PATH/TO/gcc/10.3.0/installed/bin/gcc" \
     PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
     cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  ..
 ```
-where `<YOUR_PATH_TO_PKG_CFG>` should be :
+where `<YOUR_PATH_TO_PKG_CFG>` should include :
 * `/PATH/TO/brotli/pkgconfig`
 * `/PATH/TO/libuv/pkgconfig`
 * `/PATH/TO/h2o/pkgconfig`
 * `/PATH/TO/jansson/pkgconfig`
+* `/PATH/TO/rhonabwy/pkgconfig`
+* `/PATH/TO/gnutls/pkgconfig`
+* `/PATH/TO/nettle/pkgconfig`
+* `/PATH/TO/p11-kit/pkgconfig`
 * `/PATH/TO/libcurl/pkgconfig`
 * `/PATH/TO/nghttp2/pkgconfig`
 
@@ -94,10 +102,21 @@ make dev_server
 
 To test the development server, you can use web browsers or command-line tools like `cURL`
 ```
-LD_LIBRARY_PATH="/PATH/TO/curl/installed/lib:$LD_LIBRARY_PATH" /PATH/TO/curl --cacert /PATH/TO/ca.crt \
-   --key /PATH/TO/ca.private.key  --request GET --http2 --header "Content-Type: application/json" \
-   --header "Accept: application/json"  -v  https://localhost:8010/ANY/VALID/PATH
+LD_LIBRARY_PATH="/PATH/TO/curl/installed/lib:$LD_LIBRARY_PATH" /PATH/TO/curl \
+   --cacert /PATH/TO/ca.crt \
+   --key /PATH/TO/ca.private.key \
+   --request <HTTP_METHOD> \
+   --http2 \
+   --header "Content-Type: application/json" \
+   --header "Accept: application/json" \
+   --header @/PATH/TO/FILE/CONTAINS/MULTI_LINE/HEADER_RAWDATA \
+   --data "<WHATEVER_DATA>" \
+   -v  "https://localhost:8010/ANY/VALID/PATH"
 ```
+where :
+* `<HTTP_METHOD>` can be one of the valid HTTP methods e.g. `GET`, `POST`, `PATCH` ...etc
+* `--key` is optional
+* `--http` initiates HTTP/2 connections handled by [nghttp2](https://github.com/nghttp2/nghttp2)
 
 #### Run test
 ##### unit test
