@@ -1,4 +1,4 @@
-#include <rhonabwy.h>
+#include "third_party/rhonabwy.h"
 #include "auth.h"
 
 #define H2O_STATUS_ERROR_401  H2O_STATUS_ERROR_403
@@ -141,7 +141,13 @@ int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t
     if(!encoded) {
         goto error;
     }
-    decoded = perform_jwt_authentication((jwks_t *)req->conn->ctx->storage.entries[0].data, encoded);
+    struct app_jwks_t *jwks = (struct app_jwks_t *)req->conn->ctx->storage.entries[0].data;
+    if(r_jwks_is_valid(jwks->handle) != RHN_OK) {
+        h2o_send_error_500(req, "internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);
+        h2o_error_printf("[auth] failed to import JWKS from %s \n", jwks->src_url);
+        goto done;
+    }
+    decoded = perform_jwt_authentication(jwks->handle, encoded);
     if(!decoded) { // authentication failure
         goto error;
     }
@@ -200,7 +206,7 @@ int app_basic_permission_check(struct hsearch_data *hmap)
                 continue;
             }
             const char *actual_perm = json_string_value(json_object_get(perm, "codename"));
-            if(strncmp(actual_perm, expect_perm, expect_perm_len) == 0) {
+            if(actual_perm && strncmp(actual_perm, expect_perm, expect_perm_len) == 0) {
                 matched = 1;
                 break;
             }
@@ -213,4 +219,53 @@ int app_basic_permission_check(struct hsearch_data *hmap)
 done:
     return result;
 } // end of app_basic_permission_check
+
+// ---------------------------------------------------
+
+// #define RECOVER_CORRUPTED_DATA(victom, origin)   if((victom)!=(origin)) { (victom) = (origin); }
+
+int app_rotate_jwks_store(struct app_jwks_t *jwks) {
+    int result = 1; // do nothing
+    if(!jwks || !jwks->src_url) { goto done; }
+    time_t last_update = jwks->last_update;
+    time_t now_time = time(NULL);
+    if(difftime(now_time, last_update) < (double)jwks->max_expiry_secs) {
+        goto done; // key rotation NOT required
+    }
+    if(!atomic_flag_test_and_set_explicit(&jwks->is_rotating, memory_order_acquire))
+    { // start of critical section
+        const char *url = jwks->src_url;
+        jwks_t *old_handle = jwks->handle;
+        jwks_t *new_handle = NULL;
+        r_jwks_init(&new_handle);
+        ////jwks_t *new_handle_backup = new_handle;
+        app_x5u_t  x5u = {.flags=0, .ca_path=jwks->ca_path, .ca_format=jwks->ca_format};
+        int load_result = DEV_r_jwks_import_from_uri(new_handle, url, &x5u);
+        //// RECOVER_CORRUPTED_DATA(new_handle, new_handle_backup);
+        // FIXME : figure out when data corruption occurs ?
+        if(load_result != RHN_OK)
+        {
+            h2o_error_printf("[parsing] failed to preload JWKS from given URI: %s \n", url);
+            r_jwks_free(new_handle);
+            goto end_of_cs;
+        }
+        if(r_jwks_is_valid(new_handle) != RHN_OK) {
+            h2o_error_printf("[parsing] failed to decode to JWKS format, URI: %s \n", url);
+            r_jwks_free(new_handle);
+            goto end_of_cs;
+        }
+        jwks->handle = new_handle;
+        time(&jwks->last_update);
+        if(old_handle) {
+            r_jwks_free(old_handle);
+        }
+        result = 0; // done successfully
+end_of_cs:
+        // other threads can contend next time when the JWKS expires
+        atomic_flag_clear_explicit(&jwks->is_rotating, memory_order_release);
+    } // end of critical section
+    // otherwise, some other thread currently took the job and is still handling it, skip & let go
+done:
+    return result;
+} // end of app_rotate_jwks_store
 

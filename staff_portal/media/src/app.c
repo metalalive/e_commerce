@@ -13,6 +13,7 @@
 #include "app.h"
 #include "network.h"
 #include "cfg_parser.h"
+#include "auth.h"
 
 
 struct  worker_init_data_t{
@@ -21,7 +22,7 @@ struct  worker_init_data_t{
     unsigned int cfg_thrd_idx;
 };
 
-
+#define MAX_PERIOD_KEEP_JWKS_IN_SECONDS  3600 // 1 hour
 static app_cfg_t _app_cfg = {
     .server_glb_cfg = {
         .hosts = NULL,
@@ -42,7 +43,10 @@ static app_cfg_t _app_cfg = {
     .shutdown_requested = 0,
     .workers_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
     .state = {.num_curr_sessions=0},
-    .jwks = {.handle = NULL, .src_url=NULL, .last_update = 0},
+    .jwks = {
+        .handle = NULL, .src_url=NULL, .last_update = 0, .is_rotating = ATOMIC_FLAG_INIT,
+        .ca_path = NULL, .ca_format = NULL, .max_expiry_secs = MAX_PERIOD_KEEP_JWKS_IN_SECONDS
+    }
 }; // end of _app_cfg
 
 
@@ -67,10 +71,6 @@ static void deinit_app_cfg(app_cfg_t *app_cfg) {
         fclose(app_cfg->pid_file);
         app_cfg->pid_file = NULL;
     }
-    if(app_cfg->error_log_fd > 0) {
-        close(app_cfg->error_log_fd);
-        app_cfg->error_log_fd = -1;
-    } // should be done lastly
     if(app_cfg->jwks.handle != NULL) {
         r_jwks_free(app_cfg->jwks.handle);
         app_cfg->jwks.handle = NULL;
@@ -79,6 +79,10 @@ static void deinit_app_cfg(app_cfg_t *app_cfg) {
         free(app_cfg->jwks.src_url);
         app_cfg->jwks.src_url = NULL;
     }
+    if(app_cfg->error_log_fd > 0) {
+        close(app_cfg->error_log_fd);
+        app_cfg->error_log_fd = -1;
+    } // should be done lastly
 } // end of deinit_app_cfg
 
 
@@ -131,8 +135,14 @@ static void notify_all_workers(app_cfg_t *app_cfg) {
     }
 }
 
+
 int app_server_ready(void) {
-    return h2o_barrier_done(&_app_cfg.workers_sync_barrier);
+    int workers_ready = h2o_barrier_done(&_app_cfg.workers_sync_barrier);
+    int jwks_ready = r_jwks_is_valid(_app_cfg.jwks.handle) == RHN_OK;
+    if(workers_ready && !jwks_ready) {
+        app_rotate_jwks_store(&_app_cfg.jwks);
+    }
+    return workers_ready && jwks_ready;
 }
 
 static void on_sigterm(int sig_num) {
@@ -240,7 +250,7 @@ static void worker_init_accept_ctx(app_ctx_listener_t *ctx, const app_cfg_t *cfg
     assert(http_ctx->storage.capacity == 0);
     assert(http_ctx->storage.size == 0);
     h2o_vector_reserve(NULL, &http_ctx->storage , 1);
-    http_ctx->storage.entries[0] = (h2o_context_storage_item_t) {.dispose = NULL, .data = (void *)cfg->jwks.handle };
+    http_ctx->storage.entries[0] = (h2o_context_storage_item_t) {.dispose = NULL, .data = (void *)&cfg->jwks};
     http_ctx->storage.size = 1;
 } // end of worker_init_accept_ctx
 
@@ -295,7 +305,6 @@ static void run_loop(void *data) {
     worker_init_accept_ctx(ctx_worker.listeners, app_cfg, &server_ctx);
     // stop at here until all other threads reach this point, then serve requests concurrently
     h2o_barrier_wait(&app_cfg->workers_sync_barrier);
-    assert(app_server_ready());
     if(thread_index == 0) {
         for(idx = 0; idx < app_cfg->num_listeners; idx++) {
             uv_handle_t *nt_handle = app_cfg->listeners[idx]->nt_handle;
@@ -303,6 +312,8 @@ static void run_loop(void *data) {
         } // close network handle in config object here prior to start running the loop
     } // free memory allocated to `nt_attr` in app_cfg->listeners
     while (!app_cfg->shutdown_requested) {
+        // TODO, refine a design for application-defined hook functions in this run loop
+        app_rotate_jwks_store(&app_cfg->jwks);
         uv_run(init_data->loop, UV_RUN_ONCE);
     } // end of main event loop
     if(thread_index == 0) {

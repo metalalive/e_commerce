@@ -32,15 +32,17 @@
             ]
         },
         {
-            "port": 8020,
+            "port": 8008,
             "host":"localhost",
             "ssl":{
-                "cert_file"   : "media/data/certs/test/localhost_8020.crt",
-                "privkey_file": "media/data/certs/test/localhost_8020.private.key",
+                "cert_file"   : "media/data/certs/test/localhost_8008.crt",
+                "privkey_file": "media/data/certs/test/localhost_8008.private.key",
                 "cipher_suites": "TLS_AES_128_CCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_8_SHA256",
                 "min_version": 772
             },
-            "routes": []
+            "routes": [
+                {"path":"/jwks", "entry_fn":"get_jwks_pubkey"}
+            ]
         }
     ],
     "ca":{
@@ -49,9 +51,13 @@
     },
     "max_connections": 64,
     "limit_req_body_in_bytes": 10485760,
-    "num_workers": 0,
+    "num_workers": 1,
     "tcp_fastopen_queue_size": 104,
-    "auth_keystore": "http://localhost:8008/jwks",
+    "auth_keystore": {
+        "url":"https://localhost:8008/jwks",
+        "ca_path": "media/data/certs/test/ca.crt",
+        "ca_form": "PEM"
+    },
     "tmp_buf": {
         "path": "tmp/buffer/media/test",
         "threshold_in_bytes": 102400

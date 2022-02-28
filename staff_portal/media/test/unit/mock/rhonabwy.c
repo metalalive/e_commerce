@@ -1,7 +1,7 @@
 #include <cgreen/cgreen.h>
 #include <cgreen/mocks.h>
 #include <cgreen/unit.h>
-#include <rhonabwy.h>
+#include "third_party/rhonabwy.h"
 
 int r_global_init(void)
 {
@@ -12,9 +12,9 @@ void r_global_close(void)
 {
 }
 
-int r_jwks_import_from_uri(jwks_t * jwks, const char * uri, int x5u_flags)
+int DEV_r_jwks_import_from_uri(jwks_t * jwks, const char * uri, app_x5u_t *x5u)
 {
-    return (int)mock(jwks, uri, x5u_flags);
+    return (int)mock(jwks, uri, x5u);
 }
 
 int r_jwks_init(jwks_t ** jwks)
@@ -24,6 +24,7 @@ int r_jwks_init(jwks_t ** jwks)
 
 void r_jwks_free(jwks_t * jwks)
 {
+    mock(jwks);
 }
 
 int r_jwks_is_valid(jwks_t * jwks)
@@ -38,6 +39,7 @@ int r_jwt_init(jwt_t ** jwt)
 
 void r_jwt_free(jwt_t * jwt)
 {
+    mock(jwt);
 }
 
 int r_jwt_parse(jwt_t * jwt, const char * token, int x5u_flags)

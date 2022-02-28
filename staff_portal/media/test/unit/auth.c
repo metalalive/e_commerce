@@ -33,7 +33,8 @@ static  void mock_server_lowlevel_send(struct st_h2o_ostream_t *self, h2o_req_t 
 static h2o_iovec_t  mock_hdr_names[NUM_HEADERS] = {0};
 static h2o_header_t   mock_headers[NUM_HEADERS];
 static h2o_ostream_t  mock_sock_ostream = {.do_send=mock_server_lowlevel_send};
-static h2o_context_storage_item_t  mock_jwks = {0};
+struct app_jwks_t     mock_jwks = {0};
+static h2o_context_storage_item_t  ctx_storage_item0 = {0};
 static h2o_context_t  mock_srv_ctx = {.emitted_error_status={0}};
 static h2o_pathconf_t mock_pathconf = {0};
 static h2o_handler_t  mock_hdlr = {0};
@@ -52,7 +53,9 @@ BeforeEach(MOCK_APP_SERVER) {
         mock_headers[idx].name = &mock_hdr_names[idx];
         mock_headers[idx].value = (h2o_iovec_t){.len=0, .base=NULL};
     }
-    mock_srv_ctx.storage = (h2o_context_storage_t) {.size=1, .capacity=1, .entries=&mock_jwks};
+    mock_jwks = (struct app_jwks_t) {0};
+    ctx_storage_item0 = (h2o_context_storage_item_t) {.data = (struct app_jwks_t *)&mock_jwks};
+    mock_srv_ctx.storage = (h2o_context_storage_t) {.size=1, .capacity=1, .entries=&ctx_storage_item0};
     mock_conn.ctx = &mock_srv_ctx;
     mock_req.conn = &mock_conn;
     mock_req.pathconf  = &mock_pathconf;
@@ -107,6 +110,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_init_failure_tests) {
     *mock_req.headers.entries[2].name = (h2o_iovec_t){.len=7, .base="culture"};
     mock_req.headers.entries[1].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
     // subcase 1 : assume jwt initialization failure
+    expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init, will_return(RHN_ERROR_INVALID));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
@@ -118,8 +122,10 @@ Ensure(MOCK_APP_SERVER, auth_jwt_encode_error_tests) {
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
+    expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init, will_return(RHN_OK), will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
     expect(r_jwt_parse, will_return(RHN_ERROR_INVALID));
+    expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
 }
@@ -132,6 +138,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_audience_1_tests) {
     json_t *mock_aud_claim = json_string(APP_LABEL);
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
+    expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
@@ -140,6 +147,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_audience_1_tests) {
             will_return(mock_aud_claim),
             when(jwt, is_equal_to(mock_jwt_ptr)),
             when(key, is_equal_to_string("aud")) );
+    expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
     json_decref(mock_aud_claim);
@@ -156,6 +164,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_audience_2_tests) {
     json_array_append_new(mock_aud_claim, json_string("unrelated_service_3"));
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
+    expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
@@ -164,6 +173,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_audience_2_tests) {
             will_return(mock_aud_claim),
             when(jwt, is_equal_to(mock_jwt_ptr)),
             when(key, is_equal_to_string("aud")) );
+    expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
     json_decref(mock_aud_claim);
@@ -179,6 +189,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_missing_keyid_tests) {
     json_array_append_new(mock_aud_claim, json_string(APP_LABEL));
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
+    expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
@@ -192,6 +203,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_missing_keyid_tests) {
             will_return(NULL),
             when(jwt, is_equal_to(mock_jwt_ptr)),
             when(key, is_equal_to_string("kid")) );
+    expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
     json_decref(mock_aud_claim);
@@ -209,6 +221,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_pubkey_tests) {
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
     const char *mock_keyid = "12345678";
+    expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
@@ -223,6 +236,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_pubkey_tests) {
             when(jwt, is_equal_to(mock_jwt_ptr)),
             when(key, is_equal_to_string("kid")) );
     expect(r_jwks_get_by_kid,   will_return(NULL),   when(kid, is_equal_to_string(mock_keyid)));
+    expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
     json_decref(mock_aud_claim);
@@ -242,6 +256,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_verify_signature_failure_tests) {
     jwt_t *mock_jwt_ptr = &mock_jwt;
     const char *mock_keyid = "12345678";
     trcptr_t tracepoint = {.data=NULL, .new_state="reach_verify_signature"};
+    expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
@@ -263,6 +278,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_verify_signature_failure_tests) {
             when(pubkey, is_equal_to(&mock_jwk)),
             with_side_effect(&_update_trace_point, (void *)&tracepoint)
         );
+    expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
     assert_that(tracepoint.data, is_equal_to(tracepoint.new_state));
@@ -282,6 +298,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_expiry_tests) {
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
     const char *mock_keyid = "12345678";
+    expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
@@ -304,6 +321,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_expiry_tests) {
     expect(r_jwt_validate_claims,
             will_return(RHN_ERROR),
             when(jwt, is_equal_to(mock_jwt_ptr)));
+    expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
     json_decref(mock_aud_claim);
@@ -326,6 +344,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_succeed_tests) {
     const char *mock_keyid = "12345678";
     trcptr_t tracepoint = {.data=NULL, .new_state="reach_r_jwt_get_full_claims_json_t"};
     {
+        expect(r_jwks_is_valid, will_return(RHN_OK));
         expect(r_jwt_init,
                 will_return(RHN_OK),
                 will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
@@ -352,6 +371,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_succeed_tests) {
                 will_return(mock_full_claims),
                 when(jwt, is_equal_to(mock_jwt_ptr)),
                 with_side_effect(&_update_trace_point, (void *)&tracepoint));
+        expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     }
     struct hsearch_data  mock_hashmap = {0};
     hcreate_r(2, &mock_hashmap);
@@ -449,6 +469,86 @@ Ensure(perm_chk_not_satisfy_all_tests) {
 } // end of perm_chk_not_satisfy_all_tests
 
 
+Ensure(rotate_jwks_not_expired_tests) {
+    char src_url[] = "fake_url_to_auth_server_jwks";
+    unsigned int  max_expiry_secs = 600;
+    mock_jwks = (struct app_jwks_t) {
+        .src_url = &src_url[0],  .max_expiry_secs = max_expiry_secs,
+        .last_update = time(NULL) - (max_expiry_secs - 5) // time in seconds
+    };
+    int result = app_rotate_jwks_store(&mock_jwks);
+    assert_that(result, is_equal_to(1));
+} // end of rotate_jwks_not_expired_tests
+
+
+Ensure(rotate_jwks_remote_server_error_tests) {
+    char src_url[] = "fake_url_to_auth_server_jwks";
+    unsigned int  max_expiry_secs = 600;
+    jwks_t  old_handle = {0};
+    jwks_t  new_handle = {0};
+    jwks_t *new_handle_ptr = &new_handle;
+    mock_jwks = (struct app_jwks_t) {
+        .src_url = &src_url[0], .handle = &old_handle,  .max_expiry_secs = max_expiry_secs,
+        .last_update = time(NULL) - (max_expiry_secs + 5) // time in seconds
+    };
+    time_t expect_last_update = mock_jwks.last_update;
+    int result = 0;
+    for(int idx = 0; idx < 3; idx ++)
+    { // try re-entering the function and it should still get the same error
+        expect(r_jwks_init,
+                will_return(RHN_OK),
+                will_set_contents_of_parameter(jwks, &new_handle_ptr, sizeof(jwks_t **)));
+        expect(r_jwks_free, when(jwks, is_equal_to(new_handle_ptr)));
+        expect(DEV_r_jwks_import_from_uri,
+                will_return(RHN_ERROR),
+                when(jwks, is_equal_to(new_handle_ptr)),
+                when(uri,  is_equal_to_string(src_url)) );
+        result = app_rotate_jwks_store(&mock_jwks);
+        assert_that(result, is_equal_to(1));
+        assert_that(mock_jwks.handle, is_equal_to(&old_handle));
+        assert_that(mock_jwks.last_update, is_equal_to(expect_last_update));
+    }
+} // end of rotate_jwks_remote_server_error_tests
+
+
+Ensure(rotate_jwks_succeed_tests) {
+    char src_url[] = "fake_url_to_auth_server_jwks";
+    unsigned int  max_expiry_secs = 600;
+    jwks_t  old_handle = {0};
+    jwks_t  new_handle = {0};
+    jwks_t *new_handle_ptr = &new_handle;
+    mock_jwks = (struct app_jwks_t) {
+        .src_url = &src_url[0], .handle = &old_handle,  .max_expiry_secs = max_expiry_secs,
+        .last_update = time(NULL) - (max_expiry_secs + 15) // time in seconds
+    };
+    {
+        expect(r_jwks_init,
+                will_return(RHN_OK),
+                will_set_contents_of_parameter(jwks, &new_handle_ptr, sizeof(jwks_t **)));
+        expect(DEV_r_jwks_import_from_uri,
+                will_return(RHN_OK),
+                when(jwks, is_equal_to(new_handle_ptr)),
+                when(uri,  is_equal_to_string(src_url)) );
+        expect(r_jwks_is_valid,
+                will_return(RHN_OK),
+                when(jwks, is_equal_to(new_handle_ptr)) );
+        expect(r_jwks_free, when(jwks, is_equal_to(&old_handle)));
+        time_t previous_update = mock_jwks.last_update;
+        int result = app_rotate_jwks_store(&mock_jwks);
+        assert_that(result, is_equal_to(0));
+        assert_that(mock_jwks.handle, is_equal_to(new_handle_ptr));
+        assert_that(previous_update, is_less_than(mock_jwks.last_update));
+    }
+    { // try re-entering the function and it should NOT rotate again
+      // because the refreshed JWKS hasn't expired yet.
+        time_t previous_update = mock_jwks.last_update;
+        int result = app_rotate_jwks_store(&mock_jwks);
+        assert_that(result, is_equal_to(1));
+        assert_that(previous_update, is_equal_to(mock_jwks.last_update));
+    }
+} // end of rotate_jwks_succeed_tests
+
+
 TestSuite *app_auth_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -465,5 +565,8 @@ TestSuite *app_auth_tests(void)
     add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_succeed_tests);
     add_test(suite, perm_chk_failure_tests);
     add_test(suite, perm_chk_not_satisfy_all_tests);
+    add_test(suite, rotate_jwks_not_expired_tests);
+    add_test(suite, rotate_jwks_remote_server_error_tests);
+    add_test(suite, rotate_jwks_succeed_tests);
     return suite;
 }

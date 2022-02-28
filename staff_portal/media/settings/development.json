@@ -61,7 +61,11 @@
     "limit_req_body_in_bytes": 10485760,
     "num_workers": 1,
     "tcp_fastopen_queue_size": 113,
-    "auth_keystore": "http://localhost:8008/jwks",
+    "auth_keystore": {
+        "url":"http://localhost:8008/jwks",
+        "ca_path": null,
+        "ca_form": null
+    },
     "tmp_buf": {
         "path": "tmp/buffer/media/development",
         "threshold_in_bytes": 102400

@@ -30,6 +30,19 @@ typedef enum en_run_mode_t {
     RUN_MODE_DAEMON // TODO
 } run_mode_t;
 
+struct app_jwks_t {
+    jwks_t *handle;
+    char   *src_url;
+    char   *ca_path;
+    char   *ca_format; // "PEM" or "DES"
+    time_t  last_update;
+    unsigned int  max_expiry_secs;
+    // check whether there is any worker thread rotating the jwks (from remote auth server)
+    // , this field works atomically to protect state of key rotation operation among
+    //  multiple workers
+    atomic_flag is_rotating;
+}; // end of app_jwks_t
+
 struct app_cfg_security_t {
     SSL_CTX *ctx;
     // TODO:
@@ -81,11 +94,7 @@ typedef struct {
         char *path;
         unsigned int threshold_bytes;
     } tmp_buf; // in case of handling huge data of concurrently incoming requests
-    struct {
-        jwks_t *handle;
-        char   *src_url;
-        time_t  last_update;
-    } jwks;
+    struct app_jwks_t  jwks;
 } app_cfg_t;
 
 

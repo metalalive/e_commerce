@@ -153,26 +153,21 @@ error:
 
 
 static int parse_cfg_auth_keystore(json_t *obj, app_cfg_t *app_cfg) {
-    const char *url = json_string_value(obj);
+    if (!json_is_object(obj)) { goto error; }
+    const char *url     = json_string_value(json_object_get(obj, "url"));
+    const char *ca_path = json_string_value(json_object_get(obj, "ca_path"));
+    const char *ca_form = json_string_value(json_object_get(obj, "ca_form"));
     if(!url) {
-        goto error;
-    }
-    if(!app_cfg->jwks.handle) {
-        r_jwks_init(&app_cfg->jwks.handle);
-        assert(app_cfg->jwks.handle);
-    }
-    if(r_jwks_import_from_uri(app_cfg->jwks.handle, url, 0) != RHN_OK)
-    {
-        h2o_error_printf("[parsing] failed to preload JWKS from given URI: %s \n", url);
-        goto error;
-    }
-    if(r_jwks_is_valid(app_cfg->jwks.handle) != RHN_OK)
-    {
-        h2o_error_printf("[parsing] failed to decode to JWKS format, URI: %s \n", url);
+        h2o_error_printf("[parsing] missing URL to JWKS source in configuration file\n");
         goto error;
     }
     app_cfg->jwks.src_url = strdup(url);
-    time(&app_cfg->jwks.last_update);
+    if(ca_path) {
+        app_cfg->jwks.ca_path = strdup(ca_path);
+    }
+    if(ca_form) {
+        app_cfg->jwks.ca_format = strdup(ca_form);
+    }
     return 0;
 error:
     return EX_CONFIG;

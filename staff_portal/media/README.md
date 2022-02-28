@@ -47,11 +47,12 @@ Library Dependencies (for application)
 * [gnutls](https://github.com/gnutls/gnutls) >= 3.7.2
 * [nettle](https://github.com/gnutls/nettle) >= 3.7.2, automatically built when building `gnutls`
 * [p11-kit](https://github.com/p11-glue/p11-kit) >= 0.24.0
+Library Dependencies (for workaround in [rhonabwy](https://github.com/babelouest/rhonabwy))
+* [libcurl](https://github.com/curl/curl) >= 7.69.1
+* [nghttp2](https://github.com/nghttp2/nghttp2) >= 1.46.0 , for enabling http/2 in `libcurl`
 
 Library Dependencies (for testing)
 * [cgreen](https://github.com/cgreen-devs/cgreen) >= 2.14
-* [libcurl](https://github.com/curl/curl) >= 7.69.1
-* [nghttp2](https://github.com/nghttp2/nghttp2) >= 1.46.0 , for enabling http/2 in `libcurl`
 
 
 #### certificate renewal
