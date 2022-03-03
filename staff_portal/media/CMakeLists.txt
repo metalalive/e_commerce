@@ -47,6 +47,8 @@ PKG_CHECK_MODULES(GNUTLS    REQUIRED  gnutls>=3.7.2)
 PKG_CHECK_MODULES(NETTLE    REQUIRED  nettle>=3.7.2)
 PKG_CHECK_MODULES(P11KIT    REQUIRED  p11-kit-1>=0.24.0)
 
+PKG_CHECK_MODULES(MARIADB  REQUIRED  libmariadb>=3.1.7)
+
 PKG_CHECK_MODULES(LIBCURL  REQUIRED libcurl>=7.69.0)
 PKG_CHECK_MODULES(LIBNGHTTP2  REQUIRED libnghttp2>=1.46.0)
 
@@ -107,6 +109,7 @@ INCLUDE_DIRECTORIES(
     ${GNUTLS_INCLUDE_DIRS}
     ${NETTLE_INCLUDE_DIRS}
     ${P11KIT_INCLUDE_DIRS}
+    ${MARIADB_INCLUDE_DIRS}
     ${LIBCURL_INCLUDE_DIRS}
     ${LIBNGHTTP2_INCLUDE_DIRS}
     ${JANSSON_INCLUDE_DIRS})
@@ -121,6 +124,7 @@ LINK_DIRECTORIES(
     ${GNUTLS_LIBRARY_DIRS}
     ${NETTLE_LIBRARY_DIRS}
     ${P11KIT_LIBRARY_DIRS}
+    ${MARIADB_LIBRARY_DIRS}
     ${JANSSON_LIBRARY_DIRS}
     ${LIBCURL_LIBRARY_DIRS}
     ${LIBNGHTTP2_LIBRARY_DIRS} )
@@ -161,6 +165,9 @@ SET(CMAKE_C_FLAGS_RELEASE  "-O2")
 
 SET(APP_COMMON_SOURCE_FILES
     src/auth.c
+    src/models/pool.c
+    src/models/connection.c
+    src/models/mariadb.c
     src/middleware.c
     src/network.c
     #src/multipart_parser.c
@@ -181,7 +188,10 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/routes.c
     test/unit/auth.c
     test/unit/middleware.c
+    test/unit/models/pool.c
+    test/unit/models/mariadb.c
     test/unit/mock/rhonabwy.c
+    test/unit/mock/mariadb.c
     ${APP_COMMON_SOURCE_FILES})
 
 SET(INTEGRATION_TEST_SOURCE_FILES
@@ -207,6 +217,7 @@ SET(APP_DEV_LIBRARIES
     ${GNUTLS_LIBRARIES}
     ${NETTLE_LIBRARIES}
     ${P11KIT_LIBRARIES}
+    ${MARIADB_LIBRARIES}
     ${LIBCURL_LIBRARIES}
     ${LIBNGHTTP2_LIBRARIES}
     ${APP_COMMON_LIBRARIES})

@@ -13,6 +13,8 @@ int parse_cfg_pid_file(json_t *obj, app_cfg_t *_app_cfg);
 
 int parse_cfg_max_conns(json_t *obj, app_cfg_t *_app_cfg);
 
+int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg);
+
 int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *obj);
 
 int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg);

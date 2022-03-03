@@ -66,6 +66,18 @@
         "ca_path": null,
         "ca_form": null
     },
+    "databases": [
+        {
+            "alias": "db_server_1",
+            "db_name": "ecommerce_media",
+            "max_connections": 3,
+            "idle_timeout": 1800,
+            "credential": {
+                "hierarchy": ["backend_apps","databases","media_service"],
+                "filepath":"common/data/secrets.json"
+            }
+        }
+    ],
     "tmp_buf": {
         "path": "tmp/buffer/media/development",
         "threshold_in_bytes": 102400

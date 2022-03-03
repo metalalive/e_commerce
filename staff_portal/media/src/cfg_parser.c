@@ -5,6 +5,8 @@
 #include "cfg_parser.h"
 #include "network.h"
 #include "routes.h"
+#include "models/pool.h"
+#include "models/mariadb.h"
 
 // side effect of this function is that it left pid file opened, be sure to close the file on program exit
 int parse_cfg_pid_file(json_t *obj, app_cfg_t *_app_cfg) {
@@ -172,6 +174,125 @@ static int parse_cfg_auth_keystore(json_t *obj, app_cfg_t *app_cfg) {
 error:
     return EX_CONFIG;
 } // end of parse_cfg_auth_keystore
+
+
+static void parse_cfg_free_db_conn_detail(db_conn_cfg_t *detail)
+{
+    if(detail->db_user) {
+        free(detail->db_user);
+        detail->db_user = NULL;
+    }
+    if(detail->db_passwd) {
+        free(detail->db_passwd);
+        detail->db_passwd = NULL;
+    }
+    if(detail->db_host) {
+        free(detail->db_host);
+        detail->db_host = NULL;
+    }
+}
+
+static int parse_cfg_db_credential(json_t *in, db_conn_cfg_t *out)
+{
+    const char *filepath = json_string_value(json_object_get(in, "filepath"));
+    json_t  *hierarchy = json_object_get(in, "hierarchy");
+    json_t  *root = NULL;
+    json_t  *dst  = NULL;
+    json_t  *hier_tag = NULL;
+    int idx = 0;
+    if(!filepath || !hierarchy || !json_is_array(hierarchy)) {
+        h2o_error_printf("[parsing] missing filepath parameters in database credential\n");
+        goto error;
+    }
+    root = json_load_file(filepath, (size_t)0, NULL);
+    if(!root) {
+        h2o_error_printf("[parsing] failed to load database credential from file %s \n", filepath);
+        goto error;
+    }
+    dst = root;
+    json_array_foreach(hierarchy, idx, hier_tag) {
+        const char *tag = json_string_value(hier_tag);
+        if(!tag) {
+            h2o_error_printf("[parsing] invalid hierarchy in the database credential file : %s \n",filepath);
+            goto error;
+        }
+        dst = json_object_get(dst, tag);
+        if(!dst || !json_is_object(dst)) {
+            h2o_error_printf("[parsing] invalid json object in the database credential file : %s \n", filepath);
+            goto error;
+        }
+    } // end of loop
+    const char *db_user = json_string_value(json_object_get(dst, "USER"));
+    const char *db_passwd = json_string_value(json_object_get(dst, "PASSWORD"));
+    const char *db_host = json_string_value(json_object_get(dst, "HOST"));
+    const char *db_port = json_string_value(json_object_get(dst, "PORT"));
+    if(!db_user || !db_passwd || !db_host || !db_port) {
+        h2o_error_printf("[parsing] invalid database credential: db_user(%s), db_passwd(%s), db_host(%s), db_port(%s) \n",
+                    (db_user?"not null":"null"), (db_passwd?"not null":"null"), db_host, db_port);
+        goto error;
+    }
+    uint16_t  db_port_int = (uint16_t) strtol(db_port, (char **)NULL, 10);
+    if(db_port_int == 0) {
+        h2o_error_printf("[parsing] invalid port for database connection: %s \n", db_port);
+        goto error;
+    } // no  conversion could be performed
+    out->db_user = strdup(db_user);
+    out->db_passwd = strdup(db_passwd);
+    out->db_host = strdup(db_host);
+    out->db_port = db_port_int;
+    json_decref(root);
+    return 0;
+error:
+    if(root) {
+        json_decref(root);
+    }
+    return EX_CONFIG;
+} // end of parse_cfg_db_credential
+
+
+int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg)
+{
+    (void)app_cfg; // unused
+    json_t *obj = NULL;
+    int idx = 0;
+    size_t num_pools = (size_t)json_array_size(objs);
+    if (!objs || !json_is_array(objs) || num_pools == 0) {
+        h2o_error_printf("[parsing] missing database configuration\n");
+        goto error;
+    }
+    json_array_foreach(objs, idx, obj) {
+        const char *alias   = json_string_value(json_object_get(obj, "alias"));
+        const char *db_name = json_string_value(json_object_get(obj, "db_name"));
+        uint32_t max_conns    = (uint32_t)json_integer_value(json_object_get(obj, "max_connections"));
+        uint32_t idle_timeout = (uint32_t)json_integer_value(json_object_get(obj, "idle_timeout"));
+        json_t  *credential = json_object_get(obj, "credential");
+        if(!alias || !db_name || max_conns == 0 || idle_timeout == 0) {
+            h2o_error_printf("[parsing] missing scalar parameters in database configuration\n");
+            goto error;
+        } else if (!credential || !json_is_object(credential)) {
+            h2o_error_printf("[parsing] missing credential parameters in database configuration\n");
+            goto error;
+        }
+        db_pool_cfg_t cfg_opts = { .alias=(char *)alias, .capacity=max_conns, .idle_timeout=idle_timeout,
+            .close_cb=NULL, .error_cb=NULL, .conn_detail={.db_name = (char *)db_name},
+            .conn_ops = {.init_fn = app_db_mariadb_conn_init, .deinit_fn = app_db_mariadb_conn_deinit,
+                .close_fn = app_db_mariadb_conn_close, .connect_fn = app_db_mariadb_conn_connect}
+        };
+        if(parse_cfg_db_credential(credential, &cfg_opts.conn_detail)) {
+            parse_cfg_free_db_conn_detail(&cfg_opts.conn_detail);
+            goto error;
+        }
+        if(app_db_pool_init(&cfg_opts) != DBA_RESULT_OK) {
+            parse_cfg_free_db_conn_detail(&cfg_opts.conn_detail);
+            goto error;
+        }
+        parse_cfg_free_db_conn_detail(&cfg_opts.conn_detail);
+    } // end of database configuration iteration
+    return 0;
+error:
+    app_db_pool_map_deinit();
+    return EX_CONFIG;
+} // end of parse_cfg_databases
 
 
 int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *obj)
@@ -360,6 +481,8 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
     result_error = parse_cfg_tmp_buf(json_object_get((const json_t *)root, "tmp_buf"), _app_cfg);
     if (result_error) {  goto error; }
     result_error = parse_cfg_auth_keystore(json_object_get((const json_t *)root, "auth_keystore"), _app_cfg);
+    if (result_error) {  goto error; }
+    result_error = parse_cfg_databases(json_object_get((const json_t *)root, "databases"), _app_cfg);
     if (result_error) {  goto error; }
     json_decref(root);
     return 0;

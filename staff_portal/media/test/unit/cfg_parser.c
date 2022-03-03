@@ -128,6 +128,68 @@ Ensure(cfg_listener_ssl_tests) {
     json_decref(obj);
 } // end of cfg_listener_ssl_tests
 
+Ensure(cfg_databases_missing_alias) {
+    json_t *objs = json_array();
+    json_t *obj = json_object();
+    json_array_append(objs, obj);
+    json_object_set(obj, "max_connections", json_integer(123));
+    json_object_set(obj, "idle_timeout", json_integer(456));
+    int result = parse_cfg_databases(objs, NULL);
+    assert_that(result, is_not_equal_to(0));
+    json_decref(objs);
+} // end of cfg_databases_missing_alias
+
+Ensure(cfg_databases_missing_credential) {
+    json_t *objs = json_array();
+    json_t *obj = json_object();
+    json_t *credential = json_object();
+    json_array_append(objs, obj);
+    json_object_set(obj, "max_connections", json_integer(123));
+    json_object_set(obj, "idle_timeout", json_integer(456));
+    json_object_set(obj, "alias",   json_string("service_1_primary"));
+    json_object_set(obj, "db_name", json_string("service_1_db_primary"));
+    json_object_set(obj, "credential", credential);
+    json_object_set(credential, "hierarchy", json_array());
+    json_object_set(credential, "filepath", json_string("invalid/path/to/credential_file"));
+    int result = parse_cfg_databases(objs, NULL);
+    assert_that(result, is_not_equal_to(0));
+    json_decref(objs);
+} // end of cfg_databases_missing_credential
+
+
+Ensure(cfg_databases_invalid_credential) {
+    int credential_fd = -1;
+    char credential_filepath[] = "./tmp/unittest_credential_XXXXXX";
+    json_t *objs = json_array();
+    json_t *obj = json_object();
+    json_t *credential = json_object();
+    json_array_append(objs, obj);
+    json_object_set(obj, "max_connections", json_integer(123));
+    json_object_set(obj, "idle_timeout", json_integer(456));
+    json_object_set(obj, "alias",   json_string("service_1_primary"));
+    json_object_set(obj, "db_name", json_string("service_1_db_primary"));
+    json_object_set(obj, "credential", credential);
+    {
+        const char *file_content = "{\"hier1\":{\"hier2\":{\"hier3\":{}}}}";
+        credential_fd = mkstemp(&credential_filepath[0]);
+        write(credential_fd, file_content, strlen(file_content));
+        json_object_set(credential, "filepath", json_string(&credential_filepath[0]));
+    }
+    {
+        const char *hier_str[] = {"hier1", "hier2", "hier3"};
+        json_t *credential_hier_keys = json_array();
+        for(int idx = 0; idx < 3; idx++) {
+            json_array_append(credential_hier_keys, json_string(hier_str[idx]));
+        }
+        json_object_set(credential, "hierarchy", credential_hier_keys);
+    }
+    int result = parse_cfg_databases(objs, NULL);
+    assert_that(result, is_not_equal_to(0));
+    json_decref(objs);
+    unlink(&credential_filepath[0]);
+    close(credential_fd);
+} // end of cfg_databases_invalid_credential
+
 
 TestSuite *app_cfg_parser_tests(void)
 {
@@ -135,6 +197,9 @@ TestSuite *app_cfg_parser_tests(void)
     add_test(suite, cfg_pid_file_tests);
     add_test(suite, cfg_max_conn_tests);
     add_test(suite, cfg_listener_ssl_tests);
+    add_test(suite, cfg_databases_missing_alias);
+    add_test(suite, cfg_databases_missing_credential);
+    add_test(suite, cfg_databases_invalid_credential);
     return suite;
 }
 

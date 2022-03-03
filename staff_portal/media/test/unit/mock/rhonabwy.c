@@ -1,6 +1,4 @@
-#include <cgreen/cgreen.h>
 #include <cgreen/mocks.h>
-#include <cgreen/unit.h>
 #include "third_party/rhonabwy.h"
 
 int r_global_init(void)
