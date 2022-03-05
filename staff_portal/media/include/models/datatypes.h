@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 #include <pthread.h>
+#include "utils.h"
 #include "timer_poll.h"
 
 typedef enum {
@@ -49,13 +50,7 @@ typedef void (*dba_close_cb)(void *target);
 typedef void (*dba_error_cb)(void *target, void *detail);
 typedef void (*dba_done_cb)(void *target, void *detail);
 
-
-typedef struct db_llnode_s {
-    char   dummy;
-    struct db_llnode_s *next;
-    struct db_llnode_s *prev;
-    char   data[1]; // may extend the storage space based on given type
-} db_llnode_t;
+typedef app_llnode_t db_llnode_t;
 
 typedef struct {
     char     *db_name;

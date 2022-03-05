@@ -58,6 +58,18 @@
         "ca_path": "media/data/certs/test/ca.crt",
         "ca_form": "PEM"
     },
+    "databases": [
+        {
+            "alias": "db_server_1",
+            "db_name": "test_ecommerce_media",
+            "max_connections": 3,
+            "idle_timeout": 20,
+            "credential": {
+                "hierarchy": ["backend_apps","databases","media_service"],
+                "filepath":"common/data/secrets.json"
+            }
+        }
+    ],
     "tmp_buf": {
         "path": "tmp/buffer/media/test",
         "threshold_in_bytes": 102400

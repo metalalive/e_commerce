@@ -173,6 +173,7 @@ SET(APP_COMMON_SOURCE_FILES
     #src/multipart_parser.c
     src/cfg_parser.c
     src/app.c
+    src/utils.c
     src/views.c
     src/routes.c )
 

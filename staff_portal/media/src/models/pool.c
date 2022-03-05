@@ -3,31 +3,6 @@
 
 static db_llnode_t *_app_db_pools_map = NULL;
 
-static void app_llnode_link(db_llnode_t *curr, db_llnode_t *prev, db_llnode_t *new)
-{
-    if(prev) {
-        prev->next = new;
-        new->prev  = prev;
-    }
-    if(curr) {
-        curr->prev = new;
-        new->next = curr;
-    }
-}
-
-static void app_llnode_unlink(db_llnode_t *node)
-{
-    db_llnode_t *n0 = node->prev;
-    db_llnode_t *n1 = node->next;
-    if(n0) {
-        n0->next = n1;
-    }
-    if(n1) {
-        n1->prev = n0;
-    }
-    node->next = node->prev = NULL;
-}
-
 // maintain a sorted list in every single insertion
 // with the key `length of alias` in descending order
 static void app_db_poolmap_insert_pool(db_llnode_t *new) {

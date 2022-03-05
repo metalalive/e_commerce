@@ -1,0 +1,63 @@
+#include "utils.h"
+
+void * fetch_from_hashmap(struct hsearch_data *hmap, ENTRY keyword) {
+    ENTRY *found = NULL;
+    int result = hsearch_r(keyword, FIND, &found, hmap);
+    if(result && found && found->data) {
+        return found->data;
+    } else {
+        return NULL;
+    }
+}
+
+int app_url_decode_query_param(char *data, json_t *map) {
+    // this function does NOT check inproper characters appeared in name/value field
+    // and treat all value as string by default.
+    char *tok = data;
+    char *ptr_kvpair = NULL;
+    for(tok = strtok_r(tok, "&", &ptr_kvpair); tok; tok = strtok_r(NULL, "&", &ptr_kvpair))
+    { // strtok_r is thread-safe
+        char *ptr = NULL;
+        char *name  = strtok_r(tok,  "=", &ptr);
+        char *value = strtok_r(NULL, "=", &ptr);
+        if(!name) {
+            continue;
+        }
+        json_t *obj_val = NULL;
+        if(value) {
+            obj_val = json_string(value);
+        } else {
+            obj_val = json_true();
+        }
+        json_object_set_new(map, name, obj_val);
+        //fprintf(stdout, "[debug] raw data of query params: %s = %s \n", name, value);
+    }
+    return 0;
+} // end of app_url_decode_query_param
+
+
+void app_llnode_link(app_llnode_t *curr, app_llnode_t *prev, app_llnode_t *new)
+{
+    if(prev) {
+        prev->next = new;
+        new->prev  = prev;
+    }
+    if(curr) {
+        curr->prev = new;
+        new->next = curr;
+    }
+}
+
+void app_llnode_unlink(app_llnode_t *node)
+{
+    app_llnode_t *n0 = node->prev;
+    app_llnode_t *n1 = node->next;
+    if(n0) {
+        n0->next = n1;
+    }
+    if(n1) {
+        n1->prev = n0;
+    }
+    node->next = node->prev = NULL;
+}
+

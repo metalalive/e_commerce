@@ -1,4 +1,5 @@
 #include "third_party/rhonabwy.h"
+#include "utils.h"
 #include "auth.h"
 
 #define H2O_STATUS_ERROR_401  H2O_STATUS_ERROR_403
@@ -98,16 +99,6 @@ done:
     return claims;
 } // end of perform_jwt_authentication
 
-
-static void * fetch_from_hashmap(struct hsearch_data *hmap, ENTRY keyword) {
-    ENTRY *found = NULL;
-    int result = hsearch_r(keyword, FIND, &found, hmap);
-    if(result && found && found->data) {
-        return found->data;
-    } else {
-        return NULL;
-    }
-}
 
 int app_deinit_auth_jwt_claims(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
 {

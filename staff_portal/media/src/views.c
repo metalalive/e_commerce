@@ -1,3 +1,4 @@
+#include "utils.h"
 #include "views.h"
 
 RESTAPI_ENDPOINT_HANDLER(initiate_multipart_upload, POST, self, req)
@@ -26,36 +27,10 @@ RESTAPI_ENDPOINT_HANDLER(initiate_multipart_upload, POST, self, req)
 } // end of initiate_multipart_upload
 
 
-int decode_query_param(char *data, json_t *map) {
-    // this function does NOT check inproper characters appeared in name/value field
-    // and treat all value as string by default.
-    char *tok = data;
-    char *ptr_kvpair = NULL;
-    for(tok = strtok_r(tok, "&", &ptr_kvpair); tok; tok = strtok_r(NULL, "&", &ptr_kvpair))
-    { // strtok_r is thread-safe
-        char *ptr = NULL;
-        char *name  = strtok_r(tok,  "=", &ptr);
-        char *value = strtok_r(NULL, "=", &ptr);
-        if(!name) {
-            continue;
-        }
-        json_t *obj_val = NULL;
-        if(value) {
-            obj_val = json_string(value);
-        } else {
-            obj_val = json_true();
-        }
-        json_object_set_new(map, name, obj_val);
-        //fprintf(stdout, "[debug] raw data of query params: %s = %s \n", name, value);
-    }
-    return 0;
-} // end of decode_query_param
-
-
 RESTAPI_ENDPOINT_HANDLER(upload_part, POST, self, req)
 {
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *part_str = json_string_value(json_object_get(qparams, "part"));
     int part_num = part_str ? (int)strtol(part_str, NULL, 10) : 0;
     // TODO
@@ -88,7 +63,7 @@ RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)
 {
     json_t *res_body = json_object();
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *resource_id = json_string_value(json_object_get(qparams, "resource_id"));
     const char *upload_id   = json_string_value(json_object_get(qparams, "upload_id"));
     if(!resource_id || !upload_id) {
@@ -183,7 +158,7 @@ RESTAPI_ENDPOINT_HANDLER(start_transcoding_file, POST, self, req)
 RESTAPI_ENDPOINT_HANDLER(discard_ongoing_job, DELETE, self, req)
 { // TODO:job ID required
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *job_id = json_string_value(json_object_get(qparams, "id"));
     if(job_id) {
         req->res.status = 204; // or 410 if the job has been done before receiving this request
@@ -203,7 +178,7 @@ RESTAPI_ENDPOINT_HANDLER(discard_ongoing_job, DELETE, self, req)
 RESTAPI_ENDPOINT_HANDLER(monitor_job_progress, GET, self, req)
 {
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *job_id = json_string_value(json_object_get(qparams, "id"));
     const char *body = "{\"elementary_streams\": [], \"outputs\":[]}";
     if(job_id) {
@@ -226,7 +201,7 @@ RESTAPI_ENDPOINT_HANDLER(monitor_job_progress, GET, self, req)
 RESTAPI_ENDPOINT_HANDLER(fetch_entire_file, GET, self, req)
 {
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *resource_id = json_string_value(json_object_get(qparams, "id"));
     const char *transcode_version = json_string_value(json_object_get(qparams, "trncver")); // optional in image
     if(resource_id) {
@@ -247,7 +222,7 @@ RESTAPI_ENDPOINT_HANDLER(fetch_entire_file, GET, self, req)
 RESTAPI_ENDPOINT_HANDLER(get_next_media_segment, GET, self, req)
 { // grab next media segment (usually audio/video) when running HLS protocol
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *resource_id = json_string_value(json_object_get(qparams, "id"));
     const char *transcode_version = json_string_value(json_object_get(qparams, "trncver"));
     const char *body = "";
@@ -267,7 +242,7 @@ RESTAPI_ENDPOINT_HANDLER(get_next_media_segment, GET, self, req)
 RESTAPI_ENDPOINT_HANDLER(discard_file, DELETE, self, req)
 {
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *resource_id = json_string_value(json_object_get(qparams, "id"));
     const char *body = "";
     if(resource_id) {
@@ -291,7 +266,7 @@ RESTAPI_ENDPOINT_HANDLER(edit_file_acl, PATCH, self, req)
     json_t *item = NULL;
     json_t *req_body = json_loadb(req->entity.base, req->entity.len, 0, NULL);
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *resource_id = json_string_value(json_object_get(qparams, "id"));
     if(!resource_id) {
         req->res.status = 400;
@@ -333,7 +308,7 @@ RESTAPI_ENDPOINT_HANDLER(read_file_acl, GET, self, req)
 {
     const char *body = "[{\"usr_id\": 728462, \"read\":True, \"renew\":False}, {\"usr_id\": 199204, \"read\":False, \"renew\":True}]";
     json_t *qparams = json_object();
-    decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *resource_id = json_string_value(json_object_get(qparams, "id"));
     if(resource_id) {
         req->res.status = 200;
