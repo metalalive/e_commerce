@@ -6,6 +6,7 @@
 #include "network.h"
 #include "routes.h"
 #include "models/pool.h"
+#include "models/connection.h"
 #include "models/mariadb.h"
 
 // side effect of this function is that it left pid file opened, be sure to close the file on program exit
@@ -265,8 +266,9 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg)
         const char *db_name = json_string_value(json_object_get(obj, "db_name"));
         uint32_t max_conns    = (uint32_t)json_integer_value(json_object_get(obj, "max_connections"));
         uint32_t idle_timeout = (uint32_t)json_integer_value(json_object_get(obj, "idle_timeout"));
+        uint32_t bulk_query_limit_kb = (uint32_t)json_integer_value(json_object_get(obj, "bulk_query_limit_kb"));
         json_t  *credential = json_object_get(obj, "credential");
-        if(!alias || !db_name || max_conns == 0 || idle_timeout == 0) {
+        if(!alias || !db_name || max_conns == 0 || idle_timeout == 0 || bulk_query_limit_kb == 0) {
             h2o_error_printf("[parsing] missing scalar parameters in database configuration\n");
             goto error;
         } else if (!credential || !json_is_object(credential)) {
@@ -274,9 +276,16 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg)
             goto error;
         }
         db_pool_cfg_t cfg_opts = { .alias=(char *)alias, .capacity=max_conns, .idle_timeout=idle_timeout,
-            .close_cb=NULL, .error_cb=NULL, .conn_detail={.db_name = (char *)db_name},
-            .conn_ops = {.init_fn = app_db_mariadb_conn_init, .deinit_fn = app_db_mariadb_conn_deinit,
-                .close_fn = app_db_mariadb_conn_close, .connect_fn = app_db_mariadb_conn_connect}
+            .bulk_query_limit_kb=bulk_query_limit_kb, .conn_detail={.db_name = (char *)db_name},
+            .ops = { .init_fn = app_db_mariadb_conn_init,
+                .deinit_fn = app_db_mariadb_conn_deinit,
+                .can_change_state = app_mariadb_acquire_state_change,
+                .state_transition = app_mariadb_async_state_transition_handler,
+                .notify_query = app_mariadb_conn_notified_query_callback,
+                .is_conn_closed = app_mariadb_conn_is_closed,
+                .get_sock_fd = app_db_mariadb_get_sock_fd,
+                .get_timeout_ms = app_db_mariadb_get_timeout_ms
+            }
         };
         if(parse_cfg_db_credential(credential, &cfg_opts.conn_detail)) {
             parse_cfg_free_db_conn_detail(&cfg_opts.conn_detail);

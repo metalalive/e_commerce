@@ -34,18 +34,22 @@ static void app_db_poolmap_remove_pool(db_llnode_t *node)
 
 static void app_db_pool_insert_conn(db_pool_t *pool, db_llnode_t *new)
 {
+    db_llnode_t *old_head = pool->conns.head;
     new->next = NULL;
     new->prev = NULL;
-    app_llnode_link(pool->conns, NULL, new); // insert before the original head node
-    pool->conns = new;
+    app_llnode_link(old_head, NULL, new); // insert before the original head node
+    pool->conns.head = new;
+    if(!old_head) {
+        pool->conns.tail = new;
+    }
 } // end of app_db_pool_insert_conn
 
 static void app_db_pool_remove_conn(db_pool_t *pool, db_llnode_t *node)
 {
     db_llnode_t *n1 = node->next;
     app_llnode_unlink(node);
-    if(pool->conns == node) {
-        pool->conns = n1;
+    if(pool->conns.head == node) {
+        pool->conns.head = n1;
     }
 } // end of app_db_pool_remove_conn
 
@@ -76,37 +80,99 @@ static void _app_db_poolcfg_deinit(db_pool_cfg_t *cfg) {
 
 static void _app_db_pool_conns_deinit(db_pool_t *pool) {
     db_llnode_t *node = NULL;
-    while(pool->conns) {
-        node = pool->conns;
-        db_conn_t  *conn = (db_conn_t *) node->data;
-        pool->cfg.conn_ops.deinit_fn(conn);
+    while(pool->conns.head) {
+        node = pool->conns.head;
         app_db_pool_remove_conn(pool, node);
+        db_conn_t  *conn = (db_conn_t *) node->data;
+        assert(pool->cfg.ops.deinit_fn(conn) == DBA_RESULT_OK);
         free(node);
     }
+    pool->conns.tail = NULL;
 }
 
 
-static void _app_db_pool_default_error_callback(void *target, void *detail)
+// callers get available connection from a given pool, then use the returned connection
+//  for subsequent commands (e.g. query) , return NULL means all connections in the pool
+//  are in use
+static db_conn_t * app_db_pool__acquire_free_connection(db_pool_t *pool) {
+    db_conn_t  *found = NULL;
+    db_llnode_t *node = NULL;
+    pthread_mutex_lock(&pool->lock);
+    node = pool->conns.head;
+    if(node) { // move from free list to locked list
+        if(node == pool->conns.tail) {
+            pool->conns.tail = NULL;
+        }
+        pool->conns.head = node->next;
+        app_llnode_unlink(node);
+        app_llnode_link(pool->locked_conns, NULL, node); // insert to index 0
+        pool->locked_conns = node;
+        found = (db_conn_t *) &node->data;
+    }
+    pthread_mutex_unlock(&pool->lock);
+    return found;
+} // end of app_db_pool__acquire_free_connection
+
+
+static DBA_RES_CODE app_db_pool__release_used_connection(db_conn_t *conn) {
+    if(!conn || !conn->pool) {
+        return DBA_RESULT_ERROR_ARG;
+    }
+    DBA_RES_CODE result = DBA_RESULT_OK;
+    db_pool_t *pool = conn->pool;
+    db_llnode_t *node  = NULL;
+    db_llnode_t *node2 = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, conn);
+    uint8_t  found = 0;
+    for(node = pool->locked_conns; node; node = node->next) {
+        if(node == node2) {
+            found = 1;
+            break;
+        }
+    } // end of loop
+    if(found) { // move from locked list back to free list
+        pthread_mutex_lock(&pool->lock);
+        if(pool->locked_conns == node2) {
+            pool->locked_conns = node2->next;
+        }
+        app_llnode_unlink(node2);
+        app_llnode_link(NULL, pool->conns.tail, node2); // append to the end of list
+        pool->conns.tail = node2;
+        if(!pool->conns.head) {
+            pool->conns.head = node2;
+        }
+        pthread_mutex_unlock(&pool->lock);
+    } else {
+        result = DBA_RESULT_ERROR_ARG;
+    }
+    return result;
+} // end of app_db_pool__release_used_connection
+
+static uint8_t  app_db_pool_is_closing(db_pool_t *pool)
 {
-    db_pool_t *pool = target;
-    fprintf(stderr, "[pooling][error][%s][reason_code] \n", pool->cfg.alias);
-} // end of _app_db_pool_default_error_callback
+    if(!pool) { return 1; }
+    uint16_t closing = 0x1;
+    uint16_t value = (uint16_t) atomic_load_explicit(&pool->flags, memory_order_acquire);
+    return (value & closing) == closing;
+} // end of app_db_pool_is_closing
 
 
 DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
 {
     DBA_RES_CODE result = DBA_RESULT_OK;
     db_llnode_t *new_pool_node = NULL;
+    db_llnode_t *new_conn_node = NULL;
     db_pool_t   *pool = NULL;
     size_t idx = 0;
-    if(!opts || !opts->alias || opts->capacity == 0 || opts->idle_timeout == 0) {
+    if(!opts || !opts->alias || opts->capacity == 0 || opts->idle_timeout == 0
+            || !opts->bulk_query_limit_kb) {
         result = DBA_RESULT_ERROR_ARG;
         goto done;
     }
     if(!opts->conn_detail.db_name || !opts->conn_detail.db_user || !opts->conn_detail.db_passwd
-            || !opts->conn_detail.db_host || opts->conn_detail.db_port == 0 || !opts->conn_ops.init_fn
-            || !opts->conn_ops.deinit_fn || !opts->conn_ops.close_fn || !opts->conn_ops.connect_fn
-            ) {
+            || !opts->conn_detail.db_host || opts->conn_detail.db_port == 0 || !opts->ops.init_fn
+            || !opts->ops.deinit_fn || !opts->ops.state_transition || !opts->ops.notify_query
+            || !opts->ops.is_conn_closed || !opts->ops.get_sock_fd || !opts->ops.get_timeout_ms
+            || !opts->ops.can_change_state ) {
         result = DBA_RESULT_ERROR_ARG;
         goto done;
     }
@@ -117,16 +183,21 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
     }
     new_pool_node = malloc(sizeof(db_llnode_t) + sizeof(db_pool_t));
     pool = (db_pool_t *) &new_pool_node->data;
-    pool->conns = NULL;
+    pool->conns.head = NULL;
+    pool->conns.tail = NULL;
+    pool->locked_conns = NULL;
+    pool->flags = ATOMIC_VAR_INIT(0x0);
+    pool->acquire_free_conn_fn = app_db_pool__acquire_free_connection;
+    pool->release_used_conn_fn = app_db_pool__release_used_connection;
+    pool->is_closing_fn = app_db_pool_is_closing;
     if(pthread_mutex_init(&pool->lock, NULL) != 0) {
         result = DBA_RESULT_OS_ERROR;
         goto error;
     }
-    dba_error_cb error_cb = opts->error_cb ? opts->error_cb: _app_db_pool_default_error_callback;
     pool->cfg = (db_pool_cfg_t) {
-        .alias = strdup(opts->alias),
-        .capacity = opts->capacity,  .idle_timeout = opts->idle_timeout,
-        .close_cb = opts->close_cb,  .error_cb = error_cb,
+        .alias = strdup(opts->alias),   .capacity = opts->capacity,
+        .idle_timeout = opts->idle_timeout,
+        .bulk_query_limit_kb = opts->bulk_query_limit_kb,
         .conn_detail = {
             .db_name   = strdup(opts->conn_detail.db_name), 
             .db_user   = strdup(opts->conn_detail.db_user),
@@ -134,17 +205,23 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
             .db_host   = strdup(opts->conn_detail.db_host), 
             .db_port = opts->conn_detail.db_port 
         },
-        .conn_ops = {
-            .init_fn   = opts->conn_ops.init_fn,
-            .deinit_fn = opts->conn_ops.deinit_fn,
-            .close_fn  = opts->conn_ops.close_fn,
-            .connect_fn = opts->conn_ops.connect_fn
+        .ops = {
+            .init_fn  = opts->ops.init_fn,
+            .deinit_fn = opts->ops.deinit_fn,
+            .can_change_state = opts->ops.can_change_state,
+            .state_transition = opts->ops.state_transition,
+            .notify_query = opts->ops.notify_query,
+            .is_conn_closed = opts->ops.is_conn_closed,
+            .get_sock_fd  = opts->ops.get_sock_fd,
+            .get_timeout_ms  = opts->ops.get_timeout_ms
         }
     };
+    size_t conn_sz = sizeof(db_conn_t) + (pool->cfg.bulk_query_limit_kb << 10);
+    size_t conn_node_sz = sizeof(db_llnode_t) + conn_sz;
     for(idx = 0; idx < pool->cfg.capacity; idx++) {   // initalize list of connections
-        db_llnode_t *new_conn_node = malloc(sizeof(db_llnode_t) + sizeof(db_conn_t));
+        new_conn_node = malloc(conn_node_sz);
         db_conn_t   *new_conn = (db_conn_t *) new_conn_node->data;
-        result = pool->cfg.conn_ops.init_fn(new_conn, pool);
+        result = pool->cfg.ops.init_fn(new_conn, pool);
         if(result != DBA_RESULT_OK) {
             free(new_conn_node);
             goto error; 
@@ -170,9 +247,6 @@ static DBA_RES_CODE _app_db_pool_deinit(db_pool_t *pool) {
     if(!pool) {
         return DBA_RESULT_ERROR_ARG;
     }
-    if(pool->cfg.close_cb) {
-        (pool->cfg.close_cb)((void *)pool);
-    }
     _app_db_pool_conns_deinit(pool);
     _app_db_poolcfg_deinit(&pool->cfg);
     pthread_mutex_destroy(&pool->lock);
@@ -181,6 +255,46 @@ static DBA_RES_CODE _app_db_pool_deinit(db_pool_t *pool) {
     free(node);
     return DBA_RESULT_OK;
 } // end of _app_db_pool_deinit
+
+
+void app_db_pool_map_signal_closing(void)
+{
+    uint16_t closing = 0x1;
+    db_llnode_t *node = NULL;
+    for(node = _app_db_pools_map; node; node = node->next) {
+        db_pool_t *pool = (db_pool_t *)&node->data;
+        uint16_t value = atomic_load_explicit(&pool->flags, memory_order_acquire);
+        value = value | closing;
+        atomic_store_explicit(&pool->flags, value, memory_order_release);
+    }
+} // end of app_db_pool_map_signal_closing
+
+
+void  app_db_poolmap_close_all_conns(uv_loop_t *loop) {
+    db_llnode_t *pnode = NULL;
+    db_llnode_t *cnode = NULL;
+    for(pnode = _app_db_pools_map; pnode; pnode = pnode->next) {
+        db_pool_t *pool = (db_pool_t *)&pnode->data;
+        for(cnode = pool->conns.head; cnode; cnode = cnode->next) {
+            db_conn_t  *conn = (db_conn_t *) &cnode->data[0];
+            conn->ops.try_close(conn, loop);
+        }
+    }
+} // end of app_db_poolmap_close_all_conns
+
+uint8_t  app_db_poolmap_check_all_conns_closed(void) {
+    uint8_t done = 1;
+    db_llnode_t *pnode = NULL;
+    db_llnode_t *cnode = NULL;
+    for(pnode = _app_db_pools_map; pnode && done; pnode = pnode->next) {
+        db_pool_t *pool = (db_pool_t *)&pnode->data;
+        for(cnode = pool->conns.head; cnode && done; cnode = cnode->next) {
+            db_conn_t  *conn = (db_conn_t *) &cnode->data[0];
+            done = done & conn->ops.is_closed(conn);
+        }
+    }
+    return done;
+} // end of app_db_poolmap_check_all_conns_closed
 
 
 DBA_RES_CODE app_db_pool_deinit(const char *alias)
@@ -207,10 +321,10 @@ DBA_RES_CODE app_db_pool_map_deinit(void)
 {
     DBA_RES_CODE result = DBA_RESULT_OK;
     if(_app_db_pools_map) {
-        while(_app_db_pools_map) {
+        while(_app_db_pools_map && result == DBA_RESULT_OK) {
             db_llnode_t *node = _app_db_pools_map;
             db_pool_t *p = (db_pool_t *)&node->data;
-            _app_db_pool_deinit(p);
+            result = _app_db_pool_deinit(p);
         }
         _app_db_pools_map = NULL;
     } else {

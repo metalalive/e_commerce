@@ -102,12 +102,11 @@ done:
 
 int app_deinit_auth_jwt_claims(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
 {
-    ENTRY  e = {.key = "auth", .data = NULL};
-    json_t *jwt_claims = (json_t *)fetch_from_hashmap(node->data, e);
+    json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
     if(jwt_claims) {
         json_decref(jwt_claims);
+        ENTRY  e = {.key = "auth", .data = NULL};
         ENTRY *e_ret = NULL;
-        e.data = NULL;
         hsearch_r(e, ENTER, &e_ret, node->data);
     }
     app_run_next_middleware(self, req, node);
@@ -142,6 +141,9 @@ int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t
     if(!decoded) { // authentication failure
         goto error;
     }
+    if(json_integer_value(json_object_get(decoded, "profile")) < 0) {
+        goto error;
+    } // TODO: logging, this might be security vulnerability
     ENTRY  e = {.key = "auth", .data = (void*)decoded };
     ENTRY *e_ret = NULL;
     // add new item to the given hash map
@@ -169,13 +171,10 @@ done:
 int app_basic_permission_check(struct hsearch_data *hmap)
 {
     int result = 1; // default to return error
-    ENTRY keyword = {.key=NULL, .data=NULL};
-    keyword.key = "expect_perm";
     // type casting the array of permission codes : (const char *(*) [ARRAY_SIZE]) to (const char **)
     // the number of elements in expect_perms is unknown, the latest item has to be NULL
-    const char **expect_perms = (const char **) fetch_from_hashmap(hmap, keyword);
-    keyword.key = "auth";
-    json_t *jwt_claims = (json_t *)fetch_from_hashmap(hmap, keyword);
+    const char **expect_perms = (const char **) app_fetch_from_hashmap(hmap, "expect_perm");
+    json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(hmap, "auth");
     if(!expect_perms || !jwt_claims) {
         goto done;
     }

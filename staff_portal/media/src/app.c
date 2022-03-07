@@ -153,6 +153,7 @@ static void on_sigterm(int sig_num) {
         exit(0);
     } // shutdown immediately if initialization hasn't been done yet
     notify_all_workers(&_app_cfg);
+    app_db_pool_map_signal_closing();
 }
 
 #ifdef LIBC_HAS_BACKTRACE
@@ -335,6 +336,18 @@ static void run_loop(void *data) {
 } // end of run_loop
 
 
+static void _app_loop_remain_handles_traverse(uv_handle_t *handle, void *arg) {
+    // FIXME, this is workaround to ensure all handles are closed, there is a strange
+    // issue when starting polling file descriptor using `uv_poll_start()` in libh2o client
+    // request, the h2o connection will leave timer handle `uv_timer_t` in the event loop
+    // and never clean up the timer even after the entire request completed.
+    if(!uv_is_closing(handle)) {
+        uv_close(handle, (uv_close_cb)NULL);
+        uv_run(handle->loop, UV_RUN_NOWAIT);
+    }
+} // end of _app_loop_remain_handles_traverse
+
+
 static int start_workers(app_cfg_t *app_cfg) {
     size_t num_threads = app_cfg->workers.size + 1; // plus main thread
     struct worker_init_data_t  worker_data[num_threads];
@@ -375,10 +388,16 @@ static int start_workers(app_cfg_t *app_cfg) {
             h2o_fatal("error on uv_thread_join : %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
         }
     }
+    app_db_poolmap_close_all_conns(worker_data[0].loop);
+    while(!app_db_poolmap_check_all_conns_closed()) {
+        int ms = 500;
+        uv_sleep(ms);
+    }
 done:
     for(idx = 0; idx < num_threads; idx++) {
         struct worker_init_data_t  *data_ptr = &worker_data[idx];
         if(data_ptr->loop) {
+            uv_walk(data_ptr->loop, _app_loop_remain_handles_traverse, NULL);
             ret = uv_loop_close(data_ptr->loop);
             if(ret != 0) {
                 h2o_error_printf("[system] failed to close loop at worker thread (index=%d), reason:%s \n",

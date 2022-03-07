@@ -93,9 +93,9 @@
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE uncommitted_upload_request (
-                `upld_id`   BINARY(20) NOT NULL, 
-                PRIMARY KEY (`upld_id`),
-                `usr_id`    INT UNSIGNED NOT NULL,
+                `usr_id`   INT UNSIGNED NOT NULL,
+                `req_id`   BINARY(4) NOT NULL, 
+                PRIMARY KEY (`usr_id`, `req_id`),
                 `time_created`  DATETIME NOT NULL
             )
         </sql>
@@ -106,10 +106,11 @@
     <changeSet id="add_table__uncommitted_upload_chunk" author="Haam">
         <sql dbms="mariadb">
             CREATE TABLE  uncommitted_upload_chunk (
-                `upld_id`   BINARY(20) NOT NULL, 
-                `part`      SMALLINT UNSIGNED NOT NULL,
-                PRIMARY KEY (`upld_id`, `part`),
-                CONSTRAINT `c_fk_uncmt_upload_req_id` FOREIGN KEY (`upld_id`) REFERENCES `uncommitted_upload_request`(`upld_id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                `usr_id`   INT UNSIGNED NOT NULL,
+                `req_id`   BINARY(4) NOT NULL, 
+                `part`     SMALLINT UNSIGNED NOT NULL,
+                PRIMARY KEY (`usr_id`, `req_id`, `part`),
+                CONSTRAINT `c_fk_uncmt_upload_req_id` FOREIGN KEY (`usr_id`, `req_id`) REFERENCES `uncommitted_upload_request`(`usr_id`, `req_id`) ON UPDATE CASCADE ON DELETE CASCADE,
                 `checksum`  BINARY(20) NOT NULL,
                 `size_bytes` INT UNSIGNED NOT NULL
             )

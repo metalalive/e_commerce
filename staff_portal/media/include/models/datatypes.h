@@ -4,6 +4,7 @@
 extern "C" {
 #endif
 
+#include <stdatomic.h>
 #include <pthread.h>
 #include "utils.h"
 #include "timer_poll.h"
@@ -14,43 +15,31 @@ typedef enum {
     DBA_RESULT_MEMORY_ERROR,
     DBA_RESULT_OS_ERROR,
     DBA_RESULT_CONFIG_ERROR,
+    DBA_RESULT_NETWORK_ERROR,
     DBA_RESULT_ERROR_ARG,
+    DBA_RESULT_POOL_BUSY,
+    DBA_RESULT_CONNECTION_BUSY,
+    DBA_RESULT_QUERY_STILL_PROCESSING,
+    DBA_RESULT_RSET_STILL_LOADING,
+    DBA_RESULT_ROW_STILL_FETCHING,
+    DBA_RESULT_REST_RELEASING,
+    DBA_RESULT_END_OF_RSETS_REACHED,
+    DBA_RESULT_END_OF_ROWS_REACHED,
     DBA_RESULT_SKIPPED,
 } DBA_RES_CODE;
 
-typedef enum {
-    DB_ASYNC_INITED     = 0,
-    DB_ASYNC_CONN_START = 1,
-    DB_ASYNC_CONN_WAITING,
-    DB_ASYNC_CONN_DONE,
-
-    DB_ASYNC_QUERY_START,
-    DB_ASYNC_QUERY_WAITING,
-    DB_ASYNC_QUERY_DONE,
-
-    DB_ASYNC_FETCH_ROW_START,
-    DB_ASYNC_FETCH_ROW_WAITING,
-    DB_ASYNC_FETCH_ROW_DONE,
-
-    DB_ASYNC_FREE_RESULTSET_START,
-    DB_ASYNC_FREE_RESULTSET_WAITING,
-    DB_ASYNC_FREE_RESULTSET_DONE,
-
-    DB_ASYNC_CLOSE_START,
-    DB_ASYNC_CLOSE_WAITING,
-    DB_ASYNC_CLOSE_DONE
-} dbconn_async_state;
-
+typedef int  dbconn_async_state;
 
 struct db_conn_s;
 struct db_pool_s;
-
-// the target can be pool or connection object, determined in applications
-typedef void (*dba_close_cb)(void *target);
-typedef void (*dba_error_cb)(void *target, void *detail);
-typedef void (*dba_done_cb)(void *target, void *detail);
-
+struct db_query_s;
 typedef app_llnode_t db_llnode_t;
+
+typedef struct {
+    DBA_RES_CODE app_result;
+    int  uv_result;
+    int  uv_event;
+} db_conn_err_detail_t;
 
 typedef struct {
     char     *db_name;
@@ -60,58 +49,140 @@ typedef struct {
     uint16_t  db_port;
 } db_conn_cfg_t;
 
-typedef struct { // the type is for connection handler functions
+typedef struct { // connection operations for specific database API, registered in pool object
     DBA_RES_CODE (*init_fn)(struct db_conn_s *, struct db_pool_s *);
     DBA_RES_CODE (*deinit_fn)(struct db_conn_s *);
-    DBA_RES_CODE (*close_fn)(struct db_conn_s *, dba_done_cb);
-    DBA_RES_CODE (*connect_fn)(struct db_conn_s *, dba_done_cb);
+    void  (*error_cb)(struct db_conn_s *, db_conn_err_detail_t *detail);
+    uint8_t   (*can_change_state)(struct db_conn_s *);
+    timerpoll_poll_cb  state_transition;
+    int       (*get_sock_fd)(struct db_conn_s *); // low-level socket file descriptor
+    uint64_t  (*get_timeout_ms)(struct db_conn_s *);
+    void      (*notify_query)(uv_async_t *handle);
+    uint8_t   (*is_conn_closed)(struct db_conn_s *);
 } db_conn_cbs_t;
 
 typedef struct {
     char     *alias; // label the given pool registered in the internal global pool map
     size_t    capacity; // max number of connections to preserved
-    uint32_t  idle_timeout; // in seconds
-    db_conn_cfg_t conn_detail;
-    db_conn_cbs_t conn_ops; 
-    dba_close_cb  close_cb;
-    dba_error_cb  error_cb;
+    uint32_t  idle_timeout; // timeout in seconds
+    size_t  bulk_query_limit_kb; // size limit of bulk queries in KBytes for each connection object
+    db_conn_cfg_t  conn_detail;
+    db_conn_cbs_t  ops; 
 } db_pool_cfg_t;
 
+typedef struct { // handle for specific database e.g. MariaDB, postgreSQL
+    void  *conn; // connection object at low-level specific database
+    void  *resultset;
+    void  *row;
+} db_lowlvl_t;
+
 typedef struct db_conn_s {
-    // handle for specific database e.g. MariaDB
-    void  *lowlvl_handle;
-    app_timer_poll_t  timer_poll;
+    db_lowlvl_t lowlvl;
     struct db_pool_s *pool; // must NOT be NULL
-    // list of pending queries which can cast to `db_query_t`
-    db_llnode_t  *query_entry_consumer;
-    db_llnode_t  *query_entry_producer;
+    uv_loop_t  *loop; // loop controlled by current worker thread
+    struct { // list of pending / processing queries which can cast to `db_query_t`
+        db_llnode_t  *head;
+        db_llnode_t  *tail;
+    } pending_queries;
+    db_llnode_t  *processing_queries; // processing queries in bulk
+    pthread_mutex_t lock;
     dbconn_async_state  state;
-    char *charset;
-    char *collation;
+    app_timer_poll_t  timer_poll;
     struct {
-        uint8_t  active:1;
-        uint8_t  used:1;
+        DBA_RES_CODE (*add_new_query)(struct db_conn_s *, struct db_query_s *);
+        DBA_RES_CODE (*update_ready_queries)(struct db_conn_s *); // move pending query to ready-to list
+        DBA_RES_CODE (*try_process_queries)(struct db_conn_s *, uv_loop_t *);
+        DBA_RES_CODE (*try_close)(struct db_conn_s *, uv_loop_t *);
+        uint8_t  (*is_closed)(struct db_conn_s *);
+    } ops;
+    struct {
+        // the connection is temporarily unavailable when (re)establishing connection to database
+        // server is still ongoing, or when closing a connection is ongoing.
+        atomic_flag           state_changing;
+        atomic_uint_least8_t  has_ready_query_to_process;
     } flags;
+    // internal use
+    struct {
+        size_t  wr_sz;
+        char    data[1];
+    } bulk_query_rawbytes;
 } db_conn_t;
 
 typedef struct db_pool_s {
-    db_llnode_t  *conns; // head of list that can cast to `db_conn_t`
+    struct { // head of list that can cast to `db_conn_t`
+        db_llnode_t  *head;
+        db_llnode_t  *tail;
+    } conns; // free connections
+    db_llnode_t  *locked_conns; // temporarily used by applciation callers
+    struct db_conn_s *(*acquire_free_conn_fn)(struct db_pool_s *);
+    DBA_RES_CODE      (*release_used_conn_fn)(struct db_conn_s *);
+    uint8_t           (*is_closing_fn)(struct db_pool_s *);
     pthread_mutex_t lock;
     db_pool_cfg_t   cfg;
+    // flags: bit layout
+    // bit 0 : whether the application is closing this pool
+    atomic_ushort   flags;
 } db_pool_t;
 
+
 typedef struct {
-    db_llnode_t  *statements; // could run at once (if multi-statement flag is set)
-    db_conn_t    *conn; // specify the connection to handle this query
+    struct {
+        size_t affected;
+    } num_rows;
+    // TODO, add definition of each column, which is useful information applications can access
+} db_query_rs_info_t;
+
+typedef struct {
+    size_t num_cols;
+    char **values;
+    // all data in each column is converted to NULL-terminated string
+    char   data[1];
+} db_query_row_info_t;
+
+typedef struct {
+    DBA_RES_CODE app_result;
+    struct {
+        dbconn_async_state state;
+        const char *alias;
+        uint8_t  async:1;
+    } conn;
+    uint8_t  _final:1;
+    void  (*free_data_cb)(void *);
+    char  data[1];
+} db_query_result_t;
+
+typedef struct {
+    db_pool_t  *pool;
+    uv_loop_t  *loop;
+    struct {
+        void  (*result_rdy )(struct db_query_s *target, db_query_result_t *detail);
+        void  (*row_fetched)(struct db_query_s *target, db_query_result_t *detail);
+        void  (*result_free)(struct db_query_s *target, db_query_result_t *detail);
+        void  (*error)(struct db_query_s *target, db_query_result_t *detail);
+    } callbacks;
+    struct {
+        char   *entry;
+        size_t  num_rs; // number of expected result sets to return
+    } statements;
+    struct {
+        void   **entry; // array of user data passed to each callback below
+        size_t   len;
+    } usr_data;
+} db_query_cfg_t;
+
+typedef struct db_query_s {
     // since queries come from different requests handling in different worker threads
     // or event loops, it makes sense to specify loop at query level
-    uv_loop_t    *loop;
-    dba_done_cb   result_rdy_cb;
-    dba_done_cb   row_fetched_cb;
-    dba_done_cb   result_free_cb;
-    dba_error_cb  err_cb;
-    void  *result_set;
-    void  *usr_data;
+    db_query_cfg_t  cfg;
+    uv_async_t  notification;
+    struct { // maintain a list of struct `db_query_result_t`
+        db_llnode_t  *head;
+        db_llnode_t  *tail;
+        pthread_mutex_t lock;
+        size_t num_rs_remain;
+    } db_result;
+    // --- for internal use ---
+    size_t _stmts_tot_sz; // total size of all the statements in bytes in this query
 } db_query_t;
 
 #ifdef __cplusplus

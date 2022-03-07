@@ -70,8 +70,9 @@
         {
             "alias": "db_server_1",
             "db_name": "ecommerce_media",
-            "max_connections": 3,
-            "idle_timeout": 1800,
+            "max_connections": 4,
+            "idle_timeout": 15,
+            "bulk_query_limit_kb": 2,
             "credential": {
                 "hierarchy": ["backend_apps","databases","media_service"],
                 "filepath":"common/data/secrets.json"

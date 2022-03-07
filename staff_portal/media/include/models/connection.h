@@ -13,11 +13,11 @@ DBA_RES_CODE app_db_conn_init(db_conn_t *conn, db_pool_t *pool);
 // space allocated to each member of db_conn_t
 DBA_RES_CODE app_db_conn_deinit(db_conn_t *conn);
 
-// `close connection` at here means reset the database network connection and
-// return the connection object back to the pool.
-DBA_RES_CODE app_db_conn_close(db_conn_t *conn, dba_done_cb done_cb);
+db_query_t *app_db_conn_get_first_query(db_conn_t *conn);
 
-DBA_RES_CODE app_db_conn_connect(db_conn_t *conn, dba_done_cb done_cb);
+DBA_RES_CODE  app_db_conn_try_evict_current_processing_query(db_conn_t *conn);
+
+DBA_RES_CODE app_db_async_add_poll_event(db_conn_t *conn, uint32_t event_flags);
 
 #ifdef __cplusplus
 } // end of extern C clause

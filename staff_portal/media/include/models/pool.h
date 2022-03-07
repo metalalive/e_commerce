@@ -16,19 +16,21 @@ DBA_RES_CODE app_db_pool_map_deinit(void);
 // Note these 2 functions below are  NOT thread-safe
 DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts);
 
+// entry function to try closing all connections within all pools
+void app_db_pool_map_signal_closing(void);
+
+// test whether all connections of all pools within the global pool map are closed
+void     app_db_poolmap_close_all_conns(uv_loop_t *);
+uint8_t  app_db_poolmap_check_all_conns_closed(void);
+
 // de-initialize a given pool, and unregister from the global pool map
 DBA_RES_CODE app_db_pool_deinit(const char *alias);
 
 db_pool_t *app_db_pool_get_pool(const char *alias);
 
-// callers get available connection from a given pool, then use the returned connection
-//  for subsequent commands (e.g. query) , return NULL means all connections in the pool
-//  are in use
-db_conn_t *app_db_pool_get_conn(db_pool_t *pool);
-
 // In case a runtime application needs to increase / decrease number of connections
 // in a given pool, this function adjust number of the connections to the given pool.
-DBA_RES_CODE app_db_pool_set_capacity(db_pool_t *pool, size_t  new_capacity, dba_done_cb done_cb);
+DBA_RES_CODE app_db_pool_set_capacity(db_pool_t *pool, size_t  new_capacity, void (*done_cb)(db_pool_t *));
 
 // callers MUST NOT free the space returned by this function
 const db_pool_cfg_t *app_db_pool_get_config(db_pool_t *pool);

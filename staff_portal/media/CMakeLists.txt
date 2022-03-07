@@ -168,13 +168,16 @@ SET(APP_COMMON_SOURCE_FILES
     src/models/pool.c
     src/models/connection.c
     src/models/mariadb.c
+    src/models/query.c
     src/middleware.c
     src/network.c
     #src/multipart_parser.c
     src/cfg_parser.c
     src/app.c
     src/utils.c
-    src/views.c
+    src/views/init.c
+    src/views/initiate_multipart_upload.c
+    src/timer_poll.c
     src/routes.c )
 
 SET(APP_SOURCE_FILES
