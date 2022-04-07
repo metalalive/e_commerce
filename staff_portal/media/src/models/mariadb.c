@@ -58,19 +58,22 @@ static DBA_RES_CODE _app_mariadb_async_cont_status_sanity(int uv_status) {
 
 static void _app_mariadb_error_notify_queries(db_conn_t *conn, db_llnode_t *q_head, DBA_RES_CODE app_result)
 {
-    db_llnode_t *node = NULL;
-    for(node = q_head; node; node = node->next) {
+    db_llnode_t *q_node = NULL;
+    for(q_node = q_head; q_node; q_node = q_node->next) {
         // TODO, allocate common shared memory for async handles in these query objects
-        db_llnode_t *node = malloc(sizeof(db_llnode_t) + sizeof(db_query_result_t));
-        db_query_result_t  *q_ret = (db_query_result_t *)&node->data[0];
+        db_llnode_t *rs_node = malloc(sizeof(db_llnode_t) + sizeof(db_query_result_t));
+        db_query_result_t  *q_ret = (db_query_result_t *)&rs_node->data[0];
+        db_query_t *q = (db_query_t *)&q_node->data[0];
+        q->db_result.num_rs_remain = 0;
         q_ret->app_result = app_result;
         q_ret->free_data_cb = free;
         q_ret->conn.alias = conn->pool->cfg.alias;
         q_ret->conn.state = conn->state;
-        q_ret->conn.async = 1; // TODO
-        app_db_query_notify_with_result((db_query_t *)node->data, q_ret);
+        q_ret->conn.async = (conn->loop != q->cfg.loop);
+        q_ret->_final = 1;
+        app_db_query_notify_with_result(q, q_ret);
     }
-}
+} // end of _app_mariadb_error_notify_queries
 
 // error occured at here should be OS-level or network problem, and should NOT be
 // specific to certain statement(s) in one of the processing queries.
@@ -165,7 +168,7 @@ DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
 } // end of app_db_mariadb_conn_deinit
 
 
-static DBA_RES_CODE _app_mariadb_convert_error_code(MYSQL *handle) {
+static  DBA_RES_CODE _app_mariadb_convert_error_code(MYSQL *handle) {
     DBA_RES_CODE result = DBA_RESULT_OK;
     unsigned int error_code = mysql_errno(handle);
     if(!error_code) {
@@ -178,9 +181,11 @@ static DBA_RES_CODE _app_mariadb_convert_error_code(MYSQL *handle) {
             || error_code == ER_NORMAL_SHUTDOWN || error_code == ER_ABORTING_CONNECTION
             || error_code == ER_NET_READ_ERROR_FROM_PIPE || error_code == ER_NET_FCNTL_ERROR
             || error_code == ER_NET_READ_ERROR || error_code == ER_NET_READ_INTERRUPTED
-            || error_code == ER_NET_ERROR_ON_WRITE || error_code == ER_NET_WRITE_INTERRUPTED
-            || error_code == ER_TOO_MANY_USER_CONNECTIONS) {
+            || error_code == ER_NET_ERROR_ON_WRITE || error_code == ER_NET_WRITE_INTERRUPTED) {
         result = DBA_RESULT_NETWORK_ERROR;
+    } else if(error_code == ER_USER_LIMIT_REACHED || error_code == ER_TOO_MANY_USER_CONNECTIONS) {
+        // use mysql_error() to check detail description
+        result = DBA_RESULT_REMOTE_RESOURCE_ERROR;
     } else if(error_code == ER_DISK_FULL || error_code == ER_OUTOFMEMORY
             || error_code == ER_OUT_OF_RESOURCES || error_code == ER_NET_PACKET_TOO_LARGE
             || error_code == ER_TOO_MANY_TABLES || error_code == ER_TOO_MANY_FIELDS
@@ -236,7 +241,7 @@ static DBA_RES_CODE app_db_mariadb_conn_connect_cont(db_conn_t *conn, int *evt_f
 } // end of app_db_mariadb_conn_connect_cont
 
 
-static DBA_RES_CODE app_db_mariadb_conn_send_query_start(db_conn_t *conn, int *evt_flgs)
+static  DBA_RES_CODE app_db_mariadb_conn_send_query_start(db_conn_t *conn, int *evt_flgs)
 {
     DBA_RES_CODE result = DBA_RESULT_OK;
     int my_err = 0;
@@ -251,7 +256,7 @@ static DBA_RES_CODE app_db_mariadb_conn_send_query_start(db_conn_t *conn, int *e
 } // end of app_db_mariadb_conn_send_query_start
 
 
-static DBA_RES_CODE app_db_mariadb_conn_send_query_cont(db_conn_t *conn, int *evt_flgs, int uv_status)
+static  DBA_RES_CODE app_db_mariadb_conn_send_query_cont(db_conn_t *conn, int *evt_flgs, int uv_status)
 {
     DBA_RES_CODE result = _app_mariadb_async_cont_status_sanity(uv_status);
     if(result == DBA_RESULT_OK) {
@@ -424,7 +429,7 @@ static void _app_mariadb_row_ready_helper(db_conn_t *conn, DBA_RES_CODE app_resu
     db_query_result_t *rs = (db_query_result_t *) &rs_node->data[0];
     *rs = (db_query_result_t) {.free_data_cb = free, .app_result = app_result,
             .conn = {.state = conn->state, .alias = conn->pool->cfg.alias,
-                .async = (conn->timer_poll.poll.loop != curr_query->cfg.loop)}};
+            .async = (conn->loop != curr_query->cfg.loop)}, ._final = 0};
     {
         db_query_row_info_t *cloned_row = (db_query_row_info_t *) &rs->data[0];
         cloned_row->num_cols = num_cols;
@@ -461,46 +466,31 @@ uint64_t  app_db_mariadb_get_timeout_ms(db_conn_t *conn)
 }
 
 
-void app_mariadb_conn_notified_query_callback(uv_async_t *handle)
+uint8_t app_mariadb_conn_notified_query_callback(db_query_t *query, db_query_result_t *rs)
 {
     uint8_t final = 0;
-    db_query_t *query = H2O_STRUCT_FROM_MEMBER(db_query_t, notification, handle);
-    while (query->db_result.head) {
-        db_llnode_t *curr_node = query->db_result.head;
-        db_query_result_t *rs = (db_query_result_t *) &curr_node->data[0];
-        switch((enum _dbconn_async_state)rs->conn.state) {
-            case DB_ASYNC_CHECK_CURRENT_RESULTSET:
-                // if the last statement of a query doesn't return anything, check `rs->data` to ensure
-                // whether it is the end, `rs->data` must be pointer to information of current result set
-                query->cfg.callbacks.result_rdy(query, rs);
-                final = rs->_final;
-                break;
-            case DB_ASYNC_FETCH_ROW_READY:
-                query->cfg.callbacks.row_fetched(query, rs);
-                break;
-            case DB_ASYNC_FREE_RESULTSET_DONE:
-                query->cfg.callbacks.result_free(query, rs);
-                final = rs->_final;
-                break;
-            default: // TODO, logging error
-                if(rs->app_result != DBA_RESULT_OK) {
-                    query->cfg.callbacks.error(query, rs);
-                    final = 1; // immediately deallocate the query (node) as soon as error is reported
-                }
-                break;
-        } // end of switch statement
-        pthread_mutex_lock(&query->db_result.lock);
-        query->db_result.head = curr_node->next;
-        if(!query->db_result.head) {
-            query->db_result.tail = NULL;
-        }
-        app_llnode_unlink(curr_node);
-        pthread_mutex_unlock(&query->db_result.lock);
-        rs->free_data_cb(curr_node);
-    } // end of iteration on pending results
-    if(final) {
-        uv_close((uv_handle_t *)handle, app_db_query_deallocate_node);
-    }
+    switch((enum _dbconn_async_state)rs->conn.state) {
+        case DB_ASYNC_CHECK_CURRENT_RESULTSET:
+            // if the last statement of a query doesn't return anything, check `rs->data` to ensure
+            // whether it is the end, `rs->data` must be pointer to information of current result set
+            query->cfg.callbacks.result_rdy(query, rs);
+            final = rs->_final;
+            break;
+        case DB_ASYNC_FETCH_ROW_READY:
+            query->cfg.callbacks.row_fetched(query, rs);
+            break;
+        case DB_ASYNC_FREE_RESULTSET_DONE:
+            query->cfg.callbacks.result_free(query, rs);
+            final = rs->_final;
+            break;
+        default: // TODO, logging error
+            if(rs->app_result != DBA_RESULT_OK) {
+                query->cfg.callbacks.error(query, rs);
+                final = 1; // immediately deallocate the query (node) as soon as error is reported
+            }
+            break;
+    } // end of switch statement
+    return final;
 } // end of app_mariadb_conn_notified_query_callback
 
 
@@ -510,7 +500,7 @@ uint8_t  app_mariadb_acquire_state_change(db_conn_t *conn)
     uint8_t is_changing = 1;
     // app caller is allowed to perform the transition ONLY when the connection
     // object is in following states...
-    switch(conn->state) {
+    switch((enum _dbconn_async_state)conn->state) {
         case DB_ASYNC_INITED:
         case DB_ASYNC_CONN_START:
         case DB_ASYNC_QUERY_START:
@@ -542,13 +532,18 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 if(result == DBA_RESULT_OK && event_flags) { // init timer poll then start immediately
                     int fd = conn->pool->cfg.ops.get_sock_fd(conn);
                     if(called_by_app) {
-                        app_timer_poll_init(conn->loop, &conn->timer_poll, fd);
+                        conn->ops.timerpoll_init(conn->loop, target, fd);
                     } else { // called by event loop, should happen in reconnecting case
-                        app_timer_poll_change_fd(&conn->timer_poll, fd);
+                        conn->ops.timerpoll_change_fd(target, fd);
                     }
-                    app_db_async_add_poll_event(conn, event_flags);
-                    conn->state = DB_ASYNC_CONN_WAITING;
-                    continue_checking = 0;
+                    result = app_db_async_add_poll_event(conn, event_flags);
+                    if(result == DBA_RESULT_OK) {
+                        conn->state = DB_ASYNC_CONN_WAITING;
+                        continue_checking = 0;
+                    } else {
+                        conn->state = DB_ASYNC_CONN_DONE;
+                        continue_checking = 1;
+                    }
                 } else { // error detected, unable to start async operation
                     conn->state = DB_ASYNC_CONN_DONE;
                     continue_checking = 1; // forward the result to next state
@@ -573,7 +568,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     conn->state = DB_ASYNC_CONN_DONE;
                 }
             case DB_ASYNC_CONN_DONE:
-                app_timer_poll_stop(target);
+                conn->ops.timerpoll_stop(target);
                 if(result == DBA_RESULT_OK) {
                     conn->state = DB_ASYNC_QUERY_START;
                 } else {
@@ -594,14 +589,19 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 if(result == DBA_RESULT_OK) {
                     if(called_by_app) {
                         int fd = conn->pool->cfg.ops.get_sock_fd(conn);
-                        app_timer_poll_init(conn->loop, &conn->timer_poll, fd);
+                        conn->ops.timerpoll_init(conn->loop, &conn->timer_poll, fd);
                     }
                     event_flags = 0; // always reset event flags
                     result = app_db_mariadb_conn_send_query_start(conn, &event_flags);
                     if(result == DBA_RESULT_OK && event_flags) {
-                        app_db_async_add_poll_event(conn, event_flags);
-                        conn->state = DB_ASYNC_QUERY_WAITING;
-                        continue_checking = 0;
+                        result = app_db_async_add_poll_event(conn, event_flags);
+                        if(result == DBA_RESULT_OK) {
+                            conn->state = DB_ASYNC_QUERY_WAITING;
+                            continue_checking = 0;
+                        } else { // TODO, abort queries which were already sent
+                            conn->state = DB_ASYNC_QUERY_READY;
+                            continue_checking = 1;
+                        }
                     } else {
                         conn->state = DB_ASYNC_QUERY_READY;
                         continue_checking = 1; // immediately forward the error result to ready state
@@ -625,20 +625,20 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 } else if(conn->pool->is_closing_fn(conn->pool)) {
                     if(called_by_app) {
                         int fd = conn->pool->cfg.ops.get_sock_fd(conn);
-                        app_timer_poll_init(conn->loop, &conn->timer_poll, fd);
+                        conn->ops.timerpoll_init(conn->loop, &conn->timer_poll, fd);
                     }
                     conn->state = DB_ASYNC_CLOSE_START;
                     continue_checking = 1;
                 } else {
-                    app_timer_poll_deinit(&conn->timer_poll);
+                    conn->ops.timerpoll_deinit(&conn->timer_poll);
                     continue_checking = 0;
                     atomic_flag_clear_explicit(&conn->flags.state_changing, memory_order_release);
                 }
                 break;
             case DB_ASYNC_QUERY_WAITING:
-                if(uv_status == UV_ETIMEDOUT) {
-                    assert(0);
-                }
+                // if(uv_status == UV_ETIMEDOUT) {
+                //     assert(0);
+                // }
                 result = app_db_mariadb_conn_send_query_cont(conn, &event_flags, uv_status);
                 if(result == DBA_RESULT_QUERY_STILL_PROCESSING) {
                     break;
@@ -646,7 +646,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     conn->state = DB_ASYNC_QUERY_READY;
                 }
             case DB_ASYNC_QUERY_READY:
-                app_timer_poll_stop(target);
+                conn->ops.timerpoll_stop(target);
                 if(result == DBA_RESULT_OK) {
                     conn->state = DB_ASYNC_CHECK_CURRENT_RESULTSET;
                 } else {
@@ -666,7 +666,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     db_llnode_t *rs_node = malloc(rs_node_sz);
                     db_query_result_t *rs = (db_query_result_t *) &rs_node->data[0];
                     *rs = (db_query_result_t) {.free_data_cb = free, .conn = {.state = conn->state,
-                        .alias = conn->pool->cfg.alias, .async = (target->poll.loop != curr_query->cfg.loop)}
+                        .alias = conn->pool->cfg.alias, .async = (conn->loop != curr_query->cfg.loop)}
                     };
                     if(conn->lowlvl.resultset) {
                         db_query_rs_info_t *cloned_rs_info = (db_query_rs_info_t *) &rs->data[0];
@@ -691,9 +691,14 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 event_flags = 0; // always reset event flags
                 result = app_db_mariadb_next_resultset_start(conn, &event_flags);
                 if(result == DBA_RESULT_OK && event_flags) {
-                    app_db_async_add_poll_event(conn, event_flags);
-                    conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_WAITING;
-                    continue_checking = 0;
+                    result = app_db_async_add_poll_event(conn, event_flags);
+                    if(result == DBA_RESULT_OK) {
+                        conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_WAITING;
+                        continue_checking = 0;
+                    } else {
+                        conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_DONE;
+                        continue_checking = 1;
+                    }
                 } else {
                     conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_DONE;
                     continue_checking = 1; // immediately forward the error result to ready state
@@ -707,7 +712,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_DONE;
                 }
             case DB_ASYNC_MOVE_TO_NEXT_RESULTSET_DONE:
-                app_timer_poll_stop(target);
+                conn->ops.timerpoll_stop(target);
                 if(result == DBA_RESULT_OK) {
                     conn->state = DB_ASYNC_CHECK_CURRENT_RESULTSET;
                 } else if(result == DBA_RESULT_END_OF_RSETS_REACHED){
@@ -725,9 +730,14 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 event_flags = 0;
                 result = app_db_mariadb_fetch_row_start(conn, &event_flags);
                 if(result == DBA_RESULT_OK && event_flags) {
-                    app_db_async_add_poll_event(conn, event_flags);
-                    conn->state = DB_ASYNC_FETCH_ROW_WAITING;
-                    continue_checking = 0;
+                    result = app_db_async_add_poll_event(conn, event_flags);
+                    if(result == DBA_RESULT_OK) {
+                        conn->state = DB_ASYNC_FETCH_ROW_WAITING;
+                        continue_checking = 0;
+                    } else {
+                        conn->state = DB_ASYNC_FETCH_ROW_READY;
+                        continue_checking = 1;
+                    }
                 } else {
                     conn->state = DB_ASYNC_FETCH_ROW_READY;
                     continue_checking = 1;
@@ -741,7 +751,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     conn->state = DB_ASYNC_FETCH_ROW_READY;
                 }
             case DB_ASYNC_FETCH_ROW_READY:
-                app_timer_poll_stop(target);
+                conn->ops.timerpoll_stop(target);
                 if(result == DBA_RESULT_END_OF_ROWS_REACHED) {
                     conn->state = DB_ASYNC_FREE_RESULTSET_START;
                 } else {
@@ -754,9 +764,14 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 event_flags = 0;
                 result = app_db_mariadb_free_resultset_start(conn, &event_flags);
                 if(result == DBA_RESULT_OK && event_flags) {
-                    app_db_async_add_poll_event(conn, event_flags);
-                    conn->state = DB_ASYNC_FREE_RESULTSET_WAITING;
-                    continue_checking = 0;
+                    result = app_db_async_add_poll_event(conn, event_flags);
+                    if(result == DBA_RESULT_OK) {
+                        conn->state = DB_ASYNC_FREE_RESULTSET_WAITING;
+                        continue_checking = 0;
+                    } else {
+                        conn->state = DB_ASYNC_FREE_RESULTSET_DONE;
+                        continue_checking = 1;
+                    }
                 } else {
                     conn->state = DB_ASYNC_FREE_RESULTSET_DONE;
                     continue_checking = 1;
@@ -770,7 +785,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     conn->state = DB_ASYNC_FREE_RESULTSET_DONE;
                 }
             case DB_ASYNC_FREE_RESULTSET_DONE:
-                app_timer_poll_stop(target);
+                conn->ops.timerpoll_stop(target);
                 {
                     db_query_t *curr_query = (db_query_t *) &conn->processing_queries->data;
                     app_db_conn_try_evict_current_processing_query(conn);
@@ -780,7 +795,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     db_query_result_t *rs = (db_query_result_t *) &rs_node->data[0];
                     *rs = (db_query_result_t) {.free_data_cb = free, .app_result = result,
                         .conn = {.state = conn->state, .alias = conn->pool->cfg.alias,
-                        .async = (target->poll.loop != curr_query->cfg.loop)},
+                        .async = (conn->loop != curr_query->cfg.loop)},
                         ._final = (curr_query->db_result.num_rs_remain == 0),
                     };  // end of statements in this query reached
                     app_db_query_notify_with_result(curr_query, rs);
@@ -792,9 +807,14 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
             case DB_ASYNC_CLOSE_START:
                 result = app_db_mariadb_conn_close_start(conn, &event_flags);
                 if(result == DBA_RESULT_OK && event_flags) {
-                    app_db_async_add_poll_event(conn, event_flags);
-                    conn->state = DB_ASYNC_CLOSE_WAITING;
-                    continue_checking = 0;
+                    result = app_db_async_add_poll_event(conn, event_flags);
+                    if(result == DBA_RESULT_OK) {
+                        conn->state = DB_ASYNC_CLOSE_WAITING;
+                        continue_checking = 0;
+                    } else {
+                        conn->state = DB_ASYNC_CLOSE_DONE;
+                        continue_checking = 1;
+                    }
                 } else {
                     conn->state = DB_ASYNC_CLOSE_DONE;
                     continue_checking = 1;
@@ -812,7 +832,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     conn->state = DB_ASYNC_CLOSE_DONE;
                 }
             case DB_ASYNC_CLOSE_DONE:
-                app_timer_poll_stop(target);
+                conn->ops.timerpoll_stop(target);
                 conn->lowlvl.conn = (void *)NULL;
                 continue_checking = app_db_conn_get_first_query(conn) != NULL;
                 if(conn->pool->is_closing_fn(conn->pool)) {
@@ -821,7 +841,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                         _app_mariadb_error_reset_all_processing_query(conn, result);
                         _app_mariadb_error_reset_all_pending_query(conn, result);
                     }
-                    app_timer_poll_deinit(&conn->timer_poll);
+                    conn->ops.timerpoll_deinit(&conn->timer_poll);
                     continue_checking = 0;
                 } else {
                     _app_mariadb_gen_new_handle((MYSQL **)&conn->lowlvl.conn, conn->pool->cfg.idle_timeout);

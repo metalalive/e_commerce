@@ -68,6 +68,7 @@ static DBA_RES_CODE app_db_conn__update_ready_queries(db_conn_t *conn) {
                         &conn->bulk_query_rawbytes.data[offset], query );
                 stmt_total_sz = stmt_total_sz_tmp;
             } else {
+                pq_tail = pq_tail->prev;
                 break;
             }
         }
@@ -131,7 +132,7 @@ db_query_t *app_db_conn_get_first_query(db_conn_t *conn) {
 
 DBA_RES_CODE app_db_async_add_poll_event(db_conn_t *conn, uint32_t event_flags) {
     uint64_t timeout_ms = conn->pool->cfg.ops.get_timeout_ms(conn);
-    int err = app_timer_poll_start(&conn->timer_poll, timeout_ms, event_flags,
+    int err = conn->ops.timerpoll_start(&conn->timer_poll, timeout_ms, event_flags,
                  conn->pool->cfg.ops.state_transition);
     return (err == 0) ? DBA_RESULT_OK: DBA_RESULT_OS_ERROR;
 } // end of app_db_async_add_poll_event
@@ -139,7 +140,7 @@ DBA_RES_CODE app_db_async_add_poll_event(db_conn_t *conn, uint32_t event_flags) 
 
 static DBA_RES_CODE  _app_db_async__try_processing_queries(db_conn_t *conn, uv_loop_t *loop)
 { // this callback must be invoked by application, not libuv loop
-    if(!conn || !conn->pool) {
+    if(!conn || !conn->pool || !loop) {
         return DBA_RESULT_ERROR_ARG;
     } // the timer-poll for each connection should be closed before calling this function
     uint8_t  _has_ready_query_to_process = (uint8_t) atomic_load_explicit(
@@ -227,6 +228,11 @@ DBA_RES_CODE app_db_conn_init(db_conn_t *conn, db_pool_t *pool)
     conn->ops.try_process_queries = _app_db_async__try_processing_queries;
     conn->ops.try_close = _app_db_conn__try_close;
     conn->ops.is_closed = _app_db_conn__check_is_closed;
+    conn->ops.timerpoll_init   = app_timer_poll_init;
+    conn->ops.timerpoll_deinit = app_timer_poll_deinit;
+    conn->ops.timerpoll_change_fd = app_timer_poll_change_fd;
+    conn->ops.timerpoll_start = app_timer_poll_start;
+    conn->ops.timerpoll_stop  = app_timer_poll_stop;
     conn->flags.state_changing = (atomic_flag) ATOMIC_FLAG_INIT;
     conn->flags.has_ready_query_to_process = ATOMIC_VAR_INIT(0);
 done:
@@ -250,6 +256,8 @@ DBA_RES_CODE app_db_conn_deinit(db_conn_t *conn)
     conn->ops.add_new_query = NULL;
     conn->ops.update_ready_queries = NULL;
     conn->ops.try_process_queries = NULL;
+    conn->ops.try_close = NULL;
+    conn->ops.is_closed = NULL;
     conn->pool = NULL;
 done:
     return result;

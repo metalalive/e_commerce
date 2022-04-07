@@ -16,6 +16,7 @@ typedef enum {
     DBA_RESULT_OS_ERROR,
     DBA_RESULT_CONFIG_ERROR,
     DBA_RESULT_NETWORK_ERROR,
+    DBA_RESULT_REMOTE_RESOURCE_ERROR,
     DBA_RESULT_ERROR_ARG,
     DBA_RESULT_POOL_BUSY,
     DBA_RESULT_CONNECTION_BUSY,
@@ -33,6 +34,7 @@ typedef int  dbconn_async_state;
 struct db_conn_s;
 struct db_pool_s;
 struct db_query_s;
+struct db_query_result_s;
 typedef app_llnode_t db_llnode_t;
 
 typedef struct {
@@ -57,7 +59,7 @@ typedef struct { // connection operations for specific database API, registered 
     timerpoll_poll_cb  state_transition;
     int       (*get_sock_fd)(struct db_conn_s *); // low-level socket file descriptor
     uint64_t  (*get_timeout_ms)(struct db_conn_s *);
-    void      (*notify_query)(uv_async_t *handle);
+    uint8_t   (*notify_query)(struct db_query_s *, struct db_query_result_s *);
     uint8_t   (*is_conn_closed)(struct db_conn_s *);
 } db_conn_cbs_t;
 
@@ -94,6 +96,11 @@ typedef struct db_conn_s {
         DBA_RES_CODE (*try_process_queries)(struct db_conn_s *, uv_loop_t *);
         DBA_RES_CODE (*try_close)(struct db_conn_s *, uv_loop_t *);
         uint8_t  (*is_closed)(struct db_conn_s *);
+        int (*timerpoll_init)(uv_loop_t *loop, app_timer_poll_t *handle, int fd);
+        int (*timerpoll_deinit)(app_timer_poll_t *handle);
+        int (*timerpoll_change_fd)(app_timer_poll_t *handle, int new_fd);
+        int (*timerpoll_start)(app_timer_poll_t *handle, uint64_t timeout_ms, uint32_t events, timerpoll_poll_cb poll_cb);
+        int (*timerpoll_stop)(app_timer_poll_t *handle);
     } ops;
     struct {
         // the connection is temporarily unavailable when (re)establishing connection to database
@@ -139,7 +146,7 @@ typedef struct {
     char   data[1];
 } db_query_row_info_t;
 
-typedef struct {
+typedef struct db_query_result_s {
     DBA_RES_CODE app_result;
     struct {
         dbconn_async_state state;

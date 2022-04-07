@@ -42,7 +42,7 @@ uint8_t  app_mariadb_acquire_state_change(db_conn_t *);
 
 void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv_status, int event_flags);
 
-void app_mariadb_conn_notified_query_callback(uv_async_t *handle);
+uint8_t  app_mariadb_conn_notified_query_callback(db_query_t *, db_query_result_t *);
 
 uint8_t  app_mariadb_conn_is_closed(db_conn_t *conn);
 

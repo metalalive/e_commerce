@@ -11,33 +11,37 @@ static void _app_timerpoll_timeout_cb(uv_timer_t *timeout)
 {
     app_timer_poll_t *handle = (app_timer_poll_t *) timeout->data;
     uv_poll_stop(&handle->poll);
-    handle->poll_cb(handle, UV_ETIMEDOUT, 0);
+    if(handle->poll_cb) {
+        handle->poll_cb(handle, UV_ETIMEDOUT, 0);
+    } // TODO, otherwise logging warning
 }
 
 static void _app_timerpoll_poll_cb(uv_poll_t  *poll, int status, int event)
 {
     app_timer_poll_t *handle = (app_timer_poll_t *) poll->data;
-    handle->poll_cb(handle, status, event);
+    if(handle->poll_cb) {
+        handle->poll_cb(handle, status, event);
+    } // TODO, otherwise logging warning
 }
 
 static void _app_timerpoll_close_poll_cb(uv_handle_t* poll)
 {
     app_timer_poll_t *handle = (app_timer_poll_t *) poll->data;
-    if(handle->close_cb) {
-        (handle->close_cb)(handle);
-    }
     poll->data = NULL;
     poll->loop = NULL;
+    if(handle->close_cb && app_timer_poll_is_closed(handle)) {
+        (handle->close_cb)(handle);
+    } // ensure either this function or the function below invokes user-defined callback
 }
  
 static void _app_timerpoll_close_timer_cb(uv_handle_t* timeout)
 {
     app_timer_poll_t *handle = (app_timer_poll_t *) timeout->data;
-    if(handle->close_cb) {
-        (handle->close_cb)(handle);
-    }
     timeout->data = NULL;
     timeout->loop = NULL;
+    if(handle->close_cb && app_timer_poll_is_closed(handle)) {
+        (handle->close_cb)(handle);
+    }
 }
 
 
@@ -100,7 +104,7 @@ uint8_t app_timer_poll_is_closed(app_timer_poll_t *handle) {
 
 
 int app_timer_poll_change_fd(app_timer_poll_t *handle, int new_fd) {
-    // change file descriptor without initializing uv_poll_t
+    // change file descriptor without initializing uv_poll_t , TODO: verify
     int err = 0;
     if(handle && new_fd) {
         err = UV_EINVAL;

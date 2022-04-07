@@ -30,6 +30,7 @@ int app_url_decode_query_param(char *data, json_t *map) {
     // and treat all value as string by default.
     char *tok = data;
     char *ptr_kvpair = NULL;
+    size_t num_items = 0;
     for(tok = strtok_r(tok, "&", &ptr_kvpair); tok; tok = strtok_r(NULL, "&", &ptr_kvpair))
     { // strtok_r is thread-safe
         char *ptr = NULL;
@@ -45,9 +46,10 @@ int app_url_decode_query_param(char *data, json_t *map) {
             obj_val = json_true();
         }
         json_object_set_new(map, name, obj_val);
+        num_items++;
         //fprintf(stdout, "[debug] raw data of query params: %s = %s \n", name, value);
     }
-    return 0;
+    return num_items;
 } // end of app_url_decode_query_param
 
 

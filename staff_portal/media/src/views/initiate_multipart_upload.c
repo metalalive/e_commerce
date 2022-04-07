@@ -225,27 +225,3 @@ done:
     return 0;
 } // end of initiate_multipart_upload
 
-/*
-    {
-        // TODO, figure out how to use generator to stream the response data
-        h2o_generator_t generator = {NULL, NULL};
-        json_t *res_body = json_object();
-        // upld id : sha1 digest, used to identify current upload request
-        json_object_set_new(res_body, "upld_id", json_string("9j3r8t483ugi32ut"));
-        req->res.status = 200;
-        req->res.reason = "OK";
-        {
-            size_t MAX_BYTES_RESP_BODY = 128;
-            char body_raw[MAX_BYTES_RESP_BODY];
-            size_t nwrite = json_dumpb((const json_t *)res_body, &body_raw[0],
-                    MAX_BYTES_RESP_BODY, JSON_COMPACT);
-            h2o_iovec_t body = h2o_strdup(&req->pool, &body_raw[0], nwrite);
-            size_t bufcnt = 1;
-            h2o_add_header(NULL, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));
-            h2o_start_response(req, &generator);
-            h2o_send(req, &body, bufcnt, H2O_SEND_STATE_FINAL);
-        }
-        json_decref(res_body);
-        app_run_next_middleware(self, req, node);
-    }
- * */

@@ -44,9 +44,9 @@ static app_middleware_node_t  mock_mdchain_last = {0};
 static app_middleware_node_t  mock_mdchain_head = {0};
 
 
-Describe(MOCK_APP_SERVER);
+Describe(MOCK_AUTH_PART);
 
-BeforeEach(MOCK_APP_SERVER) {
+BeforeEach(MOCK_AUTH_PART) {
     int idx = 0;
     for(idx = 0; idx < NUM_HEADERS; idx++) {
         mock_hdr_names[idx] = (h2o_iovec_t){.len=0, .base=NULL};
@@ -66,17 +66,17 @@ BeforeEach(MOCK_APP_SERVER) {
     h2o_mem_init_pool(&mock_req.pool);
     mock_mdchain_last = (app_middleware_node_t){.data=NULL, .next=NULL,  .fn=mock_final_req_handler};
     mock_mdchain_head = (app_middleware_node_t){.data=NULL, .next=&mock_mdchain_last, .fn=NULL};
-} // end of BeforeEach(MOCK_APP_SERVER)
+} // end of BeforeEach(MOCK_AUTH_PART)
 
-AfterEach(MOCK_APP_SERVER) {
+AfterEach(MOCK_AUTH_PART) {
     mock_srv_ctx.storage = (h2o_context_storage_t) {0};
     h2o_mem_clear_pool(&mock_req.pool);
     mock_req.pool = (h2o_mem_pool_t){0};
     memset(&mock_srv_ctx.emitted_error_status[0] , 0, sizeof(uint64_t) * H2O_STATUS_ERROR_MAX);
-} // end of AfterEach(MOCK_APP_SERVER)
+} // end of AfterEach(MOCK_AUTH_PART)
 
 
-Ensure(MOCK_APP_SERVER, auth_header_missing_tests) {
+Ensure(MOCK_AUTH_PART, auth_header_missing_tests) {
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=11, .base="content-md5"};
     *mock_req.headers.entries[1].name = (h2o_iovec_t){.len=4,  .base="food"};
     *mock_req.headers.entries[2].name = (h2o_iovec_t){.len=7, .base="culture"};
@@ -85,7 +85,7 @@ Ensure(MOCK_APP_SERVER, auth_header_missing_tests) {
     assert_that(mock_req.res.status, is_equal_to(401));
 }
 
-Ensure(MOCK_APP_SERVER, auth_header_incomplete_tests) {
+Ensure(MOCK_AUTH_PART, auth_header_incomplete_tests) {
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=11, .base="content-md5"};
     *mock_req.headers.entries[1].name = (h2o_iovec_t){.len=13, .base="authorization"};
     *mock_req.headers.entries[2].name = (h2o_iovec_t){.len=7, .base="culture"};
@@ -102,7 +102,7 @@ Ensure(MOCK_APP_SERVER, auth_header_incomplete_tests) {
     assert_that(mock_req.res.status, is_equal_to(401));
 }
 
-Ensure(MOCK_APP_SERVER, auth_jwt_init_failure_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_init_failure_tests) {
     // has to be mutable cuz strtok_r() always tries to modify the given string
     char mock_encoded_token[] = "Bearer abc123wrongJwt\x00";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=11, .base="content-md5"};
@@ -116,7 +116,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_init_failure_tests) {
     assert_that(mock_req.res.status, is_equal_to(401));
 }
 
-Ensure(MOCK_APP_SERVER, auth_jwt_encode_error_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_encode_error_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
@@ -130,7 +130,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_encode_error_tests) {
     assert_that(mock_req.res.status, is_equal_to(401));
 }
 
-Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_audience_1_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_audience_1_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
@@ -153,7 +153,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_audience_1_tests) {
     json_decref(mock_aud_claim);
 }
 
-Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_audience_2_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_audience_2_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
@@ -179,7 +179,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_audience_2_tests) {
     json_decref(mock_aud_claim);
 }
 
-Ensure(MOCK_APP_SERVER, auth_jwt_missing_keyid_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_missing_keyid_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
@@ -210,7 +210,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_missing_keyid_tests) {
 } // end of auth_jwt_missing_keyid_tests
 
 
-Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_pubkey_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_pubkey_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
@@ -243,7 +243,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_incorrect_pubkey_tests) {
 } // end of auth_jwt_incorrect_pubkey_tests
 
 
-Ensure(MOCK_APP_SERVER, auth_jwt_verify_signature_failure_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_verify_signature_failure_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
@@ -286,7 +286,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_verify_signature_failure_tests) {
 } // end of auth_jwt_verify_signature_failure_tests
 
 
-Ensure(MOCK_APP_SERVER, auth_jwt_expiry_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_expiry_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
@@ -328,7 +328,7 @@ Ensure(MOCK_APP_SERVER, auth_jwt_expiry_tests) {
 } // end of auth_jwt_expiry_tests
 
 
-Ensure(MOCK_APP_SERVER, auth_jwt_succeed_tests) {
+Ensure(MOCK_AUTH_PART, auth_jwt_succeed_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
@@ -552,17 +552,17 @@ Ensure(rotate_jwks_succeed_tests) {
 TestSuite *app_auth_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_header_missing_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_header_incomplete_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_init_failure_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_encode_error_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_incorrect_audience_1_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_incorrect_audience_2_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_missing_keyid_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_incorrect_pubkey_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_verify_signature_failure_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_expiry_tests);
-    add_test_with_context(suite, MOCK_APP_SERVER, auth_jwt_succeed_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_header_missing_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_header_incomplete_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_init_failure_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_encode_error_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_incorrect_audience_1_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_incorrect_audience_2_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_missing_keyid_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_incorrect_pubkey_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_verify_signature_failure_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_expiry_tests);
+    add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_succeed_tests);
     add_test(suite, perm_chk_failure_tests);
     add_test(suite, perm_chk_not_satisfy_all_tests);
     add_test(suite, rotate_jwks_not_expired_tests);

@@ -164,7 +164,7 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
     db_pool_t   *pool = NULL;
     size_t idx = 0;
     if(!opts || !opts->alias || opts->capacity == 0 || opts->idle_timeout == 0
-            || !opts->bulk_query_limit_kb) {
+            || opts->bulk_query_limit_kb == 0) {
         result = DBA_RESULT_ERROR_ARG;
         goto done;
     }
@@ -208,6 +208,7 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
         .ops = {
             .init_fn  = opts->ops.init_fn,
             .deinit_fn = opts->ops.deinit_fn,
+            .error_cb  = opts->ops.error_cb,
             .can_change_state = opts->ops.can_change_state,
             .state_transition = opts->ops.state_transition,
             .notify_query = opts->ops.notify_query,

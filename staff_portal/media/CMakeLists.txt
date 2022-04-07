@@ -191,8 +191,12 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/network.c
     test/unit/routes.c
     test/unit/auth.c
+    test/unit/utils.c
+    test/unit/timer_poll.c
     test/unit/middleware.c
     test/unit/models/pool.c
+    test/unit/models/connection.c
+    test/unit/models/query.c
     test/unit/models/mariadb.c
     test/unit/mock/rhonabwy.c
     test/unit/mock/mariadb.c
@@ -253,7 +257,7 @@ ADD_CUSTOM_TARGET(unit_test
     # uncomment the following line, make cgreen test suite run in single (main) process
     # without forking, then you can set breakpoints using debugger (currently only supports GDB)
     ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-    ## gdb -args # uncomment this line for debugging
+    ##gdb -args # uncomment this line for debugging
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${UNIT_TEST_EXE_NAME}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${UNIT_TEST_EXE_NAME})
@@ -265,4 +269,6 @@ ADD_CUSTOM_TARGET(integration_test
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS  ${INTEGRATION_TEST_EXE_NAME})
+
+# TODO, add valgrind test
 

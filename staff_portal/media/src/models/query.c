@@ -1,39 +1,85 @@
 #include <h2o/memory.h>
 #include "models/query.h"
 
-void app_db_query_deallocate_node(uv_handle_t *handle) {
+static void _app_db_query_deallocate_node(uv_handle_t *handle) {
     db_query_t *query = H2O_STRUCT_FROM_MEMBER(db_query_t, notification, handle);
     db_llnode_t *node = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, query);
     free(node);
-} // end of app_db_query_deallocate_node
+} // end of _app_db_query_deallocate_node
 
-void app_db_query_notify_with_result(db_query_t *q, db_query_result_t *rs)
+DBA_RES_CODE  app_db_query_enqueue_resultset(db_query_t *q, db_query_result_t *rs)
 {
-    if(q && rs) {
-        db_llnode_t *new_node = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, rs);
-        pthread_mutex_lock(&q->db_result.lock);
-        db_llnode_t *old_tail = q->db_result.tail;
-        new_node->prev = NULL;
-        new_node->next = NULL;
-        if(old_tail) {
-            app_llnode_link(NULL, old_tail, new_node);
-        } else {
-            q->db_result.head = new_node;
-        }
-        q->db_result.tail  = new_node;
-        pthread_mutex_unlock(&q->db_result.lock);
-        // if the thread which runs uv_async_send() is the same as the thread which
-        // runs the event loop registered in uv_async_t handle , the event loop will
-        // fail to close because a uv_timer_t is never unreferenced for unknown reason,
-        // that makes the event loop always return busy code. (TODO) figure out how
-        // to fix it
+    if(!q || !rs) {
+        return DBA_RESULT_ERROR_ARG;
+    }
+    db_llnode_t *new_node = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, rs);
+    pthread_mutex_lock(&q->db_result.lock);
+    db_llnode_t *old_tail = q->db_result.tail;
+    new_node->prev = NULL;
+    new_node->next = NULL;
+    if(old_tail) {
+        app_llnode_link(NULL, old_tail, new_node);
+    } else {
+        q->db_result.head = new_node;
+    }
+    q->db_result.tail  = new_node;
+    pthread_mutex_unlock(&q->db_result.lock);
+    return DBA_RESULT_OK;
+} // end of app_db_query_enqueue_resultset
+
+
+db_query_result_t * app_db_query_dequeue_resultset(db_query_t *query) {
+    if(!query || !query->db_result.head) {
+        return NULL;
+    }
+    db_llnode_t *curr_node = query->db_result.head;
+    pthread_mutex_lock(&query->db_result.lock);
+    query->db_result.head = curr_node->next;
+    if(!query->db_result.head) {
+        query->db_result.tail = NULL;
+    }
+    app_llnode_unlink(curr_node);
+    pthread_mutex_unlock(&query->db_result.lock);
+    return (db_query_result_t *) &curr_node->data[0];
+} // end of app_db_query_dequeue_resultset
+
+
+DBA_RES_CODE app_db_query_notify_with_result(db_query_t *q, db_query_result_t *rs)
+{
+    if(!q || !rs) {
+        return DBA_RESULT_ERROR_ARG;
+    }
+    DBA_RES_CODE result = app_db_query_enqueue_resultset(q, rs);
+    // if the thread which runs uv_async_send() is the same as the thread which
+    // runs the event loop registered in uv_async_t handle , the event loop will
+    // fail to close because a uv_timer_t is never unreferenced for unknown reason,
+    // that makes the event loop always return busy code. (TODO) figure out how
+    // to fix it
+    if(result == DBA_RESULT_OK) {
         if(rs->conn.async) {
             uv_async_send(&q->notification);
         } else {
             q->notification.async_cb(&q->notification);
         }
     }
+    return result;
 } // end of app_db_query_notify_with_result
+
+
+static void _app_db_query_notification_callback(uv_async_t *handle)
+{ // default callback for notifying the given query whenever result set is ready
+    uint8_t final = 0;
+    db_query_t *query = H2O_STRUCT_FROM_MEMBER(db_query_t, notification, handle);
+    while (query->db_result.head) {
+        db_query_result_t *rs = app_db_query_dequeue_resultset(query);
+        final = query->cfg.pool->cfg.ops.notify_query(query, rs);
+        db_llnode_t *rs_node = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, rs);
+        rs->free_data_cb(rs_node);
+    } // end of iteration on pending results
+    if(final) {
+        uv_close((uv_handle_t *)handle, _app_db_query_deallocate_node);
+    }
+} // end of _app_db_query_notification_callback
 
 
 static size_t _app_db_estimate_query_struct_size(db_query_cfg_t *cfg) {
@@ -75,7 +121,8 @@ static db_query_t *app_db_query_generate_node(db_query_cfg_t *qcfg) {
     }
     query->_stmts_tot_sz = stmts_tot_sz;
     memset(&query->notification, 0, sizeof(uv_async_t));
-    uv_async_init(qcfg->loop, &query->notification, qcfg->pool->cfg.ops.notify_query);
+    //// uv_async_init(qcfg->loop, &query->notification, qcfg->pool->cfg.ops.notify_query);
+    uv_async_init(qcfg->loop, &query->notification, _app_db_query_notification_callback);
     memcpy((void *)&query->cfg, qcfg, sizeof(db_query_cfg_t));
     char *ptr = ((char *)query) + sizeof(db_query_t);
     // extra allocated space is assigned to statements and user data of callbacks

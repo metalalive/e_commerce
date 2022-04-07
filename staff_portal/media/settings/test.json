@@ -62,7 +62,7 @@
         {
             "alias": "db_server_1",
             "db_name": "test_ecommerce_media",
-            "max_connections": 3,
+            "max_connections": 5,
             "idle_timeout": 20,
             "bulk_query_limit_kb": 2,
             "credential": {
