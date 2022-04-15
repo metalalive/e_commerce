@@ -117,7 +117,7 @@ static void initiate_multipart_upload__finalize_response(h2o_handler_t *hdlr , h
 } // end of initiate_multipart_upload__finalize_response
 
 
-static void initiate_multipart_upload__result_set_ready(db_query_t *target, db_query_result_t *detail)
+static  void initiate_multipart_upload__result_set_ready(db_query_t *target, db_query_result_t *detail)
 {
     if(!detail->_final) {
         return;
@@ -125,27 +125,7 @@ static void initiate_multipart_upload__result_set_ready(db_query_t *target, db_q
     h2o_req_t     *req  = (h2o_req_t *)     target->cfg.usr_data.entry[0];
     h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[1];
     app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    int db_result =  (int) app_fetch_from_hashmap(node->data, "db_result");
-#pragma GCC diagnostic pop
-    DBA_RES_CODE result = DBA_RESULT_OK;
-    int db_work_proceeding = 1;
-    switch(db_result) {
-        case SQL_RESULT_CODE__DB_ERROR:
-            result = initiate_multipart_upload__try_add_new_request(self, req, node);
-            if(result != DBA_RESULT_OK) {
-                db_work_proceeding = 0;
-            } // TODO, set up number of allowable retries
-            break;
-        case SQL_RESULT_CODE__OK:
-        case SQL_RESULT_CODE__LIMIT_EXCEEDED:
-        default:
-            db_work_proceeding = 0;
-            break;
-    } // end of switch statement
-    if(!db_work_proceeding) {
-        initiate_multipart_upload__finalize_response(self, req, node);
-    }
+    initiate_multipart_upload__finalize_response(self, req, node);
 } // end of initiate_multipart_upload__result_set_ready
 
 

@@ -2,7 +2,7 @@
 
 void * app_fetch_from_hashmap(struct hsearch_data *hmap, const char *keyword) {
     ENTRY *found = NULL;
-    ENTRY e = {.key = keyword, .data = NULL };
+    ENTRY e = {.key = (char *)keyword, .data = NULL };
     int success = hsearch_r(e, FIND, &found, hmap);
     if(success && found) {
         return found->data;
@@ -18,10 +18,21 @@ int app_save_int_to_hashmap(struct hsearch_data *hmap, const char *keyword, int 
         return success;
     }
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-    ENTRY  e = {.key = keyword, .data = (void *)value };
+    ENTRY  e0 = {.key = (char *)keyword, .data = NULL };
+    ENTRY  e1 = {.key = (char *)keyword, .data = (void *)value };
 #pragma GCC diagnostic pop
-    ENTRY *e_ret = NULL;
-    success = hsearch_r(e, ENTER, &e_ret, hmap);
+    ENTRY *e0_ret = NULL;
+    ENTRY *e1_ret = NULL;
+    // firstly remove existing entry using the same hash (if exists)
+    // then insert new entry
+    if(hsearch_r(e0, FIND, &e0_ret, hmap)) {
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+        e0_ret->data = (void *)value;
+#pragma GCC diagnostic pop
+        success = 1;
+    } else {
+        success = hsearch_r(e1, ENTER, &e1_ret, hmap);
+    }
     return success;
 } // end of app_save_int_to_hashmap
 
