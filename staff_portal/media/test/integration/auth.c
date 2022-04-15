@@ -99,10 +99,11 @@ int gen_signed_access_token(unsigned int usr_id, json_t *perm_codes, json_t *quo
 } // end of gen_signed_access_token
 
 
-int add_auth_token_to_http_header(json_t *headers_kv_raw, const char **codename_list)
+int add_auth_token_to_http_header(json_t *headers_kv_raw, unsigned int usr_id, const char **codename_list)
 {// TODO, argument to specify quota arrangement
-    assert(headers_kv_raw && json_is_array(headers_kv_raw));
-    unsigned int usr_id = 123;
+    assert(headers_kv_raw);
+    assert(json_is_array(headers_kv_raw));
+    assert(usr_id > 0);
     json_t *perm_codes = json_array();
     json_t *quota = json_array();
     char *signed_access_token = NULL;
@@ -127,7 +128,7 @@ int add_auth_token_to_http_header(json_t *headers_kv_raw, const char **codename_
 } // end of add_auth_token_to_http_header
 
 
-void init_mock_auth_server(void) {
+void init_mock_auth_server(const char *tmpfile_path) {
     unsigned int rsa_bits[NUM_KEY_PAIRS] = {2048, 3072}; // 256 / 384 bytes
     r_jwks_init(&_mock_jwks.store.privkey);
     r_jwks_init(&_mock_jwks.store.pubkey );
@@ -141,7 +142,6 @@ void init_mock_auth_server(void) {
         r_jwk_generate_key_pair(privkey, pubkey, R_KEY_TYPE_RSA,
                rsa_bits[idx], NULL); // set kid automatically by library
     } // end of loop
-    const char *tmpfile_path = "./tmp/media_test_jwks_pubkey_XXXXXX";
     size_t tmpfile_path_sz = strlen(tmpfile_path) + 1;
     _mock_jwks.filepath.pubkey = (char *) malloc(tmpfile_path_sz);
     memcpy(_mock_jwks.filepath.pubkey, &tmpfile_path[0], tmpfile_path_sz);

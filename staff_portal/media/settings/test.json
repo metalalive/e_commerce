@@ -69,6 +69,17 @@
                 "hierarchy": ["backend_apps","databases","media_service"],
                 "filepath":"common/data/secrets.json"
             }
+        },
+        {
+            "alias": "db_test_migration",
+            "db_name": "test_ecommerce_media",
+            "max_connections": 1,
+            "idle_timeout": 20,
+            "bulk_query_limit_kb": 2,
+            "credential": {
+                "hierarchy": ["backend_apps","databases","test_site_dba"],
+                "filepath":"common/data/secrets.json"
+            }
         }
     ],
     "tmp_buf": {

@@ -263,12 +263,15 @@ ADD_CUSTOM_TARGET(unit_test
     DEPENDS ${UNIT_TEST_EXE_NAME})
 
 ADD_CUSTOM_TARGET(integration_test
-    ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}" 
-    ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
+    ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
+    python -m media.setup_test_env  media.setup_test_env.StartTestDatabase
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json    ${LIQUIBASE_PATH}
+    COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
     ##gdb -args # uncomment this line for debugging
-    ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME}
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json
+    COMMAND python -m  media.setup_test_env  media.setup_test_env.EndTestDatabase
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json    ${LIQUIBASE_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS  ${INTEGRATION_TEST_EXE_NAME})
 
 # TODO, add valgrind test
-

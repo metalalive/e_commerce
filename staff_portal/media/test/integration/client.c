@@ -145,8 +145,7 @@ void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb)
         form = curl_mime_init(ez_handle);
     }
     test_setup_priv_t privdata = {
-        .headers = NULL,
-        .form = form,
+        .headers = NULL,  .form = form,  .expect_resp_code = pubdata->expect_resp_code,
         .fds = { // constant string argument will cause SegFault
             .req_body  = mkstemp(&tmpfile_path[0][0]), 
             .resp_hdr  = mkstemp(&tmpfile_path[1][0]),

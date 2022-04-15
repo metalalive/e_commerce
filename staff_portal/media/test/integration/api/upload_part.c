@@ -25,7 +25,7 @@ Ensure(api_test_upload_part_ok) {
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    add_auth_token_to_http_header(header_kv_serials, codename_list);
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0, .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},

@@ -1,4 +1,6 @@
 
+REVOKE SELECT, INSERT, UPDATE, DELETE ON `test_ecommerce_media`.*   FROM 'media_admin'@'localhost';
+
 REVOKE SELECT, INSERT, UPDATE, DELETE ON `ecommerce_usermgt`.*  FROM  'user_mgt_admin'@'localhost';
 REVOKE SELECT, INSERT, UPDATE, DELETE ON `ecommerce_product`.*  FROM  'prodev_admin'@'localhost';
 REVOKE SELECT, INSERT, UPDATE, DELETE ON `ecommerce_media`.*    FROM  'media_admin'@'localhost';

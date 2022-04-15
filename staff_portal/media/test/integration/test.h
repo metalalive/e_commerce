@@ -22,7 +22,8 @@ typedef struct {
     } req_body;
     json_t      *headers; // array of JSON objects (key-value pairs)
     H2O_VECTOR(char *) upload_filepaths;
-    int          verbose;
+    uint32_t  expect_resp_code;
+    int       verbose;
 } test_setup_pub_t;
 
 typedef struct {
@@ -33,15 +34,16 @@ typedef struct {
         int resp_body;
     } fds;
     curl_mime   *form;
+    uint32_t  expect_resp_code;
 } test_setup_priv_t;
 
 typedef void (*test_verify_cb_t)(CURL *, test_setup_priv_t *);
 
 // declare & implementation in test/integration/auth.c
-void init_mock_auth_server(void);
+void init_mock_auth_server(const char *tmpfile_path);
 void deinit_mock_auth_server(void);
 int gen_signed_access_token(unsigned int usr_id, json_t *perm_codes, json_t *quota, char **out);
-int add_auth_token_to_http_header(json_t *headers_kv_raw, const char **codename_list);
+int add_auth_token_to_http_header(json_t *headers_kv_raw, unsigned int usr_id, const char **codename_list);
 void api_test_common_auth_token_fail(test_setup_pub_t *setup_data);
 void api_test_common_permission_check_fail(test_setup_pub_t *setup_data);
 

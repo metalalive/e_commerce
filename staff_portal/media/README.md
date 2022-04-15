@@ -67,11 +67,10 @@ python3 -m media.renew_certs media.renew_certs.TestCertRenewal  ./media/settings
 ```
 
 #### workflow
-Generate build files (e.g. makefiles)
+Generate build files (CMake)
 ```
-CC="/PATH/TO/gcc/10.3.0/installed/bin/gcc" \
-    PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
-    cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  ..
+CC="/PATH/TO/gcc/10.3.0/installed/bin/gcc"   PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
+    cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  -DLIQUIBASE_PATH="/PATH/TO/liquibase"  ..
 ```
 where `<YOUR_PATH_TO_PKG_CFG>` should include :
 * `/PATH/TO/brotli/pkgconfig`

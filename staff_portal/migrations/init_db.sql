@@ -23,3 +23,5 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON `ecommerce_media`.*    TO 'media_admin'@
 GRANT SELECT, INSERT, UPDATE, DELETE ON `ecommerce_order`.*    TO 'order_admin'@'localhost';
 GRANT SELECT, INSERT, UPDATE, DELETE ON `ecommerce_store`.*    TO 'store_admin'@'localhost';
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON `test_ecommerce_media`.*    TO 'media_admin'@'localhost';
+
