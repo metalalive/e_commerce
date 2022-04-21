@@ -403,7 +403,7 @@ static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ss
                 h2o_iovec_init(host, strlen(host)),
                 port
             );
-        if(setup_routes(hostcfg, routes_cfg, _app_cfg->exe_path) != 0) {
+        if(app_setup_apiview_routes(hostcfg, routes_cfg, _app_cfg->exe_path) != 0) {
             goto error;
         } // preserve some network attributes which are NOT stored in `struct sockaddr`
         uv_nt_handle_data *nt_attr = h2o_mem_alloc(sizeof(uv_nt_handle_data));

@@ -43,7 +43,7 @@ Ensure(setup_route_test) {
     json_array_append_new(urls_cfg, json_object());
     json_object_set_new(json_array_get(urls_cfg, 0), "path", json_string("/v3/service_XYZ/func123"));
     json_object_set_new(json_array_get(urls_cfg, 0), "entry_fn", json_string("service_xyz_action_one"));
-    result = setup_routes(hostcfg, urls_cfg, exe_path);
+    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_path);
     assert_that(result, is_equal_to(0));
     assert_that(hostcfg->paths.size, is_equal_to(0));
     // sub case #2, multiple handler functions pointing to one API endpoint (different HTTP methods)
@@ -52,7 +52,7 @@ Ensure(setup_route_test) {
     json_array_append_new(urls_cfg, json_object());
     json_object_set_new(json_array_get(urls_cfg, 1), "path", json_string("/v3/service_XYZ/func123"));
     json_object_set_new(json_array_get(urls_cfg, 1), "entry_fn", json_string("_test_service_xyz_action_discard"));
-    result = setup_routes(hostcfg, urls_cfg, exe_path);
+    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_path);
     assert_that(hostcfg->paths.size, is_equal_to(1));
     assert_that(hostcfg->paths.entries[0]->path.base, is_equal_to_string("/v3/service_XYZ/func123"));
     assert_that(hostcfg->paths.entries[0]->handlers.size, is_equal_to(3)); // plus default handler to return status 405
@@ -63,7 +63,7 @@ Ensure(setup_route_test) {
     json_array_append_new(urls_cfg, json_object());
     json_object_set_new(json_array_get(urls_cfg, 0), "path", json_string("/v3/service_An22/bch"));
     json_object_set_new(json_array_get(urls_cfg, 0), "entry_fn", json_string("_test_service_antutu_action_edit"));
-    result = setup_routes(hostcfg, urls_cfg, exe_path);
+    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_path);
     assert_that(hostcfg->paths.size, is_equal_to(2));
     assert_that(hostcfg->paths.entries[1]->path.base, is_equal_to_string("/v3/service_An22/bch"));
     assert_that(hostcfg->paths.entries[0]->path.base, is_equal_to_string("/v3/service_XYZ/func123"));
@@ -74,7 +74,7 @@ Ensure(setup_route_test) {
     json_array_append_new(urls_cfg, json_object());
     json_object_set_new(json_array_get(urls_cfg, 0), "path", json_string("/v3/service_An22/bch/melon"));
     json_object_set_new(json_array_get(urls_cfg, 0), "entry_fn", json_string("_test_service_n22_melon_action_add"));
-    result = setup_routes(hostcfg, urls_cfg, exe_path);
+    result = app_setup_apiview_routes(hostcfg, urls_cfg, exe_path);
     assert_that(hostcfg->paths.size, is_equal_to(3));
     assert_that(hostcfg->paths.entries[0]->path.base, is_equal_to_string("/v3/service_An22/bch/melon"));
     assert_that(hostcfg->paths.entries[1]->path.base, is_equal_to_string("/v3/service_XYZ/func123"));
