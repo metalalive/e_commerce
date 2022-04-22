@@ -169,6 +169,8 @@ SET(APP_COMMON_SOURCE_FILES
     src/models/connection.c
     src/models/mariadb.c
     src/models/query.c
+    src/storage/cfg_parser.c
+    src/storage/localfs.c
     src/middleware.c
     src/network.c
     #src/multipart_parser.c
@@ -198,6 +200,8 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/connection.c
     test/unit/models/query.c
     test/unit/models/mariadb.c
+    test/unit/storage/cfg_parser.c
+    test/unit/storage/localfs.c
     test/unit/mock/rhonabwy.c
     test/unit/mock/mariadb.c
     ${APP_COMMON_SOURCE_FILES})

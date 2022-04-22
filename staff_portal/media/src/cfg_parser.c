@@ -5,6 +5,7 @@
 #include "cfg_parser.h"
 #include "network.h"
 #include "routes.h"
+#include "storage/cfg_parser.h"
 #include "models/pool.h"
 #include "models/connection.h"
 #include "models/mariadb.h"
@@ -492,6 +493,8 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
     result_error = parse_cfg_auth_keystore(json_object_get((const json_t *)root, "auth_keystore"), _app_cfg);
     if (result_error) {  goto error; }
     result_error = parse_cfg_databases(json_object_get((const json_t *)root, "databases"), _app_cfg);
+    if (result_error) {  goto error; }
+    result_error = parse_cfg_storages(json_object_get((const json_t *)root, "storages"), _app_cfg);
     if (result_error) {  goto error; }
     json_decref(root);
     return 0;

@@ -12,6 +12,8 @@ extern "C" {
 #include <h2o.h>
 #include <rhonabwy.h>
 
+#include "storage/datatypes.h"
+
 // TODO: find better way to synchronize from common/data/app_code.json
 #define APP_CODE  3
 #define APP_LABEL "media"
@@ -85,6 +87,7 @@ typedef struct {
     // atomic entity among threads & asynchronous interrupts
     volatile sig_atomic_t  shutdown_requested;
     h2o_barrier_t  workers_sync_barrier;
+    H2O_VECTOR(asa_cfg_t) storages;
     // all members in the `state` struct must be modified atomically under multithreaded application
     struct {
         atomic_int num_curr_connections;  // number of currently handled incoming connections

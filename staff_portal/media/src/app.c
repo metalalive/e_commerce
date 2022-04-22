@@ -43,6 +43,7 @@ static app_cfg_t _app_cfg = {
     .launch_time = 0,
     .shutdown_requested = 0,
     .workers_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
+    .storages = {.size = 0, .capacity = 0, .entries = NULL},
     .state = {.num_curr_sessions=0},
     .jwks = {
         .handle = NULL, .src_url=NULL, .last_update = 0, .is_rotating = ATOMIC_FLAG_INIT,
@@ -76,6 +77,26 @@ static void deinit_app_cfg(app_cfg_t *app_cfg) {
     if(app_cfg->jwks.handle != NULL) {
         r_jwks_free(app_cfg->jwks.handle);
         app_cfg->jwks.handle = NULL;
+    }
+    if(app_cfg->workers.entries) {
+        free(app_cfg->workers.entries);
+        app_cfg->workers.entries = NULL;
+    }
+    if(app_cfg->storages.entries) {
+        for(idx = 0; idx < app_cfg->storages.size; idx++) {
+            asa_cfg_t *asacfg = &app_cfg->storages.entries[idx];
+            if(asacfg->alias) {
+                free(asacfg->alias);
+                asacfg->alias = NULL;
+            }
+            if(asacfg->base_path) {
+                free(asacfg->base_path);
+                asacfg->base_path = NULL;
+            }
+        }
+        free(app_cfg->storages.entries);
+        app_cfg->storages.capacity = 0;
+        app_cfg->storages.entries = NULL; 
     }
     if(app_cfg->jwks.src_url != NULL) {
         free(app_cfg->jwks.src_url);
