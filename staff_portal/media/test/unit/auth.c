@@ -469,6 +469,33 @@ Ensure(perm_chk_not_satisfy_all_tests) {
 } // end of perm_chk_not_satisfy_all_tests
 
 
+Ensure(quota_lookup_test) {
+    json_t *mock_jwt_claims = json_object();
+    json_t *quotas = json_array();
+    json_t *result = NULL;
+    int expect_app_code = 12;
+    int expect_mat_code = 23;
+    int expect_max_num = 975;
+    {
+        json_t *quota = json_object();
+        json_object_set(quota, "app_code", json_integer(expect_app_code));
+        json_object_set(quota, "mat_code", json_integer(expect_mat_code));
+        json_object_set(quota, "maxnum", json_integer(expect_max_num));
+        json_array_append(quotas, quota);
+        json_object_set(mock_jwt_claims, "quota", quotas);
+    }
+    result = app_find_quota_arragement(mock_jwt_claims, 19, 78);
+    assert_that(result, is_null);
+    result = app_find_quota_arragement(mock_jwt_claims, expect_app_code, expect_mat_code);
+    assert_that(result, is_not_null);
+    if(result) {
+        int actual_max_num = (int) json_integer_value(json_object_get(result, "maxnum"));
+        assert_that(actual_max_num, is_equal_to(expect_max_num));
+    }
+    json_decref(mock_jwt_claims);
+} // end of quota_lookup_test
+
+
 Ensure(rotate_jwks_not_expired_tests) {
     char src_url[] = "fake_url_to_auth_server_jwks";
     unsigned int  max_expiry_secs = 600;
@@ -565,6 +592,7 @@ TestSuite *app_auth_tests(void)
     add_test_with_context(suite, MOCK_AUTH_PART, auth_jwt_succeed_tests);
     add_test(suite, perm_chk_failure_tests);
     add_test(suite, perm_chk_not_satisfy_all_tests);
+    add_test(suite, quota_lookup_test);
     add_test(suite, rotate_jwks_not_expired_tests);
     add_test(suite, rotate_jwks_remote_server_error_tests);
     add_test(suite, rotate_jwks_succeed_tests);

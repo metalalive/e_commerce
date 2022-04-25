@@ -12,6 +12,8 @@ int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t
 
 int app_basic_permission_check(struct hsearch_data *hmap);
 
+json_t * app_find_quota_arragement(json_t *jwt_claims, int app_code, int mat_code);
+
 int app_rotate_jwks_store(struct app_jwks_t *jwks);
 
 #ifdef __cplusplus

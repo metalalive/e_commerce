@@ -210,6 +210,37 @@ done:
     return result;
 } // end of app_basic_permission_check
 
+
+json_t * app_find_quota_arragement(json_t *jwt_claims, int app_code, int mat_code)
+{
+    json_t *qitem = NULL;
+    if(!jwt_claims || app_code <= 0 || mat_code <= 0) {
+        goto done;
+    }
+    json_t *quotas = json_object_get(jwt_claims, "quota");
+    if(!quotas || !json_is_array(quotas)) {
+        goto done;
+    }
+    int idx = 0;
+    int app_code_read = 0;
+    int mat_code_read = 0;
+    json_array_foreach(quotas, idx, qitem) {
+        app_code_read = (int)json_integer_value(json_object_get(qitem, "app_code"));
+        if(app_code_read != app_code) {
+            continue;
+        }
+        mat_code_read = (int)json_integer_value(json_object_get(qitem, "mat_code"));
+        if(mat_code_read == mat_code) {
+            break;
+        }
+    } // end of quota iteration
+    if(idx == json_array_size(quotas)) {
+        qitem = NULL;
+    }
+done:
+    return qitem;
+} // end of app_find_quota_arragement
+
 // ---------------------------------------------------
 
 // #define RECOVER_CORRUPTED_DATA(victom, origin)   if((victom)!=(origin)) { (victom) = (origin); }
