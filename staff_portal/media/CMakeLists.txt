@@ -173,7 +173,7 @@ SET(APP_COMMON_SOURCE_FILES
     src/storage/localfs.c
     src/middleware.c
     src/network.c
-    #src/multipart_parser.c
+    src/multipart_parser.c
     src/cfg_parser.c
     src/app.c
     src/utils.c
@@ -196,6 +196,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/utils.c
     test/unit/timer_poll.c
     test/unit/middleware.c
+    test/unit/multipart_parser.c
     test/unit/models/pool.c
     test/unit/models/connection.c
     test/unit/models/query.c

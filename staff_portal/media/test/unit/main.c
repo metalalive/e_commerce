@@ -6,6 +6,7 @@ TestSuite *app_storage_localfs_tests(void);
 TestSuite *app_network_util_tests(void);
 TestSuite *app_cfg_route_tests(void);
 TestSuite *app_middleware_tests(void);
+TestSuite *app_multipart_parsing_tests(void);
 TestSuite *app_auth_tests(void);
 TestSuite *app_utils_tests(void);
 TestSuite *app_timer_poll_tests(void);
@@ -24,6 +25,7 @@ int main(int argc, char **argv) {
     add_suite(suite, app_network_util_tests());
     add_suite(suite, app_cfg_route_tests());
     add_suite(suite, app_middleware_tests());
+    add_suite(suite, app_multipart_parsing_tests());
     add_suite(suite, app_auth_tests());
     add_suite(suite, app_utils_tests());
     add_suite(suite, app_timer_poll_tests());
