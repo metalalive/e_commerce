@@ -158,6 +158,8 @@ static void notify_all_workers(app_cfg_t *app_cfg) {
     }
 }
 
+const app_cfg_t *app_get_global_cfg(void)
+{ return (const app_cfg_t *)&_app_cfg; }
 
 int app_server_ready(void) {
     int workers_ready = h2o_barrier_done(&_app_cfg.workers_sync_barrier);

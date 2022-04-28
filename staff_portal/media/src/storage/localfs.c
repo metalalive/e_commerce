@@ -196,7 +196,8 @@ ASA_RES_CODE app_storage_localfs_write(asa_op_base_cfg_t *cfg)
 {
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
     if(!_cfg || !_cfg->loop || !cfg->op.write.cb || !cfg->op.write.src
-            || cfg->op.write.src_sz == 0) {
+        || cfg->op.write.src_sz == 0 || cfg->op.write.src_max_nbytes == 0
+        || cfg->op.write.src_sz > cfg->op.write.src_max_nbytes) {
         return ASTORAGE_RESULT_ARG_ERROR;
     }
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;

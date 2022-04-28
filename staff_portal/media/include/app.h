@@ -21,6 +21,8 @@ int init_security(void);
 
 int app_server_ready(void);
 
+const app_cfg_t *app_get_global_cfg(void);
+
 #ifdef __cplusplus
 } // end of extern C clause
 #endif 

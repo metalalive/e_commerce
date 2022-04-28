@@ -55,6 +55,7 @@ struct _asa_op_base_cfg_s {
             asa_write_cb_t cb;
             char *src;
             size_t src_sz;
+            size_t src_max_nbytes;
         } write;
         struct {
             asa_read_cb_t cb;

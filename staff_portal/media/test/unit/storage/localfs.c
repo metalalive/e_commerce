@@ -129,8 +129,8 @@ typedef struct {
 static void _utest_3_asa_prepare_nxt_write(asa_op_base_cfg_t *cfg, utest3_usrdata_t *usrdata) {
     char *ptr = &(EXPECT_FILE_CONTENT)[ usrdata->wr_ptr ];
     size_t sz = sizeof(EXPECT_FILE_CONTENT) - usrdata->wr_ptr;
-    if(sz > cfg->op.write.src_sz) {
-        sz = cfg->op.write.src_sz;
+    if(sz > cfg->op.write.src_max_nbytes) {
+        sz = cfg->op.write.src_max_nbytes;
     }
     memcpy(cfg->op.write.src, ptr, sz);
     cfg->op.write.src_sz = sz;
@@ -219,7 +219,8 @@ Ensure(storage_localfs_rwfile_test) {
         cfg->super.cb_args.entries[0] = (void *)&usrdata;
         ptr += cb_args_sz;
         cfg->super.op.write.src = ptr;
-        cfg->super.op.write.src_sz = wr_buf_sz;
+        cfg->super.op.write.src_sz = 0;
+        cfg->super.op.write.src_max_nbytes = wr_buf_sz;
         cfg->super.op.write.cb = utest_3_asa_write_cb;
         ptr += wr_buf_sz;
         cfg->super.op.read.dst  = ptr;

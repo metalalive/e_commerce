@@ -116,8 +116,8 @@ size_t multipart_parser_execute(multipart_parser *p, const char *buf, size_t len
                   continue_parsing = 0;
               } else {
                   p->index = 0;
-                  NOTIFY_CB(part_data_begin);
                   p->state = MULTIPART_STATE_HEADER_FIELD_START;
+                  NOTIFY_CB(part_data_begin);
               }
           } else {
               if (c != p->boundary.data[p->index]) {
