@@ -28,36 +28,6 @@
     }
  * */
 
-RESTAPI_ENDPOINT_HANDLER(upload_part, POST, self, req)
-{
-    json_t *qparams = json_object();
-    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
-    const char *part_str = json_string_value(json_object_get(qparams, "part"));
-    int part_num = part_str ? (int)strtol(part_str, NULL, 10) : 0;
-    // TODO
-    // * validate the untrusted values
-    // * stream request body, parse the chunk with multipart/form parser,
-    // * hash the chunks
-    // * and write it to tmp file
-    json_t *res_body = json_object();
-    json_object_set_new(res_body, "checksum", json_string("b17a33501506315093eb082"));
-    json_object_set_new(res_body, "alg", json_string("md5"));
-    json_object_set_new(res_body, "part", json_integer(part_num));
-    req->res.status = 200;
-    req->res.reason = "OK";
-    {
-        size_t MAX_BYTES_RESP_BODY = 128;
-        char body_raw[MAX_BYTES_RESP_BODY];
-        size_t nwrite = json_dumpb((const json_t *)res_body, &body_raw[0],  MAX_BYTES_RESP_BODY, JSON_COMPACT);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
-        h2o_send_inline(req, body_raw, nwrite);
-    }
-    json_decref(res_body);
-    json_decref(qparams);
-    app_run_next_middleware(self, req, node);
-    return 0;
-} // end of upload_part()
-
 
 // TODO:another API endpoint for checking status of each upload request that hasn't expired yet
 RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)

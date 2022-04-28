@@ -160,12 +160,44 @@ Ensure(app_url_decode_query_param_test) {
 #undef  RAW_STRING_LEN
 #undef  EXPECT_NUM_ITEMS
 
+
+Ensure(app_chararray_to_hexstr_test) {
+#define NBYTES_IN  5
+#define NBYTES_OUT 10
+    int err = 0;
+    char dummy[2];
+    err = app_chararray_to_hexstr(NULL, 3, NULL, 7);
+    assert_that(err, is_equal_to(1));
+    err = app_chararray_to_hexstr(&dummy[0], 0, (const char *)&dummy[1], 14);
+    assert_that(err, is_equal_to(1));
+    { // subcase
+        char in[NBYTES_IN] = {0xbe, 0x0e, 0x14, 0x3f, 0x51};
+        char expect_hex[NBYTES_OUT + 1] = "be0e143f51\x00";
+        char actual_hex[NBYTES_OUT + 1] = {0};
+        err = app_chararray_to_hexstr(&actual_hex[0], NBYTES_OUT, &in[0], NBYTES_IN);
+        assert_that(err, is_equal_to(0));
+        assert_that(actual_hex, is_equal_to_string(expect_hex));
+    }
+    { // subcase
+        char in[NBYTES_IN] = {'a', 'B', 'c', '@', 'J'};
+        char expect_hex[NBYTES_OUT + 1] = "614263404a\x00";
+        char actual_hex[NBYTES_OUT + 1] = {0};
+        err = app_chararray_to_hexstr(&actual_hex[0], NBYTES_OUT, &in[0], NBYTES_IN);
+        assert_that(err, is_equal_to(0));
+        assert_that(actual_hex, is_equal_to_string(expect_hex));
+    }
+#undef NBYTES_IN 
+#undef NBYTES_OUT
+} // end of app_chararray_to_hexstr_test
+
+
 TestSuite *app_utils_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, app_llnode_link_test);
     add_test(suite, app_hashmap_access_test);
     add_test(suite, app_url_decode_query_param_test);
+    add_test(suite, app_chararray_to_hexstr_test);
     return suite;
 } // end of app_utils_tests
 

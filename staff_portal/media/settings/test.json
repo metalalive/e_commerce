@@ -82,6 +82,21 @@
             }
         }
     ],
+    "storages": [
+        {
+            "alias":"localfs",
+            "base_path": "filespace/test",
+            "ops": {
+                "mkdir" : "app_storage_localfs_mkdir",
+                "rmdir" : "app_storage_localfs_rmdir",
+                "open" : "app_storage_localfs_open",
+                "close": "app_storage_localfs_close",
+                "read" : "app_storage_localfs_read",
+                "write": "app_storage_localfs_write",
+                "seek" : "app_storage_localfs_seek"
+            }
+        }
+    ],
     "tmp_buf": {
         "path": "tmp/buffer/media/test",
         "threshold_in_bytes": 102400

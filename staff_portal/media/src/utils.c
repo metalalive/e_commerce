@@ -36,6 +36,27 @@ int app_save_int_to_hashmap(struct hsearch_data *hmap, const char *keyword, int 
     return success;
 } // end of app_save_int_to_hashmap
 
+int app_save_ptr_to_hashmap(struct hsearch_data *hmap, const char *keyword, void *value)
+{
+    int success = 0;
+    if(!hmap || !keyword) {
+        return success;
+    }
+    ENTRY  e0 = {.key = (char *)keyword, .data = NULL };
+    ENTRY  e1 = {.key = (char *)keyword, .data = value };
+    ENTRY *e0_ret = NULL;
+    ENTRY *e1_ret = NULL;
+    // firstly remove existing entry using the same hash (if exists)
+    // then insert new entry
+    if(hsearch_r(e0, FIND, &e0_ret, hmap)) {
+        e0_ret->data = value;
+        success = 1;
+    } else {
+        success = hsearch_r(e1, ENTER, &e1_ret, hmap);
+    }
+    return success;
+} // end of app_save_ptr_to_hashmap
+
 int app_url_decode_query_param(char *data, json_t *map) {
     // this function does NOT check inproper characters appeared in name/value field
     // and treat all value as string by default.
@@ -91,3 +112,17 @@ void app_llnode_unlink(app_llnode_t *node)
     node->next = node->prev = NULL;
 }
 
+
+int app_chararray_to_hexstr(char *out, size_t out_sz, const char *in, size_t in_sz)
+{
+    if(!out || !in || in_sz == 0 || out_sz == 0) {
+        return 1;
+    }
+    const char *map = "0123456789abcdef";
+    for(size_t idx = 0; idx < in_sz; idx++) {
+        size_t jdx = idx << 1;
+        out[jdx + 0] = map[(in[idx] >> 4) & 0xf];
+        out[jdx + 1] = map[ in[idx] & 0xf];
+    }
+    return 0; // ok
+}

@@ -60,7 +60,7 @@ ASA_RES_CODE app_storage_localfs_close(asa_op_base_cfg_t *cfg)
 } // end of app_storage_localfs_close
 
 
-static ASA_RES_CODE  __attribute__((optimize("O0"))) _app_storage_mkdir_nxt_parent(asa_op_base_cfg_t *cfg)
+static ASA_RES_CODE  _app_storage_mkdir_nxt_parent(asa_op_base_cfg_t *cfg)
 {
     char *tok = NULL;
     char *origin = NULL;

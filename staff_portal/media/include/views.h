@@ -8,6 +8,9 @@ extern "C" {
 #include "auth.h"
 #include "middleware.h"
 
+// see media/migration/changelog_usermgt.log for detail
+#define QUOTA_MATERIAL__MAX_UPLOAD_KBYTES_PER_USER  1
+
 #define _API_MIDDLEWARE_CHAIN_initiate_multipart_upload  \
     4, app_authenticate_user, \
     PERMISSION_CHECK_initiate_multipart_upload,  \

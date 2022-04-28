@@ -82,7 +82,7 @@
     "storages": [
         {
             "alias":"localfs",
-            "base_path": "./filespace",
+            "base_path": "filespace/dev",
             "ops": {
                 "mkdir" : "app_storage_localfs_mkdir",
                 "rmdir" : "app_storage_localfs_rmdir",
