@@ -1,0 +1,17 @@
+So how do you build a similar online shopping system that stores an inventor
+-y of products under different categories, allow customers to search through
+-- them, and make purchases. Furthermore, how do you handle the expanding load
+---on the website and prevent it from crashing down, particularly on busy da
+--ys, such as the Black Friday Sale?
+Though Amazon is a multifaceted platform that offers an exhaustive range of pro
+----ducts and services, for the sake of simplicity, we will only try to unders
+---tand and recreate a simpler version of their online retail business. An onl
+--ine retail platform or e-commerce application allows users to buy and sell p
+-roducts.
+Sellers should be able to add, delete and modify products they want to sell.
+The website should include a catalog of products.
+Buyers can search products by name, keyword or category.
+Buyers can add, delete or update items in a cart.
+Buyers can purchase items in the cart and make payments.
+Buyers can view their previous orders.
+Buyers can review and rate purchased products.

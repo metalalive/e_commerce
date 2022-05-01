@@ -85,9 +85,12 @@ static void initiate_multipart_upload__finalize_response(h2o_handler_t *hdlr , h
         case SQL_RESULT_CODE__OK:
             {
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-                uint32_t req_seq =  (uint32_t) app_fetch_from_hashmap(node->data, "upld_req_seq");
+                uint32_t req_seq = (uint32_t) app_fetch_from_hashmap(node->data, "upld_req_seq");
 #pragma GCC diagnostic pop
+                json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
+                uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
                 json_object_set_new(res_body, "req_seq", json_integer(req_seq));
+                json_object_set_new(res_body, "usr_id",  json_integer(usr_prof_id));
                 req->res.status = 201;
                 break;
             }

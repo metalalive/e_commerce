@@ -99,13 +99,14 @@ int gen_signed_access_token(unsigned int usr_id, json_t *perm_codes, json_t *quo
 } // end of gen_signed_access_token
 
 
-int add_auth_token_to_http_header(json_t *headers_kv_raw, unsigned int usr_id, const char **codename_list)
-{// TODO, argument to specify quota arrangement
+int add_auth_token_to_http_header(json_t *headers_kv_raw, unsigned int usr_id, const char **codename_list, json_t *quota)
+{
     assert(headers_kv_raw);
     assert(json_is_array(headers_kv_raw));
+    assert(quota);
+    assert(json_is_array(quota));
     assert(usr_id > 0);
     json_t *perm_codes = json_array();
-    json_t *quota = json_array();
     char *signed_access_token = NULL;
     char *auth_header_raw = NULL;
     for(int idx = 0; codename_list && codename_list[idx] ; idx++) {
@@ -115,13 +116,13 @@ int add_auth_token_to_http_header(json_t *headers_kv_raw, unsigned int usr_id, c
         json_array_append(perm_codes, perm_code);
     }
     int result = gen_signed_access_token(usr_id, perm_codes, quota, &signed_access_token);
+    assert_that(result , is_equal_to(RHN_OK));
     assert_that(signed_access_token, is_not_null);
     const char *auth_header_pattern = "Authorization:Bearer %s";
     auth_header_raw = h2o_mem_alloc(strlen(signed_access_token) + strlen(auth_header_pattern));
     sprintf(auth_header_raw, auth_header_pattern, signed_access_token);
     json_array_append_new(headers_kv_raw, json_string(auth_header_raw));
     json_decref(perm_codes);
-    json_decref(quota);
     free(signed_access_token);
     free(auth_header_raw);
     return 0;
@@ -172,7 +173,7 @@ void deinit_mock_auth_server(void) {
 } // end of deinit_mock_auth_server
 
 
-static void test_verify__common_auth_token_fail(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__common_auth_token_fail(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 401;
@@ -187,25 +188,25 @@ void api_test_common_auth_token_fail(test_setup_pub_t *setup_data)
     int result = 0;
     json_t *header_kv_serials = setup_data->headers;
     // subcase #1, missing header
-    run_client_request(setup_data, test_verify__common_auth_token_fail);
+    run_client_request(setup_data, test_verify__common_auth_token_fail, NULL);
     // subcase #2, corrupted auth header
     result = json_array_append_new(header_kv_serials, json_string("Authorization: invalid_access_token"));
     assert_that(result, is_equal_to(0));
-    run_client_request(setup_data, test_verify__common_auth_token_fail);
+    run_client_request(setup_data, test_verify__common_auth_token_fail, NULL);
     result = json_array_remove(header_kv_serials, json_array_size(header_kv_serials) - 1);
     assert_that(result, is_equal_to(0));
     result = json_array_append_new(header_kv_serials, json_string("Authorization:Bearer  invalid_access_token"));
     assert_that(result, is_equal_to(0));
-    run_client_request(setup_data, test_verify__common_auth_token_fail);
+    run_client_request(setup_data, test_verify__common_auth_token_fail, NULL);
     // subcase #3, send token which wasn't signed by the mocked auth server
     result = json_array_remove(header_kv_serials, json_array_size(header_kv_serials) - 1);
     assert_that(result, is_equal_to(0));
     result = json_array_append_new(header_kv_serials, json_string("Authorization:Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"));
     assert_that(result, is_equal_to(0));
-    run_client_request(setup_data, test_verify__common_auth_token_fail);
+    run_client_request(setup_data, test_verify__common_auth_token_fail, NULL);
 } // end of api_test_common_auth_token_fail
 
-static void test_verify__common_perm_chk_fail(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__common_perm_chk_fail(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 403;
@@ -217,6 +218,6 @@ static void test_verify__common_perm_chk_fail(CURL *handle, test_setup_priv_t *p
 
 void api_test_common_permission_check_fail(test_setup_pub_t *setup_data)
 {
-    run_client_request(setup_data, test_verify__common_perm_chk_fail);
+    run_client_request(setup_data, test_verify__common_perm_chk_fail, NULL);
 }
 

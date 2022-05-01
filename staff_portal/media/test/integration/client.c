@@ -128,7 +128,7 @@ static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test
 
 
 
-void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb)
+void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, void *cb_arg)
 {
     assert(pubdata);
     assert(verify_cb);
@@ -162,7 +162,7 @@ void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb)
     assert_that(res, is_equal_to(CURLE_OK));
     lseek(privdata.fds.resp_body, 0, SEEK_SET);
     lseek(privdata.fds.resp_hdr,  0, SEEK_SET);
-    verify_cb(ez_handle, &privdata);
+    verify_cb(ez_handle, &privdata, cb_arg);
     // ----- de-init -----
     close(privdata.fds.req_body);
     close(privdata.fds.resp_body);

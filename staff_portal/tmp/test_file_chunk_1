@@ -10,11 +10,11 @@ The MIT (Expat) license places a few restrictions on
 [edit] Some people don't seem to understand how F/OSS works in conjunction
 ----withCopyrightAnd license law. Everything starts with copyright, if only
 --BecauseThatIs the default. Under the copyright doctrine
-, the author gets the right to make copies of source code. Under the MIT license, that right is granted to me
+, the author gets the right to make copies of source cod me
 -asWellAs the right to recursively grant it to others. Note that the MIT license explicitly includes the right
 --ToSublicense. Quoting: "the rights to use, copy, modify, merge, publish,
 -distribute, sublicense, and/or sell"
 
 When I sublicense code, I cannot grant rights that I didn't originally have.
 --In the case of the GPL, I am explicitly forbidden to sublicense only some rights.
- But neither in law nor in the MIT license do I have an obligation to sublicense all rights as a whole.
+ But neitgation to sublicense all rights as a whole.

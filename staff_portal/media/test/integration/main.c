@@ -1,7 +1,7 @@
 #include "../test/integration/test.h"
 
 
-static void test_verify__complete_multipart_upload(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__complete_multipart_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 201;
@@ -24,19 +24,21 @@ Ensure(api_complete_multipart_upload_test) {
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "PATCH", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__complete_multipart_upload);
+    run_client_request(&setup_data, test_verify__complete_multipart_upload, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
-static void test_verify__abort_multipart_upload(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__abort_multipart_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 204;
@@ -52,19 +54,21 @@ Ensure(api_abort_multipart_upload_test) {
             8010, "/upload/multipart/abort", "1c037a57581e");
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "DELETE", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__abort_multipart_upload);
+    run_client_request(&setup_data, test_verify__abort_multipart_upload, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
-static void test_verify__single_chunk_upload(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__single_chunk_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 201;
@@ -91,7 +95,8 @@ Ensure(api_single_chunk_upload_test) {
             8010, "/upload", "bMerI8f", "8fQwhBj");
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
@@ -101,12 +106,13 @@ Ensure(api_single_chunk_upload_test) {
     setup_data.upload_filepaths.entries[0] = "./tmp/test_file_chunk_0";
     setup_data.upload_filepaths.entries[1] = "./tmp/test_file_chunk_1";
     setup_data.upload_filepaths.size = 2;
-    run_client_request(&setup_data, test_verify__single_chunk_upload);
+    run_client_request(&setup_data, test_verify__single_chunk_upload, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
-static void test_verify__start_transcoding_file(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__start_transcoding_file(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 202;
@@ -127,19 +133,21 @@ Ensure(api_start_transcoding_file_test) {
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath="./media/test/integration/examples/transcode_req_body.json"},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__start_transcoding_file);
+    run_client_request(&setup_data, test_verify__start_transcoding_file, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
-static void test_verify__discard_ongoing_job(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__discard_ongoing_job(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 204;
@@ -154,19 +162,21 @@ Ensure(api_discard_ongoing_job_test) {
     sprintf(&url[0], "https://%s:%d%s?id=%s", "localhost", 8010, "/job", "1b2934ad4e2c9");
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "DELETE", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__discard_ongoing_job);
+    run_client_request(&setup_data, test_verify__discard_ongoing_job, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
-static void test_verify__monitor_job_progress(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__monitor_job_progress(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 200;
@@ -190,19 +200,21 @@ Ensure(api_monitor_job_progress_test) {
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "GET", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__monitor_job_progress);
+    run_client_request(&setup_data, test_verify__monitor_job_progress, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
-static void test_verify__fetch_entire_file(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__fetch_entire_file(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 200;
@@ -218,16 +230,18 @@ Ensure(api_fetch_entire_file_test) {
             "/file", "1b2934ad4e2c9", "SD");
     const char *codename_list[1] = {NULL};
     json_t *header_kv_serials = json_array();
+    json_t *quota = json_array();
     // TODO, ensure whether the file is public accessible, then authenticate
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "GET", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__fetch_entire_file);
+    run_client_request(&setup_data, test_verify__fetch_entire_file, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 Ensure(api_get_next_media_segment_test) {
@@ -236,19 +250,21 @@ Ensure(api_get_next_media_segment_test) {
             "/file/playback", "1b2934ad4e2c9", "SD");
     const char *codename_list[1] = {NULL};
     json_t *header_kv_serials = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "GET", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__fetch_entire_file);
+    run_client_request(&setup_data, test_verify__fetch_entire_file, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
-static void test_verify__discard_file(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__discard_file(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 204;
@@ -263,19 +279,21 @@ Ensure(api_discard_file_test) {
     sprintf(&url[0], "https://%s:%d%s?id=%s", "localhost", 8010, "/file", "1b2934ad4e2c9");
     const char *codename_list[3] = {"upload_files", "edit_file_access_control", NULL};
     json_t *header_kv_serials = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "DELETE", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__discard_file);
+    run_client_request(&setup_data, test_verify__discard_file, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
-static void test_verify__edit_file_acl(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__edit_file_acl(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 200;
@@ -292,20 +310,22 @@ Ensure(api_edit_file_acl_test) {
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "PATCH", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath="./media/test/integration/examples/edit_file_acl_req_body.json"},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__edit_file_acl);
+    run_client_request(&setup_data, test_verify__edit_file_acl, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 
 
-static void test_verify__read_file_acl(CURL *handle, test_setup_priv_t *privdata)
+static void test_verify__read_file_acl(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
     long expect_resp_code = 200;
@@ -321,15 +341,17 @@ Ensure(api_read_file_acl_test) {
     const char *codename_list[2] = {"edit_file_access_control", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list);
+    json_t *quota = json_array();
+    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "GET", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
         .headers = header_kv_serials
     };
-    run_client_request(&setup_data, test_verify__read_file_acl);
+    run_client_request(&setup_data, test_verify__read_file_acl, NULL);
     json_decref(header_kv_serials);
+    json_decref(quota);
 }
 
 TestSuite *app_api_tests(void)
@@ -389,6 +411,7 @@ int main(int argc, char **argv) {
     pthread_kill(app_tid, SIGTERM);
     pthread_join(app_tid, NULL);
 done:
+    api_deinitiate_multipart_upload_tests();
     deinit_mock_auth_server();
     curl_global_cleanup();
     destroy_test_suite(suite);

@@ -607,7 +607,7 @@ static  uint8_t upload_part__validate_uri_query_param(char *raw_qparams, char *r
         err = 1;
     } // part number is supposed to be 16-bit short integer
     if(req_seq == -1) {
-        json_object_set_new(err_res_obj, "req_seq", json_string("invalid format of request ID"));
+        json_object_set_new(err_res_obj, "req_seq", json_string("missing request ID"));
         err = 1;
     }
     if(err) {
