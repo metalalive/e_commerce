@@ -217,7 +217,7 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
             .get_timeout_ms  = opts->ops.get_timeout_ms
         }
     };
-    size_t conn_sz = sizeof(db_conn_t) + (pool->cfg.bulk_query_limit_kb << 10);
+    size_t conn_sz = sizeof(db_conn_t) + (pool->cfg.bulk_query_limit_kb << 10) + 1; // including NULL-terminated byte
     size_t conn_node_sz = sizeof(db_llnode_t) + conn_sz;
     for(idx = 0; idx < pool->cfg.capacity; idx++) {   // initalize list of connections
         new_conn_node = malloc(conn_node_sz);

@@ -287,11 +287,11 @@ size_t multipart_parser_execute(multipart_parser *p, const char *buf, size_t len
             multipart_log("MULTIPART_STATE_ENTITY_POSSIBLE_END");
             if (c == HYPHEN) {
                 NOTIFY_CB(body_end);
-                p->state = MULTIPART_STATE_ENTITY_END; // fall through
+                p->state = MULTIPART_STATE_ENTITY_END;
             } else {
                 continue_parsing = 0;
-                break;
             }
+            break;
 
         case MULTIPART_STATE_ENTITY_END:
             multipart_log("MULTIPART_STATE_ENTITY_END: %02X", (int) c);

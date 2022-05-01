@@ -142,6 +142,8 @@ Ensure(app_db_query_test_start_new_query_ok) {
         for(size_t idx = 0; idx < NUM_USR_DATA_ITEMS; idx++) {
             assert_that(query->cfg.usr_data.entry[idx], is_equal_to(db_async_usr_data[idx]));
         }
+        // ensure the copied statement is NULL-terminated
+        assert_that(query->cfg.statements.entry, is_equal_to_string(qcfg.statements.entry));
         uv_close((uv_handle_t *)&query->notification, NULL);
         uv_run(_loop, UV_RUN_ONCE);
         free(free_conn.pending_queries.head);

@@ -133,7 +133,7 @@ Ensure(app_db_conn_add_new_query_test) {
 
 #define NUM_NEW_QUERIES  11
 #define TEST_RAW_SQL  "SELECT a123, a234, a345, other_column FROM some_table WHERE a456 = 987 AND a567 = 108 ORDER BY b123 DESC LIMIT 21;"
-Ensure(app_db_conn_update_ready_queries_test) {
+Ensure(app_db_conn_update_ready_queries_test_1) {
     db_conn_extend_t conn = {0};
     db_pool_t pool = {.cfg = {.bulk_query_limit_kb = CONN_BULK_QUERY_LIMIT_KB}};
     DBA_RES_CODE result = app_db_conn_init(&conn.super, &pool);
@@ -195,9 +195,57 @@ Ensure(app_db_conn_update_ready_queries_test) {
     }
     result = app_db_conn_deinit(&conn.super);
     assert_that(result, is_equal_to(DBA_RESULT_OK));
-} // end of app_db_conn_update_ready_queries_test
+} // end of app_db_conn_update_ready_queries_test_1
 #undef  NUM_NEW_QUERIES
 #undef  TEST_RAW_SQL
+
+
+#define NUM_QUERIES 4
+#define TEST_RAW_SQL_1  "SELECT COUNT(a123), a789 FROM some_table WHERE a456 = 987 AND a567 = 108 GROUP BY ghj;"
+#define TEST_RAW_SQL_2  "SELECT d543, d567 FROM some_other_table WHERE xyz = 'tyui' LIMIT 10;"
+#define TEST_RAW_SQL_3  "SELECT g67 FROM third_table WHERE jklm < 90 LIMIT 10;"
+#define TEST_RAW_SQL_4  "SELECT m33, risc FROM fourth_table;"
+Ensure(app_db_conn_update_ready_queries_test_2) {
+    const char *test_raw_sqls[NUM_QUERIES] = { TEST_RAW_SQL_1, TEST_RAW_SQL_2, 
+        TEST_RAW_SQL_3, TEST_RAW_SQL_4 };
+    db_conn_extend_t conn = {0};
+    db_pool_t pool = {.cfg = {.bulk_query_limit_kb = 1}};
+    DBA_RES_CODE result = app_db_conn_init(&conn.super, &pool);
+    db_query_extend_t  qs_pend[NUM_QUERIES] = {0};
+    int idx = 0;
+    for(idx = 0; idx < NUM_QUERIES; idx++) {
+        db_query_t *q = (db_query_t *) &qs_pend[idx].node.data[0];
+        q->cfg.statements.num_rs = 1;
+        q->cfg.statements.entry = test_raw_sqls[idx];
+        q->_stmts_tot_sz = strlen(test_raw_sqls[idx]);
+    }
+    {
+        conn.super.ops.add_new_query(&conn.super, (db_query_t *) &qs_pend[0].node.data[0]);
+        conn.super.ops.add_new_query(&conn.super, (db_query_t *) &qs_pend[1].node.data[0]);
+        result = conn.super.ops.update_ready_queries(&conn.super);
+        assert_that(result, is_equal_to(DBA_RESULT_OK));
+        size_t exp_stmts_sz = strlen(TEST_RAW_SQL_1  TEST_RAW_SQL_2);
+        assert_that(conn.super.bulk_query_rawbytes.wr_sz, is_equal_to(exp_stmts_sz));
+        assert_that(&conn.super.bulk_query_rawbytes.data[0],
+                is_equal_to_string(TEST_RAW_SQL_1  TEST_RAW_SQL_2));
+    }
+    conn.super.processing_queries = NULL;
+    {
+        conn.super.ops.add_new_query(&conn.super, (db_query_t *) &qs_pend[2].node.data[0]);
+        conn.super.ops.add_new_query(&conn.super, (db_query_t *) &qs_pend[3].node.data[0]);
+        result = conn.super.ops.update_ready_queries(&conn.super);
+        assert_that(result, is_equal_to(DBA_RESULT_OK));
+        size_t exp_stmts_sz = strlen(TEST_RAW_SQL_3  TEST_RAW_SQL_4);
+        assert_that(conn.super.bulk_query_rawbytes.wr_sz, is_equal_to(exp_stmts_sz));
+        assert_that(&conn.super.bulk_query_rawbytes.data[0],
+                is_equal_to_string(TEST_RAW_SQL_3  TEST_RAW_SQL_4));
+    }
+} // end of app_db_conn_update_ready_queries_test_2
+#undef NUM_QUERIES
+#undef TEST_RAW_SQL_1
+#undef TEST_RAW_SQL_2
+#undef TEST_RAW_SQL_3
+#undef TEST_RAW_SQL_4
 
 
 Ensure(app_db_conn_try_process_queries_test) {
@@ -282,7 +330,8 @@ TestSuite *app_model_connection_tests(void)
     add_test(suite, app_db_conn_try_evict_query_test);
     add_test(suite, app_db_conn_get_first_query_test);
     add_test(suite, app_db_conn_add_new_query_test);
-    add_test(suite, app_db_conn_update_ready_queries_test);
+    add_test(suite, app_db_conn_update_ready_queries_test_1);
+    add_test(suite, app_db_conn_update_ready_queries_test_2);
     add_test(suite, app_db_conn_try_process_queries_test);
     add_test(suite, app_db_conn_try_close_test);
     return suite;

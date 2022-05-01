@@ -58,20 +58,23 @@ static DBA_RES_CODE app_db_conn__update_ready_queries(db_conn_t *conn) {
         size_t stmt_total_sz = 0;
         db_llnode_t *pq_tail = NULL;
         conn->bulk_query_rawbytes.wr_sz = 0;
+        char *wr_ptr = &conn->bulk_query_rawbytes.data[0];
         for(pq_tail = conn->pending_queries.head; pq_tail; pq_tail = pq_tail->next) {
             db_query_t *query = (db_query_t *)pq_tail->data;
             assert(query->_stmts_tot_sz <= q_limit_bytes);
             size_t stmt_total_sz_tmp = stmt_total_sz + query->_stmts_tot_sz;
             if(stmt_total_sz_tmp < q_limit_bytes) {
-                size_t offset = conn->bulk_query_rawbytes.wr_sz;
-                conn->bulk_query_rawbytes.wr_sz += _app_db_conn_rdy_stmts_to_net_buffer(
-                        &conn->bulk_query_rawbytes.data[offset], query );
+                size_t n_wr = _app_db_conn_rdy_stmts_to_net_buffer( wr_ptr, query );
+                conn->bulk_query_rawbytes.wr_sz += n_wr;
+                wr_ptr += n_wr;
                 stmt_total_sz = stmt_total_sz_tmp;
             } else {
                 pq_tail = pq_tail->prev;
                 break;
             }
         }
+        *wr_ptr++ = 0x0; // always append NULL char to the end of bulk query statements
+        //// conn->bulk_query_rawbytes.wr_sz ++; // NULL char must NOT be sent to database server
         {
             atomic_thread_fence(memory_order_acquire);
             conn->processing_queries = conn->pending_queries.head;
@@ -218,7 +221,7 @@ DBA_RES_CODE app_db_conn_init(db_conn_t *conn, db_pool_t *pool)
         result = DBA_RESULT_ERROR_ARG;
         goto done;
     }
-    size_t bulk_query_rawbytes_sz = pool->cfg.bulk_query_limit_kb << 10;
+    size_t bulk_query_rawbytes_sz = (pool->cfg.bulk_query_limit_kb << 10) + 1;
     memset(conn, 0, sizeof(db_conn_t));
     memset(&conn->bulk_query_rawbytes.data[0], 0, sizeof(char) * bulk_query_rawbytes_sz);
     pthread_mutex_init(&conn->lock, NULL);

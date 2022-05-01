@@ -57,7 +57,7 @@ static int utest_multipart_1__on_part_data (multipart_parser *mp, const char *at
                                                TEST_CHAR_NEWLINE \
     TEST_MULTIPART_PART_1                      TEST_CHAR_NEWLINE \
     TEST_CHAR_2HYPHENS TEST_MULTIPART_BOUNDARY TEST_CHAR_2HYPHENS
-Ensure(multipart_parsing_test__fragmented_body_part) {
+Ensure(multipart_parsing_test__fragmented_bodypart_1) {
     char  mock_part_readback[sizeof(TEST_MULTIPART_PART_1)] = {0};
     char *mock_part_readback_ptr = &mock_part_readback[0];
     multipart_parser_settings  settings = {
@@ -116,12 +116,125 @@ Ensure(multipart_parsing_test__fragmented_body_part) {
         nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
         assert_that(mp->state, is_equal_to(MULTIPART_STATE_ENTITY_END));
         req_body_ptr += nread;
-        assert_that(req_body_ptr, is_equal_to(req_body_ptr_bak + strlen(TEST_MULTIPART_ENTITY)));
+        assert_that(req_body_ptr, is_equal_to(req_body_ptr_bak + sizeof(TEST_MULTIPART_ENTITY)));
     }
     multipart_parser_free(mp);
-} // end of multipart_parsing_test__fragmented_body_part
+} // end of multipart_parsing_test__fragmented_bodypart_1
 #undef  TEST_MULTIPART_PART_1
 #undef  TEST_MULTIPART_ENTITY
+
+
+#define  TEST_MULTIPART_BODYPART_CHUNK1 "wombat" "\r" 
+#define  TEST_MULTIPART_BODYPART_CHUNK2 "penguin." 
+#define  TEST_MULTIPART_BODYPART_CHUNK3 "pigeon" TEST_CHAR_NEWLINE
+#define  TEST_MULTIPART_BODYPART_CHUNK4 "kangaroo." 
+#define  TEST_MULTIPART_BODYPART_CHUNK5 "koala" TEST_CHAR_NEWLINE "-"
+#define  TEST_MULTIPART_BODYPART_CHUNK6 "sloths." 
+#define  TEST_MULTIPART_BODYPART_CHUNK7 "catfish" TEST_CHAR_NEWLINE TEST_CHAR_2HYPHENS
+#define  TEST_MULTIPART_BODYPART_CHUNK8 "electric fish." 
+#define  TEST_MULTIPART_BODY_PART  TEST_MULTIPART_BODYPART_CHUNK1  TEST_MULTIPART_BODYPART_CHUNK2 \
+        TEST_MULTIPART_BODYPART_CHUNK3  TEST_MULTIPART_BODYPART_CHUNK4  TEST_MULTIPART_BODYPART_CHUNK5 \
+        TEST_MULTIPART_BODYPART_CHUNK6  TEST_MULTIPART_BODYPART_CHUNK7  TEST_MULTIPART_BODYPART_CHUNK8
+#define  TEST_MULTIPART_ENTITY \
+    TEST_CHAR_2HYPHENS TEST_MULTIPART_BOUNDARY TEST_CHAR_NEWLINE \
+                                               TEST_CHAR_NEWLINE \
+    TEST_MULTIPART_BODY_PART                   TEST_CHAR_NEWLINE \
+    TEST_CHAR_2HYPHENS TEST_MULTIPART_BOUNDARY TEST_CHAR_2HYPHENS \
+    TEST_REQ_BODY_IGNORED
+Ensure(multipart_parsing_test__fragmented_bodypart_2) {
+    // this test case shows that you may read more bytes than you specified in `len`
+    //  argument of multipart_parser_execute() when certain situations happen
+    multipart_parser_settings  settings = {.usr_args = {.sz = 0, .entry = NULL},
+        .cbs = {.on_part_data = utest_multipart_1__on_part_data }
+    };
+    multipart_parser *mp = multipart_parser_init(TEST_MULTIPART_BOUNDARY, &settings);
+    assert_that(mp, is_not_null);
+    if (!mp) { return; }
+    size_t nread = 0;
+    size_t mock_rd_buf_sz = 0;
+    const char *req_body_ptr = TEST_MULTIPART_ENTITY;
+    {
+        const char *exp_tot_rd_data = TEST_CHAR_2HYPHENS TEST_MULTIPART_BOUNDARY  TEST_CHAR_NEWLINE
+            TEST_CHAR_NEWLINE  TEST_MULTIPART_BODYPART_CHUNK1;
+        size_t exp_rd_sz = sizeof(TEST_MULTIPART_BODYPART_CHUNK1) - 1;
+        char exp_rd_data[sizeof(TEST_MULTIPART_BODYPART_CHUNK1) - 1] = {0};
+        memcpy(exp_rd_data, TEST_MULTIPART_BODYPART_CHUNK1, exp_rd_sz - 1); // final \r character should be preserved in mp object
+        mock_rd_buf_sz = strlen(exp_tot_rd_data);
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string(exp_rd_data)));
+        nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
+        assert_that(nread, is_equal_to(mock_rd_buf_sz));
+        req_body_ptr += nread;
+    }
+    {
+        mock_rd_buf_sz = strlen(TEST_MULTIPART_BODYPART_CHUNK2);
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string("\r")));
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string(TEST_MULTIPART_BODYPART_CHUNK2)));
+        nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
+        assert_that(nread, is_equal_to(mock_rd_buf_sz));
+        req_body_ptr += nread;
+    }
+    {
+        mock_rd_buf_sz = strlen(TEST_MULTIPART_BODYPART_CHUNK3);
+        char exp_rd_data[sizeof(TEST_MULTIPART_BODYPART_CHUNK3)] = {0};
+        memcpy(exp_rd_data, TEST_MULTIPART_BODYPART_CHUNK3, mock_rd_buf_sz - 2);
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string( exp_rd_data )));
+        nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
+        assert_that(nread, is_equal_to(mock_rd_buf_sz));
+        req_body_ptr += nread;
+    }
+    {
+        mock_rd_buf_sz = strlen(TEST_MULTIPART_BODYPART_CHUNK4);
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string(TEST_CHAR_NEWLINE)));
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string(TEST_MULTIPART_BODYPART_CHUNK4)));
+        nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
+        assert_that(nread, is_equal_to(mock_rd_buf_sz));
+        req_body_ptr += nread;
+    }
+    {
+        mock_rd_buf_sz = strlen(TEST_MULTIPART_BODYPART_CHUNK5);
+        char exp_rd_data[sizeof(TEST_MULTIPART_BODYPART_CHUNK5)] = {0};
+        memcpy(exp_rd_data, TEST_MULTIPART_BODYPART_CHUNK5, mock_rd_buf_sz - 3);
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string( exp_rd_data )));
+        nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
+        assert_that(nread, is_equal_to(mock_rd_buf_sz));
+        req_body_ptr += nread;
+    }
+    {
+        mock_rd_buf_sz = strlen(TEST_MULTIPART_BODYPART_CHUNK6);
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string(TEST_CHAR_NEWLINE "-")));
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string(TEST_MULTIPART_BODYPART_CHUNK6)));
+        nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
+        assert_that(nread, is_equal_to(mock_rd_buf_sz));
+        req_body_ptr += nread;
+    }
+    {
+        mock_rd_buf_sz = strlen(TEST_MULTIPART_BODYPART_CHUNK7);
+        char exp_rd_data[sizeof(TEST_MULTIPART_BODYPART_CHUNK7)] = {0};
+        memcpy(exp_rd_data, TEST_MULTIPART_BODYPART_CHUNK7, mock_rd_buf_sz - 4);
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string( exp_rd_data )));
+        nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
+        assert_that(nread, is_equal_to(mock_rd_buf_sz));
+        req_body_ptr += nread;
+    }
+    {
+        mock_rd_buf_sz = strlen(TEST_MULTIPART_BODYPART_CHUNK8);
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string(TEST_CHAR_NEWLINE TEST_CHAR_2HYPHENS)));
+        expect(utest_multipart_1__on_part_data, will_return(0),  when(fetched_value, is_equal_to_string(TEST_MULTIPART_BODYPART_CHUNK8)));
+        nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
+        assert_that(nread, is_equal_to(mock_rd_buf_sz));
+        req_body_ptr += nread;
+    }
+} // end of multipart_parsing_test__fragmented_bodypart_2
+#undef  TEST_MULTIPART_ENTITY
+#undef  TEST_MULTIPART_BODY_PART
+#undef  TEST_MULTIPART_BODYPART_CHUNK1
+#undef  TEST_MULTIPART_BODYPART_CHUNK2
+#undef  TEST_MULTIPART_BODYPART_CHUNK3
+#undef  TEST_MULTIPART_BODYPART_CHUNK4
+#undef  TEST_MULTIPART_BODYPART_CHUNK5
+#undef  TEST_MULTIPART_BODYPART_CHUNK6
+#undef  TEST_MULTIPART_BODYPART_CHUNK7
+#undef  TEST_MULTIPART_BODYPART_CHUNK8
 
 
 
@@ -137,7 +250,7 @@ Ensure(multipart_parsing_test__fragmented_body_part) {
     TEST_MULTIPART_PART_1                      TEST_CHAR_NEWLINE \
     TEST_CHAR_2HYPHENS TEST_MULTIPART_BOUNDARY TEST_CHAR_2HYPHENS \
     TEST_REQ_BODY_IGNORED
-Ensure(multipart_parsing_test__identify_boundary_ok)
+Ensure(multipart_parsing_test__identify_boundary)
 { // parse the content that is pretty similar to (but NOT the same as) the defined boundary
     char  mock_part_readback[sizeof(TEST_MULTIPART_PART_1)] = {0};
     char *mock_part_readback_ptr = &mock_part_readback[0];
@@ -182,12 +295,12 @@ Ensure(multipart_parsing_test__identify_boundary_ok)
         expect(utest_multipart_1__on_part_data, will_return(0), when(curr_state, is_equal_to(MULTIPART_STATE_PART_DATA_PROCEED)));
         nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
         req_body_ptr += nread;
-        size_t expect_total_nread = strlen(TEST_MULTIPART_ENTITY) - strlen(TEST_REQ_BODY_IGNORED);
+        size_t expect_total_nread = sizeof(TEST_MULTIPART_ENTITY) - strlen(TEST_REQ_BODY_IGNORED);
         assert_that(req_body_ptr, is_equal_to(req_body_ptr_bak + expect_total_nread));
     }
     assert_that(mock_part_readback_ptr, is_equal_to_string(TEST_MULTIPART_PART_1));
     multipart_parser_free(mp);
-} // end of multipart_parsing_test__identify_boundary_ok
+} // end of multipart_parsing_test__identify_boundary
 #undef  TEST_MULTIPART_PART_1
 #undef  TEST_MULTIPART_ENTITY
 
@@ -231,7 +344,7 @@ Ensure(multipart_parsing_test__several_parts_ok) {
         expect(utest_multipart_1__on_part_data, will_return(0), when(curr_state, is_equal_to(MULTIPART_STATE_PART_DATA_PROCEED)),
                 when(fetched_value, is_equal_to_string(TEST_MULTIPART_PART_3)) );
         size_t actual_nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
-        size_t expect_nread = strlen(TEST_MULTIPART_ENTITY) - strlen(TEST_REQ_BODY_IGNORED);
+        size_t expect_nread = sizeof(TEST_MULTIPART_ENTITY) - strlen(TEST_REQ_BODY_IGNORED);
         assert_that(actual_nread, is_equal_to(expect_nread));
     }
     assert_that(mock_part_readback_ptr, is_equal_to_string(EXPECT_READBACK_CONTENT));
@@ -295,7 +408,7 @@ Ensure(multipart_parsing_test__headers_ok) {
         expect(utest_multipart_1__on_part_data, will_return(0), when(curr_state, is_equal_to(MULTIPART_STATE_PART_DATA_PROCEED)),
                 when(fetched_value, is_equal_to_string(TEST_MULTIPART_PART_2)) );
         size_t actual_nread = multipart_parser_execute(mp, req_body_ptr, mock_rd_buf_sz);
-        size_t expect_nread = strlen(TEST_MULTIPART_ENTITY);
+        size_t expect_nread = sizeof(TEST_MULTIPART_ENTITY);
         assert_that(actual_nread, is_equal_to(expect_nread));
     }
     multipart_parser_free(mp);
@@ -370,8 +483,9 @@ Ensure(multipart_parsing_test__fragmented_header) {
 
 TestSuite *app_multipart_parsing_tests(void) {
     TestSuite *suite = create_test_suite();
-    add_test(suite, multipart_parsing_test__fragmented_body_part);
-    add_test(suite, multipart_parsing_test__identify_boundary_ok);
+    add_test(suite, multipart_parsing_test__fragmented_bodypart_1);
+    add_test(suite, multipart_parsing_test__fragmented_bodypart_2);
+    add_test(suite, multipart_parsing_test__identify_boundary);
     add_test(suite, multipart_parsing_test__several_parts_ok);
     add_test(suite, multipart_parsing_test__headers_ok);
     add_test(suite, multipart_parsing_test__fragmented_header);

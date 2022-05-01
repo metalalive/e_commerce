@@ -136,6 +136,14 @@ static db_query_t *app_db_query_generate_node(db_query_cfg_t *qcfg) {
     }
     query->cfg.statements.entry = ptr;
     memcpy(query->cfg.statements.entry, qcfg->statements.entry, query->_stmts_tot_sz);
+    { // rest of allocated bytes must be zero, to avoid logical error when parsing result sets later
+        ptr += query->_stmts_tot_sz;
+        size_t curr_visit_q_sz = (size_t) ((ssize_t)ptr - (ssize_t)node);
+        if(curr_visit_q_sz < node_q_sz) {
+            size_t rest_sz = node_q_sz - curr_visit_q_sz;
+            memset(ptr, 0x0, rest_sz);
+        }
+    }
     return query;
 } // end of app_db_query_generate_node
 
