@@ -9,8 +9,6 @@
 #include "storage/localfs.h"
 
 #define APP_FILECHUNK_WR_BUF_SZ  128
-#define USR_ID_STR_SIZE       10
-#define UPLOAD_INT2HEX_SIZE(x) (sizeof(x) << 1)
 #define UPLOAD_PART_NUM_SIZE  5
 #define UNCOMMITTED_FOLDER "uncommitted"
 
@@ -25,6 +23,8 @@ typedef struct {
     uint8_t end_flag:1;
     SHA_CTX  checksum;
 } app_mpp_usrarg_t;
+
+void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
 
 static void  upload_part__db_async_err(db_query_t *target, db_query_result_t *rs)
 {
@@ -41,11 +41,6 @@ static void  upload_part__db_async_err(db_query_t *target, db_query_result_t *rs
     }
     app_run_next_middleware(self, req, node);
 } // end of upload_part__db_async_err
-
-static void  upload_part__db_dummy_callback(db_query_t *target, db_query_result_t *rs)
-{
-    (void *)rs;
-}
 
 
 static void  upload_part__add_chunk_record_rs_rdy(db_query_t *target, db_query_result_t *rs)
@@ -105,8 +100,8 @@ static __attribute__((optimize("O0"))) DBA_RES_CODE upload_part__add_chunk_recor
         .loop = req->conn->ctx->loop,
         .callbacks = {
             .result_rdy  = upload_part__add_chunk_record_rs_rdy,
-            .row_fetched = upload_part__db_dummy_callback,
-            .result_free = upload_part__db_dummy_callback,
+            .row_fetched = app_db_async_dummy_cb,
+            .result_free = app_db_async_dummy_cb,
             .error = upload_part__db_async_err,
         }
     };
@@ -504,7 +499,7 @@ static DBA_RES_CODE upload_part__validate_quota_start(RESTAPI_HANDLER_ARGS(self,
         .callbacks = {
             .result_rdy  = upload_part__validate_quota_rs_rdy,
             .row_fetched = upload_part__validate_quota_fetch_row,
-            .result_free = upload_part__db_dummy_callback,
+            .result_free = app_db_async_dummy_cb,
             .error = upload_part__db_async_err,
         }
     };
@@ -512,83 +507,28 @@ static DBA_RES_CODE upload_part__validate_quota_start(RESTAPI_HANDLER_ARGS(self,
 #undef SQL_PATTERN
 } // end of upload_part__validate_quota_start
 
-static void  upload_part__validate_reqseq_row_fetch(db_query_t *target, db_query_result_t *rs)
-{ // supposed to be invoked only once
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    size_t num_active_reqs = (size_t) target->cfg.usr_data.entry[3];
-#pragma GCC diagnostic pop
-    target->cfg.usr_data.entry[3] = (void *) num_active_reqs + 1;
-} // end of upload_part__validate_reqseq_row_fetch
 
-static void  upload_part__validate_reqseq_rs_free(db_query_t *target, db_query_result_t *rs)
+static int upload_part__validate_reqseq_success(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node) 
 {
-    h2o_req_t     *req  = (h2o_req_t *) target->cfg.usr_data.entry[0];
-    h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[1];
-    app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    size_t num_active_reqs = (size_t) target->cfg.usr_data.entry[3];
-#pragma GCC diagnostic pop
-    if (rs->app_result == DBA_RESULT_OK) {
-        // check quota limit, estimate all uploaded chunks of the user
-        if(num_active_reqs == 0) {
-            char body_raw[] = "{\"req_seq\":\"request not exists\"}";
-            req->res.status = 400;
-            h2o_send_inline(req, body_raw, strlen(body_raw));
-            app_run_next_middleware(self, req, node);
-        } else if(num_active_reqs == 1) {
-            DBA_RES_CODE result = upload_part__validate_quota_start(self, req, node);
-            if(result == DBA_RESULT_OK) {
-                app_save_int_to_hashmap(node->data, "total_uploaded_bytes", 0);
-            } else {
-                upload_part__db_async_err(target, rs);
-            }
-        } else {
-            upload_part__db_async_err(target, rs);
-        }
+    DBA_RES_CODE result = upload_part__validate_quota_start(self, req, node);
+    if(result == DBA_RESULT_OK) {
+        app_save_int_to_hashmap(node->data, "total_uploaded_bytes", 0);
     } else {
-        upload_part__db_async_err(target, rs);
+        void *args[3] = {(void *)req, (void *)self, (void *)node};
+        db_query_t  fake_q = {.cfg = {.usr_data = {.entry = (void **)&args[0], .len=3}}};
+        upload_part__db_async_err(&fake_q, NULL);
     }
-} // end of upload_part__validate_reqseq_rs_free
+    return 0;
+}
 
-
-static  DBA_RES_CODE upload_part__validate_reqseq_start(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
+static int upload_part__validate_reqseq_failure(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node) 
 {
-    int usr_id  = 0;
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    int req_seq = (int)app_fetch_from_hashmap(node->data, "req_seq");
-#pragma GCC diagnostic pop
-    {
-        json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
-        if(!jwt_claims) {
-            return DBA_RESULT_ERROR_ARG;
-        }
-        usr_id = (int) json_integer_value(json_object_get(jwt_claims, "profile"));
-        if(usr_id == 0) {
-            return DBA_RESULT_ERROR_ARG;
-        }
-    }
-#define SQL_PATTERN "SELECT `usr_id` FROM `uncommitted_upload_request` WHERE `usr_id` = %u AND `req_id` = x'%08x';"
-    size_t raw_sql_sz = sizeof(SQL_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(req_seq);
-    char raw_sql[raw_sql_sz];
-    memset(&raw_sql[0], 0x0, raw_sql_sz);
-    size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, usr_id, req_seq);
-    assert(nwrite_sql < raw_sql_sz);
-    void *db_async_usr_data[4] = {(void *)req, (void *)self, (void *)node, (void *)0};
-    db_query_cfg_t  cfg = {
-        .statements = {.entry = &raw_sql[0], .num_rs = 1},
-        .usr_data = {.entry = (void **)&db_async_usr_data, .len = 4},
-        .pool = app_db_pool_get_pool("db_server_1"),
-        .loop = req->conn->ctx->loop,
-        .callbacks = {
-            .result_rdy  = upload_part__db_dummy_callback,
-            .row_fetched = upload_part__validate_reqseq_row_fetch,
-            .result_free = upload_part__validate_reqseq_rs_free,
-            .error = upload_part__db_async_err,
-        }
-    };
-    return app_db_query_start(&cfg);
-#undef SQL_PATTERN
-} // end of upload_part__validate_reqseq_start
+    char body_raw[] = "{\"req_seq\":\"request not exists\"}";
+    req->res.status = 400;
+    h2o_send_inline(req, body_raw, strlen(body_raw));
+    app_run_next_middleware(self, req, node);
+    return 0;
+}
 
 
 static  uint8_t upload_part__validate_uri_query_param(char *raw_qparams, char *res_body,
@@ -649,7 +589,11 @@ RESTAPI_ENDPOINT_HANDLER(upload_part, POST, self, req)
     }
 #undef MAX_BYTES_RESP_BODY
     // now check existence of req_seq, will access database asynchronously
-    if(upload_part__validate_reqseq_start(self, req, node) == DBA_RESULT_OK) {
+    DBA_RES_CODE db_result = app_validate_uncommitted_upld_req(
+            self, req, node, "uncommitted_upload_request", upload_part__db_async_err,
+            upload_part__validate_reqseq_success, upload_part__validate_reqseq_failure
+        );
+    if(db_result == DBA_RESULT_OK) {
         goto done;
     } else {
         h2o_send_error_500(req, "internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);

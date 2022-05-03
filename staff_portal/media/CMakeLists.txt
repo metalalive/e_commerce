@@ -178,6 +178,7 @@ SET(APP_COMMON_SOURCE_FILES
     src/app.c
     src/utils.c
     src/views/init.c
+    src/views/common.c
     src/views/initiate_multipart_upload.c
     src/views/upload_part.c
     src/timer_poll.c

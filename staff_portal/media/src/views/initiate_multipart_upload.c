@@ -4,7 +4,6 @@
 #include "models/query.h"
 
 #define MYSQL_BINARY_HEX_SIZE(x)  (x << 1)
-#define USR_ID_STR_SIZE  10
 #define DATETIME_STR_SIZE 20
 #define MAX_NUM_ACTIVE_UPLOAD_REQUESTS 3
 
@@ -35,6 +34,8 @@
     "END;\x00"
 
 
+void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
+
 static DBA_RES_CODE  initiate_multipart_upload__try_add_new_request(h2o_handler_t *self, h2o_req_t *req, app_middleware_node_t *node);
 
 static void initiate_multipart_upload__db_async_err(db_query_t *target, db_query_result_t *detail)
@@ -44,11 +45,6 @@ static void initiate_multipart_upload__db_async_err(db_query_t *target, db_query
     app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
     h2o_send_error_503(req, "server temporarily unavailable", "", H2O_SEND_ERROR_KEEP_HEADERS);
     app_run_next_middleware(self, req, node);
-}
-
-static void initiate_multipart_upload__dummy_callback(db_query_t *target, db_query_result_t *detail)
-{
-    (void *)detail;
 }
 
 static void initiate_multipart_upload__fetch_row(db_query_t *target, db_query_result_t *detail)
@@ -175,7 +171,7 @@ static DBA_RES_CODE  initiate_multipart_upload__try_add_new_request(h2o_handler_
         .callbacks = {
             .result_rdy  = initiate_multipart_upload__result_set_ready,
             .row_fetched = initiate_multipart_upload__fetch_row,
-            .result_free = initiate_multipart_upload__dummy_callback,
+            .result_free = app_db_async_dummy_cb,
             .error = initiate_multipart_upload__db_async_err,
         }
     };

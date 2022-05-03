@@ -7,6 +7,7 @@ extern "C" {
 #include <search.h>
 #include "auth.h"
 #include "middleware.h"
+#include "models/datatypes.h"
 
 // see media/migration/changelog_usermgt.log for detail
 #define QUOTA_MATERIAL__MAX_UPLOAD_KBYTES_PER_USER  1
@@ -143,6 +144,16 @@ extern "C" {
     } \
     static int API_FINAL_HANDLER_##func_name(RESTAPI_HANDLER_ARGS(hdlr_var, req_var), app_middleware_node_t *node)
 
+
+#define USR_ID_STR_SIZE       10
+#define UPLOAD_INT2HEX_SIZE(x) (sizeof(x) << 1)
+
+DBA_RES_CODE  app_validate_uncommitted_upld_req (
+    RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,
+    const char *db_table, void (*err_cb)(db_query_t *, db_query_result_t *),
+    app_middleware_fn success_cb,
+    app_middleware_fn failure_cb
+);
 
 #ifdef __cplusplus
 } // end of extern C clause
