@@ -3,6 +3,7 @@
 #include "models/pool.h"
 #include "models/query.h"
 
+
 /*
     {
         // TODO, figure out how to use generator to stream the response data
@@ -27,44 +28,6 @@
         app_run_next_middleware(self, req, node);
     }
  * */
-
-
-// TODO:another API endpoint for checking status of each upload request that hasn't expired yet
-RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)
-{
-    json_t *res_body = json_object();
-    json_t *qparams = json_object();
-    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
-    const char *resource_id = json_string_value(json_object_get(qparams, "resource_id"));
-    const char *upload_id   = json_string_value(json_object_get(qparams, "upload_id"));
-    if(!resource_id || !upload_id) {
-        req->res.status = 400;
-        req->res.reason = "invalid ID";
-        goto done;
-    }
-    json_object_set_new(res_body, "resource_id", json_string(resource_id));
-    json_object_set_new(res_body, "upload_id",   json_string(upload_id));
-    json_object_set_new(res_body, "mime_type",   json_string("video/mp4"));
-    json_object_set_new(res_body, "last_update", json_string("2022-01-26"));
-    json_object_set_new(res_body, "checksum", json_string("b17a33501506315093eb082"));
-    json_object_set_new(res_body, "alg"     , json_string("md5"));
-    req->res.status = 201; // or 200
-    req->res.reason = "Created"; // or renew (and erase old one) successfully
-done:
-    {
-        size_t MAX_BYTES_RESP_BODY = 200;
-        char body_raw[MAX_BYTES_RESP_BODY];
-        size_t nwrite = json_dumpb((const json_t *)res_body, &body_raw[0],  MAX_BYTES_RESP_BODY, JSON_COMPACT);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
-        h2o_send_inline(req, body_raw, nwrite);
-    }
-    json_decref(res_body);
-    json_decref(qparams);
-    app_run_next_middleware(self, req, node);
-    return 0;
-} // end of complete_multipart_upload()
-
-
 RESTAPI_ENDPOINT_HANDLER(abort_multipart_upload, DELETE, self, req)
 {
     req->res.status = 204;

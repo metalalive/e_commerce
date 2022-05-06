@@ -97,6 +97,33 @@
             }
         }
     ],
+    "rpc":[
+        {
+            "bindings": [
+                {
+                    "queue": "rpc_media_complete_multipart_upload",
+                    "exchange": "rpc-default-allapps",
+                    "routing_key": "rpc.media.complete_multipart_upload",
+                    "durable": true,
+                    "reply": {
+                        "q_name_pattern": "rpc.reply.%s",
+                        "exchange": "rpc-default-allapps",
+                        "task_handler_fn": "api_complete_multipart_upload__rpc_task_handler",
+                        "ttl_sec": 30
+                    }
+                }
+            ],
+            "attributes": {
+                "vhost":"/",
+                "max_channels": 256,
+                "max_kb_per_frame": 6
+            },
+            "credential": {
+                "hierarchy": ["amqp_broker", 1],
+                "filepath":"common/data/secrets.json"
+            }
+        }
+    ],
     "tmp_buf": {
         "path": "tmp/buffer/media/test",
         "threshold_in_bytes": 102400

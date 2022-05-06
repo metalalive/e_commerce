@@ -50,10 +50,11 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg)
     if(!objs || !app_cfg || !app_cfg->exe_path) {
         goto error;
     }
-    size_t prev_num_storage_setup = app_cfg->storages.size;
+    size_t prev_num_storage_setup = app_cfg->storages.capacity;
     size_t num_storage_setup = json_array_size(objs);
     if(prev_num_storage_setup < num_storage_setup) {
         h2o_vector_reserve(NULL, &app_cfg->storages, num_storage_setup);
+        num_storage_setup = app_cfg->storages.capacity; // h2o_vector_reserve() may allocates extra space
         realloc_mem = 1;
         size_t sz = sizeof(asa_cfg_t) * (num_storage_setup - prev_num_storage_setup);
         void *ptr = &app_cfg->storages.entries[prev_num_storage_setup];

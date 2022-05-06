@@ -48,6 +48,7 @@ PKG_CHECK_MODULES(NETTLE    REQUIRED  nettle>=3.7.2)
 PKG_CHECK_MODULES(P11KIT    REQUIRED  p11-kit-1>=0.24.0)
 
 PKG_CHECK_MODULES(MARIADB  REQUIRED  libmariadb>=3.1.7)
+PKG_CHECK_MODULES(RABBITMQ REQUIRED  librabbitmq>=0.11.0)
 
 PKG_CHECK_MODULES(LIBCURL  REQUIRED libcurl>=7.69.0)
 PKG_CHECK_MODULES(LIBNGHTTP2  REQUIRED libnghttp2>=1.46.0)
@@ -110,6 +111,7 @@ INCLUDE_DIRECTORIES(
     ${NETTLE_INCLUDE_DIRS}
     ${P11KIT_INCLUDE_DIRS}
     ${MARIADB_INCLUDE_DIRS}
+    ${RABBITMQ_INCLUDE_DIRS}
     ${LIBCURL_INCLUDE_DIRS}
     ${LIBNGHTTP2_INCLUDE_DIRS}
     ${JANSSON_INCLUDE_DIRS})
@@ -125,6 +127,7 @@ LINK_DIRECTORIES(
     ${NETTLE_LIBRARY_DIRS}
     ${P11KIT_LIBRARY_DIRS}
     ${MARIADB_LIBRARY_DIRS}
+    ${RABBITMQ_LIBRARY_DIRS}
     ${JANSSON_LIBRARY_DIRS}
     ${LIBCURL_LIBRARY_DIRS}
     ${LIBNGHTTP2_LIBRARY_DIRS} )
@@ -169,6 +172,8 @@ SET(APP_COMMON_SOURCE_FILES
     src/models/connection.c
     src/models/mariadb.c
     src/models/query.c
+    src/rpc/core.c
+    src/rpc/cfg_parser.c
     src/storage/cfg_parser.c
     src/storage/localfs.c
     src/middleware.c
@@ -179,6 +184,7 @@ SET(APP_COMMON_SOURCE_FILES
     src/utils.c
     src/views/init.c
     src/views/common.c
+    src/views/complete_multipart_upload.c
     src/views/initiate_multipart_upload.c
     src/views/upload_part.c
     src/timer_poll.c
@@ -203,16 +209,20 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/connection.c
     test/unit/models/query.c
     test/unit/models/mariadb.c
+    test/unit/rpc/cfg_parser.c
+    test/unit/rpc/core.c
     test/unit/storage/cfg_parser.c
     test/unit/storage/localfs.c
     test/unit/mock/rhonabwy.c
     test/unit/mock/mariadb.c
+    test/unit/mock/rabbitmq.c
     ${APP_COMMON_SOURCE_FILES})
 
 SET(INTEGRATION_TEST_SOURCE_FILES
     test/integration/main.c
     test/integration/auth.c
     test/integration/client.c
+    test/integration/api/complete_multipart_upload.c
     test/integration/api/initiate_multipart_upload.c
     test/integration/api/upload_part.c
     src/third_party/rhonabwy.c
@@ -233,6 +243,7 @@ SET(APP_DEV_LIBRARIES
     ${NETTLE_LIBRARIES}
     ${P11KIT_LIBRARIES}
     ${MARIADB_LIBRARIES}
+    ${RABBITMQ_LIBRARIES}
     ${LIBCURL_LIBRARIES}
     ${LIBNGHTTP2_LIBRARIES}
     ${APP_COMMON_LIBRARIES})

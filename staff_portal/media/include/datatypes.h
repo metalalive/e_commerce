@@ -13,6 +13,7 @@ extern "C" {
 #include <rhonabwy.h>
 
 #include "storage/datatypes.h"
+#include "rpc/datatypes.h"
 
 // TODO: find better way to synchronize from common/data/app_code.json
 #define APP_CODE  3
@@ -88,6 +89,7 @@ typedef struct {
     volatile sig_atomic_t  shutdown_requested;
     h2o_barrier_t  workers_sync_barrier;
     H2O_VECTOR(asa_cfg_t) storages;
+    H2O_VECTOR(arpc_cfg_t) rpc;
     // all members in the `state` struct must be modified atomically under multithreaded application
     struct {
         atomic_int num_curr_connections;  // number of currently handled incoming connections

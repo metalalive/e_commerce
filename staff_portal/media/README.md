@@ -82,6 +82,7 @@ where `<YOUR_PATH_TO_PKG_CFG>` should include :
 * `/PATH/TO/nettle/pkgconfig`
 * `/PATH/TO/p11-kit/pkgconfig`
 * `/PATH/TO/mariadb/pkgconfig`
+* `/PATH/TO/rabbitmq-c/pkgconfig`
 * `/PATH/TO/libcurl/pkgconfig`
 * `/PATH/TO/nghttp2/pkgconfig`
 
@@ -97,7 +98,7 @@ make app.out
 ```
 ./media/build/app.out  ./media/settings/development.json
 ```
-or 
+or for debug mode
 ```
 make dev_server
 ```
@@ -126,6 +127,8 @@ where :
 make unit_test
 ```
 ##### Integration test
+###### Pre-requisite
+* the application uses [MySQLdb](xxx) for creating / dropping test database, be sure you have this package in your python execution environment.
 ```
 make integration_test
 ```

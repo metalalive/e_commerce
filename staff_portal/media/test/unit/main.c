@@ -1,6 +1,8 @@
 #include <cgreen/cgreen.h>
 
 TestSuite *app_cfg_parser_tests(void);
+TestSuite *app_rpc_cfg_parser_tests(void);
+TestSuite *app_rpc_core_tests(void);
 TestSuite *app_storage_cfg_parser_tests(void);
 TestSuite *app_storage_localfs_tests(void);
 TestSuite *app_network_util_tests(void);
@@ -20,6 +22,8 @@ int main(int argc, char **argv) {
     TestSuite *suite = create_named_test_suite("media_app_unit_test");
     TestReporter *reporter = create_text_reporter();
     add_suite(suite, app_cfg_parser_tests());
+    add_suite(suite, app_rpc_cfg_parser_tests());
+    add_suite(suite, app_rpc_core_tests());
     add_suite(suite, app_storage_cfg_parser_tests());
     add_suite(suite, app_storage_localfs_tests());
     add_suite(suite, app_network_util_tests());

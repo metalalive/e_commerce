@@ -16,6 +16,7 @@
 #include "network.h"
 #include "cfg_parser.h"
 #include "models/pool.h"
+#include "rpc/cfg_parser.h"
 
 struct  worker_init_data_t{
     app_cfg_t  *app_cfg;
@@ -44,6 +45,7 @@ static app_cfg_t _app_cfg = {
     .shutdown_requested = 0,
     .workers_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
     .storages = {.size = 0, .capacity = 0, .entries = NULL},
+    .rpc = {.size = 0, .capacity = 0, .entries = NULL},
     .state = {.num_curr_sessions=0},
     .jwks = {
         .handle = NULL, .src_url=NULL, .last_update = 0, .is_rotating = ATOMIC_FLAG_INIT,
@@ -97,6 +99,9 @@ static void deinit_app_cfg(app_cfg_t *app_cfg) {
         free(app_cfg->storages.entries);
         app_cfg->storages.capacity = 0;
         app_cfg->storages.entries = NULL; 
+    }
+    for(idx = 0; idx < app_cfg->rpc.size; idx++) {
+        app_rpc_cfg_deinit(&app_cfg->rpc.entries[idx]);
     }
     if(app_cfg->jwks.src_url != NULL) {
         free(app_cfg->jwks.src_url);
@@ -275,7 +280,7 @@ static void worker_init_accept_ctx(app_ctx_listener_t *ctx, const app_cfg_t *cfg
     // some context-scope data is required for each http request
     assert(http_ctx->storage.capacity == 0);
     assert(http_ctx->storage.size == 0);
-    h2o_vector_reserve(NULL, &http_ctx->storage , 1);
+    h2o_vector_reserve(NULL, &http_ctx->storage , 1); // TODO, one more entry to AMQP broker connection
     http_ctx->storage.entries[0] = (h2o_context_storage_item_t) {.dispose = NULL, .data = (void *)&cfg->jwks};
     http_ctx->storage.size = 1;
 } // end of worker_init_accept_ctx
