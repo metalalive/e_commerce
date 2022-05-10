@@ -2,6 +2,17 @@
 #include "views.h"
 #include "rpc/core.h"
 
+
+static __attribute__((optimize("O0"))) ARPC_STATUS_CODE api_complete_multipart_upload__render_rpc_replyq(
+        arpc_cfg_bind_reply_t *cfg, arpc_exe_arg_t *arg, char *wr_buf, size_t wr_sz)
+{ return APPRPC_RESP_OK; }
+
+static __attribute__((optimize("O0"))) ARPC_STATUS_CODE api_complete_multipart_upload__render_rpc_corr_id(
+        arpc_cfg_bind_reply_t *cfg, arpc_exe_arg_t *arg, char *wr_buf, size_t wr_sz)
+{ return APPRPC_RESP_OK; }
+
+
+
 // TODO:another API endpoint for checking status of each upload request that hasn't expired yet
 RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)
 {
@@ -28,14 +39,16 @@ RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)
         goto done;
     }
     { // serialize the URL parameters then pass it to AMQP broker
+        //// json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
+        //// uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
 #define MAX_BYTES_MSG_BODY  128
         char msg_body_raw[MAX_BYTES_MSG_BODY] = {0};
         char job_id_raw[41] = {0};
         size_t nwrite = json_dumpb((const json_t *)req_body, &msg_body_raw[0], MAX_BYTES_MSG_BODY, JSON_COMPACT);
         arpc_exe_arg_t  rpc_arg = {
             .conn = req->conn->ctx->storage.entries[1].data,  .job_id = &job_id_raw[0],
-            .msg_body = {.len = nwrite, .bytes = &msg_body_raw[0]},
-            .routing_key = "rpc.media.complete_multipart_upload",
+            .msg_body = {.len = nwrite, .bytes = &msg_body_raw[0]}, .alias = "app_mqbroker_1",
+            .routing_key = "rpc.media.complete_multipart_upload", .usr_data = NULL,
         };
         ARPC_STATUS_CODE rpc_status = app_rpc_start(&rpc_arg);
         if(rpc_status == APPRPC_RESP_ACCEPTED) {

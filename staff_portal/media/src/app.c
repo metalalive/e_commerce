@@ -17,6 +17,7 @@
 #include "cfg_parser.h"
 #include "models/pool.h"
 #include "rpc/cfg_parser.h"
+#include "rpc/core.h"
 
 struct  worker_init_data_t{
     app_cfg_t  *app_cfg;
@@ -280,9 +281,11 @@ static void worker_init_accept_ctx(app_ctx_listener_t *ctx, const app_cfg_t *cfg
     // some context-scope data is required for each http request
     assert(http_ctx->storage.capacity == 0);
     assert(http_ctx->storage.size == 0);
-    h2o_vector_reserve(NULL, &http_ctx->storage , 1); // TODO, one more entry to AMQP broker connection
+    h2o_vector_reserve(NULL, &http_ctx->storage , 2);
     http_ctx->storage.entries[0] = (h2o_context_storage_item_t) {.dispose = NULL, .data = (void *)&cfg->jwks};
-    http_ctx->storage.size = 1;
+    http_ctx->storage.entries[1] = (h2o_context_storage_item_t) {.dispose = app_rpc_conn_deinit,
+        .data = app_rpc_conn_init(cfg->rpc.entries, cfg->rpc.size) };
+    http_ctx->storage.size = 2;
 } // end of worker_init_accept_ctx
 
 
@@ -440,11 +443,15 @@ done:
     return  ret;
 } // end of start_workers
 
+void app_global_cfg_set_exepath(const char *exe_path)
+{ // caller should ensure this function is invoked each time with single thread
+    _app_cfg.exe_path = exe_path;
+}
 
 int start_application(const char *cfg_file_path, const char *exe_path)
 {   // TODO, flush log message to centralized service e.g. ELK stack
     int err = 0;
-    _app_cfg.exe_path = exe_path;
+    app_global_cfg_set_exepath(exe_path);
     atomic_init(&_app_cfg.state.num_curr_connections , 0);
     h2o_config_init(&_app_cfg.server_glb_cfg);
     r_global_init(); // rhonabwy JWT library

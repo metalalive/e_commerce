@@ -7,11 +7,27 @@ extern "C" {
 #include <h2o.h>
 
 typedef enum {
-    APPRPC_RESP_ACCEPTED = 1,
+    APPRPC_RESP_OK = 1,
+    APPRPC_RESP_ACCEPTED,
     APPRPC_RESP_OS_ERROR,
     APPRPC_RESP_MEMORY_ERROR,
     APPRPC_RESP_ARG_ERROR,
+    APPRPC_RESP_MSGQ_CONNECTION_ERROR,
+    APPRPC_RESP_MSGQ_PUBLISH_ERROR
 } ARPC_STATUS_CODE;
+
+typedef struct {
+    const char *alias; // identify the broker configuration which is used to send command
+    void *conn;
+    char *routing_key;
+    char *job_id; // RPc function will reply with valid job ID for successfully published message
+    uint64_t _timestamp;
+    void *usr_data;
+    struct {
+        size_t len;
+        char  *bytes;
+    } msg_body;
+} arpc_exe_arg_t;
 
 typedef struct {
     uint8_t durable:1;
@@ -20,22 +36,36 @@ typedef struct {
     uint8_t auto_delete:1;
 } arpc_qcfg_flg_t;
 
-typedef struct {
-    char *q_name_pattern;
+struct arpc_cfg_bind_reply_s;
+
+typedef ARPC_STATUS_CODE (*arpc_replyq_render_fn)(struct arpc_cfg_bind_reply_s *, arpc_exe_arg_t *, char *wr_buf, size_t wr_sz);
+
+typedef struct arpc_cfg_bind_reply_s {
+    struct {
+        char *name_pattern;
+        arpc_replyq_render_fn  render_fn;
+    } queue;
+    struct {
+        char *name_pattern;
+        arpc_replyq_render_fn  render_fn;
+    } correlation_id;
     char *exchange_name;
     int (*task_handler_fn)(char *msg_body, void *arg);
-    size_t ttl_sec;
+    uint32_t  ttl_sec;
     arpc_qcfg_flg_t  flags;
 } arpc_cfg_bind_reply_t;
 
 typedef struct {
+    arpc_cfg_bind_reply_t reply;
     char *q_name;
     char *exchange_name;
     char *routing_key;
+    size_t  max_msgs_pending;
     arpc_qcfg_flg_t  flags;
 } arpc_cfg_bind_t; // per-queue config type
 
 typedef struct {
+    char *alias;
     struct {
         char     *username;
         char     *password;
@@ -48,18 +78,7 @@ typedef struct {
         size_t  max_kb_per_frame;
     } attributes; // connection-level attributes
     H2O_VECTOR(arpc_cfg_bind_t) bindings;
-    H2O_VECTOR(arpc_cfg_bind_reply_t) binding_reply;
 } arpc_cfg_t; // per-host config type
-
-typedef struct {
-    void *conn;
-    char *routing_key;
-    char *job_id;
-    struct {
-        size_t len;
-        char  *bytes;
-    } msg_body;
-} arpc_exe_arg_t;
 
 #ifdef __cplusplus
 } // end of extern C clause

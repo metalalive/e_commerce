@@ -4,15 +4,13 @@
 extern "C" {
 #endif
 
-#include "app.h"
 #include "rpc/datatypes.h"
 
-void *app_rpc_conn_init(app_cfg_t *app_cfg);
+void *app_rpc_conn_init(arpc_cfg_t *cfgs, size_t nitem);
 void  app_rpc_conn_deinit(void *conn);
 
 ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *);
-ARPC_STATUS_CODE app_rpc_publish(arpc_exe_arg_t *);
-ARPC_STATUS_CODE app_rpc_subscribe(arpc_exe_arg_t *);
+ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause

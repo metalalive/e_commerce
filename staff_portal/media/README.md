@@ -48,6 +48,7 @@ Library Dependencies (for application)
 * [nettle](https://github.com/gnutls/nettle) >= 3.7.2, automatically built when building `gnutls`
 * [p11-kit](https://github.com/p11-glue/p11-kit) >= 0.24.0
 * [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) >= 3.1.7
+* [Rabbitmq/C](https://github.com/rabbitmq/rabbitmq-c) >= 0.11.0
 Library Dependencies (for workaround in [rhonabwy](https://github.com/babelouest/rhonabwy))
 * [libcurl](https://github.com/curl/curl) >= 7.69.1
 * [nghttp2](https://github.com/nghttp2/nghttp2) >= 1.46.0 , for enabling http/2 in `libcurl`
