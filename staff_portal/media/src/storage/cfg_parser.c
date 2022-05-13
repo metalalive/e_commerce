@@ -64,12 +64,8 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg)
     json_array_foreach(objs, idx, obj) {
         const char *alias = json_string_value(json_object_get(obj, "alias"));
         const char *base_path = json_string_value(json_object_get(obj, "base_path"));
-        if(!alias) {
-            h2o_error_printf("[parsing] storage (idx=%d) includes invalid alias: %s \n", idx, alias);
-            goto error;
-        }
-        if(!base_path) {
-            h2o_error_printf("[parsing] storage (idx=%d) includes invalid base_path: %s \n", idx, base_path);
+        if(!alias || !base_path) {
+            h2o_error_printf("[parsing] storage (idx=%d) missing alias or base_path \n", idx);
             goto error;
         }
         json_t *ops = json_object_get(obj, "ops");
@@ -108,10 +104,25 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg)
     return 0;
 error:
     if(realloc_mem && app_cfg->storages.entries) {
-        free(app_cfg->storages.entries);
-        app_cfg->storages.entries = NULL;
-        app_cfg->storages.capacity = 0;
-        app_cfg->storages.size = 0;
+        app_storage_cfg_deinit(app_cfg);
     }
     return -1;
 } // end of parse_cfg_storages
+
+
+void app_storage_cfg_deinit(app_cfg_t *app_cfg) {
+    size_t idx = 0;
+    for(idx = 0; idx < app_cfg->storages.size; idx++) {
+        asa_cfg_t *_asa_cfg = &app_cfg->storages.entries[idx];
+        if(_asa_cfg->alias) {
+            free(_asa_cfg->alias);
+        }
+        if(_asa_cfg->base_path) {
+            free(_asa_cfg->base_path);
+        }
+    }
+    free(app_cfg->storages.entries);
+    app_cfg->storages.entries = NULL;
+    app_cfg->storages.capacity = 0;
+    app_cfg->storages.size = 0;
+} // end of app_storage_cfg_deinit

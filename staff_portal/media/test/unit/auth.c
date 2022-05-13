@@ -337,7 +337,8 @@ Ensure(MOCK_AUTH_PART, auth_jwt_succeed_tests) {
     json_t *mock_aud_claim = json_array();
     json_array_append_new(mock_aud_claim, json_string("unrelated_service_1"));
     json_array_append_new(mock_aud_claim, json_string(APP_LABEL));
-    json_object_set(mock_full_claims, "aud", mock_aud_claim);
+    // steal reference from upper object, no need to de-allocate mock_aud_claim again later
+    json_object_set_new(mock_full_claims, "aud", mock_aud_claim);
     jwk_t  mock_jwk = {0};
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
@@ -391,7 +392,6 @@ Ensure(MOCK_AUTH_PART, auth_jwt_succeed_tests) {
         assert_that(e_ret->data, is_equal_to(mock_full_claims));
     }
     hdestroy_r(&mock_hashmap);
-    json_decref(mock_aud_claim);
     json_decref(mock_full_claims);
 } // end of auth_jwt_succeed_tests
 
@@ -435,14 +435,14 @@ Ensure(perm_chk_not_satisfy_all_tests) {
     json_t *auth_claims = json_object();
     {
         json_t *perm = json_object();
-        json_object_set(perm, "app_code", json_integer(APP_CODE));
-        json_object_set(perm, "codename", json_string("can_do_that"));
-        json_array_append(actual_perms, perm);
+        json_object_set_new(perm, "app_code", json_integer(APP_CODE));
+        json_object_set_new(perm, "codename", json_string("can_do_that"));
+        json_array_append_new(actual_perms, perm);
         perm = json_object();
-        json_object_set(perm, "app_code", json_integer(APP_CODE));
-        json_object_set(perm, "codename", json_string("can_do_1234"));
-        json_array_append(actual_perms, perm);
-        json_object_set(auth_claims, "perms", actual_perms);
+        json_object_set_new(perm, "app_code", json_integer(APP_CODE));
+        json_object_set_new(perm, "codename", json_string("can_do_1234"));
+        json_array_append_new(actual_perms, perm);
+        json_object_set_new(auth_claims, "perms", actual_perms);
     }
     hcreate_r(2, &mock_hashmap);
     {
@@ -457,9 +457,9 @@ Ensure(perm_chk_not_satisfy_all_tests) {
     assert_that(result, is_not_equal_to(0));
     {
         json_t *perm = json_object();
-        json_object_set(perm, "app_code", json_integer(APP_CODE));
-        json_object_set(perm, "codename", json_string("can_do_this"));
-        json_array_append(actual_perms, perm);
+        json_object_set_new(perm, "app_code", json_integer(APP_CODE));
+        json_object_set_new(perm, "codename", json_string("can_do_this"));
+        json_array_append_new(actual_perms, perm);
     }
     result = app_basic_permission_check(&mock_hashmap);
     assert_that(result, is_equal_to(0));
@@ -478,11 +478,11 @@ Ensure(quota_lookup_test) {
     int expect_max_num = 975;
     {
         json_t *quota = json_object();
-        json_object_set(quota, "app_code", json_integer(expect_app_code));
-        json_object_set(quota, "mat_code", json_integer(expect_mat_code));
-        json_object_set(quota, "maxnum", json_integer(expect_max_num));
-        json_array_append(quotas, quota);
-        json_object_set(mock_jwt_claims, "quota", quotas);
+        json_object_set_new(quota, "app_code", json_integer(expect_app_code));
+        json_object_set_new(quota, "mat_code", json_integer(expect_mat_code));
+        json_object_set_new(quota, "maxnum", json_integer(expect_max_num));
+        json_array_append_new(quotas, quota);
+        json_object_set_new(mock_jwt_claims, "quota", quotas);
     }
     result = app_find_quota_arragement(mock_jwt_claims, 19, 78);
     assert_that(result, is_null);

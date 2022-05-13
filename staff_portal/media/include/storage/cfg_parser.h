@@ -6,6 +6,8 @@ extern "C" {
 
 #include "app.h"
 
+void app_storage_cfg_deinit(app_cfg_t *app_cfg);
+
 int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg);
 
 #ifdef __cplusplus

@@ -36,24 +36,24 @@ Ensure(storage_cfg_incomplete_setting_tests) {
     assert_that(app_cfg.storages.entries, is_null);
     {
         app_cfg.exe_path = "/path/to/unknown/image";
-        json_array_append(objs, obj0);
-        json_object_set(obj0, "alias", json_string("storage_dst_1"));
-        json_object_set(obj0, "base_path", json_string("/path/to/file/store"));
+        json_array_append_new(objs, obj0);
+        json_object_set_new(obj0, "alias", json_string("storage_dst_1"));
+        json_object_set_new(obj0, "base_path", json_string("/path/to/file/store"));
     }
     { // lacking part of function names in config json object
-        json_object_set(ops, "open" , json_string("utest_storage_open_fn"));
-        json_object_set(ops, "close", json_string("utest_storage_close_fn"));
-        json_object_set(obj0, "ops", ops);
+        json_object_set_new(ops, "open" , json_string("utest_storage_open_fn"));
+        json_object_set_new(ops, "close", json_string("utest_storage_close_fn"));
+        json_object_set_new(obj0, "ops", ops);
     }
     err = parse_cfg_storages(objs, &app_cfg);
     assert_that(err, is_equal_to(-1));
     assert_that(app_cfg.storages.entries, is_null);
     { // incorrect image path, failed to parse functions from image
-        json_object_set(ops, "write", json_string("utest_storage_write_fn"));
-        json_object_set(ops, "read", json_string("utest_storage_read_fn"));
-        json_object_set(ops, "seek", json_string("utest_storage_seek_fn"));
-        json_object_set(ops, "mkdir", json_string("utest_storage_mkdir_fn"));
-        json_object_set(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
+        json_object_set_new(ops, "write", json_string("utest_storage_write_fn"));
+        json_object_set_new(ops, "read", json_string("utest_storage_read_fn"));
+        json_object_set_new(ops, "seek", json_string("utest_storage_seek_fn"));
+        json_object_set_new(ops, "mkdir", json_string("utest_storage_mkdir_fn"));
+        json_object_set_new(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
     }
     err = parse_cfg_storages(objs, &app_cfg);
     assert_that(err, is_equal_to(-1));
@@ -69,23 +69,23 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
     app_cfg_t  app_cfg = {.exe_path = "media/build/unit_test.out"};
     int err = 0;
     {
-        json_array_append(objs, obj0);
-        json_object_set(obj0, "alias", json_string("storage_dst_1"));
-        json_object_set(obj0, "base_path", json_string("/path/to/file/store"));
-        json_object_set(ops, "open" , json_string("utest_storage_open_fn"));
-        json_object_set(ops, "close", json_string("utest_storage_close_fn"));
-        json_object_set(ops, "write", json_string("utest_storage_write_fn_assume_non_existent"));
-        json_object_set(ops, "read", json_string("utest_storage_read_fn"));
-        json_object_set(ops, "seek", json_string("utest_storage_seek_fn"));
-        json_object_set(obj0, "ops", ops);
+        json_array_append_new(objs, obj0);
+        json_object_set_new(obj0, "alias", json_string("storage_dst_1"));
+        json_object_set_new(obj0, "base_path", json_string("/path/to/file/store"));
+        json_object_set_new(ops, "open" , json_string("utest_storage_open_fn"));
+        json_object_set_new(ops, "close", json_string("utest_storage_close_fn"));
+        json_object_set_new(ops, "write", json_string("utest_storage_write_fn_assume_non_existent"));
+        json_object_set_new(ops, "read", json_string("utest_storage_read_fn"));
+        json_object_set_new(ops, "seek", json_string("utest_storage_seek_fn"));
+        json_object_set_new(obj0, "ops", ops);
     }
     err = parse_cfg_storages(objs, &app_cfg);
     assert_that(err, is_equal_to(-1));
     assert_that(app_cfg.storages.entries, is_null);
     {
-        json_object_set(ops, "write", json_string("utest_storage_write_fn"));
-        json_object_set(ops, "mkdir", json_string("utest_storage_mkdir_fn"));
-        json_object_set(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
+        json_object_set_new(ops, "write", json_string("utest_storage_write_fn"));
+        json_object_set_new(ops, "mkdir", json_string("utest_storage_mkdir_fn"));
+        json_object_set_new(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
     }
     err = parse_cfg_storages(objs, &app_cfg);
     assert_that(err, is_equal_to(0));
@@ -101,6 +101,7 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
         assert_that(parsed_ops->fn_mkdir, is_equal_to(utest_storage_mkdir_fn));
         assert_that(parsed_ops->fn_rmdir, is_equal_to(utest_storage_rmdir_fn));
     }
+    app_storage_cfg_deinit(&app_cfg);
     json_decref(objs);
 } // end of storage_cfg_missing_operation_fn_tests
 

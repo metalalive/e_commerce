@@ -122,7 +122,7 @@ Ensure(rpc_core_init_test__binding_error) {
     expect(amqp_channel_open, will_return(&mock_chn_result));
     expect(amqp_queue_declare, will_return(&mock_newq_return));
     expect(amqp_get_rpc_reply, will_return(&mock_reply_newq));
-    expect(amqp_queue_bind, will_return(&mock_reply_bind));
+    expect(amqp_queue_bind, will_return(&mock_bind_return));
     expect(amqp_get_rpc_reply, will_return(&mock_reply_bind));
     ctx = app_rpc_conn_init(&cfg, 1);
     { // the connection object won't be destroyed even when binding failure happened

@@ -216,6 +216,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/mock/rhonabwy.c
     test/unit/mock/mariadb.c
     test/unit/mock/rabbitmq.c
+    test/unit/mock/openssl.c
     ${APP_COMMON_SOURCE_FILES})
 
 SET(INTEGRATION_TEST_SOURCE_FILES
@@ -229,7 +230,6 @@ SET(INTEGRATION_TEST_SOURCE_FILES
     ${APP_COMMON_SOURCE_FILES})
 
 SET(APP_COMMON_LIBRARIES
-    ${OPENSSL_LIBRARIES}
     ${LIBELF_LIBRARIES}
     ${LIBUV_LIBRARIES}
     ${BROTLI_DEC_LIBRARIES}
@@ -238,6 +238,7 @@ SET(APP_COMMON_LIBRARIES
     ${JANSSON_LIBRARIES} )
 
 SET(APP_DEV_LIBRARIES
+    ${OPENSSL_LIBRARIES}
     ${RHONABWY_LIBRARIES}
     ${GNUTLS_LIBRARIES}
     ${NETTLE_LIBRARIES}
@@ -267,7 +268,9 @@ TARGET_INCLUDE_DIRECTORIES(${INTEGRATION_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_
 TARGET_LINK_LIBRARIES(${INTEGRATION_TEST_EXE_NAME} ${APP_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
 
 ADD_CUSTOM_TARGET(dev_server
-    gdb -args ${CMAKE_CURRENT_SOURCE_DIR}/build/${TARGET_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
+    ##valgrind --leak-check=full
+    gdb -args
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/${TARGET_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${TARGET_EXE_NAME})
 
@@ -287,10 +290,10 @@ ADD_CUSTOM_TARGET(integration_test
         ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json    ${LIQUIBASE_PATH}
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
     ##gdb -args # uncomment this line for debugging
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json
+    ##valgrind --leak-check=full
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json
     COMMAND python -m  media.setup_test_env  media.setup_test_env.EndTestDatabase
         ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json    ${LIQUIBASE_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS  ${INTEGRATION_TEST_EXE_NAME})
 
-# TODO, add valgrind test

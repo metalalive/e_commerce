@@ -99,6 +99,7 @@
     ],
     "rpc":[
         {
+            "alias": "app_mqbroker_1",
             "bindings": [
                 {
                     "queue": "rpc_media_complete_multipart_upload",
@@ -106,17 +107,24 @@
                     "routing_key": "rpc.media.complete_multipart_upload",
                     "durable": true,
                     "reply": {
-                        "q_name_pattern": "rpc.reply.%s",
-                        "exchange": "rpc-default-allapps",
+                        "queue": {
+                            "pattern":"rpc_reply_media_mp_done.%u",
+                            "render_fn":"api_complete_multipart_upload__render_rpc_replyq"
+                        },
+                        "correlation_id": {
+                            "pattern":"rpc.media.mp_done.corr_id.%u.%lu",
+                            "render_fn":"api_complete_multipart_upload__render_rpc_corr_id"
+                        },
                         "task_handler_fn": "api_complete_multipart_upload__rpc_task_handler",
-                        "ttl_sec": 30
+                        "durable": true,
+                        "ttl_sec": 180
                     }
                 }
             ],
             "attributes": {
                 "vhost":"/",
-                "max_channels": 256,
-                "max_kb_per_frame": 6
+                "max_channels": 128,
+                "max_kb_per_frame": 35
             },
             "credential": {
                 "hierarchy": ["amqp_broker", 1],

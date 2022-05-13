@@ -224,6 +224,7 @@ Ensure(multipart_parsing_test__fragmented_bodypart_2) {
         assert_that(nread, is_equal_to(mock_rd_buf_sz));
         req_body_ptr += nread;
     }
+    multipart_parser_free(mp);
 } // end of multipart_parsing_test__fragmented_bodypart_2
 #undef  TEST_MULTIPART_ENTITY
 #undef  TEST_MULTIPART_BODY_PART
@@ -478,7 +479,6 @@ Ensure(multipart_parsing_test__fragmented_header) {
 #undef TEST_PART_1_HEADER
 #undef TEST_MULTIPART_PART_1
 #undef TEST_MULTIPART_ENTITY
-
 
 
 TestSuite *app_multipart_parsing_tests(void) {

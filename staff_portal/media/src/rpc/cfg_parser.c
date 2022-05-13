@@ -223,7 +223,7 @@ static int parse_cfg_rpc__broker_bindings(json_t *objs, arpc_cfg_t *cfg)
             goto error;
         }
         if(max_msgs_pending > RPC_QUEUE_MAX_NUM_MSGS) {
-            h2o_error_printf("[parsing] max_msgs_pending (%lu) exceeds system limit (%lu) in queue (%s), binding configuration (idx=%lu)\n",
+            h2o_error_printf("[parsing] max_msgs_pending (%lu) exceeds system limit (%d) in queue (%s), binding configuration (idx=%lu)\n",
                     max_msgs_pending, RPC_QUEUE_MAX_NUM_MSGS, queue, idx);
             goto error;
         } else if(max_msgs_pending < RPC_QUEUE_MIN_NUM_MSGS) {

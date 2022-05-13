@@ -16,6 +16,7 @@
 #include "network.h"
 #include "cfg_parser.h"
 #include "models/pool.h"
+#include "storage/cfg_parser.h"
 #include "rpc/cfg_parser.h"
 #include "rpc/core.h"
 
@@ -86,20 +87,7 @@ static void deinit_app_cfg(app_cfg_t *app_cfg) {
         app_cfg->workers.entries = NULL;
     }
     if(app_cfg->storages.entries) {
-        for(idx = 0; idx < app_cfg->storages.size; idx++) {
-            asa_cfg_t *asacfg = &app_cfg->storages.entries[idx];
-            if(asacfg->alias) {
-                free(asacfg->alias);
-                asacfg->alias = NULL;
-            }
-            if(asacfg->base_path) {
-                free(asacfg->base_path);
-                asacfg->base_path = NULL;
-            }
-        }
-        free(app_cfg->storages.entries);
-        app_cfg->storages.capacity = 0;
-        app_cfg->storages.entries = NULL; 
+        app_storage_cfg_deinit(app_cfg);
     }
     for(idx = 0; idx < app_cfg->rpc.size; idx++) {
         app_rpc_cfg_deinit(&app_cfg->rpc.entries[idx]);
