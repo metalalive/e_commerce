@@ -105,11 +105,11 @@
                     "durable": true,
                     "reply": {
                         "queue": {
-                            "pattern":"rpc_reply_media_mp_done.%u",
+                            "pattern":"rpc.reply.media.mp_done.prof_id.%u",
                             "render_fn":"api_complete_multipart_upload__render_rpc_replyq"
                         },
                         "correlation_id": {
-                            "pattern":"rpc.media.mp_done.corr_id.%u.%lu",
+                            "pattern":"rpc.media.mp_done.corr_id.%s",
                             "render_fn":"api_complete_multipart_upload__render_rpc_corr_id"
                         },
                         "task_handler_fn": "api_complete_multipart_upload__rpc_task_handler",

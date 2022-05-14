@@ -191,7 +191,7 @@ static  int parse_cfg_rpc__reply_producer(json_t *obj, arpc_cfg_bind_reply_t *cf
     cfg->queue.name_pattern = strdup(qname_patt);
     cfg->correlation_id.name_pattern = strdup(corr_id_patt);
     cfg->ttl_sec = (uint32_t) json_integer_value(json_object_get(obj, "ttl_sec"));
-    cfg->flags = (arpc_qcfg_flg_t) {.passive = 1, .exclusive = 0, .auto_delete = 0,
+    cfg->flags = (arpc_qcfg_flg_t) {.passive = 0, .exclusive = 0, .auto_delete = 0,
         .durable = (uint8_t) json_boolean_value(json_object_get(obj, "durable"))
     };
     return 0;

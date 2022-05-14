@@ -71,3 +71,13 @@ amqp_queue_bind_ok_t *AMQP_CALL amqp_queue_bind(
             exchange_name, route_key_name);
 }
 
+int amqp_basic_publish(amqp_connection_state_t conn_state, amqp_channel_t channel,
+                       amqp_bytes_t exchange, amqp_bytes_t routing_key,
+                       amqp_boolean_t mandatory, amqp_boolean_t immediate,
+                       amqp_basic_properties_t const *properties,
+                       amqp_bytes_t body) {
+    char *exchange_name = exchange.bytes;
+    char *route_key_name = routing_key.bytes;
+    char *raw_body = body.bytes;
+    return (int)mock(conn_state, channel, exchange_name, route_key_name, raw_body);
+}

@@ -4,7 +4,19 @@
 extern "C" {
 #endif
 
+#include <amqp_tcp_socket.h>
 #include "rpc/datatypes.h"
+
+struct arpc_ctx_t {
+    arpc_cfg_t  *ref_cfg;
+    amqp_socket_t *sock;
+    amqp_connection_state_t  conn;
+};
+
+struct arpc_ctx_list_t {
+    size_t size;
+    struct arpc_ctx_t *entries;
+};
 
 void *app_rpc_conn_init(arpc_cfg_t *cfgs, size_t nitem);
 void  app_rpc_conn_deinit(void *conn);
