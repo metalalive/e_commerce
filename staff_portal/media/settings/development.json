@@ -59,7 +59,7 @@
     },
     "max_connections": 256,
     "limit_req_body_in_bytes": 10485760,
-    "num_workers": 0,
+    "num_workers": 1,
     "tcp_fastopen_queue_size": 113,
     "auth_keystore": {
         "url":"http://localhost:8008/jwks",
@@ -94,6 +94,7 @@
             }
         }
     ],
+    "num_rpc_consumers": 1,
     "rpc":[
         {
             "alias": "app_mqbroker_1",
@@ -112,7 +113,7 @@
                             "pattern":"rpc.media.mp_done.corr_id.%s",
                             "render_fn":"api_complete_multipart_upload__render_rpc_corr_id"
                         },
-                        "task_handler_fn": "api_complete_multipart_upload__rpc_task_handler",
+                        "task_handler": "api_complete_multipart_upload__rpc_task_handler",
                         "durable": true,
                         "ttl_sec": 180
                     }

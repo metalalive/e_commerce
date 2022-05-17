@@ -7,7 +7,7 @@ static void test_verify__complete_multipart_upload(CURL *handle, test_setup_priv
     long actual_resp_code = 0;
     res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
     assert_that(res, is_equal_to(CURLE_OK));
-    assert_that(expect_resp_code, is_equal_to(actual_resp_code));
+    assert_that(actual_resp_code, is_equal_to(expect_resp_code ));
     json_t *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
     // const char *expect_upld_id = "1c037a57581e";
     const char *actual_job_id = json_string_value(json_object_get(resp_obj, "job_id"));
@@ -24,7 +24,7 @@ Ensure(api_complete_multipart_upload_test_accepted) {
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     json_t *quota = json_array();
     add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
-    const char *req_body_raw = "{\"resource_id\":\"bMerI8f\", \"req_seq\":98017436}";
+    const char *req_body_raw = "{\"resource_id\":\"bMrI8f\", \"req_seq\":9801746}";
     test_setup_pub_t  setup_data = {
         .method = "PATCH", .verbose = 0,  .url = &url[0],
         .req_body = {.serial_txt=&req_body_raw[0], .src_filepath=NULL},

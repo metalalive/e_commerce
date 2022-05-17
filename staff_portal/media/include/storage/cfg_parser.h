@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-#include "app.h"
+#include "app_cfg.h"
 
 void app_storage_cfg_deinit(app_cfg_t *app_cfg);
 

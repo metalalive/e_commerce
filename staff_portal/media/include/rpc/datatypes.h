@@ -44,6 +44,7 @@ typedef struct {
 struct arpc_cfg_bind_reply_s;
 
 typedef ARPC_STATUS_CODE (*arpc_replyq_render_fn)(const char *pattern, arpc_exe_arg_t *, char *wr_buf, size_t wr_sz);
+typedef ARPC_STATUS_CODE (*arpc_task_handler_fn)(char *msg_body, size_t rd_sz, void *arg);
 
 typedef struct arpc_cfg_bind_reply_s {
     struct {
@@ -55,7 +56,7 @@ typedef struct arpc_cfg_bind_reply_s {
         arpc_replyq_render_fn  render_fn;
     } correlation_id;
     // char *exchange_name; // TODO, figure out how to send return value to reply queue with non-default exchange
-    int (*task_handler_fn)(char *msg_body, void *arg);
+    arpc_task_handler_fn  task_handler;
     uint32_t  ttl_sec;
     arpc_qcfg_flg_t  flags;
 } arpc_cfg_bind_reply_t;

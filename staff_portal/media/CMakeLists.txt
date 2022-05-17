@@ -166,34 +166,45 @@ ENDIF(NOT CMAKE_BUILD_TYPE)
 SET(CMAKE_C_FLAGS_DEBUG  "-O0")
 SET(CMAKE_C_FLAGS_RELEASE  "-O2")
 
-SET(APP_COMMON_SOURCE_FILES
+SET(APP_HTTPSERVER_SOURCE_FILES
     src/auth.c
-    src/models/pool.c
-    src/models/connection.c
-    src/models/mariadb.c
-    src/models/query.c
-    src/rpc/core.c
-    src/rpc/cfg_parser.c
-    src/storage/cfg_parser.c
-    src/storage/localfs.c
+    src/cfg_parser.c
     src/middleware.c
     src/network.c
     src/multipart_parser.c
-    src/cfg_parser.c
-    src/app.c
-    src/utils.c
     src/views/init.c
     src/views/common.c
     src/views/complete_multipart_upload.c
     src/views/initiate_multipart_upload.c
-    src/views/upload_part.c
+    src/views/upload_part.c )
+
+SET(APP_DBMODEL_SOURCE_FILES
+    src/models/pool.c
+    src/models/connection.c
+    src/models/mariadb.c
+    src/models/query.c )
+
+SET(APP_COMMON_SOURCE_FILES
+    src/rpc/core.c
+    src/rpc/cfg_parser.c
+    src/storage/cfg_parser.c
+    src/storage/localfs.c
+    src/app_cfg.c
+    src/utils.c
     src/timer_poll.c
     src/routes.c )
 
-SET(APP_SOURCE_FILES
-    src/main.c
+SET(APP_SERVER_SOURCE_FILES
+    src/app_server.c
     src/third_party/rhonabwy.c
+    ${APP_DBMODEL_SOURCE_FILES}
+    ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
+
+SET(RPC_CONSUMER_SOURCE_FILES
+    src/rpc/consumer.c
+    ${APP_COMMON_SOURCE_FILES})
+
 
 SET(UNIT_TEST_SOURCE_FILES
     test/unit/main.c
@@ -217,6 +228,8 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/mock/mariadb.c
     test/unit/mock/rabbitmq.c
     test/unit/mock/openssl.c
+    ${APP_DBMODEL_SOURCE_FILES}
+    ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
 SET(INTEGRATION_TEST_SOURCE_FILES
@@ -226,8 +239,7 @@ SET(INTEGRATION_TEST_SOURCE_FILES
     test/integration/api/complete_multipart_upload.c
     test/integration/api/initiate_multipart_upload.c
     test/integration/api/upload_part.c
-    src/third_party/rhonabwy.c
-    ${APP_COMMON_SOURCE_FILES})
+    ${APP_SERVER_SOURCE_FILES} )
 
 SET(APP_COMMON_LIBRARIES
     ${LIBELF_LIBRARIES}
@@ -237,7 +249,7 @@ SET(APP_COMMON_LIBRARIES
     ${H2O_LIBRARIES}
     ${JANSSON_LIBRARIES} )
 
-SET(APP_DEV_LIBRARIES
+SET(APP_SERVER_DEV_LIBRARIES
     ${OPENSSL_LIBRARIES}
     ${RHONABWY_LIBRARIES}
     ${GNUTLS_LIBRARIES}
@@ -249,13 +261,22 @@ SET(APP_DEV_LIBRARIES
     ${LIBNGHTTP2_LIBRARIES}
     ${APP_COMMON_LIBRARIES})
 
+SET(RPC_CONSUMER_DEV_LIBRARIES
+    ${OPENSSL_LIBRARIES}
+    ${RABBITMQ_LIBRARIES}
+    ${APP_COMMON_LIBRARIES})
+
 SET(APP_UNIT_TEST_LIBRARIES ${APP_COMMON_LIBRARIES})
 
 
-SET(TARGET_EXE_NAME app.out)
-ADD_EXECUTABLE(${TARGET_EXE_NAME} ${APP_SOURCE_FILES})
-TARGET_INCLUDE_DIRECTORIES(${TARGET_EXE_NAME} PUBLIC ${OPENSSL_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES(${TARGET_EXE_NAME}  ${APP_DEV_LIBRARIES} ${EXTRA_LIBS})
+SET(APP_SERVER_EXE_NAME   app.out)
+SET(RPC_CONSUMER_EXE_NAME rpc_consumer.out)
+ADD_EXECUTABLE(${APP_SERVER_EXE_NAME}   ${APP_SERVER_SOURCE_FILES}    src/app_server_main.c)
+ADD_EXECUTABLE(${RPC_CONSUMER_EXE_NAME} ${RPC_CONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c)
+TARGET_INCLUDE_DIRECTORIES(${APP_SERVER_EXE_NAME}    PUBLIC ${OPENSSL_INCLUDE_DIR})
+TARGET_INCLUDE_DIRECTORIES(${RPC_CONSUMER_EXE_NAME}  PUBLIC ${OPENSSL_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES(${APP_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(${RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${EXTRA_LIBS})
 
 SET(UNIT_TEST_EXE_NAME unit_test.out)
 ADD_EXECUTABLE(${UNIT_TEST_EXE_NAME} ${UNIT_TEST_SOURCE_FILES})
@@ -265,14 +286,21 @@ TARGET_LINK_LIBRARIES(${UNIT_TEST_EXE_NAME} ${APP_UNIT_TEST_LIBRARIES} ${CGREEN_
 SET(INTEGRATION_TEST_EXE_NAME  integration_test.out)
 ADD_EXECUTABLE(${INTEGRATION_TEST_EXE_NAME} ${INTEGRATION_TEST_SOURCE_FILES})
 TARGET_INCLUDE_DIRECTORIES(${INTEGRATION_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES(${INTEGRATION_TEST_EXE_NAME} ${APP_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
+TARGET_LINK_LIBRARIES(${INTEGRATION_TEST_EXE_NAME} ${APP_SERVER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
 
-ADD_CUSTOM_TARGET(dev_server
+ADD_CUSTOM_TARGET(dev_app_server
     ##valgrind --leak-check=full
-    gdb -args
-    ${CMAKE_CURRENT_SOURCE_DIR}/build/${TARGET_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
+    ##gdb -args
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${TARGET_EXE_NAME})
+    DEPENDS ${APP_SERVER_EXE_NAME})
+
+ADD_CUSTOM_TARGET(dev_rpc_worker
+    ##gdb -args
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+    DEPENDS ${RPC_CONSUMER_EXE_NAME})
+
 
 ADD_CUSTOM_TARGET(unit_test
     # uncomment the following line, make cgreen test suite run in single (main) process

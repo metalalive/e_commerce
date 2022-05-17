@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-#include "app.h"
+#include "app_cfg.h"
 #include "rpc/datatypes.h"
 
 int app_rpc_cfg_deinit(arpc_cfg_t *cfg);

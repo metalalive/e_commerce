@@ -1,7 +1,7 @@
 #include <openssl/sha.h>
 
 #include "utils.h"
-#include "app.h"
+#include "app_cfg.h"
 #include "views.h"
 #include "multipart_parser.h"
 #include "models/pool.h"
@@ -250,7 +250,7 @@ static  ASA_RES_CODE upload_part__write_filechunk_start(asa_op_base_cfg_t *cfg)
                 cfg->op.write.src_sz = usr_arg->wr_idx;
                 usr_arg->tot_file_sz += usr_arg->wr_idx;
                 SHA1_Update(&usr_arg->checksum, cfg->op.write.src, cfg->op.write.src_sz);
-                const app_cfg_t *app_cfg = app_get_global_cfg();
+                app_cfg_t *app_cfg = app_get_global_cfg();
                 asa_cfg_t *storage = &app_cfg->storages.entries[0];
                 asa_result = storage->ops.fn_write(cfg);
             }
@@ -272,7 +272,7 @@ static void upload_part__write_filechunk_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_
     multipart_parser *mp = (multipart_parser *)app_fetch_from_hashmap(node->data, "multipart_parser");
     app_mpp_usrarg_t *usr_arg = (app_mpp_usrarg_t *)mp->settings.usr_args.entry;
     if(usr_arg->end_flag) { // close file and add chunk record to database
-        const app_cfg_t *app_cfg = app_get_global_cfg();
+        app_cfg_t *app_cfg = app_get_global_cfg();
         asa_cfg_t *storage = &app_cfg->storages.entries[0];
         app_result = storage->ops.fn_close(cfg);
     } else {
@@ -354,7 +354,7 @@ static void upload_part__create_folder_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_CO
         cfg->op.open.cb = upload_part__open_file_evt_cb;
         cfg->op.open.mode  = S_IRUSR | S_IWUSR;
         cfg->op.open.flags = O_CREAT | O_WRONLY;
-        const app_cfg_t *app_cfg = app_get_global_cfg();
+        app_cfg_t *app_cfg = app_get_global_cfg();
         asa_cfg_t *storage = &app_cfg->storages.entries[0];
         app_result = storage->ops.fn_open(cfg);
         if(app_result != ASTORAGE_RESULT_ACCEPT) {
@@ -378,7 +378,7 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
     int part    = (int)app_fetch_from_hashmap(node->data, "part");
 #pragma GCC diagnostic pop
     // application can select which storage configuration to use
-    const app_cfg_t *app_cfg = app_get_global_cfg();
+    app_cfg_t *app_cfg = app_get_global_cfg();
     asa_cfg_t *storage = &app_cfg->storages.entries[0];
     size_t dirpath_sz = strlen(storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
         strlen(UNCOMMITTED_FOLDER) + 1 + UPLOAD_INT2HEX_SIZE(req_seq) + 1; // assume NULL-terminated string

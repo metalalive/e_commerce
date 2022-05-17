@@ -11,7 +11,8 @@
 #include <h2o/serverutil.h>
 #include <mysql.h>
 
-#include "app.h"
+#include "app_cfg.h"
+#include "app_server.h"
 #include "auth.h"
 #include "network.h"
 #include "cfg_parser.h"
@@ -20,43 +21,7 @@
 #include "rpc/cfg_parser.h"
 #include "rpc/core.h"
 
-struct  worker_init_data_t{
-    app_cfg_t  *app_cfg;
-    uv_loop_t  *loop;
-    unsigned int cfg_thrd_idx;
-};
-
-#define MAX_PERIOD_KEEP_JWKS_IN_SECONDS  3600 // 1 hour
-static app_cfg_t _app_cfg = {
-    .server_glb_cfg = {
-        .hosts = NULL,
-        .http2 = {0},
-        .mimemap = NULL,
-    },
-    .listeners     = NULL,
-    .num_listeners = 0,
-    .pid_file      = NULL,
-    .access_logger = NULL,
-    .error_log_fd = -1,
-    .max_connections = APP_DEFAULT_MAX_CONNECTIONS,
-    .run_mode = RUN_MODE_MASTER,
-    .workers = {.size = 0, .capacity = 0, .entries = NULL},
-    .tfo_q_len = APP_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE,
-    .exe_path = NULL,
-    .launch_time = 0,
-    .shutdown_requested = 0,
-    .workers_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
-    .storages = {.size = 0, .capacity = 0, .entries = NULL},
-    .rpc = {.size = 0, .capacity = 0, .entries = NULL},
-    .state = {.num_curr_sessions=0},
-    .jwks = {
-        .handle = NULL, .src_url=NULL, .last_update = 0, .is_rotating = ATOMIC_FLAG_INIT,
-        .ca_path = NULL, .ca_format = NULL, .max_expiry_secs = MAX_PERIOD_KEEP_JWKS_IN_SECONDS
-    }
-}; // end of _app_cfg
-
-
-static void deinit_app_cfg(app_cfg_t *app_cfg) {
+static void deinit_app_server_cfg(app_cfg_t *app_cfg) {
     int idx = 0;
     if(app_cfg->listeners) {
         for(idx = 0; app_cfg->listeners[idx] != NULL; idx++)
@@ -74,17 +39,9 @@ static void deinit_app_cfg(app_cfg_t *app_cfg) {
         free(app_cfg->tmp_buf.path);
         app_cfg->tmp_buf.path = NULL;
     }
-    if(app_cfg->pid_file) {
-        fclose(app_cfg->pid_file);
-        app_cfg->pid_file = NULL;
-    }
     if(app_cfg->jwks.handle != NULL) {
         r_jwks_free(app_cfg->jwks.handle);
         app_cfg->jwks.handle = NULL;
-    }
-    if(app_cfg->workers.entries) {
-        free(app_cfg->workers.entries);
-        app_cfg->workers.entries = NULL;
     }
     if(app_cfg->storages.entries) {
         app_storage_cfg_deinit(app_cfg);
@@ -96,15 +53,12 @@ static void deinit_app_cfg(app_cfg_t *app_cfg) {
         free(app_cfg->jwks.src_url);
         app_cfg->jwks.src_url = NULL;
     }
-    if(app_cfg->error_log_fd > 0) {
-        close(app_cfg->error_log_fd);
-        app_cfg->error_log_fd = -1;
-    } // should be done lastly
-} // end of deinit_app_cfg
+    deinit_app_cfg(app_cfg);
+} // end of deinit_app_server_cfg
 
 
 static void on_tcp_close(uv_handle_t *client_conn) {
-    atomic_num_connections(&_app_cfg, -1);
+    atomic_num_connections(app_get_global_cfg(), -1);
     // the handle created in init_client_tcp_socket, its memory should be freed in
     //  network.c instead of app.c (TODO: refactor)
     client_conn->data = NULL; // pointer to callback function can be set NULL directly
@@ -116,18 +70,19 @@ static void on_tcp_accept(uv_stream_t *server, int status) {
     app_ctx_listener_t *ctx = (app_ctx_listener_t *) server->data;
     // TLS handshake takes about 1 ms, this limits the latency induced by TLS handshakes to 10 ms per event loop
     size_t num_accepts = 10;
+    app_cfg_t *acfg = app_get_global_cfg();
     do {
-        int curr_num_conns = atomic_num_connections(&_app_cfg, 1);
-        if(curr_num_conns >= _app_cfg.max_connections) {
-            atomic_num_connections(&_app_cfg, -1);
+        int curr_num_conns = atomic_num_connections(acfg, 1);
+        if(curr_num_conns >= acfg->max_connections) {
+            atomic_num_connections(acfg, -1);
             h2o_error_printf("[worker] ID = %lu, number of connections exceeds the limit %d \n",
-                 (unsigned long int)uv_thread_self(), _app_cfg.max_connections );
+                 (unsigned long int)uv_thread_self(), acfg->max_connections );
             // TODO, return http response status 429 (too many requests)
             break;
         }
         h2o_socket_t *sock = init_client_tcp_socket(server, on_tcp_close);
         if(!sock) {
-            atomic_num_connections(&_app_cfg, -1);
+            atomic_num_connections(acfg, -1);
             h2o_error_printf("[worker] ID = %lu, end of pending connection reached \n", (unsigned long int)uv_thread_self() );
             // TODO, free space in `sock`, return http response status 500 (internal error)
             break;
@@ -152,24 +107,23 @@ static void notify_all_workers(app_cfg_t *app_cfg) {
     }
 }
 
-const app_cfg_t *app_get_global_cfg(void)
-{ return (const app_cfg_t *)&_app_cfg; }
-
 int app_server_ready(void) {
-    int workers_ready = h2o_barrier_done(&_app_cfg.workers_sync_barrier);
-    int jwks_ready = r_jwks_is_valid(_app_cfg.jwks.handle) == RHN_OK;
+    app_cfg_t *acfg = app_get_global_cfg();
+    int workers_ready = h2o_barrier_done(&acfg->workers_sync_barrier);
+    int jwks_ready = r_jwks_is_valid(acfg->jwks.handle) == RHN_OK;
     if(workers_ready && !jwks_ready) {
-        app_rotate_jwks_store(&_app_cfg.jwks);
+        app_rotate_jwks_store(&acfg->jwks);
     }
     return workers_ready && jwks_ready;
 }
 
 static void on_sigterm(int sig_num) {
-    _app_cfg.shutdown_requested = 1;
+    app_cfg_t *acfg = app_get_global_cfg();
+    acfg->shutdown_requested = 1;
     if(!app_server_ready()) {
         exit(0);
     } // shutdown immediately if initialization hasn't been done yet
-    notify_all_workers(&_app_cfg);
+    notify_all_workers(acfg);
     app_db_pool_map_signal_closing();
 }
 
@@ -177,14 +131,15 @@ static void on_sigterm(int sig_num) {
 static void on_sigfatal(int sig_num) {
     // re-apply default action (signal handler) after doing following
     h2o_set_signal_handler(sig_num, SIG_DFL);
+    app_cfg_t *acfg = app_get_global_cfg();
     if(sig_num != SIGINT) { // print stack backtrace
         const int num_frames = 128;
         int num_used = 0;
         void *frames[num_frames];
         num_used = backtrace(frames, num_frames);
-        backtrace_symbols_fd(frames, num_used, _app_cfg.error_log_fd);
+        backtrace_symbols_fd(frames, num_used, acfg->error_log_fd);
     }
-    deinit_app_cfg(&_app_cfg);
+    deinit_app_server_cfg(acfg);
     raise(sig_num);
 }
 #endif // end of LIBC_HAS_BACKTRACE
@@ -355,108 +310,42 @@ static void run_loop(void *data) {
 } // end of run_loop
 
 
-static void _app_loop_remain_handles_traverse(uv_handle_t *handle, void *arg) {
-    // FIXME, this is workaround to ensure all handles are closed, there is a strange
-    // issue when starting polling file descriptor using `uv_poll_start()` in libh2o client
-    // request, the h2o connection will leave timer handle `uv_timer_t` in the event loop
-    // and never clean up the timer even after the entire request completed.
-    if(!uv_is_closing(handle)) {
-        uv_close(handle, (uv_close_cb)NULL);
-        uv_run(handle->loop, UV_RUN_NOWAIT);
-    }
-} // end of _app_loop_remain_handles_traverse
-
-
-static int start_workers(app_cfg_t *app_cfg) {
+static int appserver_start_workers(app_cfg_t *app_cfg) {
     size_t num_threads = app_cfg->workers.size + 1; // plus main thread
     struct worker_init_data_t  worker_data[num_threads];
-    int idx = 0;
-    int ret = 0;
-    h2o_vector_reserve(NULL, &app_cfg->server_notifications, num_threads);
-    app_cfg->server_notifications.size = num_threads;
-    h2o_barrier_init(&app_cfg->workers_sync_barrier, num_threads);
-    // initiate worker threads first , than invoke run_loop() in this main thread
-    for(idx = num_threads - 1; idx >= 0 ; idx--) {
-        struct worker_init_data_t  *data_ptr = &worker_data[idx];
-        *data_ptr = (struct worker_init_data_t){.app_cfg = app_cfg,
-             .cfg_thrd_idx = (unsigned int)idx, .loop = NULL };
-        if(idx == 0) {
-            data_ptr->loop = uv_default_loop();
-            run_loop((void *)data_ptr);
-        } else if (idx > 0) {
-            data_ptr->loop = (uv_loop_t *)h2o_mem_alloc(sizeof(uv_loop_t));
-            ret = uv_loop_init(data_ptr->loop);
-            if(ret != 0) {
-                h2o_fatal("[system] failed to initialize loop at worker thread (index=%d), reason:%s \n",
-                        idx, uv_strerror(ret));
-                goto done;
-            }
-            ret = uv_thread_create( &app_cfg->workers.entries[idx - 1], run_loop, (void *)data_ptr );
-            if(ret != 0) {
-                h2o_fatal("[system] failed to create worker thread (index=%d) , reason: %s \n",
-                        idx, uv_strerror(ret));
-                goto done;
-            }
-        }
-    } // end of workers iteration
-    // wait until all worker threads exits
-    for(idx = 0; idx < app_cfg->workers.size; idx++) {
-        uv_thread_t tid = app_cfg->workers.entries[idx];
-        if(uv_thread_join(&tid) != 0) {
-            char errbuf[256];
-            h2o_fatal("error on uv_thread_join : %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-    }
+    int err = appcfg_start_workers(app_cfg, &worker_data[0], run_loop);
+    if(err) { goto done; }
     app_db_poolmap_close_all_conns(worker_data[0].loop);
     while(!app_db_poolmap_check_all_conns_closed()) {
         int ms = 500;
         uv_sleep(ms);
     }
 done:
-    for(idx = 0; idx < num_threads; idx++) {
-        struct worker_init_data_t  *data_ptr = &worker_data[idx];
-        if(data_ptr->loop) {
-            uv_walk(data_ptr->loop, _app_loop_remain_handles_traverse, NULL);
-            ret = uv_loop_close(data_ptr->loop);
-            if(ret != 0) {
-                h2o_error_printf("[system] failed to close loop at worker thread (index=%d), reason:%s \n",
-                        data_ptr->cfg_thrd_idx, uv_strerror(ret));
-            }
-            if(data_ptr->cfg_thrd_idx > 0) {
-                free(data_ptr->loop);
-                data_ptr->loop = NULL;
-            } // for non-default loop
-        }
-    }
-    return  ret;
-} // end of start_workers
-
-void app_global_cfg_set_exepath(const char *exe_path)
-{ // caller should ensure this function is invoked each time with single thread
-    _app_cfg.exe_path = exe_path;
-}
+    appcfg_terminate_workers(app_cfg, &worker_data[0]);
+    return err;
+} // end of appserver_start_workers
 
 int start_application(const char *cfg_file_path, const char *exe_path)
 {   // TODO, flush log message to centralized service e.g. ELK stack
     int err = 0;
     app_global_cfg_set_exepath(exe_path);
-    atomic_init(&_app_cfg.state.num_curr_connections , 0);
-    h2o_config_init(&_app_cfg.server_glb_cfg);
+    app_cfg_t *acfg = app_get_global_cfg();
+    atomic_init(&acfg->state.num_curr_connections , 0);
+    h2o_config_init(&acfg->server_glb_cfg);
     r_global_init(); // rhonabwy JWT library
     err = init_security();
     if(err) { goto done; }
     const char *mysql_groups[] = {"client", NULL};
     err = mysql_library_init(0, NULL, (char **)mysql_groups);
     if(err) { goto done; }
-    err = parse_cfg_params(cfg_file_path, &_app_cfg);
+    err = parse_cfg_params(cfg_file_path, acfg);
     if(err) { goto done; }
-    register_global_access_log(&_app_cfg.server_glb_cfg , _app_cfg.access_logger);
+    register_global_access_log(&acfg->server_glb_cfg , acfg->access_logger);
     init_signal_handler();
-    err = start_workers(&_app_cfg);
+    err = appserver_start_workers(acfg);
 done:
-    deinit_app_cfg(&_app_cfg);
+    deinit_app_server_cfg(acfg);
     mysql_library_end();
     r_global_close(); // rhonabwy JWT library
     return err;
 } // end of start_application
-

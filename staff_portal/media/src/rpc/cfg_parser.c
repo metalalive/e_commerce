@@ -7,8 +7,9 @@
 
 typedef struct {
     arpc_cfg_bind_reply_t *cfg;
-    const char *qname_fn_name;
+    const char *queue_fn_name;
     const char *corr_id_fn_name;
+    const char *tsk_handler_fn_name;
     uint8_t  all_fns_found:1;
 } rpc_reply_cfg_internal_t;
 
@@ -140,26 +141,34 @@ static uint8_t _app_elf_gather_rpc_reply_render_fns_cb(char *fn_name, void *entr
 {
     rpc_reply_cfg_internal_t *args = (rpc_reply_cfg_internal_t *) cb_args;
     arpc_cfg_bind_reply_t *cfg = args->cfg;
-    if(args->qname_fn_name && strcmp(fn_name, args->qname_fn_name) == 0) {
+    if(args->queue_fn_name && strcmp(fn_name, args->queue_fn_name) == 0) {
         cfg->queue.render_fn = (arpc_replyq_render_fn)entry_point;
     }
     if(args->corr_id_fn_name && strcmp(fn_name, args->corr_id_fn_name) == 0) {
         cfg->correlation_id.render_fn = (arpc_replyq_render_fn)entry_point;
     }
-    uint8_t queue_render_fn_found  = (!args->qname_fn_name) || (cfg->queue.render_fn);
+    uint8_t queue_render_fn_found  = (!args->queue_fn_name) || (cfg->queue.render_fn);
     uint8_t corrid_render_fn_found = (!args->corr_id_fn_name) || (cfg->correlation_id.render_fn);
     uint8_t immediate_stop = queue_render_fn_found && corrid_render_fn_found;
     args->all_fns_found = immediate_stop;
     return immediate_stop;
 } // end of _app_elf_gather_rpc_reply_render_fns_cb
 
-// TODO, find out the function address by parsing elf file on consumer side
+static uint8_t _app_elf_gather_rpc_handler_fn_cb(char *fn_name, void *entry_point, void *cb_args)
+{
+    rpc_reply_cfg_internal_t *args = (rpc_reply_cfg_internal_t *) cb_args;
+    arpc_cfg_bind_reply_t *cfg = args->cfg;
+    if(args->tsk_handler_fn_name && strcmp(fn_name, args->tsk_handler_fn_name) == 0) {
+        cfg->task_handler = (arpc_task_handler_fn)entry_point;
+        args->all_fns_found = 1;
+    }
+    uint8_t immediate_stop = args->all_fns_found;
+    return immediate_stop;
+} // end of _app_elf_gather_rpc_handler_fn_cb
+
+
 static  int parse_cfg_rpc__reply_producer(json_t *obj, arpc_cfg_bind_reply_t *cfg)
 {
-    if(!obj) {
-        h2o_error_printf("[parsing] missing configuration for RPC reply \n");
-        goto error;
-    }
     json_t *qname_obj   = json_object_get(obj, "queue");
     json_t *corr_id_obj = json_object_get(obj, "correlation_id");
     if(!qname_obj || !corr_id_obj) {
@@ -175,9 +184,9 @@ static  int parse_cfg_rpc__reply_producer(json_t *obj, arpc_cfg_bind_reply_t *cf
     cfg->queue.render_fn = NULL;
     cfg->correlation_id.render_fn = NULL;
     {
-        const char *qname_fn_name   = json_string_value(json_object_get(qname_obj, "render_fn"));
+        const char *queue_fn_name   = json_string_value(json_object_get(qname_obj, "render_fn"));
         const char *corr_id_fn_name = json_string_value(json_object_get(corr_id_obj, "render_fn"));
-        rpc_reply_cfg_internal_t cb_args = {.cfg = cfg, .qname_fn_name = qname_fn_name,
+        rpc_reply_cfg_internal_t cb_args = {.cfg = cfg, .queue_fn_name = queue_fn_name,
             .corr_id_fn_name = corr_id_fn_name, .all_fns_found = 0};
         int err = app_elf_traverse_functions(app_get_global_cfg()->exe_path,
                 _app_elf_gather_rpc_reply_render_fns_cb, (void *)&cb_args);
@@ -198,6 +207,27 @@ static  int parse_cfg_rpc__reply_producer(json_t *obj, arpc_cfg_bind_reply_t *cf
 error:
     return -1;
 } // end of parse_cfg_rpc__reply_producer
+
+static  int parse_cfg_rpc__reply_consumer(json_t *obj, arpc_cfg_bind_reply_t *cfg)
+{
+    const char *task_handler_fn_name = json_string_value(json_object_get(obj, "task_handler"));
+    if(!task_handler_fn_name) {
+        h2o_error_printf("[parsing] missing name of task-handling function for RPC reply \n");
+        goto error;
+    }
+    cfg->task_handler = NULL;
+    rpc_reply_cfg_internal_t cb_args = {.cfg=cfg, .all_fns_found=0,
+        .tsk_handler_fn_name=task_handler_fn_name };
+    app_elf_traverse_functions(app_get_global_cfg()->exe_path,
+            _app_elf_gather_rpc_handler_fn_cb, (void *)&cb_args);
+    if(!cb_args.all_fns_found || !cfg->task_handler) {
+        h2o_error_printf("[parsing] missing task-handling function %s for RPC reply \n", task_handler_fn_name);
+        goto error;
+    }
+    return 0;
+error:
+    return -1;
+} // end of parse_cfg_rpc__reply_consumer
 
 static int parse_cfg_rpc__broker_bindings(json_t *objs, arpc_cfg_t *cfg)
 {
@@ -286,50 +316,78 @@ error:
 } // end of parse_cfg_rpc_common
 
 
+#define PARSE_CFG_RPC__COMMON_SANITY(objs, app_cfg) \
+{ \
+    if(!objs || !app_cfg || !json_is_array(objs)) { \
+        goto error; \
+    } \
+    json_array_foreach(objs, idx, obj) { \
+        json_t  *bindings   = json_object_get(obj, "bindings"); \
+        if(!bindings) { \
+            h2o_error_printf("[parsing] missing bindings in message broker configuration (idx=%lu)\n", idx); \
+            goto error; \
+        } \
+        if(!json_is_array(bindings) || json_array_size(bindings) == 0) { \
+            h2o_error_printf("[parsing] invalid format in binding field of message broker configuration (idx=%lu)\n", idx); \
+            goto error; \
+        } \
+    } \
+}
+
+#define PARSE_CFG_RPC__BINDING_COMMON(objs, app_cfg, which_side) \
+{ \
+    size_t  idx = 0, jdx = 0; \
+    json_t *obj = NULL, *bind_obj = NULL; \
+    PARSE_CFG_RPC__COMMON_SANITY(objs, app_cfg); \
+    if(parse_cfg_rpc_common(objs, app_cfg) != 0) { \
+        goto error; \
+    } \
+    json_array_foreach(objs, idx, obj) { \
+        arpc_cfg_t *cfg = &app_cfg->rpc.entries[idx]; \
+        json_t  *bindings   = json_object_get(obj, "bindings"); \
+        int err = parse_cfg_rpc__broker_bindings(bindings, cfg); \
+        if(err) { goto error; } \
+        json_array_foreach(bindings, jdx, bind_obj) { \
+            json_t  *reply = json_object_get(bind_obj, "reply"); \
+            if(!reply) { \
+                h2o_error_printf("[parsing] missing configuration for RPC reply \n"); \
+                goto error; \
+            } \
+            arpc_cfg_bind_t *bcfg = &cfg->bindings.entries[jdx]; \
+            err = parse_cfg_rpc__reply_##which_side(reply, &bcfg->reply); \
+            if(err) { goto error; } \
+        } \
+    } \
+}
+// end of host-config iteration
+
+
+#define PARSE_CFG_RPC__COMMON_ERROR_DENINT(app_cfg) \
+{ \
+    size_t idx = 0; \
+    for(idx = 0; idx < app_cfg->rpc.size; idx++) { \
+        app_rpc_cfg_deinit(&app_cfg->rpc.entries[idx]); \
+    } \
+    free(app_cfg->rpc.entries); \
+    app_cfg->rpc.entries = NULL; \
+    app_cfg->rpc.capacity = 0; \
+}
+
+
 int parse_cfg_rpc_caller(json_t *objs, app_cfg_t *app_cfg)
 {
-    if(!objs || !app_cfg || !json_is_array(objs)) {
-        goto error;
-    }
-    size_t  idx = 0, jdx = 0;
-    json_t *obj = NULL, *bind_obj = NULL;
-    json_array_foreach(objs, idx, obj) {
-        json_t  *bindings   = json_object_get(obj, "bindings");
-        if(!bindings) {
-            h2o_error_printf("[parsing] missing bindings in message broker configuration (idx=%lu)\n", idx);
-            goto error;
-        }
-        if(!json_is_array(bindings) || json_array_size(bindings) == 0) {
-            h2o_error_printf("[parsing] invalid format in binding field of message broker configuration (idx=%lu)\n", idx);
-            goto error;
-        }
-    } // end of host-config iteration
-    int err = parse_cfg_rpc_common(objs, app_cfg);
-    if(err) { goto error; }
-    json_array_foreach(objs, idx, obj) {
-        arpc_cfg_t *cfg = &app_cfg->rpc.entries[idx];
-        json_t  *bindings   = json_object_get(obj, "bindings");
-        err = parse_cfg_rpc__broker_bindings(bindings, cfg);
-        if(err) { goto error; }
-        json_array_foreach(bindings, jdx, bind_obj) {
-            json_t  *reply = json_object_get(bind_obj, "reply");
-            arpc_cfg_bind_t *bcfg = &cfg->bindings.entries[jdx];
-            err = parse_cfg_rpc__reply_producer(reply, &bcfg->reply);
-            if(err) { goto error; }
-        }
-    } // end of host-config iteration
+    PARSE_CFG_RPC__BINDING_COMMON(objs, app_cfg, producer);
     return 0;
 error:
-    for(idx = 0; idx < app_cfg->rpc.size; idx++) {
-        app_rpc_cfg_deinit(&app_cfg->rpc.entries[idx]);
-    }
-    free(app_cfg->rpc.entries);
-    app_cfg->rpc.entries = NULL;
-    app_cfg->rpc.capacity = 0;
+    PARSE_CFG_RPC__COMMON_ERROR_DENINT(app_cfg);
     return -1;
 } // end of parse_cfg_rpc_caller
 
 int parse_cfg_rpc_callee(json_t *objs, app_cfg_t *app_cfg)
 {
+    PARSE_CFG_RPC__BINDING_COMMON(objs, app_cfg, consumer);
     return 0;
+error:
+    PARSE_CFG_RPC__COMMON_ERROR_DENINT(app_cfg);
+    return -1;
 } // end of parse_cfg_rpc_callee

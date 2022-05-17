@@ -1,4 +1,5 @@
 #include "../test/integration/test.h"
+#include "app_server.h"
 
 static void test_verify__abort_multipart_upload(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {

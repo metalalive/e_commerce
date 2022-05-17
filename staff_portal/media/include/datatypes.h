@@ -76,20 +76,13 @@ typedef struct {
     h2o_access_log_filehandle_t *access_logger;
     unsigned int   max_connections;
     run_mode_t     run_mode;
-    // number of workers in the app, defaults to number of CPUs, unrelated to number of listeners
-    H2O_VECTOR(uv_thread_t) workers;
     // pointer to  notification in each running threads, which can be accessed when signal handling callback function is invoked
     H2O_VECTOR(h2o_multithread_receiver_t*) server_notifications;
-    // pointer to path where current executable is placed
-    const char   *exe_path;
     // length of internal queue for caching TCP fastopen cookies
     unsigned int  tfo_q_len;
     time_t        launch_time;
-    // atomic entity among threads & asynchronous interrupts
-    volatile sig_atomic_t  shutdown_requested;
     h2o_barrier_t  workers_sync_barrier;
     H2O_VECTOR(asa_cfg_t) storages;
-    H2O_VECTOR(arpc_cfg_t) rpc;
     // all members in the `state` struct must be modified atomically under multithreaded application
     struct {
         atomic_int num_curr_connections;  // number of currently handled incoming connections
@@ -100,6 +93,13 @@ typedef struct {
         unsigned int threshold_bytes;
     } tmp_buf; // in case of handling huge data of concurrently incoming requests
     struct app_jwks_t  jwks;
+    H2O_VECTOR(arpc_cfg_t) rpc;
+    // pointer to path where current executable is placed
+    const char   *exe_path;
+    // number of workers in the app, defaults to number of CPUs, unrelated to number of listeners
+    H2O_VECTOR(uv_thread_t) workers;
+    // atomic entity among threads & asynchronous interrupts
+    volatile sig_atomic_t  shutdown_requested;
 } app_cfg_t;
 
 

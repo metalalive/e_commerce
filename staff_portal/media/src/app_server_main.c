@@ -1,5 +1,5 @@
 #include <assert.h>
-#include "app.h"
+#include "app_server.h"
 
 int main(int argc, char *argv[]) {
     assert(argc > 1);
@@ -7,4 +7,3 @@ int main(int argc, char *argv[]) {
     const char *exe_path = argv[0]; // program path and name
     return  start_application(cfg_file_path, exe_path);
 }
-

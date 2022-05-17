@@ -1,5 +1,5 @@
 #include <cgreen/cgreen.h>
-#include "app.h"
+#include "app_cfg.h"
 
 TestSuite *app_cfg_parser_tests(void);
 TestSuite *app_rpc_cfg_parser_tests(void);

@@ -6,7 +6,7 @@ extern "C" {
 
 #include <cgreen/cgreen.h>
 #include <curl/curl.h>
-#include "app.h"
+#include "app_cfg.h"
 
 typedef struct {
     const char *cfg_file_path;
