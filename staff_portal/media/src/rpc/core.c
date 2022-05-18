@@ -67,16 +67,14 @@ static  void apprpc_ensure_send_queue(struct arpc_ctx_t *item)
     amqp_rpc_reply_t _reply = {0};
     for(idx = 0; idx < cfg->bindings.size; idx++) {
         arpc_cfg_bind_t *bind_cfg = &cfg->bindings.entries[0];
-        // TODO , amqp_table_t doesn't seem to work in amqp_queue_declare(...) , figure
-        // out how to make it work
-        //// amqp_table_entry_t  *q_arg_n_elms = {0}; //  malloc(sizeof(amqp_table_entry_t));
-        //// *q_arg_n_elms = (amqp_table_entry_t) {.key = amqp_cstring_bytes("x-max-length"),
-        ////         .value = {.kind = AMQP_FIELD_KIND_U32, .value = {.u32 = bind_cfg->max_msgs_pending}}};
-        //// amqp_table_t  q_arg_table = {.num_entries=1, .entries=q_arg_n_elms};
+        // AMQP broker does NOT allow  unsigned number as argument when declaring a queue ? find out the source(TODO)
+         amqp_table_entry_t  q_arg_n_elms = {.key = amqp_cstring_bytes("x-max-length"),
+                 .value = {.kind = AMQP_FIELD_KIND_I32, .value = {.i32 = bind_cfg->max_msgs_pending}}};
+         amqp_table_t  q_arg_table = {.num_entries=1, .entries=&q_arg_n_elms};
         amqp_queue_declare( item->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
                 amqp_cstring_bytes(bind_cfg->q_name), (amqp_boolean_t)bind_cfg->flags.passive,
                 (amqp_boolean_t)bind_cfg->flags.durable, (amqp_boolean_t)bind_cfg->flags.exclusive,
-                (amqp_boolean_t)bind_cfg->flags.auto_delete, amqp_empty_table // q_arg_table
+                (amqp_boolean_t)bind_cfg->flags.auto_delete, q_arg_table
             );
         _reply = amqp_get_rpc_reply(item->conn);
         if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
