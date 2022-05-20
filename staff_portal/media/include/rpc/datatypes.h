@@ -82,6 +82,7 @@ typedef struct {
         char   *vhost; // virtual host is determined at which an user logins to given broker
         size_t  max_channels;
         size_t  max_kb_per_frame;
+        size_t  timeout_secs;
     } attributes; // connection-level attributes
     H2O_VECTOR(arpc_cfg_bind_t) bindings;
 } arpc_cfg_t; // per-host config type

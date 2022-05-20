@@ -1,9 +1,5 @@
 #include "rpc/core.h"
 
-// rabbitmq-c handles heartbeat frames internally (TODO, figure out how) to see whether a
-// given connection is active, some of primary API functions will return AMQP_STATUS_HEARTBEAT_TIMEOUT
-// in case that the connection is inactive (closed) before invoking this function
-#define APP_AMQP_HEARTBEAT_DEFAULT_SECONDS  70
 // Note: limitation of librabbitmq:
 //       https://github.com/alanxz/rabbitmq-c#writing-applications-using-librabbitmq
 //
@@ -22,10 +18,13 @@ static  amqp_status_enum  apprpc_msgq_conn_init(struct arpc_ctx_t *item)
         fprintf(stderr, "[RPC] connection failure %s:%hu \n", cfg->credential.host, cfg->credential.port );
         goto done;
     }
+    // rabbitmq-c handles heartbeat frames internally in its API functions to see whether a
+    // given connection is active, some of primary API functions will return AMQP_STATUS_HEARTBEAT_TIMEOUT
+    // in case that the connection is inactive (closed) before invoking this function
     {
         int  max_nbytes_per_frame = (int) cfg->attributes.max_kb_per_frame << 10;
         amqp_rpc_reply_t  _reply = amqp_login(item->conn, cfg->attributes.vhost,
-                cfg->attributes.max_channels, max_nbytes_per_frame, APP_AMQP_HEARTBEAT_DEFAULT_SECONDS,
+                cfg->attributes.max_channels, max_nbytes_per_frame, cfg->attributes.timeout_secs,
                 AMQP_SASL_METHOD_PLAIN, cfg->credential.username, cfg->credential.password );
         if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
             fprintf(stderr, "[RPC] authentication failure %s@%s:%hu \n", cfg->credential.username,
@@ -156,18 +155,18 @@ void * app_rpc_conn_init(arpc_cfg_t *cfgs, size_t nitem) {
 } // end of app_rpc_conn_init
 
 
-void app_rpc_conn_deinit(void *conn) {
-    if(!conn) { return; }
-    struct arpc_ctx_list_t *ctx = (struct arpc_ctx_list_t *) conn;
+void app_rpc_conn_deinit(void *ctx) {
+    if(!ctx) { return; }
+    struct arpc_ctx_list_t *_ctx = (struct arpc_ctx_list_t *) ctx;
     size_t idx = 0;
-    for(idx = 0; idx < ctx->size; idx++) {
-        struct arpc_ctx_t *item = &ctx->entries[idx];
+    for(idx = 0; idx < _ctx->size; idx++) {
+        struct arpc_ctx_t *item = &_ctx->entries[idx];
         if(item->conn) {
             amqp_connection_close(item->conn, AMQP_REPLY_SUCCESS);
         }
         apprpc_conn_deinit__per_item(item);
     }
-    free(ctx);
+    free(_ctx);
 } // end of app_rpc_conn_deinit
 
 
@@ -175,7 +174,7 @@ static struct arpc_ctx_t *apprpc_msgq_cfg_lookup(struct arpc_ctx_list_t *ctx, co
 {
     struct arpc_ctx_t *chosen = NULL;
     size_t idx = 0;
-    for(idx = 0; idx < ctx->size; idx++) {
+    for(idx = 0; ctx && idx < ctx->size; idx++) {
         struct arpc_ctx_t *item = &ctx->entries[idx];
         if(strcmp(item->ref_cfg->alias, alias) == 0) {
             chosen = item;
@@ -311,3 +310,4 @@ ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *args)
     ARPC_STATUS_CODE status = APPRPC_RESP_ACCEPTED;
     return status;
 } // end of app_rpc_get_reply
+

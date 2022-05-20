@@ -125,6 +125,7 @@
             "attributes": {
                 "vhost":"/",
                 "max_channels": 128,
+                "timeout_secs": 30,
                 "max_kb_per_frame": 35
             },
             "credential": {

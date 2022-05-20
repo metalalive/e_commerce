@@ -19,7 +19,7 @@ struct arpc_ctx_list_t {
 };
 
 void *app_rpc_conn_init(arpc_cfg_t *cfgs, size_t nitem);
-void  app_rpc_conn_deinit(void *conn);
+void  app_rpc_conn_deinit(void *ctx);
 
 ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *);
 ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *);

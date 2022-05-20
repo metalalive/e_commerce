@@ -7,6 +7,9 @@ extern "C" {
 #include "app_cfg.h"
 #include "rpc/datatypes.h"
 
+#define RPC_QUEUE_DEFAULT_TIMEOUT_SECONDS  70
+#define RPC_QUEUE_MINIMUM_TIMEOUT_SECONDS   7
+
 int app_rpc_cfg_deinit(arpc_cfg_t *cfg);
 
 int parse_cfg_rpc_caller(json_t *objs, app_cfg_t *app_cfg);

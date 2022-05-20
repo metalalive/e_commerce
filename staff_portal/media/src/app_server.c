@@ -21,6 +21,20 @@
 #include "rpc/cfg_parser.h"
 #include "rpc/core.h"
 
+typedef struct {
+    h2o_accept_ctx_t  accept_ctx; // context applied when accepting new request associated with the listener
+    uv_handle_t  *nt_handle; // network handle associated with the listener
+} app_ctx_listener_t;
+
+typedef struct {
+    uv_thread_t  thread_id;
+    app_ctx_listener_t *listeners;
+    unsigned int num_listeners;
+    // used when notifying (waking up) the worker thread
+    h2o_multithread_receiver_t  server_notifications;
+} app_ctx_worker_t;
+
+
 static void deinit_app_server_cfg(app_cfg_t *app_cfg) {
     int idx = 0;
     if(app_cfg->listeners) {
@@ -94,7 +108,7 @@ static void on_tcp_accept(uv_stream_t *server, int status) {
 
 
 static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_linklist_t *msgs) {
-    fprintf(stdout, "on_server_notification invoked \n");
+    fprintf(stdout, "on_app_server_notification invoked \n");
     // the notification is used only for exitting h2o_evloop_run; actual changes are done in the main loop of run_loop
 }
 
@@ -313,6 +327,7 @@ static void run_loop(void *data) {
 static int appserver_start_workers(app_cfg_t *app_cfg) {
     size_t num_threads = app_cfg->workers.size + 1; // plus main thread
     struct worker_init_data_t  worker_data[num_threads];
+    h2o_barrier_init(&app_cfg->workers_sync_barrier, num_threads);
     int err = appcfg_start_workers(app_cfg, &worker_data[0], run_loop);
     if(err) { goto done; }
     app_db_poolmap_close_all_conns(worker_data[0].loop);

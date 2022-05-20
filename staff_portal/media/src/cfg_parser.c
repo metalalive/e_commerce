@@ -2,6 +2,7 @@
 #include <h2o.h>
 #include <h2o/serverutil.h>
 
+#include "app_cfg.h"
 #include "cfg_parser.h"
 #include "network.h"
 #include "routes.h"
@@ -27,26 +28,6 @@ int parse_cfg_pid_file(json_t *obj, app_cfg_t *_app_cfg) {
     }
     return (_file ? 0: EX_CONFIG);
 } // TODO, remove pid file on program exit
-
-
-static int parse_cfg_error_log(json_t *obj, app_cfg_t *_app_cfg) {
-    int fd = -1;
-    if (json_is_string(obj)) {
-        const char *err_log_path = json_string_value(obj);
-        fd = h2o_access_log_open_log(err_log_path);
-        if (fd != -1) { // redirect stdout and stderr to error log
-            int fd_stdout = 1;
-            int fd_stderr = 2;
-            if (dup2(fd, fd_stdout) == -1 || dup2(fd, fd_stderr) == -1) {
-                close(fd);
-                fd = -1;
-            } else {
-                _app_cfg->error_log_fd = fd;
-            } // TODO, close error log fd later at some point
-        }
-    }
-    return ((fd != -1) ? 0: EX_CONFIG);
-}
 
 
 static int parse_cfg_acs_log(json_t *obj, app_cfg_t *_app_cfg) {
@@ -104,22 +85,6 @@ static int parse_cfg_limit_req_body(json_t *obj, app_cfg_t *_app_cfg) {
         err = 0;
     }
     return err;
-}
-
-
-static int parse_cfg_num_workers(json_t *obj, app_cfg_t *_app_cfg) {
-    // In this application, number of worker threads excludes the main thread
-    int new_capacity = (int) json_integer_value(obj);
-    if (new_capacity < 0) {
-        goto error;
-    }
-    // TODO, free some of memory if new capacity is smaller than current one
-    h2o_vector_reserve(NULL, &_app_cfg->workers, (size_t)new_capacity);
-    // preserve space first, update thread ID later
-    _app_cfg->workers.size = new_capacity;
-    return 0;
-error:
-    return EX_CONFIG;
 }
 
 static int parse_cfg_tfo_q_len(json_t *obj, app_cfg_t *_app_cfg) {
@@ -475,7 +440,7 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
     }
     result_error = parse_cfg_pid_file(json_object_get((const json_t *)root, "pid_file"), _app_cfg);
     if (result_error) {  goto error; }
-    result_error = parse_cfg_error_log(json_object_get((const json_t *)root, "error_log"), _app_cfg);
+    result_error = appcfg_parse_errlog_path(json_object_get((const json_t *)root, "error_log"), _app_cfg);
     if (result_error) {  goto error; }
     result_error = parse_cfg_acs_log(json_object_get((const json_t *)root, "access_log"), _app_cfg);
     if (result_error) {  goto error; }
@@ -483,7 +448,7 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
     if (result_error) {  goto error; }
     result_error = parse_cfg_limit_req_body(json_object_get((const json_t *)root, "limit_req_body_in_bytes"), _app_cfg);
     if (result_error) {  goto error; }
-    result_error = parse_cfg_num_workers(json_object_get((const json_t *)root, "num_workers"), _app_cfg);
+    result_error = appcfg_parse_num_workers(json_object_get((const json_t *)root, "num_workers"), _app_cfg);
     if (result_error) {  goto error; }
     result_error = parse_cfg_tfo_q_len(json_object_get((const json_t *)root, "tcp_fastopen_queue_size"), _app_cfg);
     if (result_error) {  goto error; }

@@ -128,8 +128,15 @@ static int parse_cfg_rpc__broker_attributes(json_t *in, arpc_cfg_t *out)
         h2o_error_printf("[parsing] missing parameters in message broker attributes\n");
         goto error;
     }
+    size_t timeout_secs = (size_t) json_integer_value(json_object_get(in, "timeout_secs"));
+    if(timeout_secs == 0) {
+        timeout_secs = RPC_QUEUE_DEFAULT_TIMEOUT_SECONDS;
+    } else if (timeout_secs < RPC_QUEUE_MINIMUM_TIMEOUT_SECONDS) {
+        timeout_secs = RPC_QUEUE_MINIMUM_TIMEOUT_SECONDS;
+    }
     out->attributes.vhost = strdup(vhost);
-    out->attributes.max_channels     = max_channels    ;
+    out->attributes.timeout_secs = timeout_secs;
+    out->attributes.max_channels = max_channels;
     out->attributes.max_kb_per_frame = max_kb_per_frame;
     return 0;
 error:

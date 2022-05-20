@@ -63,6 +63,42 @@ void deinit_app_cfg(app_cfg_t *app_cfg)
     } // should be done lastly
 } // end of deinit_app_cfg
 
+
+int appcfg_parse_errlog_path(json_t *obj, app_cfg_t *_app_cfg) {
+    int fd = -1;
+    if (json_is_string(obj)) {
+        const char *err_log_path = json_string_value(obj);
+        fd = h2o_access_log_open_log(err_log_path);
+        if (fd != -1) { // redirect stdout and stderr to error log
+            int fd_stdout = 1;
+            int fd_stderr = 2;
+            if (dup2(fd, fd_stdout) == -1 || dup2(fd, fd_stderr) == -1) {
+                close(fd);
+                fd = -1;
+            } else {
+                _app_cfg->error_log_fd = fd;
+            } // TODO, close error log fd later at some point
+        }
+    }
+    return ((fd > 0) ? 0: -1);
+}
+
+
+int appcfg_parse_num_workers(json_t *obj, app_cfg_t *_app_cfg) {
+    // In this application, number of worker threads excludes the main thread
+    int new_capacity = (int) json_integer_value(obj);
+    if (new_capacity < 0) {
+        goto error;
+    }
+    // TODO, free some of memory if new capacity is smaller than current one
+    h2o_vector_reserve(NULL, &_app_cfg->workers, (size_t)new_capacity);
+    // preserve space first, update thread ID later
+    _app_cfg->workers.size = new_capacity;
+    return 0;
+error:
+    return -1;
+}
+
 int appcfg_start_workers(app_cfg_t *app_cfg, struct worker_init_data_t *data, void (*entry)(void *))
 {
     if(!app_cfg || !data || !entry) {
@@ -73,7 +109,6 @@ int appcfg_start_workers(app_cfg_t *app_cfg, struct worker_init_data_t *data, vo
     size_t num_threads = app_cfg->workers.size + 1; // plus main thread
     h2o_vector_reserve(NULL, &app_cfg->server_notifications, num_threads);
     app_cfg->server_notifications.size = num_threads;
-    h2o_barrier_init(&app_cfg->workers_sync_barrier, num_threads);
     // initiate worker threads first , than invoke run_loop() in this main thread
     for(idx = num_threads - 1; idx >= 0 ; idx--) {
         struct worker_init_data_t  *data_ptr = &data[idx];
@@ -105,6 +140,12 @@ int appcfg_start_workers(app_cfg_t *app_cfg, struct worker_init_data_t *data, vo
             char errbuf[256];
             h2o_fatal("error on uv_thread_join : %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
         }
+    }
+    if(app_cfg->server_notifications.entries) {
+        free(app_cfg->server_notifications.entries);
+        app_cfg->server_notifications.entries = NULL;
+        app_cfg->server_notifications.size = 0;
+        app_cfg->server_notifications.capacity = 0;
     }
     return ret;
 } // end of appcfg_start_workers

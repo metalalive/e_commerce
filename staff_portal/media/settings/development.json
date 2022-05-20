@@ -106,7 +106,7 @@
                     "durable": true,
                     "reply": {
                         "queue": {
-                            "pattern":"rpc.reply.media.mp_done.prof_id.%u",
+                            "pattern":"rpc.reply.media.prof_id.%u",
                             "render_fn":"api_complete_multipart_upload__render_rpc_replyq"
                         },
                         "correlation_id": {
@@ -122,6 +122,7 @@
             "attributes": {
                 "vhost":"/",
                 "max_channels": 128,
+                "timeout_secs": 50,
                 "max_kb_per_frame": 35
             },
             "credential": {

@@ -208,6 +208,7 @@ SET(RPC_CONSUMER_SOURCE_FILES
 
 SET(UNIT_TEST_SOURCE_FILES
     test/unit/main.c
+    test/unit/app_cfg.c
     test/unit/cfg_parser.c
     test/unit/network.c
     test/unit/routes.c
@@ -290,7 +291,7 @@ TARGET_LINK_LIBRARIES(${INTEGRATION_TEST_EXE_NAME} ${APP_SERVER_DEV_LIBRARIES} $
 
 ADD_CUSTOM_TARGET(dev_app_server
     ##valgrind --leak-check=full
-    ##gdb -args
+    gdb -args
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${APP_SERVER_EXE_NAME})
@@ -319,7 +320,7 @@ ADD_CUSTOM_TARGET(integration_test
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
     ##gdb -args # uncomment this line for debugging
     ##valgrind --leak-check=full
-    ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json
     COMMAND python -m  media.setup_test_env  media.setup_test_env.EndTestDatabase
         ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json    ${LIQUIBASE_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..

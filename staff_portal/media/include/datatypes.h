@@ -103,20 +103,6 @@ typedef struct {
 } app_cfg_t;
 
 
-typedef struct {
-    h2o_accept_ctx_t  accept_ctx; // context applied when accepting new request associated with the listener
-    uv_handle_t  *nt_handle; // network handle associated with the listener
-} app_ctx_listener_t;
-
-typedef struct {
-    uv_thread_t  thread_id;
-    app_ctx_listener_t *listeners;
-    unsigned int num_listeners;
-    // used when notifying (waking up) the worker thread
-    h2o_multithread_receiver_t  server_notifications;
-} app_ctx_worker_t;
-
-
 // data required for network handle (libuv)
 typedef struct {
     int  ai_flags;
