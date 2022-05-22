@@ -32,9 +32,18 @@ Ensure(api_complete_multipart_upload_test_accepted) {
         .headers = header_kv_serials
     };
     run_client_request(&setup_data, test_verify__complete_multipart_upload, NULL);
+    { // wait until connection timeout, consume API again, the app server should reconnect the AMQP broker
+        app_cfg_t *acfg = app_get_global_cfg();
+        arpc_cfg_t *rpc_cfg = &acfg->rpc.entries[0];
+        size_t delay_secs = 4 * rpc_cfg->attributes.timeout_secs;
+        sleep(delay_secs);
+        req_body_raw = "{\"resource_id\":\"t37Gl9\", \"req_seq\":107465}";
+        setup_data.req_body.serial_txt = req_body_raw;
+        run_client_request(&setup_data, test_verify__complete_multipart_upload, NULL);
+    }
     json_decref(header_kv_serials);
     json_decref(quota);
-}
+} // end of api_complete_multipart_upload_test_accepted
 
 TestSuite *api_complete_multipart_upload_tests(void)
 {

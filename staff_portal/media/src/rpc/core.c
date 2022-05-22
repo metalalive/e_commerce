@@ -91,12 +91,69 @@ static  void apprpc_ensure_send_queue(struct arpc_ctx_t *item)
     } // end of loop
 } // end of apprpc_ensure_send_queue
 
+
+static  ARPC_STATUS_CODE apprpc__translate_status_from_lowlvl_lib(amqp_rpc_reply_t *reply)
+{
+    ARPC_STATUS_CODE  app_status = APPRPC_RESP_OK;
+    switch(reply->reply_type) {
+        case AMQP_RESPONSE_NORMAL:
+            break;
+        case AMQP_RESPONSE_SERVER_EXCEPTION:
+            switch (reply->reply.id) {
+                case AMQP_CHANNEL_CLOSE_METHOD:
+                case AMQP_CONNECTION_CLOSE_METHOD: // half-closed on remote server ?
+                    app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
+                    break;
+                case AMQP_EXCHANGE_DECLARE_METHOD: 
+                case AMQP_QUEUE_DECLARE_METHOD:
+                    app_status = APPRPC_RESP_MSGQ_DECLARE_ERROR;
+                    break;
+                case AMQP_BASIC_PUBLISH_METHOD:
+                    app_status = APPRPC_RESP_MSGQ_PUBLISH_ERROR;
+                    break;
+                case AMQP_BASIC_CONSUME_METHOD:
+                    app_status = APPRPC_RESP_MSGQ_CONSUME_ERROR;
+                    break;
+                default:
+                    app_status = APPRPC_RESP_MSGQ_REMOTE_UNCLASSIFIED_ERROR;
+                    break;
+            }
+            break;
+        case AMQP_RESPONSE_LIBRARY_EXCEPTION:
+            switch(reply->library_error) {
+                case AMQP_STATUS_TIMEOUT:
+                case AMQP_STATUS_HEARTBEAT_TIMEOUT:
+                case AMQP_STATUS_SOCKET_ERROR:
+                    app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
+                    break;
+                case AMQP_STATUS_SOCKET_CLOSED:
+                case AMQP_STATUS_CONNECTION_CLOSED: // try connecting again
+                    app_status = APPRPC_RESP_MSGQ_CONNECTION_CLOSED;
+                    break;
+                case AMQP_STATUS_INVALID_PARAMETER:
+                    app_status = APPRPC_RESP_ARG_ERROR;
+                    break;
+                case AMQP_STATUS_BAD_AMQP_DATA:
+                case AMQP_STATUS_TABLE_TOO_BIG:
+                    app_status = APPRPC_RESP_MEMORY_ERROR;
+                    break;
+                default:
+                    app_status = APPRPC_RESP_MSGQ_LOWLEVEL_LIB_ERROR;
+                    break;
+            }
+            break;
+        default:
+            app_status = APPRPC_RESP_MSGQ_UNKNOWN_ERROR;
+            break;
+    } // end of error type check
+    return app_status;
+} // end of apprpc__translate_status_from_lowlvl_lib
+
 static ARPC_STATUS_CODE  apprpc_ensure_reply_queue(amqp_connection_state_t raw_conn,
         arpc_cfg_bind_reply_t *reply_cfg, char *q_name) {
     // Currently, reply queue is always bound with default exchange (specify empty
     // exchange name) , in case some AMQP brokers sends return value back to the reply
     // queue ONLY using default exchange. (TODO: switch to non-default exchange)
-    ARPC_STATUS_CODE  app_status = APPRPC_RESP_OK;
     amqp_queue_declare( raw_conn, APP_AMQP_CHANNEL_DEFAULT_ID,
             amqp_cstring_bytes(q_name), (amqp_boolean_t)reply_cfg->flags.passive,
             (amqp_boolean_t)reply_cfg->flags.durable, (amqp_boolean_t)reply_cfg->flags.exclusive,
@@ -104,9 +161,8 @@ static ARPC_STATUS_CODE  apprpc_ensure_reply_queue(amqp_connection_state_t raw_c
     amqp_rpc_reply_t _reply = amqp_get_rpc_reply(raw_conn);
     if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
         apprpc_declare_q_report_error(&_reply, q_name);
-        app_status = APPRPC_RESP_MSGQ_REMOTE_UNKNOWN_ERROR;
     }
-    return app_status;
+    return  apprpc__translate_status_from_lowlvl_lib(&_reply);
 } // end of apprpc_ensure_reply_queue
 
 static void apprpc_conn_deinit__per_item(struct arpc_ctx_t *item) {
@@ -251,8 +307,28 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
     ARPC_MSGQ__ENSURE_RPC_REPLY_PARAM(app_status, &bind_cfg->reply, correlation_id, args,
              args->job_id.bytes, args->job_id.len);
     app_status = apprpc_ensure_reply_queue(mq_cfg->conn, &bind_cfg->reply, &reply_req_queue[0]);
-    if(app_status != APPRPC_RESP_OK) {
-        goto done;
+    switch(app_status) {
+        case APPRPC_RESP_OK:
+            break;
+        case APPRPC_RESP_MSGQ_CONNECTION_ERROR: // try reconnecting
+            amqp_connection_close(mq_cfg->conn, AMQP_REPLY_SUCCESS);
+            apprpc_conn_deinit__per_item(mq_cfg); // TODO, find better approach, without re-init connection object
+        case APPRPC_RESP_MSGQ_CONNECTION_CLOSED:
+            mq_cfg->conn = amqp_new_connection();
+            mq_cfg->sock = amqp_tcp_socket_new(mq_cfg->conn);
+            if(apprpc_msgq_conn_init(mq_cfg) == AMQP_STATUS_OK) {
+                app_status = apprpc_ensure_reply_queue(mq_cfg->conn, &bind_cfg->reply, &reply_req_queue[0]);
+                if(app_status == APPRPC_RESP_OK) {
+                    break;
+                } else {
+                    goto done;
+                }
+            } else {
+                app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR ;
+                goto done;
+            }
+        default:
+            goto done;
     }
     amqp_basic_properties_t properties = {
             ._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CORRELATION_ID_FLAG
@@ -261,44 +337,19 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
             .correlation_id = {.bytes=args->job_id.bytes, .len=args->job_id.len},  .timestamp = args->_timestamp,
             .delivery_mode = 0x2, // defined in AMQP 0.9.1 without clear explanation
         };
-    uint8_t is_done = 0, is_reconnected = 0;
-    do { // publish message , if receiving heartbeat timeout , than login and open channel again
-        // TODO: figure out how to use non-blocking API functions provided by librabbitmq.
-        // Currently blocking API is used, there is only one channel to use for each
-        // RabbitMQ connection.
-        amqp_status_enum mq_status = amqp_basic_publish( mq_cfg->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
-                amqp_cstring_bytes(bind_cfg->exchange_name),  amqp_cstring_bytes(bind_cfg->routing_key),
-                mandatory, immediate, (amqp_basic_properties_t const *)&properties,
-                amqp_cstring_bytes(args->msg_body.bytes) );
-        switch(mq_status) {
-            case AMQP_STATUS_OK:
-                app_status = APPRPC_RESP_ACCEPTED;
-                is_done = 1;
-                break;
-            case AMQP_STATUS_TIMEOUT:
-            case AMQP_STATUS_HEARTBEAT_TIMEOUT:
-            case AMQP_STATUS_SOCKET_ERROR:
-                if(is_reconnected) { // prevent endless loop at here
-                    app_status = APPRPC_RESP_MSGQ_REMOTE_UNKNOWN_ERROR;
-                    is_done = 1;
-                    break;
-                } else { // close connection without destroying it, then forward to next case ...
-                    amqp_connection_close(mq_cfg->conn, AMQP_REPLY_SUCCESS);
-                }
-            case AMQP_STATUS_CONNECTION_CLOSED: // try connecting again
-                if(apprpc_msgq_conn_init(mq_cfg) == AMQP_STATUS_OK) {
-                    is_reconnected = 1;
-                } else {
-                    app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR ;
-                    is_done = 1;
-                }
-                break;
-            default:
-                app_status = APPRPC_RESP_MSGQ_PUBLISH_ERROR;
-                is_done = 1;
-                break;
-        } // end of switch statement
-    } while(!is_done);
+    amqp_status_enum mq_status = amqp_basic_publish( mq_cfg->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
+            amqp_cstring_bytes(bind_cfg->exchange_name),  amqp_cstring_bytes(bind_cfg->routing_key),
+            mandatory, immediate, (amqp_basic_properties_t const *)&properties,
+            amqp_cstring_bytes(args->msg_body.bytes) );
+    // TODO: figure out how to use non-blocking API functions provided by librabbitmq.
+    // Currently blocking API is used, there is only one channel to use for each
+    // RabbitMQ connection.
+    if(mq_status == AMQP_STATUS_OK) {
+        app_status = APPRPC_RESP_ACCEPTED;
+    } else {
+        amqp_rpc_reply_t _reply = amqp_get_rpc_reply(mq_cfg->conn);
+        app_status = apprpc__translate_status_from_lowlvl_lib(&_reply);
+    }
 #undef   RPC_MAX_REPLY_QNAME_SZ
 done:
     return app_status;
