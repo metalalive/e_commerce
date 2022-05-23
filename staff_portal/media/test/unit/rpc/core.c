@@ -9,19 +9,17 @@ Ensure(rpc_core_init_test__memory_error) {
     arpc_cfg_t  cfgs[NUM_RPC_CFGS] = {0};
     // amqp_socket_t, struct amqp_connection_state_t_  are incomplete type, which is
     // very inconvenient for testing cuz we cannot see the structure detail.
-    amqp_socket_t *mock_socket = malloc(34);
     amqp_connection_state_t mock_conn_state = malloc(45);
     // assume entry #1 has connection error
     expect(amqp_new_connection, will_return(NULL));
-    expect(amqp_tcp_socket_new, will_return(mock_socket));
     // assume entry #2 has socket error
     expect(amqp_new_connection, will_return(mock_conn_state));
     expect(amqp_tcp_socket_new, will_return(NULL));
+    expect(amqp_connection_close, when(conn_state, is_equal_to(mock_conn_state)));
+    expect(amqp_destroy_connection, will_return(0), when(conn_state, is_equal_to(mock_conn_state)));
     ctx = app_rpc_conn_init(&cfgs[0], NUM_RPC_CFGS);
     assert_that(ctx, is_not_null);
     if(ctx) {
-        expect(amqp_connection_close, when(conn_state, is_equal_to(mock_conn_state)));
-        expect(amqp_destroy_connection, will_return(0), when(conn_state, is_equal_to(mock_conn_state)));
         app_rpc_conn_deinit(ctx);
     }
     free(mock_conn_state);
@@ -249,11 +247,11 @@ Ensure(rpc_start_test__publish_failure) {
         expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
     }
     ARPC_STATUS_CODE status = app_rpc_start(&rpc_arg);
-    assert_that(status, is_equal_to(APPRPC_RESP_MSGQ_PUBLISH_ERROR));
+    assert_that(status, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
 } // end of rpc_start_test__publish_failure
 
 
-Ensure(rpc_start_test__msg_broker_down) {
+Ensure(rpc_start_test__publish_msg_broker_down) {
     const char *msg_body_raw = "{\"rpc_field_1\": \"some_str_value\", \"rpc_field_2\": 98760}";
     size_t msg_body_raw_sz = strlen(msg_body_raw);
     char job_id_raw[MAX_BYTES_JOB_ID] = {0};
@@ -285,11 +283,206 @@ Ensure(rpc_start_test__msg_broker_down) {
         expect(amqp_new_connection, will_return(mock_mq_conn));
         expect(amqp_tcp_socket_new, will_return(mock_mq_sock));
         expect(amqp_socket_open, will_return(AMQP_STATUS_SOCKET_ERROR));
+        expect(amqp_connection_close, when(conn_state, is_equal_to(mock_mq_conn)));
+        expect(amqp_destroy_connection, will_return(0), when(conn_state, is_equal_to(mock_mq_conn)));
     }
     assert_that(rpc_arg.job_id.bytes, is_equal_to_string(""));
     ARPC_STATUS_CODE status = app_rpc_start(&rpc_arg);
     assert_that(status, is_equal_to(APPRPC_RESP_MSGQ_CONNECTION_ERROR));
-} // end of rpc_start_test__msg_broker_down
+} // end of rpc_start_test__publish_msg_broker_down
+
+Ensure(rpc_ctx_lookup_test) {
+#define  NUM_RPC_CFGS  3
+    arpc_cfg_t  mock_cfgs[NUM_RPC_CFGS] = {
+        {.alias="utest_mqbroker_1"}, {.alias="utest_mqbroker_2"}, {.alias="utest_mqbroker_3"}
+    };
+    struct arpc_ctx_t      mock_ctxs[NUM_RPC_CFGS] = {
+        {.ref_cfg=&mock_cfgs[0]}, {.ref_cfg=&mock_cfgs[1]}, {.ref_cfg=&mock_cfgs[2]}
+    };
+    struct arpc_ctx_list_t mock_ctx_lst = {.size=NUM_RPC_CFGS, .entries=&mock_ctxs[0]};
+    void *chosen_ctx = NULL;
+    chosen_ctx = app_rpc_context_lookup((void *)&mock_ctx_lst, "utest_mqbroker_6789");
+    assert_that(chosen_ctx, is_null);
+    chosen_ctx = app_rpc_context_lookup((void *)&mock_ctx_lst, "utest_mqbroker_2");
+    assert_that(chosen_ctx, is_equal_to(&mock_ctxs[1]));
+#undef  NUM_RPC_CFGS
+} // end of rpc_ctx_lookup_test
+
+Ensure(rpc_consume_test__cfg_error) {
+    char dummy[1] = {0};
+    arpc_cfg_bind_t bindcfg = {.q_name="utest_rpc_method_queue"};
+    arpc_cfg_t  mock_cfg = {.bindings={.entries=&bindcfg, .size=1}};
+    struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=0, .ref_cfg=&mock_cfg,
+        .conn = (void *)&dummy[0]};
+    amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_SERVER_EXCEPTION,
+            .reply={.id=AMQP_BASIC_CONSUME_METHOD}};
+    expect(amqp_basic_consume, when(conn_state, is_equal_to(&dummy[0])),
+            when(q_name, is_equal_to("utest_rpc_method_queue")) );
+    expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
+    expect(amqp_destroy_envelope);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    assert_that(res, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
+} // end of rpc_consume_test__cfg_error
+
+Ensure(rpc_consume_test__empty_queue) {
+    char dummy[1] = {0};
+    arpc_cfg_t  mock_cfg = {0};
+    struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg,
+        .conn = (void *)&dummy[0]};
+    amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_LIBRARY_EXCEPTION,
+            .library_error=AMQP_STATUS_TIMEOUT};
+    expect(amqp_consume_message, will_return(&mock_reply_err));
+    expect(amqp_destroy_envelope);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    assert_that(res, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_TIMEOUT));
+} // end of rpc_consume_test__empty_queue
+
+Ensure(rpc_consume_test__unknown_route) {
+    char dummy[1] = {0};
+    const char *mock_route_key = "abcde";
+    size_t mock_route_key_sz = strlen(mock_route_key);
+    arpc_cfg_t  mock_cfg = {0};
+    struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg,
+        .conn = (void *)&dummy[0]};
+    amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+    expect(amqp_consume_message,  will_return(&mock_reply_ok),
+            will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
+            will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
+        );
+    expect(amqp_destroy_envelope);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    assert_that(res, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
+} // end of rpc_consume_test__unknown_route
+
+Ensure(rpc_consume_test__missing_handler) {
+#define EXPECT_NUM_BINDINGS 3
+    char dummy[1] = {0};
+    arpc_cfg_bind_t bindcfg[EXPECT_NUM_BINDINGS] = {
+        {.routing_key="utest.rpc.operation1"},
+        {.routing_key="utest.rpc.operation2"},
+        {.routing_key="utest.rpc.operation3"},
+    };
+    const char *mock_route_key = bindcfg[2].routing_key;
+    size_t mock_route_key_sz = strlen(mock_route_key);
+    arpc_cfg_t  mock_cfg = {.bindings={.entries=&bindcfg[0], .size=EXPECT_NUM_BINDINGS}};
+    struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg, .conn = (void *)&dummy[0]};
+    amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+    expect(amqp_consume_message,  will_return(&mock_reply_ok),
+            will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
+            will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
+        );
+    expect(amqp_destroy_envelope);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    assert_that(res, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
+#undef EXPECT_NUM_BINDINGS
+} // end of rpc_consume_test__missing_handler
+
+
+static void utest_mock_consumer_handler(arpc_receipt_t *r)
+{
+    char  *return_body = "qwertyuh";
+    char **return_body_p = &return_body;
+    mock(r, return_body_p);
+    r->return_fn(r, return_body, strlen(return_body));
+} // end of utest_mock_consumer_handler
+
+Ensure(rpc_consume_test__handler_done__broker_down) {
+#define EXPECT_NUM_BINDINGS 1
+    char dummy[2] = {0};
+    arpc_cfg_bind_t bindcfg[EXPECT_NUM_BINDINGS] = {
+        {.routing_key="utest.rpc.operation.1234", .reply={.task_handler=utest_mock_consumer_handler}},
+    };
+    const char *mock_route_key = bindcfg[0].routing_key;
+    size_t mock_route_key_sz = strlen(mock_route_key);
+    arpc_cfg_t  mock_cfg = {.bindings={.entries=&bindcfg[0], .size=EXPECT_NUM_BINDINGS}};
+    struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg, .conn=(void *)&dummy[0]
+        , .sock=(void *)&dummy[1]};
+    {
+        amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+        amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_LIBRARY_EXCEPTION,
+                .library_error=AMQP_STATUS_SOCKET_ERROR};
+        expect(amqp_consume_message,  will_return(&mock_reply_ok),
+                will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
+                will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
+            );
+        expect(utest_mock_consumer_handler);
+        expect(amqp_basic_publish, will_return(AMQP_STATUS_SOCKET_ERROR));
+        expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
+        expect(amqp_connection_close);
+        expect(amqp_destroy_connection);
+        expect(amqp_new_connection, will_return(&dummy[0]));
+        expect(amqp_tcp_socket_new, will_return(&dummy[1]));
+        expect(amqp_socket_open, will_return(AMQP_STATUS_TCP_ERROR));
+        expect(amqp_connection_close);
+        expect(amqp_destroy_connection);
+        expect(amqp_destroy_envelope);
+    }
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    assert_that(res, is_equal_to(APPRPC_RESP_OK));
+#undef EXPECT_NUM_BINDINGS
+} // end of rpc_consume_test__handler_done__broker_down
+
+
+Ensure(rpc_consume_test__handler_done__send_reply_error) {
+#define EXPECT_NUM_BINDINGS 1
+    char dummy[2] = {0};
+    arpc_cfg_bind_t bindcfg[EXPECT_NUM_BINDINGS] = {
+        {.routing_key="utest.rpc.operation.1234", .reply={.task_handler=utest_mock_consumer_handler}},
+    };
+    const char *mock_route_key = bindcfg[0].routing_key;
+    size_t mock_route_key_sz = strlen(mock_route_key);
+    arpc_cfg_t  mock_cfg = {.bindings={.entries=&bindcfg[0], .size=EXPECT_NUM_BINDINGS}};
+    struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg, .conn=(void *)&dummy[0]
+        , .sock=(void *)&dummy[1]};
+    {
+        amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+        amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_SERVER_EXCEPTION,
+                .reply={.id=AMQP_BASIC_PUBLISH_METHOD} };
+        expect(amqp_consume_message,  will_return(&mock_reply_ok),
+                will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
+                will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
+            );
+        expect(utest_mock_consumer_handler);
+        expect(amqp_basic_publish, will_return(AMQP_STATUS_BAD_AMQP_DATA));
+        expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
+        expect(amqp_destroy_envelope);
+    }
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    assert_that(res, is_equal_to(APPRPC_RESP_OK));
+#undef EXPECT_NUM_BINDINGS
+} // end of rpc_consume_test__handler_done__send_reply_error
+
+
+Ensure(rpc_consume_test__handler_done__send_reply_ok) {
+#define EXPECT_NUM_BINDINGS 1
+    char dummy[2] = {0};
+    arpc_cfg_bind_t bindcfg[EXPECT_NUM_BINDINGS] = {
+        {.routing_key="utest.rpc.operation.1234", .reply={.task_handler=utest_mock_consumer_handler}},
+    };
+    const char *mock_route_key = bindcfg[0].routing_key;
+    size_t mock_route_key_sz = strlen(mock_route_key);
+    const char *expect_return_body = "you are almost there, keep digging";
+    arpc_cfg_t  mock_cfg = {.bindings={.entries=&bindcfg[0], .size=EXPECT_NUM_BINDINGS}};
+    struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg, .conn=(void *)&dummy[0]
+        , .sock=(void *)&dummy[1]};
+    {
+        amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+        expect(amqp_consume_message,  will_return(&mock_reply_ok),
+                will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
+                will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
+            );
+        expect(utest_mock_consumer_handler,
+                will_set_contents_of_parameter(return_body_p, &expect_return_body, sizeof(char *))
+            );
+        expect(amqp_basic_publish, will_return(AMQP_STATUS_OK),
+                when(raw_body, is_equal_to_string(expect_return_body)));
+        expect(amqp_destroy_envelope);
+    }
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    assert_that(res, is_equal_to(APPRPC_RESP_OK));
+#undef EXPECT_NUM_BINDINGS
+} // end of rpc_consume_test__handler_done__send_reply_ok
+
 
 TestSuite *app_rpc_core_tests(void) {
     TestSuite *suite = create_test_suite();
@@ -301,6 +494,14 @@ TestSuite *app_rpc_core_tests(void) {
     add_test(suite, rpc_start_test__cfg_missing);
     add_test(suite, rpc_start_test__reconnected_published);
     add_test(suite, rpc_start_test__publish_failure);
-    add_test(suite, rpc_start_test__msg_broker_down);
+    add_test(suite, rpc_start_test__publish_msg_broker_down);
+    add_test(suite, rpc_ctx_lookup_test);
+    add_test(suite, rpc_consume_test__cfg_error);
+    add_test(suite, rpc_consume_test__empty_queue);
+    add_test(suite, rpc_consume_test__unknown_route);
+    add_test(suite, rpc_consume_test__missing_handler);
+    add_test(suite, rpc_consume_test__handler_done__broker_down);
+    add_test(suite, rpc_consume_test__handler_done__send_reply_error);
+    add_test(suite, rpc_consume_test__handler_done__send_reply_ok);
     return suite;
 }

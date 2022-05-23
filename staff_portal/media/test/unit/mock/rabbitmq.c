@@ -2,6 +2,7 @@
 #include <amqp_tcp_socket.h>
 #include <cgreen/mocks.h>
 
+const amqp_bytes_t amqp_empty_bytes = {0, NULL};
 const amqp_table_t amqp_empty_table = {0, NULL};
 
 amqp_bytes_t amqp_cstring_bytes(char const *cstr)
@@ -81,3 +82,29 @@ int amqp_basic_publish(amqp_connection_state_t conn_state, amqp_channel_t channe
     char *raw_body = body.bytes;
     return (int)mock(conn_state, channel, exchange_name, route_key_name, raw_body);
 }
+
+amqp_basic_consume_ok_t *amqp_basic_consume(
+    amqp_connection_state_t conn_state, amqp_channel_t channel, amqp_bytes_t queue,
+    amqp_bytes_t consumer_tag, amqp_boolean_t no_local, amqp_boolean_t no_ack,
+    amqp_boolean_t exclusive, amqp_table_t arguments) {
+    char *q_name = queue.bytes;
+    return (amqp_basic_consume_ok_t *) mock(conn_state, channel, q_name, no_local, no_ack);
+}
+
+amqp_rpc_reply_t amqp_consume_message(amqp_connection_state_t conn_state,
+      amqp_envelope_t *envelope,  const struct timeval *timeout, int flags)
+{
+    void   **evp_routekey    = &envelope->routing_key.bytes;
+    size_t  *evp_routekey_sz = &envelope->routing_key.len  ;
+    void   **evp_msg_body    = &envelope->message.body.bytes;
+    amqp_rpc_reply_t *out = (amqp_rpc_reply_t *) mock(conn_state, evp_routekey, evp_routekey_sz,
+           evp_msg_body, timeout, flags);
+    return *out;
+}
+
+void  amqp_destroy_envelope(amqp_envelope_t *envelope)
+{ mock(envelope); }
+
+int amqp_get_sockfd(amqp_connection_state_t conn_state)
+{ return (int)mock(conn_state); }
+

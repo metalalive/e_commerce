@@ -14,30 +14,42 @@ typedef enum {
     APPRPC_RESP_ARG_ERROR,
     APPRPC_RESP_MSGQ_CONNECTION_CLOSED,
     APPRPC_RESP_MSGQ_CONNECTION_ERROR,
-    APPRPC_RESP_MSGQ_DECLARE_ERROR,
-    APPRPC_RESP_MSGQ_PUBLISH_ERROR,
-    APPRPC_RESP_MSGQ_CONSUME_ERROR,
+    APPRPC_RESP_MSGQ_OPERATION_ERROR,
+    APPRPC_RESP_MSGQ_OPERATION_TIMEOUT,
     APPRPC_RESP_MSGQ_UNKNOWN_ERROR,
     APPRPC_RESP_MSGQ_LOWLEVEL_LIB_ERROR,
     APPRPC_RESP_MSGQ_REMOTE_UNCLASSIFIED_ERROR,
 } ARPC_STATUS_CODE;
 
-typedef struct {
-    const char *alias; // identify the broker configuration which is used to send command
-    void *conn;
-    char *routing_key;
-    uint64_t _timestamp;
-    void *usr_data;
-    // RPC function will reply with valid job ID for successfully published message
-    struct {
-        size_t len;
-        char *bytes;
-    } job_id;
-    struct {
-        size_t len;
-        char  *bytes;
+#define ARPC_EXECUTE_COMMON_FIELDS \
+    void *usr_data; \
+    char *routing_key; \
+    uint64_t _timestamp; \
+    struct { \
+        size_t len; \
+        char *bytes; \
+    } job_id; \
+    struct { \
+        size_t len; \
+        char  *bytes; \
     } msg_body;
-} arpc_exe_arg_t;
+
+typedef struct {
+    // RPC function will reply with valid job ID for successfully published message
+    ARPC_EXECUTE_COMMON_FIELDS;
+    const char *alias; // identify the broker configuration which is used to send command
+    void *conn; // list of  pointers to RPC contexts
+} arpc_exe_arg_t; // TODO, rename to arpc_delivery_t
+
+struct arpc_receipt_s;
+typedef void (*arpc_consume_handler_return_fn)(struct arpc_receipt_s *, char *out, size_t out_sz);
+
+typedef struct arpc_receipt_s {
+    ARPC_EXECUTE_COMMON_FIELDS;
+    arpc_consume_handler_return_fn  return_fn;
+    void *ctx; // pointer to specific RPC context
+    void *_msg_obj;
+} arpc_receipt_t;
 
 typedef struct {
     uint8_t durable:1;
@@ -49,7 +61,7 @@ typedef struct {
 struct arpc_cfg_bind_reply_s;
 
 typedef ARPC_STATUS_CODE (*arpc_replyq_render_fn)(const char *pattern, arpc_exe_arg_t *, char *wr_buf, size_t wr_sz);
-typedef ARPC_STATUS_CODE (*arpc_task_handler_fn)(char *msg_body, size_t rd_sz, void *arg);
+typedef void (*arpc_task_handler_fn)(arpc_receipt_t *receipt);
 
 typedef struct arpc_cfg_bind_reply_s {
     struct {

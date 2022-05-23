@@ -9,7 +9,7 @@
 #define APP_AMQP_CHANNEL_DEFAULT_ID  1
 
 
-static  amqp_status_enum  apprpc_msgq_conn_init(struct arpc_ctx_t *item)
+static  amqp_status_enum  apprpc_msgq_conn_auth(struct arpc_ctx_t *item)
 {
     amqp_status_enum  status = AMQP_STATUS_OK;
     arpc_cfg_t *cfg = item->ref_cfg;
@@ -42,7 +42,7 @@ static  amqp_status_enum  apprpc_msgq_conn_init(struct arpc_ctx_t *item)
     }
 done:
     return status;
-} // end of apprpc_msgq_conn_init
+} // end of apprpc_msgq_conn_auth
 
 static void apprpc_declare_q_report_error(amqp_rpc_reply_t *reply, char *q_name)
 {
@@ -106,13 +106,9 @@ static  ARPC_STATUS_CODE apprpc__translate_status_from_lowlvl_lib(amqp_rpc_reply
                     break;
                 case AMQP_EXCHANGE_DECLARE_METHOD: 
                 case AMQP_QUEUE_DECLARE_METHOD:
-                    app_status = APPRPC_RESP_MSGQ_DECLARE_ERROR;
-                    break;
                 case AMQP_BASIC_PUBLISH_METHOD:
-                    app_status = APPRPC_RESP_MSGQ_PUBLISH_ERROR;
-                    break;
                 case AMQP_BASIC_CONSUME_METHOD:
-                    app_status = APPRPC_RESP_MSGQ_CONSUME_ERROR;
+                    app_status = APPRPC_RESP_MSGQ_OPERATION_ERROR;
                     break;
                 default:
                     app_status = APPRPC_RESP_MSGQ_REMOTE_UNCLASSIFIED_ERROR;
@@ -121,7 +117,12 @@ static  ARPC_STATUS_CODE apprpc__translate_status_from_lowlvl_lib(amqp_rpc_reply
             break;
         case AMQP_RESPONSE_LIBRARY_EXCEPTION:
             switch(reply->library_error) {
+                case AMQP_STATUS_TIMER_FAILURE:
+                    app_status = APPRPC_RESP_OS_ERROR;
+                    break;
                 case AMQP_STATUS_TIMEOUT:
+                    app_status = APPRPC_RESP_MSGQ_OPERATION_TIMEOUT;
+                    break;
                 case AMQP_STATUS_HEARTBEAT_TIMEOUT:
                 case AMQP_STATUS_SOCKET_ERROR:
                     app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
@@ -191,18 +192,8 @@ void * app_rpc_conn_init(arpc_cfg_t *cfgs, size_t nitem) {
     for(idx = 0; idx < nitem; idx++) {
         struct arpc_ctx_t *item = &ctx->entries[idx];
         item->ref_cfg = &cfgs[idx];
-        item->conn = amqp_new_connection();
-        item->sock = amqp_tcp_socket_new(item->conn); // socket will be deleted once connection is closed
-        if(!item->conn || !item->sock) {
-            fprintf(stderr, "[RPC][init] missing connection object or  TCP socket at entry %ld \n", idx);
-            continue;
-        }
-        if(apprpc_msgq_conn_init(item) != AMQP_STATUS_OK) {
-            fprintf(stderr, "[RPC][init] login failure at entry %ld \n", idx);
-            if(item->conn) {
-                amqp_connection_close(item->conn, AMQP_REPLY_SUCCESS);
-            }
-            apprpc_conn_deinit__per_item(item);
+        ARPC_STATUS_CODE  res = app_rpc_open_connection((void *)item);
+        if(res != APPRPC_RESP_OK) {
             continue;
         }
         apprpc_ensure_send_queue(item);
@@ -311,20 +302,15 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
         case APPRPC_RESP_OK:
             break;
         case APPRPC_RESP_MSGQ_CONNECTION_ERROR: // try reconnecting
-            amqp_connection_close(mq_cfg->conn, AMQP_REPLY_SUCCESS);
-            apprpc_conn_deinit__per_item(mq_cfg); // TODO, find better approach, without re-init connection object
+            app_rpc_close_connection((void *)mq_cfg);
         case APPRPC_RESP_MSGQ_CONNECTION_CLOSED:
-            mq_cfg->conn = amqp_new_connection();
-            mq_cfg->sock = amqp_tcp_socket_new(mq_cfg->conn);
-            if(apprpc_msgq_conn_init(mq_cfg) == AMQP_STATUS_OK) {
+            app_status = app_rpc_open_connection((void *)mq_cfg);
+            if(app_status == APPRPC_RESP_OK) {
                 app_status = apprpc_ensure_reply_queue(mq_cfg->conn, &bind_cfg->reply, &reply_req_queue[0]);
-                if(app_status == APPRPC_RESP_OK) {
-                    break;
-                } else {
-                    goto done;
-                }
+            }
+            if(app_status == APPRPC_RESP_OK) {
+                break;
             } else {
-                app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR ;
                 goto done;
             }
         default:
@@ -362,3 +348,210 @@ ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *args)
     return status;
 } // end of app_rpc_get_reply
 
+
+static ARPC_STATUS_CODE apprpc_consumer_set_read_queues(struct arpc_ctx_t *_ctx)
+{
+    ARPC_STATUS_CODE res = APPRPC_RESP_OK;
+    arpc_cfg_t *rpc_cfg = _ctx->ref_cfg;
+    size_t idx = 0;
+    amqp_boolean_t no_local = 0;
+    amqp_boolean_t no_ack = 1; // automatically send ack back to broker
+    amqp_boolean_t exclusive = 0;
+    for(idx = 0; idx < rpc_cfg->bindings.size; idx++) {
+        arpc_cfg_bind_t *bindcfg = &rpc_cfg->bindings.entries[idx];
+        amqp_bytes_t queue = amqp_cstring_bytes(bindcfg->q_name);
+        amqp_basic_consume( _ctx->conn, APP_AMQP_CHANNEL_DEFAULT_ID, queue, amqp_empty_bytes,
+                no_local, no_ack, exclusive, amqp_empty_table) ;
+        amqp_rpc_reply_t  reply = amqp_get_rpc_reply(_ctx->conn);
+        res = apprpc__translate_status_from_lowlvl_lib(&reply);
+        if(res != APPRPC_RESP_OK) { break; }
+    }
+    return res;
+} // end of apprpc_consumer_set_read_queues
+
+
+static void apprpc_consume_handler_finalize(arpc_receipt_t *r, char *out, size_t out_sz)
+{
+    struct arpc_ctx_t * _ctx = (struct arpc_ctx_t *)r->ctx;
+    amqp_envelope_t  *evp = (amqp_envelope_t *)r->_msg_obj;
+    // Note this function doesn't ensure existence of the reply queue, it reports error
+    // if reply queue is absent.
+    amqp_basic_properties_t properties = {
+        ._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG |
+            AMQP_BASIC_CORRELATION_ID_FLAG | AMQP_BASIC_TIMESTAMP_FLAG,
+        .content_type = amqp_cstring_bytes("application/json"), .timestamp = r->_timestamp,
+        .correlation_id = {.bytes=r->job_id.bytes, .len=r->job_id.len}, .delivery_mode = 0x2,
+    };
+    // send return value to reply queue
+    amqp_bytes_t body = {.len=out_sz , .bytes=out};
+    amqp_boolean_t mandatory = 1;
+    amqp_boolean_t immediate = 0;
+    amqp_status_enum  mq_status = AMQP_STATUS_OK;
+    // it has to be anon-exchange for publishing message to RPC reply queue, such exchange
+    // in AMQP broker maps routing key directly to the queue with exact name.
+#define AMQP_ANON_EXCHANGE amqp_empty_bytes
+#define RUN_PUBLISH_CMD \
+    amqp_basic_publish( _ctx->conn, APP_AMQP_CHANNEL_DEFAULT_ID,  AMQP_ANON_EXCHANGE, \
+            evp->message.properties.reply_to, mandatory, immediate, \
+            (amqp_basic_properties_t const *)&properties, body );
+    mq_status = RUN_PUBLISH_CMD;
+    if(mq_status != AMQP_STATUS_OK) {
+        amqp_rpc_reply_t _reply = amqp_get_rpc_reply(_ctx->conn);
+        ARPC_STATUS_CODE app_status = apprpc__translate_status_from_lowlvl_lib(&_reply);
+        switch(app_status) {
+            case APPRPC_RESP_MSGQ_CONNECTION_ERROR: // try reconnecting
+                app_rpc_close_connection((void *)_ctx);
+            case APPRPC_RESP_MSGQ_CONNECTION_CLOSED:
+                app_status = app_rpc_open_connection((void *)_ctx);
+                if(app_status == APPRPC_RESP_OK) {
+                    mq_status = RUN_PUBLISH_CMD;
+                } else {
+                    fprintf(stderr, "[RPC][consumer] failed to reconnect when sending to reply queue\n");
+                }
+                if(mq_status != AMQP_STATUS_OK) {
+                    fprintf(stderr, "[RPC][consumer] failed to send return value to reply queue\n");
+                } // TODO, logging more error detail
+                break;
+            case APPRPC_RESP_OK:
+            default:
+                fprintf(stderr, "[RPC][consumer] unclassified error (%d) when returning value to reply queue\n", app_status);
+                break;
+        } // error handling if connection closed unexpectedly
+    }
+    amqp_destroy_envelope(evp);
+    free(evp);
+    free(r);
+#undef RUN_PUBLISH_CMD
+#undef AMQP_ANON_EXCHANGE
+} // end of apprpc_consume_handler_finalize
+
+
+ARPC_STATUS_CODE app_rpc_consume_message(void *ctx)
+{ // consume one message at a time in non-blocking manner
+    ARPC_STATUS_CODE res = APPRPC_RESP_OK;
+    struct arpc_ctx_t *_ctx = (struct arpc_ctx_t *)ctx;
+    struct timeval  timeout = {0}; // immediately return if all the queues are empty.
+    amqp_envelope_t envelope = {0}; // initialize automatically in amqp_consume_message(...)
+    if(!_ctx || !_ctx->conn || !_ctx->ref_cfg) {
+        return APPRPC_RESP_ARG_ERROR;
+    }
+    if(!_ctx->consumer_setup_done) {
+        res = apprpc_consumer_set_read_queues(_ctx);
+        if(res != APPRPC_RESP_OK) { goto done; }
+        _ctx->consumer_setup_done = 1;
+    }
+    amqp_rpc_reply_t reply = amqp_consume_message(_ctx->conn, &envelope, (const struct timeval *)&timeout, 0);
+    res = apprpc__translate_status_from_lowlvl_lib(&reply);
+    if(res != APPRPC_RESP_OK) {
+        goto done;
+    } // this is non-blocking function, don't treat operation timeout as error.
+    arpc_cfg_bind_t *bind_cfg = apprpc_msgq_bind_cfg_lookup(_ctx->ref_cfg,
+            (const char *)envelope.routing_key.bytes);
+    if(!bind_cfg) {
+        fprintf(stderr, "[RPC consumer] unknown routing key (%s) within the RPC message\n",
+                (char *)envelope.routing_key.bytes);
+        res = APPRPC_RESP_MSGQ_OPERATION_ERROR;
+        goto done;
+    }
+    arpc_task_handler_fn  entry_fn = bind_cfg->reply.task_handler;
+    if(entry_fn) {
+        arpc_receipt_t *r = malloc(sizeof(arpc_receipt_t));
+        amqp_bytes_t *corr_id = &envelope.message.properties.correlation_id;
+        amqp_bytes_t *body    = &envelope.message.body;
+        *r = (arpc_receipt_t) {.ctx=ctx, .return_fn=apprpc_consume_handler_finalize, 
+            ._msg_obj=malloc(sizeof(amqp_envelope_t)), .routing_key=envelope.routing_key.bytes,
+            .job_id={.len=corr_id->len, .bytes=corr_id->bytes}, ._timestamp=(uint64_t)time(NULL),
+            .msg_body={.len=body->len, .bytes=body->bytes}
+        };
+        *(amqp_envelope_t *)r->_msg_obj = envelope;
+        entry_fn(r); // user-defined handlers must invoke return function at the end of the long-running task
+    } else {
+        fprintf(stderr, "[RPC consumer] missing task handler (%s) that wasn't found at parsing phase \n",
+                (char *)envelope.routing_key.bytes);
+        // TODO, log error, received message not handled
+        res = APPRPC_RESP_MSGQ_OPERATION_ERROR;
+    }
+done:
+    if(res != APPRPC_RESP_OK) {
+        amqp_destroy_envelope(&envelope);
+    }
+    return res;
+} // end of app_rpc_consume_message
+
+
+ARPC_STATUS_CODE app_rpc_close_connection(void *ctx)
+{ // TODO, find better approach, without re-init connection object
+    ARPC_STATUS_CODE res = APPRPC_RESP_OK;
+    struct arpc_ctx_t *_ctx = (struct arpc_ctx_t *)ctx;
+    if(_ctx && _ctx->conn && _ctx->sock) {
+        amqp_connection_close(_ctx->conn, AMQP_REPLY_SUCCESS);
+        apprpc_conn_deinit__per_item(_ctx); 
+    } else {
+        res = APPRPC_RESP_MEMORY_ERROR;
+    }
+    return res;
+}
+
+ARPC_STATUS_CODE app_rpc_open_connection(void *ctx)
+{
+    ARPC_STATUS_CODE res = APPRPC_RESP_OK;
+    struct arpc_ctx_t *_ctx = (struct arpc_ctx_t *)ctx;
+    if(!_ctx) {
+        return APPRPC_RESP_ARG_ERROR;
+    }
+    if(_ctx->conn || _ctx->sock) {
+        return APPRPC_RESP_MEMORY_ERROR;
+    }
+    _ctx->conn = amqp_new_connection();
+    if(!_ctx->conn) {
+        fprintf(stderr, "[RPC][init] memory allocation error on connection object\n");
+        res = APPRPC_RESP_MEMORY_ERROR;
+        goto done;
+    }
+    _ctx->sock = amqp_tcp_socket_new(_ctx->conn);
+    if(!_ctx->sock) {
+        fprintf(stderr, "[RPC][init] memory allocation error on TCP socket\n");
+        res = APPRPC_RESP_MEMORY_ERROR;
+        goto done; 
+    } // socket will be deleted once connection is closed
+    if(apprpc_msgq_conn_auth(_ctx) != AMQP_STATUS_OK) {
+        res = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
+        goto done; 
+    }
+    _ctx->consumer_setup_done = 0;
+done:
+    if(res != APPRPC_RESP_OK) {
+        if(_ctx->conn) {
+            amqp_connection_close(_ctx->conn, AMQP_REPLY_SUCCESS);
+        }
+        apprpc_conn_deinit__per_item(_ctx); 
+    }
+    return res;
+} // end of app_rpc_open_connection
+
+
+void *app_rpc_context_lookup(void *ctxes, const char *alias)
+{
+    struct arpc_ctx_list_t *ctx_list = (struct arpc_ctx_list_t *)ctxes;
+    return (void *)apprpc_msgq_cfg_lookup(ctx_list, alias);
+}
+
+int app_rpc_get_sockfd(void *ctx)
+{
+    int fd = -1;
+    struct arpc_ctx_t *_ctx = (struct arpc_ctx_t *)ctx;
+    if(_ctx && _ctx->conn) {
+        fd = amqp_get_sockfd(_ctx->conn);
+    }
+    return fd;
+}
+
+arpc_cfg_t *app_rpc_get_config(void *ctx)
+{
+    arpc_cfg_t *cfg =  NULL;
+    struct arpc_ctx_t *_ctx = (struct arpc_ctx_t *)ctx;
+    if(_ctx && _ctx->ref_cfg) {
+        cfg = _ctx->ref_cfg;
+    }
+    return cfg;
+}
