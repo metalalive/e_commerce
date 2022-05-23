@@ -9,7 +9,7 @@ result_serializer = 'json'
 
 timezone = "Asia/Taipei"
 
-broker_url = _get_amqp_url(secrets_path="./common/data/secrets.json")
+broker_url = _get_amqp_url(secrets_path="./common/data/secrets.json", idx=1)
 
 
 # TODO: use Redis as result backend

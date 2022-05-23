@@ -8,7 +8,7 @@ result_serializer = 'json'
 
 timezone = "Asia/Taipei"
 
-broker_url = _get_amqp_url(secrets_path="./common/data/secrets.json")
+broker_url = _get_amqp_url(secrets_path="./common/data/secrets.json", idx=1)
 # send result as transient message back to caller from AMQP broker,
 # instead of storing it somewhere (e.g. database, file system)
 result_backend = 'rpc://'
