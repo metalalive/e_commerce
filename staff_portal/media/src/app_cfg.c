@@ -63,6 +63,23 @@ void deinit_app_cfg(app_cfg_t *app_cfg)
     } // should be done lastly
 } // end of deinit_app_cfg
 
+// side effect of this function is that it left pid file opened, be sure to close the file on program exit
+int appcfg_parse_pid_file(json_t *obj, app_cfg_t *_app_cfg) {
+    FILE *_file = NULL;
+    if (json_is_string(obj)) {
+        const char *pid_file_str = json_string_value(obj);
+        _file = fopen(pid_file_str, "w+");
+        if (_file) {
+            fprintf(_file, "%d\n", (int)getpid());
+            fflush(_file);
+            _app_cfg->pid_file = _file;
+        } else {
+            // TODO check errno from <errno.h>
+        }
+    }
+    return (_file ? 0: -1);
+} // TODO, remove pid file on program exit
+
 
 int appcfg_parse_errlog_path(json_t *obj, app_cfg_t *_app_cfg) {
     int fd = -1;
@@ -97,6 +114,18 @@ int appcfg_parse_num_workers(json_t *obj, app_cfg_t *_app_cfg) {
     return 0;
 error:
     return -1;
+}
+
+void appcfg_notify_all_workers(app_cfg_t *app_cfg) {
+    if(!app_cfg || !app_cfg->server_notifications.entries) {
+        return;
+    } // TODO , log error
+    int idx = 0;
+    for(idx = 0; idx < app_cfg->server_notifications.size; idx++) {
+        h2o_multithread_receiver_t *receiver = app_cfg->server_notifications.entries[idx];
+        // simply notify each worker without message
+        h2o_multithread_send_message(receiver, NULL);
+    }
 }
 
 int appcfg_start_workers(app_cfg_t *app_cfg, struct worker_init_data_t *data, void (*entry)(void *))

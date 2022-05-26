@@ -174,9 +174,14 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/multipart_parser.c
     src/views/init.c
     src/views/common.c
-    src/views/complete_multipart_upload.c
     src/views/initiate_multipart_upload.c
+    src/views/complete_multipart_upload.c
+    src/views/start_transcoding_file.c
     src/views/upload_part.c )
+
+SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
+    src/views/async/transcode_video_file.c
+    src/views/async/complete_multipart_upload.c )
 
 SET(APP_DBMODEL_SOURCE_FILES
     src/models/pool.c
@@ -203,6 +208,7 @@ SET(APP_SERVER_SOURCE_FILES
 
 SET(RPC_CONSUMER_SOURCE_FILES
     src/rpc/consumer.c
+    ${APP_RPCCONSUMER_HANDLER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
 
@@ -270,7 +276,7 @@ SET(RPC_CONSUMER_DEV_LIBRARIES
 SET(APP_UNIT_TEST_LIBRARIES ${APP_COMMON_LIBRARIES})
 
 
-SET(APP_SERVER_EXE_NAME   app.out)
+SET(APP_SERVER_EXE_NAME   app_server.out)
 SET(RPC_CONSUMER_EXE_NAME rpc_consumer.out)
 ADD_EXECUTABLE(${APP_SERVER_EXE_NAME}   ${APP_SERVER_SOURCE_FILES}    src/app_server_main.c)
 ADD_EXECUTABLE(${RPC_CONSUMER_EXE_NAME} ${RPC_CONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c)
@@ -291,7 +297,7 @@ TARGET_LINK_LIBRARIES(${INTEGRATION_TEST_EXE_NAME} ${APP_SERVER_DEV_LIBRARIES} $
 
 ADD_CUSTOM_TARGET(dev_app_server
     ##valgrind --leak-check=full
-    gdb -args
+    ##gdb -args
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${APP_SERVER_EXE_NAME})
@@ -313,16 +319,18 @@ ADD_CUSTOM_TARGET(unit_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${UNIT_TEST_EXE_NAME})
 
+SET(ITEST_APPCFG_PATH ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
+
 ADD_CUSTOM_TARGET(integration_test
     ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
-    python -m media.setup_test_env  media.setup_test_env.StartTestDatabase
-        ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json    ${LIQUIBASE_PATH}
+    python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${ITEST_APPCFG_PATH} &
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-    ##gdb -args # uncomment this line for debugging
-    ##valgrind --leak-check=full
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json
-    COMMAND python -m  media.setup_test_env  media.setup_test_env.EndTestDatabase
-        ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json    ${LIQUIBASE_PATH}
+        gdb -args # uncomment this line for debugging
+        ##valgrind --leak-check=full
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${ITEST_APPCFG_PATH}
+    COMMAND python -m  media.setup_test_env EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH}
+    COMMAND python -m  media.setup_test_env KillRPCconsumer  ${ITEST_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS  ${INTEGRATION_TEST_EXE_NAME})
+    DEPENDS  ${INTEGRATION_TEST_EXE_NAME} ${RPC_CONSUMER_EXE_NAME})
 

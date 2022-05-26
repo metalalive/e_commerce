@@ -9,8 +9,6 @@ extern "C" {
 
 typedef int (*app_cfg_parsing_fn)(json_t *, app_cfg_t *);
 
-int parse_cfg_pid_file(json_t *obj, app_cfg_t *_app_cfg);
-
 int parse_cfg_max_conns(json_t *obj, app_cfg_t *_app_cfg);
 
 int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg);

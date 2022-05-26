@@ -68,27 +68,6 @@ RESTAPI_ENDPOINT_HANDLER(single_chunk_upload, POST, self, req)
 }
 
 
-RESTAPI_ENDPOINT_HANDLER(start_transcoding_file, POST, self, req)
-{
-    // TODO, should create async job send it to message queue,
-    //  since it takes time to transcode media file
-    json_t *res_body = json_object();
-    json_object_set_new(res_body, "job",  json_string("903r83y03yr23rsz"));
-    req->res.status = 202;
-    req->res.reason = "Accepted"; // will start a new job and transcode asynchronously
-    {
-        size_t MAX_BYTES_RESP_BODY = 256;
-        char body_raw[MAX_BYTES_RESP_BODY];
-        size_t nwrite = json_dumpb((const json_t *)res_body, &body_raw[0],  MAX_BYTES_RESP_BODY, JSON_COMPACT);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
-        h2o_send_inline(req, body_raw, nwrite);
-    }
-    json_decref(res_body);
-    app_run_next_middleware(self, req, node);
-    return 0;
-}
-
-
 RESTAPI_ENDPOINT_HANDLER(discard_ongoing_job, DELETE, self, req)
 { // TODO:job ID required
     json_t *qparams = json_object();

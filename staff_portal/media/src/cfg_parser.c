@@ -12,24 +12,6 @@
 #include "models/connection.h"
 #include "models/mariadb.h"
 
-// side effect of this function is that it left pid file opened, be sure to close the file on program exit
-int parse_cfg_pid_file(json_t *obj, app_cfg_t *_app_cfg) {
-    FILE *_file = NULL;
-    if (json_is_string(obj)) {
-        const char *pid_file_str = json_string_value(obj);
-        _file = fopen(pid_file_str, "w+");
-        if (_file) {
-            fprintf(_file, "%d\n", (int)getpid());
-            fflush(_file);
-            _app_cfg->pid_file = _file;
-        } else {
-            // TODO check errno from <errno.h>
-        }
-    }
-    return (_file ? 0: EX_CONFIG);
-} // TODO, remove pid file on program exit
-
-
 static int parse_cfg_acs_log(json_t *obj, app_cfg_t *_app_cfg) {
     int err = EX_CONFIG;
     if (json_is_object(obj)) {
@@ -438,10 +420,18 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
                &jerror.source[0], jerror.line, jerror.column);
         goto error;
     }
-    result_error = parse_cfg_pid_file(json_object_get((const json_t *)root, "pid_file"), _app_cfg);
-    if (result_error) {  goto error; }
-    result_error = appcfg_parse_errlog_path(json_object_get((const json_t *)root, "error_log"), _app_cfg);
-    if (result_error) {  goto error; }
+    {
+        json_t *pid_file = json_object_get((const json_t *)root, "pid_file");
+        json_t *filepath = json_object_get((const json_t *)pid_file, "app_server");
+        result_error = appcfg_parse_pid_file(filepath, _app_cfg);
+        if (result_error) {  goto error; }
+    }
+    {
+        json_t *err_log  = json_object_get((const json_t *)root, "error_log");
+        json_t *filepath = json_object_get((const json_t *)err_log, "app_server");
+        result_error = appcfg_parse_errlog_path(filepath, _app_cfg);
+        if (result_error) {  goto error; }
+    }
     result_error = parse_cfg_acs_log(json_object_get((const json_t *)root, "access_log"), _app_cfg);
     if (result_error) {  goto error; }
     result_error = parse_cfg_max_conns(json_object_get((const json_t *)root, "max_connections"), _app_cfg);

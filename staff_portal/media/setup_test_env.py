@@ -1,7 +1,9 @@
 import sys
+import os
+import signal
 import json
+import inspect
 import subprocess
-import pdb
 
 from MySQLdb import _mysql
 from common.util.python import import_module_string
@@ -11,7 +13,10 @@ TEST_DB_MIGRATION_ALIAS = 'db_test_migration'
 _is_test_migration_found = lambda cfg: cfg.get('alias') == TEST_DB_MIGRATION_ALIAS
 
 class AbstractTestDatabase:
-    def start(self, setting_path:str, liquibase_path:str):
+    def start(self, argv):
+        assert len(argv) == 2, "arguments must include (1) app config file (2) liquibase config file"
+        setting_path   = argv[0]
+        liquibase_path = argv[1]
         f = None
         renew_required = []
         cfg_root = {}
@@ -93,10 +98,32 @@ class EndTestDatabase(AbstractTestDatabase):
         self._create_drop_db(cfg, sql)
 
 
+class KillRPCconsumer:
+    def start(self, argv):
+        assert len(argv) == 1, "arguments must include (1) app config file"
+        setting_path  = argv[0]
+        pid = -1
+        with open(setting_path, 'r') as f:
+            cfg_root = json.load(f)
+            pid_file = cfg_root['pid_file']['rpc_consumer']
+            with open(pid_file, 'r') as f2:
+                pid = int(f2.readline())
+        if pid > 2:
+            os.kill(pid, signal.SIGTERM)
+        ##import pdb
+        ##pdb.set_trace()
+
+
 if __name__ == '__main__':
-    assert len(sys.argv) >= 3, "arguments must include (1)dotted path to renewal handler class (2) corresponding configuration file "
-    class_path   = sys.argv[-3]
-    cfg_filepath = sys.argv[-2]
-    liquibase_path = sys.argv[-1]
-    cls = import_module_string(dotted_path=class_path)
-    cls().start(cfg_filepath, liquibase_path)
+    curr_module = sys.modules[__name__]
+    cls_members = inspect.getmembers(curr_module, inspect.isclass)
+    target_class_name = sys.argv[1]
+    target_class = None
+    for name, cls in cls_members:
+        if target_class_name == name:
+            target_class = cls
+            break
+    assert target_class, 'invalid class name "%s" received \n' % target_class_name
+    argv = sys.argv[2:]
+    target_class().start(argv)
+

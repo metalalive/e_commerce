@@ -9,89 +9,6 @@
 #define APP_AMQP_CHANNEL_DEFAULT_ID  1
 
 
-static  amqp_status_enum  apprpc_msgq_conn_auth(struct arpc_ctx_t *item)
-{
-    amqp_status_enum  status = AMQP_STATUS_OK;
-    arpc_cfg_t *cfg = item->ref_cfg;
-    status = amqp_socket_open(item->sock, cfg->credential.host, cfg->credential.port);
-    if(status != AMQP_STATUS_OK) {
-        fprintf(stderr, "[RPC] connection failure %s:%hu \n", cfg->credential.host, cfg->credential.port );
-        goto done;
-    }
-    // rabbitmq-c handles heartbeat frames internally in its API functions to see whether a
-    // given connection is active, some of primary API functions will return AMQP_STATUS_HEARTBEAT_TIMEOUT
-    // in case that the connection is inactive (closed) before invoking this function
-    {
-        int  max_nbytes_per_frame = (int) cfg->attributes.max_kb_per_frame << 10;
-        amqp_rpc_reply_t  _reply = amqp_login(item->conn, cfg->attributes.vhost,
-                cfg->attributes.max_channels, max_nbytes_per_frame, cfg->attributes.timeout_secs,
-                AMQP_SASL_METHOD_PLAIN, cfg->credential.username, cfg->credential.password );
-        if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
-            fprintf(stderr, "[RPC] authentication failure %s@%s:%hu \n", cfg->credential.username,
-                    cfg->credential.host, cfg->credential.port );
-            status = AMQP_STATUS_INVALID_PARAMETER;
-            goto done;
-        } // TODO, figure out where to dig more error detail
-    }
-    // AMQP channel should be long-lived , not for each operation (e.g. HTTP request)
-    amqp_channel_open_ok_t *chn_res = amqp_channel_open(item->conn, APP_AMQP_CHANNEL_DEFAULT_ID);
-    if(!chn_res || !chn_res->channel_id.bytes) {
-        fprintf(stderr, "[RPC] failed to open default channel %s:%hu \n", cfg->credential.host,
-                cfg->credential.port );
-        status = AMQP_STATUS_NO_MEMORY;
-    }
-done:
-    return status;
-} // end of apprpc_msgq_conn_auth
-
-static void apprpc_declare_q_report_error(amqp_rpc_reply_t *reply, char *q_name)
-{
-    fprintf(stderr, "[RPC] fail to declare a queue : %s ", q_name);
-    if(reply->reply_type == AMQP_RESPONSE_SERVER_EXCEPTION) {
-        // TODO, separate channel error and connection error
-        amqp_channel_close_t *m = (amqp_channel_close_t *)reply->reply.decoded;
-        fprintf(stderr, ", reason: server channel error %uh, message: %.*s ",
-             m->reply_code, (int)m->reply_text.len, (char *)m->reply_text.bytes);
-    } else if(reply->reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION) {
-        const char *errmsg = amqp_error_string2(reply->library_error);
-        fprintf(stderr, ", reason: library error, %s ", errmsg);
-    }
-    fprintf(stderr, "\n");
-} // end of apprpc_declare_q_report_error
-
-static  void apprpc_ensure_send_queue(struct arpc_ctx_t *item)
-{
-    size_t idx = 0;
-    arpc_cfg_t *cfg = item->ref_cfg;
-    amqp_rpc_reply_t _reply = {0};
-    for(idx = 0; idx < cfg->bindings.size; idx++) {
-        arpc_cfg_bind_t *bind_cfg = &cfg->bindings.entries[0];
-        // AMQP broker does NOT allow  unsigned number as argument when declaring a queue ? find out the source(TODO)
-         amqp_table_entry_t  q_arg_n_elms = {.key = amqp_cstring_bytes("x-max-length"),
-                 .value = {.kind = AMQP_FIELD_KIND_I32, .value = {.i32 = bind_cfg->max_msgs_pending}}};
-         amqp_table_t  q_arg_table = {.num_entries=1, .entries=&q_arg_n_elms};
-        amqp_queue_declare( item->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
-                amqp_cstring_bytes(bind_cfg->q_name), (amqp_boolean_t)bind_cfg->flags.passive,
-                (amqp_boolean_t)bind_cfg->flags.durable, (amqp_boolean_t)bind_cfg->flags.exclusive,
-                (amqp_boolean_t)bind_cfg->flags.auto_delete, q_arg_table
-            );
-        _reply = amqp_get_rpc_reply(item->conn);
-        if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
-            apprpc_declare_q_report_error(&_reply, bind_cfg->q_name);
-            continue;
-        }
-        amqp_queue_bind( item->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
-                amqp_cstring_bytes(bind_cfg->q_name),  amqp_cstring_bytes(bind_cfg->exchange_name),
-                amqp_cstring_bytes(bind_cfg->routing_key),  amqp_empty_table);
-        _reply = amqp_get_rpc_reply(item->conn);
-        if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
-            fprintf(stderr, "[RPC] fail to bind the routing key (%s) with the queue (%s) \n",
-                    bind_cfg->routing_key, bind_cfg->q_name);
-        }
-    } // end of loop
-} // end of apprpc_ensure_send_queue
-
-
 static  ARPC_STATUS_CODE apprpc__translate_status_from_lowlvl_lib(amqp_rpc_reply_t *reply)
 {
     ARPC_STATUS_CODE  app_status = APPRPC_RESP_OK;
@@ -149,6 +66,90 @@ static  ARPC_STATUS_CODE apprpc__translate_status_from_lowlvl_lib(amqp_rpc_reply
     } // end of error type check
     return app_status;
 } // end of apprpc__translate_status_from_lowlvl_lib
+
+
+static  amqp_status_enum  apprpc_msgq_conn_auth(struct arpc_ctx_t *item)
+{
+    amqp_status_enum  status = AMQP_STATUS_OK;
+    arpc_cfg_t *cfg = item->ref_cfg;
+    status = amqp_socket_open(item->sock, cfg->credential.host, cfg->credential.port);
+    if(status != AMQP_STATUS_OK) {
+        fprintf(stderr, "[RPC] connection failure %s:%hu \n", cfg->credential.host, cfg->credential.port );
+        goto done;
+    }
+    // rabbitmq-c handles heartbeat frames internally in its API functions to see whether a
+    // given connection is active, some of primary API functions will return AMQP_STATUS_HEARTBEAT_TIMEOUT
+    // in case that the connection is inactive (closed) before invoking this function
+    {
+        int  max_nbytes_per_frame = (int) cfg->attributes.max_kb_per_frame << 10;
+        amqp_rpc_reply_t  _reply = amqp_login(item->conn, cfg->attributes.vhost,
+                cfg->attributes.max_channels, max_nbytes_per_frame, cfg->attributes.timeout_secs,
+                AMQP_SASL_METHOD_PLAIN, cfg->credential.username, cfg->credential.password );
+        if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
+            fprintf(stderr, "[RPC] authentication failure %s@%s:%hu \n", cfg->credential.username,
+                    cfg->credential.host, cfg->credential.port );
+            status = AMQP_STATUS_INVALID_PARAMETER;
+            goto done;
+        } // TODO, figure out where to dig more error detail
+    }
+    // AMQP channel should be long-lived , not for each operation (e.g. HTTP request)
+    amqp_channel_open_ok_t *chn_res = amqp_channel_open(item->conn, APP_AMQP_CHANNEL_DEFAULT_ID);
+    if(!chn_res || !chn_res->channel_id.bytes) {
+        fprintf(stderr, "[RPC] failed to open default channel %s:%hu \n", cfg->credential.host,
+                cfg->credential.port );
+        status = AMQP_STATUS_NO_MEMORY;
+    }
+done:
+    return status;
+} // end of apprpc_msgq_conn_auth
+
+static void apprpc_declare_q_report_error(amqp_rpc_reply_t *reply, char *q_name)
+{
+    fprintf(stderr, "[RPC] fail to declare a queue : %s ", q_name);
+    if(reply->reply_type == AMQP_RESPONSE_SERVER_EXCEPTION) {
+        // TODO, separate channel error and connection error
+        amqp_channel_close_t *m = (amqp_channel_close_t *)reply->reply.decoded;
+        fprintf(stderr, ", reason: server channel error %uh, message: %.*s ",
+             m->reply_code, (int)m->reply_text.len, (char *)m->reply_text.bytes);
+    } else if(reply->reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION) {
+        const char *errmsg = amqp_error_string2(reply->library_error);
+        fprintf(stderr, ", reason: library error, %s ", errmsg);
+    }
+    fprintf(stderr, "\n");
+} // end of apprpc_declare_q_report_error
+
+static void apprpc_ensure_send_queue(struct arpc_ctx_t *item)
+{
+    size_t idx = 0;
+    arpc_cfg_t *cfg = item->ref_cfg;
+    amqp_rpc_reply_t _reply = {0};
+    for(idx = 0; idx < cfg->bindings.size; idx++) {
+        arpc_cfg_bind_t *bind_cfg = &cfg->bindings.entries[idx];
+        // AMQP broker does NOT allow  unsigned number as argument when declaring a queue ? find out the source(TODO)
+         amqp_table_entry_t  q_arg_n_elms = {.key = amqp_cstring_bytes("x-max-length"),
+                 .value = {.kind = AMQP_FIELD_KIND_I32, .value = {.i32 = bind_cfg->max_msgs_pending}}};
+         amqp_table_t  q_arg_table = {.num_entries=1, .entries=&q_arg_n_elms};
+        amqp_queue_declare( item->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
+                amqp_cstring_bytes(bind_cfg->q_name), (amqp_boolean_t)bind_cfg->flags.passive,
+                (amqp_boolean_t)bind_cfg->flags.durable, (amqp_boolean_t)bind_cfg->flags.exclusive,
+                (amqp_boolean_t)bind_cfg->flags.auto_delete, q_arg_table
+            );
+        _reply = amqp_get_rpc_reply(item->conn);
+        if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
+            apprpc_declare_q_report_error(&_reply, bind_cfg->q_name);
+            continue;
+        }
+        amqp_queue_bind( item->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
+                amqp_cstring_bytes(bind_cfg->q_name),  amqp_cstring_bytes(bind_cfg->exchange_name),
+                amqp_cstring_bytes(bind_cfg->routing_key),  amqp_empty_table);
+        _reply = amqp_get_rpc_reply(item->conn);
+        if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
+            fprintf(stderr, "[RPC] fail to bind the routing key (%s) with the queue (%s) \n",
+                    bind_cfg->routing_key, bind_cfg->q_name);
+        }
+    } // end of loop
+} // end of apprpc_ensure_send_queue
+
 
 static ARPC_STATUS_CODE  apprpc_ensure_reply_queue(amqp_connection_state_t raw_conn,
         arpc_cfg_bind_reply_t *reply_cfg, char *q_name) {
@@ -231,13 +232,14 @@ static struct arpc_ctx_t *apprpc_msgq_cfg_lookup(struct arpc_ctx_list_t *ctx, co
     return chosen;
 } // end of apprpc_msgq_cfg_lookup
 
-static arpc_cfg_bind_t *apprpc_msgq_bind_cfg_lookup(arpc_cfg_t *cfg, const char *routing_key)
+static arpc_cfg_bind_t *apprpc_msgq_bind_cfg_lookup(arpc_cfg_t *cfg, amqp_bytes_t *route_key)
 {
     arpc_cfg_bind_t *chosen = NULL;
     size_t idx = 0;
     for(idx = 0; idx < cfg->bindings.size; idx++) {
         arpc_cfg_bind_t *item = &cfg->bindings.entries[idx];
-        if(strcmp(item->routing_key, routing_key) == 0) {
+        if(strncmp(item->routing_key, (char *)route_key->bytes, route_key->len) == 0)
+        {
             chosen = item;
             break;
         }
@@ -280,7 +282,8 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
         app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR ;
         goto done;
     }
-    arpc_cfg_bind_t *bind_cfg = apprpc_msgq_bind_cfg_lookup(mq_cfg->ref_cfg, args->routing_key);
+    amqp_bytes_t routekey = amqp_cstring_bytes(args->routing_key);
+    arpc_cfg_bind_t *bind_cfg = apprpc_msgq_bind_cfg_lookup(mq_cfg->ref_cfg, &routekey);
     if(!bind_cfg) {
         app_status = APPRPC_RESP_ARG_ERROR;
         goto done;
@@ -324,9 +327,8 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
             .delivery_mode = 0x2, // defined in AMQP 0.9.1 without clear explanation
         };
     amqp_status_enum mq_status = amqp_basic_publish( mq_cfg->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
-            amqp_cstring_bytes(bind_cfg->exchange_name),  amqp_cstring_bytes(bind_cfg->routing_key),
-            mandatory, immediate, (amqp_basic_properties_t const *)&properties,
-            amqp_cstring_bytes(args->msg_body.bytes) );
+            amqp_cstring_bytes(bind_cfg->exchange_name),  routekey, mandatory, immediate,
+            (amqp_basic_properties_t const *)&properties, amqp_cstring_bytes(args->msg_body.bytes) );
     // TODO: figure out how to use non-blocking API functions provided by librabbitmq.
     // Currently blocking API is used, there is only one channel to use for each
     // RabbitMQ connection.
@@ -440,13 +442,13 @@ ARPC_STATUS_CODE app_rpc_consume_message(void *ctx)
         if(res != APPRPC_RESP_OK) { goto done; }
         _ctx->consumer_setup_done = 1;
     }
+    amqp_maybe_release_buffers(_ctx->conn);    
     amqp_rpc_reply_t reply = amqp_consume_message(_ctx->conn, &envelope, (const struct timeval *)&timeout, 0);
     res = apprpc__translate_status_from_lowlvl_lib(&reply);
     if(res != APPRPC_RESP_OK) {
         goto done;
     } // this is non-blocking function, don't treat operation timeout as error.
-    arpc_cfg_bind_t *bind_cfg = apprpc_msgq_bind_cfg_lookup(_ctx->ref_cfg,
-            (const char *)envelope.routing_key.bytes);
+    arpc_cfg_bind_t *bind_cfg = apprpc_msgq_bind_cfg_lookup(_ctx->ref_cfg, &envelope.routing_key);
     if(!bind_cfg) {
         fprintf(stderr, "[RPC consumer] unknown routing key (%s) within the RPC message\n",
                 (char *)envelope.routing_key.bytes);

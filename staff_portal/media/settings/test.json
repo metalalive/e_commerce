@@ -1,8 +1,14 @@
 {
-    "pid_file" : "tmp/proc/media_server_test.pid",
-    "error_log": "tmp/log/staffsite/media_server_test.err",
+    "pid_file" : {
+        "app_server"  :"tmp/proc/media_itest_app_server.pid",
+        "rpc_consumer":"tmp/proc/media_itest_rpc_consumer.pid"
+    },
+    "error_log": {
+        "app_server"  :"tmp/log/staffsite/media_itest_app_server.err",
+        "rpc_consumer":"tmp/log/staffsite/media_itest_rpc_consumer.err"
+    },
     "access_log": {
-        "path":"tmp/log/staffsite/media_server_test.access.log",
+        "path":"tmp/log/staffsite/media_itest_app_server.access.log",
         "format":"%H %h %l %t \"%r\" %s %b"
     },
     "listen": [
@@ -109,7 +115,7 @@
                     "durable": true,
                     "reply": {
                         "queue": {
-                            "pattern":"rpc.reply.media.mp_done.prof_id.%u",
+                            "pattern":"rpc.reply.prof_id.%u",
                             "render_fn":"api_complete_multipart_upload__render_rpc_replyq"
                         },
                         "correlation_id": {
@@ -119,6 +125,24 @@
                         "task_handler": "api_complete_multipart_upload__rpc_task_handler",
                         "durable": true,
                         "ttl_sec": 180
+                    }
+                },
+                {
+                    "queue": "rpc_media_transcode_video_file",
+                    "exchange": "rpc-default-allapps",
+                    "routing_key": "rpc.media.transcode_video_file",
+                    "durable": true,
+                    "reply": {
+                        "queue": {
+                            "pattern":"rpc.reply.prof_id.%u",
+                            "render_fn":"api_complete_multipart_upload__render_rpc_replyq"
+                        },
+                        "correlation_id": {
+                            "pattern":"rpc.media.mp_done.corr_id.%s",
+                            "render_fn":"api_complete_multipart_upload__render_rpc_corr_id"
+                        },
+                        "task_handler": "api_transcode_video_file__rpc_task_handler",
+                        "durable": true
                     }
                 }
             ],

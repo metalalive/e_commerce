@@ -112,15 +112,6 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
     // the notification is used only for exitting h2o_evloop_run; actual changes are done in the main loop of run_loop
 }
 
-static void notify_all_workers(app_cfg_t *app_cfg) {
-    int idx = 0;
-    for(idx = 0; idx < app_cfg->server_notifications.size; idx++) {
-        h2o_multithread_receiver_t *receiver = app_cfg->server_notifications.entries[idx];
-        // simply notify each worker without message
-        h2o_multithread_send_message(receiver, NULL);
-    }
-}
-
 int app_server_ready(void) {
     app_cfg_t *acfg = app_get_global_cfg();
     int workers_ready = h2o_barrier_done(&acfg->workers_sync_barrier);
@@ -137,7 +128,7 @@ static void on_sigterm(int sig_num) {
     if(!app_server_ready()) {
         exit(0);
     } // shutdown immediately if initialization hasn't been done yet
-    notify_all_workers(acfg);
+    appcfg_notify_all_workers(acfg);
     app_db_pool_map_signal_closing();
 }
 
