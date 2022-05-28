@@ -31,4 +31,5 @@ DATABASES['default'].update(secrets)
 DATABASES['default']['NAME'] = DATABASES['default']['TEST']['NAME']
 
 DATABASE_ROUTERS.clear()
+render_logging_handler_localfs('tmp/log/test')
 

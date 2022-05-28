@@ -4,11 +4,11 @@
         "rpc_consumer":"tmp/proc/media_itest_rpc_consumer.pid"
     },
     "error_log": {
-        "app_server"  :"tmp/log/staffsite/media_itest_app_server.err",
-        "rpc_consumer":"tmp/log/staffsite/media_itest_rpc_consumer.err"
+        "app_server"  :"tmp/log/test/media_app_server.err",
+        "rpc_consumer":"tmp/log/test/media_rpc_consumer.err"
     },
     "access_log": {
-        "path":"tmp/log/staffsite/media_itest_app_server.access.log",
+        "path":"tmp/log/test/media_app_server.access.log",
         "format":"%H %h %l %t \"%r\" %s %b"
     },
     "listen": [
@@ -153,7 +153,7 @@
                 "max_kb_per_frame": 35
             },
             "credential": {
-                "hierarchy": ["amqp_broker", 1],
+                "hierarchy": ["amqp_broker", 0],
                 "filepath":"common/data/secrets.json"
             }
         }

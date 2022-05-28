@@ -48,14 +48,14 @@ beat_schedule = {
                 'persist_secret_handler': {
                     'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
                     'init_kwargs': {
-                        'filepath': './tmp/cache/production/jwks/privkey/current.json',
+                        'filepath': './tmp/cache/dev/jwks/privkey/current.json',
                         'name':'secret', 'expired_after_days': 10,
                     },
                 },
                 'persist_pubkey_handler': {
                     'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
                     'init_kwargs': {
-                        'filepath': './tmp/cache/production/jwks/pubkey/current.json',
+                        'filepath': './tmp/cache/dev/jwks/pubkey/current.json',
                         'name':'pubkey', 'expired_after_days': 21,
                     },
                 },

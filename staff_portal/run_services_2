@@ -1,2 +1,2 @@
-APP_SETTINGS="store.settings.development" uvicorn --host 127.0.0.1 --port 8011 store.entry:app >& ./tmp/log/staffsite/store_app.log &
+APP_SETTINGS="store.settings.development" uvicorn --host 127.0.0.1 --port 8011 store.entry:app >& ./tmp/log/dev/store_app.log &
 

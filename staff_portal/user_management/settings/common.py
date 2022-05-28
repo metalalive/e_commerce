@@ -193,7 +193,6 @@ PASSWORD_HASHERS = [
 ]
 
 # logging
-_LOG_BASE_DIR = os.path.join(BASE_DIR ,'tmp/log/staffsite')
 _LOG_FMT_DBG_BASE = ["{asctime}", "{levelname}", "{process:d}", "{thread:d}", "{pathname}", "{lineno:d}", "{message}"]
 _LOG_FMT_DBG_VIEW = ["{req_ip}", "{req_mthd}", "{uri}"] + _LOG_FMT_DBG_BASE
 
@@ -222,28 +221,6 @@ LOGGING = {
             #    'class': 'logging.StreamHandler',
             #    'stream': 'ext://sys.stdout',
             #},
-            "default_file": {
-                'level': 'WARNING',
-                'formatter': 'shortened_fmt',
-                'class': 'logging.handlers.TimedRotatingFileHandler',
-                'filename': str(os.path.join(_LOG_BASE_DIR, 'usermgt_default.log')),
-                # daily log, keep all log files for one year
-                'backupCount': 366,
-                # new file is created every 0 am (local time)
-                'atTime': time(hour=0, minute=0, second=0),
-                'encoding': 'utf-8',
-                'delay': True, # lazy creation
-            },
-            "dbg_views_file": {
-                'level': 'INFO',
-                'formatter': 'dbg_view_fmt',
-                'class': 'logging.handlers.TimedRotatingFileHandler',
-                'filename': str(os.path.join(_LOG_BASE_DIR, 'usermgt_views.log')),
-                'backupCount': 150,
-                'atTime': time(hour=0, minute=0, second=0),
-                'encoding': 'utf-8',
-                'delay': True, # lazy creation
-            },
             "dbg_views_logstash": {
                 'level': 'DEBUG',
                 'formatter': 'dbg_view_fmt',
@@ -382,6 +359,35 @@ LOGGING = {
             'handlers': ['default_file'],
         },
 } # end of LOGGING
+
+
+def render_logging_handler_localfs(log_dir):
+    _log_base_dir = os.path.join(BASE_DIR, log_dir)
+    handlers = {
+        "default_file": {
+            'level': 'WARNING',
+            'formatter': 'shortened_fmt',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': str(os.path.join(_log_base_dir, 'usermgt_default.log')),
+            # daily log, keep all log files for one year
+            'backupCount': 366,
+            # new file is created every 0 am (local time)
+            'atTime': time(hour=0, minute=0, second=0),
+            'encoding': 'utf-8',
+            'delay': True, # lazy creation
+        },
+        "dbg_views_file": {
+            'level': 'INFO',
+            'formatter': 'dbg_view_fmt',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': str(os.path.join(_log_base_dir, 'usermgt_views.log')),
+            'backupCount': 150,
+            'atTime': time(hour=0, minute=0, second=0),
+            'encoding': 'utf-8',
+            'delay': True, # lazy creation
+        },
+    }
+    LOGGING['handlers'].update(handlers)
 
 
 REST_FRAMEWORK = {

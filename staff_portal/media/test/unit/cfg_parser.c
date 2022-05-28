@@ -5,22 +5,23 @@
 #include <cgreen/cgreen.h>
 #include <cgreen/mocks.h>
 
+#include "app_cfg.h"
 #include "cfg_parser.h"
 
 Ensure(cfg_pid_file_tests) {
     int result = 0;
     json_t *obj = NULL;
     app_cfg_t app_cfg = {.pid_file = NULL};
-    result = parse_cfg_pid_file(NULL, NULL);
-    assert_that(result, is_equal_to(EX_CONFIG));
+    result = appcfg_parse_pid_file(NULL, NULL);
+    assert_that(result, is_equal_to(-1));
     obj = json_string("/path/to/invalid/not_permitted.pid");
-    result = parse_cfg_pid_file(obj, &app_cfg);
+    result = appcfg_parse_pid_file(obj, &app_cfg);
     json_decref(obj);
-    assert_that(result, is_equal_to(EX_CONFIG));
+    assert_that(result, is_equal_to(-1));
     assert_that(app_cfg.pid_file, is_equal_to(NULL));
     const char *filename = "./tmp/proc/media_server_test.pid";
     obj = json_string(filename);
-    result = parse_cfg_pid_file(obj, &app_cfg);
+    result = appcfg_parse_pid_file(obj, &app_cfg);
     json_decref(obj);
     if(app_cfg.pid_file) {
         fclose(app_cfg.pid_file);

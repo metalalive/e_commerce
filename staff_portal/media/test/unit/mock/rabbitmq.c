@@ -108,3 +108,6 @@ void  amqp_destroy_envelope(amqp_envelope_t *envelope)
 int amqp_get_sockfd(amqp_connection_state_t conn_state)
 { return (int)mock(conn_state); }
 
+void amqp_maybe_release_buffers(amqp_connection_state_t conn_state)
+{ mock(conn_state); }
+

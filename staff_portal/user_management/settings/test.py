@@ -21,4 +21,5 @@ DATABASES['default']['NAME'] = DATABASES['default']['TEST']['NAME']
 ## does NOT work for testing
 ##DATABASES['usermgt_service'].update(secrets)
 DATABASE_ROUTERS.clear()
+render_logging_handler_localfs('tmp/log/test')
 

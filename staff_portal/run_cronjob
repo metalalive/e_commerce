@@ -1,1 +1,1 @@
-celery --app=common.util.python --config=common.util.python.celerybeatconfig  beat  --loglevel=INFO --logfile=./tmp/log/staffsite/celerybeat.log &
+celery --app=common.util.python --config=common.util.python.celerybeatconfig  beat  --loglevel=INFO --logfile=./tmp/log/dev/celerybeat.log &

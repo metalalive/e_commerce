@@ -331,6 +331,7 @@ Ensure(rpc_consume_test__empty_queue) {
         .conn = (void *)&dummy[0]};
     amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_LIBRARY_EXCEPTION,
             .library_error=AMQP_STATUS_TIMEOUT};
+    expect(amqp_maybe_release_buffers);
     expect(amqp_consume_message, will_return(&mock_reply_err));
     expect(amqp_destroy_envelope);
     ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
@@ -345,6 +346,7 @@ Ensure(rpc_consume_test__unknown_route) {
     struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg,
         .conn = (void *)&dummy[0]};
     amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+    expect(amqp_maybe_release_buffers);
     expect(amqp_consume_message,  will_return(&mock_reply_ok),
             will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
             will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
@@ -367,6 +369,7 @@ Ensure(rpc_consume_test__missing_handler) {
     arpc_cfg_t  mock_cfg = {.bindings={.entries=&bindcfg[0], .size=EXPECT_NUM_BINDINGS}};
     struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg, .conn = (void *)&dummy[0]};
     amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+    expect(amqp_maybe_release_buffers);
     expect(amqp_consume_message,  will_return(&mock_reply_ok),
             will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
             will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
@@ -401,6 +404,7 @@ Ensure(rpc_consume_test__handler_done__broker_down) {
         amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
         amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_LIBRARY_EXCEPTION,
                 .library_error=AMQP_STATUS_SOCKET_ERROR};
+        expect(amqp_maybe_release_buffers);
         expect(amqp_consume_message,  will_return(&mock_reply_ok),
                 will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
                 will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
@@ -438,6 +442,7 @@ Ensure(rpc_consume_test__handler_done__send_reply_error) {
         amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
         amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_SERVER_EXCEPTION,
                 .reply={.id=AMQP_BASIC_PUBLISH_METHOD} };
+        expect(amqp_maybe_release_buffers);
         expect(amqp_consume_message,  will_return(&mock_reply_ok),
                 will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
                 will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
@@ -467,6 +472,7 @@ Ensure(rpc_consume_test__handler_done__send_reply_ok) {
         , .sock=(void *)&dummy[1]};
     {
         amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+        expect(amqp_maybe_release_buffers);
         expect(amqp_consume_message,  will_return(&mock_reply_ok),
                 will_set_contents_of_parameter(evp_routekey, (void **)&mock_route_key, sizeof(void *)),
                 will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
