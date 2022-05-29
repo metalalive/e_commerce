@@ -7,6 +7,7 @@ import subprocess
 
 from MySQLdb import _mysql
 from common.util.python import import_module_string
+from media.renew_certs import *
 
 TEST_DB_MIGRATION_ALIAS = 'db_test_migration'
 

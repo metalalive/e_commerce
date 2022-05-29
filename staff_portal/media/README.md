@@ -57,16 +57,6 @@ Library Dependencies (for testing)
 * [cgreen](https://github.com/cgreen-devs/cgreen) >= 2.14
 
 
-#### certificate renewal
-##### development server
-```
-python3 -m media.renew_certs media.renew_certs.DevCertRenewal  ./media/settings/development.json
-```
-##### testing server (for integration test)
-```
-python3 -m media.renew_certs media.renew_certs.TestCertRenewal  ./media/settings/test.json
-```
-
 #### workflow
 Generate build files (CMake)
 ```

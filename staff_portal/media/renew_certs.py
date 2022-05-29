@@ -43,7 +43,9 @@ def check_cert_expiry(listen):
 
 
 class DevCertRenewal:
-    def start(self, setting_path:str):
+    def start(self, argv:list):
+        assert len(argv) == 1, "arguments must include (1) app config file"
+        setting_path  = argv[0]
         f = None
         renew_required = []
         cfg_root = {}
@@ -167,10 +169,5 @@ class TestCertRenewal(DevCertRenewal):
     pass
 
 
-if __name__ == '__main__':
-    assert len(sys.argv) >= 3, "arguments must include (1)dotted path to renewal handler class (2) corresponding configuration file "
-    class_path = sys.argv[-2]
-    cfg_filepath = sys.argv[-1]
-    cls = import_module_string(dotted_path=class_path)
-    cls().start(cfg_filepath)
+__all__ = ['TestCertRenewal', 'DevCertRenewal']
 

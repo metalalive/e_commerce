@@ -295,10 +295,14 @@ ADD_EXECUTABLE(${INTEGRATION_TEST_EXE_NAME} ${INTEGRATION_TEST_SOURCE_FILES})
 TARGET_INCLUDE_DIRECTORIES(${INTEGRATION_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(${INTEGRATION_TEST_EXE_NAME} ${APP_SERVER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
 
+
+SET(DEV_APPCFG_PATH ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json)
 ADD_CUSTOM_TARGET(dev_app_server
-    ##valgrind --leak-check=full
-    ##gdb -args
-    ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
+    python -m  media.setup_test_env DevCertRenewal  ${DEV_APPCFG_PATH}
+    COMMAND
+       ##valgrind --leak-check=full
+       ##gdb -args
+       ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${APP_SERVER_EXE_NAME})
 
@@ -323,7 +327,8 @@ SET(ITEST_APPCFG_PATH ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
 
 ADD_CUSTOM_TARGET(integration_test
     ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
-    python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
+    python -m media.setup_test_env  TestCertRenewal    ${ITEST_APPCFG_PATH}
+    COMMAND python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${ITEST_APPCFG_PATH} &
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
         gdb -args # uncomment this line for debugging
