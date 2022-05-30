@@ -122,5 +122,73 @@
     <changeSet id="tag_version_0.0.2" author="Haam">
         <tagDatabase tag="0.0.2" />
     </changeSet>
+    <changeSet id="add-column-last_upld_req-new" author="Haam">
+        <sql dbms="mariadb">
+            ALTER TABLE `uploaded_file` ADD COLUMN  `last_upld_req__new`  BINARY(4) NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `uploaded_file` DROP COLUMN  `last_upld_req__new`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.3" author="Haam">
+        <tagDatabase tag="0.0.3" />
+    </changeSet>
+    <changeSet id="trucate-last_upld_req-to-4-bytes" author="Haam">
+        <comment> for practicing zero-downtime migration </comment>
+        <sql dbms="mariadb">
+            UPDATE `uploaded_file` SET `last_upld_req__new` = LEFT(`last_upld_req`, 4) WHERE `last_upld_req` IS NOT NULL;
+        </sql>
+        <rollback>
+            UPDATE `uploaded_file` SET `last_upld_req` = `last_upld_req__new`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.4" author="Haam">
+        <tagDatabase tag="0.0.4" />
+    </changeSet>
+    <changeSet id="drop-column-last_upld_req-old" author="Haam">
+        <comment>
+            the syntax RENAME COLUMN has been introduced since MariaDB 10.5.2, before the version
+            you can only use CHANGE COLUMN to rename a column
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `uploaded_file` DROP COLUMN  `last_upld_req`;
+            ALTER TABLE `uploaded_file` CHANGE COLUMN  `last_upld_req__new`  `last_upld_req`  BINARY(4) NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `uploaded_file` CHANGE COLUMN  `last_upld_req` `last_upld_req__new`   BINARY(4) NULL;
+            ALTER TABLE `uploaded_file` ADD COLUMN  `last_upld_req`  BINARY(20) NULL;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.5" author="Haam">
+        <tagDatabase tag="0.0.5" />
+    </changeSet>
+    <changeSet id="redesign-file-commit-mechanism" author="Haam">
+        <comment>
+            keep individual uploaded file-chunk as it is, do not merge them to a single file
+            when finalizing and committing the upload request
+        </comment>
+        <sql dbms="mariadb">
+            RENAME TABLE `uncommitted_upload_request` TO `upload_request`, `uncommitted_upload_chunk` TO `upload_filechunk`;
+            ALTER TABLE  `upload_request` ADD COLUMN `time_committed`  DATETIME NULL;
+            ALTER TABLE `uploaded_file`  DROP COLUMN `mimetype_toplvl`, DROP COLUMN `mimetype_sub`,
+                DROP COLUMN `checksum`, DROP COLUMN `size_bytes`, MODIFY COLUMN `usr_id` INT UNSIGNED NULL;
+            ALTER TABLE `uploaded_file`  ADD CONSTRAINT `c_fk3_uploadfile_last_req` FOREIGN KEY (`usr_id`,`last_upld_req`)
+                REFERENCES `upload_request`(`usr_id`,`req_id`) ON UPDATE CASCADE  ON DELETE SET NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `uploaded_file`  DROP CONSTRAINT `c_fk3_uploadfile_last_req`;
+            ALTER TABLE `uploaded_file`
+                ADD COLUMN `mimetype_toplvl` VARCHAR(11) NOT NULL DEFAULT '',
+                ADD COLUMN `mimetype_sub` VARCHAR(9) NOT NULL DEFAULT   '',
+                ADD COLUMN `size_bytes`   INT UNSIGNED NOT NULL DEFAULT 0,
+                ADD COLUMN `checksum`     BINARY(20) NOT NULL DEFAULT x'00',
+                MODIFY COLUMN `usr_id`    INT UNSIGNED  NULL;
+            ALTER TABLE  `upload_request` DROP COLUMN `time_committed`;
+            RENAME TABLE `upload_request` TO `uncommitted_upload_request`, `upload_filechunk` TO `uncommitted_upload_chunk`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.6" author="Haam">
+        <tagDatabase tag="0.0.6" />
+    </changeSet>
 </databaseChangeLog>
 
