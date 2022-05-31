@@ -10,7 +10,6 @@
 
 #define APP_FILECHUNK_WR_BUF_SZ  128
 #define UPLOAD_PART_NUM_SIZE  5
-#define UNCOMMITTED_FOLDER "uncommitted"
 
 typedef struct {
     size_t rd_idx;
@@ -75,10 +74,10 @@ static void  upload_part__add_chunk_record_rs_rdy(db_query_t *target, db_query_r
 } // end of upload_part__add_chunk_record_rs_rdy
 
 
-static __attribute__((optimize("O0"))) DBA_RES_CODE upload_part__add_chunk_record_to_db(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
+static DBA_RES_CODE upload_part__add_chunk_record_to_db(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
 {
-#define SQL_PATTERN "INSERT INTO `uncommitted_upload_chunk`(`usr_id`,`req_id`,`part`," \
-    "`checksum`,`size_bytes`) VALUES(%u, x'%08x', %hu, x'%s', %u);"
+#define SQL_PATTERN "INSERT INTO `upload_filechunk`(`usr_id`,`req_id`,`part`,`checksum`,`size_bytes`)" \
+    " VALUES(%u, x'%08x', %hu, x'%s', %u);"
     json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
     int usr_id = (int) json_integer_value(json_object_get(jwt_claims, "profile"));
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
@@ -226,12 +225,14 @@ error:
 
 
 static  ASA_RES_CODE upload_part__write_filechunk_start(asa_op_base_cfg_t *cfg)
-{
+{ // TODO, figure out how to test this function
     ASA_RES_CODE asa_result = ASTORAGE_RESULT_UNKNOWN_ERROR;
     h2o_req_t *req  = (void *)cfg->cb_args.entries[0];
     app_middleware_node_t *node = (void *)cfg->cb_args.entries[2];
     multipart_parser *mp = (multipart_parser *)app_fetch_from_hashmap(node->data, "multipart_parser");
     app_mpp_usrarg_t *usr_arg = (app_mpp_usrarg_t *)mp->settings.usr_args.entry;
+    app_cfg_t *app_cfg = app_get_global_cfg();
+    asa_cfg_t *storage = &app_cfg->storages.entries[0];
     usr_arg->wr_idx = 0; // reset write index before parsing new portion of data
     while(usr_arg->wr_idx == 0) {
         if (usr_arg->tot_entity_sz <= usr_arg->rd_idx) {
@@ -250,9 +251,13 @@ static  ASA_RES_CODE upload_part__write_filechunk_start(asa_op_base_cfg_t *cfg)
                 cfg->op.write.src_sz = usr_arg->wr_idx;
                 usr_arg->tot_file_sz += usr_arg->wr_idx;
                 SHA1_Update(&usr_arg->checksum, cfg->op.write.src, cfg->op.write.src_sz);
-                app_cfg_t *app_cfg = app_get_global_cfg();
-                asa_cfg_t *storage = &app_cfg->storages.entries[0];
                 asa_result = storage->ops.fn_write(cfg);
+            } else if(usr_arg->end_flag) { // implicitly means wr_idx == 0, nothing to write in the final parsed chunk
+                asa_result = storage->ops.fn_close(cfg);
+                break;
+            } else {
+                asa_result = ASTORAGE_RESULT_UNKNOWN_ERROR;
+                break;
             }
         } else { // TODO, logging possible error
             asa_result = ASTORAGE_RESULT_OS_ERROR;
@@ -381,7 +386,7 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
     app_cfg_t *app_cfg = app_get_global_cfg();
     asa_cfg_t *storage = &app_cfg->storages.entries[0];
     size_t dirpath_sz = strlen(storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
-        strlen(UNCOMMITTED_FOLDER) + 1 + UPLOAD_INT2HEX_SIZE(req_seq) + 1; // assume NULL-terminated string
+         UPLOAD_INT2HEX_SIZE(req_seq) + 1; // assume NULL-terminated string
     size_t filepath_sz = (dirpath_sz - 1) + 1 + UPLOAD_INT2HEX_SIZE(part) + 1;
     size_t cb_args_tot_sz = sizeof(void *) * 3; // for self, req, node
     size_t mp_boundary_len = app_find_multipart_boundary(req, NULL);
@@ -407,8 +412,7 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
         ptr += dirpath_sz;
         {
             char dirpath[dirpath_sz];
-            snprintf(&dirpath[0], dirpath_sz, "%s/%d/%s/%08x", storage->base_path, usr_id,
-                    UNCOMMITTED_FOLDER, req_seq);
+            snprintf(&dirpath[0], dirpath_sz, "%s/%d/%08x", storage->base_path, usr_id, req_seq);
             dirpath[dirpath_sz - 1] = 0x0; // NULL-terminated
             memcpy(asa_cfg->super.op.mkdir.path.origin, dirpath, dirpath_sz);
         }
@@ -416,8 +420,7 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
         ptr += filepath_sz;
         {
             char filepath[filepath_sz];
-            snprintf(&filepath[0], filepath_sz, "%s/%d/%s/%08x/%d", storage->base_path, usr_id,
-                    UNCOMMITTED_FOLDER, req_seq, part);
+            snprintf(&filepath[0], filepath_sz, "%s/%d/%08x/%d", storage->base_path, usr_id, req_seq, part);
             filepath[filepath_sz - 1] = 0x0;
             memcpy(asa_cfg->super.op.open.dst_path, filepath, filepath_sz);
         }
@@ -437,9 +440,6 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
 
 static void  upload_part__validate_quota_rs_rdy(db_query_t *target, db_query_result_t *rs)
 {
-    if(!rs->_final) {
-        return;
-    }
     h2o_req_t     *req  = (h2o_req_t *) target->cfg.usr_data.entry[0];
     h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[1];
     app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
@@ -479,27 +479,23 @@ static void  upload_part__validate_quota_fetch_row(db_query_t *target, db_query_
 
 static DBA_RES_CODE upload_part__validate_quota_start(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
 {
-#define SQL_PATTERN \
-    "BEGIN NOT ATOMIC" \
-    "  SELECT `size_bytes` FROM `uncommitted_upload_chunk` WHERE `usr_id` = %u;" \
-    "  SELECT `size_bytes` FROM `uploaded_file` WHERE `usr_id` = %u;" \
-    "END;"
+#define SQL_PATTERN  "SELECT `size_bytes` FROM `upload_filechunk` WHERE `usr_id` = %u;"
     json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
     int usr_id = (int) json_integer_value(json_object_get(jwt_claims, "profile"));
-    size_t raw_sql_sz = sizeof(SQL_PATTERN) + 2 * USR_ID_STR_SIZE;
+    size_t raw_sql_sz = sizeof(SQL_PATTERN) + USR_ID_STR_SIZE;
     char raw_sql[raw_sql_sz];
     memset(&raw_sql[0], 0x0, raw_sql_sz);
-    sprintf(&raw_sql[0], SQL_PATTERN, usr_id, usr_id);
+    sprintf(&raw_sql[0], SQL_PATTERN, usr_id);
     void *db_async_usr_data[3] = {(void *)req, (void *)self, (void *)node};
     db_query_cfg_t  cfg = {
-        .statements = {.entry = &raw_sql[0], .num_rs = 3},
+        .statements = {.entry = &raw_sql[0], .num_rs = 1},
         .usr_data = {.entry = (void **)&db_async_usr_data, .len = 3},
         .pool = app_db_pool_get_pool("db_server_1"),
         .loop = req->conn->ctx->loop,
         .callbacks = {
-            .result_rdy  = upload_part__validate_quota_rs_rdy,
+            .result_rdy  = app_db_async_dummy_cb,
             .row_fetched = upload_part__validate_quota_fetch_row,
-            .result_free = app_db_async_dummy_cb,
+            .result_free = upload_part__validate_quota_rs_rdy,
             .error = upload_part__db_async_err,
         }
     };
@@ -590,7 +586,7 @@ RESTAPI_ENDPOINT_HANDLER(upload_part, POST, self, req)
 #undef MAX_BYTES_RESP_BODY
     // now check existence of req_seq, will access database asynchronously
     DBA_RES_CODE db_result = app_validate_uncommitted_upld_req(
-            self, req, node, "uncommitted_upload_request", upload_part__db_async_err,
+            self, req, node, "upload_request", upload_part__db_async_err,
             upload_part__validate_reqseq_success, upload_part__validate_reqseq_failure
         );
     if(db_result == DBA_RESULT_OK) {

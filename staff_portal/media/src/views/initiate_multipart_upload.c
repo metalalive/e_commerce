@@ -22,9 +22,9 @@
     "    SELECT result_code, num_active_req;" \
     "  END;" \
     "  START TRANSACTION;" \
-    "  SELECT COUNT(`req_id`) INTO num_active_req FROM `uncommitted_upload_request` AS L WHERE L.`usr_id` = %u FOR UPDATE;" \
+    "  SELECT COUNT(`req_id`) INTO num_active_req FROM `upload_request` AS L WHERE L.`usr_id` = %u FOR UPDATE;" \
     "  IF num_active_req < max_num_active_req THEN " \
-    "    INSERT INTO `uncommitted_upload_request`(`usr_id`,`req_id`,`time_created`) VALUES (%u, x'%08x', '%s');" \
+    "    INSERT INTO `upload_request`(`usr_id`,`req_id`,`time_created`) VALUES (%u, x'%08x', '%s');" \
     "    COMMIT;" \
     "  ELSE" \
     "    ROLLBACK;" \
