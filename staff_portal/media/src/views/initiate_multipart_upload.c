@@ -4,7 +4,6 @@
 #include "models/query.h"
 
 #define MYSQL_BINARY_HEX_SIZE(x)  (x << 1)
-#define DATETIME_STR_SIZE 20
 #define MAX_NUM_ACTIVE_UPLOAD_REQUESTS 3
 
 #define SQL_RESULT_CODE__OK 0

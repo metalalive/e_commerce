@@ -145,7 +145,8 @@ extern "C" {
     static int API_FINAL_HANDLER_##func_name(RESTAPI_HANDLER_ARGS(hdlr_var, req_var), app_middleware_node_t *node)
 
 
-#define USR_ID_STR_SIZE       10
+#define DATETIME_STR_SIZE    20
+#define USR_ID_STR_SIZE      10
 #define UPLOAD_INT2HEX_SIZE(x) (sizeof(x) << 1)
 
 DBA_RES_CODE  app_validate_uncommitted_upld_req (
@@ -154,6 +155,15 @@ DBA_RES_CODE  app_validate_uncommitted_upld_req (
     app_middleware_fn success_cb,
     app_middleware_fn failure_cb
 );
+
+DBA_RES_CODE  app_validate_resource_id (
+    RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,
+    const char *db_table, void (*err_cb)(db_query_t *, db_query_result_t *),
+    app_middleware_fn success_cb,
+    app_middleware_fn failure_cb
+);
+
+void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
 
 #ifdef __cplusplus
 } // end of extern C clause

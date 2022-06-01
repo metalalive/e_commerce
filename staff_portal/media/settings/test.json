@@ -116,11 +116,11 @@
                     "reply": {
                         "queue": {
                             "pattern":"rpc.reply.prof_id.%u",
-                            "render_fn":"api_complete_multipart_upload__render_rpc_replyq"
+                            "render_fn":"api__render_rpc_reply_qname"
                         },
                         "correlation_id": {
                             "pattern":"rpc.media.mp_done.corr_id.%s",
-                            "render_fn":"api_complete_multipart_upload__render_rpc_corr_id"
+                            "render_fn":"api__render_rpc_corr_id"
                         },
                         "task_handler": "api_complete_multipart_upload__rpc_task_handler",
                         "durable": true,
@@ -135,11 +135,11 @@
                     "reply": {
                         "queue": {
                             "pattern":"rpc.reply.prof_id.%u",
-                            "render_fn":"api_complete_multipart_upload__render_rpc_replyq"
+                            "render_fn":"api__render_rpc_reply_qname"
                         },
                         "correlation_id": {
                             "pattern":"rpc.media.mp_done.corr_id.%s",
-                            "render_fn":"api_complete_multipart_upload__render_rpc_corr_id"
+                            "render_fn":"api__render_rpc_corr_id"
                         },
                         "task_handler": "api_transcode_video_file__rpc_task_handler",
                         "durable": true

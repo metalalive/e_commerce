@@ -229,6 +229,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/mariadb.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
+    test/unit/views/common.c
     test/unit/storage/cfg_parser.c
     test/unit/storage/localfs.c
     test/unit/mock/rhonabwy.c
@@ -243,6 +244,7 @@ SET(INTEGRATION_TEST_SOURCE_FILES
     test/integration/main.c
     test/integration/auth.c
     test/integration/client.c
+    test/integration/api/start_transcoding_file.c
     test/integration/api/complete_multipart_upload.c
     test/integration/api/initiate_multipart_upload.c
     test/integration/api/upload_part.c
@@ -301,7 +303,7 @@ ADD_CUSTOM_TARGET(dev_app_server
     python -m  media.setup_test_env DevCertRenewal  ${DEV_APPCFG_PATH}
     COMMAND
        ##valgrind --leak-check=full
-       ##gdb -args
+       gdb -args
        ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${APP_SERVER_EXE_NAME})
@@ -331,7 +333,7 @@ ADD_CUSTOM_TARGET(integration_test
     COMMAND python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${ITEST_APPCFG_PATH} &
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-        gdb -args # uncomment this line for debugging
+        ##gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${ITEST_APPCFG_PATH}
     COMMAND python -m  media.setup_test_env EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH}

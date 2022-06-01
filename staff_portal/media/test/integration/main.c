@@ -75,41 +75,6 @@ Ensure(api_single_chunk_upload_test) {
 }
 
 
-static void test_verify__start_transcoding_file(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
-{
-    CURLcode res;
-    long expect_resp_code = 202;
-    long actual_resp_code = 0;
-    res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
-    assert_that(res, is_equal_to(CURLE_OK));
-    assert_that(expect_resp_code, is_equal_to(actual_resp_code));
-    json_t *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
-    const char *actual_job_id = json_string_value(json_object_get(resp_obj, "job"));
-    assert_that(actual_job_id, is_not_null);
-    json_decref(resp_obj);
-}
-
-Ensure(api_start_transcoding_file_test) {
-    char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/file/transcode");
-    const char *codename_list[2] = {"upload_files", NULL};
-    json_t *header_kv_serials = json_array();
-    json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
-    json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    json_t *quota = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
-    test_setup_pub_t  setup_data = {
-        .method = "POST", .verbose = 0,  .url = &url[0],
-        .req_body = {.serial_txt=NULL, .src_filepath="./media/test/integration/examples/transcode_req_body.json"},
-        .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
-        .headers = header_kv_serials
-    };
-    run_client_request(&setup_data, test_verify__start_transcoding_file, NULL);
-    json_decref(header_kv_serials);
-    json_decref(quota);
-}
-
-
 static void test_verify__discard_ongoing_job(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
@@ -323,9 +288,9 @@ TestSuite *app_api_tests(void)
     add_suite(suite, api_initiate_multipart_upload_tests());
     add_suite(suite, api_upload_part_tests());
     add_suite(suite, api_complete_multipart_upload_tests());
+    add_suite(suite, api_start_transcoding_file_tests());
     add_test(suite, api_abort_multipart_upload_test);
     add_test(suite, api_single_chunk_upload_test);
-    add_test(suite, api_start_transcoding_file_test);
     add_test(suite, api_discard_ongoing_job_test);
     add_test(suite, api_monitor_job_progress_test);
     add_test(suite, api_fetch_entire_file_test);
@@ -357,7 +322,7 @@ int main(int argc, char **argv) {
     TestReporter *reporter = create_text_reporter();
     add_suite(suite, app_api_tests());
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    init_mock_auth_server("./tmp/media_test_jwks_pubkey_XXXXXX");
+    init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
     do {
         result = pthread_tryjoin_np(app_tid, NULL);
         if(result == 0) {

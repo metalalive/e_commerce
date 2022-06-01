@@ -23,9 +23,10 @@ static void test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_p
                     assert_that(usr_id, is_greater_than(0));
                     if(req_seq > 0 && usr_id > 0) {
                         json_t *item = json_object();
-                        json_object_set(item, "usr_id",  json_integer(usr_id));
-                        json_object_set(item, "req_seq", json_integer(req_seq));
-                        json_array_append(_app_itest_active_upload_requests, item);
+                        json_object_set_new(item, "usr_id",  json_integer(usr_id));
+                        json_object_set_new(item, "req_seq", json_integer(req_seq));
+                        json_object_set_new(item, "part", json_array());
+                        json_array_append_new(_app_itest_active_upload_requests, item);
                     }
                 }
                 break;
@@ -48,43 +49,45 @@ static void test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_p
 
 
 Ensure(api_test_initiate_multipart_upload_ok) {
+#define  NUM_USERS 6
     char url[128] = {0};
     size_t idx = 0;
     // the resource id client wants to claim, server may return auth failure if the user doesn't
     //  have access to modify the resource pointed by this ID
     sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/initiate");
     const char *codename_list[3] = {"upload_files", "edit_file_access_control", NULL};
+    uint32_t usr_prof_ids[NUM_USERS] = {125, 127, 128, 130, 128, 133};
     json_t *header_kv_serials = json_array();
+    json_t *quota = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    json_t *quota = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 125, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0,  .url = &url[0],  .req_body = {.serial_txt=NULL, .src_filepath=NULL},
         .upload_filepaths = {.size=0, .capacity=0, .entries=NULL}, .headers = header_kv_serials,
         .expect_resp_code = 201
     };
-    run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
-    { // clean previous auth token and create new one
-        sleep(1);
+    for(idx = 0; idx < (NUM_USERS - 1); idx++) {
+        add_auth_token_to_http_header(header_kv_serials, usr_prof_ids[idx], codename_list, quota);
+        run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
+        sleep(1); // then clean previous auth token and create new one
         json_array_remove(header_kv_serials, (json_array_size(header_kv_serials) - 1));
-        add_auth_token_to_http_header(header_kv_serials, 127, codename_list, quota);
-        run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
     }
-    json_array_remove(header_kv_serials, (json_array_size(header_kv_serials) - 1));
-    add_auth_token_to_http_header(header_kv_serials, 130, codename_list, quota);
-    setup_data.expect_resp_code = 201;
-    for(idx = 0; idx < MAX_NUM_ACTIVE_UPLOAD_REQUESTS; idx++) {
+    {
+        add_auth_token_to_http_header(header_kv_serials, usr_prof_ids[NUM_USERS - 1], codename_list, quota);
+        setup_data.expect_resp_code = 201;
+        for(idx = 0; idx < MAX_NUM_ACTIVE_UPLOAD_REQUESTS; idx++) {
+            run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
+            sleep(1);
+        } // app server does NOT allow users to send several valid requests in one second
+        setup_data.expect_resp_code = 400;
         sleep(1);
-        run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
-    } // app server does NOT allow users to send several valid requests in one second
-    setup_data.expect_resp_code = 400;
-    sleep(1);
-    for(idx = 0; idx < 6; idx++) {
-        run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
+        for(idx = 0; idx < 6; idx++) {
+            run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
+        }
     }
     json_decref(header_kv_serials);
     json_decref(quota);
+#undef NUM_USERS
 } // end of api_test_initiate_multipart_upload_ok
 
 
