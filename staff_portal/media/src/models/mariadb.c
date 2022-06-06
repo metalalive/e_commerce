@@ -420,7 +420,7 @@ static void _app_mariadb_row_ready_helper(db_conn_t *conn, DBA_RES_CODE app_resu
         size_t row_tot_sz = sizeof(char *) * num_cols;
         for(idx = 0; idx < num_cols; idx++) {
             char *val = ((MYSQL_ROW)conn->lowlvl.row)[idx];
-            row_tot_sz += strlen(val) + 1;
+            row_tot_sz += val ? strlen(val) + 1 : 0; // in case the column stored NULL
         }
         rs_node_sz += sizeof(db_query_row_info_t) + row_tot_sz;
     }
@@ -437,10 +437,14 @@ static void _app_mariadb_row_ready_helper(db_conn_t *conn, DBA_RES_CODE app_resu
         char  *d_ptr = &cloned_row->data[sizeof(char *) * num_cols];
         for(idx = 0; idx < num_cols; idx++) {
             char *val = ((MYSQL_ROW)conn->lowlvl.row)[idx];
-            size_t val_sz = strlen(val) + 1; // including NULL character at the end
-            memcpy(d_ptr, val, val_sz);
-            cloned_row->values[idx] = d_ptr;
-            d_ptr += val_sz;
+            if(val) {
+                size_t val_sz = strlen(val) + 1; // including NULL character at the end
+                memcpy(d_ptr, val, val_sz);
+                cloned_row->values[idx] = d_ptr;
+                d_ptr += val_sz;
+            } else {
+                cloned_row->values[idx] = NULL;
+            } // in case the column stored NULL
         }
     } // end of cloning mysql row
     app_db_query_notify_with_result(curr_query, rs);
