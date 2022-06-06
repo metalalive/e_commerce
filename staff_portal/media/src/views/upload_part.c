@@ -23,7 +23,6 @@ typedef struct {
     SHA_CTX  checksum;
 } app_mpp_usrarg_t;
 
-void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
 
 static void  upload_part__db_async_err(db_query_t *target, db_query_result_t *rs)
 {
@@ -75,7 +74,7 @@ static void  upload_part__add_chunk_record_rs_rdy(db_query_t *target, db_query_r
 
 
 static DBA_RES_CODE upload_part__add_chunk_record_to_db(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
-{
+{ // TODO, allow users to re-upload the same file chunk
 #define SQL_PATTERN "INSERT INTO `upload_filechunk`(`usr_id`,`req_id`,`part`,`checksum`,`size_bytes`)" \
     " VALUES(%u, x'%08x', %hu, x'%s', %u);"
     json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
@@ -252,13 +251,13 @@ static  ASA_RES_CODE upload_part__write_filechunk_start(asa_op_base_cfg_t *cfg)
                 usr_arg->tot_file_sz += usr_arg->wr_idx;
                 SHA1_Update(&usr_arg->checksum, cfg->op.write.src, cfg->op.write.src_sz);
                 asa_result = storage->ops.fn_write(cfg);
-            } else if(usr_arg->end_flag) { // implicitly means wr_idx == 0, nothing to write in the final parsed chunk
+            } else if(usr_arg->end_flag) {
+                // implicitly means wr_idx == 0, nothing to write in the final parsed chunk.
                 asa_result = storage->ops.fn_close(cfg);
                 break;
-            } else {
-                asa_result = ASTORAGE_RESULT_UNKNOWN_ERROR;
-                break;
             }
+            // Eventually multipaart-parser will reach the 2 statements above as it
+            // traversed all bytes of the request body.
         } else { // TODO, logging possible error
             asa_result = ASTORAGE_RESULT_OS_ERROR;
             break;
