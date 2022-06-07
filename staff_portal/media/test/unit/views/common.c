@@ -191,8 +191,8 @@ Ensure(apiview_common_test__resource_id_found) {
                 will_set_contents_of_parameter(col_val_p, &mock_col_value, sizeof(char *)));
         expect(utest__find_resource_id_success, when(resource_owner_id, is_equal_to(0)),
                 when(last_req_seq, is_equal_to(0)));
-        app_validate_resource_id(&hdlr, &http_req, &node, "utest_upld_file_table",
-              utest__db_async_err_cb, utest__find_resource_id_success, utest__uncommitted_upld_req_failure );
+        app_verify_existence_resource_id(&hdlr, &http_req, &node,  utest__db_async_err_cb,
+              utest__find_resource_id_success, utest__uncommitted_upld_req_failure );
     }
     {
         char  *mock_col_upld_req = "10d"; // will be converted to decemal number 256 + 13
@@ -206,17 +206,30 @@ Ensure(apiview_common_test__resource_id_found) {
                 will_set_contents_of_parameter(col_val_p, &mock_col_upld_req, sizeof(char *)));
         expect(utest__find_resource_id_success, when(resource_owner_id, is_equal_to(197)),
                 when(last_req_seq, is_equal_to(256 + 13)));
-        app_validate_resource_id(&hdlr, &http_req, &node, "utest_upld_file_table",
-              utest__db_async_err_cb, utest__find_resource_id_success, utest__uncommitted_upld_req_failure );
+        app_verify_existence_resource_id(&hdlr, &http_req, &node, utest__db_async_err_cb,
+              utest__find_resource_id_success, utest__uncommitted_upld_req_failure );
     }
     app_db_pool_deinit(UTEST_DBPOOL_ALIAS);
     hdestroy_r(&htab);
 } // end of apiview_common_test__resource_id_found
+
+
+Ensure(apiview_common_test__resource_id_format) {
+    assert_that(app_verify_format_resource_id(NULL), is_not_equal_to(0));
+    assert_that(app_verify_format_resource_id(""), is_not_equal_to(0));
+    assert_that(app_verify_format_resource_id("abcde"), is_equal_to(0));
+    assert_that(app_verify_format_resource_id("abc e"), is_not_equal_to(0));
+    assert_that(app_verify_format_resource_id("a\x01cde"), is_not_equal_to(0));
+    char res_id[APP_RESOURCE_ID_SIZE + 5] = {0};
+    memset(&res_id[0], 0x61, sizeof(char) * (APP_RESOURCE_ID_SIZE + 3));
+    assert_that(app_verify_format_resource_id(&res_id[0]), is_not_equal_to(0));
+} // end of apiview_common_test__resource_id_format
 
 TestSuite *app_views_common_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, apiview_common_test__upload_request_found);
     add_test(suite, apiview_common_test__resource_id_found);
+    add_test(suite, apiview_common_test__resource_id_format);
     return suite;
 }

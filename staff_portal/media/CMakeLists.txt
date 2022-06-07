@@ -196,6 +196,7 @@ SET(APP_COMMON_SOURCE_FILES
     src/storage/localfs.c
     src/app_cfg.c
     src/utils.c
+    src/base64.c
     src/timer_poll.c
     src/routes.c )
 
@@ -303,7 +304,7 @@ ADD_CUSTOM_TARGET(dev_app_server
     python -m  media.setup_test_env DevCertRenewal  ${DEV_APPCFG_PATH}
     COMMAND
        ##valgrind --leak-check=full
-       gdb -args
+       ##gdb -args
        ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${APP_SERVER_EXE_NAME})
@@ -333,7 +334,7 @@ ADD_CUSTOM_TARGET(integration_test
     COMMAND python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${ITEST_APPCFG_PATH} &
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-        ##gdb -args # uncomment this line for debugging
+        gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${ITEST_APPCFG_PATH}
     COMMAND python -m  media.setup_test_env EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH}

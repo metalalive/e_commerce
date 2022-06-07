@@ -1,4 +1,6 @@
+#include <ctype.h>
 #include <openssl/sha.h>
+
 #include "utils.h"
 #include "views.h"
 #include "models/pool.h"
@@ -132,20 +134,19 @@ DBA_RES_CODE  app_validate_uncommitted_upld_req(RESTAPI_HANDLER_ARGS(self, req),
 } // end of  app_validate_uncommitted_upld_req
 
 
-DBA_RES_CODE  app_validate_resource_id (RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,
-        const char *db_table, void (*err_cb)(db_query_t *, db_query_result_t *), app_middleware_fn success_cb,
-        app_middleware_fn failure_cb)
+DBA_RES_CODE  app_verify_existence_resource_id (RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,
+        void (*err_cb)(db_query_t *, db_query_result_t *), app_middleware_fn success_cb, app_middleware_fn failure_cb)
 {
-    if(!self || !req || !node || !db_table || !err_cb || !failure_cb || !success_cb)
+    if(!self || !req || !node || !err_cb || !failure_cb || !success_cb)
     {
         return DBA_RESULT_ERROR_ARG;
     }
-    char  *resource_id = (char *)app_fetch_from_hashmap(node->data, "resource_id");
-#define SQL_PATTERN "SELECT `usr_id`, HEX(`last_upld_req`) FROM `%s` WHERE `id` = '%s'"
-    size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(db_table) + strlen(resource_id);
+    char  *res_id_encoded = (char *)app_fetch_from_hashmap(node->data, "res_id_encoded");
+#define SQL_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`, HEX(`last_upld_req`) FROM `uploaded_file` WHERE `id` = ?' USING FROM_BASE64('%s');"
+    size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(res_id_encoded);
     char raw_sql[raw_sql_sz];
     memset(&raw_sql[0], 0x0, raw_sql_sz);
-    size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, db_table, resource_id);
+    size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, res_id_encoded);
     assert(nwrite_sql < raw_sql_sz);
 #undef SQL_PATTERN
 #define  NUM_USR_ARGS  8
@@ -165,8 +166,29 @@ DBA_RES_CODE  app_validate_resource_id (RESTAPI_HANDLER_ARGS(self, req), app_mid
     };
     return app_db_query_start(&cfg);
 #undef NUM_USR_ARGS
-} // end of app_validate_resource_id
+} // end of app_verify_existence_resource_id
 
+
+int  app_verify_format_resource_id(const char *id)
+{ // Note this function does NOT prevent SQL injection
+    int err = 0;
+    if(!id) {
+        err = 1;
+        goto done;
+    }
+    size_t actual_sz = strlen(id);
+    if(actual_sz == 0 || actual_sz > APP_RESOURCE_ID_SIZE) {
+        err = 2;
+        goto done;
+    }
+    for(size_t idx = 0; idx < actual_sz; idx++) {
+        int c = (int)id[idx];
+        err = (isprint(c) == 0) || isspace(c);
+        if(err) { break; }
+    }
+done:
+    return err;
+} // end of app_verify_format_resource_id
 
 ARPC_STATUS_CODE api__render_rpc_reply_qname(
         const char *name_pattern, arpc_exe_arg_t *args, char *wr_buf, size_t wr_sz)

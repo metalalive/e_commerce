@@ -1,7 +1,7 @@
 #include "../test/integration/test.h"
 
 #define  EXPECT_RESOURCE_ID  "bMrI8f"
-#define  SECONDARY_RESOURCE_ID  "t1kT0y"
+#define  SECONDARY_RESOURCE_ID  "';t1kT0'"
 
 typedef struct {
     uint32_t expect_resp_code;
@@ -94,7 +94,14 @@ Ensure(api_commit_upload_req__missing_auth_token) {
 } // end of api_commit_upload_req__missing_auth_token
 
 
-Ensure(api_commit_upload_req__invalid_req) {
+Ensure(api_commit_upload_req__invalid_resource_id) {
+    json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0);
+    if(upld_req) {
+        _api_commit_upload_req__success_common(upld_req, "' OR 1;'", 400, "resource_id", "invalid format");
+    }
+} // end of api_commit_upload_req__invalid_resource_id
+
+Ensure(api_commit_upload_req__nonexistent_req) {
     json_t *upld_req_src = json_array_get(_app_itest_active_upload_requests, 0);
     json_t *upld_req_dst = json_object();
     {
@@ -106,7 +113,7 @@ Ensure(api_commit_upload_req__invalid_req) {
     _api_commit_upload_req__success_common(upld_req_dst, EXPECT_RESOURCE_ID, 400,
             "req_seq", "request not exists");
     json_decref(upld_req_dst);
-} // end of api_commit_upload_req__invalid_req
+} // end of api_commit_upload_req__nonexistent_req
 
 
 Ensure(api_commit_upload_req__incomplete_chunks) {
@@ -158,7 +165,8 @@ TestSuite *api_complete_multipart_upload_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, api_commit_upload_req__missing_auth_token);
-    add_test(suite, api_commit_upload_req__invalid_req);
+    add_test(suite, api_commit_upload_req__invalid_resource_id);
+    add_test(suite, api_commit_upload_req__nonexistent_req);
     add_test(suite, api_commit_upload_req__incomplete_chunks);
     add_test(suite, api_commit_upload_req__add_new_resource_id);
     add_test(suite, api_commit_upload_req__resource_id_not_allowed);

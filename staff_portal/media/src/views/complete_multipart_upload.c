@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "base64.h"
 #include "views.h"
 #include "models/pool.h"
 #include "models/query.h"
@@ -7,10 +8,10 @@
 #define  MAX_BYTES_RESP_BODY  250
 
 static void api__dealloc_req_hashmap (app_middleware_node_t *node) {
-    char *resource_id = app_fetch_from_hashmap(node->data, "resource_id");
-    if(resource_id) {
-        free(resource_id);
-        app_save_ptr_to_hashmap(node->data, "resource_id", (void *)NULL);
+    char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
+    if(res_id_encoded) {
+        free(res_id_encoded);
+        app_save_ptr_to_hashmap(node->data, "res_id_encoded", (void *)NULL);
     }
 }
 
@@ -37,7 +38,10 @@ static void  api__complete_multipart_upload__db_write_done(db_query_t *target, d
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
         uint32_t curr_req_seq = (uint32_t)app_fetch_from_hashmap(node->data, "req_seq");
 #pragma GCC diagnostic pop
-        char *resource_id = app_fetch_from_hashmap(node->data, "resource_id");
+        char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
+        size_t res_id_len = 0;
+        unsigned char *resource_id = base64_decode((const unsigned char *)res_id_encoded,
+                strlen(res_id_encoded), &res_id_len);
         json_t *res_body = json_object();
         json_object_set_new(res_body, "resource_id", json_string(resource_id));
         json_object_set_new(res_body, "req_seq",  json_integer(curr_req_seq));
@@ -49,6 +53,7 @@ static void  api__complete_multipart_upload__db_write_done(db_query_t *target, d
 #pragma GCC diagnostic pop
         h2o_send_inline(req, body_raw, nwrite);
         json_decref(res_body);
+        free(resource_id);
     }
     api__dealloc_req_hashmap(node);
     app_run_next_middleware(self, req, node);
@@ -64,7 +69,8 @@ static int api__complete_multipart_upload__resource_id_exist(RESTAPI_HANDLER_ARG
       "BEGIN NOT ATOMIC" \
       "  START TRANSACTION;" \
       "    UPDATE `upload_request` SET `time_committed`=NULL WHERE `req_id`=x'%08x' AND `usr_id`=%u;" \
-      "    UPDATE `uploaded_file` SET `usr_id`=%u, `last_upld_req`=x'%08x', `last_update`='%s'  WHERE `id`='%s';" \
+      "    EXECUTE IMMEDIATE 'UPDATE `uploaded_file` SET `usr_id`=?, `last_upld_req`=?, `last_update`=?  WHERE `id`=?'" \
+      "        USING %u,x'%08x','%s',FROM_BASE64('%s'); " \
       "    " SQL_PATTERN__UPLOAD_REQ__SET_COMMITTED_TIME \
       "  COMMIT;" \
       "END;"
@@ -78,8 +84,8 @@ static int api__complete_multipart_upload__resource_id_exist(RESTAPI_HANDLER_ARG
         uint32_t curr_req_seq = (uint32_t)app_fetch_from_hashmap(node->data, "req_seq");
         uint32_t last_req_seq = (uint32_t)app_fetch_from_hashmap(node->data, "last_upld_req");
 #pragma GCC diagnostic pop
-        char *resource_id = app_fetch_from_hashmap(node->data, "resource_id");
-        size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(resource_id) + USR_ID_STR_SIZE*3 +
+        char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
+        size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(res_id_encoded) + USR_ID_STR_SIZE*3 +
                   (DATETIME_STR_SIZE - 1)*2 + UPLOAD_INT2HEX_SIZE(curr_req_seq)*3;
         char raw_sql[raw_sql_sz];
         char curr_time_str[DATETIME_STR_SIZE] = {0};
@@ -90,7 +96,7 @@ static int api__complete_multipart_upload__resource_id_exist(RESTAPI_HANDLER_ARG
         }
         memset(&raw_sql[0], 0x0, sizeof(char) *  raw_sql_sz);
         snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, last_req_seq, resource_owner_id, curr_usr_id, curr_req_seq,
-                &curr_time_str[0], resource_id, &curr_time_str[0], curr_req_seq, curr_usr_id);
+                &curr_time_str[0], res_id_encoded, &curr_time_str[0], curr_req_seq, curr_usr_id);
 #define NUM_USR_ARGS 4
         void *db_async_usr_data[NUM_USR_ARGS] = {(void *)req, (void *)self, (void *)node, (void *)200};
         db_query_cfg_t  cfg = {
@@ -127,7 +133,8 @@ static int api__complete_multipart_upload__resource_id_notexist(RESTAPI_HANDLER_
 #define SQL_PATTERN  \
     "BEGIN NOT ATOMIC" \
     "  START TRANSACTION;" \
-    "    INSERT INTO `uploaded_file`(`id`,`usr_id`,`last_upld_req`,`last_update`) VALUES ('%s',%u,x'%08x','%s');" \
+    "    EXECUTE IMMEDIATE 'INSERT INTO `uploaded_file`(`id`,`usr_id`,`last_upld_req`,`last_update`) VALUES (?,?,?,?)'" \
+    "       USING FROM_BASE64('%s'),%u,x'%08x','%s';" \
     "    " SQL_PATTERN__UPLOAD_REQ__SET_COMMITTED_TIME \
     "  COMMIT;" \
     "END;"
@@ -136,8 +143,8 @@ static int api__complete_multipart_upload__resource_id_notexist(RESTAPI_HANDLER_
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
     uint32_t curr_req_seq = (uint32_t)app_fetch_from_hashmap(node->data, "req_seq");
 #pragma GCC diagnostic pop
-    char *resource_id = app_fetch_from_hashmap(node->data, "resource_id");
-    size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(resource_id) + USR_ID_STR_SIZE*2 +
+    char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
+    size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(res_id_encoded) + USR_ID_STR_SIZE*2 +
               (DATETIME_STR_SIZE - 1)*2 + UPLOAD_INT2HEX_SIZE(curr_req_seq)*2;
     char raw_sql[raw_sql_sz];
     char curr_time_str[DATETIME_STR_SIZE] = {0};
@@ -147,7 +154,7 @@ static int api__complete_multipart_upload__resource_id_notexist(RESTAPI_HANDLER_
         strftime(&curr_time_str[0], DATETIME_STR_SIZE, "%F %T", brokendown); // ISO8601 date format
     }
     memset(&raw_sql[0], 0x0, sizeof(char) *  raw_sql_sz);
-    snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, resource_id, curr_usr_id, curr_req_seq,
+    snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, res_id_encoded, curr_usr_id, curr_req_seq,
             &curr_time_str[0], &curr_time_str[0], curr_req_seq, curr_usr_id);
 #define NUM_USR_ARGS 4
     void *db_async_usr_data[NUM_USR_ARGS] = {(void *)req, (void *)self, (void *)node, (void *)201};
@@ -192,8 +199,8 @@ static void api__complete_multipart_upload__validate_filechunks__rs_free(db_quer
         api__dealloc_req_hashmap(node);
         app_run_next_middleware(self, req, node);
     } else {
-        DBA_RES_CODE result = app_validate_resource_id (
-            self, req, node, "uploaded_file", api__complete_multipart_upload__db_async_err,
+        DBA_RES_CODE result = app_verify_existence_resource_id (
+            self, req, node, api__complete_multipart_upload__db_async_err,
             api__complete_multipart_upload__resource_id_exist,
             api__complete_multipart_upload__resource_id_notexist
         );
@@ -291,7 +298,11 @@ RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)
     const char *resource_id = json_string_value(json_object_get(req_body, "resource_id"));
     uint32_t req_seq = (uint32_t) json_integer_value(json_object_get(req_body, "req_seq"));
     if(resource_id) {
-        // TODO, SQL injection check
+        int err = app_verify_format_resource_id(resource_id);
+        if(err) {
+            res_id_err = "invalid format";
+            req->res.status = 400;
+        }
     } else {
         res_id_err = "missing resource ID";
         req->res.status = 400;
@@ -319,7 +330,10 @@ RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)
         json_decref(res_body);
         app_run_next_middleware(self, req, node);
     } else {
-        app_save_ptr_to_hashmap(node->data, "resource_id", (void *)strdup(resource_id));
+        size_t out_len = 0;
+        unsigned char *res_id_encoded = base64_encode((const unsigned char *)resource_id,
+                strlen(resource_id), &out_len);
+        app_save_ptr_to_hashmap(node->data, "res_id_encoded", (void *)res_id_encoded);
         app_save_int_to_hashmap(node->data, "req_seq", req_seq);
         DBA_RES_CODE db_result = app_validate_uncommitted_upld_req (
                 self, req, node, "upload_request", api__complete_multipart_upload__db_async_err,
