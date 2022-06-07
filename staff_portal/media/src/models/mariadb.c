@@ -660,11 +660,10 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     break;
                 }
             case DB_ASYNC_CHECK_CURRENT_RESULTSET:
-                {
-                    assert(conn->processing_queries);
+                conn->lowlvl.resultset = (void *) mysql_use_result((MYSQL *)conn->lowlvl.conn);
+                conn->lowlvl.row = NULL;
+                if(conn->processing_queries) {
                     db_query_t *curr_query = (db_query_t *) &conn->processing_queries->data;
-                    conn->lowlvl.resultset = (void *) mysql_use_result((MYSQL *)conn->lowlvl.conn);
-                    conn->lowlvl.row = NULL;
                     size_t rs_node_sz = sizeof(db_llnode_t) + sizeof(db_query_result_t);
                     if(conn->lowlvl.resultset) { rs_node_sz += sizeof(db_query_rs_info_t); }
                     db_llnode_t *rs_node = malloc(rs_node_sz);
@@ -685,6 +684,14 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     app_db_query_notify_with_result(curr_query, rs);
                     if(conn->lowlvl.resultset) { // current result set has rows
                         conn->state = DB_ASYNC_FETCH_ROW_START;
+                        continue_checking = 1;
+                        break;
+                    } else { // go check next result set
+                        conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_START;
+                    }
+                } else { // in case app caller accidentally send junk string literal
+                    if(conn->lowlvl.resultset) { // current result set has rows
+                        conn->state = DB_ASYNC_FREE_RESULTSET_START;
                         continue_checking = 1;
                         break;
                     } else { // go check next result set
@@ -790,10 +797,10 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 }
             case DB_ASYNC_FREE_RESULTSET_DONE:
                 conn->ops.timerpoll_stop(target);
-                {
+                conn->lowlvl.resultset = NULL;
+                if(conn->processing_queries) {
                     db_query_t *curr_query = (db_query_t *) &conn->processing_queries->data;
                     app_db_conn_try_evict_current_processing_query(conn);
-                    conn->lowlvl.resultset = NULL;
                     size_t rs_node_sz = sizeof(db_llnode_t) + sizeof(db_query_result_t);
                     db_llnode_t *rs_node = malloc(rs_node_sz);
                     db_query_result_t *rs = (db_query_result_t *) &rs_node->data[0];
@@ -803,10 +810,10 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                         ._final = (curr_query->db_result.num_rs_remain == 0),
                     };  // end of statements in this query reached
                     app_db_query_notify_with_result(curr_query, rs);
-                    conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_START;
-                    continue_checking = 1;
-                    break;
                 }
+                conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_START;
+                continue_checking = 1;
+                break;
 
             case DB_ASYNC_CLOSE_START:
                 result = app_db_mariadb_conn_close_start(conn, &event_flags);
