@@ -1,5 +1,6 @@
 #include <h2o.h>
 #include "app_cfg.h"
+#include "transcoder/cfg_parser.h"
 
 #ifdef TCP_FASTOPEN
 #define APP_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE  150
@@ -49,6 +50,7 @@ void app_global_cfg_set_exepath(const char *exe_path)
 
 void deinit_app_cfg(app_cfg_t *app_cfg)
 {
+    app_transcoder_cfg_deinit(&app_cfg->transcoder);
     if(app_cfg->pid_file) {
         fclose(app_cfg->pid_file);
         app_cfg->pid_file = NULL;

@@ -8,6 +8,7 @@
 #include "routes.h"
 #include "rpc/cfg_parser.h"
 #include "storage/cfg_parser.h"
+#include "transcoder/cfg_parser.h"
 #include "models/pool.h"
 #include "models/connection.h"
 #include "models/mariadb.h"
@@ -453,6 +454,8 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
     result_error = parse_cfg_storages(json_object_get((const json_t *)root, "storages"), _app_cfg);
     if (result_error) {  goto error; }
     result_error = parse_cfg_rpc_caller(json_object_get((const json_t *)root, "rpc"), _app_cfg);
+    if (result_error) {  goto error; }
+    result_error = parse_cfg_transcoder(json_object_get((const json_t *)root, "transcoder"), _app_cfg);
     if (result_error) {  goto error; }
     json_decref(root);
     return 0;

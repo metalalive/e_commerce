@@ -7,6 +7,7 @@
 #include "rpc/cfg_parser.h"
 #include "rpc/core.h"
 #include "rpc/consumer.h"
+#include "transcoder/cfg_parser.h"
 
 // TODO, parameterize the delay time for heartbeat frame to send (to AMQP broker).
 // When this application almost reaches timeout, it tries sending heartbeat frame
@@ -62,6 +63,9 @@ static int parse_cfg_params(const char *cfg_file_path, app_cfg_t *app_cfg)
     err = appcfg_parse_num_workers(json_object_get((const json_t *)root, "num_rpc_consumers"), app_cfg);
     if (err) {  goto error; }
     err = parse_cfg_rpc_callee(json_object_get((const json_t *)root, "rpc"), app_cfg);
+    if (err) {  goto error; }
+    err = parse_cfg_transcoder(json_object_get((const json_t *)root, "transcoder"), app_cfg);
+    if (err) {  goto error; }
     json_decref(root);
     return 0;
 error:
@@ -171,7 +175,7 @@ done:
 } // end of appworker_init_context
 
 
-static void appworker_timerpoll_message_cb(app_timer_poll_t *target, int status, int event)
+static  void appworker_timerpoll_message_cb(app_timer_poll_t *target, int status, int event)
 {
     app_ctx_msgq_t *mq = H2O_STRUCT_FROM_MEMBER(app_ctx_msgq_t, timerpoll, target);
     uint8_t expected_timeout_reaching = status == UV_ETIMEDOUT;
@@ -224,7 +228,7 @@ static void appworker_timerpoll_message_cb(app_timer_poll_t *target, int status,
 static int _appworker_start_timerpoll(app_ctx_msgq_t *mq)
 {
     arpc_cfg_t *rpc_cfg = app_rpc_get_config(mq->conn);
-    uint32_t events = UV_READABLE | UV_WRITABLE | UV_DISCONNECT;
+    uint32_t events = UV_READABLE | UV_DISCONNECT;
     uint64_t timeout_ms = ((uint64_t)rpc_cfg->attributes.timeout_secs - RPC_REFRESH_CONNECTION_LATENCY_SECS) * 1000;
     return  app_timer_poll_start(&mq->timerpoll, timeout_ms, events, appworker_timerpoll_message_cb);
 }
@@ -268,7 +272,7 @@ static size_t get_num_of_pending_requests(app_ctx_worker_t *ctx)
 }
 
 
-static int appworker_waiting_messages(app_ctx_worker_t *ctx, app_cfg_t  *acfg, uv_loop_t *loop)
+static  int appworker_waiting_messages(app_ctx_worker_t *ctx, app_cfg_t  *acfg, uv_loop_t *loop)
 {
     int err = 0;
     for(size_t idx = 0; idx < ctx->msgq.size; idx++) {

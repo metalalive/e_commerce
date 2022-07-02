@@ -298,7 +298,7 @@ RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)
     const char *resource_id = json_string_value(json_object_get(req_body, "resource_id"));
     uint32_t req_seq = (uint32_t) json_integer_value(json_object_get(req_body, "req_seq"));
     if(resource_id) {
-        int err = app_verify_format_resource_id(resource_id);
+        int err = app_verify_printable_string(resource_id, APP_RESOURCE_ID_SIZE);
         if(err) {
             res_id_err = "invalid format";
             req->res.status = 400;

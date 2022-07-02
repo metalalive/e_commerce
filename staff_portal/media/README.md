@@ -49,6 +49,7 @@ Library Dependencies (for application)
 * [p11-kit](https://github.com/p11-glue/p11-kit) >= 0.24.0
 * [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) >= 3.1.7
 * [Rabbitmq/C](https://github.com/rabbitmq/rabbitmq-c) >= 0.11.0
+* [FFMpeg](https://github.com/FFmpeg/FFmpeg) >= 4.3.3
 Library Dependencies (for workaround in [rhonabwy](https://github.com/babelouest/rhonabwy))
 * [libcurl](https://github.com/curl/curl) >= 7.69.1
 * [nghttp2](https://github.com/nghttp2/nghttp2) >= 1.46.0 , for enabling http/2 in `libcurl`
@@ -74,6 +75,7 @@ where `<YOUR_PATH_TO_PKG_CFG>` should include :
 * `/PATH/TO/p11-kit/pkgconfig`
 * `/PATH/TO/mariadb/pkgconfig`
 * `/PATH/TO/rabbitmq-c/pkgconfig`
+* `/PATH/TO/ffmpeg/pkgconfig`
 * `/PATH/TO/libcurl/pkgconfig`
 * `/PATH/TO/nghttp2/pkgconfig`
 
@@ -91,7 +93,8 @@ make app.out
 ```
 or for debug mode
 ```
-make dev_server
+make dev_app_server
+make dev_rpc_worker
 ```
 
 To test the development server, you can use web browsers or command-line tools like `cURL`
@@ -125,6 +128,9 @@ make integration_test
 ```
 
 
-NOTE
+### NOTE
 * the database credential `YOUR_DBA_USERNAME` / `YOUR_DBA_PASSWORD` should have access to perform DDL to the specified database `ecommerce_media` and `ecommerce_usermgt` 
+
+### TO-DO
+* currently this application works only with Mysql / Mariadb because it access data by directly running raw SQL. Create [Data Access Ojbect](https://stackoverflow.com/questions/19154202) layer to separate database-specific SQL syntax from applicaiton logic (as well as make it easy to switch to other databaase).
 

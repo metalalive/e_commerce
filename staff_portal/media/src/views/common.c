@@ -142,6 +142,9 @@ DBA_RES_CODE  app_verify_existence_resource_id (RESTAPI_HANDLER_ARGS(self, req),
         return DBA_RESULT_ERROR_ARG;
     }
     char  *res_id_encoded = (char *)app_fetch_from_hashmap(node->data, "res_id_encoded");
+    if(!res_id_encoded) {
+        return DBA_RESULT_ERROR_ARG;
+    }
 #define SQL_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`, HEX(`last_upld_req`) FROM `uploaded_file` WHERE `id` = ?' USING FROM_BASE64('%s');"
     size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(res_id_encoded);
     char raw_sql[raw_sql_sz];
@@ -169,26 +172,27 @@ DBA_RES_CODE  app_verify_existence_resource_id (RESTAPI_HANDLER_ARGS(self, req),
 } // end of app_verify_existence_resource_id
 
 
-int  app_verify_format_resource_id(const char *id)
-{ // Note this function does NOT prevent SQL injection
+int  app_verify_printable_string(const char *str, size_t limit_sz)
+{  // Note in this application,  this function does not allow whitespace
+   // and does NOT prevent SQL injection
     int err = 0;
-    if(!id) {
+    if(!str || limit_sz == 0) {
         err = 1;
         goto done;
     }
-    size_t actual_sz = strlen(id);
-    if(actual_sz == 0 || actual_sz > APP_RESOURCE_ID_SIZE) {
+    size_t actual_sz = strlen(str);
+    if(actual_sz == 0 || actual_sz > limit_sz) {
         err = 2;
         goto done;
     }
     for(size_t idx = 0; idx < actual_sz; idx++) {
-        int c = (int)id[idx];
+        int c = (int)str[idx];
         err = (isprint(c) == 0) || isspace(c);
         if(err) { break; }
     }
 done:
     return err;
-} // end of app_verify_format_resource_id
+} // end of app_verify_printable_string
 
 ARPC_STATUS_CODE api__render_rpc_reply_qname(
         const char *name_pattern, arpc_exe_arg_t *args, char *wr_buf, size_t wr_sz)

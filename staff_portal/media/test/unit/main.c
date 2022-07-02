@@ -3,6 +3,7 @@
 
 TestSuite *app_appcfg_generic_tests(void);
 TestSuite *app_cfg_parser_tests(void);
+TestSuite *app_transcoder_cfg_parser_tests(void);
 TestSuite *app_rpc_cfg_parser_tests(void);
 TestSuite *app_rpc_core_tests(void);
 TestSuite *app_storage_cfg_parser_tests(void);
@@ -41,6 +42,7 @@ int main(int argc, char **argv) {
     add_suite(suite, app_model_connection_tests());
     add_suite(suite, app_model_mariadb_tests());
     add_suite(suite, app_model_query_tests());
+    add_suite(suite, app_transcoder_cfg_parser_tests());
     add_suite(suite, app_views_common_tests());
     add_suite(suite, app_appcfg_generic_tests());
     if(argc > 1) {

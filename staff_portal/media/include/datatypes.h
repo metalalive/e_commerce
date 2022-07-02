@@ -12,6 +12,7 @@ extern "C" {
 #include <h2o.h>
 #include <rhonabwy.h>
 
+#include "transcoder/datatypes.h"
 #include "storage/datatypes.h"
 #include "rpc/datatypes.h"
 
@@ -94,6 +95,7 @@ typedef struct {
     } tmp_buf; // in case of handling huge data of concurrently incoming requests
     struct app_jwks_t  jwks;
     H2O_VECTOR(arpc_cfg_t) rpc;
+    aav_cfg_transcode_t  transcoder;
     // pointer to path where current executable is placed
     const char   *exe_path;
     // number of workers in the app, defaults to number of CPUs, unrelated to number of listeners

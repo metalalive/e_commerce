@@ -50,6 +50,9 @@ PKG_CHECK_MODULES(P11KIT    REQUIRED  p11-kit-1>=0.24.0)
 PKG_CHECK_MODULES(MARIADB  REQUIRED  libmariadb>=3.1.7)
 PKG_CHECK_MODULES(RABBITMQ REQUIRED  librabbitmq>=0.11.0)
 
+PKG_CHECK_MODULES(AVCODEC   REQUIRED  libavcodec>=58.91.100)
+PKG_CHECK_MODULES(AVFORMAT  REQUIRED  libavformat>=58.45.100)
+
 PKG_CHECK_MODULES(LIBCURL  REQUIRED libcurl>=7.69.0)
 PKG_CHECK_MODULES(LIBNGHTTP2  REQUIRED libnghttp2>=1.46.0)
 
@@ -112,6 +115,8 @@ INCLUDE_DIRECTORIES(
     ${P11KIT_INCLUDE_DIRS}
     ${MARIADB_INCLUDE_DIRS}
     ${RABBITMQ_INCLUDE_DIRS}
+    ${AVFORMAT_INCLUDE_DIRS}
+    ${AVCODEC_INCLUDE_DIRS}
     ${LIBCURL_INCLUDE_DIRS}
     ${LIBNGHTTP2_INCLUDE_DIRS}
     ${JANSSON_INCLUDE_DIRS})
@@ -128,6 +133,8 @@ LINK_DIRECTORIES(
     ${P11KIT_LIBRARY_DIRS}
     ${MARIADB_LIBRARY_DIRS}
     ${RABBITMQ_LIBRARY_DIRS}
+    ${AVFORMAT_LIBRARY_DIRS}
+    ${AVCODEC_LIBRARY_DIRS}
     ${JANSSON_LIBRARY_DIRS}
     ${LIBCURL_LIBRARY_DIRS}
     ${LIBNGHTTP2_LIBRARY_DIRS} )
@@ -194,6 +201,7 @@ SET(APP_COMMON_SOURCE_FILES
     src/rpc/cfg_parser.c
     src/storage/cfg_parser.c
     src/storage/localfs.c
+    src/transcoder/cfg_parser.c
     src/app_cfg.c
     src/utils.c
     src/base64.c
@@ -228,6 +236,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/connection.c
     test/unit/models/query.c
     test/unit/models/mariadb.c
+    test/unit/transcoder/cfg_parser.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c
@@ -237,6 +246,8 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/mock/mariadb.c
     test/unit/mock/rabbitmq.c
     test/unit/mock/openssl.c
+    test/unit/mock/ffmpeg/libavformat.c
+    test/unit/mock/ffmpeg/libavcodec.c
     ${APP_DBMODEL_SOURCE_FILES}
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
@@ -267,6 +278,8 @@ SET(APP_SERVER_DEV_LIBRARIES
     ${P11KIT_LIBRARIES}
     ${MARIADB_LIBRARIES}
     ${RABBITMQ_LIBRARIES}
+    ${AVFORMAT_LIBRARIES}
+    ${AVCODEC_LIBRARIES}
     ${LIBCURL_LIBRARIES}
     ${LIBNGHTTP2_LIBRARIES}
     ${APP_COMMON_LIBRARIES})
@@ -274,6 +287,8 @@ SET(APP_SERVER_DEV_LIBRARIES
 SET(RPC_CONSUMER_DEV_LIBRARIES
     ${OPENSSL_LIBRARIES}
     ${RABBITMQ_LIBRARIES}
+    ${AVFORMAT_LIBRARIES}
+    ${AVCODEC_LIBRARIES}
     ${APP_COMMON_LIBRARIES})
 
 SET(APP_UNIT_TEST_LIBRARIES ${APP_COMMON_LIBRARIES})
@@ -310,7 +325,7 @@ ADD_CUSTOM_TARGET(dev_app_server
     DEPENDS ${APP_SERVER_EXE_NAME})
 
 ADD_CUSTOM_TARGET(dev_rpc_worker
-    ##gdb -args
+    gdb -args
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${RPC_CONSUMER_EXE_NAME})
@@ -334,7 +349,7 @@ ADD_CUSTOM_TARGET(integration_test
     COMMAND python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${ITEST_APPCFG_PATH} &
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-        gdb -args # uncomment this line for debugging
+        ##gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${ITEST_APPCFG_PATH}
     COMMAND python -m  media.setup_test_env EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH}

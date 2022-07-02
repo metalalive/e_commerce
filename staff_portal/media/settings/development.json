@@ -155,6 +155,29 @@
             }
         }
     ],
+    "transcoder": {
+        "input": {
+            "demuxers": ["mp4", "mov"],
+            "decoders": {
+                "video":["h264", "hevc"],
+                "audio":["aac"]
+            }
+        },
+        "output": {
+            "muxers": ["hls"],
+            "encoders": {
+                "video":["libx264", "libx265"],
+                "audio":["aac"]
+            },
+            "video": {
+                "pixels": [[1080, 600], [720, 540], [480, 360], [360, 270], [240, 180], [160, 120]],
+                "fps": [35,30,28,25,24,20,16,15,11]
+            },
+            "audio": {
+                "bitrate_kbps": [128, 96, 64, 32]
+            }
+        }
+    },
     "tmp_buf": {
         "path": "tmp/buffer/media/development",
         "threshold_in_bytes": 102400

@@ -148,7 +148,9 @@ extern "C" {
 #define DATETIME_STR_SIZE    20
 #define USR_ID_STR_SIZE      10
 #define UPLOAD_INT2HEX_SIZE(x) (sizeof(x) << 1)
-#define APP_RESOURCE_ID_SIZE  8 // TODO, synchronize with DB migration config file
+// TODO, synchronize following parameters with DB migration config file
+#define APP_RESOURCE_ID_SIZE  8
+#define APP_TRANSCODED_VERSION_SIZE  2
 
 DBA_RES_CODE  app_validate_uncommitted_upld_req (
     RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,
@@ -162,7 +164,7 @@ DBA_RES_CODE  app_verify_existence_resource_id (
     app_middleware_fn success_cb,  app_middleware_fn failure_cb
 );
 
-int  app_verify_format_resource_id(const char *resource_id);
+int  app_verify_printable_string(const char *str, size_t limit_sz);
 
 void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
 

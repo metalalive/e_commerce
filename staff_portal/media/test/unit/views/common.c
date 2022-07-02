@@ -170,7 +170,7 @@ Ensure(apiview_common_test__resource_id_found) {
 #define  UTEST_NUM_ENTRIES_HASHMAP  5
     struct hsearch_data    htab = {0};
     hcreate_r(UTEST_NUM_ENTRIES_HASHMAP, &htab);
-    app_save_ptr_to_hashmap(&htab, "resource_id", "9cK4yf");
+    app_save_ptr_to_hashmap(&htab, "res_id_encoded", "9cK4yf");
     uv_loop_t     *mock_loop = uv_default_loop();
     h2o_context_t  http_srv_ctx = {.loop=mock_loop};
     h2o_conn_t     http_conn = {.ctx=&http_srv_ctx};
@@ -215,14 +215,14 @@ Ensure(apiview_common_test__resource_id_found) {
 
 
 Ensure(apiview_common_test__resource_id_format) {
-    assert_that(app_verify_format_resource_id(NULL), is_not_equal_to(0));
-    assert_that(app_verify_format_resource_id(""), is_not_equal_to(0));
-    assert_that(app_verify_format_resource_id("abcde"), is_equal_to(0));
-    assert_that(app_verify_format_resource_id("abc e"), is_not_equal_to(0));
-    assert_that(app_verify_format_resource_id("a\x01cde"), is_not_equal_to(0));
+    assert_that(app_verify_printable_string(NULL,0), is_not_equal_to(0));
+    assert_that(app_verify_printable_string("",0), is_not_equal_to(0));
+    assert_that(app_verify_printable_string("abcde", 5), is_equal_to(0));
+    assert_that(app_verify_printable_string("abc e", 5), is_not_equal_to(0));
+    assert_that(app_verify_printable_string("a\x01cde", 5), is_not_equal_to(0));
     char res_id[APP_RESOURCE_ID_SIZE + 5] = {0};
     memset(&res_id[0], 0x61, sizeof(char) * (APP_RESOURCE_ID_SIZE + 3));
-    assert_that(app_verify_format_resource_id(&res_id[0]), is_not_equal_to(0));
+    assert_that(app_verify_printable_string(&res_id[0], APP_RESOURCE_ID_SIZE), is_not_equal_to(0));
 } // end of apiview_common_test__resource_id_format
 
 TestSuite *app_views_common_tests(void)
