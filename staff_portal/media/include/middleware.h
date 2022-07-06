@@ -7,7 +7,7 @@ extern "C" {
 #include <search.h>
 #include "datatypes.h"
 
-#define  NUM_ENTRIES_APP_HASHMAP 10
+#define  NUM_ENTRIES_APP_HASHMAP 15 // TODO, parameterize, for each API endpoint
 
 typedef struct _app_middleware_node_s
 {

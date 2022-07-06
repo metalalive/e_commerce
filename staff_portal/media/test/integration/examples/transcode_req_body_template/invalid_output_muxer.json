@@ -1,0 +1,29 @@
+{
+    "elementary_streams":{
+        "video-stream0": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 180,
+                "width_pixel": 240,
+                "framerate": 15
+            }
+        },
+        "audio-stream0": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 64 }
+        }
+    },
+    "resource_id": "e234s678",
+    "outputs":{
+        "Jk": {
+            "container": "hls",
+            "elementary_streams": ["video-stream0", "audio-stream0"]
+        },
+        "pG": {
+            "container": "mpeg0",
+            "elementary_streams": ["video-stream0", "audio-stream0"]
+        }
+    }
+}

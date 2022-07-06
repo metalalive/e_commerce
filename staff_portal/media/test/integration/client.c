@@ -152,10 +152,6 @@ void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, v
             .resp_body = mkstemp(&tmpfile_path[2][0])
         }
     };
-    // delete immediately as soon as there is no file descriptor pointing to the temp file
-    unlink(&tmpfile_path[0][0]);
-    unlink(&tmpfile_path[1][0]);
-    unlink(&tmpfile_path[2][0]);
     setup_client_request(ez_handle, &privdata, pubdata);
     setup_tls_client_request(ez_handle);
     res = curl_easy_perform(ez_handle); // send synchronous HTTP request
@@ -167,6 +163,10 @@ void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, v
     close(privdata.fds.req_body);
     close(privdata.fds.resp_body);
     close(privdata.fds.resp_hdr);
+    // delete immediately as soon as there is no file descriptor pointing to the temp file
+    unlink(&tmpfile_path[0][0]);
+    unlink(&tmpfile_path[1][0]);
+    unlink(&tmpfile_path[2][0]);
     curl_slist_free_all(privdata.headers);
     if(form) {
         curl_mime_free(form);

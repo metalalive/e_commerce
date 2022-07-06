@@ -119,8 +119,8 @@
                             "render_fn":"api__render_rpc_reply_qname"
                         },
                         "correlation_id": {
-                            "pattern":"rpc.media.mp_done.corr_id.%s",
-                            "render_fn":"api__render_rpc_corr_id"
+                            "pattern":"rpc.media.mp_done.corr_id.1234",
+                            "render_fn":null
                         },
                         "task_handler": "api_complete_multipart_upload__rpc_task_handler",
                         "durable": true,
@@ -139,7 +139,7 @@
                         },
                         "correlation_id": {
                             "pattern":"rpc.media.mp_done.corr_id.%s",
-                            "render_fn":"api__render_rpc_corr_id"
+                            "render_fn":"api__start_transcoding__render_rpc_corr_id"
                         },
                         "task_handler": "api_transcode_video_file__rpc_task_handler",
                         "durable": true
@@ -177,7 +177,7 @@
                 "fps": [35,30,28,25,24,20,16,15,11]
             },
             "audio": {
-                "bitrate_kbps": [128, 96, 64, 32]
+                "bitrate_kbps": [128, 96, 64, 55, 32]
             }
         }
     },

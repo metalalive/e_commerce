@@ -1,5 +1,4 @@
 #include <ctype.h>
-#include <openssl/sha.h>
 
 #include "utils.h"
 #include "views.h"
@@ -198,7 +197,8 @@ ARPC_STATUS_CODE api__render_rpc_reply_qname(
         const char *name_pattern, arpc_exe_arg_t *args, char *wr_buf, size_t wr_sz)
 {
     ARPC_STATUS_CODE status = APPRPC_RESP_OK;
-    uint32_t usr_prof_id = (uint32_t) json_integer_value((json_t *)args->usr_data);
+    json_t *_usr_data = (json_t *)args->usr_data;
+    uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(_usr_data,"usr_id"));
     if(usr_prof_id > 0) {
         snprintf(wr_buf, wr_sz, name_pattern, usr_prof_id);
     } else {
@@ -206,32 +206,4 @@ ARPC_STATUS_CODE api__render_rpc_reply_qname(
     }
     return status;
 } // end of api__render_rpc_reply_qname
-
-
-ARPC_STATUS_CODE api__render_rpc_corr_id (
-        const char *name_pattern, arpc_exe_arg_t *args, char *wr_buf, size_t wr_sz)
-{
-    ARPC_STATUS_CODE status = APPRPC_RESP_OK;
-    size_t md_hex_sz = (SHA_DIGEST_LENGTH << 1) + 1;
-    size_t tot_wr_sz = strlen(name_pattern) + md_hex_sz;
-    if(tot_wr_sz > wr_sz) {
-        return APPRPC_RESP_MEMORY_ERROR;
-    }
-    uint32_t usr_prof_id = (uint32_t) json_integer_value((json_t *)args->usr_data);
-    if(usr_prof_id > 0) {
-        SHA_CTX  sha_ctx = {0};
-        SHA1_Init(&sha_ctx);
-        SHA1_Update(&sha_ctx, (const char *)&usr_prof_id, sizeof(usr_prof_id));
-        SHA1_Update(&sha_ctx, (const char *)&args->_timestamp, sizeof(args->_timestamp));
-        char md[SHA_DIGEST_LENGTH] = {0};
-        char md_hex[md_hex_sz];
-        SHA1_Final((unsigned char *)&md[0], &sha_ctx);
-        app_chararray_to_hexstr(&md_hex[0], md_hex_sz - 1, &md[0], SHA_DIGEST_LENGTH);
-        md_hex[md_hex_sz - 1] = 0x0;
-        snprintf(wr_buf, wr_sz, name_pattern, &md_hex[0]);
-    } else {
-        status = APPRPC_RESP_ARG_ERROR;
-    }
-    return status;
-} // end of api__render_rpc_corr_id
 

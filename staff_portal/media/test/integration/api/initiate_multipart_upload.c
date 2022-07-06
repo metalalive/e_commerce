@@ -26,6 +26,8 @@ static void test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_p
                         json_object_set_new(item, "usr_id",  json_integer(usr_id));
                         json_object_set_new(item, "req_seq", json_integer(req_seq));
                         json_object_set_new(item, "part", json_array());
+                        json_object_set_new(item, "resource_id", json_null());
+                        json_object_set_new(item, "transcode_outputs", json_object());
                         json_array_append_new(_app_itest_active_upload_requests, item);
                     }
                 }

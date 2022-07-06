@@ -1,0 +1,34 @@
+{
+    "elementary_streams":{
+        "video-stream0": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 600,
+                "width_pixel": 1080,
+                "framerate": 28
+            }
+        },
+        "video-stream1-wrong-resolution": {
+            "type": "video",
+            "codec": "libx265",
+            "attribute":{
+                "height_pixel": -23,
+                "width_pixel": 45,
+                "framerate": 20
+            }
+        },
+        "audio-stream0": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 64 }
+        },
+        "audio-stream1": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 55 }
+        }
+    },
+    "resource_id": "iE938eu3",
+    "outputs":{}
+}

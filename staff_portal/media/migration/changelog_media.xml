@@ -190,5 +190,24 @@
     <changeSet id="tag_version_0.0.6" author="Haam">
         <tagDatabase tag="0.0.6" />
     </changeSet>
+    <changeSet id="add-metadata-to-transcoded-video-table" author="Haam">
+        <comment>
+        </comment>
+        <sql dbms="mariadb">
+            RENAME TABLE `transcoded_file` TO `transcoded_video`;
+            ALTER TABLE `transcoded_video`
+                ADD COLUMN `height_pixel`  SMALLINT UNSIGNED NOT NULL,
+                ADD COLUMN `width_pixel`   SMALLINT UNSIGNED NOT NULL,
+                ADD COLUMN `framerate`     TINYINT  UNSIGNED NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `transcoded_video` DROP COLUMN `height_pixel`,
+                DROP COLUMN `width_pixel`, DROP COLUMN `framerate`;
+            RENAME TABLE `transcoded_video` TO `transcoded_file`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.7" author="Haam">
+        <tagDatabase tag="0.0.7" />
+    </changeSet>
 </databaseChangeLog>
 

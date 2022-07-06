@@ -1,0 +1,27 @@
+{
+    "elementary_streams":{
+        "video-stream0": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 270,
+                "width_pixel": 360,
+                "framerate": 28
+            }
+        },
+        "sideband-not-allowed": {
+            "type": "sideband",
+            "attribute":{
+                "rpm": 2540,
+                "voltage": 3.3
+            }
+        },
+        "audio-stream0": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 64 }
+        }
+    },
+    "resource_id": "iE938eu3",
+    "outputs":{}
+}

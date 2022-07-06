@@ -1,0 +1,25 @@
+{
+    "elementary_streams":{
+        "video-stream1": {
+            "type": "video",
+            "codec": "libx265",
+            "attribute":{
+                "height_pixel": 540,
+                "width_pixel": 720,
+                "framerate": 20
+            }
+        },
+        "audio-stream0": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 64 }
+        },
+        "audio-stream1": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 1 }
+        }
+    },
+    "resource_id": "iE938eu3",
+    "outputs":{}
+}
