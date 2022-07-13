@@ -39,15 +39,14 @@ Ensure(gen_middleware_tests) {
         assert_that(curr->fn, is_equal_to(expect_fn_order[idx]));
         curr = curr->next;
     } // end of loop
-#define NUM_KEYS_HTAB NUM_ENTRIES_APP_HASHMAP
-    char *test_keys[] = {"j83","4t9","34u","9ut","4yu","wrf","xin","mqf"};
+    char *test_keys[] = {"j83","4t9","34u","9ut","4yu","wrf","xin","mqf", NULL};
     const char *test_data = "qwertyuiopasdfghjklzxcvbnm";
-    for(idx = 0; idx < NUM_KEYS_HTAB; idx++) {
+    for(idx = 0; test_keys[idx]; idx++) {
         e.key = test_keys[idx];
         e.data = (void *)&test_data[idx];
         assert_that( hsearch_r(e, ENTER, &e_ret, head->data) , is_not_equal_to(0) );
     } // end of loop
-    for(idx = 0; idx < NUM_KEYS_HTAB; idx++) {
+    for(idx = 0; test_keys[idx]; idx++) {
         e.key = test_keys[idx];
         e.data = NULL;
         e_ret = NULL;
@@ -62,7 +61,6 @@ Ensure(gen_middleware_tests) {
     assert_that(e_ret, is_not_null);
     assert_that(e_ret->data, is_equal_to(head));
     app_cleanup_middlewares(head);
-#undef NUM_KEYS_HTAB
 #undef EXPECT_FN_ORDER
 #undef NUM_FNS
 } // end of gen_middleware_tests

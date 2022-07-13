@@ -118,6 +118,30 @@ error:
     return -1;
 }
 
+
+int appcfg_parse_local_tmp_buf(json_t *obj, app_cfg_t *_app_cfg) {
+    if (!json_is_object(obj)) { goto error; }
+    json_t *path_obj = json_object_get((const json_t *)obj, "path");
+    json_t *threshold_obj = json_object_get((const json_t *)obj, "threshold_in_bytes");
+    const char *path = json_string_value(path_obj);
+    int  threshold = (int) json_integer_value(threshold_obj);
+    if (!path || threshold <= 0) {
+        h2o_error_printf("[parsing] invalid tmp_buf settings, path: %s , threshold: %d bytes\n",
+                path, threshold);
+        goto error;
+    }
+    // access check to the path
+    if(access(path, F_OK | R_OK | W_OK) != 0) {
+        h2o_error_printf("[parsing] not all requested permissions granted, path: %s\n", path);
+        goto error;
+    }
+    _app_cfg->tmp_buf.threshold_bytes = (unsigned int)threshold;
+    _app_cfg->tmp_buf.path = strdup(path);
+    return 0;
+error:
+    return -1;
+} // end of appcfg_parse_local_tmp_buf
+
 void appcfg_notify_all_workers(app_cfg_t *app_cfg) {
     if(!app_cfg || !app_cfg->server_notifications.entries) {
         return;

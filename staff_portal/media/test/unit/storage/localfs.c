@@ -221,10 +221,13 @@ Ensure(storage_localfs_rwfile_test) {
         cfg->super.op.write.src = ptr;
         cfg->super.op.write.src_sz = 0;
         cfg->super.op.write.src_max_nbytes = wr_buf_sz;
+        cfg->super.op.write.offset  = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
         cfg->super.op.write.cb = utest_3_asa_write_cb;
         ptr += wr_buf_sz;
         cfg->super.op.read.dst  = ptr;
         cfg->super.op.read.dst_sz  = rd_buf_sz;
+        cfg->super.op.read.dst_max_nbytes  = rd_buf_sz;
+        cfg->super.op.read.offset  = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
         cfg->super.op.read.cb = utest_3_asa_read_cb;
     }
     ASA_RES_CODE result = app_storage_localfs_open((asa_op_base_cfg_t *)cfg);

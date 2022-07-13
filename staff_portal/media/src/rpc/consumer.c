@@ -7,6 +7,7 @@
 #include "rpc/cfg_parser.h"
 #include "rpc/core.h"
 #include "rpc/consumer.h"
+#include "storage/cfg_parser.h"
 #include "transcoder/cfg_parser.h"
 
 // TODO, parameterize the delay time for heartbeat frame to send (to AMQP broker).
@@ -64,7 +65,11 @@ static int parse_cfg_params(const char *cfg_file_path, app_cfg_t *app_cfg)
     if (err) {  goto error; }
     err = parse_cfg_rpc_callee(json_object_get((const json_t *)root, "rpc"), app_cfg);
     if (err) {  goto error; }
+    err = parse_cfg_storages(json_object_get((const json_t *)root, "storages"), app_cfg);
+    if (err) {  goto error; }
     err = parse_cfg_transcoder(json_object_get((const json_t *)root, "transcoder"), app_cfg);
+    if (err) {  goto error; }
+    err = appcfg_parse_local_tmp_buf(json_object_get((const json_t *)root, "tmp_buf"), app_cfg);
     if (err) {  goto error; }
     json_decref(root);
     return 0;
@@ -185,7 +190,7 @@ static  void appworker_timerpoll_message_cb(app_timer_poll_t *target, int status
     ARPC_STATUS_CODE res = APPRPC_RESP_OK;
     if(reconnect_required) {
         if(expected_timeout_reaching) { // try consuming, reconnect if error returned
-            res = app_rpc_consume_message(mq->conn);
+            res = app_rpc_consume_message(mq->conn, mq->loop);
             // operation timeout means empty queue, also implicitly means the connection is still active
             reconnect_ok = (res == APPRPC_RESP_OK) || (res == APPRPC_RESP_MSGQ_OPERATION_TIMEOUT);
             if(reconnect_ok) {
@@ -201,7 +206,7 @@ static  void appworker_timerpoll_message_cb(app_timer_poll_t *target, int status
         reconnect_ok = 1;
     }
     if(reconnect_ok) {
-        app_rpc_consume_message(mq->conn);
+        app_rpc_consume_message(mq->conn, mq->loop);
         if(!mq->broker_active) {
             // will re-init both poller and timer in next event-loop iteration
             uv_timer_stop(&target->timeout);

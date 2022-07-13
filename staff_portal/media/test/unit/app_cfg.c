@@ -41,20 +41,15 @@ static void utest_appcfg__worker_entry(void *data)
     struct worker_init_data_t *actual_data = (struct worker_init_data_t *)data;
     assert_that(actual_data->app_cfg, is_not_null);
     assert_that(actual_data->loop, is_not_null);
-    mock(actual_data);
 } // end of utest_appcfg__worker_entry
 
 Ensure(appcfg_start_workers_test) {
 #define  NUM_EXPECT_WORKERS  2
     app_cfg_t acfg = {0};
     struct worker_init_data_t expect_data[NUM_EXPECT_WORKERS + 1] = {0};
-    size_t idx = 0;
     json_t *obj = json_integer(NUM_EXPECT_WORKERS);
     appcfg_parse_num_workers(obj, &acfg);
     json_decref(obj);
-    for(idx = 0; idx < (NUM_EXPECT_WORKERS + 1); idx++) {
-        expect(utest_appcfg__worker_entry);
-    }
     int err = appcfg_start_workers(&acfg, &expect_data[0], utest_appcfg__worker_entry);
     assert_that(err, is_equal_to(0));
     appcfg_terminate_workers(&acfg, expect_data);

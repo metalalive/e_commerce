@@ -57,11 +57,14 @@ struct _asa_op_base_cfg_s {
             char *src;
             size_t src_sz;
             size_t src_max_nbytes;
+            int offset;
         } write;
         struct {
             asa_read_cb_t cb;
             char *dst;
             size_t dst_sz;
+            size_t dst_max_nbytes;
+            int offset;
         } read;
         struct {
             asa_seek_cb_t cb;
@@ -87,6 +90,8 @@ typedef struct {
     char *base_path;
     asa_cfg_ops_t  ops;
 } asa_cfg_t;
+
+#define APP_STORAGE_USE_CURRENT_FILE_OFFSET  -1
 
 #ifdef __cplusplus
 } // end of extern C clause

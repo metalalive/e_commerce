@@ -423,6 +423,7 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
             filepath[filepath_sz - 1] = 0x0;
             memcpy(asa_cfg->super.op.open.dst_path, filepath, filepath_sz);
         }
+        asa_cfg->super.op.write.offset = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
         asa_cfg->super.op.write.src_max_nbytes = wr_src_buf_sz;
         // will be updated after file chunk is read sequentially from multipart entity
         asa_cfg->super.op.write.src_sz = 0;

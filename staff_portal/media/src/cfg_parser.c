@@ -81,30 +81,6 @@ static int parse_cfg_tfo_q_len(json_t *obj, app_cfg_t *_app_cfg) {
 }
 
 
-static int parse_cfg_tmp_buf(json_t *obj, app_cfg_t *_app_cfg) {
-    if (!json_is_object(obj)) { goto error; }
-    json_t *path_obj = json_object_get((const json_t *)obj, "path");
-    json_t *threshold_obj = json_object_get((const json_t *)obj, "threshold_in_bytes");
-    const char *path = json_string_value(path_obj);
-    int  threshold = (int) json_integer_value(threshold_obj);
-    if (!path || threshold <= 0) {
-        h2o_error_printf("[parsing] invalid tmp_buf settings, path: %s , threshold: %d bytes\n",
-                path, threshold);
-        goto error;
-    }
-    // access check to the path
-    if(access(path, F_OK | R_OK | W_OK) != 0) {
-        h2o_error_printf("[parsing] not all requested permissions granted, path: %s\n", path);
-        goto error;
-    }
-    _app_cfg->tmp_buf.threshold_bytes = (unsigned int)threshold;
-    _app_cfg->tmp_buf.path = strdup(path);
-    return 0;
-error:
-    return EX_CONFIG;
-} // end of parse_cfg_tmp_buf
-
-
 static int parse_cfg_auth_keystore(json_t *obj, app_cfg_t *app_cfg) {
     if (!json_is_object(obj)) { goto error; }
     const char *url     = json_string_value(json_object_get(obj, "url"));
@@ -445,7 +421,7 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
     if (result_error) {  goto error; }
     result_error = parse_cfg_listeners(json_object_get((const json_t *)root, "listen"), _app_cfg);
     if (result_error) {  goto error; }
-    result_error = parse_cfg_tmp_buf(json_object_get((const json_t *)root, "tmp_buf"), _app_cfg);
+    result_error = appcfg_parse_local_tmp_buf(json_object_get((const json_t *)root, "tmp_buf"), _app_cfg);
     if (result_error) {  goto error; }
     result_error = parse_cfg_auth_keystore(json_object_get((const json_t *)root, "auth_keystore"), _app_cfg);
     if (result_error) {  goto error; }

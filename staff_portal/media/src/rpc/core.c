@@ -428,13 +428,13 @@ static void apprpc_consume_handler_finalize(arpc_receipt_t *r, char *out, size_t
 } // end of apprpc_consume_handler_finalize
 
 
-ARPC_STATUS_CODE app_rpc_consume_message(void *ctx)
+ARPC_STATUS_CODE app_rpc_consume_message(void *ctx, void *loop)
 { // consume one message at a time in non-blocking manner
     ARPC_STATUS_CODE res = APPRPC_RESP_OK;
     struct arpc_ctx_t *_ctx = (struct arpc_ctx_t *)ctx;
     struct timeval  timeout = {0}; // immediately return if all the queues are empty.
     amqp_envelope_t envelope = {0}; // initialize automatically in amqp_consume_message(...)
-    if(!_ctx || !_ctx->conn || !_ctx->ref_cfg) {
+    if(!_ctx || !_ctx->conn || !_ctx->ref_cfg || !loop) {
         return APPRPC_RESP_ARG_ERROR;
     }
     if(!_ctx->consumer_setup_done) {
@@ -460,7 +460,7 @@ ARPC_STATUS_CODE app_rpc_consume_message(void *ctx)
         arpc_receipt_t *r = malloc(sizeof(arpc_receipt_t));
         amqp_bytes_t *corr_id = &envelope.message.properties.correlation_id;
         amqp_bytes_t *body    = &envelope.message.body;
-        *r = (arpc_receipt_t) {.ctx=ctx, .return_fn=apprpc_consume_handler_finalize, 
+        *r = (arpc_receipt_t) {.ctx=ctx, .loop=loop, .return_fn=apprpc_consume_handler_finalize, 
             ._msg_obj=malloc(sizeof(amqp_envelope_t)), .routing_key=envelope.routing_key.bytes,
             .job_id={.len=corr_id->len, .bytes=corr_id->bytes}, ._timestamp=(uint64_t)time(NULL),
             .msg_body={.len=body->len, .bytes=body->bytes}

@@ -309,7 +309,7 @@ Ensure(rpc_ctx_lookup_test) {
 } // end of rpc_ctx_lookup_test
 
 Ensure(rpc_consume_test__cfg_error) {
-    char dummy[1] = {0};
+    char dummy[2] = {0};
     arpc_cfg_bind_t bindcfg = {.q_name="utest_rpc_method_queue"};
     arpc_cfg_t  mock_cfg = {.bindings={.entries=&bindcfg, .size=1}};
     struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=0, .ref_cfg=&mock_cfg,
@@ -320,12 +320,12 @@ Ensure(rpc_consume_test__cfg_error) {
             when(q_name, is_equal_to("utest_rpc_method_queue")) );
     expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
     expect(amqp_destroy_envelope);
-    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs, (void *)&dummy[1]);
     assert_that(res, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
 } // end of rpc_consume_test__cfg_error
 
 Ensure(rpc_consume_test__empty_queue) {
-    char dummy[1] = {0};
+    char dummy[2] = {0};
     arpc_cfg_t  mock_cfg = {0};
     struct arpc_ctx_t mock_ctxs = {.consumer_setup_done=1, .ref_cfg=&mock_cfg,
         .conn = (void *)&dummy[0]};
@@ -334,12 +334,12 @@ Ensure(rpc_consume_test__empty_queue) {
     expect(amqp_maybe_release_buffers);
     expect(amqp_consume_message, will_return(&mock_reply_err));
     expect(amqp_destroy_envelope);
-    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs, (void *)&dummy[1]);
     assert_that(res, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_TIMEOUT));
 } // end of rpc_consume_test__empty_queue
 
 Ensure(rpc_consume_test__unknown_route) {
-    char dummy[1] = {0};
+    char dummy[2] = {0};
     const char *mock_route_key = "abcde";
     size_t mock_route_key_sz = strlen(mock_route_key);
     arpc_cfg_t  mock_cfg = {0};
@@ -352,13 +352,13 @@ Ensure(rpc_consume_test__unknown_route) {
             will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
         );
     expect(amqp_destroy_envelope);
-    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs, (void *)&dummy[1]);
     assert_that(res, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
 } // end of rpc_consume_test__unknown_route
 
 Ensure(rpc_consume_test__missing_handler) {
 #define EXPECT_NUM_BINDINGS 3
-    char dummy[1] = {0};
+    char dummy[2] = {0};
     arpc_cfg_bind_t bindcfg[EXPECT_NUM_BINDINGS] = {
         {.routing_key="utest.rpc.operation1"},
         {.routing_key="utest.rpc.operation2"},
@@ -375,7 +375,7 @@ Ensure(rpc_consume_test__missing_handler) {
             will_set_contents_of_parameter(evp_routekey_sz, &mock_route_key_sz, sizeof(size_t)),
         );
     expect(amqp_destroy_envelope);
-    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs, (void *)&dummy[1]);
     assert_that(res, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
 #undef EXPECT_NUM_BINDINGS
 } // end of rpc_consume_test__missing_handler
@@ -391,7 +391,7 @@ static void utest_mock_consumer_handler(arpc_receipt_t *r)
 
 Ensure(rpc_consume_test__handler_done__broker_down) {
 #define EXPECT_NUM_BINDINGS 1
-    char dummy[2] = {0};
+    char dummy[3] = {0};
     arpc_cfg_bind_t bindcfg[EXPECT_NUM_BINDINGS] = {
         {.routing_key="utest.rpc.operation.1234", .reply={.task_handler=utest_mock_consumer_handler}},
     };
@@ -421,7 +421,7 @@ Ensure(rpc_consume_test__handler_done__broker_down) {
         expect(amqp_destroy_connection);
         expect(amqp_destroy_envelope);
     }
-    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs, (void *)&dummy[2]);
     assert_that(res, is_equal_to(APPRPC_RESP_OK));
 #undef EXPECT_NUM_BINDINGS
 } // end of rpc_consume_test__handler_done__broker_down
@@ -429,7 +429,7 @@ Ensure(rpc_consume_test__handler_done__broker_down) {
 
 Ensure(rpc_consume_test__handler_done__send_reply_error) {
 #define EXPECT_NUM_BINDINGS 1
-    char dummy[2] = {0};
+    char dummy[3] = {0};
     arpc_cfg_bind_t bindcfg[EXPECT_NUM_BINDINGS] = {
         {.routing_key="utest.rpc.operation.1234", .reply={.task_handler=utest_mock_consumer_handler}},
     };
@@ -452,7 +452,7 @@ Ensure(rpc_consume_test__handler_done__send_reply_error) {
         expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
         expect(amqp_destroy_envelope);
     }
-    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs, (void *)&dummy[2]);
     assert_that(res, is_equal_to(APPRPC_RESP_OK));
 #undef EXPECT_NUM_BINDINGS
 } // end of rpc_consume_test__handler_done__send_reply_error
@@ -460,7 +460,7 @@ Ensure(rpc_consume_test__handler_done__send_reply_error) {
 
 Ensure(rpc_consume_test__handler_done__send_reply_ok) {
 #define EXPECT_NUM_BINDINGS 1
-    char dummy[2] = {0};
+    char dummy[3] = {0};
     arpc_cfg_bind_t bindcfg[EXPECT_NUM_BINDINGS] = {
         {.routing_key="utest.rpc.operation.1234", .reply={.task_handler=utest_mock_consumer_handler}},
     };
@@ -484,7 +484,7 @@ Ensure(rpc_consume_test__handler_done__send_reply_ok) {
                 when(raw_body, is_equal_to_string(expect_return_body)));
         expect(amqp_destroy_envelope);
     }
-    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs);
+    ARPC_STATUS_CODE res = app_rpc_consume_message((void *)&mock_ctxs, (void *)&dummy[2]);
     assert_that(res, is_equal_to(APPRPC_RESP_OK));
 #undef EXPECT_NUM_BINDINGS
 } // end of rpc_consume_test__handler_done__send_reply_ok

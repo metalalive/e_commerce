@@ -159,7 +159,6 @@ ASA_RES_CODE app_storage_localfs_rmdir (asa_op_base_cfg_t *cfg)
 
 
 #define NUM_BUFS      1
-#define FILE_OFFSET  -1
 static void _app_storage_localfs_read_cb(uv_fs_t *req) {
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
     ASA_RES_CODE  app_result = (req->result >= 0) ? ASTORAGE_RESULT_COMPLETE: ASTORAGE_RESULT_OS_ERROR;
@@ -171,13 +170,14 @@ ASA_RES_CODE app_storage_localfs_read (asa_op_base_cfg_t *cfg)
 {
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
     if(!_cfg || !_cfg->loop || !cfg->op.read.cb || !cfg->op.read.dst
-            || cfg->op.read.dst_sz == 0) {
+            || cfg->op.read.dst_sz == 0 || cfg->op.read.dst_max_nbytes == 0
+            || cfg->op.read.dst_sz > cfg->op.read.dst_max_nbytes) {
         return ASTORAGE_RESULT_ARG_ERROR;
     }
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
     const uv_buf_t bufs[NUM_BUFS] = {{.base = cfg->op.read.dst, .len = cfg->op.read.dst_sz}};
     int err = uv_fs_read(_cfg->loop, &_cfg->file, _cfg->file.file, bufs, NUM_BUFS,
-               FILE_OFFSET, _app_storage_localfs_read_cb );
+                 cfg->op.read.offset, _app_storage_localfs_read_cb );
     if(err != 0) {
         result = ASTORAGE_RESULT_OS_ERROR;
     }
@@ -203,18 +203,18 @@ ASA_RES_CODE app_storage_localfs_write(asa_op_base_cfg_t *cfg)
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
     const uv_buf_t bufs[NUM_BUFS] = {{.base = cfg->op.write.src, .len = cfg->op.write.src_sz}};
     int err = uv_fs_write(_cfg->loop, &_cfg->file, _cfg->file.file, bufs, NUM_BUFS,
-               FILE_OFFSET, _app_storage_localfs_write_cb );
+                 cfg->op.write.offset, _app_storage_localfs_write_cb );
     if(err != 0) {
         result = ASTORAGE_RESULT_OS_ERROR;
     }
     return result;
 } // end of app_storage_localfs_write
 #undef NUM_BUFS
-#undef FILE_OFFSET
 
 
 ASA_RES_CODE app_storage_localfs_seek (asa_op_base_cfg_t *cfg)
-{ //  TODO, implementation
+{ //  TODO, remove, seek function doesn't seem appropriate for multi-threaded applications
+  //  which requires to access the same file
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
     return result;
 } // end of app_storage_localfs_seek

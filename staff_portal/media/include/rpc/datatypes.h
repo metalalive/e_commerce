@@ -49,6 +49,7 @@ typedef struct arpc_receipt_s {
     arpc_consume_handler_return_fn  return_fn;
     void *ctx; // pointer to specific RPC context
     void *_msg_obj;
+    void *loop;
 } arpc_receipt_t;
 
 typedef struct {

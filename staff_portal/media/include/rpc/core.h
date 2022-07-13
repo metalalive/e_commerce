@@ -25,7 +25,7 @@ void  app_rpc_conn_deinit(void *ctx);
 ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *);
 ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *);
 
-ARPC_STATUS_CODE app_rpc_consume_message(void *ctx);
+ARPC_STATUS_CODE app_rpc_consume_message(void *ctx, void *loop);
 
 ARPC_STATUS_CODE app_rpc_close_connection(void *ctx);
 ARPC_STATUS_CODE app_rpc_open_connection(void *ctx);

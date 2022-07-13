@@ -18,9 +18,10 @@ void  app_global_cfg_set_exepath(const char *exe_path);
 
 void deinit_app_cfg(app_cfg_t *app_cfg);
 
-int appcfg_parse_pid_file(json_t *obj, app_cfg_t *_app_cfg);
+int appcfg_parse_pid_file(json_t *obj, app_cfg_t *acfg);
 int appcfg_parse_errlog_path(json_t *obj, app_cfg_t *acfg);
 int appcfg_parse_num_workers(json_t *obj, app_cfg_t *acfg);
+int appcfg_parse_local_tmp_buf(json_t *obj, app_cfg_t *acfg);
 
 void appcfg_notify_all_workers(app_cfg_t *acfg);
 int  appcfg_start_workers(app_cfg_t *app_cfg, struct worker_init_data_t *data, void (*entry)(void *));
