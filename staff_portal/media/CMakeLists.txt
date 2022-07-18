@@ -53,6 +53,9 @@ PKG_CHECK_MODULES(RABBITMQ REQUIRED  librabbitmq>=0.11.0)
 
 PKG_CHECK_MODULES(AVCODEC   REQUIRED  libavcodec>=58.91.100)
 PKG_CHECK_MODULES(AVFORMAT  REQUIRED  libavformat>=58.45.100)
+PKG_CHECK_MODULES(AVUTIL    REQUIRED  libavutil>=56.51.100)
+PKG_CHECK_MODULES(AVFILTER  REQUIRED  libavfilter>=7.85.100)
+PKG_CHECK_MODULES(AVDEVICE  REQUIRED  libavdevice>=58.10.100)
 
 PKG_CHECK_MODULES(LIBCURL  REQUIRED libcurl>=7.69.0)
 PKG_CHECK_MODULES(LIBNGHTTP2  REQUIRED libnghttp2>=1.46.0)
@@ -120,6 +123,9 @@ INCLUDE_DIRECTORIES(
     ${CMAGIC_INCLUDE_DIR}
     ${AVFORMAT_INCLUDE_DIRS}
     ${AVCODEC_INCLUDE_DIRS}
+    ${AVUTIL_INCLUDE_DIRS}
+    ${AVFILTER_INCLUDE_DIRS}
+    ${AVDEVICE_INCLUDE_DIRS}
     ${LIBCURL_INCLUDE_DIRS}
     ${LIBNGHTTP2_INCLUDE_DIRS}
     ${JANSSON_INCLUDE_DIRS})
@@ -138,6 +144,9 @@ LINK_DIRECTORIES(
     ${RABBITMQ_LIBRARY_DIRS}
     ${AVFORMAT_LIBRARY_DIRS}
     ${AVCODEC_LIBRARY_DIRS}
+    ${AVUTIL_LIBRARY_DIRS}
+    ${AVFILTER_LIBRARY_DIRS}
+    ${AVDEVICE_LIBRARY_DIRS}
     ${JANSSON_LIBRARY_DIRS}
     ${LIBCURL_LIBRARY_DIRS}
     ${LIBNGHTTP2_LIBRARY_DIRS} )
@@ -191,7 +200,9 @@ SET(APP_HTTPSERVER_SOURCE_FILES
 
 SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/file_processor.c
-    src/transcoder/video/mp4.c )
+    src/transcoder/video/mp4/preload.c 
+    src/transcoder/video/mp4/input.c 
+    src/transcoder/video/mp4/init.c )
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
     src/views/async/transcode_video_file.c
@@ -245,6 +256,8 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/query.c
     test/unit/models/mariadb.c
     test/unit/transcoder/cfg_parser.c
+    test/unit/transcoder/file_processor.c
+    test/unit/transcoder/video/mp4/preload.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c
@@ -256,7 +269,9 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/mock/openssl.c
     test/unit/mock/ffmpeg/libavformat.c
     test/unit/mock/ffmpeg/libavcodec.c
+    test/unit/mock/ffmpeg/libavutil.c
     ${APP_DBMODEL_SOURCE_FILES}
+    ${APP_TRANSCODER_SOURCE_FILES}
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
@@ -298,6 +313,9 @@ SET(RPC_CONSUMER_DEV_LIBRARIES
     ${CMAGIC_LIBRARIES}
     ${AVFORMAT_LIBRARIES}
     ${AVCODEC_LIBRARIES}
+    ${AVUTIL_LIBRARIES}
+    ${AVFILTER_LIBRARIES}
+    ${AVDEVICE_LIBRARIES}
     ${APP_COMMON_LIBRARIES})
 
 SET(APP_UNIT_TEST_LIBRARIES ${APP_COMMON_LIBRARIES})

@@ -9,7 +9,9 @@
 
 #define   TEMP_TRANSCODING_FOLDER_NAME  "transcoding"
 #define   APP_ENCODED_RD_BUF_SZ       2048
-#define   APP_ENCODED_WR_BUF_SZ       2048
+#define   ASA_USRARG_RPC_RECEIPT_INDEX  6
+#define   ASA_USRARG_ATFP_INDEX         ATFP_INDEX_IN_ASA_OP_USRARG
+
 
 static  __attribute__((optimize("O0"))) void _rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body)
 {
@@ -63,7 +65,7 @@ static  __attribute__((optimize("O0"))) void  _transcoding__processing_finish_cb
 {
     json_t *err_info = processor->data.error;
     asa_op_base_cfg_t *cfg = processor->data.src.storage.handle;
-    arpc_receipt_t *receipt = cfg->cb_args.entries[0];
+    arpc_receipt_t *receipt = cfg->cb_args.entries[ASA_USRARG_RPC_RECEIPT_INDEX];
     if (json_object_size(err_info) == 0) {
         json_t *api_req = cfg->cb_args.entries[1];
         json_t *resource_id_item = json_object_get(api_req, "resource_id");
@@ -91,7 +93,7 @@ static  void _transcoding__io_init_finish_cb (atfp_t  *processor)
     }
     if (json_object_size(err_info) > 0) {
         asa_op_base_cfg_t *cfg = processor->data.src.storage.handle;
-        arpc_receipt_t *receipt = cfg->cb_args.entries[0];
+        arpc_receipt_t *receipt = cfg->cb_args.entries[ASA_USRARG_RPC_RECEIPT_INDEX];
         _rpc_task_send_reply(receipt, err_info);
         _storage_error_handler(cfg);
          processor->ops->deinit(processor);
@@ -119,9 +121,11 @@ static __attribute__((optimize("O0"))) void _transcoding__first_filechunk__read_
         json_object_set_new(err_info, "transcoder", json_string("unsupported input resource"));
         goto done;
     }
+    cfg->cb_args.entries[ASA_USRARG_ATFP_INDEX] = processor;
     processor->data = (atfp_data_t) {
         .error=err_info, .callback=_transcoding__io_init_finish_cb,
         .spec=cfg->cb_args.entries[1], // request from app server
+        .loop=((asa_op_localfs_cfg_t *)cfg)->loop,
         .local_tmpbuf_basepath=cfg->cb_args.entries[4],
         .src={ .basepath=cfg->cb_args.entries[2], .storage={ .handle=cfg,
             .config=(asa_cfg_t *)cfg->cb_args.entries[3] } },
@@ -133,7 +137,7 @@ done:
     if(m)
         magic_close(m);
     if(json_object_size(err_info) > 0) {
-        arpc_receipt_t *receipt = cfg->cb_args.entries[0];
+        arpc_receipt_t *receipt = cfg->cb_args.entries[ASA_USRARG_RPC_RECEIPT_INDEX];
         _rpc_task_send_reply(receipt, err_info);
         _storage_error_handler(cfg);
         if(processor) {
@@ -159,7 +163,7 @@ static void _transcoding__open_first_filechunk_evt_cb(asa_op_base_cfg_t *cfg, AS
         json_object_set_new(err_info, "storage", json_string("failed to issue read-file operation"));
 done:
     if(json_object_size(err_info) > 0) {
-        arpc_receipt_t *receipt = cfg->cb_args.entries[0];
+        arpc_receipt_t *receipt = cfg->cb_args.entries[ASA_USRARG_RPC_RECEIPT_INDEX];
         _rpc_task_send_reply(receipt, err_info);
         _storage_error_handler(cfg);
     }
@@ -175,25 +179,14 @@ static void _transcoding__create_work_folder_cb(asa_op_base_cfg_t *cfg, ASA_RES_
     }
     size_t dirpath_sz = strlen(cfg->op.mkdir.path.curr_parent); // recover destination path
     memcpy(cfg->op.mkdir.path.origin, cfg->op.mkdir.path.curr_parent, dirpath_sz);
-    { // update file path for each media segment, open the first file chunk
-        const char *basepath = (const char *)cfg->cb_args.entries[2];
-        size_t filepath_sz = strlen(basepath) + 3; // assume NULL-terminated string
-        char filepath[filepath_sz];
-        size_t nwrite = snprintf(&filepath[0], filepath_sz, "%s/1", basepath);
-        filepath[nwrite++] = 0x0;
-        cfg->op.open.dst_path = strndup(&filepath[0], nwrite);
-    }
-    cfg->op.open.cb = _transcoding__open_first_filechunk_evt_cb;
-    cfg->op.open.mode  = S_IRUSR;
-    cfg->op.open.flags = O_RDONLY;
-    asa_cfg_t *storage =  cfg->cb_args.entries[3];
-    app_result = storage->ops.fn_open(cfg);
+    app_result = atfp_open_srcfile_chunk( cfg, cfg->cb_args.entries[3], cfg->cb_args.entries[2],
+            1, _transcoding__open_first_filechunk_evt_cb );
     if(app_result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(err_info, "storage", json_string("failed to issue open-file operation"));
     }
 done:
     if(json_object_size(err_info) > 0) {
-        arpc_receipt_t *receipt = cfg->cb_args.entries[0];
+        arpc_receipt_t *receipt = cfg->cb_args.entries[ASA_USRARG_RPC_RECEIPT_INDEX];
         _rpc_task_send_reply(receipt, err_info);
         _storage_error_handler(cfg);
     }
@@ -227,14 +220,13 @@ static  __attribute__((optimize("O0"))) void  api_transcode_video_file__rpc_task
         goto error;
     app_cfg_t *app_cfg = app_get_global_cfg();
     asa_cfg_t *storage = &app_cfg->storages.entries[0]; // storage is local filesystem in this app
-#define  NUM_CB_ARGS  6
+#define  NUM_CB_ARGS  7
     size_t dirpath_sz = strlen(storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
             UPLOAD_INT2HEX_SIZE(last_upld_req) + 1 + strlen(TEMP_TRANSCODING_FOLDER_NAME) + 1 +
             APP_TRANSCODED_VERSION_SIZE + 1; // assume NULL-terminated string
     size_t cb_args_tot_sz = sizeof(void *) * NUM_CB_ARGS; // for receipt, api_req, base path of the resource
-    size_t wr_src_buf_sz = APP_ENCODED_WR_BUF_SZ;
     size_t rd_dst_buf_sz = APP_ENCODED_RD_BUF_SZ;
-    size_t asa_cfg_sz = sizeof(asa_op_localfs_cfg_t) + (dirpath_sz << 1) +  wr_src_buf_sz +
+    size_t asa_cfg_sz = sizeof(asa_op_localfs_cfg_t) + (dirpath_sz << 1) + 
               cb_args_tot_sz + rd_dst_buf_sz;
     asa_cfg = malloc(asa_cfg_sz);
     memset(asa_cfg, 0x0, asa_cfg_sz);
@@ -243,10 +235,11 @@ static  __attribute__((optimize("O0"))) void  api_transcode_video_file__rpc_task
         ((asa_op_localfs_cfg_t *)asa_cfg)->loop = receipt->loop;
         asa_cfg->cb_args.size = NUM_CB_ARGS;
         asa_cfg->cb_args.entries = (void **) ptr;
-        asa_cfg->cb_args.entries[0] = (void *)receipt;
+        asa_cfg->cb_args.entries[ASA_USRARG_RPC_RECEIPT_INDEX] = (void *)receipt;
         asa_cfg->cb_args.entries[1] = (void *)api_req;
         asa_cfg->cb_args.entries[3] = (void *)storage; // global config object for  storage
         asa_cfg->cb_args.entries[5] = (void *)err_info;
+        asa_cfg->cb_args.entries[ASA_USRARG_ATFP_INDEX] = NULL; // reserved for later transcoding file-processor
         { // pre-calculated base path for files accessed by storage API
             char basepath[dirpath_sz];
             size_t nwrite = snprintf(&basepath[0], dirpath_sz, "%s/%d/%08x", storage->base_path,
@@ -279,12 +272,7 @@ static  __attribute__((optimize("O0"))) void  api_transcode_video_file__rpc_task
             assert(nwrite <= dirpath_sz);
             memcpy(asa_cfg->op.mkdir.path.origin, dirpath, dirpath_sz);
         }
-        asa_cfg->op.write.offset = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
-        asa_cfg->op.write.src_max_nbytes = wr_src_buf_sz;
-        asa_cfg->op.write.src_sz = 0;
-        asa_cfg->op.write.src = (char *)ptr;
-        ptr += wr_src_buf_sz;
-        asa_cfg->op.read.offset = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
+        asa_cfg->op.read.offset = 0;
         asa_cfg->op.read.dst_max_nbytes = rd_dst_buf_sz;
         asa_cfg->op.read.dst_sz = 0;
         asa_cfg->op.read.dst = (char *)ptr;

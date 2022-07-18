@@ -163,6 +163,11 @@ static void _app_storage_localfs_read_cb(uv_fs_t *req) {
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
     ASA_RES_CODE  app_result = (req->result >= 0) ? ASTORAGE_RESULT_COMPLETE: ASTORAGE_RESULT_OS_ERROR;
     size_t nread = (req->result >= 0) ? req->result : 0;
+    if(app_result == ASTORAGE_RESULT_COMPLETE) {
+        if(cfg->op.read.offset >= 0)
+            cfg->op.seek.pos = cfg->op.read.offset;
+        cfg->op.seek.pos += nread;
+    }
     cfg->op.read.cb(cfg, app_result, nread);
 } // end of _app_storage_localfs_read_cb
 
@@ -189,6 +194,11 @@ static void _app_storage_localfs_write_cb(uv_fs_t *req) {
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
     ASA_RES_CODE  app_result = (req->result > 0) ? ASTORAGE_RESULT_COMPLETE: ASTORAGE_RESULT_OS_ERROR;
     size_t nwrite = req->result;
+    if(app_result == ASTORAGE_RESULT_COMPLETE) {
+        if(cfg->op.write.offset >= 0)
+            cfg->op.seek.pos = cfg->op.write.offset;
+        cfg->op.seek.pos += cfg->op.write.src_sz;
+    }
     cfg->op.write.cb(cfg, app_result, nwrite);
 } // end of _app_storage_localfs_write_cb
 
