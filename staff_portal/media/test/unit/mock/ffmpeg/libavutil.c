@@ -8,3 +8,6 @@ void av_freep(void *ptr)
 void *av_malloc(size_t sz)
 { return (void *) mock(sz); }
 
+void *av_mallocz_array(size_t nmemb, size_t sz)
+{ return (void *) mock(nmemb, sz); }
+

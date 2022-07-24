@@ -40,9 +40,13 @@ static __attribute__((optimize("O0"))) void  utest_init_transcoder_srcfile_chunk
     }
 } // end of utest_init_transcoder_srcfile_chunk
 
-static __attribute__((optimize("O0"))) void  utest_deinit_transcoder_srcfile_chunk(void)
+static __attribute__((optimize("O0"))) void  utest_deinit_transcoder_srcfile_chunk(asa_op_base_cfg_t *asa_cfg)
 {
     int idx = 0;
+    if(asa_cfg->op.open.dst_path) {
+        free(asa_cfg->op.open.dst_path);
+        asa_cfg->op.open.dst_path = NULL;
+    }
     for(idx=0; idx < NUM_FILECHUNKS; idx++) {
         RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
         unlink(&filepath[0]);
@@ -132,7 +136,7 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
             uv_run(loop, UV_RUN_ONCE);
         }
     }
-    utest_deinit_transcoder_srcfile_chunk();
+    utest_deinit_transcoder_srcfile_chunk(&asa_cfg.super);
 } // end of transcoder_test__open_srcfile_chunk_ok
 
 
@@ -147,6 +151,7 @@ Ensure(transcoder_test__open_srcfile_chunk_error) {
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         if(result == ASTORAGE_RESULT_ACCEPT) 
             uv_run(loop, UV_RUN_ONCE);
+        free(asa_cfg.super.op.open.dst_path);
     }
 } // end of transcoder_test__open_srcfile_chunk_error
 
@@ -197,7 +202,7 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
 #undef  NUM_SWITCHES
     }
     json_decref(spec);
-    utest_deinit_transcoder_srcfile_chunk();
+    utest_deinit_transcoder_srcfile_chunk(&asa_cfg.super);
 } // end of transcoder_test__switch_srcfile_chunk_ok
 
 

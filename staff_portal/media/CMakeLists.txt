@@ -258,6 +258,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/cfg_parser.c
     test/unit/transcoder/file_processor.c
     test/unit/transcoder/video/mp4/preload.c
+    test/unit/transcoder/video/mp4/input.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c

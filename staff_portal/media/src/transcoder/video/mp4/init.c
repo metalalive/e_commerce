@@ -5,11 +5,18 @@
 
 #define   LOCAL_BUFFER_FILENAME    "local_buffer"
 
-static void atfp_mp4__avinput_init__success (atfp_mp4_t *mp4proc)
+static void atfp_mp4__avinput_init_done_cb (atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
+    json_t *err_info = processor->data.error;
+    if(json_object_size(err_info) == 0) {
+        atfp_mp4__validate_source_format(mp4proc);
+    }
+    if(json_object_size(err_info) == 0) {
+        // TODO, intialize output format context
+    }
     processor -> data.callback(processor);
-} // end of atfp_mp4__avinput_init__success
+}
 
 
 static void atfp_mp4__preload_stream_info__done(atfp_mp4_t *mp4proc)
@@ -17,13 +24,13 @@ static void atfp_mp4__preload_stream_info__done(atfp_mp4_t *mp4proc)
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
     if(json_object_size(err_info) == 0) {
-        ASA_RES_CODE result = atfp_mp4__avinput_init(mp4proc, atfp_mp4__avinput_init__success);
+        ASA_RES_CODE result = atfp_mp4__avinput_init(mp4proc, 5, atfp_mp4__avinput_init_done_cb);
         if(result != ASTORAGE_RESULT_ACCEPT)
             json_object_set_new(err_info, "libav", json_string("[mp4] failed to init avformat context"));
     }
     if(json_object_size(err_info) > 0)
         processor -> data.callback(processor);
-} // end of atfp_mp4__preload_stream_info__done
+}
 
 
 static void atfp__video_mp4__open_local_tmpbuf_cb (asa_op_base_cfg_t *cfg, ASA_RES_CODE result)

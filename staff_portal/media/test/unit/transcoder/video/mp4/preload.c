@@ -7,9 +7,6 @@
 #include <cgreen/unit.h>
 #include <uv.h>
 
-#include <cgreen/cgreen.h>
-#include <cgreen/unit.h>
-
 #include "transcoder/video/mp4.h"
 
 #define  LOCAL_TMPBUF_BASEPATH  "tmp/buffer/media/test"
@@ -107,6 +104,10 @@ static __attribute__((optimize("O0"))) void  utest_deinit_mp4_preload(atfp_mp4_t
             free(asa_src_cfg->super.op.read.dst);
             asa_src_cfg->super.op.read.dst = NULL;
         }
+        if(asa_src_cfg->super.op.open.dst_path) {
+            free(asa_src_cfg->super.op.open.dst_path);
+            asa_src_cfg->super.op.open.dst_path = NULL;
+        }
         free(asa_src_cfg);
         processor->data.src.storage.handle = NULL;
     }
@@ -150,6 +151,7 @@ static __attribute__((optimize("O0"))) void  utest_deinit_mp4_preload(atfp_mp4_t
             }
             free(namelist[idx]);
         }
+        free(namelist);
 #undef  PRELOAD_SRCFILE_TEMPLATE
     }
     unlink(LOCAL_TMPBUF_PATH);

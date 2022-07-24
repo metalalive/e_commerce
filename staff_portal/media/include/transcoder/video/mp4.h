@@ -13,6 +13,8 @@ typedef struct {
 } mp4_atom;
 
 
+typedef  struct atfp_mp4_stream_ctx_s  atfp_mp4_stream_ctx_t;
+
 struct atfp_mp4_s ;
 
 typedef struct atfp_mp4_s {
@@ -22,7 +24,11 @@ typedef struct atfp_mp4_s {
         struct {
             size_t  size;
             size_t  nbytes_copied;
-        } curr_atom;
+        } curr_atom; // TODO, union with preload_pkts field
+        struct {
+            size_t  size;
+            size_t  nbytes_copied;
+        } preload_pkts;
         struct {
             mp4_atom  header;
             size_t    fchunk_seq; 
@@ -30,22 +36,26 @@ typedef struct atfp_mp4_s {
             size_t    size; // the size without respect to first 8-byte header
         } mdat;
         size_t  nread_prev_chunk;
-        union {
-            void (*preload_stream_info)(struct atfp_mp4_s *);
+        struct {
+            void (*preload_done)(struct atfp_mp4_s *);
             void (*avinput_init_done)(struct atfp_mp4_s *);
         } callback;
     } internal;
     struct {
         void     *fmt_ctx;
+        atfp_mp4_stream_ctx_t *stream_ctx;
     } avinput;
 } atfp_mp4_t;
 
 
 ASA_RES_CODE  atfp_mp4__preload_stream_info (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
 
-ASA_RES_CODE  atfp_mp4__preload_initial_packets (atfp_mp4_t *mp4proc, size_t num, void (*cb)(atfp_mp4_t *));
+ASA_RES_CODE  atfp_mp4__preload_packet_sequence (atfp_mp4_t *mp4proc, int chunk_idx_start,
+        size_t chunk_offset, size_t nbytes_to_load, void (*cb)(atfp_mp4_t *));
 
-ASA_RES_CODE  atfp_mp4__avinput_init (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
+ASA_RES_CODE  atfp_mp4__avinput_init (atfp_mp4_t *, size_t num_init_pkts, void (*cb)(atfp_mp4_t *));
+
+int  atfp_mp4__validate_source_format(atfp_mp4_t *mp4proc);
 
 void  atfp_mp4__avinput_deinit(atfp_mp4_t *);
 

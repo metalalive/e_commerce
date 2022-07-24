@@ -27,12 +27,33 @@ AVIOContext *avio_alloc_context(
 }
 
 void avio_context_free(AVIOContext **s)
-{ mock(s); }
+{
+    mock(s);
+    *s = NULL;
+}
 
 
 int avformat_open_input(AVFormatContext **ps, const char *url, ff_const59 AVInputFormat *fmt, AVDictionary **options)
-{ return (int) mock(ps, url, fmt, options); }
+{
+    AVFormatContext *_fmt_ctx = *ps;
+    return (int) mock(_fmt_ctx, url, fmt, options);
+}
 
 void avformat_close_input(AVFormatContext **s)
-{ mock(s); }
+{
+    mock(s);
+    *s = NULL;
+}
+
+int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
+{ return (int) mock(ic, options); }
+
+AVRational av_guess_frame_rate(AVFormatContext *fmtctx, AVStream *stream, AVFrame *frame)
+{
+    AVRational out = {
+        (int) mock(fmtctx, stream, frame),
+        (int) mock(),
+    };
+    return out;
+}
 
