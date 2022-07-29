@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
-#include <h2o/memory.h>
 #include <libavutil/error.h>
 
 #include "app_cfg.h"
@@ -13,13 +12,12 @@ static int  atfp_avio__read_header(void *opaque, uint8_t *buf, int required_size
     // non-blocking call currently hasn't been supported yet.
     if(!opaque)
         return AVERROR(EINVAL) ;
-    asa_op_localfs_cfg_t *local_tmpbuf = (asa_op_localfs_cfg_t *)opaque;
-    int hdr_tmp_fd =  local_tmpbuf->file.file;
+    asa_op_localfs_cfg_t *asa_local = (asa_op_localfs_cfg_t *)opaque;
+    int hdr_tmp_fd =  asa_local->file.file;
     int nread = read(hdr_tmp_fd, buf, required_size);
     if(nread == 0)
         nread = AVERROR_EOF;
     return nread;
-    
 } // end of atfp_avio__read_header
 
 
@@ -38,18 +36,18 @@ static  size_t  atfp_mp4__mdat_body_pos(atfp_mp4_t *mp4proc)
 } // end of atfp_mp4__mdat_body_pos
 
 
-void  atfp_mp4__avinput_deinit(atfp_mp4_t *mp4proc)
+void  atfp_mp4__av_deinit(atfp_mp4_t *mp4proc)
 {
     int idx = 0;
-    AVFormatContext    *fmt_ctx = mp4proc->avinput.fmt_ctx;
-    atfp_mp4_stream_ctx_t *sctx = mp4proc->avinput.stream_ctx;
-    if(sctx) {
+    AVFormatContext    *fmt_ctx = mp4proc->av->fmt_ctx;
+    AVCodecContext   **dec_ctxs = mp4proc->av->stream_ctx.decode;
+    if(dec_ctxs) {
         int nb_streams = fmt_ctx ? fmt_ctx->nb_streams: 0;
         for(idx = 0; idx < nb_streams; idx++) {
-            if(sctx[idx].dec_ctx)
-                avcodec_free_context(&sctx[idx].dec_ctx);
+            if(dec_ctxs[idx])
+                avcodec_free_context(&dec_ctxs[idx]);
         }
-        av_freep(&mp4proc->avinput.stream_ctx);
+        av_freep(&mp4proc->av->stream_ctx.decode);
     }
     if(fmt_ctx) {
         AVIOContext *avio_ctx = fmt_ctx -> pb;
@@ -57,17 +55,17 @@ void  atfp_mp4__avinput_deinit(atfp_mp4_t *mp4proc)
             av_freep(&avio_ctx->buffer);
             avio_context_free(&fmt_ctx->pb);            
         }
-        avformat_close_input((AVFormatContext **)&mp4proc->avinput.fmt_ctx);
+        avformat_close_input((AVFormatContext **)&mp4proc->av->fmt_ctx);
     }
-} // end of atfp_mp4__avinput_deinit
+} // end of atfp_mp4__av_deinit
 
 
 int  atfp_mp4__validate_source_format(atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
-    AVFormatContext  *fmt_ctx = mp4proc->avinput.fmt_ctx;
-    atfp_mp4_stream_ctx_t *stream_ctx = mp4proc->avinput.stream_ctx;
+    AVFormatContext  *fmt_ctx = mp4proc->av ->fmt_ctx;
+    AVCodecContext **dec_ctxs = mp4proc->av->stream_ctx.decode;
     app_cfg_t *app_cfg = app_get_global_cfg();
     aav_cfg_input_t *aav_cfg_in = &app_cfg->transcoder.input;
     int idx = 0;
@@ -86,7 +84,7 @@ int  atfp_mp4__validate_source_format(atfp_mp4_t *mp4proc)
            valid_obj = codec2; \
     }
     for(idx = 0; idx < fmt_ctx->nb_streams; idx++) {
-        const struct AVCodec *codec1 = stream_ctx[idx].dec_ctx ->codec;
+        const struct AVCodec *codec1 = dec_ctxs[idx]->codec;
         if(codec1->type == AVMEDIA_TYPE_VIDEO) {
             GENCODE_FIND_CODEC(video, codec_video_valid);
         } else if (codec1->type == AVMEDIA_TYPE_AUDIO) {
@@ -110,19 +108,21 @@ static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
-    AVFormatContext  *fmt_ctx = mp4proc->avinput.fmt_ctx;
-    asa_op_localfs_cfg_t *local_tmpbuf = (asa_op_localfs_cfg_t *)&mp4proc->local_tmpbuf_handle;
+    AVFormatContext  *fmt_ctx = mp4proc->av ->fmt_ctx;
+    asa_op_base_cfg_t *asaobj = mp4proc -> super.data.storage.handle;
+    atfp_asa_map_t *_map = (atfp_asa_map_t *)asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
     int idx = 0, ret = 0;
     if(json_object_size(err_info) > 0) // error from storage
         goto done;
-    lseek(local_tmpbuf->file.file, 0, SEEK_SET);
+    lseek(asa_local->file.file, 0, SEEK_SET);
     ret = avformat_find_stream_info(fmt_ctx, NULL);
     if(ret < 0) {
         json_object_set_new(err_info, "transcoder", json_string("failed to analyze stream info"));
         goto done;
     }
-    atfp_mp4_stream_ctx_t *stream_ctx = av_mallocz_array(fmt_ctx->nb_streams, sizeof(atfp_mp4_stream_ctx_t));
-    mp4proc->avinput.stream_ctx = stream_ctx;
+    AVCodecContext **dec_ctxs = av_mallocz_array(fmt_ctx->nb_streams, sizeof(AVCodecContext *));
+    mp4proc->av->stream_ctx.decode = dec_ctxs;
     for(idx = 0; idx < fmt_ctx->nb_streams; idx++) {
         AVStream *stream  = fmt_ctx->streams[idx];
         AVCodec  *decoder = avcodec_find_decoder(stream->codecpar->codec_id);
@@ -131,7 +131,7 @@ static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc)
             break;
         }
         AVCodecContext *codec_ctx = avcodec_alloc_context3(decoder);
-        stream_ctx[idx].dec_ctx = codec_ctx;
+        dec_ctxs[idx] = codec_ctx;
         if(!codec_ctx) {
             json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to create decoder context of the stream"));
             break;
@@ -148,7 +148,14 @@ static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc)
             case AVMEDIA_TYPE_AUDIO:
                 ret = avcodec_open2(codec_ctx, decoder, NULL);
                 break;
+            case AVMEDIA_TYPE_DATA:
+            case AVMEDIA_TYPE_SUBTITLE:
+                break;
+            case AVMEDIA_TYPE_NB:
+            case AVMEDIA_TYPE_ATTACHMENT:
+            case AVMEDIA_TYPE_UNKNOWN:
             default:
+                ret = AVERROR_INVALIDDATA; // unsupported stream type
                 break;
         }
         if(ret < 0) {
@@ -160,34 +167,36 @@ static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc)
         av_dump_format(fmt_ctx, 0, "some_input_file_path", 0);
     } // dump format for debugging
 done:
-    mp4proc->internal.callback.avinput_init_done(mp4proc);
+    mp4proc->internal.callback.av_init_done(mp4proc);
 } // end of atfp_mp4__preload_initial_packets_done
 
 
-ASA_RES_CODE  atfp_mp4__avinput_init (atfp_mp4_t *mp4proc, size_t num_init_pkts, void (*cb)(atfp_mp4_t *))
+ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *mp4proc, size_t num_init_pkts, void (*cb)(atfp_mp4_t *))
 {
-    asa_op_localfs_cfg_t *local_tmpbuf = (asa_op_localfs_cfg_t *)&mp4proc->local_tmpbuf_handle;
+    asa_op_base_cfg_t *asaobj = mp4proc -> super.data.storage.handle;
+    atfp_asa_map_t *_map = (atfp_asa_map_t *)asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
 #define  AVIO_CTX_BUFFER_SIZE 2048    
     uint8_t  *avio_ctx_buffer = NULL;
     AVFormatContext *fmt_ctx = NULL;
     int ret = 0;
     if (!(fmt_ctx = avformat_alloc_context()))
         goto error;
-    mp4proc->internal.callback.avinput_init_done = cb;
-    mp4proc->avinput.fmt_ctx = fmt_ctx;
+    mp4proc->internal.callback.av_init_done = cb;
+    *mp4proc->av = (atfp_av_ctx_t){.fmt_ctx=fmt_ctx, .decoder_flag=1};
     avio_ctx_buffer = av_malloc(AVIO_CTX_BUFFER_SIZE);
     fmt_ctx -> pb = avio_alloc_context(avio_ctx_buffer, AVIO_CTX_BUFFER_SIZE, 0,
-              local_tmpbuf, atfp_avio__read_header, NULL, NULL); // &app_seek_packet
+              asa_local, atfp_avio__read_header, NULL, NULL); // &app_seek_packet
     if (!fmt_ctx->pb || !avio_ctx_buffer)
         goto error;
     { // libavformat accesses input file synchronously
-        lseek(local_tmpbuf->file.file, 0, SEEK_SET);
+        lseek(asa_local->file.file, 0, SEEK_SET);
         ret = avformat_open_input(&fmt_ctx, NULL, NULL, NULL);
         if(ret < 0) 
             goto error;
         fmt_ctx->pb ->pos = atfp_mp4__mdat_body_pos(mp4proc);
         // erase content in local temp buffer, load initial packets from source
-        lseek(local_tmpbuf->file.file, 0, SEEK_SET);
+        lseek(asa_local->file.file, 0, SEEK_SET);
     }
     size_t  first_pkt_pos = fmt_ctx->pb ->pos;
     size_t  farest_pos = 0;
@@ -206,13 +215,16 @@ ASA_RES_CODE  atfp_mp4__avinput_init (atfp_mp4_t *mp4proc, size_t num_init_pkts,
     size_t nbytes_to_load  = farest_pos + farest_sz - first_pkt_pos;
     int    chunk_idx  = mp4proc->internal.mdat.fchunk_seq;
     size_t offset     = mp4proc->internal.mdat.pos;
-    return  atfp_mp4__preload_packet_sequence (mp4proc, chunk_idx, offset, nbytes_to_load,
-               atfp_mp4__preload_initial_packets_done);
+    ASA_RES_CODE asa_result = atfp_mp4__preload_packet_sequence (mp4proc, chunk_idx, offset,
+            nbytes_to_load,  atfp_mp4__preload_initial_packets_done);
+    if(asa_result != ASTORAGE_RESULT_ACCEPT)
+        goto error;
+    return asa_result;
 error:
     json_object_set_new(mp4proc->super.data.error, "transcoder",
-            json_string("[mp4] failed to initialize AVFormatContext"));
-    atfp_mp4__avinput_deinit(mp4proc);
+            json_string("[mp4] failed to initialize input format context"));
+    atfp_mp4__av_deinit(mp4proc);
     return ASTORAGE_RESULT_OS_ERROR;
 #undef  AVIO_CTX_BUFFER_SIZE    
-} // end of atfp_mp4__avinput_init
+} // end of atfp_mp4__av_init
 

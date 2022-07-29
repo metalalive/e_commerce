@@ -200,8 +200,10 @@ SET(APP_HTTPSERVER_SOURCE_FILES
 
 SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/file_processor.c
+    src/transcoder/video/hls/init.c 
+    src/transcoder/video/hls/avcontext.c 
     src/transcoder/video/mp4/preload.c 
-    src/transcoder/video/mp4/input.c 
+    src/transcoder/video/mp4/avcontext.c 
     src/transcoder/video/mp4/init.c )
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
@@ -258,7 +260,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/cfg_parser.c
     test/unit/transcoder/file_processor.c
     test/unit/transcoder/video/mp4/preload.c
-    test/unit/transcoder/video/mp4/input.c
+    test/unit/transcoder/video/mp4/avcontext.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c
@@ -353,7 +355,7 @@ ADD_CUSTOM_TARGET(dev_app_server
     DEPENDS ${APP_SERVER_EXE_NAME})
 
 ADD_CUSTOM_TARGET(dev_rpc_worker
-    ##gdb -args
+    #gdb -args
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${RPC_CONSUMER_EXE_NAME})
@@ -363,7 +365,7 @@ ADD_CUSTOM_TARGET(unit_test
     # uncomment the following line, make cgreen test suite run in single (main) process
     # without forking, then you can set breakpoints using debugger (currently only supports GDB)
     ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-    ##gdb -args # uncomment this line for debugging
+    #gdb -args # uncomment this line for debugging
     ##valgrind --leak-check=full
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${UNIT_TEST_EXE_NAME}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..

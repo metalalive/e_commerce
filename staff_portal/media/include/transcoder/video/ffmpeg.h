@@ -9,13 +9,22 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 
-struct atfp_mp4_stream_ctx_s {
-    AVCodecContext *dec_ctx;
+typedef struct {
     AVCodecContext *enc_ctx;
     AVFilterContext *filt_sink_ctx;
     AVFilterContext *filt_src_ctx;
     AVFilterGraph   *filter_graph;
+} atfp_stream_enc_ctx_t;
+
+struct atfp_av_ctx_s {
+    AVFormatContext    *fmt_ctx;
+    uint8_t      decoder_flag:1;
+    union {
+        AVCodecContext        **decode;
+        atfp_stream_enc_ctx_t  *encode;
+    } stream_ctx;
 };
+
 
 #ifdef __cplusplus
 } // end of extern C clause

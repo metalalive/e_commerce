@@ -67,7 +67,8 @@ static void  transcoder_utest__openfile_callback (asa_op_base_cfg_t *cfg, ASA_RE
 #define  READ_BUFFER_SZ 128
      int stderr_fd = 2;
      char rd_buf[READ_BUFFER_SZ] = {0};
-     const char *expect_content = cfg->cb_args.entries[1];
+     size_t  expect_content_idx = cfg->cb_args.size - 1;
+     const char *expect_content = cfg->cb_args.entries[expect_content_idx];
      asa_op_localfs_cfg_t  *localfile_handle = (asa_op_localfs_cfg_t *) cfg;
      assert_that(result, is_equal_to(ASTORAGE_RESULT_COMPLETE));
      if(result != ASTORAGE_RESULT_COMPLETE)
@@ -102,41 +103,56 @@ static json_t *transcoder_utest__gen_atfp_spec(const char **expect_f_content, si
 
 
 Ensure(transcoder_test__get_atfp_object) {
-    atfp_t *file_processor = app_transcoder_file_processor("audio/wmv");
-    assert_that(file_processor, is_equal_to(NULL));
-    file_processor = app_transcoder_file_processor("video/mp4");
-    assert_that(file_processor, is_not_equal_to(NULL));
-    assert_that(file_processor->ops, is_not_equal_to(NULL));
-    assert_that(file_processor->ops->init,   is_not_equal_to(NULL));
-    assert_that(file_processor->ops->deinit, is_not_equal_to(NULL));
-    assert_that(file_processor->ops->processing,   is_not_equal_to(NULL));
-    assert_that(file_processor->ops->get_obj_size, is_not_equal_to(NULL));
-    file_processor->ops->deinit(file_processor);
+#define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
+    atfp_t *mock_fp = app_transcoder_file_processor("audio/wmv");
+    assert_that(mock_fp, is_equal_to(NULL));
+    mock_fp = app_transcoder_file_processor("video/mp4");
+    assert_that(mock_fp, is_not_equal_to(NULL));
+    assert_that(mock_fp->ops, is_not_equal_to(NULL));
+    if(mock_fp && mock_fp->ops) {
+        assert_that(mock_fp->ops->init,   is_not_equal_to(NULL));
+        assert_that(mock_fp->ops->deinit, is_not_equal_to(NULL));
+        assert_that(mock_fp->ops->processing,   is_not_equal_to(NULL));
+        assert_that(mock_fp->ops->has_done_processing, is_not_equal_to(NULL));
+        assert_that(mock_fp->ops->label_match, is_not_equal_to(NULL));
+        assert_that(mock_fp->ops->instantiate, is_not_equal_to(NULL));
+        atfp_asa_map_t    mock_map = {0};
+        void  *cb_args_entries[NUM_CB_ARGS_ASAOBJ] = {mock_fp, &mock_map};
+        asa_op_base_cfg_t mock_asaobj = {.cb_args={.size=NUM_CB_ARGS_ASAOBJ,
+            .entries=cb_args_entries}};
+        mock_fp->data.storage.handle = &mock_asaobj;
+        mock_fp->ops->deinit(mock_fp);
+    }
+#undef  NUM_CB_ARGS_ASAOBJ
 } // end of transcoder_test__get_atfp_object
 
 Ensure(transcoder_test__open_srcfile_chunk_ok) {
-    void *asacfg_usr_args[2] = {0};
+#define  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG   (ASAMAP_INDEX__IN_ASA_USRARG + 1)
+#define  NUM_CB_ARGS_ASAOBJ  (UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG + 1)
+    void *asaobj_usr_args[NUM_CB_ARGS_ASAOBJ] = {0};
     uv_loop_t  *loop = uv_default_loop();
-    asa_op_localfs_cfg_t  asa_cfg = {.loop=loop, .super={.cb_args={.size=2, .entries=asacfg_usr_args}}};
+    asa_op_localfs_cfg_t  asaobj = {.loop=loop, .super={.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asaobj_usr_args}}};
     asa_cfg_t   storage = {.ops={.fn_open=app_storage_localfs_open}};
     ASA_RES_CODE result ;
     FILECHUNK_CONTENT(expect_f_content);
     utest_init_transcoder_srcfile_chunk();
-    asa_cfg.super.cb_args.entries[ATFP_INDEX_IN_ASA_OP_USRARG] = NULL;
+    asaobj.super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = NULL;
     for(int chunk_seq = 0; chunk_seq < NUM_FILECHUNKS; chunk_seq++) {
-        asa_cfg.super.cb_args.entries[1] = (void *) expect_f_content[chunk_seq];
+        asaobj.super.cb_args.entries[UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG] = (void *) expect_f_content[chunk_seq];
         // in thhis application, sequential numbers in a set of ffile chunks start from one.
-        result = atfp_open_srcfile_chunk( &asa_cfg.super, &storage, FULLPATH2,
+        result = atfp_open_srcfile_chunk( &asaobj.super, &storage, FULLPATH2,
                 chunk_seq + 1, transcoder_utest__openfile_callback );
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         if(result == ASTORAGE_RESULT_ACCEPT) {
             uv_run(loop, UV_RUN_ONCE);
-            asa_cfg.super.op.close.cb = transcoder_utest__closefile_callback;
-            app_storage_localfs_close(&asa_cfg.super);
+            asaobj.super.op.close.cb = transcoder_utest__closefile_callback;
+            app_storage_localfs_close(&asaobj.super);
             uv_run(loop, UV_RUN_ONCE);
         }
     }
-    utest_deinit_transcoder_srcfile_chunk(&asa_cfg.super);
+    utest_deinit_transcoder_srcfile_chunk(&asaobj.super);
+#undef  NUM_CB_ARGS_ASAOBJ
+#undef  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG
 } // end of transcoder_test__open_srcfile_chunk_ok
 
 
@@ -157,22 +173,24 @@ Ensure(transcoder_test__open_srcfile_chunk_error) {
 
 
 Ensure(transcoder_test__switch_srcfile_chunk_ok) {
+#define  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG   (ASAMAP_INDEX__IN_ASA_USRARG + 1)
+#define  NUM_CB_ARGS_ASAOBJ  (UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG + 1)
     FILECHUNK_CONTENT(expect_f_content);
-    void *asacfg_usr_args[2] = {0};
+    void *asaobj_usr_args[NUM_CB_ARGS_ASAOBJ] = {0};
     uv_loop_t  *loop = uv_default_loop();
-    asa_op_localfs_cfg_t  asa_cfg = {.loop=loop, .super={.cb_args={.size=2, .entries=asacfg_usr_args}}};
+    asa_op_localfs_cfg_t  asaobj = {.loop=loop, .super={.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asaobj_usr_args}}};
     asa_cfg_t   storage = {.ops={.fn_open=app_storage_localfs_open, .fn_close=app_storage_localfs_close}};
     const char *atfp_src_basepath = FULLPATH2;
     json_t  *spec  = transcoder_utest__gen_atfp_spec(expect_f_content, NUM_FILECHUNKS);
-    atfp_t   processor = {.data={.spec=spec, .src={.basepath=atfp_src_basepath,
-        .storage={.handle=&asa_cfg.super, .config=&storage}}}};
-    asa_cfg.super.cb_args.entries[ATFP_INDEX_IN_ASA_OP_USRARG] = &processor;
+    atfp_t mock_fp = {.data={.spec=spec,  .storage={.basepath=atfp_src_basepath,
+        .handle=&asaobj.super, .config=&storage}}};
+    asaobj.super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp;
     utest_init_transcoder_srcfile_chunk();
     int idx = 0;
     { // open the first chunk
         int chunk_seq = 0;
-        asa_cfg.super.cb_args.entries[1] = (void *) expect_f_content[chunk_seq];
-        ASA_RES_CODE result = atfp_open_srcfile_chunk( &asa_cfg.super, &storage, atfp_src_basepath,
+        asaobj.super.cb_args.entries[UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG] = (void *) expect_f_content[chunk_seq];
+        ASA_RES_CODE result = atfp_open_srcfile_chunk( &asaobj.super, &storage, atfp_src_basepath,
                 chunk_seq + 1, transcoder_utest__openfile_callback );
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         uv_run(loop, UV_RUN_ONCE);
@@ -192,8 +210,8 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
             {-1, expect_f_content[3]},
         };
         for(idx = 0; idx < NUM_SWITCHES; idx++) {
-            asa_cfg.super.cb_args.entries[1] = (void *) switch_chunk_seq[idx].expect_content;
-            ASA_RES_CODE result = atfp_switch_to_srcfile_chunk(&processor, switch_chunk_seq[idx].num,
+            asaobj.super.cb_args.entries[UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG] = (void *) switch_chunk_seq[idx].expect_content;
+            ASA_RES_CODE result = atfp_switch_to_srcfile_chunk(&mock_fp, switch_chunk_seq[idx].num,
                 transcoder_utest__openfile_callback);
             assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
             uv_run(loop, UV_RUN_ONCE); // invoke file-close callback
@@ -202,7 +220,9 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
 #undef  NUM_SWITCHES
     }
     json_decref(spec);
-    utest_deinit_transcoder_srcfile_chunk(&asa_cfg.super);
+    utest_deinit_transcoder_srcfile_chunk(&asaobj.super);
+#undef  NUM_CB_ARGS_ASAOBJ
+#undef  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG
 } // end of transcoder_test__switch_srcfile_chunk_ok
 
 
@@ -245,6 +265,116 @@ Ensure(transcoder_test__estimate_src_filechunk_idx) {
 } // end of transcoder_test__estimate_src_filechunk_idx
 
 
+Ensure(transcoder_test__asamap_basic_ok) {
+#define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
+    void *asasrc_cb_args[NUM_CB_ARGS_ASAOBJ] = {0};
+    void *asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {0};
+    asa_op_base_cfg_t     mock_asa_src = {.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asasrc_cb_args}};
+    asa_op_localfs_cfg_t  mock_asa_local = {.super={.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asalocal_cb_args}}};
+    uint8_t num_dst = 0;
+    atfp_asa_map_t  *map = atfp_asa_map_init(num_dst);
+    atfp_asa_map_t  *readback_map = NULL;
+    assert_that(map, is_not_equal_to(NULL));
+    if(map) {
+        readback_map = mock_asa_src.cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        assert_that(readback_map , is_equal_to(NULL));
+        atfp_asa_map_set_source(map, &mock_asa_src);
+        atfp_asa_map_set_localtmp(map, &mock_asa_local);
+        readback_map = mock_asa_src.cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        assert_that(readback_map , is_equal_to(map));
+        readback_map = mock_asa_local.super.cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        assert_that(readback_map , is_equal_to(map));
+
+        asa_op_localfs_cfg_t  *readback_asa_local = atfp_asa_map_get_localtmp(map);
+        asa_op_base_cfg_t     *readback_asa_src = atfp_asa_map_get_source(map);
+        assert_that(readback_asa_local, is_equal_to(&mock_asa_local));
+        assert_that(readback_asa_src  , is_equal_to(&mock_asa_src));
+        atfp_asa_map_deinit(map);
+    }
+#undef  NUM_CB_ARGS_ASAOBJ
+} // end of transcoder_test__asamap_basic_ok
+
+
+Ensure(transcoder_test__asamap_destination_ok) {
+#define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
+#define  NUM_DESTINATIONS  7
+    void *asadsts_cb_args[NUM_DESTINATIONS][NUM_CB_ARGS_ASAOBJ] = {0};
+    asa_op_base_cfg_t   mock_asa_dsts[NUM_DESTINATIONS] = {0}, *readback_asa_dst = NULL;
+    atfp_asa_map_t  *map = atfp_asa_map_init(NUM_DESTINATIONS);
+    atfp_asa_map_t  *readback_map = NULL;
+    int idx = 0;
+    assert_that(map, is_not_equal_to(NULL));
+    if(!map) { return; }
+    for(idx=0; idx < NUM_DESTINATIONS; idx++) {
+        mock_asa_dsts[idx].cb_args.size = NUM_CB_ARGS_ASAOBJ;
+        mock_asa_dsts[idx].cb_args.entries = asadsts_cb_args[idx];
+    }
+    { // subcase 1
+        for(idx = 0; idx < NUM_DESTINATIONS; idx++) {
+            uint8_t err = atfp_asa_map_add_destination(map, &mock_asa_dsts[idx]);
+            assert_that(err, is_equal_to(0));
+        } // no avilable entry for new destination
+        uint8_t err = atfp_asa_map_add_destination(map, &mock_asa_dsts[0]);
+        assert_that(err, is_not_equal_to(0));
+    } { // subcase 2
+        idx = 0;
+        atfp_asa_map_reset_dst_iteration(map);
+        while((readback_asa_dst = atfp_asa_map_iterate_destination(map))) {
+            readback_map = readback_asa_dst->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+            assert_that(readback_map, is_equal_to(map));
+            assert_that(readback_asa_dst, is_equal_to(&mock_asa_dsts[idx++]));
+        }
+        readback_asa_dst = atfp_asa_map_iterate_destination(map);
+        assert_that(readback_asa_dst, is_equal_to(NULL));
+    } { // subcase 3
+        asa_op_base_cfg_t  *working_asa_dst = &mock_asa_dsts[2];
+        assert_that(atfp_asa_map_all_dst_stopped(map), is_equal_to(1));
+        atfp_asa_map_dst_start_working(map, working_asa_dst);
+        assert_that(atfp_asa_map_all_dst_stopped(map), is_equal_to(0));
+        atfp_asa_map_dst_stop_working(map, working_asa_dst);
+        assert_that(atfp_asa_map_all_dst_stopped(map), is_equal_to(1));
+    } { // subcase 4
+        asa_op_base_cfg_t  *deleting_asa_dst = &mock_asa_dsts[3];
+        asa_op_base_cfg_t  *list_after_deleted[NUM_DESTINATIONS - 1] = {
+            &mock_asa_dsts[0], &mock_asa_dsts[1], &mock_asa_dsts[2],
+            &mock_asa_dsts[4], &mock_asa_dsts[5], &mock_asa_dsts[6], 
+        };
+        uint8_t err = atfp_asa_map_remove_destination(map, deleting_asa_dst);
+        assert_that(err, is_equal_to(0));
+        atfp_asa_map_reset_dst_iteration(map);
+        for(idx = 0; idx < NUM_DESTINATIONS - 1; idx++)
+             assert_that(atfp_asa_map_iterate_destination(map), is_equal_to(list_after_deleted[idx]));
+        assert_that(atfp_asa_map_iterate_destination(map), is_equal_to(NULL));
+    } { // subcase 5
+        asa_op_base_cfg_t  *deleting_asa_dst = &mock_asa_dsts[6];
+        asa_op_base_cfg_t  *list_after_deleted[NUM_DESTINATIONS - 2] = {
+            &mock_asa_dsts[0], &mock_asa_dsts[1], &mock_asa_dsts[2],
+            &mock_asa_dsts[4], &mock_asa_dsts[5],
+        };
+        uint8_t err = atfp_asa_map_remove_destination(map, deleting_asa_dst);
+        assert_that(err, is_equal_to(0));
+        atfp_asa_map_reset_dst_iteration(map);
+        for(idx = 0; idx < NUM_DESTINATIONS - 2; idx++)
+             assert_that(atfp_asa_map_iterate_destination(map), is_equal_to(list_after_deleted[idx]));
+        assert_that(atfp_asa_map_iterate_destination(map), is_equal_to(NULL));
+    } { // subcase 6
+        asa_op_base_cfg_t  *deleting_asa_dst = &mock_asa_dsts[0];
+        asa_op_base_cfg_t  *list_after_deleted[NUM_DESTINATIONS - 3] = {
+            &mock_asa_dsts[1], &mock_asa_dsts[2], &mock_asa_dsts[4], &mock_asa_dsts[5],
+        };
+        uint8_t err = atfp_asa_map_remove_destination(map, deleting_asa_dst);
+        assert_that(err, is_equal_to(0));
+        atfp_asa_map_reset_dst_iteration(map);
+        for(idx = 0; idx < NUM_DESTINATIONS - 3; idx++)
+             assert_that(atfp_asa_map_iterate_destination(map), is_equal_to(list_after_deleted[idx]));
+        assert_that(atfp_asa_map_iterate_destination(map), is_equal_to(NULL));
+    }
+    atfp_asa_map_deinit(map);
+#undef  NUM_DESTINATIONS
+#undef  NUM_CB_ARGS_ASAOBJ
+} // end of transcoder_test__asamap_destination_ok
+
+
 TestSuite *app_transcoder_file_processor_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -253,6 +383,8 @@ TestSuite *app_transcoder_file_processor_tests(void)
     add_test(suite, transcoder_test__open_srcfile_chunk_error);
     add_test(suite, transcoder_test__switch_srcfile_chunk_ok);
     add_test(suite, transcoder_test__estimate_src_filechunk_idx);
+    add_test(suite, transcoder_test__asamap_basic_ok);
+    add_test(suite, transcoder_test__asamap_destination_ok);
     return suite;
 }
 #undef  NUM_FILECHUNKS

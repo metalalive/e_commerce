@@ -23,3 +23,9 @@ int avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **op
 int avcodec_parameters_to_context(AVCodecContext *codec_ctx, const AVCodecParameters *par)
 { return (int) mock(codec_ctx, par); }
 
+int avcodec_parameters_from_context(AVCodecParameters *par, const AVCodecContext *codec_ctx)
+{ return (int) mock(par, codec_ctx); }
+
+int avcodec_parameters_copy(AVCodecParameters *dst, const AVCodecParameters *src)
+{ return (int) mock(dst, src); }
+

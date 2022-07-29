@@ -12,6 +12,10 @@ AVOutputFormat *av_guess_format(const char *short_name, const char *filename, co
 AVFormatContext *avformat_alloc_context(void)
 { return (AVFormatContext *) mock(); }
 
+int avformat_alloc_output_context2(AVFormatContext **fmtctx_p, ff_const59 AVOutputFormat *oformat,
+                                   const char *fmt_name, const char *filename)
+{ return (int) mock(fmtctx_p, oformat, fmt_name, filename); }
+
 
 AVIOContext *avio_alloc_context(
                   unsigned char *buffer,
@@ -32,6 +36,8 @@ void avio_context_free(AVIOContext **s)
     *s = NULL;
 }
 
+void avformat_free_context(AVFormatContext *s)
+{ mock(s); }
 
 int avformat_open_input(AVFormatContext **ps, const char *url, ff_const59 AVInputFormat *fmt, AVDictionary **options)
 {
@@ -56,4 +62,7 @@ AVRational av_guess_frame_rate(AVFormatContext *fmtctx, AVStream *stream, AVFram
     };
     return out;
 }
+
+AVStream *avformat_new_stream(AVFormatContext *s, const AVCodec *c)
+{ return (AVStream *) mock(s, c); }
 

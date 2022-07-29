@@ -11,3 +11,6 @@ void *av_malloc(size_t sz)
 void *av_mallocz_array(size_t nmemb, size_t sz)
 { return (void *) mock(nmemb, sz); }
 
+int av_get_channel_layout_nb_channels(uint64_t channel_layout)
+{ return (int) mock(channel_layout); }
+

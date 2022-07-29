@@ -96,6 +96,20 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
     json_t *upld_req_item = json_object_get(req_body_json, "last_upld_req");
     json_object_set(res_body_json, "resource_id", res_id_item);
     json_object_set_new(res_body_json, "outputs", res_outputs);
+    // TODO, improve transcoding function by following design straategies:
+    // (1) reduce the redundant decode stages in RPC consumers. For the same source
+    //     file transcoding to different variants, all decoders in the RPC consumers
+    //     are identical, which means they generate the same decoded frames in
+    //     different consumer servers. It is possible to save computational power by
+    //     using only one consumer and then distribute each decoded frame to next stage
+    //     scaling for different variants. (e.g. you may apply 2-level consumer scheme, the
+    //     first-level consumer decodes packet and sends decoded frame to the next-level
+    //     consumer for scaling and encoding)
+    // (2) buffer scaled frames, which saves time for transcoding variants in one go.
+    //     For example, a video transcoding to 2 variants 1024p720 and 512p360, the
+    //     function can first scale a frame to 1024p720, keep the frame, use it when
+    //     scaling to 512p360 (extra storage required, so this will be considered for
+    //      scalability once the application grows).
     json_object_foreach(req_outputs, version, req_output) {
         json_t *msgq_body_item = json_copy(req_output);
         { // construct message body
