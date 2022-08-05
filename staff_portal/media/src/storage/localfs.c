@@ -94,6 +94,8 @@ static void _app_storage_localfs_mkdir_cb(uv_fs_t *req) {
         uint8_t final_round = cfg->op.mkdir.path.tok_saveptr[0] == 0x0;
         if(final_round) { // all essential parent folders are created
             app_result = ASTORAGE_RESULT_COMPLETE;
+            size_t fullpath_sz = strlen(cfg->op.mkdir.path.curr_parent); // recover destination path
+            memcpy(cfg->op.mkdir.path.origin, cfg->op.mkdir.path.curr_parent, fullpath_sz);
             cfg->op.mkdir.cb(cfg, app_result);
         } else { // recursively create new subfolder
             app_result = app_storage_localfs_mkdir(cfg);
