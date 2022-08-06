@@ -9,6 +9,8 @@ static void atfp_hls__create_local_workfolder_cb (asa_op_base_cfg_t *asaobj, ASA
     atfp_hls_t *hlsproc = (atfp_hls_t *) H2O_STRUCT_FROM_MEMBER(atfp_hls_t, asa_local, asaobj);
     atfp_t *processor = &hlsproc -> super;
     atfp_hls__av_init(hlsproc);
+    //if (!err)
+    //    err  = atfp_hls__av_filter_init(hlsproc->av, avctx_src, processor->data.error);
     processor -> data.callback(processor);
 } // end of atfp_hls__create_local_workfolder_cb
 

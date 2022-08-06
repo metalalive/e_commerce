@@ -3,7 +3,14 @@
 #include "transcoder/video/hls.h"
 #include "transcoder/video/ffmpeg.h"
 
-#define  PLAYLIST_FILENAME      "playlist"
+#define  HLS_PLAYLIST_TYPE__VOD   2
+#define  HLS_SEGMENT_TYPE__FMP4   1
+#define  HLS_TIME__IN_SECONDS     7
+#define  HLS_DELETE_THRESHOLD__IN_SECONDS     3
+#define  HLS_SEGMENT_FILENAME_PREFIX       "data_seg_"
+#define  HLS_SEGMENT_FILENAME_TEMPLATE     HLS_SEGMENT_FILENAME_PREFIX  "%04d"
+#define  HLS_FMP4_FILENAME          "init_packet_map"
+#define  HLS_PLAYLIST_FILENAME      "playlist.m3u8"
 
 void  atfp_hls__av_deinit(atfp_hls_t *hlsproc)
 {
@@ -23,6 +30,42 @@ void  atfp_hls__av_deinit(atfp_hls_t *hlsproc)
         hlsproc->av->fmt_ctx = NULL;
     }
 } // end of atfp_hls__av_deinit
+
+
+static int  atfp_hls__av_setup_options(AVFormatContext *fmt_ctx, const char *local_basepath)
+{
+    // if((fmt_ctx->oformat->flags & AVFMT_NOFILE) == 0)
+    //     goto error;
+    AVDictionary *options = NULL; // TODO, parameterize
+    av_dict_set_int(&options, "hls_playlist_type", (int64_t)HLS_PLAYLIST_TYPE__VOD, 0); // vod
+    av_dict_set_int(&options, "hls_segment_type", (int64_t)HLS_SEGMENT_TYPE__FMP4, 0); // fmp4
+    av_dict_set_int(&options, "hls_time", (int64_t)HLS_TIME__IN_SECONDS, 0);
+    av_dict_set_int(&options, "hls_delete_threshold", (int64_t)HLS_DELETE_THRESHOLD__IN_SECONDS, 0);
+    // 1000 KB, not implemented yet as of ffmpeg v4.3.4
+    //// av_dict_set_int(&options, "hls_segment_size", (int64_t)1024000, 0);
+    // will be prepended to each segment entry in final playlist, TODO, enable this option and finish the playback API
+    //// av_dict_set(&options, "hls_base_url", "/file?id=x4eyy5i&segment=", 0);
+    {
+        size_t path_sz = strlen(local_basepath) + 1 + sizeof(HLS_SEGMENT_FILENAME_TEMPLATE) + 1;
+        char   path[path_sz];
+        size_t nwrite = snprintf(&path[0], path_sz, "%s/%s", local_basepath, HLS_SEGMENT_FILENAME_TEMPLATE);
+        path[nwrite++] = 0;
+        av_dict_set(&options, "hls_segment_filename",  &path[0], 0);
+    }
+    av_dict_set(&options, "hls_fmp4_init_filename", HLS_FMP4_FILENAME, 0);
+    // At this point, avformat_write_header() does NOT write any bytes to playlist
+    int err = avformat_write_header(fmt_ctx, &options);
+    av_dict_free(&options);
+    if (err == 0) {
+        int is_output = 1;
+        av_dump_format(fmt_ctx, 0, "some_output_file_path", is_output);
+    } else {
+        char errbuf[128];
+        av_strerror(err, &errbuf[0], 128);
+        av_log(NULL, AV_LOG_ERROR, "Error occurred when opening output file, %s \n", &errbuf[0]);
+    }
+    return err;
+} // end of atfp_hls__av_setup_options
 
 
 static void _atfp_config_dst_video_codecctx(AVCodecContext *dst, AVCodecContext *src, json_t *spec)
@@ -63,26 +106,11 @@ static void _atfp_config_dst_audio_coderctx(AVCodecContext *dst, AVCodecContext 
 } // end of _atfp_config_dst_audio_coderctx
 
 
-static  __attribute__((optimize("O0"))) int _atfp_hls__av_encoder_init(atfp_hls_t *hlsproc)
+static int atfp_hls__av_encoder_init(atfp_av_ctx_t *avctx_dst, atfp_av_ctx_t *avctx_src,
+        json_t *spec, json_t *err_info)
 {
-    atfp_t   *fp_dst = &hlsproc->super;
-    json_t *err_info = fp_dst ->data.error;
-    asa_op_base_cfg_t  *asa_dst = fp_dst->data.storage.handle;
-    atfp_asa_map_t     *map = asa_dst->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
-    asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(map);
-    // TODO, refactor in case app uses different multimedia codec library
-    atfp_t   *fp_src =  asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    if(fp_dst->backend_id != fp_src->backend_id) {
-        json_object_set_new(err_info, "transcoder", json_string("[hls] invalid backend library in source file processor"));
-        return AVERROR(EINVAL);
-    }
-    // from this point, it ensures both src/dst sides apply the same backend
-    // library for transcoding process.
-    atfp_av_ctx_t   *avctx_src = ((atfp_hls_t *)fp_src)->av; // TODO, better design for identifying source format
-    atfp_av_ctx_t   *avctx_dst = hlsproc->av;
     AVFormatContext *ofmt_ctx  = avctx_dst->fmt_ctx;
     AVFormatContext *ifmt_ctx  = avctx_src->fmt_ctx;
-
     AVCodecContext       **dec_ctxs = avctx_src ->stream_ctx.decode;
     atfp_stream_enc_ctx_t *enc_ctxs = av_mallocz_array(ifmt_ctx->nb_streams, sizeof(atfp_stream_enc_ctx_t));
     avctx_dst ->stream_ctx.encode = enc_ctxs;
@@ -105,9 +133,9 @@ static  __attribute__((optimize("O0"))) int _atfp_hls__av_encoder_init(atfp_hls_
                 break;
             }
             if(dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
-                _atfp_config_dst_video_codecctx(enc_ctx, dec_ctx, fp_dst->data.spec);
+                _atfp_config_dst_video_codecctx(enc_ctx, dec_ctx, spec);
             } else if(dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) {
-                _atfp_config_dst_audio_coderctx(enc_ctx, dec_ctx, fp_dst->data.spec);
+                _atfp_config_dst_audio_coderctx(enc_ctx, dec_ctx, spec);
             }
             err = avcodec_open2(enc_ctx, encoder, NULL);
             if(err < 0) {
@@ -131,7 +159,7 @@ static  __attribute__((optimize("O0"))) int _atfp_hls__av_encoder_init(atfp_hls_
         }
     } // end of stream iteration
     return err;
-} // end of _atfp_hls__av_encoder_init
+} // end of atfp_hls__av_encoder_init
 
 
 int  atfp_hls__av_init(atfp_hls_t *hlsproc)
@@ -140,26 +168,49 @@ int  atfp_hls__av_init(atfp_hls_t *hlsproc)
     AVFormatContext *fmt_ctx = NULL;
     atfp_t  *processor = &hlsproc->super;
     json_t  *req_spec  =  processor->data.spec;
+    const char *local_basepath = hlsproc->asa_local.super.op.mkdir.path.origin;
     { // In this project, everything in `spec` field has to be validated at app server
         const char *fmt_name = json_string_value(json_object_get(req_spec, "container"));
-        const char *basepath = hlsproc->asa_local.super.op.mkdir.path.origin;
-        size_t playlist_path_sz = strlen(basepath) + 1 + sizeof(PLAYLIST_FILENAME);
+        size_t playlist_path_sz = strlen(local_basepath) + 1 + sizeof(HLS_PLAYLIST_FILENAME);
         char   playlist_path [playlist_path_sz];
-        size_t nwrite = snprintf(&playlist_path[0], playlist_path_sz, "%s/%s", basepath, PLAYLIST_FILENAME);
+        size_t nwrite = snprintf(&playlist_path[0], playlist_path_sz, "%s/%s",
+                local_basepath, HLS_PLAYLIST_FILENAME);
         playlist_path[nwrite++] = 0;
         err = avformat_alloc_output_context2(&fmt_ctx, NULL, fmt_name, &playlist_path[0]);
         hlsproc->av->fmt_ctx = fmt_ctx;
     } // does output format context require low-level AVIO context ?
+    atfp_av_ctx_t   *avctx_src = NULL;
+    if (!err) {
+        atfp_t   *fp_dst = &hlsproc->super;
+        asa_op_base_cfg_t  *asa_dst = fp_dst->data.storage.handle;
+        atfp_asa_map_t     *map = asa_dst->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(map);
+        // TODO, refactor in case app uses different multimedia codec library
+        atfp_t   *fp_src =  asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+        if((fp_dst->backend_id != fp_src->backend_id) || (fp_dst->backend_id == ATFP_BACKEND_LIB__UNKNOWN))
+        {
+            json_object_set_new(fp_dst ->data.error, "transcoder", json_string("[hls] invalid backend library in source file processor"));
+            err = AVERROR(EINVAL);
+        }
+        // from this point, it ensures both src/dst sides apply the same backend
+        // library for transcoding process.
+        avctx_src = ((atfp_hls_t *)fp_src)->av; // TODO, better design for identifying source format
+    }
     if (!err)
-        err  = _atfp_hls__av_encoder_init(hlsproc);
+        err  = atfp_hls__av_encoder_init(hlsproc->av, avctx_src, req_spec,
+                   processor->data.error);
+    if (!err)
+        err  = atfp_hls__av_setup_options(fmt_ctx, local_basepath);
     // TODO, add function and data structure to monitor how many segment files are done by encoding
     //  function and ready to traansfer to destination storage. This is for certain types of output
     //  formats which support content segmentation such as HLS or mpeg-DASH
     if(err) {
-        json_object_set_new(processor->data.error, "transcoder",
-            json_string("[mp4] failed to initialize output format context"));
+        json_t *err_detail = json_object_get(processor->data.error, "transcoder");
+        if(!err_detail) {
+            json_object_set_new(processor->data.error, "transcoder",
+                json_string("[hls] failed to initialize output format context"));
+        }
         atfp_hls__av_deinit(hlsproc);
     }
     return err;
 } // end of atfp_hls__av_init
-#undef  PLAYLIST_FILENAME

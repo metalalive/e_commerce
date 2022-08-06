@@ -147,7 +147,7 @@ Ensure(atfp_mp4_test__avctx_init_ok) {
             expect(avcodec_parameters_to_context,  will_return(0),
                     when(codec_ctx, is_equal_to(expect_codec_ctx)) ,
                     when(par, is_equal_to(mock_av_streams[idx].codecpar))  );
-            expect(avcodec_open2,  will_return(0), when(avctx, is_equal_to(expect_codec_ctx)) );
+            expect(avcodec_open2,  will_return(0), when(ctx, is_equal_to(expect_codec_ctx)) );
             if(expect_codec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
                 expect(av_guess_frame_rate,  will_return(18));
                 expect(av_guess_frame_rate,  will_return(1));
@@ -209,7 +209,7 @@ Ensure(atfp_mp4_test__avctx_init__codec_error) {
             expect(avcodec_parameters_to_context,  will_return(0),
                     when(codec_ctx, is_equal_to(expect_codec_ctx)) ,
                     when(par, is_equal_to(mock_av_streams[0].codecpar))  );
-            expect(avcodec_open2,  will_return(AVERROR(ENOMEM)), when(avctx, is_equal_to(expect_codec_ctx)) );
+            expect(avcodec_open2,  will_return(AVERROR(ENOMEM)), when(ctx, is_equal_to(expect_codec_ctx)) );
         }
         expect(utest_atfp_mp4__avctx_init__done_cb);
     } {

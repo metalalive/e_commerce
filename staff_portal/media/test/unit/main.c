@@ -7,6 +7,7 @@ TestSuite *app_transcoder_cfg_parser_tests(void);
 TestSuite *app_transcoder_file_processor_tests(void);
 TestSuite *app_transcoder_mp4_preload_tests(void);
 TestSuite *app_transcoder_mp4_avcontext_tests(void);
+TestSuite *app_transcoder_hls_avcontext_tests(void);
 TestSuite *app_rpc_cfg_parser_tests(void);
 TestSuite *app_rpc_core_tests(void);
 TestSuite *app_storage_cfg_parser_tests(void);
@@ -49,8 +50,9 @@ int main(int argc, char **argv) {
     add_suite(suite, app_transcoder_file_processor_tests());
     add_suite(suite, app_transcoder_mp4_preload_tests());
     add_suite(suite, app_transcoder_mp4_avcontext_tests());
+    add_suite(suite, app_transcoder_hls_avcontext_tests());
     add_suite(suite, app_views_common_tests());
-    //add_suite(suite, app_appcfg_generic_tests());
+    add_suite(suite, app_appcfg_generic_tests());
     if(argc > 1) {
         const char *test_name = argv[argc - 1];
         result = run_single_test(suite, test_name, reporter);

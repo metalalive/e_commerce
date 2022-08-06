@@ -12,13 +12,21 @@ AVCodec *avcodec_find_decoder(enum AVCodecID id)
 { return (AVCodec *)mock(id); }
 
 AVCodecContext *avcodec_alloc_context3(const AVCodec *codec)
-{ return (AVCodecContext *)mock(codec); }
+{
+    AVCodecContext *out = (AVCodecContext *)mock(codec);
+    if(out)
+        out->codec = codec;
+    return out;
+}
 
-void avcodec_free_context(AVCodecContext **avctx_p)
-{ mock(avctx_p); }
+void avcodec_free_context(AVCodecContext **ctx_p)
+{
+    AVCodecContext *ctx = *ctx_p;
+    mock(ctx);
+}
 
-int avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options)
-{ return (int) mock(avctx, codec, options); }
+int avcodec_open2(AVCodecContext *ctx, const AVCodec *codec, AVDictionary **options)
+{ return (int) mock(ctx, codec, options); }
 
 int avcodec_parameters_to_context(AVCodecContext *codec_ctx, const AVCodecParameters *par)
 { return (int) mock(codec_ctx, par); }

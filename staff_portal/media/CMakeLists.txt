@@ -261,6 +261,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/file_processor.c
     test/unit/transcoder/video/mp4/preload.c
     test/unit/transcoder/video/mp4/avcontext.c
+    test/unit/transcoder/video/hls/avcontext.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c
@@ -355,7 +356,7 @@ ADD_CUSTOM_TARGET(dev_app_server
     DEPENDS ${APP_SERVER_EXE_NAME})
 
 ADD_CUSTOM_TARGET(dev_rpc_worker
-    #gdb -args
+    ##gdb -args
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${RPC_CONSUMER_EXE_NAME})
@@ -365,7 +366,7 @@ ADD_CUSTOM_TARGET(unit_test
     # uncomment the following line, make cgreen test suite run in single (main) process
     # without forking, then you can set breakpoints using debugger (currently only supports GDB)
     ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-    #gdb -args # uncomment this line for debugging
+    ##gdb -args # uncomment this line for debugging
     ##valgrind --leak-check=full
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${UNIT_TEST_EXE_NAME}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..

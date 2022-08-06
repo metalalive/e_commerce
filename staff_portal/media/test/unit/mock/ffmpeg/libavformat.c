@@ -64,5 +64,16 @@ AVRational av_guess_frame_rate(AVFormatContext *fmtctx, AVStream *stream, AVFram
 }
 
 AVStream *avformat_new_stream(AVFormatContext *s, const AVCodec *c)
-{ return (AVStream *) mock(s, c); }
+{
+    AVStream *out = (AVStream *) mock(s, c);
+    if(s)
+       s-> nb_streams += 1;
+    return out;
+}
+
+int avformat_write_header(AVFormatContext *fmt_ctx, AVDictionary **options)
+{ return (int) mock(fmt_ctx, options); }
+
+void av_dump_format(AVFormatContext *ic, int index, const char *url, int is_output)
+{ return  mock(ic, index, url, is_output); }
 
