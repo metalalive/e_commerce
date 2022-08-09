@@ -202,6 +202,7 @@ SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/file_processor.c
     src/transcoder/video/hls/init.c 
     src/transcoder/video/hls/avcontext.c 
+    src/transcoder/video/hls/avfilter.c 
     src/transcoder/video/mp4/preload.c 
     src/transcoder/video/mp4/avcontext.c 
     src/transcoder/video/mp4/init.c )
@@ -262,6 +263,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/mp4/preload.c
     test/unit/transcoder/video/mp4/avcontext.c
     test/unit/transcoder/video/hls/avcontext.c
+    test/unit/transcoder/video/hls/avfilter.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c
@@ -273,6 +275,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/mock/openssl.c
     test/unit/mock/ffmpeg/libavformat.c
     test/unit/mock/ffmpeg/libavcodec.c
+    test/unit/mock/ffmpeg/libavfilter.c
     test/unit/mock/ffmpeg/libavutil.c
     ${APP_DBMODEL_SOURCE_FILES}
     ${APP_TRANSCODER_SOURCE_FILES}

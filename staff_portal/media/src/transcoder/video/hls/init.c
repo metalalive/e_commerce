@@ -8,9 +8,9 @@ static void atfp_hls__create_local_workfolder_cb (asa_op_base_cfg_t *asaobj, ASA
 {
     atfp_hls_t *hlsproc = (atfp_hls_t *) H2O_STRUCT_FROM_MEMBER(atfp_hls_t, asa_local, asaobj);
     atfp_t *processor = &hlsproc -> super;
-    atfp_hls__av_init(hlsproc);
-    //if (!err)
-    //    err  = atfp_hls__av_filter_init(hlsproc->av, avctx_src, processor->data.error);
+    int err = hlsproc->internal.op.avctx_init(hlsproc);
+    if(!err)
+        hlsproc->internal.op.avfilter_init(hlsproc);
     processor -> data.callback(processor);
 } // end of atfp_hls__create_local_workfolder_cb
 
@@ -61,7 +61,7 @@ static void atfp__video_hls__deinit(atfp_t *processor)
         free(path);
         hlsproc->asa_local.super.op.mkdir.path.curr_parent = NULL;
     }
-    atfp_hls__av_deinit((atfp_hls_t *)processor);
+    hlsproc->internal.op.avctx_deinit(hlsproc);
     free(processor);
 } // end of atfp__video_hls__deinit
 
@@ -81,6 +81,9 @@ static atfp_t *atfp__video_hls__instantiate(void) {
     atfp_hls_t  *out = calloc(0x1, tot_sz);
     char *ptr = (char *)out + sizeof(atfp_hls_t);
     out->av = (atfp_av_ctx_t *) ptr;
+    out->internal.op.avctx_init   = atfp_hls__av_init;
+    out->internal.op.avctx_deinit = atfp_hls__av_deinit;
+    out->internal.op.avfilter_init = atfp_hls__avfilter_init;
     return &out->super;
 }
 

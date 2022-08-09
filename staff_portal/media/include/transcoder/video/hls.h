@@ -13,12 +13,17 @@ typedef struct atfp_hls_s {
     atfp_av_ctx_t  *av;
     asa_op_localfs_cfg_t  asa_local;
     struct {
+        struct {
+            int  (*avfilter_init)(struct atfp_hls_s *);
+            int  (*avctx_init)(struct atfp_hls_s *);
+            void (*avctx_deinit)(struct atfp_hls_s *);
+        } op;
         uint32_t curr_segment_idx;
     } internal;
 } atfp_hls_t;
 
+int   atfp_hls__avfilter_init(atfp_hls_t *);
 int   atfp_hls__av_init(atfp_hls_t *);
-
 void  atfp_hls__av_deinit(atfp_hls_t *);
 
 

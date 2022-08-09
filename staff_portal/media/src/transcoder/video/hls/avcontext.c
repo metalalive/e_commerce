@@ -21,7 +21,9 @@ void  atfp_hls__av_deinit(atfp_hls_t *hlsproc)
         for(int idx = 0; idx < nb_streams; idx++) {
             if(enc_ctxs[idx].enc_ctx)
                 avcodec_free_context(&enc_ctxs[idx].enc_ctx);
-            if(enc_ctxs[idx].filter_graph) {}
+            if(enc_ctxs[idx].filter_graph) {
+                avfilter_graph_free(&enc_ctxs[idx].filter_graph);
+            }
         }
         av_freep(&hlsproc->av ->stream_ctx.encode);
     }
