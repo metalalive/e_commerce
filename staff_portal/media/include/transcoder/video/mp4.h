@@ -30,6 +30,10 @@ typedef struct atfp_mp4_s {
             size_t    fchunk_seq; 
             size_t    pos;  // position started immediately after first 8-byte header
             size_t    size; // the size without respect to first 8-byte header
+            // `pos` field above means the position in the chunk file indexed with `fchunk_seq`,
+            // while `pos_wholefile` means the position in the whole (not segmented) file 
+            size_t    pos_wholefile;
+            size_t    nb_preloaded; // total num of bytes preloaded in `mdat` atom
         } mdat;
         size_t  nread_prev_chunk;
         struct {
@@ -47,9 +51,13 @@ ASA_RES_CODE  atfp_mp4__preload_packet_sequence (atfp_mp4_t *mp4proc, int chunk_
 
 int  atfp_mp4__validate_source_format(atfp_mp4_t *mp4proc);
 
-ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *, size_t num_init_pkts, void (*cb)(atfp_mp4_t *));
+ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
 
 void  atfp_mp4__av_deinit(atfp_mp4_t *);
+
+ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
+int  atfp_mp4__av_next_local_packet(atfp_av_ctx_t *, void **packet_p);
+int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *, void *packet);
 
 #ifdef __cplusplus
 } // end of extern C clause

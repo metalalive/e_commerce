@@ -51,7 +51,6 @@
     {.pos=180, .size=9}, \
 }
 
-#define  NUM_INIT_PKTS_PRELOAD   4
 #define  PRELOAD_INIT_PKTSEQ_SZ  (81 + 4 - MDAT_ATOM_OFFSET)
 #define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 
@@ -80,9 +79,9 @@ static ASA_RES_CODE mock_asa_src_read_fn(asa_op_base_cfg_t *cfg)
     AVIndexEntry  mock_idx_entry_audio[NUM_PKTS_AUDIO_STREAM] = PACKET_INDEX_ENTRY_AUDIO; \
     AVStream  mock_av_streams[NUM_STREAMS_FMTCTX] = { \
         {.nb_index_entries=NUM_PKTS_VIDEO_STREAM, .index_entries=&mock_idx_entry_video[0], \
-            .codecpar=&mock_codec_param}, \
+            .index=0, .codecpar=&mock_codec_param}, \
         {.nb_index_entries=NUM_PKTS_AUDIO_STREAM, .index_entries=&mock_idx_entry_audio[0], \
-            .codecpar=&mock_codec_param}, \
+            .index=1, .codecpar=&mock_codec_param}, \
     }; \
     AVCodec  mock_av_decoders[NUM_STREAMS_FMTCTX] = {0}; \
     AVCodecContext  mock_av_codec_ctx[NUM_STREAMS_FMTCTX] = { \
@@ -155,7 +154,7 @@ Ensure(atfp_mp4_test__avctx_init_ok) {
         }
         expect(utest_atfp_mp4__avctx_init__done_cb);
     } {
-        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, NUM_INIT_PKTS_PRELOAD, utest_atfp_mp4__avctx_init__done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_init__done_cb);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         assert_that(mp4proc.av->fmt_ctx, is_equal_to(&mock_avfmt_ctx));
         assert_that(mp4proc.av->stream_ctx.decode, is_equal_to(mock_dec_ctxs));
@@ -180,7 +179,7 @@ Ensure(atfp_mp4_test__avctx_init__fmtctx_error) {
         expect(avio_context_free, when(s, is_equal_to(&mock_avfmt_ctx.pb)));
         expect(avformat_close_input);
     } {
-        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, NUM_INIT_PKTS_PRELOAD, utest_atfp_mp4__avctx_init__done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_init__done_cb);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR));
         assert_that(mp4proc.av->fmt_ctx, is_equal_to(NULL));
         assert_that(mp4proc.av->stream_ctx.decode, is_equal_to(NULL));
@@ -213,7 +212,7 @@ Ensure(atfp_mp4_test__avctx_init__codec_error) {
         }
         expect(utest_atfp_mp4__avctx_init__done_cb);
     } {
-        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, NUM_INIT_PKTS_PRELOAD, utest_atfp_mp4__avctx_init__done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_init__done_cb);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         assert_that(mp4proc.av->fmt_ctx, is_equal_to(&mock_avfmt_ctx));
         assert_that(mp4proc.av->stream_ctx.decode, is_equal_to(mock_dec_ctxs));
@@ -335,7 +334,6 @@ TestSuite *app_transcoder_mp4_avcontext_tests(void)
 }
 
 #undef  PRELOAD_INIT_PKTSEQ_SZ
-#undef  NUM_INIT_PKTS_PRELOAD
 #undef  NUM_STREAMS_FMTCTX
 #undef  NUM_FILE_CHUNKS
 #undef  NUM_PKTS_VIDEO_STREAM

@@ -22,7 +22,7 @@ static void atfp_mp4__preload_stream_info__done(atfp_mp4_t *mp4proc)
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
     if(json_object_size(err_info) == 0) {
-        ASA_RES_CODE result = atfp_mp4__av_init(mp4proc, 5, atfp_mp4__avinput_init_done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_init(mp4proc, atfp_mp4__avinput_init_done_cb);
         if(result != ASTORAGE_RESULT_ACCEPT)
             json_object_set_new(err_info, "libav", json_string("[mp4] failed to init avformat context"));
     }
@@ -115,15 +115,50 @@ static void atfp__video_mp4__deinit(atfp_t *processor)
 } // end of atfp__video_mp4__deinit
 
 
+static void atfp_mp4__av_preload_packets__done_cb(atfp_mp4_t *mp4proc)
+{
+    atfp_t *processor = &mp4proc -> super;
+    json_t *err_info = processor->data.error;
+    void *packet = NULL;
+    int err = atfp_mp4__av_next_local_packet(mp4proc->av, &packet);
+    if(!err && packet) {
+        err = atfp_mp4__av_decode_packet(mp4proc->av, packet);
+        if(err)
+           json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to decode next packet after preload"));
+    } else {
+        json_object_set_new(err_info, "transcoder", json_string("[mp4] error when getting next packet after preload"));
+    }
+    // TODO, return following data when processing is done successfully
+    ////atfp_t *processor = &mp4proc -> super;
+    ////processor->transcoded_info = json_array();
+    ////json_t  *item = json_object();
+    ////json_object_set_new(item, "filename", json_string("fake_transcoded_file.mp4"));
+    ////json_object_set_new(item, "size", json_integer(8193));
+    ////json_object_set_new(item, "checksum", json_string("f09d77e32572b562863518c6"));
+    ////json_array_append_new(processor->transcoded_info, item);
+    processor -> data.callback(processor);
+} // end of atfp_mp4__av_preload_packets__done_cb
+
+
 static void atfp__video_mp4__processing(atfp_t *processor)
 {
-    processor->transcoded_info = json_array();
-    json_t  *item = json_object();
-    json_object_set_new(item, "filename", json_string("fake_transcoded_file.mp4"));
-    json_object_set_new(item, "size", json_integer(8193));
-    json_object_set_new(item, "checksum", json_string("f09d77e32572b562863518c6"));
-    json_array_append_new(processor->transcoded_info, item);
-    processor -> data.callback(processor);
+    atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
+    json_t *err_info = processor->data.error;
+    void *packet = NULL;
+    int err = atfp_mp4__av_next_local_packet(mp4proc->av, &packet);
+    if(err) {
+        json_object_set_new(err_info, "transcoder", json_string("[mp4] error when getting next packet from local temp buffer"));
+    } else if(!packet) {
+        ASA_RES_CODE result = atfp_mp4__av_preload_packets(mp4proc, atfp_mp4__av_preload_packets__done_cb );
+        if(result != ASTORAGE_RESULT_ACCEPT)
+            err = 1;
+    } else {
+        err = atfp_mp4__av_decode_packet(mp4proc->av, packet);
+        if(err)
+           json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to decode next packet"));
+    }
+    if(err)
+        processor -> data.callback(processor);
 } // end of atfp__video_mp4__processing
 
 static uint8_t  atfp__video_mp4__has_done_processing(atfp_t *processor)
