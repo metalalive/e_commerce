@@ -6,6 +6,9 @@ extern "C" {
 
 #include "transcoder/file_processor.h"
 
+#define   ATFP_MP4__DEFAULT_NUM_INIT_PKTS   5
+#define   ATFP_MP4__DEFAULT_NBYTES_BULK     55000
+
 typedef struct {
     uint32_t size;
     uint32_t type;
@@ -55,7 +58,7 @@ ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
 
 void  atfp_mp4__av_deinit(atfp_mp4_t *);
 
-ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
+ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *, size_t nbytes, void (*cb)(atfp_mp4_t *));
 int  atfp_mp4__av_next_local_packet(atfp_av_ctx_t *, void **packet_p);
 int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *, void *packet);
 

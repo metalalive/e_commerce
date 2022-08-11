@@ -245,6 +245,7 @@ static void atfp_mp4__write_srcfile_pkt_frag_to_local_tmpbuf_cb (asa_op_base_cfg
         size_t nbytes_copied = mp4proc->internal.preload_pkts.nbytes_copied;
         nbytes_copied += nwrite;
         mp4proc->internal.preload_pkts.nbytes_copied = nbytes_copied;
+        mp4proc->internal.mdat.nb_preloaded += nwrite;
         if(nbytes_total == nbytes_copied) {
             //sequence of the requested packet is written to local temp buffer
             mp4proc->internal.callback.preload_done(mp4proc) ;

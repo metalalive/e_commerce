@@ -51,21 +51,33 @@
     {.pos=180, .size=9}, \
 }
 
-#define  PRELOAD_INIT_PKTSEQ_SZ  (81 + 4 - MDAT_ATOM_OFFSET)
+#define  PRELOAD_INIT_PKTSEQ_SZ  (99 + 9 - MDAT_ATOM_OFFSET)
 #define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 
 
-static void utest_atfp_mp4__avctx_init__done_cb(atfp_mp4_t *mp4proc)
+static void utest_atfp_mp4__avctx_preload__done_cb(atfp_mp4_t *mp4proc)
 {
     mock(mp4proc);
 }
 
-static ASA_RES_CODE mock_asa_src_read_fn(asa_op_base_cfg_t *cfg)
+static ASA_RES_CODE mock_asa_src_initial_read_fn(asa_op_base_cfg_t *cfg)
 { // skip real storage read function, directly invoke the callback, assume the preloading is done.
     atfp_mp4_t *mp4proc = (atfp_mp4_t *)cfg->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     assert_that(mp4proc->internal.preload_pkts.size, is_equal_to(PRELOAD_INIT_PKTSEQ_SZ));
     assert_that(mp4proc->internal.preload_pkts.nbytes_copied, is_equal_to(0));
     mp4proc->internal.preload_pkts.nbytes_copied = mp4proc->internal.preload_pkts.size;
+    mp4proc->internal.mdat.nb_preloaded += mp4proc->internal.preload_pkts.size;
+    mp4proc->internal.callback.preload_done(mp4proc);
+    return ASTORAGE_RESULT_ACCEPT;
+}
+
+static ASA_RES_CODE mock_asa_src_subsequent_read_fn(asa_op_base_cfg_t *cfg)
+{ // skip real storage read function, directly invoke the callback, assume the preloading is done.
+    atfp_mp4_t *mp4proc = (atfp_mp4_t *)cfg->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    //// assert_that(mp4proc->internal.preload_pkts.size, is_equal_to(PRELOAD_INIT_PKTSEQ_SZ));
+    assert_that(mp4proc->internal.preload_pkts.nbytes_copied, is_equal_to(0));
+    mp4proc->internal.preload_pkts.nbytes_copied = mp4proc->internal.preload_pkts.size;
+    mp4proc->internal.mdat.nb_preloaded += mp4proc->internal.preload_pkts.size;
     mp4proc->internal.callback.preload_done(mp4proc);
     return ASTORAGE_RESULT_ACCEPT;
 }
@@ -94,7 +106,7 @@ static ASA_RES_CODE mock_asa_src_read_fn(asa_op_base_cfg_t *cfg)
     asa_op_base_cfg_t  asa_cfg_src = {0}; \
     asa_op_localfs_cfg_t  asa_local = {0}; \
     atfp_asa_map_t  *mock_map = atfp_asa_map_init(2); \
-    asa_cfg_t   storage_src = {.ops={.fn_read=mock_asa_src_read_fn}}; \
+    asa_cfg_t   storage_src = {.ops={.fn_read=mock_asa_src_initial_read_fn}}; \
     atfp_av_ctx_t  *mock_av_ctx = calloc(1, sizeof(atfp_av_ctx_t)); \
     atfp_mp4_t  mp4proc = { \
         .internal={.mdat={.pos=MDAT_ATOM_OFFSET, .fchunk_seq=0, .size=MDAT_ATOM_BODY_SZ}} , \
@@ -152,13 +164,18 @@ Ensure(atfp_mp4_test__avctx_init_ok) {
                 expect(av_guess_frame_rate,  will_return(1));
             }
         }
-        expect(utest_atfp_mp4__avctx_init__done_cb);
+        expect(utest_atfp_mp4__avctx_preload__done_cb);
     } {
-        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_init__done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_preload__done_cb);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         assert_that(mp4proc.av->fmt_ctx, is_equal_to(&mock_avfmt_ctx));
         assert_that(mp4proc.av->stream_ctx.decode, is_equal_to(mock_dec_ctxs));
+        atfp_stream_stats_t  *stats = mp4proc.av->stats;
         for(int idx = 0; idx < NUM_STREAMS_FMTCTX; idx++) {
+            int actual_num_pkt_preloading = stats[idx].index_entry.preloading;
+            uint8_t stream_preload_cond = actual_num_pkt_preloading >= ATFP_MP4__DEFAULT_NUM_INIT_PKTS;
+            assert_that(stream_preload_cond  ,is_equal_to(1));
+            assert_that(actual_num_pkt_preloading, is_less_than( mock_av_streams[idx].nb_index_entries ));
             assert_that(mock_dec_ctxs[idx], is_equal_to(&mock_av_codec_ctx[idx]));
         }
         assert_that(json_object_size(mp4proc.super.data.error), is_equal_to(0));
@@ -179,7 +196,7 @@ Ensure(atfp_mp4_test__avctx_init__fmtctx_error) {
         expect(avio_context_free, when(s, is_equal_to(&mock_avfmt_ctx.pb)));
         expect(avformat_close_input);
     } {
-        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_init__done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_preload__done_cb);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR));
         assert_that(mp4proc.av->fmt_ctx, is_equal_to(NULL));
         assert_that(mp4proc.av->stream_ctx.decode, is_equal_to(NULL));
@@ -210,9 +227,9 @@ Ensure(atfp_mp4_test__avctx_init__codec_error) {
                     when(par, is_equal_to(mock_av_streams[0].codecpar))  );
             expect(avcodec_open2,  will_return(AVERROR(ENOMEM)), when(ctx, is_equal_to(expect_codec_ctx)) );
         }
-        expect(utest_atfp_mp4__avctx_init__done_cb);
+        expect(utest_atfp_mp4__avctx_preload__done_cb);
     } {
-        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_init__done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_init(&mp4proc, utest_atfp_mp4__avctx_preload__done_cb);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         assert_that(mp4proc.av->fmt_ctx, is_equal_to(&mock_avfmt_ctx));
         assert_that(mp4proc.av->stream_ctx.decode, is_equal_to(mock_dec_ctxs));
@@ -321,6 +338,94 @@ Ensure(atfp_mp4_test__avctx_validate__decoder_unsupported) {
 #undef   NUM_VIDEO_CODEC_CTXS
 
 
+#define  UNITTEST_AVCTX__PRELOAD_PKT_SETUP \
+    AVIndexEntry  mock_idx_entry_video[NUM_PKTS_VIDEO_STREAM] = PACKET_INDEX_ENTRY_VIDEO; \
+    AVIndexEntry  mock_idx_entry_audio[NUM_PKTS_AUDIO_STREAM] = PACKET_INDEX_ENTRY_AUDIO; \
+    AVStream  mock_av_streams[NUM_STREAMS_FMTCTX] = { \
+        {.nb_index_entries=NUM_PKTS_VIDEO_STREAM, .index_entries=&mock_idx_entry_video[0], \
+            .index=0}, \
+        {.nb_index_entries=NUM_PKTS_AUDIO_STREAM, .index_entries=&mock_idx_entry_audio[0], \
+            .index=1}, \
+    }; \
+    AVStream  *mock_av_streams_ptr[NUM_STREAMS_FMTCTX] = {&mock_av_streams[0], &mock_av_streams[1]}; \
+    AVFormatContext  mock_avfmt_ctx = {.nb_streams=NUM_STREAMS_FMTCTX, .streams=mock_av_streams_ptr}; \
+    atfp_stream_stats_t  mock_av_stream_stats[NUM_STREAMS_FMTCTX] = {0}; \
+    asa_op_base_cfg_t  asa_cfg_src = {0}; \
+    asa_op_localfs_cfg_t  asa_local = {0}; \
+    atfp_asa_map_t  *mock_map = atfp_asa_map_init(2); \
+    asa_cfg_t   storage_src = {.ops={.fn_read=mock_asa_src_subsequent_read_fn}}; \
+    atfp_av_ctx_t  mock_av_ctx = {.fmt_ctx=&mock_avfmt_ctx, .stats=&mock_av_stream_stats[0]}; \
+    atfp_mp4_t  mp4proc = { \
+        .internal={.mdat={.pos=MDAT_ATOM_OFFSET, .fchunk_seq=0, .size=MDAT_ATOM_BODY_SZ, \
+            .pos_wholefile=MDAT_ATOM_OFFSET, .nb_preloaded=0 }} , \
+        .super={.data={.storage={.handle=&asa_cfg_src, .config=&storage_src}, \
+            .spec=json_object(), .error=json_object() }}, .av=&mock_av_ctx \
+    }; \
+    void *asacfg_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
+    { \
+        json_t *fchunks_sz = json_array(); \
+        json_object_set_new(mp4proc.super.data.spec, "parts_size", fchunks_sz); \
+        json_array_append_new(fchunks_sz, json_integer(MDAT_ATOM_OFFSET + MDAT_ATOM_BODY_SZ)); \
+        asacfg_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mp4proc; \
+        asa_cfg_src.cb_args.entries = asacfg_cb_args; \
+        asa_cfg_src.cb_args.size    = NUM_CB_ARGS_ASAOBJ; \
+        atfp_asa_map_set_source(mock_map, &asa_cfg_src); \
+        atfp_asa_map_set_localtmp(mock_map, &asa_local); \
+        mkdir(LOCAL_TMPBUF_PATH, S_IRWXU); \
+        asa_local .file.file = open(LOCAL_TMPBUF_PATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
+    }
+
+#define  UNITTEST_AVCTX__PRELOAD_PKT_TEARDOWN \
+    { \
+        close(asa_local.file.file); \
+        unlink(LOCAL_TMPBUF_PATH); \
+        rmdir(UNITTEST_FULLPATH); \
+        json_decref(mp4proc.super.data.spec); \
+        json_decref(mp4proc.super.data.error); \
+        atfp_asa_map_deinit(mock_map); \
+    }
+
+Ensure(atfp_mp4_test__avctx_subsequent_preload_all_packets) {
+    UNITTEST_AVCTX__PRELOAD_PKT_SETUP;
+    expect(utest_atfp_mp4__avctx_preload__done_cb);
+    ASA_RES_CODE result = atfp_mp4__av_preload_packets(&mp4proc, MDAT_ATOM_BODY_SZ + 1,
+            utest_atfp_mp4__avctx_preload__done_cb);
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+    for(int idx = 0; idx < NUM_STREAMS_FMTCTX; idx++) {
+        int actual_num_preloading = mock_av_stream_stats[idx].index_entry.preloading;
+        int actual_num_preloaded  = mock_av_stream_stats[idx].index_entry.preloaded;
+        assert_that(actual_num_preloading, is_equal_to( mock_av_streams[idx].nb_index_entries ));
+        assert_that(actual_num_preloading, is_equal_to( actual_num_preloaded ));
+    }
+    assert_that(json_object_size(mp4proc.super.data.error), is_equal_to(0));
+    UNITTEST_AVCTX__PRELOAD_PKT_TEARDOWN;
+} // end of atfp_mp4_test__avctx_subsequent_preload_all_packets
+
+
+Ensure(atfp_mp4_test__avctx_subsequent_preload_some_packets) {
+    UNITTEST_AVCTX__PRELOAD_PKT_SETUP;
+    int proceed_idx_entries[] = {3,5,8,12, -1};
+    size_t start_pos = 0;
+    size_t last_end_pos = MDAT_ATOM_OFFSET;
+    for(int idx = 0; proceed_idx_entries[idx] > 0; idx++) {
+        int proceed_to_idx_entry = proceed_idx_entries[idx];
+        start_pos = last_end_pos;
+        last_end_pos = mock_idx_entry_video[proceed_to_idx_entry].pos;
+        size_t expect_nbytes_preload = last_end_pos - start_pos;
+        mock_av_ctx.async_limit.max_nbytes_bulk = expect_nbytes_preload;
+        expect(utest_atfp_mp4__avctx_preload__done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_preload_packets(&mp4proc, expect_nbytes_preload,
+                utest_atfp_mp4__avctx_preload__done_cb);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        int actual_num_preloading = mock_av_stream_stats[0].index_entry.preloading;
+        int actual_num_preloaded  = mock_av_stream_stats[0].index_entry.preloaded;
+        assert_that(actual_num_preloading, is_equal_to( proceed_to_idx_entry ));
+        assert_that(actual_num_preloading, is_equal_to( actual_num_preloaded ));
+    }
+    UNITTEST_AVCTX__PRELOAD_PKT_TEARDOWN;
+} // end of atfp_mp4_test__avctx_subsequent_preload_some_packets
+
+
 TestSuite *app_transcoder_mp4_avcontext_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -330,6 +435,8 @@ TestSuite *app_transcoder_mp4_avcontext_tests(void)
     add_test(suite, atfp_mp4_test__avctx_validate__ok);
     add_test(suite, atfp_mp4_test__avctx_validate__demuxer_unsupported);
     add_test(suite, atfp_mp4_test__avctx_validate__decoder_unsupported);
+    add_test(suite, atfp_mp4_test__avctx_subsequent_preload_all_packets);
+    add_test(suite, atfp_mp4_test__avctx_subsequent_preload_some_packets);
     return suite;
 }
 

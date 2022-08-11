@@ -61,13 +61,12 @@ static  size_t  atfp_mp4__mdat_body_pos(atfp_mp4_t *mp4proc)
 
 static uint8_t estimate_nb_initial_packet__continue_fn(atfp_av_ctx_t *avctx, size_t start_pos, size_t end_pos)
 {
-    const int num_init_pkts = 5;
     uint8_t should_continue = 0;
     AVFormatContext *fmt_ctx = avctx->fmt_ctx;
     // TODO, end-of-whole-file check
     for(int idx = 0; (!should_continue) && (idx < fmt_ctx->nb_streams); idx++) {
          int curr_pkt_idx = avctx-> stats[idx].index_entry.preloading;
-         should_continue = (num_init_pkts - 1) > curr_pkt_idx;
+         should_continue = (avctx->async_limit.num_init_pkts) > curr_pkt_idx;
     }
     return should_continue;
 }
@@ -75,8 +74,7 @@ static uint8_t estimate_nb_initial_packet__continue_fn(atfp_av_ctx_t *avctx, siz
 static uint8_t estimate_nb_subsequent_packet__continue_fn (atfp_av_ctx_t *avctx, size_t start_pos, size_t end_pos)
 {
     // TODO, end-of-whole-file check
-    const  size_t limit_nb_bytes = 55000;
-    uint8_t should_continue = (end_pos - start_pos) < limit_nb_bytes;
+    uint8_t should_continue = (end_pos - start_pos) < avctx->async_limit.max_nbytes_bulk;
     return should_continue;
 }
 
@@ -269,23 +267,16 @@ ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *mp4proc, void (*cb)(atfp_mp4_t *))
         // erase content in local temp buffer, load initial packets from source
         lseek(asa_local->file.file, 0, SEEK_SET);
         mp4proc-> av-> stats = calloc(fmt_ctx->nb_streams, sizeof(atfp_stream_stats_t));
+    } { // set up limit of preloading bytes size for async decoding
+        uint8_t  min__num_init_pkts = ATFP_MP4__DEFAULT_NUM_INIT_PKTS;
+        for(int idx = 0; idx < fmt_ctx->nb_streams; idx++) {
+            AVStream *stream  = fmt_ctx->streams[idx];
+            min__num_init_pkts = FFMIN(min__num_init_pkts, stream->nb_index_entries);
+        }
+        mp4proc->av->async_limit.num_init_pkts = min__num_init_pkts;
     }
     size_t  nbytes_to_load = atfp_ffmpeg__estimate_nb_pkt_preload(mp4proc->av,
             mp4proc->internal.mdat.pos_wholefile,  estimate_nb_initial_packet__continue_fn);
-    ////size_t  farest_pos = 0;
-    ////size_t  farest_sz  = 0;
-    ////for (int idx = 0; idx < fmt_ctx->nb_streams; idx++) {
-    ////    AVStream *stream = fmt_ctx->streams[idx];
-    ////    size_t max_num_pkts = FFMIN(num_init_pkts, stream->nb_index_entries);
-    ////    for (int jdx = 0; jdx < max_num_pkts; jdx++) {
-    ////        size_t  pkt_pos = stream-> index_entries[jdx].pos;
-    ////        if(farest_pos < pkt_pos) {
-    ////            farest_pos = pkt_pos;
-    ////            farest_sz  = stream-> index_entries[jdx].size;
-    ////        }
-    ////    }
-    ////} // end of loop
-    ////size_t nbytes_to_load  = farest_pos + farest_sz - start_pkt_pos;
     // -------------
     int    chunk_idx  = mp4proc->internal.mdat.fchunk_seq;
     size_t offset     = mp4proc->internal.mdat.pos;
@@ -313,7 +304,7 @@ static void  atfp_mp4__preload_subsequent_packets_done(atfp_mp4_t *mp4proc)
 } // end of atfp_mp4__preload_subsequent_packets_done
 
 
-ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *mp4proc, void (*cb)(atfp_mp4_t *))
+ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *mp4proc, size_t nbytes, void (*cb)(atfp_mp4_t *))
 {
     ASA_RES_CODE result = ASTORAGE_RESULT_COMPLETE;
     AVFormatContext *fmt_ctx = mp4proc->av ->fmt_ctx;
@@ -323,6 +314,7 @@ ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *mp4proc, void (*cb)(atfp
     size_t  offset     = 0;
     result = atfp_mp4__serial_to_segment_pos(mp4proc->super.data.spec, start_pkt_pos, &chunk_idx, &offset);
     if(result == ASTORAGE_RESULT_COMPLETE) {
+        mp4proc->av->async_limit.max_nbytes_bulk = FFMIN(nbytes, mp4proc->internal.mdat.size);
         nbytes_to_load = atfp_ffmpeg__estimate_nb_pkt_preload(mp4proc->av, start_pkt_pos,
               estimate_nb_subsequent_packet__continue_fn);
     }

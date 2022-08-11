@@ -22,6 +22,7 @@ typedef struct {
     struct {
         size_t  preloading;
         size_t  preloaded;
+        size_t  fetched; 
         size_t  decoded; 
     } index_entry;
 } atfp_stream_stats_t;
@@ -33,7 +34,11 @@ struct atfp_av_ctx_s {
         atfp_stream_enc_ctx_t  *encode;
     } stream_ctx;
     atfp_stream_stats_t  *stats;
-    uint8_t      decoder_flag:1;
+    struct {
+        uint8_t  num_init_pkts;
+        size_t   max_nbytes_bulk; // max nbytes to load for async decoding
+    } async_limit;
+    uint8_t  decoder_flag:1;
 };
 
 

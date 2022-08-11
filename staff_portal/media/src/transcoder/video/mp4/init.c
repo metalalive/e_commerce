@@ -149,7 +149,8 @@ static void atfp__video_mp4__processing(atfp_t *processor)
     if(err) {
         json_object_set_new(err_info, "transcoder", json_string("[mp4] error when getting next packet from local temp buffer"));
     } else if(!packet) {
-        ASA_RES_CODE result = atfp_mp4__av_preload_packets(mp4proc, atfp_mp4__av_preload_packets__done_cb );
+        ASA_RES_CODE result = atfp_mp4__av_preload_packets(mp4proc, ATFP_MP4__DEFAULT_NBYTES_BULK,
+                atfp_mp4__av_preload_packets__done_cb );
         if(result != ASTORAGE_RESULT_ACCEPT)
             err = 1;
     } else {
