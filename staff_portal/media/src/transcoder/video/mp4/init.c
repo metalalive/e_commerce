@@ -120,7 +120,7 @@ static void atfp_mp4__av_preload_packets__done_cb(atfp_mp4_t *mp4proc)
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
     void *packet = NULL;
-    int err = atfp_mp4__av_next_local_packet(mp4proc->av, &packet);
+    int err = atfp_ffmpeg__next_local_packet(mp4proc->av, &packet);
     if(!err && packet) {
         err = atfp_mp4__av_decode_packet(mp4proc->av, packet);
         if(err)
@@ -145,7 +145,7 @@ static void atfp__video_mp4__processing(atfp_t *processor)
     atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
     json_t *err_info = processor->data.error;
     void *packet = NULL;
-    int err = atfp_mp4__av_next_local_packet(mp4proc->av, &packet);
+    int err = atfp_ffmpeg__next_local_packet(mp4proc->av, &packet);
     if(err) {
         json_object_set_new(err_info, "transcoder", json_string("[mp4] error when getting next packet from local temp buffer"));
     } else if(!packet) {
@@ -158,7 +158,7 @@ static void atfp__video_mp4__processing(atfp_t *processor)
         if(err)
            json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to decode next packet"));
     }
-    if(err)
+    if(err || packet)
         processor -> data.callback(processor);
 } // end of atfp__video_mp4__processing
 

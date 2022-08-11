@@ -102,11 +102,22 @@ static  size_t   atfp_ffmpeg__estimate_nb_pkt_preload(atfp_av_ctx_t *avctx, size
     return farest_pos - start_pkt_pos;
 } // end of atfp_ffmpeg__estimate_nb_pkt_preload
 
+
+static void  atfp_mp4__av_packet_deinit(AVPacket  *packet)
+{
+    if(!packet->data) { return; }
+    av_packet_unref(packet);
+    *packet = (AVPacket) {0};
+    packet->stream_index = -1;
+}
+
 void  atfp_mp4__av_deinit(atfp_mp4_t *mp4proc)
 {
     int idx = 0;
     AVFormatContext    *fmt_ctx = mp4proc->av->fmt_ctx;
     AVCodecContext   **dec_ctxs = mp4proc->av->stream_ctx.decode;
+    AVPacket  *pkt = & mp4proc->av->intermediate_data.decode.packet;
+    atfp_mp4__av_packet_deinit(pkt);
     if(dec_ctxs) {
         int nb_streams = fmt_ctx ? fmt_ctx->nb_streams: 0;
         for(idx = 0; idx < nb_streams; idx++) {
@@ -328,11 +339,33 @@ ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *mp4proc, size_t nbytes, 
 
 
 
-int  atfp_mp4__av_next_local_packet(atfp_av_ctx_t *avctx, void **packet_p)
+int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *avctx, void **packet_p)
 {
     int err = 0, idx = 0;
+    size_t  num_pkts_avail = 0;
+    AVFormatContext  *fmt_ctx = avctx ->fmt_ctx;
+    for(idx = 0; idx < fmt_ctx->nb_streams; idx++) {
+        size_t  preloaded = avctx->stats[idx].index_entry.preloaded;
+        size_t  fetched   = avctx->stats[idx].index_entry.fetched;
+        num_pkts_avail += preloaded - fetched;
+    }
+    if(num_pkts_avail > 0) {
+        AVPacket  *pkt = &avctx->intermediate_data.decode.packet;
+        atfp_mp4__av_packet_deinit(pkt);
+        err = av_read_frame(fmt_ctx, pkt);
+        if(!err) {
+            int is_corrupted = (pkt->flags & (int)AV_PKT_FLAG_CORRUPT);
+            err = (pkt->stream_index < 0) || (is_corrupted != 0) || 
+                (pkt->stream_index >= fmt_ctx->nb_streams);
+        }
+        if(!err) {
+            idx = pkt->stream_index;
+            avctx->stats[idx].index_entry.fetched ++;
+            *packet_p = (void *)pkt;
+        }
+    }
     return err;
-} // end of atfp_mp4__av_next_local_packet
+} // end of atfp_ffmpeg__next_local_packet
 
 
 int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *avctx, void *packet)

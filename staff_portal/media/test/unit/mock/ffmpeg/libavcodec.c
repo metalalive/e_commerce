@@ -37,3 +37,6 @@ int avcodec_parameters_from_context(AVCodecParameters *par, const AVCodecContext
 int avcodec_parameters_copy(AVCodecParameters *dst, const AVCodecParameters *src)
 { return (int) mock(dst, src); }
 
+void av_packet_unref(AVPacket *pkt)
+{ mock(pkt); }
+

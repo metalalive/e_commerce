@@ -75,5 +75,10 @@ int avformat_write_header(AVFormatContext *fmt_ctx, AVDictionary **options)
 { return (int) mock(fmt_ctx, options); }
 
 void av_dump_format(AVFormatContext *ic, int index, const char *url, int is_output)
-{ return  mock(ic, index, url, is_output); }
+{ mock(ic, index, url, is_output); }
+
+int av_read_frame(AVFormatContext *fmt_ctx, AVPacket *pkt)
+{
+    return (int) mock(fmt_ctx, pkt);
+}
 

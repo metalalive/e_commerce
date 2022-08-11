@@ -29,11 +29,17 @@ typedef struct {
 
 struct atfp_av_ctx_s {
     AVFormatContext    *fmt_ctx;
+    atfp_stream_stats_t  *stats;
     union {
         AVCodecContext        **decode;
         atfp_stream_enc_ctx_t  *encode;
     } stream_ctx;
-    atfp_stream_stats_t  *stats;
+    union {
+        struct {
+            app_llnode_t  *frame_chain; // list of AVFrame
+            AVPacket  packet;
+        } decode;
+    } intermediate_data;
     struct {
         uint8_t  num_init_pkts;
         size_t   max_nbytes_bulk; // max nbytes to load for async decoding

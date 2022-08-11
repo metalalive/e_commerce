@@ -426,6 +426,90 @@ Ensure(atfp_mp4_test__avctx_subsequent_preload_some_packets) {
 } // end of atfp_mp4_test__avctx_subsequent_preload_some_packets
 
 
+Ensure(atfp_mp4_test__get_next_local_packet) {
+    atfp_stream_stats_t  mock_av_stream_stats[NUM_STREAMS_FMTCTX] = {0};
+    AVFormatContext  mock_avfmt_ctx = {.nb_streams=NUM_STREAMS_FMTCTX};
+    atfp_av_ctx_t  mock_avctx = {.fmt_ctx=&mock_avfmt_ctx, .stats=&mock_av_stream_stats[0]};
+#define  STREAM0_NUM_PRELOADED  6
+#define  STREAM0_NUM_FETCHED    1
+#define  STREAM1_NUM_PRELOADED  11
+#define  STREAM1_NUM_FETCHED    4
+#define  STREAM0_NUM_PKTS_AVAIL  (STREAM0_NUM_PRELOADED - STREAM0_NUM_FETCHED)
+#define  STREAM1_NUM_PKTS_AVAIL  (STREAM1_NUM_PRELOADED - STREAM1_NUM_FETCHED)
+#define  EXPECT_NUM_PKTS_AVAIL   (STREAM0_NUM_PKTS_AVAIL + STREAM1_NUM_PKTS_AVAIL)
+    mock_av_stream_stats[0] = (atfp_stream_stats_t) {.index_entry={.preloaded=STREAM0_NUM_PRELOADED, .fetched=STREAM0_NUM_FETCHED}};
+    mock_av_stream_stats[1] = (atfp_stream_stats_t) {.index_entry={.preloaded=STREAM1_NUM_PRELOADED, .fetched=STREAM1_NUM_FETCHED}};
+    AVPacket  mock_pkts[EXPECT_NUM_PKTS_AVAIL] = {0};
+    uint8_t  dummy[1] = {0};
+    int idx = 0;
+    for(idx=0; idx<STREAM1_NUM_PKTS_AVAIL; idx++)
+        mock_pkts[idx + 1].stream_index = 1;
+    for(idx=0; idx<EXPECT_NUM_PKTS_AVAIL; idx++)
+        mock_pkts[idx].data = &dummy[0];
+    for(idx=0; idx<EXPECT_NUM_PKTS_AVAIL; idx++) {
+        if(idx > 0)
+            expect(av_packet_unref, when(pkt, is_not_equal_to(NULL)));
+        expect(av_read_frame, will_return(0), will_set_contents_of_parameter(pkt, &mock_pkts[idx], sizeof(AVPacket))  );
+        void *packet = NULL;
+        int err = atfp_ffmpeg__next_local_packet(&mock_avctx, &packet);
+        assert_that(err, is_equal_to(0));
+        assert_that(packet, is_not_equal_to(NULL));
+    }
+#undef  STREAM0_NUM_PRELOADED
+#undef  STREAM0_NUM_FETCHED  
+#undef  STREAM1_NUM_PRELOADED
+#undef  STREAM1_NUM_FETCHED  
+#undef  STREAM0_NUM_PKTS_AVAIL
+#undef  STREAM1_NUM_PKTS_AVAIL
+#undef  EXPECT_NUM_PKTS_AVAIL
+} // end of atfp_mp4_test__get_next_local_packet
+
+
+Ensure(atfp_mp4_test__no_local_packet_available) {
+    atfp_stream_stats_t  mock_av_stream_stats[NUM_STREAMS_FMTCTX] = {0};
+    AVFormatContext  mock_avfmt_ctx = {.nb_streams=NUM_STREAMS_FMTCTX};
+    atfp_av_ctx_t  mock_avctx = {.fmt_ctx=&mock_avfmt_ctx, .stats=&mock_av_stream_stats[0]};
+#define  STREAM0_NUM_PRELOADED  6
+#define  STREAM0_NUM_FETCHED    6
+#define  STREAM1_NUM_PRELOADED  11
+#define  STREAM1_NUM_FETCHED    11
+    mock_av_stream_stats[0] = (atfp_stream_stats_t) {.index_entry={.preloaded=STREAM0_NUM_PRELOADED, .fetched=STREAM0_NUM_FETCHED}};
+    mock_av_stream_stats[1] = (atfp_stream_stats_t) {.index_entry={.preloaded=STREAM1_NUM_PRELOADED, .fetched=STREAM1_NUM_FETCHED}};
+    void *packet = NULL;
+    int err = atfp_ffmpeg__next_local_packet(&mock_avctx, &packet);
+    assert_that(err, is_equal_to(0));
+    assert_that(packet, is_equal_to(NULL));
+#undef  STREAM0_NUM_PRELOADED
+#undef  STREAM0_NUM_FETCHED  
+#undef  STREAM1_NUM_PRELOADED
+#undef  STREAM1_NUM_FETCHED  
+} // end of atfp_mp4_test__no_local_packet_available
+
+
+Ensure(atfp_mp4_test__next_local_packet__error) {
+    atfp_stream_stats_t  mock_av_stream_stats[NUM_STREAMS_FMTCTX] = {0};
+    AVFormatContext  mock_avfmt_ctx = {.nb_streams=NUM_STREAMS_FMTCTX};
+    atfp_av_ctx_t  mock_avctx = {.fmt_ctx=&mock_avfmt_ctx, .stats=&mock_av_stream_stats[0]};
+#define  STREAM0_NUM_PRELOADED  6
+#define  STREAM0_NUM_FETCHED    5
+#define  STREAM1_NUM_PRELOADED  11
+#define  STREAM1_NUM_FETCHED    11
+    mock_av_stream_stats[0] = (atfp_stream_stats_t) {.index_entry={.preloaded=STREAM0_NUM_PRELOADED, .fetched=STREAM0_NUM_FETCHED}};
+    mock_av_stream_stats[1] = (atfp_stream_stats_t) {.index_entry={.preloaded=STREAM1_NUM_PRELOADED, .fetched=STREAM1_NUM_FETCHED}};
+    AVPacket  mock_pkts[1] = {0};
+    int expect_err = AVERROR(EOF);
+    expect(av_read_frame, will_return(expect_err), will_set_contents_of_parameter(pkt, &mock_pkts[0], sizeof(AVPacket))  );
+    void *packet = NULL;
+    int err = atfp_ffmpeg__next_local_packet(&mock_avctx, &packet);
+    assert_that(err, is_equal_to(expect_err));
+    assert_that(packet, is_equal_to(NULL));
+#undef  STREAM0_NUM_PRELOADED
+#undef  STREAM0_NUM_FETCHED  
+#undef  STREAM1_NUM_PRELOADED
+#undef  STREAM1_NUM_FETCHED  
+} // end of atfp_mp4_test__next_local_packet__error
+
+
 TestSuite *app_transcoder_mp4_avcontext_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -437,6 +521,9 @@ TestSuite *app_transcoder_mp4_avcontext_tests(void)
     add_test(suite, atfp_mp4_test__avctx_validate__decoder_unsupported);
     add_test(suite, atfp_mp4_test__avctx_subsequent_preload_all_packets);
     add_test(suite, atfp_mp4_test__avctx_subsequent_preload_some_packets);
+    add_test(suite, atfp_mp4_test__get_next_local_packet);
+    add_test(suite, atfp_mp4_test__no_local_packet_available);
+    add_test(suite, atfp_mp4_test__next_local_packet__error);
     return suite;
 }
 
