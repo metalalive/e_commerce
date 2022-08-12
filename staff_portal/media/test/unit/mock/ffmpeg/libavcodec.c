@@ -40,3 +40,12 @@ int avcodec_parameters_copy(AVCodecParameters *dst, const AVCodecParameters *src
 void av_packet_unref(AVPacket *pkt)
 { mock(pkt); }
 
+void av_packet_rescale_ts(AVPacket *pkt, AVRational tb_src, AVRational tb_dst)
+{ mock(pkt); }
+
+int  avcodec_send_packet(AVCodecContext *codec_ctx, const AVPacket *avpkt)
+{ return (int) mock(codec_ctx, avpkt); }
+
+int  avcodec_receive_frame(AVCodecContext *codec_ctx, AVFrame *frame)
+{ return (int) mock(codec_ctx, frame); }
+

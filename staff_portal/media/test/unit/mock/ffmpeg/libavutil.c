@@ -2,6 +2,7 @@
 #include <libavutil/dict.h>
 #include <libavutil/rational.h>
 #include <libavutil/samplefmt.h>
+#include <libavutil/frame.h>
 #include <cgreen/cgreen.h>
 #include <cgreen/mocks.h>
 
@@ -55,4 +56,7 @@ unsigned int av_int_list_length_for_size(unsigned elsize, const void *list, uint
 
 int64_t av_get_default_channel_layout(int nb_channels)
 { return (int64_t) mock(nb_channels); }
+
+void av_frame_unref(AVFrame *frame)
+{ mock(frame); }
 

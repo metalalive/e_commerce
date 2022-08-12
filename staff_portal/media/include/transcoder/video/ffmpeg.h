@@ -9,8 +9,6 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 
-#include "utils.h"
-
 typedef struct {
     AVCodecContext *enc_ctx;
     AVFilterContext *filt_sink_ctx;
@@ -23,7 +21,6 @@ typedef struct {
         size_t  preloading;
         size_t  preloaded;
         size_t  fetched; 
-        size_t  decoded; 
     } index_entry;
 } atfp_stream_stats_t;
 
@@ -36,8 +33,9 @@ struct atfp_av_ctx_s {
     } stream_ctx;
     union {
         struct {
-            app_llnode_t  *frame_chain; // list of AVFrame
+            AVFrame   frame;
             AVPacket  packet;
+            uint16_t  num_decoded_frames;
         } decode;
     } intermediate_data;
     struct {

@@ -105,9 +105,8 @@ static  size_t   atfp_ffmpeg__estimate_nb_pkt_preload(atfp_av_ctx_t *avctx, size
 
 static void  atfp_mp4__av_packet_deinit(AVPacket  *packet)
 {
-    if(!packet->data) { return; }
     av_packet_unref(packet);
-    *packet = (AVPacket) {0};
+    // *packet = (AVPacket) {0};
     packet->stream_index = -1;
 }
 
@@ -117,7 +116,9 @@ void  atfp_mp4__av_deinit(atfp_mp4_t *mp4proc)
     AVFormatContext    *fmt_ctx = mp4proc->av->fmt_ctx;
     AVCodecContext   **dec_ctxs = mp4proc->av->stream_ctx.decode;
     AVPacket  *pkt = & mp4proc->av->intermediate_data.decode.packet;
+    AVFrame   *frm = & mp4proc->av->intermediate_data.decode.frame;
     atfp_mp4__av_packet_deinit(pkt);
+    av_frame_unref(frm);
     if(dec_ctxs) {
         int nb_streams = fmt_ctx ? fmt_ctx->nb_streams: 0;
         for(idx = 0; idx < nb_streams; idx++) {
@@ -318,7 +319,6 @@ static void  atfp_mp4__preload_subsequent_packets_done(atfp_mp4_t *mp4proc)
 ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *mp4proc, size_t nbytes, void (*cb)(atfp_mp4_t *))
 {
     ASA_RES_CODE result = ASTORAGE_RESULT_COMPLETE;
-    AVFormatContext *fmt_ctx = mp4proc->av ->fmt_ctx;
     size_t  start_pkt_pos = mp4proc->internal.mdat.pos_wholefile + mp4proc->internal.mdat.nb_preloaded;
     size_t  nbytes_to_load = 0;
     int     chunk_idx  = 0;
@@ -339,9 +339,9 @@ ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *mp4proc, size_t nbytes, 
 
 
 
-int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *avctx, void **packet_p)
+int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *avctx)
 {
-    int err = 0, idx = 0;
+    int ret = 0, idx = 0;
     size_t  num_pkts_avail = 0;
     AVFormatContext  *fmt_ctx = avctx ->fmt_ctx;
     for(idx = 0; idx < fmt_ctx->nb_streams; idx++) {
@@ -352,24 +352,64 @@ int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *avctx, void **packet_p)
     if(num_pkts_avail > 0) {
         AVPacket  *pkt = &avctx->intermediate_data.decode.packet;
         atfp_mp4__av_packet_deinit(pkt);
-        err = av_read_frame(fmt_ctx, pkt);
-        if(!err) {
+        ret = av_read_frame(fmt_ctx, pkt);
+        if(!ret) {
             int is_corrupted = (pkt->flags & (int)AV_PKT_FLAG_CORRUPT);
-            err = (pkt->stream_index < 0) || (is_corrupted != 0) || 
+            ret = (pkt->stream_index < 0) || (is_corrupted != 0) || 
                 (pkt->stream_index >= fmt_ctx->nb_streams);
+            ret = ret * -1;
         }
-        if(!err) {
+        if(!ret) {
             idx = pkt->stream_index;
             avctx->stats[idx].index_entry.fetched ++;
-            *packet_p = (void *)pkt;
+            avctx->intermediate_data.decode.num_decoded_frames = 0;
         }
-    }
-    return err;
+    } else { ret = 1; } // request to preload next packet
+    return ret;
 } // end of atfp_ffmpeg__next_local_packet
 
 
-int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *avctx, void *packet)
+int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *avctx)
 {
-     return 0;
-}
+    int ret = 0, got_frame = 0;
+    uint16_t  num_decoded = avctx->intermediate_data.decode.num_decoded_frames;
+    AVPacket *pkt  = &avctx->intermediate_data.decode.packet;
+    AVFrame  *frm  = &avctx->intermediate_data.decode.frame;
+    int stream_idx = pkt->stream_index;
+    AVFormatContext  *fmt_ctx = avctx->fmt_ctx;
+    AVStream         *stream = fmt_ctx->streams[stream_idx];
+    AVCodecContext   *dec_ctx = avctx->stream_ctx.decode[stream_idx];
+    if(num_decoded == 0) {
+        if(pkt->size > 0) {
+            av_packet_rescale_ts(pkt, stream->time_base, dec_ctx->time_base);
+            // To handle codec-context draining and resume the operation, the alternative is to
+            // flush internal state using avcodec_flush_buffers()
+            ret =  avcodec_send_packet(dec_ctx, pkt);
+        } else { // request to preload next packet
+            ret = 1;
+        }
+    }
+    if(ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to send packet to decoder, pos: 0x%08x size:%d \n",
+                (uint32_t)pkt->pos, pkt->size);        
+    } else if(ret == 1) {
+        // skipped, new input data required
+    } else {
+        ret = avcodec_receive_frame(dec_ctx, frm); // internally call av_frame_unref() to clean up previous frame
+        if(ret == 0) {
+            frm->pts = frm->best_effort_timestamp;            
+            got_frame = 1;
+        } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            // new input data required (for EOF), or the current packet doesn't contain
+            //  useful frame to decode (EAGAIN)
+            ret = 1;
+        } else {
+            av_log(NULL, AV_LOG_ERROR, "Failed to get decoded frame, pos: 0x%08x size:%d \n",
+                    (uint32_t)pkt->pos, pkt->size);
+        }
+    }
+    if(got_frame)
+        avctx->intermediate_data.decode.num_decoded_frames = 1 + num_decoded;
+    return ret;
+} // end of atfp_mp4__av_decode_packet
 

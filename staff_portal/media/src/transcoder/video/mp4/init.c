@@ -119,10 +119,9 @@ static void atfp_mp4__av_preload_packets__done_cb(atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
-    void *packet = NULL;
-    int err = atfp_ffmpeg__next_local_packet(mp4proc->av, &packet);
-    if(!err && packet) {
-        err = atfp_mp4__av_decode_packet(mp4proc->av, packet);
+    int err = atfp_ffmpeg__next_local_packet(mp4proc->av);
+    if(!err) {
+        err = atfp_mp4__av_decode_packet(mp4proc->av);
         if(err)
            json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to decode next packet after preload"));
     } else {
@@ -144,22 +143,37 @@ static void atfp__video_mp4__processing(atfp_t *processor)
 {
     atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
     json_t *err_info = processor->data.error;
-    void *packet = NULL;
-    int err = atfp_ffmpeg__next_local_packet(mp4proc->av, &packet);
-    if(err) {
-        json_object_set_new(err_info, "transcoder", json_string("[mp4] error when getting next packet from local temp buffer"));
-    } else if(!packet) {
-        ASA_RES_CODE result = atfp_mp4__av_preload_packets(mp4proc, ATFP_MP4__DEFAULT_NBYTES_BULK,
-                atfp_mp4__av_preload_packets__done_cb );
-        if(result != ASTORAGE_RESULT_ACCEPT)
-            err = 1;
-    } else {
-        err = atfp_mp4__av_decode_packet(mp4proc->av, packet);
-        if(err)
+    int frame_avail = 0, pkt_avail = 0;
+    int err = 0;
+    do {
+        err = atfp_mp4__av_decode_packet(mp4proc->av);
+        if(!err) {
+            frame_avail = 1;
+        } else if(err == 1) { // new packet required
+            err = atfp_ffmpeg__next_local_packet(mp4proc->av);
+            if(!err) {
+                pkt_avail = 1;
+            } else if(err == 1) { // another preload operation required
+                ASA_RES_CODE result = atfp_mp4__av_preload_packets(mp4proc, ATFP_MP4__DEFAULT_NBYTES_BULK,
+                        atfp_mp4__av_preload_packets__done_cb );
+                err = (result == ASTORAGE_RESULT_ACCEPT)? 0: -1;
+                break;
+            } else {
+                json_object_set_new(err_info, "transcoder", json_string("[mp4] error when getting next packet from local temp buffer"));
+            }
+        } else {
            json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to decode next packet"));
-    }
-    if(err || packet)
+        }
+    } while (!frame_avail);
+
+    if(err) {
         processor -> data.callback(processor);
+    } else if(frame_avail) {
+        // TODO, call the callback asynchronously if packet exists and is decoded successfully, this is to
+        // avoid recursive calls between source and corresponding destination file processors if there are 
+        // too many packets fetched and decoded successfully, which may leads to stack overflow.
+        processor -> data.callback(processor);
+    }
 } // end of atfp__video_mp4__processing
 
 static uint8_t  atfp__video_mp4__has_done_processing(atfp_t *processor)

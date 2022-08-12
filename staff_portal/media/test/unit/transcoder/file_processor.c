@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <cgreen/cgreen.h>
 #include <cgreen/unit.h>
+#include <cgreen/mocks.h>
 #include <uv.h>
 
 #include "storage/localfs.h"
@@ -102,6 +103,9 @@ static json_t *transcoder_utest__gen_atfp_spec(const char **expect_f_content, si
 }  // end of transcoder_utest__gen_atfp_spec
 
 
+#include <libavcodec/avcodec.h>
+#include <libavutil/frame.h>
+// TODO, refactor ?
 Ensure(transcoder_test__get_atfp_object) {
 #define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
     atfp_t *mock_fp = app_transcoder_file_processor("audio/wmv");
@@ -121,6 +125,8 @@ Ensure(transcoder_test__get_atfp_object) {
         asa_op_base_cfg_t mock_asaobj = {.cb_args={.size=NUM_CB_ARGS_ASAOBJ,
             .entries=cb_args_entries}};
         mock_fp->data.storage.handle = &mock_asaobj;
+        expect(av_packet_unref);
+        expect(av_frame_unref);
         mock_fp->ops->deinit(mock_fp);
     }
 #undef  NUM_CB_ARGS_ASAOBJ

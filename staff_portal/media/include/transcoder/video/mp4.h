@@ -59,8 +59,8 @@ ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
 void  atfp_mp4__av_deinit(atfp_mp4_t *);
 
 ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *, size_t nbytes, void (*cb)(atfp_mp4_t *));
-int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *, void **packet_p);
-int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *, void *packet);
+int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *);
+int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause
