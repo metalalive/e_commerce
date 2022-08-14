@@ -39,7 +39,8 @@
 #define  EXPECT_MDAT_SZ_INDEX__IN_ASA_USRARG      (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define  EXPECT_FCHUNK_SEQ_INDEX__IN_ASA_USRARG   (ASAMAP_INDEX__IN_ASA_USRARG + 2)
 #define  EXPECT_MDAT_POS_INDEX__IN_ASA_USRARG     (ASAMAP_INDEX__IN_ASA_USRARG + 3)
-#define  DONE_FLAG_INDEX__IN_ASA_USRARG     (ASAMAP_INDEX__IN_ASA_USRARG + 4)
+#define  EXPECT_STREAMINFO_SZ_INDEX__IN_ASA_USRARG  (ASAMAP_INDEX__IN_ASA_USRARG + 4)
+#define  DONE_FLAG_INDEX__IN_ASA_USRARG     (ASAMAP_INDEX__IN_ASA_USRARG + 5)
 #define  NUM_CB_ARGS_ASAOBJ  (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
 
 static void  mock_mp4_asa_src_open_cb (asa_op_base_cfg_t *cfg, ASA_RES_CODE result)
@@ -189,6 +190,7 @@ static void utest_atfp_mp4__preload_stream_info__done_ok(atfp_mp4_t *mp4proc)
     asa_op_base_cfg_t     *asa_src_cfg   =  processor->data.storage.handle;
     atfp_asa_map_t  *map = asa_src_cfg->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t  *asa_local_cfg = atfp_asa_map_get_localtmp(map);
+    assert_that(json_object_size(err_info), is_equal_to(0));
     if(json_object_size(err_info) == 0) {
         // verify the sequence of preloaded atoms, which should be :
         // ftype --> free(optional) --> moov --> mdat
@@ -229,11 +231,26 @@ static void utest_atfp_mp4__preload_stream_info__done_ok(atfp_mp4_t *mp4proc)
             uint32_t expect_mdat_pos = *(uint32_t*) asa_src_cfg->cb_args.entries[EXPECT_MDAT_POS_INDEX__IN_ASA_USRARG];
             uint32_t actual_mdat_pos =  mp4proc->internal.mdat.pos;
             assert_that(expect_mdat_pos, is_equal_to(actual_mdat_pos));
+        } {
+            size_t expect_preload_sz = *(size_t *) asa_src_cfg->cb_args.entries[EXPECT_STREAMINFO_SZ_INDEX__IN_ASA_USRARG];
+            assert_that(mp4proc->internal.preload_pkts.size, is_equal_to(expect_preload_sz));
+            assert_that(mp4proc->internal.preload_pkts.nbytes_copied, is_equal_to(expect_preload_sz));
         }
     } // end of err_info is empty
     uint8_t *done_flag = asa_src_cfg->cb_args.entries[DONE_FLAG_INDEX__IN_ASA_USRARG];
     *done_flag = 1;
 } // end of utest_atfp_mp4__preload_stream_info__done_ok
+
+
+static void utest_atfp_mp4__preload_packet__done_ok(atfp_mp4_t *mp4proc)
+{
+    atfp_t *processor = & mp4proc -> super;
+    json_t *err_info  = processor->data.error;
+    asa_op_base_cfg_t     *asa_src_cfg   =  processor->data.storage.handle;
+    assert_that(json_object_size(err_info), is_equal_to(0));
+    uint8_t *done_flag = asa_src_cfg->cb_args.entries[DONE_FLAG_INDEX__IN_ASA_USRARG];
+    *done_flag = 1;
+} // end of utest_atfp_mp4__preload_packet__done_ok
 
 
 #define  NUM_FILE_CHUNKS  4
@@ -271,13 +288,15 @@ static void preload_stream_info_ok_1__prepare_fchunks (atfp_mp4_t *mp4proc)
         write(fds[3], ptr, sz);
     } {
         asa_op_base_cfg_t *asa_src_cfg = mp4proc->super.data.storage.handle;
-        uint32_t *mdat_info = calloc(3, sizeof(uint32_t));
+        uint32_t *mdat_info = calloc(4, sizeof(uint32_t));
         mdat_info[0] = strlen(MP4__ATOM_BODY_MDAT);
         mdat_info[1] = 2;
         mdat_info[2] = mdat_body_rd_offset;
+        mdat_info[3] = ftyp_sz + free_sz + moov_sz + strlen(MP4__ATOM_TYPE_MDAT) + sizeof(uint32_t);
         asa_src_cfg->cb_args.entries[EXPECT_MDAT_SZ_INDEX__IN_ASA_USRARG] = &mdat_info[0]; // size of mdat body
         asa_src_cfg->cb_args.entries[EXPECT_FCHUNK_SEQ_INDEX__IN_ASA_USRARG] = &mdat_info[1]; // sequemce number of file chunk where mdat body starts
         asa_src_cfg->cb_args.entries[EXPECT_MDAT_POS_INDEX__IN_ASA_USRARG] = &mdat_info[2]; // offset of the file chunk
+        asa_src_cfg->cb_args.entries[EXPECT_STREAMINFO_SZ_INDEX__IN_ASA_USRARG] = &mdat_info[3];
     }
     json_t *parts_size = json_object_get(mp4proc->super.data.spec, "parts_size");
     for(int idx = 0; idx < NUM_FILE_CHUNKS; idx++) {
@@ -331,9 +350,10 @@ static void preload_stream_info_ok_2__prepare_fchunks (atfp_mp4_t *mp4proc)
         mdat_body_rd_offset = lseek(fds[1], 0, SEEK_CUR);
         uint32_t body_tot_sz = strlen(MP4__ATOM_BODY_MDAT);
         const char *body_ptr = MP4__ATOM_BODY_MDAT ;
-        write(fds[1], body_ptr, 11);
-        body_ptr += 11;
-        body_tot_sz -= 11;
+#define  MP4__ATOM_BODY_MDAT__FIRST_PIECE__SZ  11
+        write(fds[1], body_ptr, MP4__ATOM_BODY_MDAT__FIRST_PIECE__SZ);
+        body_ptr += MP4__ATOM_BODY_MDAT__FIRST_PIECE__SZ;
+        body_tot_sz -= MP4__ATOM_BODY_MDAT__FIRST_PIECE__SZ;
         write(fds[2], body_ptr, 13);
         body_ptr += 13;
         body_tot_sz -= 13;
@@ -351,13 +371,15 @@ static void preload_stream_info_ok_2__prepare_fchunks (atfp_mp4_t *mp4proc)
         write(fds[5], body_ptr, body_tot_sz);
     } {
         asa_op_base_cfg_t *asa_src_cfg = mp4proc->super.data.storage.handle;
-        uint32_t *mdat_info = calloc(3, sizeof(uint32_t));
+        uint32_t *mdat_info = calloc(4, sizeof(uint32_t));
         mdat_info[0] = strlen(MP4__ATOM_BODY_MDAT);
         mdat_info[1] = 1;
         mdat_info[2] = mdat_body_rd_offset;
+        mdat_info[3] = ftyp_sz + moov_sz + strlen(MP4__ATOM_TYPE_MDAT) + sizeof(uint32_t);
         asa_src_cfg->cb_args.entries[EXPECT_MDAT_SZ_INDEX__IN_ASA_USRARG] = &mdat_info[0]; // size of mdat body
         asa_src_cfg->cb_args.entries[EXPECT_FCHUNK_SEQ_INDEX__IN_ASA_USRARG] = &mdat_info[1]; // sequemce number of file chunk where mdat body starts
         asa_src_cfg->cb_args.entries[EXPECT_MDAT_POS_INDEX__IN_ASA_USRARG] = &mdat_info[2]; // offset of the file chunk
+        asa_src_cfg->cb_args.entries[EXPECT_STREAMINFO_SZ_INDEX__IN_ASA_USRARG] = &mdat_info[3];
     }
     json_t *parts_size = json_object_get(mp4proc->super.data.spec, "parts_size");
     for(int idx = 0; idx < NUM_FILE_CHUNKS; idx++) {
@@ -441,11 +463,62 @@ Ensure(atfp_mp4_test__preload_stream_info__corrupted_moov) {
 #undef  NUM_FILE_CHUNKS
 
 
+Ensure(atfp_mp4_test__preload_mdat_packet_ok) {
+    atfp_mp4_t  mp4proc = {0};
+    utest_init_mp4_preload(&mp4proc, preload_stream_info_ok_2__prepare_fchunks);
+    asa_op_base_cfg_t     *asa_src = mp4proc.super.data.storage.handle;
+    atfp_asa_map_t        *map     = asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(map);
+    int local_tmppbuf_fd = asa_local->file.file;
+    uv_loop_t  *loop = uv_default_loop();
+    uint8_t done_flag = 0;
+    asa_src->cb_args.entries[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag;
+    int chunk_idx_start = 0;
+    size_t chunk_offset = 0, nbytes_to_load = 0;
+    { // subcase #1
+        chunk_idx_start = *(uint32_t *)asa_src ->cb_args.entries[EXPECT_FCHUNK_SEQ_INDEX__IN_ASA_USRARG];
+        chunk_offset    = *(uint32_t *)asa_src ->cb_args.entries[EXPECT_MDAT_POS_INDEX__IN_ASA_USRARG];
+        nbytes_to_load  = *(uint32_t *)asa_src ->cb_args.entries[EXPECT_MDAT_SZ_INDEX__IN_ASA_USRARG];
+        ASA_RES_CODE  result = atfp_mp4__preload_packet_sequence(&mp4proc, chunk_idx_start,
+                chunk_offset, nbytes_to_load,  utest_atfp_mp4__preload_packet__done_ok);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        for(done_flag = 0; !done_flag; )
+            uv_run(loop, UV_RUN_ONCE);
+        char actual_content[sizeof(MP4__ATOM_BODY_MDAT)] = {0};
+        lseek(local_tmppbuf_fd, 0, SEEK_SET);
+        read(local_tmppbuf_fd, &actual_content[0], sizeof(MP4__ATOM_BODY_MDAT));
+        assert_that(&actual_content[0], is_equal_to_string(MP4__ATOM_BODY_MDAT));
+    } { // subcase #2
+        chunk_idx_start += 1;
+        chunk_offset = 1;
+        nbytes_to_load  = 10;
+        lseek(local_tmppbuf_fd, 0, SEEK_SET);
+        ASA_RES_CODE  result = atfp_mp4__preload_packet_sequence(&mp4proc, chunk_idx_start,
+                chunk_offset, nbytes_to_load,  utest_atfp_mp4__preload_packet__done_ok);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        for(done_flag = 0; !done_flag; )
+            uv_run(loop, UV_RUN_ONCE);
+        char expect_content[nbytes_to_load + 1];
+        char actual_content[nbytes_to_load + 1];
+        expect_content[nbytes_to_load] = 0x0;
+        actual_content[nbytes_to_load] = 0x0;
+        lseek(local_tmppbuf_fd, 0, SEEK_SET);
+        read(local_tmppbuf_fd, &actual_content[0], nbytes_to_load);
+        const char *mdat_body = MP4__ATOM_BODY_MDAT;
+        memcpy(&expect_content[0], &mdat_body[MP4__ATOM_BODY_MDAT__FIRST_PIECE__SZ + chunk_offset], nbytes_to_load);
+        assert_that(&actual_content[0], is_equal_to_string(&expect_content[0]));
+    }
+    utest_deinit_mp4_preload(&mp4proc);
+} // end of atfp_mp4_test__preload_mdat_packet_ok
+
+
+
 TestSuite *app_transcoder_mp4_preload_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, atfp_mp4_test__preload_stream_info_ok_1);
     add_test(suite, atfp_mp4_test__preload_stream_info_ok_2);
     add_test(suite, atfp_mp4_test__preload_stream_info__corrupted_moov);
+    add_test(suite, atfp_mp4_test__preload_mdat_packet_ok);
     return suite;
 }

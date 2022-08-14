@@ -205,6 +205,8 @@ static void atfp_mp4__write_srcfile_atom_to_local_tmpbuf_cb (asa_op_base_cfg_t *
         mp4proc->internal.curr_atom.nbytes_copied = nbytes_copied;
         asaobj = processor->data.storage.handle;
         if(nbytes_tot_atom == nbytes_copied) { // end of current atom reached, load next atom
+            mp4proc->internal.preload_pkts.size += nbytes_tot_atom;
+            mp4proc->internal.preload_pkts.nbytes_copied += nbytes_tot_atom;
             asaobj->op.read.dst_sz = sizeof(mp4_atom);
             asaobj->op.read.cb = atfp_mp4__read_input_atom_header_cb;
         } else if(nbytes_tot_atom > nbytes_copied) { // copy rest of atom body
@@ -282,7 +284,10 @@ static void atfp_mp4__write_srcfile_mdat_header_to_local_tmpbuf_cb (asa_op_base_
     atfp_t *processor = asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
     json_t   *err_info  = processor->data.error;
-    if(result != ASTORAGE_RESULT_COMPLETE) { // write error
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        mp4proc->internal.preload_pkts.size += sizeof(mp4_atom);
+        mp4proc->internal.preload_pkts.nbytes_copied += sizeof(mp4_atom);
+    } else { // write error
         json_object_set_new(err_info, "storage", json_string("failed to write atom to local temp buffer"));
     }
     mp4proc->internal.callback.preload_done(mp4proc) ;
@@ -298,6 +303,8 @@ ASA_RES_CODE  atfp_mp4__preload_stream_info (atfp_mp4_t *mp4proc, void (*cb)(atf
     cfg->op.read.dst_sz = expect_nread;
     cfg->op.read.offset = 0; // point back to beginning of file, then read the first few byte
     mp4proc->internal.callback.preload_done = cb;
+    mp4proc->internal.preload_pkts.size = 0;
+    mp4proc->internal.preload_pkts.nbytes_copied = 0;
     asa_cfg_t *storage = processor->data.storage.config;
     return storage->ops.fn_read(cfg);
 } // end of atfp_mp4__preload_stream_info
