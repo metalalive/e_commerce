@@ -390,7 +390,7 @@ Ensure(atfp_mp4_test__avctx_validate__decoder_unsupported) {
 Ensure(atfp_mp4_test__avctx_subsequent_preload_all_packets) {
     UNITTEST_AVCTX__PRELOAD_PKT_SETUP;
     expect(utest_atfp_mp4__avctx_preload__done_cb);
-    ASA_RES_CODE result = atfp_mp4__av_preload_packets(&mp4proc, MDAT_ATOM_BODY_SZ + 1,
+    ASA_RES_CODE result = atfp_mp4__av_preload_packets(&mp4proc, MDAT_ATOM_BODY_SZ + 123,
             utest_atfp_mp4__avctx_preload__done_cb);
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     for(int idx = 0; idx < NUM_STREAMS_FMTCTX; idx++) {
@@ -406,15 +406,15 @@ Ensure(atfp_mp4_test__avctx_subsequent_preload_all_packets) {
 
 Ensure(atfp_mp4_test__avctx_subsequent_preload_some_packets) {
     UNITTEST_AVCTX__PRELOAD_PKT_SETUP;
-    int proceed_idx_entries[] = {3,5,8,12, -1};
+    int proceed_idx_entries[] = {3,5,8,11, -1};
     size_t start_pos = 0;
     size_t last_end_pos = MDAT_ATOM_OFFSET;
-    for(int idx = 0; proceed_idx_entries[idx] > 0; idx++) {
+    int idx = 0;
+    for(idx = 0; proceed_idx_entries[idx] > 0; idx++) { // subcase #1, normal
         int proceed_to_idx_entry = proceed_idx_entries[idx];
         start_pos = last_end_pos;
         last_end_pos = mock_idx_entry_video[proceed_to_idx_entry].pos;
         size_t expect_nbytes_preload = last_end_pos - start_pos;
-        mock_av_ctx.async_limit.max_nbytes_bulk = expect_nbytes_preload;
         expect(utest_atfp_mp4__avctx_preload__done_cb);
         ASA_RES_CODE result = atfp_mp4__av_preload_packets(&mp4proc, expect_nbytes_preload,
                 utest_atfp_mp4__avctx_preload__done_cb);
@@ -423,6 +423,15 @@ Ensure(atfp_mp4_test__avctx_subsequent_preload_some_packets) {
         int actual_num_preloaded  = mock_av_stream_stats[0].index_entry.preloaded;
         assert_that(actual_num_preloading, is_equal_to( proceed_to_idx_entry ));
         assert_that(actual_num_preloading, is_equal_to( actual_num_preloaded ));
+    } { //  subcase #2, try overloading at the final preload operation
+        size_t expect_nbytes_preload = MDAT_ATOM_BODY_SZ << 2;
+        expect(utest_atfp_mp4__avctx_preload__done_cb);
+        ASA_RES_CODE result = atfp_mp4__av_preload_packets(&mp4proc, expect_nbytes_preload,
+                utest_atfp_mp4__avctx_preload__done_cb);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        for(idx = 0; idx < NUM_STREAMS_FMTCTX; idx++)
+            assert_that(mock_av_stream_stats[idx].index_entry.preloading,
+                    is_equal_to( mock_av_streams[idx].nb_index_entries ));
     }
     UNITTEST_AVCTX__PRELOAD_PKT_TEARDOWN;
 } // end of atfp_mp4_test__avctx_subsequent_preload_some_packets
@@ -431,7 +440,6 @@ Ensure(atfp_mp4_test__avctx_subsequent_preload_some_packets) {
 Ensure(atfp_mp4_test__get_next_local_packet) {
     atfp_stream_stats_t  mock_av_stream_stats[NUM_STREAMS_FMTCTX] = {0};
     AVFormatContext  mock_avfmt_ctx = {.nb_streams=NUM_STREAMS_FMTCTX};
-    atfp_av_ctx_t  mock_avctx = {.fmt_ctx=&mock_avfmt_ctx, .stats=&mock_av_stream_stats[0]};
 #define  STREAM0_NUM_PRELOADED  6
 #define  STREAM0_NUM_FETCHED    1
 #define  STREAM1_NUM_PRELOADED  11
@@ -439,6 +447,8 @@ Ensure(atfp_mp4_test__get_next_local_packet) {
 #define  STREAM0_NUM_PKTS_AVAIL  (STREAM0_NUM_PRELOADED - STREAM0_NUM_FETCHED)
 #define  STREAM1_NUM_PKTS_AVAIL  (STREAM1_NUM_PRELOADED - STREAM1_NUM_FETCHED)
 #define  EXPECT_NUM_PKTS_AVAIL   (STREAM0_NUM_PKTS_AVAIL + STREAM1_NUM_PKTS_AVAIL)
+    atfp_av_ctx_t  mock_avctx = {.fmt_ctx=&mock_avfmt_ctx, .stats=&mock_av_stream_stats[0],
+         .intermediate_data={.decode={.tot_num_pkts_avail=EXPECT_NUM_PKTS_AVAIL}}};
     mock_av_stream_stats[0] = (atfp_stream_stats_t) {.index_entry={.preloaded=STREAM0_NUM_PRELOADED, .fetched=STREAM0_NUM_FETCHED}};
     mock_av_stream_stats[1] = (atfp_stream_stats_t) {.index_entry={.preloaded=STREAM1_NUM_PRELOADED, .fetched=STREAM1_NUM_FETCHED}};
     AVPacket  mock_pkts[EXPECT_NUM_PKTS_AVAIL] = {0};
@@ -449,12 +459,18 @@ Ensure(atfp_mp4_test__get_next_local_packet) {
     for(idx=0; idx<EXPECT_NUM_PKTS_AVAIL; idx++)
         mock_pkts[idx].data = &dummy[0];
     for(idx=0; idx<EXPECT_NUM_PKTS_AVAIL; idx++) {
+        assert_that(atfp_ffmpeg_avctx__has_done_decoding(&mock_avctx), is_equal_to(0));
         expect(av_packet_unref, when(pkt, is_equal_to(&mock_avctx.intermediate_data.decode.packet)));
         expect(av_read_frame, will_return(0), will_set_contents_of_parameter(pkt, &mock_pkts[idx], sizeof(AVPacket))  );
+        mock_avctx.intermediate_data.decode.num_decoded_frames = 100 + idx; // assume some frames were decoded in previous packet
         int new_pkt_ready = 0;
         int err = atfp_ffmpeg__next_local_packet(&mock_avctx);
         assert_that(err, is_equal_to(new_pkt_ready));
-    }
+        assert_that(mock_avctx.intermediate_data.decode.num_decoded_frames, is_equal_to(0));
+        assert_that(mock_avctx.intermediate_data.decode.tot_num_pkts_avail,
+                is_equal_to(EXPECT_NUM_PKTS_AVAIL - idx - 1));
+    } // end of loop
+    assert_that(atfp_ffmpeg_avctx__has_done_decoding(&mock_avctx), is_equal_to(1));
 #undef  STREAM0_NUM_PRELOADED
 #undef  STREAM0_NUM_FETCHED  
 #undef  STREAM1_NUM_PRELOADED
@@ -535,6 +551,7 @@ Ensure(atfp_mp4_test__packet_decode_frames_ok) {
         err = atfp_mp4__av_decode_packet(&mock_avctx);
         assert_that(err, is_equal_to(new_frm_ready));
     }
+    assert_that(mock_avctx.intermediate_data.decode.num_decoded_frames, is_equal_to(expect_num_frames_avail));
 } // end of atfp_mp4_test__packet_decode_frames_ok
 
 

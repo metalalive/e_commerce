@@ -7,18 +7,30 @@
 #include "transcoder/video/mp4.h"
 #include "transcoder/video/ffmpeg.h"
 
-static int  atfp_avio__read_header(void *opaque, uint8_t *buf, int required_size)
+static int  atfp_avio__read_local_tmpbuf(void *opaque, uint8_t *buf, int required_size)
 { // the API functions in libavformat always access file in blocking way,
     // non-blocking call currently hasn't been supported yet.
     if(!opaque)
         return AVERROR(EINVAL) ;
-    asa_op_localfs_cfg_t *asa_local = (asa_op_localfs_cfg_t *)opaque;
-    int hdr_tmp_fd =  asa_local->file.file;
-    int nread = read(hdr_tmp_fd, buf, required_size);
-    if(nread == 0)
+    atfp_asa_map_t *_map = (atfp_asa_map_t *)opaque;
+    asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
+    asa_op_base_cfg_t     *asa_src   = atfp_asa_map_get_source(_map);
+    atfp_mp4_t  *mp4proc = (atfp_mp4_t *) asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    int  hdr_tmp_fd =  asa_local->file.file;
+    size_t  nbytes_total  = mp4proc->internal.preload_pkts .size;
+    size_t  nbytes_used   = lseek(hdr_tmp_fd, 0, SEEK_CUR);
+    size_t  nbytes_avail  = nbytes_total - nbytes_used;
+    size_t  nbytes_copy  = FFMIN(nbytes_avail, required_size);
+    int nread = 0;
+    if(nbytes_copy == 0) {
         nread = AVERROR_EOF;
+    } else {
+        nread = read(hdr_tmp_fd, buf, nbytes_copy);
+        if(nread == 0)
+            nread = AVERROR_EOF;
+    }
     return nread;
-} // end of atfp_avio__read_header
+} // end of atfp_avio__read_local_tmpbuf
 
 
 static ASA_RES_CODE  atfp_mp4__serial_to_segment_pos(json_t *spec, size_t in_offset, int *out_chunk_idx, size_t *out_offset)
@@ -63,7 +75,6 @@ static uint8_t estimate_nb_initial_packet__continue_fn(atfp_av_ctx_t *avctx, siz
 {
     uint8_t should_continue = 0;
     AVFormatContext *fmt_ctx = avctx->fmt_ctx;
-    // TODO, end-of-whole-file check
     for(int idx = 0; (!should_continue) && (idx < fmt_ctx->nb_streams); idx++) {
          int curr_pkt_idx = avctx-> stats[idx].index_entry.preloading;
          should_continue = (avctx->async_limit.num_init_pkts) > curr_pkt_idx;
@@ -73,7 +84,6 @@ static uint8_t estimate_nb_initial_packet__continue_fn(atfp_av_ctx_t *avctx, siz
 
 static uint8_t estimate_nb_subsequent_packet__continue_fn (atfp_av_ctx_t *avctx, size_t start_pos, size_t end_pos)
 {
-    // TODO, end-of-whole-file check
     uint8_t should_continue = (end_pos - start_pos) < avctx->async_limit.max_nbytes_bulk;
     return should_continue;
 }
@@ -81,24 +91,31 @@ static uint8_t estimate_nb_subsequent_packet__continue_fn (atfp_av_ctx_t *avctx,
 
 static  size_t   atfp_ffmpeg__estimate_nb_pkt_preload(atfp_av_ctx_t *avctx, size_t start_pkt_pos,
         uint8_t (*continue_fn)(atfp_av_ctx_t*, size_t, size_t) )
-{
+{ // TODO, make it testable, this private function becomes complicated
     size_t  farest_pos = start_pkt_pos;
     AVFormatContext *fmt_ctx = avctx->fmt_ctx;
+    uint8_t  end_of_streams = 1;
     do {
         AVStream *stream = NULL;
         int curr_pkt_idx = -1;
+        end_of_streams = 1;
         for (int idx = 0; (!stream) && (idx < fmt_ctx->nb_streams); idx++) {
             stream = fmt_ctx->streams[idx];
             curr_pkt_idx = avctx-> stats[idx].index_entry.preloading;
-            size_t pkt_pos = stream-> index_entries[curr_pkt_idx].pos;
-            if(farest_pos != pkt_pos)
+            end_of_streams &= (curr_pkt_idx >= stream->nb_index_entries);
+            if(!end_of_streams) {
+                size_t pkt_pos = stream-> index_entries[curr_pkt_idx].pos;
+                if(farest_pos != pkt_pos)
+                    stream = NULL;
+            } else {
                 stream = NULL;
+            }
         }
         if(stream && curr_pkt_idx >= 0) {
             farest_pos += stream-> index_entries[curr_pkt_idx].size;
             avctx->stats[ stream->index ].index_entry.preloading = curr_pkt_idx + 1;
-        }
-    } while(continue_fn(avctx, start_pkt_pos, farest_pos));
+        } // TODO, handle data corruption case
+    } while(!end_of_streams && continue_fn(avctx, start_pkt_pos, farest_pos));
     return farest_pos - start_pkt_pos;
 } // end of atfp_ffmpeg__estimate_nb_pkt_preload
 
@@ -258,14 +275,14 @@ ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *mp4proc, void (*cb)(atfp_mp4_t *))
 #define  AVIO_CTX_BUFFER_SIZE 2048    
     uint8_t  *avio_ctx_buffer = NULL;
     AVFormatContext *fmt_ctx = NULL;
-    int ret = 0;
+    int ret = 0, idx = 0;
     if (!(fmt_ctx = avformat_alloc_context()))
         goto error;
     mp4proc->internal.callback.av_init_done = cb;
     *mp4proc->av = (atfp_av_ctx_t){.fmt_ctx=fmt_ctx, .decoder_flag=1};
     avio_ctx_buffer = av_malloc(AVIO_CTX_BUFFER_SIZE);
     fmt_ctx -> pb = avio_alloc_context(avio_ctx_buffer, AVIO_CTX_BUFFER_SIZE, 0,
-              asa_local, atfp_avio__read_header, NULL, NULL); // &app_seek_packet
+              _map, atfp_avio__read_local_tmpbuf, NULL, NULL); // &app_seek_packet
     if (!fmt_ctx->pb || !avio_ctx_buffer)
         goto error;
     { // libavformat accesses input file synchronously
@@ -281,9 +298,11 @@ ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *mp4proc, void (*cb)(atfp_mp4_t *))
         mp4proc-> av-> stats = calloc(fmt_ctx->nb_streams, sizeof(atfp_stream_stats_t));
     } { // set up limit of preloading bytes size for async decoding
         uint8_t  min__num_init_pkts = ATFP_MP4__DEFAULT_NUM_INIT_PKTS;
-        for(int idx = 0; idx < fmt_ctx->nb_streams; idx++) {
+        mp4proc->av->intermediate_data.decode.tot_num_pkts_avail = 0;
+        for(idx = 0; idx < fmt_ctx->nb_streams; idx++) {
             AVStream *stream  = fmt_ctx->streams[idx];
             min__num_init_pkts = FFMIN(min__num_init_pkts, stream->nb_index_entries);
+            mp4proc->av->intermediate_data.decode.tot_num_pkts_avail += stream ->nb_index_entries;
         }
         mp4proc->av->async_limit.num_init_pkts = min__num_init_pkts;
     }
@@ -307,7 +326,11 @@ error:
 
 
 static void  atfp_mp4__preload_subsequent_packets_done(atfp_mp4_t *mp4proc)
-{
+{ // TODO, seek first position in the local tmp buf
+    asa_op_base_cfg_t *asasrc = mp4proc -> super.data.storage.handle;
+    atfp_asa_map_t *_map = (atfp_asa_map_t *)asasrc->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
+    lseek(asa_local->file.file, 0, SEEK_SET);
     AVFormatContext  *fmt_ctx = mp4proc->av ->fmt_ctx;
     for(int idx = 0; idx < fmt_ctx->nb_streams; idx++) {
         mp4proc->av->stats[idx].index_entry.preloaded = mp4proc->av -> stats[idx].index_entry.preloading;
@@ -330,6 +353,10 @@ ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *mp4proc, size_t nbytes, 
               estimate_nb_subsequent_packet__continue_fn);
     }
     if(nbytes_to_load > 0) {
+        asa_op_base_cfg_t *asasrc = mp4proc -> super.data.storage.handle;
+        atfp_asa_map_t *_map = (atfp_asa_map_t *)asasrc->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
+        lseek(asa_local->file.file, 0, SEEK_SET);
         mp4proc->internal.callback.av_init_done = cb; // TODO, rename to avctx_done
         result = atfp_mp4__preload_packet_sequence (mp4proc, chunk_idx, offset,
             nbytes_to_load,  atfp_mp4__preload_subsequent_packets_done);
@@ -363,6 +390,7 @@ int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *avctx)
             idx = pkt->stream_index;
             avctx->stats[idx].index_entry.fetched ++;
             avctx->intermediate_data.decode.num_decoded_frames = 0;
+            avctx->intermediate_data.decode.tot_num_pkts_avail -= 1;
         }
     } else { ret = 1; } // request to preload next packet
     return ret;
@@ -413,3 +441,8 @@ int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *avctx)
     return ret;
 } // end of atfp_mp4__av_decode_packet
 
+
+uint8_t  atfp_ffmpeg_avctx__has_done_decoding(atfp_av_ctx_t *avctx)
+{
+    return avctx->intermediate_data.decode.tot_num_pkts_avail == 0;
+}

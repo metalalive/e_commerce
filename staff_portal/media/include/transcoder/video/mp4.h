@@ -23,7 +23,7 @@ typedef struct atfp_mp4_s {
         struct {
             size_t  size;
             size_t  nbytes_copied;
-        } curr_atom; // TODO, union with preload_pkts field
+        } curr_atom;
         struct {
             size_t  size;
             size_t  nbytes_copied;
@@ -59,8 +59,12 @@ ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
 void  atfp_mp4__av_deinit(atfp_mp4_t *);
 
 ASA_RES_CODE  atfp_mp4__av_preload_packets (atfp_mp4_t *, size_t nbytes, void (*cb)(atfp_mp4_t *));
+
 int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *);
+
 int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *);
+
+uint8_t  atfp_ffmpeg_avctx__has_done_decoding(atfp_av_ctx_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause

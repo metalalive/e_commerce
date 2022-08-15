@@ -35,6 +35,7 @@ struct atfp_av_ctx_s {
         struct {
             AVFrame   frame;
             AVPacket  packet;
+            size_t    tot_num_pkts_avail; // from all valid streams
             uint16_t  num_decoded_frames;
         } decode;
     } intermediate_data;

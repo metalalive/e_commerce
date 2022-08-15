@@ -119,30 +119,6 @@ static void atfp_mp4__av_preload_packets__done_cb(atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
-    int err = atfp_ffmpeg__next_local_packet(mp4proc->av);
-    if(!err) {
-        err = atfp_mp4__av_decode_packet(mp4proc->av);
-        if(err)
-           json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to decode next packet after preload"));
-    } else {
-        json_object_set_new(err_info, "transcoder", json_string("[mp4] error when getting next packet after preload"));
-    }
-    // TODO, return following data when processing is done successfully
-    ////atfp_t *processor = &mp4proc -> super;
-    ////processor->transcoded_info = json_array();
-    ////json_t  *item = json_object();
-    ////json_object_set_new(item, "filename", json_string("fake_transcoded_file.mp4"));
-    ////json_object_set_new(item, "size", json_integer(8193));
-    ////json_object_set_new(item, "checksum", json_string("f09d77e32572b562863518c6"));
-    ////json_array_append_new(processor->transcoded_info, item);
-    processor -> data.callback(processor);
-} // end of atfp_mp4__av_preload_packets__done_cb
-
-
-static void atfp__video_mp4__processing(atfp_t *processor)
-{
-    atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
-    json_t *err_info = processor->data.error;
     int frame_avail = 0, pkt_avail = 0;
     int err = 0;
     do {
@@ -174,10 +150,27 @@ static void atfp__video_mp4__processing(atfp_t *processor)
         // too many packets fetched and decoded successfully, which may leads to stack overflow.
         processor -> data.callback(processor);
     }
+    // TODO, return following data when processing is done successfully
+    ////atfp_t *processor = &mp4proc -> super;
+    ////processor->transcoded_info = json_array();
+    ////json_t  *item = json_object();
+    ////json_object_set_new(item, "filename", json_string("fake_transcoded_file.mp4"));
+    ////json_object_set_new(item, "size", json_integer(8193));
+    ////json_object_set_new(item, "checksum", json_string("f09d77e32572b562863518c6"));
+    ////json_array_append_new(processor->transcoded_info, item);
+} // end of atfp_mp4__av_preload_packets__done_cb
+
+
+static void atfp__video_mp4__processing(atfp_t *processor)
+{
+    atfp_mp4__av_preload_packets__done_cb((atfp_mp4_t *)processor);
 } // end of atfp__video_mp4__processing
 
 static uint8_t  atfp__video_mp4__has_done_processing(atfp_t *processor)
-{ return 1; }
+{
+    atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
+    return  atfp_ffmpeg_avctx__has_done_decoding(mp4proc->av);
+}
 
 
 static atfp_t *atfp__video_mp4__instantiate(void) {
