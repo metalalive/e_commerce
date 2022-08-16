@@ -122,7 +122,7 @@ done:
 } // end of atfp_hls__init_audio_filter
 
 
-__attribute__((optimize("O0")))  int  atfp_hls__avfilter_init(atfp_hls_t *hlsproc)
+int  atfp_hls__avfilter_init(atfp_hls_t *hlsproc)
 {
     int err = 0, idx = 0;
     atfp_av_ctx_t   *avctx_dst = hlsproc->av;
@@ -191,3 +191,45 @@ end:
     } // end of loop
     return err;
 } // end of atfp_hls__avfilter_init
+
+
+int  atfp_hls__av_filter_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
+{
+    int ret = 0, stream_idx = -1, nb_streams_in = 0;
+    if(!src || !dst) {
+        ret = AVERROR(EINVAL);
+        goto done;
+    }
+    nb_streams_in = src->fmt_ctx->nb_streams;
+    stream_idx = src->intermediate_data.decode.packet.stream_index;
+    if(stream_idx < 0 || stream_idx > nb_streams_in) {
+        ret = AVERROR(EINVAL);
+        goto done;
+    }
+    atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
+    AVFrame   *frame_filt   = &dst->intermediate_data.encode.frame;
+    AVFrame   *frame_origin = &src->intermediate_data.decode.frame;
+    uint16_t   num_filtered_frms = dst->intermediate_data.encode.num_filtered_frms;
+    if(num_filtered_frms == 0) {
+        ret = av_buffersrc_add_frame_flags(st_encode_ctx->filt_src_ctx, frame_origin, 0);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_ERROR, "Error while feeding the filtergraph\n");
+            goto done;
+        }
+    }
+    av_frame_unref(frame_filt);
+    ret = av_buffersink_get_frame(st_encode_ctx->filt_sink_ctx, frame_filt);
+    if (ret == 0) {
+        frame_filt ->pict_type = AV_PICTURE_TYPE_NONE;        
+        dst->intermediate_data.encode.num_filtered_frms = 1 + num_filtered_frms;
+    } else { // ret < 0
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            ret = 1; // the filter has finished filtering source frame, request for next one
+            dst->intermediate_data.encode.num_filtered_frms = 0;
+        } else {
+            av_log(NULL, AV_LOG_WARNING, "error when pulling filtered frame from filters\n");
+        }
+    }
+done:
+    return ret;
+} // end of atfp_hls__av_filter_processing

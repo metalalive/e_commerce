@@ -117,6 +117,8 @@ Ensure(atfp_hls_test__avctx_init__fmtctx_error) {
         expect(avformat_alloc_output_context2, will_return(expect_err), when(fmt_name, is_equal_to_string(expect_mux_fmt)),
             will_set_contents_of_parameter(fmtctx_p, &mock_ofmt_ctx_p, sizeof(AVFormatContext **)),
         );
+        expect(av_packet_unref, when(pkt, is_equal_to(&mock_avctx_dst.intermediate_data.encode.packet)));
+        expect(av_frame_unref,  when(frame, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)));
     }
     int err = atfp_hls__av_init(&mock_fp_dst);
     assert_that(err, is_equal_to(expect_err));
@@ -136,6 +138,8 @@ Ensure(atfp_hls_test__avctx_init__invalid_backend_lib) {
         expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(expect_mux_fmt)),
             will_set_contents_of_parameter(fmtctx_p, &mock_ofmt_ctx_p, sizeof(AVFormatContext **)),
         );
+        expect(av_packet_unref, when(pkt, is_equal_to(&mock_avctx_dst.intermediate_data.encode.packet)));
+        expect(av_frame_unref,  when(frame, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)));
         expect(avformat_free_context,  when(s, is_equal_to(mock_ofmt_ctx_p)));
     }
     int err = atfp_hls__av_init(&mock_fp_dst);
@@ -179,6 +183,8 @@ Ensure(atfp_hls_test__avctx_init__audio_codec_error) {
         expect(avcodec_open2, will_return(expect_err), when(ctx, is_equal_to(&mock_encoder_ctxs[2])));
         expect(avcodec_parameters_from_context, will_return(0), when(codec_ctx, is_equal_to(&mock_encoder_ctxs[0])));
         expect(avcodec_parameters_copy); // for other stream types 
+        expect(av_packet_unref, when(pkt, is_equal_to(&mock_avctx_dst.intermediate_data.encode.packet)));
+        expect(av_frame_unref,  when(frame, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)));
         expect(av_freep,  when(ptr, is_equal_to(&mock_avctx_dst.stream_ctx.encode))); // pointer to mock_st_encoder_ctxs
         expect(avcodec_free_context,  when(ctx, is_equal_to(&mock_encoder_ctxs[0])));
         expect(avcodec_free_context,  when(ctx, is_equal_to(&mock_encoder_ctxs[2])));
@@ -222,6 +228,8 @@ Ensure(atfp_hls_test__avctx_init__white_header_error) {
         expect(av_strerror);
         expect(av_log);
         expect(av_dict_free);
+        expect(av_packet_unref, when(pkt, is_equal_to(&mock_avctx_dst.intermediate_data.encode.packet)));
+        expect(av_frame_unref,  when(frame, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)));
         expect(av_freep,  when(ptr, is_equal_to(&mock_avctx_dst.stream_ctx.encode))); // pointer to mock_st_encoder_ctxs
         expect(avcodec_free_context,  when(ctx, is_equal_to(&mock_encoder_ctxs[0])));
         expect(avformat_free_context,  when(s, is_equal_to(mock_ofmt_ctx_p)));

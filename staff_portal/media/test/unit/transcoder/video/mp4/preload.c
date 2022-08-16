@@ -508,6 +508,7 @@ Ensure(atfp_mp4_test__preload_mdat_packet_ok) {
         memcpy(&expect_content[0], &mdat_body[MP4__ATOM_BODY_MDAT__FIRST_PIECE__SZ + chunk_offset], nbytes_to_load);
         assert_that(&actual_content[0], is_equal_to_string(&expect_content[0]));
     }
+    free(asa_src->cb_args.entries[EXPECT_MDAT_SZ_INDEX__IN_ASA_USRARG]);
     utest_deinit_mp4_preload(&mp4proc);
 } // end of atfp_mp4_test__preload_mdat_packet_ok
 

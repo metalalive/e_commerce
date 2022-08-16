@@ -16,6 +16,10 @@ void  atfp_hls__av_deinit(atfp_hls_t *hlsproc)
 {
     AVFormatContext *fmt_ctx  = hlsproc->av->fmt_ctx;
     atfp_stream_enc_ctx_t *enc_ctxs = hlsproc->av ->stream_ctx.encode;
+    AVPacket  *pkt = & hlsproc->av->intermediate_data.encode.packet;
+    AVFrame   *frm = & hlsproc->av->intermediate_data.encode.frame;
+    av_packet_unref(pkt);
+    av_frame_unref(frm);
     if(enc_ctxs) {
         int nb_streams = fmt_ctx ? fmt_ctx->nb_streams: 0;
         for(int idx = 0; idx < nb_streams; idx++) {
@@ -216,3 +220,10 @@ int  atfp_hls__av_init(atfp_hls_t *hlsproc)
     }
     return err;
 } // end of atfp_hls__av_init
+
+
+int  atfp_hls__av_encode_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
+{ return 1; } // end of atfp_hls__av_encode_processing
+
+int   atfp_hls__av_local_white(atfp_av_ctx_t *dst)
+{ return 0; } // end of atfp_hls__av_local_white

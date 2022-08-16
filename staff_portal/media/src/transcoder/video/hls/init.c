@@ -68,8 +68,40 @@ static void atfp__video_hls__deinit(atfp_t *processor)
 
 static void atfp__video_hls__processing(atfp_t *processor)
 {
-    processor -> data.callback(processor);
-}
+    int ret = 0;
+    ASA_RES_CODE result = ASTORAGE_RESULT_COMPLETE;
+    atfp_hls_t *hlsproc_dst = NULL, *hlsproc_src = NULL;
+    {
+        asa_op_base_cfg_t *asa_dst = processor -> data.storage.handle;
+        atfp_asa_map_t    *_map = (atfp_asa_map_t *)asa_dst->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(_map);
+        hlsproc_src = (atfp_hls_t *) asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+        hlsproc_dst = (atfp_hls_t *)processor;
+    }
+    while(!ret) {
+        ret = hlsproc_dst->internal.op.filter(hlsproc_src->av, hlsproc_dst->av);
+        if(ret) { continue; } // may return error (ret < 0), or no more frames to filter (ret == 1)
+        int ret2 = 0;
+        while(!ret2) {
+            ret2 = hlsproc_dst->internal.op.encode(hlsproc_src->av, hlsproc_dst->av);
+            if(ret2 == 0) {
+                ret2 = hlsproc_dst->internal.op.write(hlsproc_dst->av);
+            } else if(ret2 == 1) {
+                // no more encoded frames to write, break to outer loop for next filtered frame
+            }
+            if(ret2 < 0) { ret = ret2; }
+        }
+    } // end of outer loop
+    if(ret == 1) {
+        result = hlsproc_dst->internal.op.move_to_storage(hlsproc_dst);
+    } else { // ret < 0
+        result = ASTORAGE_RESULT_UNKNOWN_ERROR;
+    }
+    if(result != ASTORAGE_RESULT_ACCEPT) {
+        processor -> data.callback(processor);
+    }
+} // end of atfp__video_hls__processing
+
 
 static uint8_t  atfp__video_hls__has_done_processing(atfp_t *processor)
 { return 1; }
@@ -84,6 +116,10 @@ static atfp_t *atfp__video_hls__instantiate(void) {
     out->internal.op.avctx_init   = atfp_hls__av_init;
     out->internal.op.avctx_deinit = atfp_hls__av_deinit;
     out->internal.op.avfilter_init = atfp_hls__avfilter_init;
+    out->internal.op.filter  = atfp_hls__av_filter_processing;
+    out->internal.op.encode  = atfp_hls__av_encode_processing;
+    out->internal.op.write   = atfp_hls__av_local_white;
+    out->internal.op.move_to_storage = atfp_hls__try_flush_to_storage;
     return &out->super;
 }
 

@@ -43,4 +43,9 @@ int avfilter_graph_create_filter (AVFilterContext **filt_ctx_p, const AVFilter *
          const char *name, const char *args, void *opaque, AVFilterGraph *graph_ctx)
 { return (int) mock(filt_ctx_p, filt, name, args, graph_ctx); }
 
+int av_buffersrc_add_frame_flags(AVFilterContext *filt_ctx, AVFrame *frm, int flags)
+{ return (int) mock(filt_ctx, frm); }
+
+int av_buffersink_get_frame(AVFilterContext *filt_ctx, AVFrame *frm)
+{ return (int) mock(filt_ctx, frm); }
 

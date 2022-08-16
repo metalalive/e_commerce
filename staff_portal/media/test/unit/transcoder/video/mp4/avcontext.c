@@ -130,11 +130,14 @@ static ASA_RES_CODE mock_asa_src_subsequent_read_fn(asa_op_base_cfg_t *cfg)
 
 #define  UNITTEST_AVCTX_INIT__TEARDOWN \
     { \
-        close(asa_local.file.file); \
+        if(asa_local.file.file > 0) \
+            close(asa_local.file.file); \
         unlink(LOCAL_TMPBUF_PATH); \
         rmdir(UNITTEST_FULLPATH); \
         json_decref(mp4proc.super.data.spec); \
         json_decref(mp4proc.super.data.error); \
+        if(mock_av_ctx->stats) \
+            free(mock_av_ctx->stats); \
         free(mock_av_ctx); \
         atfp_asa_map_deinit(mock_map); \
     }
@@ -170,6 +173,7 @@ Ensure(atfp_mp4_test__avctx_init_ok) {
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         assert_that(mp4proc.av->fmt_ctx, is_equal_to(&mock_avfmt_ctx));
         assert_that(mp4proc.av->stream_ctx.decode, is_equal_to(mock_dec_ctxs));
+        assert_that(mp4proc.av->stats, is_not_equal_to(NULL));
         atfp_stream_stats_t  *stats = mp4proc.av->stats;
         for(int idx = 0; idx < NUM_STREAMS_FMTCTX; idx++) {
             int actual_num_pkt_preloading = stats[idx].index_entry.preloading;
@@ -379,7 +383,8 @@ Ensure(atfp_mp4_test__avctx_validate__decoder_unsupported) {
 
 #define  UNITTEST_AVCTX__PRELOAD_PKT_TEARDOWN \
     { \
-        close(asa_local.file.file); \
+        if(asa_local.file.file > 0) \
+            close(asa_local.file.file); \
         unlink(LOCAL_TMPBUF_PATH); \
         rmdir(UNITTEST_FULLPATH); \
         json_decref(mp4proc.super.data.spec); \

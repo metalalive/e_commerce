@@ -203,6 +203,7 @@ SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/video/hls/init.c 
     src/transcoder/video/hls/avcontext.c 
     src/transcoder/video/hls/avfilter.c 
+    src/transcoder/video/hls/output.c 
     src/transcoder/video/mp4/preload.c 
     src/transcoder/video/mp4/avcontext.c 
     src/transcoder/video/mp4/init.c )

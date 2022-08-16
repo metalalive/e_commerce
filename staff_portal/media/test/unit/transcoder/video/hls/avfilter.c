@@ -196,11 +196,91 @@ Ensure(atfp_hls_test__avfilter_init_audio_error) {
 } // end of atfp_hls_test__avfilter_init_audio_error
 
 
+Ensure(atfp_hls_test__avfilter_process__new_frame_filtered) {
+#define  EXPECT_NB_STREAMS_IFMT_CTX   3
+    int ret = 0, idx = 0, ret_ok = 0, expect_num_filtered_frames = 5;
+    int  expect_pkt_stream_idx = EXPECT_NB_STREAMS_IFMT_CTX - 1;
+    AVFilterContext  mock_filt_sink_ctx [EXPECT_NB_STREAMS_IFMT_CTX] = {0};
+    AVFilterContext  mock_filt_src_ctx  [EXPECT_NB_STREAMS_IFMT_CTX] = {0};
+    atfp_stream_enc_ctx_t  mock_st_encode_ctx[EXPECT_NB_STREAMS_IFMT_CTX] =  {0};
+    for(idx=0; idx<EXPECT_NB_STREAMS_IFMT_CTX;
+            mock_st_encode_ctx[idx].filt_sink_ctx = &mock_filt_sink_ctx[idx], 
+            mock_st_encode_ctx[idx].filt_src_ctx  = &mock_filt_src_ctx[idx], 
+            idx++); 
+    AVFormatContext   mock_ifmt_ctx = {.nb_streams=EXPECT_NB_STREAMS_IFMT_CTX};
+    atfp_av_ctx_t  mock_avctx_dst = {.stream_ctx = {.encode = &mock_st_encode_ctx[0]}};
+    atfp_av_ctx_t  mock_avctx_src = {.fmt_ctx = &mock_ifmt_ctx, .intermediate_data = {.decode = {
+        .packet = {.stream_index = expect_pkt_stream_idx}}}};
+    for(idx = 0; idx < expect_num_filtered_frames; idx++) {
+        if(idx == 0)
+            expect(av_buffersrc_add_frame_flags, will_return(0),
+                when(filt_ctx, is_equal_to(&mock_filt_src_ctx[expect_pkt_stream_idx])),
+                when(frm, is_equal_to(&mock_avctx_src.intermediate_data.decode.frame)));
+        expect(av_frame_unref);
+        expect(av_buffersink_get_frame, will_return(0),
+                when(filt_ctx, is_equal_to(&mock_filt_sink_ctx[expect_pkt_stream_idx])),
+                when(frm, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)));
+        ret = atfp_hls__av_filter_processing(&mock_avctx_src, &mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_ok));
+    }
+#undef  EXPECT_NB_STREAMS_IFMT_CTX
+} // end of atfp_hls_test__avfilter_process__new_frame_filtered
+
+
+Ensure(atfp_hls_test__avfilter_process__no_more_frame_filtered) {
+#define  EXPECT_NB_STREAMS_IFMT_CTX   3
+    int ret = 0, ret_nxt_frm_required = 1;
+    int  expect_pkt_stream_idx = EXPECT_NB_STREAMS_IFMT_CTX - 1;
+    atfp_stream_enc_ctx_t  mock_st_encode_ctx[EXPECT_NB_STREAMS_IFMT_CTX] =  {0};
+    AVFormatContext   mock_ifmt_ctx = {.nb_streams=EXPECT_NB_STREAMS_IFMT_CTX};
+    atfp_av_ctx_t  mock_avctx_dst = {.stream_ctx = {.encode = &mock_st_encode_ctx[0]}};
+    atfp_av_ctx_t  mock_avctx_src = {.fmt_ctx = &mock_ifmt_ctx, .intermediate_data = {.decode = {
+        .packet = {.stream_index = expect_pkt_stream_idx}}}};
+    {
+        expect(av_buffersrc_add_frame_flags, will_return(0),
+                when(frm, is_equal_to(&mock_avctx_src.intermediate_data.decode.frame)));
+        expect(av_frame_unref);
+        expect(av_buffersink_get_frame, will_return(AVERROR(EAGAIN)),
+                when(frm, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)));
+        ret = atfp_hls__av_filter_processing(&mock_avctx_src, &mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_nxt_frm_required));
+    }
+#undef  EXPECT_NB_STREAMS_IFMT_CTX
+} // end of atfp_hls_test__avfilter_process__no_more_frame_filtered
+
+
+Ensure(atfp_hls_test__avfilter_process__error) {
+#define  EXPECT_NB_STREAMS_IFMT_CTX   3
+    int ret = 0, expect_err = AVERROR(EIO);
+    int  expect_pkt_stream_idx = 1;
+    atfp_stream_enc_ctx_t  mock_st_encode_ctx[EXPECT_NB_STREAMS_IFMT_CTX] =  {0};
+    AVFormatContext   mock_ifmt_ctx = {.nb_streams=EXPECT_NB_STREAMS_IFMT_CTX};
+    atfp_av_ctx_t  mock_avctx_dst = {.stream_ctx = {.encode = &mock_st_encode_ctx[0]},
+        .intermediate_data = {.encode = {.num_filtered_frms=7}}
+    };
+    atfp_av_ctx_t  mock_avctx_src = {.fmt_ctx = &mock_ifmt_ctx, .intermediate_data = {
+        .decode = {.packet = {.stream_index = expect_pkt_stream_idx}}}
+    };
+    {
+        expect(av_frame_unref);
+        expect(av_buffersink_get_frame, will_return(expect_err),
+                when(frm, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)));
+        expect(av_log);
+        ret = atfp_hls__av_filter_processing(&mock_avctx_src, &mock_avctx_dst);
+        assert_that(ret, is_equal_to(expect_err));
+    }
+#undef  EXPECT_NB_STREAMS_IFMT_CTX
+} // end of atfp_hls_test__avfilter_process__error
+
+
 TestSuite *app_transcoder_hls_avfilter_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, atfp_hls_test__avfilter_init_ok);
     add_test(suite, atfp_hls_test__avfilter_init_video_error);
     add_test(suite, atfp_hls_test__avfilter_init_audio_error);
+    add_test(suite, atfp_hls_test__avfilter_process__new_frame_filtered);
+    add_test(suite, atfp_hls_test__avfilter_process__no_more_frame_filtered);
+    add_test(suite, atfp_hls_test__avfilter_process__error);
     return suite;
 } // end of app_transcoder_hls_avfilter_tests
