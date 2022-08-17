@@ -273,6 +273,76 @@ Ensure(atfp_hls_test__avfilter_process__error) {
 } // end of atfp_hls_test__avfilter_process__error
 
 
+Ensure(atfp_hls_test__avfilter_process__finalize_flushing_frames) {
+#define  EXPECT_NB_STREAMS   4
+#define  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS   {8,3,17,11}
+    int  ret = 0, idx = 0, jdx = 0, ret_ok = 0, ret_nxt_frm_required = 1;
+    int  expect_num_filtered_frames[EXPECT_NB_STREAMS] = EXPECT_NUM_FILT_FRAMES_FROM_STREAMS;
+    AVFilterContext  mock_filt_src_ctx  [EXPECT_NB_STREAMS] = {0};
+    atfp_stream_enc_ctx_t  mock_st_encode_ctx[EXPECT_NB_STREAMS] =  {0};
+    for(idx = 0; idx < EXPECT_NB_STREAMS;
+            mock_st_encode_ctx[idx].filt_src_ctx = &mock_filt_src_ctx[idx],  idx++); 
+    AVFormatContext   mock_ifmt_ctx = {.nb_streams=EXPECT_NB_STREAMS};
+    atfp_av_ctx_t  mock_avctx_dst = {.stream_ctx = {.encode = &mock_st_encode_ctx[0]}};
+    atfp_av_ctx_t  mock_avctx_src = {.fmt_ctx = &mock_ifmt_ctx};
+    for(idx = 0; idx < EXPECT_NB_STREAMS; idx++) {
+        expect(av_buffersrc_add_frame_flags, will_return(0), when(frm, is_equal_to(NULL)),
+                when(filt_ctx, is_equal_to(&mock_filt_src_ctx[idx])),
+            );
+        for(jdx = 0; jdx < expect_num_filtered_frames[idx]; jdx++) {
+            expect(av_frame_unref);
+            expect(av_buffersink_get_frame, will_return(0),
+                when(frm, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)));
+            ret = atfp_hls__av_filter__finalize_processing(&mock_avctx_src, &mock_avctx_dst);
+            assert_that(ret, is_equal_to(ret_ok));
+        }
+        expect(av_frame_unref);
+        expect(av_buffersink_get_frame, will_return(AVERROR(EAGAIN)));
+        ret = atfp_hls__av_filter__finalize_processing(&mock_avctx_src, &mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_nxt_frm_required));
+    } // end of loop
+    for(idx = 0; idx < 5; idx++) {
+        ret = atfp_hls__av_filter__finalize_processing(&mock_avctx_src, &mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_ok)); // nothing happened
+    } // end of loop
+#undef  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS
+#undef  EXPECT_NB_STREAMS
+} // end of atfp_hls_test__avfilter_process__finalize_flushing_frames
+
+
+Ensure(atfp_hls_test__avfilter_process__finalize_error) {
+#define  EXPECT_NB_STREAMS   2
+#define  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS   {0,5}
+    int  ret = 0, idx = 0, expect_err = AVERROR(EPERM), ret_nxt_frm_required = 1;
+    int  expect_num_filtered_frames[EXPECT_NB_STREAMS] = EXPECT_NUM_FILT_FRAMES_FROM_STREAMS;
+    AVFilterContext  mock_filt_src_ctx  [EXPECT_NB_STREAMS] = {0};
+    atfp_stream_enc_ctx_t  mock_st_encode_ctx[EXPECT_NB_STREAMS] =  {0};
+    for(idx = 0; idx < EXPECT_NB_STREAMS;
+            mock_st_encode_ctx[idx].filt_src_ctx = &mock_filt_src_ctx[idx],  idx++); 
+    AVFormatContext   mock_ifmt_ctx = {.nb_streams=EXPECT_NB_STREAMS};
+    atfp_av_ctx_t  mock_avctx_dst = {.stream_ctx = {.encode = &mock_st_encode_ctx[0]}};
+    atfp_av_ctx_t  mock_avctx_src = {.fmt_ctx = &mock_ifmt_ctx};
+    { // no more frame flushed
+        expect(av_buffersrc_add_frame_flags, will_return(0), when(frm, is_equal_to(NULL)),
+                when(filt_ctx, is_equal_to(&mock_filt_src_ctx[0]))  );
+        expect(av_frame_unref);
+        expect(av_buffersink_get_frame, will_return(AVERROR(EAGAIN)));
+        ret = atfp_hls__av_filter__finalize_processing(&mock_avctx_src, &mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_nxt_frm_required));
+    } {
+        expect(av_buffersrc_add_frame_flags, will_return(0), when(frm, is_equal_to(NULL)),
+                when(filt_ctx, is_equal_to(&mock_filt_src_ctx[1]))  );
+        expect(av_frame_unref);
+        expect(av_buffersink_get_frame, will_return(expect_err));
+        expect(av_log);
+        ret = atfp_hls__av_filter__finalize_processing(&mock_avctx_src, &mock_avctx_dst);
+        assert_that(ret, is_equal_to(expect_err));
+    }
+#undef  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS
+#undef  EXPECT_NB_STREAMS
+} // end of atfp_hls_test__avfilter_process__finalize_error
+
+
 TestSuite *app_transcoder_hls_avfilter_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -282,5 +352,7 @@ TestSuite *app_transcoder_hls_avfilter_tests(void)
     add_test(suite, atfp_hls_test__avfilter_process__new_frame_filtered);
     add_test(suite, atfp_hls_test__avfilter_process__no_more_frame_filtered);
     add_test(suite, atfp_hls_test__avfilter_process__error);
+    add_test(suite, atfp_hls_test__avfilter_process__finalize_flushing_frames);
+    add_test(suite, atfp_hls_test__avfilter_process__finalize_error);
     return suite;
 } // end of app_transcoder_hls_avfilter_tests

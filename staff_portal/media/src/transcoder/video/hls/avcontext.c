@@ -130,7 +130,12 @@ static int atfp_hls__av_encoder_init(atfp_av_ctx_t *avctx_dst, atfp_av_ctx_t *av
         }
         AVCodecContext *dec_ctx = dec_ctxs[idx];
         if(dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO || dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) {
-            const AVCodec *encoder = dec_ctx->codec;
+            const AVCodec *encoder = avcodec_find_encoder(dec_ctx->codec_id); // do NOT reference dec_ctx->codec;
+            if(!encoder) {
+                json_object_set_new(err_info, "transcoder", json_string("[hls] invalid decoder ID"));
+                err = AVERROR(EINVAL);
+                break;
+            }
             AVCodecContext *enc_ctx = avcodec_alloc_context3(encoder);
             enc_ctxs[idx].enc_ctx = enc_ctx;
             if(!enc_ctx) {
@@ -222,8 +227,93 @@ int  atfp_hls__av_init(atfp_hls_t *hlsproc)
 } // end of atfp_hls__av_init
 
 
-int  atfp_hls__av_encode_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
-{ return 1; } // end of atfp_hls__av_encode_processing
+static int  _atfp_hls__av_encode_processing(atfp_av_ctx_t *dst, AVFrame *frame, int8_t stream_idx)
+{
+    int ret = 0;
+    atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
+    AVPacket  *packet = &dst->intermediate_data.encode.packet;
+    uint16_t   num_encoded_pkts = dst->intermediate_data.encode. num_encoded_pkts;
+    if(num_encoded_pkts == 0) {
+        ret = avcodec_send_frame(st_encode_ctx->enc_ctx, frame);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_ERROR, "Error sending a frame for encoding.\n");
+            goto done;
+        }
+    }
+    ret = avcodec_receive_packet(st_encode_ctx->enc_ctx, packet);
+    if (ret == 0) {
+        packet-> stream_index = stream_idx;
+        av_packet_rescale_ts(packet, st_encode_ctx->enc_ctx->time_base,
+                dst->fmt_ctx->streams[stream_idx]->time_base);
+        if(packet->duration == 0) { // always happens to video encoder
+            packet->duration = (frame && frame->pkt_duration) ? frame->pkt_duration: 1;
+        }
+        dst->intermediate_data.encode.num_encoded_pkts = 1 + num_encoded_pkts;
+    } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+        ret = 1;
+        dst->intermediate_data.encode.num_encoded_pkts = 0;
+    } else { // ret < 0
+        av_log(NULL, AV_LOG_ERROR, "Error on receiving encoded packet.\n");
+    }
+done:
+    return ret;
+} // end of _atfp_hls__av_encode_processing
+
+
+int  atfp_hls__av_encode_processing(atfp_av_ctx_t *dst) {
+    int ret = 0;
+    if(dst) {
+        int8_t stream_idx =  dst->intermediate_data.encode.stream_idx;
+        AVFrame   *frame  = &dst->intermediate_data.encode.frame;
+        ret = _atfp_hls__av_encode_processing(dst, frame, stream_idx);
+    } else {
+        ret = AVERROR(EINVAL);
+    }
+    return ret;
+} // end of atfp_hls__av_encode_processing
+
+
+int   atfp_hls__av_encode__finalize_processing(atfp_av_ctx_t *dst) {
+    int ret = AVERROR(EAGAIN);
+    if(dst) {
+        int8_t nb_streams_in = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
+        int8_t stream_idx    = (int8_t) dst->intermediate_data.encode._final.enc_stream_idx;
+        if (nb_streams_in > stream_idx) {
+            ret = _atfp_hls__av_encode_processing(dst, NULL, stream_idx);
+            if((ret == 1) && (nb_streams_in > stream_idx)) {
+                ++stream_idx;
+            }
+        }
+        dst->intermediate_data.encode._final.enc_stream_idx = stream_idx;
+    } else {
+        ret = AVERROR(EINVAL);
+    }
+    return ret;
+} // end of atfp_hls__av_encode__finalize_processing
+
+
+uint8_t  atfp_av_encoder__has_done_flushing(atfp_av_ctx_t *dst)
+{
+    int8_t nb_streams_in = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
+    int8_t stream_idx    = (int8_t) dst->intermediate_data.encode._final.enc_stream_idx;
+    return  (nb_streams_in > 0) && (nb_streams_in == stream_idx);
+}
+
 
 int   atfp_hls__av_local_white(atfp_av_ctx_t *dst)
-{ return 0; } // end of atfp_hls__av_local_white
+{
+    AVPacket  *packet = &dst->intermediate_data.encode.packet;
+    int ret = av_interleaved_write_frame(dst->fmt_ctx, packet);    
+    return ret;
+}
+
+int   atfp_hls__av_local_white_finalize(atfp_av_ctx_t *dst)
+{
+    int ret = av_write_trailer(dst->fmt_ctx);
+    dst->intermediate_data.encode._final.file_trailer_wrote = 1;
+    return (ret < 0) ? ret: 1;
+}
+
+uint8_t  atfp_av__has_done_processing(atfp_av_ctx_t *dst) {
+    return  dst->intermediate_data.encode._final.file_trailer_wrote ;
+}

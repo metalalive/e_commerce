@@ -82,6 +82,8 @@ Ensure(atfp_hls_test__avctx_init_ok) {
             expect(avformat_new_stream, will_return(&mock_av_streams_dst[idx]),
                     when(s, is_equal_to(&mock_ofmt_ctx)));
         } // end of for-loop
+        expect(avcodec_find_encoder, will_return(&mock_codecs[0]));
+        expect(avcodec_find_encoder, will_return(&mock_codecs[1]));
         expect(avcodec_alloc_context3, will_return(&mock_encoder_ctxs[0]));
         expect(avcodec_alloc_context3, will_return(&mock_encoder_ctxs[1]));
         int expect_num_channels_audio = 5;
@@ -175,6 +177,8 @@ Ensure(atfp_hls_test__avctx_init__audio_codec_error) {
             expect(avformat_new_stream, will_return(&mock_av_streams_dst[idx]),
                     when(s, is_equal_to(&mock_ofmt_ctx)));
         } // end of for-loop
+        expect(avcodec_find_encoder, will_return(&mock_codecs[0]));
+        expect(avcodec_find_encoder, will_return(&mock_codecs[2]));
         expect(avcodec_alloc_context3, will_return(&mock_encoder_ctxs[0]));
         expect(avcodec_alloc_context3, will_return(&mock_encoder_ctxs[2]));
         int expect_num_channels_audio = 7;
@@ -215,6 +219,7 @@ Ensure(atfp_hls_test__avctx_init__white_header_error) {
         mock_decoder_ctxs[0].codec_type = AVMEDIA_TYPE_VIDEO;
         expect(avformat_new_stream, will_return(&mock_av_streams_dst[0]),
                 when(s, is_equal_to(&mock_ofmt_ctx)));
+        expect(avcodec_find_encoder, will_return(&mock_codecs[0]));
         expect(avcodec_alloc_context3, will_return(&mock_encoder_ctxs[0]));
         expect(avcodec_open2, will_return(0), when(ctx, is_equal_to(&mock_encoder_ctxs[0])));
         expect(avcodec_parameters_from_context, will_return(0), when(codec_ctx, is_equal_to(&mock_encoder_ctxs[0])));
@@ -241,6 +246,120 @@ Ensure(atfp_hls_test__avctx_init__white_header_error) {
 } // end of atfp_hls_test__avctx_init__white_header_error
 
 
+#define  UNITTEST_AVCTX_ENCODE__SETUP  \
+    AVStream   mock_av_streams_src[EXPECT_NB_STREAMS] = {0}; \
+    AVStream  *mock_av_streams_src_p[EXPECT_NB_STREAMS] = {0}; \
+    AVCodecContext   mock_enc_ctx[EXPECT_NB_STREAMS] = {0}; \
+    atfp_stream_enc_ctx_t  mock_st_encode_ctx[EXPECT_NB_STREAMS] =  {0}; \
+    for(idx = 0; idx < EXPECT_NB_STREAMS; mock_st_encode_ctx[idx].enc_ctx = &mock_enc_ctx[idx], \
+           mock_av_streams_src_p[idx] = &mock_av_streams_src[idx], idx++);  \
+    AVFormatContext   mock_ofmt_ctx = {.streams=&mock_av_streams_src_p[0], .nb_streams=EXPECT_NB_STREAMS}; \
+    atfp_av_ctx_t  mock_avctx_dst = {.fmt_ctx=&mock_ofmt_ctx, .stream_ctx = {.encode=&mock_st_encode_ctx[0]}, \
+        .intermediate_data = {.encode = {.num_encoded_pkts=0}}, \
+    };
+
+Ensure(atfp_hls_test__avctx_encode__ok) {
+#define  EXPECT_NB_STREAMS   3
+    int ret = 0, idx = 0, ret_ok = 0, ret_nxt_frm_required = 1,
+          expect_stream_idx = EXPECT_NB_STREAMS - 1, expect_num_encoded_pkts = 4;
+    UNITTEST_AVCTX_ENCODE__SETUP;
+    mock_avctx_dst.intermediate_data.encode.stream_idx = expect_stream_idx;
+    expect(avcodec_send_frame, will_return(0), when(codec_ctx, is_equal_to(&mock_enc_ctx[expect_stream_idx])));
+    for(idx = 0; idx < expect_num_encoded_pkts; idx++) {
+        expect(avcodec_receive_packet, will_return(0),
+                when(codec_ctx, is_equal_to(&mock_enc_ctx[expect_stream_idx])));
+        expect(av_packet_rescale_ts);
+        ret = atfp_hls__av_encode_processing(&mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_ok));
+    } {
+        expect(avcodec_receive_packet, will_return(AVERROR(EAGAIN)),
+                when(codec_ctx, is_equal_to(&mock_enc_ctx[expect_stream_idx])));
+        ret = atfp_hls__av_encode_processing(&mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_nxt_frm_required));
+    }
+#undef  EXPECT_NB_STREAMS
+} // end of atfp_hls_test__avctx_encode__ok
+
+
+Ensure(atfp_hls_test__avctx_encode__error) {
+#define  EXPECT_NB_STREAMS   3
+    int ret = 0, idx = 0, ret_ok = 0, expect_err = AVERROR(EIO), expect_stream_idx = 1;
+    UNITTEST_AVCTX_ENCODE__SETUP;
+    mock_avctx_dst.intermediate_data.encode.stream_idx = expect_stream_idx;
+    expect(avcodec_send_frame, will_return(0), when(codec_ctx, is_equal_to(&mock_enc_ctx[expect_stream_idx])));
+    {
+        expect(avcodec_receive_packet, will_return(0),
+                when(codec_ctx, is_equal_to(&mock_enc_ctx[expect_stream_idx])));
+        expect(av_packet_rescale_ts);
+        ret = atfp_hls__av_encode_processing(&mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_ok));
+        expect(avcodec_receive_packet, will_return(expect_err),
+                when(codec_ctx, is_equal_to(&mock_enc_ctx[expect_stream_idx])));
+        expect(av_log);
+        ret = atfp_hls__av_encode_processing(&mock_avctx_dst);
+        assert_that(ret, is_equal_to(expect_err));
+    }
+#undef  EXPECT_NB_STREAMS
+} // end of atfp_hls_test__avctx_encode__error
+
+
+Ensure(atfp_hls_test__avctx_encode__finalize_flushing_frame) {
+#define  EXPECT_NB_STREAMS   4
+#define  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS   {8,3,17,11}
+    int  ret = 0, idx = 0, jdx = 0, ret_ok = 0, ret_nxt_frm_required = 1;
+    int  expect_num_encoded_pkts[EXPECT_NB_STREAMS] = EXPECT_NUM_FILT_FRAMES_FROM_STREAMS;
+    UNITTEST_AVCTX_ENCODE__SETUP;
+    // assume the application has done flushing filters of all streams
+    mock_avctx_dst .intermediate_data.encode._final.filt_stream_idx = EXPECT_NB_STREAMS;
+    for(idx = 0; idx < EXPECT_NB_STREAMS; idx++) {
+        expect(avcodec_send_frame, will_return(0), when(frame, is_equal_to(NULL)),
+                when(codec_ctx, is_equal_to(&mock_enc_ctx[idx])),
+            );
+        for(jdx = 0; jdx < expect_num_encoded_pkts[idx]; jdx++) {
+            expect(avcodec_receive_packet, will_return(0),
+                when(avpkt, is_equal_to(&mock_avctx_dst.intermediate_data.encode.packet)));
+            expect(av_packet_rescale_ts);
+            ret = atfp_hls__av_encode__finalize_processing(&mock_avctx_dst);
+            assert_that(ret, is_equal_to(ret_ok));
+        }
+        expect(avcodec_receive_packet, will_return(AVERROR(EAGAIN)));
+        ret = atfp_hls__av_encode__finalize_processing(&mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_nxt_frm_required));
+    } // end of loop
+    for(idx = 0; idx < 5; idx++) {
+        ret = atfp_hls__av_encode__finalize_processing(&mock_avctx_dst);
+        assert_that(ret, is_equal_to(AVERROR(EAGAIN))); // nothing happened
+    } // end of loop
+#undef  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS
+#undef  EXPECT_NB_STREAMS
+} // end of atfp_hls_test__avctx_encode__finalize_flushing_frame
+
+
+Ensure(atfp_hls_test__avctx_encode__finalize_error) {
+#define  EXPECT_NB_STREAMS   2
+#define  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS   {0,4}
+    int  ret = 0, idx = 0, expect_err = AVERROR(EPERM), ret_nxt_frm_required = 1;
+    UNITTEST_AVCTX_ENCODE__SETUP;
+    mock_avctx_dst .intermediate_data.encode._final.filt_stream_idx = EXPECT_NB_STREAMS;
+    { // no more frame flushed
+        expect(avcodec_send_frame, will_return(0), when(frame, is_equal_to(NULL)),
+                when(codec_ctx, is_equal_to(&mock_enc_ctx[0])),  );
+        expect(avcodec_receive_packet, will_return(AVERROR(EAGAIN)));
+        ret = atfp_hls__av_encode__finalize_processing(&mock_avctx_dst);
+        assert_that(ret, is_equal_to(ret_nxt_frm_required));
+    } {
+        expect(avcodec_send_frame, will_return(0), when(frame, is_equal_to(NULL)),
+                when(codec_ctx, is_equal_to(&mock_enc_ctx[1]))  );
+        expect(avcodec_receive_packet, will_return(expect_err));
+        expect(av_log);
+        ret = atfp_hls__av_encode__finalize_processing(&mock_avctx_dst);
+        assert_that(ret, is_equal_to(expect_err));
+    }
+#undef  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS
+#undef  EXPECT_NB_STREAMS
+} // end of atfp_hls_test__avctx_encode__finalize_error
+
+
 TestSuite *app_transcoder_hls_avcontext_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -249,5 +368,9 @@ TestSuite *app_transcoder_hls_avcontext_tests(void)
     add_test(suite, atfp_hls_test__avctx_init__invalid_backend_lib);
     add_test(suite, atfp_hls_test__avctx_init__audio_codec_error);
     add_test(suite, atfp_hls_test__avctx_init__white_header_error);
+    add_test(suite, atfp_hls_test__avctx_encode__ok);
+    add_test(suite, atfp_hls_test__avctx_encode__error);
+    add_test(suite, atfp_hls_test__avctx_encode__finalize_flushing_frame);
+    add_test(suite, atfp_hls_test__avctx_encode__finalize_error);
     return suite;
 }

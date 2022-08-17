@@ -43,6 +43,12 @@ struct atfp_av_ctx_s {
             AVPacket  packet;
             uint16_t  num_filtered_frms;
             uint16_t  num_encoded_pkts;
+            int8_t    stream_idx;
+            struct {
+                int8_t   filt_stream_idx;
+                int8_t   enc_stream_idx;
+                uint8_t  file_trailer_wrote:1;
+            } _final;
         } encode;
     } intermediate_data;
     struct {

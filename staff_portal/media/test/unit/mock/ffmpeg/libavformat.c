@@ -78,7 +78,11 @@ void av_dump_format(AVFormatContext *ic, int index, const char *url, int is_outp
 { mock(ic, index, url, is_output); }
 
 int av_read_frame(AVFormatContext *fmt_ctx, AVPacket *pkt)
-{
-    return (int) mock(fmt_ctx, pkt);
-}
+{ return (int) mock(fmt_ctx, pkt); }
+
+int av_interleaved_write_frame(AVFormatContext *fmt_ctx, AVPacket *pkt)
+{ return (int) mock(fmt_ctx, pkt); }
+
+int av_write_trailer(AVFormatContext *fmt_ctx)
+{ return (int) mock(fmt_ctx); }
 

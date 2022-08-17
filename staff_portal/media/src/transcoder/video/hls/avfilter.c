@@ -193,23 +193,12 @@ end:
 } // end of atfp_hls__avfilter_init
 
 
-int  atfp_hls__av_filter_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
+static int  _atfp_hls__av_filter_processing(atfp_av_ctx_t *dst, AVFrame  *frame_origin, int8_t stream_idx)
 {
-    int ret = 0, stream_idx = -1, nb_streams_in = 0;
-    if(!src || !dst) {
-        ret = AVERROR(EINVAL);
-        goto done;
-    }
-    nb_streams_in = src->fmt_ctx->nb_streams;
-    stream_idx = src->intermediate_data.decode.packet.stream_index;
-    if(stream_idx < 0 || stream_idx > nb_streams_in) {
-        ret = AVERROR(EINVAL);
-        goto done;
-    }
-    atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
+    int ret = 0;
     AVFrame   *frame_filt   = &dst->intermediate_data.encode.frame;
-    AVFrame   *frame_origin = &src->intermediate_data.decode.frame;
-    uint16_t   num_filtered_frms = dst->intermediate_data.encode.num_filtered_frms;
+    atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
+    uint16_t   num_filtered_frms  = dst->intermediate_data.encode.num_filtered_frms;
     if(num_filtered_frms == 0) {
         ret = av_buffersrc_add_frame_flags(st_encode_ctx->filt_src_ctx, frame_origin, 0);
         if (ret < 0) {
@@ -222,6 +211,7 @@ int  atfp_hls__av_filter_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
     if (ret == 0) {
         frame_filt ->pict_type = AV_PICTURE_TYPE_NONE;        
         dst->intermediate_data.encode.num_filtered_frms = 1 + num_filtered_frms;
+        dst->intermediate_data.encode.stream_idx = stream_idx;
     } else { // ret < 0
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
             ret = 1; // the filter has finished filtering source frame, request for next one
@@ -232,4 +222,47 @@ int  atfp_hls__av_filter_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
     }
 done:
     return ret;
+} // end of _atfp_hls__av_filter_processing
+
+
+int  atfp_hls__av_filter_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
+{
+    int ret = 0;
+    if(!src || !dst) {
+        ret = AVERROR(EINVAL);
+        goto done;
+    }
+    int nb_streams_in = src->fmt_ctx->nb_streams;
+    int8_t  stream_idx = (int8_t) src->intermediate_data.decode.packet.stream_index;
+    if(stream_idx < 0 || stream_idx >= nb_streams_in) {
+        ret = AVERROR(EINVAL);
+        goto done;
+    }
+    ret = _atfp_hls__av_filter_processing(dst, &src->intermediate_data.decode.frame, stream_idx);
+done:
+    return ret;
 } // end of atfp_hls__av_filter_processing
+
+
+int  atfp_hls__av_filter__finalize_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
+{
+    int ret = 0;
+    int8_t  nb_streams_in = (int8_t) src->fmt_ctx->nb_streams;
+    int8_t  stream_idx    = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
+    if(nb_streams_in > stream_idx) {
+        ret = _atfp_hls__av_filter_processing(dst, NULL, stream_idx);
+        if(ret == 1)
+            dst->intermediate_data.encode._final.filt_stream_idx = stream_idx + 1;
+    } else {
+        ret = 0; // skip
+    }
+    return ret;
+} // end of atfp_hls__av_filter__finalize_processing
+
+uint8_t  atfp_av_filter__has_done_flushing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
+{
+    int8_t  nb_streams_in = (int8_t) src->fmt_ctx->nb_streams;
+    int8_t  stream_idx    = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
+    return  (nb_streams_in > 0) && (nb_streams_in == stream_idx);
+}
+

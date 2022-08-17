@@ -83,7 +83,7 @@ static void atfp__video_hls__processing(atfp_t *processor)
         if(ret) { continue; } // may return error (ret < 0), or no more frames to filter (ret == 1)
         int ret2 = 0;
         while(!ret2) {
-            ret2 = hlsproc_dst->internal.op.encode(hlsproc_src->av, hlsproc_dst->av);
+            ret2 = hlsproc_dst->internal.op.encode(hlsproc_dst->av);
             if(ret2 == 0) {
                 ret2 = hlsproc_dst->internal.op.write(hlsproc_dst->av);
             } else if(ret2 == 1) {
@@ -92,19 +92,30 @@ static void atfp__video_hls__processing(atfp_t *processor)
             if(ret2 < 0) { ret = ret2; }
         }
     } // end of outer loop
+    uint8_t  src_done = hlsproc_src->super.ops->has_done_processing(&hlsproc_src->super);
+    uint8_t  flush_filt_done = hlsproc_dst->internal.op.has_done_flush_filter(hlsproc_src->av, hlsproc_dst->av);
+    uint8_t  flush_enc_done  = hlsproc_dst->internal.op.has_done_flush_encoder(hlsproc_dst->av);
+    if(src_done)
+        hlsproc_dst->internal.op.filter = atfp_hls__av_filter__finalize_processing;
+    if(flush_filt_done)
+        hlsproc_dst->internal.op.encode = atfp_hls__av_encode__finalize_processing;
+    if(flush_enc_done)
+        ret = atfp_hls__av_local_white_finalize(hlsproc_dst->av);
     if(ret == 1) {
         result = hlsproc_dst->internal.op.move_to_storage(hlsproc_dst);
     } else { // ret < 0
         result = ASTORAGE_RESULT_UNKNOWN_ERROR;
     }
-    if(result != ASTORAGE_RESULT_ACCEPT) {
+    if(result != ASTORAGE_RESULT_ACCEPT)
         processor -> data.callback(processor);
-    }
 } // end of atfp__video_hls__processing
 
 
 static uint8_t  atfp__video_hls__has_done_processing(atfp_t *processor)
-{ return 1; }
+{
+    atfp_hls_t *hlsproc_dst = (atfp_hls_t *)processor;
+    return atfp_av__has_done_processing(hlsproc_dst->av);
+}
 
 
 static atfp_t *atfp__video_hls__instantiate(void) {
@@ -120,6 +131,8 @@ static atfp_t *atfp__video_hls__instantiate(void) {
     out->internal.op.encode  = atfp_hls__av_encode_processing;
     out->internal.op.write   = atfp_hls__av_local_white;
     out->internal.op.move_to_storage = atfp_hls__try_flush_to_storage;
+    out->internal.op.has_done_flush_filter = atfp_av_filter__has_done_flushing;
+    out->internal.op.has_done_flush_encoder = atfp_av_encoder__has_done_flushing;
     return &out->super;
 }
 

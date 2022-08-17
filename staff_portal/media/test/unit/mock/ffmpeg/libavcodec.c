@@ -49,3 +49,12 @@ int  avcodec_send_packet(AVCodecContext *codec_ctx, const AVPacket *avpkt)
 int  avcodec_receive_frame(AVCodecContext *codec_ctx, AVFrame *frame)
 { return (int) mock(codec_ctx, frame); }
 
+int  avcodec_send_frame(AVCodecContext *codec_ctx, const AVFrame *frame)
+{ return (int) mock(codec_ctx, frame); }
+
+int  avcodec_receive_packet(AVCodecContext *codec_ctx, AVPacket *avpkt)
+{ return (int) mock(codec_ctx, avpkt); }
+
+AVCodec *avcodec_find_encoder(enum AVCodecID id)
+{ return (AVCodec *) mock(id); }
+
