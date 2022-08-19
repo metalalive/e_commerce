@@ -6,6 +6,12 @@
 
 #define   LOCAL_BUFFER_FILENAME    "local_buffer"
 
+static void  atfp_mp4__postpone_usr_callback(uv_async_t* handle)
+{
+    atfp_t *processor = handle -> data;
+    processor -> data.callback(processor);
+}
+
 static void atfp_mp4__avinput_init_done_cb (atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
@@ -13,8 +19,16 @@ static void atfp_mp4__avinput_init_done_cb (atfp_mp4_t *mp4proc)
     if(json_object_size(err_info) == 0) {
         atfp_mp4__validate_source_format(mp4proc);
     }
+    if(json_object_size(err_info) == 0) {
+        asa_op_base_cfg_t *asa_src = mp4proc -> super.data.storage.handle;
+        atfp_asa_map_t *_map = (atfp_asa_map_t *)asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
+        int ret = uv_async_init(asa_local->loop, &mp4proc->async, atfp_mp4__postpone_usr_callback);
+        if(ret < 0) 
+            json_object_set_new(err_info, "libav", json_string("[mp4] failed to init internal async handle"));
+    }
     processor -> data.callback(processor);
-}
+} // end of atfp_mp4__avinput_init_done_cb
 
 
 static void atfp_mp4__preload_stream_info__done(atfp_mp4_t *mp4proc)
@@ -86,18 +100,12 @@ static void  atfp_mp4__close_local_tmpbuf_cb(asa_op_base_cfg_t *asaobj, ASA_RES_
     free(processor);
 } // end of atfp_mp4__close_local_tmpbuf_cb
 
-
-static void atfp__video_mp4__deinit(atfp_t *processor)
+static void  atfp_mp4__close_async_handle_cb (uv_handle_t* handle)
 {
-    atfp_mp4_t *mp4_proc = (atfp_mp4_t *)processor;
-    asa_op_base_cfg_t *asaobj = processor->data.storage.handle;
-    atfp_asa_map_t    *map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    atfp_t *processor = handle->data;
+    asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
+    atfp_asa_map_t    *map = asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t *asa_local = atfp_asa_map_get_localtmp(map);
-    if(processor->transcoded_info) {
-        json_decref(processor->transcoded_info);
-        processor->transcoded_info = NULL;
-    }
-    atfp_mp4__av_deinit(mp4_proc);
     ASA_RES_CODE  result;
     if(asa_local) {
         if(asa_local->super.op.open.dst_path) {
@@ -112,44 +120,65 @@ static void atfp__video_mp4__deinit(atfp_t *processor)
     if(result != ASTORAGE_RESULT_ACCEPT) {
         free(processor);
     } // local temp buffer may already be closed
+} // end of atfp_mp4__close_async_handle_cb
+
+
+static void atfp__video_mp4__deinit(atfp_t *processor)
+{
+    atfp_mp4_t *mp4_proc = (atfp_mp4_t *)processor;
+    if(processor->transcoded_info) {
+        json_decref(processor->transcoded_info);
+        processor->transcoded_info = NULL;
+    }
+    atfp_mp4__av_deinit(mp4_proc);
+    uv_handle_t *async_handle = (uv_handle_t *)&mp4_proc->async;
+    if(uv_has_ref(async_handle)) {
+        uv_close(async_handle, atfp_mp4__close_async_handle_cb);
+    } else { // not initialized yet
+        atfp_mp4__close_async_handle_cb(async_handle);
+    }
 } // end of atfp__video_mp4__deinit
 
 
-static void atfp_mp4__av_preload_packets__done_cb(atfp_mp4_t *mp4proc)
+static void _atfp_mp4__processing_one_frame(atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
     int frame_avail = 0, pkt_avail = 0;
     int err = 0;
     do {
-        err = atfp_mp4__av_decode_packet(mp4proc->av);
+        err = mp4proc->internal.op.decode_pkt(mp4proc->av);
         if(!err) {
             frame_avail = 1;
         } else if(err == 1) { // new packet required
-            err = atfp_ffmpeg__next_local_packet(mp4proc->av);
+            err =  mp4proc->internal.op.next_pkt(mp4proc->av);
             if(!err) {
                 pkt_avail = 1;
             } else if(err == 1) { // another preload operation required
-                ASA_RES_CODE result = atfp_mp4__av_preload_packets(mp4proc, ATFP_MP4__DEFAULT_NBYTES_BULK,
-                        atfp_mp4__av_preload_packets__done_cb );
+                ASA_RES_CODE result = mp4proc->internal.op.preload(mp4proc, ATFP_MP4__DEFAULT_NBYTES_BULK,
+                        _atfp_mp4__processing_one_frame );
                 err = (result == ASTORAGE_RESULT_ACCEPT)? 0: -1;
                 break;
             } else {
                 json_object_set_new(err_info, "transcoder", json_string("[mp4] error when getting next packet from local temp buffer"));
+                break;
             }
         } else {
-           json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to decode next packet"));
+            json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to decode next packet"));
+            break;
         }
     } while (!frame_avail);
 
-    if(err) {
-        processor -> data.callback(processor);
-    } else if(frame_avail) {
-        // TODO, call the callback asynchronously if packet exists and is decoded successfully, this is to
-        // avoid recursive calls between source and corresponding destination file processors if there are 
-        // too many packets fetched and decoded successfully, which may leads to stack overflow.
-        processor -> data.callback(processor);
+    if(frame_avail) {
+        // invoke the callback asynchronously if a new frame is decoded successfully, which avoids
+        // recursive calls between source and destination file processors when there are too many
+        // packets fetched and decoded successfully, which may leads to stack overflow.
+        err = uv_async_send(&mp4proc->async);
+        if(err < 0)
+            json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to send async event with decoded frame"));
     }
+    if(err)
+        processor -> data.callback(processor);
     // TODO, return following data when processing is done successfully
     ////atfp_t *processor = &mp4proc -> super;
     ////processor->transcoded_info = json_array();
@@ -158,12 +187,12 @@ static void atfp_mp4__av_preload_packets__done_cb(atfp_mp4_t *mp4proc)
     ////json_object_set_new(item, "size", json_integer(8193));
     ////json_object_set_new(item, "checksum", json_string("f09d77e32572b562863518c6"));
     ////json_array_append_new(processor->transcoded_info, item);
-} // end of atfp_mp4__av_preload_packets__done_cb
+} // end of _atfp_mp4__processing_one_frame
 
 
 static void atfp__video_mp4__processing(atfp_t *processor)
 {
-    atfp_mp4__av_preload_packets__done_cb((atfp_mp4_t *)processor);
+    _atfp_mp4__processing_one_frame((atfp_mp4_t *)processor);
 } // end of atfp__video_mp4__processing
 
 static uint8_t  atfp__video_mp4__has_done_processing(atfp_t *processor)
@@ -177,6 +206,10 @@ static atfp_t *atfp__video_mp4__instantiate(void) {
     // at this point, `atfp_av_ctx_t` should NOT be incomplete type
     size_t tot_sz = sizeof(atfp_mp4_t) + sizeof(atfp_av_ctx_t);
     atfp_mp4_t  *out = calloc(0x1, tot_sz);
+    out->internal.op.decode_pkt  = atfp_mp4__av_decode_packet;
+    out->internal.op.next_pkt    = atfp_ffmpeg__next_local_packet;
+    out->internal.op.preload     = atfp_mp4__av_preload_packets;
+    out->async.data = out;
     char *ptr = (char *)out + sizeof(atfp_mp4_t);
     out->av = (atfp_av_ctx_t *)ptr;
     return &out->super;

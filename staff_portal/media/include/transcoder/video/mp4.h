@@ -19,6 +19,7 @@ struct atfp_mp4_s ;
 typedef struct atfp_mp4_s {
     atfp_t  super;
     atfp_av_ctx_t  *av;
+    uv_async_t  async;
     struct {
         struct {
             size_t  size;
@@ -43,6 +44,11 @@ typedef struct atfp_mp4_s {
             void (*preload_done)(struct atfp_mp4_s *);
             void (*av_init_done)(struct atfp_mp4_s *);
         } callback;
+        struct {
+            int  (*decode_pkt)(atfp_av_ctx_t *);
+            int  (*next_pkt)(atfp_av_ctx_t *);
+            ASA_RES_CODE  (*preload)(struct atfp_mp4_s *, size_t nbytes, void (*cb)(struct atfp_mp4_s *));
+        } op;
     } internal;
 } atfp_mp4_t;
 

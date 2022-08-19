@@ -261,6 +261,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/mariadb.c
     test/unit/transcoder/cfg_parser.c
     test/unit/transcoder/file_processor.c
+    test/unit/transcoder/video/mp4/init.c
     test/unit/transcoder/video/mp4/preload.c
     test/unit/transcoder/video/mp4/avcontext.c
     test/unit/transcoder/video/hls/avcontext.c
