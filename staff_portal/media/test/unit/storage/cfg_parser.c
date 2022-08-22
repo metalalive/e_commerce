@@ -9,6 +9,9 @@ static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_mkdir_fn(asa_o
 static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_rmdir_fn(asa_op_base_cfg_t *cfg)
 { return ASTORAGE_RESULT_ACCEPT; }
 
+static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_unlink_fn(asa_op_base_cfg_t *cfg)
+{ return ASTORAGE_RESULT_ACCEPT; }
+
 static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_open_fn(asa_op_base_cfg_t *cfg)
 { return ASTORAGE_RESULT_ACCEPT; }
 
@@ -86,6 +89,7 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
         json_object_set_new(ops, "write", json_string("utest_storage_write_fn"));
         json_object_set_new(ops, "mkdir", json_string("utest_storage_mkdir_fn"));
         json_object_set_new(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
+        json_object_set_new(ops, "unlink",json_string("utest_storage_unlink_fn"));
     }
     err = parse_cfg_storages(objs, &app_cfg);
     assert_that(err, is_equal_to(0));
@@ -100,6 +104,7 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
         assert_that(parsed_ops->fn_seek,  is_equal_to(utest_storage_seek_fn));
         assert_that(parsed_ops->fn_mkdir, is_equal_to(utest_storage_mkdir_fn));
         assert_that(parsed_ops->fn_rmdir, is_equal_to(utest_storage_rmdir_fn));
+        assert_that(parsed_ops->fn_unlink,is_equal_to(utest_storage_unlink_fn));
     }
     app_storage_cfg_deinit(&app_cfg);
     json_decref(objs);

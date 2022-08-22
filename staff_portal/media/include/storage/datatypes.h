@@ -18,6 +18,7 @@ struct _asa_op_base_cfg_s;
 
 typedef void (*asa_mkdir_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
 typedef void (*asa_rmdir_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
+typedef void (*asa_unlink_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
 typedef void (*asa_open_cb_t) (struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
 typedef void (*asa_close_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
 typedef void (*asa_seek_cb_t) (struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result, size_t pos);
@@ -39,10 +40,14 @@ struct _asa_op_base_cfg_s {
                 char *tok_saveptr;
             } path;
         } mkdir;
-        struct {
+        struct { // delete an empty folder
             asa_rmdir_cb_t  cb;
             char  *path; 
         } rmdir;
+        struct { // delete a file
+            asa_unlink_cb_t  cb;
+            char  *path; 
+        } unlink;
         struct {
             asa_open_cb_t  cb;
             char  *dst_path; 
@@ -83,6 +88,7 @@ typedef struct {
     ASA_RES_CODE (*fn_seek) (asa_op_base_cfg_t *cfg);
     ASA_RES_CODE (*fn_write)(asa_op_base_cfg_t *cfg);
     ASA_RES_CODE (*fn_read) (asa_op_base_cfg_t *cfg);
+    ASA_RES_CODE (*fn_unlink) (asa_op_base_cfg_t *cfg);
 } asa_cfg_ops_t;
 
 typedef struct {

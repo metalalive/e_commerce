@@ -17,6 +17,8 @@ ASA_RES_CODE app_storage_localfs_mkdir (asa_op_base_cfg_t *cfg);
 
 ASA_RES_CODE app_storage_localfs_rmdir (asa_op_base_cfg_t *cfg);
 
+ASA_RES_CODE app_storage_localfs_unlink (asa_op_base_cfg_t *cfg);
+
 ASA_RES_CODE app_storage_localfs_open (asa_op_base_cfg_t *cfg);
 
 ASA_RES_CODE app_storage_localfs_close(asa_op_base_cfg_t *cfg);

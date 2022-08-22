@@ -5,6 +5,8 @@ extern "C" {
 #endif
 
 #include <jansson.h>
+#include <h2o.h>
+
 #include "storage/datatypes.h"
 #include "storage/localfs.h"
 
@@ -54,8 +56,39 @@ typedef struct atfp_s {
         uint32_t  next;
         asa_open_cb_t  usr_cb;
         uint8_t   eof_reached;
-    } filechunk_seq;
+    } filechunk_seq; // TODO, used only for source file processor, consider to union with type `atfp_segment_t`
 } atfp_t;
+
+typedef struct {
+    // indicate list of numbers for transcoded segment files
+    H2O_VECTOR(int) rdy_list;
+    struct {
+        struct {
+            char *data;
+            size_t sz;
+        } prefix;
+        struct {
+            char *data;
+            size_t sz;
+            uint8_t max_num_digits;
+        } pattern;
+    } filename;
+    struct {
+        struct {
+            char *data;
+            size_t sz;
+        } _asa_local;
+        struct {
+            char *data;
+            size_t sz;
+        } _asa_dst;
+    } fullpath;
+    struct {
+        // index to the item in `rdy_list` field above
+        uint32_t  curr_idx;
+        uint8_t   eof_reached:1;
+    } transfer;
+} atfp_segment_t;
 
 typedef struct {
     asa_op_base_cfg_t  *handle;
@@ -119,6 +152,18 @@ void     atfp_asa_map_reset_dst_iteration(atfp_asa_map_t *);
 uint8_t  atfp_asa_map_dst_start_working(atfp_asa_map_t *, asa_op_base_cfg_t *);
 uint8_t  atfp_asa_map_dst_stop_working(atfp_asa_map_t *, asa_op_base_cfg_t *);
 uint8_t  atfp_asa_map_all_dst_stopped(atfp_asa_map_t *);
+
+ASA_RES_CODE  atfp__segment_start_transfer(
+        asa_op_base_cfg_t     *asa_dst,
+        asa_op_localfs_cfg_t  *asa_local,
+        atfp_segment_t        *seg_cfg,
+        int chosen_idx );
+
+ASA_RES_CODE  atfp__file_start_transfer(
+        asa_op_base_cfg_t     *asa_dst,
+        asa_op_localfs_cfg_t  *asa_local,
+        atfp_segment_t        *seg_cfg,
+        const char *filename );
 
 #ifdef __cplusplus
 } // end of extern C clause

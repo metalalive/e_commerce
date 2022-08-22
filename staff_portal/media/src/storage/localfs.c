@@ -7,7 +7,7 @@ static void _app_storage_localfs_open_cb(uv_fs_t *req) {
     const char *filepath = req->path;
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
     ASA_RES_CODE  app_result = ASTORAGE_RESULT_UNKNOWN_ERROR;
-    if(req->result > 0) { // return valid file descriptor
+    if(req->result >= 0) { // return valid file descriptor, zero is possible if stdin is turned off
         app_result = ASTORAGE_RESULT_COMPLETE;
         req->file = req->result;
     } else {
@@ -23,16 +23,13 @@ ASA_RES_CODE app_storage_localfs_open (asa_op_base_cfg_t *cfg)
 {
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
     if(!_cfg || !_cfg->loop || !cfg->op.open.cb || !cfg->op.open.dst_path)
-    {
         return ASTORAGE_RESULT_ARG_ERROR;
-    }
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
     int err = uv_fs_open( _cfg->loop, &_cfg->file, cfg->op.open.dst_path,
             cfg->op.open.flags, cfg->op.open.mode, _app_storage_localfs_open_cb
         );
-    if(err != 0) {
+    if(err != 0) 
         result = ASTORAGE_RESULT_OS_ERROR;
-    }
     return result;
 } // end of app_storage_localfs_open
 
@@ -147,9 +144,7 @@ ASA_RES_CODE app_storage_localfs_rmdir (asa_op_base_cfg_t *cfg)
 { // TODO, recursively remove sub folders
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
     if(!_cfg || !_cfg->loop || !cfg->op.rmdir.cb || !cfg->op.rmdir.path)
-    {
         return ASTORAGE_RESULT_ARG_ERROR;
-    }
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
     int err = uv_fs_rmdir(_cfg->loop, &_cfg->file, cfg->op.rmdir.path
             , _app_storage_localfs_rmdir_cb);
@@ -158,6 +153,30 @@ ASA_RES_CODE app_storage_localfs_rmdir (asa_op_base_cfg_t *cfg)
     }
     return result;
 } // end of app_storage_localfs_rmdir
+
+
+static void _app_storage_localfs_unlink_cb(uv_fs_t *req) {
+    const char *curr_path = req->path;
+    asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
+    ASA_RES_CODE  app_result = (req->result == 0)? ASTORAGE_RESULT_COMPLETE: ASTORAGE_RESULT_OS_ERROR;
+    if(cfg->op.unlink.cb)
+        cfg->op.unlink.cb(cfg, app_result);
+    if(curr_path) 
+        free((void *)curr_path);
+} // end of _app_storage_localfs_unlink_cb
+
+ASA_RES_CODE app_storage_localfs_unlink (asa_op_base_cfg_t *cfg)
+{
+    asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
+    if(!_cfg || !_cfg->loop || !cfg->op.unlink.path)
+        return ASTORAGE_RESULT_ARG_ERROR;
+    ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
+    int err = uv_fs_unlink(_cfg->loop, &_cfg->file, cfg->op.unlink.path,
+                _app_storage_localfs_unlink_cb);
+    if(err != 0)
+        result = ASTORAGE_RESULT_OS_ERROR;
+    return result;
+} // end of app_storage_localfs_unlink
 
 
 #define NUM_BUFS      1

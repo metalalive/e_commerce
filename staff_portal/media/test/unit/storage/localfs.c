@@ -1,6 +1,9 @@
 #include <unistd.h>
 #include <uv.h>
 #include <cgreen/cgreen.h>
+#include <cgreen/unit.h>
+#include <cgreen/mocks.h>
+
 #include "storage/localfs.h"
 
 #define EXPECT_CB_ARGS_SZ 3
@@ -34,6 +37,11 @@ static __attribute__((optimize("O0")))  void utest_1_asa_open_cb (asa_op_base_cf
     cfg->op.close.cb = utest_1_asa_close_cb;
     assert_that(app_storage_localfs_close(cfg), is_equal_to(ASTORAGE_RESULT_ACCEPT));
 } // end of utest_1_asa_open_cb
+
+static __attribute__((optimize("O0")))  void utest_4_asa_unlink_cb (asa_op_base_cfg_t *cfg, ASA_RES_CODE result)
+{
+    mock(cfg, result);
+}
 
 Ensure(storage_localfs_openfile_test) {
     int expect_cb_args[EXPECT_CB_ARGS_SZ] = {123, 234, 345};
@@ -246,11 +254,60 @@ Ensure(storage_localfs_rwfile_test) {
 #undef  EXPECT_FILE_PATH
 
 
+#define  EXPECT_FILE1_PATH  "./tmp/utest/media/file123"
+#define  EXPECT_FILE2_PATH  "./tmp/utest/media/file456"
+Ensure(storage_localfs_unlink_test) {
+    {
+        mkdir("./tmp/utest", S_IRWXU);
+        mkdir("./tmp/utest/media", S_IRWXU);
+        int fds[2] = {0};
+        fds[0] = open(EXPECT_FILE1_PATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        fds[1] = open(EXPECT_FILE2_PATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        close(fds[0]);
+        close(fds[1]);
+        assert_that(access(EXPECT_FILE1_PATH, F_OK), is_equal_to(0));
+        assert_that(access(EXPECT_FILE2_PATH, F_OK), is_equal_to(0));
+    }
+    ASA_RES_CODE result;
+    asa_op_localfs_cfg_t  mock_asaobj = {.loop = uv_default_loop()};
+    { // subcase #1
+        mock_asaobj.super.op.unlink.path = EXPECT_FILE1_PATH;
+        result = app_storage_localfs_unlink(&mock_asaobj.super);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+        assert_that(access(EXPECT_FILE1_PATH, F_OK), is_equal_to(-1));
+    } { // subcase #2
+        mock_asaobj.super.op.unlink.cb = utest_4_asa_unlink_cb;
+        mock_asaobj.super.op.unlink.path = EXPECT_FILE2_PATH;
+        expect(utest_4_asa_unlink_cb, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
+        result = app_storage_localfs_unlink(&mock_asaobj.super);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+        assert_that(access(EXPECT_FILE2_PATH, F_OK), is_equal_to(-1));
+    } { // subcase #3
+        mock_asaobj.super.op.unlink.cb = utest_4_asa_unlink_cb;
+        mock_asaobj.super.op.unlink.path = "./tmp/utest/media/file_not_exist";
+        expect(utest_4_asa_unlink_cb, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
+        result = app_storage_localfs_unlink(&mock_asaobj.super);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+    } {
+        unlink(EXPECT_FILE1_PATH);
+        unlink(EXPECT_FILE2_PATH);
+        rmdir("./tmp/utest/media");
+        rmdir("./tmp/utest");
+    }
+} // end of storage_localfs_unlink_test
+#undef  EXPECT_FILE1_PATH
+#undef  EXPECT_FILE2_PATH
+
+
 TestSuite *app_storage_localfs_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, storage_localfs_openfile_test);
     add_test(suite, storage_localfs_mkdir_test);
     add_test(suite, storage_localfs_rwfile_test);
+    add_test(suite, storage_localfs_unlink_test);
     return suite;
 } // end of app_storage_localfs_tests

@@ -24,9 +24,17 @@ typedef struct atfp_hls_s {
             uint8_t  (*has_done_flush_filter)(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
             uint8_t  (*has_done_flush_encoder)(atfp_av_ctx_t *dst);
         } op;
-        uint32_t curr_segment_idx;
+        atfp_segment_t  segment; // TODO, consider to move to parent type `atfp_t`
     } internal;
 } atfp_hls_t;
+
+// TODO, parameterize
+#define  HLS_SEGMENT_FILENAME_PREFIX       "data_seg_"
+#define  HLS_SEGMENT_FILENAME_NUM_FORMAT   "%04d"
+#define  HLS_SEGMENT_FILENAME_FORMAT_MAX_DIGITS   4
+#define  HLS_SEGMENT_FILENAME_TEMPLATE     HLS_SEGMENT_FILENAME_PREFIX    HLS_SEGMENT_FILENAME_NUM_FORMAT
+#define  HLS_FMP4_FILENAME          "init_packet_map"
+#define  HLS_PLAYLIST_FILENAME      "playlist.m3u8"
 
 int   atfp_hls__av_init(atfp_hls_t *);
 void  atfp_hls__av_deinit(atfp_hls_t *);

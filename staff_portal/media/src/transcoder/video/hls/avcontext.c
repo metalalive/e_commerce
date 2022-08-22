@@ -7,10 +7,6 @@
 #define  HLS_SEGMENT_TYPE__FMP4   1
 #define  HLS_TIME__IN_SECONDS     7
 #define  HLS_DELETE_THRESHOLD__IN_SECONDS     3
-#define  HLS_SEGMENT_FILENAME_PREFIX       "data_seg_"
-#define  HLS_SEGMENT_FILENAME_TEMPLATE     HLS_SEGMENT_FILENAME_PREFIX  "%04d"
-#define  HLS_FMP4_FILENAME          "init_packet_map"
-#define  HLS_PLAYLIST_FILENAME      "playlist.m3u8"
 
 void  atfp_hls__av_deinit(atfp_hls_t *hlsproc)
 {

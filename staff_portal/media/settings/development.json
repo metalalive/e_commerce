@@ -92,6 +92,7 @@
             "ops": {
                 "mkdir" : "app_storage_localfs_mkdir",
                 "rmdir" : "app_storage_localfs_rmdir",
+                "unlink": "app_storage_localfs_unlink",
                 "open" : "app_storage_localfs_open",
                 "close": "app_storage_localfs_close",
                 "read" : "app_storage_localfs_read",

@@ -379,7 +379,150 @@ Ensure(transcoder_test__asamap_destination_ok) {
 #undef  NUM_DESTINATIONS
 #undef  NUM_CB_ARGS_ASAOBJ
 } // end of transcoder_test__asamap_destination_ok
+#undef  NUM_FILECHUNKS
+#undef  FILEPATH_TEMPLATE
+#undef  FULLPATH1
+#undef  FULLPATH2
+#undef  UNITTEST_FOLDER_NAME 
+#undef  FILECHUNK_FOLDER_NAME
 
+
+#define  UTEST_ASA_LOCAL_BASEPATH     "tmp/utest/media/asa_local"
+#define  UTEST_ASA_REMOTE_BASEPATH    "tmp/utest/media/asa_remote"
+
+#define  UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP \
+    int mock_rdy_seg_num[NUM_READY_SEGMENTS] = READY_SEGMENT_NUMBERS; \
+    char mock_asa_wr_buf[MOCK_ASA_WR_BUF_SZ] = {0}; \
+    char seg_fullpath_asalocal[NBYTES_SEGMENT_FULLPATH__ASA_LOCAL] = {0}; \
+    char seg_fullpath_asadst[NBYTES_SEGMENT_FULLPATH__ASA_DST] = {0}; \
+    uv_loop_t *loop = uv_default_loop(); \
+    asa_op_base_cfg_t     mock_asa_remote = {.op={.open={.cb=utest_asa_remote_openfile_cb}, \
+        .write={.src=&mock_asa_wr_buf[0], .src_max_nbytes=MOCK_ASA_WR_BUF_SZ}, \
+        .mkdir={.path={.origin=UTEST_ASA_REMOTE_BASEPATH}}  }}; \
+    asa_op_localfs_cfg_t  mock_asa_local  = {.super={.op={.open={.cb=utest_asa_local_openfile_cb}, \
+        .mkdir={.path={.origin=UTEST_ASA_LOCAL_BASEPATH}}}}, .loop=loop}; \
+    atfp_segment_t  mock_seg_cfg = { \
+        .rdy_list={.capacity=NUM_READY_SEGMENTS, .size=NUM_READY_SEGMENTS, .entries=&mock_rdy_seg_num[0]}, \
+        .filename={.prefix={.data=UTEST_DATA_SEGMENT_PREFIX, .sz=strlen(UTEST_DATA_SEGMENT_PREFIX)}, \
+            .pattern={.data=UTEST_DATA_SEGMENT_PATTERN, .sz=strlen(UTEST_DATA_SEGMENT_PATTERN), \
+               .max_num_digits=UTEST_SEGMENT_NUM_MAXDIGIT} }, \
+        .fullpath={._asa_local={.data=&seg_fullpath_asalocal[0], .sz=NBYTES_SEGMENT_FULLPATH__ASA_LOCAL}, \
+            ._asa_dst={.data=&seg_fullpath_asadst[0], .sz=NBYTES_SEGMENT_FULLPATH__ASA_DST}}, \
+    }; \
+    mkdir("./tmp/utest", S_IRWXU); \
+    mkdir("./tmp/utest/media", S_IRWXU); \
+    mkdir(UTEST_ASA_LOCAL_BASEPATH,  S_IRWXU); \
+    mkdir(UTEST_ASA_REMOTE_BASEPATH, S_IRWXU);
+
+#define  UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN \
+    rmdir(UTEST_ASA_LOCAL_BASEPATH);  \
+    rmdir(UTEST_ASA_REMOTE_BASEPATH); \
+    rmdir("./tmp/utest/media"); \
+    rmdir("./tmp/utest");
+
+
+static  __attribute__((optimize("O0")))  void utest_asa_remote_openfile_cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{ mock(asaobj, result); }
+
+static  __attribute__((optimize("O0")))  void utest_asa_local_openfile_cb  (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{ mock(asaobj, result); }
+
+#define  NUM_READY_SEGMENTS  9
+#define  READY_SEGMENT_NUMBERS  {12, 4, 195, 26, 87, 994, 28, 3, 13}
+#define  UTEST_DATA_SEGMENT_PREFIX   "utest_dataseg_"
+#define  UTEST_DATA_SEGMENT_PATTERN  "%07d"
+#define  UTEST_SEGMENT_NUM_MAXDIGIT  7
+#define  MOCK_ASA_WR_BUF_SZ   10
+#define  NBYTES_SEGMENT_FULLPATH__ASA_LOCAL   sizeof(UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX) + UTEST_SEGMENT_NUM_MAXDIGIT
+#define  NBYTES_SEGMENT_FULLPATH__ASA_DST     sizeof(UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX) + UTEST_SEGMENT_NUM_MAXDIGIT
+
+Ensure(transcoder_test__start_transfer_segment_ok) {
+#define  EXPECT_NUM_TRANSFER_SEGMENTS  3
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    int chosen_idx[EXPECT_NUM_TRANSFER_SEGMENTS] = {1,2,4};
+    const char * expect_seg_local_path[EXPECT_NUM_TRANSFER_SEGMENTS] = {
+        UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000004",
+        UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000195",
+        UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000087",
+    };
+    const char * expect_seg_remote_path[EXPECT_NUM_TRANSFER_SEGMENTS] = {
+        UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000004",
+        UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000195",
+        UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000087",
+    };
+    for (int idx = 0; idx < EXPECT_NUM_TRANSFER_SEGMENTS; idx++) {
+        int fd = open(expect_seg_local_path[idx], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        close(fd);
+        assert_that(access(expect_seg_local_path[idx], F_OK), is_equal_to(0));
+        ASA_RES_CODE  result;
+        result = atfp__segment_start_transfer( &mock_asa_remote, &mock_asa_local, &mock_seg_cfg, chosen_idx[idx]);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        assert_that(mock_asa_local.super.op.open.dst_path, is_equal_to_string(expect_seg_local_path[idx]));
+        assert_that(mock_asa_remote.op.open.dst_path     , is_equal_to_string(expect_seg_remote_path[idx]));
+        expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
+        uv_run(loop, UV_RUN_ONCE);
+        unlink(expect_seg_local_path[idx]);
+    } // end of loop
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+#undef  EXPECT_NUM_TRANSFER_SEGMENTS
+} // end of transcoder_test__start_transfer_segment_ok
+
+
+Ensure(transcoder_test__start_transfer_segment_exceeding_index) {
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    ASA_RES_CODE  result = atfp__segment_start_transfer( &mock_asa_remote, &mock_asa_local,
+            &mock_seg_cfg, NUM_READY_SEGMENTS);
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_COMPLETE));
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+} // end of transcoder_test__start_transfer_segment_exceeding_index
+
+
+Ensure(transcoder_test__start_transfer_segment_error) {
+    // assume segment not exists
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    const char *expect_seg_local_path  = UTEST_ASA_LOCAL_BASEPATH  "/" UTEST_DATA_SEGMENT_PREFIX "0000013";
+    const char *expect_seg_remote_path = UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000013";
+    int chosen_idx = NUM_READY_SEGMENTS - 1;
+    ASA_RES_CODE  result = atfp__segment_start_transfer( &mock_asa_remote, &mock_asa_local,
+            &mock_seg_cfg, chosen_idx);
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+    assert_that(mock_asa_local.super.op.open.dst_path, is_equal_to_string(expect_seg_local_path));
+    assert_that(mock_asa_remote.op.open.dst_path     , is_equal_to_string(expect_seg_remote_path));
+    expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
+    uv_run(loop, UV_RUN_ONCE);
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+} // end of transcoder_test__start_transfer_segment_error
+
+
+Ensure(transcoder_test__start_transfer_genericfile_ok) {
+#define  EXPECT_FILENAME   "setup_map"
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    const char *expect_seg_local_path  = UTEST_ASA_LOCAL_BASEPATH  "/"  EXPECT_FILENAME;
+    const char *expect_seg_remote_path = UTEST_ASA_REMOTE_BASEPATH "/"  EXPECT_FILENAME;
+    int fd = open(expect_seg_local_path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    close(fd);
+    ASA_RES_CODE result = atfp__file_start_transfer(&mock_asa_remote, &mock_asa_local,
+            &mock_seg_cfg, EXPECT_FILENAME );
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+    assert_that(mock_asa_local.super.op.open.dst_path, is_equal_to_string(expect_seg_local_path));
+    assert_that(mock_asa_remote.op.open.dst_path     , is_equal_to_string(expect_seg_remote_path));
+    expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
+    uv_run(loop, UV_RUN_ONCE);
+    unlink(expect_seg_local_path);
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+#undef  EXPECT_FILENAME
+} // end of transcoder_test__start_transfer_genericfile_ok
+
+#undef  MOCK_ASA_WR_BUF_SZ
+#undef  NBYTES_SEGMENT_FULLPATH__ASA_DST
+#undef  NBYTES_SEGMENT_FULLPATH__ASA_LOCAL
+#undef  UTEST_SEGMENT_NUM_MAXDIGIT
+#undef  UTEST_DATA_SEGMENT_PREFIX
+#undef  UTEST_DATA_SEGMENT_PATTERN
+#undef  READY_SEGMENT_NUMBERS
+#undef  NUM_READY_SEGMENTS
+#undef  UTEST_ASA_REMOTE_BASEPATH
+#undef  UTEST_ASA_LOCAL_BASEPATH
 
 TestSuite *app_transcoder_file_processor_tests(void)
 {
@@ -391,11 +534,9 @@ TestSuite *app_transcoder_file_processor_tests(void)
     add_test(suite, transcoder_test__estimate_src_filechunk_idx);
     add_test(suite, transcoder_test__asamap_basic_ok);
     add_test(suite, transcoder_test__asamap_destination_ok);
+    add_test(suite, transcoder_test__start_transfer_segment_ok);
+    add_test(suite, transcoder_test__start_transfer_segment_exceeding_index);
+    add_test(suite, transcoder_test__start_transfer_segment_error);
+    add_test(suite, transcoder_test__start_transfer_genericfile_ok);
     return suite;
 }
-#undef  NUM_FILECHUNKS
-#undef  FILEPATH_TEMPLATE
-#undef  FULLPATH1
-#undef  FULLPATH2
-#undef  UNITTEST_FOLDER_NAME 
-#undef  FILECHUNK_FOLDER_NAME

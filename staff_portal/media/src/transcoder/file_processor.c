@@ -294,3 +294,106 @@ uint8_t  atfp_asa_map_all_dst_stopped(atfp_asa_map_t *map)
     }
     return !any_dst_working;
 }
+
+
+static int  atfp__format_file_fullpath(char *out, size_t out_sz, const char *basepath, const char *filename)
+{
+    memset(out, 0x0, sizeof(char) * out_sz);
+    strncat(out, basepath, strlen(basepath));
+    strncat(out, "/", 1);
+    strncat(out, filename, strlen(filename));
+    return  0;
+} // end of atfp__format_file_fullpath
+
+static int  atfp__format_segment_fullpath(char *out, size_t out_sz, const char *basepath, atfp_segment_t  *seg_cfg, int chosen_idx)
+{
+    if(seg_cfg->rdy_list.size <= chosen_idx)
+        return  1;
+    if(seg_cfg->filename.pattern.max_num_digits == 0)
+        return  2;
+    uint8_t max_num_digits = seg_cfg->filename.pattern.max_num_digits;
+    memset(out, 0x0, sizeof(char) * out_sz);
+    strncat(out, basepath, strlen(basepath));
+    strncat(out, "/", 1);
+    strncat(out, seg_cfg->filename.prefix.data, seg_cfg->filename.prefix.sz);
+    int  seg_num = seg_cfg->rdy_list.entries[chosen_idx];
+    uint8_t  seg_num_str_sz = max_num_digits + 1;
+    char seg_num_str[seg_num_str_sz];
+    snprintf(&seg_num_str[0], seg_num_str_sz, seg_cfg->filename.pattern.data, seg_num);
+    strncat(out, &seg_num_str[0], max_num_digits);
+    return  0;
+} // end of atfp__format_segment_fullpath
+
+
+static void   _atfp__transfer_basic_setup(
+        asa_op_base_cfg_t     *asa_dst,
+        asa_op_localfs_cfg_t  *asa_local,
+        atfp_segment_t        *seg_cfg )
+{
+    asa_dst->op.open.mode  = S_IRUSR | S_IWUSR;
+    asa_dst->op.open.flags = O_WRONLY | O_CREAT;
+    asa_dst->op.write.offset = -1;
+    asa_dst->op.open.dst_path = seg_cfg->fullpath._asa_dst.data;
+    asa_local->super.op.open.mode  = S_IRUSR;
+    asa_local->super.op.open.flags = O_RDONLY;
+    asa_local->super.op.read.offset = -1;
+    asa_local->super.op.open.dst_path = seg_cfg->fullpath._asa_local.data;
+    // shares the same buffer
+    asa_local->super.op.read.dst = asa_dst->op.write.src;
+    size_t srcbuf_max_nbytes = asa_dst->op.write.src_max_nbytes;
+    asa_local->super.op.read.dst_max_nbytes =  srcbuf_max_nbytes;
+    asa_local->super.op.read.dst_sz = srcbuf_max_nbytes;
+}
+
+ASA_RES_CODE  atfp__segment_start_transfer(
+        asa_op_base_cfg_t     *asa_dst,
+        asa_op_localfs_cfg_t  *asa_local,
+        atfp_segment_t        *seg_cfg,
+        int chosen_idx )
+{
+    ASA_RES_CODE  result = ASTORAGE_RESULT_DATA_ERROR;
+    if(!asa_dst || !asa_local || !seg_cfg || !asa_dst->op.write.src ||
+            asa_dst->op.write.src_max_nbytes == 0 || !asa_dst->op.open.cb ||
+            !asa_local->super.op.open.cb) {
+        goto done;
+    }
+    int ret1 = atfp__format_segment_fullpath( seg_cfg->fullpath._asa_dst.data,
+            seg_cfg->fullpath._asa_dst.sz,  asa_dst->op.mkdir.path.origin, seg_cfg, chosen_idx);
+    int ret2 = atfp__format_segment_fullpath( seg_cfg->fullpath._asa_local.data,
+            seg_cfg->fullpath._asa_local.sz,  asa_local->super.op.mkdir.path.origin, seg_cfg, chosen_idx);
+    if(!ret1 && !ret2) {
+        _atfp__transfer_basic_setup( asa_dst, asa_local, seg_cfg );
+        seg_cfg->transfer.curr_idx  = chosen_idx;
+        result = app_storage_localfs_open(&asa_local->super);
+    } else if (ret1 == 1) {
+        result = ASTORAGE_RESULT_COMPLETE; // do nothing
+    }
+done:
+    return result;
+} // end of atfp__segment_start_transfer
+
+
+ASA_RES_CODE  atfp__file_start_transfer(
+        asa_op_base_cfg_t     *asa_dst,
+        asa_op_localfs_cfg_t  *asa_local,
+        atfp_segment_t        *seg_cfg,
+        const char *filename )
+{
+    ASA_RES_CODE  result = ASTORAGE_RESULT_DATA_ERROR;
+    if(!asa_dst || !asa_local || !seg_cfg || !filename || !asa_dst->op.write.src) {
+        goto done;
+    } else if(!asa_dst->op.open.cb || !asa_local->super.op.open.cb) {
+        goto done;
+    }
+    int ret1 = atfp__format_file_fullpath( seg_cfg->fullpath._asa_dst.data,
+            seg_cfg->fullpath._asa_dst.sz,  asa_dst->op.mkdir.path.origin, filename);
+    int ret2 = atfp__format_file_fullpath( seg_cfg->fullpath._asa_local.data,
+            seg_cfg->fullpath._asa_local.sz,  asa_local->super.op.mkdir.path.origin, filename);
+    if(!ret1 && !ret2) {
+        _atfp__transfer_basic_setup( asa_dst, asa_local, seg_cfg );
+        result = app_storage_localfs_open(&asa_local->super);
+    }
+done:
+    return result;
+} // end of atfp__file_start_transfer
+

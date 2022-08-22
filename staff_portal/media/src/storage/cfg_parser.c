@@ -24,6 +24,7 @@ static uint8_t _app_elf_gather_storage_operation_cb(char *fn_name, void *entry_p
     asa_internal_cb_arg_t *args = (asa_internal_cb_arg_t *)cb_args;
     STORAGE_OPS_FN_MAPPING(mkdir, args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(rmdir, args, fn_name, entry_point);
+    STORAGE_OPS_FN_MAPPING(unlink,args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(open,  args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(close, args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(write, args, fn_name, entry_point);
@@ -32,6 +33,7 @@ static uint8_t _app_elf_gather_storage_operation_cb(char *fn_name, void *entry_p
 done:
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, mkdir, args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, rmdir, args);
+    immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, unlink,args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, open,  args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, close, args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, write, args);
