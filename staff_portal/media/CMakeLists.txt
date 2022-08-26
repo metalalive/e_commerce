@@ -267,6 +267,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/hls/avcontext.c
     test/unit/transcoder/video/hls/avfilter.c
     test/unit/transcoder/video/hls/output.c
+    test/unit/transcoder/video/hls/init.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c

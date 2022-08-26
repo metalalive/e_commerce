@@ -17,6 +17,12 @@ typedef enum {
     ATFP_BACKEND_LIB__LIBVLC
 } ATFP_BACKEND_LIB_TYPE;
 
+typedef enum {
+    ATFP_AVCTX_RET__OK = 0,
+    ATFP_AVCTX_RET__NEED_MORE_DATA = 1,
+    ATFP_AVCTX_RET__END_OF_FLUSH_ENCODER = 2,
+} avctx_fn_ret_code;
+
 struct atfp_s;
 
 typedef  struct atfp_av_ctx_s   atfp_av_ctx_t;
@@ -33,9 +39,9 @@ typedef struct {
 } atfp_data_t;
 
 typedef struct atfp_ops_s {
-    void  (*init)(struct atfp_s *);
-    void  (*deinit)(struct atfp_s *);
-    void  (*processing)(struct atfp_s *);
+    void     (*init)(struct atfp_s *);
+    uint8_t  (*deinit)(struct atfp_s *); // return value indicates whether de-init is still ongoing
+    void     (*processing)(struct atfp_s *);
     uint8_t  (*has_done_processing)(struct atfp_s *);
     uint8_t  (*label_match)(const char *label);
     struct atfp_s *(*instantiate)(void);
@@ -56,7 +62,12 @@ typedef struct atfp_s {
         uint32_t  next;
         asa_open_cb_t  usr_cb;
         uint8_t   eof_reached;
-    } filechunk_seq; // TODO, used only for source file processor, consider to union with type `atfp_segment_t`
+    } filechunk_seq; // TODO, move into `transfer` field below, it is used only for source file processor 
+    union {
+        struct {
+            uint32_t flags;
+        } dst; // TODO, add new field of type `atfp_segment_t`
+    } transfer;
 } atfp_t;
 
 typedef struct {
@@ -118,6 +129,10 @@ typedef struct {
 // `asa_op_base_cfg_t` type  as a pointer to the associated file processor
 #define  ATFP_INDEX__IN_ASA_USRARG    0
 #define  ASAMAP_INDEX__IN_ASA_USRARG  1
+
+// bit fields used as flags for transfer transcoded files from local to destination storage
+#define  ATFP_TRANSFER_FLAG__ASALOCAL_OPEN    0
+#define  ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN   1
 
 atfp_t * app_transcoder_file_processor(const char *label);
 

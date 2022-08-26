@@ -328,7 +328,7 @@ Ensure(atfp_hls_test__avctx_encode__finalize_flushing_frame) {
     } // end of loop
     for(idx = 0; idx < 5; idx++) {
         ret = atfp_hls__av_encode__finalize_processing(&mock_avctx_dst);
-        assert_that(ret, is_equal_to(AVERROR(EAGAIN))); // nothing happened
+        assert_that(ret, is_equal_to(ATFP_AVCTX_RET__END_OF_FLUSH_ENCODER)); // nothing happened
     } // end of loop
 #undef  EXPECT_NUM_FILT_FRAMES_FROM_STREAMS
 #undef  EXPECT_NB_STREAMS

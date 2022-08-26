@@ -246,7 +246,7 @@ static int  _atfp_hls__av_encode_processing(atfp_av_ctx_t *dst, AVFrame *frame, 
         }
         dst->intermediate_data.encode.num_encoded_pkts = 1 + num_encoded_pkts;
     } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-        ret = 1;
+        ret = ATFP_AVCTX_RET__NEED_MORE_DATA;
         dst->intermediate_data.encode.num_encoded_pkts = 0;
     } else { // ret < 0
         av_log(NULL, AV_LOG_ERROR, "Error on receiving encoded packet.\n");
@@ -257,7 +257,7 @@ done:
 
 
 int  atfp_hls__av_encode_processing(atfp_av_ctx_t *dst) {
-    int ret = 0;
+    int ret = ATFP_AVCTX_RET__OK;
     if(dst) {
         int8_t stream_idx =  dst->intermediate_data.encode.stream_idx;
         AVFrame   *frame  = &dst->intermediate_data.encode.frame;
@@ -270,7 +270,7 @@ int  atfp_hls__av_encode_processing(atfp_av_ctx_t *dst) {
 
 
 int   atfp_hls__av_encode__finalize_processing(atfp_av_ctx_t *dst) {
-    int ret = AVERROR(EAGAIN);
+    int ret = AVERROR(EINVAL);
     if(dst) {
         int8_t nb_streams_in = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
         int8_t stream_idx    = (int8_t) dst->intermediate_data.encode._final.enc_stream_idx;
@@ -279,10 +279,10 @@ int   atfp_hls__av_encode__finalize_processing(atfp_av_ctx_t *dst) {
             if((ret == 1) && (nb_streams_in > stream_idx)) {
                 ++stream_idx;
             }
+        } else { // packets already flushed from all encoders, skip
+            ret = ATFP_AVCTX_RET__END_OF_FLUSH_ENCODER;
         }
         dst->intermediate_data.encode._final.enc_stream_idx = stream_idx;
-    } else {
-        ret = AVERROR(EINVAL);
     }
     return ret;
 } // end of atfp_hls__av_encode__finalize_processing
@@ -307,7 +307,7 @@ int   atfp_hls__av_local_white_finalize(atfp_av_ctx_t *dst)
 {
     int ret = av_write_trailer(dst->fmt_ctx);
     dst->intermediate_data.encode._final.file_trailer_wrote = 1;
-    return (ret < 0) ? ret: 1;
+    return (ret < 0) ? ret: ATFP_AVCTX_RET__NEED_MORE_DATA;
 }
 
 uint8_t  atfp_av__has_done_processing(atfp_av_ctx_t *dst) {

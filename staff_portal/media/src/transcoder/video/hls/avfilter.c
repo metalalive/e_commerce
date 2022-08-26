@@ -195,7 +195,7 @@ end:
 
 static int  _atfp_hls__av_filter_processing(atfp_av_ctx_t *dst, AVFrame  *frame_origin, int8_t stream_idx)
 {
-    int ret = 0;
+    int ret = ATFP_AVCTX_RET__OK;
     AVFrame   *frame_filt   = &dst->intermediate_data.encode.frame;
     atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
     uint16_t   num_filtered_frms  = dst->intermediate_data.encode.num_filtered_frms;
@@ -208,13 +208,13 @@ static int  _atfp_hls__av_filter_processing(atfp_av_ctx_t *dst, AVFrame  *frame_
     }
     av_frame_unref(frame_filt);
     ret = av_buffersink_get_frame(st_encode_ctx->filt_sink_ctx, frame_filt);
-    if (ret == 0) {
+    if (ret == ATFP_AVCTX_RET__OK) {
         frame_filt ->pict_type = AV_PICTURE_TYPE_NONE;        
         dst->intermediate_data.encode.num_filtered_frms = 1 + num_filtered_frms;
         dst->intermediate_data.encode.stream_idx = stream_idx;
     } else { // ret < 0
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            ret = 1; // the filter has finished filtering source frame, request for next one
+            ret = ATFP_AVCTX_RET__NEED_MORE_DATA; // the filter has finished filtering source frame, request for next one
             dst->intermediate_data.encode.num_filtered_frms = 0;
         } else {
             av_log(NULL, AV_LOG_WARNING, "error when pulling filtered frame from filters\n");
@@ -227,7 +227,7 @@ done:
 
 int  atfp_hls__av_filter_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
 {
-    int ret = 0;
+    int ret = ATFP_AVCTX_RET__OK;
     if(!src || !dst) {
         ret = AVERROR(EINVAL);
         goto done;
@@ -246,15 +246,15 @@ done:
 
 int  atfp_hls__av_filter__finalize_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
 {
-    int ret = 0;
+    int ret = ATFP_AVCTX_RET__OK;
     int8_t  nb_streams_in = (int8_t) src->fmt_ctx->nb_streams;
     int8_t  stream_idx    = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
     if(nb_streams_in > stream_idx) {
         ret = _atfp_hls__av_filter_processing(dst, NULL, stream_idx);
-        if(ret == 1)
+        if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA)
             dst->intermediate_data.encode._final.filt_stream_idx = stream_idx + 1;
     } else {
-        ret = 0; // skip
+        ret = ATFP_AVCTX_RET__OK; // all frames were already flushed, skip
     }
     return ret;
 } // end of atfp_hls__av_filter__finalize_processing

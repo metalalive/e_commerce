@@ -8,8 +8,8 @@
 static  void atfp_hls__close_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
     int err = 1;
-    atfp_hls_t *hlsproc = (atfp_hls_t *) H2O_STRUCT_FROM_MEMBER(atfp_hls_t, asa_local, asaobj);
-    atfp_t *processor = &hlsproc->super;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASALOCAL_OPEN));
     if(result == ASTORAGE_RESULT_COMPLETE) {
         asa_op_base_cfg_t *asa_local = asaobj;
         asa_local->op.unlink.path = asa_local-> op.open.dst_path ;
@@ -26,8 +26,7 @@ static  void atfp_hls__close_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CO
 static  void atfp_hls__unlink_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
     int err = 1;
-    atfp_hls_t *hlsproc = (atfp_hls_t *) H2O_STRUCT_FROM_MEMBER(atfp_hls_t, asa_local, asaobj);
-    atfp_t *processor = &hlsproc->super;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     if(result == ASTORAGE_RESULT_COMPLETE) {
         asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
         asa_cfg_t  *storage = processor->data.storage.config;
@@ -43,8 +42,8 @@ static  void atfp_hls__unlink_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_C
 
 static  void atfp_hls__close_dst_playlist__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
-    atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    atfp_t *processor = &hlsproc->super;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN));
     if(result != ASTORAGE_RESULT_COMPLETE)
         json_object_set_new(processor->data.error, "storage",
                 json_string("[hls] failed to close playlist on destination side"));
@@ -56,6 +55,7 @@ static  void atfp_hls__close_dst_initmap__cb (asa_op_base_cfg_t *asaobj, ASA_RES
     int err = 1;
     atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = &hlsproc->super;
+    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN));
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_t    *seg_cfg = &hlsproc->internal.segment;
         asa_op_base_cfg_t *asa_dst = asaobj;
@@ -76,6 +76,7 @@ static  void atfp_hls__close_dst_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE
     int err = 1;
     atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = &hlsproc->super;
+    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN));
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_t    *seg_cfg = &hlsproc->internal.segment;
         asa_op_base_cfg_t *asa_dst = asaobj;
@@ -109,9 +110,10 @@ static  void atfp_hls__close_dst_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE
 static  void atfp_hls__open_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
     int err = 1;
-    atfp_hls_t *hlsproc = (atfp_hls_t *) H2O_STRUCT_FROM_MEMBER(atfp_hls_t, asa_local, asaobj);
-    atfp_t *processor = &hlsproc->super;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     if(result == ASTORAGE_RESULT_COMPLETE) {
+        uint32_t flags =  1 << ATFP_TRANSFER_FLAG__ASALOCAL_OPEN;
+        processor->transfer.dst.flags |= flags;
         asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
         asa_cfg_t  *storage = processor->data.storage.config;
         result =  storage->ops.fn_open(asa_dst);
@@ -132,6 +134,7 @@ static  void atfp_hls__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_t  *seg_cfg = &hlsproc->internal.segment;
         seg_cfg->transfer.eof_reached = 0;
+        processor->transfer.dst.flags |= (1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN);
         result = app_storage_localfs_read(&hlsproc->asa_local.super);
         err = result != ASTORAGE_RESULT_ACCEPT;
     }
@@ -192,25 +195,30 @@ static void atfp_hls__write_dst_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE
 int atfp__collect_output_segment_num (uv_fs_t* req, int *out, size_t o_sz,
           const char *seg_prefix, size_t seg_prefix_sz, uint8_t final)
 {
-    int err = 0, idx = 0, num_segs_rdy = 0, curr_seg_max_idx = -1,
+    int err = 0, num_segs_rdy = 0, curr_seg_max_idx = -1,
         curr_seg_max_num = -1;
     uv_dirent_t  curr_entry = {0};
-    for(idx = 0; idx < o_sz; idx++) {
+    // NOTE, to free all allocated memory for uv_fs_scandir(), application developers have
+    //  to loop through all the entries in uv_req_t object until uv_fs_scandir_next() returns
+    //  UV_EOF, if you break fom the loop in the middle, it would lead to memory leak.
+    while(1) {
         err = uv_fs_scandir_next(req, &curr_entry);
         if((err == UV_EOF) || (err < 0)) 
             break;
         if(curr_entry.type != UV_DIRENT_FILE)
-            continue;
+            goto loop_end;
         const char *filename = curr_entry.name;
         int not_match = strncmp(filename, seg_prefix, seg_prefix_sz);
         if(not_match)
-            continue;
+            goto loop_end;
         int seg_num = (int) strtol(&filename[seg_prefix_sz], NULL, 10);
         if(seg_num > curr_seg_max_num) {
             curr_seg_max_num = seg_num;
             curr_seg_max_idx = num_segs_rdy;
         }
         out[num_segs_rdy++] = seg_num;
+loop_end:
+        curr_entry.name = NULL;
     } // end of loop
     // the segment with currently largest number might NOT be ready, skip it for current flush operation
     // (and will be transferring next time)
@@ -226,12 +234,12 @@ static void  atfp_hls__scan_local_tmpbuf_cb(uv_fs_t* req)
     atfp_t *processor = &hlsproc->super;
     atfp_segment_t  *seg_cfg = &hlsproc->internal.segment;
     int end = 1, nitems = req->result, num_segs_created = 0;
-    free((char *)req->path);
     if(nitems > 0) {
         int avail_seg_numbers[nitems];
         uint8_t process_done = processor->ops->has_done_processing(processor);
         num_segs_created = atfp__collect_output_segment_num( req, &avail_seg_numbers[0], nitems,
                seg_cfg->filename.prefix.data,  seg_cfg->filename.prefix.sz, process_done );
+        uv_fs_req_cleanup(req);
         if(num_segs_created > 0) {
             h2o_vector_reserve(NULL, &seg_cfg->rdy_list, num_segs_created);
             seg_cfg-> rdy_list.size = num_segs_created;
@@ -253,6 +261,7 @@ static void  atfp_hls__scan_local_tmpbuf_cb(uv_fs_t* req)
                    json_string("[hls] failed to start transfer at first ready segment"));
         }
     } else {
+        uv_fs_req_cleanup(req);
         json_object_set_new(processor->data.error, "storage",
                 json_string("[hls] nitems should not be negative in local temp buf"));
     }

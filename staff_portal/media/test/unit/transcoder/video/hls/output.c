@@ -71,6 +71,7 @@ static void utest_atfp_hls__flush_output_cb (atfp_t *processor)
         }}, \
     }; \
     asaremote_usr_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_hlsproc; \
+    asalocal_usr_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_hlsproc; \
     mkdir("./tmp/utest", S_IRWXU); \
     mkdir(UTEST_BASSEPATH, S_IRWXU); \
     mkdir(UTEST_ASA_LOCAL_BASEPATH,  S_IRWXU); \
@@ -113,6 +114,10 @@ static void utest_atfp_hls__flush_output_cb (atfp_t *processor)
 
 
 #define  UTEST_HLS__FLUSH_OUTPUT_TEARDOWN \
+    if(mock_hlsproc.internal.segment.rdy_list.entries) { \
+        free(mock_hlsproc.internal.segment.rdy_list.entries); \
+        mock_hlsproc.internal.segment.rdy_list.entries = NULL; \
+    } \
     json_decref(mock_hlsproc.super.data.error); \
     rmdir(UTEST_ASA_LOCAL_BASEPATH);  \
     rmdir(UTEST_ASA_REMOTE_BASEPATH); \

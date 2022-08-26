@@ -20,6 +20,11 @@ typedef struct atfp_hls_s {
             int  (*filter)(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
             int  (*encode)(atfp_av_ctx_t *dst);
             int  (*write)(atfp_av_ctx_t *dst);
+            struct {
+                int  (*filter)(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
+                int  (*encode)(atfp_av_ctx_t *dst);
+                int  (*write)(atfp_av_ctx_t *dst);
+            } finalize;
             ASA_RES_CODE  (*move_to_storage)(struct atfp_hls_s *);
             uint8_t  (*has_done_flush_filter)(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
             uint8_t  (*has_done_flush_encoder)(atfp_av_ctx_t *dst);
@@ -28,6 +33,7 @@ typedef struct atfp_hls_s {
     } internal;
 } atfp_hls_t;
 
+#define  NUM_USRARGS_HLS_ASA_LOCAL  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 // TODO, parameterize
 #define  HLS_SEGMENT_FILENAME_PREFIX       "data_seg_"
 #define  HLS_SEGMENT_FILENAME_NUM_FORMAT   "%04d"
