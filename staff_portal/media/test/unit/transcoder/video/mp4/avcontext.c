@@ -300,7 +300,7 @@ Ensure(atfp_mp4_test__avctx_validate__ok) {
     mock_avfmt_ctx.iformat = &mock_avinfmts[2];
     mock_dec_ctxs[0] = &mock_audio_codec_ctxs[0];
     mock_dec_ctxs[1] = &mock_video_codec_ctxs[3];
-    int err = atfp_mp4__validate_source_format(&mp4proc);
+    int err = atfp_av__validate_source_format(&mock_av_ctx, mp4proc.super.data.error);
     assert_that(err, is_equal_to(0));
     assert_that(json_object_size(mp4proc.super.data.error), is_equal_to(0));
     UNITTEST_AVCTX_VALIDATE_SOURCE__TEARDOWN;
@@ -313,7 +313,7 @@ Ensure(atfp_mp4_test__avctx_validate__demuxer_unsupported) {
     mock_avfmt_ctx.iformat = &mock_excluded_avinfmt;
     mock_dec_ctxs[0] = &mock_audio_codec_ctxs[3];
     mock_dec_ctxs[1] = &mock_video_codec_ctxs[1];
-    int err = atfp_mp4__validate_source_format(&mp4proc);
+    int err = atfp_av__validate_source_format(&mock_av_ctx, mp4proc.super.data.error);
     assert_that(err, is_greater_than(0));
     assert_that(json_object_size(mp4proc.super.data.error), is_greater_than(0));
     const char *expect_errmsg = "[mp4] unsupported demuxer";
@@ -330,7 +330,7 @@ Ensure(atfp_mp4_test__avctx_validate__decoder_unsupported) {
     mock_avfmt_ctx.iformat = &mock_avinfmts[1];
     mock_dec_ctxs[0] = &mock_audio_codec_ctxs[2];
     mock_dec_ctxs[1] = &mock_video_codec_ctxs[1];
-    int err = atfp_mp4__validate_source_format(&mp4proc);
+    int err = atfp_av__validate_source_format(&mock_av_ctx, mp4proc.super.data.error);
     assert_that(err, is_greater_than(0));
     assert_that(json_object_size(mp4proc.super.data.error), is_greater_than(0));
     const char *expect_errmsg = "[mp4] unsupported video codec";

@@ -129,6 +129,10 @@ static __attribute__((optimize("O0"))) void  utest_deinit_mp4_preload(atfp_mp4_t
             free(asa_local_cfg->super.cb_args.entries);
             asa_local_cfg->super.cb_args.entries = NULL;
         }
+        if(asa_local_cfg->super.op.open.dst_path) {
+            free(asa_local_cfg->super.op.open.dst_path);
+            asa_local_cfg->super.op.open.dst_path = NULL;
+        }
         free(asa_local_cfg);
     }
     atfp_asa_map_deinit(map);
@@ -139,10 +143,6 @@ static __attribute__((optimize("O0"))) void  utest_deinit_mp4_preload(atfp_mp4_t
     if(processor->data.storage.basepath) {
         free((char *)processor->data.storage.basepath);
         processor->data.storage.basepath = NULL;
-    }
-    if(asa_local_cfg->super.op.open.dst_path) {
-        free(asa_local_cfg->super.op.open.dst_path);
-        asa_local_cfg->super.op.open.dst_path = NULL;
     }
     if(processor->data.error) {
         json_decref(processor->data.error);
@@ -232,8 +232,8 @@ static void utest_atfp_mp4__preload_stream_info__done_ok(atfp_mp4_t *mp4proc)
             uint32_t actual_mdat_pos =  mp4proc->internal.mdat.pos;
             assert_that(expect_mdat_pos, is_equal_to(actual_mdat_pos));
         } {
-            size_t expect_preload_sz = *(size_t *) asa_src_cfg->cb_args.entries[EXPECT_STREAMINFO_SZ_INDEX__IN_ASA_USRARG];
-            assert_that(mp4proc->internal.preload_pkts.size, is_equal_to(expect_preload_sz));
+            uint32_t expect_preload_sz = *(uint32_t *) asa_src_cfg->cb_args.entries[EXPECT_STREAMINFO_SZ_INDEX__IN_ASA_USRARG];
+            assert_that(mp4proc->internal.preload_pkts.size, is_equal_to((size_t)expect_preload_sz));
             assert_that(mp4proc->internal.preload_pkts.nbytes_copied, is_equal_to(expect_preload_sz));
         }
     } // end of err_info is empty

@@ -134,16 +134,16 @@ void  atfp_mp4__av_deinit(atfp_mp4_t *mp4proc)
     AVCodecContext   **dec_ctxs = mp4proc->av->stream_ctx.decode;
     AVPacket  *pkt = & mp4proc->av->intermediate_data.decode.packet;
     AVFrame   *frm = & mp4proc->av->intermediate_data.decode.frame;
-    atfp_mp4__av_packet_deinit(pkt);
-    av_frame_unref(frm);
     if(dec_ctxs) {
         int nb_streams = fmt_ctx ? fmt_ctx->nb_streams: 0;
         for(idx = 0; idx < nb_streams; idx++) {
             if(dec_ctxs[idx])
-                avcodec_free_context(&dec_ctxs[idx]);
+                avcodec_free_context(&mp4proc->av->stream_ctx.decode[idx]);
         }
         av_freep(&mp4proc->av->stream_ctx.decode);
     }
+    atfp_mp4__av_packet_deinit(pkt);
+    av_frame_unref(frm);
     if(fmt_ctx) {
         AVIOContext *avio_ctx = fmt_ctx -> pb;
         if(avio_ctx) {
@@ -155,12 +155,10 @@ void  atfp_mp4__av_deinit(atfp_mp4_t *mp4proc)
 } // end of atfp_mp4__av_deinit
 
 
-int  atfp_mp4__validate_source_format(atfp_mp4_t *mp4proc)
+int  atfp_av__validate_source_format(atfp_av_ctx_t *avctx, json_t *err_info)
 {
-    atfp_t *processor = &mp4proc -> super;
-    json_t *err_info = processor->data.error;
-    AVFormatContext  *fmt_ctx = mp4proc->av ->fmt_ctx;
-    AVCodecContext **dec_ctxs = mp4proc->av->stream_ctx.decode;
+    AVFormatContext  *fmt_ctx = avctx->fmt_ctx;
+    AVCodecContext **dec_ctxs = avctx->stream_ctx.decode;
     app_cfg_t *app_cfg = app_get_global_cfg();
     aav_cfg_input_t *aav_cfg_in = &app_cfg->transcoder.input;
     int idx = 0;
@@ -196,7 +194,7 @@ int  atfp_mp4__validate_source_format(atfp_mp4_t *mp4proc)
     }
     int err = json_object_size(err_info) > 0;
     return err;
-} // end of atfp_mp4__validate_source_format
+} // end of atfp_av__validate_source_format
 
 
 static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc) 

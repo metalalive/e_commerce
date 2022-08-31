@@ -45,9 +45,13 @@ typedef struct atfp_mp4_s {
             void (*av_init_done)(struct atfp_mp4_s *);
         } callback;
         struct {
+            ASA_RES_CODE  (*av_init)     (struct atfp_mp4_s *, void (*cb)(struct atfp_mp4_s *));
+            ASA_RES_CODE  (*preload_info)(struct atfp_mp4_s *, void (*cb)(struct atfp_mp4_s *));
+            int  (*av_validate) (atfp_av_ctx_t *, json_t *err_info);
+            void (*av_deinit) (struct atfp_mp4_s *);
             int  (*decode_pkt)(atfp_av_ctx_t *);
             int  (*next_pkt)(atfp_av_ctx_t *);
-            ASA_RES_CODE  (*preload)(struct atfp_mp4_s *, size_t nbytes, void (*cb)(struct atfp_mp4_s *));
+            ASA_RES_CODE  (*preload_pkt)(struct atfp_mp4_s *, size_t nbytes, void (*cb)(struct atfp_mp4_s *));
         } op;
     } internal;
 } atfp_mp4_t;
@@ -58,7 +62,7 @@ ASA_RES_CODE  atfp_mp4__preload_stream_info (atfp_mp4_t *, void (*cb)(atfp_mp4_t
 ASA_RES_CODE  atfp_mp4__preload_packet_sequence (atfp_mp4_t *mp4proc, int chunk_idx_start,
         size_t chunk_offset, size_t nbytes_to_load, void (*cb)(atfp_mp4_t *));
 
-int  atfp_mp4__validate_source_format(atfp_mp4_t *mp4proc);
+int  atfp_av__validate_source_format(atfp_av_ctx_t *, json_t *err_info);
 
 ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *, void (*cb)(atfp_mp4_t *));
 

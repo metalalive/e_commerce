@@ -25,6 +25,7 @@ ASA_RES_CODE app_storage_localfs_open (asa_op_base_cfg_t *cfg)
     if(!_cfg || !_cfg->loop || !cfg->op.open.cb || !cfg->op.open.dst_path)
         return ASTORAGE_RESULT_ARG_ERROR;
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
+    _cfg->file.file = -1; // TODO, may risk unclosed file-descriptor if application developers forgot 
     int err = uv_fs_open( _cfg->loop, &_cfg->file, cfg->op.open.dst_path,
             cfg->op.open.flags, cfg->op.open.mode, _app_storage_localfs_open_cb
         );
@@ -37,6 +38,7 @@ ASA_RES_CODE app_storage_localfs_open (asa_op_base_cfg_t *cfg)
 static void _app_storage_localfs_close_cb(uv_fs_t *req) {
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
     ASA_RES_CODE  app_result = (req->result == 0)? ASTORAGE_RESULT_COMPLETE: ASTORAGE_RESULT_OS_ERROR;
+    req->file = -1;
     cfg->op.close.cb(cfg, app_result);
 } // end of _app_storage_localfs_close_cb
 
