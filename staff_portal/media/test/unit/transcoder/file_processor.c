@@ -103,32 +103,29 @@ static json_t *transcoder_utest__gen_atfp_spec(const char **expect_f_content, si
 }  // end of transcoder_utest__gen_atfp_spec
 
 
-#include <libavcodec/avcodec.h>
-#include <libavutil/frame.h>
-// TODO, refactor ?
 Ensure(transcoder_test__get_atfp_object) {
 #define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
     atfp_t *mock_fp = app_transcoder_file_processor("audio/wmv");
     assert_that(mock_fp, is_equal_to(NULL));
-    mock_fp = app_transcoder_file_processor("video/mp4");
-    assert_that(mock_fp, is_not_equal_to(NULL));
-    assert_that(mock_fp->ops, is_not_equal_to(NULL));
-    if(mock_fp && mock_fp->ops) {
-        assert_that(mock_fp->ops->init,   is_not_equal_to(NULL));
-        assert_that(mock_fp->ops->deinit, is_not_equal_to(NULL));
-        assert_that(mock_fp->ops->processing,   is_not_equal_to(NULL));
-        assert_that(mock_fp->ops->has_done_processing, is_not_equal_to(NULL));
-        assert_that(mock_fp->ops->label_match, is_not_equal_to(NULL));
-        assert_that(mock_fp->ops->instantiate, is_not_equal_to(NULL));
-        atfp_asa_map_t    mock_map = {0};
-        void  *cb_args_entries[NUM_CB_ARGS_ASAOBJ] = {mock_fp, &mock_map};
-        asa_op_base_cfg_t mock_asaobj = {.cb_args={.size=NUM_CB_ARGS_ASAOBJ,
-            .entries=cb_args_entries}};
-        mock_fp->data.storage.handle = &mock_asaobj;
-        expect(av_packet_unref);
-        expect(av_frame_unref);
-        mock_fp->ops->deinit(mock_fp);
-    }
+    const char *valid_labels[] = {"video/mp4", "mov", "hls", "application/x-mpegURL", NULL};
+    const char *label = NULL;
+    int idx = 0;
+    for(idx = 0; valid_labels[idx]; idx++) {
+        label = valid_labels[idx];
+        mock_fp = app_transcoder_file_processor(label);
+        assert_that(mock_fp, is_not_equal_to(NULL));
+        assert_that(mock_fp->ops, is_not_equal_to(NULL));
+        if(mock_fp && mock_fp->ops) {
+            assert_that(mock_fp->backend_id,  is_equal_to(ATFP_BACKEND_LIB__FFMPEG));
+            assert_that(mock_fp->ops->init,   is_not_equal_to(NULL));
+            assert_that(mock_fp->ops->deinit, is_not_equal_to(NULL));
+            assert_that(mock_fp->ops->processing,   is_not_equal_to(NULL));
+            assert_that(mock_fp->ops->has_done_processing, is_not_equal_to(NULL));
+            assert_that(mock_fp->ops->label_match, is_not_equal_to(NULL));
+            assert_that(mock_fp->ops->instantiate, is_not_equal_to(NULL));
+            free(mock_fp); // all instantiate functions should be de-init as easy as single free()
+        }
+    } // end of loop
 #undef  NUM_CB_ARGS_ASAOBJ
 } // end of transcoder_test__get_atfp_object
 
@@ -477,8 +474,7 @@ Ensure(transcoder_test__start_transfer_segment_exceeding_index) {
 } // end of transcoder_test__start_transfer_segment_exceeding_index
 
 
-Ensure(transcoder_test__start_transfer_segment_error) {
-    // assume segment not exists
+Ensure(transcoder_test__transfer_segment__missing_file) {
     UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
     const char *expect_seg_local_path  = UTEST_ASA_LOCAL_BASEPATH  "/" UTEST_DATA_SEGMENT_PREFIX "0000013";
     const char *expect_seg_remote_path = UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000013";
@@ -491,7 +487,53 @@ Ensure(transcoder_test__start_transfer_segment_error) {
     expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
     uv_run(loop, UV_RUN_ONCE);
     UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
-} // end of transcoder_test__start_transfer_segment_error
+} // end of transcoder_test__transfer_segment__missing_file
+
+
+Ensure(transcoder_test__transfer_segment__memory_corruption) {
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    int chosen_idx = 1;
+    ASA_RES_CODE  result;
+    { // subcase 1
+        mock_asa_remote.op.mkdir.path.origin = UTEST_ASA_REMOTE_BASEPATH  "/corrupt";
+        result = atfp__segment_start_transfer( &mock_asa_remote, &mock_asa_local,
+                &mock_seg_cfg, chosen_idx);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_DATA_ERROR));
+    } { // subcase 2
+        mock_asa_remote.op.mkdir.path.origin      = UTEST_ASA_REMOTE_BASEPATH;
+        mock_asa_local.super.op.mkdir.path.origin = UTEST_ASA_LOCAL_BASEPATH "/corrupt";
+        result = atfp__segment_start_transfer( &mock_asa_remote, &mock_asa_local,
+                &mock_seg_cfg, chosen_idx);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_DATA_ERROR));
+    } { // subcase 3
+        mock_asa_remote.op.mkdir.path.origin      = UTEST_ASA_REMOTE_BASEPATH;
+        mock_asa_local.super.op.mkdir.path.origin = UTEST_ASA_LOCAL_BASEPATH;
+        mock_seg_cfg.filename.prefix.data = UTEST_DATA_SEGMENT_PREFIX "c_";
+        mock_seg_cfg.filename.prefix.sz = strlen(mock_seg_cfg.filename.prefix.data);
+        result = atfp__segment_start_transfer( &mock_asa_remote, &mock_asa_local,
+                &mock_seg_cfg, chosen_idx);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_DATA_ERROR));
+    } { // subcase 4
+        mock_seg_cfg.filename.prefix.data = UTEST_DATA_SEGMENT_PREFIX;
+        mock_seg_cfg.filename.prefix.sz = sizeof(UTEST_DATA_SEGMENT_PREFIX) - 1;
+        mock_seg_cfg.filename.pattern.data = "%08d"; // originally UTEST_DATA_SEGMENT_PATTERN
+        mock_seg_cfg.filename.pattern.sz   = 4;
+        mock_seg_cfg.filename.pattern.max_num_digits = 8; // originally UTEST_SEGMENT_NUM_MAXDIGIT
+        result = atfp__segment_start_transfer( &mock_asa_remote, &mock_asa_local,
+                &mock_seg_cfg, chosen_idx);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_DATA_ERROR));
+    } { // recover
+        mock_seg_cfg.filename.pattern.data = UTEST_DATA_SEGMENT_PATTERN;
+        mock_seg_cfg.filename.pattern.sz   = sizeof(UTEST_DATA_SEGMENT_PATTERN) - 1;
+        mock_seg_cfg.filename.pattern.max_num_digits = UTEST_SEGMENT_NUM_MAXDIGIT;
+        result = atfp__segment_start_transfer( &mock_asa_remote, &mock_asa_local,
+                &mock_seg_cfg, chosen_idx);
+        assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+        expect(utest_asa_local_openfile_cb, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
+        uv_run(loop, UV_RUN_ONCE);
+    }
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+} // end of transcoder_test__transfer_segment__memory_corruption
 
 
 Ensure(transcoder_test__start_transfer_genericfile_ok) {
@@ -512,6 +554,19 @@ Ensure(transcoder_test__start_transfer_genericfile_ok) {
     UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
 #undef  EXPECT_FILENAME
 } // end of transcoder_test__start_transfer_genericfile_ok
+
+
+Ensure(transcoder_test__transfer_genericfile__memory_corruption) {
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
+    // filename exceeds max length of setup value
+#define  EXPECT_FILENAME    UTEST_DATA_SEGMENT_PREFIX  UTEST_DATA_SEGMENT_PREFIX  UTEST_DATA_SEGMENT_PREFIX
+    ASA_RES_CODE result = atfp__file_start_transfer(&mock_asa_remote, &mock_asa_local,
+            &mock_seg_cfg, EXPECT_FILENAME );
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_DATA_ERROR));
+#undef  EXPECT_FILENAME
+    UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
+} // end of transcoder_test__transfer_genericfile__memory_corruption
+
 
 #undef  MOCK_ASA_WR_BUF_SZ
 #undef  NBYTES_SEGMENT_FULLPATH__ASA_DST
@@ -536,7 +591,9 @@ TestSuite *app_transcoder_file_processor_tests(void)
     add_test(suite, transcoder_test__asamap_destination_ok);
     add_test(suite, transcoder_test__start_transfer_segment_ok);
     add_test(suite, transcoder_test__start_transfer_segment_exceeding_index);
-    add_test(suite, transcoder_test__start_transfer_segment_error);
+    add_test(suite, transcoder_test__transfer_segment__missing_file);
+    add_test(suite, transcoder_test__transfer_segment__memory_corruption);
     add_test(suite, transcoder_test__start_transfer_genericfile_ok);
+    add_test(suite, transcoder_test__transfer_genericfile__memory_corruption);
     return suite;
 }

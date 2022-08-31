@@ -298,11 +298,18 @@ uint8_t  atfp_asa_map_all_dst_stopped(atfp_asa_map_t *map)
 
 static int  atfp__format_file_fullpath(char *out, size_t out_sz, const char *basepath, const char *filename)
 {
-    memset(out, 0x0, sizeof(char) * out_sz);
-    strncat(out, basepath, strlen(basepath));
-    strncat(out, "/", 1);
-    strncat(out, filename, strlen(filename));
-    return  0;
+    size_t  basepath_sz = strlen(basepath);
+    size_t  filename_sz = strlen(filename);
+    size_t  sz_required = basepath_sz + filename_sz + 1;
+    int ret = 1; // error, insufficient memory space
+    if(sz_required < out_sz) {
+        memset(out, 0x0, sizeof(char) * out_sz);
+        strncat(out, basepath, basepath_sz);
+        strncat(out, "/", 1);
+        strncat(out, filename, filename_sz);
+        ret = 0; // ok
+    }
+    return  ret;
 } // end of atfp__format_file_fullpath
 
 static int  atfp__format_segment_fullpath(char *out, size_t out_sz, const char *basepath, atfp_segment_t  *seg_cfg, int chosen_idx)
@@ -311,17 +318,26 @@ static int  atfp__format_segment_fullpath(char *out, size_t out_sz, const char *
         return  1;
     if(seg_cfg->filename.pattern.max_num_digits == 0)
         return  2;
+    size_t  basepath_sz = strlen(basepath);
     uint8_t max_num_digits = seg_cfg->filename.pattern.max_num_digits;
-    memset(out, 0x0, sizeof(char) * out_sz);
-    strncat(out, basepath, strlen(basepath));
-    strncat(out, "/", 1);
-    strncat(out, seg_cfg->filename.prefix.data, seg_cfg->filename.prefix.sz);
-    int  seg_num = seg_cfg->rdy_list.entries[chosen_idx];
-    uint8_t  seg_num_str_sz = max_num_digits + 1;
-    char seg_num_str[seg_num_str_sz];
-    snprintf(&seg_num_str[0], seg_num_str_sz, seg_cfg->filename.pattern.data, seg_num);
-    strncat(out, &seg_num_str[0], max_num_digits);
-    return  0;
+    size_t  sz_required = basepath_sz + seg_cfg->filename.prefix.sz + 1 + max_num_digits;
+    int ret = 0;
+    if(sz_required < out_sz) {
+        memset(out, 0x0, sizeof(char) * out_sz);
+        strncat(out, basepath, basepath_sz);
+        strncat(out, "/", 1);
+        strncat(out, seg_cfg->filename.prefix.data, seg_cfg->filename.prefix.sz);
+        int  seg_num = seg_cfg->rdy_list.entries[chosen_idx];
+        uint8_t  seg_num_str_sz = max_num_digits + 1;
+        char seg_num_str[seg_num_str_sz];
+        size_t nwrite = snprintf(&seg_num_str[0], seg_num_str_sz, seg_cfg->filename.pattern.data, seg_num);
+        assert(nwrite == max_num_digits);
+        seg_num_str[nwrite] = 0x0;
+        strncat(out, &seg_num_str[0], max_num_digits);
+    } else {
+        ret = 3; // insufficient memory space
+    }
+    return  ret;
 } // end of atfp__format_segment_fullpath
 
 
