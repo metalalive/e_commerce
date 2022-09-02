@@ -114,7 +114,8 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
     json_t *mock_err_info = json_object(); \
     atfp_hls_t *mock_fp = (atfp_hls_t *) atfp_ops_video_hls.ops.instantiate(); \
     mock_fp->super.data = (atfp_data_t) {.callback=utest_hls_done_usr_cb, .spec=mock_spec, \
-            .error=mock_err_info,  .storage={.handle=mock_asa_dst, .config=&mock_storage_cfg}}; \
+            .error=mock_err_info,  .storage={.handle=mock_asa_dst, .config=&mock_storage_cfg}, \
+            .version="Nh"  }; \
     mock_fp->internal.op.avctx_init    = utest_hls__avctx_init; \
     mock_fp->internal.op.avfilter_init = utest_hls__avfilter_init; \
     mock_fp->internal.op.avctx_deinit  = utest_hls__avctx_deinit; \
@@ -122,7 +123,6 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
     asa_dst_cb_args[ATFP_INDEX__IN_ASA_USRARG] = mock_fp; \
     asa_dst_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = &mock_map; \
     asa_dst_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
-    json_object_set_new(mock_spec, "version", json_string("Nh")); \
     const char *created_path = UTEST_ASALOCAL_BASEPATH "/" ATFP_TEMP_TRANSCODING_FOLDER_NAME "/" "Nh";
 
 

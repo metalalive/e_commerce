@@ -11,6 +11,8 @@ static  void atfp_hls__close_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CO
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASALOCAL_OPEN));
     if(result == ASTORAGE_RESULT_COMPLETE) {
+        atfp_hls_t *hlsproc = (atfp_hls_t *) processor;
+        atfp_segment_final(&hlsproc->internal.segment, processor->transfer.dst.info);
         asa_op_base_cfg_t *asa_local = asaobj;
         asa_local->op.unlink.path = asa_local-> op.open.dst_path ;
         result =  app_storage_localfs_unlink(asa_local);
@@ -108,7 +110,7 @@ static  void atfp_hls__close_dst_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE
 
 
 static  void atfp_hls__open_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
-{
+{ // TODO, this callback can be reused by any type of file-processor
     int err = 1;
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     if(result == ASTORAGE_RESULT_COMPLETE) {
@@ -132,8 +134,7 @@ static  void atfp_hls__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE
     atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = &hlsproc->super;
     if(result == ASTORAGE_RESULT_COMPLETE) {
-        atfp_segment_t  *seg_cfg = &hlsproc->internal.segment;
-        seg_cfg->transfer.eof_reached = 0;
+        atfp_segment_init(&hlsproc->internal.segment);
         processor->transfer.dst.flags |= (1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN);
         result = app_storage_localfs_read(&hlsproc->asa_local.super);
         err = result != ASTORAGE_RESULT_ACCEPT;
@@ -177,6 +178,8 @@ static void atfp_hls__write_dst_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE
     atfp_t *processor = &hlsproc->super;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_t  *seg_cfg = &hlsproc->internal.segment;
+        SHA1_Update(&seg_cfg->checksum, asaobj->op.write.src, nwrite);
+        seg_cfg->transfer.nbytes += nwrite;
         if(seg_cfg->transfer.eof_reached) { // switch to next segment (if exists)
             result = app_storage_localfs_close(&hlsproc->asa_local.super);
         } else {

@@ -10,7 +10,9 @@ static void atfp_hls__create_local_workfolder_cb (asa_op_base_cfg_t *asaobj, ASA
     atfp_t *processor = &hlsproc -> super;
     int err = hlsproc->internal.op.avctx_init(hlsproc);
     if(!err)
-        hlsproc->internal.op.avfilter_init(hlsproc);
+        err = hlsproc->internal.op.avfilter_init(hlsproc);
+    if(!err)
+        processor->transfer.dst.info = json_object();
     processor -> data.callback(processor);
 } // end of atfp_hls__create_local_workfolder_cb
 
@@ -40,12 +42,12 @@ static void atfp__video_hls__init(atfp_t *processor)
         // NOTE, if multiple destination file-processors work concurrently,  there should be multiple
         // local storage handles , each of which stores transcoded file for specific spec
         const char *local_tmpfile_basepath = asa_local_srcdata->super.op.mkdir.path.origin;
-        const char *version = json_string_value(json_object_get(processor->data.spec, "version"));
+        const char *_version = processor->data.version;
         size_t path_sz = strlen(local_tmpfile_basepath) + 1 + sizeof(ATFP_TEMP_TRANSCODING_FOLDER_NAME)
-                          + 1 + strlen(version) + 1; // include NULL-terminated byte
+                          + 1 + strlen(_version) + 1; // include NULL-terminated byte
         char fullpath[path_sz];
         size_t nwrite = snprintf(&fullpath[0], path_sz, "%s/%s/%s", local_tmpfile_basepath,
-                 ATFP_TEMP_TRANSCODING_FOLDER_NAME, version);
+                 ATFP_TEMP_TRANSCODING_FOLDER_NAME, _version);
         fullpath[nwrite++] = 0x0; // NULL-terminated
         asa_local_dstdata->super.op.mkdir.path.origin = strndup(&fullpath[0], nwrite);
         asa_local_dstdata->super.op.mkdir.path.curr_parent = calloc(nwrite, sizeof(char));
@@ -75,6 +77,7 @@ static void atfp__video_hls__init(atfp_t *processor)
                 ._asa_local = {.sz = fullpath_sz_local, .data = asa_local_fullpath_buf},
                 ._asa_dst = {.sz = fullpath_sz_dst, .data = asa_dst_fullpath_buf},
             },
+            .checksum = {0}, .transfer = {0} // implicitly reset `curr_idx` field to 0
         };
     } {
         asa_local_dstdata->loop = asa_local_srcdata->loop;
@@ -131,6 +134,10 @@ static  uint8_t atfp__video_hls__deinit(atfp_t *processor)
     DEINIT_IF_EXISTS(seg_cfg->filename.prefix.data);
     DEINIT_IF_EXISTS(seg_cfg->filename.pattern.data);
     DEINIT_IF_EXISTS(seg_cfg-> rdy_list.entries);
+    if(processor->transfer.dst.info) {
+        json_decref(processor->transfer.dst.info);
+        processor->transfer.dst.info = NULL;
+    }
     // ensure file-descriptors in asa-local and asa-dst are closed
     ASA_RES_CODE  asa_result;
     uint32_t asaobj_flags = processor->transfer.dst.flags;

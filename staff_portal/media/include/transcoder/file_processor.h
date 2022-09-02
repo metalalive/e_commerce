@@ -4,6 +4,7 @@
 extern "C" {
 #endif
 
+#include <openssl/sha.h>
 #include <jansson.h>
 #include <h2o.h>
 
@@ -30,6 +31,7 @@ typedef  struct atfp_av_ctx_s   atfp_av_ctx_t;
 typedef struct {
     json_t *error;
     json_t *spec;
+    const char *version; // point to version label string
     void (*callback)(struct atfp_s *);
     struct {
         const char *basepath;
@@ -56,7 +58,6 @@ typedef struct atfp_s {
     atfp_data_t  data;
     const atfp_ops_t  *ops;
     ATFP_BACKEND_LIB_TYPE  backend_id;
-    json_t   *transcoded_info;
     struct { // store current index of source file chunks
         uint32_t  curr;  // currently opened file chunk of the source file
         uint32_t  next;
@@ -65,7 +66,8 @@ typedef struct atfp_s {
     } filechunk_seq; // TODO, move into `transfer` field below, it is used only for source file processor 
     union {
         struct {
-            uint32_t flags;
+            json_t   *info;
+            uint32_t  flags;
         } dst; // TODO, add new field of type `atfp_segment_t`
     } transfer;
 } atfp_t;
@@ -94,9 +96,10 @@ typedef struct {
             size_t sz;
         } _asa_dst;
     } fullpath;
+    SHA_CTX   checksum; // currently SHA1 is used to calculate checksum of each file
     struct {
-        // index to the item in `rdy_list` field above
-        uint32_t  curr_idx;
+        size_t    nbytes;   // nbytes per file after transcoded, including segment, metadata file, etc.
+        uint32_t  curr_idx; // the index to the item in `rdy_list` field above
         uint8_t   eof_reached:1;
     } transfer;
 } atfp_segment_t;
@@ -179,6 +182,10 @@ ASA_RES_CODE  atfp__file_start_transfer(
         asa_op_localfs_cfg_t  *asa_local,
         atfp_segment_t        *seg_cfg,
         const char *filename );
+
+
+int atfp_segment_init(atfp_segment_t *);
+int atfp_segment_final(atfp_segment_t *, json_t *info);
 
 #ifdef __cplusplus
 } // end of extern C clause

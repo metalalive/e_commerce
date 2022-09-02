@@ -146,15 +146,23 @@ static  __attribute__((optimize("O0"))) void utest_hls__output_verify_content(
 Ensure(atfp_hls_test__flush_segments__when_processing) {
     UTEST_HLS__FLUSH_OUTPUT_SETUP;
     UTEST_HLS__FLUSH_FILES_SETUP;
+    size_t expect_numfiles_transferred = NUM_READY_SEGMENTS - 1;
     ASA_RES_CODE result = atfp_hls__try_flush_to_storage(&mock_hlsproc);
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     expect(utest__atfp_has_done_processing, will_return(0));
     expect(utest__atfp_has_done_processing, will_return(0));
     expect(utest_atfp_hls__flush_output_cb, when(num_err_msg, is_equal_to(0)));
+    for (idx = 0; idx < expect_numfiles_transferred; idx++) { // final segment not ready yet
+        int  wr_buf_sz = mock_asa_remote.super.op.write.src_max_nbytes;
+        expect(SHA1_Init,    will_return(1));
+        for(int file_sz = strlen(expect_seg_content[idx]); file_sz > 0; file_sz -= wr_buf_sz)
+            expect(SHA1_Update,  will_return(1));
+        expect(SHA1_Final,   will_return(1));
+        expect(OPENSSL_cleanse);
+    } // end of loop
     while(!flush_done)
         uv_run(loop, UV_RUN_ONCE);
     { // examine after completing transfer
-        size_t expect_numfiles_transferred = NUM_READY_SEGMENTS - 1;
         assert_that(mock_hlsproc.internal.segment.rdy_list.size, is_equal_to(expect_numfiles_transferred));
         assert_that(mock_hlsproc.internal.segment.rdy_list.entries, is_not_equal_to(NULL));
         assert_that(access(expect_seg_remote_path[0], F_OK), is_equal_to(0));
@@ -205,14 +213,22 @@ Ensure(atfp_hls_test__flush_nothing__when_processing) {
 Ensure(atfp_hls_test__flush_segments__final) {
     UTEST_HLS__FLUSH_OUTPUT_SETUP;
     UTEST_HLS__FLUSH_FILES_SETUP;
+    size_t expect_numfiles_transferred = (NUM_READY_SEGMENTS + NUM_READY_METADATA_FILES);
     ASA_RES_CODE result = atfp_hls__try_flush_to_storage(&mock_hlsproc);
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     expect(utest__atfp_has_done_processing, will_return(1));
     expect(utest__atfp_has_done_processing, will_return(1));
     expect(utest_atfp_hls__flush_output_cb, when(num_err_msg, is_equal_to(0)));
+    for (idx = 0; idx < expect_numfiles_transferred; idx++) { // final segment already ready
+        int  wr_buf_sz = mock_asa_remote.super.op.write.src_max_nbytes;
+        expect(SHA1_Init,    will_return(1));
+        for(int file_sz = strlen(expect_seg_content[idx]); file_sz > 0; file_sz -= wr_buf_sz)
+            expect(SHA1_Update,  will_return(1));
+        expect(SHA1_Final,   will_return(1));
+        expect(OPENSSL_cleanse);
+    } // end of loop
     while(!flush_done)
         uv_run(loop, UV_RUN_ONCE);
-    size_t expect_numfiles_transferred = (NUM_READY_SEGMENTS + NUM_READY_METADATA_FILES);
     assert_that(mock_hlsproc.internal.segment.rdy_list.size, is_equal_to(NUM_READY_SEGMENTS));
     assert_that(mock_hlsproc.internal.segment.rdy_list.entries, is_not_equal_to(NULL));
     for (idx = 0; idx < expect_numfiles_transferred; idx++) {
@@ -234,6 +250,14 @@ Ensure(atfp_hls_test__flush_error__transfer_segment) {
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     expect(utest__atfp_has_done_processing, will_return(0));
     expect(utest_atfp_hls__flush_output_cb, when(num_err_msg, is_equal_to(1)));
+    { // assume first segment is transferred successfully
+        int  wr_buf_sz = mock_asa_remote.super.op.write.src_max_nbytes;
+        expect(SHA1_Init,    will_return(1));
+        for(int file_sz = strlen(expect_seg_content[0]); file_sz > 0; file_sz -= wr_buf_sz)
+            expect(SHA1_Update,  will_return(1));
+        expect(SHA1_Final,   will_return(1));
+        expect(OPENSSL_cleanse);
+    }
     while (access(expect_seg_remote_path[0], F_OK) == -1)
         uv_run(loop, UV_RUN_ONCE);
     uv_run(loop, UV_RUN_ONCE);
@@ -260,6 +284,14 @@ Ensure(atfp_hls_test__flush_error__open_next_segment) {
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     expect(utest__atfp_has_done_processing, will_return(0));
     expect(utest_atfp_hls__flush_output_cb, when(num_err_msg, is_equal_to(1)));
+    { // assume first segment is transferred successfully
+        int  wr_buf_sz = mock_asa_remote.super.op.write.src_max_nbytes;
+        expect(SHA1_Init,    will_return(1));
+        for(int file_sz = strlen(expect_seg_content[0]); file_sz > 0; file_sz -= wr_buf_sz)
+            expect(SHA1_Update,  will_return(1));
+        expect(SHA1_Final,   will_return(1));
+        expect(OPENSSL_cleanse);
+    }
     while (access(expect_seg_local_path[0], F_OK) != -1)
         uv_run(loop, UV_RUN_ONCE);
     UTEST_HLS__FLUSH_FILES_TEARDOWN;

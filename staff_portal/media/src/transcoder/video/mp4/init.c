@@ -121,10 +121,6 @@ static uint8_t atfp__video_mp4__deinit(atfp_t *processor)
     asa_cfg_t  *storage  = processor->data.storage.config;
     asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
     uv_handle_t *async_handle = (uv_handle_t *)&mp4_proc->async;
-    if(processor->transcoded_info) {
-        json_decref(processor->transcoded_info);
-        processor->transcoded_info = NULL;
-    }
     mp4_proc->internal.op.av_deinit(mp4_proc);
     uint8_t still_ongoing = 0;
     if(uv_has_ref(async_handle)) {
@@ -180,14 +176,6 @@ static void _atfp_mp4__processing_one_frame(atfp_mp4_t *mp4proc)
     }
     if(err)
         processor -> data.callback(processor);
-    // TODO, return following data when processing is done successfully
-    ////atfp_t *processor = &mp4proc -> super;
-    ////processor->transcoded_info = json_array();
-    ////json_t  *item = json_object();
-    ////json_object_set_new(item, "filename", json_string("fake_transcoded_file.mp4"));
-    ////json_object_set_new(item, "size", json_integer(8193));
-    ////json_object_set_new(item, "checksum", json_string("f09d77e32572b562863518c6"));
-    ////json_array_append_new(processor->transcoded_info, item);
 } // end of _atfp_mp4__processing_one_frame
 
 

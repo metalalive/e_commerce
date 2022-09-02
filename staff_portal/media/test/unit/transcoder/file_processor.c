@@ -568,6 +568,58 @@ Ensure(transcoder_test__transfer_genericfile__memory_corruption) {
 } // end of transcoder_test__transfer_genericfile__memory_corruption
 
 
+Ensure(transcoder_test__collect_segment_info_ok) {
+#define  BASEPATH      "/path/to/dst/storage/"
+#define  EXPECT_KEY_1  "segment_a0X1"
+#define  EXPECT_KEY_2  "segment_Jg5y"
+#define  EXPECT_FSIZE_1  234
+#define  EXPECT_FSIZE_2  456
+    atfp_segment_t  mock_seg_cfg = {0};
+    json_t *info = json_object();
+    int err = 0;
+    { // item 1
+        expect(SHA1_Init,    will_return(1));
+        err = atfp_segment_init(&mock_seg_cfg);
+        assert_that(err, is_equal_to(0));
+        mock_seg_cfg.fullpath._asa_dst.data = BASEPATH  EXPECT_KEY_1;
+        mock_seg_cfg.transfer.eof_reached = 1;
+        mock_seg_cfg.transfer.nbytes = EXPECT_FSIZE_1;
+        expect(SHA1_Final,   will_return(1));
+        expect(OPENSSL_cleanse);
+        err = atfp_segment_final(&mock_seg_cfg, info);
+        assert_that(err, is_equal_to(0));
+        assert_that(json_object_size(info), is_equal_to(1));
+    } { // item 2
+        expect(SHA1_Init,    will_return(1));
+        err = atfp_segment_init(&mock_seg_cfg);
+        assert_that(err, is_equal_to(0));
+        assert_that(mock_seg_cfg.transfer.eof_reached, is_equal_to(0));
+        mock_seg_cfg.fullpath._asa_dst.data = BASEPATH  EXPECT_KEY_2;
+        mock_seg_cfg.transfer.eof_reached = 1;
+        mock_seg_cfg.transfer.nbytes = EXPECT_FSIZE_2;
+        expect(SHA1_Final,   will_return(1));
+        expect(OPENSSL_cleanse);
+        err = atfp_segment_final(&mock_seg_cfg, info);
+        assert_that(err, is_equal_to(0));
+        assert_that(json_object_size(info), is_equal_to(2));
+    } { // verify
+        json_t *item = json_object_get(info, EXPECT_KEY_1);
+        assert_that(item, is_not_equal_to(NULL));
+        int actual_size = json_integer_value(json_object_get(item, "size"));
+        assert_that(actual_size, is_equal_to(EXPECT_FSIZE_1));
+        item = json_object_get(info, EXPECT_KEY_2);
+        assert_that(item, is_not_equal_to(NULL));
+        actual_size = json_integer_value(json_object_get(item, "size"));
+        assert_that(actual_size, is_equal_to(EXPECT_FSIZE_2));
+    }
+    json_decref(info);
+#undef   BASEPATH    
+#undef   EXPECT_KEY_1
+#undef   EXPECT_KEY_2
+#undef   EXPECT_FSIZE_1
+#undef   EXPECT_FSIZE_2
+} // end of transcoder_test__collect_segment_info_ok
+
 #undef  MOCK_ASA_WR_BUF_SZ
 #undef  NBYTES_SEGMENT_FULLPATH__ASA_DST
 #undef  NBYTES_SEGMENT_FULLPATH__ASA_LOCAL
@@ -595,5 +647,6 @@ TestSuite *app_transcoder_file_processor_tests(void)
     add_test(suite, transcoder_test__transfer_segment__memory_corruption);
     add_test(suite, transcoder_test__start_transfer_genericfile_ok);
     add_test(suite, transcoder_test__transfer_genericfile__memory_corruption);
+    add_test(suite, transcoder_test__collect_segment_info_ok);
     return suite;
 }

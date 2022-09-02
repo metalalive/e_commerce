@@ -1,6 +1,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
+
+#include "utils.h"
 #include "transcoder/file_processor.h"
 
 extern atfp_ops_entry_t  atfp_ops_video_mp4;
@@ -295,6 +297,37 @@ uint8_t  atfp_asa_map_all_dst_stopped(atfp_asa_map_t *map)
     return !any_dst_working;
 }
 
+
+int atfp_segment_init(atfp_segment_t  *seg_cfg) {
+    seg_cfg->transfer.eof_reached = 0;
+    seg_cfg->transfer.nbytes = 0;
+    int ret = SHA1_Init(&seg_cfg->checksum); // 0 means error
+    return ret == 0;
+}
+
+int atfp_segment_final(atfp_segment_t *seg_cfg, json_t *info) {
+#define  MD_HEX_SZ   ((SHA_DIGEST_LENGTH << 1) + 1)   // 20 * 2 + NULL bytes
+    const char *filename = (const char *) strrchr(seg_cfg->fullpath._asa_dst.data, (int)'/');
+    if(!filename) {
+        return 1; // invalid key
+    } else if(json_object_get(info, filename)) {
+        return 2; // duplicate not allowed
+    } else {
+        filename += 1; // skip slash char
+    }
+    unsigned char md[SHA_DIGEST_LENGTH] = {0}, md_hex[MD_HEX_SZ] = {0};
+    SHA1_Final(&md[0], &seg_cfg->checksum);
+    app_chararray_to_hexstr((char *)&md_hex[0], (size_t)(MD_HEX_SZ - 1),
+            (char *)&md[0], SHA_DIGEST_LENGTH);
+    md_hex[MD_HEX_SZ - 1] = 0x0;
+#undef   MD_HEX_SZ 
+    json_t *item = json_object();
+    json_object_set_new(item, "size", json_integer(seg_cfg->transfer.nbytes));
+    json_object_set_new(item, "checksum", json_string((char *)&md_hex[0]));
+    json_object_set_new(info, filename, item);
+    OPENSSL_cleanse(&seg_cfg->checksum, sizeof(seg_cfg->checksum));
+    return 0;
+} // end of atfp_segment_final
 
 static int  atfp__format_file_fullpath(char *out, size_t out_sz, const char *basepath, const char *filename)
 {
