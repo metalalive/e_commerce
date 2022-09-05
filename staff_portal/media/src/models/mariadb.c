@@ -868,3 +868,17 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
     } while(continue_checking); // end of continue_checking loop
 } // end of app_mariadb_async_state_transition_handler
 
+
+void  app_db_mariadb__cfg_ops(db_conn_cbs_t *cfg) {
+    if(!cfg) { return; }
+    *cfg = (db_conn_cbs_t) {
+        .init_fn = app_db_mariadb_conn_init,
+        .deinit_fn = app_db_mariadb_conn_deinit,
+        .can_change_state = app_mariadb_acquire_state_change,
+        .state_transition = app_mariadb_async_state_transition_handler,
+        .notify_query = app_mariadb_conn_notified_query_callback,
+        .is_conn_closed = app_mariadb_conn_is_closed,
+        .get_sock_fd = app_db_mariadb_get_sock_fd,
+        .get_timeout_ms = app_db_mariadb_get_timeout_ms
+    };
+}

@@ -480,6 +480,16 @@ done:
     return res;
 } // end of app_rpc_consume_message
 
+void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body)
+{
+    size_t  nrequired = json_dumpb((const json_t *)res_body, NULL, 0, 0);
+    char   *body_raw = calloc(nrequired, sizeof(char));
+    size_t  nwrite = json_dumpb((const json_t *)res_body, body_raw, nrequired, JSON_COMPACT);
+    assert(nwrite <= nrequired);
+    receipt->return_fn(receipt, body_raw, nwrite);
+    free(body_raw);
+} // end of app_rpc_task_send_reply
+
 
 ARPC_STATUS_CODE app_rpc_close_connection(void *ctx)
 { // TODO, find better approach, without re-init connection object

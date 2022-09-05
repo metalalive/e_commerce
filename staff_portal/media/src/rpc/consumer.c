@@ -7,6 +7,8 @@
 #include "rpc/cfg_parser.h"
 #include "rpc/core.h"
 #include "rpc/consumer.h"
+#include "models/cfg_parser.h"
+#include "models/pool.h"
 #include "storage/cfg_parser.h"
 #include "transcoder/cfg_parser.h"
 
@@ -65,6 +67,8 @@ static int parse_cfg_params(const char *cfg_file_path, app_cfg_t *app_cfg)
     if (err) {  goto error; }
     err = parse_cfg_rpc_callee(json_object_get((const json_t *)root, "rpc"), app_cfg);
     if (err) {  goto error; }
+    err = parse_cfg_databases(json_object_get((const json_t *)root, "databases"), app_cfg);
+    if (err) {  goto error; }
     err = parse_cfg_storages(json_object_get((const json_t *)root, "storages"), app_cfg);
     if (err) {  goto error; }
     err = parse_cfg_transcoder(json_object_get((const json_t *)root, "transcoder"), app_cfg);
@@ -84,6 +88,7 @@ static void on_sigterm(int sig_num) {
     app_cfg_t *acfg = app_get_global_cfg();
     acfg->shutdown_requested = 1;
     appcfg_notify_all_workers(acfg);
+    app_db_pool_map_signal_closing();
 }
 
 #ifdef LIBC_HAS_BACKTRACE

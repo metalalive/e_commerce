@@ -209,20 +209,24 @@ SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/video/mp4/init.c )
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
-    src/views/async/transcode_video_file.c
+    src/views/async/start_transcode.c
+    src/views/async/finalize_transcode.c
     src/views/async/complete_multipart_upload.c )
 
 SET(APP_DBMODEL_SOURCE_FILES
+    src/models/cfg_parser.c
     src/models/pool.c
     src/models/connection.c
     src/models/mariadb.c
     src/models/query.c )
 
+SET(APP_STORAGE_SOURCE_FILES
+    src/storage/cfg_parser.c
+    src/storage/localfs.c )
+
 SET(APP_COMMON_SOURCE_FILES
     src/rpc/core.c
     src/rpc/cfg_parser.c
-    src/storage/cfg_parser.c
-    src/storage/localfs.c
     src/transcoder/cfg_parser.c
     src/app_cfg.c
     src/utils.c
@@ -234,11 +238,14 @@ SET(APP_SERVER_SOURCE_FILES
     src/app_server.c
     src/third_party/rhonabwy.c
     ${APP_DBMODEL_SOURCE_FILES}
+    ${APP_STORAGE_SOURCE_FILES}
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
 SET(RPC_CONSUMER_SOURCE_FILES
     src/rpc/consumer.c
+    ${APP_DBMODEL_SOURCE_FILES}
+    ${APP_STORAGE_SOURCE_FILES}
     ${APP_TRANSCODER_SOURCE_FILES}
     ${APP_RPCCONSUMER_HANDLER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
@@ -255,6 +262,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/timer_poll.c
     test/unit/middleware.c
     test/unit/multipart_parser.c
+    test/unit/models/cfg_parser.c
     test/unit/models/pool.c
     test/unit/models/connection.c
     test/unit/models/query.c
@@ -282,6 +290,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/mock/ffmpeg/libavfilter.c
     test/unit/mock/ffmpeg/libavutil.c
     ${APP_DBMODEL_SOURCE_FILES}
+    ${APP_STORAGE_SOURCE_FILES}
     ${APP_TRANSCODER_SOURCE_FILES}
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
@@ -320,6 +329,7 @@ SET(APP_SERVER_DEV_LIBRARIES
 
 SET(RPC_CONSUMER_DEV_LIBRARIES
     ${OPENSSL_LIBRARIES}
+    ${MARIADB_LIBRARIES}
     ${RABBITMQ_LIBRARIES}
     ${CMAGIC_LIBRARIES}
     ${AVFORMAT_LIBRARIES}

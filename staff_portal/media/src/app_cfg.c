@@ -1,5 +1,6 @@
 #include <h2o.h>
 #include "app_cfg.h"
+#include "models/pool.h"
 #include "transcoder/cfg_parser.h"
 
 #ifdef TCP_FASTOPEN
@@ -50,6 +51,7 @@ void app_global_cfg_set_exepath(const char *exe_path)
 
 void deinit_app_cfg(app_cfg_t *app_cfg)
 {
+    app_db_pool_map_deinit();
     app_transcoder_cfg_deinit(&app_cfg->transcoder);
     if(app_cfg->pid_file) {
         fclose(app_cfg->pid_file);

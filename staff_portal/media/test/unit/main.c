@@ -2,7 +2,7 @@
 #include "app_cfg.h"
 
 TestSuite *app_appcfg_generic_tests(void);
-TestSuite *app_cfg_parser_tests(void);
+TestSuite *appserver_cfg_parser_tests(void);
 TestSuite *app_transcoder_cfg_parser_tests(void);
 TestSuite *app_transcoder_file_processor_tests(void);
 TestSuite *app_transcoder_mp4_init_tests(void);
@@ -23,6 +23,7 @@ TestSuite *app_multipart_parsing_tests(void);
 TestSuite *app_auth_tests(void);
 TestSuite *app_utils_tests(void);
 TestSuite *app_timer_poll_tests(void);
+TestSuite *app_model_cfg_parser_tests(void);
 TestSuite *app_model_pool_tests(void);
 TestSuite *app_model_connection_tests(void);
 TestSuite *app_model_mariadb_tests(void);
@@ -34,7 +35,7 @@ int main(int argc, char **argv) {
     TestSuite *suite = create_named_test_suite("media_app_unit_test");
     TestReporter *reporter = create_text_reporter();
     app_global_cfg_set_exepath("./media/build/unit_test.out");
-    add_suite(suite, app_cfg_parser_tests());
+    add_suite(suite, appserver_cfg_parser_tests());
     add_suite(suite, app_rpc_cfg_parser_tests());
     add_suite(suite, app_rpc_core_tests());
     add_suite(suite, app_storage_cfg_parser_tests());
@@ -47,6 +48,7 @@ int main(int argc, char **argv) {
     add_suite(suite, app_utils_tests());
     add_suite(suite, app_timer_poll_tests());
     add_suite(suite, app_model_pool_tests());
+    add_suite(suite, app_model_cfg_parser_tests());
     add_suite(suite, app_model_connection_tests());
     add_suite(suite, app_model_mariadb_tests());
     add_suite(suite, app_model_query_tests());

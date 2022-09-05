@@ -82,7 +82,8 @@
             "credential": {
                 "hierarchy": ["backend_apps","databases","media_service"],
                 "filepath":"common/data/secrets.json"
-            }
+            },
+            "init_cfg_ops": "app_db_mariadb__cfg_ops"
         }
     ],
     "storages": [
@@ -113,7 +114,7 @@
                     "durable": true,
                     "reply": {
                         "queue": {
-                            "pattern":"rpc.reply.prof_id.%u",
+                            "pattern":"rpc.reply.media.prof_id.%u",
                             "render_fn":"api__render_rpc_reply_qname"
                         },
                         "correlation_id": {
@@ -132,14 +133,14 @@
                     "durable": true,
                     "reply": {
                         "queue": {
-                            "pattern":"rpc.reply.prof_id.%u",
+                            "pattern":"rpc.reply.media.prof_id.%u",
                             "render_fn":"api__render_rpc_reply_qname"
                         },
                         "correlation_id": {
                             "pattern":"rpc.media.mp_done.corr_id.%s",
                             "render_fn":"api__start_transcoding__render_rpc_corr_id"
                         },
-                        "task_handler": "api_transcode_video_file__rpc_task_handler",
+                        "task_handler": "api_rpc_task_handler__start_transcode",
                         "durable": true
                     }
                 }

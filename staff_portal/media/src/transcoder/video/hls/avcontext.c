@@ -5,7 +5,7 @@
 
 #define  HLS_PLAYLIST_TYPE__VOD   2
 #define  HLS_SEGMENT_TYPE__FMP4   1
-#define  HLS_TIME__IN_SECONDS     7
+#define  HLS_TIME__IN_SECONDS     30 // TODO, adjust time period of each segment with respect to total duration
 #define  HLS_DELETE_THRESHOLD__IN_SECONDS     3
 
 void  atfp_hls__av_deinit(atfp_hls_t *hlsproc)

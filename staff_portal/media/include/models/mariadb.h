@@ -50,6 +50,8 @@ int app_db_mariadb_get_sock_fd(db_conn_t *conn); // get low-level socket file de
 
 uint64_t  app_db_mariadb_get_timeout_ms(db_conn_t *conn);
 
+void  app_db_mariadb__cfg_ops(db_conn_cbs_t *cfg);
+
 #ifdef __cplusplus
 } // end of extern C clause
 #endif
