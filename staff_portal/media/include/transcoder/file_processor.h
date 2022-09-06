@@ -36,7 +36,6 @@ typedef struct {
     struct {
         const char *basepath;
         asa_op_base_cfg_t *handle;
-        asa_cfg_t         *config;
     } storage;
 } atfp_data_t;
 
@@ -142,11 +141,8 @@ atfp_t * app_transcoder_file_processor(const char *label);
 uint8_t  atfp_common__label_match(const char *label, size_t num, const char **exp_labels);
 
 ASA_RES_CODE  atfp_open_srcfile_chunk(
-        asa_op_base_cfg_t *cfg,
-        asa_cfg_t  *storage,
-        const char *basepath,
-        int         chunk_seq,
-        asa_open_cb_t  cb );
+        asa_op_base_cfg_t *cfg,   const char *basepath,
+        int         chunk_seq,    asa_open_cb_t  cb );
 
 ASA_RES_CODE  atfp_switch_to_srcfile_chunk(atfp_t *processor, int chunk_seq, asa_open_cb_t cb);
 

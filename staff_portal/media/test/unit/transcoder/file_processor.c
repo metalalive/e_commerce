@@ -6,7 +6,6 @@
 #include <cgreen/mocks.h>
 #include <uv.h>
 
-#include "storage/localfs.h"
 #include "transcoder/file_processor.h"
 
 #define  LOCAL_TMPBUF_BASEPATH  "tmp/buffer/media/test"
@@ -134,8 +133,9 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
 #define  NUM_CB_ARGS_ASAOBJ  (UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG + 1)
     void *asaobj_usr_args[NUM_CB_ARGS_ASAOBJ] = {0};
     uv_loop_t  *loop = uv_default_loop();
-    asa_op_localfs_cfg_t  asaobj = {.loop=loop, .super={.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asaobj_usr_args}}};
-    asa_cfg_t   storage = {.ops={.fn_open=app_storage_localfs_open}};
+    asa_cfg_t   mock_storage = {.ops={.fn_open=app_storage_localfs_open}};
+    asa_op_localfs_cfg_t  asaobj = {.loop=loop, .super={.storage=&mock_storage,
+        .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asaobj_usr_args}}};
     ASA_RES_CODE result ;
     FILECHUNK_CONTENT(expect_f_content);
     utest_init_transcoder_srcfile_chunk();
@@ -143,8 +143,8 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
     for(int chunk_seq = 0; chunk_seq < NUM_FILECHUNKS; chunk_seq++) {
         asaobj.super.cb_args.entries[UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG] = (void *) expect_f_content[chunk_seq];
         // in thhis application, sequential numbers in a set of ffile chunks start from one.
-        result = atfp_open_srcfile_chunk( &asaobj.super, &storage, FULLPATH2,
-                chunk_seq + 1, transcoder_utest__openfile_callback );
+        result = atfp_open_srcfile_chunk( &asaobj.super, FULLPATH2, chunk_seq + 1,
+                transcoder_utest__openfile_callback );
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         if(result == ASTORAGE_RESULT_ACCEPT) {
             uv_run(loop, UV_RUN_ONCE);
@@ -161,11 +161,12 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
 
 Ensure(transcoder_test__open_srcfile_chunk_error) {
     uv_loop_t  *loop = uv_default_loop();
-    asa_op_localfs_cfg_t  asa_cfg = {.loop=loop, .super={.cb_args={.size=0, .entries=NULL}}};
-    asa_cfg_t   storage = {.ops={.fn_open=app_storage_localfs_open}};
+    asa_cfg_t   mock_storage = {.ops={.fn_open=app_storage_localfs_open}};
+    asa_op_localfs_cfg_t  asa_cfg = {.loop=loop, .super={.storage=&mock_storage, 
+        .cb_args={.size=0, .entries=NULL}}};
     {
         int chunk_seq = NUM_FILECHUNKS + 1;
-        ASA_RES_CODE result = atfp_open_srcfile_chunk( &asa_cfg.super, &storage, FULLPATH2,
+        ASA_RES_CODE result = atfp_open_srcfile_chunk( &asa_cfg.super, FULLPATH2,
                 chunk_seq + 1, transcoder_utest__openfile_error_callback );
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         if(result == ASTORAGE_RESULT_ACCEPT) 
@@ -181,19 +182,20 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
     FILECHUNK_CONTENT(expect_f_content);
     void *asaobj_usr_args[NUM_CB_ARGS_ASAOBJ] = {0};
     uv_loop_t  *loop = uv_default_loop();
-    asa_op_localfs_cfg_t  asaobj = {.loop=loop, .super={.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asaobj_usr_args}}};
-    asa_cfg_t   storage = {.ops={.fn_open=app_storage_localfs_open, .fn_close=app_storage_localfs_close}};
+    asa_cfg_t   mock_storage = {.ops={.fn_open=app_storage_localfs_open, .fn_close=app_storage_localfs_close}};
+    asa_op_localfs_cfg_t  asaobj = {.loop=loop, .super={.storage=&mock_storage,
+        .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asaobj_usr_args}}};
     const char *atfp_src_basepath = FULLPATH2;
     json_t  *spec  = transcoder_utest__gen_atfp_spec(expect_f_content, NUM_FILECHUNKS);
     atfp_t mock_fp = {.data={.spec=spec,  .storage={.basepath=atfp_src_basepath,
-        .handle=&asaobj.super, .config=&storage}}};
+        .handle=&asaobj.super }}};
     asaobj.super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp;
     utest_init_transcoder_srcfile_chunk();
     int idx = 0;
     { // open the first chunk
         int chunk_seq = 0;
         asaobj.super.cb_args.entries[UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG] = (void *) expect_f_content[chunk_seq];
-        ASA_RES_CODE result = atfp_open_srcfile_chunk( &asaobj.super, &storage, atfp_src_basepath,
+        ASA_RES_CODE result = atfp_open_srcfile_chunk( &asaobj.super, atfp_src_basepath,
                 chunk_seq + 1, transcoder_utest__openfile_callback );
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         uv_run(loop, UV_RUN_ONCE);
@@ -393,11 +395,12 @@ Ensure(transcoder_test__asamap_destination_ok) {
     char seg_fullpath_asalocal[NBYTES_SEGMENT_FULLPATH__ASA_LOCAL] = {0}; \
     char seg_fullpath_asadst[NBYTES_SEGMENT_FULLPATH__ASA_DST] = {0}; \
     uv_loop_t *loop = uv_default_loop(); \
+    asa_cfg_t  mock_storage = {.ops={.fn_open=app_storage_localfs_open}}; \
     asa_op_base_cfg_t     mock_asa_remote = {.op={.open={.cb=utest_asa_remote_openfile_cb}, \
         .write={.src=&mock_asa_wr_buf[0], .src_max_nbytes=MOCK_ASA_WR_BUF_SZ}, \
         .mkdir={.path={.origin=UTEST_ASA_REMOTE_BASEPATH}}  }}; \
     asa_op_localfs_cfg_t  mock_asa_local  = {.super={.op={.open={.cb=utest_asa_local_openfile_cb}, \
-        .mkdir={.path={.origin=UTEST_ASA_LOCAL_BASEPATH}}}}, .loop=loop}; \
+        .mkdir={.path={.origin=UTEST_ASA_LOCAL_BASEPATH}}}, .storage=&mock_storage }, .loop=loop}; \
     atfp_segment_t  mock_seg_cfg = { \
         .rdy_list={.capacity=NUM_READY_SEGMENTS, .size=NUM_READY_SEGMENTS, .entries=&mock_rdy_seg_num[0]}, \
         .filename={.prefix={.data=UTEST_DATA_SEGMENT_PREFIX, .sz=strlen(UTEST_DATA_SEGMENT_PREFIX)}, \

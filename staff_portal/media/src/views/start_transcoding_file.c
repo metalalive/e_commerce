@@ -10,6 +10,7 @@
 #include "models/pool.h"
 #include "models/query.h"
 #include "rpc/core.h"
+#include "storage/cfg_parser.h"
 
 static void api__dealloc_req_hashmap (app_middleware_node_t *node) {
     char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
@@ -96,6 +97,8 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
     json_t *upld_req_item = json_object_get(req_body_json, "last_upld_req");
     json_object_set(res_body_json, "resource_id", res_id_item);
     json_object_set_new(res_body_json, "outputs", res_outputs);
+    // determine source and destination storage for RPC consumer, TODO, scalability
+    asa_cfg_t *storage =  app_storage_cfg_lookup("localfs");
     // TODO, improve transcoding function by following design straategies:
     // (1) reduce the redundant decode stages in RPC consumers. For the same source
     //     file transcoding to different variants, all decoders in the RPC consumers
@@ -116,6 +119,8 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
             json_object_set(msgq_body_item, "parts_size", parts_size);
             json_object_set(msgq_body_item, "resource_id", res_id_item);
             json_object_set_new(msgq_body_item, "version", json_string(version));
+            json_object_set_new(msgq_body_item, "metadata_db", json_string("db_server_1"));
+            json_object_set_new(msgq_body_item, "storage_alias", json_string(storage->alias));
             json_object_set(msgq_body_item, "usr_id", usr_id_item);
             json_object_set(msgq_body_item, "last_upld_req", upld_req_item);
             json_t *elm_st_cp = json_object();
@@ -132,15 +137,16 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
             } // end of loop
             json_object_set_new(msgq_body_item, "elementary_streams", elm_st_cp);
         }
-#define MAX_BYTES_MSGQ_BODY  512
-        char msg_body_raw[MAX_BYTES_MSGQ_BODY + 1] = {0};
-        size_t nwrite = json_dumpb(msgq_body_item, &msg_body_raw[0], MAX_BYTES_MSGQ_BODY, JSON_COMPACT);
-        if(nwrite < MAX_BYTES_MSGQ_BODY) {
+        size_t nb_required = json_dumpb(msgq_body_item, NULL, 0, 0);
+        char *msg_body_raw = calloc(nb_required, sizeof(char));
+        size_t nwrite = json_dumpb(msgq_body_item, msg_body_raw, nb_required, JSON_COMPACT);
+        assert(nwrite <= nb_required);
+        {
 #define MAX_BYTES_JOB_ID    70
             char job_id_raw[MAX_BYTES_JOB_ID] = {0};
             arpc_exe_arg_t  rpc_arg = {
                 .conn = req->conn->ctx->storage.entries[1].data,  .job_id = {.bytes=&job_id_raw[0],
-                    .len=MAX_BYTES_JOB_ID }, .msg_body = {.len=MAX_BYTES_MSGQ_BODY, .bytes=&msg_body_raw[0]},
+                    .len=MAX_BYTES_JOB_ID }, .msg_body = {.len=nwrite, .bytes=msg_body_raw},
                 .alias = "app_mqbroker_1",  .routing_key = "rpc.media.transcode_video_file",
                 .usr_data = (void *)msgq_body_item,
             }; // will start a new job and transcode asynchronously
@@ -150,10 +156,8 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
                 _render_response_output(res_outputs, version, NULL, 503);
             }
 #undef MAX_BYTES_JOB_ID
-#undef MAX_BYTES_MSGQ_BODY
-        } else { // buffer size not enough, internal implementation error
-            _render_response_output(res_outputs, version, NULL, 500);
         }
+        free(msg_body_raw);
         json_decref(msgq_body_item);
     } // end of loop - output iteration
     {
@@ -514,7 +518,7 @@ static void _validate_request__outputs_elm_st_map(json_t *output, json_t *elm_st
     if(video_stream_key) { free(video_stream_key); }
 } // end of _validate_request__outputs_elm_st_map
 
-static __attribute__((optimize("O0"))) void _validate_request__outputs(json_t *outputs, json_t *elm_streams, json_t *res_body)
+static  void _validate_request__outputs(json_t *outputs, json_t *elm_streams, json_t *res_body)
 {
     if(!outputs || !json_is_object(outputs) || json_object_size(outputs) == 0) {
         json_object_set_new(res_body, "outputs", json_string("missing field"));

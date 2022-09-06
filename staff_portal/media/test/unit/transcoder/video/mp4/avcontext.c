@@ -103,15 +103,15 @@ static ASA_RES_CODE mock_asa_src_subsequent_read_fn(asa_op_base_cfg_t *cfg)
     AVCodecContext  *mock_dec_ctxs[NUM_STREAMS_FMTCTX] = {0}; \
     AVIOContext      mock_avio_ctx  = {0}; \
     AVFormatContext  mock_avfmt_ctx = {.nb_streams=NUM_STREAMS_FMTCTX, .streams=mock_av_streams_ptr}; \
-    asa_op_base_cfg_t  asa_cfg_src = {0}; \
+    asa_cfg_t   storage_src = {.ops={.fn_read=mock_asa_src_initial_read_fn}}; \
+    asa_op_base_cfg_t  asa_cfg_src = {.storage=&storage_src}; \
     asa_op_localfs_cfg_t  asa_local = {0}; \
     atfp_asa_map_t  *mock_map = atfp_asa_map_init(2); \
-    asa_cfg_t   storage_src = {.ops={.fn_read=mock_asa_src_initial_read_fn}}; \
     atfp_av_ctx_t  *mock_av_ctx = calloc(1, sizeof(atfp_av_ctx_t)); \
     atfp_mp4_t  mp4proc = { \
         .internal={.mdat={.pos=MDAT_ATOM_OFFSET, .fchunk_seq=0, .size=MDAT_ATOM_BODY_SZ}} , \
-        .super={.data={.storage={.handle=&asa_cfg_src, .config=&storage_src}, \
-            .spec=json_object(), .error=json_object() }}, .av=mock_av_ctx \
+        .super={.data={.storage={.handle=&asa_cfg_src}, .spec=json_object(), .error=json_object() }} \
+        , .av=mock_av_ctx \
     }; \
     void *asacfg_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     { \
@@ -356,16 +356,16 @@ Ensure(atfp_mp4_test__avctx_validate__decoder_unsupported) {
     AVStream  *mock_av_streams_ptr[NUM_STREAMS_FMTCTX] = {&mock_av_streams[0], &mock_av_streams[1]}; \
     AVFormatContext  mock_avfmt_ctx = {.nb_streams=NUM_STREAMS_FMTCTX, .streams=mock_av_streams_ptr}; \
     atfp_stream_stats_t  mock_av_stream_stats[NUM_STREAMS_FMTCTX] = {0}; \
-    asa_op_base_cfg_t  asa_cfg_src = {0}; \
+    asa_cfg_t   storage_src = {.ops={.fn_read=mock_asa_src_subsequent_read_fn}}; \
+    asa_op_base_cfg_t  asa_cfg_src = {.storage=&storage_src}; \
     asa_op_localfs_cfg_t  asa_local = {0}; \
     atfp_asa_map_t  *mock_map = atfp_asa_map_init(2); \
-    asa_cfg_t   storage_src = {.ops={.fn_read=mock_asa_src_subsequent_read_fn}}; \
     atfp_av_ctx_t  mock_av_ctx = {.fmt_ctx=&mock_avfmt_ctx, .stats=&mock_av_stream_stats[0]}; \
     atfp_mp4_t  mp4proc = { \
         .internal={.mdat={.pos=MDAT_ATOM_OFFSET, .fchunk_seq=0, .size=MDAT_ATOM_BODY_SZ, \
             .pos_wholefile=MDAT_ATOM_OFFSET, .nb_preloaded=0 }} , \
-        .super={.data={.storage={.handle=&asa_cfg_src, .config=&storage_src}, \
-            .spec=json_object(), .error=json_object() }}, .av=&mock_av_ctx \
+        .super={.data={.storage={.handle=&asa_cfg_src}, .spec=json_object(), .error=json_object() }}, \
+        .av=&mock_av_ctx \
     }; \
     void *asacfg_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     { \

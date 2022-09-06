@@ -86,7 +86,8 @@ static void atfp__video_mp4__init(atfp_t *processor)
         strncat(ptr, "/", 1);
         strncat(ptr, LOCAL_BUFFER_FILENAME, tmpbuf_filename_sz);
     }
-    if(app_storage_localfs_open(&asa_local->super) != ASTORAGE_RESULT_ACCEPT) {
+    ASA_RES_CODE  asa_result = asa_local->super.storage->ops.fn_open(&asa_local->super);
+    if(asa_result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(processor->data.error, "storage",
                 json_string("failed to issue open operation for local temp buffer"));
         processor -> data.callback(processor);
@@ -118,7 +119,6 @@ static  void  atfp_mp4__asaremote_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RE
 static uint8_t atfp__video_mp4__deinit(atfp_t *processor)
 {
     atfp_mp4_t *mp4_proc = (atfp_mp4_t *)processor;
-    asa_cfg_t  *storage  = processor->data.storage.config;
     asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
     uv_handle_t *async_handle = (uv_handle_t *)&mp4_proc->async;
     mp4_proc->internal.op.av_deinit(mp4_proc);
@@ -129,7 +129,7 @@ static uint8_t atfp__video_mp4__deinit(atfp_t *processor)
         atfp_mp4__close_async_handle_cb(async_handle);
     } { // close source chunkfile if still open
         asa_src->op.close.cb = atfp_mp4__asaremote_closefile_cb;
-        still_ongoing = storage->ops.fn_close(asa_src) == ASTORAGE_RESULT_ACCEPT;
+        still_ongoing = asa_src->storage->ops.fn_close(asa_src) == ASTORAGE_RESULT_ACCEPT;
         if(!still_ongoing)
             atfp_mp4__asaremote_closefile_cb(asa_src, ASTORAGE_RESULT_COMPLETE);
     }

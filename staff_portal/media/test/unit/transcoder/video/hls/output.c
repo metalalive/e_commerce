@@ -47,20 +47,22 @@ static void utest_atfp_hls__flush_output_cb (atfp_t *processor)
     char seg_fullpath_asadst[NBYTES_SEGMENT_FULLPATH__ASA_DST] = {0}; \
     uv_loop_t *loop = uv_default_loop(); \
     int idx = 0; \
+    asa_cfg_t  mock_storage_common = {.ops={.fn_open=app_storage_localfs_open, \
+        .fn_close=app_storage_localfs_close, .fn_write=app_storage_localfs_write, \
+        .fn_read=app_storage_localfs_read, .fn_unlink=app_storage_localfs_unlink }}; \
     asa_op_localfs_cfg_t   mock_asa_remote = {.loop=loop, .super={.op={.open={.cb=NULL}, \
         .write={.src=&mock_asa_wr_buf[0], .src_max_nbytes=MOCK_ASA_WR_BUF_SZ}, \
         .mkdir={.path={.origin=UTEST_ASA_REMOTE_BASEPATH}}  }, .cb_args={ \
-            .entries=(void **)asaremote_usr_args, .size=NUM_CB_ARGS_ASAOBJ}} \
+            .entries=(void **)asaremote_usr_args, .size=NUM_CB_ARGS_ASAOBJ}, \
+        .storage=&mock_storage_common } \
     }; \
-    asa_cfg_t  mock_asa_cfg_remote = {.ops={.fn_open=app_storage_localfs_open, \
-        .fn_close=app_storage_localfs_close, .fn_write=app_storage_localfs_write}}; \
     atfp_ops_t  mock_atfp_ops = {.has_done_processing=utest__atfp_has_done_processing}; \
     atfp_hls_t  mock_hlsproc = { \
         .asa_local={ .super={ .cb_args={.entries=(void **)asalocal_usr_args, .size=NUM_CB_ARGS_ASAOBJ}, \
-            .op={.mkdir={.path={.origin=UTEST_ASA_LOCAL_BASEPATH}}} }, .loop=loop }, \
+            .op={.mkdir={.path={.origin=UTEST_ASA_LOCAL_BASEPATH}}}, .storage=&mock_storage_common }, \
+            .loop=loop }, \
         .super={ .data={.error=json_object(), .callback=utest_atfp_hls__flush_output_cb, \
-            .storage={.basepath=NULL, .handle=&mock_asa_remote.super, .config=&mock_asa_cfg_remote}}, \
-            .ops=&mock_atfp_ops }, \
+            .storage={.basepath=NULL, .handle=&mock_asa_remote.super,}}, .ops=&mock_atfp_ops }, \
         .internal = {.segment = { \
             .rdy_list={.capacity=0, .size=0, .entries=NULL}, \
             .filename={.prefix={.data=UTEST_DATA_SEGMENT_PREFIX, .sz=strlen(UTEST_DATA_SEGMENT_PREFIX)}, \

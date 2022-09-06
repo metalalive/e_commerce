@@ -59,11 +59,8 @@ uint8_t  atfp_common__label_match(const char *label, size_t num, const char **ex
 
 
 ASA_RES_CODE  atfp_open_srcfile_chunk(
-        asa_op_base_cfg_t *cfg,
-        asa_cfg_t  *storage,
-        const char *basepath,
-        int        chunk_seq,
-        asa_open_cb_t  cb )
+        asa_op_base_cfg_t *cfg,   const char *basepath,
+        int        chunk_seq,     asa_open_cb_t  cb )
 {
 #define  MAX_INT32_DIGITS  10
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
@@ -72,15 +69,14 @@ ASA_RES_CODE  atfp_open_srcfile_chunk(
         char filepath[filepath_sz];
         size_t nwrite = snprintf(&filepath[0], filepath_sz, "%s/%d", basepath, chunk_seq);
         filepath[nwrite++] = 0x0;
-        if(cfg->op.open.dst_path) {
+        if(cfg->op.open.dst_path) 
             free(cfg->op.open.dst_path);
-        }
         cfg->op.open.dst_path = strndup(&filepath[0], nwrite);
     }
     cfg->op.open.cb = cb;
     cfg->op.open.mode  = S_IRUSR;
     cfg->op.open.flags = O_RDONLY;
-    result = storage->ops.fn_open(cfg);
+    result = cfg->storage->ops.fn_open(cfg);
     return result;
 #undef  MAX_INT32_DIGITS
 } // end of  atfp_open_srcfile_chunk
@@ -91,9 +87,8 @@ static void  atfp__close_curr_srcfchunk_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CO
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     uint8_t err = result != ASTORAGE_RESULT_COMPLETE;
     if(!err) {
-        asa_cfg_t  *storage = processor->data.storage.config;
         int next_chunk_seq = (int) processor->filechunk_seq.next + 1;
-        result = atfp_open_srcfile_chunk(asaobj, storage, processor->data.storage.basepath,
+        result = atfp_open_srcfile_chunk(asaobj, processor->data.storage.basepath,
                      next_chunk_seq, asaobj->op.open.cb);
         err = result != ASTORAGE_RESULT_ACCEPT;
     }
@@ -120,12 +115,11 @@ ASA_RES_CODE  atfp_switch_to_srcfile_chunk(atfp_t *processor, int chunk_seq, asa
     uint32_t  next_filechunk_id   = (chunk_seq < 0) ? (processor->filechunk_seq.curr + 1): chunk_seq;
     if(final_filechunk_id >= next_filechunk_id) {
         asa_op_base_cfg_t *cfg = processor->data.storage.handle;
-        asa_cfg_t     *storage = processor->data.storage.config;
         cfg->op.close.cb = atfp__close_curr_srcfchunk_cb;
         cfg->op.open.cb  = atfp__open_next_srcfchunk_cb;
         processor->filechunk_seq.next = next_filechunk_id;
         processor->filechunk_seq.usr_cb = cb;
-        result = storage->ops.fn_close(cfg);
+        result = cfg->storage->ops.fn_close(cfg);
     } else {
         result = ASTORAGE_RESULT_DATA_ERROR;
     }
@@ -413,7 +407,7 @@ ASA_RES_CODE  atfp__segment_start_transfer(
     if(!ret1 && !ret2) {
         _atfp__transfer_basic_setup( asa_dst, asa_local, seg_cfg );
         seg_cfg->transfer.curr_idx  = chosen_idx;
-        result = app_storage_localfs_open(&asa_local->super);
+        result = asa_local->super.storage->ops.fn_open(&asa_local->super);
     } else if (ret1 == 1) {
         result = ASTORAGE_RESULT_COMPLETE; // do nothing
     }
@@ -440,7 +434,7 @@ ASA_RES_CODE  atfp__file_start_transfer(
             seg_cfg->fullpath._asa_local.sz,  asa_local->super.op.mkdir.path.origin, filename);
     if(!ret1 && !ret2) {
         _atfp__transfer_basic_setup( asa_dst, asa_local, seg_cfg );
-        result = app_storage_localfs_open(&asa_local->super);
+        result = asa_local->super.storage->ops.fn_open(&asa_local->super);
     }
 done:
     return result;

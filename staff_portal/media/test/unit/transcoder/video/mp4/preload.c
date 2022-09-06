@@ -57,22 +57,23 @@ static __attribute__((optimize("O0"))) void  utest_init_mp4_preload(
     json_object_set_new(processor->data.spec, "parts_size", json_array());
     uv_loop_t  *loop = uv_default_loop();
     atfp_asa_map_t  *map = atfp_asa_map_init(1);
+    asa_cfg_t  *src_storage = calloc(1, sizeof(asa_cfg_t));
     asa_op_localfs_cfg_t  *asa_local_cfg = calloc(1, sizeof(asa_op_localfs_cfg_t));
     asa_op_localfs_cfg_t  *asa_src_cfg = calloc(1, sizeof(asa_op_localfs_cfg_t));
-    asa_cfg_t  *src_storage = calloc(1, sizeof(asa_cfg_t));
     processor->data.storage.handle = &asa_src_cfg->super;
-    processor->data.storage.config = src_storage;
     processor->data.storage.basepath = strdup(PRELOAD_SRC_BASEPATH);
     src_storage->ops = (asa_cfg_ops_t) {
         .fn_open=app_storage_localfs_open, .fn_close=app_storage_localfs_close,
-        .fn_read=app_storage_localfs_read 
+        .fn_read=app_storage_localfs_read, .fn_write=app_storage_localfs_write
     };
     asa_src_cfg->loop = asa_local_cfg->loop = loop;
+    asa_src_cfg->super.storage = src_storage;
     asa_src_cfg->super.cb_args.size = NUM_CB_ARGS_ASAOBJ;
     asa_src_cfg->super.cb_args.entries = calloc(NUM_CB_ARGS_ASAOBJ, sizeof(void *));
     asa_src_cfg->super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = mp4proc;
     asa_src_cfg->super.op.read.dst = malloc(SRC_READ_BUF_SZ * sizeof(char));
     asa_src_cfg->super.op.read.dst_max_nbytes = SRC_READ_BUF_SZ;
+    asa_local_cfg->super.storage = src_storage;
     asa_local_cfg->super.cb_args.size = ASAMAP_INDEX__IN_ASA_USRARG + 1;
     asa_local_cfg->super.cb_args.entries = calloc(ASAMAP_INDEX__IN_ASA_USRARG + 1, sizeof(void *));
     atfp_asa_map_set_source(map, &asa_src_cfg->super);
@@ -83,8 +84,8 @@ static __attribute__((optimize("O0"))) void  utest_init_mp4_preload(
         mkdir(PRELOAD_SRC_BASEPATH, S_IRWXU);
         prepare_fchunk_fn(mp4proc);
     } { // open first chunk of the source
-        ASA_RES_CODE result = atfp_open_srcfile_chunk( &asa_src_cfg->super, src_storage,
-             PRELOAD_SRC_BASEPATH, 1, mock_mp4_asa_src_open_cb);
+        ASA_RES_CODE result = atfp_open_srcfile_chunk( &asa_src_cfg->super, PRELOAD_SRC_BASEPATH,
+             1, mock_mp4_asa_src_open_cb);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         if(result == ASTORAGE_RESULT_ACCEPT)
             uv_run(loop, UV_RUN_ONCE);
@@ -107,7 +108,7 @@ static __attribute__((optimize("O0"))) void  utest_deinit_mp4_preload(atfp_mp4_t
     asa_op_localfs_cfg_t  *asa_src_cfg = (asa_op_localfs_cfg_t *) processor->data.storage.handle;
     atfp_asa_map_t  *map = asa_src_cfg->super.cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t  *asa_local_cfg = atfp_asa_map_get_localtmp(map);
-    asa_cfg_t  *src_storage = processor->data.storage.config;
+    asa_cfg_t  *src_storage = asa_src_cfg->super.storage;
     if(asa_src_cfg) {
         if(asa_src_cfg->super.cb_args.entries) {
             free(asa_src_cfg->super.cb_args.entries);
@@ -138,7 +139,6 @@ static __attribute__((optimize("O0"))) void  utest_deinit_mp4_preload(atfp_mp4_t
     atfp_asa_map_deinit(map);
     if(src_storage) {
         free(src_storage);
-        processor->data.storage.config = NULL;
     }
     if(processor->data.storage.basepath) {
         free((char *)processor->data.storage.basepath);

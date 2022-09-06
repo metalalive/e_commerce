@@ -1,11 +1,11 @@
 #include <openssl/sha.h>
 
 #include "utils.h"
-#include "app_cfg.h"
 #include "views.h"
 #include "multipart_parser.h"
 #include "models/pool.h"
 #include "models/query.h"
+#include "storage/cfg_parser.h"
 #include "storage/localfs.h"
 
 #define APP_FILECHUNK_WR_BUF_SZ  128
@@ -230,8 +230,6 @@ static  ASA_RES_CODE upload_part__write_filechunk_start(asa_op_base_cfg_t *cfg)
     app_middleware_node_t *node = (void *)cfg->cb_args.entries[2];
     multipart_parser *mp = (multipart_parser *)app_fetch_from_hashmap(node->data, "multipart_parser");
     app_mpp_usrarg_t *usr_arg = (app_mpp_usrarg_t *)mp->settings.usr_args.entry;
-    app_cfg_t *app_cfg = app_get_global_cfg();
-    asa_cfg_t *storage = &app_cfg->storages.entries[0];
     usr_arg->wr_idx = 0; // reset write index before parsing new portion of data
     while(usr_arg->wr_idx == 0) {
         if (usr_arg->tot_entity_sz <= usr_arg->rd_idx) {
@@ -250,10 +248,10 @@ static  ASA_RES_CODE upload_part__write_filechunk_start(asa_op_base_cfg_t *cfg)
                 cfg->op.write.src_sz = usr_arg->wr_idx;
                 usr_arg->tot_file_sz += usr_arg->wr_idx;
                 SHA1_Update(&usr_arg->checksum, cfg->op.write.src, cfg->op.write.src_sz);
-                asa_result = storage->ops.fn_write(cfg);
+                asa_result = cfg->storage->ops.fn_write(cfg);
             } else if(usr_arg->end_flag) {
                 // implicitly means wr_idx == 0, nothing to write in the final parsed chunk.
-                asa_result = storage->ops.fn_close(cfg);
+                asa_result = cfg->storage->ops.fn_close(cfg);
                 break;
             }
             // Eventually multipaart-parser will reach the 2 statements above as it
@@ -276,9 +274,7 @@ static void upload_part__write_filechunk_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_
     multipart_parser *mp = (multipart_parser *)app_fetch_from_hashmap(node->data, "multipart_parser");
     app_mpp_usrarg_t *usr_arg = (app_mpp_usrarg_t *)mp->settings.usr_args.entry;
     if(usr_arg->end_flag) { // close file and add chunk record to database
-        app_cfg_t *app_cfg = app_get_global_cfg();
-        asa_cfg_t *storage = &app_cfg->storages.entries[0];
-        app_result = storage->ops.fn_close(cfg);
+        app_result = cfg->storage->ops.fn_close(cfg);
     } else {
         app_result = upload_part__write_filechunk_start(cfg);
     }
@@ -358,9 +354,7 @@ static void upload_part__create_folder_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_CO
         cfg->op.open.cb = upload_part__open_file_evt_cb;
         cfg->op.open.mode  = S_IRUSR | S_IWUSR;
         cfg->op.open.flags = O_CREAT | O_WRONLY;
-        app_cfg_t *app_cfg = app_get_global_cfg();
-        asa_cfg_t *storage = &app_cfg->storages.entries[0];
-        app_result = storage->ops.fn_open(cfg);
+        app_result = cfg->storage->ops.fn_open(cfg);
         if(app_result != ASTORAGE_RESULT_ACCEPT) {
             err = 1;
         }
@@ -382,8 +376,7 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
     int part    = (int)app_fetch_from_hashmap(node->data, "part");
 #pragma GCC diagnostic pop
     // application can select which storage configuration to use
-    app_cfg_t *app_cfg = app_get_global_cfg();
-    asa_cfg_t *storage = &app_cfg->storages.entries[0];
+    asa_cfg_t *storage = app_storage_cfg_lookup("localfs");
     size_t dirpath_sz = strlen(storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
          UPLOAD_INT2HEX_SIZE(req_seq) + 1; // assume NULL-terminated string
     size_t filepath_sz = (dirpath_sz - 1) + 1 + UPLOAD_INT2HEX_SIZE(part) + 1;
@@ -392,11 +385,12 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
     size_t wr_src_buf_sz = APP_FILECHUNK_WR_BUF_SZ + 4 + mp_boundary_len;
     size_t asa_cfg_sz = sizeof(asa_op_localfs_cfg_t) + (dirpath_sz << 1) + filepath_sz +
             wr_src_buf_sz + cb_args_tot_sz;
-    asa_op_localfs_cfg_t  *asa_cfg = malloc(asa_cfg_sz);
+    asa_op_localfs_cfg_t  *asa_cfg = calloc(1, asa_cfg_sz);
     { // start of storage object setup
         char *ptr = (char *)asa_cfg + sizeof(asa_op_localfs_cfg_t);
         memset(asa_cfg, 0x0, asa_cfg_sz);
         asa_cfg->loop = req->conn->ctx->loop;
+        asa_cfg->super.storage = storage;
         asa_cfg->super.cb_args.size = 3;
         asa_cfg->super.cb_args.entries = (void **) ptr;
         asa_cfg->super.cb_args.entries[0] = (void *)req;

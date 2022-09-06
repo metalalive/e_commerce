@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <string.h>
 #include <h2o/memory.h>
+
+#include "storage/cfg_parser.h"
 #include "transcoder/video/hls.h"
 #include "transcoder/video/ffmpeg.h"
 
@@ -116,7 +118,6 @@ static  void  atfp_hls__asaremote_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RE
 static  uint8_t atfp__video_hls__deinit(atfp_t *processor)
 {
     atfp_hls_t *hlsproc = (atfp_hls_t *)processor;
-    asa_cfg_t  *storage = processor->data.storage.config;
     asa_op_base_cfg_t     *asa_dst = processor -> data.storage.handle;
     asa_op_localfs_cfg_t  *asa_local_dstdata = &hlsproc->asa_local;
     atfp_segment_t  *seg_cfg = &hlsproc->internal.segment;
@@ -155,7 +156,7 @@ static  uint8_t atfp__video_hls__deinit(atfp_t *processor)
     }
     if (asa_remote_open) {
         asa_dst->op.close.cb = atfp_hls__asaremote_closefile_cb;
-        asa_result =  storage->ops.fn_close(asa_dst);
+        asa_result =  asa_dst->storage->ops.fn_close(asa_dst);
         asa_remote_open = asa_result == ASTORAGE_RESULT_ACCEPT;
         if(asa_result != ASTORAGE_RESULT_ACCEPT)
             atfp_hls__asaremote_closefile_cb(asa_dst, ASTORAGE_RESULT_COMPLETE);
@@ -235,6 +236,7 @@ static atfp_t *atfp__video_hls__instantiate(void) {
     atfp_hls_t  *out = calloc(0x1, tot_sz);
     char *ptr = (char *)out + sizeof(atfp_hls_t);
     out->av = (atfp_av_ctx_t *) ptr;
+    out->asa_local.super.storage = app_storage_cfg_lookup("localfs") ; 
     out->internal.op.avctx_init   = atfp_hls__av_init;
     out->internal.op.avctx_deinit = atfp_hls__av_deinit;
     out->internal.op.avfilter_init = atfp_hls__avfilter_init;

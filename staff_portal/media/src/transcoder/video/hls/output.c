@@ -15,7 +15,7 @@ static  void atfp_hls__close_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CO
         atfp_segment_final(&hlsproc->internal.segment, processor->transfer.dst.info);
         asa_op_base_cfg_t *asa_local = asaobj;
         asa_local->op.unlink.path = asa_local-> op.open.dst_path ;
-        result =  app_storage_localfs_unlink(asa_local);
+        result = asa_local->storage->ops.fn_unlink(asa_local);
         err = result != ASTORAGE_RESULT_ACCEPT;
     }
     if(err) {
@@ -31,8 +31,7 @@ static  void atfp_hls__unlink_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_C
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     if(result == ASTORAGE_RESULT_COMPLETE) {
         asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
-        asa_cfg_t  *storage = processor->data.storage.config;
-        result =  storage->ops.fn_close(asa_dst);
+        result = asa_dst->storage->ops.fn_close(asa_dst);
         err = result != ASTORAGE_RESULT_ACCEPT;
     }
     if(err) {
@@ -117,8 +116,7 @@ static  void atfp_hls__open_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CO
         uint32_t flags =  1 << ATFP_TRANSFER_FLAG__ASALOCAL_OPEN;
         processor->transfer.dst.flags |= flags;
         asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
-        asa_cfg_t  *storage = processor->data.storage.config;
-        result =  storage->ops.fn_open(asa_dst);
+        result = asa_dst->storage->ops.fn_open(asa_dst);
         err = result != ASTORAGE_RESULT_ACCEPT;
     }
     if(err) {
@@ -136,7 +134,8 @@ static  void atfp_hls__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_init(&hlsproc->internal.segment);
         processor->transfer.dst.flags |= (1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN);
-        result = app_storage_localfs_read(&hlsproc->asa_local.super);
+        asa_op_base_cfg_t *_asa_local = &hlsproc->asa_local.super;
+        result = _asa_local->storage->ops.fn_read(_asa_local);
         err = result != ASTORAGE_RESULT_ACCEPT;
     }
     if(err) {
@@ -155,12 +154,12 @@ static void atfp_hls__read_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_COD
         atfp_segment_t  *seg_cfg = &hlsproc->internal.segment;
         seg_cfg->transfer.eof_reached = asaobj->op.read.dst_sz > nread;
         if(nread == 0) {
-            result = app_storage_localfs_close(asaobj);
+            asa_op_base_cfg_t *_asa_local = asaobj;
+            result = _asa_local->storage->ops.fn_close(_asa_local);
         } else {
             asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
-            asa_cfg_t  *storage = processor->data.storage.config;
             asa_dst->op.write.src_sz = nread;
-            result =  storage->ops.fn_write(asa_dst);
+            result = asa_dst->storage->ops.fn_write(asa_dst);
         }
         err = result != ASTORAGE_RESULT_ACCEPT;
     }
@@ -177,13 +176,14 @@ static void atfp_hls__write_dst_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE
     atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = &hlsproc->super;
     if(result == ASTORAGE_RESULT_COMPLETE) {
+        asa_op_base_cfg_t *_asa_local = &hlsproc->asa_local.super;
         atfp_segment_t  *seg_cfg = &hlsproc->internal.segment;
         SHA1_Update(&seg_cfg->checksum, asaobj->op.write.src, nwrite);
         seg_cfg->transfer.nbytes += nwrite;
         if(seg_cfg->transfer.eof_reached) { // switch to next segment (if exists)
-            result = app_storage_localfs_close(&hlsproc->asa_local.super);
+            result = _asa_local->storage->ops.fn_close(_asa_local);
         } else {
-            result = app_storage_localfs_read(&hlsproc->asa_local.super);
+            result = _asa_local->storage->ops.fn_read(_asa_local);
         }
         err = result != ASTORAGE_RESULT_ACCEPT;
     }

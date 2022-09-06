@@ -7,8 +7,11 @@
 #include "transcoder/video/ffmpeg.h"
 
 #define  UTEST_FILE_BASEPATH   "tmp/utest"
-#define  UTEST_ASALOCAL_BASEPATH   UTEST_FILE_BASEPATH "/asalocal"
-#define  UTEST_LOCAL_TMPBUF        UTEST_ASALOCAL_BASEPATH "/local_buffer"
+#define  UTEST_ASALOCAL_BASEPATH    UTEST_FILE_BASEPATH "/asalocal"
+#define  UTEST_LOCAL_TMPBUF         UTEST_ASALOCAL_BASEPATH "/local_buffer"
+#define  UTEST_ASAREMOTE_BASEPATH   UTEST_FILE_BASEPATH "/asaremote"
+#define  UTEST_REMOTE_FINAL_FILE    UTEST_ASAREMOTE_BASEPATH  "/fchunk_final"
+
 #define  DONE_FLAG_INDEX__IN_ASA_USRARG     (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define  NUM_CB_ARGS_ASAOBJ  (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
 
@@ -83,17 +86,19 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
     atfp_asa_map_t  mock_map = {0}; \
     uint8_t done_flag = 0; \
     void  *asa_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
+    asa_cfg_t  mock_storage_cfg = {.ops={.fn_open=app_storage_localfs_open, .fn_close=utest_asa__close_fn}}; \
     asa_op_base_cfg_t  *mock_asa_src = calloc(1, sizeof(asa_op_base_cfg_t)); \
-    *mock_asa_src = (asa_op_base_cfg_t) { \
+    *mock_asa_src = (asa_op_base_cfg_t) { .storage=&mock_storage_cfg, \
+        .op={.mkdir={.path={.origin=strdup(UTEST_ASAREMOTE_BASEPATH)}}, \
+            .open={.dst_path=strdup(UTEST_REMOTE_FINAL_FILE)}}, \
         .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_cb_args}, \
     }; \
     asa_op_localfs_cfg_t  mock_asa_local = { .loop=loop, .file={.file=-1}, \
-        .super={ \
+        .super={ .storage=&mock_storage_cfg, \
             .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_cb_args}, \
             .op={.mkdir={.path={.origin=UTEST_ASALOCAL_BASEPATH}}}, \
         } \
     }; \
-    asa_cfg_t  mock_storage_cfg = {.ops={.fn_close=utest_asa__close_fn}}; \
     json_t *mock_errinfo = json_object(); \
     atfp_mp4_t *mock_fp = (atfp_mp4_t *) atfp_ops_video_mp4.ops.instantiate(); \
     mock_fp->internal.op.av_init   = utest_mp4__av_init; \
@@ -103,7 +108,6 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
     mock_fp->super.data.callback = utest_atfp_usr_cb ; \
     mock_fp->super.data.error = mock_errinfo ; \
     mock_fp->super.data.storage.handle = mock_asa_src ; \
-    mock_fp->super.data.storage.config = &mock_storage_cfg; \
     atfp_asa_map_set_source(&mock_map, mock_asa_src); \
     atfp_asa_map_set_localtmp(&mock_map, &mock_asa_local); \
     asa_cb_args[ATFP_INDEX__IN_ASA_USRARG]   = mock_fp; \
@@ -140,6 +144,7 @@ Ensure(atfp_mp4_test__init_deinit__ok) {
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_size(mock_errinfo), is_equal_to(0));
         assert_that(mock_asa_local.file.file, is_greater_than(-1));
+        assert_that(access(UTEST_LOCAL_TMPBUF, F_OK), is_equal_to(0));
     } { // de-init
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
         expect(utest_asa__close_fn, will_return(ASTORAGE_RESULT_ACCEPT),

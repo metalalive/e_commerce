@@ -14,6 +14,7 @@ typedef enum {
     ASTORAGE_RESULT_DATA_ERROR
 } ASA_RES_CODE;
 
+struct _asa_cfg_s;
 struct _asa_op_base_cfg_s;
 
 typedef void (*asa_mkdir_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
@@ -30,6 +31,7 @@ struct _asa_op_base_cfg_s {
         size_t size;
         void **entries;
     } cb_args;
+    struct _asa_cfg_s  *storage;
     struct {
         struct {
             asa_mkdir_cb_t  cb;
@@ -91,7 +93,7 @@ typedef struct {
     ASA_RES_CODE (*fn_unlink) (asa_op_base_cfg_t *cfg);
 } asa_cfg_ops_t;
 
-typedef struct {
+typedef struct _asa_cfg_s {
     char *alias;
     char *base_path;
     asa_cfg_ops_t  ops;

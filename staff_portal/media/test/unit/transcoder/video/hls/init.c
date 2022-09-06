@@ -98,6 +98,7 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
     atfp_asa_map_t  mock_map = {0}; \
     uint8_t done_flag = 0; \
     void  *asa_dst_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
+    asa_cfg_t  mock_storage_cfg = {.ops={.fn_close=utest_hls__storage_fn_close}}; \
     asa_op_localfs_cfg_t  mock_asa_local_srcside = { .loop=loop, \
         .super={.op={.mkdir={.path={.origin=UTEST_ASALOCAL_BASEPATH}}}} \
     }; \
@@ -107,15 +108,13 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
         .op={ \
             .mkdir={.path={.origin=strdup(UTEST_ASADST_BASEPATH)}}, \
             .write={.src_max_nbytes=WR_BUF_MAX_SZ, .src=&mock_wr_buf[0]} \
-        }, \
+        }, .storage=&mock_storage_cfg, \
     }; \
-    asa_cfg_t  mock_storage_cfg = {.ops={.fn_close=utest_hls__storage_fn_close}}; \
     json_t *mock_spec = json_object(); \
     json_t *mock_err_info = json_object(); \
     atfp_hls_t *mock_fp = (atfp_hls_t *) atfp_ops_video_hls.ops.instantiate(); \
     mock_fp->super.data = (atfp_data_t) {.callback=utest_hls_done_usr_cb, .spec=mock_spec, \
-            .error=mock_err_info,  .storage={.handle=mock_asa_dst, .config=&mock_storage_cfg}, \
-            .version="Nh"  }; \
+            .error=mock_err_info,  .storage={.handle=mock_asa_dst}, .version="Nh"  }; \
     mock_fp->internal.op.avctx_init    = utest_hls__avctx_init; \
     mock_fp->internal.op.avfilter_init = utest_hls__avfilter_init; \
     mock_fp->internal.op.avctx_deinit  = utest_hls__avctx_deinit; \

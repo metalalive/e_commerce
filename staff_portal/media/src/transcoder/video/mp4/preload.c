@@ -25,7 +25,6 @@ static void atfp_mp4__read_input_atom_header_cb (asa_op_base_cfg_t *asaobj, ASA_
     atfp_t *processor = & mp4proc -> super;
     json_t *err_info = processor->data.error;
     if(result == ASTORAGE_RESULT_COMPLETE) {
-        asa_cfg_t *storage = processor->data.storage.config;
         atfp_asa_map_t *_map = (atfp_asa_map_t *)asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
         asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
         if(asaobj->op.read.dst_sz == nread) {
@@ -53,7 +52,7 @@ static void atfp_mp4__read_input_atom_header_cb (asa_op_base_cfg_t *asaobj, ASA_
                 asaobj->op.read.dst_sz = sizeof(mp4_atom);
                 asaobj->op.read.cb = atfp_mp4__read_input_atom_header_cb;
                 if(next_chunk_seq == processor->filechunk_seq.curr) { // next atom can be fetched in the same file chunk
-                    result = storage->ops.fn_read(asaobj);
+                    result = asaobj->storage->ops.fn_read(asaobj);
                 } else { // the app has to switch to subsequent filechunk first, then read from the position
                     mp4proc->internal.nread_prev_chunk = 0;
                     result = atfp_switch_to_srcfile_chunk(processor, next_chunk_seq,
@@ -69,7 +68,7 @@ static void atfp_mp4__read_input_atom_header_cb (asa_op_base_cfg_t *asaobj, ASA_
                 asa_local->super.op.write.src_sz = nread;
                 asa_local->super.op.write.src_max_nbytes = nread;
                 asa_local->super.op.write.offset = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
-                result = app_storage_localfs_write(&asa_local->super);
+                result = asa_local->super.storage->ops.fn_write(&asa_local->super);
             } else { // invalid atom type
                 json_object_set_new(err_info, "transcoder", json_string("[mp4] invalid atom type"));
             }
@@ -92,7 +91,7 @@ static void atfp_mp4__read_input_atom_header_cb (asa_op_base_cfg_t *asaobj, ASA_
                     asa_local->super.op.write.src_sz = sizeof(mp4_atom);
                     asa_local->super.op.write.src_max_nbytes = sizeof(mp4_atom);
                     asa_local->super.op.write.offset = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
-                    result = app_storage_localfs_write(&asa_local->super);
+                    result = asa_local->super.storage->ops.fn_write(&asa_local->super);
                     if(result != ASTORAGE_RESULT_ACCEPT)
                         json_object_set_new(err_info, "storage", json_string("[mp4] failed to issue write operation for mdat atom"));
                 } else {
@@ -111,21 +110,21 @@ static void atfp_mp4__read_input_atom_header_cb (asa_op_base_cfg_t *asaobj, ASA_
 
 
 static void atfp_mp4__read_input_byte_sequence_cb (
-        asa_op_base_cfg_t *asaobj, ASA_RES_CODE result, size_t nread, asa_write_cb_t write_cb)
+        asa_op_base_cfg_t *asa_src, ASA_RES_CODE result, size_t nread, asa_write_cb_t write_cb)
 {
-    atfp_mp4_t *mp4proc = (atfp_mp4_t *)asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp_mp4_t *mp4proc = (atfp_mp4_t *)asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = & mp4proc -> super;
     json_t *err_info = processor->data.error;
     if(result == ASTORAGE_RESULT_COMPLETE) {
-        atfp_asa_map_t *_map = (atfp_asa_map_t *)asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        atfp_asa_map_t *_map = (atfp_asa_map_t *)asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
         asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
-        asa_local->super.op.write.src = asaobj->op.read.dst;
+        asa_local->super.op.write.src = asa_src->op.read.dst;
         asa_local->super.op.write.src_sz = nread;
         asa_local->super.op.write.src_max_nbytes = nread;
         asa_local->super.op.write.offset = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
         asa_local->super.op.write.cb = write_cb;
-        processor->filechunk_seq.eof_reached = asaobj->op.read.dst_sz > nread;
-        result = app_storage_localfs_write(&asa_local->super);
+        processor->filechunk_seq.eof_reached = asa_src ->op.read.dst_sz > nread;
+        result = asa_local->super.storage->ops.fn_write(&asa_local->super);
         if(result != ASTORAGE_RESULT_ACCEPT)
             json_object_set_new(err_info, "storage", json_string("[mp4] failed to issue write operation for atom body"));
     } else {
@@ -136,31 +135,30 @@ static void atfp_mp4__read_input_byte_sequence_cb (
 }
 
 
-static void atfp_mp4__read_input_atom_body_cb (asa_op_base_cfg_t *cfg, ASA_RES_CODE result, size_t nread)
+static void atfp_mp4__read_input_atom_body_cb (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result, size_t nread)
 {
-    atfp_mp4__read_input_byte_sequence_cb (cfg, result, nread, atfp_mp4__write_srcfile_atom_to_local_tmpbuf_cb);
+    atfp_mp4__read_input_byte_sequence_cb (asa_src, result, nread, atfp_mp4__write_srcfile_atom_to_local_tmpbuf_cb);
 }
 
-static void atfp_mp4__read_input_packet_fragment_cb (asa_op_base_cfg_t *cfg, ASA_RES_CODE result, size_t nread)
+static void atfp_mp4__read_input_packet_fragment_cb (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result, size_t nread)
 {
-    atfp_mp4__read_input_byte_sequence_cb (cfg, result, nread, atfp_mp4__write_srcfile_pkt_frag_to_local_tmpbuf_cb);
+    atfp_mp4__read_input_byte_sequence_cb (asa_src, result, nread, atfp_mp4__write_srcfile_pkt_frag_to_local_tmpbuf_cb);
 }
 
 
-static void atfp_mp4__switch_to_fchunk__for_atom_header_cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+static void atfp_mp4__switch_to_fchunk__for_atom_header_cb (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result)
 {
-    atfp_mp4_t *mp4proc = (atfp_mp4_t *)asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp_mp4_t *mp4proc = (atfp_mp4_t *)asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = & mp4proc -> super;
     json_t *err_info = processor->data.error;
-    assert(asaobj == processor->data.storage.handle);
+    assert(asa_src == processor->data.storage.handle);
     if(result == ASTORAGE_RESULT_COMPLETE) {
         size_t expect_nread = sizeof(mp4_atom) - mp4proc->internal.nread_prev_chunk;
-        asaobj->op.read.dst += mp4proc->internal.nread_prev_chunk; // will point back later
-        asaobj->op.read.dst_max_nbytes -= mp4proc->internal.nread_prev_chunk;
-        asaobj->op.read.cb = atfp_mp4__read_input_atom_header_cb;
-        asaobj->op.read.dst_sz = expect_nread;
-        asa_cfg_t *storage = processor->data.storage.config;
-        result = storage->ops.fn_read(asaobj);
+        asa_src->op.read.dst += mp4proc->internal.nread_prev_chunk; // will point back later
+        asa_src->op.read.dst_max_nbytes -= mp4proc->internal.nread_prev_chunk;
+        asa_src->op.read.cb = atfp_mp4__read_input_atom_header_cb;
+        asa_src->op.read.dst_sz = expect_nread;
+        result = asa_src->storage->ops.fn_read(asa_src);
         if(result != ASTORAGE_RESULT_ACCEPT)
             json_object_set_new(err_info, "storage", json_string("failed to issue read operation to mp4 input"));
     } else {
@@ -171,15 +169,14 @@ static void atfp_mp4__switch_to_fchunk__for_atom_header_cb (asa_op_base_cfg_t *a
 } // end of atfp_mp4__switch_to_fchunk__for_atom_header_cb
 
 
-static void atfp_mp4__switch_fchunk__postpone_read_cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+static void atfp_mp4__switch_fchunk__postpone_read_cb (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result)
 {
-    atfp_mp4_t *mp4proc = (atfp_mp4_t *)asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp_mp4_t *mp4proc = (atfp_mp4_t *)asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = & mp4proc -> super;
     json_t *err_info = processor->data.error;
-    assert(asaobj == processor->data.storage.handle);
+    assert(asa_src == processor->data.storage.handle);
     if(result == ASTORAGE_RESULT_COMPLETE) {
-        asa_cfg_t  *storage  = processor->data.storage.config;
-        result = storage->ops.fn_read(asaobj);
+        result = asa_src->storage->ops.fn_read(asa_src);
         if(result != ASTORAGE_RESULT_ACCEPT)
             json_object_set_new(err_info, "storage", json_string("[mp4] failed to issue next read operation after switching filec hunk"));
     } else {
@@ -197,32 +194,30 @@ static void atfp_mp4__write_srcfile_atom_to_local_tmpbuf_cb (asa_op_base_cfg_t *
     atfp_t *processor = asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
     json_t     *err_info = processor->data.error;
-    asa_cfg_t  *storage  = processor->data.storage.config;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         size_t nbytes_tot_atom = mp4proc->internal.curr_atom.size;
         size_t nbytes_copied   = mp4proc->internal.curr_atom.nbytes_copied;
         nbytes_copied += nwrite;
         mp4proc->internal.curr_atom.nbytes_copied = nbytes_copied;
-        asaobj = processor->data.storage.handle;
         if(nbytes_tot_atom == nbytes_copied) { // end of current atom reached, load next atom
             mp4proc->internal.preload_pkts.size += nbytes_tot_atom;
             mp4proc->internal.preload_pkts.nbytes_copied += nbytes_tot_atom;
-            asaobj->op.read.dst_sz = sizeof(mp4_atom);
-            asaobj->op.read.cb = atfp_mp4__read_input_atom_header_cb;
+            asa_src->op.read.dst_sz = sizeof(mp4_atom);
+            asa_src->op.read.cb = atfp_mp4__read_input_atom_header_cb;
         } else if(nbytes_tot_atom > nbytes_copied) { // copy rest of atom body
-            size_t nbytes_max_rdbuf = asaobj->op.read.dst_max_nbytes;
+            size_t nbytes_max_rdbuf = asa_src->op.read.dst_max_nbytes;
             size_t nbytes_unread = nbytes_tot_atom - nbytes_copied;
             size_t expect_nread = (nbytes_max_rdbuf <= nbytes_unread) ? nbytes_max_rdbuf: nbytes_unread;
-            asaobj->op.read.dst_sz = expect_nread;
-            asaobj->op.read.cb = atfp_mp4__read_input_atom_body_cb;
+            asa_src->op.read.dst_sz = expect_nread;
+            asa_src->op.read.cb = atfp_mp4__read_input_atom_body_cb;
         }
         if(processor->filechunk_seq.eof_reached) {
             int nxt_fchunk = -1;
-            asaobj->op.read.offset = 0;
+            asa_src->op.read.offset = 0;
             result = atfp_switch_to_srcfile_chunk(processor, nxt_fchunk, atfp_mp4__switch_fchunk__postpone_read_cb);
         } else {
-            asaobj->op.read.offset = asaobj ->op.seek.pos;
-            result = storage->ops.fn_read(asaobj);
+            asa_src->op.read.offset = asa_src ->op.seek.pos;
+            result = asa_src->storage->ops.fn_read(asa_src);
         } // do not use APP_STORAGE_USE_CURRENT_FILE_OFFSET , it will start reading from last read pointer of the opened file
         if(result != ASTORAGE_RESULT_ACCEPT)
             json_object_set_new(err_info, "storage", json_string("[mp4] failed to issue next read operation for atom"));
@@ -241,39 +236,40 @@ static void atfp_mp4__write_srcfile_pkt_frag_to_local_tmpbuf_cb (asa_op_base_cfg
     atfp_t *processor = asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
     json_t     *err_info = processor->data.error;
-    asa_cfg_t  *storage  = processor->data.storage.config;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         size_t nbytes_total  = mp4proc->internal.preload_pkts.size;
         size_t nbytes_copied = mp4proc->internal.preload_pkts.nbytes_copied;
         nbytes_copied += nwrite;
         mp4proc->internal.preload_pkts.nbytes_copied = nbytes_copied;
         mp4proc->internal.mdat.nb_preloaded += nwrite;
-        if(nbytes_total == nbytes_copied) {
+        if(nbytes_total <= nbytes_copied) {
+            if(nbytes_total < nbytes_copied)
+                json_object_set_new(err_info, "storage", json_string("[mp4] corruption, exceeding data loaded"));
             //sequence of the requested packet is written to local temp buffer
             mp4proc->internal.callback.preload_done(mp4proc) ;
         } else if(nbytes_total > nbytes_copied) { // copy the rest
-            asaobj = processor->data.storage.handle;
-            size_t nbytes_max_rdbuf = asaobj->op.read.dst_max_nbytes;
+            size_t nbytes_max_rdbuf = asa_src->op.read.dst_max_nbytes;
             size_t nbytes_unread = nbytes_total - nbytes_copied;
-            size_t expect_nread = (nbytes_max_rdbuf <= nbytes_unread) ? nbytes_max_rdbuf: nbytes_unread;
-            asaobj->op.read.dst_sz = expect_nread;
-            asaobj->op.read.cb = atfp_mp4__read_input_packet_fragment_cb;
+            size_t expect_nread = MIN(nbytes_max_rdbuf, nbytes_unread);
+            asa_src->op.read.dst_sz = expect_nread;
+            asa_src->op.read.cb = atfp_mp4__read_input_packet_fragment_cb;
             if(processor->filechunk_seq.eof_reached) {
                 int nxt_fchunk = -1;
-                asaobj->op.read.offset = 0;
+                asa_src->op.read.offset = 0;
                 result = atfp_switch_to_srcfile_chunk(processor, nxt_fchunk, atfp_mp4__switch_fchunk__postpone_read_cb);
             } else {
-                asaobj->op.read.offset = asaobj->op.seek.pos;
-                result = storage->ops.fn_read(asaobj);
+                asa_src->op.read.offset = asa_src->op.seek.pos;
+                result = asa_src->storage->ops.fn_read(asa_src);
             } // do not use APP_STORAGE_USE_CURRENT_FILE_OFFSET , it will start reading from last read pointer of the opened file
             if(result != ASTORAGE_RESULT_ACCEPT)
                 json_object_set_new(err_info, "storage", json_string("[mp4] failed to issue next read operation for atom"));
+            if(json_object_size(err_info) > 0)
+                mp4proc->internal.callback.preload_done(mp4proc) ;
         }
     } else { // write error
         json_object_set_new(err_info, "storage", json_string("failed to write atom to local temp buffer"));
-    }
-    if(json_object_size(err_info) > 0)
         mp4proc->internal.callback.preload_done(mp4proc) ;
+    }
 } // end of atfp_mp4__write_srcfile_pkt_frag_to_local_tmpbuf_cb
 
 
@@ -305,8 +301,7 @@ ASA_RES_CODE  atfp_mp4__preload_stream_info (atfp_mp4_t *mp4proc, void (*cb)(atf
     mp4proc->internal.callback.preload_done = cb;
     mp4proc->internal.preload_pkts.size = 0;
     mp4proc->internal.preload_pkts.nbytes_copied = 0;
-    asa_cfg_t *storage = processor->data.storage.config;
-    return storage->ops.fn_read(cfg);
+    return cfg->storage->ops.fn_read(cfg);
 } // end of atfp_mp4__preload_stream_info
 
 
@@ -315,18 +310,17 @@ ASA_RES_CODE  atfp_mp4__preload_packet_sequence (atfp_mp4_t *mp4proc, int chunk_
 {
     ASA_RES_CODE result;
     atfp_t *processor = & mp4proc -> super;
-    asa_op_base_cfg_t *asaobj = processor->data.storage.handle;
-    size_t dst_max_nbytes = asaobj->op.read.dst_max_nbytes;
+    asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
+    size_t dst_max_nbytes = asa_src->op.read.dst_max_nbytes;
     mp4proc->internal.preload_pkts.size = nbytes_to_load;
     mp4proc->internal.preload_pkts.nbytes_copied = 0;
     mp4proc->internal.callback.preload_done = cb;
 
-    asaobj->op.read.offset = chunk_offset;
-    asaobj->op.read.dst_sz = (nbytes_to_load > dst_max_nbytes ? dst_max_nbytes: nbytes_to_load);
-    asaobj->op.read.cb = atfp_mp4__read_input_packet_fragment_cb;
+    asa_src->op.read.offset = chunk_offset;
+    asa_src->op.read.dst_sz = (nbytes_to_load > dst_max_nbytes ? dst_max_nbytes: nbytes_to_load);
+    asa_src->op.read.cb = atfp_mp4__read_input_packet_fragment_cb;
     if(chunk_idx_start == processor->filechunk_seq.curr) {
-        asa_cfg_t *storage = processor->data.storage.config;
-        result = storage->ops.fn_read(asaobj);
+        result = asa_src->storage->ops.fn_read(asa_src);
     } else {
         result = atfp_switch_to_srcfile_chunk(processor, chunk_idx_start,
               atfp_mp4__switch_fchunk__postpone_read_cb);
