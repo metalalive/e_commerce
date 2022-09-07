@@ -14,6 +14,7 @@ typedef enum {
     DBA_RESULT_UNKNOWN_ERROR,
     DBA_RESULT_MEMORY_ERROR,
     DBA_RESULT_OS_ERROR,
+    DBA_RESULT_LIBRARY_ERROR,
     DBA_RESULT_CONFIG_ERROR,
     DBA_RESULT_NETWORK_ERROR,
     DBA_RESULT_REMOTE_RESOURCE_ERROR,
@@ -52,8 +53,10 @@ typedef struct {
 } db_conn_cfg_t;
 
 typedef struct { // connection operations for specific database API, registered in pool object
-    DBA_RES_CODE (*init_fn)(struct db_conn_s *, struct db_pool_s *);
-    DBA_RES_CODE (*deinit_fn)(struct db_conn_s *);
+    DBA_RES_CODE (*global_init_fn)(struct db_pool_s *);
+    DBA_RES_CODE (*global_deinit_fn)(struct db_pool_s *);
+    DBA_RES_CODE (*conn_init_fn)(struct db_conn_s *, struct db_pool_s *);
+    DBA_RES_CODE (*conn_deinit_fn)(struct db_conn_s *);
     void  (*error_cb)(struct db_conn_s *, db_conn_err_detail_t *detail);
     uint8_t   (*can_change_state)(struct db_conn_s *);
     timerpoll_poll_cb  state_transition;
@@ -61,7 +64,7 @@ typedef struct { // connection operations for specific database API, registered 
     uint64_t  (*get_timeout_ms)(struct db_conn_s *);
     uint8_t   (*notify_query)(struct db_query_s *, struct db_query_result_s *);
     uint8_t   (*is_conn_closed)(struct db_conn_s *);
-} db_conn_cbs_t;
+} db_3rdparty_ops_t;
 
 typedef struct {
     char     *alias; // label the given pool registered in the internal global pool map
@@ -69,7 +72,7 @@ typedef struct {
     uint32_t  idle_timeout; // timeout in seconds
     size_t  bulk_query_limit_kb; // size limit of bulk queries in KBytes for each connection object
     db_conn_cfg_t  conn_detail;
-    db_conn_cbs_t  ops; 
+    db_3rdparty_ops_t  ops;
 } db_pool_cfg_t;
 
 typedef struct { // handle for specific database e.g. MariaDB, postgreSQL

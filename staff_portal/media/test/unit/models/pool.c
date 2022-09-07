@@ -9,9 +9,13 @@ static DBA_RES_CODE  mock_db_conn__try_close(db_conn_t *conn, uv_loop_t *loop)
 } // end of mock_db_conn__try_close
 
 static uint8_t  mock_db_conn__is_closed(db_conn_t *conn)
-{
-    return (uint8_t) mock(conn);
-} // end of mock_db_conn__is_closed
+{ return (uint8_t) mock(conn); }
+
+static  DBA_RES_CODE  mock_db__global_init (db_pool_t *pool)
+{ return (DBA_RES_CODE) mock(pool); }
+
+static  DBA_RES_CODE  mock_db__global_deinit (db_pool_t *pool)
+{ return (DBA_RES_CODE) mock(pool); }
 
 static  DBA_RES_CODE mock_db_conn_init(db_conn_t *conn, db_pool_t *pool)
 {
@@ -48,7 +52,7 @@ static  uint8_t  mock_db_pool__is_conn_closed(db_conn_t *conn)
 Ensure(app_model_pool_init_missing_arg_test) {
     db_pool_cfg_t cfg_opts = {
         .alias="db_primary", .capacity=4, .idle_timeout=80, .bulk_query_limit_kb=2,
-        .conn_detail={.db_name = "ecommerce_media_123"},  .ops = {.init_fn = mock_db_conn_init}
+        .conn_detail={.db_name = "ecommerce_media_123"},  .ops = {.conn_init_fn = mock_db_conn_init}
     };
     DBA_RES_CODE result = app_db_pool_init(&cfg_opts);
     assert_that(result, is_equal_to(DBA_RESULT_ERROR_ARG));
@@ -78,7 +82,8 @@ Ensure(app_model_pool_init_one_test_ok) {
         .alias="db_primary", .capacity=5, .idle_timeout=80, .bulk_query_limit_kb=2,
         .conn_detail={.db_name = "ecommerce_media_123", .db_user="username",
             .db_passwd="password", .db_host="utest.myhost.com", .db_port=1234 },
-        .ops = {.init_fn = mock_db_conn_init, .deinit_fn = mock_db_conn_deinit,
+        .ops = {.conn_init_fn = mock_db_conn_init, .conn_deinit_fn = mock_db_conn_deinit,
+            .global_init_fn=mock_db__global_init, .global_deinit_fn=mock_db__global_deinit,
             .error_cb = mock_db_conn__error_cb,
             .can_change_state = mock_db_conn__can_change_state,
             .state_transition = mock_db_conn__state_transition,
@@ -88,6 +93,7 @@ Ensure(app_model_pool_init_one_test_ok) {
             .is_conn_closed = mock_db_pool__is_conn_closed,
         }
     };
+    expect(mock_db__global_init, will_return(DBA_RESULT_OK));
     expect(mock_db_conn_init, will_return(DBA_RESULT_OK));
     expect(mock_db_conn_init, will_return(DBA_RESULT_OK));
     expect(mock_db_conn_init, will_return(DBA_RESULT_OK));
@@ -107,11 +113,10 @@ Ensure(app_model_pool_init_one_test_ok) {
     {
         uint16_t init_flag = (uint16_t) atomic_load_explicit(&pool_found->flags, memory_order_relaxed);
         assert_that(init_flag, is_equal_to((uint16_t)0));
-    }
-    {
-        db_conn_cbs_t *ops = &pool_found->cfg.ops;
-        assert_that(ops->init_fn   , is_equal_to(mock_db_conn_init));
-        assert_that(ops->deinit_fn , is_equal_to(mock_db_conn_deinit));
+    } {
+        db_3rdparty_ops_t *ops = &pool_found->cfg.ops;
+        assert_that(ops->conn_init_fn   , is_equal_to(mock_db_conn_init));
+        assert_that(ops->conn_deinit_fn , is_equal_to(mock_db_conn_deinit));
         assert_that(ops->error_cb  , is_equal_to(mock_db_conn__error_cb));
         assert_that(ops->can_change_state , is_equal_to(mock_db_conn__can_change_state));
         assert_that(ops->state_transition , is_equal_to(mock_db_conn__state_transition));
@@ -125,6 +130,7 @@ Ensure(app_model_pool_init_one_test_ok) {
     expect(mock_db_conn_deinit, will_return(DBA_RESULT_OK));
     expect(mock_db_conn_deinit, will_return(DBA_RESULT_OK));
     expect(mock_db_conn_deinit, will_return(DBA_RESULT_OK));
+    expect(mock_db__global_deinit, will_return(DBA_RESULT_OK));
     result = app_db_pool_deinit("db_primary");
     assert_that(result, is_equal_to(DBA_RESULT_OK));
     pool_found = app_db_pool_get_pool("db_primary");
@@ -139,7 +145,7 @@ Ensure(app_model_pool_init_one_test_error_init_conns) {
         .alias="db_primary", .capacity=5, .idle_timeout=80, .bulk_query_limit_kb=2,
         .conn_detail={.db_name = "ecommerce_media_123", .db_user="username",
             .db_passwd="password", .db_host="utest.myhost.com", .db_port=1234 },
-        .ops = {.init_fn = mock_db_conn_init, .deinit_fn = mock_db_conn_deinit,
+        .ops = {.conn_init_fn = mock_db_conn_init, .conn_deinit_fn = mock_db_conn_deinit,
             .error_cb = mock_db_conn__error_cb,
             .can_change_state = mock_db_conn__can_change_state,
             .state_transition = mock_db_conn__state_transition,
@@ -171,7 +177,7 @@ Ensure(app_model_pool_init_duplicate_error) {
             .alias="db_primary", .capacity=2, .idle_timeout=80, .bulk_query_limit_kb=2,
             .conn_detail={.db_name = "ecommerce_media_123", .db_user="username",
                 .db_passwd="password", .db_host="utest.myhost.com", .db_port=1234 },
-            .ops = {.init_fn = mock_db_conn_init, .deinit_fn = mock_db_conn_deinit,
+            .ops = {.conn_init_fn = mock_db_conn_init, .conn_deinit_fn = mock_db_conn_deinit,
                 .error_cb = mock_db_conn__error_cb,
                 .can_change_state = mock_db_conn__can_change_state,
                 .state_transition = mock_db_conn__state_transition,
@@ -185,7 +191,7 @@ Ensure(app_model_pool_init_duplicate_error) {
             .alias="db_primary", .capacity=3, .idle_timeout=100,  .bulk_query_limit_kb=2,
             .conn_detail={.db_name = "ecommerce_media_456", .db_user="username123",
                 .db_passwd="password", .db_host="itest.myhost.com", .db_port=1987 },
-            .ops = {.init_fn = mock_db_conn_init, .deinit_fn = mock_db_conn_deinit,
+            .ops = {.conn_init_fn = mock_db_conn_init, .conn_deinit_fn = mock_db_conn_deinit,
                 .error_cb = mock_db_conn__error_cb,
                 .can_change_state = mock_db_conn__can_change_state,
                 .state_transition = mock_db_conn__state_transition,
@@ -224,7 +230,8 @@ Ensure(app_model_pool_init_many_test_ok) {
             .alias="db_primary", .capacity=2, .idle_timeout=80,  .bulk_query_limit_kb=2,
             .conn_detail={.db_name = "ecommerce_media_123", .db_user="username",
                 .db_passwd="password", .db_host="utest.myhost.com", .db_port=1234 },
-            .ops = {.init_fn = mock_db_conn_init, .deinit_fn = mock_db_conn_deinit,
+            .ops = {.conn_init_fn = mock_db_conn_init, .conn_deinit_fn = mock_db_conn_deinit,
+                .global_init_fn=mock_db__global_init, .global_deinit_fn=mock_db__global_deinit,
                 .error_cb = mock_db_conn__error_cb,
                 .can_change_state = mock_db_conn__can_change_state,
                 .state_transition = mock_db_conn__state_transition,
@@ -238,7 +245,8 @@ Ensure(app_model_pool_init_many_test_ok) {
             .alias="db_replica_1", .capacity=3, .idle_timeout=100,  .bulk_query_limit_kb=2,
             .conn_detail={.db_name = "ecommerce_media_456", .db_user="bob",
                 .db_passwd="uncle", .db_host="itest.myhost.com", .db_port=1987 },
-            .ops = {.init_fn = mock_db_conn_init, .deinit_fn = mock_db_conn_deinit,
+            .ops = {.conn_init_fn = mock_db_conn_init, .conn_deinit_fn = mock_db_conn_deinit,
+                .global_init_fn=mock_db__global_init,
                 .error_cb = mock_db_conn__error_cb,
                 .can_change_state = mock_db_conn__can_change_state,
                 .state_transition = mock_db_conn__state_transition,
@@ -252,7 +260,8 @@ Ensure(app_model_pool_init_many_test_ok) {
             .alias="db_repli2", .capacity=4, .idle_timeout=147,  .bulk_query_limit_kb=2,
             .conn_detail={.db_name = "ecommerce_media_458", .db_user="alice",
                 .db_passwd="dreammaker", .db_host="itest.myhost.com", .db_port=1987 },
-            .ops = {.init_fn = mock_db_conn_init, .deinit_fn = mock_db_conn_deinit,
+            .ops = {.conn_init_fn = mock_db_conn_init, .conn_deinit_fn = mock_db_conn_deinit,
+                .global_deinit_fn=mock_db__global_deinit,
                 .error_cb = mock_db_conn__error_cb,
                 .can_change_state = mock_db_conn__can_change_state,
                 .state_transition = mock_db_conn__state_transition,
@@ -263,6 +272,8 @@ Ensure(app_model_pool_init_many_test_ok) {
             }
         }
     };
+    expect(mock_db__global_init, will_return(DBA_RESULT_OK));
+    expect(mock_db__global_init, will_return(DBA_RESULT_OK));
     for(idx = 0; idx < 3; idx++) {
         for(size_t jdx = 0; jdx < cfg_opts[idx].capacity; jdx++) {
             expect(mock_db_conn_init, will_return(DBA_RESULT_OK));
@@ -278,6 +289,8 @@ Ensure(app_model_pool_init_many_test_ok) {
         assert_that(pool_found->cfg.conn_detail.db_user, is_equal_to_string(cfg_opts[idx].conn_detail.db_user));
         assert_traverse_linklist(pool_found->conns.head, cfg_opts[idx].capacity);
     }
+    expect(mock_db__global_deinit, will_return(DBA_RESULT_OK));
+    expect(mock_db__global_deinit, will_return(DBA_RESULT_OK));
     for(idx = 0; idx < 3; idx++) {
         for(size_t jdx = 0; jdx < cfg_opts[idx].capacity; jdx++) {
             expect(mock_db_conn_deinit, will_return(DBA_RESULT_OK));
@@ -301,7 +314,7 @@ BeforeEach(MOCK_DB_POOL) {
         .alias="db_primary", .capacity=capacity, .idle_timeout=15, .bulk_query_limit_kb=2,
         .conn_detail={.db_name = "ecommerce_media_123", .db_user="username",
             .db_passwd="password", .db_host="utest.myhost.com", .db_port=1234 },
-        .ops = {.init_fn = mock_db_conn_init, .deinit_fn = mock_db_conn_deinit,
+        .ops = {.conn_init_fn = mock_db_conn_init, .conn_deinit_fn = mock_db_conn_deinit,
             .error_cb = mock_db_conn__error_cb,
             .can_change_state = mock_db_conn__can_change_state,
             .state_transition = mock_db_conn__state_transition,

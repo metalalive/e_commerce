@@ -94,7 +94,7 @@ static uint8_t   mock_dbpool__is_conn_closed(db_conn_t *conn)
 static db_pool_cfg_t  utest_db_pool_cfg = {
     .alias=UTEST_DBPOOL_ALIAS, .capacity=1, .idle_timeout=13, .bulk_query_limit_kb=3,
     .conn_detail = {.db_name="x", .db_user="x", .db_passwd="x", .db_host="x", .db_port=4567},
-    .ops = {.init_fn=mock_dbpool__init_fn, .deinit_fn=mock_dbpool__deinit_fn,
+    .ops = {.conn_init_fn=mock_dbpool__init_fn, .conn_deinit_fn=mock_dbpool__deinit_fn,
         .state_transition=mock_dbpool__state_transition, .notify_query=mock_dbpool__notify_query,
         .is_conn_closed=mock_dbpool__is_conn_closed, .get_sock_fd=mock_dbpool__get_sock_fd,
         .get_timeout_ms=mock_dbpool__get_timeout_ms, .can_change_state=mock_dbpool__can_change_state }

@@ -5,7 +5,7 @@
 #include "models/datatypes.h"
 #include "models/cfg_parser.h"
 
-static  __attribute__((optimize("O0")))  void  utest_app_model__db_ops_cfg(db_conn_cbs_t *cfg)
+static  __attribute__((optimize("O0")))  void  utest_app_model__db_ops_cfg(db_3rdparty_ops_t *cfg)
 { mock(cfg); }
 
 Ensure(cfg_databases_missing_alias) {

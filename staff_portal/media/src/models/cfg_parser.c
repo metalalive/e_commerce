@@ -3,7 +3,7 @@
 #include "models/pool.h"
 
 typedef struct {
-    db_conn_cbs_t  *cfg;
+    db_3rdparty_ops_t  *cfg;
     const char *fn_label;
     uint8_t     done;
 }  app_internal_cb_arg_t;
@@ -13,7 +13,7 @@ static uint8_t _app_elf_gather_db_operation_cb(char *fn_name, void *entry_point,
     app_internal_cb_arg_t  *args = (app_internal_cb_arg_t *)cb_args;
     uint8_t immediate_stop = strcmp(args->fn_label, fn_name) == 0;
     if(immediate_stop) {
-        void (*entry_fn)(db_conn_cbs_t *) = (void (*)(db_conn_cbs_t *)) entry_point;
+        void (*entry_fn)(db_3rdparty_ops_t *) = (void (*)(db_3rdparty_ops_t *)) entry_point;
         entry_fn(args->cfg);
         args->done = 1;
     }

@@ -7,6 +7,24 @@
 #include "models/query.h"
 #include "models/mariadb.h"
 
+// the library init/end function seems  reentrant, no need to
+// protect them using some kind of global variables
+DBA_RES_CODE  app_db_mariadb__global_init(db_pool_t *p)
+{
+    DBA_RES_CODE  result = DBA_RESULT_OK;
+    const char *mysql_groups[] = {"client", NULL};
+    int err = mysql_library_init(0, NULL, (char **)mysql_groups);
+    if(err)
+        result = DBA_RESULT_LIBRARY_ERROR;
+    return result;
+}
+
+DBA_RES_CODE  app_db_mariadb__global_deinit(db_pool_t *p)
+{
+    mysql_library_end();
+    return DBA_RESULT_OK;
+}
+
 static int _app_mariadb_convert_evt_from_uv(int uv_status, int uv_evts)
 {
     int my_evts = 0;
@@ -869,11 +887,13 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
 } // end of app_mariadb_async_state_transition_handler
 
 
-void  app_db_mariadb__cfg_ops(db_conn_cbs_t *cfg) {
+void  app_db_mariadb__cfg_ops(db_3rdparty_ops_t *cfg) {
     if(!cfg) { return; }
-    *cfg = (db_conn_cbs_t) {
-        .init_fn = app_db_mariadb_conn_init,
-        .deinit_fn = app_db_mariadb_conn_deinit,
+    *cfg = (db_3rdparty_ops_t) {
+        .global_init_fn   =  app_db_mariadb__global_init,
+        .global_deinit_fn =  app_db_mariadb__global_deinit,
+        .conn_init_fn = app_db_mariadb_conn_init,
+        .conn_deinit_fn = app_db_mariadb_conn_deinit,
         .can_change_state = app_mariadb_acquire_state_change,
         .state_transition = app_mariadb_async_state_transition_handler,
         .notify_query = app_mariadb_conn_notified_query_callback,
@@ -881,4 +901,4 @@ void  app_db_mariadb__cfg_ops(db_conn_cbs_t *cfg) {
         .get_sock_fd = app_db_mariadb_get_sock_fd,
         .get_timeout_ms = app_db_mariadb_get_timeout_ms
     };
-}
+} // end of app_db_mariadb__cfg_ops

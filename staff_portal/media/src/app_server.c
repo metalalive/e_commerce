@@ -9,7 +9,6 @@
 #endif // end of LIBC_HAS_BACKTRACE
 #include <h2o.h>
 #include <h2o/serverutil.h>
-#include <mysql.h>
 
 #include "app_cfg.h"
 #include "app_server.h"
@@ -340,9 +339,6 @@ int start_application(const char *cfg_file_path, const char *exe_path)
     r_global_init(); // rhonabwy JWT library
     err = init_security();
     if(err) { goto done; }
-    const char *mysql_groups[] = {"client", NULL};
-    err = mysql_library_init(0, NULL, (char **)mysql_groups);
-    if(err) { goto done; }
     err = parse_cfg_params(cfg_file_path, acfg);
     if(err) { goto done; }
     register_global_access_log(&acfg->server_glb_cfg , acfg->access_logger);
@@ -350,7 +346,6 @@ int start_application(const char *cfg_file_path, const char *exe_path)
     err = appserver_start_workers(acfg);
 done:
     deinit_app_server_cfg(acfg);
-    mysql_library_end();
     r_global_close(); // rhonabwy JWT library
     return err;
 } // end of start_application

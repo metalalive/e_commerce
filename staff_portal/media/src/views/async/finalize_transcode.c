@@ -64,6 +64,8 @@ void api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *_map) {
 
 void  api_rpc_transcode__finalize (atfp_asa_map_t *map)
 { // TODO, write metadata of transcoded files to database, swtich folders in storage
+    const char *_metadata_db = json_string_value(json_object_get(api_req, "metadata_db"));
+
     asa_op_base_cfg_t *asa_dst = NULL, *asa_src = atfp_asa_map_get_source(map);
     arpc_receipt_t  *receipt = asa_src->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
     json_t *err_info = asa_src->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO];

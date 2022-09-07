@@ -84,7 +84,7 @@ static void _app_db_pool_conns_deinit(db_pool_t *pool) {
         node = pool->conns.head;
         app_db_pool_remove_conn(pool, node);
         db_conn_t  *conn = (db_conn_t *) node->data;
-        assert(pool->cfg.ops.deinit_fn(conn) == DBA_RESULT_OK);
+        assert(pool->cfg.ops.conn_deinit_fn(conn) == DBA_RESULT_OK);
         free(node);
     }
     pool->conns.tail = NULL;
@@ -169,8 +169,8 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
         goto done;
     }
     if(!opts->conn_detail.db_name || !opts->conn_detail.db_user || !opts->conn_detail.db_passwd
-            || !opts->conn_detail.db_host || opts->conn_detail.db_port == 0 || !opts->ops.init_fn
-            || !opts->ops.deinit_fn || !opts->ops.state_transition || !opts->ops.notify_query
+            || !opts->conn_detail.db_host || opts->conn_detail.db_port == 0 || !opts->ops.conn_init_fn
+            || !opts->ops.conn_deinit_fn || !opts->ops.state_transition || !opts->ops.notify_query
             || !opts->ops.is_conn_closed || !opts->ops.get_sock_fd || !opts->ops.get_timeout_ms
             || !opts->ops.can_change_state ) {
         result = DBA_RESULT_ERROR_ARG;
@@ -206,8 +206,10 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
             .db_port = opts->conn_detail.db_port 
         },
         .ops = {
-            .init_fn  = opts->ops.init_fn,
-            .deinit_fn = opts->ops.deinit_fn,
+            .global_init_fn = opts->ops.global_init_fn,
+            .global_deinit_fn = opts->ops.global_deinit_fn,
+            .conn_init_fn  = opts->ops.conn_init_fn,
+            .conn_deinit_fn = opts->ops.conn_deinit_fn,
             .error_cb  = opts->ops.error_cb,
             .can_change_state = opts->ops.can_change_state,
             .state_transition = opts->ops.state_transition,
@@ -217,12 +219,17 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
             .get_timeout_ms  = opts->ops.get_timeout_ms
         }
     };
+    if(pool->cfg.ops.global_init_fn) {
+        result = pool->cfg.ops.global_init_fn(pool);
+        if(result != DBA_RESULT_OK)
+            goto error; 
+    }
     size_t conn_sz = sizeof(db_conn_t) + (pool->cfg.bulk_query_limit_kb << 10) + 1; // including NULL-terminated byte
     size_t conn_node_sz = sizeof(db_llnode_t) + conn_sz;
     for(idx = 0; idx < pool->cfg.capacity; idx++) {   // initalize list of connections
         new_conn_node = malloc(conn_node_sz);
         db_conn_t   *new_conn = (db_conn_t *) new_conn_node->data;
-        result = pool->cfg.ops.init_fn(new_conn, pool);
+        result = pool->cfg.ops.conn_init_fn(new_conn, pool);
         if(result != DBA_RESULT_OK) {
             free(new_conn_node);
             goto error; 
@@ -248,13 +255,16 @@ static DBA_RES_CODE _app_db_pool_deinit(db_pool_t *pool) {
     if(!pool) {
         return DBA_RESULT_ERROR_ARG;
     }
+    DBA_RES_CODE  result = DBA_RESULT_OK;
     _app_db_pool_conns_deinit(pool);
     _app_db_poolcfg_deinit(&pool->cfg);
     pthread_mutex_destroy(&pool->lock);
+    if(pool->cfg.ops.global_deinit_fn) 
+        result = pool->cfg.ops.global_deinit_fn(pool);
     db_llnode_t *node = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, pool);
     app_db_poolmap_remove_pool(node);
     free(node);
-    return DBA_RESULT_OK;
+    return  result;
 } // end of _app_db_pool_deinit
 
 
