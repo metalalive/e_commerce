@@ -200,6 +200,7 @@ SET(APP_HTTPSERVER_SOURCE_FILES
 
 SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/file_processor.c
+    src/transcoder/video/metadata.c 
     src/transcoder/video/hls/init.c 
     src/transcoder/video/hls/avcontext.c 
     src/transcoder/video/hls/avfilter.c 

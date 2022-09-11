@@ -84,6 +84,7 @@ static void _render_response_output(json_t *res_outputs, const char *version, co
 
 static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jobs(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
 { // create async job send it to message queue, since it takes time to transcode media file
+    char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
     json_t *res_body_json = app_fetch_from_hashmap(node->data, "res_body_json");
     json_t *req_body_json = app_fetch_from_hashmap(node->data, "req_body_json");
     json_t *req_outputs = json_object_get(req_body_json, "outputs");
@@ -118,6 +119,7 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
         { // construct message body
             json_object_set(msgq_body_item, "parts_size", parts_size);
             json_object_set(msgq_body_item, "resource_id", res_id_item);
+            json_object_set_new(msgq_body_item, "res_id_encoded", json_string(res_id_encoded));
             json_object_set_new(msgq_body_item, "version", json_string(version));
             json_object_set_new(msgq_body_item, "metadata_db", json_string("db_server_1"));
             json_object_set_new(msgq_body_item, "storage_alias", json_string(storage->alias));
@@ -270,8 +272,8 @@ static void _mark_old_transcoded_version (RESTAPI_HANDLER_ARGS(self, req), app_m
     json_t *req_body_json = (json_t *)app_fetch_from_hashmap(node->data, "req_body_json");
     json_t *outputs = json_object_get(req_body_json, "outputs");
     size_t  outputs_sz = json_object_size(outputs);
-#define SQL_PATTERN "EXECUTE IMMEDIATE 'SELECT `version`, `height_pixel`, `width_pixel`, `framerate`" \
-       " FROM `transcoded_video` WHERE `file_id` = ? and `version` IN (%s)' USING FROM_BASE64('%s'), %s;"
+#define SQL_PATTERN "EXECUTE IMMEDIATE 'SELECT `version`, `height_pixel`, `width_pixel`, `framerate` FROM" \
+       " `transcoded_video_metadata` WHERE `file_id` = ? and `version` IN (%s)' USING FROM_BASE64('%s'), %s;"
     size_t num_comma = outputs_sz - 1;
     size_t param_markers_sz = num_comma + outputs_sz * 1;
     size_t param_val_sz = num_comma + outputs_sz * (APP_TRANSCODED_VERSION_SIZE + 2); // 2 extra charaters for quote

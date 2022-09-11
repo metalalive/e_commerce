@@ -3,6 +3,7 @@
 #include <h2o/memory.h>
 
 #include "storage/cfg_parser.h"
+#include "transcoder/video/common.h"
 #include "transcoder/video/hls.h"
 #include "transcoder/video/ffmpeg.h"
 
@@ -236,6 +237,7 @@ static atfp_t *atfp__video_hls__instantiate(void) {
     atfp_hls_t  *out = calloc(0x1, tot_sz);
     char *ptr = (char *)out + sizeof(atfp_hls_t);
     out->av = (atfp_av_ctx_t *) ptr;
+    out->super.transfer.dst.update_metadata = atfp_video__dst_update_metadata;
     out->asa_local.super.storage = app_storage_cfg_lookup("localfs") ; 
     out->internal.op.avctx_init   = atfp_hls__av_init;
     out->internal.op.avctx_deinit = atfp_hls__av_deinit;

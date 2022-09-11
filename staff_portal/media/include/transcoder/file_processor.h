@@ -66,6 +66,7 @@ typedef struct atfp_s {
     } filechunk_seq; // TODO, move into `transfer` field below, it is used only for source file processor 
     union {
         struct {
+            void   (*update_metadata)(struct atfp_s *, void *loop);
             json_t   *info;
             uint32_t  tot_nbytes_file;
             uint32_t  flags;

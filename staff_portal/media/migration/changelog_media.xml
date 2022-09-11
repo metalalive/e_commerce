@@ -35,10 +35,8 @@
             * the field `version` labels transcoded version of the original media file pointed to by `file_id`,
               the primary key identifies specific file set (with lower quality) transcoded from
               original media file (for improving user experience).
-            * the `size_bytes` could also be sum of all generated files when transcoding
-              original media file.
-            * All attributes of the transcoded file are calculated on-the-fly whenever new client
-              request comes
+            * the `size_bytes` should be aggregate of all the generated files particularly for a
+               transcoded media file, which is to monitor space usage of all users.
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE transcoded_file (
@@ -190,20 +188,26 @@
     <changeSet id="tag_version_0.0.6" author="Haam">
         <tagDatabase tag="0.0.6" />
     </changeSet>
-    <changeSet id="add-metadata-to-transcoded-video-table" author="Haam">
+    <changeSet id="modify-schema-metadata-transcoded-video" author="Haam">
         <comment>
+            * the table (originally named transcoded_file) should dedicate to storage of metadata
+              of transcoded videos.
+            * When this table grows larger, app developers have to consider whether the metadata is
+              important enough for the business model, if it isn't,  since these records are almost
+              never changed once inserted, the metadata could be stored in document-oriented databases
+              which support atomicity and durability (of ACID properties), e.g. MongoDB v4.0 later
         </comment>
         <sql dbms="mariadb">
-            RENAME TABLE `transcoded_file` TO `transcoded_video`;
-            ALTER TABLE `transcoded_video`
+            RENAME TABLE `transcoded_file` TO `transcoded_video_metadata`;
+            ALTER TABLE `transcoded_video_metadata`
                 ADD COLUMN `height_pixel`  SMALLINT UNSIGNED NOT NULL,
                 ADD COLUMN `width_pixel`   SMALLINT UNSIGNED NOT NULL,
                 ADD COLUMN `framerate`     TINYINT  UNSIGNED NOT NULL;
         </sql>
         <rollback>
-            ALTER TABLE `transcoded_video` DROP COLUMN `height_pixel`,
+            ALTER TABLE `transcoded_video_metadata` DROP COLUMN `height_pixel`,
                 DROP COLUMN `width_pixel`, DROP COLUMN `framerate`;
-            RENAME TABLE `transcoded_video` TO `transcoded_file`;
+            RENAME TABLE `transcoded_video_metadata` TO `transcoded_file`;
         </rollback>
     </changeSet>
     <changeSet id="tag_version_0.0.7" author="Haam">

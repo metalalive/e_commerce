@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <string.h>
+#include "transcoder/video/common.h"
 #include "transcoder/video/hls.h"
 #include "transcoder/video/ffmpeg.h"
 
@@ -72,13 +73,9 @@ static int  atfp_hls__av_setup_options(AVFormatContext *fmt_ctx, const char *loc
 
 static void _atfp_config_dst_video_codecctx(AVCodecContext *dst, AVCodecContext *src, json_t *spec)
 {
-    json_t *elm_st_key_obj = json_object_get(json_object_get(spec, "__internal__"), "video_key");
-    const char *elm_st_key = json_string_value(elm_st_key_obj);
-    json_t *attribute  = json_object_get(json_object_get(json_object_get(spec, "elementary_streams"
-                    ), elm_st_key), "attribute");
-    uint32_t height = json_integer_value(json_object_get(attribute, "height_pixel"));
-    uint32_t width  = json_integer_value(json_object_get(attribute, "width_pixel"));
-    uint8_t  fps    = json_integer_value(json_object_get(attribute, "framerate"));
+    uint32_t height = 0, width = 0;
+    uint8_t  fps    = 0;
+    ATFP_VIDEO__READ_SPEC(spec, height, width, fps);
     dst->height = FFMIN(src->height, height);
     dst->width  = FFMIN(src->width , width);
     dst->framerate = (AVRational){num:fps, den:1};

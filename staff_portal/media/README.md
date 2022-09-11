@@ -133,4 +133,6 @@ make integration_test
 
 ### TO-DO
 * currently this application works only with Mysql / Mariadb because it access data by directly running raw SQL. Create [Data Access Ojbect](https://stackoverflow.com/questions/19154202) layer to separate database-specific SQL syntax from applicaiton logic (as well as make it easy to switch to other databaase).
+* Parallelize transcoding process after stream metadata is parsed from media container, by splitting part of packets to different transcoding nodes(servers) . Then assemble encoded packets to final file(s)
+* write other less important metadata (e.g. checksum of each generated file, video title, tags for search, ...etc.) of transcoded file to storage, or document-oriented databases.
 

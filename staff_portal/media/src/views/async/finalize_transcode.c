@@ -29,7 +29,7 @@ static void  api_rpc__asalocal_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_C
 
 void api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *_map) {
     if(!_map) { return; }
-    // TODO, this function has to be idempotent, to make sure all connected storage
+    // TODO, this function has to be reentrant, to make sure all connected storage
     //  handles are de-initialized before de-initializing the map 
     asa_op_localfs_cfg_t *asa_local =  atfp_asa_map_get_localtmp(_map);
     asa_op_base_cfg_t *asa_src = atfp_asa_map_get_source(_map);
@@ -60,13 +60,17 @@ void api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *_map) {
     }
     atfp_asa_map_deinit(_map);
 } // end of api_rpc_transcoding__storagemap_deinit
+   
 
-
-void  api_rpc_transcode__finalize (atfp_asa_map_t *map)
-{ // TODO, write metadata of transcoded files to database, swtich folders in storage
-    const char *_metadata_db = json_string_value(json_object_get(api_req, "metadata_db"));
-
-    asa_op_base_cfg_t *asa_dst = NULL, *asa_src = atfp_asa_map_get_source(map);
+static void api_rpc_transcode__update_metadata_done(struct atfp_s *processor)
+{
+    asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
+    atfp_asa_map_t   *map = asa_dst->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
+    atfp_asa_map_dst_stop_working(map, asa_dst);
+    if(!atfp_asa_map_all_dst_stopped(map)) {
+        return;
+    }
+    asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(map);
     arpc_receipt_t  *receipt = asa_src->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
     json_t *err_info = asa_src->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO];
     if (json_object_size(err_info) == 0) { // reuse error info object, to construct reply message
@@ -87,5 +91,25 @@ void  api_rpc_transcode__finalize (atfp_asa_map_t *map)
     } // transcoded successfully
     app_rpc_task_send_reply(receipt, err_info);
     api_rpc_transcoding__storagemap_deinit(map);
-} // end of api_rpc_transcode__finalize
+} // end of api_rpc_transcode__update_metadata_done
 
+void  api_rpc_transcode__finalize (atfp_asa_map_t *map)
+{
+    uint8_t has_err = 0;
+    asa_op_base_cfg_t *asa_dst = NULL, *asa_src = atfp_asa_map_get_source(map);
+    arpc_receipt_t  *receipt = asa_src->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
+    json_t         *err_info = asa_src->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO];
+    atfp_asa_map_reset_dst_iteration(map);
+    while(!has_err && (asa_dst = atfp_asa_map_iterate_destination(map))) {
+        atfp_t *fp_dst = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];
+        fp_dst->data.callback = api_rpc_transcode__update_metadata_done;
+        fp_dst->transfer.dst.update_metadata(fp_dst, receipt->loop);
+        has_err = json_object_size(err_info) > 0;
+        if(!has_err)
+            atfp_asa_map_dst_start_working(map, asa_dst);
+    } // TODO, solve potential n + 1 problems
+    if(atfp_asa_map_all_dst_stopped(map) && has_err) {
+        app_rpc_task_send_reply(receipt, err_info);
+        api_rpc_transcoding__storagemap_deinit(map);
+    }
+} // end of api_rpc_transcode__finalize
