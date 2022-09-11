@@ -9,7 +9,7 @@ extern "C" {
 
 typedef struct {
     asa_op_base_cfg_t  super;
-    uv_loop_t   *loop;
+    uv_loop_t   *loop; // TODO, move to base type (asa_op_base_cfg_t)
     uv_fs_t      file;
 } asa_op_localfs_cfg_t;
 

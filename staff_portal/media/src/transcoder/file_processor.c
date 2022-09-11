@@ -440,3 +440,124 @@ done:
     return result;
 } // end of atfp__file_start_transfer
 
+// -----------------------------------------------------------
+// common callbacks used when transferring segemnt files from
+// local transcoding server to remote destination storage
+// -----------------------------------------------------------
+void  atfp__close_local_seg__cb(asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_cfg, ASA_RES_CODE result)
+{
+    int err = 1;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASALOCAL_OPEN));
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        atfp_segment_final(seg_cfg, processor->transfer.dst.info);
+        processor->transfer.dst.tot_nbytes_file += seg_cfg->transfer.nbytes;
+        asa_op_base_cfg_t *asa_local = asaobj;
+        asa_local->op.unlink.path = asa_local-> op.open.dst_path ;
+        result = asa_local->storage->ops.fn_unlink(asa_local);
+        err = result != ASTORAGE_RESULT_ACCEPT;
+    } // TODO , flush transcoded detail info to local metadata file
+    if(err) {
+        json_object_set_new(processor->data.error, "storage",
+                json_string("failed to close transferred segment file on local side"));
+        processor -> data.callback(processor);
+    }
+} // end of atfp__close_local_seg__cb
+
+void atfp__unlink_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{
+    int err = 1;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
+        result = asa_dst->storage->ops.fn_close(asa_dst);
+        err = result != ASTORAGE_RESULT_ACCEPT;
+    }
+    if(err) {
+        json_object_set_new(processor->data.error, "storage",
+                json_string("failed to unlink transferred segment file on local side"));
+        processor -> data.callback(processor);
+    }
+} // end of atfp__unlink_local_seg__cb
+
+void atfp__open_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{
+    int err = 1;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        uint32_t flags =  1 << ATFP_TRANSFER_FLAG__ASALOCAL_OPEN;
+        processor->transfer.dst.flags |= flags;
+        asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
+        result = asa_dst->storage->ops.fn_open(asa_dst);
+        err = result != ASTORAGE_RESULT_ACCEPT;
+    }
+    if(err) {
+        json_object_set_new(processor->data.error, "storage",
+                json_string("failed to open local segment file for transfer"));
+        processor -> data.callback(processor);
+    }
+} // end of atfp__open_local_seg__cb
+
+void atfp__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_cfg, ASA_RES_CODE result)
+{
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    asa_op_base_cfg_t *_asa_local = asaobj;
+    int err = 1;
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        atfp_segment_init(seg_cfg);
+        processor->transfer.dst.flags |= (1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN);
+        result = _asa_local->storage->ops.fn_read(_asa_local);
+        err = result != ASTORAGE_RESULT_ACCEPT;
+    }
+    if(err) {
+        json_object_set_new(processor->data.error, "storage",
+                json_string("failed to open segment file on destination side for transfer"));
+        processor -> data.callback(processor);
+    }
+} // end of atfp__open_dst_seg__cb
+
+void atfp__read_local_seg__cb (asa_op_base_cfg_t *asaobj, atfp_segment_t  *seg_cfg, ASA_RES_CODE result, size_t nread)
+{
+    int err = 1;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        seg_cfg->transfer.eof_reached = asaobj->op.read.dst_sz > nread;
+        if(nread == 0) {
+            asa_op_base_cfg_t *_asa_local = asaobj;
+            result = _asa_local->storage->ops.fn_close(_asa_local);
+        } else {
+            SHA1_Update(&seg_cfg->checksum, asaobj->op.read.dst, nread);
+            asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
+            asa_dst->op.write.src_sz = nread;
+            result = asa_dst->storage->ops.fn_write(asa_dst);
+        }
+        err = result != ASTORAGE_RESULT_ACCEPT;
+    }
+    if(err) {
+        json_object_set_new(processor->data.error, "storage",
+                json_string("failed to read from local segment file for transfer"));
+        processor -> data.callback(processor);
+    }
+} // end of atfp__read_local_seg__cb
+
+void atfp__write_dst_seg__cb (asa_op_base_cfg_t *asaobj, atfp_segment_t  *seg_cfg, ASA_RES_CODE result, size_t nwrite)
+{
+    int err = 1;
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        asa_op_base_cfg_t *_asa_local = asaobj;
+        seg_cfg->transfer.nbytes += nwrite;
+        if(seg_cfg->transfer.eof_reached) { // switch to next segment (if exists)
+            result = _asa_local->storage->ops.fn_close(_asa_local);
+        } else {
+            result = _asa_local->storage->ops.fn_read(_asa_local);
+        }
+        err = result != ASTORAGE_RESULT_ACCEPT;
+    }
+    if(err) {
+        json_object_set_new(processor->data.error, "storage",
+                json_string("failed to transfer to destination segment file"));
+        processor -> data.callback(processor);
+    }
+} // end of atfp__write_dst_seg__cb
+

@@ -11,6 +11,7 @@ extern "C" {
 #include "storage/datatypes.h"
 #include "storage/localfs.h"
 
+
 // identification of backend library for transcoders
 typedef enum {
     ATFP_BACKEND_LIB__UNKNOWN = 0,
@@ -66,6 +67,7 @@ typedef struct atfp_s {
     union {
         struct {
             json_t   *info;
+            uint32_t  tot_nbytes_file;
             uint32_t  flags;
         } dst; // TODO, add new field of type `atfp_segment_t`
     } transfer;
@@ -182,6 +184,13 @@ ASA_RES_CODE  atfp__file_start_transfer(
 
 int atfp_segment_init(atfp_segment_t *);
 int atfp_segment_final(atfp_segment_t *, json_t *info);
+
+void  atfp__close_local_seg__cb  (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE);
+void  atfp__unlink_local_seg__cb (asa_op_base_cfg_t *, ASA_RES_CODE);
+void  atfp__open_local_seg__cb (asa_op_base_cfg_t *, ASA_RES_CODE);
+void  atfp__open_dst_seg__cb   (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE);
+void  atfp__read_local_seg__cb (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE, size_t nread);
+void  atfp__write_dst_seg__cb  (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE, size_t nwrite);
 
 #ifdef __cplusplus
 } // end of extern C clause
