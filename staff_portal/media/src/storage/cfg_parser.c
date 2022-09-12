@@ -24,6 +24,9 @@ static uint8_t _app_elf_gather_storage_operation_cb(char *fn_name, void *entry_p
     asa_internal_cb_arg_t *args = (asa_internal_cb_arg_t *)cb_args;
     STORAGE_OPS_FN_MAPPING(mkdir, args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(rmdir, args, fn_name, entry_point);
+    STORAGE_OPS_FN_MAPPING(scandir,      args, fn_name, entry_point);
+    STORAGE_OPS_FN_MAPPING(scandir_next, args, fn_name, entry_point);
+    STORAGE_OPS_FN_MAPPING(rename,args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(unlink,args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(open,  args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(close, args, fn_name, entry_point);
@@ -33,6 +36,9 @@ static uint8_t _app_elf_gather_storage_operation_cb(char *fn_name, void *entry_p
 done:
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, mkdir, args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, rmdir, args);
+    immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, scandir, args);
+    immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, scandir_next, args);
+    immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, rename, args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, unlink,args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, open,  args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, close, args);
@@ -73,6 +79,8 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg)
         json_t *ops = json_object_get(obj, "ops");
         if(!ops || !json_is_object(ops) || !json_object_get(ops, "open") || !json_object_get(ops, "close")
                 || !json_object_get(ops, "seek") || !json_object_get(ops, "write") || !json_object_get(ops, "read")
+                || !json_object_get(ops, "scandir") || !json_object_get(ops, "scandir_next")
+                || !json_object_get(ops, "rename") || !json_object_get(ops, "unlink")
                 || !json_object_get(ops, "mkdir") || !json_object_get(ops, "rmdir"))
         {
             h2o_error_printf("[parsing] storage (idx=%d) must include function names for all operations \n", idx);
@@ -96,8 +104,9 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg)
             goto error;
         }
         if(!_asa_cfg->ops.fn_open || !_asa_cfg->ops.fn_close || !_asa_cfg->ops.fn_seek
-                || !_asa_cfg->ops.fn_write || !_asa_cfg->ops.fn_read || !_asa_cfg->ops.fn_mkdir
-                || !_asa_cfg->ops.fn_rmdir)
+                || !_asa_cfg->ops.fn_write || !_asa_cfg->ops.fn_read || !_asa_cfg->ops.fn_scandir_next
+                || !_asa_cfg->ops.fn_scandir || !_asa_cfg->ops.fn_rename || !_asa_cfg->ops.fn_unlink
+                || !_asa_cfg->ops.fn_mkdir || !_asa_cfg->ops.fn_rmdir)
         {
             h2o_error_printf("[parsing] storage (idx=%d) failed to look up all necessary operations \n", idx);
             goto error;

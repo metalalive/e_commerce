@@ -97,6 +97,9 @@
             "ops": {
                 "mkdir" : "app_storage_localfs_mkdir",
                 "rmdir" : "app_storage_localfs_rmdir",
+                "scandir": "app_storage_localfs_scandir",
+                "scandir_next": "app_storage_localfs_scandir_next",
+                "rename": "app_storage_localfs_rename",
                 "unlink": "app_storage_localfs_unlink",
                 "open" : "app_storage_localfs_open",
                 "close": "app_storage_localfs_close",

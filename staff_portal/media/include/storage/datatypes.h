@@ -8,6 +8,7 @@ extern "C" {
 typedef enum {
     ASTORAGE_RESULT_COMPLETE = 1,
     ASTORAGE_RESULT_ACCEPT,
+    ASTORAGE_RESULT_EOF_SCAN, // end of file
     ASTORAGE_RESULT_UNKNOWN_ERROR,
     ASTORAGE_RESULT_ARG_ERROR,
     ASTORAGE_RESULT_OS_ERROR,
@@ -17,14 +18,16 @@ typedef enum {
 struct _asa_cfg_s;
 struct _asa_op_base_cfg_s;
 
-typedef void (*asa_mkdir_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
-typedef void (*asa_rmdir_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
-typedef void (*asa_unlink_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
-typedef void (*asa_open_cb_t) (struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
-typedef void (*asa_close_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result);
-typedef void (*asa_seek_cb_t) (struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result, size_t pos);
-typedef void (*asa_write_cb_t)(struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result, size_t nwrite);
-typedef void (*asa_read_cb_t) (struct _asa_op_base_cfg_s *cfg, ASA_RES_CODE result, size_t nread);
+typedef void (*asa_mkdir_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_rmdir_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_scandir_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_rename_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_unlink_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_open_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_close_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
+typedef void (*asa_seek_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE, size_t pos);
+typedef void (*asa_write_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE, size_t nwrite);
+typedef void (*asa_read_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE, size_t nread);
 
 struct _asa_op_base_cfg_s {
     struct {
@@ -46,6 +49,17 @@ struct _asa_op_base_cfg_s {
             asa_rmdir_cb_t  cb;
             char  *path; 
         } rmdir;
+        struct {
+            asa_scandir_cb_t  cb;
+            char  *path; 
+        } scandir;
+        struct { // move folder
+            asa_rename_cb_t  cb;
+            struct {
+                char  *_new;
+                char  *_old;
+            } path;
+        } rename;
         struct { // delete a file
             asa_unlink_cb_t  cb;
             char  *path; 
@@ -82,15 +96,30 @@ struct _asa_op_base_cfg_s {
 
 typedef struct _asa_op_base_cfg_s asa_op_base_cfg_t;
 
+typedef enum {
+    ASA_DIRENT_UNKNOWN = 0,
+    ASA_DIRENT_FILE,
+    ASA_DIRENT_DIR,
+    ASA_DIRENT_LINK,
+} asa_dirent_type_t;
+
 typedef struct {
-    ASA_RES_CODE (*fn_mkdir)(asa_op_base_cfg_t *cfg);
-    ASA_RES_CODE (*fn_rmdir)(asa_op_base_cfg_t *cfg);
-    ASA_RES_CODE (*fn_open) (asa_op_base_cfg_t *cfg);
-    ASA_RES_CODE (*fn_close)(asa_op_base_cfg_t *cfg);
-    ASA_RES_CODE (*fn_seek) (asa_op_base_cfg_t *cfg);
-    ASA_RES_CODE (*fn_write)(asa_op_base_cfg_t *cfg);
-    ASA_RES_CODE (*fn_read) (asa_op_base_cfg_t *cfg);
-    ASA_RES_CODE (*fn_unlink) (asa_op_base_cfg_t *cfg);
+    char *name;
+    asa_dirent_type_t  type;
+} asa_dirent_t;
+
+typedef struct {
+    ASA_RES_CODE (*fn_mkdir)(asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_rmdir)(asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_open) (asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_close)(asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_seek) (asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_write)(asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_read) (asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_unlink) (asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_rename) (asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_scandir)(asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_scandir_next)(asa_op_base_cfg_t *, asa_dirent_t *);
 } asa_cfg_ops_t;
 
 typedef struct _asa_cfg_s {

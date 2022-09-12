@@ -157,6 +157,88 @@ ASA_RES_CODE app_storage_localfs_rmdir (asa_op_base_cfg_t *cfg)
 } // end of app_storage_localfs_rmdir
 
 
+static void  _app_storage_localfs__scandir_cb(uv_fs_t *req)
+{
+    const char *path = req->path; // `new_path` and `path` fields were allocated together
+    asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
+    ASA_RES_CODE  app_result = (req->result >= 0) ? ASTORAGE_RESULT_COMPLETE: ASTORAGE_RESULT_OS_ERROR;
+    cfg->op.scandir.cb(cfg, app_result);
+    if(path)
+        free((void *)path);
+}
+
+ASA_RES_CODE  app_storage_localfs_scandir (asa_op_base_cfg_t *cfg)
+{
+    asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
+    if(!_cfg || !_cfg->loop || !cfg->op.scandir.cb || !cfg->op.scandir.path)
+        return ASTORAGE_RESULT_ARG_ERROR;
+    ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
+    int err = uv_fs_scandir(_cfg->loop, &_cfg->file, cfg->op.scandir.path,
+            0, _app_storage_localfs__scandir_cb);
+    if(err != 0)
+        result = ASTORAGE_RESULT_OS_ERROR;
+    return result;
+}
+
+ASA_RES_CODE  app_storage_localfs_scandir_next (asa_op_base_cfg_t *cfg, asa_dirent_t *e)
+{ 
+    asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
+    if(!_cfg || _cfg->file.file < 0 || !e)
+        return ASTORAGE_RESULT_ARG_ERROR;
+    ASA_RES_CODE result = ASTORAGE_RESULT_COMPLETE;
+    uv_dirent_t  ent = {0};
+    int err = uv_fs_scandir_next(&_cfg->file, &ent);
+    if(err == UV_EOF) {
+        *e = (asa_dirent_t) {0};
+        result = ASTORAGE_RESULT_EOF_SCAN;
+    } else if(err == 0) {
+        asa_dirent_type_t ftyp;
+        switch(ent.type) {
+            case UV_DIRENT_FILE:
+                ftyp = ASA_DIRENT_FILE;
+                break;
+            case UV_DIRENT_DIR:
+                ftyp = ASA_DIRENT_DIR;
+                break;
+            case UV_DIRENT_LINK:
+                ftyp = ASA_DIRENT_LINK;
+                break;
+            default:
+                ftyp = ASA_DIRENT_UNKNOWN;
+                break;
+        }
+        *e = (asa_dirent_t) {.type=ftyp, .name=ent.name};
+    } else {
+        result = ASTORAGE_RESULT_OS_ERROR;
+    }
+    return result;
+} // end of app_storage_localfs_scandir_next
+
+static void  _app_storage_localfs__rename_cb(uv_fs_t *req)
+{
+    const char *path = req->path; // `new_path` and `path` fields were allocated together
+    asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
+    ASA_RES_CODE  app_result = (req->result == 0)? ASTORAGE_RESULT_COMPLETE: ASTORAGE_RESULT_OS_ERROR;
+    cfg->op.rename.cb(cfg, app_result);
+    if(path)
+        free((void *)path);
+}
+
+ASA_RES_CODE  app_storage_localfs_rename(asa_op_base_cfg_t *cfg)
+{ 
+    asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
+    if(!_cfg || !_cfg->loop || !cfg->op.rename.cb || !cfg->op.rename.path._new
+             || !cfg->op.rename.path._old)
+        return ASTORAGE_RESULT_ARG_ERROR;
+    ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
+    int err = uv_fs_rename(_cfg->loop, &_cfg->file, cfg->op.rename.path._old,
+            cfg->op.rename.path._new, _app_storage_localfs__rename_cb);
+    if(err != 0)
+        result = ASTORAGE_RESULT_OS_ERROR;
+    return result;
+}
+
+
 static void _app_storage_localfs_unlink_cb(uv_fs_t *req) {
     const char *curr_path = req->path;
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);

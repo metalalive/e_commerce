@@ -9,6 +9,15 @@ static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_mkdir_fn(asa_o
 static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_rmdir_fn(asa_op_base_cfg_t *cfg)
 { return ASTORAGE_RESULT_ACCEPT; }
 
+static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_scandir_fn(asa_op_base_cfg_t *cfg)
+{ return ASTORAGE_RESULT_ACCEPT; }
+
+static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_scandir_next_fn(asa_op_base_cfg_t *cfg, asa_dirent_t *ent)
+{ return ASTORAGE_RESULT_ACCEPT; }
+
+static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_rename_fn(asa_op_base_cfg_t *cfg)
+{ return ASTORAGE_RESULT_ACCEPT; }
+
 static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_unlink_fn(asa_op_base_cfg_t *cfg)
 { return ASTORAGE_RESULT_ACCEPT; }
 
@@ -80,6 +89,8 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
         json_object_set_new(ops, "write", json_string("utest_storage_write_fn_assume_non_existent"));
         json_object_set_new(ops, "read", json_string("utest_storage_read_fn"));
         json_object_set_new(ops, "seek", json_string("utest_storage_seek_fn"));
+        json_object_set_new(ops, "mkdir", json_string("utest_storage_mkdir_fn"));
+        json_object_set_new(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
         json_object_set_new(obj0, "ops", ops);
     }
     err = parse_cfg_storages(objs, &app_cfg);
@@ -87,9 +98,10 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
     assert_that(app_cfg.storages.entries, is_null);
     {
         json_object_set_new(ops, "write", json_string("utest_storage_write_fn"));
-        json_object_set_new(ops, "mkdir", json_string("utest_storage_mkdir_fn"));
-        json_object_set_new(ops, "rmdir", json_string("utest_storage_rmdir_fn"));
         json_object_set_new(ops, "unlink",json_string("utest_storage_unlink_fn"));
+        json_object_set_new(ops, "rename", json_string("utest_storage_rename_fn"));
+        json_object_set_new(ops, "scandir", json_string("utest_storage_scandir_fn"));
+        json_object_set_new(ops, "scandir_next", json_string("utest_storage_scandir_next_fn"));
     }
     err = parse_cfg_storages(objs, &app_cfg);
     assert_that(err, is_equal_to(0));
@@ -105,6 +117,9 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
         assert_that(parsed_ops->fn_mkdir, is_equal_to(utest_storage_mkdir_fn));
         assert_that(parsed_ops->fn_rmdir, is_equal_to(utest_storage_rmdir_fn));
         assert_that(parsed_ops->fn_unlink,is_equal_to(utest_storage_unlink_fn));
+        assert_that(parsed_ops->fn_rename,is_equal_to(utest_storage_rename_fn));
+        assert_that(parsed_ops->fn_scandir, is_equal_to(utest_storage_scandir_fn));
+        assert_that(parsed_ops->fn_scandir_next, is_equal_to(utest_storage_scandir_next_fn));
     }
     app_storage_cfg_deinit(&app_cfg);
     json_decref(objs);

@@ -301,6 +301,133 @@ Ensure(storage_localfs_unlink_test) {
 #undef  EXPECT_FILE1_PATH
 #undef  EXPECT_FILE2_PATH
 
+static __attribute__((optimize("O0"))) void utest_5_asa_mock_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE result)
+{ mock(cfg, result); }
+
+static void _storage_localfs__rename_test(const char *old_path, const char *new_path,
+       ASA_RES_CODE expect_result) {
+    ASA_RES_CODE result;
+    asa_op_localfs_cfg_t  mock_asaobj = {.loop = uv_default_loop(), .super={ .op={
+        .rename={.cb=utest_5_asa_mock_cb, .path={._old=(char *)old_path,
+            ._new=(char *)new_path }}
+    }}};
+    result =  app_storage_localfs_rename(&mock_asaobj.super);
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+    expect(utest_5_asa_mock_cb, when(result, is_equal_to(expect_result)));
+    uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+} // end of _storage_localfs__rename_test
+
+#define  EXPECT_PATH1   "./tmp/utest/media/origin_name"
+#define  EXPECT_PATH2   "./tmp/utest/media/modified_name"
+#define  INVALID_PATH3  "./tmp/utest/media/nonexist_name"
+#define  EXPECT_FILENAME   "dummyfile"
+Ensure(storage_localfs_rename_test) {
+    mkdir("./tmp/utest", S_IRWXU);
+    mkdir("./tmp/utest/media", S_IRWXU);
+    mkdir(EXPECT_PATH1, S_IRWXU);
+    int fd = open(EXPECT_PATH1 "/" EXPECT_FILENAME, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    close(fd);
+    _storage_localfs__rename_test(EXPECT_PATH1, EXPECT_PATH2, ASTORAGE_RESULT_COMPLETE); 
+    access(EXPECT_PATH2 "/" EXPECT_FILENAME, F_OK);
+    _storage_localfs__rename_test(INVALID_PATH3, EXPECT_PATH2, ASTORAGE_RESULT_OS_ERROR); 
+    access(EXPECT_PATH2 "/" EXPECT_FILENAME, F_OK);
+    unlink(EXPECT_PATH2 "/" EXPECT_FILENAME);
+    rmdir(EXPECT_PATH2);
+    rmdir("./tmp/utest/media");
+    rmdir("./tmp/utest");
+} // end of storage_localfs_rename_test
+#undef   EXPECT_FILENAME
+#undef   INVALID_PATH3
+#undef   EXPECT_PATH1
+#undef   EXPECT_PATH2
+
+
+#define  EXPECT_BASEPATH   "tmp/utest/media/"
+#define  EXPECT_DIR_NAMES    {"123folder", "456folder"}
+#define  EXPECT_FILE_NAMES   {"a.out", "b.out", "d.out"}
+#define  EXPECT_DIR_PATHS    {EXPECT_BASEPATH"123folder", EXPECT_BASEPATH"456folder"}
+#define  EXPECT_FILE_PATHS   {EXPECT_BASEPATH"a.out", EXPECT_BASEPATH"b.out", EXPECT_BASEPATH"d.out"}
+#define  EXPECT_NUM_DIRS    2
+#define  EXPECT_NUM_FILES   3
+Ensure(storage_localfs_scandir_test) {
+    const char *expect_path_dirs  [EXPECT_NUM_DIRS]  = EXPECT_DIR_PATHS;
+    const char *expect_path_files [EXPECT_NUM_FILES] = EXPECT_FILE_PATHS;
+    const char *expect_name_dirs  [EXPECT_NUM_DIRS]  = EXPECT_DIR_NAMES;
+    const char *expect_name_files [EXPECT_NUM_FILES] = EXPECT_FILE_NAMES;
+    int idx = 0;
+    { // setup
+        mkdir("./tmp/utest", S_IRWXU);
+        mkdir(EXPECT_BASEPATH, S_IRWXU);
+        for(idx=0; idx < EXPECT_NUM_DIRS; idx++)
+            mkdir(expect_path_dirs[idx], S_IRWXU);
+        for(idx=0; idx < EXPECT_NUM_FILES; idx++) {
+            int fd = open(expect_path_files[idx], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+            close(fd);
+        }
+    }
+    asa_op_localfs_cfg_t  mock_asaobj = {.loop = uv_default_loop(), .super={ .op={
+        .scandir={.cb=utest_5_asa_mock_cb, .path=EXPECT_BASEPATH }}}};
+    ASA_RES_CODE result = app_storage_localfs_scandir (&mock_asaobj.super);
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+    expect(utest_5_asa_mock_cb, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
+    uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+    int num_entries_cond = mock_asaobj.file.result >= (EXPECT_NUM_DIRS + EXPECT_NUM_FILES);
+    assert_that(num_entries_cond, is_equal_to(1));
+    while(1) {
+        asa_dirent_t  e = {0};
+        result = app_storage_localfs_scandir_next (&mock_asaobj.super,  &e);
+        assert_that(result, is_not_equal_to(ASTORAGE_RESULT_OS_ERROR));
+        assert_that(result, is_not_equal_to(ASTORAGE_RESULT_ACCEPT));
+        if(result == ASTORAGE_RESULT_EOF_SCAN) {
+            break;
+        } else if(result == ASTORAGE_RESULT_COMPLETE) {
+            assert_that(e.name, is_not_null);
+            switch(e.type) { // tedious... since the order might change
+                case ASA_DIRENT_DIR:
+                    switch(e.name[0]) {
+                        case '1':
+                            assert_that(e.name, is_equal_to_string(expect_name_dirs[0]));
+                            break;
+                        case '4':
+                            assert_that(e.name, is_equal_to_string(expect_name_dirs[1]));
+                            break;
+                    }
+                    break;
+                case ASA_DIRENT_FILE:
+                    switch(e.name[0]) {
+                        case 'a':
+                            assert_that(e.name, is_equal_to_string(expect_name_files[0]));
+                            break;
+                        case 'b':
+                            assert_that(e.name, is_equal_to_string(expect_name_files[1]));
+                            break;
+                        case 'd':
+                            assert_that(e.name, is_equal_to_string(expect_name_files[2]));
+                            break;
+                    }
+                    break;
+                default:
+                    break;
+            } // end of swtich statement
+        } // end of entry read
+    } // end of loop
+    { // tear down
+        for(idx=0; idx < EXPECT_NUM_DIRS; idx++)
+            rmdir(expect_path_dirs[idx]);
+        for(idx=0; idx < EXPECT_NUM_FILES; idx++)
+            unlink(expect_path_files[idx]);
+        rmdir(EXPECT_BASEPATH);
+        rmdir("./tmp/utest");
+    }
+} // end of storage_localfs_scandir_test
+#undef   EXPECT_DIR_PATHS  
+#undef   EXPECT_FILE_PATHS 
+#undef   EXPECT_DIR_NAMES
+#undef   EXPECT_FILE_NAMES 
+#undef   EXPECT_NUM_DIRS   
+#undef   EXPECT_NUM_FILES
+#undef   EXPECT_BASEPATH
+
 
 TestSuite *app_storage_localfs_tests(void)
 {
@@ -309,5 +436,7 @@ TestSuite *app_storage_localfs_tests(void)
     add_test(suite, storage_localfs_mkdir_test);
     add_test(suite, storage_localfs_rwfile_test);
     add_test(suite, storage_localfs_unlink_test);
+    add_test(suite, storage_localfs_rename_test);
+    add_test(suite, storage_localfs_scandir_test);
     return suite;
 } // end of app_storage_localfs_tests
