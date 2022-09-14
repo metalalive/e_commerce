@@ -14,7 +14,7 @@ typedef struct {
     uv_fs_t      file;
 } asa_op_localfs_cfg_t;
 
-ASA_RES_CODE  app_storage_localfs_mkdir (asa_op_base_cfg_t *);
+ASA_RES_CODE  app_storage_localfs_mkdir (asa_op_base_cfg_t *, uint8_t  allow_exists);
 ASA_RES_CODE  app_storage_localfs_rmdir (asa_op_base_cfg_t *);
 ASA_RES_CODE  app_storage_localfs_scandir (asa_op_base_cfg_t *);
 ASA_RES_CODE  app_storage_localfs_scandir_next (asa_op_base_cfg_t *, asa_dirent_t *);

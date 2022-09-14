@@ -108,6 +108,7 @@ static void  atfp_mp4__close_async_handle_cb (uv_handle_t* handle)
 static  void  atfp_mp4__asaremote_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
     asa_op_base_cfg_t *asa_src = asaobj;
+    DEINIT_IF_EXISTS(asa_src->op.mkdir.path.prefix);
     DEINIT_IF_EXISTS(asa_src->op.mkdir.path.origin);
     DEINIT_IF_EXISTS(asa_src->op.mkdir.path.curr_parent);
     DEINIT_IF_EXISTS(asa_src->op.open.dst_path);

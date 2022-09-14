@@ -425,7 +425,7 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
         ptr += wr_src_buf_sz;
         assert((size_t)(ptr - (char *)asa_cfg) == asa_cfg_sz);
     } // end of storage object setup
-    ASA_RES_CODE asa_result = storage->ops.fn_mkdir((asa_op_base_cfg_t *)asa_cfg);
+    ASA_RES_CODE asa_result = storage->ops.fn_mkdir((asa_op_base_cfg_t *)asa_cfg, 1);
     if (asa_result != ASTORAGE_RESULT_ACCEPT) {
         upload_part__storage_error_handler((asa_op_base_cfg_t *)asa_cfg);
     }

@@ -186,7 +186,18 @@ static  void  api_rpc_transcode__try_init_file_processors(asa_op_base_cfg_t *asa
             json_object_set_new(err_info, "transcoder", json_string("unsupported destination file format"));
             goto done;
         }
-    }
+        if(asa_dst->op.mkdir.path.prefix) {
+            const char *version = asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL];
+            char *basepath = asa_dst->op.mkdir.path.origin;
+            basepath[0] = 0;
+            strcat(basepath, asa_dst->op.mkdir.path.prefix);
+            strcat(basepath, "/");
+            strcat(basepath, version);
+            size_t nwrite = strlen(basepath) + 1;
+            basepath[nwrite++] = 0;
+            asa_dst->op.mkdir.path.prefix[0] = 0; // let next mkdir() call ignore the prefix
+        } // move prefix path to origin field, append version value to it
+    } // end of loop
     processor = asa_src->cb_args.entries[ASA_USRARG_INDEX__AFTP];
     processor->ops->init(processor); // internally it may add error message to err_info
 done:
@@ -261,6 +272,43 @@ static void api_rpc_transcode__create_folder_common_cb (asa_op_base_cfg_t *asaob
         api_rpc_transcoding__storagemap_deinit(_map);
     }
 } // end of api_rpc_transcode__create_folder_common_cb
+
+
+static void api_rpc_transcode__create_dst_basepath_cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE app_result)
+{
+    atfp_asa_map_t *_map = asaobj->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
+    json_t     *err_info = asaobj->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO];
+    if(json_object_size(err_info) > 0) {
+        // pass
+    } else if(app_result == ASTORAGE_RESULT_COMPLETE) {
+        asa_op_base_cfg_t   *asa_dst = NULL;
+        atfp_asa_map_reset_dst_iteration(_map);
+        while((asa_dst = atfp_asa_map_iterate_destination(_map))) {
+            const char *version = asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL];
+            char *basepath = asa_dst->op.mkdir.path.origin;
+            strcpy(asa_dst->op.mkdir.path.prefix, basepath);
+            size_t nwrite = sprintf(basepath, "%s", version);
+            basepath[nwrite++] = 0;
+            asa_dst->op.mkdir.path.curr_parent[0] = 0x0; // reset for mkdir
+            asa_dst->op.mkdir.cb =  api_rpc_transcode__create_folder_common_cb;
+            // clear allow_exist flag, to make use of OS lock, and consider EEXISTS as error after mkdir()
+            app_result = asa_dst->storage->ops.fn_mkdir(asa_dst, 0);
+            if (app_result != ASTORAGE_RESULT_ACCEPT) {
+                json_object_set_new(err_info, "storage", json_string("failed to issue mkdir operation to storage"));
+                break;
+            }
+        } // end of destination iteraation
+    } else {
+        json_object_set_new(err_info, "storage", json_string("failed to create work folder for transcoded file"));
+    }
+    if(json_object_size(err_info) > 0) {
+        if(--_map->app_sync_cnt == 0) {
+            arpc_receipt_t *receipt = asaobj->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
+            app_rpc_task_send_reply(receipt, err_info);
+            api_rpc_transcoding__storagemap_deinit(_map);
+        }
+    }
+} // end of api_rpc_transcode__create_dst_basepath_cb
 
 
 static asa_op_base_cfg_t * api_rpc_transcode__init_asa_obj (arpc_receipt_t *receipt,
@@ -348,7 +396,7 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
              app_storage_cfg_lookup("localfs"),  sizeof(asa_op_localfs_cfg_t),
              (uint8_t)NUM_USRARGS_ASA_LOCALTMP, (uint32_t)0, (uint32_t)0);
     {
-        ((asa_op_localfs_cfg_t *)asa_src)->loop = receipt->loop;
+        ((asa_op_localfs_cfg_t *)asa_src)->loop = receipt->loop; // TODO, generalize
         ((asa_op_localfs_cfg_t *)asa_dst)->loop = receipt->loop;
         asa_local_tmpbuf->loop = receipt->loop;
         atfp_asa_map_set_source(asaobj_map, asa_src);
@@ -367,7 +415,7 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
         asa_local_tmpbuf->super.op.mkdir.cb = api_rpc_transcode__create_folder_common_cb;
         asa_local_tmpbuf->super.op.mkdir.path.origin = (void *)strndup(&basepath[0], nwrite);
         asa_local_tmpbuf->super.op.mkdir.path.curr_parent = (void *)calloc(nwrite, sizeof(char));
-        asa_result = app_storage_localfs_mkdir(&asa_local_tmpbuf->super);
+        asa_result = asa_local_tmpbuf->super.storage->ops.fn_mkdir(&asa_local_tmpbuf->super, 1);
         if(asa_result != ASTORAGE_RESULT_ACCEPT) {
             json_object_set_new(err_info, "storage", json_string("failed to issue create-folder operation for tmp buf"));
             goto error;
@@ -387,27 +435,28 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
             goto error;
         }
     } { // create folder for saving transcoded files in destination
-        size_t path_sz = strlen(asa_dst->storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
-                   UPLOAD_INT2HEX_SIZE(last_upld_req) + 1 + strlen(ATFP_TEMP_TRANSCODING_FOLDER_NAME)
-                   + 1 + strlen(version) + 1;
+        size_t transcoding_fullpath_sz = strlen(asa_dst->storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
+            UPLOAD_INT2HEX_SIZE(last_upld_req) + 1 + ATFP__MAXSZ_STATUS_FOLDER_NAME + 1 ;
+        size_t version_fullpath_sz = transcoding_fullpath_sz + strlen(version) + 1;
+        asa_dst->op.mkdir.path.prefix = (void *)calloc(transcoding_fullpath_sz, sizeof(char));
+        asa_dst->op.mkdir.path.origin = (void *)calloc(version_fullpath_sz, sizeof(char));
+        asa_dst->op.mkdir.path.curr_parent = (void *)calloc(version_fullpath_sz, sizeof(char));
         // will be used later when application moves transcoded file from temporary buffer (locally
         // stored in transcoding server) to destination storage (may be remotely stored, e.g. in cloud platform)
-        char basepath[path_sz];
-        size_t nwrite = snprintf(&basepath[0], path_sz, "%s/%d/%08x/%s/%s", asa_dst->storage->base_path,
-                     usr_id, last_upld_req,  ATFP_TEMP_TRANSCODING_FOLDER_NAME, version);
-        basepath[nwrite++] = 0x0; // NULL-terminated
-        asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL] = version;
-        asa_dst->op.mkdir.path.origin = (void *)strndup(&basepath[0], nwrite);
-        asa_dst->op.mkdir.path.curr_parent = (void *)calloc(nwrite, sizeof(char));
+        size_t nwrite = snprintf(asa_dst->op.mkdir.path.origin, version_fullpath_sz, "%s/%d/%08x/%s",
+                asa_dst->storage->base_path, usr_id, last_upld_req,  ATFP__TEMP_TRANSCODING_FOLDER_NAME);
+        asa_dst->op.mkdir.path.origin[nwrite++] = 0x0; // NULL-terminated
+        assert(nwrite <= transcoding_fullpath_sz);
+        asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL] = (void *) version;
         asa_dst->op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
-        asa_dst->op.mkdir.cb = api_rpc_transcode__create_folder_common_cb;
-        asa_result = asa_dst->storage->ops.fn_mkdir(asa_dst);
+        asa_dst->op.mkdir.cb = api_rpc_transcode__create_dst_basepath_cb;
+        asa_result = asa_dst->storage->ops.fn_mkdir(asa_dst, 1); // TODO, ensure only one asa_dst executes this command
         if (asa_result != ASTORAGE_RESULT_ACCEPT) {
             json_object_set_new(err_info, "storage", json_string("failed to issue mkdir operation to storage"));
             goto error;
         }
     } // end of storage object setup
-    asaobj_map->app_sync_cnt = 3;
+    asaobj_map->app_sync_cnt = 3; // TODO, handle multiple destination file-processors at once
     return;
 error:
     app_rpc_task_send_reply(receipt, err_info);

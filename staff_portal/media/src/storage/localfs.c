@@ -67,40 +67,53 @@ static ASA_RES_CODE  _app_storage_mkdir_nxt_parent(asa_op_base_cfg_t *cfg)
     if(init_round) {
         cfg->op.mkdir.path.tok_saveptr = NULL;
         origin = cfg->op.mkdir.path.origin;
-    } else {
-        if(!cfg->op.mkdir.path.tok_saveptr) {
-            return ASTORAGE_RESULT_ARG_ERROR;
+        char *prefix = cfg->op.mkdir.path.prefix;
+        if(prefix && prefix[0] != 0) {
+            strcat(cfg->op.mkdir.path.curr_parent, prefix);
+            strcat(cfg->op.mkdir.path.curr_parent, "/");
         }
+    } else {
+        if(!cfg->op.mkdir.path.tok_saveptr)
+            return ASTORAGE_RESULT_ARG_ERROR;
         origin = NULL;
     }
     tok = strtok_r(origin, "/", &cfg->op.mkdir.path.tok_saveptr);
     if(!tok || strcmp(tok, ".") == 0 || strcmp(tok, "..") == 0)
-    {
         return ASTORAGE_RESULT_ARG_ERROR;
-    }
-    if(!init_round) {
+    if(!init_round)
         strcat(cfg->op.mkdir.path.curr_parent, "/");
-    }
     strcat(cfg->op.mkdir.path.curr_parent, tok);
     return ASTORAGE_RESULT_ACCEPT;
 } // end of _app_storage_mkdir_nxt_parent
 
+
 static void _app_storage_localfs_mkdir_cb(uv_fs_t *req) {
     const char *curr_path = req->path;
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
+    uint8_t  allow_exists = cfg->op.mkdir._allow_exists;
+    uint8_t  op_ok = (req->result == 0) || ((req->result == UV_EEXIST) && (allow_exists));
+    uint8_t  final_round = (cfg->op.mkdir.path.tok_saveptr[0] == 0x0) ||  (!op_ok);
     ASA_RES_CODE  app_result = ASTORAGE_RESULT_UNKNOWN_ERROR;
-    if(req->result == 0 || req->result == UV_EEXIST) { // acceptable if parent folder already exists
-        uint8_t final_round = cfg->op.mkdir.path.tok_saveptr[0] == 0x0;
+    if(final_round) {
+        size_t cpy_sz = strlen(cfg->op.mkdir.path.curr_parent); // recover destination path
+        char *cpy_pos = cfg->op.mkdir.path.curr_parent;
+        char *prefix = cfg->op.mkdir.path.prefix;
+        if(prefix && prefix[0] != 0) {
+            size_t prefix_sz = strlen(prefix) + 1; // one extra slash character
+            cpy_pos += prefix_sz;
+            cpy_sz  -= prefix_sz;
+        }
+        memcpy(cfg->op.mkdir.path.origin, cpy_pos, cpy_sz);
+        cfg->op.mkdir.path.origin[cpy_sz] = 0;
+    }
+    if(op_ok) { // acceptable if parent folder already exists
         if(final_round) { // all essential parent folders are created
-            app_result = ASTORAGE_RESULT_COMPLETE;
-            size_t fullpath_sz = strlen(cfg->op.mkdir.path.curr_parent); // recover destination path
-            memcpy(cfg->op.mkdir.path.origin, cfg->op.mkdir.path.curr_parent, fullpath_sz);
+            app_result   = ASTORAGE_RESULT_COMPLETE;
             cfg->op.mkdir.cb(cfg, app_result);
         } else { // recursively create new subfolder
-            app_result = app_storage_localfs_mkdir(cfg);
-            if(app_result != ASTORAGE_RESULT_ACCEPT) {
+            app_result = app_storage_localfs_mkdir(cfg, allow_exists);
+            if(app_result != ASTORAGE_RESULT_ACCEPT)
                 cfg->op.mkdir.cb(cfg, app_result);
-            }
         }
     } else {
         app_result = ASTORAGE_RESULT_OS_ERROR;
@@ -112,14 +125,13 @@ static void _app_storage_localfs_mkdir_cb(uv_fs_t *req) {
 } // end of _app_storage_localfs_mkdir_cb
 
 
-ASA_RES_CODE app_storage_localfs_mkdir (asa_op_base_cfg_t *cfg)
+ASA_RES_CODE  app_storage_localfs_mkdir (asa_op_base_cfg_t *cfg, uint8_t  allow_exists)
 {
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
     if(!_cfg || !_cfg->loop || !cfg->op.mkdir.cb || !cfg->op.mkdir.path.origin
             || !cfg->op.mkdir.path.curr_parent)
-    {
-        return ASTORAGE_RESULT_ARG_ERROR;
-    }
+    { return ASTORAGE_RESULT_ARG_ERROR; }
+    cfg->op.mkdir._allow_exists = allow_exists;
     ASA_RES_CODE result = _app_storage_mkdir_nxt_parent(cfg);
     if(result == ASTORAGE_RESULT_ACCEPT) {
         int err = uv_fs_mkdir(_cfg->loop, &_cfg->file, cfg->op.mkdir.path.curr_parent,

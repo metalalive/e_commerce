@@ -40,10 +40,12 @@ struct _asa_op_base_cfg_s {
             asa_mkdir_cb_t  cb;
             int    mode;
             struct {
+                char *prefix;
                 char *origin;
                 char *curr_parent;
                 char *tok_saveptr;
             } path;
+            uint8_t  _allow_exists:1;
         } mkdir;
         struct { // delete an empty folder
             asa_rmdir_cb_t  cb;
@@ -109,7 +111,7 @@ typedef struct {
 } asa_dirent_t;
 
 typedef struct {
-    ASA_RES_CODE (*fn_mkdir)(asa_op_base_cfg_t *);
+    ASA_RES_CODE (*fn_mkdir)(asa_op_base_cfg_t *, uint8_t  allow_exists);
     ASA_RES_CODE (*fn_rmdir)(asa_op_base_cfg_t *);
     ASA_RES_CODE (*fn_open) (asa_op_base_cfg_t *);
     ASA_RES_CODE (*fn_close)(asa_op_base_cfg_t *);

@@ -38,10 +38,8 @@ static __attribute__((optimize("O0")))  void utest_1_asa_open_cb (asa_op_base_cf
     assert_that(app_storage_localfs_close(cfg), is_equal_to(ASTORAGE_RESULT_ACCEPT));
 } // end of utest_1_asa_open_cb
 
-static __attribute__((optimize("O0")))  void utest_4_asa_unlink_cb (asa_op_base_cfg_t *cfg, ASA_RES_CODE result)
-{
-    mock(cfg, result);
-}
+static __attribute__((optimize("O0")))  void utest_4_asa_simple_callback (asa_op_base_cfg_t *cfg, ASA_RES_CODE result)
+{ mock(cfg, result); }
 
 Ensure(storage_localfs_openfile_test) {
     int expect_cb_args[EXPECT_CB_ARGS_SZ] = {123, 234, 345};
@@ -91,7 +89,7 @@ static __attribute__((optimize("O0")))  void utest_2_asa_mkdir_cb (asa_op_base_c
     assert_that(app_storage_localfs_rmdir(cfg), is_equal_to(ASTORAGE_RESULT_ACCEPT));
 }
 
-Ensure(storage_localfs_mkdir_test) {
+Ensure(storage_localfs_test__mkdir_simple) {
     size_t  cfg_sz = sizeof(asa_op_localfs_cfg_t) + sizeof(EXPECT_MKDIR_PATH) * 2;
     asa_op_localfs_cfg_t *cfg = malloc(cfg_sz);
     memset(cfg, 0x0, cfg_sz);
@@ -105,7 +103,8 @@ Ensure(storage_localfs_mkdir_test) {
         ptr += sizeof(EXPECT_MKDIR_PATH);
         cfg->super.op.mkdir.path.curr_parent = ptr;
     }
-    ASA_RES_CODE result = app_storage_localfs_mkdir((asa_op_base_cfg_t *)cfg);
+    uint8_t allow_exist = 1;
+    ASA_RES_CODE result = app_storage_localfs_mkdir((asa_op_base_cfg_t *)cfg, allow_exist);
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     // check event loop 5 times for recursively creating parent folders
     uv_run(cfg->loop, UV_RUN_ONCE);
@@ -115,7 +114,7 @@ Ensure(storage_localfs_mkdir_test) {
     uv_run(cfg->loop, UV_RUN_ONCE);
     // check event loop one more time for removing a single folder (non-recursive)
     uv_run(cfg->loop, UV_RUN_ONCE);
-} // end of storage_localfs_mkdir_test
+} // end of storage_localfs_test__mkdir_simple
 #undef EXPECT_MKDIR_PATH 
 #undef EXPECT_RMDIR_PATH 
 
@@ -254,6 +253,68 @@ Ensure(storage_localfs_rwfile_test) {
 #undef  EXPECT_FILE_PATH
 
 
+#define  EXPECT_MKDIR_PREFIX  "tmp/utest/media"
+#define  EXPECT_MKDIR_ORIGIN  "beard/chang/tiger"
+Ensure(storage_localfs_test__mkdir_prefix) {
+    mkdir("tmp/utest", S_IRWXU);
+    mkdir(EXPECT_MKDIR_PREFIX, S_IRWXU);
+    char  *path_ori = strdup(EXPECT_MKDIR_ORIGIN);
+    char  *path_pfx = strdup(EXPECT_MKDIR_PREFIX);
+    char  *path_cur_parent = calloc(sizeof(EXPECT_MKDIR_PREFIX) + sizeof(EXPECT_MKDIR_ORIGIN) + 1, sizeof(char));
+    asa_op_localfs_cfg_t  mock_asaobj = { .loop=uv_default_loop(), .super={ .op={
+        .mkdir={ .cb=utest_4_asa_simple_callback,  .mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR,
+            .path={ .origin=path_ori, .prefix=path_pfx, .curr_parent=path_cur_parent}
+    }}}};
+    uint8_t allow_exist = 1;
+    ASA_RES_CODE result = app_storage_localfs_mkdir(&mock_asaobj.super, allow_exist);
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+    expect(utest_4_asa_simple_callback, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
+    uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+    uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+    uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+    assert_that(access(path_cur_parent, F_OK), is_equal_to(0));
+    rmdir(EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN);
+    rmdir(EXPECT_MKDIR_PREFIX "/beard/chang");
+    rmdir(EXPECT_MKDIR_PREFIX "/beard");
+    rmdir(EXPECT_MKDIR_PREFIX);
+    rmdir("tmp/utest");
+    free(path_ori);
+    free(path_pfx);
+    free(path_cur_parent);
+} // end of storage_localfs_test__mkdir_prefix
+#undef   EXPECT_MKDIR_PREFIX
+#undef   EXPECT_MKDIR_ORIGIN
+
+
+#define  EXPECT_MKDIR_PREFIX  "tmp/utest/media"
+#define  EXPECT_MKDIR_ORIGIN  "duplicate"
+Ensure(storage_localfs_test__mkdir_dup_error) {
+    mkdir("tmp/utest", S_IRWXU);
+    mkdir(EXPECT_MKDIR_PREFIX, S_IRWXU);
+    mkdir(EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN, S_IRWXU);
+    char  *path_ori = strdup(EXPECT_MKDIR_ORIGIN);
+    char  *path_pfx = strdup(EXPECT_MKDIR_PREFIX);
+    char  *path_cur_parent = calloc(sizeof(EXPECT_MKDIR_PREFIX) + sizeof(EXPECT_MKDIR_ORIGIN) + 1, sizeof(char));
+    asa_op_localfs_cfg_t  mock_asaobj = { .loop=uv_default_loop(), .super={ .op={
+        .mkdir={ .cb=utest_4_asa_simple_callback,  .mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR,
+            .path={ .origin=path_ori, .prefix=path_pfx, .curr_parent=path_cur_parent}
+    }}}};
+    uint8_t allow_exist = 0;
+    ASA_RES_CODE result = app_storage_localfs_mkdir(&mock_asaobj.super, allow_exist);
+    assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
+    expect(utest_4_asa_simple_callback, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
+    uv_run(mock_asaobj.loop, UV_RUN_ONCE);
+    rmdir(EXPECT_MKDIR_PREFIX "/" EXPECT_MKDIR_ORIGIN);
+    rmdir(EXPECT_MKDIR_PREFIX);
+    rmdir("tmp/utest");
+    free(path_ori);
+    free(path_pfx);
+    free(path_cur_parent);
+} // end of storage_localfs_test__mkdir_dup_error
+#undef   EXPECT_MKDIR_PREFIX
+#undef   EXPECT_MKDIR_ORIGIN
+
+
 #define  EXPECT_FILE1_PATH  "./tmp/utest/media/file123"
 #define  EXPECT_FILE2_PATH  "./tmp/utest/media/file456"
 Ensure(storage_localfs_unlink_test) {
@@ -277,17 +338,17 @@ Ensure(storage_localfs_unlink_test) {
         uv_run(mock_asaobj.loop, UV_RUN_ONCE);
         assert_that(access(EXPECT_FILE1_PATH, F_OK), is_equal_to(-1));
     } { // subcase #2
-        mock_asaobj.super.op.unlink.cb = utest_4_asa_unlink_cb;
+        mock_asaobj.super.op.unlink.cb = utest_4_asa_simple_callback;
         mock_asaobj.super.op.unlink.path = EXPECT_FILE2_PATH;
-        expect(utest_4_asa_unlink_cb, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
+        expect(utest_4_asa_simple_callback, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));
         result = app_storage_localfs_unlink(&mock_asaobj.super);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         uv_run(mock_asaobj.loop, UV_RUN_ONCE);
         assert_that(access(EXPECT_FILE2_PATH, F_OK), is_equal_to(-1));
     } { // subcase #3
-        mock_asaobj.super.op.unlink.cb = utest_4_asa_unlink_cb;
+        mock_asaobj.super.op.unlink.cb = utest_4_asa_simple_callback;
         mock_asaobj.super.op.unlink.path = "./tmp/utest/media/file_not_exist";
-        expect(utest_4_asa_unlink_cb, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
+        expect(utest_4_asa_simple_callback, when(result, is_equal_to(ASTORAGE_RESULT_OS_ERROR)));
         result = app_storage_localfs_unlink(&mock_asaobj.super);
         assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
         uv_run(mock_asaobj.loop, UV_RUN_ONCE);
@@ -433,7 +494,9 @@ TestSuite *app_storage_localfs_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, storage_localfs_openfile_test);
-    add_test(suite, storage_localfs_mkdir_test);
+    add_test(suite, storage_localfs_test__mkdir_simple);
+    add_test(suite, storage_localfs_test__mkdir_prefix);
+    add_test(suite, storage_localfs_test__mkdir_dup_error);
     add_test(suite, storage_localfs_rwfile_test);
     add_test(suite, storage_localfs_unlink_test);
     add_test(suite, storage_localfs_rename_test);

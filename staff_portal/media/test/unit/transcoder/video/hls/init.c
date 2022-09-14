@@ -122,14 +122,14 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
     asa_dst_cb_args[ATFP_INDEX__IN_ASA_USRARG] = mock_fp; \
     asa_dst_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = &mock_map; \
     asa_dst_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
-    const char *created_path = UTEST_ASALOCAL_BASEPATH "/" ATFP_TEMP_TRANSCODING_FOLDER_NAME "/" "Nh";
+    const char *created_path = UTEST_ASALOCAL_BASEPATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" "Nh";
 
 
 #define ATFP_HLS_TEST__INIT__TEARDOWN \
     json_decref(mock_spec); \
     json_decref(mock_err_info); \
     rmdir(created_path); \
-    rmdir(UTEST_ASALOCAL_BASEPATH "/" ATFP_TEMP_TRANSCODING_FOLDER_NAME); \
+    rmdir(UTEST_ASALOCAL_BASEPATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME); \
     rmdir(UTEST_ASALOCAL_BASEPATH); \
     rmdir(UTEST_FILE_BASEPATH);
 

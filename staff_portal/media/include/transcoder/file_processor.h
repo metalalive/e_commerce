@@ -127,7 +127,10 @@ typedef struct {
     int   app_sync_cnt;
 } atfp_asa_map_t;
 
-#define   ATFP_TEMP_TRANSCODING_FOLDER_NAME  "transcoding"
+#define   ATFP__TEMP_TRANSCODING_FOLDER_NAME  "transcoding"
+#define   ATFP__COMMITTED_FOLDER_NAME         "committed"
+#define   ATFP__DISCARDING_FOLDER_NAME        "discarding"
+#define   ATFP__MAXSZ_STATUS_FOLDER_NAME   MAX(sizeof(ATFP__TEMP_TRANSCODING_FOLDER_NAME),MAX(sizeof(ATFP__COMMITTED_FOLDER_NAME),sizeof(ATFP__DISCARDING_FOLDER_NAME)))
 // In the transcoder, `atfp_t` object requires that each object of `asa_op_base_cfg_t` type
 //  should be able to find back to itself in the callback of `asa_op_base_cfg_t` type.
 // For simplicity, the transcoder `atfp_t` reserves the first field of user arguments of
@@ -185,6 +188,8 @@ ASA_RES_CODE  atfp__file_start_transfer(
 
 int atfp_segment_init(atfp_segment_t *);
 int atfp_segment_final(atfp_segment_t *, json_t *info);
+
+void  atfp_storage__commit_new_version(atfp_t *);
 
 void  atfp__close_local_seg__cb  (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE);
 void  atfp__unlink_local_seg__cb (asa_op_base_cfg_t *, ASA_RES_CODE);

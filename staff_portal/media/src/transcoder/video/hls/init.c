@@ -46,11 +46,11 @@ static void atfp__video_hls__init(atfp_t *processor)
         // local storage handles , each of which stores transcoded file for specific spec
         const char *local_tmpfile_basepath = asa_local_srcdata->super.op.mkdir.path.origin;
         const char *_version = processor->data.version;
-        size_t path_sz = strlen(local_tmpfile_basepath) + 1 + sizeof(ATFP_TEMP_TRANSCODING_FOLDER_NAME)
+        size_t path_sz = strlen(local_tmpfile_basepath) + 1 + sizeof(ATFP__TEMP_TRANSCODING_FOLDER_NAME)
                           + 1 + strlen(_version) + 1; // include NULL-terminated byte
         char fullpath[path_sz];
         size_t nwrite = snprintf(&fullpath[0], path_sz, "%s/%s/%s", local_tmpfile_basepath,
-                 ATFP_TEMP_TRANSCODING_FOLDER_NAME, _version);
+                 ATFP__TEMP_TRANSCODING_FOLDER_NAME, _version);
         fullpath[nwrite++] = 0x0; // NULL-terminated
         asa_local_dstdata->super.op.mkdir.path.origin = strndup(&fullpath[0], nwrite);
         asa_local_dstdata->super.op.mkdir.path.curr_parent = calloc(nwrite, sizeof(char));
@@ -87,7 +87,7 @@ static void atfp__video_hls__init(atfp_t *processor)
         asa_local_dstdata->super.op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
         asa_local_dstdata->super.op.mkdir.cb = atfp_hls__create_local_workfolder_cb;
     }
-    ASA_RES_CODE  asa_result = app_storage_localfs_mkdir(&asa_local_dstdata->super);
+    ASA_RES_CODE  asa_result = app_storage_localfs_mkdir(&asa_local_dstdata->super, 1);
     if(asa_result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(processor->data.error, "storage",
                 json_string("[hls] failed to issue create-folder operation for internal local tmp buf"));
@@ -105,12 +105,14 @@ static  void  atfp_hls__asalocal_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES
 {
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     DEINIT_IF_EXISTS(asaobj->cb_args.entries);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.prefix);
     DEINIT_IF_EXISTS(asaobj->op.mkdir.path.origin);
     DEINIT_IF_EXISTS(asaobj->op.mkdir.path.curr_parent);
     DEINIT_IF_EXISTS(processor);
 }
 static  void  atfp_hls__asaremote_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.prefix);
     DEINIT_IF_EXISTS(asaobj->op.mkdir.path.origin);
     DEINIT_IF_EXISTS(asaobj->op.mkdir.path.curr_parent);
     DEINIT_IF_EXISTS(asaobj);
