@@ -174,6 +174,10 @@ static void  _app_storage_localfs__scandir_cb(uv_fs_t *req)
     const char *path = req->path; // `new_path` and `path` fields were allocated together
     asa_op_base_cfg_t *cfg = (asa_op_base_cfg_t *) H2O_STRUCT_FROM_MEMBER(asa_op_localfs_cfg_t, file, req);
     ASA_RES_CODE  app_result = (req->result >= 0) ? ASTORAGE_RESULT_COMPLETE: ASTORAGE_RESULT_OS_ERROR;
+    if(req->result >= 0) {
+        cfg->op.scandir.fileinfo.size = req->result;
+        cfg->op.scandir.fileinfo.rd_idx = 0;
+    } // let app developers decide when to alloc/free memory for the result
     cfg->op.scandir.cb(cfg, app_result);
     if(path)
         free((void *)path);
@@ -184,6 +188,8 @@ ASA_RES_CODE  app_storage_localfs_scandir (asa_op_base_cfg_t *cfg)
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
     if(!_cfg || !_cfg->loop || !cfg->op.scandir.cb || !cfg->op.scandir.path)
         return ASTORAGE_RESULT_ARG_ERROR;
+    if(cfg->op.scandir.fileinfo.data || cfg->op.scandir.fileinfo.size > 0)
+        return ASTORAGE_RESULT_ARG_ERROR; // previous scan data should be cleaned
     ASA_RES_CODE result = ASTORAGE_RESULT_ACCEPT;
     int err = uv_fs_scandir(_cfg->loop, &_cfg->file, cfg->op.scandir.path,
             0, _app_storage_localfs__scandir_cb);
@@ -195,7 +201,7 @@ ASA_RES_CODE  app_storage_localfs_scandir (asa_op_base_cfg_t *cfg)
 ASA_RES_CODE  app_storage_localfs_scandir_next (asa_op_base_cfg_t *cfg, asa_dirent_t *e)
 { 
     asa_op_localfs_cfg_t *_cfg = (asa_op_localfs_cfg_t *) cfg;
-    if(!_cfg || _cfg->file.file < 0 || !e)
+    if(!_cfg || !e)
         return ASTORAGE_RESULT_ARG_ERROR;
     ASA_RES_CODE result = ASTORAGE_RESULT_COMPLETE;
     uv_dirent_t  ent = {0};
@@ -221,6 +227,7 @@ ASA_RES_CODE  app_storage_localfs_scandir_next (asa_op_base_cfg_t *cfg, asa_dire
         }
         *e = (asa_dirent_t) {.type=ftyp, .name=ent.name};
     } else {
+        uv_fs_req_cleanup(&_cfg->file);
         result = ASTORAGE_RESULT_OS_ERROR;
     }
     return result;

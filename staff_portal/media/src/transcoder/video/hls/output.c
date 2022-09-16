@@ -17,7 +17,7 @@ static  void atfp_hls__unlink_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_C
 static  void atfp_hls__close_dst_playlist__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN));
+    processor->transfer.dst.flags.asaremote_open = 0;
     if(result != ASTORAGE_RESULT_COMPLETE)
         json_object_set_new(processor->data.error, "storage",
                 json_string("[hls] failed to close playlist on destination side"));
@@ -29,7 +29,7 @@ static  void atfp_hls__close_dst_initmap__cb (asa_op_base_cfg_t *asaobj, ASA_RES
     int err = 1;
     atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = &hlsproc->super;
-    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN));
+    processor->transfer.dst.flags.asaremote_open = 0;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_t    *seg_cfg = &hlsproc->internal.segment;
         asa_op_base_cfg_t *asa_dst = asaobj;
@@ -50,7 +50,7 @@ static  void atfp_hls__close_dst_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE
     int err = 1;
     atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_t *processor = &hlsproc->super;
-    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN));
+    processor->transfer.dst.flags.asaremote_open = 0;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_t    *seg_cfg = &hlsproc->internal.segment;
         asa_op_base_cfg_t *asa_dst = asaobj;

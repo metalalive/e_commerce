@@ -18,6 +18,18 @@ typedef enum {
 struct _asa_cfg_s;
 struct _asa_op_base_cfg_s;
 
+typedef enum {
+    ASA_DIRENT_UNKNOWN = 0,
+    ASA_DIRENT_FILE,
+    ASA_DIRENT_DIR,
+    ASA_DIRENT_LINK,
+} asa_dirent_type_t;
+
+typedef struct {
+    char *name;
+    asa_dirent_type_t  type;
+} asa_dirent_t;
+
 typedef void (*asa_mkdir_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE);
 typedef void (*asa_rmdir_cb_t) (struct _asa_op_base_cfg_s *, ASA_RES_CODE);
 typedef void (*asa_scandir_cb_t)(struct _asa_op_base_cfg_s *, ASA_RES_CODE);
@@ -53,7 +65,12 @@ struct _asa_op_base_cfg_s {
         } rmdir;
         struct {
             asa_scandir_cb_t  cb;
-            char  *path; 
+            char  *path;
+            struct { // for app to buffer the result of scandir
+                asa_dirent_t  *data;
+                uint32_t  size;
+                uint32_t  rd_idx;
+            } fileinfo;
         } scandir;
         struct { // move folder
             asa_rename_cb_t  cb;
@@ -97,18 +114,6 @@ struct _asa_op_base_cfg_s {
 }; // end of struct _asa_op_base_cfg_s
 
 typedef struct _asa_op_base_cfg_s asa_op_base_cfg_t;
-
-typedef enum {
-    ASA_DIRENT_UNKNOWN = 0,
-    ASA_DIRENT_FILE,
-    ASA_DIRENT_DIR,
-    ASA_DIRENT_LINK,
-} asa_dirent_type_t;
-
-typedef struct {
-    char *name;
-    asa_dirent_type_t  type;
-} asa_dirent_t;
 
 typedef struct {
     ASA_RES_CODE (*fn_mkdir)(asa_op_base_cfg_t *, uint8_t  allow_exists);

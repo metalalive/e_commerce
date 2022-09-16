@@ -8,57 +8,36 @@ static void api_rpc_transcoding__storage_deinit(asa_op_base_cfg_t *asaobj) {
     atfp_t  *processor = asaobj->cb_args.entries[ASA_USRARG_INDEX__AFTP];
     // each file-processor is responsible to de-init asa object, due to the reason
     // file processor may require information provided in external asa object during de-init
+    processor->data.error = NULL;
+    processor->data.spec = NULL;
+    processor->data.callback = NULL;
     processor->ops->deinit(processor);
-}
-
-static void  api_rpc__asalocal_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
-{   // TODO, clean up all files in created local storage since they are for temporary use
-    if(asaobj->op.mkdir.path.origin) {
-        free(asaobj->op.mkdir.path.origin);
-        asaobj->op.mkdir.path.origin = NULL;
-    }
-    if(asaobj->op.mkdir.path.curr_parent) {
-        free(asaobj->op.mkdir.path.curr_parent);
-        asaobj->op.mkdir.path.curr_parent = NULL;
-    }
-    if(asaobj->op.open.dst_path) {
-        free(asaobj->op.open.dst_path);
-        asaobj->op.open.dst_path = NULL;
-    }
 }
 
 void api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *_map) {
     if(!_map) { return; }
-    // TODO, this function has to be reentrant, to make sure all connected storage
-    //  handles are de-initialized before de-initializing the map 
-    asa_op_localfs_cfg_t *asa_local =  atfp_asa_map_get_localtmp(_map);
+    // NOTE :
+    // * each source file processor is responsible to de-initialize asa_src, asa_local, as well as
+    //   the map object, since it could takes several event-loop cycles to complete de-initialization
+    //   (for example, unlink temp files for its internal use)
+    // * all the asa objects MUST NOT read values from `api_req` and `err_info` during the
+    //   de-initialization 
     asa_op_base_cfg_t *asa_src = atfp_asa_map_get_source(_map);
     asa_op_base_cfg_t *asa_dst = NULL;
-    if (asa_src) { // other objects shared between `asa_op_base_cfg_t` objects
-        json_t *api_req  = asa_src->cb_args.entries[ASA_USRARG_INDEX__API_REQUEST];
-        json_t *err_info = asa_src->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO];
-        json_decref(api_req);
-        json_decref(err_info);
-        asa_src->cb_args.entries[ASA_USRARG_INDEX__API_REQUEST] = NULL;
-        asa_src->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO] = NULL;
-        atfp_asa_map_set_source(_map, NULL);
-        api_rpc_transcoding__storage_deinit(asa_src);
-    }
-    if(asa_local) {
-        atfp_asa_map_set_localtmp(_map, NULL);
-        if(asa_local->file.file >= 0) {
-            asa_local->super.op.close.cb =  api_rpc__asalocal_closefile_cb;
-            app_storage_localfs_close(&asa_local->super);
-        } else {
-            api_rpc__asalocal_closefile_cb(&asa_local->super, ASTORAGE_RESULT_COMPLETE);
-        }
-    }
     atfp_asa_map_reset_dst_iteration(_map);
     while((asa_dst = atfp_asa_map_iterate_destination(_map))) {
         atfp_asa_map_remove_destination(_map, asa_dst);
         api_rpc_transcoding__storage_deinit(asa_dst);
     }
-    atfp_asa_map_deinit(_map);
+    if (asa_src) { // other objects shared between `asa_op_base_cfg_t` objects
+        json_t *api_req  = asa_src->cb_args.entries[ASA_USRARG_INDEX__API_REQUEST];
+        json_t *err_info = asa_src->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO];
+        json_decref(api_req); // de-init in destinations may require to read values from here
+        json_decref(err_info);
+        asa_src->cb_args.entries[ASA_USRARG_INDEX__API_REQUEST] = NULL;
+        asa_src->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO] = NULL;
+        api_rpc_transcoding__storage_deinit(asa_src);
+    }
 } // end of api_rpc_transcoding__storagemap_deinit
    
 

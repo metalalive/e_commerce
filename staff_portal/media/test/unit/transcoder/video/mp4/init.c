@@ -24,15 +24,22 @@ static void  utest_atfp__async_usr_callback(uv_async_t* handle)
 }
 
 static void  utest_atfp_usr_cb(atfp_t *processor) {
+    json_t *err_info = NULL;
+    int num_err_items = 0;
+    if(processor)
+        err_info = processor->data.error;
+    if(err_info)
+        num_err_items = json_object_size(err_info);
+    mock(processor, num_err_items);
+    if(num_err_items > 0)
+        json_object_clear(err_info);
+    if(!processor)
+        return;
     asa_op_base_cfg_t  *asa_src = processor->data.storage.handle;
     if(asa_src && asa_src->cb_args.entries) {
         uint8_t *done_flag = asa_src->cb_args.entries[DONE_FLAG_INDEX__IN_ASA_USRARG];
-        if(done_flag && *done_flag == 0) {
+        if(done_flag && *done_flag == 0)
             *done_flag = 1;
-            mock(processor);
-        }
-    } else {
-       mock(processor);
     }
 } // end of utest_atfp_usr_cb
 
@@ -63,14 +70,6 @@ static  int  utest_mp4__av_validate (atfp_av_ctx_t *avctx, json_t *err_info)
     return  err;
 }
 
-static ASA_RES_CODE  utest_asa__close_fn(asa_op_base_cfg_t *asaobj)
-{
-    ASA_RES_CODE result = (ASA_RES_CODE) mock(asaobj);
-    if(result == ASTORAGE_RESULT_ACCEPT)
-        asaobj->op.close.cb(asaobj, ASTORAGE_RESULT_COMPLETE);
-    return  result;
-}
-
 static  int  utest_atfp_mockops_decode_pkt(atfp_av_ctx_t *avctx)
 { return (int) mock(avctx); }
 
@@ -83,22 +82,23 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
 
 #define  UTEST_ATFP_MP4__INIT_SETUP \
     uv_loop_t *loop  = uv_default_loop(); \
-    atfp_asa_map_t  mock_map = {0}; \
+    atfp_asa_map_t  *mock_map = calloc(1, sizeof(atfp_asa_map_t)); \
     uint8_t done_flag = 0; \
     void  *asa_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
-    asa_cfg_t  mock_storage_cfg = {.ops={.fn_open=app_storage_localfs_open, .fn_close=utest_asa__close_fn}}; \
-    asa_op_base_cfg_t  *mock_asa_src = calloc(1, sizeof(asa_op_base_cfg_t)); \
-    *mock_asa_src = (asa_op_base_cfg_t) { .storage=&mock_storage_cfg, \
+    asa_cfg_t  mock_storage_cfg = {.ops={.fn_open=app_storage_localfs_open, .fn_close=app_storage_localfs_close, \
+        .fn_unlink=app_storage_localfs_unlink }}; \
+    asa_op_localfs_cfg_t  *mock_asa_src = calloc(1, sizeof(asa_op_localfs_cfg_t)); \
+    *mock_asa_src = (asa_op_localfs_cfg_t) { .loop=loop, .file={.file=-1}, \
+        .super={ .storage=&mock_storage_cfg, .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_cb_args}, \
         .op={.mkdir={.path={.origin=strdup(UTEST_ASAREMOTE_BASEPATH)}}, \
             .open={.dst_path=strdup(UTEST_REMOTE_FINAL_FILE)}}, \
-        .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_cb_args}, \
-    }; \
-    asa_op_localfs_cfg_t  mock_asa_local = { .loop=loop, .file={.file=-1}, \
+    }}; \
+    asa_op_localfs_cfg_t  *mock_asa_local = calloc(1, sizeof(asa_op_localfs_cfg_t)); \
+    *mock_asa_local = (asa_op_localfs_cfg_t) { .loop=loop, .file={.file=-1}, \
         .super={ .storage=&mock_storage_cfg, \
             .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_cb_args}, \
-            .op={.mkdir={.path={.origin=UTEST_ASALOCAL_BASEPATH}}}, \
-        } \
-    }; \
+            .op={.mkdir={.path={.origin=strdup(UTEST_ASALOCAL_BASEPATH)}}}, \
+    }}; \
     json_t *mock_errinfo = json_object(); \
     atfp_mp4_t *mock_fp = (atfp_mp4_t *) atfp_ops_video_mp4.ops.instantiate(); \
     mock_fp->internal.op.av_init   = utest_mp4__av_init; \
@@ -107,11 +107,11 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
     mock_fp->internal.op.preload_info = utest_mp4__preload_info ; \
     mock_fp->super.data.callback = utest_atfp_usr_cb ; \
     mock_fp->super.data.error = mock_errinfo ; \
-    mock_fp->super.data.storage.handle = mock_asa_src ; \
-    atfp_asa_map_set_source(&mock_map, mock_asa_src); \
-    atfp_asa_map_set_localtmp(&mock_map, &mock_asa_local); \
+    mock_fp->super.data.storage.handle = &mock_asa_src->super; \
+    atfp_asa_map_set_source(mock_map, &mock_asa_src->super); \
+    atfp_asa_map_set_localtmp(mock_map, mock_asa_local); \
     asa_cb_args[ATFP_INDEX__IN_ASA_USRARG]   = mock_fp; \
-    asa_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = &mock_map; \
+    asa_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = mock_map; \
     asa_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
     mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
     mkdir(UTEST_ASALOCAL_BASEPATH, S_IRWXU); \
@@ -119,14 +119,6 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
 
 #define  UTEST_ATFP_MP4__INIT_TEARDOWN \
     json_decref(mock_errinfo); \
-    if(mock_asa_local.file.file >= 0) { \
-        close(mock_asa_local.file.file); \
-        mock_asa_local.file.file = -1; \
-    } \
-    if(mock_asa_local.super.op.open.dst_path) { \
-        unlink(mock_asa_local.super.op.open.dst_path); \
-        free(mock_asa_local.super.op.open.dst_path); \
-    } \
     rmdir(UTEST_ASALOCAL_BASEPATH); \
     rmdir(UTEST_FILE_BASEPATH);
 
@@ -139,19 +131,19 @@ Ensure(atfp_mp4_test__init_deinit__ok) {
         expect(utest_mp4__preload_info, will_return(ASTORAGE_RESULT_ACCEPT));
         expect(utest_mp4__av_init, will_return(ASTORAGE_RESULT_ACCEPT));
         expect(utest_mp4__av_validate, will_return(0));
-        expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)));
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)), 
+                when(num_err_items, is_equal_to(0)));
         while(!done_flag)
             uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_size(mock_errinfo), is_equal_to(0));
-        assert_that(mock_asa_local.file.file, is_greater_than(-1));
+        assert_that(mock_asa_local->file.file, is_greater_than(-1));
         assert_that(access(UTEST_LOCAL_TMPBUF, F_OK), is_equal_to(0));
     } { // de-init
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
-        expect(utest_asa__close_fn, will_return(ASTORAGE_RESULT_ACCEPT),
-                when(asaobj, is_equal_to(mock_asa_src)));
         atfp_ops_video_mp4.ops.deinit(&mock_fp->super);
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
         uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_size(mock_errinfo), is_equal_to(0));
+        uv_run(loop, UV_RUN_ONCE);
+        uv_run(loop, UV_RUN_ONCE);
     }
     UTEST_ATFP_MP4__INIT_TEARDOWN
 } // end of atfp_mp4_test__init_deinit__ok
@@ -163,18 +155,17 @@ Ensure(atfp_mp4_test__init_preload_error) {
         atfp_ops_video_mp4.ops.init(&mock_fp->super);
         assert_that(json_object_size(mock_errinfo), is_equal_to(0));
         expect(utest_mp4__preload_info, will_return(ASTORAGE_RESULT_OS_ERROR));
-        expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)));
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)),
+                when(num_err_items, is_equal_to(1)));
         while(!done_flag)
             uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_size(mock_errinfo), is_equal_to(1));
     } { // de-init
-        json_object_clear(mock_errinfo);
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
-        expect(utest_asa__close_fn, will_return(ASTORAGE_RESULT_ACCEPT),
-                when(asaobj, is_equal_to(mock_asa_src)));
         atfp_ops_video_mp4.ops.deinit(&mock_fp->super);
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
         uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_size(mock_errinfo), is_equal_to(0));
+        uv_run(loop, UV_RUN_ONCE);
+        uv_run(loop, UV_RUN_ONCE);
     }
     UTEST_ATFP_MP4__INIT_TEARDOWN
 } // end of atfp_mp4_test__init_preload_error
@@ -187,18 +178,17 @@ Ensure(atfp_mp4_test__init_avctx_error) {
         assert_that(json_object_size(mock_errinfo), is_equal_to(0));
         expect(utest_mp4__preload_info, will_return(ASTORAGE_RESULT_ACCEPT));
         expect(utest_mp4__av_init, will_return(ASTORAGE_RESULT_DATA_ERROR));
-        expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)));
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)),
+                when(num_err_items, is_equal_to(1)));
         while(!done_flag)
             uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_size(mock_errinfo), is_equal_to(1));
     } { // de-init
-        json_object_clear(mock_errinfo);
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
-        expect(utest_asa__close_fn, will_return(ASTORAGE_RESULT_ACCEPT),
-                when(asaobj, is_equal_to(mock_asa_src)));
         atfp_ops_video_mp4.ops.deinit(&mock_fp->super);
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
         uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_size(mock_errinfo), is_equal_to(0));
+        uv_run(loop, UV_RUN_ONCE);
+        uv_run(loop, UV_RUN_ONCE);
     }
     UTEST_ATFP_MP4__INIT_TEARDOWN
 } // end of atfp_mp4_test__init_avctx_error
@@ -212,18 +202,17 @@ Ensure(atfp_mp4_test__init_avctx_validation_failure) {
         expect(utest_mp4__preload_info, will_return(ASTORAGE_RESULT_ACCEPT));
         expect(utest_mp4__av_init, will_return(ASTORAGE_RESULT_ACCEPT));
         expect(utest_mp4__av_validate, will_return(-1));
-        expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)));
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp->super)),
+              when(num_err_items, is_equal_to(1)));
         while(!done_flag)
             uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_size(mock_errinfo), is_equal_to(1));
     } { // de-init
-        json_object_clear(mock_errinfo);
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
-        expect(utest_asa__close_fn, will_return(ASTORAGE_RESULT_ACCEPT),
-                when(asaobj, is_equal_to(mock_asa_src)));
         atfp_ops_video_mp4.ops.deinit(&mock_fp->super);
+        expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
         uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_size(mock_errinfo), is_equal_to(0));
+        uv_run(loop, UV_RUN_ONCE);
+        uv_run(loop, UV_RUN_ONCE);
     }
     UTEST_ATFP_MP4__INIT_TEARDOWN
 } // end of atfp_mp4_test__init_avctx_validation_failure

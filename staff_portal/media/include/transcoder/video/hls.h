@@ -42,6 +42,9 @@ typedef struct atfp_hls_s {
 #define  HLS_FMP4_FILENAME          "init_packet_map"
 #define  HLS_PLAYLIST_FILENAME      "playlist.m3u8"
 
+uint8_t  atfp__video_hls__deinit(atfp_t *);
+void     atfp_hls__remove_file(atfp_t *, const char *status);
+
 int   atfp_hls__av_init(atfp_hls_t *);
 void  atfp_hls__av_deinit(atfp_hls_t *);
 int   atfp_hls__avfilter_init(atfp_hls_t *);

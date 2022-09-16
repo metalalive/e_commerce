@@ -19,8 +19,9 @@ static void  atfp_video__dst_update_metadata__db_async_err(db_query_t *target, d
 
 
 static void  atfp_video__dst_update_metadata__rs_rdy(db_query_t *target, db_query_result_t *detail)
-{ // TODO, move transcoding files to transcoded
+{
     atfp_t *processor = (atfp_t *) target->cfg.usr_data.entry[0];
+    //atfp_storage__commit_new_version(processor);
     processor->data.callback(processor);
 } // end of atfp_video__dst_update_metadata__rs_rdy
 
@@ -47,11 +48,10 @@ void  atfp_video__dst_update_metadata(atfp_t *processor, void *loop)
     size_t  res_id_encoded_sz = strlen(res_id_encoded), version_sz = strlen(version);
     size_t  raw_sql_sz = UINT32_STR_SIZE * 3 + UINT8_STR_SIZE + version_sz + res_id_encoded_sz;
     size_t  nb_rawsql_used = 0;
-    uint8_t  is_update = (uint8_t) json_boolean_value(json_object_get(json_object_get(
-                    spec, "__internal__"), "is_update"));
-    raw_sql_sz += (is_update) ? sizeof(SQL_PATTERN__METADATA_UPDATE): sizeof(SQL_PATTERN__METADATA_INSERT);
+    uint8_t  _is_update =  processor->transfer.dst.flags.version_exists;
+    raw_sql_sz += (_is_update) ? sizeof(SQL_PATTERN__METADATA_UPDATE): sizeof(SQL_PATTERN__METADATA_INSERT);
     char raw_sql[raw_sql_sz];
-    if(is_update) {
+    if(_is_update) {
         nb_rawsql_used = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN__METADATA_UPDATE,
                 height, width, framerate, total_nbytes, res_id_encoded, version);
     } else {

@@ -13,12 +13,14 @@ extern "C" {
 // for all file processors of each API request
 #define   ASA_USRARG_INDEX__RPC_RECEIPT  (ASA_USRARG_INDEX__ASAOBJ_MAP + 1)
 #define   ASA_USRARG_INDEX__API_REQUEST  (ASA_USRARG_INDEX__ASAOBJ_MAP + 2)
-#define   ASA_USRARG_INDEX__VERSION_LABEL   (ASA_USRARG_INDEX__ASAOBJ_MAP + 3)
-#define   ASA_USRARG_INDEX__ERROR_INFO      (ASA_USRARG_INDEX__ASAOBJ_MAP + 4)
+#define   ASA_USRARG_INDEX__ERROR_INFO      (ASA_USRARG_INDEX__ASAOBJ_MAP + 3)
+#define   ASA_USRARG_INDEX__VERSION_LABEL   (ASA_USRARG_INDEX__ASAOBJ_MAP + 4)
+#define   ASA_USRARG_INDEX__VERSION_EXIST_FLAG   (ASA_USRARG_INDEX__ASAOBJ_MAP + 5)
+
 
 #define   NUM_USRARGS_ASA_LOCALTMP  (ASA_USRARG_INDEX__ERROR_INFO + 1)
 #define   NUM_USRARGS_ASA_SRC       (ASA_USRARG_INDEX__ERROR_INFO + 1)
-#define   NUM_USRARGS_ASA_DST       (ASA_USRARG_INDEX__ERROR_INFO + 1)
+#define   NUM_USRARGS_ASA_DST       (ASA_USRARG_INDEX__VERSION_EXIST_FLAG + 1)
 
 void  api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *_map);
 void  api_rpc_transcode__finalize (atfp_asa_map_t *map);

@@ -147,9 +147,11 @@ static atfp_t * api_rpc_transcode__init_file_processor (
     if(processor) {
         json_t  *err_info = asaobj->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO];
         json_t  *spec     = asaobj->cb_args.entries[ASA_USRARG_INDEX__API_REQUEST];
+        uint32_t _usr_id = (uint32_t) json_integer_value(json_object_get(spec, "usr_id"));
+        uint32_t _upld_req_id = (uint32_t) json_integer_value(json_object_get(spec, "last_upld_req"));
         asaobj->cb_args.entries[ASA_USRARG_INDEX__AFTP] = processor;
         processor->data = (atfp_data_t) {
-            .error=err_info, .spec=spec, .callback=callback,
+            .error=err_info, .spec=spec, .callback=callback, .usr_id=_usr_id, .upld_req_id=_upld_req_id,
             .version=asaobj->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL],
             .storage={ .basepath=asaobj->op.mkdir.path.origin, .handle=asaobj},
         };
@@ -186,6 +188,10 @@ static  void  api_rpc_transcode__try_init_file_processors(asa_op_base_cfg_t *asa
             json_object_set_new(err_info, "transcoder", json_string("unsupported destination file format"));
             goto done;
         }
+#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
+        uint8_t version_exist = (uint8_t) asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_EXIST_FLAG];
+#pragma GCC diagnostic pop
+        processor->transfer.dst.flags.version_exists = version_exist;
         if(asa_dst->op.mkdir.path.prefix) {
             const char *version = asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL];
             char *basepath = asa_dst->op.mkdir.path.origin;
@@ -368,11 +374,13 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
     const char *_metadata_db   = json_string_value(json_object_get(api_req, "metadata_db"));
     const char *_storage_alias = json_string_value(json_object_get(api_req, "storage_alias"));
     const char *version = json_string_value(json_object_get(api_req, "version"));
-    uint32_t usr_id = (uint32_t) json_integer_value(json_object_get(api_req, "usr_id"));
-    uint32_t last_upld_req = (uint32_t) json_integer_value(json_object_get(api_req, "last_upld_req"));
-    if(last_upld_req == 0)
+    uint8_t version_exist = (uint8_t) json_boolean_value(json_object_get(json_object_get(
+                    api_req, "__internal__"), "is_update"));
+    uint32_t _usr_id = (uint32_t) json_integer_value(json_object_get(api_req, "usr_id"));
+    uint32_t _upld_req_id = (uint32_t) json_integer_value(json_object_get(api_req, "last_upld_req"));
+    if(_upld_req_id == 0)
         json_object_set_new(err_info, "upld_req", json_string("has to be non-zero unsigned integer"));
-    if(usr_id == 0) 
+    if(_usr_id == 0) 
         json_object_set_new(err_info, "usr_id", json_string("has to be non-zero unsigned integer"));
     if(!version)
         json_object_set_new(err_info, "version", json_string("required"));
@@ -405,10 +413,10 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
     } { // create work folder for local temp buffer
         app_cfg_t *app_cfg = app_get_global_cfg();
         size_t path_sz = strlen(app_cfg->tmp_buf.path) + 1 + USR_ID_STR_SIZE + 1 +
-            UPLOAD_INT2HEX_SIZE(last_upld_req) + 1; // include NULL-terminated byte
+            UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1; // include NULL-terminated byte
         char basepath[path_sz];
         size_t nwrite = snprintf(&basepath[0], path_sz, "%s/%d/%08x", app_cfg->tmp_buf.path,
-                usr_id, last_upld_req);
+                _usr_id, _upld_req_id);
         basepath[nwrite++] = 0x0; // NULL-terminated
         asa_local_tmpbuf->file.file = -1;
         asa_local_tmpbuf->super.op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
@@ -422,10 +430,10 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
         }
     } { // open source file then read first portion
         size_t path_sz = strlen(asa_src->storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
-                   UPLOAD_INT2HEX_SIZE(last_upld_req) + 1; // assume NULL-terminated string
+                   UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1; // assume NULL-terminated string
         char basepath[path_sz];
         size_t nwrite = snprintf(&basepath[0], path_sz, "%s/%d/%08x", asa_src->storage->base_path,
-                usr_id, last_upld_req);
+                _usr_id, _upld_req_id);
         basepath[nwrite++] = 0x0; // NULL-terminated
         asa_src->op.mkdir.path.origin = (void *)strndup(&basepath[0], nwrite);
         asa_result = atfp_open_srcfile_chunk(asa_src, asa_src->op.mkdir.path.origin, 1,
@@ -436,7 +444,7 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
         }
     } { // create folder for saving transcoded files in destination
         size_t transcoding_fullpath_sz = strlen(asa_dst->storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
-            UPLOAD_INT2HEX_SIZE(last_upld_req) + 1 + ATFP__MAXSZ_STATUS_FOLDER_NAME + 1 ;
+            UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1 + ATFP__MAXSZ_STATUS_FOLDER_NAME + 1 ;
         size_t version_fullpath_sz = transcoding_fullpath_sz + strlen(version) + 1;
         asa_dst->op.mkdir.path.prefix = (void *)calloc(transcoding_fullpath_sz, sizeof(char));
         asa_dst->op.mkdir.path.origin = (void *)calloc(version_fullpath_sz, sizeof(char));
@@ -444,10 +452,13 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
         // will be used later when application moves transcoded file from temporary buffer (locally
         // stored in transcoding server) to destination storage (may be remotely stored, e.g. in cloud platform)
         size_t nwrite = snprintf(asa_dst->op.mkdir.path.origin, version_fullpath_sz, "%s/%d/%08x/%s",
-                asa_dst->storage->base_path, usr_id, last_upld_req,  ATFP__TEMP_TRANSCODING_FOLDER_NAME);
+                asa_dst->storage->base_path, _usr_id, _upld_req_id,  ATFP__TEMP_TRANSCODING_FOLDER_NAME);
         asa_dst->op.mkdir.path.origin[nwrite++] = 0x0; // NULL-terminated
         assert(nwrite <= transcoding_fullpath_sz);
-        asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL] = (void *) version;
+        asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL] = (void *) strdup(version);
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+        asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_EXIST_FLAG] = (void *) version_exist;
+#pragma GCC diagnostic pop
         asa_dst->op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
         asa_dst->op.mkdir.cb = api_rpc_transcode__create_dst_basepath_cb;
         asa_result = asa_dst->storage->ops.fn_mkdir(asa_dst, 1); // TODO, ensure only one asa_dst executes this command

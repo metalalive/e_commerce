@@ -24,7 +24,7 @@ static void atfp_mp4__avinput_init_done_cb (atfp_mp4_t *mp4proc)
         atfp_asa_map_t *_map = (atfp_asa_map_t *)asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
         asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
         int ret = uv_async_init(asa_local->loop, &mp4proc->async, atfp_mp4__postpone_usr_callback);
-        if(ret < 0) 
+        if(ret < 0)
             json_object_set_new(err_info, "libav", json_string("[mp4] failed to init internal async handle"));
     }
     processor -> data.callback(processor);
@@ -97,45 +97,85 @@ static void atfp__video_mp4__init(atfp_t *processor)
 
 #define  DEINIT_IF_EXISTS(var) \
     if(var) { \
-        free(var); \
+        free((void *)var); \
         (var) = NULL; \
     }
-static void  atfp_mp4__close_async_handle_cb (uv_handle_t* handle)
+
+static  void  _atfp_mp4__final_dealloc (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
-    atfp_t *processor = handle->data;
-    DEINIT_IF_EXISTS(processor);
-} // end of atfp_mp4__close_async_handle_cb
-static  void  atfp_mp4__asaremote_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
-{
-    asa_op_base_cfg_t *asa_src = asaobj;
+    atfp_asa_map_t  *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t *asa_local = atfp_asa_map_get_localtmp(_map);
+    asa_op_base_cfg_t    *asa_src   = atfp_asa_map_get_source(_map);
+    atfp_t *processor = asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    void (*cb)(atfp_t *) = processor->data.callback;
+    assert(asaobj == &asa_local->super);
+    assert(asa_src == processor->data.storage.handle);
+    atfp_asa_map_set_localtmp(_map, NULL);
+    atfp_asa_map_set_source(_map, NULL);
+    atfp_asa_map_deinit(_map);
+    DEINIT_IF_EXISTS(asa_local->super.op.mkdir.path.prefix);
+    DEINIT_IF_EXISTS(asa_local->super.op.mkdir.path.origin);
+    DEINIT_IF_EXISTS(asa_local->super.op.mkdir.path.curr_parent);
+    DEINIT_IF_EXISTS(asa_local->super.op.open.dst_path);
+    DEINIT_IF_EXISTS(asa_local);
     DEINIT_IF_EXISTS(asa_src->op.mkdir.path.prefix);
     DEINIT_IF_EXISTS(asa_src->op.mkdir.path.origin);
     DEINIT_IF_EXISTS(asa_src->op.mkdir.path.curr_parent);
     DEINIT_IF_EXISTS(asa_src->op.open.dst_path);
     DEINIT_IF_EXISTS(asa_src);
+    DEINIT_IF_EXISTS(processor);
+    if(cb)
+        cb(NULL);
+} // end of _atfp_mp4__final_dealloc
+
+static void  atfp_mp4__asalocal_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{   // TODO, clean up temp folder for locally storing transcoded files
+    atfp_asa_map_t    *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t *asa_local = atfp_asa_map_get_localtmp(_map);
+    asa_local->super.op.unlink.path = asa_local->super.op.open.dst_path; // local temp buffer file
+    asa_local->super.op.unlink.cb = _atfp_mp4__final_dealloc;
+    result = asa_local->super.storage->ops.fn_unlink(&asa_local->super);
+    if(result != ASTORAGE_RESULT_ACCEPT)
+        _atfp_mp4__final_dealloc(asaobj, ASTORAGE_RESULT_COMPLETE);
+}
+
+static  void  atfp_mp4__asaremote_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{
+    atfp_asa_map_t  *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t *asa_local =  atfp_asa_map_get_localtmp(_map);
+    if(asa_local->file.file >= 0) {
+        asa_local->super.op.close.cb =  atfp_mp4__asalocal_closefile_cb;
+        asa_local->super.storage->ops.fn_close(&asa_local->super);
+    } else {
+        atfp_mp4__asalocal_closefile_cb(&asa_local->super, ASTORAGE_RESULT_COMPLETE);
+    }
 }
 #undef  DEINIT_IF_EXISTS
+
+static void  atfp_mp4__close_async_handle_cb (uv_handle_t* handle)
+{ // close source chunkfile if still open
+    atfp_t *processor = handle->data;
+    asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
+    asa_src->op.close.cb = atfp_mp4__asaremote_closefile_cb;
+    uint8_t still_ongoing = asa_src->storage->ops.fn_close(asa_src) == ASTORAGE_RESULT_ACCEPT;
+    if(!still_ongoing)
+        atfp_mp4__asaremote_closefile_cb(asa_src, ASTORAGE_RESULT_COMPLETE);
+}
 
 
 static uint8_t atfp__video_mp4__deinit(atfp_t *processor)
 {
     atfp_mp4_t *mp4_proc = (atfp_mp4_t *)processor;
-    asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
     uv_handle_t *async_handle = (uv_handle_t *)&mp4_proc->async;
     mp4_proc->internal.op.av_deinit(mp4_proc);
-    uint8_t still_ongoing = 0;
-    if(uv_has_ref(async_handle)) {
+    uint8_t still_ongoing = uv_has_ref(async_handle);
+    if(still_ongoing) {
         uv_close(async_handle, atfp_mp4__close_async_handle_cb);
-    } else { // de-initialization hasn't completed yet
+    } else {
         atfp_mp4__close_async_handle_cb(async_handle);
-    } { // close source chunkfile if still open
-        asa_src->op.close.cb = atfp_mp4__asaremote_closefile_cb;
-        still_ongoing = asa_src->storage->ops.fn_close(asa_src) == ASTORAGE_RESULT_ACCEPT;
-        if(!still_ongoing)
-            atfp_mp4__asaremote_closefile_cb(asa_src, ASTORAGE_RESULT_COMPLETE);
     }
     return  still_ongoing;
-} // end of atfp__video_mp4__deinit
+}
 
 
 static void _atfp_mp4__processing_one_frame(atfp_mp4_t *mp4proc)

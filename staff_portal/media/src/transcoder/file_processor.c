@@ -448,7 +448,7 @@ void  atfp__close_local_seg__cb(asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_c
 {
     int err = 1;
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    processor->transfer.dst.flags &= ~((uint32_t)(1 << ATFP_TRANSFER_FLAG__ASALOCAL_OPEN));
+    processor->transfer.dst.flags.asalocal_open = 0;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_final(seg_cfg, processor->transfer.dst.info);
         processor->transfer.dst.tot_nbytes_file += seg_cfg->transfer.nbytes;
@@ -485,8 +485,7 @@ void atfp__open_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
     int err = 1;
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     if(result == ASTORAGE_RESULT_COMPLETE) {
-        uint32_t flags =  1 << ATFP_TRANSFER_FLAG__ASALOCAL_OPEN;
-        processor->transfer.dst.flags |= flags;
+        processor->transfer.dst.flags.asalocal_open = 1;
         asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
         result = asa_dst->storage->ops.fn_open(asa_dst);
         err = result != ASTORAGE_RESULT_ACCEPT;
@@ -505,7 +504,7 @@ void atfp__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_cfg,
     int err = 1;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_init(seg_cfg);
-        processor->transfer.dst.flags |= (1 << ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN);
+        processor->transfer.dst.flags.asaremote_open = 1;
         result = _asa_local->storage->ops.fn_read(_asa_local);
         err = result != ASTORAGE_RESULT_ACCEPT;
     }
@@ -560,4 +559,42 @@ void atfp__write_dst_seg__cb (asa_op_base_cfg_t *asaobj, atfp_segment_t  *seg_cf
         processor -> data.callback(processor);
     }
 } // end of atfp__write_dst_seg__cb
+
+
+int  atfp_scandir_load_fileinfo (asa_op_base_cfg_t *asaobj, json_t *err_info)
+{
+    int idx = 0, err = 0;
+    ASA_RES_CODE result ;
+    size_t num_files = asaobj->op.scandir.fileinfo.size;
+    asa_dirent_t *es = calloc(num_files, sizeof(asa_dirent_t));
+    for(idx = 0; (!err) && (idx < num_files); idx++) {
+        result =  asaobj->storage->ops.fn_scandir_next(asaobj, &es[idx]);
+        if(result == ASTORAGE_RESULT_COMPLETE) { //  && es[idx].type == ASA_DIRENT_FILE
+            es[idx].name = strdup(es[idx].name); // TODO, optimize with linked list of 1kb mem block
+        } else {
+            json_object_set_new(err_info, "transcode", json_string(
+                "[storage] failed to retrieve next entry in scandir result"));
+            err = 1;
+        }
+    } // end of loop
+    if(!err) {
+        asa_dirent_t  e = {0};
+        result =  asaobj->storage->ops.fn_scandir_next(asaobj, &e);
+        if(result != ASTORAGE_RESULT_EOF_SCAN) {
+            json_object_set_new(err_info, "transcode", json_string(
+                "[storage] unexpected entry found in scandir result"));
+            err = 1;
+        }
+    }
+    if(err) {
+        for(idx = 0; idx < num_files; idx++) {
+            if(es[idx].name)
+                free(es[idx].name);
+        }
+        free(es);
+    } else {
+        asaobj->op.scandir.fileinfo.data = es;
+    }
+    return err;
+} // end of atfp_scandir_load_fileinfo
 

@@ -33,6 +33,8 @@ typedef struct {
     json_t *error;
     json_t *spec;
     const char *version; // point to version label string
+    uint32_t  usr_id;
+    uint32_t  upld_req_id;
     void (*callback)(struct atfp_s *);
     struct {
         const char *basepath;
@@ -67,9 +69,14 @@ typedef struct atfp_s {
     union {
         struct {
             void   (*update_metadata)(struct atfp_s *, void *loop);
+            void   (*remove_file)(struct atfp_s *, const char *status);
             json_t   *info;
             uint32_t  tot_nbytes_file;
-            uint32_t  flags;
+            struct { // for transfer transcoded files from local to destination storage
+                uint8_t  asalocal_open:1;
+                uint8_t  asaremote_open:1;
+                uint8_t  version_exists:1;
+            }  flags;
         } dst; // TODO, add new field of type `atfp_segment_t`
     } transfer;
 } atfp_t;
@@ -138,10 +145,6 @@ typedef struct {
 #define  ATFP_INDEX__IN_ASA_USRARG    0
 #define  ASAMAP_INDEX__IN_ASA_USRARG  1
 
-// bit fields used as flags for transfer transcoded files from local to destination storage
-#define  ATFP_TRANSFER_FLAG__ASALOCAL_OPEN    0
-#define  ATFP_TRANSFER_FLAG__ASAREMOTE_OPEN   1
-
 atfp_t * app_transcoder_file_processor(const char *label);
 
 uint8_t  atfp_common__label_match(const char *label, size_t num, const char **exp_labels);
@@ -188,6 +191,8 @@ ASA_RES_CODE  atfp__file_start_transfer(
 
 int atfp_segment_init(atfp_segment_t *);
 int atfp_segment_final(atfp_segment_t *, json_t *info);
+
+int  atfp_scandir_load_fileinfo (asa_op_base_cfg_t *, json_t *err_info);
 
 void  atfp_storage__commit_new_version(atfp_t *);
 

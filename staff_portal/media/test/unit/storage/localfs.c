@@ -426,8 +426,8 @@ Ensure(storage_localfs_scandir_test) {
             close(fd);
         }
     }
-    asa_op_localfs_cfg_t  mock_asaobj = {.loop = uv_default_loop(), .super={ .op={
-        .scandir={.cb=utest_5_asa_mock_cb, .path=EXPECT_BASEPATH }}}};
+    asa_op_localfs_cfg_t  mock_asaobj = {.loop = uv_default_loop(), .file={.file=-1},
+        .super={.op={.scandir={.cb=utest_5_asa_mock_cb, .path=EXPECT_BASEPATH }}}};
     ASA_RES_CODE result = app_storage_localfs_scandir (&mock_asaobj.super);
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     expect(utest_5_asa_mock_cb, when(result, is_equal_to(ASTORAGE_RESULT_COMPLETE)));

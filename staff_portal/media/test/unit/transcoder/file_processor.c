@@ -634,6 +634,78 @@ Ensure(transcoder_test__collect_segment_info_ok) {
 #undef  UTEST_ASA_REMOTE_BASEPATH
 #undef  UTEST_ASA_LOCAL_BASEPATH
 
+
+static ASA_RES_CODE  utest__mock_fn_scandir_next(asa_op_base_cfg_t *asaobj, asa_dirent_t *curr_entry)
+{ return (ASA_RES_CODE)mock(asaobj, curr_entry); }
+
+#define  UTEST__SCANDIR_LOAD_FILEINFO__SETUP  \
+    asa_dirent_t  mock_scandir_entries[EXPECT_SCANDIR_NUM_ENTRIES] = EXPECT_SCANDIR_ENTRIES; \
+    asa_cfg_t  mock_cfg_storage = {.ops={.fn_scandir_next=utest__mock_fn_scandir_next}}; \
+    asa_op_base_cfg_t  mock_asaobj = {.storage=&mock_cfg_storage, .op={.scandir={.fileinfo={.size=EXPECT_SCANDIR_NUM_ENTRIES}}}}; \
+    json_t *mock_errinfo = json_object(); \
+    int idx = 0;
+
+#define  UTEST__SCANDIR_LOAD_FILEINFO__TEARDOWN  \
+    if(mock_asaobj.op.scandir.fileinfo.data) { \
+        for(idx = 0; idx < EXPECT_SCANDIR_NUM_ENTRIES; idx++) { \
+            asa_dirent_t  *e = &mock_asaobj.op.scandir.fileinfo.data[idx]; \
+            free(e->name); \
+        } \
+        free(mock_asaobj.op.scandir.fileinfo.data); \
+    } \
+    json_decref(mock_errinfo);
+
+
+#define  EXPECT_SCANDIR_NUM_ENTRIES   4
+#define  EXPECT_SCANDIR_ENTRIES   {{"charlie",ASA_DIRENT_FILE}, {"jordan",ASA_DIRENT_DIR}, {"mike",ASA_DIRENT_LINK}, {"lima",ASA_DIRENT_FILE}}
+Ensure(atfp_test__scandir_load_fileinfo__ok) {
+    UTEST__SCANDIR_LOAD_FILEINFO__SETUP;
+    for(idx = 0; idx < EXPECT_SCANDIR_NUM_ENTRIES; idx++) {
+        asa_dirent_t  *src_entry = &mock_scandir_entries[idx];
+        expect(utest__mock_fn_scandir_next,  will_return(ASTORAGE_RESULT_COMPLETE),
+                will_set_contents_of_parameter(curr_entry, src_entry, sizeof(asa_dirent_t)));
+    }
+    assert_that(mock_asaobj.op.scandir.fileinfo.data , is_equal_to(NULL));
+    expect(utest__mock_fn_scandir_next,  will_return(ASTORAGE_RESULT_EOF_SCAN));
+    int err = atfp_scandir_load_fileinfo (&mock_asaobj, mock_errinfo);
+    assert_that(err, is_equal_to(0));
+    assert_that(json_object_size(mock_errinfo), is_equal_to(0));
+    assert_that(mock_asaobj.op.scandir.fileinfo.data , is_not_equal_to(NULL));
+    UTEST__SCANDIR_LOAD_FILEINFO__TEARDOWN;
+} // end of atfp_test__scandir_load_fileinfo__ok
+
+
+Ensure(atfp_test__scandir_load_fileinfo__corrupt) {
+    UTEST__SCANDIR_LOAD_FILEINFO__SETUP;
+    expect(utest__mock_fn_scandir_next,  will_return(ASTORAGE_RESULT_COMPLETE),
+            will_set_contents_of_parameter(curr_entry, &mock_scandir_entries[0], sizeof(asa_dirent_t)));
+    expect(utest__mock_fn_scandir_next,  will_return(ASTORAGE_RESULT_OS_ERROR));
+    int err = atfp_scandir_load_fileinfo (&mock_asaobj, mock_errinfo);
+    assert_that(err, is_equal_to(1));
+    assert_that(json_object_size(mock_errinfo), is_equal_to(1));
+    assert_that(mock_asaobj.op.scandir.fileinfo.data , is_equal_to(NULL));
+    UTEST__SCANDIR_LOAD_FILEINFO__TEARDOWN;
+} // end of atfp_test__scandir_load_fileinfo__corrupt
+
+
+Ensure(atfp_test__scandir_load_fileinfo__unexpected_extra) {
+    UTEST__SCANDIR_LOAD_FILEINFO__SETUP;
+    mock_asaobj.op.scandir.fileinfo.size -= 1;
+    for(idx = 0; idx < EXPECT_SCANDIR_NUM_ENTRIES; idx++) {
+        asa_dirent_t  *src_entry = &mock_scandir_entries[idx];
+        expect(utest__mock_fn_scandir_next,  will_return(ASTORAGE_RESULT_COMPLETE),
+                will_set_contents_of_parameter(curr_entry, src_entry, sizeof(asa_dirent_t)));
+    }
+    int err = atfp_scandir_load_fileinfo (&mock_asaobj, mock_errinfo);
+    assert_that(err, is_equal_to(1));
+    assert_that(json_object_size(mock_errinfo), is_equal_to(1));
+    assert_that(mock_asaobj.op.scandir.fileinfo.data , is_equal_to(NULL));
+    UTEST__SCANDIR_LOAD_FILEINFO__TEARDOWN;
+} // end of atfp_test__scandir_load_fileinfo__unexpected_extra
+#undef   EXPECT_SCANDIR_NUM_ENTRIES
+#undef   EXPECT_SCANDIR_ENTRIES
+
+
 TestSuite *app_transcoder_file_processor_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -651,5 +723,8 @@ TestSuite *app_transcoder_file_processor_tests(void)
     add_test(suite, transcoder_test__start_transfer_genericfile_ok);
     add_test(suite, transcoder_test__transfer_genericfile__memory_corruption);
     add_test(suite, transcoder_test__collect_segment_info_ok);
+    add_test(suite, atfp_test__scandir_load_fileinfo__ok);
+    add_test(suite, atfp_test__scandir_load_fileinfo__corrupt);
+    add_test(suite, atfp_test__scandir_load_fileinfo__unexpected_extra);
     return suite;
 }
