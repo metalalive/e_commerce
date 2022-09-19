@@ -200,6 +200,7 @@ SET(APP_HTTPSERVER_SOURCE_FILES
 
 SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/file_processor.c
+    src/transcoder/storage.c
     src/transcoder/video/metadata.c 
     src/transcoder/video/hls/init.c 
     src/transcoder/video/hls/deinit.c 
@@ -271,6 +272,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/mariadb.c
     test/unit/transcoder/cfg_parser.c
     test/unit/transcoder/file_processor.c
+    test/unit/transcoder/storage.c
     test/unit/transcoder/video/mp4/init.c
     test/unit/transcoder/video/mp4/preload.c
     test/unit/transcoder/video/mp4/avcontext.c

@@ -21,8 +21,7 @@ static void  atfp_video__dst_update_metadata__db_async_err(db_query_t *target, d
 static void  atfp_video__dst_update_metadata__rs_rdy(db_query_t *target, db_query_result_t *detail)
 {
     atfp_t *processor = (atfp_t *) target->cfg.usr_data.entry[0];
-    //atfp_storage__commit_new_version(processor);
-    processor->data.callback(processor);
+    atfp_storage__commit_new_version(processor);
 } // end of atfp_video__dst_update_metadata__rs_rdy
 
 
