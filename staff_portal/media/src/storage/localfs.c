@@ -345,6 +345,8 @@ ASA_RES_CODE app_storage_localfs_write(asa_op_base_cfg_t *cfg)
 } // end of app_storage_localfs_write
 #undef NUM_BUFS
 
+size_t   app_storage_localfs_typesize(void)
+{ return sizeof(asa_op_localfs_cfg_t); }
 
 ASA_RES_CODE app_storage_localfs_seek (asa_op_base_cfg_t *cfg)
 { //  TODO, remove, seek function doesn't seem appropriate for multi-threaded applications

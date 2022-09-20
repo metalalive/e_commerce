@@ -200,7 +200,8 @@ static int  _atfp_hls__av_filter_processing(atfp_av_ctx_t *dst, AVFrame  *frame_
     atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
     uint16_t   num_filtered_frms  = dst->intermediate_data.encode.num_filtered_frms;
     if(num_filtered_frms == 0) {
-        ret = av_buffersrc_add_frame_flags(st_encode_ctx->filt_src_ctx, frame_origin, 0);
+        ret = av_buffersrc_add_frame_flags(st_encode_ctx->filt_src_ctx, frame_origin, 
+               AV_BUFFERSRC_FLAG_KEEP_REF ); // reference the same decoded frame in multiple filters
         if (ret < 0) {
             av_log(NULL, AV_LOG_ERROR, "Error while feeding the filtergraph\n");
             goto done;

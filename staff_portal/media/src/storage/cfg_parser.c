@@ -33,6 +33,7 @@ static uint8_t _app_elf_gather_storage_operation_cb(char *fn_name, void *entry_p
     STORAGE_OPS_FN_MAPPING(write, args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(read,  args, fn_name, entry_point);
     STORAGE_OPS_FN_MAPPING(seek,  args, fn_name, entry_point);
+    STORAGE_OPS_FN_MAPPING(typesize,  args, fn_name, entry_point);
 done:
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, mkdir, args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, rmdir, args);
@@ -45,6 +46,7 @@ done:
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, write, args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, read,  args);
     immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, seek,  args);
+    immediate_stop = STORAGE_ALL_OPS_READY(immediate_stop, typesize,  args);
     return immediate_stop;
 } // end of _app_elf_gather_storage_operation_cb
 #undef STORAGE_OPS_FN_MAPPING
@@ -81,7 +83,8 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg)
                 || !json_object_get(ops, "seek") || !json_object_get(ops, "write") || !json_object_get(ops, "read")
                 || !json_object_get(ops, "scandir") || !json_object_get(ops, "scandir_next")
                 || !json_object_get(ops, "rename") || !json_object_get(ops, "unlink")
-                || !json_object_get(ops, "mkdir") || !json_object_get(ops, "rmdir"))
+                || !json_object_get(ops, "mkdir") || !json_object_get(ops, "rmdir")
+                || !json_object_get(ops, "typesize"))
         {
             h2o_error_printf("[parsing] storage (idx=%d) must include function names for all operations \n", idx);
             goto error;
@@ -106,7 +109,7 @@ int parse_cfg_storages(json_t *objs, app_cfg_t *app_cfg)
         if(!_asa_cfg->ops.fn_open || !_asa_cfg->ops.fn_close || !_asa_cfg->ops.fn_seek
                 || !_asa_cfg->ops.fn_write || !_asa_cfg->ops.fn_read || !_asa_cfg->ops.fn_scandir_next
                 || !_asa_cfg->ops.fn_scandir || !_asa_cfg->ops.fn_rename || !_asa_cfg->ops.fn_unlink
-                || !_asa_cfg->ops.fn_mkdir || !_asa_cfg->ops.fn_rmdir)
+                || !_asa_cfg->ops.fn_mkdir || !_asa_cfg->ops.fn_rmdir || !_asa_cfg->ops.fn_typesize)
         {
             h2o_error_printf("[parsing] storage (idx=%d) failed to look up all necessary operations \n", idx);
             goto error;

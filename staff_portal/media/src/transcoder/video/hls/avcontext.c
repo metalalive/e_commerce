@@ -71,11 +71,11 @@ static int  atfp_hls__av_setup_options(AVFormatContext *fmt_ctx, const char *loc
 } // end of atfp_hls__av_setup_options
 
 
-static void _atfp_config_dst_video_codecctx(AVCodecContext *dst, AVCodecContext *src, json_t *spec)
+static void _atfp_config_dst_video_codecctx(AVCodecContext *dst, AVCodecContext *src, json_t *o_spec, json_t *elm_st_map)
 {
     uint32_t height = 0, width = 0;
     uint8_t  fps    = 0;
-    ATFP_VIDEO__READ_SPEC(spec, height, width, fps);
+    ATFP_VIDEO__READ_SPEC(o_spec, elm_st_map, height, width, fps);
     dst->height = FFMIN(src->height, height);
     dst->width  = FFMIN(src->width , width);
     dst->framerate = (AVRational){num:fps, den:1};
@@ -88,12 +88,11 @@ static void _atfp_config_dst_video_codecctx(AVCodecContext *dst, AVCodecContext 
     dst->bit_rate  = src->bit_rate;    
 } // end of _atfp_config_dst_video_codecctx
 
-static void _atfp_config_dst_audio_coderctx(AVCodecContext *dst, AVCodecContext *src, json_t *spec)
+static void _atfp_config_dst_audio_coderctx(AVCodecContext *dst, AVCodecContext *src, json_t *o_spec, json_t *elm_st_map)
 {
-    json_t *elm_st_key_obj = json_object_get(json_object_get(spec, "__internal__"), "audio_key");
+    json_t *elm_st_key_obj = json_object_get(json_object_get(o_spec, "__internal__"), "audio_key");
     const char *elm_st_key = json_string_value(elm_st_key_obj);
-    json_t *attribute  = json_object_get(json_object_get(json_object_get(spec, "elementary_streams"
-                    ), elm_st_key), "attribute");
+    json_t *attribute  = json_object_get(json_object_get(elm_st_map, elm_st_key), "attribute");
     uint32_t bitrate_kbps = json_integer_value(json_object_get(attribute, "bitrate_kbps"));
     dst->bit_rate  = FFMIN(src->bit_rate, (bitrate_kbps * 1000 - 1));
     dst->sample_rate = src->sample_rate;
@@ -106,7 +105,7 @@ static void _atfp_config_dst_audio_coderctx(AVCodecContext *dst, AVCodecContext 
 
 
 static int atfp_hls__av_encoder_init(atfp_av_ctx_t *avctx_dst, atfp_av_ctx_t *avctx_src,
-        json_t *spec, json_t *err_info)
+        json_t *o_spec, json_t *elm_st_map, json_t *err_info)
 {
     AVFormatContext *ofmt_ctx  = avctx_dst->fmt_ctx;
     AVFormatContext *ifmt_ctx  = avctx_src->fmt_ctx;
@@ -137,9 +136,9 @@ static int atfp_hls__av_encoder_init(atfp_av_ctx_t *avctx_dst, atfp_av_ctx_t *av
                 break;
             }
             if(dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
-                _atfp_config_dst_video_codecctx(enc_ctx, dec_ctx, spec);
+                _atfp_config_dst_video_codecctx(enc_ctx, dec_ctx, o_spec, elm_st_map);
             } else if(dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) {
-                _atfp_config_dst_audio_coderctx(enc_ctx, dec_ctx, spec);
+                _atfp_config_dst_audio_coderctx(enc_ctx, dec_ctx, o_spec, elm_st_map);
             }
             err = avcodec_open2(enc_ctx, encoder, NULL);
             if(err < 0) {
@@ -171,10 +170,14 @@ int  atfp_hls__av_init(atfp_hls_t *hlsproc)
     int err = 0;
     AVFormatContext *fmt_ctx = NULL;
     atfp_t  *processor = &hlsproc->super;
+    assert(processor->data.version);
+    assert(processor->data.spec);
     json_t  *req_spec  =  processor->data.spec;
+    json_t  *output  = json_object_get(json_object_get(req_spec, "outputs"), processor->data.version);
+    json_t  *elm_st_map = json_object_get(req_spec, "elementary_streams");
     const char *local_basepath = hlsproc->asa_local.super.op.mkdir.path.origin;
-    { // In this project, everything in `spec` field has to be validated at app server
-        const char *fmt_name = json_string_value(json_object_get(req_spec, "container"));
+    { // Note everything in `spec` field has to be validated at app server
+        const char *fmt_name = json_string_value(json_object_get(output, "container"));
         size_t playlist_path_sz = strlen(local_basepath) + 1 + sizeof(HLS_PLAYLIST_FILENAME);
         char   playlist_path [playlist_path_sz];
         size_t nwrite = snprintf(&playlist_path[0], playlist_path_sz, "%s/%s",
@@ -201,8 +204,8 @@ int  atfp_hls__av_init(atfp_hls_t *hlsproc)
         avctx_src = ((atfp_hls_t *)fp_src)->av; // TODO, better design for identifying source format
     }
     if (!err)
-        err  = atfp_hls__av_encoder_init(hlsproc->av, avctx_src, req_spec,
-                   processor->data.error);
+        err  = atfp_hls__av_encoder_init(hlsproc->av, avctx_src, output,
+                  elm_st_map, processor->data.error);
     if (!err)
         err  = atfp_hls__av_setup_options(fmt_ctx, local_basepath);
     // TODO, add function and data structure to monitor how many segment files are done by encoding

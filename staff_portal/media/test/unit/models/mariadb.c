@@ -120,6 +120,7 @@ Ensure(app_mariadb_test_init_ok) {
     assert_that(result, is_equal_to(DBA_RESULT_OK));
     assert_that(conn.pool, is_equal_to(&pool));
     assert_that(conn.lowlvl.conn, is_equal_to(&expect_mysql));
+    expect(mysql_close, when(mysql, is_equal_to(&expect_mysql)));
     result = app_db_mariadb_conn_deinit(&conn);
     assert_that(result, is_equal_to(DBA_RESULT_OK));
     assert_that(conn.lowlvl.conn, is_equal_to(NULL));

@@ -36,6 +36,9 @@ static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_write_fn(asa_o
 static __attribute__((optimize("O0"))) ASA_RES_CODE utest_storage_read_fn( asa_op_base_cfg_t *cfg)
 { return ASTORAGE_RESULT_ACCEPT; }
 
+static __attribute__((optimize("O0")))  size_t  utest_storage_typesize_fn (void)
+{ return 123; }
+
 
 Ensure(storage_cfg_incomplete_setting_tests) {
     json_t *objs = json_array();
@@ -102,6 +105,7 @@ Ensure(storage_cfg_missing_operation_fn_tests) {
         json_object_set_new(ops, "rename", json_string("utest_storage_rename_fn"));
         json_object_set_new(ops, "scandir", json_string("utest_storage_scandir_fn"));
         json_object_set_new(ops, "scandir_next", json_string("utest_storage_scandir_next_fn"));
+        json_object_set_new(ops, "typesize", json_string("utest_storage_typesize_fn"));
     }
     err = parse_cfg_storages(objs, &app_cfg);
     assert_that(err, is_equal_to(0));

@@ -25,6 +25,7 @@ ASA_RES_CODE  app_storage_localfs_close(asa_op_base_cfg_t *);
 ASA_RES_CODE  app_storage_localfs_read (asa_op_base_cfg_t *);
 ASA_RES_CODE  app_storage_localfs_write(asa_op_base_cfg_t *);
 ASA_RES_CODE  app_storage_localfs_seek (asa_op_base_cfg_t *);
+size_t   app_storage_localfs_typesize(void);
 
 #ifdef __cplusplus
 } // end of extern C clause

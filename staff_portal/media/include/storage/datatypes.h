@@ -127,6 +127,7 @@ typedef struct {
     ASA_RES_CODE (*fn_rename) (asa_op_base_cfg_t *);
     ASA_RES_CODE (*fn_scandir)(asa_op_base_cfg_t *);
     ASA_RES_CODE (*fn_scandir_next)(asa_op_base_cfg_t *, asa_dirent_t *);
+    size_t   (*fn_typesize)(void);
 } asa_cfg_ops_t;
 
 typedef struct _asa_cfg_s {

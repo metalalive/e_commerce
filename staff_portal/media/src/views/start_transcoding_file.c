@@ -52,13 +52,17 @@ ARPC_STATUS_CODE api__start_transcoding__render_rpc_corr_id (
     }
     json_t *_usr_data = (json_t *)args->usr_data;
     uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(_usr_data,"usr_id"));
-    const char *version = json_string_value(json_object_get(_usr_data, "version"));
-    if(usr_prof_id > 0 && version) {
+    json_t *outputs = json_object_get(_usr_data, "outputs");
+    if(usr_prof_id > 0 && outputs) {
         SHA_CTX  sha_ctx = {0};
         SHA1_Init(&sha_ctx);
         SHA1_Update(&sha_ctx, (const char *)&usr_prof_id, sizeof(usr_prof_id));
         SHA1_Update(&sha_ctx, (const char *)&args->_timestamp, sizeof(args->_timestamp));
-        SHA1_Update(&sha_ctx, version, APP_TRANSCODED_VERSION_SIZE);
+        const char *version = NULL;
+        json_t *req_output = NULL;
+        json_object_foreach(outputs, version, req_output) {
+            SHA1_Update(&sha_ctx, version, APP_TRANSCODED_VERSION_SIZE);
+        }
         char md[SHA_DIGEST_LENGTH] = {0};
         char md_hex[md_hex_sz];
         SHA1_Final((unsigned char *)&md[0], &sha_ctx);
@@ -72,34 +76,23 @@ ARPC_STATUS_CODE api__start_transcoding__render_rpc_corr_id (
 } // end of api__start_transcoding__render_rpc_corr_id
 
 
-static void _render_response_output(json_t *res_outputs, const char *version, const char *job_id, int status)
-{
-    json_t *item = json_object();
-    if(job_id)
-        json_object_set_new(item, "job_id", json_string(job_id));
-    json_object_set_new(item, "status", json_integer(status));
-    json_object_set_new(res_outputs, version, item);
-} // end of _render_response_output
-
 
 static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jobs(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
 { // create async job send it to message queue, since it takes time to transcode media file
+    int http_resp_status = 0;
     char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
     json_t *res_body_json = app_fetch_from_hashmap(node->data, "res_body_json");
     json_t *req_body_json = app_fetch_from_hashmap(node->data, "req_body_json");
     json_t *req_outputs = json_object_get(req_body_json, "outputs");
-    json_t *res_outputs = json_object();
-    json_t *req_output = NULL;
-    const char *version = NULL;
     json_t *elm_streams = json_object_get(req_body_json, "elementary_streams");
     json_t *parts_size  = json_object_get(req_body_json, "parts_size");
     json_t *res_id_item = json_object_get(req_body_json, "resource_id");
     json_t *usr_id_item   = json_object_get(req_body_json, "usr_id");
     json_t *upld_req_item = json_object_get(req_body_json, "last_upld_req");
     json_object_set(res_body_json, "resource_id", res_id_item);
-    json_object_set_new(res_body_json, "outputs", res_outputs);
-    // determine source and destination storage for RPC consumer, TODO, scalability
-    asa_cfg_t *storage =  app_storage_cfg_lookup("localfs");
+    // determine source and destination storage for RPC consumers, TODO, scalability
+    asa_cfg_t *src_storage =  app_storage_cfg_lookup("localfs");
+    asa_cfg_t *dst_storage =  app_storage_cfg_lookup("localfs");
     // TODO, improve transcoding function by following design straategies:
     // (1) reduce the redundant decode stages in RPC consumers. For the same source
     //     file transcoding to different variants, all decoders in the RPC consumers
@@ -114,59 +107,50 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
     //     function can first scale a frame to 1024p720, keep the frame, use it when
     //     scaling to 512p360 (extra storage required, so this will be considered for
     //      scalability once the application grows).
-    json_object_foreach(req_outputs, version, req_output) {
-        json_t *msgq_body_item = json_copy(req_output);
-        { // construct message body
-            json_object_set(msgq_body_item, "parts_size", parts_size);
-            json_object_set(msgq_body_item, "resource_id", res_id_item);
-            json_object_set_new(msgq_body_item, "res_id_encoded", json_string(res_id_encoded));
-            json_object_set_new(msgq_body_item, "version", json_string(version));
-            json_object_set_new(msgq_body_item, "metadata_db", json_string("db_server_1"));
-            json_object_set_new(msgq_body_item, "storage_alias", json_string(storage->alias));
-            json_object_set(msgq_body_item, "usr_id", usr_id_item);
-            json_object_set(msgq_body_item, "last_upld_req", upld_req_item);
-            json_t *elm_st_cp = json_object();
-            json_t *elm_st_label = NULL;
-            int idx = 0;
-            json_array_foreach(json_object_get(req_output, "elementary_streams"), idx, elm_st_label)
-            {
-                const char *label = json_string_value(elm_st_label);
-                json_t *elm_st_entry = json_object_get(elm_streams, label);
-                // the same elementary stream may be referenced by several outputs,
-                // By using json_object_set(), elm_st_entry will be kept (NOT be freed up)
-                // after json_decref(msgq_body_item) at the end
-                json_object_set(elm_st_cp, label, elm_st_entry);
-            } // end of loop
-            json_object_set_new(msgq_body_item, "elementary_streams", elm_st_cp);
-        }
+    json_t *msgq_body_item = json_object();
+    { // start of construct message body
+        json_t *req_output = NULL;
+        const char *version = NULL;
+        json_object_set(msgq_body_item, "parts_size", parts_size);
+        json_object_set(msgq_body_item, "resource_id", res_id_item);
+        json_object_set_new(msgq_body_item, "res_id_encoded", json_string(res_id_encoded));
+        json_object_set_new(msgq_body_item, "metadata_db", json_string("db_server_1"));
+        json_object_set_new(msgq_body_item, "storage_alias", json_string(src_storage->alias));
+        json_object_set(msgq_body_item, "usr_id", usr_id_item);
+        json_object_set(msgq_body_item, "last_upld_req", upld_req_item);
+        json_object_set(msgq_body_item, "elementary_streams", elm_streams);
+        json_object_set(msgq_body_item, "outputs", req_outputs);
+        json_object_foreach(req_outputs, version, req_output) {
+            json_object_set_new(req_output, "storage_alias", json_string(dst_storage->alias));
+        } // each output version may be in different storage
         size_t nb_required = json_dumpb(msgq_body_item, NULL, 0, 0);
         char *msg_body_raw = calloc(nb_required, sizeof(char));
         size_t nwrite = json_dumpb(msgq_body_item, msg_body_raw, nb_required, JSON_COMPACT);
         assert(nwrite <= nb_required);
-        {
 #define MAX_BYTES_JOB_ID    70
-            char job_id_raw[MAX_BYTES_JOB_ID] = {0};
-            arpc_exe_arg_t  rpc_arg = {
-                .conn = req->conn->ctx->storage.entries[1].data,  .job_id = {.bytes=&job_id_raw[0],
-                    .len=MAX_BYTES_JOB_ID }, .msg_body = {.len=nwrite, .bytes=msg_body_raw},
-                .alias = "app_mqbroker_1",  .routing_key = "rpc.media.transcode_video_file",
-                .usr_data = (void *)msgq_body_item,
-            }; // will start a new job and transcode asynchronously
-            if(app_rpc_start(&rpc_arg) == APPRPC_RESP_ACCEPTED) {
-                _render_response_output(res_outputs, version, &job_id_raw[0], 202);
-            } else {
-                _render_response_output(res_outputs, version, NULL, 503);
-            }
-#undef MAX_BYTES_JOB_ID
+        char job_id_raw[MAX_BYTES_JOB_ID] = {0};
+        arpc_exe_arg_t  rpc_arg = {
+            .conn = req->conn->ctx->storage.entries[1].data,  .job_id = {.bytes=&job_id_raw[0],
+                .len=MAX_BYTES_JOB_ID }, .msg_body = {.len=nwrite, .bytes=msg_body_raw},
+            .alias = "app_mqbroker_1",  .routing_key = "rpc.media.transcode_video_file",
+            .usr_data = (void *)msgq_body_item,
+        }; // will start a new job and transcode asynchronously
+        if(app_rpc_start(&rpc_arg) == APPRPC_RESP_ACCEPTED) {
+            http_resp_status = 202;
+            json_object_set_new(res_body_json, "job_id", json_string(&job_id_raw[0]));
+        } else {
+            http_resp_status = 503;
+            json_object_set_new(res_body_json, "job_id", json_null());
         }
+#undef MAX_BYTES_JOB_ID
         free(msg_body_raw);
-        json_decref(msgq_body_item);
-    } // end of loop - output iteration
+    } // end of construct message body
+    json_decref(msgq_body_item);
     {
 #define  MAX_BYTES_RESP_BODY  512
-        req->res.status = 202;
+        req->res.status = http_resp_status;
         req->res.reason = "Accepted";
-        char body_raw[MAX_BYTES_RESP_BODY];
+        char body_raw[MAX_BYTES_RESP_BODY] = {0};
         size_t nwrite = json_dumpb(res_body_json, &body_raw[0],  MAX_BYTES_RESP_BODY, JSON_COMPACT);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
         h2o_send_inline(req, body_raw, nwrite);
@@ -512,7 +496,7 @@ static void _validate_request__outputs_elm_st_map(json_t *output, json_t *elm_st
         json_object_set_new(internal, "audio_key", json_string(audio_stream_key));
         json_object_set_new(internal, "video_key", json_string(video_stream_key));
         json_object_set_new(output, "__internal__", internal);
-    } else {
+    } else { // TODO, does the app have to support 2 audio/video streams in the same media container ?
         json_object_set_new(err, "elementary_streams",
                 json_string("each output item should have exact one audio stream and exact one video stream to mux"));
     }

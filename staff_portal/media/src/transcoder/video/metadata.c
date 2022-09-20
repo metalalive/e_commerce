@@ -9,7 +9,7 @@
 static void _db_async_dummy_cb(db_query_t *target, db_query_result_t *detail)
 { (void *)detail; }
 
-static void  atfp_video__dst_update_metadata__db_async_err(db_query_t *target, db_query_result_t *detail)
+static __attribute__((optimize("O0")))  void  atfp_video__dst_update_metadata__db_async_err(db_query_t *target, db_query_result_t *detail)
 {
     atfp_t *processor = (atfp_t *) target->cfg.usr_data.entry[0];
     json_object_set_new(processor->data.error, "model",
@@ -35,15 +35,17 @@ static void  atfp_video__dst_update_metadata__rs_rdy(db_query_t *target, db_quer
 
 void  atfp_video__dst_update_metadata(atfp_t *processor, void *loop)
 {
+    uv_loop_t *_loop = (uv_loop_t *) loop;
+    uint32_t  total_nbytes = processor->transfer.dst.tot_nbytes_file;
+    json_t  *req_spec = processor->data.spec;
+    const char *version = processor->data.version;
+    const char *res_id_encoded = json_string_value(json_object_get(req_spec, "res_id_encoded"));
+    const char *metadata_db_label = json_string_value(json_object_get(req_spec, "metadata_db"));
+    json_t  *output   = json_object_get(json_object_get(req_spec, "outputs"), version);
+    json_t  *elm_st_map = json_object_get(req_spec, "elementary_streams");
     uint32_t height = 0, width = 0;
     uint8_t  framerate = 0;
-    uv_loop_t *_loop = (uv_loop_t *) loop;
-    json_t *spec = processor->data.spec;
-    ATFP_VIDEO__READ_SPEC(spec, height, width, framerate);
-    uint32_t  total_nbytes = processor->transfer.dst.tot_nbytes_file;
-    const char *version = processor->data.version;
-    const char *res_id_encoded = json_string_value(json_object_get(spec, "res_id_encoded"));
-    const char *metadata_db_label = json_string_value(json_object_get(spec, "metadata_db"));
+    ATFP_VIDEO__READ_SPEC(output, elm_st_map, height, width, framerate);
     size_t  res_id_encoded_sz = strlen(res_id_encoded), version_sz = strlen(version);
     size_t  raw_sql_sz = UINT32_STR_SIZE * 3 + UINT8_STR_SIZE + version_sz + res_id_encoded_sz;
     size_t  nb_rawsql_used = 0;

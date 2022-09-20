@@ -5,12 +5,11 @@ extern "C" {
 #endif
 #include "transcoder/file_processor.h"
 
-#define  ATFP_VIDEO__READ_SPEC(spec, pix_height, pix_width, fps) \
+#define  ATFP_VIDEO__READ_SPEC(_o_spec, _elm_st_map, pix_height, pix_width, fps) \
 { \
-    json_t *elm_st_key_obj = json_object_get(json_object_get(spec, "__internal__"), "video_key"); \
+    json_t *elm_st_key_obj = json_object_get(json_object_get(_o_spec, "__internal__"), "video_key"); \
     const char *elm_st_key = json_string_value(elm_st_key_obj); \
-    json_t *attribute  = json_object_get(json_object_get(json_object_get(spec, "elementary_streams" \
-                    ), elm_st_key), "attribute"); \
+    json_t *attribute  = json_object_get(json_object_get(_elm_st_map, elm_st_key), "attribute"); \
     pix_height = json_integer_value(json_object_get(attribute, "height_pixel")); \
     pix_width  = json_integer_value(json_object_get(attribute, "width_pixel")); \
     fps        = json_integer_value(json_object_get(attribute, "framerate")); \

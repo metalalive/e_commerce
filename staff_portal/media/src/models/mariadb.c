@@ -136,9 +136,8 @@ static DBA_RES_CODE  _app_mariadb_gen_new_handle(MYSQL **handle, uint32_t timeou
     *handle = tmp;
     goto done;
 error:
-    if(tmp) {
+    if(tmp)
         mysql_close(tmp);
-    }
 done:
     return result;
 } // end of _app_mariadb_gen_new_handle
@@ -176,10 +175,10 @@ DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
     }
     DBA_RES_CODE result = app_db_conn_deinit(conn);
     if(result == DBA_RESULT_OK) {
-        // use blocking function, currently this function is supposed to be invoked
-        // after app server received shutdown request, already completed
-        // all client requests, and closed all the HTTP connections.
-        //// mysql_close((MYSQL *)conn->lowlvl.conn);
+        // close and de-init a connection in  blocking manner, in case the API server
+        // and RPC consumer terminated and never launched database operations.
+        if(conn->lowlvl.conn)
+            mysql_close((MYSQL *)conn->lowlvl.conn);
         conn->lowlvl = (db_lowlvl_t){0};
     }
     return result;
@@ -862,7 +861,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 }
             case DB_ASYNC_CLOSE_DONE:
                 conn->ops.timerpoll_stop(target);
-                conn->lowlvl.conn = (void *)NULL;
+                conn->lowlvl.conn = (void *)NULL; // closed async, memory should be freed
                 continue_checking = app_db_conn_get_first_query(conn) != NULL;
                 if(conn->pool->is_closing_fn(conn->pool)) {
                     if(continue_checking) {

@@ -8,11 +8,13 @@ static void api_rpc_transcoding__storage_deinit(asa_op_base_cfg_t *asaobj) {
     atfp_t  *processor = asaobj->cb_args.entries[ASA_USRARG_INDEX__AFTP];
     // each file-processor is responsible to de-init asa object, due to the reason
     // file processor may require information provided in external asa object during de-init
-    processor->data.error = NULL;
-    processor->data.spec = NULL;
-    processor->data.callback = NULL;
-    processor->ops->deinit(processor);
-}
+    if(processor) {
+        processor->data.error = NULL;
+        processor->data.spec = NULL;
+        processor->data.callback = NULL;
+        processor->ops->deinit(processor);
+    }
+} // end of 
 
 void api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *_map) {
     if(!_map) { return; }

@@ -101,6 +101,7 @@
                 "close": "app_storage_localfs_close",
                 "read" : "app_storage_localfs_read",
                 "write": "app_storage_localfs_write",
+                "typesize": "app_storage_localfs_typesize",
                 "seek" : "app_storage_localfs_seek"
             }
         }

@@ -11,10 +11,19 @@
 #define  UNITTEST_FOLDER_NAME   "utest"
 #define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 
+#define  EXPECT_MUX_FORMAT  "hls"
+#define  EXPECT_VERSION  "tH"
+
+#define  EXPECT_SPEC_SERIALIZED  "{ \"elementary_streams\":{" \
+    "\"video-st0\":{\"type\":\"video\",\"codec\":\"libx264\",\"attribute\":{\"height_pixel\":180,\"width_pixel\":240,\"framerate\":24}},"  \
+    "\"audio-st0\":{\"type\":\"audio\",\"codec\":\"aac\",\"attribute\":{\"bitrate_kbps\":55}}"  \
+    "}, \"outputs\":{" \
+            "\"" EXPECT_VERSION "\":{\"container\":\"" EXPECT_MUX_FORMAT "\",\"elementary_streams\":[\"video-st0\",\"audio-st0\"]}" \
+    "}}"
+
 #define  UNITTEST_AVCTX_INIT__SETUP \
     int idx = 0; \
     char local_path[] = LOCAL_BASEPATH "/" UNITTEST_FOLDER_NAME; \
-    const char *expect_mux_fmt = "hls"; \
     AVStream   mock_av_streams_src[EXPECT_NB_STREAMS_IFMT_CTX] = {0}; \
     AVStream  *mock_av_streams_src_p[EXPECT_NB_STREAMS_IFMT_CTX] = {0}; \
     for(idx=0; idx<EXPECT_NB_STREAMS_IFMT_CTX; \
@@ -23,8 +32,7 @@
     AVFormatContext   mock_ofmt_ctx = {0}; \
     AVFormatContext  *mock_ofmt_ctx_p = &mock_ofmt_ctx; \
     json_t *mock_errinfo = json_object(); \
-    json_t *mock_spec = json_object(); \
-    json_object_set_new(mock_spec, "container", json_string(expect_mux_fmt)); \
+    json_t *mock_spec = json_loadb((const char *)EXPECT_SPEC_SERIALIZED, sizeof(EXPECT_SPEC_SERIALIZED) - 1, (size_t)0, NULL); \
     void *asasrc_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     void *asadst_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     asa_op_base_cfg_t  mock_asa_src = {.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asasrc_cb_args}}; \
@@ -44,7 +52,7 @@
             .backend_id=ATFP_BACKEND_LIB__FFMPEG}, \
     }; \
     atfp_hls_t  mock_fp_dst = { .av=&mock_avctx_dst, \
-        .super={.data={.spec=mock_spec, .error=mock_errinfo, .storage={.handle=&mock_asa_dst}}, \
+        .super={.data={.spec=mock_spec, .error=mock_errinfo, .version=EXPECT_VERSION, .storage={.handle=&mock_asa_dst}}, \
             .backend_id=ATFP_BACKEND_LIB__FFMPEG}, \
         .asa_local={.super={.op={.mkdir={.path={.origin=&local_path[0]}}}}} \
     }; \
@@ -67,7 +75,7 @@ Ensure(atfp_hls_test__avctx_init_ok) {
     AVCodecContext  mock_encoder_ctxs[EXPECT_NB_STREAMS_IFMT_CTX] = {0};
     enum AVSampleFormat  mock_audio_sample_fmt[2] = {AV_SAMPLE_FMT_U8, AV_SAMPLE_FMT_FLTP};
     {
-        expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(expect_mux_fmt)),
+        expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(EXPECT_MUX_FORMAT)),
             will_set_contents_of_parameter(fmtctx_p, &mock_ofmt_ctx_p, sizeof(AVFormatContext **)),
         );
         expect(av_mallocz_array, will_return(&mock_st_encoder_ctxs[0]),
@@ -116,7 +124,7 @@ Ensure(atfp_hls_test__avctx_init__fmtctx_error) {
     int expect_err = AVERROR(ENOMEM);
     {
         mock_ofmt_ctx_p = NULL;
-        expect(avformat_alloc_output_context2, will_return(expect_err), when(fmt_name, is_equal_to_string(expect_mux_fmt)),
+        expect(avformat_alloc_output_context2, will_return(expect_err), when(fmt_name, is_equal_to_string(EXPECT_MUX_FORMAT)),
             will_set_contents_of_parameter(fmtctx_p, &mock_ofmt_ctx_p, sizeof(AVFormatContext **)),
         );
         expect(av_packet_unref, when(pkt, is_equal_to(&mock_avctx_dst.intermediate_data.encode.packet)));
@@ -137,7 +145,7 @@ Ensure(atfp_hls_test__avctx_init__invalid_backend_lib) {
     {
         mock_fp_src.super.backend_id = ATFP_BACKEND_LIB__LIBVLC;
         mock_fp_dst.super.backend_id = ATFP_BACKEND_LIB__FFMPEG;
-        expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(expect_mux_fmt)),
+        expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(EXPECT_MUX_FORMAT)),
             will_set_contents_of_parameter(fmtctx_p, &mock_ofmt_ctx_p, sizeof(AVFormatContext **)),
         );
         expect(av_packet_unref, when(pkt, is_equal_to(&mock_avctx_dst.intermediate_data.encode.packet)));
@@ -162,7 +170,7 @@ Ensure(atfp_hls_test__avctx_init__audio_codec_error) {
     enum AVSampleFormat  mock_audio_sample_fmt[2] = {AV_SAMPLE_FMT_U8, AV_SAMPLE_FMT_FLTP};
     int expect_err = AVERROR(EIO);
     {
-        expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(expect_mux_fmt)),
+        expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(EXPECT_MUX_FORMAT)),
             will_set_contents_of_parameter(fmtctx_p, &mock_ofmt_ctx_p, sizeof(AVFormatContext **)),
         );
         expect(av_mallocz_array, will_return(&mock_st_encoder_ctxs[0]),
@@ -209,7 +217,7 @@ Ensure(atfp_hls_test__avctx_init__white_header_error) {
     AVCodecContext  mock_encoder_ctxs[EXPECT_NB_STREAMS_IFMT_CTX] = {0};
     int expect_err = AVERROR(EPERM);
     {
-        expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(expect_mux_fmt)),
+        expect(avformat_alloc_output_context2, will_return(0), when(fmt_name, is_equal_to_string(EXPECT_MUX_FORMAT)),
             will_set_contents_of_parameter(fmtctx_p, &mock_ofmt_ctx_p, sizeof(AVFormatContext **)),
         );
         expect(av_mallocz_array, will_return(&mock_st_encoder_ctxs[0]),
