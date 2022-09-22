@@ -184,10 +184,9 @@ int  app_verify_printable_string(const char *str, size_t limit_sz)
         err = 2;
         goto done;
     }
-    for(size_t idx = 0; idx < actual_sz; idx++) {
+    for(size_t idx = 0; (!err) && (idx < actual_sz); idx++) {
         int c = (int)str[idx];
         err = (isprint(c) == 0) || isspace(c);
-        if(err) { break; }
     }
 done:
     return err;

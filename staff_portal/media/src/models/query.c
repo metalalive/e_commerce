@@ -9,9 +9,8 @@ static void _app_db_query_deallocate_node(uv_handle_t *handle) {
 
 DBA_RES_CODE  app_db_query_enqueue_resultset(db_query_t *q, db_query_result_t *rs)
 {
-    if(!q || !rs) {
+    if(!q || !rs)
         return DBA_RESULT_ERROR_ARG;
-    }
     db_llnode_t *new_node = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, rs);
     pthread_mutex_lock(&q->db_result.lock);
     db_llnode_t *old_tail = q->db_result.tail;
@@ -29,15 +28,13 @@ DBA_RES_CODE  app_db_query_enqueue_resultset(db_query_t *q, db_query_result_t *r
 
 
 db_query_result_t * app_db_query_dequeue_resultset(db_query_t *query) {
-    if(!query || !query->db_result.head) {
+    if(!query || !query->db_result.head)
         return NULL;
-    }
     db_llnode_t *curr_node = query->db_result.head;
     pthread_mutex_lock(&query->db_result.lock);
     query->db_result.head = curr_node->next;
-    if(!query->db_result.head) {
+    if(!query->db_result.head)
         query->db_result.tail = NULL;
-    }
     app_llnode_unlink(curr_node);
     pthread_mutex_unlock(&query->db_result.lock);
     return (db_query_result_t *) &curr_node->data[0];
@@ -46,9 +43,8 @@ db_query_result_t * app_db_query_dequeue_resultset(db_query_t *query) {
 
 DBA_RES_CODE app_db_query_notify_with_result(db_query_t *q, db_query_result_t *rs)
 {
-    if(!q || !rs) {
+    if(!q || !rs)
         return DBA_RESULT_ERROR_ARG;
-    }
     DBA_RES_CODE result = app_db_query_enqueue_resultset(q, rs);
     // if the thread which runs uv_async_send() is the same as the thread which
     // runs the event loop registered in uv_async_t handle , the event loop will
@@ -56,11 +52,15 @@ DBA_RES_CODE app_db_query_notify_with_result(db_query_t *q, db_query_result_t *r
     // that makes the event loop always return busy code. (TODO) figure out how
     // to fix it
     if(result == DBA_RESULT_OK) {
+#if  0
+        uv_async_send(&q->notification);
+#else
         if(rs->conn.async) {
             uv_async_send(&q->notification);
         } else {
             q->notification.async_cb(&q->notification);
         }
+#endif
     }
     return result;
 } // end of app_db_query_notify_with_result
@@ -76,9 +76,8 @@ static void _app_db_query_notification_callback(uv_async_t *handle)
         db_llnode_t *rs_node = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, rs);
         rs->free_data_cb(rs_node);
     } // end of iteration on pending results
-    if(final) {
+    if(final)
         uv_close((uv_handle_t *)handle, _app_db_query_deallocate_node);
-    }
 } // end of _app_db_query_notification_callback
 
 
@@ -103,9 +102,8 @@ static size_t _app_db_estimate_query_total_bytes_statements(db_query_cfg_t *cfg)
 
 static db_query_t *app_db_query_generate_node(db_query_cfg_t *qcfg) {
     size_t stmts_tot_sz = _app_db_estimate_query_total_bytes_statements(qcfg);
-    if(stmts_tot_sz == 0) {
+    if(stmts_tot_sz == 0)
         return NULL;
-    }
     size_t q_sz = _app_db_estimate_query_struct_size(qcfg) + stmts_tot_sz;
     size_t node_q_sz = sizeof(db_llnode_t) + q_sz;
     db_llnode_t *node = malloc(node_q_sz);

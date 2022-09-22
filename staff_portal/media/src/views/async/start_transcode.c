@@ -9,6 +9,22 @@
 
 #define   SRC_FILECHUNK_BEGINNING_READ_SZ  0x40
 
+// switch to the destination file-processors which haven't done yet
+#define   ASA_DESTINATIONS_PROCESSING(_map, has_err) { \
+    asa_op_base_cfg_t *_asa_dst = NULL; \
+    atfp_t  *_processor = NULL; \
+    atfp_asa_map_reset_dst_iteration(_map); \
+    while(!has_err && (_asa_dst = atfp_asa_map_iterate_destination(_map))) { \
+        _processor = _asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP]; \
+        uint8_t done_dst = _processor->ops->has_done_processing(_processor); \
+        if(done_dst) { continue; } \
+        _processor->ops->processing(_processor); \
+        has_err = json_object_size(_processor->data.error) > 0; \
+        if(!has_err) \
+            atfp_asa_map_dst_start_working(_map, _asa_dst); \
+    } \
+}
+
 static void  api_rpc_transcode__atfp_src_processing_cb (atfp_t  *processor)
 {
     json_t *err_info = processor->data.error;
@@ -21,16 +37,7 @@ static void  api_rpc_transcode__atfp_src_processing_cb (atfp_t  *processor)
         app_rpc_task_send_reply(receipt, err_info);
         api_rpc_transcoding__storagemap_deinit(_map);
     } else {
-        atfp_asa_map_reset_dst_iteration(_map);
-        while(!has_err && (asa_dst = atfp_asa_map_iterate_destination(_map))) {
-            processor = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];
-            uint8_t done_dst = processor->ops->has_done_processing(processor);
-            if(done_dst) { continue; }
-            processor->ops->processing(processor);
-            has_err = json_object_size(err_info) > 0;
-            if(!has_err)
-                atfp_asa_map_dst_start_working(_map, asa_dst);
-        }
+        ASA_DESTINATIONS_PROCESSING(_map, has_err);
         if(atfp_asa_map_all_dst_stopped(_map)) {
             if(has_err) {
                 app_rpc_task_send_reply(receipt, err_info);
@@ -48,9 +55,8 @@ static void  api_rpc_transcode__atfp_dst_processing_cb (atfp_t  *processor)
     asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
     atfp_asa_map_t   *_map = asa_dst->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
     atfp_asa_map_dst_stop_working(_map, asa_dst);
-    if(!atfp_asa_map_all_dst_stopped(_map)) {
-        return;
-    } // only the last destination storage handle can proceed
+    if(!atfp_asa_map_all_dst_stopped(_map))
+        return; // only the last destination storage handle can proceed
     json_t *err_info = processor->data.error;
     uint8_t has_err = json_object_size(err_info) > 0;
     asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(_map);
@@ -60,18 +66,11 @@ static void  api_rpc_transcode__atfp_dst_processing_cb (atfp_t  *processor)
         if(!done_src) { // switch to source file processor
             processor->ops->processing(processor);
             has_err = json_object_size(err_info) > 0;
-        } else { // switch to the destination file-processors which haven't done yet
-            atfp_asa_map_reset_dst_iteration(_map);
-            while(!has_err && (asa_dst = atfp_asa_map_iterate_destination(_map))) {
-                processor = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];
-                uint8_t done_dst = processor->ops->has_done_processing(processor);
-                if(!done_dst) {
-                    processor->ops->processing(processor);
-                    has_err = json_object_size(err_info) > 0;
-                    if(!has_err)
-                        atfp_asa_map_dst_start_working(_map, asa_dst);
-                }
-            } // end of while loop
+        } else {
+            // Beware of duplicate reply messages are sent due to (1) recursive calls to processing
+            // function of multiple destinations, and (2) error returned multiple times by these
+            // processing function
+            ASA_DESTINATIONS_PROCESSING(_map, has_err);
             if(atfp_asa_map_all_dst_stopped(_map)) { // send return message to rpc-reply queue
                 if(!has_err)
                     api_rpc_transcode__finalize(_map);
@@ -94,25 +93,29 @@ static  void api_rpc_transcode__atfp_dst_init_finish_cb (atfp_t  *processor)
     asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
     atfp_asa_map_t   *_map = asa_dst->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
     atfp_asa_map_dst_stop_working(_map, asa_dst);
-    if(atfp_asa_map_all_dst_stopped(_map)) {
-        json_t *err_info = processor->data.error;
-        atfp_asa_map_reset_dst_iteration(_map);
-        while((asa_dst = atfp_asa_map_iterate_destination(_map))) {
-            processor = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];
-            processor->data.callback = api_rpc_transcode__atfp_dst_processing_cb;
-        }
-        if(json_object_size(err_info) == 0) { // switch to source file processor
-            asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(_map);
-            processor = asa_src->cb_args.entries[ASA_USRARG_INDEX__AFTP];
-            processor->data.callback = api_rpc_transcode__atfp_src_processing_cb;
-            processor->ops->processing(processor);
-        }
-        if (json_object_size(err_info) > 0) {
-             arpc_receipt_t *receipt = asa_dst->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
-             app_rpc_task_send_reply(receipt, err_info);
-             api_rpc_transcoding__storagemap_deinit(_map);
-        }
-    } // only the last destination storage handle can proceed
+    if(!atfp_asa_map_all_dst_stopped(_map))
+        return; // only the last destination storage handle can proceed
+    json_t *err_info = processor->data.error;
+#if 1
+    atfp_asa_map_reset_dst_iteration(_map);
+    while((asa_dst = atfp_asa_map_iterate_destination(_map))) {
+        processor = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];
+        processor->data.callback = api_rpc_transcode__atfp_dst_processing_cb;
+    }
+    if(json_object_size(err_info) == 0) { // switch to source file processor
+        asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(_map);
+        processor = asa_src->cb_args.entries[ASA_USRARG_INDEX__AFTP];
+        processor->data.callback = api_rpc_transcode__atfp_src_processing_cb;
+        processor->ops->processing(processor);
+    }
+#else
+    json_object_set_new(err_info, "__dev__", json_string("assertion for memory chekcing, after init atfp dst"));
+#endif
+    if (json_object_size(err_info) > 0) {
+         arpc_receipt_t *receipt = asa_dst->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
+         app_rpc_task_send_reply(receipt, err_info);
+         api_rpc_transcoding__storagemap_deinit(_map);
+    }
 } // end of api_rpc_transcode__atfp_dst_init_finish_cb
 
 
@@ -122,16 +125,20 @@ static  void api_rpc_transcode__atfp_src_init_finish_cb (atfp_t  *processor)
     asa_op_base_cfg_t *asa_src = processor->data .storage.handle;
     asa_op_base_cfg_t *asa_dst = NULL;
     atfp_asa_map_t *_map    = asa_src->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
+#if 0
+    json_object_set_new(err_info, "__dev__", json_string("assertion for memory chekcing, after init atfp src"));
+#endif
     uint8_t has_err = json_object_size(err_info) > 0;
+#if 1
     atfp_asa_map_reset_dst_iteration(_map);
     while(!has_err && (asa_dst = atfp_asa_map_iterate_destination(_map))) {
         processor = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];
         processor->ops->init(processor); // internally it may add error message to err_info
         has_err = json_object_size(err_info) > 0;
-        if(!has_err) {
+        if(!has_err)
             atfp_asa_map_dst_start_working(_map, asa_dst);
-        }
     }
+#endif
     if(has_err && atfp_asa_map_all_dst_stopped(_map)) {
          arpc_receipt_t *receipt = asa_src->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
          app_rpc_task_send_reply(receipt, err_info);
@@ -168,8 +175,10 @@ static  void  api_rpc_transcode__try_init_file_processors(asa_op_base_cfg_t *asa
     atfp_t *processor = NULL;
     asa_op_base_cfg_t   *asa_src = atfp_asa_map_get_source(_map);
     asa_op_base_cfg_t   *asa_dst = NULL;
+    // TODO, upgrade libmagic to latest version, to prevent memory leak (currently 5.14)
+    // https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=840754
     magic_t  m = magic_open(MAGIC_MIME_TYPE); // check magic bytes of the file
-    if(magic_load(m, NULL) == 0) {
+    if(magic_load(m, "/usr/share/misc/magic") == 0) {
         const char *mimetype = magic_buffer(m, (const void *)asa_src->op.read.dst, SRC_FILECHUNK_BEGINNING_READ_SZ);
         processor = api_rpc_transcode__init_file_processor(asa_src, mimetype, api_rpc_transcode__atfp_src_init_finish_cb);
         if(processor == NULL) {
@@ -209,8 +218,7 @@ static  void  api_rpc_transcode__try_init_file_processors(asa_op_base_cfg_t *asa
     processor = asa_src->cb_args.entries[ASA_USRARG_INDEX__AFTP];
     processor->ops->init(processor); // internally it may add error message to err_info
 done:
-    if(m)
-        magic_close(m);
+    magic_close(m);
 } // end of api_rpc_transcode__try_init_file_processors
 
 
@@ -356,7 +364,7 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
     json_error_t jerror = {0};
     asa_op_base_cfg_t  *asa_src = NULL, *asa_dst = NULL;
     asa_op_localfs_cfg_t  *asa_local_tmpbuf = NULL;
-    ASA_RES_CODE  asa_result; 
+    ASA_RES_CODE  asa_result = ASTORAGE_RESULT_ACCEPT;
     json_t *err_info = json_object();
     json_t *api_req = json_loadb((const char *)receipt->msg_body.bytes, receipt->msg_body.len, (size_t)0, &jerror);
     atfp_asa_map_t  *asaobj_map = NULL;
@@ -401,6 +409,8 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
         asa_local_tmpbuf->loop = receipt->loop;
         atfp_asa_map_set_source(asaobj_map, asa_src);
         atfp_asa_map_set_localtmp(asaobj_map, asa_local_tmpbuf);
+        asa_src->deinit = api_rpc_transcode__asa_src_deinit;
+        asa_local_tmpbuf->super.deinit = api_rpc_transcode__asa_localtmp_deinit;
         const char *version = NULL;
         json_t *output = NULL;
         json_object_foreach(outputs, version, output) {
@@ -416,11 +426,14 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
                    (uint8_t)NUM_USRARGS_ASA_DST, (uint32_t)0, (uint32_t)APP_ENCODED_WR_BUF_SZ);
             if(!strcmp(dst_storage->alias, "localfs"))
                 ((asa_op_localfs_cfg_t *)asa_dst)->loop = receipt->loop; // TODO
-            asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL] = (void *) strdup(version);
+            char *version_cpy = calloc(4, sizeof(char)); // used as key in json object, to make valgrind happy
+            strncpy(version_cpy, version, APP_TRANSCODED_VERSION_SIZE);
+            asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL] = (void *) version_cpy;
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
             asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_EXIST_FLAG] = (void *) version_exist;
 #pragma GCC diagnostic pop
             atfp_asa_map_add_destination(asaobj_map, asa_dst);
+            asa_dst->deinit = api_rpc_transcode__asa_dst_deinit;
         } // end of iteration
     } { // create work folder for local temp buffer
         app_cfg_t *app_cfg = app_get_global_cfg();

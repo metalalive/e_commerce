@@ -48,6 +48,7 @@ struct atfp_av_ctx_s {
                 int8_t   filt_stream_idx;
                 int8_t   enc_stream_idx;
                 uint8_t  file_trailer_wrote:1;
+                uint8_t  file_header_wrote:1;
             } _final;
         } encode;
     } intermediate_data;
@@ -56,7 +57,7 @@ struct atfp_av_ctx_s {
         size_t   max_nbytes_bulk; // max nbytes to load for async decoding
     } async_limit;
     uint8_t  decoder_flag:1;
-};
+}; // end of struct atfp_av_ctx_s
 
 
 #ifdef __cplusplus

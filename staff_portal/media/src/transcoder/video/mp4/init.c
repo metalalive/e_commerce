@@ -95,12 +95,6 @@ static void atfp__video_mp4__init(atfp_t *processor)
 } // end of atfp__video_mp4__init
 
 
-#define  DEINIT_IF_EXISTS(var) \
-    if(var) { \
-        free((void *)var); \
-        (var) = NULL; \
-    }
-
 static  void  _atfp_mp4__final_dealloc (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
     atfp_asa_map_t  *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
@@ -110,20 +104,9 @@ static  void  _atfp_mp4__final_dealloc (asa_op_base_cfg_t *asaobj, ASA_RES_CODE 
     void (*cb)(atfp_t *) = processor->data.callback;
     assert(asaobj == &asa_local->super);
     assert(asa_src == processor->data.storage.handle);
-    atfp_asa_map_set_localtmp(_map, NULL);
-    atfp_asa_map_set_source(_map, NULL);
-    atfp_asa_map_deinit(_map);
-    DEINIT_IF_EXISTS(asa_local->super.op.mkdir.path.prefix);
-    DEINIT_IF_EXISTS(asa_local->super.op.mkdir.path.origin);
-    DEINIT_IF_EXISTS(asa_local->super.op.mkdir.path.curr_parent);
-    DEINIT_IF_EXISTS(asa_local->super.op.open.dst_path);
-    DEINIT_IF_EXISTS(asa_local);
-    DEINIT_IF_EXISTS(asa_src->op.mkdir.path.prefix);
-    DEINIT_IF_EXISTS(asa_src->op.mkdir.path.origin);
-    DEINIT_IF_EXISTS(asa_src->op.mkdir.path.curr_parent);
-    DEINIT_IF_EXISTS(asa_src->op.open.dst_path);
-    DEINIT_IF_EXISTS(asa_src);
-    DEINIT_IF_EXISTS(processor);
+    asa_local->super.deinit(&asa_local->super);
+    asa_src->deinit(asa_src);
+    free(processor);
     if(cb)
         cb(NULL);
 } // end of _atfp_mp4__final_dealloc
@@ -150,7 +133,6 @@ static  void  atfp_mp4__asaremote_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RE
         atfp_mp4__asalocal_closefile_cb(&asa_local->super, ASTORAGE_RESULT_COMPLETE);
     }
 }
-#undef  DEINIT_IF_EXISTS
 
 static void  atfp_mp4__close_async_handle_cb (uv_handle_t* handle)
 { // close source chunkfile if still open
@@ -225,10 +207,22 @@ static void atfp__video_mp4__processing(atfp_t *processor)
     _atfp_mp4__processing_one_frame((atfp_mp4_t *)processor);
 } // end of atfp__video_mp4__processing
 
+//#define ENABLE_DBG_NUM_PROCESS_FRAMES   32
+//#ifdef  ENABLE_DBG_NUM_PROCESS_FRAMES
+//static int _dbg_num_processed_frames = 0;
+//#endif
+
 static uint8_t  atfp__video_mp4__has_done_processing(atfp_t *processor)
 {
+#if  0 // defined(ENABLE_DBG_NUM_PROCESS_FRAMES)
+    uint8_t done = _dbg_num_processed_frames > ENABLE_DBG_NUM_PROCESS_FRAMES;
+    if(!done)
+        _dbg_num_processed_frames ++;
+    return done;
+#else
     atfp_mp4_t *mp4proc = (atfp_mp4_t *)processor;
     return  atfp_ffmpeg_avctx__has_done_decoding(mp4proc->av);
+#endif
 }
 
 

@@ -45,6 +45,23 @@ static int  utest_hls__avctx_init (atfp_hls_t *hlsproc)
 static void  utest_hls__avctx_deinit(atfp_hls_t *hlsproc)
 { mock(hlsproc); }
 
+#define  DEINIT_IF_EXISTS(var) \
+    if(var) { \
+        free((void *)var); \
+        (var) = NULL; \
+    }
+
+
+static void utest_hls__asa_dst_final_dealloc (asa_op_base_cfg_t *asaobj) {
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    DEINIT_IF_EXISTS(processor->data.version);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.prefix);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.origin);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.curr_parent);
+    DEINIT_IF_EXISTS(asaobj->op.open.dst_path);
+    DEINIT_IF_EXISTS(asaobj);
+}
+
 static  uint8_t  utest_hls__src_has_done_processing (atfp_t *processor)
 { return  (uint8_t)mock(processor); }
 
@@ -111,7 +128,7 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
         .op={ \
             .mkdir={.path={.origin=strdup(UTEST_ASADST_BASEPATH)}}, \
             .write={.src_max_nbytes=WR_BUF_MAX_SZ, .src=&mock_wr_buf[0]} \
-        }, .storage=&mock_storage_cfg, \
+        }, .storage=&mock_storage_cfg, .deinit=utest_hls__asa_dst_final_dealloc, \
     }; \
     json_t *mock_spec = json_object(); \
     json_t *mock_err_info = json_object(); \
@@ -410,7 +427,7 @@ Ensure(atfp_hls_test__process__filter_encode_error) {
         expect(utest_hls__src_has_done_processing, will_return(0));
         expect(utest_hls__has_done_flush_filter,   will_return(0));
         expect(utest_hls__has_done_flush_encoder,  will_return(0));
-        expect(utest_hls_done_usr_cb, when(processor, is_equal_to(&mock_fp_dst)));
+        // the user callback utest_hls_done_usr_cb will NOT be invoked due to the error
         atfp_ops_video_hls.ops.processing(&mock_fp_dst.super);
         assert_that(json_object_size(mock_err_info), is_equal_to(1));
     } { // subcase 2, error when encoding
@@ -426,7 +443,7 @@ Ensure(atfp_hls_test__process__filter_encode_error) {
         expect(utest_hls__src_has_done_processing, will_return(0));
         expect(utest_hls__has_done_flush_filter,   will_return(0));
         expect(utest_hls__has_done_flush_encoder,  will_return(0));
-        expect(utest_hls_done_usr_cb, when(processor, is_equal_to(&mock_fp_dst)));
+        // the user callback utest_hls_done_usr_cb will NOT be invoked due to the error
         atfp_ops_video_hls.ops.processing(&mock_fp_dst.super);
         assert_that(json_object_size(mock_err_info), is_equal_to(1));
     }

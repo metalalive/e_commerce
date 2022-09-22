@@ -47,6 +47,7 @@ struct _asa_op_base_cfg_s {
         void **entries;
     } cb_args;
     struct _asa_cfg_s  *storage;
+    void (*deinit)(struct _asa_op_base_cfg_s *);
     struct {
         struct {
             asa_mkdir_cb_t  cb;

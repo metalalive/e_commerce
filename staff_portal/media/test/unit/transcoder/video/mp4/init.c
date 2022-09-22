@@ -15,6 +15,12 @@
 #define  DONE_FLAG_INDEX__IN_ASA_USRARG     (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define  NUM_CB_ARGS_ASAOBJ  (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
 
+#define  DEINIT_IF_EXISTS(var) \
+    if(var) { \
+        free((void *)var); \
+        (var) = NULL; \
+    }
+
 extern const atfp_ops_entry_t  atfp_ops_video_mp4;
 
 static void  utest_atfp__async_usr_callback(uv_async_t* handle)
@@ -54,6 +60,30 @@ static  ASA_RES_CODE  utest_mp4__av_init (atfp_mp4_t *mp4proc, void (*cb)(atfp_m
 static void utest_mp4__av_deinit (atfp_mp4_t *mp4proc)
 { mock(mp4proc); }
 
+
+static void  utest_mp4__asa_src_final_dealloc (asa_op_base_cfg_t *asaobj) {
+    atfp_asa_map_t  *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    atfp_asa_map_set_source(_map, NULL);
+    atfp_asa_map_deinit(_map);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.prefix);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.origin);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.curr_parent);
+    DEINIT_IF_EXISTS(asaobj->op.open.dst_path);
+    mock(asaobj);
+    DEINIT_IF_EXISTS(asaobj);
+}
+
+static void utest_mp4__asa_local_final_dealloc (asa_op_base_cfg_t *asaobj) {
+    atfp_asa_map_t  *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    atfp_asa_map_set_localtmp(_map, NULL);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.prefix);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.origin);
+    DEINIT_IF_EXISTS(asaobj->op.mkdir.path.curr_parent);
+    DEINIT_IF_EXISTS(asaobj->op.open.dst_path);
+    mock(asaobj);
+    DEINIT_IF_EXISTS(asaobj);
+}
+
 static  ASA_RES_CODE  utest_mp4__preload_info (atfp_mp4_t *mp4proc, void (*cb)(atfp_mp4_t *))
 {
     ASA_RES_CODE result = (ASA_RES_CODE) mock(mp4proc);
@@ -82,21 +112,22 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
 
 #define  UTEST_ATFP_MP4__INIT_SETUP \
     uv_loop_t *loop  = uv_default_loop(); \
-    atfp_asa_map_t  *mock_map = calloc(1, sizeof(atfp_asa_map_t)); \
+    atfp_asa_map_t  *mock_map = atfp_asa_map_init(1); \
     uint8_t done_flag = 0; \
-    void  *asa_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
+    void  *asasrc_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
+    void  *asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     asa_cfg_t  mock_storage_cfg = {.ops={.fn_open=app_storage_localfs_open, .fn_close=app_storage_localfs_close, \
         .fn_unlink=app_storage_localfs_unlink }}; \
     asa_op_localfs_cfg_t  *mock_asa_src = calloc(1, sizeof(asa_op_localfs_cfg_t)); \
     *mock_asa_src = (asa_op_localfs_cfg_t) { .loop=loop, .file={.file=-1}, \
-        .super={ .storage=&mock_storage_cfg, .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_cb_args}, \
+        .super={ .storage=&mock_storage_cfg, .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asasrc_cb_args}, \
         .op={.mkdir={.path={.origin=strdup(UTEST_ASAREMOTE_BASEPATH)}}, \
-            .open={.dst_path=strdup(UTEST_REMOTE_FINAL_FILE)}}, \
+            .open={.dst_path=strdup(UTEST_REMOTE_FINAL_FILE)}}, .deinit=utest_mp4__asa_src_final_dealloc, \
     }}; \
     asa_op_localfs_cfg_t  *mock_asa_local = calloc(1, sizeof(asa_op_localfs_cfg_t)); \
     *mock_asa_local = (asa_op_localfs_cfg_t) { .loop=loop, .file={.file=-1}, \
-        .super={ .storage=&mock_storage_cfg, \
-            .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_cb_args}, \
+        .super={ .storage=&mock_storage_cfg, .deinit=utest_mp4__asa_local_final_dealloc, \
+            .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asalocal_cb_args}, \
             .op={.mkdir={.path={.origin=strdup(UTEST_ASALOCAL_BASEPATH)}}}, \
     }}; \
     json_t *mock_errinfo = json_object(); \
@@ -110,9 +141,12 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
     mock_fp->super.data.storage.handle = &mock_asa_src->super; \
     atfp_asa_map_set_source(mock_map, &mock_asa_src->super); \
     atfp_asa_map_set_localtmp(mock_map, mock_asa_local); \
-    asa_cb_args[ATFP_INDEX__IN_ASA_USRARG]   = mock_fp; \
-    asa_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = mock_map; \
-    asa_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
+    asasrc_cb_args[ATFP_INDEX__IN_ASA_USRARG]   = mock_fp; \
+    asasrc_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = mock_map; \
+    asasrc_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
+    asalocal_cb_args[ATFP_INDEX__IN_ASA_USRARG]   = mock_fp; \
+    asalocal_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = mock_map; \
+    asalocal_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
     mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
     mkdir(UTEST_ASALOCAL_BASEPATH, S_IRWXU); \
 
@@ -141,10 +175,14 @@ Ensure(atfp_mp4_test__init_deinit__ok) {
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
         atfp_ops_video_mp4.ops.deinit(&mock_fp->super);
         expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
+        expect(utest_mp4__asa_local_final_dealloc, when(asaobj, is_equal_to(mock_asa_local)));
+        expect(utest_mp4__asa_src_final_dealloc, when(asaobj, is_equal_to(mock_asa_src)));
         uv_run(loop, UV_RUN_ONCE);
         uv_run(loop, UV_RUN_ONCE);
         uv_run(loop, UV_RUN_ONCE);
     }
+    (void *)mock_asa_src;
+    (void *)mock_asa_local;
     UTEST_ATFP_MP4__INIT_TEARDOWN
 } // end of atfp_mp4_test__init_deinit__ok
 
@@ -163,6 +201,8 @@ Ensure(atfp_mp4_test__init_preload_error) {
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
         atfp_ops_video_mp4.ops.deinit(&mock_fp->super);
         expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
+        expect(utest_mp4__asa_local_final_dealloc, when(asaobj, is_equal_to(mock_asa_local)));
+        expect(utest_mp4__asa_src_final_dealloc, when(asaobj, is_equal_to(mock_asa_src)));
         uv_run(loop, UV_RUN_ONCE);
         uv_run(loop, UV_RUN_ONCE);
         uv_run(loop, UV_RUN_ONCE);
@@ -186,6 +226,8 @@ Ensure(atfp_mp4_test__init_avctx_error) {
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
         atfp_ops_video_mp4.ops.deinit(&mock_fp->super);
         expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
+        expect(utest_mp4__asa_local_final_dealloc, when(asaobj, is_equal_to(mock_asa_local)));
+        expect(utest_mp4__asa_src_final_dealloc, when(asaobj, is_equal_to(mock_asa_src)));
         uv_run(loop, UV_RUN_ONCE);
         uv_run(loop, UV_RUN_ONCE);
         uv_run(loop, UV_RUN_ONCE);
@@ -210,6 +252,8 @@ Ensure(atfp_mp4_test__init_avctx_validation_failure) {
         expect(utest_mp4__av_deinit, when(mp4proc, is_equal_to(mock_fp)));
         atfp_ops_video_mp4.ops.deinit(&mock_fp->super);
         expect(utest_atfp_usr_cb, when(processor, is_equal_to(NULL)));
+        expect(utest_mp4__asa_local_final_dealloc, when(asaobj, is_equal_to(mock_asa_local)));
+        expect(utest_mp4__asa_src_final_dealloc, when(asaobj, is_equal_to(mock_asa_src)));
         uv_run(loop, UV_RUN_ONCE);
         uv_run(loop, UV_RUN_ONCE);
         uv_run(loop, UV_RUN_ONCE);

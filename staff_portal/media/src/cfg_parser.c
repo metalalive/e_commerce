@@ -104,9 +104,8 @@ error:
 int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *obj)
 {
     SSL_CTX *ssl_ctx = NULL;
-    if(!json_is_object(obj)) {
+    if(!obj || !json_is_object(obj))
         goto error;
-    }
     json_t *cert_file_obj    = json_object_get(obj, "cert_file");
     json_t *privkey_file_obj = json_object_get(obj, "privkey_file");
     json_t *min_ver_obj      = json_object_get(obj, "min_version");
@@ -124,7 +123,7 @@ int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *ob
         h2o_error_printf("[parsing] currently this server only supports TLS v1.3 and successive versions, given : 0x%llx \n", min_version);
         goto error;
     }
-    ssl_ctx = SSL_CTX_new(TLS_server_method());
+    ssl_ctx = SSL_CTX_new(TLS_server_method()); // TODO, upgrade openssl, due to memory error reported by valgrind
     long disabled_ssl_versions = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1
         | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2;
     long ssl_options = SSL_OP_ALL | SSL_OP_CIPHER_SERVER_PREFERENCE | SSL_OP_NO_COMPRESSION

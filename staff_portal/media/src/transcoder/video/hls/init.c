@@ -141,13 +141,12 @@ static void atfp__video_hls__processing(atfp_t *processor)
         hlsproc_dst->internal.op.encode = hlsproc_dst->internal.op.finalize.encode;
     if(flush_enc_done)
         ret = hlsproc_dst->internal.op.finalize.write(hlsproc_dst->av);
-    if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA) {
+    if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA) { // will return `ASTORAGE_RESULT_ACCEPT`
         result = hlsproc_dst->internal.op.move_to_storage(hlsproc_dst);
     } else if(ret < ATFP_AVCTX_RET__OK) {
         result = ASTORAGE_RESULT_UNKNOWN_ERROR;
     }
-    if(result != ASTORAGE_RESULT_ACCEPT)
-        processor -> data.callback(processor);
+    assert(result != ASTORAGE_RESULT_COMPLETE);
 } // end of atfp__video_hls__processing
 
 
@@ -172,10 +171,10 @@ static atfp_t *atfp__video_hls__instantiate(void) {
     out->internal.op.avfilter_init = atfp_hls__avfilter_init;
     out->internal.op.filter  = atfp_hls__av_filter_processing;
     out->internal.op.encode  = atfp_hls__av_encode_processing;
-    out->internal.op.write   = atfp_hls__av_local_white;
+    out->internal.op.write   = atfp_hls__av_local_write;
     out->internal.op.finalize.filter = atfp_hls__av_filter__finalize_processing;
     out->internal.op.finalize.encode = atfp_hls__av_encode__finalize_processing;
-    out->internal.op.finalize.write  = atfp_hls__av_local_white_finalize;
+    out->internal.op.finalize.write  = atfp_hls__av_local_write_finalize;
     out->internal.op.move_to_storage = atfp_hls__try_flush_to_storage;
     out->internal.op.has_done_flush_filter = atfp_av_filter__has_done_flushing;
     out->internal.op.has_done_flush_encoder = atfp_av_encoder__has_done_flushing;

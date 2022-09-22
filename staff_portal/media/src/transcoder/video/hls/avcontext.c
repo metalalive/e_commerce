@@ -17,6 +17,9 @@ void  atfp_hls__av_deinit(atfp_hls_t *hlsproc)
     AVFrame   *frm = & hlsproc->av->intermediate_data.encode.frame;
     av_packet_unref(pkt);
     av_frame_unref(frm);
+    // ffmpeg internally allocates memory via call to avformat_write_header(), to free up all
+    // internal space, one has to call av_write_trailer() exactly once for each transcoding request.
+    atfp_hls__av_local_write_finalize(hlsproc->av);
     if(enc_ctxs) {
         int nb_streams = fmt_ctx ? fmt_ctx->nb_streams: 0;
         for(int idx = 0; idx < nb_streams; idx++) {
@@ -218,6 +221,8 @@ int  atfp_hls__av_init(atfp_hls_t *hlsproc)
                 json_string("[hls] failed to initialize output format context"));
         }
         atfp_hls__av_deinit(hlsproc);
+    } else {
+        hlsproc->av->intermediate_data.encode._final.file_header_wrote = 1;
     }
     return err;
 } // end of atfp_hls__av_init
@@ -236,7 +241,11 @@ static int  _atfp_hls__av_encode_processing(atfp_av_ctx_t *dst, AVFrame *frame, 
             goto done;
         }
     }
+#if  1
     ret = avcodec_receive_packet(st_encode_ctx->enc_ctx, packet);
+#else
+    ret = AVERROR(EAGAIN);
+#endif
     if (ret == 0) {
         packet-> stream_index = stream_idx;
         av_packet_rescale_ts(packet, st_encode_ctx->enc_ctx->time_base,
@@ -296,17 +305,27 @@ uint8_t  atfp_av_encoder__has_done_flushing(atfp_av_ctx_t *dst)
 }
 
 
-int   atfp_hls__av_local_white(atfp_av_ctx_t *dst)
+int   atfp_hls__av_local_write(atfp_av_ctx_t *dst)
 {
+#if 1
     AVPacket  *packet = &dst->intermediate_data.encode.packet;
-    int ret = av_interleaved_write_frame(dst->fmt_ctx, packet);    
+    int ret = av_interleaved_write_frame(dst->fmt_ctx, packet);
     return ret;
+#else
+    return ATFP_AVCTX_RET__OK;
+#endif
 }
 
-int   atfp_hls__av_local_white_finalize(atfp_av_ctx_t *dst)
+int   atfp_hls__av_local_write_finalize(atfp_av_ctx_t *dst)
 {
-    int ret = av_write_trailer(dst->fmt_ctx);
-    dst->intermediate_data.encode._final.file_trailer_wrote = 1;
+    uint8_t  trailer_wrote = dst->intermediate_data.encode._final.file_trailer_wrote;
+    uint8_t  header_wrote  = dst->intermediate_data.encode._final.file_header_wrote;
+    int ret = 0;
+    if(header_wrote && !trailer_wrote) {
+        ret = av_write_trailer(dst->fmt_ctx);
+        trailer_wrote = 1;
+    }
+    dst->intermediate_data.encode._final.file_trailer_wrote = trailer_wrote;
     return (ret < 0) ? ret: ATFP_AVCTX_RET__NEED_MORE_DATA;
 }
 

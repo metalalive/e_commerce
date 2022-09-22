@@ -22,6 +22,10 @@ extern "C" {
 #define   NUM_USRARGS_ASA_SRC       (ASA_USRARG_INDEX__ERROR_INFO + 1)
 #define   NUM_USRARGS_ASA_DST       (ASA_USRARG_INDEX__VERSION_EXIST_FLAG + 1)
 
+void api_rpc_transcode__asa_localtmp_deinit(asa_op_base_cfg_t *);
+void api_rpc_transcode__asa_src_deinit(asa_op_base_cfg_t *);
+void api_rpc_transcode__asa_dst_deinit(asa_op_base_cfg_t *);
+
 void  api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *_map);
 void  api_rpc_transcode__finalize (atfp_asa_map_t *map);
 

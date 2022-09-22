@@ -65,7 +65,14 @@ static void deinit_app_server_cfg(app_cfg_t *app_cfg) {
         free(app_cfg->jwks.src_url);
         app_cfg->jwks.src_url = NULL;
     }
+    if(app_cfg->access_logger != NULL) {
+        int ret = 0;
+        while(!ret)
+            ret = h2o_mem_release_shared(app_cfg->access_logger);
+        app_cfg->access_logger = NULL;
+    }
     deinit_app_cfg(app_cfg);
+    r_global_close(); // rhonabwy JWT library
 } // end of deinit_app_server_cfg
 
 
@@ -142,7 +149,6 @@ static void on_sigfatal(int sig_num) {
         num_used = backtrace(frames, num_frames);
         backtrace_symbols_fd(frames, num_used, acfg->error_log_fd);
     }
-    deinit_app_server_cfg(acfg);
     raise(sig_num);
 }
 #endif // end of LIBC_HAS_BACKTRACE
@@ -150,7 +156,8 @@ static void on_sigfatal(int sig_num) {
 
 int init_security(void) {
     uint64_t opts = OPENSSL_INIT_LOAD_SSL_STRINGS | OPENSSL_INIT_LOAD_CRYPTO_STRINGS;
-    int err = (OPENSSL_init_ssl(opts, NULL) == 0);
+    int err = OPENSSL_init_ssl(opts, NULL) == 0;
+    r_global_init(); // rhonabwy JWT library
     return err;
 }
 
@@ -318,25 +325,25 @@ static int appserver_start_workers(app_cfg_t *app_cfg) {
     struct worker_init_data_t  worker_data[num_threads];
     h2o_barrier_init(&app_cfg->workers_sync_barrier, num_threads);
     int err = appcfg_start_workers(app_cfg, &worker_data[0], run_loop);
-    if(err) { goto done; }
-    app_db_poolmap_close_all_conns(worker_data[0].loop);
-    while(!app_db_poolmap_check_all_conns_closed()) {
-        int ms = 500;
-        uv_sleep(ms);
+    if(!err) {
+        app_db_poolmap_close_all_conns(worker_data[0].loop);
+        while(!app_db_poolmap_check_all_conns_closed()) {
+            int ms = 500;
+            uv_sleep(ms);
+        }
     }
-done:
     appcfg_terminate_workers(app_cfg, &worker_data[0]);
     return err;
 } // end of appserver_start_workers
 
+// TODO, flush log message to centralized service e.g. ELK stack
 int start_application(const char *cfg_file_path, const char *exe_path)
-{   // TODO, flush log message to centralized service e.g. ELK stack
+{
     int err = 0;
     app_global_cfg_set_exepath(exe_path);
     app_cfg_t *acfg = app_get_global_cfg();
     atomic_init(&acfg->state.num_curr_connections , 0);
     h2o_config_init(&acfg->server_glb_cfg);
-    r_global_init(); // rhonabwy JWT library
     err = init_security();
     if(err) { goto done; }
     err = parse_cfg_params(cfg_file_path, acfg);
@@ -345,7 +352,8 @@ int start_application(const char *cfg_file_path, const char *exe_path)
     init_signal_handler();
     err = appserver_start_workers(acfg);
 done:
+    // ISSUE: if JWKS hasn't been updated from auth server, this app server will unexpectedly skip
+    //     de-initialization  deinit_app_server_cfg() after workers completed
     deinit_app_server_cfg(acfg);
-    r_global_close(); // rhonabwy JWT library
     return err;
 } // end of start_application

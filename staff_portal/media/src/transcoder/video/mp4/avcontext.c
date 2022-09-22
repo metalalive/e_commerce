@@ -134,6 +134,8 @@ void  atfp_mp4__av_deinit(atfp_mp4_t *mp4proc)
     AVCodecContext   **dec_ctxs = mp4proc->av->stream_ctx.decode;
     AVPacket  *pkt = & mp4proc->av->intermediate_data.decode.packet;
     AVFrame   *frm = & mp4proc->av->intermediate_data.decode.frame;
+    if(mp4proc-> av-> stats)
+        av_freep(&mp4proc-> av-> stats);
     if(dec_ctxs) {
         int nb_streams = fmt_ctx ? fmt_ctx->nb_streams: 0;
         for(idx = 0; idx < nb_streams; idx++) {

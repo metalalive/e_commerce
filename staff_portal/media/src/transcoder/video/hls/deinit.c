@@ -147,11 +147,8 @@ static  void  _atfp_hls__final_dealloc(atfp_t *processor)
     json_t *err_info = processor->data.error;
     if(json_object_size(err_info) > 0) {} // TODO,log for error happened
     asa_op_base_cfg_t *asaremote = processor ->data.storage.handle;
-    DEINIT_IF_EXISTS(asaremote->op.mkdir.path.prefix, free);
-    DEINIT_IF_EXISTS(asaremote->op.mkdir.path.origin, free);
-    DEINIT_IF_EXISTS(asaremote->op.mkdir.path.curr_parent, free);
-    DEINIT_IF_EXISTS(asaremote, free);
-    DEINIT_IF_EXISTS(processor->data.version, free);
+    asaremote->deinit(asaremote);
+    processor->data.version = NULL;
     DEINIT_IF_EXISTS(processor->data.error, json_decref);
     DEINIT_IF_EXISTS(processor, free);
     if(cb)

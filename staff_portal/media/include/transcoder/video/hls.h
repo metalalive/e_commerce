@@ -52,10 +52,10 @@ uint8_t  atfp_av__has_done_processing(atfp_av_ctx_t *dst);
 
 int   atfp_hls__av_filter_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
 int   atfp_hls__av_encode_processing(atfp_av_ctx_t *dst);
-int   atfp_hls__av_local_white(atfp_av_ctx_t *dst);
+int   atfp_hls__av_local_write(atfp_av_ctx_t *dst);
 int   atfp_hls__av_filter__finalize_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
 int   atfp_hls__av_encode__finalize_processing(atfp_av_ctx_t *dst);
-int   atfp_hls__av_local_white_finalize(atfp_av_ctx_t *);
+int   atfp_hls__av_local_write_finalize(atfp_av_ctx_t *);
 uint8_t  atfp_av_filter__has_done_flushing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
 uint8_t  atfp_av_encoder__has_done_flushing(atfp_av_ctx_t *dst);
 

@@ -600,13 +600,14 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     break;
                 }
             case DB_ASYNC_QUERY_START:
+#if   1
                 result = conn->ops.update_ready_queries(conn);
-                { // ---------- debug -----------
-                    //// conn->processing_queries = conn->pending_queries.head;
-                    //// conn->pending_queries.head = NULL;
-                    //// conn->pending_queries.tail = NULL;
-                    //// result = conn->processing_queries ? DBA_RESULT_OK: DBA_RESULT_SKIPPED;
-                }
+#else // ---------- debug -----------
+                conn->processing_queries = conn->pending_queries.head;
+                conn->pending_queries.head = NULL;
+                conn->pending_queries.tail = NULL;
+                result = conn->processing_queries ? DBA_RESULT_OK: DBA_RESULT_SKIPPED;
+#endif
                 if(result == DBA_RESULT_OK) {
                     if(called_by_app) {
                         int fd = conn->pool->cfg.ops.get_sock_fd(conn);
