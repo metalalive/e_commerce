@@ -372,8 +372,9 @@ static ARPC_STATUS_CODE apprpc_consumer_set_read_queues(struct arpc_ctx_t *_ctx)
 } // end of apprpc_consumer_set_read_queues
 
 
-static void apprpc_consume_handler_finalize(arpc_receipt_t *r, char *out, size_t out_sz)
+static ARPC_STATUS_CODE _apprpc_consume_handler__send2reply_q(arpc_receipt_t *r, char *out, size_t out_sz)
 {
+    ARPC_STATUS_CODE app_status = APPRPC_RESP_MSGQ_UNKNOWN_ERROR;
     struct arpc_ctx_t * _ctx = (struct arpc_ctx_t *)r->ctx;
     amqp_envelope_t  *evp = (amqp_envelope_t *)r->_msg_obj;
     // Note this function doesn't ensure existence of the reply queue, it reports error
@@ -382,7 +383,7 @@ static void apprpc_consume_handler_finalize(arpc_receipt_t *r, char *out, size_t
         ._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG |
             AMQP_BASIC_CORRELATION_ID_FLAG | AMQP_BASIC_TIMESTAMP_FLAG,
         .content_type = amqp_cstring_bytes("application/json"), .timestamp = r->_timestamp,
-        .correlation_id = {.bytes=r->job_id.bytes, .len=r->job_id.len}, .delivery_mode = 0x2,
+        .correlation_id = {.bytes=r->job_id.bytes, .len=r->job_id.len}, .delivery_mode = 0x2, // magic number
     };
     // send return value to reply queue
     amqp_bytes_t body = {.len=out_sz , .bytes=out};
@@ -397,9 +398,11 @@ static void apprpc_consume_handler_finalize(arpc_receipt_t *r, char *out, size_t
             evp->message.properties.reply_to, mandatory, immediate, \
             (amqp_basic_properties_t const *)&properties, body );
     mq_status = RUN_PUBLISH_CMD;
-    if(mq_status != AMQP_STATUS_OK) {
+    if(mq_status == AMQP_STATUS_OK) {
+        app_status = APPRPC_RESP_OK;
+    } else {
         amqp_rpc_reply_t _reply = amqp_get_rpc_reply(_ctx->conn);
-        ARPC_STATUS_CODE app_status = apprpc__translate_status_from_lowlvl_lib(&_reply);
+        app_status = apprpc__translate_status_from_lowlvl_lib(&_reply);
         switch(app_status) {
             case APPRPC_RESP_MSGQ_CONNECTION_ERROR: // try reconnecting
                 app_rpc_close_connection((void *)_ctx);
@@ -407,12 +410,15 @@ static void apprpc_consume_handler_finalize(arpc_receipt_t *r, char *out, size_t
                 app_status = app_rpc_open_connection((void *)_ctx);
                 if(app_status == APPRPC_RESP_OK) {
                     mq_status = RUN_PUBLISH_CMD;
+                    if(mq_status != AMQP_STATUS_OK) {
+                        _reply = amqp_get_rpc_reply(_ctx->conn);
+                        app_status = apprpc__translate_status_from_lowlvl_lib(&_reply);
+                        fprintf(stderr, "[RPC][consumer] failed to send message to reply queue\n");
+                    } // TODO, logging more error detail
                 } else {
                     fprintf(stderr, "[RPC][consumer] failed to reconnect when sending to reply queue\n");
+                    app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
                 }
-                if(mq_status != AMQP_STATUS_OK) {
-                    fprintf(stderr, "[RPC][consumer] failed to send return value to reply queue\n");
-                } // TODO, logging more error detail
                 break;
             case APPRPC_RESP_OK:
             default:
@@ -420,11 +426,19 @@ static void apprpc_consume_handler_finalize(arpc_receipt_t *r, char *out, size_t
                 break;
         } // error handling if connection closed unexpectedly
     }
+    return app_status;
+#undef RUN_PUBLISH_CMD
+#undef AMQP_ANON_EXCHANGE
+} // end of _apprpc_consume_handler__send2reply_q
+
+static ARPC_STATUS_CODE apprpc_consume_handler_finalize(arpc_receipt_t *r, char *out, size_t out_sz)
+{
+    amqp_envelope_t  *evp = (amqp_envelope_t *)r->_msg_obj;
+    ARPC_STATUS_CODE  status = _apprpc_consume_handler__send2reply_q(r, out, out_sz);
     amqp_destroy_envelope(evp);
     free(evp);
     free(r);
-#undef RUN_PUBLISH_CMD
-#undef AMQP_ANON_EXCHANGE
+    return status;
 } // end of apprpc_consume_handler_finalize
 
 
@@ -460,10 +474,11 @@ ARPC_STATUS_CODE app_rpc_consume_message(void *ctx, void *loop)
         arpc_receipt_t *r = malloc(sizeof(arpc_receipt_t));
         amqp_bytes_t *corr_id = &envelope.message.properties.correlation_id;
         amqp_bytes_t *body    = &envelope.message.body;
-        *r = (arpc_receipt_t) {.ctx=ctx, .loop=loop, .return_fn=apprpc_consume_handler_finalize, 
+        *r = (arpc_receipt_t) {.ctx=ctx, .loop=loop, .return_fn=apprpc_consume_handler_finalize,
+            .send_fn=_apprpc_consume_handler__send2reply_q,
             ._msg_obj=malloc(sizeof(amqp_envelope_t)), .routing_key=envelope.routing_key.bytes,
             .job_id={.len=corr_id->len, .bytes=corr_id->bytes}, ._timestamp=(uint64_t)time(NULL),
-            .msg_body={.len=body->len, .bytes=body->bytes}
+            .msg_body={.len=body->len, .bytes=body->bytes},
         };
         *(amqp_envelope_t *)r->_msg_obj = envelope;
         entry_fn(r); // user-defined handlers must invoke return function at the end of the long-running task
@@ -474,19 +489,22 @@ ARPC_STATUS_CODE app_rpc_consume_message(void *ctx, void *loop)
         res = APPRPC_RESP_MSGQ_OPERATION_ERROR;
     }
 done:
-    if(res != APPRPC_RESP_OK) {
+    if(res != APPRPC_RESP_OK)
         amqp_destroy_envelope(&envelope);
-    }
     return res;
 } // end of app_rpc_consume_message
 
-void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body)
+void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body, uint8_t _final)
 {
     size_t  nrequired = json_dumpb((const json_t *)res_body, NULL, 0, 0);
     char   *body_raw = calloc(nrequired, sizeof(char));
     size_t  nwrite = json_dumpb((const json_t *)res_body, body_raw, nrequired, JSON_COMPACT);
     assert(nwrite <= nrequired);
-    receipt->return_fn(receipt, body_raw, nwrite);
+    if(_final) {
+        receipt->return_fn(receipt, body_raw, nwrite);
+    } else {
+        receipt->send_fn(receipt, body_raw, nwrite);
+    }
     free(body_raw);
 } // end of app_rpc_task_send_reply
 

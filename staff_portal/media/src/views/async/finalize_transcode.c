@@ -9,7 +9,6 @@
         (var) = NULL; \
     }
 
-
 void api_rpc_transcode__asa_localtmp_deinit(asa_op_base_cfg_t *asaobj) {
     atfp_asa_map_t  *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     atfp_asa_map_set_localtmp(_map, NULL);
@@ -114,7 +113,7 @@ static void api_rpc_transcode__update_metadata_done(struct atfp_s *processor)
             json_object_set(transcoded_info_list, fp_dst->data.version, fp_dst->transfer.dst.info);
         }  // e.g. size and checksum of each file ...etc.
     } // transcoded successfully
-    app_rpc_task_send_reply(receipt, err_info);
+    app_rpc_task_send_reply(receipt, err_info, 1);
     api_rpc_transcoding__storagemap_deinit(map);
 } // end of api_rpc_transcode__update_metadata_done
 
@@ -139,7 +138,7 @@ void  api_rpc_transcode__finalize (atfp_asa_map_t *map)
     } // TODO, solve potential n + 1 problems
 #endif
     if(atfp_asa_map_all_dst_stopped(map) && has_err) {
-        app_rpc_task_send_reply(receipt, err_info);
+        app_rpc_task_send_reply(receipt, err_info, 1);
         api_rpc_transcoding__storagemap_deinit(map);
     }
 } // end of api_rpc_transcode__finalize

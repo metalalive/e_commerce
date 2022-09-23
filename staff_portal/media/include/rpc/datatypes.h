@@ -42,11 +42,12 @@ typedef struct {
 } arpc_exe_arg_t; // TODO, rename to arpc_delivery_t
 
 struct arpc_receipt_s;
-typedef void (*arpc_consume_handler_return_fn)(struct arpc_receipt_s *, char *out, size_t out_sz);
+typedef ARPC_STATUS_CODE (*arpc_consume_handler_return_fn)(struct arpc_receipt_s *, char *out, size_t out_sz);
 
 typedef struct arpc_receipt_s {
     ARPC_EXECUTE_COMMON_FIELDS;
-    arpc_consume_handler_return_fn  return_fn;
+    arpc_consume_handler_return_fn  return_fn; // equal to send_fn, and de-initialize itself afterwards
+    arpc_consume_handler_return_fn  send_fn;
     void *ctx; // pointer to specific RPC context
     void *_msg_obj;
     void *loop;

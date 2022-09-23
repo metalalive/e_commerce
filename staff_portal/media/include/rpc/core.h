@@ -27,7 +27,7 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *);
 ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *);
 
 ARPC_STATUS_CODE app_rpc_consume_message(void *ctx, void *loop);
-void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body);
+void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body, uint8_t _final);
 
 ARPC_STATUS_CODE app_rpc_close_connection(void *ctx);
 ARPC_STATUS_CODE app_rpc_open_connection(void *ctx);
