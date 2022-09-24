@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <string.h>
 #include <h2o/memory.h>
+
 #include "transcoder/video/mp4.h"
 #include "transcoder/video/ffmpeg.h"
 
@@ -197,6 +198,7 @@ static void _atfp_mp4__processing_one_frame(atfp_mp4_t *mp4proc)
         if(err < 0)
             json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to send async event with decoded frame"));
     }
+    mp4proc->internal.op.monitor_progress(mp4proc->av, processor->data.rpc_receipt);
     if(err)
         processor -> data.callback(processor);
 } // end of _atfp_mp4__processing_one_frame
@@ -237,6 +239,7 @@ static atfp_t *atfp__video_mp4__instantiate(void) {
     out->internal.op.decode_pkt  = atfp_mp4__av_decode_packet;
     out->internal.op.next_pkt    = atfp_ffmpeg__next_local_packet;
     out->internal.op.preload_pkt = atfp_mp4__av_preload_packets;
+    out->internal.op.monitor_progress = atfp_ffmpeg_avctx__monitor_progress;
     out->async.data = out;
     char *ptr = (char *)out + sizeof(atfp_mp4_t);
     out->av = (atfp_av_ctx_t *)ptr;

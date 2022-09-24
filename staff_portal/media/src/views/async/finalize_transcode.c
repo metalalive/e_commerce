@@ -44,6 +44,7 @@ static void api_rpc_transcoding__storage_deinit(asa_op_base_cfg_t *asaobj) {
     if(processor) {
         processor->data.error = NULL;
         processor->data.spec = NULL;
+        processor->data.rpc_receipt = NULL;
         processor->data.callback = NULL;
         processor->ops->deinit(processor);
     } else {

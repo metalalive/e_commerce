@@ -598,6 +598,35 @@ Ensure(atfp_mp4_test__packet_decode__recv_error) {
 } // end of atfp_mp4_test__packet_decode__recv_error
 
 
+static ARPC_STATUS_CODE utest_mp4_rpc_send_progress(arpc_receipt_t *r, char *out, size_t out_sz)
+{ return (ARPC_STATUS_CODE) mock(r, out, out_sz); }
+
+Ensure(atfp_mp4_test__monitor_progress) {
+    atfp_av_ctx_t  mock_avctx = {.intermediate_data = {.decode={.tot_num_pkts_fixed=10000,
+        .tot_num_pkts_avail=10000, .percent_done=0.0f, .report_interval=0.10f }}};
+    arpc_receipt_t  mock_receipt = {.send_fn=utest_mp4_rpc_send_progress};
+    atfp_ffmpeg_avctx__monitor_progress(&mock_avctx, &mock_receipt);
+    mock_avctx.intermediate_data.decode.tot_num_pkts_avail = 8950;
+    expect(utest_mp4_rpc_send_progress,   will_return(APPRPC_RESP_OK),  when(r,is_equal_to(&mock_receipt))  );
+    atfp_ffmpeg_avctx__monitor_progress(&mock_avctx, &mock_receipt);
+    // is_greater_than_double()  does not work in some hardware platforms
+    uint8_t  condition = mock_avctx.intermediate_data.decode.percent_done >= 0.1f;
+    assert_that(condition, is_equal_to(1));
+    atfp_ffmpeg_avctx__monitor_progress(&mock_avctx, &mock_receipt);
+    atfp_ffmpeg_avctx__monitor_progress(&mock_avctx, &mock_receipt);
+    condition = mock_avctx.intermediate_data.decode.percent_done >= 0.1f;
+    assert_that(condition, is_equal_to(1));
+    condition = mock_avctx.intermediate_data.decode.percent_done >= 0.2f;
+    assert_that(condition, is_equal_to(0));
+    mock_avctx.intermediate_data.decode.tot_num_pkts_avail = 7950;
+    expect(utest_mp4_rpc_send_progress,   will_return(APPRPC_RESP_OK),  when(r,is_equal_to(&mock_receipt))  );
+    atfp_ffmpeg_avctx__monitor_progress(&mock_avctx, &mock_receipt);
+    condition = mock_avctx.intermediate_data.decode.percent_done >= 0.2f;
+    assert_that(condition, is_equal_to(1));
+} // end of atfp_mp4_test__monitor_progress
+
+
+
 TestSuite *app_transcoder_mp4_avcontext_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -616,6 +645,7 @@ TestSuite *app_transcoder_mp4_avcontext_tests(void)
     add_test(suite, atfp_mp4_test__packet_decode_more_data_required);
     add_test(suite, atfp_mp4_test__packet_decode__send_error);
     add_test(suite, atfp_mp4_test__packet_decode__recv_error);
+    add_test(suite, atfp_mp4_test__monitor_progress);
     return suite;
 }
 

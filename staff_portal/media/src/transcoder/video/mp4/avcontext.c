@@ -4,6 +4,7 @@
 #include <libavutil/error.h>
 
 #include "app_cfg.h"
+#include "rpc/core.h"
 #include "transcoder/video/mp4.h"
 #include "transcoder/video/ffmpeg.h"
 
@@ -304,6 +305,8 @@ ASA_RES_CODE  atfp_mp4__av_init (atfp_mp4_t *mp4proc, void (*cb)(atfp_mp4_t *))
             min__num_init_pkts = FFMIN(min__num_init_pkts, stream->nb_index_entries);
             mp4proc->av->intermediate_data.decode.tot_num_pkts_avail += stream ->nb_index_entries;
         }
+        mp4proc->av->intermediate_data.decode.tot_num_pkts_fixed = mp4proc->av->intermediate_data.decode.tot_num_pkts_avail;
+        mp4proc->av->intermediate_data.decode.report_interval = 0.15f;
         mp4proc->av->async_limit.num_init_pkts = min__num_init_pkts;
     }
     size_t  nbytes_to_load = atfp_ffmpeg__estimate_nb_pkt_preload(mp4proc->av,
@@ -443,6 +446,23 @@ int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *avctx)
 
 
 uint8_t  atfp_ffmpeg_avctx__has_done_decoding(atfp_av_ctx_t *avctx)
+{ return avctx->intermediate_data.decode.tot_num_pkts_avail == 0; }
+
+void  atfp_ffmpeg_avctx__monitor_progress(atfp_av_ctx_t *avctx, arpc_receipt_t  *rpc_receipt)
 {
-    return avctx->intermediate_data.decode.tot_num_pkts_avail == 0;
-}
+    if(!rpc_receipt || !avctx)
+        return;
+    size_t  tot_num_pkts   = avctx->intermediate_data.decode.tot_num_pkts_fixed;
+    size_t  num_pkts_avail = avctx->intermediate_data.decode.tot_num_pkts_avail;
+    size_t  num_pkts_done  = tot_num_pkts - num_pkts_avail;
+    float   _percent_done = 1.0f * num_pkts_done / tot_num_pkts;
+    float   diff = _percent_done - avctx->intermediate_data.decode.percent_done;
+    float   percent_interval = avctx->intermediate_data.decode.report_interval;
+    if(diff < percent_interval)
+        return;
+    json_t *progress_info = json_object();
+    json_object_set_new(progress_info, "progress", json_real((double)_percent_done));
+    app_rpc_task_send_reply(rpc_receipt, progress_info, 0);
+    json_decref(progress_info);
+    avctx->intermediate_data.decode.percent_done = _percent_done;
+} // end of atfp_ffmpeg_avctx__monitor_progress

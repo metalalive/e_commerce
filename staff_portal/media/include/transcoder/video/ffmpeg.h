@@ -35,7 +35,10 @@ struct atfp_av_ctx_s {
         struct {
             AVFrame   frame;
             AVPacket  packet;
+            size_t    tot_num_pkts_fixed; // from all valid streams
             size_t    tot_num_pkts_avail; // from all valid streams
+            float     percent_done;
+            float     report_interval; // in terms of percentage
             uint16_t  num_decoded_frames;
         } decode;
         struct {

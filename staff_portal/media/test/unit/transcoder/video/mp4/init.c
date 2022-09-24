@@ -23,7 +23,7 @@
 
 extern const atfp_ops_entry_t  atfp_ops_video_mp4;
 
-static void  utest_atfp__async_usr_callback(uv_async_t* handle)
+static void  utest_atfp__libuv_async_callback(uv_async_t* handle)
 {
     atfp_t *processor = handle -> data;
     processor -> data.callback(processor);
@@ -109,6 +109,8 @@ static  int  utest_atfp_mockops_next_pkt(atfp_av_ctx_t *avctx)
 static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nbytes, void (*cb)(atfp_mp4_t *))
 { return (ASA_RES_CODE) mock(mp4proc,cb); }
 
+static void  utest_atfp_mockops_monitor_progress(atfp_av_ctx_t *avctx, arpc_receipt_t  *receipt)
+{ mock(avctx, receipt); }
 
 #define  UTEST_ATFP_MP4__INIT_SETUP \
     uv_loop_t *loop  = uv_default_loop(); \
@@ -135,6 +137,7 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
     mock_fp->internal.op.av_init   = utest_mp4__av_init; \
     mock_fp->internal.op.av_deinit = utest_mp4__av_deinit; \
     mock_fp->internal.op.av_validate  = utest_mp4__av_validate; \
+    mock_fp->internal.op.preload_info = utest_mp4__preload_info ; \
     mock_fp->internal.op.preload_info = utest_mp4__preload_info ; \
     mock_fp->super.data.callback = utest_atfp_usr_cb ; \
     mock_fp->super.data.error = mock_errinfo ; \
@@ -266,11 +269,11 @@ Ensure(atfp_mp4_test__init_avctx_validation_failure) {
     atfp_av_ctx_t  mock_av_ctx = {0}; \
     atfp_mp4_t  mock_mp4proc = { .av=&mock_av_ctx, .async={0}, .internal={.op={ \
         .preload_pkt=utest_atfp_mockops_preload, .next_pkt=utest_atfp_mockops_next_pkt, \
-        .decode_pkt=utest_atfp_mockops_decode_pkt}}, \
+        .decode_pkt=utest_atfp_mockops_decode_pkt, .monitor_progress=utest_atfp_mockops_monitor_progress }}, \
         .super={.data={.callback=utest_atfp_usr_cb,  .error=json_object(),}}, \
     }; \
     uv_loop_t *loop =  uv_default_loop(); \
-    uv_async_init(loop, &mock_mp4proc.async, utest_atfp__async_usr_callback); \
+    uv_async_init(loop, &mock_mp4proc.async, utest_atfp__libuv_async_callback); \
     mock_mp4proc.async.data = &mock_mp4proc.super;
 
 #define  UTEST_ATFP_MP4_PROCESS_TEARDOWN \
@@ -280,7 +283,11 @@ Ensure(atfp_mp4_test__init_avctx_validation_failure) {
 
 Ensure(atfp_mp4_test__process_one_frame__ok) {
     UTEST_ATFP_MP4_PROCESS_SETUP;
+    arpc_receipt_t  mock_receipt = {0};
+    mock_mp4proc.super.data.rpc_receipt = &mock_receipt;
     expect(utest_atfp_mockops_decode_pkt, will_return(0), when(avctx, is_equal_to(&mock_av_ctx)));
+    expect(utest_atfp_mockops_monitor_progress, when(avctx, is_equal_to(&mock_av_ctx)),
+            when(receipt, is_equal_to(&mock_receipt))  );
     expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_mp4proc.super)));
     atfp_ops_video_mp4 .ops .processing(&mock_mp4proc.super);
     uv_run(loop, UV_RUN_NOWAIT);
@@ -298,6 +305,7 @@ Ensure(atfp_mp4_test__fetch_and_process_one_frame__ok) {
         expect(utest_atfp_mockops_next_pkt,   will_return(0), when(avctx, is_equal_to(&mock_av_ctx)));
     }
     expect(utest_atfp_mockops_decode_pkt, will_return(0), when(avctx, is_equal_to(&mock_av_ctx)));
+    expect(utest_atfp_mockops_monitor_progress, when(avctx, is_equal_to(&mock_av_ctx)));
     expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_mp4proc.super)));
     atfp_ops_video_mp4 .ops .processing(&mock_mp4proc.super);
     uv_run(loop, UV_RUN_NOWAIT);
@@ -312,6 +320,7 @@ Ensure(atfp_mp4_test__process_preload_start__ok) {
     expect(utest_atfp_mockops_preload,   will_return(ASTORAGE_RESULT_ACCEPT),
             when(mp4proc, is_equal_to(&mock_mp4proc)),  when(cb, is_not_equal_to(NULL)), 
     );
+    expect(utest_atfp_mockops_monitor_progress, when(avctx, is_equal_to(&mock_av_ctx)));
     atfp_ops_video_mp4 .ops .processing(&mock_mp4proc.super);
     UTEST_ATFP_MP4_PROCESS_TEARDOWN;
 } // end of atfp_mp4_test__process_preload_start__ok
@@ -324,6 +333,7 @@ Ensure(atfp_mp4_test__process_preload_start__error) {
     expect(utest_atfp_mockops_preload,   will_return(ASTORAGE_RESULT_OS_ERROR),
             when(mp4proc, is_equal_to(&mock_mp4proc)),  when(cb, is_not_equal_to(NULL)), 
     );
+    expect(utest_atfp_mockops_monitor_progress, when(avctx, is_equal_to(&mock_av_ctx)));
     expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_mp4proc.super)));
     atfp_ops_video_mp4 .ops .processing(&mock_mp4proc.super);
     UTEST_ATFP_MP4_PROCESS_TEARDOWN;
@@ -334,6 +344,7 @@ Ensure(atfp_mp4_test__process_decode__error) {
     UTEST_ATFP_MP4_PROCESS_SETUP;
     expect(utest_atfp_mockops_decode_pkt, will_return(1), when(avctx, is_equal_to(&mock_av_ctx)));
     expect(utest_atfp_mockops_next_pkt,   will_return(AVERROR(EIO)), when(avctx, is_equal_to(&mock_av_ctx)));
+    expect(utest_atfp_mockops_monitor_progress, when(avctx, is_equal_to(&mock_av_ctx)));
     expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_mp4proc.super)));
     atfp_ops_video_mp4 .ops .processing(&mock_mp4proc.super);
     UTEST_ATFP_MP4_PROCESS_TEARDOWN;

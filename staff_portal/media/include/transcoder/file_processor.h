@@ -10,6 +10,7 @@ extern "C" {
 
 #include "storage/datatypes.h"
 #include "storage/localfs.h"
+#include "rpc/datatypes.h"
 
 
 // identification of backend library for transcoders
@@ -32,6 +33,7 @@ typedef  struct atfp_av_ctx_s   atfp_av_ctx_t;
 typedef struct {
     json_t *error;
     json_t *spec;
+    arpc_receipt_t  *rpc_receipt;
     const char *version; // point to version label string
     uint32_t  usr_id;
     uint32_t  upld_req_id;

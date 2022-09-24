@@ -52,6 +52,7 @@ typedef struct atfp_mp4_s {
             int  (*decode_pkt)(atfp_av_ctx_t *);
             int  (*next_pkt)(atfp_av_ctx_t *);
             ASA_RES_CODE  (*preload_pkt)(struct atfp_mp4_s *, size_t nbytes, void (*cb)(struct atfp_mp4_s *));
+            void  (*monitor_progress)(atfp_av_ctx_t *, arpc_receipt_t *);
         } op;
     } internal;
 } atfp_mp4_t;
@@ -75,6 +76,8 @@ int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *);
 int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *);
 
 uint8_t  atfp_ffmpeg_avctx__has_done_decoding(atfp_av_ctx_t *);
+
+void  atfp_ffmpeg_avctx__monitor_progress(atfp_av_ctx_t *, arpc_receipt_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause

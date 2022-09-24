@@ -160,6 +160,7 @@ static atfp_t * api_rpc_transcode__init_file_processor (
         processor->data = (atfp_data_t) {
             .error=err_info, .spec=spec, .callback=callback, .usr_id=_usr_id, .upld_req_id=_upld_req_id,
             .version=asaobj->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL],
+            .rpc_receipt=asaobj->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT],
             .storage={ .basepath=asaobj->op.mkdir.path.origin, .handle=asaobj},
         };
     }
