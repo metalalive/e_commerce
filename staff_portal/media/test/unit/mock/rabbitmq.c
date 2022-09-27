@@ -96,9 +96,10 @@ amqp_rpc_reply_t amqp_consume_message(amqp_connection_state_t conn_state,
 {
     void   **evp_routekey    = &envelope->routing_key.bytes;
     size_t  *evp_routekey_sz = &envelope->routing_key.len  ;
-    void   **evp_msg_body    = &envelope->message.body.bytes;
+    amqp_bytes_t  *evp_msg_body  = &envelope->message.body;
+    amqp_bytes_t  *evp_corr_id   = &envelope->message.properties.correlation_id;
     amqp_rpc_reply_t *out = (amqp_rpc_reply_t *) mock(conn_state, evp_routekey, evp_routekey_sz,
-           evp_msg_body, timeout, flags);
+           evp_msg_body, evp_corr_id, timeout, flags);
     return *out;
 }
 
@@ -111,3 +112,9 @@ int amqp_get_sockfd(amqp_connection_state_t conn_state)
 void amqp_maybe_release_buffers(amqp_connection_state_t conn_state)
 { mock(conn_state); }
 
+amqp_basic_cancel_ok_t  *amqp_basic_cancel( amqp_connection_state_t  conn_state,
+        amqp_channel_t channel, amqp_bytes_t  consumer_tag)
+{
+    char *tag = consumer_tag.bytes;
+    return (amqp_basic_cancel_ok_t *) mock(conn_state, tag); 
+}

@@ -136,4 +136,6 @@ make integration_test
 * Parallelize transcoding process after stream metadata is parsed from media container, by splitting part of packets to different transcoding nodes(servers) . Then assemble encoded packets to final file(s)
 * write other less important metadata (e.g. checksum of each generated file, video title, tags for search, ...etc.) of transcoded file to storage, or document-oriented databases.
 * Upgrade Valgrind to latest version then check the memory usage again, current version (3.110.1) reports tons of false positive issues (e.g. read/write of unninitialized value) and may cause undefined program behaviour and stack buffer overflow.
+* Transcoding progress info is rarely updated once inserted to database / file, currently it is maintained in file for individual user. For better scalability of progress monitor, use distributed document-oriented database to keep the info. 
+* [Rabbitmq/C](https://github.com/rabbitmq/rabbitmq-c) is currently applied to this app for interacting with RabbitMQ, the library doesn't support asynchronous operations (except consume function), so I've been looking for other C libraries which implement AMQP in non-blocking manner.
 

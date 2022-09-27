@@ -152,7 +152,7 @@ static int appworker_init_context(app_ctx_worker_t *ctx, struct worker_init_data
     unsigned int thread_index = init_data->cfg_thrd_idx;
     ctx->thread_id = uv_thread_self();
     void *mq_conns  = app_rpc_conn_init(acfg->rpc.entries, acfg->rpc.size);
-    if(!mq_conns) {
+    if(!mq_conns) { // each thread has AMQP connection to each broker, no need to apply lock
         fprintf(stderr, "[worker] connection failure on message queue\n");
         err = -1;
         goto done;

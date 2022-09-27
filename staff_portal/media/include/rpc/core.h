@@ -12,7 +12,7 @@ struct arpc_ctx_t {
     arpc_cfg_t  *ref_cfg;
     amqp_socket_t *sock;
     amqp_connection_state_t  conn;
-    uint8_t consumer_setup_done;
+    uint8_t consumer_setup_done:1;
 };
 
 struct arpc_ctx_list_t {
@@ -27,6 +27,7 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *);
 ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *);
 
 ARPC_STATUS_CODE app_rpc_consume_message(void *ctx, void *loop);
+ARPC_STATUS_CODE app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *, void (*)(const char *, size_t, arpc_exe_arg_t *));
 void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body, uint8_t _final);
 
 ARPC_STATUS_CODE app_rpc_close_connection(void *ctx);

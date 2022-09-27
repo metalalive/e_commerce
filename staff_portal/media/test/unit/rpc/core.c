@@ -189,7 +189,7 @@ Ensure(rpc_start_test__reconnected_published) {
     struct arpc_ctx_list_t mock_ctx_lst = {.size=1, .entries=&mock_ctx};
     arpc_exe_arg_t  rpc_arg = {
         .conn=(void *)&mock_ctx_lst, .job_id = {.bytes=&job_id_raw[0], .len=MAX_BYTES_JOB_ID },
-        .msg_body = {.len=msg_body_raw_sz, .bytes=msg_body_raw},  .alias=mock_cfg.alias,
+        .msg_body = {.len=msg_body_raw_sz, .bytes=(void *)msg_body_raw},  .alias=mock_cfg.alias,
         .usr_data = NULL,  .routing_key=mock_bind_cfg.routing_key,
     };
     {
@@ -269,7 +269,7 @@ Ensure(rpc_start_test__publish_msg_broker_down) {
     struct arpc_ctx_list_t mock_ctx_lst = {.size=1, .entries=&mock_ctx};
     arpc_exe_arg_t  rpc_arg = {
         .conn=(void *)&mock_ctx_lst, .job_id = {.bytes=&job_id_raw[0], .len=MAX_BYTES_JOB_ID },
-        .msg_body = {.len=msg_body_raw_sz, .bytes=msg_body_raw},  .alias=mock_cfg.alias,
+        .msg_body = {.len=msg_body_raw_sz, .bytes=(void *)msg_body_raw},  .alias=mock_cfg.alias,
         .usr_data = NULL,  .routing_key=mock_bind_cfg.routing_key,
     };
     {
@@ -544,6 +544,127 @@ Ensure(rpc_consume_test__handler_middle_reply_ok) {
 } // end of rpc_consume_test__handler_middle_reply_ok
 
 
+#define  NUM_BIND_CFG   2
+#define  UTEST_FETCH_REPLYQ__SETUP  \
+    char dummy[2] = {0x12, 0x45}; \
+    amqp_socket_t  *mock_mq_sock = (amqp_socket_t  *)&dummy[0]; \
+    amqp_connection_state_t  mock_mq_conn = (amqp_connection_state_t)&dummy[1]; \
+    arpc_cfg_bind_t  mock_bind_cfgs[NUM_BIND_CFG] = { \
+        {.reply={.queue={.name_pattern="app.op.xyz123"}}}, \
+        {.reply={.queue={.name_pattern="app.op.uvw345"}}}, \
+    }; \
+    arpc_cfg_t  mock_cfg = {.alias="utest_mqbroker_1", .bindings={.capacity=NUM_BIND_CFG, \
+        .size=NUM_BIND_CFG, .entries=&mock_bind_cfgs[0] }}; \
+    struct arpc_ctx_t  mock_ctx = {.ref_cfg=&mock_cfg, .sock=mock_mq_sock, .conn=mock_mq_conn}; \
+    struct arpc_ctx_list_t  mock_ctx_lst = {.size=1, .entries=&mock_ctx}; \
+    arpc_exe_arg_t  mock_rpc_arg = {.conn=(void *)&mock_ctx_lst, .alias=mock_cfg.alias, .usr_data=NULL };
+
+static void  utest_rpc_fetch_from_replyq_cb (const char *msg, size_t sz, arpc_exe_arg_t *args)
+{
+    const char *job_id = args->job_id.bytes;
+    mock(msg, sz, job_id);
+} // end of utest_rpc_fetch_from_replyq_cb
+
+#define  NUM_ENVELOPS_PER_REPLYQ  3
+Ensure(rpc_replyq_test__get_msgs)
+{
+    UTEST_FETCH_REPLYQ__SETUP;
+    const char *mock_corr_id_list [NUM_BIND_CFG][NUM_ENVELOPS_PER_REPLYQ] = {
+        {"lucifa", "freight", "chip"}, {"oosaka","cracket","corn"} };
+    const char *mock_msg_list [NUM_BIND_CFG][NUM_ENVELOPS_PER_REPLYQ] = {
+        {"msg001", "msg002", "msg003"}, {"msg004", "msg005", "msg006"} };
+    amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+    amqp_rpc_reply_t  mock_reply_timeout = {.reply_type=AMQP_RESPONSE_LIBRARY_EXCEPTION,
+                .library_error=AMQP_STATUS_TIMEOUT};
+    for(int idx = 0; idx < NUM_BIND_CFG; idx++) {
+        const char *expect_q_name = mock_bind_cfgs[idx].reply.queue.name_pattern;
+        expect(amqp_basic_consume, when(conn_state, is_equal_to(mock_mq_conn)),
+            when(q_name, is_equal_to_string(expect_q_name)) );
+        expect(amqp_get_rpc_reply, will_return(&mock_reply_ok));
+        for(int jdx = 0; jdx < NUM_ENVELOPS_PER_REPLYQ; jdx++) {
+            const char *exp_corr_id = mock_corr_id_list[idx][jdx];
+            const char *exp_msg     = mock_msg_list[idx][jdx];
+            amqp_bytes_t  src_corr_id = {.bytes=(void *)exp_corr_id, .len=strlen(exp_corr_id)};
+            amqp_bytes_t  src_msg = {.bytes=(void *)exp_msg, .len=strlen(exp_msg)};
+            expect(amqp_maybe_release_buffers, when(conn_state, is_equal_to(mock_mq_conn))  );
+            expect(amqp_consume_message,  will_return(&mock_reply_ok),
+                    will_set_contents_of_parameter(evp_msg_body, &src_msg, sizeof(amqp_bytes_t)),
+                    will_set_contents_of_parameter(evp_corr_id, &src_corr_id, sizeof(amqp_bytes_t)),
+                );
+            // unfortunately set-parameter macro cannot be used several times within
+            //  a target function, the previously set content will be removed
+            //expect(utest_rpc_fetch_from_replyq_cb, when(msg, is_equal_to_string(exp_msg)),
+            //     when(job_id, is_equal_to_string(src_corr_id.bytes))  );
+            expect(utest_rpc_fetch_from_replyq_cb);
+            expect(amqp_destroy_envelope);
+        } // end of loop
+        expect(amqp_maybe_release_buffers, when(conn_state, is_equal_to(mock_mq_conn))  );
+        expect(amqp_consume_message,  will_return(&mock_reply_timeout));
+        expect(amqp_basic_cancel, when(tag, is_equal_to_string(expect_q_name)));
+    } // end of loop
+    ARPC_STATUS_CODE  result =  app_rpc_fetch_all_reply_msg(&mock_rpc_arg, utest_rpc_fetch_from_replyq_cb);
+    assert_that(result, is_equal_to(APPRPC_RESP_OK));
+} // end of rpc_replyq_test__get_msgs
+#undef  NUM_ENVELOPS_PER_REPLYQ
+
+
+Ensure(rpc_replyq_test__empty_queue) {
+    UTEST_FETCH_REPLYQ__SETUP;
+    amqp_rpc_reply_t  mock_reply_ok  = {.reply_type=AMQP_RESPONSE_NORMAL};
+    amqp_rpc_reply_t  mock_reply_timeout = {.reply_type=AMQP_RESPONSE_LIBRARY_EXCEPTION,
+                .library_error=AMQP_STATUS_TIMEOUT};
+    for(int idx = 0; idx < NUM_BIND_CFG; idx++) {
+        const char *expect_q_name = mock_bind_cfgs[idx].reply.queue.name_pattern;
+        expect(amqp_basic_consume, when(conn_state, is_equal_to(mock_mq_conn)),
+            when(q_name, is_equal_to_string(expect_q_name)) );
+        expect(amqp_get_rpc_reply, will_return(&mock_reply_ok));
+        expect(amqp_maybe_release_buffers, when(conn_state, is_equal_to(mock_mq_conn))  );
+        expect(amqp_consume_message,  will_return(&mock_reply_timeout));
+        expect(amqp_basic_cancel, when(tag, is_equal_to_string(expect_q_name)));
+    } // end of loop
+    ARPC_STATUS_CODE  result =  app_rpc_fetch_all_reply_msg(&mock_rpc_arg, utest_rpc_fetch_from_replyq_cb);
+    assert_that(result, is_equal_to(APPRPC_RESP_OK));
+} // end of rpc_replyq_test__empty_queue
+
+
+Ensure(rpc_replyq_test__connection_error) {
+    UTEST_FETCH_REPLYQ__SETUP;
+    amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_LIBRARY_EXCEPTION,
+           .library_error=AMQP_STATUS_SOCKET_ERROR };
+    {
+        const char *expect_q_name = mock_bind_cfgs[0].reply.queue.name_pattern;
+        expect(amqp_basic_consume, when(conn_state, is_equal_to(mock_mq_conn)),
+            when(q_name, is_equal_to_string(expect_q_name)) );
+        expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
+        expect(amqp_connection_close, when(conn_state, is_equal_to(mock_mq_conn)));
+        expect(amqp_destroy_connection, when(conn_state, is_equal_to(mock_mq_conn)));
+        expect(amqp_new_connection, will_return(mock_mq_conn));
+        expect(amqp_tcp_socket_new, will_return(mock_mq_sock));
+        expect(amqp_socket_open, will_return(AMQP_STATUS_TCP_ERROR));
+        expect(amqp_connection_close, when(conn_state, is_equal_to(mock_mq_conn)));
+        expect(amqp_destroy_connection, when(conn_state, is_equal_to(mock_mq_conn)));
+    }
+    ARPC_STATUS_CODE  result =  app_rpc_fetch_all_reply_msg(&mock_rpc_arg, utest_rpc_fetch_from_replyq_cb);
+    assert_that(result, is_equal_to(APPRPC_RESP_MSGQ_CONNECTION_ERROR));
+} // end of rpc_replyq_test__connection_error
+
+
+Ensure(rpc_replyq_test__operation_error) {
+    UTEST_FETCH_REPLYQ__SETUP;
+    amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_SERVER_EXCEPTION,
+           .reply={.id=AMQP_BASIC_CONSUME_METHOD}};
+    {
+        const char *expect_q_name = mock_bind_cfgs[0].reply.queue.name_pattern;
+        expect(amqp_basic_consume, when(conn_state, is_equal_to(mock_mq_conn)),
+            when(q_name, is_equal_to_string(expect_q_name)) );
+        expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
+        expect(amqp_basic_cancel, when(tag, is_equal_to_string(expect_q_name)));
+    }
+    ARPC_STATUS_CODE  result =  app_rpc_fetch_all_reply_msg(&mock_rpc_arg, utest_rpc_fetch_from_replyq_cb);
+    assert_that(result, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
+} // end of rpc_replyq_test__operation_error
+
+
 TestSuite *app_rpc_core_tests(void) {
     TestSuite *suite = create_test_suite();
     add_test(suite, rpc_core_init_test__memory_error);
@@ -565,5 +686,9 @@ TestSuite *app_rpc_core_tests(void) {
     add_test(suite, rpc_consume_test__handler_finalize_reply_ok);
     add_test(suite, rpc_consume_test__handler_middle_reply_error);
     add_test(suite, rpc_consume_test__handler_middle_reply_ok);
+    add_test(suite, rpc_replyq_test__get_msgs);
+    add_test(suite, rpc_replyq_test__empty_queue);
+    add_test(suite, rpc_replyq_test__connection_error);
+    add_test(suite, rpc_replyq_test__operation_error);
     return suite;
 }
