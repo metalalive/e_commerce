@@ -47,9 +47,8 @@ ARPC_STATUS_CODE api__start_transcoding__render_rpc_corr_id (
     ARPC_STATUS_CODE status = APPRPC_RESP_OK;
     size_t md_hex_sz = (SHA_DIGEST_LENGTH << 1) + 1;
     size_t tot_wr_sz = strlen(name_pattern) + md_hex_sz;
-    if(tot_wr_sz > wr_sz) {
+    if(tot_wr_sz > wr_sz) 
         return APPRPC_RESP_MEMORY_ERROR;
-    }
     json_t *_usr_data = (json_t *)args->usr_data;
     uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(_usr_data,"usr_id"));
     json_t *outputs = json_object_get(_usr_data, "outputs");
@@ -68,7 +67,10 @@ ARPC_STATUS_CODE api__start_transcoding__render_rpc_corr_id (
         SHA1_Final((unsigned char *)&md[0], &sha_ctx);
         app_chararray_to_hexstr(&md_hex[0], md_hex_sz - 1, &md[0], SHA_DIGEST_LENGTH);
         md_hex[md_hex_sz - 1] = 0x0;
-        snprintf(wr_buf, wr_sz, name_pattern, &md_hex[0]);
+        size_t nwrite = snprintf(wr_buf, wr_sz, name_pattern, &md_hex[0]);
+        if(nwrite >= wr_sz)
+            status = APPRPC_RESP_MEMORY_ERROR;
+        OPENSSL_cleanse(&sha_ctx, sizeof(SHA_CTX));
     } else {
         status = APPRPC_RESP_ARG_ERROR;
     }
@@ -127,7 +129,6 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
         char *msg_body_raw = calloc(nb_required, sizeof(char));
         size_t nwrite = json_dumpb(msgq_body_item, msg_body_raw, nb_required, JSON_COMPACT);
         assert(nwrite <= nb_required);
-#define MAX_BYTES_JOB_ID    70
         char job_id_raw[MAX_BYTES_JOB_ID] = {0};
         arpc_exe_arg_t  rpc_arg = {
             .conn = req->conn->ctx->storage.entries[1].data,  .job_id = {.bytes=&job_id_raw[0],
@@ -142,7 +143,6 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
             http_resp_status = 503;
             json_object_set_new(res_body_json, "job_id", json_null());
         }
-#undef MAX_BYTES_JOB_ID
         free(msg_body_raw);
     } // end of construct message body
     json_decref(msgq_body_item);

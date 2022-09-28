@@ -151,6 +151,7 @@ extern "C" {
 // TODO, synchronize following parameters with DB migration config file
 #define APP_RESOURCE_ID_SIZE  8
 #define APP_TRANSCODED_VERSION_SIZE  2
+#define MAX_BYTES_JOB_ID    70  // TODO, parameterize
 
 DBA_RES_CODE  app_validate_uncommitted_upld_req (
     RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,

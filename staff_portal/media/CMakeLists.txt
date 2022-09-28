@@ -193,6 +193,7 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/multipart_parser.c
     src/views/init.c
     src/views/common.c
+    src/views/monitor_job_progress.c
     src/views/initiate_multipart_upload.c
     src/views/complete_multipart_upload.c
     src/views/start_transcoding_file.c
@@ -370,14 +371,15 @@ SET(DEV_APPCFG_PATH ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json)
 ADD_CUSTOM_TARGET(dev_app_server
     python -m  media.setup_test_env DevCertRenewal  ${DEV_APPCFG_PATH}
     COMMAND
-       ##valgrind --leak-check=full
        ##gdb -args
+       ##valgrind --leak-check=full   --show-leak-kinds=definite 
        ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${APP_SERVER_EXE_NAME})
 
 ADD_CUSTOM_TARGET(dev_rpc_worker
     ##gdb -args
+    ##valgrind --leak-check=full
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${RPC_CONSUMER_EXE_NAME})

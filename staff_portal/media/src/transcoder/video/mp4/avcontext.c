@@ -449,7 +449,7 @@ uint8_t  atfp_ffmpeg_avctx__has_done_decoding(atfp_av_ctx_t *avctx)
 { return avctx->intermediate_data.decode.tot_num_pkts_avail == 0; }
 
 void  atfp_ffmpeg_avctx__monitor_progress(atfp_av_ctx_t *avctx, arpc_receipt_t  *rpc_receipt)
-{
+{ // TODO, re-design the interface only for progress update, with respect to scalability of API servers
     if(!rpc_receipt || !avctx)
         return;
     size_t  tot_num_pkts   = avctx->intermediate_data.decode.tot_num_pkts_fixed;

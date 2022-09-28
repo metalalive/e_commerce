@@ -108,6 +108,7 @@ static void api_rpc_transcode__update_metadata_done(struct atfp_s *processor)
         json_object_set(err_info, "last_upld_req", upld_req_item);
         json_t *transcoded_info_list = json_object();
         json_object_set_new(err_info, "info", transcoded_info_list);
+        json_object_set_new(err_info, "progress", json_real((double) 1.0f));
         atfp_asa_map_reset_dst_iteration(map);
         while((asa_dst = atfp_asa_map_iterate_destination(map))) {
             atfp_t *fp_dst = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];

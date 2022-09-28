@@ -88,27 +88,6 @@ RESTAPI_ENDPOINT_HANDLER(discard_ongoing_job, DELETE, self, req)
 }
 
 
-RESTAPI_ENDPOINT_HANDLER(monitor_job_progress, GET, self, req)
-{
-    json_t *qparams = json_object();
-    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
-    const char *job_id = json_string_value(json_object_get(qparams, "id"));
-    const char *body = "{\"elementary_streams\": [], \"outputs\":[]}";
-    if(job_id) {
-        req->res.status = 200;
-        req->res.reason = "OK";
-    } else {
-        req->res.status = 404;
-        req->res.reason = "job not found";
-    }
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
-    h2o_send_inline(req, body, strlen(body));
-    json_decref(qparams);
-    app_run_next_middleware(self, req, node);
-    return 0;
-}
-
-
 // fetch file (image or video, audio playlist for streaming)
 // TODO: seperate API endpoint for public media resource ?
 RESTAPI_ENDPOINT_HANDLER(fetch_entire_file, GET, self, req)

@@ -137,9 +137,7 @@ DBA_RES_CODE  app_verify_existence_resource_id (RESTAPI_HANDLER_ARGS(self, req),
         void (*err_cb)(db_query_t *, db_query_result_t *), app_middleware_fn success_cb, app_middleware_fn failure_cb)
 {
     if(!self || !req || !node || !err_cb || !failure_cb || !success_cb)
-    {
         return DBA_RESULT_ERROR_ARG;
-    }
     char  *res_id_encoded = (char *)app_fetch_from_hashmap(node->data, "res_id_encoded");
     if(!res_id_encoded) {
         return DBA_RESULT_ERROR_ARG;
