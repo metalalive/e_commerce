@@ -68,8 +68,8 @@
         {
             "alias": "db_server_1",
             "db_name": "test_ecommerce_media",
-            "max_connections": 5,
-            "idle_timeout": 20,
+            "max_connections": 3,
+            "idle_timeout": 14,
             "bulk_query_limit_kb": 2,
             "credential": {
                 "hierarchy": ["backend_apps","databases","media_service"],
@@ -156,7 +156,7 @@
             "attributes": {
                 "vhost":"/",
                 "max_channels": 128,
-                "timeout_secs": 2,
+                "timeout_secs": 7,
                 "max_kb_per_frame": 35
             },
             "credential": {
@@ -180,16 +180,34 @@
                 "audio":["aac"]
             },
             "video": {
-                "pixels": [[1080, 600], [720, 540], [480, 360], [360, 270], [240, 180], [160, 120]],
-                "fps": [35,30,28,25,24,20,16,15,11]
+                "pixels": [[720, 540], [480, 360], [400, 300], [360, 270], [320, 240], [240, 180], [200, 150], [190,135], [170,125], [160, 120], [150, 105]],
+                "fps": [35,30,28,27,25,24,22,21,20,18,17,16,15,13,11]
             },
             "audio": {
-                "bitrate_kbps": [128, 96, 64, 55, 32]
+                "bitrate_kbps": [128, 96, 72, 64, 60, 55, 49, 47, 44, 40, 39, 32, 28, 25, 24]
             }
         }
     },
     "tmp_buf": {
         "path": "tmp/buffer/media/test",
         "threshold_in_bytes": 102400
+    },
+    "test": {
+        "file_chunk": {
+            "base_folder": "tmp/log/test/media",
+            "files": [
+                {"type":"mp4", "dst_pattern":"video1/file{0}", "src":"media/test/integration/examples/video1.mp4",
+                    "broken":false, "num_chunks":4 },
+                {"type":"mp4", "dst_pattern":"video2/file{0}", "src":"media/test/integration/examples/video2.mp4",
+                    "broken":false, "num_chunks":9 },
+                {"type":"mp4", "dst_pattern":"video3/file{0}", "src":"media/test/integration/examples/video3.mp4",
+                    "broken":false, "num_chunks":8 },
+                {"type":"mp4", "dst_pattern":"video4/file{0}", "src":"media/test/integration/examples/video4.mp4",
+                    "broken":false, "num_chunks":5 },
+                {"type":"avi", "dst_pattern":"video5/file{0}", "src":"media/test/integration/examples/video5.avi",
+                    "broken":false, "num_chunks":5 }
+            ],
+            "output_metadata": "filechunk_metadata.json"
+        }
     }
 }

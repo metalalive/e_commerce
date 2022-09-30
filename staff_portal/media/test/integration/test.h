@@ -24,6 +24,7 @@ typedef struct {
     H2O_VECTOR(char *) upload_filepaths;
     uint32_t  expect_resp_code;
     int       verbose;
+    int  http_timeout_sec;
 } test_setup_pub_t;
 
 typedef struct {
@@ -52,9 +53,10 @@ void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, v
 
 // declare & implementation in test/integration/api/xxxx.c
 TestSuite *api_initiate_multipart_upload_tests(void);
-TestSuite *api_upload_part_tests(void);
+TestSuite *api_upload_part_tests(json_t *root_cfg);
 TestSuite *api_complete_multipart_upload_tests(void);
 TestSuite *api_start_transcoding_file_tests(void);
+TestSuite *api_monitor_job_progress_tests(void);
 void api_deinitiate_multipart_upload_tests(void);
 
 #ifdef __cplusplus

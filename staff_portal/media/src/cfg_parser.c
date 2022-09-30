@@ -306,8 +306,7 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
     json_decref(root);
     return 0;
 error:
-    if (!root) {
+    if (!root)
         json_decref(root);
-    }
     return EX_CONFIG;
 } // end of parse_cfg_params()

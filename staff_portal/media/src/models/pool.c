@@ -252,9 +252,8 @@ done:
 
 
 static DBA_RES_CODE _app_db_pool_deinit(db_pool_t *pool) {
-    if(!pool) {
+    if(!pool)
         return DBA_RESULT_ERROR_ARG;
-    }
     DBA_RES_CODE  result = DBA_RESULT_OK;
     _app_db_pool_conns_deinit(pool);
     _app_db_poolcfg_deinit(&pool->cfg);

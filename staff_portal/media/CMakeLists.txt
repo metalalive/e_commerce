@@ -304,6 +304,7 @@ SET(INTEGRATION_TEST_SOURCE_FILES
     test/integration/main.c
     test/integration/auth.c
     test/integration/client.c
+    test/integration/api/monitor_job_progress.c
     test/integration/api/start_transcoding_file.c
     test/integration/api/complete_multipart_upload.c
     test/integration/api/initiate_multipart_upload.c
@@ -367,20 +368,22 @@ TARGET_INCLUDE_DIRECTORIES(${INTEGRATION_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_
 TARGET_LINK_LIBRARIES(${INTEGRATION_TEST_EXE_NAME} ${APP_SERVER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
 
 
-SET(DEV_APPCFG_PATH ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json)
+SET(DEV_APPCFG_PATH    ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json)
+SET(ITEST_APPCFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
+
 ADD_CUSTOM_TARGET(dev_app_server
     python -m  media.setup_test_env DevCertRenewal  ${DEV_APPCFG_PATH}
     COMMAND
        ##gdb -args
        ##valgrind --leak-check=full   --show-leak-kinds=definite 
-       ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
+       ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME}  ${DEV_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${APP_SERVER_EXE_NAME})
 
 ADD_CUSTOM_TARGET(dev_rpc_worker
     ##gdb -args
     ##valgrind --leak-check=full
-    ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json
+    ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME}  ${DEV_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${RPC_CONSUMER_EXE_NAME})
 
@@ -390,24 +393,25 @@ ADD_CUSTOM_TARGET(unit_test
     # without forking, then you can set breakpoints using debugger (currently only supports GDB)
     ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
     ##gdb -args # uncomment this line for debugging
-    ##valgrind --leak-check=full
+    #valgrind --leak-check=full
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${UNIT_TEST_EXE_NAME}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${UNIT_TEST_EXE_NAME})
 
-SET(ITEST_APPCFG_PATH ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
 
 ADD_CUSTOM_TARGET(integration_test
     ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
     python -m media.setup_test_env  TestCertRenewal    ${ITEST_APPCFG_PATH}
+    COMMAND python -m  media.setup_test_env  FilechunkSetup   ${ITEST_APPCFG_PATH}
     COMMAND python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
-    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME} ${ITEST_APPCFG_PATH} &
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH} &
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
         ##gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME} ${ITEST_APPCFG_PATH}
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME}  ${ITEST_APPCFG_PATH}
     COMMAND python -m  media.setup_test_env EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH}
-    COMMAND python -m  media.setup_test_env KillRPCconsumer  ${ITEST_APPCFG_PATH}
+    COMMAND python -m  media.setup_test_env  KillRPCconsumer  ${ITEST_APPCFG_PATH}
+    COMMAND python -m  media.setup_test_env  FilechunkTeardown   ${ITEST_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS  ${INTEGRATION_TEST_EXE_NAME} ${RPC_CONSUMER_EXE_NAME})
 

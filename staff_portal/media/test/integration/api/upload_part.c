@@ -42,7 +42,7 @@ static void test_verify__app_server_response(CURL *handle, test_setup_priv_t *pr
 } // end of test_verify__app_server_response
 
 #define EXPECT_PART  3
-#define CHUNK_FILE_PATH  "./tmp/test_file_chunk_0"
+#define CHUNK_FILE_PATH  "media/test/integration/examples/test_file_chunk_0"
 #define CHUNK_FILE_CHKSUM  "c618d7709f63b3e2cc11f799f3d1a7edb53b5bc0"
 Ensure(api_test_upload_part__singlechunk_ok) {
     char url[128] = {0};
@@ -185,9 +185,9 @@ Ensure(api_test_upload_part__invalid_req) {
 
 
 #define  NUM_PARTS  3
-#define  CHUNK_FILE_PATH_1    "./tmp/test_file_chunk_0"
-#define  CHUNK_FILE_PATH_2    "./tmp/test_file_chunk_1"
-#define  CHUNK_FILE_PATH_3    "./tmp/test_file_chunk_2"
+#define  CHUNK_FILE_PATH_1    "media/test/integration/examples/test_file_chunk_0"
+#define  CHUNK_FILE_PATH_2    "media/test/integration/examples/test_file_chunk_1"
+#define  CHUNK_FILE_PATH_3    "media/test/integration/examples/test_file_chunk_2"
 #define  CHUNK_FILE_CHKSUM_1  "c618d7709f63b3e2cc11f799f3d1a7edb53b5bc0"
 #define  CHUNK_FILE_CHKSUM_2  "95e2ea5f466fa1bf99e32781f9c2a273f005adb4"
 #define  CHUNK_FILE_CHKSUM_3  "5a1a019e84295cd75f7d78752650ac9d5dd54432"
@@ -244,15 +244,17 @@ Ensure(api_test_upload_part__quota_exceed) {
 #undef  NUM_PARTS
 
 
-#define  FILECHUNK_SETUP_PATH  "./media/test/integration/examples/filechunks.json"
+static  char *_itest_filechunk_metadata = NULL;
+
 Ensure(api_test_upload_part__multichunk_outoforder)
 {
     json_t *header_kv_serials = json_array();
     json_t *usr_upload_quota = json_object();
     json_error_t jerror;
-    json_t *files_chunkinfo = json_load_file(FILECHUNK_SETUP_PATH, (size_t)0, &jerror);
+    uint8_t  is_array = 0;
+    json_t *files_info = json_load_file(_itest_filechunk_metadata, (size_t)0, &jerror);
     {
-        uint8_t is_array = json_is_array(files_chunkinfo);
+        is_array = json_is_array(files_info);
         assert_that(is_array, is_equal_to(1));
         if(!is_array) { goto done; }
     }
@@ -263,18 +265,23 @@ Ensure(api_test_upload_part__multichunk_outoforder)
     h2o_vector_reserve(NULL, &setup_data.upload_filepaths, 1);
     setup_data.upload_filepaths.size = 1;
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    json_t *info, *chunkinfo;
+    json_t *info, *file_info, *chunkinfo;
     size_t idx, jdx;
-    json_array_foreach(files_chunkinfo, idx, chunkinfo) {
+    json_array_foreach(files_info, idx, file_info) {
+        chunkinfo = json_object_get(file_info, "chunks");
+        const char *file_type = json_string_value(json_object_get(file_info, "type"));
+        uint8_t     is_broken = json_boolean_value(json_object_get(file_info, "broken"));
         {
-            uint8_t is_array = json_is_array(chunkinfo);
+            is_array = json_is_array(chunkinfo);
             assert_that(is_array, is_equal_to(1));
             if(!is_array) { break; }
         }
-        size_t req_seq_idx = 2 + idx;
+        size_t req_seq_idx = 2 + idx; // the first 2 upload requests are reserved for the 2 test cases above
         json_t *upld_req = json_array_get(_app_itest_active_upload_requests, req_seq_idx);
         assert_that(upld_req, is_not_equal_to(NULL));
-        if(!upld_req) { break; }
+        if(!upld_req) { break; } // not have enough upload requests
+        json_object_set_new(upld_req, "type",   json_string(file_type));
+        json_object_set_new(upld_req, "broken", json_boolean(is_broken));
         uint32_t usr_id  = json_integer_value(json_object_get(upld_req, "usr_id" ));
         uint32_t req_seq = json_integer_value(json_object_get(upld_req, "req_seq"));
         ssize_t file_tot_sz_bytes = 0;
@@ -322,16 +329,25 @@ Ensure(api_test_upload_part__multichunk_outoforder)
             run_client_request(&setup_data, test_verify__app_server_response, (void *)&cb_arg);
         } // end of inner loop
     } // end of outer loop
-
 done:
-    json_decref(files_chunkinfo);
+    json_decref(files_info);
     json_decref(header_kv_serials);
     json_decref(usr_upload_quota);
 } // end of api_test_upload_part__multichunk_outoforder
-#undef  FILECHUNK_SETUP_PATH
 
-TestSuite *api_upload_part_tests(void)
+
+TestSuite *api_upload_part_tests(json_t *root_cfg)
 {
+    json_t  *fchunk_cfg = json_object_get(json_object_get(root_cfg, "test"), "file_chunk");
+    const char *metadata_fname = json_string_value(json_object_get(fchunk_cfg, "output_metadata"));
+    const char *base_folder = json_string_value(json_object_get(fchunk_cfg, "base_folder"));
+    size_t metadata_fname_sz = strlen(metadata_fname);
+    size_t base_folder_sz    = strlen(base_folder);
+    size_t  _meta_filepath_sz = metadata_fname_sz + base_folder_sz + 2;
+    _itest_filechunk_metadata = calloc(_meta_filepath_sz, sizeof(char)); // TODO, dealloc
+    strncat(_itest_filechunk_metadata, base_folder, base_folder_sz);
+    strncat(_itest_filechunk_metadata, "/", 1);
+    strncat(_itest_filechunk_metadata, metadata_fname, metadata_fname_sz);
     TestSuite *suite = create_test_suite();
     add_test(suite, api_test_upload_part__missing_auth_token);
     add_test(suite, api_test_upload_part__singlechunk_ok);

@@ -1,5 +1,6 @@
 #include "../test/integration/test.h"
 
+#define  ITEST_HTTP_TIMEOUT_SECOND_DEFAULT   5
 
 static size_t test_read_req_body_cb(char *buf, size_t sz, size_t nitems, void *usrdata)
 {
@@ -51,7 +52,10 @@ static void setup_client_request(CURL *handle, test_setup_priv_t *privdata, test
     assert_that(res, is_equal_to(CURLE_OK));
     res = curl_easy_setopt(handle, CURLOPT_VERBOSE, (long)pubdata->verbose);
     assert_that(res, is_equal_to(CURLE_OK));
-    res = curl_easy_setopt(handle, CURLOPT_TIMEOUT, (long)5);
+    int timeout_sec = pubdata->http_timeout_sec;
+    if(timeout_sec == 0)
+        timeout_sec = ITEST_HTTP_TIMEOUT_SECOND_DEFAULT;
+    res = curl_easy_setopt(handle, CURLOPT_TIMEOUT, (long)timeout_sec);
     assert_that(res, is_equal_to(CURLE_OK));
     res = curl_easy_setopt(handle, CURLOPT_URL, pubdata->url);
     assert_that(res, is_equal_to(CURLE_OK));

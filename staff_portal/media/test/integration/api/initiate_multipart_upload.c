@@ -27,7 +27,9 @@ static void test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_p
                         json_object_set_new(item, "req_seq", json_integer(req_seq));
                         json_object_set_new(item, "part", json_array());
                         json_object_set_new(item, "resource_id", json_null());
-                        json_object_set_new(item, "transcode_outputs", json_object());
+                        json_object_set_new(item, "async_job_ids", json_array()); // num of ongoing async jobs
+                        json_object_set_new(item, "type"  , json_null()); // file type, will be referenced when transcoding files
+                        json_object_set_new(item, "broken", json_null()); // is the file broken
                         json_array_append_new(_app_itest_active_upload_requests, item);
                     }
                 }
@@ -51,14 +53,14 @@ static void test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_p
 
 
 Ensure(api_test_initiate_multipart_upload_ok) {
-#define  NUM_USERS 6
+#define  NUM_USERS  7
     char url[128] = {0};
     size_t idx = 0;
     // the resource id client wants to claim, server may return auth failure if the user doesn't
     //  have access to modify the resource pointed by this ID
     sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/initiate");
     const char *codename_list[3] = {"upload_files", "edit_file_access_control", NULL};
-    uint32_t usr_prof_ids[NUM_USERS] = {125, 127, 128, 130, 128, 133};
+    uint32_t usr_prof_ids[NUM_USERS] = {125, 127, 128, 130, 128, 137, 139};
     json_t *header_kv_serials = json_array();
     json_t *quota = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
