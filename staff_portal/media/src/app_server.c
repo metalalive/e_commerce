@@ -90,7 +90,7 @@ static void on_tcp_accept(uv_stream_t *server, int status) {
     // TLS handshake takes about 1 ms, this limits the latency induced by TLS handshakes to 10 ms per event loop
     size_t num_accepts = 10;
     app_cfg_t *acfg = app_get_global_cfg();
-    do {
+    do { // TODO, figure out how to use libh2o to monitor and de-init connections which hang
         int curr_num_conns = atomic_num_connections(acfg, 1);
         if(curr_num_conns >= acfg->max_connections) {
             atomic_num_connections(acfg, -1);
@@ -129,7 +129,11 @@ int app_server_ready(void) {
 
 static void on_sigterm(int sig_num) {
     app_cfg_t *acfg = app_get_global_cfg();
-    acfg->shutdown_requested = 1;
+    if(acfg->shutdown_requested == 0) {
+        acfg->shutdown_requested = APP_GRACEFUL_SHUTDOWN;
+    } else if(acfg->shutdown_requested == APP_GRACEFUL_SHUTDOWN) {
+        acfg->shutdown_requested = APP_HARD_SHUTDOWN;
+    }
     if(!app_server_ready()) {
         exit(0);
     } // shutdown immediately if initialization hasn't been done yet
@@ -307,7 +311,8 @@ static void run_loop(void *data) {
         h2o_error_printf("[system] graceful shutdown starts \n");
     }
     h2o_context_request_shutdown(&server_ctx);
-    while(atomic_num_connections(app_cfg, 0) > 0) {
+    while((atomic_num_connections(app_cfg, 0) > 0) && (app_cfg->shutdown_requested != APP_HARD_SHUTDOWN))
+    {
         uv_run(init_data->loop, UV_RUN_ONCE);
     } // wait until all client requests are handled & connection closed
     // close internal timer used only for timeout on graceful shutdown

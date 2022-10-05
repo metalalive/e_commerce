@@ -86,7 +86,11 @@ error:
 
 static void on_sigterm(int sig_num) {
     app_cfg_t *acfg = app_get_global_cfg();
-    acfg->shutdown_requested = 1;
+    if(acfg->shutdown_requested == 0) {
+        acfg->shutdown_requested = APP_GRACEFUL_SHUTDOWN;
+    } else if(acfg->shutdown_requested == APP_GRACEFUL_SHUTDOWN) {
+        acfg->shutdown_requested = APP_HARD_SHUTDOWN;
+    }
     appcfg_notify_all_workers(acfg);
     app_db_pool_map_signal_closing();
 }
@@ -293,7 +297,8 @@ static  int appworker_waiting_messages(app_ctx_worker_t *ctx, app_cfg_t  *acfg, 
         uv_run(loop, UV_RUN_ONCE);
         _appworker_maybe_reinit_timerpoll(ctx);
     } // end of main event loop
-    while(get_num_of_pending_requests(ctx) > 0) {
+    while((get_num_of_pending_requests(ctx) > 0) && (acfg->shutdown_requested != APP_HARD_SHUTDOWN))
+    {
         uv_run(loop, UV_RUN_ONCE);
         _appworker_maybe_reinit_timerpoll(ctx);
     } // wait until all published message are handled & results are replied

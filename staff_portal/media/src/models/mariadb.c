@@ -89,6 +89,10 @@ static void _app_mariadb_error_notify_queries(db_conn_t *conn, db_llnode_t *q_he
         q_ret->conn.state = conn->state;
         q_ret->conn.async = (conn->loop != q->cfg.loop);
         q_ret->_final = 1;
+#if  0
+        fprintf(stderr, "[mariaDB] line:%d, conn_state:%d, app_result:%d, sql:%s \n",
+                __LINE__, conn->state, app_result, q->cfg.statements.entry );
+#endif
         app_db_query_notify_with_result(q, q_ret);
     }
 } // end of _app_mariadb_error_notify_queries
@@ -170,9 +174,8 @@ done:
 
 DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
 {
-    if(!conn) {
+    if(!conn)
         return  DBA_RESULT_ERROR_ARG;
-    }
     DBA_RES_CODE result = app_db_conn_deinit(conn);
     if(result == DBA_RESULT_OK) {
         // close and de-init a connection in  blocking manner, in case the API server
@@ -203,6 +206,10 @@ static  DBA_RES_CODE _app_mariadb_convert_error_code(MYSQL *handle) {
     } else if(error_code == ER_USER_LIMIT_REACHED || error_code == ER_TOO_MANY_USER_CONNECTIONS) {
         // use mysql_error() to check detail description
         result = DBA_RESULT_REMOTE_RESOURCE_ERROR;
+#if  0
+        fprintf(stderr, "[mariaDB] line:%d, error code: %d, detail:%s \n", __LINE__,
+            error_code, mysql_error(handle));
+#endif
     } else if(error_code == ER_DISK_FULL || error_code == ER_OUTOFMEMORY
             || error_code == ER_OUT_OF_RESOURCES || error_code == ER_NET_PACKET_TOO_LARGE
             || error_code == ER_TOO_MANY_TABLES || error_code == ER_TOO_MANY_FIELDS
@@ -250,7 +257,7 @@ static DBA_RES_CODE app_db_mariadb_conn_connect_cont(db_conn_t *conn, int *evt_f
             if(my_ret) {
                 assert(my_ret == conn->lowlvl.conn);
             } else {
-                result = DBA_RESULT_NETWORK_ERROR;
+                result = _app_mariadb_convert_error_code(conn->lowlvl.conn);
             }
         }
     }
@@ -464,6 +471,11 @@ static void _app_mariadb_row_ready_helper(db_conn_t *conn, DBA_RES_CODE app_resu
             } // in case the column stored NULL
         }
     } // end of cloning mysql row
+#if   0
+    if(app_result != DBA_RESULT_OK)
+        fprintf(stderr, "[mariaDB] line:%d, conn_state:%d, app_result:%d, sql:%s \n",
+                __LINE__, conn->state, app_result, curr_query->cfg.statements.entry );
+#endif
     app_db_query_notify_with_result(curr_query, rs);
 } // end of _app_mariadb_row_ready_helper
 
@@ -542,7 +554,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
     DBA_RES_CODE result = DBA_RESULT_OK;
     db_conn_t *conn = H2O_STRUCT_FROM_MEMBER(db_conn_t, timer_poll, target);
     uint8_t called_by_app = (uv_status == 0) && (event_flags == 0);
-    uint8_t continue_checking = 0;
+    uint8_t continue_checking = 0, is_app_closing = 0;
     do {
         switch((enum _dbconn_async_state)conn->state) {
             case DB_ASYNC_INITED:
@@ -593,7 +605,10 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 if(result == DBA_RESULT_OK) {
                     conn->state = DB_ASYNC_QUERY_START;
                 } else {
-                    _app_mariadb_error_reset_all_processing_query(conn, result);
+#if   0
+                    fprintf(stderr, "[mariaDB] line:%d, result:%d \n", __LINE__, result);
+#endif
+                    _app_mariadb_error_reset_all_processing_query(conn, result); // TODO, retry before evicting processing queries
                     _app_mariadb_error_reset_all_pending_query(conn, result);
                     conn->state = DB_ASYNC_CLOSE_START;
                     continue_checking = 1;
@@ -671,7 +686,10 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 conn->ops.timerpoll_stop(target);
                 if(result == DBA_RESULT_OK) {
                     conn->state = DB_ASYNC_CHECK_CURRENT_RESULTSET;
-                } else {
+                } else { // TODO, for connection error, retry few times before give up
+#if   0
+                    fprintf(stderr, "[mariaDB] line:%d, result:%d \n", __LINE__, result);
+#endif
                     _app_mariadb_error_reset_all_processing_query(conn, result);
                     conn->state = (result == DBA_RESULT_NETWORK_ERROR) ? DB_ASYNC_CLOSE_START: DB_ASYNC_QUERY_START;
                     continue_checking = 1;
@@ -699,6 +717,13 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     } // TODO: copy important attributes from result set to the following query struct
                     rs->_final = (curr_query->db_result.num_rs_remain == 0) && 
                         (rs->app_result == DBA_RESULT_END_OF_ROWS_REACHED);
+#if  0
+                    if(rs->app_result != DBA_RESULT_OK && rs->app_result != DBA_RESULT_END_OF_ROWS_REACHED) {
+                        const char *sql = curr_query ? curr_query->cfg.statements.entry: NULL;
+                        fprintf(stderr, "[mariaDB] line:%d, conn_state:%d, app_result:%d, sql:%s \n",
+                                __LINE__, conn->state, rs->app_result, sql );
+                    }
+#endif
                     app_db_query_notify_with_result(curr_query, rs);
                     if(conn->lowlvl.resultset) { // current result set has rows
                         conn->state = DB_ASYNC_FETCH_ROW_START;
@@ -827,6 +852,11 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                         .async = (conn->loop != curr_query->cfg.loop)},
                         ._final = (curr_query->db_result.num_rs_remain == 0),
                     };  // end of statements in this query reached
+#if  0
+                    if(result != DBA_RESULT_OK)
+                        fprintf(stderr, "[mariaDB] line:%d, conn_state:%d, app_result:%d, sql:%s \n",
+                                __LINE__, conn->state, result, curr_query->cfg.statements.entry );
+#endif
                     app_db_query_notify_with_result(curr_query, rs);
                 }
                 conn->state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_START;
@@ -864,7 +894,12 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 conn->ops.timerpoll_stop(target);
                 conn->lowlvl.conn = (void *)NULL; // closed async, memory should be freed
                 continue_checking = app_db_conn_get_first_query(conn) != NULL;
-                if(conn->pool->is_closing_fn(conn->pool)) {
+                is_app_closing = conn->pool->is_closing_fn(conn->pool);
+#if  0
+                fprintf(stderr, "[mariaDB] line:%d, is_app_closing:%hu, continue_checking:%hu \n",
+                        __LINE__, is_app_closing, continue_checking);
+#endif
+                if(is_app_closing) {
                     if(continue_checking) {
                         result = DBA_RESULT_CONNECTION_BUSY;
                         _app_mariadb_error_reset_all_processing_query(conn, result);

@@ -236,6 +236,7 @@ Ensure(app_mariadb_test_connect_db_server_error) {
         assert_that(conn.state, is_equal_to(DB_ASYNC_CONN_WAITING));
         expect(mysql_real_connect_cont, will_return(0),
                 will_set_contents_of_parameter(ret, &mysql_conn_ret, sizeof(MYSQL *)));
+        expect(mysql_errno, will_return(ER_TOO_MANY_USER_CONNECTIONS));
         expect(mock_app__timerpoll_stop, will_return(0));
         // assume there's no pending or processing query in this case. Start closing connection
         expect(mysql_close_start, will_return(MYSQL_WAIT_READ),
@@ -310,6 +311,7 @@ Ensure(app_mariadb_test_evict_all_queries_on_connection_failure) {
     { // assume there are pending and processing queries in this case. Evict them
         expect(mysql_real_connect_cont, will_return(0),
                 will_set_contents_of_parameter(ret, &mysql_conn_ret, sizeof(MYSQL *)));
+        expect(mysql_errno, will_return(ER_SERVER_SHUTDOWN));
         expect(mock_app__timerpoll_stop, will_return(0));
         expect(mock_db_query__notify_callback,  when(app_result, is_equal_to(DBA_RESULT_NETWORK_ERROR)),
                 when(conn_state, is_equal_to(DB_ASYNC_CONN_DONE)), when(is_async, is_equal_to(0)),

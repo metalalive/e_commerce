@@ -18,6 +18,9 @@ void mysql_close(MYSQL *mysql)
 unsigned int STDCALL mysql_errno(MYSQL *mysql)
 { return (unsigned int)mock(mysql); }
 
+const char * STDCALL mysql_error(MYSQL *mysql)
+{ return (const char *)mock(mysql); }
+
 unsigned int STDCALL mysql_get_timeout_value_ms(const MYSQL *mysql)
 { return (unsigned int)mock(mysql); }
 

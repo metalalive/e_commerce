@@ -126,9 +126,8 @@ static size_t app_find_multipart_boundary(h2o_req_t *req, char **start)
         }
     }
     if(boundary) {
-        if (start) {
+        if (start)
             *start = boundary;
-        }
         len = strlen(boundary);
     }
     return len;
@@ -194,9 +193,8 @@ static multipart_parser * upload_part__init_multipart_parser(asa_op_base_cfg_t *
     char  *boundary_start = NULL;
     size_t boundary_len = app_find_multipart_boundary(req, &boundary_start);
     char boundary_cpy[boundary_len + 1];
-    if(!boundary_start || boundary_len == 0) {
+    if(!boundary_start || boundary_len == 0)
         goto error;
-    }
     memcpy(boundary_cpy, boundary_start, boundary_len);
     boundary_cpy[boundary_len] = 0;
     app_mpp_usrarg_t  mpp_usr_arg = {.tot_entity_sz=req->entity.len, .tot_file_sz=0, .rd_idx=0,
@@ -238,9 +236,8 @@ static  ASA_RES_CODE upload_part__write_filechunk_start(asa_op_base_cfg_t *cfg)
         }
         size_t exp_rd_sz = usr_arg->tot_entity_sz - usr_arg->rd_idx - 1;
         if(exp_rd_sz > APP_FILECHUNK_WR_BUF_SZ) {
-            // due to restriction of multipart parser, don't use entire write buffer usr_arg->tot_wr_sz
             exp_rd_sz = APP_FILECHUNK_WR_BUF_SZ; // usr_arg->tot_wr_sz
-        }
+        } // due to restriction of multipart parser, don't use entire write buffer usr_arg->tot_wr_sz
         size_t actual_nread = multipart_parser_execute(mp, &req->entity.base[ usr_arg->rd_idx ], exp_rd_sz);
         if(actual_nread == exp_rd_sz || usr_arg->end_flag) {
             usr_arg->rd_idx += exp_rd_sz;
@@ -265,11 +262,10 @@ static  ASA_RES_CODE upload_part__write_filechunk_start(asa_op_base_cfg_t *cfg)
 } // end of upload_part__write_filechunk_start
 
 
-static void upload_part__write_filechunk_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE app_result, size_t nwrite)
+static void upload_part__write_filechunk_done_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE app_result, size_t nwrite)
 {
-    if(app_result != ASTORAGE_RESULT_COMPLETE) {
+    if(app_result != ASTORAGE_RESULT_COMPLETE)
         goto error;
-    }
     app_middleware_node_t *node = (void *)cfg->cb_args.entries[2];
     multipart_parser *mp = (multipart_parser *)app_fetch_from_hashmap(node->data, "multipart_parser");
     app_mpp_usrarg_t *usr_arg = (app_mpp_usrarg_t *)mp->settings.usr_args.entry;
@@ -278,40 +274,36 @@ static void upload_part__write_filechunk_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_
     } else {
         app_result = upload_part__write_filechunk_start(cfg);
     }
-    if(app_result != ASTORAGE_RESULT_ACCEPT) {
+    if(app_result != ASTORAGE_RESULT_ACCEPT)
         goto error;
-    }
     return;
 error:
     upload_part__storage_error_handler(cfg);
-} // end of upload_part__write_filechunk_evt_cb
+} // end of upload_part__write_filechunk_done_cb
 
 
-static void upload_part__open_file_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE app_result)
+static void upload_part__openfile_done_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE app_result)
 {
-    if(app_result != ASTORAGE_RESULT_COMPLETE) {
+    if(app_result != ASTORAGE_RESULT_COMPLETE)
         goto error;
-    }
     app_middleware_node_t *node = (void *)cfg->cb_args.entries[2];
     multipart_parser *mp = upload_part__init_multipart_parser(cfg);
     if(!mp) { goto error; }
     int success = app_save_ptr_to_hashmap(node->data, "multipart_parser", (void *)mp);
     if(!success) { goto error; }
     app_result = upload_part__write_filechunk_start(cfg);
-    if(app_result != ASTORAGE_RESULT_ACCEPT) {
+    if(app_result != ASTORAGE_RESULT_ACCEPT)
         goto error;
-    }
     return;
 error:
     upload_part__storage_error_handler(cfg);
-} // end of upload_part__open_file_evt_cb
+} // end of upload_part__openfile_done_cb
 
 
-static void  upload_part__close_file_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE app_result)
+static void  upload_part__closefile_done_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE app_result)
 {
-    if(app_result != ASTORAGE_RESULT_COMPLETE) {
+    if(app_result != ASTORAGE_RESULT_COMPLETE)
         goto error;
-    }
     char *md_hex = NULL;
     h2o_req_t     *req  = (void *)cfg->cb_args.entries[0];
     h2o_handler_t *self = (void *)cfg->cb_args.entries[1];
@@ -342,32 +334,31 @@ static void  upload_part__close_file_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE
     return;
 error:
     upload_part__storage_error_handler(cfg);
-} // end of upload_part__close_file_evt_cb
+} // end of upload_part__closefile_done_cb
 
 
-static void upload_part__create_folder_evt_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE app_result)
+static void upload_part__ensure_dst_folder_done_cb(asa_op_base_cfg_t *cfg, ASA_RES_CODE app_result)
 {
     uint8_t err = 0;
     if(app_result == ASTORAGE_RESULT_COMPLETE) {
-        cfg->op.write.cb = upload_part__write_filechunk_evt_cb;
-        cfg->op.close.cb = upload_part__close_file_evt_cb;
-        cfg->op.open.cb = upload_part__open_file_evt_cb;
+        cfg->op.write.cb = upload_part__write_filechunk_done_cb;
+        cfg->op.close.cb = upload_part__closefile_done_cb;
+        cfg->op.open.cb  = upload_part__openfile_done_cb;
         cfg->op.open.mode  = S_IRUSR | S_IWUSR;
         cfg->op.open.flags = O_CREAT | O_WRONLY;
         app_result = cfg->storage->ops.fn_open(cfg);
-        if(app_result != ASTORAGE_RESULT_ACCEPT) {
+        if(app_result != ASTORAGE_RESULT_ACCEPT)
             err = 1;
-        }
     } else {
         err = 1;
     }
-    if(err) {
+    if(err)
         upload_part__storage_error_handler(cfg);
-    }
-} // end of upload_part__create_folder_evt_cb
+} // end of upload_part__ensure_dst_folder_done_cb
 
 
-static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
+static void upload_part__ensure_dst_folder(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,
+        size_t mp_boundary_len)
 {
     json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
     int usr_id = (int) json_integer_value(json_object_get(jwt_claims, "profile"));
@@ -381,7 +372,6 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
          UPLOAD_INT2HEX_SIZE(req_seq) + 1; // assume NULL-terminated string
     size_t filepath_sz = (dirpath_sz - 1) + 1 + UPLOAD_INT2HEX_SIZE(part) + 1;
     size_t cb_args_tot_sz = sizeof(void *) * 3; // for self, req, node
-    size_t mp_boundary_len = app_find_multipart_boundary(req, NULL);
     size_t wr_src_buf_sz = APP_FILECHUNK_WR_BUF_SZ + 4 + mp_boundary_len;
     size_t asa_cfg_sz = sizeof(asa_op_localfs_cfg_t) + (dirpath_sz << 1) + filepath_sz +
             wr_src_buf_sz + cb_args_tot_sz;
@@ -398,7 +388,7 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
         asa_cfg->super.cb_args.entries[2] = (void *)node;
         ptr += cb_args_tot_sz;
         asa_cfg->super.op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
-        asa_cfg->super.op.mkdir.cb = upload_part__create_folder_evt_cb;
+        asa_cfg->super.op.mkdir.cb = upload_part__ensure_dst_folder_done_cb;
         asa_cfg->super.op.mkdir.path.origin = ptr;
         ptr += dirpath_sz;
         asa_cfg->super.op.mkdir.path.curr_parent = ptr;
@@ -425,14 +415,14 @@ static void upload_part__create_folder_start(RESTAPI_HANDLER_ARGS(self, req), ap
         ptr += wr_src_buf_sz;
         assert((size_t)(ptr - (char *)asa_cfg) == asa_cfg_sz);
     } // end of storage object setup
-    ASA_RES_CODE asa_result = storage->ops.fn_mkdir((asa_op_base_cfg_t *)asa_cfg, 1);
-    if (asa_result != ASTORAGE_RESULT_ACCEPT) {
+    uint8_t  allow_exists = 1;
+    ASA_RES_CODE asa_result = storage->ops.fn_mkdir((asa_op_base_cfg_t *)asa_cfg, allow_exists);
+    if (asa_result != ASTORAGE_RESULT_ACCEPT) 
         upload_part__storage_error_handler((asa_op_base_cfg_t *)asa_cfg);
-    }
-} // end of  upload_part__create_folder_start
+} // end of  upload_part__ensure_dst_folder
 
 
-static void  upload_part__validate_quota_rs_rdy(db_query_t *target, db_query_result_t *rs)
+static  void  upload_part__validate_quota_rs_rdy(db_query_t *target, db_query_result_t *rs)
 {
     h2o_req_t     *req  = (h2o_req_t *) target->cfg.usr_data.entry[0];
     h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[1];
@@ -440,9 +430,29 @@ static void  upload_part__validate_quota_rs_rdy(db_query_t *target, db_query_res
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
     size_t total_used_bytes = (size_t)app_fetch_from_hashmap(node->data, "total_uploaded_bytes");
 #pragma GCC diagnostic pop
-    // TODO, provide more accurate file size, since the request body contains extra
-    //  bytes such as boundary delimiter for multipart entity.
-    total_used_bytes +=  req->entity.len;
+    // estimate file size, since the HTTP request body contains not just bytes for file but
+    //  boundary delimiter and MIME headers for each part within multipart entity.
+    char  *req_body_start = &req->entity.base[0];
+#define  BLANK_LINE   "\r\n\r\n" // start of body area in multiple-body (page 22, RFC 2046)
+    char  *mpbody_area_start = strstr(req_body_start, BLANK_LINE);
+#undef   BLANK_LINE
+    if(!mpbody_area_start) {
+        char body_raw[] = "{\"body\":\"invalid multipart body\"}";
+        req->res.status = 400;
+        h2o_send_inline(req, body_raw, strlen(body_raw));
+        app_run_next_middleware(self, req, node);
+        return;
+    } // assume there's only one part within the multipart body
+#define  TWO_HYPHEN_SZ  2
+#define  CRLF_SZ        2
+    size_t start_dash_boundary_and_mime_header_sz = (size_t)mpbody_area_start - (size_t)req_body_start;
+    size_t boundary_len = app_find_multipart_boundary(req, NULL);
+    size_t close_dash_boundary_sz = ((TWO_HYPHEN_SZ + CRLF_SZ) << 1) + boundary_len ;
+    size_t nbytes_skipped = start_dash_boundary_and_mime_header_sz + close_dash_boundary_sz;
+    size_t estimated_filesize = req->entity.len - nbytes_skipped;
+    total_used_bytes +=  estimated_filesize;
+#undef   TWO_HYPHEN_SZ
+#undef   CRLF_SZ
     // this API view requires quota arrangement `QUOTA_MATERIAL__MAX_UPLOAD_KBYTES_PER_USER`
     // to be present in auth JWT payload
     json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
@@ -455,9 +465,10 @@ static void  upload_part__validate_quota_rs_rdy(db_query_t *target, db_query_res
         h2o_send_inline(req, body_raw, strlen(body_raw));
         app_run_next_middleware(self, req, node);
     } else {
-        upload_part__create_folder_start(self, req, node);
+        upload_part__ensure_dst_folder(self, req, node, boundary_len);
     }
 } // end of upload_part__validate_quota_rs_rdy
+
 
 static void  upload_part__validate_quota_fetch_row(db_query_t *target, db_query_result_t *rs)
 {
@@ -471,8 +482,9 @@ static void  upload_part__validate_quota_fetch_row(db_query_t *target, db_query_
     app_save_int_to_hashmap(node->data, "total_uploaded_bytes", total_used_bytes);
 } // end of upload_part__validate_quota_fetch_row
 
+
 static DBA_RES_CODE upload_part__validate_quota_start(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
-{
+{ // TODO, add total nbytes of transcoded files
 #define SQL_PATTERN  "SELECT `size_bytes` FROM `upload_filechunk` WHERE `usr_id` = %u;"
     json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
     int usr_id = (int) json_integer_value(json_object_get(jwt_claims, "profile"));

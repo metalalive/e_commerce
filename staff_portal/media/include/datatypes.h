@@ -21,6 +21,9 @@ extern "C" {
 #define APP_LABEL "media"
 #define APP_LABEL_LEN  (sizeof(APP_LABEL) - 1) // 5
 
+#define APP_GRACEFUL_SHUTDOWN   1
+#define APP_HARD_SHUTDOWN       2 
+
 // valid code options represented for quota arrangement in this application
 typedef enum {
     MAX_KBYTES_CONSUMED_SPACE = 1,
@@ -101,7 +104,7 @@ typedef struct {
     // number of workers in the app, defaults to number of CPUs, unrelated to number of listeners
     H2O_VECTOR(uv_thread_t) workers;
     // atomic entity among threads & asynchronous interrupts
-    volatile sig_atomic_t  shutdown_requested;
+    volatile sig_atomic_t  shutdown_requested; // 1 = graceful shutdown, 2 = hard shutdown
 } app_cfg_t;
 
 
