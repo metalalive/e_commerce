@@ -12,6 +12,7 @@ struct arpc_ctx_t {
     arpc_cfg_t  *ref_cfg;
     amqp_socket_t *sock;
     amqp_connection_state_t  conn;
+    amqp_channel_t  curr_channel_id;
     uint8_t consumer_setup_done:1;
 };
 

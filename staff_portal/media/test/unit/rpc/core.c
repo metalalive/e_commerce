@@ -649,7 +649,7 @@ Ensure(rpc_replyq_test__connection_error) {
 } // end of rpc_replyq_test__connection_error
 
 
-Ensure(rpc_replyq_test__operation_error) {
+Ensure(rpc_replyq_test__consume_error) {
     UTEST_FETCH_REPLYQ__SETUP;
     amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_SERVER_EXCEPTION,
            .reply={.id=AMQP_BASIC_CONSUME_METHOD}};
@@ -658,11 +658,35 @@ Ensure(rpc_replyq_test__operation_error) {
         expect(amqp_basic_consume, when(conn_state, is_equal_to(mock_mq_conn)),
             when(q_name, is_equal_to_string(expect_q_name)) );
         expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
-        expect(amqp_basic_cancel, when(tag, is_equal_to_string(expect_q_name)));
     }
     ARPC_STATUS_CODE  result =  app_rpc_fetch_all_reply_msg(&mock_rpc_arg, utest_rpc_fetch_from_replyq_cb);
     assert_that(result, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
-} // end of rpc_replyq_test__operation_error
+} // end of rpc_replyq_test__consume_error
+
+
+Ensure(rpc_replyq_test__nonexist_error) {
+    UTEST_FETCH_REPLYQ__SETUP;
+    uint16_t expect_channel_id = 12;
+    uint16_t next_channel_id = expect_channel_id + 1;
+    mock_ctx.curr_channel_id = expect_channel_id;
+    amqp_channel_close_t  err_detail = {.reply_code=AMQP_NOT_FOUND};
+    amqp_rpc_reply_t  mock_reply_err = {.reply_type=AMQP_RESPONSE_SERVER_EXCEPTION,
+           .reply={.id=AMQP_CHANNEL_CLOSE_METHOD, .decoded=&err_detail}};
+    amqp_channel_open_ok_t   mock_chn_result = {.channel_id = {.len=next_channel_id, .bytes=(void*)"RTYU"}};
+    { // assume channel-level exception happened and the broker automatically closed the channel
+        const char *expect_q_name = mock_bind_cfgs[0].reply.queue.name_pattern;
+        expect(amqp_basic_consume, when(conn_state, is_equal_to(mock_mq_conn)),
+            when(q_name, is_equal_to_string(expect_q_name)) );
+        expect(amqp_get_rpc_reply, will_return(&mock_reply_err));
+        expect(amqp_channel_close, when(conn_state, is_equal_to(mock_mq_conn)),
+            when(channel, is_equal_to(expect_channel_id)) );
+        expect(amqp_channel_open, will_return(&mock_chn_result), when(conn_state, is_equal_to(mock_mq_conn)),
+            when(channel, is_equal_to(next_channel_id)) );
+    }
+    ARPC_STATUS_CODE  result =  app_rpc_fetch_all_reply_msg(&mock_rpc_arg, utest_rpc_fetch_from_replyq_cb);
+    assert_that(result, is_equal_to(APPRPC_RESP_MSGQ_OPERATION_ERROR));
+    assert_that(mock_ctx.curr_channel_id, is_equal_to(next_channel_id));
+} // end of  rpc_replyq_test__nonexist_error
 
 
 TestSuite *app_rpc_core_tests(void) {
@@ -689,6 +713,7 @@ TestSuite *app_rpc_core_tests(void) {
     add_test(suite, rpc_replyq_test__get_msgs);
     add_test(suite, rpc_replyq_test__empty_queue);
     add_test(suite, rpc_replyq_test__connection_error);
-    add_test(suite, rpc_replyq_test__operation_error);
+    add_test(suite, rpc_replyq_test__consume_error);
+    add_test(suite, rpc_replyq_test__nonexist_error);
     return suite;
 }

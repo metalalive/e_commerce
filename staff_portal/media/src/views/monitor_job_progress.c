@@ -16,9 +16,10 @@
 static void  _api_monitor_progress__deinit_primitives (h2o_req_t *req, h2o_handler_t *hdlr,
         app_middleware_node_t *node, json_t *qparam, json_t *res_body)
 {
-    size_t  nrequired = json_dumpb((const json_t *)res_body, NULL, 0, 0);
+    size_t  nrequired = json_dumpb((const json_t *)res_body, NULL, 0, 0) + 1;
     char    body_raw[nrequired] ;
     size_t  nwrite = json_dumpb((const json_t *)res_body, &body_raw[0], nrequired, JSON_COMPACT);
+    body_raw[nwrite++] = 0;
     assert(nwrite <= nrequired);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
     h2o_send_inline(req, &body_raw[0], strlen(&body_raw[0]));
@@ -49,21 +50,28 @@ static void  _api_monitor_progress__update_info_cb (const char *msg, size_t sz, 
     if(arg->job_id.len == 0 || !arg->job_id.bytes)
         goto done; // discard due to lack of job ID
     new_reply = json_loadb(msg, sz, JSON_REJECT_DUPLICATES, &j_err);
-    if(j_err.line >= 0 || j_err.column >= 0)
+    if(j_err.line >= 0 || j_err.column >= 0) {
+#if 1
+        fprintf(stderr, "[API] monitor job progress, line:%d, junk data :%s \n", __LINE__, msg);
+#endif
         goto done; // discard junk data
-    json_t  *progress_item = json_object_get(new_reply, "progress");
-    if(!progress_item) // TODO, report error, error detail does not contain progress message
-        goto done;
-    float percent_done = (float) json_real_value(progress_item);
-    if((percent_done > 1.0f) || (percent_done < 0.0f)) 
-        goto done;
+    }
     json_t *info = arg->usr_data;
     json_t *jobs_item = json_object_get(info, "jobs");
-    json_t *job_item  = json_object();
-    json_object_deln(jobs_item, arg->job_id.bytes, arg->job_id.len);
-    json_object_set_new(job_item, "percent_done", json_real(percent_done) );
-    json_object_set_new(job_item, "timestamp", json_integer(arg->_timestamp) );
-    json_object_setn_new(jobs_item, arg->job_id.bytes, arg->job_id.len, job_item);
+    json_t  *progress_item = json_object_get(new_reply, "progress");
+    if(progress_item) {
+        float percent_done = (float) json_real_value(progress_item);
+        if(percent_done < 0.0f)
+            goto done;
+        json_t *job_item  = json_object();
+        json_object_set_new(job_item, "percent_done", json_real(percent_done) );
+        json_object_set_new(job_item, "timestamp", json_integer(arg->_timestamp) );
+        json_object_deln(    jobs_item, arg->job_id.bytes, arg->job_id.len);
+        json_object_setn_new(jobs_item, arg->job_id.bytes, arg->job_id.len, job_item);
+    } else {
+        json_object_deln(jobs_item, arg->job_id.bytes, arg->job_id.len);
+        json_object_setn(jobs_item, arg->job_id.bytes, arg->job_id.len, new_reply);
+    } // report error, error detail does not contain progress message
 done:
     if(new_reply)
         json_decref(new_reply);
@@ -74,6 +82,8 @@ static void  _api_monitor_progress__openfile_done_cb (asa_op_base_cfg_t *asaobj,
 {
     asa_op_localfs_cfg_t * asa_local = (asa_op_localfs_cfg_t *)asaobj;
     h2o_req_t  *req  = asaobj->cb_args.entries[ASA_USRARG_INDEX__H2REQ];
+    json_t *qparams  = asaobj->cb_args.entries[ASA_USRARG_INDEX__QUERY_PARAM];
+    json_t *res_body = asaobj->cb_args.entries[ASA_USRARG_INDEX__RESP_BODY];
     if(result == ASTORAGE_RESULT_COMPLETE) {
         int fd = asa_local->file.file;
         json_error_t  j_err = {0};   // load entire file, it shouldn't be that large in most cases
@@ -91,23 +101,28 @@ static void  _api_monitor_progress__openfile_done_cb (asa_op_base_cfg_t *asaobj,
         arpc_exe_arg_t  rpc_arg = {.alias="app_mqbroker_1", .usr_data=(void *)info,
                   .conn=req->conn->ctx->storage.entries[1].data };
         ARPC_STATUS_CODE  arpc_res = app_rpc_fetch_all_reply_msg(&rpc_arg, _api_monitor_progress__update_info_cb);
+        ftruncate(fd, (off_t)0);
+        lseek(fd, 0, SEEK_SET);
+        json_dumpfd((const json_t *)info, fd, JSON_COMPACT);
         if(arpc_res == APPRPC_RESP_OK) { // fetch progress field associated with given job ID
-            ftruncate(fd, (off_t)0);
-            lseek(fd, 0, SEEK_SET);
-            json_dumpfd((const json_t *)info, fd, JSON_COMPACT);
-            json_t *qparams  = asaobj->cb_args.entries[ASA_USRARG_INDEX__QUERY_PARAM];
-            json_t *res_body = asaobj->cb_args.entries[ASA_USRARG_INDEX__RESP_BODY];
             const char *req_job_id = json_string_value(json_object_get(qparams, "id"));
             json_t  *jobs_item = json_object_get(info, "jobs");
-            json_t  *progress_item = json_object_get(jobs_item, req_job_id);
-            if(progress_item) {
+            json_t  *result_item = json_object_get(jobs_item, req_job_id);
+            if(result_item) { // either progress or error detail
                 req->res.status = 200;
-                json_object_set_new(res_body, req_job_id, progress_item);
+                json_object_set_new(res_body, req_job_id, result_item);
             } else {
                 req->res.status = 404;
                 json_object_set_new(res_body, "reason", json_string("job ID not found"));
             }
+        } else if(arpc_res == APPRPC_RESP_MSGQ_OPERATION_ERROR || arpc_res == APPRPC_RESP_MSGQ_OPERATION_TIMEOUT) {
+            req->res.status = 404;
+            json_object_set_new(res_body, "reason", json_string("job queue not found"));
         } else {
+#if  1
+            fprintf(stderr, "[monitor_job_progress] http_resp:503, line:%d, RPC result:%d \n",
+                __LINE__, arpc_res);
+#endif
             req->res.status = 503;
             req->res.reason = "message queue failure";
         }
@@ -116,6 +131,10 @@ static void  _api_monitor_progress__openfile_done_cb (asa_op_base_cfg_t *asaobj,
         if(result != ASTORAGE_RESULT_ACCEPT)
             _api_monitor_progress__deinit_asaobj(asaobj);
     } else { // failed to open progress file
+#if  1
+        fprintf(stderr, "[monitor_job_progress] http_resp:503, line:%d, storage result:%d \n",
+                __LINE__, result );
+#endif
         req->res.status = 503;
         req->res.reason = "open file failure";
         _api_monitor_progress__deinit_asaobj(asaobj);
@@ -142,6 +161,10 @@ static void  _api_monitor_progress__mkdir_done_cb (asa_op_base_cfg_t *asaobj, AS
             _api_monitor_progress__deinit_asaobj(asaobj);
         }
     } else {
+#if  1
+        fprintf(stderr, "[monitor_job_progress] http_resp:503, line:%d, storage result:%d \n",
+                __LINE__, result );
+#endif
         req->res.status = 503;
         req->res.reason = "mkdir failure";
         _api_monitor_progress__deinit_asaobj(asaobj);
@@ -213,6 +236,10 @@ RESTAPI_ENDPOINT_HANDLER(monitor_job_progress, GET, hdlr, req)
         req->res.status = 503;
         req->res.reason = "missing rpc context";
         json_object_set_new(res_body, "reason", json_string("essential service not available"));
+#if  1
+        fprintf(stderr, "[monitor_job_progress] http_resp:503, line:%d, ctx storage size:%d \n",
+                __LINE__, req->conn->ctx->storage.size );
+#endif
     } // missing rpc context object
     if(json_object_size(res_body) == 0) {
         asa_op_localfs_cfg_t *asa_local = _api_monitor_progress__init_asa_obj (req, hdlr, node, qparam, res_body);
@@ -222,6 +249,10 @@ RESTAPI_ENDPOINT_HANDLER(monitor_job_progress, GET, hdlr, req)
             req->res.status = 503;
             req->res.reason = "error when issuing mkdir cmd to storage";
             free(asa_local);
+#if  1
+            fprintf(stderr, "[monitor_job_progress] http_resp:503, line:%d, storage error code:%d \n",
+                __LINE__, result );
+#endif
         }
     } else {
         req->res.status = 400;

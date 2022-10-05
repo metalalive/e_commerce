@@ -46,6 +46,13 @@ amqp_rpc_reply_t amqp_login(amqp_connection_state_t conn_state, char const *vhos
 amqp_channel_open_ok_t *amqp_channel_open(amqp_connection_state_t conn_state, amqp_channel_t channel)
 { return (amqp_channel_open_ok_t *) mock(conn_state, channel); }
 
+amqp_rpc_reply_t   amqp_channel_close(amqp_connection_state_t  conn_state, amqp_channel_t channel, int code)
+{
+    amqp_rpc_reply_t   reply = {0};
+    mock(conn_state, channel, code);
+    return reply;
+}
+
 
 amqp_queue_declare_ok_t *amqp_queue_declare(
     amqp_connection_state_t conn_state, amqp_channel_t channel, amqp_bytes_t queue,

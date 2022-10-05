@@ -17,7 +17,24 @@ static  ARPC_STATUS_CODE apprpc__translate_status_from_lowlvl_lib(amqp_rpc_reply
             break;
         case AMQP_RESPONSE_SERVER_EXCEPTION:
             switch (reply->reply.id) {
-                case AMQP_CHANNEL_CLOSE_METHOD:
+                case AMQP_CHANNEL_CLOSE_METHOD: // see detail usage of API  amqp_get_rpc_reply(...) in rabbitmq-c
+                    {
+                        amqp_channel_close_t *m = (amqp_channel_close_t *)reply->reply.decoded;
+#if  0
+                        fprintf(stderr, "[RPC][core] line:%d, reason: server channel error %u, class id:0x%x, method id:0x%x, message: %.*s \n",
+                                __LINE__, m->reply_code, m->class_id, m->method_id, (int)m->reply_text.len,
+                                (char *)m->reply_text.bytes);
+#endif
+                        if(m->reply_code < AMQP_CONTENT_TOO_LARGE) {
+                            // pass
+                        } else if(m->reply_code >= AMQP_CONTENT_TOO_LARGE && m->reply_code < AMQP_FRAME_ERROR) {
+                            // the codes within the range means mostly config error
+                            app_status = APPRPC_RESP_MSGQ_OPERATION_ERROR;
+                        } else {
+                            app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
+                        }
+                    }
+                    break;
                 case AMQP_CONNECTION_CLOSE_METHOD: // half-closed on remote server ?
                     app_status = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
                     break;
@@ -94,10 +111,10 @@ static  amqp_status_enum  apprpc_msgq_conn_auth(struct arpc_ctx_t *item)
         } // TODO, figure out where to dig more error detail
     }
     // AMQP channel should be long-lived , not for each operation (e.g. HTTP request)
-    amqp_channel_open_ok_t *chn_res = amqp_channel_open(item->conn, APP_AMQP_CHANNEL_DEFAULT_ID);
+    amqp_channel_open_ok_t *chn_res = amqp_channel_open(item->conn, item->curr_channel_id);
     if(!chn_res || !chn_res->channel_id.bytes) {
-        fprintf(stderr, "[RPC] failed to open default channel %s:%hu \n", cfg->credential.host,
-                cfg->credential.port );
+        fprintf(stderr, "[RPC] line:%d, failed to open default channel %s:%hu \n",
+                __LINE__, cfg->credential.host, cfg->credential.port );
         status = AMQP_STATUS_NO_MEMORY;
     }
 done:
@@ -105,12 +122,12 @@ done:
 } // end of apprpc_msgq_conn_auth
 
 static void apprpc_declare_q_report_error(amqp_rpc_reply_t *reply, char *q_name)
-{
+{ // TODO, deprecated, will be replaced by apprpc__translate_status_from_lowlvl_lib
     fprintf(stderr, "[RPC] fail to declare a queue : %s ", q_name);
     if(reply->reply_type == AMQP_RESPONSE_SERVER_EXCEPTION) {
         // TODO, separate channel error and connection error
         amqp_channel_close_t *m = (amqp_channel_close_t *)reply->reply.decoded;
-        fprintf(stderr, ", reason: server channel error %uh, message: %.*s ",
+        fprintf(stderr, ", reason: server channel error %hu, message: %.*s ",
              m->reply_code, (int)m->reply_text.len, (char *)m->reply_text.bytes);
     } else if(reply->reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION) {
         const char *errmsg = amqp_error_string2(reply->library_error);
@@ -130,7 +147,7 @@ static void apprpc_ensure_send_queue(struct arpc_ctx_t *item)
          amqp_table_entry_t  q_arg_n_elms = {.key = amqp_cstring_bytes("x-max-length"),
                  .value = {.kind = AMQP_FIELD_KIND_I32, .value = {.i32 = bind_cfg->max_msgs_pending}}};
          amqp_table_t  q_arg_table = {.num_entries=1, .entries=&q_arg_n_elms};
-        amqp_queue_declare( item->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
+        amqp_queue_declare( item->conn,  item->curr_channel_id,
                 amqp_cstring_bytes(bind_cfg->q_name), (amqp_boolean_t)bind_cfg->flags.passive,
                 (amqp_boolean_t)bind_cfg->flags.durable, (amqp_boolean_t)bind_cfg->flags.exclusive,
                 (amqp_boolean_t)bind_cfg->flags.auto_delete, q_arg_table
@@ -140,7 +157,7 @@ static void apprpc_ensure_send_queue(struct arpc_ctx_t *item)
             apprpc_declare_q_report_error(&_reply, bind_cfg->q_name);
             continue;
         }
-        amqp_queue_bind( item->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
+        amqp_queue_bind( item->conn, item->curr_channel_id,
                 amqp_cstring_bytes(bind_cfg->q_name),  amqp_cstring_bytes(bind_cfg->exchange_name),
                 amqp_cstring_bytes(bind_cfg->routing_key),  amqp_empty_table);
         _reply = amqp_get_rpc_reply(item->conn);
@@ -152,18 +169,18 @@ static void apprpc_ensure_send_queue(struct arpc_ctx_t *item)
 } // end of apprpc_ensure_send_queue
 
 
-static ARPC_STATUS_CODE  apprpc_ensure_reply_queue(amqp_connection_state_t raw_conn,
+static ARPC_STATUS_CODE  apprpc_ensure_reply_queue(struct arpc_ctx_t *_ctx,
         arpc_cfg_bind_reply_t *reply_cfg, char *q_name) {
     // TODO:
     // * Currently, reply queue is always bound with default exchange (specify empty
     //   exchange name) , in case some AMQP brokers sends return value back to the reply
     //   queue ONLY using default exchange. ( switch to non-default exchange)
     // * add  `x-message-ttl` attribute to all reply queues, the base time unit is milliseconds
-    amqp_queue_declare( raw_conn, APP_AMQP_CHANNEL_DEFAULT_ID,
+    amqp_queue_declare( _ctx->conn, _ctx->curr_channel_id,
             amqp_cstring_bytes(q_name), (amqp_boolean_t)reply_cfg->flags.passive,
             (amqp_boolean_t)reply_cfg->flags.durable, (amqp_boolean_t)reply_cfg->flags.exclusive,
             (amqp_boolean_t)reply_cfg->flags.auto_delete, amqp_empty_table );
-    amqp_rpc_reply_t _reply = amqp_get_rpc_reply(raw_conn);
+    amqp_rpc_reply_t _reply = amqp_get_rpc_reply(_ctx->conn);
     if(_reply.reply_type != AMQP_RESPONSE_NORMAL)
         apprpc_declare_q_report_error(&_reply, q_name);
     return  apprpc__translate_status_from_lowlvl_lib(&_reply);
@@ -301,7 +318,7 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
         goto done;
     size_t _job_id_fit_sz = strlen(args->job_id.bytes);
     assert(_job_id_fit_sz < args->job_id.len);
-    app_status = apprpc_ensure_reply_queue(mq_ctx->conn, &bind_cfg->reply, &reply_req_queue[0]);
+    app_status = apprpc_ensure_reply_queue(mq_ctx, &bind_cfg->reply, &reply_req_queue[0]);
     switch(app_status) {
         case APPRPC_RESP_OK:
             break;
@@ -310,7 +327,7 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
         case APPRPC_RESP_MSGQ_CONNECTION_CLOSED:
             app_status = app_rpc_open_connection((void *)mq_ctx);
             if(app_status == APPRPC_RESP_OK)
-                app_status = apprpc_ensure_reply_queue(mq_ctx->conn, &bind_cfg->reply, &reply_req_queue[0]);
+                app_status = apprpc_ensure_reply_queue(mq_ctx, &bind_cfg->reply, &reply_req_queue[0]);
             if(app_status == APPRPC_RESP_OK) {
                 break;
             } else {
@@ -326,7 +343,7 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
             .correlation_id = {.bytes=args->job_id.bytes, .len=_job_id_fit_sz},  .timestamp = args->_timestamp,
             .delivery_mode = 0x2, // defined in AMQP 0.9.1 without clear explanation
         };
-    amqp_status_enum mq_status = amqp_basic_publish( mq_ctx->conn, APP_AMQP_CHANNEL_DEFAULT_ID,
+    amqp_status_enum mq_status = amqp_basic_publish( mq_ctx->conn,  mq_ctx->curr_channel_id,
             amqp_cstring_bytes(bind_cfg->exchange_name),  routekey, mandatory, immediate,
             (amqp_basic_properties_t const *)&properties, amqp_cstring_bytes(args->msg_body.bytes) );
     // TODO: figure out how to use non-blocking API functions provided by librabbitmq.
@@ -344,13 +361,6 @@ done:
 } // end of app_rpc_start
 
 
-ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *args)
-{ // TODO ,remove
-    ARPC_STATUS_CODE status = APPRPC_RESP_ACCEPTED;
-    return status;
-} // end of app_rpc_get_reply
-
-
 static ARPC_STATUS_CODE apprpc_consumer_set_read_queues(struct arpc_ctx_t *_ctx)
 {
     ARPC_STATUS_CODE res = APPRPC_RESP_OK;
@@ -361,7 +371,7 @@ static ARPC_STATUS_CODE apprpc_consumer_set_read_queues(struct arpc_ctx_t *_ctx)
     for(idx = 0; idx < rpc_cfg->bindings.size; idx++) {
         arpc_cfg_bind_t *bindcfg = &rpc_cfg->bindings.entries[idx];
         amqp_bytes_t queue = amqp_cstring_bytes(bindcfg->q_name);
-        amqp_basic_consume( _ctx->conn, APP_AMQP_CHANNEL_DEFAULT_ID, queue, amqp_empty_bytes,
+        amqp_basic_consume( _ctx->conn, _ctx->curr_channel_id, queue, amqp_empty_bytes,
                 no_local, no_ack, exclusive, amqp_empty_table) ;
         amqp_rpc_reply_t  reply = amqp_get_rpc_reply(_ctx->conn);
         res = apprpc__translate_status_from_lowlvl_lib(&reply);
@@ -393,7 +403,7 @@ static ARPC_STATUS_CODE _apprpc_consume_handler__send2reply_q(arpc_receipt_t *r,
     // in AMQP broker maps routing key directly to the queue with exact name.
 #define AMQP_ANON_EXCHANGE amqp_empty_bytes
 #define RUN_PUBLISH_CMD \
-    amqp_basic_publish( _ctx->conn, APP_AMQP_CHANNEL_DEFAULT_ID,  AMQP_ANON_EXCHANGE, \
+    amqp_basic_publish( _ctx->conn, _ctx->curr_channel_id,  AMQP_ANON_EXCHANGE, \
             evp->message.properties.reply_to, mandatory, immediate, \
             (amqp_basic_properties_t const *)&properties, body );
     mq_status = RUN_PUBLISH_CMD;
@@ -530,10 +540,10 @@ ARPC_STATUS_CODE  app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *args, void (*cb)(c
         amqp_bytes_t _queue   = amqp_cstring_bytes(&reply_q_name[0]);
         amqp_bytes_t _con_tag = _queue;
 #define  CMD(_res) { \
-        amqp_basic_consume(mq_ctx->conn, APP_AMQP_CHANNEL_DEFAULT_ID, _queue, _con_tag, \
-                no_local, no_ack, exclusive, amqp_empty_table) ; \
-        reply = amqp_get_rpc_reply(mq_ctx->conn); \
-        _res = apprpc__translate_status_from_lowlvl_lib(&reply); \
+    amqp_basic_consume(mq_ctx->conn, mq_ctx->curr_channel_id, _queue, _con_tag, \
+            no_local, no_ack, exclusive, amqp_empty_table) ; \
+    reply = amqp_get_rpc_reply(mq_ctx->conn); \
+    _res = apprpc__translate_status_from_lowlvl_lib(&reply); \
 }
         MSGQ__RECONNECT_THEN_RUN_OPERATION(mq_ctx, res, CMD);
 #undef  CMD
@@ -541,10 +551,22 @@ ARPC_STATUS_CODE  app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *args, void (*cb)(c
             // pass
         } else if(res == APPRPC_RESP_MSGQ_OPERATION_ERROR || res == APPRPC_RESP_MSGQ_OPERATION_TIMEOUT) {
             fprintf(stderr, "[RPC] failed to consume reply queue (%s) \n", &reply_q_name[0]);
-            amqp_basic_cancel(mq_ctx->conn, APP_AMQP_CHANNEL_DEFAULT_ID, _con_tag);
+            uint8_t channel_closed = reply.reply_type == AMQP_RESPONSE_SERVER_EXCEPTION && 
+                        reply.reply.id == AMQP_CHANNEL_CLOSE_METHOD;
+            if(channel_closed) { // RPC reply queue for current user does not exist
+                // TODO, (1) force to reconnect if channal number reaches its max limit,
+                //  (2) security log, prevent DDoS attack
+                reply = amqp_channel_close(mq_ctx->conn, mq_ctx->curr_channel_id++, AMQP_NOT_FOUND);
+                amqp_channel_open_ok_t *chn_res = amqp_channel_open(mq_ctx->conn, mq_ctx->curr_channel_id);
+                if(!chn_res || !chn_res->channel_id.bytes) {
+                    fprintf(stderr, "[RPC] line:%d, failed to open channel:%hu \n", __LINE__,  mq_ctx->curr_channel_id);
+                    res = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
+                    break;
+                }
+            } // can perform basic-cancel ?
             continue; 
         } else {
-            fprintf(stderr, "[RPC] failed to reconnect to broker \n");
+            fprintf(stderr, "[RPC] failed to reconnect to broker (%d) \n", res);
             break;
         }
         struct timeval   timeout = {0}; // immediately return if all the queues are empty.
@@ -565,7 +587,7 @@ ARPC_STATUS_CODE  app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *args, void (*cb)(c
         } while (res == APPRPC_RESP_OK);
         if (res == APPRPC_RESP_MSGQ_OPERATION_TIMEOUT)
             res = APPRPC_RESP_OK; // means empty reply queue
-        amqp_basic_cancel(mq_ctx->conn, APP_AMQP_CHANNEL_DEFAULT_ID, _con_tag);
+        amqp_basic_cancel(mq_ctx->conn, mq_ctx->curr_channel_id, _con_tag);
     } // end of msg queue setup iteration
     return res;
 #undef   RPC_MAX_REPLY_QNAME_SZ
@@ -574,16 +596,16 @@ ARPC_STATUS_CODE  app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *args, void (*cb)(c
 
 void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body, uint8_t _final)
 {
-    size_t  nrequired = json_dumpb((const json_t *)res_body, NULL, 0, 0);
-    char   *body_raw = calloc(nrequired, sizeof(char));
-    size_t  nwrite = json_dumpb((const json_t *)res_body, body_raw, nrequired, JSON_COMPACT);
+    size_t  nrequired = json_dumpb((const json_t *)res_body, NULL, 0, 0); // + 1;
+    char    body_raw[nrequired];
+    size_t  nwrite = json_dumpb((const json_t *)res_body, &body_raw[0], nrequired, JSON_COMPACT);
+    // body_raw[nwrite++] = 0;
     assert(nwrite <= nrequired);
     if(_final) {
-        receipt->return_fn(receipt, body_raw, nwrite);
+        receipt->return_fn(receipt, &body_raw[0], nwrite);
     } else {
-        receipt->send_fn(receipt, body_raw, nwrite);
+        receipt->send_fn(receipt, &body_raw[0], nwrite);
     }
-    free(body_raw);
 } // end of app_rpc_task_send_reply
 
 
@@ -620,6 +642,7 @@ ARPC_STATUS_CODE app_rpc_open_connection(void *ctx)
         res = APPRPC_RESP_MEMORY_ERROR;
         goto done;
     } // socket will be deleted once connection is closed
+    _ctx->curr_channel_id = APP_AMQP_CHANNEL_DEFAULT_ID;
     if(apprpc_msgq_conn_auth(_ctx) != AMQP_STATUS_OK) {
         res = APPRPC_RESP_MSGQ_CONNECTION_ERROR;
         goto done; 
