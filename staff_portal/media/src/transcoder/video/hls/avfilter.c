@@ -41,18 +41,23 @@ typedef struct {
 }
 
 
-static int atfp_hls__init_video_filter(atfp_avfilter_data_t *data) {
-    int err = 0;
+static  int atfp_hls__init_video_filter(atfp_avfilter_data_t *data) {
+    int err = 0, nwrite = 0;
     atfp_stream_enc_ctx_t  *st_enc_ctx = data->st_enc_ctx;
     AVCodecContext    *enc_ctx = st_enc_ctx->enc_ctx;
     AVCodecContext    *dec_ctx = data->dec_ctx;
     AVRational frm_ratio = av_mul_q(dec_ctx->framerate, dec_ctx->time_base);
     frm_ratio = av_inv_q(frm_ratio) ;
-    snprintf(data->spec.bytes, data->spec.sz, "fps=%d,setpts=PTS*%f,scale=%d:%d",
+    nwrite = snprintf(data->spec.bytes, data->spec.sz, "fps=%d,setpts=PTS*%f,scale=%d:%d",
         enc_ctx->framerate.num / enc_ctx->framerate.den,
         (1.0 * ((float)frm_ratio.num / frm_ratio.den) * ((float)dec_ctx->framerate.num / enc_ctx->framerate.num)),
         enc_ctx->width, enc_ctx->height
     );
+    if (nwrite >= data->spec.sz) {
+        av_log(NULL, AV_LOG_ERROR, "[atfp][HLS][filter] line:%d, video spec string exceeding \n", __LINE__);
+        err = AVERROR(ENOMEM);
+        goto done;
+    }
     const AVFilter *buffersrc  = avfilter_get_by_name("buffer");
     const AVFilter *buffersink = avfilter_get_by_name("buffersink");
     if (!buffersrc || !buffersink) {
@@ -60,18 +65,24 @@ static int atfp_hls__init_video_filter(atfp_avfilter_data_t *data) {
         err = AVERROR_UNKNOWN;
         goto done;
     }
-    char args[512] = {0};
-    snprintf(args, sizeof(args),
+#define  FILTER_ARG_SZ  512
+    char args[FILTER_ARG_SZ] = {0};
+    nwrite = snprintf(args, FILTER_ARG_SZ,
             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
             dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt,
             dec_ctx->time_base.num, dec_ctx->time_base.den,
             dec_ctx->sample_aspect_ratio.num, dec_ctx->sample_aspect_ratio.den );
+    if (nwrite >= FILTER_ARG_SZ) {
+        av_log(NULL, AV_LOG_ERROR, "[atfp][HLS][filter] line:%d, video spec string exceeding \n", __LINE__);
+        err = AVERROR(ENOMEM);
+        goto done;
+    }
     CREATE_AVFILTER_COMMON_CODE(args, buffersrc, buffersink, st_enc_ctx);
     err = av_opt_set_bin(st_enc_ctx->filt_sink_ctx, "pix_fmts", (uint8_t*)&enc_ctx->pix_fmt,
             sizeof(enc_ctx->pix_fmt), AV_OPT_SEARCH_CHILDREN);
-    if (err < 0) {
-        av_log(NULL, AV_LOG_ERROR, "Cannot set output pixel format\n");
-    }
+    if (err < 0)
+        av_log(NULL, AV_LOG_ERROR, "[atfp][HLS][filter] Cannot set output pixel format\n");
+#undef  FILTER_ARG_SZ
 done:
     return err;
 } // end of atfp_hls__init_video_filter

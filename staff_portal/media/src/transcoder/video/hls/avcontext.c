@@ -5,7 +5,7 @@
 #include "transcoder/video/ffmpeg.h"
 
 #define  HLS_PLAYLIST_TYPE__VOD   2
-#define  HLS_SEGMENT_TYPE__FMP4   1
+#define  HLS_SEGMENT_TYPE__FMP4   1  // fMP4, improves web delivery than its older alternative, mpeg-ts
 #define  HLS_TIME__IN_SECONDS     30 // TODO, adjust time period of each segment with respect to total duration
 #define  HLS_DELETE_THRESHOLD__IN_SECONDS     3
 
@@ -74,14 +74,16 @@ static int  atfp_hls__av_setup_options(AVFormatContext *fmt_ctx, const char *loc
 } // end of atfp_hls__av_setup_options
 
 
-static void _atfp_config_dst_video_codecctx(AVCodecContext *dst, AVCodecContext *src, json_t *o_spec, json_t *elm_st_map)
+static int _atfp_config_dst_video_codecctx(AVCodecContext *dst, AVCodecContext *src, json_t *o_spec, json_t *elm_st_map)
 {
     uint32_t height = 0, width = 0;
     uint8_t  fps    = 0;
+    if (src->framerate.den == 0)
+        return AVERROR(EINVAL);
     ATFP_VIDEO__READ_SPEC(o_spec, elm_st_map, height, width, fps);
     dst->height = FFMIN(src->height, height);
     dst->width  = FFMIN(src->width , width);
-    dst->framerate = (AVRational){num:fps, den:1};
+    dst->framerate = (AVRational){num:fps*src->framerate.den, den:src->framerate.den};
     if (dst->codec->pix_fmts) // take first format from list of supported formats
         dst->pix_fmt = dst->codec->pix_fmts[0];
     else
@@ -89,6 +91,7 @@ static void _atfp_config_dst_video_codecctx(AVCodecContext *dst, AVCodecContext 
     dst->sample_aspect_ratio = src->sample_aspect_ratio;
     dst->time_base = src->time_base;
     dst->bit_rate  = src->bit_rate;    
+    return  0;
 } // end of _atfp_config_dst_video_codecctx
 
 static void _atfp_config_dst_audio_coderctx(AVCodecContext *dst, AVCodecContext *src, json_t *o_spec, json_t *elm_st_map)
@@ -139,7 +142,11 @@ static int atfp_hls__av_encoder_init(atfp_av_ctx_t *avctx_dst, atfp_av_ctx_t *av
                 break;
             }
             if(dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
-                _atfp_config_dst_video_codecctx(enc_ctx, dec_ctx, o_spec, elm_st_map);
+                err = _atfp_config_dst_video_codecctx(enc_ctx, dec_ctx, o_spec, elm_st_map);
+                if(err < 0) {
+                    json_object_set_new(err_info, "transcoder", json_string("[hls] failed to configure video encoder context"));
+                    break;
+                }
             } else if(dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) {
                 _atfp_config_dst_audio_coderctx(enc_ctx, dec_ctx, o_spec, elm_st_map);
             }

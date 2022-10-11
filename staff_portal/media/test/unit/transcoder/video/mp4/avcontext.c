@@ -163,8 +163,8 @@ Ensure(atfp_mp4_test__avctx_init_ok) {
                     when(par, is_equal_to(mock_av_streams[idx].codecpar))  );
             expect(avcodec_open2,  will_return(0), when(ctx, is_equal_to(expect_codec_ctx)) );
             if(expect_codec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
-                expect(av_guess_frame_rate,  will_return(18));
-                expect(av_guess_frame_rate,  will_return(1));
+                expect(av_guess_frame_rate,  will_return(180));
+                expect(av_guess_frame_rate,  will_return(10));
             }
         }
         expect(utest_atfp_mp4__avctx_preload__done_cb);

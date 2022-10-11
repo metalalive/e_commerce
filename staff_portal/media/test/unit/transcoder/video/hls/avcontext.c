@@ -85,6 +85,8 @@ Ensure(atfp_hls_test__avctx_init_ok) {
         mock_decoder_ctxs[0].codec_type = AVMEDIA_TYPE_VIDEO;
         mock_decoder_ctxs[1].codec_type = AVMEDIA_TYPE_AUDIO;
         mock_decoder_ctxs[2].codec_type = AVMEDIA_TYPE_SUBTITLE;
+        mock_decoder_ctxs[0].framerate = (AVRational) {num:180, den:10};
+        mock_decoder_ctxs[0].time_base = (AVRational) {num:10, den:180};
         mock_codecs[1].sample_fmts = &mock_audio_sample_fmt[0];
         for(idx = 0; idx < EXPECT_NB_STREAMS_IFMT_CTX; idx++) {
             expect(avformat_new_stream, will_return(&mock_av_streams_dst[idx]),
@@ -180,6 +182,8 @@ Ensure(atfp_hls_test__avctx_init__audio_codec_error) {
         mock_decoder_ctxs[0].codec_type = AVMEDIA_TYPE_VIDEO;
         mock_decoder_ctxs[1].codec_type = AVMEDIA_TYPE_SUBTITLE;
         mock_decoder_ctxs[2].codec_type = AVMEDIA_TYPE_AUDIO;
+        mock_decoder_ctxs[0].framerate = (AVRational) {num:180, den:10};
+        mock_decoder_ctxs[0].time_base = (AVRational) {num:10, den:180};
         mock_codecs[2].sample_fmts = &mock_audio_sample_fmt[0];
         for(idx = 0; idx < EXPECT_NB_STREAMS_IFMT_CTX; idx++) {
             expect(avformat_new_stream, will_return(&mock_av_streams_dst[idx]),
@@ -225,6 +229,8 @@ Ensure(atfp_hls_test__avctx_init__white_header_error) {
                 when(sz, is_equal_to(sizeof(atfp_stream_enc_ctx_t)))
             );
         mock_decoder_ctxs[0].codec_type = AVMEDIA_TYPE_VIDEO;
+        mock_decoder_ctxs[0].framerate = (AVRational) {num:180, den:10};
+        mock_decoder_ctxs[0].time_base = (AVRational) {num:10, den:180};
         expect(avformat_new_stream, will_return(&mock_av_streams_dst[0]),
                 when(s, is_equal_to(&mock_ofmt_ctx)));
         expect(avcodec_find_encoder, will_return(&mock_codecs[0]));

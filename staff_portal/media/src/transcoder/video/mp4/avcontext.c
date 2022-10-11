@@ -241,6 +241,10 @@ static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc)
         switch(codec_ctx->codec_type) {
             case AVMEDIA_TYPE_VIDEO:
                 codec_ctx->framerate = av_guess_frame_rate(fmt_ctx, stream, NULL);
+                if (codec_ctx->framerate.den == 0) {
+                    ret = AVERROR(EINVAL);
+                    break;
+                }
                 // pass through          
             case AVMEDIA_TYPE_AUDIO:
                 ret = avcodec_open2(codec_ctx, decoder, NULL);
