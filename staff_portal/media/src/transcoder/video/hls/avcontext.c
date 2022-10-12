@@ -49,6 +49,9 @@ static int  atfp_hls__av_setup_options(AVFormatContext *fmt_ctx, const char *loc
     av_dict_set_int(&options, "hls_delete_threshold", (int64_t)HLS_DELETE_THRESHOLD__IN_SECONDS, 0);
     // 1000 KB, not implemented yet as of ffmpeg v4.3.4
     //// av_dict_set_int(&options, "hls_segment_size", (int64_t)1024000, 0);
+    // for reconstructing master playlist later, the app will require accurate bandwidth
+    // attribute from EXT-X-STREAM-INF tag
+    av_dict_set(&options, "master_pl_name", HLS_MASTER_PLAYLIST_FILENAME, 0);
     // will be prepended to each segment entry in final playlist, TODO, enable this option and finish the playback API
     //// av_dict_set(&options, "hls_base_url", "/file?id=x4eyy5i&segment=", 0);
     {

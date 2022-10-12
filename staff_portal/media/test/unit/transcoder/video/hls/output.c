@@ -14,7 +14,7 @@
 #define  UTEST_ASA_REMOTE_BASEPATH   UTEST_BASSEPATH "/asa_remote"
 
 #define  NUM_READY_SEGMENTS  5
-#define  NUM_READY_METADATA_FILES    2
+#define  NUM_READY_METADATA_FILES    3
 #define  UTEST_DATA_SEGMENT_PREFIX   "utest_dataseg_"
 #define  UTEST_DATA_SEGMENT_PATTERN  "%07d"
 #define  UTEST_SEGMENT_NUM_MAXDIGIT  7
@@ -88,6 +88,7 @@ static void utest_atfp_hls__flush_output_cb (atfp_t *processor)
         UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000994", \
         UTEST_ASA_LOCAL_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000008", \
         UTEST_ASA_LOCAL_BASEPATH "/"   HLS_FMP4_FILENAME, \
+        UTEST_ASA_LOCAL_BASEPATH "/"   HLS_MASTER_PLAYLIST_FILENAME, \
         UTEST_ASA_LOCAL_BASEPATH "/"   HLS_PLAYLIST_FILENAME, \
     }; \
     const char * expect_seg_remote_path[NUM_READY_SEGMENTS + NUM_READY_METADATA_FILES] = { \
@@ -97,6 +98,7 @@ static void utest_atfp_hls__flush_output_cb (atfp_t *processor)
         UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000994", \
         UTEST_ASA_REMOTE_BASEPATH "/" UTEST_DATA_SEGMENT_PREFIX "0000008", \
         UTEST_ASA_REMOTE_BASEPATH "/"   HLS_FMP4_FILENAME, \
+        UTEST_ASA_REMOTE_BASEPATH "/"   HLS_MASTER_PLAYLIST_FILENAME, \
         UTEST_ASA_REMOTE_BASEPATH "/"   HLS_PLAYLIST_FILENAME, \
     }; \
     const char * expect_seg_content [NUM_READY_SEGMENTS + NUM_READY_METADATA_FILES] = { \
@@ -107,6 +109,7 @@ static void utest_atfp_hls__flush_output_cb (atfp_t *processor)
         "which is new way of taking over any territory around the world, money game invented by China Communist party", \
         "CCP has made huge amount of effort trying to cover their dark history, by setting up international news media", \
         "brainwishing people around the world, spreading political propaganda 24/7", \
+        "take over one country after another, it is not for history, it is for perfornal benefit.", \
     }; \
     for (idx = 0; idx < (NUM_READY_SEGMENTS + NUM_READY_METADATA_FILES); idx++) { \
         int fd = open(expect_seg_local_path[idx], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \

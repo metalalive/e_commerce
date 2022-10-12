@@ -39,8 +39,9 @@ typedef struct atfp_hls_s {
 #define  HLS_SEGMENT_FILENAME_NUM_FORMAT   "%04d"
 #define  HLS_SEGMENT_FILENAME_FORMAT_MAX_DIGITS   4
 #define  HLS_SEGMENT_FILENAME_TEMPLATE     HLS_SEGMENT_FILENAME_PREFIX    HLS_SEGMENT_FILENAME_NUM_FORMAT
-#define  HLS_FMP4_FILENAME          "init_packet_map"
-#define  HLS_PLAYLIST_FILENAME      "playlist.m3u8"
+#define  HLS_FMP4_FILENAME               "init_packet_map"
+#define  HLS_PLAYLIST_FILENAME           "lvl2_plist.m3u8"
+#define  HLS_MASTER_PLAYLIST_FILENAME    "mst_plist.m3u8"
 
 uint8_t  atfp__video_hls__deinit(atfp_t *);
 void     atfp_hls__remove_file(atfp_t *, const char *status);

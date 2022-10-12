@@ -55,10 +55,12 @@ static void atfp__video_hls__init(atfp_t *processor)
         asa_local_dstdata->super.op.mkdir.path.origin = strndup(&fullpath[0], nwrite);
         asa_local_dstdata->super.op.mkdir.path.curr_parent = calloc(nwrite, sizeof(char));
     } {
-        size_t playlist_name_sz = sizeof(HLS_PLAYLIST_FILENAME) - 1;
+        size_t mst_playlist_name_sz = sizeof(HLS_MASTER_PLAYLIST_FILENAME) - 1;
+        size_t l2_playlist_name_sz = sizeof(HLS_PLAYLIST_FILENAME) - 1;
         size_t pktmap_name_sz = sizeof(HLS_FMP4_FILENAME) - 1;
         size_t segment_name_sz = sizeof(HLS_SEGMENT_FILENAME_PREFIX) - 1 + HLS_SEGMENT_FILENAME_FORMAT_MAX_DIGITS;
-        size_t filename_max_sz = MAX(playlist_name_sz, pktmap_name_sz);
+        size_t filename_max_sz = MAX(l2_playlist_name_sz, pktmap_name_sz);
+        filename_max_sz = MAX(filename_max_sz, mst_playlist_name_sz);
         filename_max_sz = MAX(filename_max_sz, segment_name_sz) + 2; // extra slash char, and NUL-terminated char
         size_t fullpath_sz_local = strlen(asa_local_dstdata->super.op.mkdir.path.origin) + filename_max_sz;
         size_t fullpath_sz_dst   = strlen(asa_dst->op.mkdir.path.origin) + filename_max_sz;

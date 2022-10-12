@@ -107,6 +107,7 @@ Ensure(atfp_hls_test__avctx_init_ok) {
         expect(av_dict_set_int,  when(key, is_equal_to_string("hls_segment_type")));
         expect(av_dict_set_int,  when(key, is_equal_to_string("hls_time")));
         expect(av_dict_set_int,  when(key, is_equal_to_string("hls_delete_threshold")));
+        expect(av_dict_set,  when(key, is_equal_to_string("master_pl_name")));
         expect(av_dict_set,  when(key, is_equal_to_string("hls_segment_filename")));
         expect(av_dict_set,  when(key, is_equal_to_string("hls_fmp4_init_filename")));
         expect(avformat_write_header, will_return(0),  when(fmt_ctx, is_equal_to(mock_ofmt_ctx_p)));
@@ -241,6 +242,7 @@ Ensure(atfp_hls_test__avctx_init__white_header_error) {
         expect(av_dict_set_int,  when(key, is_equal_to_string("hls_segment_type")));
         expect(av_dict_set_int,  when(key, is_equal_to_string("hls_time")));
         expect(av_dict_set_int,  when(key, is_equal_to_string("hls_delete_threshold")));
+        expect(av_dict_set,  when(key, is_equal_to_string("master_pl_name")));
         expect(av_dict_set,  when(key, is_equal_to_string("hls_segment_filename")));
         expect(av_dict_set,  when(key, is_equal_to_string("hls_fmp4_init_filename")));
         expect(avformat_write_header, will_return(expect_err),  when(fmt_ctx, is_equal_to(mock_ofmt_ctx_p)));

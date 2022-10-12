@@ -14,7 +14,7 @@ static  void atfp_hls__close_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CO
 static  void atfp_hls__unlink_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 { atfp__unlink_local_seg__cb(asaobj, result); }
 
-static  void atfp_hls__close_dst_playlist__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+static  void atfp_hls__close_dst__mst_playlist__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     processor->transfer.dst.flags.asaremote_open = 0;
@@ -24,26 +24,35 @@ static  void atfp_hls__close_dst_playlist__cb (asa_op_base_cfg_t *asaobj, ASA_RE
     processor -> data.callback(processor);
 }
 
-static  void atfp_hls__close_dst_initmap__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
-{
-    int err = 1;
-    atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    atfp_t *processor = &hlsproc->super;
-    processor->transfer.dst.flags.asaremote_open = 0;
-    if(result == ASTORAGE_RESULT_COMPLETE) {
-        atfp_segment_t    *seg_cfg = &hlsproc->internal.segment;
-        asa_op_base_cfg_t *asa_dst = asaobj;
-        asa_op_localfs_cfg_t  *asa_local = &hlsproc->asa_local;
-        result = atfp__file_start_transfer(asa_dst, asa_local, seg_cfg, HLS_PLAYLIST_FILENAME);
-        asa_dst->op.close.cb = atfp_hls__close_dst_playlist__cb;
-        err = result != ASTORAGE_RESULT_ACCEPT;
-    }
-    if(err) {
-        json_object_set_new(processor->data.error, "storage",
-                json_string("[hls] failed to close init-map file on destination side"));
-        processor -> data.callback(processor);
-    }
-} // end of atfp_hls__close_dst_initmap__cb
+#define  ATFP_HLS__OUTPUT_CLOSE_CB_GENCODE(curr_cb_fn, next_cb_fn, cfgfile_name) \
+static  void  curr_cb_fn (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result) \
+{ \
+    int err = 1; \
+    atfp_hls_t *hlsproc = (atfp_hls_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG]; \
+    atfp_t *processor = &hlsproc->super; \
+    processor->transfer.dst.flags.asaremote_open = 0; \
+    if(result == ASTORAGE_RESULT_COMPLETE) { \
+        atfp_segment_t    *seg_cfg = &hlsproc->internal.segment; \
+        asa_op_base_cfg_t *asa_dst = asaobj; \
+        asa_op_localfs_cfg_t  *asa_local = &hlsproc->asa_local; \
+        result = atfp__file_start_transfer(asa_dst, asa_local, seg_cfg, cfgfile_name); \
+        asa_dst->op.close.cb =  next_cb_fn; \
+        err = result != ASTORAGE_RESULT_ACCEPT; \
+    } \
+    if(err) { \
+        json_object_set_new(processor->data.error, "storage", \
+                json_string("[hls] failed to close init-map file on destination side")); \
+        processor -> data.callback(processor); \
+    } \
+}
+
+
+ATFP_HLS__OUTPUT_CLOSE_CB_GENCODE(atfp_hls__close_dst__lvl2_playlist__cb,
+       atfp_hls__close_dst__mst_playlist__cb, HLS_PLAYLIST_FILENAME);
+
+// initialization section must exist if fMP4 is chosen for encoding, currently this app only supports fMP4
+ATFP_HLS__OUTPUT_CLOSE_CB_GENCODE(atfp_hls__close_dst_initmap__cb,
+       atfp_hls__close_dst__lvl2_playlist__cb, HLS_MASTER_PLAYLIST_FILENAME);
 
 static  void atfp_hls__close_dst_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {
