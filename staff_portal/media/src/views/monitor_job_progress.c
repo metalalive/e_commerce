@@ -237,7 +237,7 @@ RESTAPI_ENDPOINT_HANDLER(monitor_job_progress, GET, hdlr, req)
         req->res.reason = "missing rpc context";
         json_object_set_new(res_body, "reason", json_string("essential service not available"));
 #if  1
-        fprintf(stderr, "[monitor_job_progress] http_resp:503, line:%d, ctx storage size:%d \n",
+        fprintf(stderr, "[monitor_job_progress] http_resp:503, line:%d, ctx storage size:%ld \n",
                 __LINE__, req->conn->ctx->storage.size );
 #endif
     } // missing rpc context object

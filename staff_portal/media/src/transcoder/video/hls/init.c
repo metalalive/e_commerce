@@ -2,10 +2,32 @@
 #include <string.h>
 #include <h2o/memory.h>
 
-#include "storage/cfg_parser.h"
 #include "transcoder/video/common.h"
 #include "transcoder/video/hls.h"
-#include "transcoder/video/ffmpeg.h"
+
+
+atfp_t  *atfp__video_hls__instantiate_transcoder(void)
+{
+    atfp_t  *out = atfp__video_hls__instantiate();
+    if(out) {
+        atfp_hls_t *hlsproc = (atfp_hls_t *)out;
+        out->transfer.dst.update_metadata = atfp_video__dst_update_metadata;
+        out->transfer.dst.remove_file = atfp_hls__remove_file;
+        hlsproc->internal.op.avctx_init   = atfp_hls__av_init;
+        hlsproc->internal.op.avctx_deinit = atfp_hls__av_deinit;
+        hlsproc->internal.op.avfilter_init = atfp_hls__avfilter_init;
+        hlsproc->internal.op.filter  = atfp_hls__av_filter_processing;
+        hlsproc->internal.op.encode  = atfp_hls__av_encode_processing;
+        hlsproc->internal.op.write   = atfp_hls__av_local_write;
+        hlsproc->internal.op.finalize.filter = atfp_hls__av_filter__finalize_processing;
+        hlsproc->internal.op.finalize.encode = atfp_hls__av_encode__finalize_processing;
+        hlsproc->internal.op.finalize.write  = atfp_hls__av_local_write_finalize;
+        hlsproc->internal.op.move_to_storage = atfp_hls__try_flush_to_storage;
+        hlsproc->internal.op.has_done_flush_filter = atfp_av_filter__has_done_flushing;
+        hlsproc->internal.op.has_done_flush_encoder = atfp_av_encoder__has_done_flushing;
+    }
+    return out;
+} // end of atfp__video_hls__instantiate_transcoder
 
 static void atfp_hls__create_local_workfolder_cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 { // TODO, check whether the folder was already creaated, delete all the files in it if exists
@@ -20,7 +42,7 @@ static void atfp_hls__create_local_workfolder_cb (asa_op_base_cfg_t *asaobj, ASA
 } // end of atfp_hls__create_local_workfolder_cb
 
 
-static void atfp__video_hls__init(atfp_t *processor)
+void  atfp__video_hls__init_transcode(atfp_t *processor)
 {
     atfp_hls_t *hlsproc = (atfp_hls_t *)processor;
     asa_op_base_cfg_t *asa_dst = processor -> data.storage.handle;
@@ -95,10 +117,10 @@ static void atfp__video_hls__init(atfp_t *processor)
                 json_string("[hls] failed to issue create-folder operation for internal local tmp buf"));
         processor -> data.callback(processor);
     }
-} // end of atfp__video_hls__init
+} // end of atfp__video_hls__init_transcode
 
 
-static void atfp__video_hls__processing(atfp_t *processor)
+void atfp__video_hls__proceeding_transcode(atfp_t *processor)
 {
     int ret = ATFP_AVCTX_RET__OK;
     ASA_RES_CODE result = ASTORAGE_RESULT_COMPLETE;
@@ -149,53 +171,11 @@ static void atfp__video_hls__processing(atfp_t *processor)
         result = ASTORAGE_RESULT_UNKNOWN_ERROR;
     }
     assert(result != ASTORAGE_RESULT_COMPLETE);
-} // end of atfp__video_hls__processing
+} // end of atfp__video_hls__proceeding_transcode
 
 
-static uint8_t  atfp__video_hls__has_done_processing(atfp_t *processor)
+uint8_t  atfp__video_hls__has_done_processing(atfp_t *processor)
 {
     atfp_hls_t *hlsproc_dst = (atfp_hls_t *)processor;
     return atfp_av__has_done_processing(hlsproc_dst->av);
 }
-
-
-static atfp_t *atfp__video_hls__instantiate(void) {
-    // at this point, `atfp_av_ctx_t` should NOT be incomplete type
-    size_t tot_sz = sizeof(atfp_hls_t) + sizeof(atfp_av_ctx_t);
-    atfp_hls_t  *out = calloc(0x1, tot_sz);
-    char *ptr = (char *)out + sizeof(atfp_hls_t);
-    out->av = (atfp_av_ctx_t *) ptr;
-    out->super.transfer.dst.update_metadata = atfp_video__dst_update_metadata;
-    out->super.transfer.dst.remove_file = atfp_hls__remove_file;
-    out->asa_local.super.storage = app_storage_cfg_lookup("localfs") ; 
-    out->internal.op.avctx_init   = atfp_hls__av_init;
-    out->internal.op.avctx_deinit = atfp_hls__av_deinit;
-    out->internal.op.avfilter_init = atfp_hls__avfilter_init;
-    out->internal.op.filter  = atfp_hls__av_filter_processing;
-    out->internal.op.encode  = atfp_hls__av_encode_processing;
-    out->internal.op.write   = atfp_hls__av_local_write;
-    out->internal.op.finalize.filter = atfp_hls__av_filter__finalize_processing;
-    out->internal.op.finalize.encode = atfp_hls__av_encode__finalize_processing;
-    out->internal.op.finalize.write  = atfp_hls__av_local_write_finalize;
-    out->internal.op.move_to_storage = atfp_hls__try_flush_to_storage;
-    out->internal.op.has_done_flush_filter = atfp_av_filter__has_done_flushing;
-    out->internal.op.has_done_flush_encoder = atfp_av_encoder__has_done_flushing;
-    return &out->super;
-} // end of atfp__video_hls__instantiate
-
-static uint8_t    atfp__video_hls__label_match(const char *label) {
-    const char *exp_labels[2] = {"hls", "application/x-mpegURL"};
-    return atfp_common__label_match(label, 2, exp_labels);
-}
-
-atfp_ops_entry_t  atfp_ops_video_hls = {
-    .backend_id = ATFP_BACKEND_LIB__FFMPEG,
-    .ops = {
-        .init   = atfp__video_hls__init,
-        .deinit = atfp__video_hls__deinit,
-        .processing  = atfp__video_hls__processing,
-        .instantiate = atfp__video_hls__instantiate,
-        .label_match = atfp__video_hls__label_match,
-        .has_done_processing = atfp__video_hls__has_done_processing,
-    },
-};

@@ -24,6 +24,13 @@ extern "C" {
 #define APP_GRACEFUL_SHUTDOWN   1
 #define APP_HARD_SHUTDOWN       2 
 
+#define DATETIME_STR_SIZE    20
+#define USR_ID_STR_SIZE      10
+#define UPLOAD_INT2HEX_SIZE(x) (sizeof(x) << 1)
+// TODO, synchronize following parameters with DB migration config file
+#define APP_RESOURCE_ID_SIZE  8
+#define APP_TRANSCODED_VERSION_SIZE  2
+
 // valid code options represented for quota arrangement in this application
 typedef enum {
     MAX_KBYTES_CONSUMED_SPACE = 1,

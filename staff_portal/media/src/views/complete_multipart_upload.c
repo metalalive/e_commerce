@@ -43,7 +43,7 @@ static void  api__complete_multipart_upload__db_write_done(db_query_t *target, d
         unsigned char *resource_id = base64_decode((const unsigned char *)res_id_encoded,
                 strlen(res_id_encoded), &res_id_len);
         json_t *res_body = json_object();
-        json_object_set_new(res_body, "resource_id", json_string(resource_id));
+        json_object_set_new(res_body, "resource_id", json_string((const char *)resource_id));
         json_object_set_new(res_body, "req_seq",  json_integer(curr_req_seq));
         json_object_set_new(res_body, "usr_id" ,  json_integer(curr_usr_id));
         char body_raw[MAX_BYTES_RESP_BODY] = {0};

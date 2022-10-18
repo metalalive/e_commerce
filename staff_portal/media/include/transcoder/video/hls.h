@@ -30,6 +30,9 @@ typedef struct atfp_hls_s {
             uint8_t  (*has_done_flush_encoder)(atfp_av_ctx_t *dst);
         } op;
         atfp_segment_t  segment; // TODO, consider to move to parent type `atfp_t`
+        // ---- for init VOD stream ----
+        uint8_t  num_plist_merged:7;
+        uint8_t  local_plist_lock_owner:1;
     } internal;
 } atfp_hls_t;
 
@@ -39,13 +42,27 @@ typedef struct atfp_hls_s {
 #define  HLS_SEGMENT_FILENAME_NUM_FORMAT   "%04d"
 #define  HLS_SEGMENT_FILENAME_FORMAT_MAX_DIGITS   4
 #define  HLS_SEGMENT_FILENAME_TEMPLATE     HLS_SEGMENT_FILENAME_PREFIX    HLS_SEGMENT_FILENAME_NUM_FORMAT
-#define  HLS_FMP4_FILENAME               "init_packet_map"
-#define  HLS_PLAYLIST_FILENAME           "lvl2_plist.m3u8"
-#define  HLS_MASTER_PLAYLIST_FILENAME    "mst_plist.m3u8"
+#define  HLS_FMP4_FILENAME              "init_packet_map"
+#define  HLS_PLAYLIST_FILENAME          "lvl2_plist.m3u8"
+#define  HLS_MASTER_PLAYLIST_FILENAME   "mst_plist.m3u8"
+#define  HLS_CRYPTO_KEY_FILENAME        "crypto_key.json"
 
-uint8_t  atfp__video_hls__deinit(atfp_t *);
+// common
+atfp_t  *atfp__video_hls__instantiate(void);
+uint8_t  atfp__video_hls__label_match(const char *label);
+
+// api server
+void     atfp__video_hls__init_stream(atfp_t *);
+// rpc consumer
+atfp_t  *atfp__video_hls__instantiate_transcoder(void);
+void     atfp__video_hls__init_transcode(atfp_t *);
+void     atfp__video_hls__proceeding_transcode(atfp_t *);
+uint8_t  atfp__video_hls__has_done_processing(atfp_t *);
+uint8_t  atfp__video_hls__deinit_transcode(atfp_t *);
 void     atfp_hls__remove_file(atfp_t *, const char *status);
 
+
+// internal
 int   atfp_hls__av_init(atfp_hls_t *);
 void  atfp_hls__av_deinit(atfp_hls_t *);
 int   atfp_hls__avfilter_init(atfp_hls_t *);

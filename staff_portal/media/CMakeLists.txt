@@ -193,14 +193,26 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/multipart_parser.c
     src/views/init.c
     src/views/common.c
+    src/views/initiate_video_stream.c
+    src/views/fetch_video_stream_element.c
     src/views/monitor_job_progress.c
     src/views/initiate_multipart_upload.c
     src/views/complete_multipart_upload.c
     src/views/start_transcoding_file.c
     src/views/upload_part.c )
 
-SET(APP_TRANSCODER_SOURCE_FILES
+SET(APP_TRANSCODE_COMMON_SOURCE_FILES
+    src/transcoder/cfg_parser.c
     src/transcoder/file_processor.c
+    src/transcoder/video/hls/common.c )
+
+SET(APP_TRANSCODE_TABLE_IN_RPC_CONSUMER__SOURCE_FILES
+    src/transcoder/table_rpc_consumer.c
+    src/transcoder/video/hls/table_rpc_consumer.c )
+
+SET(APP_TRANSCODER_SOURCE_FILES
+    ${APP_TRANSCODE_COMMON_SOURCE_FILES}
+    src/transcoder/segment.c
     src/transcoder/storage.c
     src/transcoder/video/metadata.c 
     src/transcoder/video/hls/init.c 
@@ -211,6 +223,14 @@ SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/video/mp4/preload.c 
     src/transcoder/video/mp4/avcontext.c 
     src/transcoder/video/mp4/init.c )
+
+SET(APP_TRANSCODE_TABLE_IN_HTTP_SERVER__SOURCE_FILES
+    src/transcoder/table_api_server.c
+    src/transcoder/video/hls/table_api_server.c )
+
+SET(APP_STREAMING_SOURCE_FILES
+    ${APP_TRANSCODE_COMMON_SOURCE_FILES}
+    src/transcoder/video/hls/init_stream.c )
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
     src/views/async/start_transcode.c
@@ -231,7 +251,6 @@ SET(APP_STORAGE_SOURCE_FILES
 SET(APP_COMMON_SOURCE_FILES
     src/rpc/core.c
     src/rpc/cfg_parser.c
-    src/transcoder/cfg_parser.c
     src/app_cfg.c
     src/utils.c
     src/base64.c
@@ -243,6 +262,8 @@ SET(APP_SERVER_SOURCE_FILES
     src/third_party/rhonabwy.c
     ${APP_DBMODEL_SOURCE_FILES}
     ${APP_STORAGE_SOURCE_FILES}
+    ${APP_STREAMING_SOURCE_FILES}
+    ${APP_TRANSCODE_TABLE_IN_HTTP_SERVER__SOURCE_FILES}
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
@@ -251,6 +272,7 @@ SET(RPC_CONSUMER_SOURCE_FILES
     ${APP_DBMODEL_SOURCE_FILES}
     ${APP_STORAGE_SOURCE_FILES}
     ${APP_TRANSCODER_SOURCE_FILES}
+    ${APP_TRANSCODE_TABLE_IN_RPC_CONSUMER__SOURCE_FILES}
     ${APP_RPCCONSUMER_HANDLER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
@@ -281,6 +303,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/hls/avfilter.c
     test/unit/transcoder/video/hls/output.c
     test/unit/transcoder/video/hls/init.c
+    test/unit/transcoder/video/hls/init_stream.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c
@@ -297,6 +320,8 @@ SET(UNIT_TEST_SOURCE_FILES
     ${APP_DBMODEL_SOURCE_FILES}
     ${APP_STORAGE_SOURCE_FILES}
     ${APP_TRANSCODER_SOURCE_FILES}
+    ${APP_TRANSCODE_TABLE_IN_RPC_CONSUMER__SOURCE_FILES}
+    ${APP_STREAMING_SOURCE_FILES}
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
@@ -393,7 +418,7 @@ ADD_CUSTOM_TARGET(unit_test
     # without forking, then you can set breakpoints using debugger (currently only supports GDB)
     ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
     ##gdb -args # uncomment this line for debugging
-    #valgrind --leak-check=full
+    ##valgrind --leak-check=full
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${UNIT_TEST_EXE_NAME}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${UNIT_TEST_EXE_NAME})

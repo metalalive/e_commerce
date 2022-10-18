@@ -60,15 +60,11 @@ extern "C" {
     API_FINAL_HANDLER_monitor_job_progress, \
     app_deinit_auth_jwt_claims
 
-#define _API_MIDDLEWARE_CHAIN_fetch_entire_file \
-    3, app_authenticate_user, \
-    API_FINAL_HANDLER_fetch_entire_file, \
-    app_deinit_auth_jwt_claims
+#define _API_MIDDLEWARE_CHAIN_initiate_video_stream \
+    1,  API_FINAL_HANDLER_initiate_video_stream
 
-#define _API_MIDDLEWARE_CHAIN_get_next_media_segment \
-    3, app_authenticate_user, \
-    API_FINAL_HANDLER_get_next_media_segment, \
-    app_deinit_auth_jwt_claims
+#define _API_MIDDLEWARE_CHAIN_fetch_video_stream_element \
+    1,  API_FINAL_HANDLER_fetch_video_stream_element
 
 #define _API_MIDDLEWARE_CHAIN_discard_file \
     4, app_authenticate_user, \
@@ -98,9 +94,9 @@ extern "C" {
 #define _RESTAPI_PERM_CODES_single_chunk_upload       "upload_files"
 #define _RESTAPI_PERM_CODES_start_transcoding_file    "upload_files"
 #define _RESTAPI_PERM_CODES_discard_ongoing_job       "upload_files"
-#define _RESTAPI_PERM_CODES_monitor_job_progress      "upload_files"
-#define _RESTAPI_PERM_CODES_fetch_entire_file         NULL
-#define _RESTAPI_PERM_CODES_get_next_media_segment    NULL
+#define _RESTAPI_PERM_CODES_monitor_job_progress      "upload_files" 
+#define _RESTAPI_PERM_CODES_initiate_video_stream         NULL
+#define _RESTAPI_PERM_CODES_fetch_video_stream_element    NULL
 #define _RESTAPI_PERM_CODES_discard_file              "upload_files"
 #define _RESTAPI_PERM_CODES_edit_file_acl             "edit_file_access_control"
 #define _RESTAPI_PERM_CODES_read_file_acl             "edit_file_access_control"
@@ -145,12 +141,6 @@ extern "C" {
     static int API_FINAL_HANDLER_##func_name(RESTAPI_HANDLER_ARGS(hdlr_var, req_var), app_middleware_node_t *node)
 
 
-#define DATETIME_STR_SIZE    20
-#define USR_ID_STR_SIZE      10
-#define UPLOAD_INT2HEX_SIZE(x) (sizeof(x) << 1)
-// TODO, synchronize following parameters with DB migration config file
-#define APP_RESOURCE_ID_SIZE  8
-#define APP_TRANSCODED_VERSION_SIZE  2
 #define MAX_BYTES_JOB_ID    70  // TODO, parameterize
 
 DBA_RES_CODE  app_validate_uncommitted_upld_req (

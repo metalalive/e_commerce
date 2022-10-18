@@ -30,9 +30,9 @@
                 {"path":"/file/transcode", "entry_fn":"start_transcoding_file"},
                 {"path":"/job"     , "entry_fn":"discard_ongoing_job"},
                 {"path":"/job"     , "entry_fn":"monitor_job_progress"},
-                {"path":"/file"    , "entry_fn":"fetch_entire_file"},
                 {"path":"/file"    , "entry_fn":"discard_file"},
-                {"path":"/file/playback" , "entry_fn":"get_next_media_segment"},
+                {"path":"/video/playback/init" , "entry_fn":"initiate_video_stream"},
+                {"path":"/video/playback/seek" , "entry_fn":"fetch_video_stream_element"},
                 {"path":"/file/acl", "entry_fn":"edit_file_acl"},
                 {"path":"/file/acl", "entry_fn":"read_file_acl"}
             ]
@@ -76,7 +76,7 @@
         {
             "alias": "db_server_1",
             "db_name": "ecommerce_media",
-            "max_connections": 4,
+            "max_connections": 3,
             "idle_timeout": 15,
             "bulk_query_limit_kb": 2,
             "credential": {
@@ -176,7 +176,7 @@
                 "audio":["aac"]
             },
             "video": {
-                "pixels": [[1080, 600], [720, 540], [480, 360], [360, 270], [240, 180], [160, 120]],
+                "pixels": [[1080, 600], [720, 540], [480, 360], [480,300], [360, 220], [240, 180], [160, 120]],
                 "fps": [35,30,28,25,24,20,16,15,14,11,9]
             },
             "audio": {

@@ -45,6 +45,7 @@ typedef struct {
 } atfp_data_t;
 
 typedef struct atfp_ops_s {
+    // TODO, rename `init` and `deinit` to `init_transcode` and `deinit_transcode`
     void     (*init)(struct atfp_s *);
     uint8_t  (*deinit)(struct atfp_s *); // return value indicates whether de-init is still ongoing
     void     (*processing)(struct atfp_s *);

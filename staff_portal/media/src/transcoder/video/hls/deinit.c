@@ -184,7 +184,7 @@ static  void  atfp_hls__asalocal_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES
     }
 }
 
-uint8_t  atfp__video_hls__deinit(atfp_t *processor)
+uint8_t  atfp__video_hls__deinit_transcode(atfp_t *processor)
 {
     atfp_hls_t *hlsproc = (atfp_hls_t *)processor;
     asa_op_base_cfg_t     *asa_dst = processor -> data.storage.handle;
@@ -225,6 +225,6 @@ uint8_t  atfp__video_hls__deinit(atfp_t *processor)
         atfp_hls__asalocal_closefile_cb(&asa_local_dstdata->super, ASTORAGE_RESULT_COMPLETE);
     }
     return  asa_remote_open || asa_local_open;
-} // end of atfp__video_hls__deinit
+} // end of atfp__video_hls__deinit_transcode
 #undef  DEINIT_IF_EXISTS
 

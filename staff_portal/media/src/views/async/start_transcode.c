@@ -326,14 +326,7 @@ static asa_op_base_cfg_t * api_rpc_transcode__init_asa_obj (arpc_receipt_t *rece
         json_t *api_req, json_t *err_info, asa_cfg_t *storage, 
         uint8_t num_cb_args, uint32_t rd_buf_bytes, uint32_t wr_buf_bytes )
 {
-    asa_op_base_cfg_t *out = NULL;
-    size_t   cb_args_tot_sz = sizeof(void *) * num_cb_args;
-    size_t   asaobj_sz = storage->ops.fn_typesize();
-    size_t   asaobj_tot_sz = asaobj_sz + cb_args_tot_sz + rd_buf_bytes + wr_buf_bytes;
-    out = calloc(1, asaobj_tot_sz);
-    char *ptr = (char *)out + asaobj_sz;
-    out->cb_args.size = num_cb_args;
-    out->cb_args.entries = (void **) ptr;
+    asa_op_base_cfg_t *out = app_storage__init_asaobj_helper (storage, num_cb_args, rd_buf_bytes, wr_buf_bytes);
     // each storage handle connects to its own file processor, it is one-to-one relationship
     out->cb_args.entries[ASA_USRARG_INDEX__AFTP] = NULL;
     // all storage handles share the same following objects
@@ -341,21 +334,6 @@ static asa_op_base_cfg_t * api_rpc_transcode__init_asa_obj (arpc_receipt_t *rece
     out->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT] = (void *)receipt;
     out->cb_args.entries[ASA_USRARG_INDEX__API_REQUEST] = (void *)api_req;
     out->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO] = (void *)err_info;
-    out->storage = storage;
-    ptr += cb_args_tot_sz;
-    out->op.read.offset = 0;
-    out->op.read.dst_max_nbytes = rd_buf_bytes;
-    out->op.read.dst_sz = 0;
-    if(rd_buf_bytes > 0)
-        out->op.read.dst = (char *)ptr;
-    ptr += rd_buf_bytes;
-    out->op.write.offset = 0;
-    out->op.write.src_max_nbytes = wr_buf_bytes;
-    out->op.write.src_sz = 0;
-    if(wr_buf_bytes > 0)
-        out->op.write.src = (char *)ptr;
-    ptr += wr_buf_bytes;
-    assert((size_t)(ptr - (char *)out) == asaobj_tot_sz);
     return out;
 }  // end of api_rpc_transcode__init_asa_obj
 

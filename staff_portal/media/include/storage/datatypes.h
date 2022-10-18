@@ -11,7 +11,7 @@ typedef enum {
     ASTORAGE_RESULT_EOF_SCAN, // end of file
     ASTORAGE_RESULT_UNKNOWN_ERROR,
     ASTORAGE_RESULT_ARG_ERROR,
-    ASTORAGE_RESULT_OS_ERROR,
+    ASTORAGE_RESULT_OS_ERROR, // TODO, separate path-not-found from other error types
     ASTORAGE_RESULT_DATA_ERROR
 } ASA_RES_CODE;
 

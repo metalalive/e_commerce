@@ -1,4 +1,5 @@
 #include <cgreen/mocks.h>
+#include <openssl/err.h>
 #include <openssl/bn.h>
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
@@ -107,6 +108,12 @@ void BN_free(BIGNUM *a)
 int BN_set_word(BIGNUM *a, BN_ULONG w)
 { return (int) mock(a,w); }
 
+char *BN_bn2hex(const BIGNUM *a)
+{ return (char *) mock(a); }
+
+int BN_rand(BIGNUM *a, int bits, int top, int bottom)
+{ return (int) mock(a, bits, top, bottom); }
+
 int ASN1_INTEGER_set(ASN1_INTEGER *a, long v)
 { return (int) mock(a,v); }
 
@@ -128,4 +135,10 @@ int PEM_write_PrivateKey(FILE *fp, EVP_PKEY *x, const EVP_CIPHER *enc,
 
 int PEM_write_X509(FILE *fp, X509 *x)
 { return (int)mock(fp, x); }
+
+unsigned long ERR_get_error(void)
+{ return (unsigned long)mock(); }
+
+void ERR_error_string_n(unsigned long e, char *buf, size_t len)
+{ mock(e, buf, len); }
 

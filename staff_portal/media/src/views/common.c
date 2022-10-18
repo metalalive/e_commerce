@@ -6,55 +6,61 @@
 #include "models/query.h"
 #include "rpc/datatypes.h"
 
+#define  DB_OP__USRARG_IDX__HTTP_REQ     0
+#define  DB_OP__USRARG_IDX__HTTP_HDLR    1
+#define  DB_OP__USRARG_IDX__MIDDLEWARE_NODE  2
+#define  DB_OP__USRARG_IDX__NB_ROWS_RD    3
+#define  DB_OP__USRARG_IDX__SUCCESS_CB    4
+#define  DB_OP__USRARG_IDX__FAILURE_CB    5
+#define  DB_OP__USRARG_IDX__RES_OWNER_ID  6
+#define  DB_OP__USRARG_IDX__UPLD_REQ_ID   7
+
 void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail)
-{
-    (void *)detail;
-}
+{ (void *)detail; }
 
-
-static void  app_validate_id_existence__row_fetch(db_query_t *target, db_query_result_t *rs)
+static void  _app__upld_req_exist__row_fetch(db_query_t *target, db_query_result_t *rs)
 { // supposed to be invoked only once
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    size_t num_rows_read = (size_t) target->cfg.usr_data.entry[3];
+    size_t num_rows_read = (size_t) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__NB_ROWS_RD];
 #pragma GCC diagnostic pop
-    target->cfg.usr_data.entry[3] = (void *) num_rows_read + 1;
-} // end of app_validate_id_existence__row_fetch
+    target->cfg.usr_data.entry[DB_OP__USRARG_IDX__NB_ROWS_RD] = (void *) num_rows_read + 1;
+} // end of _app__upld_req_exist__row_fetch
 
-static void  app_validate_res_id_existence__row_fetch(db_query_t *target, db_query_result_t *rs)
+static void  _app_resource_id_exist__row_fetch(db_query_t *target, db_query_result_t *rs)
 {
     db_query_row_info_t *row = (db_query_row_info_t *)&rs->data[0];
     if(row->values[0]) {
         uint32_t resource_owner_id = (uint32_t) strtoul(row->values[0], NULL, 10);
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-        target->cfg.usr_data.entry[6] = (void *) resource_owner_id;
+        target->cfg.usr_data.entry[DB_OP__USRARG_IDX__RES_OWNER_ID] = (void *) resource_owner_id;
 #pragma GCC diagnostic pop
     }
     if(row->values[1]) {
         uint32_t last_upld_req = (uint32_t) strtoul(row->values[1], NULL, 16);
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-        target->cfg.usr_data.entry[7] = (void *) last_upld_req;
+        target->cfg.usr_data.entry[DB_OP__USRARG_IDX__UPLD_REQ_ID] = (void *) last_upld_req;
 #pragma GCC diagnostic pop
     }
-    app_validate_id_existence__row_fetch(target, rs);
-} // end of app_validate_res_id_existence__row_fetch
+    _app__upld_req_exist__row_fetch(target, rs);
+} // end of _app_resource_id_exist__row_fetch
 
 
-static void  app_validate_id_existence__rs_free(db_query_t *target, db_query_result_t *rs)
+static void  _app__upld_req_exist__rs_free(db_query_t *target, db_query_result_t *rs)
 {
-    h2o_req_t     *req  = (h2o_req_t *)     target->cfg.usr_data.entry[0];
-    h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[1];
-    app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
+    h2o_req_t     *req  = (h2o_req_t *)     target->cfg.usr_data.entry[DB_OP__USRARG_IDX__HTTP_REQ];
+    h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__HTTP_HDLR];
+    app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__MIDDLEWARE_NODE];
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    size_t num_rows_read = (size_t) target->cfg.usr_data.entry[3];
+    size_t num_rows_read = (size_t) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__NB_ROWS_RD];
 #pragma GCC diagnostic pop
     if (rs->app_result == DBA_RESULT_OK) {
         // check quota limit, estimate all uploaded chunks of the user
         app_middleware_fn  cb = NULL;
         if(num_rows_read == 0) {
-            cb = (app_middleware_fn) target->cfg.usr_data.entry[5];
+            cb = (app_middleware_fn) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__FAILURE_CB];
             cb(self, req, node);
         } else if(num_rows_read == 1) {
-            cb = (app_middleware_fn) target->cfg.usr_data.entry[4];
+            cb = (app_middleware_fn) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__SUCCESS_CB];
             cb(self, req, node);
         } else {
             target->cfg.callbacks.error(target, rs);
@@ -62,22 +68,22 @@ static void  app_validate_id_existence__rs_free(db_query_t *target, db_query_res
     } else {
         target->cfg.callbacks.error(target, rs);
     }
-} // end of app_validate_id_existence__rs_free
+} // end of _app__upld_req_exist__rs_free
 
-static void  app_validate_res_id_existence__rs_free(db_query_t *target, db_query_result_t *rs)
+static void  _app_resource_id_exist__rs_free(db_query_t *target, db_query_result_t *rs)
 {
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    size_t num_rows_read = (size_t) target->cfg.usr_data.entry[3];
-    uint32_t resource_owner_id = (uint32_t) target->cfg.usr_data.entry[6];
-    uint32_t last_upld_req     = (uint32_t) target->cfg.usr_data.entry[7];
+    size_t num_rows_read = (size_t) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__NB_ROWS_RD];
+    uint32_t resource_owner_id = (uint32_t) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__RES_OWNER_ID];
+    uint32_t last_upld_req     = (uint32_t) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__UPLD_REQ_ID];
 #pragma GCC diagnostic pop
     if(num_rows_read == 1) {
-        app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
+        app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__MIDDLEWARE_NODE];
         app_save_int_to_hashmap(node->data, "last_upld_req", last_upld_req);
         app_save_int_to_hashmap(node->data, "resource_owner_id", resource_owner_id);
     }
-    app_validate_id_existence__rs_free(target, rs);
-} // end of app_validate_res_id_existence__rs_free
+    _app__upld_req_exist__rs_free(target, rs);
+} // end of _app_resource_id_exist__rs_free
 
 
 #define GET_USR_PROF_ID(node, usr_id) \
@@ -97,9 +103,7 @@ DBA_RES_CODE  app_validate_uncommitted_upld_req(RESTAPI_HANDLER_ARGS(self, req),
         app_middleware_fn failure_cb)
 {
     if(!self || !req || !node || !db_table || !err_cb || !failure_cb || !success_cb)
-    {
         return DBA_RESULT_ERROR_ARG;
-    }
     int usr_id  = 0;
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
     int req_seq = (int)app_fetch_from_hashmap(node->data, "req_seq");
@@ -113,7 +117,7 @@ DBA_RES_CODE  app_validate_uncommitted_upld_req(RESTAPI_HANDLER_ARGS(self, req),
     size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, db_table, usr_id, req_seq);
     assert(nwrite_sql < raw_sql_sz);
 #undef SQL_PATTERN
-#define  NUM_USR_ARGS  6
+#define  NUM_USR_ARGS   (DB_OP__USRARG_IDX__FAILURE_CB + 1)
     void *db_async_usr_data[NUM_USR_ARGS] = {(void *)req, (void *)self, (void *)node,
             (void *)0, (void *)success_cb, (void *)failure_cb };
     db_query_cfg_t  cfg = {
@@ -123,8 +127,8 @@ DBA_RES_CODE  app_validate_uncommitted_upld_req(RESTAPI_HANDLER_ARGS(self, req),
         .loop = req->conn->ctx->loop,
         .callbacks = {
             .result_rdy  = app_db_async_dummy_cb,
-            .row_fetched = app_validate_id_existence__row_fetch,
-            .result_free = app_validate_id_existence__rs_free,
+            .row_fetched = _app__upld_req_exist__row_fetch,
+            .result_free = _app__upld_req_exist__rs_free,
             .error = err_cb,
         }
     };
@@ -139,9 +143,8 @@ DBA_RES_CODE  app_verify_existence_resource_id (RESTAPI_HANDLER_ARGS(self, req),
     if(!self || !req || !node || !err_cb || !failure_cb || !success_cb)
         return DBA_RESULT_ERROR_ARG;
     char  *res_id_encoded = (char *)app_fetch_from_hashmap(node->data, "res_id_encoded");
-    if(!res_id_encoded) {
+    if(!res_id_encoded)
         return DBA_RESULT_ERROR_ARG;
-    }
 #define SQL_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`, HEX(`last_upld_req`) FROM `uploaded_file` WHERE `id` = ?' USING FROM_BASE64('%s');"
     size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(res_id_encoded);
     char raw_sql[raw_sql_sz];
@@ -149,7 +152,7 @@ DBA_RES_CODE  app_verify_existence_resource_id (RESTAPI_HANDLER_ARGS(self, req),
     size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, res_id_encoded);
     assert(nwrite_sql < raw_sql_sz);
 #undef SQL_PATTERN
-#define  NUM_USR_ARGS  8
+#define  NUM_USR_ARGS  (DB_OP__USRARG_IDX__UPLD_REQ_ID + 1)
     void *db_async_usr_data[NUM_USR_ARGS] = {(void *)req, (void *)self, (void *)node,
             (void *)0, (void *)success_cb, (void *)failure_cb, (void *)0, (void *)0 };
     db_query_cfg_t  cfg = {
@@ -159,8 +162,8 @@ DBA_RES_CODE  app_verify_existence_resource_id (RESTAPI_HANDLER_ARGS(self, req),
         .loop = req->conn->ctx->loop,
         .callbacks = {
             .result_rdy  = app_db_async_dummy_cb,
-            .row_fetched = app_validate_res_id_existence__row_fetch,
-            .result_free = app_validate_res_id_existence__rs_free,
+            .row_fetched = _app_resource_id_exist__row_fetch,
+            .result_free = _app_resource_id_exist__rs_free,
             .error = err_cb,
         }
     };
