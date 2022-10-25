@@ -230,6 +230,7 @@ SET(APP_TRANSCODE_TABLE_IN_HTTP_SERVER__SOURCE_FILES
 
 SET(APP_STREAMING_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
+    src/transcoder/crypto.c
     src/transcoder/video/hls/init_stream.c )
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
@@ -295,6 +296,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/mariadb.c
     test/unit/transcoder/cfg_parser.c
     test/unit/transcoder/file_processor.c
+    test/unit/transcoder/crypto.c
     test/unit/transcoder/storage.c
     test/unit/transcoder/video/mp4/init.c
     test/unit/transcoder/video/mp4/preload.c

@@ -6,6 +6,7 @@ TestSuite *appserver_cfg_parser_tests(void);
 TestSuite *app_transcoder_cfg_parser_tests(void);
 TestSuite *app_transcoder_file_processor_tests(void);
 TestSuite *app_transcoder_storage_tests(void);
+TestSuite *app_transcoder_crypto_tests(void);
 TestSuite *app_transcoder_mp4_init_tests(void);
 TestSuite *app_transcoder_mp4_preload_tests(void);
 TestSuite *app_transcoder_mp4_avcontext_tests(void);
@@ -55,6 +56,7 @@ int main(int argc, char **argv) {
     add_suite(suite, app_model_mariadb_tests());
     add_suite(suite, app_model_query_tests());
     add_suite(suite, app_transcoder_cfg_parser_tests());
+    add_suite(suite, app_transcoder_crypto_tests());
     add_suite(suite, app_transcoder_storage_tests());
     add_suite(suite, app_transcoder_file_processor_tests());
     add_suite(suite, app_transcoder_mp4_init_tests());

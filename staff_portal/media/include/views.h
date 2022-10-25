@@ -141,7 +141,11 @@ extern "C" {
     static int API_FINAL_HANDLER_##func_name(RESTAPI_HANDLER_ARGS(hdlr_var, req_var), app_middleware_node_t *node)
 
 
-#define MAX_BYTES_JOB_ID    70  // TODO, parameterize
+#define   MAX_BYTES_JOB_ID    70  // TODO, parameterize
+#define   API_QUERYPARAM_LABEL__RESOURCE_ID        "doc_id"
+#define   API_QUERYPARAM_LABEL__RESOURCE_VERSION   "doc_ver"
+#define   API_QUERYPARAM_LABEL__DETAIL_ELEMENT     "detail"
+
 
 DBA_RES_CODE  app_validate_uncommitted_upld_req (
     RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,

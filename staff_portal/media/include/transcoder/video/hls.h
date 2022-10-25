@@ -13,7 +13,11 @@ typedef struct atfp_hls_s {
     atfp_av_ctx_t  *av;
     asa_op_localfs_cfg_t  asa_local;
     struct {
-        struct {
+        struct { // TODO, replace with union
+            // ---- only for VOD/live stream
+            const char * (*get_crypto_key) (json_t *map, const char *key_id, json_t **item_out);
+            int  (*encrypt_document_id) (atfp_data_t *, json_t *key_item, unsigned char **out, size_t *out_sz);
+            // ---- only for transcoding
             int  (*avfilter_init)(struct atfp_hls_s *);
             int  (*avctx_init)(struct atfp_hls_s *);
             void (*avctx_deinit)(struct atfp_hls_s *);
@@ -47,12 +51,19 @@ typedef struct atfp_hls_s {
 #define  HLS_MASTER_PLAYLIST_FILENAME   "mst_plist.m3u8"
 #define  HLS_CRYPTO_KEY_FILENAME        "crypto_key.json"
 
+#define  HLS__NBYTES_KEY_ID     8
+#define  HLS__NBYTES_KEY        16 // can be 16, 24, 32 octets
+#define  HLS__NBYTES_IV         16 // for AES-CBC, it has to be as the same as block size (16 octets)
+
 // common
 atfp_t  *atfp__video_hls__instantiate(void);
 uint8_t  atfp__video_hls__label_match(const char *label);
+int  atfp_hls__encrypt_document_id (atfp_data_t *, json_t *keyitem,  unsigned char **out, size_t *out_sz);
 
 // api server
+atfp_t  *atfp__video_hls__instantiate_stream(void);
 void     atfp__video_hls__init_stream(atfp_t *);
+
 // rpc consumer
 atfp_t  *atfp__video_hls__instantiate_transcoder(void);
 void     atfp__video_hls__init_transcode(atfp_t *);

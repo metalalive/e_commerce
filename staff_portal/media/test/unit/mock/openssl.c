@@ -13,6 +13,9 @@ int OPENSSL_init_ssl(uint64_t opts, const OPENSSL_INIT_SETTINGS *settings)
 void OPENSSL_cleanse(void *ptr, size_t len)
 { mock(ptr, len); }
 
+unsigned char *OPENSSL_hexstr2buf(const char *str, long *len)
+{ return (unsigned char *) mock(str, len); }
+
 const SSL_METHOD *TLS_server_method(void)
 { return (const SSL_METHOD *)mock(); }
 
@@ -30,6 +33,38 @@ void EVP_PKEY_free(EVP_PKEY *pkey)
 
 int EVP_PKEY_assign(EVP_PKEY *pkey, int type, void *key)
 { return (int)mock(pkey, type, key); }
+
+EVP_CIPHER_CTX *EVP_CIPHER_CTX_new(void)
+{ return (EVP_CIPHER_CTX *) mock(); }
+
+void EVP_CIPHER_CTX_free(EVP_CIPHER_CTX *ctx)
+{ mock(ctx); }
+
+int EVP_EncryptInit_ex(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *type,  ENGINE *impl,
+        const unsigned char *key, const unsigned char *iv) {
+    return (int) mock(ctx, type, impl, key, iv);
+}
+
+int EVP_EncryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out,  int *outl, const unsigned char *in, int inl)
+{ return (int) mock(ctx, out, outl, in, inl); }
+
+int EVP_EncryptFinal_ex(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl)
+{ return (int) mock(ctx, out, outl); }
+
+int EVP_CIPHER_CTX_block_size(const EVP_CIPHER_CTX *ctx)
+{ return (int)mock(ctx); }
+
+int EVP_CIPHER_CTX_set_key_length(EVP_CIPHER_CTX *ctx, int keylen)
+{ return (int)mock(ctx, keylen); }
+
+const EVP_CIPHER *EVP_aes_128_cbc(void)
+{ return (const EVP_CIPHER *) mock(); }
+
+void CRYPTO_free(void *addr, const char *file, int line)
+{ mock(addr, file, line); }
+
+
+
 
 unsigned long SSL_CTX_set_options(SSL_CTX *ctx, unsigned long op)
 { return (unsigned long)mock(ctx, op); }

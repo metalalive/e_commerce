@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 #include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <jansson.h>
 #include <h2o.h>
 
@@ -141,6 +142,10 @@ typedef struct {
 #define   ATFP__COMMITTED_FOLDER_NAME         "committed"
 #define   ATFP__DISCARDING_FOLDER_NAME        "discarding"
 #define   ATFP__MAXSZ_STATUS_FOLDER_NAME   MAX(sizeof(ATFP__TEMP_TRANSCODING_FOLDER_NAME),MAX(sizeof(ATFP__COMMITTED_FOLDER_NAME),sizeof(ATFP__DISCARDING_FOLDER_NAME)))
+
+#define  ATFP_ENCRYPTED_FILE_FOLDERNAME   "encrypted"
+#define  ATFP_ENCRYPT_KEY_ID_FILENAME   "key_id"
+#define  ATFP__CRYPTO_KEY_MOST_RECENT   "recent"
 // In the transcoder, `atfp_t` object requires that each object of `asa_op_base_cfg_t` type
 //  should be able to find back to itself in the callback of `asa_op_base_cfg_t` type.
 // For simplicity, the transcoder `atfp_t` reserves the first field of user arguments of
@@ -198,6 +203,16 @@ int atfp_segment_final(atfp_segment_t *, json_t *info);
 int  atfp_scandir_load_fileinfo (asa_op_base_cfg_t *, json_t *err_info);
 
 void  atfp_storage__commit_new_version(atfp_t *);
+
+int  atfp_check_fileupdate_required(atfp_data_t *, const char *basepath,
+        const char *filename, float threshold_secs);
+
+// for crypto / key encryption
+size_t  atfp_get_encrypted_file_basepath (const char *basepath, char *out, size_t o_sz,
+        const char *doc_id, size_t id_sz);
+int  atfp_save_key_id_file_local(const char *basepath, const char *key_id);
+const char * atfp_get_crypto_key (json_t *keyinfo, const char *key_id, json_t **item_out);
+int  atfp_encrypt_document_id (EVP_CIPHER_CTX *, atfp_data_t *, json_t *kitem, unsigned char **out, size_t *out_sz);
 
 void  atfp__close_local_seg__cb  (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE);
 void  atfp__unlink_local_seg__cb (asa_op_base_cfg_t *, ASA_RES_CODE);

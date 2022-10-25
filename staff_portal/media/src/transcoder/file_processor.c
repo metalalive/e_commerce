@@ -2,6 +2,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include "datatypes.h"
 #include "transcoder/file_processor.h"
 
 extern atfp_ops_entry_t * _atfp_ops_table [];
@@ -227,3 +228,27 @@ int  atfp_scandir_load_fileinfo (asa_op_base_cfg_t *asaobj, json_t *err_info)
     }
     return err;
 } // end of atfp_scandir_load_fileinfo
+
+
+int  atfp_check_fileupdate_required(atfp_data_t *data, const char *basepath,
+        const char *filename, float threshold_secs)
+{ // check if a file at local app server should be refreshed since its latest update
+#define  ASA_SRC_BASEPATH_PATTERN  "%s/%d/%08x/%s"
+    int  required = 1;
+    size_t filepath_sz = sizeof(ASA_SRC_BASEPATH_PATTERN) + strlen(basepath) +
+        USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(data->upld_req_id) + strlen(filename) + 1;
+    char filepath[filepath_sz];
+    size_t nwrite = snprintf(&filepath[0], filepath_sz, ASA_SRC_BASEPATH_PATTERN,
+            basepath, data->usr_id, data->upld_req_id, filename);
+    assert(filepath_sz >= nwrite);
+    struct stat  statbuf = {0};
+    int ret = stat(&filepath[0], &statbuf); // TODO, invoke stat() asynchronously
+    if(!ret) {
+        time_t  last_update = statbuf.st_mtime;
+        time_t  curr_tm = time(NULL);
+        double  num_seconds = difftime(curr_tm, last_update);
+        required = (threshold_secs < num_seconds) || (statbuf.st_size == 0);
+    } // otherwise, file not found, update required
+    return required;
+#undef  ASA_SRC_BASEPATH_PATTERN
+} // end of atfp_check_fileupdate_required
