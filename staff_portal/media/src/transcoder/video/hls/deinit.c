@@ -158,10 +158,10 @@ static  void  _atfp_hls__final_dealloc(atfp_t *processor)
 static  void  atfp_hls__asaremote_closefile_cb(asa_op_base_cfg_t *asaremote, ASA_RES_CODE result)
 {
     atfp_t *processor = asaremote->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    if(processor->transfer.dst.flags.version_exists) {
+    if(processor->transfer.transcoded_dst.flags.version_exists) {
         processor->data.error = json_object();
         processor->data.callback = _atfp_hls__final_dealloc; // TODO, ensure no extra callback from rpc consumer
-        processor->transfer.dst.remove_file(processor, ATFP__DISCARDING_FOLDER_NAME);
+        processor->transfer.transcoded_dst.remove_file(processor, ATFP__DISCARDING_FOLDER_NAME);
     } else {
         _atfp_hls__final_dealloc(processor);
     }
@@ -172,7 +172,7 @@ static  void  atfp_hls__asalocal_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES
     atfp_hls_t *hlsproc = (atfp_hls_t *) H2O_STRUCT_FROM_MEMBER(atfp_hls_t, asa_local, asaobj);
     atfp_t *processor = &hlsproc -> super;
     asa_op_base_cfg_t *asaremote = processor ->data.storage.handle;
-    uint8_t  asa_remote_open = processor->transfer.dst.flags.asaremote_open != 0;
+    uint8_t  asa_remote_open = processor->transfer.transcoded_dst.flags.asaremote_open != 0;
     if (asa_remote_open) {
         asaremote->op.close.cb = atfp_hls__asaremote_closefile_cb;
         result =  asaremote->storage->ops.fn_close(asaremote);
@@ -204,7 +204,7 @@ uint8_t  atfp__video_hls__deinit_transcode(atfp_t *processor)
     DEINIT_IF_EXISTS(seg_cfg->filename.prefix.data, free);
     DEINIT_IF_EXISTS(seg_cfg->filename.pattern.data, free);
     DEINIT_IF_EXISTS(seg_cfg-> rdy_list.entries, free);
-    DEINIT_IF_EXISTS(processor->transfer.dst.info, json_decref);
+    DEINIT_IF_EXISTS(processor->transfer.transcoded_dst.info, json_decref);
     DEINIT_IF_EXISTS(asa_local_dstdata->super.cb_args.entries, free);
     DEINIT_IF_EXISTS(asa_local_dstdata->super.op.mkdir.path.prefix, free);
     DEINIT_IF_EXISTS(asa_local_dstdata->super.op.mkdir.path.origin, free);
@@ -212,8 +212,8 @@ uint8_t  atfp__video_hls__deinit_transcode(atfp_t *processor)
     DEINIT_IF_EXISTS(asa_local_dstdata->super.op.open.dst_path, free);
     // ensure file-descriptors in asa-local and asa-dst are closed
     ASA_RES_CODE  asa_result;
-    uint8_t  asa_local_open  = processor->transfer.dst.flags.asalocal_open  != 0;
-    uint8_t  asa_remote_open = processor->transfer.dst.flags.asaremote_open != 0;
+    uint8_t  asa_local_open  = processor->transfer.transcoded_dst.flags.asalocal_open  != 0;
+    uint8_t  asa_remote_open = processor->transfer.transcoded_dst.flags.asaremote_open != 0;
     if (asa_local_open) {
         asa_local_dstdata->super.op.close.cb = atfp_hls__asalocal_closefile_cb;
         asa_result = app_storage_localfs_close(&asa_local_dstdata->super);

@@ -160,10 +160,10 @@ void  atfp__close_local_seg__cb(asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_c
 {
     int err = 1;
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    processor->transfer.dst.flags.asalocal_open = 0;
+    processor->transfer.transcoded_dst.flags.asalocal_open = 0;
     if(result == ASTORAGE_RESULT_COMPLETE) {
-        atfp_segment_final(seg_cfg, processor->transfer.dst.info);
-        processor->transfer.dst.tot_nbytes_file += seg_cfg->transfer.nbytes;
+        atfp_segment_final(seg_cfg, processor->transfer.transcoded_dst.info);
+        processor->transfer.transcoded_dst.tot_nbytes_file += seg_cfg->transfer.nbytes;
         asa_op_base_cfg_t *asa_local = asaobj;
         asa_local->op.unlink.path = asa_local-> op.open.dst_path ;
         result = asa_local->storage->ops.fn_unlink(asa_local);
@@ -197,7 +197,7 @@ void atfp__open_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
     int err = 1;
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     if(result == ASTORAGE_RESULT_COMPLETE) {
-        processor->transfer.dst.flags.asalocal_open = 1;
+        processor->transfer.transcoded_dst.flags.asalocal_open = 1;
         asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
         result = asa_dst->storage->ops.fn_open(asa_dst);
         err = result != ASTORAGE_RESULT_ACCEPT;
@@ -216,7 +216,7 @@ void atfp__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_cfg,
     int err = 1;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_init(seg_cfg);
-        processor->transfer.dst.flags.asaremote_open = 1;
+        processor->transfer.transcoded_dst.flags.asaremote_open = 1;
         result = _asa_local->storage->ops.fn_read(_asa_local);
         err = result != ASTORAGE_RESULT_ACCEPT;
     }

@@ -109,7 +109,7 @@ static void _atfp_utest__commit_version__verify_existence(
     json_t *mock_errinfo = json_object(); \
     atfp_t  mock_fp = {.data={.error=mock_errinfo, .callback=utest__commit_new_version__done_cb, \
         .storage={.handle=&mock_asa_dst.super}, .usr_id=UTEST_USER_ID, .upld_req_id=UTEST_UPLOAD_REQ_ID, \
-        .version=UTEST_VERSION}, .transfer={.dst={.flags={.version_exists=EXPECT_VERSION_EXIST_FLAG}}}}; \
+        .version=UTEST_VERSION}, .transfer={.transcoded_dst={.flags={.version_exists=EXPECT_VERSION_EXIST_FLAG}}}}; \
     asa_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp; \
     asa_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
     mkdir(LOCAL_TMPBUF_BASEPATH, S_IRWXU); \

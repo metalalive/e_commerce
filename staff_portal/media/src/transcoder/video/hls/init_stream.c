@@ -33,12 +33,11 @@ static void _atfp_hls__final_dealloc(atfp_t *processor, uint8_t invoke_usr_cb) {
 
 
 #define  INIT_CONSTRUCT_URL_PLAYLIST(_spec) \
-    const char *host_domain = NULL, *res_id_label = NULL, *version_label = NULL,  *detail_label = NULL; \
+    const char *host_domain = NULL, *res_id_label = NULL,  *detail_label = NULL; \
     { \
         host_domain = json_string_value(json_object_get(_spec, "host")); \
         json_t *qparam_obj = json_object_get(_spec, "query_param_label"); \
         res_id_label  = json_string_value(json_object_get(qparam_obj, "resource_id")); \
-        version_label = json_string_value(json_object_get(qparam_obj, "version")); \
         detail_label  = json_string_value(json_object_get(qparam_obj, "detail")); \
     }
 
@@ -66,8 +65,7 @@ static  void  _atfp_hls__ensure_encrypted_basepath_cb (asa_op_base_cfg_t *_asa_l
     json_t *err_info  =  processor->data.error;
     json_t *_spec = processor->data.spec;
     if (result == ASTORAGE_RESULT_COMPLETE) {
-        const char *_crypto_key_id = json_string_value(json_object_get(_spec, "crypto_key_id"));
-        atfp_save_key_id_file_local(_asa_local->op.mkdir.path.origin, _crypto_key_id);
+        atfp_save_encryption_metadata(_asa_local->op.mkdir.path.origin, "hls", &processor->data);
         atfp_hls__init_stream__finish_cb (processor);
     } else {
         json_object_set_new(err_info, "storage", json_string("[hls] failed to init stream"));
@@ -323,7 +321,7 @@ void   atfp__video_hls__init_stream(atfp_t *processor)
     json_t *update_interval = json_object_get(_spec, "update_interval");
     float  keyfile_update_interval  = json_real_value(json_object_get(update_interval, "keyfile"));
     if (!loop || !update_interval || keyfile_update_interval < 1.0f || !host_domain ||
-            !res_id_label || !version_label || !detail_label) {
+            !res_id_label || !detail_label) {
         _http_resp_code = 400;
         json_object_set_new(_err_info, "transcoder", json_string("[hls] missing arguments in spec for constructing playlist"));
         goto done;
@@ -368,6 +366,21 @@ atfp_t  *atfp__video_hls__instantiate_stream(void)
         atfp_hls_t *hlsproc = (atfp_hls_t *)out;
         hlsproc->internal.op.get_crypto_key = atfp_get_crypto_key;
         hlsproc->internal.op.encrypt_document_id = atfp_hls__encrypt_document_id;
+        hlsproc->internal.op.build_master_playlist = atfp_hls_stream__build_mst_plist;
+        hlsproc->internal.op.build_secondary_playlist = atfp_hls_stream__build_lvl2_plist;
+        hlsproc->internal.op.encrypt_segment = atfp_hls_stream__encrypt_segment;
     }
     return out;
 } // end of  atfp__video_hls__instantiate_stream
+
+
+
+uint8_t atfp__video_hls__deinit_stream_element(atfp_t *processor)
+{
+    return 0;
+} // end of  atfp__video_hls__deinit_stream_element
+
+void   atfp__video_hls__seek_stream_element (atfp_t *processor)
+{
+} // end of  atfp__video_hls__seek_stream_element
+

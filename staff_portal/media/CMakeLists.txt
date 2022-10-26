@@ -194,7 +194,6 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/views/init.c
     src/views/common.c
     src/views/initiate_video_stream.c
-    src/views/fetch_video_stream_element.c
     src/views/monitor_job_progress.c
     src/views/initiate_multipart_upload.c
     src/views/complete_multipart_upload.c
@@ -231,6 +230,9 @@ SET(APP_TRANSCODE_TABLE_IN_HTTP_SERVER__SOURCE_FILES
 SET(APP_STREAMING_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
     src/transcoder/crypto.c
+    src/transcoder/video/hls/seeker/master_playlist.c
+    src/transcoder/video/hls/seeker/secondary_playlist.c
+    src/transcoder/video/hls/seeker/segment.c
     src/transcoder/video/hls/init_stream.c )
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
@@ -306,6 +308,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/hls/output.c
     test/unit/transcoder/video/hls/init.c
     test/unit/transcoder/video/hls/init_stream.c
+    test/unit/transcoder/video/hls/seeker/master_playlist.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c

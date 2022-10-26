@@ -72,6 +72,15 @@ typedef struct atfp_s {
     } filechunk_seq; // TODO, move into `transfer` field below, it is used only for source file processor 
     union {
         struct {
+            struct {
+                char   *data;
+                size_t  len;
+            } block;
+            struct {
+                uint8_t  is_final:1;
+            }  flags;
+        } streaming_dst;
+        struct {
             void   (*update_metadata)(struct atfp_s *, void *loop);
             void   (*remove_file)(struct atfp_s *, const char *status);
             json_t   *info;
@@ -81,7 +90,7 @@ typedef struct atfp_s {
                 uint8_t  asaremote_open:1;
                 uint8_t  version_exists:1;
             }  flags;
-        } dst; // TODO, add new field of type `atfp_segment_t`
+        } transcoded_dst; // TODO, add new field of type `atfp_segment_t`
     } transfer;
 } atfp_t;
 
@@ -144,14 +153,16 @@ typedef struct {
 #define   ATFP__MAXSZ_STATUS_FOLDER_NAME   MAX(sizeof(ATFP__TEMP_TRANSCODING_FOLDER_NAME),MAX(sizeof(ATFP__COMMITTED_FOLDER_NAME),sizeof(ATFP__DISCARDING_FOLDER_NAME)))
 
 #define  ATFP_ENCRYPTED_FILE_FOLDERNAME   "encrypted"
-#define  ATFP_ENCRYPT_KEY_ID_FILENAME   "key_id"
+#define  ATFP_ENCRYPT_METADATA_FILENAME   "metadata.json"
 #define  ATFP__CRYPTO_KEY_MOST_RECENT   "recent"
 // In the transcoder, `atfp_t` object requires that each object of `asa_op_base_cfg_t` type
 //  should be able to find back to itself in the callback of `asa_op_base_cfg_t` type.
 // For simplicity, the transcoder `atfp_t` reserves the first field of user arguments of
 // `asa_op_base_cfg_t` type  as a pointer to the associated file processor
-#define  ATFP_INDEX__IN_ASA_USRARG    0
-#define  ASAMAP_INDEX__IN_ASA_USRARG  1
+#define  ATFP_INDEX__IN_ASA_USRARG     0
+#define  ASAMAP_INDEX__IN_ASA_USRARG   1
+#define  SPEC_INDEX__IN_ASA_USRARG     2
+#define  ERRINFO_INDEX__IN_ASA_USRARG  3
 
 atfp_t * app_transcoder_file_processor(const char *label);
 
@@ -210,9 +221,14 @@ int  atfp_check_fileupdate_required(atfp_data_t *, const char *basepath,
 // for crypto / key encryption
 size_t  atfp_get_encrypted_file_basepath (const char *basepath, char *out, size_t o_sz,
         const char *doc_id, size_t id_sz);
-int  atfp_save_key_id_file_local(const char *basepath, const char *key_id);
+int  atfp_save_encryption_metadata(const char *basepath, const char *mimetype, atfp_data_t *fp_data);
 const char * atfp_get_crypto_key (json_t *keyinfo, const char *key_id, json_t **item_out);
 int  atfp_encrypt_document_id (EVP_CIPHER_CTX *, atfp_data_t *, json_t *kitem, unsigned char **out, size_t *out_sz);
+
+// for cached file at local API server
+asa_op_localfs_cfg_t  *atfp_cachefile_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
+       uint32_t buf_sz, asa_open_cb_t  _init_cb, asa_close_cb_t  _deinit_cb);
+void  atfp_cachefile_proceed_datablock (asa_op_base_cfg_t *, void *cb_p);
 
 void  atfp__close_local_seg__cb  (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE);
 void  atfp__unlink_local_seg__cb (asa_op_base_cfg_t *, ASA_RES_CODE);

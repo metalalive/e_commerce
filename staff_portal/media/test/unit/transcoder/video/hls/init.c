@@ -23,7 +23,7 @@ static  ASA_RES_CODE utest_hls__storage_fn_close (asa_op_base_cfg_t *asaobj)
     mock(asaobj, cb_result_ptr);
     {
         atfp_t *processor = (atfp_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-        processor->transfer.dst.flags.asaremote_open = 0;
+        processor->transfer.transcoded_dst.flags.asaremote_open = 0;
     }
     asaobj->op.close.cb(asaobj, cb_result);
     return  ASTORAGE_RESULT_ACCEPT;
@@ -232,9 +232,9 @@ Ensure(atfp_hls_test__deinit_asa_close_files) {
     { // de-init, assume some files were open but have not been closed yet
         int fd_local = open(UTEST_ASALOCAL_FILEPATH, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
         mock_fp->asa_local.file.file = fd_local;
-        mock_fp->super.transfer.dst.flags.asalocal_open  = 1;
-        mock_fp->super.transfer.dst.flags.asaremote_open = 1;
-        mock_fp->super.transfer.dst.flags.version_exists = 0;
+        mock_fp->super.transfer.transcoded_dst.flags.asalocal_open  = 1;
+        mock_fp->super.transfer.transcoded_dst.flags.asaremote_open = 1;
+        mock_fp->super.transfer.transcoded_dst.flags.version_exists = 0;
         expect(utest_hls__avctx_deinit,  when(hlsproc, is_equal_to(mock_fp)));
         ASA_RES_CODE  expect_cb_result = ASTORAGE_RESULT_COMPLETE;
         expect(utest_hls__storage_fn_close, will_set_contents_of_parameter(

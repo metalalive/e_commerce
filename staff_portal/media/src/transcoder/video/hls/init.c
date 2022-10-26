@@ -11,8 +11,8 @@ atfp_t  *atfp__video_hls__instantiate_transcoder(void)
     atfp_t  *out = atfp__video_hls__instantiate();
     if(out) {
         atfp_hls_t *hlsproc = (atfp_hls_t *)out;
-        out->transfer.dst.update_metadata = atfp_video__dst_update_metadata;
-        out->transfer.dst.remove_file = atfp_hls__remove_file;
+        out->transfer.transcoded_dst.update_metadata = atfp_video__dst_update_metadata;
+        out->transfer.transcoded_dst.remove_file = atfp_hls__remove_file;
         hlsproc->internal.op.avctx_init   = atfp_hls__av_init;
         hlsproc->internal.op.avctx_deinit = atfp_hls__av_deinit;
         hlsproc->internal.op.avfilter_init = atfp_hls__avfilter_init;
@@ -37,7 +37,7 @@ static void atfp_hls__create_local_workfolder_cb (asa_op_base_cfg_t *asaobj, ASA
     if(!err)
         err = hlsproc->internal.op.avfilter_init(hlsproc);
     if(!err)
-        processor->transfer.dst.info = json_object();
+        processor->transfer.transcoded_dst.info = json_object();
     processor -> data.callback(processor);
 } // end of atfp_hls__create_local_workfolder_cb
 
@@ -53,7 +53,8 @@ void  atfp__video_hls__init_transcode(atfp_t *processor)
         json_object_set_new(processor->data.error, "storage", json_string("[hls] no write buffer provided in asaobj"));
         processor -> data.callback(processor);
         return;
-    } else if (processor->transfer.dst.flags.asalocal_open || processor->transfer.dst.flags.asaremote_open) {
+    } else if (processor->transfer.transcoded_dst.flags.asalocal_open ||
+            processor->transfer.transcoded_dst.flags.asaremote_open) {
         json_object_set_new(processor->data.error, "transcoder", json_string("[hls] asaobj is not cleaned"));
         processor -> data.callback(processor);
         return;

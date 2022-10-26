@@ -61,7 +61,7 @@ static void  _atfp__ensure_dst_committed_basepath_cb(asa_op_base_cfg_t *asaobj, 
     atfp_t  *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     json_t  *err_info  = processor->data.error;
     if (result == ASTORAGE_RESULT_COMPLETE) {
-        uint8_t  _is_update = processor->transfer.dst.flags.version_exists;
+        uint8_t  _is_update = processor->transfer.transcoded_dst.flags.version_exists;
         size_t path_sz  = strlen(asaobj->op.mkdir.path.prefix) + 2 + ATFP__MAXSZ_STATUS_FOLDER_NAME;
         char  old_path[path_sz],  new_path[path_sz];
         PRINT_DST_PATH_STRING( &new_path[0], asaobj->op.mkdir.path.prefix,

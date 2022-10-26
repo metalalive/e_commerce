@@ -4,28 +4,41 @@
 #include "transcoder/file_processor.h"
 
 
-int  atfp_save_key_id_file_local(const char *basepath, const char *key_id) {
+int  atfp_save_encryption_metadata(const char *basepath, const char *mimetype, atfp_data_t *fp_data)
+{ // new file to save key ID applied to this video, TODO, async operation
+    if(!basepath || !mimetype || !fp_data || !fp_data->spec || fp_data->usr_id == 0
+            || fp_data->upld_req_id == 0)
+        return  1;
+    const char *key_id = json_string_value(json_object_get(fp_data->spec, "crypto_key_id"));
+    if(!key_id)
+        return  1;
+    int skipped = 0;
 #define  PATTERN  "%s/%s"
-    size_t filepath_sz = sizeof(PATTERN) + strlen(basepath) + sizeof(ATFP_ENCRYPT_KEY_ID_FILENAME) + 1;
+    size_t filepath_sz = sizeof(PATTERN) + strlen(basepath) + sizeof(ATFP_ENCRYPT_METADATA_FILENAME) + 1;
     char filepath[filepath_sz];
-    size_t nwrite = snprintf(&filepath[0], filepath_sz, PATTERN, basepath, ATFP_ENCRYPT_KEY_ID_FILENAME);
+    size_t nwrite = snprintf(&filepath[0], filepath_sz, PATTERN, basepath, ATFP_ENCRYPT_METADATA_FILENAME);
     assert(filepath_sz >= nwrite);
 #undef   PATTERN
     int ret = access(&filepath[0], F_OK);
     if(ret != 0) { // not exist
+        json_t *info = json_object();
+        json_object_set_new(info, "mimetype", json_string(mimetype));
+        json_object_set_new(info, "key_id", json_string(key_id));
+        json_object_set_new(info, "usr_id", json_integer(fp_data->usr_id));
+        json_object_set_new(info, "upld_req", json_integer(fp_data->upld_req_id));
         int  fd = open(&filepath[0], O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR);
-        ftruncate(fd, (off_t)0);
-        write(fd, key_id, strlen(key_id));
+        json_dumpfd((const json_t *)info, fd, JSON_COMPACT);
         close(fd);
+        json_decref(info);
     }
-    int skipped = ret == 0;
+    skipped = ret == 0;
 #if  1
     if(skipped)
         fprintf(stderr, "[atfp] line:%d, skip updating key ID to the path:%s \r\n",
                 __LINE__, basepath);
 #endif
     return skipped;
-} // new file to save key ID applied to this video, TODO, async operation
+} // end of  atfp_save_encryption_metadata
 
 
 // build path for cacheable encrypted files

@@ -204,12 +204,13 @@ Ensure(atfp_hls_test__init_stream__skip_key_rotation) {
     ATFP_HLS_TEST__INIT_STREAM__SPEC_SETUP
     _COMMON_CODE(MOCK_KEY_ITEM_1, 0)
     {
-        const char *path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1"/"ATFP_ENCRYPT_KEY_ID_FILENAME;
-        int fd = open(path, O_RDONLY, S_IRUSR);
-        char  rd_buf[100] = {0};
-        read(fd, &rd_buf[0], 100);
-        assert_that(&rd_buf[0], is_equal_to_string(key_id_hex));
-        close(fd);
+        const char *path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1"/"ATFP_ENCRYPT_METADATA_FILENAME;
+        json_t *_metadata = json_load_file(path, 0, NULL);
+        assert_that(json_string_value(json_object_get(_metadata, "key_id")), is_equal_to_string(key_id_hex));
+        assert_that(json_string_value(json_object_get(_metadata, "mimetype")), is_equal_to_string("hls"));
+        assert_that(json_integer_value(json_object_get(_metadata, "usr_id")), is_equal_to(MOCK_USER_ID));
+        assert_that(json_integer_value(json_object_get(_metadata, "upld_req")), is_equal_to(MOCK_UPLD_REQ_1_ID));
+        json_decref(_metadata);
     }
     ATFP_HLS_TEST__INIT_STREAM__TEARDOWN
 }  // end of  atfp_hls_test__init_stream__skip_key_rotation
@@ -222,9 +223,9 @@ Ensure(atfp_hls_test__init_stream__update_ok_2) {
     _COMMON_CODE(MOCK_KEY_ITEM_2, 1)
     {
         const char *path = NULL;
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1"/"ATFP_ENCRYPT_KEY_ID_FILENAME;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1"/"ATFP_ENCRYPT_METADATA_FILENAME;
         unlink(path);
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_2"/"ATFP_ENCRYPT_KEY_ID_FILENAME;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_2"/"ATFP_ENCRYPT_METADATA_FILENAME;
         unlink(path);
         path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1;
         rmdir(path);
@@ -255,6 +256,7 @@ Ensure(atfp_hls_test__init_stream__update_ok_2) {
 
 Ensure(atfp_hls_test__init_stream__args_error) {
     ATFP_HLS_TEST__INIT_STREAM__SETUP
+    (void *) loop;
     atfp__video_hls__init_stream(&mock_fp->super);
     size_t err_cnt = json_object_size(mock_err_info);
     assert_that(err_cnt, is_equal_to(1));

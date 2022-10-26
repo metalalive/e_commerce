@@ -36,7 +36,7 @@ static void  atfp_video__dst_update_metadata__rs_rdy(db_query_t *target, db_quer
 void  atfp_video__dst_update_metadata(atfp_t *processor, void *loop)
 {
     uv_loop_t *_loop = (uv_loop_t *) loop;
-    uint32_t  total_nbytes = processor->transfer.dst.tot_nbytes_file;
+    uint32_t  total_nbytes = processor->transfer.transcoded_dst.tot_nbytes_file;
     json_t  *req_spec = processor->data.spec;
     const char *version = processor->data.version;
     const char *res_id_encoded = json_string_value(json_object_get(req_spec, "res_id_encoded"));
@@ -49,7 +49,7 @@ void  atfp_video__dst_update_metadata(atfp_t *processor, void *loop)
     size_t  res_id_encoded_sz = strlen(res_id_encoded), version_sz = strlen(version);
     size_t  raw_sql_sz = UINT32_STR_SIZE * 3 + UINT8_STR_SIZE + version_sz + res_id_encoded_sz;
     size_t  nb_rawsql_used = 0;
-    uint8_t  _is_update =  processor->transfer.dst.flags.version_exists;
+    uint8_t  _is_update =  processor->transfer.transcoded_dst.flags.version_exists;
     raw_sql_sz += (_is_update) ? sizeof(SQL_PATTERN__METADATA_UPDATE): sizeof(SQL_PATTERN__METADATA_INSERT);
     char raw_sql[raw_sql_sz];
     if(_is_update) {

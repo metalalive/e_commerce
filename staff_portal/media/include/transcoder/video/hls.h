@@ -17,6 +17,9 @@ typedef struct atfp_hls_s {
             // ---- only for VOD/live stream
             const char * (*get_crypto_key) (json_t *map, const char *key_id, json_t **item_out);
             int  (*encrypt_document_id) (atfp_data_t *, json_t *key_item, unsigned char **out, size_t *out_sz);
+            void  (*build_master_playlist)(struct atfp_hls_s *);
+            void  (*build_secondary_playlist)(struct atfp_hls_s *);
+            void  (*encrypt_segment)(struct atfp_hls_s *);
             // ---- only for transcoding
             int  (*avfilter_init)(struct atfp_hls_s *);
             int  (*avctx_init)(struct atfp_hls_s *);
@@ -35,8 +38,7 @@ typedef struct atfp_hls_s {
         } op;
         atfp_segment_t  segment; // TODO, consider to move to parent type `atfp_t`
         // ---- for init VOD stream ----
-        uint8_t  num_plist_merged:7;
-        uint8_t  local_plist_lock_owner:1;
+        uint8_t  num_plist_merged;
     } internal;
 } atfp_hls_t;
 
@@ -63,6 +65,8 @@ int  atfp_hls__encrypt_document_id (atfp_data_t *, json_t *keyitem,  unsigned ch
 // api server
 atfp_t  *atfp__video_hls__instantiate_stream(void);
 void     atfp__video_hls__init_stream(atfp_t *);
+uint8_t  atfp__video_hls__deinit_stream_element(atfp_t *);
+void     atfp__video_hls__seek_stream_element (atfp_t *);
 
 // rpc consumer
 atfp_t  *atfp__video_hls__instantiate_transcoder(void);
@@ -89,6 +93,11 @@ uint8_t  atfp_av_filter__has_done_flushing(atfp_av_ctx_t *src, atfp_av_ctx_t *ds
 uint8_t  atfp_av_encoder__has_done_flushing(atfp_av_ctx_t *dst);
 
 ASA_RES_CODE  atfp_hls__try_flush_to_storage(atfp_hls_t *);
+
+void  atfp_hls_stream__build_mst_plist(atfp_hls_t *);
+void  atfp_hls_stream__build_mst_plist__continue (atfp_hls_t *);
+void  atfp_hls_stream__build_lvl2_plist(atfp_hls_t *);
+void  atfp_hls_stream__encrypt_segment(atfp_hls_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause
