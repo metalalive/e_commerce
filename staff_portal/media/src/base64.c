@@ -156,3 +156,15 @@ unsigned char * base64_decode(const unsigned char *src, size_t len,
 	*out_len = pos - out;
 	return out;
 }
+
+
+int  is_base64_encoded(const unsigned char *src, size_t len)
+{
+    int verify_ok = 1;   size_t idx = 0;
+    for(idx = 0; (verify_ok) && (idx < len); idx++) {
+        unsigned char c = src[idx];
+        verify_ok = ('z' >= c && c >= 'a') || ('Z' >= c && c >= 'A') ||
+            ('9' >= c && c >= '/') || ('=' == c) || ('+' == c);
+    } // end of loop
+    return verify_ok;
+} // end of is_base64_encoded

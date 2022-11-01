@@ -1,5 +1,6 @@
 #include <cgreen/cgreen.h>
 #include "utils.h"
+#include "base64.h"
 
 #define  NUM_TEST_NODES 8
 Ensure(app_llnode_link_test) {
@@ -127,18 +128,20 @@ Ensure(app_hashmap_access_test) {
 #undef  NUM_ENTRIES_HASHMAP
 
 
-#define  EXPECT_NUM_ITEMS  3
-#define  RAW_STRING_LEN    80
+#define  EXPECT_NUM_ITEMS  5
+#define  RAW_STRING_LEN    140
 Ensure(app_url_decode_query_param_test) {
     const char *kv[EXPECT_NUM_ITEMS][2] = {
-        {"cumin", "clove"},
+        {"cumin", "clove+garlic"},
+        {"sesame","coriander"},
         {"wasabi", NULL},
+        {"chilli", "bayan=-omega===zoo"},
         {"dill", "mustard"},
     }; // pairs of query parameters expected to be in raw URI
     char raw_query_param[RAW_STRING_LEN] = {0};
     // should NOT include question mark --> `?`  symbol
-    snprintf(&raw_query_param[0], (size_t)RAW_STRING_LEN, "%s=%s&%s&%s=%s&",
-           kv[0][0], kv[0][1], kv[1][0], kv[2][0], kv[2][1] );
+    snprintf(&raw_query_param[0], (size_t)RAW_STRING_LEN, "%s=%s&%s=%s&%s&%s=%s&%s=%s&", kv[0][0], kv[0][1],
+           kv[1][0], kv[1][1], kv[2][0],  kv[3][0], kv[3][1],  kv[4][0], kv[4][1]);
     json_t *map = json_object();
     int actual_num_items = app_url_decode_query_param(&raw_query_param[0], map);
     assert_that(actual_num_items, is_equal_to(EXPECT_NUM_ITEMS));
@@ -191,6 +194,20 @@ Ensure(app_chararray_to_hexstr_test) {
 } // end of app_chararray_to_hexstr_test
 
 
+Ensure(app_base64_check_encoded_test) {
+    int ok = 0; size_t len = 16;
+    ok = is_base64_encoded((const unsigned char *)"g91oi+w3Qur/pcO=", len);
+    assert_that(ok, is_equal_to(1));
+    ok = is_base64_encoded((const unsigned char *)"piqyRqhM3hoBigh3", len);
+    assert_that(ok, is_equal_to(1));
+    ok = is_base64_encoded((const unsigned char *)"hw=Efg-Weu/fkr==", len);
+    assert_that(ok, is_equal_to(0));
+    ok = is_base64_encoded((const unsigned char *)"8hwEfgWeufker+==", len);
+    assert_that(ok, is_equal_to(1));
+    ok = is_base64_encoded((const unsigned char *)"hwHefgu/fk@r0SjA", len);
+    assert_that(ok, is_equal_to(0));
+} // end of app_base64_check_encoded_test
+
 TestSuite *app_utils_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -198,6 +215,7 @@ TestSuite *app_utils_tests(void)
     add_test(suite, app_hashmap_access_test);
     add_test(suite, app_url_decode_query_param_test);
     add_test(suite, app_chararray_to_hexstr_test);
+    add_test(suite, app_base64_check_encoded_test);
     return suite;
 } // end of app_utils_tests
 

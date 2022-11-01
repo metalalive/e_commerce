@@ -67,12 +67,11 @@ int app_url_decode_query_param(char *data, json_t *map) {
     { // strtok_r is thread-safe
         char *ptr = NULL;
         char *name  = strtok_r(tok,  "=", &ptr);
-        char *value = strtok_r(NULL, "=", &ptr);
-        if(!name) {
+        char *value = ptr; // in case the value contains equal symbol, do not use  strtok_r(NULL, "=", &ptr);
+        if(!name)
             continue;
-        }
         json_t *obj_val = NULL;
-        if(value) {
+        if(value && strlen(value) > 0) {
             obj_val = json_string(value);
         } else {
             obj_val = json_true();
