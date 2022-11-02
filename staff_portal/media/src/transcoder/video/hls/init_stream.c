@@ -2,12 +2,14 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <openssl/err.h>
 #include <openssl/bn.h>
 
 #include "app_cfg.h"
+#include "views.h"
 #include "transcoder/video/hls.h"
 
 // TODO, parameterize
@@ -377,10 +379,44 @@ atfp_t  *atfp__video_hls__instantiate_stream(void)
 
 uint8_t atfp__video_hls__deinit_stream_element(atfp_t *processor)
 {
+    asa_op_base_cfg_t  *asa_src = processor->data.storage.handle;
+    if(asa_src) {
+        processor->data.storage.handle = NULL;
+        asa_src->deinit(asa_src);
+    }
+    free(processor);
     return 0;
 } // end of  atfp__video_hls__deinit_stream_element
 
 void   atfp__video_hls__seek_stream_element (atfp_t *processor)
 {
+    json_t *_err_info = processor->data.error;
+    json_t *_spec = processor->data.spec;
+    atfp_hls_t *hlsproc = (atfp_hls_t *)processor;
+    void  (*_fn)(atfp_hls_t *) = NULL;
+    const char *detail = json_string_value(json_object_get(_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+#define  CHECK_ELEMENT_FILE(fn0, fn1_name,  _pattern, _prefix_sz , _extra_cond) \
+    if (!fn0) { \
+        size_t  pattern_sz = sizeof(_pattern) - 1; \
+        int  ret = strncmp(&detail[_prefix_sz], _pattern, pattern_sz); \
+        if((ret == 0) && (_extra_cond)) \
+            fn0 = hlsproc->internal.op.fn1_name; \
+    }
+    if(detail) {
+        CHECK_ELEMENT_FILE(_fn, build_master_playlist,  HLS_MASTER_PLAYLIST_FILENAME, 0, 1)
+        CHECK_ELEMENT_FILE(_fn, build_secondary_playlist, HLS_PLAYLIST_FILENAME, APP_TRANSCODED_VERSION_SIZE + 1,
+                isalnum(detail[0]) && isalnum(detail[1]) && detail[APP_TRANSCODED_VERSION_SIZE] == '/')
+        CHECK_ELEMENT_FILE(_fn, encrypt_segment, HLS_SEGMENT_FILENAME_PREFIX,  APP_TRANSCODED_VERSION_SIZE + 1,
+                isalnum(detail[0]) && isalnum(detail[1]) && detail[APP_TRANSCODED_VERSION_SIZE] == '/')
+        CHECK_ELEMENT_FILE(_fn, encrypt_segment, HLS_FMP4_FILENAME, APP_TRANSCODED_VERSION_SIZE + 1,
+                isalnum(detail[0]) && isalnum(detail[1]) && detail[APP_TRANSCODED_VERSION_SIZE] == '/')
+    }
+    if (_fn) {
+        _fn(hlsproc);
+    } else {
+        json_object_set_new(_err_info, "transcoder", json_string("[hls] invalid path"));
+        json_object_set_new(_err_info, "_http_resp_code", json_integer(400));
+    }
+#undef  CHECK_ELEMENT_FILE
 } // end of  atfp__video_hls__seek_stream_element
 

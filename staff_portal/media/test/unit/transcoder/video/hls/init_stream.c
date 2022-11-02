@@ -7,6 +7,7 @@
 #include <uv.h>
 
 #include "app_cfg.h"
+#include "views.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
 
@@ -335,6 +336,84 @@ Ensure(atfp_hls_test__init_stream__encrypt_id_error) {
 #undef  MOCK_UPDATE_SECS_KEYFILE
 
 
+
+
+static void  utest_hls_stream_elm__build_mst_plist (atfp_hls_t *_hlsproc)
+{ mock(_hlsproc); }
+
+static void  utest_hls_stream_elm__build_lvl2_plist (atfp_hls_t *_hlsproc)
+{ mock(_hlsproc); }
+
+static void  utest_hls_stream_elm__encrypt_segment (atfp_hls_t *_hlsproc)
+{ mock(_hlsproc); }
+
+
+#define    HLS_TEST__SEEK_STREAM_ELEMENT__SETUP \
+    json_t *mock_spec = json_object(); \
+    json_t *mock_err_info = json_object(); \
+    atfp_hls_t  mock_fp = {.super={.data={.spec=mock_spec, .error=mock_err_info}}, \
+        .internal={.op={.build_master_playlist=utest_hls_stream_elm__build_mst_plist, \
+            .build_secondary_playlist=utest_hls_stream_elm__build_lvl2_plist, \
+            .encrypt_segment=utest_hls_stream_elm__encrypt_segment \
+        }} \
+    };
+
+#define    HLS_TEST__SEEK_STREAM_ELEMENT__TEARDOWN \
+    json_decref(mock_spec); \
+    json_decref(mock_err_info);
+
+Ensure(atfp_hls_test__seek_stream_element__ok) {
+    HLS_TEST__SEEK_STREAM_ELEMENT__SETUP
+#define RUN(_path, fn_name) { \
+        json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string(_path)); \
+        expect(fn_name, when(_hlsproc, is_equal_to(&mock_fp))); \
+        atfp__video_hls__seek_stream_element (&mock_fp.super); \
+    }
+    RUN(HLS_MASTER_PLAYLIST_FILENAME, utest_hls_stream_elm__build_mst_plist)
+    RUN("xU/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
+    RUN("Lh/"HLS_FMP4_FILENAME, utest_hls_stream_elm__encrypt_segment)
+    RUN("9B/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
+    RUN("k5/"HLS_SEGMENT_FILENAME_PREFIX, utest_hls_stream_elm__encrypt_segment)
+    HLS_TEST__SEEK_STREAM_ELEMENT__TEARDOWN
+#undef RUN
+} // end of  atfp_hls_test__seek_stream_element__ok
+
+Ensure(atfp_hls_test__seek_stream_element__invalid_detail) {
+    HLS_TEST__SEEK_STREAM_ELEMENT__SETUP
+#define RUN(_path) { \
+        const char *__path = _path; \
+        if(!__path || strlen(__path) == 0) { \
+            json_object_del(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT); \
+        } else  { \
+            json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string(__path)); \
+        } \
+        atfp__video_hls__seek_stream_element (&mock_fp.super); \
+        assert_that(json_object_size(mock_err_info), is_greater_than(0)); \
+        int http_resp_status = json_integer_value(json_object_get(mock_err_info, "_http_resp_code")); \
+        assert_that(http_resp_status, is_equal_to(400)); \
+        assert_that(json_object_get(mock_err_info, "transcoder"), is_not_null); \
+        json_object_clear(mock_err_info); \
+    }
+    RUN("")
+    RUN("non-existent")
+    RUN("x"HLS_MASTER_PLAYLIST_FILENAME)
+    RUN("xXxx"HLS_MASTER_PLAYLIST_FILENAME)
+    RUN("ab$e"HLS_PLAYLIST_FILENAME)
+    RUN("/x/"HLS_MASTER_PLAYLIST_FILENAME)
+    RUN("ab$"HLS_PLAYLIST_FILENAME)
+    RUN("fa0"HLS_FMP4_FILENAME)
+    RUN(HLS_PLAYLIST_FILENAME)
+    RUN("xin"HLS_SEGMENT_FILENAME_PREFIX)
+    RUN(HLS_FMP4_FILENAME)
+    RUN("///rust"HLS_SEGMENT_FILENAME_PREFIX)
+    RUN("/e/a/"HLS_SEGMENT_FILENAME_PREFIX)
+    RUN("///"HLS_FMP4_FILENAME)
+    RUN("/i/"HLS_SEGMENT_FILENAME_PREFIX)
+    HLS_TEST__SEEK_STREAM_ELEMENT__TEARDOWN
+#undef RUN
+} // end of atfp_hls_test__seek_stream_element__invalid_detail
+
+
 TestSuite *app_transcoder_hls_init_stream_tests(void) {
     TestSuite *suite = create_test_suite();
     add_test(suite, atfp_hls_test__init_stream__update_ok_1); // the 3 cases will run sequentially
@@ -343,5 +422,7 @@ TestSuite *app_transcoder_hls_init_stream_tests(void) {
     add_test(suite, atfp_hls_test__init_stream__args_error);
     add_test(suite, atfp_hls_test__init_stream__key_rotate_fail);
     add_test(suite, atfp_hls_test__init_stream__encrypt_id_error);
+    add_test(suite, atfp_hls_test__seek_stream_element__ok);
+    add_test(suite, atfp_hls_test__seek_stream_element__invalid_detail);
     return suite;
 }
