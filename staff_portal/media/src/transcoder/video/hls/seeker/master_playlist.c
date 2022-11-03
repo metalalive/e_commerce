@@ -1,38 +1,8 @@
-#include "storage/cfg_parser.h"
+#include "datatypes.h"
 #include "transcoder/video/hls.h"
-
 #define   NUM_USRARGS_ASA_SRC     (ATFP_INDEX__IN_ASA_USRARG + 1)
 
-#define  DEINIT_IF_EXISTS(var, fn_name) \
-    if(var) { \
-        fn_name((void *)var); \
-        (var) = NULL; \
-    }
-
 static  ASA_RES_CODE atfp_hls__open_src_mst_plist (atfp_hls_t *);
-
-static void _atfp_hls__deinit__final_dealloc (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result)
-{
-    if(asa_src->op.scandir.fileinfo.data) {
-        for(int idx = 0; idx < asa_src->op.scandir.fileinfo.size; idx++) {
-            asa_dirent_t  *e = &asa_src->op.scandir.fileinfo.data[idx];
-            DEINIT_IF_EXISTS(e->name, free);
-        }
-    }
-    DEINIT_IF_EXISTS(asa_src->op.scandir.fileinfo.data, free);
-    DEINIT_IF_EXISTS(asa_src->op.scandir.path, free);
-    DEINIT_IF_EXISTS(asa_src->op.open.dst_path, free);
-    free(asa_src);
-}
-
-static void _atfp_hls__deinit_build_mst_plist (asa_op_base_cfg_t *asa_src)
-{
-    asa_src->op.close.cb = _atfp_hls__deinit__final_dealloc;
-    ASA_RES_CODE result  = asa_src->storage->ops.fn_close(asa_src);
-    if(result != ASTORAGE_RESULT_ACCEPT)
-        _atfp_hls__deinit__final_dealloc(asa_src, result);
-}
-
 
 
 static  void  _atfp_hls__close_src_mst_plist_cb (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result)
@@ -59,12 +29,19 @@ static  void  _atfp_hls__read_src_mst_plist_cb (asa_op_base_cfg_t *asa_src, ASA_
     atfp_t *processor = &hlsproc->super;
     // NOTE, this application assumes the read buffer is sufficient to read whole beginning
     // part of ext-x tags, so there is only one read operation to the source playlist
+    size_t _eof_reached = nread <= asa_src->op.read.dst_sz;
+    if(!_eof_reached) {
+        fprintf(stderr, "[hls][mst_plist] line:%d, insufficient read buffer \r\n", __LINE__);
+        goto done;
+    }
+    processor->transfer.streaming_dst.flags.eof_reached = _eof_reached;
+    asa_src->op.read.dst[nread] = 0x0;
     int entry_idx = asa_src->op.scandir.fileinfo.rd_idx - 1;
     if (result != ASTORAGE_RESULT_COMPLETE)
         goto done;
     char *stream_inf_start = strstr(asa_src->op.read.dst, "\n" "#EXT-X-STREAM-INF");
     if(!stream_inf_start) {
-        fprintf(stderr, "[hls] line:%d, invalid content in source master playlist \r\n", __LINE__);
+        fprintf(stderr, "[hls][mst_plist] line:%d, invalid content \r\n", __LINE__);
         goto done;
     }
     char *stream_inf_end = strstr(stream_inf_start + 1, "\n"); // skip new-line chars
@@ -82,10 +59,11 @@ static  void  _atfp_hls__read_src_mst_plist_cb (asa_op_base_cfg_t *asa_src, ASA_
         asa_dirent_t *ver_entry = & asa_src->op.scandir.fileinfo.data[ entry_idx ];
         size_t nb_buf_avail = asa_src->op.read. dst_max_nbytes - ((size_t)stream_inf_end
                 - (size_t)asa_src->op.read.dst);
-        size_t  nwrite = snprintf(stream_inf_end, nb_buf_avail, "https://%s%s?%s=%s&%s=%s/%s\n",
-                host_domain, host_path, doc_id_label, doc_id, detail_label, ver_entry->name,
-                HLS_PLAYLIST_FILENAME); // build path of secondary playlist
-        assert(nb_buf_avail > nwrite);
+#define  HLS__URL_PATTERN    "https://%s%s?%s=%s&%s=%s/%s\n"
+        size_t  nwrite = snprintf(stream_inf_end, nb_buf_avail, HLS__URL_PATTERN, host_domain,
+                host_path, doc_id_label, doc_id, detail_label, ver_entry->name, HLS_PLAYLIST_FILENAME);
+        assert(nb_buf_avail > nwrite);  // build path of secondary playlist
+#undef   HLS__URL_PATTERN
         stream_inf_end += nwrite; // including the new generaated URL
     }
     char  *wr_buf = (hlsproc->internal.num_plist_merged++ == 0) ? asa_src->op.read.dst: stream_inf_start;
@@ -106,13 +84,13 @@ static  void  _atfp_hls__open_src_mst_plist_cb (asa_op_base_cfg_t *asa_src, ASA_
     atfp_t *processor = &hlsproc->super;
     asa_src->op.open.dst_path = NULL;
     if (result == ASTORAGE_RESULT_COMPLETE) {
-        asa_src->op.read.dst_sz = asa_src->op.read.dst_max_nbytes;
+        asa_src->op.read.dst_sz = asa_src->op.read.dst_max_nbytes - 1;
         asa_src->op.read.cb = _atfp_hls__read_src_mst_plist_cb;
         result = asa_src->storage->ops.fn_read(asa_src);
         if(result != ASTORAGE_RESULT_ACCEPT)
-            fprintf(stderr, "[hls] line:%d, error on reading src master playlist \r\n", __LINE__);
+            fprintf(stderr, "[hls][mst_plist] line:%d, error on reading file \r\n", __LINE__);
     } else { // it is possible to have other video quality encoded with non-HLS format
-        fprintf(stderr, "[hls] line:%d, error on opening src master playlist \r\n", __LINE__);
+        fprintf(stderr, "[hls][mst_plist] line:%d, error on opening file \r\n", __LINE__);
         result = atfp_hls__open_src_mst_plist(hlsproc);
     }
     if(result != ASTORAGE_RESULT_ACCEPT) {
@@ -123,7 +101,7 @@ static  void  _atfp_hls__open_src_mst_plist_cb (asa_op_base_cfg_t *asa_src, ASA_
 } // end of  _atfp_hls__open_src_mst_plist_cb
 
 
-static  __attribute__((optimize("O0")))  ASA_RES_CODE atfp_hls__open_src_mst_plist (atfp_hls_t *hlsproc)
+static  ASA_RES_CODE atfp_hls__open_src_mst_plist (atfp_hls_t *hlsproc)
 {
     ASA_RES_CODE result;
     atfp_t *processor = &hlsproc->super;
@@ -157,12 +135,12 @@ static  __attribute__((optimize("O0")))  ASA_RES_CODE atfp_hls__open_src_mst_pli
         asa_src->op.open.cb  = _atfp_hls__open_src_mst_plist_cb;
         result = asa_src->storage->ops.fn_open(asa_src);
         if(result != ASTORAGE_RESULT_ACCEPT) {
-            fprintf(stderr, "[hls] line:%d, failed to open src master playlist \r\n", __LINE__);
+            fprintf(stderr, "[hls][mst_plist] line:%d, failed to open file \r\n", __LINE__);
             json_object_set_new(err_info, "storage", json_string("[hls] internal error"));
             asa_src->op.open.dst_path = NULL;
         }
     } else { // end of video version iteration, no more media playlist
-        fprintf(stderr, "[hls] line:%d, reach end of iteration on version folders \r\n", __LINE__);
+        fprintf(stderr, "[hls][mst_plist] line:%d, reach end of iteration on version folders \r\n", __LINE__);
         result = ASTORAGE_RESULT_EOF_SCAN;
         if(hlsproc->internal.num_plist_merged == 0) {
             json_object_set_new(err_info, "_http_resp_code", json_integer(404));
@@ -200,17 +178,17 @@ static  void atfp_hls__scandir_versions_cb (asa_op_base_cfg_t *asa_src, ASA_RES_
                 hlsproc->internal.op.build_master_playlist = atfp_hls_stream__build_mst_plist__continue;
             } else {
                 json_object_set_new(err_info, "hls", json_string("[storage] no version avaiable"));
-                fprintf(stderr, "[hls] line:%d, no version available in the path:%s \r\n",
+                fprintf(stderr, "[hls][mst_plist] line:%d, no version available in the path:%s \r\n",
                         __LINE__, asa_src->op.scandir.path);
             }
         } else {
-            fprintf(stderr, "[hls] line:%d, error when loading file info from the path:%s \r\n",
+            fprintf(stderr, "[hls][mst_plist] line:%d, error when loading file info from the path:%s \r\n",
                     __LINE__, asa_src->op.scandir.path);
         }
     } else {
         _http_resp_code = 404;
         json_object_set_new(err_info, "storage", json_string("[hls] unknown source path"));
-        fprintf(stderr, "[hls] line:%d, error on scandir, versions unknown \r\n", __LINE__);
+        fprintf(stderr, "[hls][mst_plist] line:%d, error on scandir, versions unknown \r\n", __LINE__);
     }
     if(json_object_size(err_info) > 0)
         json_object_set_new(err_info, "_http_resp_code", json_integer(_http_resp_code));
@@ -218,64 +196,27 @@ static  void atfp_hls__scandir_versions_cb (asa_op_base_cfg_t *asa_src, ASA_RES_
 } // end of  atfp_hls__scandir_versions_cb
 
 
-static void atfp_hls_stream__build_mst_plist__start (atfp_hls_t *hlsproc)
+static  ASA_RES_CODE atfp_hls_stream__build_mst_plist__start (asa_op_base_cfg_t *asa_src, atfp_t *processor)
 {
-    atfp_t *processor = & hlsproc->super;
-    json_t *err_info  =  processor->data.error;
-    json_t *spec  =  processor->data.spec;
-    asa_op_base_cfg_t  *asa_src = processor->data.storage.handle;
     uint32_t  _usr_id = processor->data.usr_id;
     uint32_t  _upld_req_id = processor->data.upld_req_id;
-    if(!err_info || !spec || _usr_id==0 || _upld_req_id==0) {
-        fprintf(stderr, "[hls][build_mst_plist] line:%d, missing argument from caller \r\n",  __LINE__ );
-        goto error;
-    } else if(asa_src) {
-        fprintf(stderr, "[hls][build_mst_plist] line:%d, asa_src field reserved for internal use. \r\n",  __LINE__ );
-        goto error;
-    }
-    const char *storage_alias = json_string_value(json_object_get(spec, "storage_alias"));
-    size_t  _buf_max_sz = json_integer_value(json_object_get(spec, "buf_max_sz"));
-    if(!storage_alias || _buf_max_sz==0) {
-        fprintf(stderr, "[hls][build_mst_plist] line:%d, missing argument in spec \r\n",  __LINE__ );
-        goto error;
-    }
-    asa_cfg_t *storage = app_storage_cfg_lookup(storage_alias);
-    asa_src =  app_storage__init_asaobj_helper (storage, NUM_USRARGS_ASA_SRC, _buf_max_sz, 0);
-    if(!asa_src) {
-        fprintf(stderr, "[hls][build_mst_plist] line:%d, missing argument \r\n",  __LINE__ );
-        goto error;
-    }
-    void *loop = (void *) json_integer_value(json_object_get(spec, "loop"));
-    if(!strcmp(storage_alias, "localfs")) // TODO
-        ((asa_op_localfs_cfg_t *)asa_src)->loop = loop;
-    asa_src->deinit = _atfp_hls__deinit_build_mst_plist;
-    {
 #define  ASA_SRC_BASEPATH_PATTERN  "%s/%d/%08x/%s"
-        size_t  scan_path_sz = sizeof(ASA_SRC_BASEPATH_PATTERN) + strlen(asa_src->storage->base_path)
-            + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(ATFP__COMMITTED_FOLDER_NAME) + 1;
-        char  *scanning_path = calloc(scan_path_sz, sizeof(char));
-        size_t  nwrite = snprintf(&scanning_path[0], scan_path_sz, ASA_SRC_BASEPATH_PATTERN,
-                asa_src->storage->base_path, _usr_id, _upld_req_id, ATFP__COMMITTED_FOLDER_NAME);
-        assert(scan_path_sz >= nwrite);
-        asa_src->op.scandir.path =  scanning_path;
-        asa_src->op.scandir.cb =  atfp_hls__scandir_versions_cb;
-        ASA_RES_CODE result =  asa_src->storage->ops.fn_scandir(asa_src);
-        if(result != ASTORAGE_RESULT_ACCEPT) {
-            fprintf(stderr, "[hls][build_mst_plist] line:%d, failed to fetch video resolutions \r\n",  __LINE__ );
-            goto error;
-        }
+    size_t  scan_path_sz = sizeof(ASA_SRC_BASEPATH_PATTERN) + strlen(asa_src->storage->base_path)
+        + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(ATFP__COMMITTED_FOLDER_NAME) + 1;
+    char  *scanning_path = calloc(scan_path_sz, sizeof(char));
+    size_t  nwrite = snprintf(&scanning_path[0], scan_path_sz, ASA_SRC_BASEPATH_PATTERN,
+            asa_src->storage->base_path, _usr_id, _upld_req_id, ATFP__COMMITTED_FOLDER_NAME);
+    assert(scan_path_sz >= nwrite);
+    asa_src->op.scandir.path =  scanning_path;
+    asa_src->op.scandir.cb =  atfp_hls__scandir_versions_cb;
+    return asa_src->storage->ops.fn_scandir(asa_src);
 #undef   ASA_SRC_BASEPATH_PATTERN
-    }
-    asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = processor;
-    processor->data.storage.handle = asa_src;
-    return;
-error:
-    json_object_set_new(err_info, "transcoder", json_string("[hls] internal error"));
-    if(asa_src)
-        asa_src->deinit(asa_src);
-} // end of atfp_hls_stream__build_mst_plist__start
-
+}
 
 void atfp_hls_stream__build_mst_plist (atfp_hls_t *hlsproc)
-{  atfp_hls_stream__build_mst_plist__start (hlsproc); }
-
+{
+    json_t *spec = hlsproc->super.data.spec;
+    json_object_set_new(spec, "num_usrargs_asa_src", json_integer(NUM_USRARGS_ASA_SRC));
+    atfp_hls_stream_seeker__init_common (hlsproc, atfp_hls_stream__build_mst_plist__start);
+    hlsproc->asa_local.super.deinit = NULL; // always use default de-init function in ../init_stream.c
+}

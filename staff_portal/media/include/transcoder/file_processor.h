@@ -69,7 +69,9 @@ typedef struct atfp_s {
         uint32_t  next;
         asa_open_cb_t  usr_cb;
         uint8_t   eof_reached;
-    } filechunk_seq; // TODO, move into `transfer` field below, it is used only for source file processor 
+        // TODO, move into  `transfer`.`transcoded_dst` field below, it is used only
+        // for source file processor during transcoding
+    } filechunk_seq;
     union {
         struct {
             struct {
@@ -78,13 +80,14 @@ typedef struct atfp_s {
             } block;
             struct {
                 uint8_t  is_final:1;
+                uint8_t  eof_reached:1;
             }  flags;
         } streaming_dst;
         struct {
             void   (*update_metadata)(struct atfp_s *, void *loop);
             void   (*remove_file)(struct atfp_s *, const char *status);
-            json_t   *info;
             uint32_t  tot_nbytes_file;
+            json_t   *info;
             struct { // for transfer transcoded files from local to destination storage
                 uint8_t  asalocal_open:1;
                 uint8_t  asaremote_open:1;
@@ -124,7 +127,7 @@ typedef struct {
         uint32_t  curr_idx; // the index to the item in `rdy_list` field above
         uint8_t   eof_reached:1;
     } transfer;
-} atfp_segment_t;
+} atfp_segment_t; // used for moving transcoded files from dedicated server to remote storage
 
 typedef struct {
     asa_op_base_cfg_t  *handle;

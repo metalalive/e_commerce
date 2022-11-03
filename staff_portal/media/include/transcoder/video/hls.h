@@ -37,8 +37,7 @@ typedef struct atfp_hls_s {
             uint8_t  (*has_done_flush_encoder)(atfp_av_ctx_t *dst);
         } op;
         atfp_segment_t  segment; // TODO, consider to move to parent type `atfp_t`
-        // ---- for init VOD stream ----
-        uint8_t  num_plist_merged;
+        uint8_t  num_plist_merged; // for master playlist
     } internal;
 } atfp_hls_t;
 
@@ -52,6 +51,8 @@ typedef struct atfp_hls_s {
 #define  HLS_PLAYLIST_FILENAME          "lvl2_plist.m3u8"
 #define  HLS_MASTER_PLAYLIST_FILENAME   "mst_plist.m3u8"
 #define  HLS_CRYPTO_KEY_FILENAME        "crypto_key.json"
+#define  HLS_REQ_KEYFILE_LABEL          "key_request"
+#define  HLS_PLIST_TARGET_DURATION_MAX_BYTES    15 // max nbytes occupied in tag EXT-X-TARGETDURATION
 
 #define  HLS__NBYTES_KEY_ID     8
 #define  HLS__NBYTES_KEY        16 // can be 16, 24, 32 octets
@@ -94,10 +95,18 @@ uint8_t  atfp_av_encoder__has_done_flushing(atfp_av_ctx_t *dst);
 
 ASA_RES_CODE  atfp_hls__try_flush_to_storage(atfp_hls_t *);
 
+void  atfp_hls_stream_seeker__init_common (atfp_hls_t *, ASA_RES_CODE (*)(asa_op_base_cfg_t *, atfp_t *));
 void  atfp_hls_stream__build_mst_plist(atfp_hls_t *);
 void  atfp_hls_stream__build_mst_plist__continue (atfp_hls_t *);
 void  atfp_hls_stream__build_lvl2_plist(atfp_hls_t *);
+void  atfp_hls_stream__lvl2_plist__parse_header (atfp_hls_t *hlsproc);
+void  atfp_hls_stream__lvl2_plist__parse_extinf (atfp_hls_t *hlsproc);
 void  atfp_hls_stream__encrypt_segment(atfp_hls_t *);
+
+char * atfp_hls_lvl2pl__load_curr_rd_ptr(atfp_hls_t *);
+void   atfp_hls_lvl2pl__save_curr_rd_ptr(atfp_hls_t *, char *ptr);
+size_t  atfp_hls_lvl2pl__load_num_unread(atfp_hls_t *);
+size_t  atfp_hls_lvl2pl__load_segment_idx(atfp_hls_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause

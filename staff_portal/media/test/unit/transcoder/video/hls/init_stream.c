@@ -364,16 +364,24 @@ static void  utest_hls_stream_elm__encrypt_segment (atfp_hls_t *_hlsproc)
 
 Ensure(atfp_hls_test__seek_stream_element__ok) {
     HLS_TEST__SEEK_STREAM_ELEMENT__SETUP
-#define RUN(_path, fn_name) { \
-        json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string(_path)); \
+#define RUN(_version, _path, fn_name) { \
+        const char *_expect_version = _version; \
+        json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, \
+                json_string(_version  _path)); \
         expect(fn_name, when(_hlsproc, is_equal_to(&mock_fp))); \
         atfp__video_hls__seek_stream_element (&mock_fp.super); \
+        if(_expect_version && strlen(_expect_version)) \
+            assert_that(mock_fp.super.data.version, is_equal_to_string(_expect_version)); \
+        if(mock_fp.super.data.version) { \
+            free((void *)mock_fp.super.data.version); \
+            mock_fp.super.data.version = NULL; \
+        } \
     }
-    RUN(HLS_MASTER_PLAYLIST_FILENAME, utest_hls_stream_elm__build_mst_plist)
-    RUN("xU/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
-    RUN("Lh/"HLS_FMP4_FILENAME, utest_hls_stream_elm__encrypt_segment)
-    RUN("9B/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
-    RUN("k5/"HLS_SEGMENT_FILENAME_PREFIX, utest_hls_stream_elm__encrypt_segment)
+    RUN("", HLS_MASTER_PLAYLIST_FILENAME, utest_hls_stream_elm__build_mst_plist)
+    RUN("xU", "/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
+    RUN("Lh", "/"HLS_FMP4_FILENAME, utest_hls_stream_elm__encrypt_segment)
+    RUN("9B", "/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
+    RUN("k5", "/"HLS_SEGMENT_FILENAME_PREFIX, utest_hls_stream_elm__encrypt_segment)
     HLS_TEST__SEEK_STREAM_ELEMENT__TEARDOWN
 #undef RUN
 } // end of  atfp_hls_test__seek_stream_element__ok

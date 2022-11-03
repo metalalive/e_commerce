@@ -379,12 +379,19 @@ atfp_t  *atfp__video_hls__instantiate_stream(void)
 
 uint8_t atfp__video_hls__deinit_stream_element(atfp_t *processor)
 {
+    atfp_hls_t  *hlsproc = (atfp_hls_t *)processor;
+    asa_op_base_cfg_t  *_asa_local = &hlsproc->asa_local.super;
     asa_op_base_cfg_t  *asa_src = processor->data.storage.handle;
     if(asa_src) {
         processor->data.storage.handle = NULL;
         asa_src->deinit(asa_src);
     }
-    free(processor);
+    DEINIT_IF_EXISTS(processor->data.version, free);
+    if(_asa_local->deinit) {
+        _asa_local->deinit(_asa_local);
+    } else {
+        DEINIT_IF_EXISTS(processor, free);
+    }
     return 0;
 } // end of  atfp__video_hls__deinit_stream_element
 
@@ -395,20 +402,26 @@ void   atfp__video_hls__seek_stream_element (atfp_t *processor)
     atfp_hls_t *hlsproc = (atfp_hls_t *)processor;
     void  (*_fn)(atfp_hls_t *) = NULL;
     const char *detail = json_string_value(json_object_get(_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
-#define  CHECK_ELEMENT_FILE(fn0, fn1_name,  _pattern, _prefix_sz , _extra_cond) \
+#define  CHECK_ELEMENT_FILE(fn0, fn1_name,  _pattern, _prefix_sz , _version_required, _extra_cond) \
     if (!fn0) { \
         size_t  pattern_sz = sizeof(_pattern) - 1; \
         int  ret = strncmp(&detail[_prefix_sz], _pattern, pattern_sz); \
         if((ret == 0) && (_extra_cond)) \
             fn0 = hlsproc->internal.op.fn1_name; \
+        if(fn0 && _version_required && !processor->data.version) { \
+            size_t  uint_sz = sizeof(uint32_t); \
+            size_t  alloc_sz = uint_sz + APP_TRANSCODED_VERSION_SIZE - (APP_TRANSCODED_VERSION_SIZE % uint_sz); \
+            processor->data.version = calloc(alloc_sz, sizeof(char)); \
+            strncpy((char *)processor->data.version, &detail[0], APP_TRANSCODED_VERSION_SIZE); \
+        } \
     }
     if(detail) {
-        CHECK_ELEMENT_FILE(_fn, build_master_playlist,  HLS_MASTER_PLAYLIST_FILENAME, 0, 1)
-        CHECK_ELEMENT_FILE(_fn, build_secondary_playlist, HLS_PLAYLIST_FILENAME, APP_TRANSCODED_VERSION_SIZE + 1,
+        CHECK_ELEMENT_FILE(_fn, build_master_playlist,  HLS_MASTER_PLAYLIST_FILENAME, 0, 0, 1)
+        CHECK_ELEMENT_FILE(_fn, build_secondary_playlist, HLS_PLAYLIST_FILENAME, APP_TRANSCODED_VERSION_SIZE + 1, 1,
                 isalnum(detail[0]) && isalnum(detail[1]) && detail[APP_TRANSCODED_VERSION_SIZE] == '/')
-        CHECK_ELEMENT_FILE(_fn, encrypt_segment, HLS_SEGMENT_FILENAME_PREFIX,  APP_TRANSCODED_VERSION_SIZE + 1,
+        CHECK_ELEMENT_FILE(_fn, encrypt_segment, HLS_SEGMENT_FILENAME_PREFIX,  APP_TRANSCODED_VERSION_SIZE + 1, 1,
                 isalnum(detail[0]) && isalnum(detail[1]) && detail[APP_TRANSCODED_VERSION_SIZE] == '/')
-        CHECK_ELEMENT_FILE(_fn, encrypt_segment, HLS_FMP4_FILENAME, APP_TRANSCODED_VERSION_SIZE + 1,
+        CHECK_ELEMENT_FILE(_fn, encrypt_segment, HLS_FMP4_FILENAME, APP_TRANSCODED_VERSION_SIZE + 1, 1,
                 isalnum(detail[0]) && isalnum(detail[1]) && detail[APP_TRANSCODED_VERSION_SIZE] == '/')
     }
     if (_fn) {
