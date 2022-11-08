@@ -29,7 +29,7 @@
 #define  MOCK__QUERYPARAM_LABEL__DETAIL    "ut_detail_keyword"
 
 
-static  __attribute__((optimize("O0")))  void _utest_hls_lvl2_plist__common_done_cb (atfp_t *processor)
+static  void _utest_hls_lvl2_plist__common_done_cb (atfp_t *processor)
 {
     asa_op_base_cfg_t  *asa_src = processor->data.storage.handle;
     json_t  *err_info = processor->data.error;
@@ -71,6 +71,10 @@ static  __attribute__((optimize("O0")))  void _utest_hls_lvl2_plist__common_done
         .internal={.op={.build_secondary_playlist=atfp_hls_stream__build_lvl2_plist, \
             .get_crypto_key=atfp_get_crypto_key}} \
     }; \
+    json_object_set_new(mock_spec, "loop", json_integer((uint64_t)loop)); \
+    json_object_set_new(mock_spec, "buf_max_sz", json_integer(RD_BUF_MAX_SZ)); \
+    json_object_set_new(mock_spec, "storage_alias", json_string(MOCK_STORAGE_ALIAS)); \
+    json_object_set_new(mock_spec, "metadata", mock_doc_metadata); \
     mkdir(UTEST_FILE_BASEPATH,   S_IRWXU); \
     mkdir(UTEST_ASASRC_BASEPATH, S_IRWXU); \
     mkdir(UTEST_ASALOCAL_BASEPATH, S_IRWXU); \
@@ -83,11 +87,7 @@ static  __attribute__((optimize("O0")))  void _utest_hls_lvl2_plist__common_done
     UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, \
             ATFP__COMMITTED_FOLDER_NAME, UTEST_OPS_MKDIR); \
     UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID, \
-            ATFP__COMMITTED_FOLDER_NAME"/"MOCK_VERSION_STR, UTEST_OPS_MKDIR); \
-    json_object_set_new(mock_spec, "loop", json_integer((uint64_t)loop)); \
-    json_object_set_new(mock_spec, "buf_max_sz", json_integer(RD_BUF_MAX_SZ)); \
-    json_object_set_new(mock_spec, "storage_alias", json_string(MOCK_STORAGE_ALIAS)); \
-    json_object_set_new(mock_spec, "metadata", mock_doc_metadata);
+            ATFP__COMMITTED_FOLDER_NAME"/"MOCK_VERSION_STR, UTEST_OPS_MKDIR);
 
 
 #define  HLS__LVL2_PLIST_VALIDATE__TEARDOWN \
@@ -218,7 +218,7 @@ Ensure(atfp_hls_test__l2_pl__validate_missing_key) {
                 when(out_chunkbytes_sz, is_equal_to(0)), when(out_chunkbytes, is_null));
         while(!mock_done_flag)
             uv_run(loop, UV_RUN_ONCE);
-        assert_that(json_object_get(mock_err_info, "storage") , is_not_null);
+        assert_that(json_object_get(mock_err_info, "transcoder") , is_not_null);
     }
     UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASASRC_BASEPATH, MOCK_USER_ID, MOCK_UPLD_REQ_1_ID,
         ATFP__COMMITTED_FOLDER_NAME"/"MOCK_VERSION_STR"/"HLS_PLAYLIST_FILENAME, UTEST_OPS_UNLINK);

@@ -370,6 +370,7 @@ atfp_t  *atfp__video_hls__instantiate_stream(void)
         hlsproc->internal.op.encrypt_document_id = atfp_hls__encrypt_document_id;
         hlsproc->internal.op.build_master_playlist = atfp_hls_stream__build_mst_plist;
         hlsproc->internal.op.build_secondary_playlist = atfp_hls_stream__build_lvl2_plist;
+        hlsproc->internal.op.acquire_key = atfp_hls_stream__acquire_key;
         hlsproc->internal.op.encrypt_segment = atfp_hls_stream__encrypt_segment;
     }
     return out;
@@ -416,6 +417,7 @@ void   atfp__video_hls__seek_stream_element (atfp_t *processor)
         } \
     }
     if(detail) {
+        CHECK_ELEMENT_FILE(_fn, acquire_key,  HLS_REQ_KEYFILE_LABEL, 0, 0, 1)
         CHECK_ELEMENT_FILE(_fn, build_master_playlist,  HLS_MASTER_PLAYLIST_FILENAME, 0, 0, 1)
         CHECK_ELEMENT_FILE(_fn, build_secondary_playlist, HLS_PLAYLIST_FILENAME, APP_TRANSCODED_VERSION_SIZE + 1, 1,
                 isalnum(detail[0]) && isalnum(detail[1]) && detail[APP_TRANSCODED_VERSION_SIZE] == '/')
@@ -432,4 +434,3 @@ void   atfp__video_hls__seek_stream_element (atfp_t *processor)
     }
 #undef  CHECK_ELEMENT_FILE
 } // end of  atfp__video_hls__seek_stream_element
-

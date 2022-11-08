@@ -29,38 +29,11 @@ size_t  atfp_hls_lvl2pl__load_segment_idx(atfp_hls_t* _h)
 // , this function re-invent the wheels and  parses the playlist in asynchronous operation
 // , find out better implementation option for this.
 
-void  atfp_hls_stream__load_crypto_key (atfp_hls_t *hlsproc)
-{
-    atfp_t *processor = & hlsproc->super;
-    json_t *err_info = processor->data.error;
-    json_t *spec = processor->data.spec;
-    json_t *keyinfo = json_loadfd(hlsproc->asa_local.file.file, JSON_REJECT_DUPLICATES, NULL);
-    json_t *_metadata = json_object_get(spec, "metadata");
-    const char  *_key_id = json_string_value(json_object_get(_metadata, "key_id"));
-    if(keyinfo && _key_id) {
-        json_t *keyitem = NULL;
-        hlsproc->internal.op.get_crypto_key(keyinfo, _key_id, &keyitem);
-        if(keyitem) { // TODO, ensure the object will be deallocated
-            json_object_set(spec, "_crypto_key", keyitem);
-        } else {
-            fprintf(stderr, "[hls][lvl2_plist] line:%d, key item not found \r\n", __LINE__);
-            json_object_set_new(err_info, "_http_resp_code", json_integer(404));
-            json_object_set_new(err_info, "storage", json_string("[hls] not found"));
-        }
-        json_decref(keyinfo);
-    } else {
-        fprintf(stderr, "[hls][lvl2_plist] line:%d, error on parsing crypto key file \r\n", __LINE__);
-        json_object_set_new(err_info, "storage", json_string("[hls] internal error"));
-    }
-} // end of  atfp_hls_stream__load_crypto_key
-
-
 
 static __attribute__((optimize("O0")))  void _atfp_hls_stream__lvl2_plist__parse_extint (atfp_hls_t *hlsproc)
 {
     atfp_t *processor = &hlsproc->super;
     json_t *spec = processor->data.spec;
-    asa_op_base_cfg_t  *asa_src = processor->data.storage.handle;
     size_t  _wrbuf_max_sz = json_integer_value(json_object_get(spec, "wrbuf_max_sz"));
     size_t  curr_wr_sz = 0, url_placeholder_sz = 2 * 6;
 #define  URL_PATTERN   "\nhttps://%s%s?%s=%s&%s=%s/" HLS_SEGMENT_FILENAME_PREFIX  HLS_SEGMENT_FILENAME_NUM_FORMAT
@@ -253,7 +226,7 @@ done:
 } // end of  _atfp_hls__build_lvl2_plist__modify_map_tag
 
 
-   __attribute__((optimize("O0"))) void  atfp_hls_stream__lvl2_plist__parse_header (atfp_hls_t *hlsproc)
+void  atfp_hls_stream__lvl2_plist__parse_header (atfp_hls_t *hlsproc)
 {
     atfp_t *processor = &hlsproc->super;
     json_t *err_info = processor->data.error;
@@ -398,7 +371,7 @@ static  void _atfp_hls__open_local_keyfile_cb (asa_op_base_cfg_t *_asa_local, AS
     atfp_t *processor = & hlsproc->super;
     json_t *err_info = processor->data.error;
     if (result == ASTORAGE_RESULT_COMPLETE) {
-        atfp_hls_stream__load_crypto_key (hlsproc);
+        atfp_hls_stream__load_crypto_key (hlsproc, hlsproc->asa_local.file.file);
         _asa_local->op.close.cb = _atfp_hls__close_local_keyfile_cb;
         result = _asa_local->storage->ops.fn_close(_asa_local);
     } else {

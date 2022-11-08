@@ -347,6 +347,9 @@ static void  utest_hls_stream_elm__build_lvl2_plist (atfp_hls_t *_hlsproc)
 static void  utest_hls_stream_elm__encrypt_segment (atfp_hls_t *_hlsproc)
 { mock(_hlsproc); }
 
+static void  utest_hls_stream_elm__acquire_key (atfp_hls_t *_hlsproc)
+{ mock(_hlsproc); }
+
 
 #define    HLS_TEST__SEEK_STREAM_ELEMENT__SETUP \
     json_t *mock_spec = json_object(); \
@@ -354,6 +357,7 @@ static void  utest_hls_stream_elm__encrypt_segment (atfp_hls_t *_hlsproc)
     atfp_hls_t  mock_fp = {.super={.data={.spec=mock_spec, .error=mock_err_info}}, \
         .internal={.op={.build_master_playlist=utest_hls_stream_elm__build_mst_plist, \
             .build_secondary_playlist=utest_hls_stream_elm__build_lvl2_plist, \
+            .acquire_key=utest_hls_stream_elm__acquire_key, \
             .encrypt_segment=utest_hls_stream_elm__encrypt_segment \
         }} \
     };
@@ -382,6 +386,7 @@ Ensure(atfp_hls_test__seek_stream_element__ok) {
     RUN("Lh", "/"HLS_FMP4_FILENAME, utest_hls_stream_elm__encrypt_segment)
     RUN("9B", "/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
     RUN("k5", "/"HLS_SEGMENT_FILENAME_PREFIX, utest_hls_stream_elm__encrypt_segment)
+    RUN("", HLS_REQ_KEYFILE_LABEL, utest_hls_stream_elm__acquire_key)
     HLS_TEST__SEEK_STREAM_ELEMENT__TEARDOWN
 #undef RUN
 } // end of  atfp_hls_test__seek_stream_element__ok
@@ -407,6 +412,7 @@ Ensure(atfp_hls_test__seek_stream_element__invalid_detail) {
     RUN("x"HLS_MASTER_PLAYLIST_FILENAME)
     RUN("xXxx"HLS_MASTER_PLAYLIST_FILENAME)
     RUN("ab$e"HLS_PLAYLIST_FILENAME)
+    RUN("xj"HLS_REQ_KEYFILE_LABEL)
     RUN("/x/"HLS_MASTER_PLAYLIST_FILENAME)
     RUN("ab$"HLS_PLAYLIST_FILENAME)
     RUN("fa0"HLS_FMP4_FILENAME)

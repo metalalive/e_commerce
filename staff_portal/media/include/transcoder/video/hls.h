@@ -19,6 +19,7 @@ typedef struct atfp_hls_s {
             int  (*encrypt_document_id) (atfp_data_t *, json_t *key_item, unsigned char **out, size_t *out_sz);
             void  (*build_master_playlist)(struct atfp_hls_s *);
             void  (*build_secondary_playlist)(struct atfp_hls_s *);
+            void  (*acquire_key)(struct atfp_hls_s *);
             void  (*encrypt_segment)(struct atfp_hls_s *);
             // ---- only for transcoding
             int  (*avfilter_init)(struct atfp_hls_s *);
@@ -96,11 +97,16 @@ uint8_t  atfp_av_encoder__has_done_flushing(atfp_av_ctx_t *dst);
 ASA_RES_CODE  atfp_hls__try_flush_to_storage(atfp_hls_t *);
 
 void  atfp_hls_stream_seeker__init_common (atfp_hls_t *, ASA_RES_CODE (*)(asa_op_base_cfg_t *, atfp_t *));
+void  _atfp_hls__stream_seeker_asalocal_deinit (asa_op_base_cfg_t *_asa_local);
+void  atfp_hls_stream__load_crypto_key (atfp_hls_t *, int fd);
+
 void  atfp_hls_stream__build_mst_plist(atfp_hls_t *);
 void  atfp_hls_stream__build_mst_plist__continue (atfp_hls_t *);
 void  atfp_hls_stream__build_lvl2_plist(atfp_hls_t *);
 void  atfp_hls_stream__lvl2_plist__parse_header (atfp_hls_t *hlsproc);
 void  atfp_hls_stream__lvl2_plist__parse_extinf (atfp_hls_t *hlsproc);
+void  atfp_hls_stream__acquire_key(atfp_hls_t *);
+void  atfp_hls_stream__acquire_key__final (atfp_hls_t *);
 void  atfp_hls_stream__encrypt_segment(atfp_hls_t *);
 
 char * atfp_hls_lvl2pl__load_curr_rd_ptr(atfp_hls_t *);

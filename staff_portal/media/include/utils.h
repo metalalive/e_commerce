@@ -27,6 +27,7 @@ void app_llnode_link(app_llnode_t *curr, app_llnode_t *prev, app_llnode_t *new);
 void app_llnode_unlink(app_llnode_t *node);
 
 int app_chararray_to_hexstr(char *out, size_t out_sz, const char *in, size_t in_sz);
+int app_hexstr_to_chararray(char *out, size_t out_sz, const char *in, size_t in_sz);
 
 #ifdef __cplusplus
 } // end of extern C clause

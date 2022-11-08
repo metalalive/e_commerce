@@ -29,7 +29,7 @@ static void _atfp_hls__stream_seeker_asasrc_deinit (asa_op_base_cfg_t *asa_src)
         _atfp_hls__deinit_asasrc_final(asa_src, result);
 }
 
-static void _atfp_hls__stream_seeker_asalocal_deinit (asa_op_base_cfg_t *_asa_local)
+void _atfp_hls__stream_seeker_asalocal_deinit (asa_op_base_cfg_t *_asa_local)
 {
     atfp_t *processor = (atfp_t *) H2O_STRUCT_FROM_MEMBER(atfp_hls_t, asa_local, _asa_local);
     DEINIT_IF_EXISTS(processor->transfer.streaming_dst.block.data, free);
@@ -84,3 +84,29 @@ error:
     if(asa_src)
         asa_src->deinit(asa_src);
 } // end of  atfp_hls_stream_seeker__init_common
+
+
+void  atfp_hls_stream__load_crypto_key (atfp_hls_t *hlsproc, int fd)
+{
+    atfp_t *processor = & hlsproc->super;
+    json_t *err_info = processor->data.error;
+    json_t *spec = processor->data.spec;
+    json_t *keyinfo = json_loadfd(fd, JSON_REJECT_DUPLICATES, NULL);
+    json_t *_metadata = json_object_get(spec, "metadata");
+    const char  *_key_id = json_string_value(json_object_get(_metadata, "key_id"));
+    if(keyinfo && _key_id) {
+        json_t *keyitem = NULL;
+        hlsproc->internal.op.get_crypto_key(keyinfo, _key_id, &keyitem);
+        if(keyitem) { // TODO, ensure the object will be deallocated
+            json_object_set(spec, "_crypto_key", keyitem);
+        } else {
+            fprintf(stderr, "[hls][lvl2_plist] line:%d, key item not found \r\n", __LINE__);
+            json_object_set_new(err_info, "_http_resp_code", json_integer(404));
+            json_object_set_new(err_info, "transcoder", json_string("[hls] not found"));
+        }
+        json_decref(keyinfo);
+    } else {
+        fprintf(stderr, "[hls][lvl2_plist] line:%d, error on parsing crypto key file \r\n", __LINE__);
+        json_object_set_new(err_info, "transcoder", json_string("[hls] internal error"));
+    }
+} // end of  atfp_hls_stream__load_crypto_key

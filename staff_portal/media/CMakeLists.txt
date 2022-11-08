@@ -233,6 +233,7 @@ SET(APP_STREAMING_SOURCE_FILES
     src/transcoder/video/hls/seeker/common.c
     src/transcoder/video/hls/seeker/master_playlist.c
     src/transcoder/video/hls/seeker/secondary_playlist.c
+    src/transcoder/video/hls/seeker/cryptokey.c
     src/transcoder/video/hls/seeker/segment.c
     src/transcoder/video/hls/init_stream.c )
 
@@ -311,6 +312,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/hls/init_stream.c
     test/unit/transcoder/video/hls/seeker/master_playlist.c
     test/unit/transcoder/video/hls/seeker/secondary_playlist.c
+    test/unit/transcoder/video/hls/seeker/cryptokey.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c

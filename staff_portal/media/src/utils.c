@@ -125,3 +125,35 @@ int app_chararray_to_hexstr(char *out, size_t out_sz, const char *in, size_t in_
     }
     return 0; // ok
 }
+
+int app_hexstr_to_chararray(char *out, size_t out_sz, const char *in, size_t in_sz)
+{ // this function assume the input is an octet array of hex char
+    int err = 0;
+    if(!out || !in || in_sz == 0 || out_sz == 0) {
+        err = 1;
+    } else if ((out_sz << 1) != in_sz) {
+        err = 2;
+    }
+    if(err)
+        goto done;
+    for(size_t idx = 0; idx < in_sz; idx++) {
+        char c = in[idx];
+        int8_t  n = -1;
+        if('0' <= c && c <= '9') {
+            n = c - '0';
+        } else if('a' <= c && c <= 'f') {
+            n = c - 'a' + 0xa;
+        } else if('A' <= c && c <= 'F') {
+            n = c - 'A' + 0xa;
+        } else { // invalid char in hex string input
+            err = 3;
+            break;
+        }
+        size_t octet_pos = idx >> 1,  bit_pos = (~idx & 1) << 2;
+        if(bit_pos != 0)
+            out[octet_pos] = 0;
+        out[octet_pos] |= n << bit_pos;
+    } // end of loop
+done:
+    return  err;
+}

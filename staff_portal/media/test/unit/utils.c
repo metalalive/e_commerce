@@ -180,8 +180,7 @@ Ensure(app_chararray_to_hexstr_test) {
         err = app_chararray_to_hexstr(&actual_hex[0], NBYTES_OUT, &in[0], NBYTES_IN);
         assert_that(err, is_equal_to(0));
         assert_that(actual_hex, is_equal_to_string(expect_hex));
-    }
-    { // subcase
+    } { // subcase
         char in[NBYTES_IN] = {'a', 'B', 'c', '@', 'J'};
         char expect_hex[NBYTES_OUT + 1] = "614263404a\x00";
         char actual_hex[NBYTES_OUT + 1] = {0};
@@ -192,6 +191,45 @@ Ensure(app_chararray_to_hexstr_test) {
 #undef NBYTES_IN 
 #undef NBYTES_OUT
 } // end of app_chararray_to_hexstr_test
+
+
+Ensure(app_hexstr_to_chararray_test) {
+    int err = 0;
+    char dummy[2];
+    err = app_hexstr_to_chararray(NULL, 3, NULL, 7);
+    assert_that(err, is_equal_to(1));
+    err = app_hexstr_to_chararray(&dummy[0], 13, (const char *)&dummy[1], 14);
+    assert_that(err, is_equal_to(2));
+#define NBYTES_IN   10
+#define NBYTES_OUT  5
+    { // subcase
+        char in[NBYTES_IN] = "bea0348f51";
+        char expect_octet[NBYTES_OUT] = {0xbe, 0xa0, 0x34, 0x8f, 0x51};
+        char actual_octet[NBYTES_OUT] = {0};
+        err = app_hexstr_to_chararray(&actual_octet[0], NBYTES_OUT, &in[0], NBYTES_IN);
+        assert_that(err, is_equal_to(0));
+        assert_that(memcmp(actual_octet, expect_octet, NBYTES_OUT), is_equal_to(0));
+    } { // subcase
+        char in[NBYTES_IN] = "bea034fg5l";
+        char actual_octet[NBYTES_OUT] = {0};
+        err = app_hexstr_to_chararray(&actual_octet[0], NBYTES_OUT, &in[0], NBYTES_IN);
+        assert_that(err, is_equal_to(3));
+    } { // subcase
+        char in[NBYTES_IN] = "a34f07b5$d";
+        char actual_octet[NBYTES_OUT] = {0};
+        err = app_hexstr_to_chararray(&actual_octet[0], NBYTES_OUT, &in[0], NBYTES_IN);
+        assert_that(err, is_equal_to(3));
+    } { // subcase
+        char in[NBYTES_IN] = "e038f512a9";
+        char expect_octet[NBYTES_OUT] = {0xe0, 0x38, 0xf5, 0x12, 0xa9};
+        char actual_octet[NBYTES_OUT] = {0};
+        err = app_hexstr_to_chararray(&actual_octet[0], NBYTES_OUT, &in[0], NBYTES_IN);
+        assert_that(err, is_equal_to(0));
+        assert_that(memcmp(actual_octet, expect_octet, NBYTES_OUT), is_equal_to(0));
+    }
+#undef NBYTES_IN 
+#undef NBYTES_OUT
+} // end of  app_hexstr_to_chararray_test
 
 
 Ensure(app_base64_check_encoded_test) {
@@ -215,7 +253,7 @@ TestSuite *app_utils_tests(void)
     add_test(suite, app_hashmap_access_test);
     add_test(suite, app_url_decode_query_param_test);
     add_test(suite, app_chararray_to_hexstr_test);
+    add_test(suite, app_hexstr_to_chararray_test);
     add_test(suite, app_base64_check_encoded_test);
     return suite;
 } // end of app_utils_tests
-
