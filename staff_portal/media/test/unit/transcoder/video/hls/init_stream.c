@@ -383,9 +383,9 @@ Ensure(atfp_hls_test__seek_stream_element__ok) {
     }
     RUN("", HLS_MASTER_PLAYLIST_FILENAME, utest_hls_stream_elm__build_mst_plist)
     RUN("xU", "/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
-    RUN("Lh", "/"HLS_FMP4_FILENAME, utest_hls_stream_elm__encrypt_segment)
+    RUN("", "Lh/"HLS_FMP4_FILENAME, utest_hls_stream_elm__encrypt_segment)
     RUN("9B", "/"HLS_PLAYLIST_FILENAME, utest_hls_stream_elm__build_lvl2_plist)
-    RUN("k5", "/"HLS_SEGMENT_FILENAME_PREFIX, utest_hls_stream_elm__encrypt_segment)
+    RUN("", "k5/"HLS_SEGMENT_FILENAME_PREFIX, utest_hls_stream_elm__encrypt_segment)
     RUN("", HLS_REQ_KEYFILE_LABEL, utest_hls_stream_elm__acquire_key)
     HLS_TEST__SEEK_STREAM_ELEMENT__TEARDOWN
 #undef RUN

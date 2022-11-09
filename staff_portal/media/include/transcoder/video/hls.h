@@ -96,9 +96,10 @@ uint8_t  atfp_av_encoder__has_done_flushing(atfp_av_ctx_t *dst);
 
 ASA_RES_CODE  atfp_hls__try_flush_to_storage(atfp_hls_t *);
 
+// commonly used in streaming file seeker
 void  atfp_hls_stream_seeker__init_common (atfp_hls_t *, ASA_RES_CODE (*)(asa_op_base_cfg_t *, atfp_t *));
 void  _atfp_hls__stream_seeker_asalocal_deinit (asa_op_base_cfg_t *_asa_local);
-void  atfp_hls_stream__load_crypto_key (atfp_hls_t *, int fd);
+ASA_RES_CODE  atfp_hls_stream__load_crypto_key__async (atfp_hls_t *, asa_close_cb_t);
 
 void  atfp_hls_stream__build_mst_plist(atfp_hls_t *);
 void  atfp_hls_stream__build_mst_plist__continue (atfp_hls_t *);
@@ -107,7 +108,8 @@ void  atfp_hls_stream__lvl2_plist__parse_header (atfp_hls_t *hlsproc);
 void  atfp_hls_stream__lvl2_plist__parse_extinf (atfp_hls_t *hlsproc);
 void  atfp_hls_stream__acquire_key(atfp_hls_t *);
 void  atfp_hls_stream__acquire_key__final (atfp_hls_t *);
-void  atfp_hls_stream__encrypt_segment(atfp_hls_t *);
+void  atfp_hls_stream__encrypt_segment__start(atfp_hls_t *);
+void  atfp_hls_stream__encrypt_segment__continue(atfp_hls_t *);
 
 char * atfp_hls_lvl2pl__load_curr_rd_ptr(atfp_hls_t *);
 void   atfp_hls_lvl2pl__save_curr_rd_ptr(atfp_hls_t *, char *ptr);

@@ -86,7 +86,7 @@ error:
 } // end of  atfp_hls_stream_seeker__init_common
 
 
-void  atfp_hls_stream__load_crypto_key (atfp_hls_t *hlsproc, int fd)
+static void  _atfp_hls_stream__load_crypto_key (atfp_hls_t *hlsproc, int fd)
 {
     atfp_t *processor = & hlsproc->super;
     json_t *err_info = processor->data.error;
@@ -109,4 +109,49 @@ void  atfp_hls_stream__load_crypto_key (atfp_hls_t *hlsproc, int fd)
         fprintf(stderr, "[hls][lvl2_plist] line:%d, error on parsing crypto key file \r\n", __LINE__);
         json_object_set_new(err_info, "transcoder", json_string("[hls] internal error"));
     }
-} // end of  atfp_hls_stream__load_crypto_key
+} // end of  _atfp_hls_stream__load_crypto_key
+
+
+static  void _atfp_hls__open_local_keyfile_cb (asa_op_base_cfg_t *_asa_local, ASA_RES_CODE result)
+{
+    atfp_hls_t *hlsproc = (atfp_hls_t *) H2O_STRUCT_FROM_MEMBER(atfp_hls_t, asa_local, _asa_local);
+    atfp_t *processor = & hlsproc->super;
+    json_t *err_info = processor->data.error;
+    if (result == ASTORAGE_RESULT_COMPLETE) {
+        _atfp_hls_stream__load_crypto_key (hlsproc, hlsproc->asa_local.file.file);
+        result = _asa_local->storage->ops.fn_close(_asa_local);
+    } else {
+        fprintf(stderr, "[hls][seeker_common] line:%d, failed to open crypto key file \r\n", __LINE__);
+        json_object_set_new(err_info, "_http_resp_code", json_integer(400));
+        json_object_set_new(err_info, "storage", json_string("[hls] document outdated"));
+    } // TODO, more advanced error handling, separate errors to client side 4xx or server side 5xx
+    if(result != ASTORAGE_RESULT_ACCEPT)
+        processor->data.callback(processor);
+} // end of  _atfp_hls__open_local_keyfile_cb
+
+
+ASA_RES_CODE  atfp_hls_stream__load_crypto_key__async (atfp_hls_t *hlsproc, asa_close_cb_t _cb)
+{
+    atfp_t *processor = &hlsproc->super;
+    uint32_t  _usr_id = processor->data.usr_id;
+    uint32_t  _upld_req_id = processor->data.upld_req_id;
+    asa_op_base_cfg_t  *_asa_local = &hlsproc->asa_local.super;
+    app_cfg_t *acfg = app_get_global_cfg();
+#define  PATH_PATTERN  "%s/%d/%08x/%s"
+    size_t filepath_sz = sizeof(PATH_PATTERN) + strlen(acfg->tmp_buf.path) + USR_ID_STR_SIZE +
+          UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(HLS_CRYPTO_KEY_FILENAME);
+    char filepath[filepath_sz];
+    size_t nwrite = snprintf (&filepath[0], filepath_sz, PATH_PATTERN, acfg->tmp_buf.path,
+             _usr_id, _upld_req_id, HLS_CRYPTO_KEY_FILENAME);
+#undef  PATH_PATTERN
+    assert(filepath_sz >= nwrite);
+    _asa_local->op.close.cb = _cb;
+    _asa_local->op.open.dst_path = &filepath[0];
+    _asa_local->op.open.mode  = S_IRUSR;
+    _asa_local->op.open.flags = O_RDONLY;
+    _asa_local->op.open.cb  = _atfp_hls__open_local_keyfile_cb;
+    ASA_RES_CODE  result = _asa_local->storage->ops.fn_open(_asa_local);
+    _asa_local->op.open.dst_path = NULL;
+    return result;
+} // end of atfp_hls_stream__load_crypto_key__async
+

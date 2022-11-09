@@ -126,7 +126,7 @@ static  void _utest_hls_lvl2_plist__common_done_cb (atfp_t *processor)
     "#EXT-X-MAP:URI=\"/path/to/init_map\"\n#EXTINF:437.270567,\n/path/to/segment_a01.file"
 #define   UTEST__CRYPTOKEY_MIN_CONTENT  \
     "{\"73724A57\":{\"iv\":{\"nbytes\":8,\"data\":\"296F986F0B7531A9\"},\"alg\":\"aes\"}," \
-    " \""UTEST__CRYPTOKEY_CHOSEN_ID"\":{\"iv\":{\"nbytes\":8,\"data\":\"5D4A38331751A3\"},\"alg\":\"aes\"}}"
+    " \""UTEST__CRYPTOKEY_CHOSEN_ID"\":{\"iv\":{\"nbytes\":8,\"data\":\"05D4A38F331751A3\"},\"alg\":\"aes\"}}"
 #define   RD_BUF_MAX_SZ         (sizeof(UTEST__PLIST_ORIGIN_CONTENT) + 1)
 Ensure(atfp_hls_test__l2_pl__validate_ok) {
     HLS__LVL2_PLIST_VALIDATE__SETUP

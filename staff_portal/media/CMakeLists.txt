@@ -313,6 +313,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/hls/seeker/master_playlist.c
     test/unit/transcoder/video/hls/seeker/secondary_playlist.c
     test/unit/transcoder/video/hls/seeker/cryptokey.c
+    test/unit/transcoder/video/hls/seeker/segment.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/views/common.c
