@@ -57,7 +57,9 @@ typedef struct atfp_ops_s {
 
 typedef struct {
     ATFP_BACKEND_LIB_TYPE  backend_id;
-    const atfp_ops_t ops;
+    // TODO, look for better implementation option, this member cannot be read-only for few unit-test cases
+    //const
+    atfp_ops_t  ops;
 } atfp_ops_entry_t;
 
 typedef struct atfp_s {
@@ -150,6 +152,20 @@ typedef struct {
     int   app_sync_cnt;
 } atfp_asa_map_t;
 
+// for caching / processing streaming file
+typedef  void (*asa_cch_proceed_cb_t) (asa_op_base_cfg_t *, ASA_RES_CODE, h2o_iovec_t *, uint8_t is_final);
+
+typedef struct {
+    struct {
+        asa_open_cb_t    init;
+        asa_close_cb_t   deinit;
+        asa_cch_proceed_cb_t    proceed;
+    } callback;
+    struct {
+        uint8_t  locked:1;
+    } flags;
+} asa_cch_usrdata_t;
+
 #define   ATFP__TEMP_TRANSCODING_FOLDER_NAME  "transcoding"
 #define   ATFP__COMMITTED_FOLDER_NAME         "committed"
 #define   ATFP__DISCARDING_FOLDER_NAME        "discarding"
@@ -224,14 +240,14 @@ int  atfp_check_fileupdate_required(atfp_data_t *, const char *basepath,
 // for crypto / key encryption
 size_t  atfp_get_encrypted_file_basepath (const char *basepath, char *out, size_t o_sz,
         const char *doc_id, size_t id_sz);
-int  atfp_save_encryption_metadata(const char *basepath, const char *mimetype, atfp_data_t *fp_data);
 const char * atfp_get_crypto_key (json_t *keyinfo, const char *key_id, json_t **item_out);
 int  atfp_encrypt_document_id (EVP_CIPHER_CTX *, atfp_data_t *, json_t *kitem, unsigned char **out, size_t *out_sz);
 
-// for cached file at local API server
-asa_op_localfs_cfg_t  *atfp_cachefile_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
+// for cached streaming files at local API server
+asa_op_localfs_cfg_t  *atfp_streamcache_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
        uint32_t buf_sz, asa_open_cb_t  _init_cb, asa_close_cb_t  _deinit_cb);
-void  atfp_cachefile_proceed_datablock (asa_op_base_cfg_t *, void *cb_p);
+void  atfp_streamcache_proceed_datablock (asa_op_base_cfg_t *, asa_cch_proceed_cb_t);
+int  atfp_cache_save_metadata(const char *basepath, const char *mimetype, atfp_data_t *);
 
 void  atfp__close_local_seg__cb  (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE);
 void  atfp__unlink_local_seg__cb (asa_op_base_cfg_t *, ASA_RES_CODE);

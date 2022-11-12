@@ -9,7 +9,7 @@
 #include "app_cfg.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
-#include "../test/unit/transcoder/video/hls/seeker/test.h"
+#include "../test/unit/transcoder/test.h"
 
 #define  UTEST_FILE_BASEPATH   "tmp/utest"
 #define  UTEST_ASASRC_BASEPATH      UTEST_FILE_BASEPATH "/asasrc"
@@ -52,17 +52,17 @@ static  void _utest_hls_enc_segm__common_done_cb (atfp_t *processor)
     uv_loop_t *loop  = uv_default_loop(); \
     json_t *mock_spec = json_object(), *mock_err_info = json_object(); \
     json_t *mock_doc_metadata = json_object(); \
-    asa_cfg_t  mock_src_storage_cfg = {.alias=MOCK_STORAGE_ALIAS, .base_path=UTEST_ASASRC_BASEPATH, \
+    asa_cfg_t  mock_storage_cfg = {.alias=MOCK_STORAGE_ALIAS, .base_path=UTEST_ASASRC_BASEPATH, \
         .ops={ .fn_read=app_storage_localfs_read, .fn_open=app_storage_localfs_open, \
             .fn_close=app_storage_localfs_close, .fn_typesize=app_storage_localfs_typesize }}; \
     app_cfg_t *mock_appcfg = app_get_global_cfg(); \
     mock_appcfg->storages.size = 1; \
     mock_appcfg->storages.capacity = 1; \
-    mock_appcfg->storages.entries = &mock_src_storage_cfg; \
+    mock_appcfg->storages.entries = &mock_storage_cfg; \
     mock_appcfg->tmp_buf.path = UTEST_ASALOCAL_BASEPATH; \
     atfp_hls_t  mock_fp = {.super = {.data = {.callback=_utest_hls_enc_segm__common_done_cb, \
         .spec=mock_spec, .error=mock_err_info, .usr_id=MOCK_USER_ID, .upld_req_id=MOCK_UPLD_REQ_1_ID, \
-        .version=NULL, .storage={.handle=NULL}}}, .asa_local={.super={.storage=&mock_src_storage_cfg, \
+        .version=NULL, .storage={.handle=NULL}}}, .asa_local={.super={.storage=&mock_storage_cfg, \
             .cb_args={.entries=mock_asalocal_cb_args, .size=NUM_CB_ARGS_ASAOBJ}}}, \
         .internal={.op={.encrypt_segment=atfp_hls_stream__encrypt_segment__start, \
             .get_crypto_key=atfp_get_crypto_key}} \

@@ -67,7 +67,7 @@ static  void  _atfp_hls__ensure_encrypted_basepath_cb (asa_op_base_cfg_t *_asa_l
     json_t *err_info  =  processor->data.error;
     json_t *_spec = processor->data.spec;
     if (result == ASTORAGE_RESULT_COMPLETE) {
-        atfp_save_encryption_metadata(_asa_local->op.mkdir.path.origin, "hls", &processor->data);
+        atfp_cache_save_metadata(_asa_local->op.mkdir.path.origin, "hls", &processor->data);
         atfp_hls__init_stream__finish_cb (processor);
     } else {
         json_object_set_new(err_info, "storage", json_string("[hls] failed to init stream"));

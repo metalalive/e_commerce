@@ -230,6 +230,7 @@ SET(APP_TRANSCODE_TABLE_IN_HTTP_SERVER__SOURCE_FILES
 SET(APP_STREAMING_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
     src/transcoder/crypto.c
+    src/transcoder/stream_cache.c
     src/transcoder/video/hls/seeker/common.c
     src/transcoder/video/hls/seeker/master_playlist.c
     src/transcoder/video/hls/seeker/secondary_playlist.c
@@ -300,6 +301,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/mariadb.c
     test/unit/transcoder/cfg_parser.c
     test/unit/transcoder/file_processor.c
+    test/unit/transcoder/stream_cache.c
     test/unit/transcoder/crypto.c
     test/unit/transcoder/storage.c
     test/unit/transcoder/video/mp4/init.c

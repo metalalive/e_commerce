@@ -1,5 +1,5 @@
-#ifndef  MEDIA__UTEST_TRANSCODER__HLS_SEEKER_H
-#define  MEDIA__UTEST_TRANSCODER__HLS_SEEKER_H
+#ifndef  MEDIA__UTEST_TRANSCODER__H
+#define  MEDIA__UTEST_TRANSCODER__H
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -40,4 +40,4 @@ extern "C" {
 #ifdef __cplusplus
 } // end of extern C clause
 #endif
-#endif // end of MEDIA__UTEST_TRANSCODER__HLS_SEEKER_H
+#endif // end of MEDIA__UTEST_TRANSCODER__H

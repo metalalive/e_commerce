@@ -9,7 +9,7 @@
 #include "app_cfg.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
-#include "../test/unit/transcoder/video/hls/seeker/test.h"
+#include "../test/unit/transcoder/test.h"
 
 #define  UTEST_FILE_BASEPATH   "tmp/utest"
 #define  UTEST_ASASRC_BASEPATH      UTEST_FILE_BASEPATH "/asasrc"
