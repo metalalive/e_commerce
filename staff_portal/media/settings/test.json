@@ -30,9 +30,9 @@
                 {"path":"/file/transcode", "entry_fn":"start_transcoding_file"},
                 {"path":"/job"     , "entry_fn":"discard_ongoing_job"},
                 {"path":"/job"     , "entry_fn":"monitor_job_progress"},
-                {"path":"/file"    , "entry_fn":"fetch_entire_file"},
                 {"path":"/file"    , "entry_fn":"discard_file"},
-                {"path":"/file/playback" , "entry_fn":"get_next_media_segment"},
+                {"path":"/file/stream/init" , "entry_fn":"initiate_file_stream"},
+                {"path":"/file/stream/seek" , "entry_fn":"fetch_file_streaming_element"},
                 {"path":"/file/acl", "entry_fn":"edit_file_acl"},
                 {"path":"/file/acl", "entry_fn":"read_file_acl"}
             ]

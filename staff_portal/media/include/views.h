@@ -60,11 +60,11 @@ extern "C" {
     API_FINAL_HANDLER_monitor_job_progress, \
     app_deinit_auth_jwt_claims
 
-#define _API_MIDDLEWARE_CHAIN_initiate_video_stream \
-    1,  API_FINAL_HANDLER_initiate_video_stream
+#define _API_MIDDLEWARE_CHAIN_initiate_file_stream \
+    1,  API_FINAL_HANDLER_initiate_file_stream
 
-#define _API_MIDDLEWARE_CHAIN_fetch_video_stream_element \
-    1,  API_FINAL_HANDLER_fetch_video_stream_element
+#define _API_MIDDLEWARE_CHAIN_fetch_file_streaming_element \
+    1,  API_FINAL_HANDLER_fetch_file_streaming_element
 
 #define _API_MIDDLEWARE_CHAIN_discard_file \
     4, app_authenticate_user, \
@@ -95,8 +95,8 @@ extern "C" {
 #define _RESTAPI_PERM_CODES_start_transcoding_file    "upload_files"
 #define _RESTAPI_PERM_CODES_discard_ongoing_job       "upload_files"
 #define _RESTAPI_PERM_CODES_monitor_job_progress      "upload_files" 
-#define _RESTAPI_PERM_CODES_initiate_video_stream         NULL
-#define _RESTAPI_PERM_CODES_fetch_video_stream_element    NULL
+#define _RESTAPI_PERM_CODES_initiate_file_stream         NULL
+#define _RESTAPI_PERM_CODES_fetch_file_streaming_element    NULL
 #define _RESTAPI_PERM_CODES_discard_file              "upload_files"
 #define _RESTAPI_PERM_CODES_edit_file_acl             "edit_file_access_control"
 #define _RESTAPI_PERM_CODES_read_file_acl             "edit_file_access_control"

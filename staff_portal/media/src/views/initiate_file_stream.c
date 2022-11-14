@@ -1,4 +1,4 @@
-#include "app_cfg.h"
+#include <curl/curl.h>
 #include "utils.h"
 #include "base64.h"
 #include "views.h"
@@ -6,14 +6,9 @@
 #include "storage/cfg_parser.h"
 #include "transcoder/file_processor.h"
 
-#define   ASA_USRARG_INDEX__AFTP         ATFP_INDEX__IN_ASA_USRARG
-#define   ASA_USRARG_INDEX__ASAOBJ_MAP   ASAMAP_INDEX__IN_ASA_USRARG
-#define   NUM_USRARGS_ASA_SRC            (ASA_USRARG_INDEX__ASAOBJ_MAP + 1)
-#define   ASA_SRC_RD_BUF_SZ                     512
-#define   APP_UPDATE_INTERVAL_SECS_MST_PLIST    30.0f
 #define   APP_UPDATE_INTERVAL_SECS_KEYFILE      60.0f
 
-static  void  _api_initiate_video_stream__deinit_primitives (h2o_req_t *req, h2o_handler_t *hdlr,
+static  void  _api_initiate_file_stream__deinit_primitives (h2o_req_t *req, h2o_handler_t *hdlr,
         app_middleware_node_t *node, json_t *qparams, json_t *res_body)
 {
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
@@ -35,7 +30,7 @@ static  void  _api_initiate_video_stream__deinit_primitives (h2o_req_t *req, h2o
     }
     // TODO, dealloc jwt if created for ACL check
     app_run_next_middleware(hdlr, req, node);
-} // end of  _api_initiate_video_stream__deinit_primitives
+} // end of  _api_initiate_file_stream__deinit_primitives
 
 
 static void _api_atfp_init_stream__done_cb(atfp_t *processor)
@@ -57,11 +52,11 @@ static void _api_atfp_init_stream__done_cb(atfp_t *processor)
     req->res.status = (int) json_integer_value(json_object_get(spec, "http_resp_code"));
     processor->data.error = NULL;
     processor->data.spec = NULL;
-    _api_initiate_video_stream__deinit_primitives (req, hdlr, node, qparams, resp_body);
+    _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, resp_body);
 } // end of _api_atfp_init_stream__done_cb
 
 
-static void api__initiate_video_stream__db_async_err (db_query_t *target, db_query_result_t *rs)
+static void api__initiate_file_stream__db_async_err (db_query_t *target, db_query_result_t *rs)
 {
     h2o_req_t     *req  = target->cfg.usr_data.entry[0];
     h2o_handler_t *hdlr = target->cfg.usr_data.entry[1];
@@ -70,11 +65,11 @@ static void api__initiate_video_stream__db_async_err (db_query_t *target, db_que
     json_t *qparams  = app_fetch_from_hashmap(node->data, "qparams");
     json_object_set_new(err_info, "id", json_string("error happended during validation"));
     req->res.status = 500;
-    _api_initiate_video_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-} // end of  api__initiate_video_stream__db_async_err
+    _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
+} // end of  api__initiate_file_stream__db_async_err
 
 
-static int api__initiate_video_stream__resource_id_exist (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node) 
+static int api__initiate_file_stream__resource_id_exist (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node) 
 {
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
     uint32_t  last_upld_seq = (uint32_t) app_fetch_from_hashmap(node->data, "last_upld_req");
@@ -88,24 +83,13 @@ static int api__initiate_video_stream__resource_id_exist (h2o_handler_t *hdlr, h
     if(!processor) {
         req->res.status = 500;
         goto done;
-    }
-    asa_cfg_t *storage = app_storage_cfg_lookup(storage_alias);
-    asa_op_base_cfg_t *asa_src = app_storage__init_asaobj_helper (storage,
-            NUM_USRARGS_ASA_SRC, ASA_SRC_RD_BUF_SZ, 0);
-    if(!asa_src) {
-        req->res.status = 500;
-        goto done;
     } {
-        app_cfg_t *acfg = app_get_global_cfg();
-        json_t *hostinfo = json_object(), *qp_labels = json_object(), *update_interval = json_object();
-        json_object_set_new(hostinfo, "domain", json_string(req->authority.base));  // h2o_iovec_t, domain name + port
-        json_object_set_new(hostinfo, "path", json_string("/video/playback/seek")); // TODO, parameterize
-        json_object_set_new(qp_labels, "resource_id", json_string("doc_id"));
-        json_object_set_new(qp_labels, "version", json_string("doc_ver"));
-        json_object_set_new(qp_labels, "detail", json_string("detail"));
-        json_object_set_new(update_interval, "playlist",  json_real(APP_UPDATE_INTERVAL_SECS_MST_PLIST));
+        json_t *qp_labels = json_object(), *update_interval = json_object();
+        json_object_set_new(qp_labels, "resource_id", json_string(API_QUERYPARAM_LABEL__RESOURCE_ID));
+        // json_object_set_new(qp_labels, "version", json_string(API_QUERYPARAM_LABEL__RESOURCE_VERSION));
+        json_object_set_new(qp_labels, "detail", json_string(API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
         json_object_set_new(update_interval, "keyfile",   json_real(APP_UPDATE_INTERVAL_SECS_KEYFILE));
-        json_object_set_new(qparams, "host", hostinfo);
+        json_object_set_new(qparams, "host", json_string(req->authority.base));  // h2o_iovec_t, domain name + port
         json_object_set_new(qparams, "query_param_label", qp_labels);
         json_object_set_new(qparams, "update_interval",  update_interval);
     }
@@ -119,32 +103,28 @@ static int api__initiate_video_stream__resource_id_exist (h2o_handler_t *hdlr, h
     json_object_set_new(qparams, "loop", json_integer((uint64_t)req->conn->ctx->loop));
 #pragma GCC diagnostic pop
     json_object_set_new(qparams, "db_alias", json_string("db_server_1"));
-    json_object_set_new(qparams, "storage_alias", json_string(storage->alias));
-    asa_src->cb_args.entries[ASA_USRARG_INDEX__AFTP] = processor;
-    asa_src->deinit = (void (*)(asa_op_base_cfg_t *)) free;
-    if(!strcmp(storage->alias, "localfs"))
-        ((asa_op_localfs_cfg_t *)asa_src)->loop = req->conn->ctx->loop; // TODO
+    json_object_set_new(qparams, "storage_alias", json_string(storage_alias));
     processor->data = (atfp_data_t) {.error=err_info, .spec=qparams, .callback=_api_atfp_init_stream__done_cb,
-          .usr_id=res_owner_id, .upld_req_id=last_upld_seq, .storage={.handle=asa_src}};
+          .usr_id=res_owner_id, .upld_req_id=last_upld_seq, .storage={.handle=NULL}};
     processor->ops->init(processor);
     if(json_object_size(err_info) > 0) // 4xx or 5xx
         req->res.status = (int) json_integer_value(json_object_get(qparams, "http_resp_code"));
 done:
     if(json_object_size(err_info) > 0)
-        _api_initiate_video_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
+        _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
     return 0;
-} // end of  api__initiate_video_stream__resource_id_exist
+} // end of  api__initiate_file_stream__resource_id_exist
 
 
-static int api__initiate_video_stream__resource_id_notexist (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node) 
+static int api__initiate_file_stream__resource_id_notexist (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node) 
 {
     json_t *err_info = app_fetch_from_hashmap(node->data, "err_info");
     json_t *qparams  = app_fetch_from_hashmap(node->data, "qparams");
     json_object_set_new(err_info, "id", json_string("not exists"));
     req->res.status = 404;
-    _api_initiate_video_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
+    _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
     return 0;
-} // end of  api__initiate_video_stream__resource_id_notexist
+} // end of  api__initiate_file_stream__resource_id_notexist
 
 
 static  int  app__validate_file_acl(const char *resource_id, h2o_req_t *req, app_middleware_node_t *node,
@@ -157,12 +137,12 @@ static  int  app__validate_file_acl(const char *resource_id, h2o_req_t *req, app
     // * refresh users ACL from database to local api server (saved in temp buffer)
     //   (may improve the flow by sending message queue everytime when user ACL has been updaated)
     // * examine user ACL, if it is NOT public, authenticate client JWT, then check the auth user
-    // has permission to watch this video.
+    // has access to the file.
     return  err;
 }
 
 
-RESTAPI_ENDPOINT_HANDLER(initiate_video_stream, POST, self, req)
+RESTAPI_ENDPOINT_HANDLER(initiate_file_stream, POST, self, req)
 {
     int  err = 0;
     json_t *err_info = json_object();
@@ -170,9 +150,17 @@ RESTAPI_ENDPOINT_HANDLER(initiate_video_stream, POST, self, req)
     app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
     const char *resource_id = json_string_value(json_object_get(qparams, "id"));
     size_t  res_id_sz = strlen(resource_id);
-    if(res_id_sz > APP_RESOURCE_ID_SIZE) {
+    size_t  max_res_id_sz = APP_RESOURCE_ID_SIZE * 3; // consider it is URL-encoded
+    if(res_id_sz > max_res_id_sz) {
         json_object_set_new(err_info, "id", json_string("exceeding max limit"));
         req->res.status = 400;
+    } else { // resource ID from frontend client should always be URL-encoded
+        int   out_len  = 0;
+        char *res_id_uri_decoded = curl_easy_unescape(NULL, resource_id, (int)res_id_sz, &out_len);
+        json_object_set_new(qparams, "id", json_string(res_id_uri_decoded));
+        free(res_id_uri_decoded);
+        resource_id = json_string_value(json_object_get(qparams, "id"));
+        res_id_sz = strlen(resource_id);
     }
     if(json_object_size(err_info) == 0) {
         err = app_verify_printable_string(resource_id, res_id_sz);
@@ -200,9 +188,9 @@ RESTAPI_ENDPOINT_HANDLER(initiate_video_stream, POST, self, req)
         app_save_ptr_to_hashmap(node->data, "err_info", (void *)err_info);
         app_save_ptr_to_hashmap(node->data, "qparams", (void *)qparams);
         DBA_RES_CODE  result = app_verify_existence_resource_id (
-            self, req, node, api__initiate_video_stream__db_async_err,
-            api__initiate_video_stream__resource_id_exist,
-            api__initiate_video_stream__resource_id_notexist
+            self, req, node, api__initiate_file_stream__db_async_err,
+            api__initiate_file_stream__resource_id_exist,
+            api__initiate_file_stream__resource_id_notexist
         );
         if(result != DBA_RESULT_OK) {
             json_object_set_new(err_info, "model", json_string("failed to validate resource ID"));
@@ -210,7 +198,7 @@ RESTAPI_ENDPOINT_HANDLER(initiate_video_stream, POST, self, req)
         }
     }
     if(json_object_size(err_info) > 0)
-        _api_initiate_video_stream__deinit_primitives (req, self, node, qparams, err_info);
+        _api_initiate_file_stream__deinit_primitives (req, self, node, qparams, err_info);
     return 0;
-} // end of initiate_video_stream
+} // end of initiate_file_stream
 

@@ -62,7 +62,6 @@ typedef struct atfp_hls_s {
 // common
 atfp_t  *atfp__video_hls__instantiate(void);
 uint8_t  atfp__video_hls__label_match(const char *label);
-int  atfp_hls__encrypt_document_id (atfp_data_t *, json_t *keyitem,  unsigned char **out, size_t *out_sz);
 
 // api server
 atfp_t  *atfp__video_hls__instantiate_stream(void);

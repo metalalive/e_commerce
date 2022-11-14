@@ -112,7 +112,7 @@ static void api_rpc_transcode__update_metadata_done(struct atfp_s *processor)
         atfp_asa_map_reset_dst_iteration(map);
         while((asa_dst = atfp_asa_map_iterate_destination(map))) {
             atfp_t *fp_dst = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];
-            json_object_set(transcoded_info_list, fp_dst->data.version, fp_dst->transfer.dst.info);
+            json_object_set(transcoded_info_list, fp_dst->data.version, fp_dst->transfer.transcoded_dst.info);
         }  // e.g. size and checksum of each file ...etc.
     } // transcoded successfully
     app_rpc_task_send_reply(receipt, err_info, 1);
@@ -133,7 +133,7 @@ void  api_rpc_transcode__finalize (atfp_asa_map_t *map)
     while(!has_err && (asa_dst = atfp_asa_map_iterate_destination(map))) {
         atfp_t *fp_dst = asa_dst->cb_args.entries[ASA_USRARG_INDEX__AFTP];
         fp_dst->data.callback = api_rpc_transcode__update_metadata_done;
-        fp_dst->transfer.dst.update_metadata(fp_dst, receipt->loop);
+        fp_dst->transfer.transcoded_dst.update_metadata(fp_dst, receipt->loop);
         has_err = json_object_size(err_info) > 0;
         if(!has_err)
             atfp_asa_map_dst_start_working(map, asa_dst);

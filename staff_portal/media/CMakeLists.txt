@@ -193,7 +193,8 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/multipart_parser.c
     src/views/init.c
     src/views/common.c
-    src/views/initiate_video_stream.c
+    src/views/initiate_file_stream.c
+    src/views/stream_file_lookup.c
     src/views/monitor_job_progress.c
     src/views/initiate_multipart_upload.c
     src/views/complete_multipart_upload.c
@@ -325,6 +326,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/mock/mariadb.c
     test/unit/mock/rabbitmq.c
     test/unit/mock/openssl.c
+    test/unit/mock/curl.c
     test/unit/mock/ffmpeg/libavformat.c
     test/unit/mock/ffmpeg/libavcodec.c
     test/unit/mock/ffmpeg/libavfilter.c
@@ -346,6 +348,8 @@ SET(INTEGRATION_TEST_SOURCE_FILES
     test/integration/api/complete_multipart_upload.c
     test/integration/api/initiate_multipart_upload.c
     test/integration/api/upload_part.c
+    test/integration/api/initiate_file_stream.c
+    test/integration/api/stream_file_lookup.c
     ${APP_SERVER_SOURCE_FILES} )
 
 SET(APP_COMMON_LIBRARIES
@@ -411,9 +415,9 @@ SET(ITEST_APPCFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
 ADD_CUSTOM_TARGET(dev_app_server
     python -m  media.setup_test_env DevCertRenewal  ${DEV_APPCFG_PATH}
     COMMAND
-       ##gdb -args
-       ##valgrind --leak-check=full   --show-leak-kinds=definite 
-       ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME}  ${DEV_APPCFG_PATH}
+        ##gdb -args
+        ##valgrind --leak-check=full   --show-leak-kinds=definite 
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME}  ${DEV_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${APP_SERVER_EXE_NAME})
 

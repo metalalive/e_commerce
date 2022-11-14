@@ -29,7 +29,6 @@ static void  api_rpc_transcode__atfp_src_processing_cb (atfp_t  *processor)
 {
     json_t *err_info = processor->data.error;
     asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
-    asa_op_base_cfg_t *asa_dst = NULL;
     arpc_receipt_t  *receipt = asa_src->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
     atfp_asa_map_t   *_map = asa_src->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
     uint8_t has_err = json_object_size(err_info) > 0;
@@ -204,7 +203,7 @@ static  void  api_rpc_transcode__try_init_file_processors(asa_op_base_cfg_t *asa
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
         uint8_t version_exist = (uint8_t) asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_EXIST_FLAG];
 #pragma GCC diagnostic pop
-        processor->transfer.dst.flags.version_exists = version_exist;
+        processor->transfer.transcoded_dst.flags.version_exists = version_exist;
         if(asa_dst->op.mkdir.path.prefix) {
             char *basepath = asa_dst->op.mkdir.path.origin;
             basepath[0] = 0;

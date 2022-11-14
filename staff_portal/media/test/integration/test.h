@@ -57,6 +57,8 @@ TestSuite *api_upload_part_tests(json_t *root_cfg);
 TestSuite *api_complete_multipart_upload_tests(void);
 TestSuite *api_start_transcoding_file_tests(void);
 TestSuite *api_monitor_job_progress_tests(void);
+TestSuite *api_file_streaming_init_tests(void);
+TestSuite *api_file_stream_seek_elm_tests(void);
 void api_deinitiate_multipart_upload_tests(void);
 
 #ifdef __cplusplus

@@ -352,29 +352,3 @@ RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, self, req)
 } // end of complete_multipart_upload()
 
 #undef  MAX_BYTES_MSG_BODY
-
-////     { // serialize the URL parameters then pass it to AMQP broker
-////         json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
-//// #define MAX_BYTES_MSG_BODY  128
-//// #define MAX_BYTES_JOB_ID    70
-////         char msg_body_raw[MAX_BYTES_MSG_BODY] = {0};
-////         char job_id_raw[MAX_BYTES_JOB_ID] = {0};
-////         size_t nwrite = json_dumpb((const json_t *)req_body, &msg_body_raw[0], MAX_BYTES_MSG_BODY, JSON_COMPACT);
-////         arpc_exe_arg_t  rpc_arg = {
-////             .conn = req->conn->ctx->storage.entries[1].data,  .job_id = {.bytes=&job_id_raw[0],
-////                 .len=MAX_BYTES_JOB_ID }, .msg_body = {.len=nwrite, .bytes=&msg_body_raw[0]},
-////             .alias = "app_mqbroker_1",  .routing_key = "rpc.media.complete_multipart_upload",
-////             .usr_data = (void *)json_object_get(jwt_claims, "profile"),
-////         };
-////         ARPC_STATUS_CODE rpc_status = app_rpc_start(&rpc_arg);
-////         if(rpc_status == APPRPC_RESP_ACCEPTED) {
-////             json_object_set_new(res_body, "job_id", json_string(rpc_arg.job_id.bytes));
-////         } else {
-////             req->res.status = 500;
-////             req->res.reason = "publish message error";
-////             goto done;
-////         }
-//// #undef  MAX_BYTES_JOB_ID
-//// #undef  MAX_BYTES_RESP_BODY
-////     }
-
