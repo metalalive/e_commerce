@@ -33,6 +33,7 @@ static int verify_jwt_claim_audience(jwt_t *jwt) {
                 break;
             }
         }
+        json_decref(audiences);
     }
     return result;
 } // end of verify_jwt_claim_audience

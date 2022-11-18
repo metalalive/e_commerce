@@ -76,12 +76,10 @@ static void deinit_app_server_cfg(app_cfg_t *app_cfg) {
 } // end of deinit_app_server_cfg
 
 
-static void on_tcp_close(uv_handle_t *client_conn) {
+static  void on_tcp_close(uv_handle_t *client_conn) {
     atomic_num_connections(app_get_global_cfg(), -1);
-    // the handle created in init_client_tcp_socket, its memory should be freed in
-    //  network.c instead of app.c (TODO: refactor)
-    client_conn->data = NULL; // pointer to callback function can be set NULL directly
-    destroy_network_handle(client_conn, (uv_close_cb)free);
+    // the handle created in init_client_tcp_socket has to be freed if it is already closed
+    free(client_conn);
 }
 
 
