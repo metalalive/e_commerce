@@ -191,6 +191,7 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/middleware.c
     src/network.c
     src/multipart_parser.c
+    src/rpc/reply.c
     src/views/init.c
     src/views/common.c
     src/views/initiate_file_stream.c
@@ -320,6 +321,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/hls/seeker/segment.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
+    test/unit/rpc/reply.c
     test/unit/views/common.c
     test/unit/storage/cfg_parser.c
     test/unit/storage/localfs.c

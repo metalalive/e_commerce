@@ -22,6 +22,7 @@ TestSuite *app_transcoder_hls_stream_encrypt_segment_tests(void);
 TestSuite *app_stream_cache_tests(void);
 TestSuite *app_rpc_cfg_parser_tests(void);
 TestSuite *app_rpc_core_tests(void);
+TestSuite *app_rpc_replytimer_tests(void);
 TestSuite *app_storage_cfg_parser_tests(void);
 TestSuite *app_storage_localfs_tests(void);
 TestSuite *app_network_util_tests(void);
@@ -46,6 +47,7 @@ int main(int argc, char **argv) {
     add_suite(suite, appserver_cfg_parser_tests());
     add_suite(suite, app_rpc_cfg_parser_tests());
     add_suite(suite, app_rpc_core_tests());
+    add_suite(suite, app_rpc_replytimer_tests());
     add_suite(suite, app_storage_cfg_parser_tests());
     add_suite(suite, app_storage_localfs_tests());
     add_suite(suite, app_network_util_tests());

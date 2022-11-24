@@ -112,9 +112,8 @@ static int parse_cfg_rpc__broker_credential(json_t *in, arpc_cfg_t *out)
     json_decref(root);
     return 0;
 error:
-    if(root) {
+    if(root)
         json_decref(root);
-    }
     return -1;
 } // end of parse_cfg_rpc__broker_credential
 
@@ -144,22 +143,20 @@ error:
 } // end of parse_cfg_rpc__broker_attributes
 
 
-static uint8_t _app_elf_gather_rpc_reply_render_fns_cb(char *fn_name, void *entry_point, void *cb_args)
+static uint8_t _app_elf_gather_rpc_reply_fns(char *fn_name, void *entry_point, void *cb_args)
 {
     rpc_reply_cfg_internal_t *args = (rpc_reply_cfg_internal_t *) cb_args;
     arpc_cfg_bind_reply_t *cfg = args->cfg;
-    if(args->queue_fn_name && strcmp(fn_name, args->queue_fn_name) == 0) {
+    if(args->queue_fn_name && strcmp(fn_name, args->queue_fn_name) == 0)
         cfg->queue.render_fn = (arpc_replyq_render_fn)entry_point;
-    }
-    if(args->corr_id_fn_name && strcmp(fn_name, args->corr_id_fn_name) == 0) {
+    if(args->corr_id_fn_name && strcmp(fn_name, args->corr_id_fn_name) == 0)
         cfg->correlation_id.render_fn = (arpc_replyq_render_fn)entry_point;
-    }
     uint8_t queue_render_fn_found  = (!args->queue_fn_name) || (cfg->queue.render_fn);
     uint8_t corrid_render_fn_found = (!args->corr_id_fn_name) || (cfg->correlation_id.render_fn);
     uint8_t immediate_stop = queue_render_fn_found && corrid_render_fn_found;
     args->all_fns_found = immediate_stop;
     return immediate_stop;
-} // end of _app_elf_gather_rpc_reply_render_fns_cb
+} // end of _app_elf_gather_rpc_reply_fns
 
 static uint8_t _app_elf_gather_rpc_handler_fn_cb(char *fn_name, void *entry_point, void *cb_args)
 {
@@ -191,12 +188,12 @@ static  int parse_cfg_rpc__reply_producer(json_t *obj, arpc_cfg_bind_reply_t *cf
     cfg->queue.render_fn = NULL;
     cfg->correlation_id.render_fn = NULL;
     {
-        const char *queue_fn_name   = json_string_value(json_object_get(qname_obj, "render_fn"));
-        const char *corr_id_fn_name = json_string_value(json_object_get(corr_id_obj, "render_fn"));
-        rpc_reply_cfg_internal_t cb_args = {.cfg = cfg, .queue_fn_name = queue_fn_name,
-            .corr_id_fn_name = corr_id_fn_name, .all_fns_found = 0};
+        rpc_reply_cfg_internal_t  cb_args = { .cfg=cfg,  .all_fns_found=0,
+            .queue_fn_name = json_string_value(json_object_get(qname_obj, "render_fn")),
+            .corr_id_fn_name = json_string_value(json_object_get(corr_id_obj, "render_fn")),
+        };
         int err = app_elf_traverse_functions(app_get_global_cfg()->exe_path,
-                _app_elf_gather_rpc_reply_render_fns_cb, (void *)&cb_args);
+                _app_elf_gather_rpc_reply_fns, (void *)&cb_args);
         if(!cb_args.all_fns_found) {
             h2o_error_printf("[parsing] missing rendering function for RPC reply \n");
             goto error;
@@ -217,18 +214,22 @@ error:
 
 static  int parse_cfg_rpc__reply_consumer(json_t *obj, arpc_cfg_bind_reply_t *cfg)
 {
-    const char *task_handler_fn_name = json_string_value(json_object_get(obj, "task_handler"));
-    if(!task_handler_fn_name) {
+    json_t *tsk_hdlr_item = json_object_get(obj, "task_handler");
+    const char *tsk_hdlr_fn_name = json_string_value(tsk_hdlr_item);
+    cfg->task_handler = NULL;
+    if(!tsk_hdlr_item) {
+        h2o_error_printf("[parsing] task handler omitted implicitly \n");
+        return 0;
+    } else if(!tsk_hdlr_fn_name) {
         h2o_error_printf("[parsing] missing name of task-handling function for RPC reply \n");
         goto error;
     }
-    cfg->task_handler = NULL;
     rpc_reply_cfg_internal_t cb_args = {.cfg=cfg, .all_fns_found=0,
-        .tsk_handler_fn_name=task_handler_fn_name };
+        .tsk_handler_fn_name=tsk_hdlr_fn_name };
     app_elf_traverse_functions(app_get_global_cfg()->exe_path,
             _app_elf_gather_rpc_handler_fn_cb, (void *)&cb_args);
     if(!cb_args.all_fns_found || !cfg->task_handler) {
-        h2o_error_printf("[parsing] missing task-handling function %s for RPC reply \n", task_handler_fn_name);
+        h2o_error_printf("[parsing] missing task-handling function %s for RPC reply \n", tsk_hdlr_fn_name);
         goto error;
     }
     return 0;
@@ -254,6 +255,7 @@ static int parse_cfg_rpc__broker_bindings(json_t *objs, arpc_cfg_t *cfg)
         const char *routing_key = json_string_value(json_object_get(obj, "routing_key"));
         size_t   max_msgs_pending = (size_t) json_integer_value(json_object_get(obj, "max_msgs_pending"));
         uint8_t  durable = (uint8_t) json_boolean_value(json_object_get(obj, "durable"));
+        uint8_t  skip_declare = (uint8_t) json_boolean_value(json_object_get(obj, "skip_declare"));
         if(!queue || !exchange || !routing_key) {
             h2o_error_printf("[parsing] missing binding parameters (idx=%lu) in message broker configuration (%s:%hu) \n",
                     idx, cfg->credential.host, cfg->credential.port);
@@ -268,7 +270,8 @@ static int parse_cfg_rpc__broker_bindings(json_t *objs, arpc_cfg_t *cfg)
         }
         arpc_cfg_bind_t *bcfg = &cfg->bindings.entries[ cfg->bindings.size++ ];
         *bcfg = (arpc_cfg_bind_t) {.q_name = strdup(queue), .exchange_name = strdup(exchange),
-            .routing_key = strdup(routing_key), .max_msgs_pending = max_msgs_pending };
+            .routing_key = strdup(routing_key), .max_msgs_pending = max_msgs_pending,
+            .skip_declare=skip_declare  };
         // * if passive = 0 and the queue exists, the queue should have the same values for durable
         //   , exclusive, auto-delete, and all other attributes associated with the queue
         //   , otherwise such comparison will NOT be performed if the queue does NOT exists.

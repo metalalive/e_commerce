@@ -143,15 +143,19 @@ static void apprpc_ensure_send_queue(struct arpc_ctx_t *item)
     amqp_rpc_reply_t _reply = {0};
     for(idx = 0; idx < cfg->bindings.size; idx++) {
         arpc_cfg_bind_t *bind_cfg = &cfg->bindings.entries[idx];
+        if(bind_cfg->skip_declare) {
+            fprintf(stderr, "[RPC][core] this app should NOT declare the queue:%s"
+                    " where the other app will consume the message from \n",   bind_cfg->q_name);
+            continue;
+        }
         // AMQP broker does NOT allow  unsigned number as argument when declaring a queue ? find out the source(TODO)
-         amqp_table_entry_t  q_arg_n_elms = {.key = amqp_cstring_bytes("x-max-length"),
-                 .value = {.kind = AMQP_FIELD_KIND_I32, .value = {.i32 = bind_cfg->max_msgs_pending}}};
-         amqp_table_t  q_arg_table = {.num_entries=1, .entries=&q_arg_n_elms};
+        amqp_table_entry_t  q_arg_n_elms = {.key = amqp_cstring_bytes("x-max-length"),
+                .value = {.kind = AMQP_FIELD_KIND_I32, .value = {.i32 = bind_cfg->max_msgs_pending}}};
+        amqp_table_t  q_arg_table = {.num_entries=1, .entries=&q_arg_n_elms};
         amqp_queue_declare( item->conn,  item->curr_channel_id,
                 amqp_cstring_bytes(bind_cfg->q_name), (amqp_boolean_t)bind_cfg->flags.passive,
                 (amqp_boolean_t)bind_cfg->flags.durable, (amqp_boolean_t)bind_cfg->flags.exclusive,
-                (amqp_boolean_t)bind_cfg->flags.auto_delete, q_arg_table
-            );
+                (amqp_boolean_t)bind_cfg->flags.auto_delete, q_arg_table );
         _reply = amqp_get_rpc_reply(item->conn);
         if(_reply.reply_type != AMQP_RESPONSE_NORMAL) {
             apprpc_declare_q_report_error(&_reply, bind_cfg->q_name);
@@ -370,6 +374,11 @@ static ARPC_STATUS_CODE apprpc_consumer_set_read_queues(struct arpc_ctx_t *_ctx)
     amqp_boolean_t no_ack = 1; // automatically send ack back to broker
     for(idx = 0; idx < rpc_cfg->bindings.size; idx++) {
         arpc_cfg_bind_t *bindcfg = &rpc_cfg->bindings.entries[idx];
+        if(bindcfg->skip_declare) {
+            fprintf(stderr, "[RPC][core] this app should NOT consume message from the queue:%s \n",
+                    bindcfg->q_name);
+            continue;
+        }
         amqp_bytes_t queue = amqp_cstring_bytes(bindcfg->q_name);
         amqp_basic_consume( _ctx->conn, _ctx->curr_channel_id, queue, amqp_empty_bytes,
                 no_local, no_ack, exclusive, amqp_empty_table) ;
@@ -518,10 +527,10 @@ done:
     } \
 }
 
-ARPC_STATUS_CODE  app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *args, void (*cb)(const char *, size_t, arpc_exe_arg_t *))
+ARPC_STATUS_CODE  app_rpc_fetch_replies (arpc_exe_arg_t *args, size_t max_nread, arpc_reply_corr_identify_fn  cb)
 {
 #define  RPC_MAX_REPLY_QNAME_SZ     128
-    if(!args || !args->conn || !args->alias  || !cb)
+    if(!args || !args->conn || !args->alias  || !cb || max_nread == 0)
         return APPRPC_RESP_ARG_ERROR;
     struct arpc_ctx_t  *mq_ctx = app_rpc_context_lookup(args->conn, args->alias);
     if(!mq_ctx || !mq_ctx->ref_cfg || !mq_ctx->ref_cfg->bindings.entries ||
@@ -530,7 +539,8 @@ ARPC_STATUS_CODE  app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *args, void (*cb)(c
     ARPC_STATUS_CODE  res = APPRPC_RESP_OK;
     amqp_boolean_t  no_local = 0, exclusive = 0, no_ack = 1; // automatically send ack back to broker
     amqp_rpc_reply_t  reply = {0};
-    for(int idx = 0; idx < mq_ctx->ref_cfg->bindings.size; idx++) {
+    for(int idx = 0; (max_nread > 0) && (idx < mq_ctx->ref_cfg->bindings.size); idx++) 
+    {
         arpc_cfg_bind_t  *bind_cfg = & mq_ctx->ref_cfg->bindings.entries[idx];
         char reply_q_name[RPC_MAX_REPLY_QNAME_SZ] = {0};
         ARPC_MSGQ__ENSURE_RPC_REPLY_PARAM(res, &bind_cfg->reply, queue, args,
@@ -564,12 +574,14 @@ ARPC_STATUS_CODE  app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *args, void (*cb)(c
                     break;
                 }
             } // can perform basic-cancel ?
+            args->flags.replyq_nonexist = 1;
             continue; 
         } else {
             fprintf(stderr, "[RPC] failed to reconnect to broker (%d) \n", res);
             break;
         }
         struct timeval   timeout = {0}; // immediately return if all the queues are empty.
+        args->routing_key = &reply_q_name[0];
         do {
             amqp_envelope_t  envelope = {0};
             amqp_maybe_release_buffers(mq_ctx->conn);    
@@ -580,18 +592,26 @@ ARPC_STATUS_CODE  app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *args, void (*cb)(c
                 amqp_bytes_t *msgbody = &envelope.message.body;
                 args->job_id.len   = corr_id->len;
                 args->job_id.bytes = corr_id->bytes;
+                args->msg_body.len   = msgbody->len;
+                args->msg_body.bytes = msgbody->bytes;
                 args->_timestamp = (uint64_t) envelope.message.properties.timestamp;
-                cb((const char *)msgbody->bytes, msgbody->len, args);
+                cb(mq_ctx->ref_cfg, args);
+                max_nread--;
                 amqp_destroy_envelope(&envelope);
             } // TODO, figure out the way of identifying empty queue
-        } while (res == APPRPC_RESP_OK);
+        } while ((res == APPRPC_RESP_OK) && (max_nread > 0));
         if (res == APPRPC_RESP_MSGQ_OPERATION_TIMEOUT)
             res = APPRPC_RESP_OK; // means empty reply queue
         amqp_basic_cancel(mq_ctx->conn, mq_ctx->curr_channel_id, _con_tag);
     } // end of msg queue setup iteration
+    args->routing_key = NULL;
+    args->job_id.len   = 0;
+    args->job_id.bytes = NULL;
+    args->msg_body.len   = 0;
+    args->msg_body.bytes = NULL;
     return res;
 #undef   RPC_MAX_REPLY_QNAME_SZ
-}  // ned of app_rpc_fetch_all_reply_msg
+}  // ned of app_rpc_fetch_replies
 
 
 void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body, uint8_t _final)

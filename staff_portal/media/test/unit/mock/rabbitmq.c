@@ -108,7 +108,7 @@ amqp_rpc_reply_t amqp_consume_message(amqp_connection_state_t conn_state,
     amqp_rpc_reply_t *out = (amqp_rpc_reply_t *) mock(conn_state, evp_routekey, evp_routekey_sz,
            evp_msg_body, evp_corr_id, timeout, flags);
     return *out;
-}
+} // end of  amqp_consume_message
 
 void  amqp_destroy_envelope(amqp_envelope_t *envelope)
 { mock(envelope); }

@@ -39,6 +39,9 @@ typedef struct {
     ARPC_EXECUTE_COMMON_FIELDS;
     const char *alias; // identify the broker configuration which is used to send command
     void *conn; // list of  pointers to RPC contexts
+    struct {
+        uint8_t replyq_nonexist:1;
+    } flags;
 } arpc_exe_arg_t; // TODO, rename to arpc_delivery_t
 
 struct arpc_receipt_s;
@@ -72,7 +75,7 @@ typedef struct arpc_cfg_bind_reply_s {
     } queue;
     struct {
         char *name_pattern;
-        arpc_replyq_render_fn  render_fn;
+        arpc_replyq_render_fn   render_fn;
     } correlation_id;
     // char *exchange_name; // TODO, figure out how to send return value to reply queue with non-default exchange
     arpc_task_handler_fn  task_handler;
@@ -87,6 +90,7 @@ typedef struct {
     char *routing_key;
     size_t  max_msgs_pending;
     arpc_qcfg_flg_t  flags;
+    uint8_t  skip_declare:1;
 } arpc_cfg_bind_t; // per-queue config type
 
 typedef struct {
@@ -105,6 +109,8 @@ typedef struct {
     } attributes; // connection-level attributes
     H2O_VECTOR(arpc_cfg_bind_t) bindings;
 } arpc_cfg_t; // per-host config type
+
+typedef void (*arpc_reply_corr_identify_fn)(arpc_cfg_t *, arpc_exe_arg_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause

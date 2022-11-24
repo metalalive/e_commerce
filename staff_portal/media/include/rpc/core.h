@@ -21,6 +21,7 @@ struct arpc_ctx_list_t {
     struct arpc_ctx_t *entries;
 };
 
+
 void *app_rpc_conn_init(arpc_cfg_t *cfgs, size_t nitem);
 void  app_rpc_conn_deinit(void *ctx);
 
@@ -28,7 +29,7 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *);
 ARPC_STATUS_CODE app_rpc_get_reply(arpc_exe_arg_t *);
 
 ARPC_STATUS_CODE app_rpc_consume_message(void *ctx, void *loop);
-ARPC_STATUS_CODE app_rpc_fetch_all_reply_msg(arpc_exe_arg_t *, void (*)(const char *, size_t, arpc_exe_arg_t *));
+ARPC_STATUS_CODE app_rpc_fetch_replies(arpc_exe_arg_t *, size_t max_nread, arpc_reply_corr_identify_fn);
 void app_rpc_task_send_reply (arpc_receipt_t *receipt, json_t *res_body, uint8_t _final);
 
 ARPC_STATUS_CODE app_rpc_close_connection(void *ctx);
