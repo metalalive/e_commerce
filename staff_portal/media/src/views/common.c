@@ -1,9 +1,14 @@
 #include <ctype.h>
+#include <errno.h>
+#include <sys/file.h>
+#include <openssl/sha.h>
 
 #include "utils.h"
 #include "views.h"
 #include "models/pool.h"
 #include "models/query.h"
+#include "storage/cfg_parser.h"
+#include "storage/localfs.h"
 #include "rpc/datatypes.h"
 
 #define  DB_OP__USRARG_IDX__HTTP_REQ     0
@@ -14,6 +19,8 @@
 #define  DB_OP__USRARG_IDX__FAILURE_CB    5
 #define  DB_OP__USRARG_IDX__RES_OWNER_ID  6
 #define  DB_OP__USRARG_IDX__UPLD_REQ_ID   7
+
+#define   JOB_PROGRESS_INFO_FILENAME  "job_progress.json"
 
 void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail)
 { (void *)detail; }
@@ -197,6 +204,12 @@ ARPC_STATUS_CODE api__render_rpc_reply_qname(
         const char *name_pattern, arpc_exe_arg_t *args, char *wr_buf, size_t wr_sz)
 {
     ARPC_STATUS_CODE status = APPRPC_RESP_OK;
+    size_t tot_wr_sz = strlen(name_pattern) + USR_ID_STR_SIZE;
+    if(tot_wr_sz > wr_sz) {
+        fprintf(stderr, "[api][common] line:%d, insufficient buffer, required:%ld,actual:%ld \n",
+                __LINE__, tot_wr_sz, wr_sz );
+        return APPRPC_RESP_MEMORY_ERROR;
+    }
     json_t *_usr_data = (json_t *)args->usr_data;
     uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(_usr_data,"usr_id"));
     if(usr_prof_id > 0) {
@@ -206,4 +219,167 @@ ARPC_STATUS_CODE api__render_rpc_reply_qname(
     }
     return status;
 } // end of api__render_rpc_reply_qname
+
+
+ARPC_STATUS_CODE api__default__render_rpc_corr_id (
+        const char *name_pattern, arpc_exe_arg_t *args, char *wr_buf, size_t wr_sz)
+{
+    ARPC_STATUS_CODE status = APPRPC_RESP_OK;
+    size_t md_hex_sz = (SHA_DIGEST_LENGTH << 1) + 1;
+    size_t tot_wr_sz = strlen(name_pattern) + md_hex_sz;
+    if(tot_wr_sz > wr_sz) {
+        fprintf(stderr, "[api][common] line:%d, insufficient buffer, required:%ld,actual:%ld \n",
+                __LINE__, tot_wr_sz, wr_sz );
+        return APPRPC_RESP_MEMORY_ERROR;
+    }
+    json_t *_usr_data = (json_t *)args->usr_data;
+    uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(_usr_data,"usr_id"));
+    if(usr_prof_id > 0) {
+        SHA_CTX  sha_ctx = {0};
+        SHA1_Init(&sha_ctx);
+        SHA1_Update(&sha_ctx, (const char *)&usr_prof_id, sizeof(usr_prof_id));
+        SHA1_Update(&sha_ctx, (const char *)&args->_timestamp, sizeof(args->_timestamp));
+        char md[SHA_DIGEST_LENGTH] = {0};
+        char md_hex[md_hex_sz];
+        SHA1_Final((unsigned char *)&md[0], &sha_ctx);
+        app_chararray_to_hexstr(&md_hex[0], md_hex_sz - 1, &md[0], SHA_DIGEST_LENGTH);
+        md_hex[md_hex_sz - 1] = 0x0;
+        size_t nwrite = snprintf(wr_buf, wr_sz, name_pattern, &md_hex[0]);
+        if(nwrite >= wr_sz)
+            status = APPRPC_RESP_MEMORY_ERROR;
+        OPENSSL_cleanse(&sha_ctx, sizeof(SHA_CTX));
+    } else {
+        status = APPRPC_RESP_ARG_ERROR;
+    }
+    return status;
+} // end of api__default__render_rpc_corr_id
+
+
+
+static void _api_progressinfo_update (int fd, json_t *reply_msgs)
+{
+    json_error_t  j_err = {0};   // load entire file, it shouldn't be that large in most cases
+    json_t *info = NULL, *_packed = NULL;
+    int idx = 0;
+    lseek(fd, 0, SEEK_SET);
+    info = json_loadfd(fd, JSON_REJECT_DUPLICATES, &j_err);
+    if(!info)
+        info = json_object();
+    json_array_foreach(reply_msgs, idx, _packed) {
+        json_t *corr_id_item = json_object_get(_packed, "corr_id");
+        json_t *msg_item = json_object_get(_packed, "msg");
+        uint64_t  ts_done = json_integer_value(json_object_get(_packed, "timestamp"));
+        const char * corr_id = json_string_value(json_object_get(corr_id_item, "data"));
+        size_t  corr_id_sz   = json_integer_value(json_object_get(corr_id_item, "size"));
+        const char *msg = json_string_value(json_object_get(msg_item, "data"));
+        size_t  msg_sz  = json_integer_value(json_object_get(msg_item, "size"));
+        j_err = (json_error_t){0};
+        json_t *_reply = json_loadb(msg, msg_sz, JSON_REJECT_DUPLICATES, &j_err);
+        if(j_err.line >= 0 || j_err.column >= 0) { //  discard junk data
+            fprintf(stderr, "[api][common] line:%d, corr_id:%s, msg:%s \n", __LINE__, corr_id, msg);
+        } else { // -----------------------------
+            json_t  *progress_item = json_object_get(_reply, "progress");
+            float percent_done = (float) json_real_value(progress_item);
+            if(percent_done > 0.0f) {
+                json_t *job_item  = json_object();
+                json_object_set_new(job_item, "percent_done", json_real(percent_done) );
+                json_object_set_new(job_item, "timestamp", json_integer(ts_done) );
+                json_object_deln(    info, corr_id, corr_id_sz);
+                json_object_setn_new(info, corr_id, corr_id_sz, job_item);
+            } // report error, error detail does not contain progress message
+            json_decref(_reply);
+        } // ---------------------------
+    } // end of reply message iteration
+    ftruncate(fd, (off_t)0);
+    lseek(fd, 0, SEEK_SET);
+    json_dumpfd((const json_t *)info, fd, JSON_COMPACT); // will call low-level write() without buffering this
+    json_decref(info);
+} // end of  _api_progressinfo_update
+
+
+static void  _api_job_progress_fileopened_cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{
+    asa_op_localfs_cfg_t * _asa_local = (asa_op_localfs_cfg_t *)asaobj;
+    json_t *reply_msgs = asaobj->cb_args.entries[ASA_USRARG_INDEX__API_RPC_REPLY_DATA];
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        int fd = _asa_local->file.file;
+        int ret = flock(fd, LOCK_EX); //  | LOCK_NB
+        if(ret == 0) {
+            _api_progressinfo_update (fd, reply_msgs);
+            flock(fd, LOCK_UN); //  | LOCK_NB
+        } else {
+            fprintf(stderr, "[api][common] line:%d, error (%d) when locking file \r\n", __LINE__, errno);
+        }
+        result = asaobj->storage->ops.fn_close(asaobj);
+    }
+    json_decref(reply_msgs);
+    asaobj->cb_args.entries[ASA_USRARG_INDEX__API_RPC_REPLY_DATA] = NULL;
+    if(result != ASTORAGE_RESULT_ACCEPT) {
+        fprintf(stderr, "[api][common] line:%d, storage result:%d \n", __LINE__, result );
+        asaobj->deinit(asaobj);
+    }
+} // end of _api_job_progress_fileopened_cb
+
+
+static void  _api_ensure_progress_update_filepath_cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        asaobj->op.open.cb = _api_job_progress_fileopened_cb;
+        asaobj->op.open.mode  = S_IRUSR | S_IWUSR;
+        asaobj->op.open.flags = O_RDWR | O_CREAT;
+        result = asaobj->storage->ops.fn_open(asaobj);
+    }
+    if(result != ASTORAGE_RESULT_ACCEPT) {
+        json_t *reply_msgs = asaobj->cb_args.entries[ASA_USRARG_INDEX__API_RPC_REPLY_DATA];
+        json_decref(reply_msgs);
+        asaobj->cb_args.entries[ASA_USRARG_INDEX__API_RPC_REPLY_DATA] = NULL;
+        fprintf(stderr, "[api][common] line:%d, storage result:%d \n", __LINE__, result );
+        asaobj->deinit(asaobj);
+    }
+} // end of _api_ensure_progress_update_filepath_cb
+
+
+asa_op_base_cfg_t * api_job_progress_update__init_asaobj (void *loop, uint32_t usr_id, size_t num_usr_args)
+{
+    asa_cfg_t *storage =  app_storage_cfg_lookup("localfs");
+    app_cfg_t *app_cfg = app_get_global_cfg();
+    size_t  mkdir_path_sz = strlen(app_cfg->tmp_buf.path) + 1 + USR_ID_STR_SIZE + 1; // include NULL-terminated byte
+    size_t  openf_path_sz = mkdir_path_sz + sizeof(JOB_PROGRESS_INFO_FILENAME) + 1;
+    size_t  cb_args_sz = num_usr_args * sizeof(void *);
+    size_t  asaobj_base_sz = storage->ops.fn_typesize();
+    size_t  asaobj_tot_sz  = asaobj_base_sz + cb_args_sz + (mkdir_path_sz << 1) + openf_path_sz;
+    asa_op_localfs_cfg_t *asa_local = calloc(1, asaobj_tot_sz);
+    asa_op_base_cfg_t *asaobj = &asa_local->super;
+    char *ptr = (char *)asaobj + asaobj_base_sz;
+    asaobj->cb_args.size = num_usr_args;
+    asaobj->cb_args.entries = (void **) ptr;
+    ptr += cb_args_sz;
+    asaobj->op.mkdir.path.origin = ptr;
+    ptr += mkdir_path_sz;
+    asaobj->op.mkdir.path.curr_parent = ptr;
+    ptr += mkdir_path_sz;
+    asaobj->op.open.dst_path = ptr;
+    ptr += openf_path_sz;
+    assert((size_t)(ptr - (char *)asaobj) == asaobj_tot_sz);
+    asaobj->storage = storage;
+    asa_local->file.file = -1;
+    asa_local->loop = loop;
+    asaobj->deinit = NULL;
+    { // mkdir setup
+        char *basepath = asaobj->op.mkdir.path.origin;
+        size_t nwrite = snprintf(basepath, mkdir_path_sz, "%s/%d", app_cfg->tmp_buf.path, usr_id);
+        basepath[nwrite++] = 0x0; // NULL-terminated
+        assert(nwrite <= mkdir_path_sz);
+        asaobj->op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
+        asaobj->op.mkdir.cb = _api_ensure_progress_update_filepath_cb;
+        assert(asaobj->op.mkdir.path.curr_parent[0] == 0x0);
+    } { // build file path in advance
+        char *basepath = asaobj->op.open.dst_path ;
+        size_t nwrite = snprintf( basepath, openf_path_sz, "%s/%s", asaobj->op.mkdir.path.origin,
+                JOB_PROGRESS_INFO_FILENAME );
+        basepath[nwrite++] = 0x0; // NULL-terminated
+        assert(nwrite <= openf_path_sz);
+    }
+    return  asaobj;
+} // end of api_job_progress_update__init_asaobj
 

@@ -141,8 +141,9 @@ extern "C" {
     static int API_FINAL_HANDLER_##func_name(RESTAPI_HANDLER_ARGS(hdlr_var, req_var), app_middleware_node_t *node)
 
 
-#define   MAX_BYTES_JOB_ID    70  // TODO, parameterize
-
+#define   MAX_BYTES_JOB_ID    90  // TODO, parameterize
+#define   ASA_USRARG_INDEX__APIUSRDATA   0
+#define   ASA_USRARG_INDEX__API_RPC_REPLY_DATA   1
 
 DBA_RES_CODE  app_validate_uncommitted_upld_req (
     RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,
@@ -159,6 +160,8 @@ DBA_RES_CODE  app_verify_existence_resource_id (
 int  app_verify_printable_string(const char *str, size_t limit_sz);
 
 void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
+
+asa_op_base_cfg_t * api_job_progress_update__init_asaobj (void *loop, uint32_t usr_id, size_t num_usr_args);
 
 #ifdef __cplusplus
 } // end of extern C clause
