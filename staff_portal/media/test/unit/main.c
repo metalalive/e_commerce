@@ -38,6 +38,8 @@ TestSuite *app_model_connection_tests(void);
 TestSuite *app_model_mariadb_tests(void);
 TestSuite *app_views_common_tests(void);
 TestSuite *app_model_query_tests(void);
+TestSuite *app_resource_acl_tests(void);
+
 
 int main(int argc, char **argv) {
     int result = 0;
@@ -79,6 +81,7 @@ int main(int argc, char **argv) {
     add_suite(suite, app_transcoder_hls_stream_cryptokey_request_tests());
     add_suite(suite, app_transcoder_hls_stream_encrypt_segment_tests());
     add_suite(suite, app_stream_cache_tests());
+    add_suite(suite, app_resource_acl_tests());
     add_suite(suite, app_views_common_tests());
     add_suite(suite, app_appcfg_generic_tests());
     if(argc > 1) {

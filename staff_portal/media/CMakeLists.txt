@@ -186,6 +186,7 @@ SET(CMAKE_C_FLAGS_DEBUG  "-O0")
 SET(CMAKE_C_FLAGS_RELEASE  "-O2")
 
 SET(APP_HTTPSERVER_SOURCE_FILES
+    src/acl.c
     src/auth.c
     src/cfg_parser.c
     src/middleware.c
@@ -243,8 +244,7 @@ SET(APP_STREAMING_SOURCE_FILES
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
     src/views/async/start_transcode.c
-    src/views/async/finalize_transcode.c
-    src/views/async/complete_multipart_upload.c )
+    src/views/async/finalize_transcode.c )
 
 SET(APP_DBMODEL_SOURCE_FILES
     src/models/cfg_parser.c
@@ -292,6 +292,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/cfg_parser.c
     test/unit/network.c
     test/unit/routes.c
+    test/unit/acl.c
     test/unit/auth.c
     test/unit/utils.c
     test/unit/timer_poll.c

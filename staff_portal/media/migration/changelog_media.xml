@@ -196,6 +196,7 @@
               important enough for the business model, if it isn't,  since these records are almost
               never changed once inserted, the metadata could be stored in document-oriented databases
               which support atomicity and durability (of ACID properties), e.g. MongoDB v4.0 later
+            * TODO: add column for separating different stream type in case they'll be supported in future.
         </comment>
         <sql dbms="mariadb">
             RENAME TABLE `transcoded_file` TO `transcoded_video_metadata`;
@@ -212,6 +213,31 @@
     </changeSet>
     <changeSet id="tag_version_0.0.7" author="Haam">
         <tagDatabase tag="0.0.7" />
+    </changeSet>
+    <changeSet id="modify-schema-transcoded-file-acl" author="Haam">
+        <comment>
+             currently this app doesn't support group-level access control because it may cause
+             a lot of RPCs to user_management app for up-to-date user profiles 
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `file_access_control` DROP  CONSTRAINT `c_fk1_uploadfile_id`;
+            ALTER TABLE `file_access_control` DROP PRIMARY KEY ;
+            ALTER TABLE `file_access_control` DROP COLUMN `usr_type` ;
+            ALTER TABLE `file_access_control` ADD PRIMARY KEY (`file_id`, `usr_id`);
+            ALTER TABLE `file_access_control` ADD CONSTRAINT `c_fk1_uploadfile_id` FOREIGN KEY (`file_id`)
+                 REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE;
+        </sql>
+        <rollback>
+            ALTER TABLE `file_access_control` DROP  CONSTRAINT `c_fk1_uploadfile_id`;
+            ALTER TABLE `file_access_control` DROP PRIMARY KEY ;
+            ALTER TABLE `file_access_control` ADD COLUMN `usr_type`  TINYINT UNSIGNED NOT NULL ;
+            ALTER TABLE `file_access_control` ADD PRIMARY KEY (`file_id`, `usr_type`, `usr_id`);
+            ALTER TABLE `file_access_control` ADD CONSTRAINT `c_fk1_uploadfile_id` FOREIGN KEY (`file_id`)
+                 REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.8" author="Haam">
+        <tagDatabase tag="0.0.8" />
     </changeSet>
 </databaseChangeLog>
 
