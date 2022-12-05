@@ -87,8 +87,18 @@ int amqp_basic_publish(amqp_connection_state_t conn_state, amqp_channel_t channe
     char *exchange_name = exchange.bytes;
     char *route_key_name = routing_key.bytes;
     char *raw_body = body.bytes;
-    return (int)mock(conn_state, channel, exchange_name, route_key_name, raw_body);
-}
+    size_t  num_hdr_entries = properties->headers.num_entries;
+    amqp_table_entry_t  *hdr_entries = properties->headers.entries;
+    int ret = (int)mock(conn_state, channel, exchange_name, route_key_name, raw_body,
+            num_hdr_entries, hdr_entries);
+    for(int idx = 0; idx < num_hdr_entries; idx++) {
+        amqp_table_entry_t  *hdr_entry = &hdr_entries[idx];
+        const char *rd_key = hdr_entry->key.bytes;
+        const char *rd_val = hdr_entry->value.value.bytes.bytes;
+        mock(rd_key, rd_val);
+    }
+    return ret;
+} // end of  amqp_basic_publish
 
 amqp_basic_consume_ok_t *amqp_basic_consume(
     amqp_connection_state_t conn_state, amqp_channel_t channel, amqp_bytes_t queue,

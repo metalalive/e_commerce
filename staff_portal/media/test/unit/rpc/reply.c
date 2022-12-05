@@ -308,6 +308,111 @@ Ensure(rpc_replytimer__lowlvl_unknown_error)
 } // end of rpc_replytimer__lowlvl_unknown_error
 
 
+Ensure(rpc_pycelery_extract_reply__start_ok)
+{
+#define  DISCARDED_REPLY    "{\"app123\":\"put down the great firewall\"}"
+#define  PYCELERY_RAW_MSG  "{\"status\":\"STARTED\",\"result\":" DISCARDED_REPLY "}"
+#define  UTEST_MSG_PATTERN   "[{\"msg\":{\"data\":null,\"size\":0}}]"
+    json_t *mock_msgs_in = json_loadb(UTEST_MSG_PATTERN, sizeof(UTEST_MSG_PATTERN) - 1, 0, NULL);
+    {
+        json_t *item = json_object_get(json_array_get(mock_msgs_in, 0),"msg");
+        json_object_set_new(item, "data", json_string(PYCELERY_RAW_MSG));
+        json_object_set_new(item, "size", json_integer(sizeof(PYCELERY_RAW_MSG) - 1));
+    }
+    json_t *valid_reply = NULL;
+    ARPC_STATUS_CODE result = app_rpc__pycelery_extract_replies(mock_msgs_in, &valid_reply);
+    assert_that(result, is_equal_to(APPRPC_RESP_OK));
+    assert_that(valid_reply, is_equal_to(NULL));
+    json_decref(mock_msgs_in);
+#undef   UTEST_MSG_PATTERN
+#undef   PYCELERY_RAW_MSG
+#undef   DISCARDED_REPLY
+} // end of rpc_pycelery_extract_reply__start_ok
+
+
+Ensure(rpc_pycelery_extract_reply__return_ok) 
+{
+#define  EXPECT_APP_KEY     "var456"
+#define  EXPECT_APP_VALUE   "redis oauth quic"
+#define  DISCARDED_REPLY    "{\"var123\":\"pipeapple\"}"
+#define  EXTRACTED_REPLY    "{\""EXPECT_APP_KEY"\":\""EXPECT_APP_VALUE"\"}"
+#define  PYCELERY_RAW_MSG_1  "{\"status\":\"STARTED\",\"result\":" DISCARDED_REPLY "}"
+#define  PYCELERY_RAW_MSG_2  "{\"status\":\"SUCCESS\",\"result\":" EXTRACTED_REPLY "}"
+#define  UTEST_MSG_PATTERN   "[{\"msg\":{\"data\":null,\"size\":0}}, {\"msg\":{\"data\":null,\"size\":0}}]"
+    json_t *mock_msgs_in = json_loadb(UTEST_MSG_PATTERN, sizeof(UTEST_MSG_PATTERN) - 1, 0, NULL);
+    {
+        json_t *item = json_object_get(json_array_get(mock_msgs_in, 0),"msg");
+        json_object_set_new(item, "data", json_string(PYCELERY_RAW_MSG_1));
+        json_object_set_new(item, "size", json_integer(sizeof(PYCELERY_RAW_MSG_1) - 1));
+        item = json_object_get(json_array_get(mock_msgs_in, 1),"msg");
+        json_object_set_new(item, "data", json_string(PYCELERY_RAW_MSG_2));
+        json_object_set_new(item, "size", json_integer(sizeof(PYCELERY_RAW_MSG_2) - 1));
+    }
+    json_t *valid_reply = NULL;
+    ARPC_STATUS_CODE result = app_rpc__pycelery_extract_replies(mock_msgs_in, &valid_reply);
+    assert_that(result, is_equal_to(APPRPC_RESP_OK));
+    assert_that(valid_reply, is_not_equal_to(NULL));
+    if(valid_reply) {
+        const char *actual = json_string_value(json_object_get(valid_reply,EXPECT_APP_KEY));
+        assert_that(actual, is_equal_to_string(EXPECT_APP_VALUE));
+        json_decref(valid_reply);
+    }
+    json_decref(mock_msgs_in);
+#undef   UTEST_MSG_PATTERN
+#undef   PYCELERY_RAW_MSG_2
+#undef   PYCELERY_RAW_MSG_1
+#undef   EXTRACTED_REPLY
+#undef   DISCARDED_REPLY
+#undef   EXPECT_APP_VALUE
+#undef   EXPECT_APP_KEY
+} // end of rpc_pycelery_extract_reply__return_ok
+
+
+Ensure(rpc_pycelery_extract_reply__invalid)
+{
+#define  PYCELERY_RAW_MSG    "{\"random\":\"can not be recognized\"}"
+#define  UTEST_MSG_PATTERN   "[{\"msg\":{\"data\":null,\"size\":0}}, {\"msg\":{\"data\":null,\"size\":0}}]"
+    json_t *mock_msgs_in = json_loadb(UTEST_MSG_PATTERN, sizeof(UTEST_MSG_PATTERN) - 1, 0, NULL);
+    {
+        json_t *item = json_object_get(json_array_get(mock_msgs_in, 0),"msg");
+        json_object_set_new(item, "data", json_string(PYCELERY_RAW_MSG));
+        json_object_set_new(item, "size", json_integer(sizeof(PYCELERY_RAW_MSG) - 1));
+    }
+    json_t *valid_reply = NULL;
+    ARPC_STATUS_CODE result = app_rpc__pycelery_extract_replies(mock_msgs_in, &valid_reply);
+    assert_that(result, is_equal_to(APPRPC_RESP_ARG_ERROR));
+    assert_that(valid_reply, is_equal_to(NULL));
+    json_decref(mock_msgs_in);
+#undef   UTEST_MSG_PATTERN
+#undef   PYCELERY_RAW_MSG
+} // end of rpc_pycelery_extract_reply__invalid
+
+
+Ensure(rpc_pycelery_extract_reply__remote_error)
+{
+#define  PYCELERY_RAW_MSG_1  "{\"status\":\"STARTED\",\"result\":{\"var123\":\"pipeapple\"}}"
+#define  PYCELERY_RAW_MSG_2  "{\"status\":\"ERROR\",\"result\":{\"var456\":\"heyhey\"}}"
+#define  UTEST_MSG_PATTERN   "[{\"msg\":{\"data\":null,\"size\":0}}, {\"msg\":{\"data\":null,\"size\":0}}]"
+    json_t *mock_msgs_in = json_loadb(UTEST_MSG_PATTERN, sizeof(UTEST_MSG_PATTERN) - 1, 0, NULL);
+    {
+        json_t *item = json_object_get(json_array_get(mock_msgs_in, 0),"msg");
+        json_object_set_new(item, "data", json_string(PYCELERY_RAW_MSG_1));
+        json_object_set_new(item, "size", json_integer(sizeof(PYCELERY_RAW_MSG_1) - 1));
+        item = json_object_get(json_array_get(mock_msgs_in, 1),"msg");
+        json_object_set_new(item, "data", json_string(PYCELERY_RAW_MSG_2));
+        json_object_set_new(item, "size", json_integer(sizeof(PYCELERY_RAW_MSG_2) - 1));
+    }
+    json_t *valid_reply = NULL;
+    ARPC_STATUS_CODE result = app_rpc__pycelery_extract_replies(mock_msgs_in, &valid_reply);
+    assert_that(result, is_equal_to(APPRPC_RESP_ARG_ERROR));
+    assert_that(valid_reply, is_equal_to(NULL));
+    json_decref(mock_msgs_in);
+#undef   UTEST_MSG_PATTERN
+#undef   PYCELERY_RAW_MSG_2
+#undef   PYCELERY_RAW_MSG_1
+} // end of rpc_pycelery_extract_reply__remote_error
+
+
 TestSuite *app_rpc_replytimer_tests(void) {
     TestSuite *suite = create_test_suite();
     add_test(suite, rpc_replytimer__msg_batch);
@@ -315,5 +420,9 @@ TestSuite *app_rpc_replytimer_tests(void) {
     add_test(suite, rpc_replytimer__missing_corr_id);
     add_test(suite, rpc_replytimer__recv_junk_msg);
     add_test(suite, rpc_replytimer__lowlvl_unknown_error);
+    add_test(suite, rpc_pycelery_extract_reply__start_ok);
+    add_test(suite, rpc_pycelery_extract_reply__return_ok);
+    add_test(suite, rpc_pycelery_extract_reply__invalid);
+    add_test(suite, rpc_pycelery_extract_reply__remote_error);
     return suite;
 } // end of  app_rpc_replytimer_tests

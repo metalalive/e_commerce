@@ -29,6 +29,9 @@ void * apprpc_recv_reply_start (arpc_reply_cfg_t *);
 void * apprpc_recv_reply_restart (void *ctx);
 void   apprpc_reply_deinit_start (void *ctx);
 
+// `in_msgs` indicates a list of serialized messages with the same prefix of correlation ID pattern
+ARPC_STATUS_CODE  app_rpc__pycelery_extract_replies(json_t *in_msgs, json_t **out);
+
 #ifdef __cplusplus
 } // end of extern C clause
 #endif

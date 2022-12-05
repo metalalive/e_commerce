@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-#include <h2o.h>
+#include <h2o/memory.h>
 
 typedef enum {
     APPRPC_RESP_OK = 1,
@@ -20,6 +20,17 @@ typedef enum {
     APPRPC_RESP_MSGQ_LOWLEVEL_LIB_ERROR,
     APPRPC_RESP_MSGQ_REMOTE_UNCLASSIFIED_ERROR,
 } ARPC_STATUS_CODE;
+
+typedef struct {
+    struct {
+        size_t len;
+        char *bytes;
+    } key;
+    struct {
+        size_t len;
+        char *bytes;
+    } value;
+} arpc_kv_t;
 
 #define ARPC_EXECUTE_COMMON_FIELDS \
     void *usr_data; \
@@ -39,6 +50,10 @@ typedef struct {
     ARPC_EXECUTE_COMMON_FIELDS;
     const char *alias; // identify the broker configuration which is used to send command
     void *conn; // list of  pointers to RPC contexts
+    struct {
+        arpc_kv_t *entries;
+        uint8_t  size;
+    } headers;
     struct {
         uint8_t replyq_nonexist:1;
     } flags;

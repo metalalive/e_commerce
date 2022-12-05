@@ -1,3 +1,4 @@
+#include <time.h>
 #include "rpc/core.h"
 
 // Note: limitation of librabbitmq:
@@ -340,13 +341,32 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
         default:
             goto done;
     }
+    amqp_table_entry_t  *extra_headers = NULL;
+    amqp_flags_t  header_enable_flag = 0;
+    if(args->headers.size > 0 && args->headers.entries) {
+        extra_headers = malloc(args->headers.size * sizeof(amqp_table_entry_t));
+        for(uint8_t idx = 0; idx < args->headers.size; idx++) {
+            arpc_kv_t *in = &args->headers.entries[idx];
+            extra_headers[idx] = (amqp_table_entry_t) {  .value={.kind=AMQP_FIELD_KIND_UTF8,
+                .value={.bytes={.len=in->value.len, .bytes=in->value.bytes}}},
+                .key={.len=in->key.len, .bytes=in->key.bytes}
+            };
+        }
+        header_enable_flag = AMQP_BASIC_HEADERS_FLAG;
+    } else {
+        args->headers.size = 0;
+        args->headers.entries = NULL;
+    }
     amqp_basic_properties_t properties = {
-            ._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CORRELATION_ID_FLAG
-                | AMQP_BASIC_REPLY_TO_FLAG | AMQP_BASIC_TIMESTAMP_FLAG,
-            .content_type = amqp_cstring_bytes("application/json"),  .reply_to = amqp_cstring_bytes(&reply_req_queue[0]),
-            .correlation_id = {.bytes=args->job_id.bytes, .len=_job_id_fit_sz},  .timestamp = args->_timestamp,
-            .delivery_mode = 0x2, // defined in AMQP 0.9.1 without clear explanation
-        };
+        ._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_CORRELATION_ID_FLAG
+            | AMQP_BASIC_REPLY_TO_FLAG | AMQP_BASIC_TIMESTAMP_FLAG | AMQP_BASIC_CONTENT_ENCODING_FLAG
+            | header_enable_flag,
+        .content_encoding = amqp_cstring_bytes("utf-8"), .content_type = amqp_cstring_bytes("application/json"),
+        .headers = {.num_entries=args->headers.size, .entries=&extra_headers[0]},
+        .reply_to=amqp_cstring_bytes(&reply_req_queue[0]),
+        .correlation_id = {.bytes=args->job_id.bytes, .len=_job_id_fit_sz},  .timestamp = args->_timestamp,
+        .delivery_mode = 0x2, // defined in AMQP 0.9.1 without clear explanation
+    };
     amqp_status_enum mq_status = amqp_basic_publish( mq_ctx->conn,  mq_ctx->curr_channel_id,
             amqp_cstring_bytes(bind_cfg->exchange_name),  routekey, mandatory, immediate,
             (amqp_basic_properties_t const *)&properties, amqp_cstring_bytes(args->msg_body.bytes) );
@@ -359,6 +379,8 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
         amqp_rpc_reply_t _reply = amqp_get_rpc_reply(mq_ctx->conn);
         app_status = apprpc__translate_status_from_lowlvl_lib(&_reply);
     }
+    if(extra_headers)
+        free(extra_headers);
 #undef   RPC_MAX_REPLY_QNAME_SZ
 done:
     return app_status;

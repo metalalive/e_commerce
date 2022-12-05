@@ -127,6 +127,50 @@ void * apprpc_recv_reply_restart (void *in_ctx)
     if(ret != 0) {
         _apprpc_reply_deinit_start(_rpc_ctx);
         in_ctx = NULL;
+        fprintf(stderr,"[rpc][reply] line:%d, failed to restart: %d \n", __LINE__, ret);
     }
     return in_ctx;
 }
+
+
+ARPC_STATUS_CODE  app_rpc__pycelery_extract_replies(json_t *in_msgs, json_t **out)
+{
+    json_t  *_packed = NULL;
+    ARPC_STATUS_CODE  result = APPRPC_RESP_OK;
+    int idx = 0;
+    // Python celery consumer sends 2 messages back, first one means the consumer started handling
+    //  the request, the second one indicates either error or completion 
+    json_array_foreach(in_msgs, idx, _packed) {
+        json_t *msg_item = json_object_get(_packed, "msg");
+        const char *msg = json_string_value(json_object_get(msg_item, "data"));
+        size_t  msg_sz  = json_integer_value(json_object_get(msg_item, "size"));
+        json_t *_reply = json_loadb(msg, msg_sz, JSON_REJECT_DUPLICATES, NULL);
+        if(_reply) {
+            const char *rpc_status  = json_string_value(json_object_get(_reply, "status"));
+            if(rpc_status && !strncmp(rpc_status, "SUCCESS", 7)) {
+                json_t  *rpc_result  = json_object_get(_reply, "result");
+                if(rpc_result != NULL) {
+                    json_incref(rpc_result);
+                    *out = rpc_result;
+                } else {
+                    fprintf(stderr, "[rpc][reply] line:%d, invalid result \n", __LINE__);
+                    result = APPRPC_RESP_ARG_ERROR;
+                }
+            } else if(rpc_status && !strncmp(rpc_status, "STARTED", 7)) {
+                // pass, discard the result
+            } else {
+                fprintf(stderr, "[rpc][reply] line:%d, unknown state:%s \n", __LINE__, rpc_status);
+                result = APPRPC_RESP_ARG_ERROR;
+            }
+            json_decref(_reply);
+        } else {
+            json_t *corr_id_item = json_object_get(_packed, "corr_id");
+            const char * corr_id = json_string_value(json_object_get(corr_id_item, "data"));
+            fprintf(stderr, "[rpc][reply] line:%d, corr_id:%s, msg:%s \n", __LINE__, corr_id, msg);
+            result = APPRPC_RESP_ARG_ERROR;
+        }
+        if((result != APPRPC_RESP_OK) || *out)
+            break;
+    } // end of loop
+    return  result;
+} // end of  app_rpc__pycelery_extract_replies

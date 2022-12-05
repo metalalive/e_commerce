@@ -171,13 +171,20 @@ Ensure(rpc_start_test__cfg_missing) {
     assert_that(rpc_arg.job_id.bytes, is_equal_to_string(""));
 } // end of rpc_start_test__cfg_missing
 
-Ensure(rpc_start_test__reconnected_published) {
+Ensure(rpc_start_test__reconnected_published)
+{
+#define  UTEST_NUM_HEADERS   3
     const char *msg_body_raw = "{\"rpc_field_1\": \"some_str_value\", \"rpc_field_2\": 98760}";
     size_t msg_body_raw_sz = strlen(msg_body_raw);
     char job_id_raw[MAX_BYTES_JOB_ID] = {0};
 #pragma GCC diagnostic ignored "-Wint-conversion"
     void *dummy[2] = {0x123, 0x456};
 #pragma GCC diagnostic pop
+    arpc_kv_t  mock_headers[UTEST_NUM_HEADERS] = {
+        {.key={.len=3, .bytes="ace"}, .value={.len=4, .bytes="next"}},
+        {.key={.len=9, .bytes="interview"}, .value={.len=4, .bytes="land"}},
+        {.key={.len=5, .bytes="dream"}, .value={.len=3, .bytes="job"}},
+    };
     amqp_socket_t  *mock_mq_sock = (amqp_socket_t  *)dummy[0];
     amqp_connection_state_t  mock_mq_conn = (amqp_connection_state_t)dummy[1];
     arpc_cfg_bind_t mock_bind_cfg = {.routing_key="rpc.media.utest_operation_1", .exchange_name="exc257",
@@ -190,7 +197,8 @@ Ensure(rpc_start_test__reconnected_published) {
     arpc_exe_arg_t  rpc_arg = {
         .conn=(void *)&mock_ctx_lst, .job_id = {.bytes=&job_id_raw[0], .len=MAX_BYTES_JOB_ID },
         .msg_body = {.len=msg_body_raw_sz, .bytes=(void *)msg_body_raw},  .alias=mock_cfg.alias,
-        .usr_data = NULL,  .routing_key=mock_bind_cfg.routing_key,
+        .usr_data = NULL,  .routing_key=mock_bind_cfg.routing_key,  .headers={.size=UTEST_NUM_HEADERS,
+             .entries=&mock_headers[0] }
     };
     {
         amqp_rpc_reply_t mock_reply_conn_err = {.reply_type=AMQP_RESPONSE_LIBRARY_EXCEPTION,
@@ -209,12 +217,18 @@ Ensure(rpc_start_test__reconnected_published) {
         expect(amqp_channel_open, will_return(&mock_chn_result));
         expect(amqp_queue_declare);
         expect(amqp_get_rpc_reply, will_return(&mock_reply_ok));
-        expect(amqp_basic_publish, will_return(AMQP_STATUS_OK), when(raw_body, is_equal_to_string(msg_body_raw)));
+        expect(amqp_basic_publish, will_return(AMQP_STATUS_OK), when(raw_body, is_equal_to_string(msg_body_raw)),
+                when(route_key_name, is_equal_to_string(mock_bind_cfg.routing_key))  );
+        for(int idx = 0; idx < UTEST_NUM_HEADERS; idx++) {
+            expect(amqp_basic_publish, when(rd_key, is_equal_to_string(mock_headers[idx].key.bytes)),
+                    when(rd_val, is_equal_to_string(mock_headers[idx].value.bytes))  );
+        }
     }
     assert_that(rpc_arg.job_id.bytes, is_equal_to_string(""));
     ARPC_STATUS_CODE status = app_rpc_start(&rpc_arg);
     assert_that(status, is_equal_to(APPRPC_RESP_ACCEPTED));
     assert_that(rpc_arg.job_id.bytes, is_equal_to_string(mock_bind_cfg.reply.correlation_id.name_pattern));
+#undef   UTEST_NUM_HEADERS
 } // end of rpc_start_test__reconnected_published
 
 
