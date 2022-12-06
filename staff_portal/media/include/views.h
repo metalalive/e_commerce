@@ -13,76 +13,75 @@ extern "C" {
 #define QUOTA_MATERIAL__MAX_UPLOAD_KBYTES_PER_USER  1
 
 #define _API_MIDDLEWARE_CHAIN_initiate_multipart_upload  \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_initiate_multipart_upload,  \
-    API_FINAL_HANDLER_initiate_multipart_upload, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_initiate_multipart_upload, 0,  \
+    API_FINAL_HANDLER_initiate_multipart_upload, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_upload_part  \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_upload_part,  \
-    API_FINAL_HANDLER_upload_part, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_upload_part, 0, \
+    API_FINAL_HANDLER_upload_part, 0, \
+    app_deinit_auth_jwt_claims, 1
     
 #define _API_MIDDLEWARE_CHAIN_complete_multipart_upload \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_complete_multipart_upload, \
-    API_FINAL_HANDLER_complete_multipart_upload, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_complete_multipart_upload, 0, \
+    API_FINAL_HANDLER_complete_multipart_upload, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_abort_multipart_upload \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_abort_multipart_upload, \
-    API_FINAL_HANDLER_abort_multipart_upload, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_abort_multipart_upload, 0, \
+    API_FINAL_HANDLER_abort_multipart_upload, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_single_chunk_upload \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_single_chunk_upload, \
-    API_FINAL_HANDLER_single_chunk_upload, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_single_chunk_upload, 0, \
+    API_FINAL_HANDLER_single_chunk_upload, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_start_transcoding_file \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_start_transcoding_file, \
-    API_FINAL_HANDLER_start_transcoding_file, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_start_transcoding_file, 0, \
+    API_FINAL_HANDLER_start_transcoding_file, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_discard_ongoing_job \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_discard_ongoing_job, \
-    API_FINAL_HANDLER_discard_ongoing_job, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_discard_ongoing_job, 0, \
+    API_FINAL_HANDLER_discard_ongoing_job, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_monitor_job_progress \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_monitor_job_progress,  \
-    API_FINAL_HANDLER_monitor_job_progress, \
-    app_deinit_auth_jwt_claims
+    6, app_authenticate_user, 1, \
+    API_FINAL_HANDLER_monitor_job_progress, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_initiate_file_stream \
-    1,  API_FINAL_HANDLER_initiate_file_stream
+    2,  API_FINAL_HANDLER_initiate_file_stream, 0
 
 #define _API_MIDDLEWARE_CHAIN_fetch_file_streaming_element \
-    1,  API_FINAL_HANDLER_fetch_file_streaming_element
+    2,  API_FINAL_HANDLER_fetch_file_streaming_element, 0
 
 #define _API_MIDDLEWARE_CHAIN_discard_file \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_discard_file, \
-    API_FINAL_HANDLER_discard_file,  \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_discard_file, 0, \
+    API_FINAL_HANDLER_discard_file, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_edit_file_acl \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_edit_file_acl, \
-    API_FINAL_HANDLER_edit_file_acl, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_edit_file_acl, 0,  \
+    API_FINAL_HANDLER_edit_file_acl, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_read_file_acl \
-    4, app_authenticate_user, \
-    PERMISSION_CHECK_read_file_acl, \
-    API_FINAL_HANDLER_read_file_acl, \
-    app_deinit_auth_jwt_claims
+    8, app_authenticate_user, 1, \
+    PERMISSION_CHECK_read_file_acl, 0, \
+    API_FINAL_HANDLER_read_file_acl, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 
 // the macro definitions below represent a list of `permission codename` required
@@ -114,11 +113,9 @@ extern "C" {
         ENTRY  e = {.key = "expect_perm", .data = (void*)&perm_codes[0] }; \
         ENTRY *e_ret = NULL; \
         hsearch_r(e, ENTER, &e_ret, node->data); \
-        if(!app_basic_permission_check(node->data)) { \
-            app_run_next_middleware(self, req, node); \
-        } else { \
+        if(app_basic_permission_check(node->data)) \
             h2o_send_error_403(req, "Not permitted to perform the action", "", 0); \
-        } \
+        app_run_next_middleware(self, req, node); \
         return 0; \
     } \
     \
@@ -158,6 +155,8 @@ DBA_RES_CODE  app_verify_existence_resource_id (
 );
 
 int  app_verify_printable_string(const char *str, size_t limit_sz);
+
+const char *app_resource_id__url_decode(json_t *spec, json_t *err_info);
 
 void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
 

@@ -33,6 +33,8 @@ static int verify_jwt_claim_audience(jwt_t *jwt) {
                 break;
             }
         }
+        // Note r_jwt_get_claim_json_t_value() internally allocates extra memory space,
+        //  it has to be freed as soon as it is not in use.
         json_decref(audiences);
     }
     return result;
@@ -121,17 +123,14 @@ int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t
     char   *encoded = NULL;
     json_t *decoded = NULL;
     size_t  name_len = sizeof(AUTH_HEADER_NAME) - 1; // exclude final byte which represent NULL-terminating character
-    if(!self || !req || !node) {
+    if(!self || !req || !node)
         goto error;
-    }
     int found_idx = (int)h2o_find_header_by_str(&req->headers, AUTH_HEADER_NAME, name_len, -1);
-    if(found_idx == -1) { // not found
+    if(found_idx == -1) // not found
         goto error;
-    }
     encoded = extract_header_auth_token(req, found_idx);
-    if(!encoded) {
+    if(!encoded)
         goto error;
-    }
     struct app_jwks_t *jwks = (struct app_jwks_t *)req->conn->ctx->storage.entries[0].data;
     if(r_jwks_is_valid(jwks->handle) != RHN_OK) {
         h2o_send_error_500(req, "internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);
@@ -139,18 +138,15 @@ int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t
         goto done;
     }
     decoded = perform_jwt_authentication(jwks->handle, encoded);
-    if(!decoded) { // authentication failure
+    if(!decoded) // authentication failure
         goto error;
-    }
     if(json_integer_value(json_object_get(decoded, "profile")) < 0) {
         goto error;
     } // TODO: logging, this might be security vulnerability
     ENTRY  e = {.key = "auth", .data = (void*)decoded };
-    ENTRY *e_ret = NULL;
-    // add new item to the given hash map
+    ENTRY *e_ret = NULL; // add new item to the given hash map
     if(hsearch_r(e, ENTER, &e_ret, node->data)) {
-        // next middleware function will take turn ...
-        app_run_next_middleware(self, req, node);
+        // pass
     } else {
         h2o_send_error_500(req, "internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);
         h2o_error_printf("[auth] failed to save JWT claims (0x%lx) to given hash map \n",
@@ -160,10 +156,10 @@ int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t
     goto done;
 error:
     h2o_send_error_401(req, "authentication failure", "", H2O_SEND_ERROR_KEEP_HEADERS);
-    if(decoded) {
+    if(decoded) // TODO, de-initialize the jwt claims in asynchronous way
         json_decref(decoded);
-    } // TODO, de-initialize the jwt claims in asynchronous way
-done:
+done: // always switch to next middleware function ...
+    app_run_next_middleware(self, req, node);
     return 0;
 #undef AUTH_HEADER_NAME
 } // end of app_authenticate_user

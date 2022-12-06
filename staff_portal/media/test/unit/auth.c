@@ -14,7 +14,7 @@ typedef struct {
 
 static void _update_trace_point(void *cb_args) {
     trcptr_t *tracepoint = (trcptr_t *)cb_args;
-    tracepoint->data = tracepoint->new_state;
+    tracepoint->data = (char *) tracepoint->new_state;
 }
 
 static int mock_final_req_handler(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
@@ -176,7 +176,6 @@ Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_audience_2_tests) {
     expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
-    json_decref(mock_aud_claim);
 }
 
 Ensure(MOCK_AUTH_PART, auth_jwt_missing_keyid_tests) {
@@ -206,7 +205,6 @@ Ensure(MOCK_AUTH_PART, auth_jwt_missing_keyid_tests) {
     expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
-    json_decref(mock_aud_claim);
 } // end of auth_jwt_missing_keyid_tests
 
 
@@ -239,7 +237,6 @@ Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_pubkey_tests) {
     expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
-    json_decref(mock_aud_claim);
 } // end of auth_jwt_incorrect_pubkey_tests
 
 
@@ -282,7 +279,6 @@ Ensure(MOCK_AUTH_PART, auth_jwt_verify_signature_failure_tests) {
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
     assert_that(tracepoint.data, is_equal_to(tracepoint.new_state));
-    json_decref(mock_aud_claim);
 } // end of auth_jwt_verify_signature_failure_tests
 
 
@@ -324,7 +320,6 @@ Ensure(MOCK_AUTH_PART, auth_jwt_expiry_tests) {
     expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
-    json_decref(mock_aud_claim);
 } // end of auth_jwt_expiry_tests
 
 
@@ -337,8 +332,8 @@ Ensure(MOCK_AUTH_PART, auth_jwt_succeed_tests) {
     json_t *mock_aud_claim = json_array();
     json_array_append_new(mock_aud_claim, json_string("unrelated_service_1"));
     json_array_append_new(mock_aud_claim, json_string(APP_LABEL));
-    // steal reference from upper object, no need to de-allocate mock_aud_claim again later
-    json_object_set_new(mock_full_claims, "aud", mock_aud_claim);
+    // Note r_jwt_get_claim_json_t_value() internally allocates extra memory space
+    json_object_set (mock_full_claims, "aud", mock_aud_claim);
     jwk_t  mock_jwk = {0};
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
