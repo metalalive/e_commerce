@@ -54,21 +54,29 @@ static DBA_RES_CODE  utest_dbconn__try_process_queries (db_conn_t *_conn, uv_loo
         uv_close((uv_handle_t *)&query->notification, NULL);
         uv_run(loop, UV_RUN_ONCE);
         free(q_node);
+        _conn->processing_queries =  NULL;
     }
     return result;
 } // end of  utest_dbconn__try_process_queries
 
 
-static void utest_acl__operation_done_cb (aacl_result_t *_result, void *_usr_data)
+static __attribute__((optimize("O0"))) void utest_acl__operation_done_cb (aacl_result_t *_result, void **_usr_args)
 {
     size_t  actual_capacity = _result->data.capacity;
     size_t  actual_num_rows = _result->data.size;
     aacl_data_t  *actual_entry_ptr = _result->data.entries;
+    uint32_t  actual_res_owner_id   = _result->owner_usr_id;
+    uint32_t  actual_upld_req  = _result->upld_req;
     uint8_t flg_err   = _result->flag.error;
     uint8_t flg_wr_ok = _result->flag.write_ok;
-    mock(actual_capacity, actual_num_rows, actual_entry_ptr, flg_err, flg_wr_ok);
-    if(_usr_data) {
-        aacl_data_t *expect_entry = _usr_data;
+    uint8_t flg_res_id_exists = _result->flag.res_id_exists;
+    uint8_t flg_res_id_dup    = _result->flag.res_id_dup;
+    mock(actual_capacity, actual_num_rows, actual_entry_ptr, flg_err, flg_wr_ok, flg_res_id_exists,
+            flg_res_id_dup, actual_res_owner_id, actual_upld_req);
+    if(!_usr_args)
+        return;
+    if(_usr_args[0]) {
+        aacl_data_t *expect_entry = _usr_args[0];
         for(size_t idx = 0; idx < actual_num_rows; idx++) {
             assert_that(actual_entry_ptr[idx].usr_id , is_equal_to(expect_entry[idx].usr_id));
             assert_that(actual_entry_ptr[idx].capability.renew, is_equal_to(expect_entry[idx].capability.renew));
@@ -88,12 +96,11 @@ static void utest_acl__operation_done_cb (aacl_result_t *_result, void *_usr_dat
     }; \
     db_conn_t  mock_conn = {.ops={.add_new_query=utest_dbconn__add_new_query, \
         .try_process_queries=utest_dbconn__try_process_queries}}; \
-    aacl_cfg_t mock_acl_cfg = {.usrdata=NULL, .db_pool=&mock_db_pool, .resource_id=UTEST_RESOURCE_ID, \
+    aacl_cfg_t mock_acl_cfg = {.usr_args={.entries=NULL, .size=0}, .db_pool=&mock_db_pool, .resource_id=UTEST_RESOURCE_ID, \
                 .loop=uv_default_loop(), .callback=utest_acl__operation_done_cb };
 
 
-#define  UTEST_ACL_LOAD_SETUP(rawsql_max_nkbytes, exp_num_rows, _num_cols) \
-    UTEST_ACL_COMMON_SETUP(rawsql_max_nkbytes) \
+#define  UTEST_DB_QUERY_RESULT_SETUP(exp_num_rows, _num_cols) \
     uint8_t  expect_num_rows = exp_num_rows, idx = 0; \
     db_query_result_t  *expect_row[exp_num_rows] = {0}; \
     { \
@@ -109,7 +116,7 @@ static void utest_acl__operation_done_cb (aacl_result_t *_result, void *_usr_dat
         } \
     }
 
-#define  UTEST_ACL_LOAD_TEARDOWN \
+#define  UTEST_DB_QUERY_RESULT_TEARDOWN \
     free(expect_row[0]);
 
 
@@ -117,7 +124,8 @@ static void utest_acl__operation_done_cb (aacl_result_t *_result, void *_usr_dat
 #define  UTEST_EXPECT_NUM_COLS  4
 Ensure(app_acl_test__load_ok)
 {
-    UTEST_ACL_LOAD_SETUP(1, UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
+    UTEST_ACL_COMMON_SETUP(1)
+    UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
     const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {
             {"93804", "1", "0", "0"},  {"4095", "0", "0", "0"},  {"133847", "0", "1", "0"}  };
     aacl_data_t  expect_row_data_int[UTEST_EXPECT_NUM_ROWS] = {
@@ -125,7 +133,9 @@ Ensure(app_acl_test__load_ok)
         {.usr_id=4095,   .capability={.transcode=0, .renew=0, .edit_acl=0}},
         {.usr_id=133847, .capability={.transcode=0, .renew=1, .edit_acl=0}}
     };
-    mock_acl_cfg.usrdata = (void *)&expect_row_data_int[0];
+    void *mock_usr_args[1] = {(void *)&expect_row_data_int[0]};
+    mock_acl_cfg.usr_args.entries = (void **)&mock_usr_args[0];
+    mock_acl_cfg.usr_args.size = 1;
     expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
     expect(utest_dbpool__acquire_free_conn, will_return(&mock_conn), when(_pool, is_equal_to(&mock_db_pool)));
     expect(utest_dbconn__add_new_query, when(_conn, is_equal_to(&mock_conn)), when(q, is_not_equal_to(NULL)));
@@ -142,7 +152,7 @@ Ensure(app_acl_test__load_ok)
                when(actual_num_rows, is_equal_to(UTEST_EXPECT_NUM_ROWS)) );
     int err =  app_resource_acl_load(&mock_acl_cfg);
     assert_that(err, is_equal_to(0));
-    UTEST_ACL_LOAD_TEARDOWN
+    UTEST_DB_QUERY_RESULT_TEARDOWN
 } // end of app_acl_test__load_ok
 #undef  UTEST_EXPECT_NUM_ROWS
 #undef  UTEST_EXPECT_NUM_COLS
@@ -152,7 +162,8 @@ Ensure(app_acl_test__load_ok)
 #define  UTEST_EXPECT_NUM_COLS  4
 Ensure(app_acl_test__load_error)
 {
-    UTEST_ACL_LOAD_SETUP(1, UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
+    UTEST_ACL_COMMON_SETUP(1)
+    UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
     uint8_t  expect_error = 1;
     const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"351", "0", "1", "1"}};
     expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
@@ -173,7 +184,7 @@ Ensure(app_acl_test__load_error)
                when(actual_num_rows, is_equal_to(UTEST_EXPECT_NUM_ROWS)) );
     int err =  app_resource_acl_load(&mock_acl_cfg);
     assert_that(err, is_equal_to(0));
-    UTEST_ACL_LOAD_TEARDOWN
+    UTEST_DB_QUERY_RESULT_TEARDOWN
 } // end of app_acl_test__load_error
 #undef  UTEST_EXPECT_NUM_ROWS
 #undef  UTEST_EXPECT_NUM_COLS
@@ -356,6 +367,96 @@ Ensure(app_acl_test__save_error)
 } // end of app_acl_test__save_error
 
 
+#define  UTEST_EXPECT_NUM_ROWS  1
+#define  UTEST_EXPECT_NUM_COLS  2
+Ensure(app_acl_test__resource_id__exact_one)
+{
+    UTEST_ACL_COMMON_SETUP(1)
+    UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
+    const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"139", "0a14f029"}};
+    expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
+    expect(utest_dbpool__acquire_free_conn, will_return(&mock_conn), when(_pool, is_equal_to(&mock_db_pool)));
+    expect(utest_dbconn__add_new_query, when(_conn, is_equal_to(&mock_conn)), when(q, is_not_equal_to(NULL)));
+    expect(utest_dbpool__release_used_conn, will_return(DBA_RESULT_OK), when(_conn, is_equal_to(&mock_conn)));
+    expect(utest_dbconn__try_process_queries, will_return(DBA_RESULT_OK),
+                will_set_contents_of_parameter(exp_num_rows_p, &expect_num_rows, sizeof(uint8_t))  );
+    {
+        db_query_row_info_t *rowinfo = (db_query_row_info_t *) &expect_row[0]->data[0];
+        for(uint8_t jdx = 0; jdx < UTEST_EXPECT_NUM_COLS; jdx++)
+            rowinfo->values[jdx] = (char *) expect_row_data[0][jdx];
+        expect(utest_dbconn__try_process_queries, will_return(expect_row[0]));
+    }
+    expect(utest_acl__operation_done_cb, when(flg_err, is_equal_to(0)),  when(flg_res_id_exists, is_equal_to(1)),
+          when(actual_res_owner_id, is_equal_to(139)),  when(actual_upld_req, is_equal_to(0x0a14f029)),
+    );
+    int err = app_acl_verify_resource_id (&mock_acl_cfg);
+    assert_that(err, is_equal_to(0));
+    UTEST_DB_QUERY_RESULT_TEARDOWN
+} // end of app_acl_test__resource_id__exact_one
+#undef  UTEST_EXPECT_NUM_ROWS
+#undef  UTEST_EXPECT_NUM_COLS
+
+
+#define  UTEST_EXPECT_NUM_ROWS  2
+#define  UTEST_EXPECT_NUM_COLS  2
+Ensure(app_acl_test__resource_id__duplicate)
+{
+    UTEST_ACL_COMMON_SETUP(1)
+    UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
+    const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"140", "0a14f029"}, {"148", "f10293b"}};
+    expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
+    expect(utest_dbpool__acquire_free_conn, will_return(&mock_conn), when(_pool, is_equal_to(&mock_db_pool)));
+    expect(utest_dbconn__add_new_query, when(_conn, is_equal_to(&mock_conn)), when(q, is_not_equal_to(NULL)));
+    expect(utest_dbpool__release_used_conn, will_return(DBA_RESULT_OK), when(_conn, is_equal_to(&mock_conn)));
+    expect(utest_dbconn__try_process_queries, will_return(DBA_RESULT_OK),
+                will_set_contents_of_parameter(exp_num_rows_p, &expect_num_rows, sizeof(uint8_t))  );
+    for(idx = 0; idx < UTEST_EXPECT_NUM_ROWS; idx++) {
+        db_query_row_info_t *rowinfo = (db_query_row_info_t *) &expect_row[idx]->data[0];
+        for(uint8_t jdx = 0; jdx < UTEST_EXPECT_NUM_COLS; jdx++)
+            rowinfo->values[jdx] = (char *) expect_row_data[idx][jdx];
+        expect(utest_dbconn__try_process_queries, will_return(expect_row[idx]));
+    } // end of loop
+    expect(utest_acl__operation_done_cb, when(flg_err, is_equal_to(0)),
+          when(flg_res_id_exists, is_equal_to(0)),  when(flg_res_id_dup, is_equal_to(1))  );
+    int err = app_acl_verify_resource_id (&mock_acl_cfg);
+    assert_that(err, is_equal_to(0));
+    UTEST_DB_QUERY_RESULT_TEARDOWN
+} // end of app_acl_test__resource_id__duplicate
+#undef  UTEST_EXPECT_NUM_ROWS
+#undef  UTEST_EXPECT_NUM_COLS
+
+
+#define  UTEST_EXPECT_NUM_ROWS  1
+#define  UTEST_EXPECT_NUM_COLS  2
+Ensure(app_acl_test__resource_id__db_error)
+{
+    UTEST_ACL_COMMON_SETUP(1)
+    UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
+    uint8_t  expect_error = 1;
+    const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"1351", "dea1b33f"}};
+    expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
+    expect(utest_dbpool__acquire_free_conn, will_return(&mock_conn), when(_pool, is_equal_to(&mock_db_pool)));
+    expect(utest_dbconn__add_new_query, when(_conn, is_equal_to(&mock_conn)), when(q, is_not_equal_to(NULL)));
+    expect(utest_dbpool__release_used_conn, will_return(DBA_RESULT_OK), when(_conn, is_equal_to(&mock_conn)));
+    expect(utest_dbconn__try_process_queries, will_return(DBA_RESULT_OK),
+            will_set_contents_of_parameter(exp_num_rows_p, &expect_num_rows, sizeof(uint8_t)),
+            will_set_contents_of_parameter(expect_err_p, &expect_error, sizeof(uint8_t))     );
+    {
+        db_query_row_info_t *rowinfo = (db_query_row_info_t *) &expect_row[0]->data[0];
+        for(uint8_t jdx = 0; jdx < UTEST_EXPECT_NUM_COLS; jdx++)
+            rowinfo->values[jdx] = (char *) expect_row_data[0][jdx];
+        expect(utest_dbconn__try_process_queries, will_return(expect_row[0]));
+    }
+    expect(utest_acl__operation_done_cb, when(flg_err, is_equal_to(1)),
+          when(flg_res_id_exists, is_equal_to(0)),  when(flg_res_id_dup, is_equal_to(0))  );
+    int err = app_acl_verify_resource_id (&mock_acl_cfg);
+    assert_that(err, is_equal_to(0));
+    UTEST_DB_QUERY_RESULT_TEARDOWN
+} // end of app_acl_test__resource_id__db_error
+#undef  UTEST_EXPECT_NUM_ROWS
+#undef  UTEST_EXPECT_NUM_COLS
+
+
 TestSuite *app_resource_acl_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -365,5 +466,8 @@ TestSuite *app_resource_acl_tests(void)
     add_test(suite, app_acl_test__build_update_list_2);
     add_test(suite, app_acl_test__save_ok);
     add_test(suite, app_acl_test__save_error);
+    add_test(suite, app_acl_test__resource_id__exact_one);
+    add_test(suite, app_acl_test__resource_id__duplicate);
+    add_test(suite, app_acl_test__resource_id__db_error);
     return suite;
 }

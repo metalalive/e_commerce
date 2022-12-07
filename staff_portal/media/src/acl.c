@@ -2,30 +2,32 @@
 #include "acl.h"
 #include "models/query.h"
 
-#define  NUM_USR_ARGS  1
 #define  SQL_TABLE_NAME   "file_access_control"
 #define  SQL_BASE64_ENCODED_RESOURCE_ID   "FROM_BASE64('%s')"
 
 #define  COPY_CFG_TO_CTX(_ctx, _cfg) { \
     _ctx->resource_id = _cfg->resource_id; \
     _ctx->usr_id   = _cfg->usr_id; \
-    _ctx->usrdata  = _cfg->usrdata; \
     _ctx->callback = _cfg->callback; \
+    _ctx->_num_usr_args  = _cfg->usr_args.size; \
 }
 
 typedef struct {
     APP_ACL_CFG__COMMON_FIELDS
     aacl_result_t  result;
+    uint16_t   _num_internal_args;
+    uint16_t   _num_usr_args;
 } _aacl_ctx_t;
 
 
 static void  appacl_db_dummy_cb (db_query_t *q, db_query_result_t *rs)
 {}
 
-static void  appacl_db_common_trigger_callback (_aacl_ctx_t  *ctx)
+static void  appacl_db_common_trigger_callback (_aacl_ctx_t  *ctx, void  **usr_args)
 {
+    usr_args = ctx->_num_usr_args == 0 ? NULL: usr_args;
     aacl_result_t  *_result = &ctx->result;
-    ctx->callback(_result, ctx->usrdata);
+    ctx->callback(_result, usr_args);
     if(_result->data.entries) {
         free(_result->data.entries);
         _result->data.entries = NULL;
@@ -35,23 +37,28 @@ static void  appacl_db_common_trigger_callback (_aacl_ctx_t  *ctx)
 
 static void  appacl_loaddb_resultset_dealloc (db_query_t *q, db_query_result_t *rs)
 {
-    _aacl_ctx_t  *ctx = q->cfg.usr_data.entry[0];
-    appacl_db_common_trigger_callback (ctx);
+    _aacl_ctx_t  *ctx =  q->cfg.usr_data.entry[0];
+    void   **usr_args = &q->cfg.usr_data.entry[ctx->_num_internal_args];
+    appacl_db_common_trigger_callback (ctx, usr_args);
 }
 
 static void  appacl_db_common_error_cb (db_query_t *q, db_query_result_t *rs)
 {
-    _aacl_ctx_t  *ctx = q->cfg.usr_data.entry[0];
+    _aacl_ctx_t  *ctx =  q->cfg.usr_data.entry[0];
+    void   **usr_args = &q->cfg.usr_data.entry[ctx->_num_internal_args];
     ctx->result.flag.error = 1;
-    appacl_db_common_trigger_callback (ctx);
+    fprintf(stderr, "[acl] line:%d, error, resource ID:%s, user ID:%u \n", __LINE__,
+            ctx->resource_id, ctx->usr_id);
+    appacl_db_common_trigger_callback (ctx, usr_args);
 }
 
 static void  appacl_db_write_done_cb (db_query_t *q, db_query_result_t *rs)
 {
     assert(rs->_final);
-    _aacl_ctx_t  *ctx = q->cfg.usr_data.entry[0];
+    _aacl_ctx_t  *ctx =  q->cfg.usr_data.entry[0];
+    void   **usr_args = &q->cfg.usr_data.entry[ctx->_num_internal_args];
     ctx->result.flag.write_ok = 1;
-    appacl_db_common_trigger_callback (ctx);
+    appacl_db_common_trigger_callback (ctx, usr_args);
 }
 
 static void  appacl_loaddb_row_fetched (db_query_t *q, db_query_result_t *rs)
@@ -103,9 +110,13 @@ int  app_resource_acl_load(aacl_cfg_t *cfg)
     }
 #undef   SQL_PATTERN_1
 #undef   SQL_PATTERN_2
-    void *db_async_usr_args[NUM_USR_ARGS] = {ctx};
+    ctx->_num_internal_args = 1;
+    uint16_t tot_num_usr_args = ctx->_num_internal_args + ctx->_num_usr_args;
+    void *db_async_usr_args[tot_num_usr_args];
+    db_async_usr_args[0] = ctx;
+    memcpy(&db_async_usr_args[ctx->_num_internal_args], cfg->usr_args.entries, sizeof(void *) * ctx->_num_usr_args);
     db_query_cfg_t  db_cfg = { .loop=cfg->loop, .pool=cfg->db_pool,
-        .usr_data={.entry=(void **)&db_async_usr_args[0], .len=NUM_USR_ARGS},
+        .usr_data={.entry=(void **)&db_async_usr_args[0], .len=tot_num_usr_args},
         .callbacks = {.result_rdy=appacl_db_dummy_cb, .row_fetched=appacl_loaddb_row_fetched,
             .result_free=appacl_loaddb_resultset_dealloc,  .error=appacl_db_common_error_cb },
         .statements = {.entry=&rawsql[0], .num_rs=1}
@@ -116,6 +127,87 @@ int  app_resource_acl_load(aacl_cfg_t *cfg)
         free(ctx);
     return err;
 } // end of  app_resource_acl_load
+
+
+static void _app_acl_resource_id__rs_free (db_query_t *q, db_query_result_t *rs)
+{
+    _aacl_ctx_t  *ctx = q->cfg.usr_data.entry[0];
+#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
+    size_t num_rows_read = (size_t) q->cfg.usr_data.entry[1];
+    uint32_t resource_owner_id = (uint32_t) q->cfg.usr_data.entry[2];
+    uint32_t last_upld_req     = (uint32_t) q->cfg.usr_data.entry[3];
+#pragma GCC diagnostic pop
+    aacl_result_t  *_result = &ctx->result;
+    if(num_rows_read == 1) {
+        _result->owner_usr_id = resource_owner_id;
+        _result->upld_req = last_upld_req;
+        _result->flag.res_id_exists = 1;
+    } else if(num_rows_read > 1) {
+        _result->flag.res_id_dup = 1;
+    }
+    void   **usr_args = &q->cfg.usr_data.entry[ ctx->_num_internal_args ];
+    appacl_db_common_trigger_callback (ctx, usr_args);
+} // end of  _app_acl_resource_id__rs_free
+
+
+static void  _app_acl_resource_id__row_fetch (db_query_t *q, db_query_result_t *rs)
+{
+    db_query_row_info_t *row = (db_query_row_info_t *)&rs->data[0];
+    if(row->values[0]) {
+        uint32_t resource_owner_id = (uint32_t) strtoul(row->values[0], NULL, 10);
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+        q->cfg.usr_data.entry[2] = (void *) resource_owner_id;
+#pragma GCC diagnostic pop
+    }
+    if(row->values[1]) {
+        uint32_t last_upld_req = (uint32_t) strtoul(row->values[1], NULL, 16);
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+        q->cfg.usr_data.entry[3] = (void *) last_upld_req;
+#pragma GCC diagnostic pop
+    }
+#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
+    size_t num_rows_read = (size_t) q->cfg.usr_data.entry[1];
+#pragma GCC diagnostic pop
+    q->cfg.usr_data.entry[1] = (void *) num_rows_read + 1;
+} // end of  _app_acl_resource_id__row_fetch
+
+
+int  app_acl_verify_resource_id (aacl_cfg_t *cfg)
+{
+    int err = 1;
+    if(!cfg || !cfg->resource_id || !cfg->callback)
+        return err;
+#define SQL_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`, HEX(`last_upld_req`) FROM `uploaded_file` WHERE `id` = ?' USING FROM_BASE64('%s');"
+    size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(cfg->resource_id);
+    char raw_sql[raw_sql_sz];
+    memset(&raw_sql[0], 0x0, raw_sql_sz);
+    size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, cfg->resource_id);
+    assert(nwrite_sql < raw_sql_sz);
+#undef SQL_PATTERN
+    _aacl_ctx_t  *ctx = calloc(1, sizeof(_aacl_ctx_t));
+    COPY_CFG_TO_CTX(ctx, cfg)
+    ctx->_num_internal_args = 4;
+    uint16_t tot_num_usr_args = ctx->_num_internal_args + ctx->_num_usr_args;
+    void *db_async_usr_args[tot_num_usr_args];
+    db_async_usr_args[0] = ctx;
+    db_async_usr_args[1] = (void *)0;
+    db_async_usr_args[2] = (void *)0;
+    db_async_usr_args[3] = (void *)0;
+    memcpy(&db_async_usr_args[ctx->_num_internal_args], cfg->usr_args.entries, sizeof(void *) * ctx->_num_usr_args);
+    db_query_cfg_t  db_cfg = {
+        .statements = {.entry=&raw_sql[0], .num_rs=1}, .pool=cfg->db_pool, .loop=cfg->loop,
+        .usr_data = {.entry=(void **)&db_async_usr_args[0], .len=tot_num_usr_args},
+        .callbacks = {
+            .result_rdy=appacl_db_dummy_cb,  .error=appacl_db_common_error_cb,
+            .row_fetched = _app_acl_resource_id__row_fetch,
+            .result_free = _app_acl_resource_id__rs_free,
+        }
+    };
+    DBA_RES_CODE  result = app_db_query_start(&db_cfg);
+    err = result != DBA_RESULT_OK;
+    return err;
+} // end of app_acl_verify_resource_id
+
 
 
 void  app_acl__build_update_lists (aacl_result_t *existing_data, json_t *new_data,
@@ -246,9 +338,13 @@ int  app_resource_acl_save(aacl_cfg_t *cfg, aacl_result_t *existing_data, json_t
     } // end of list of sql queries construction
     _aacl_ctx_t  *ctx = calloc(1, sizeof(_aacl_ctx_t));
     COPY_CFG_TO_CTX(ctx, cfg)
-    void *db_async_usr_args[NUM_USR_ARGS] = {ctx};
+    ctx->_num_internal_args = 1;
+    uint16_t tot_num_usr_args = ctx->_num_internal_args + ctx->_num_usr_args;
+    void *db_async_usr_args[tot_num_usr_args];
+    db_async_usr_args[0] = ctx;
+    memcpy(&db_async_usr_args[ctx->_num_internal_args], cfg->usr_args.entries, sizeof(void *) * ctx->_num_usr_args);
     db_query_cfg_t  db_cfg = { .loop=cfg->loop, .pool=cfg->db_pool,
-        .usr_data={.entry=(void **)&db_async_usr_args[0], .len=NUM_USR_ARGS},
+        .usr_data={.entry=(void **)&db_async_usr_args[0], .len=tot_num_usr_args},
         .callbacks = {.result_rdy=appacl_db_write_done_cb, .row_fetched=appacl_db_dummy_cb,
             .result_free=appacl_db_dummy_cb,  .error=appacl_db_common_error_cb },
         .statements = {.entry=&final_sql[0], .num_rs=1}

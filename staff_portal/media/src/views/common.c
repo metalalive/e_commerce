@@ -2,8 +2,10 @@
 #include <errno.h>
 #include <sys/file.h>
 #include <openssl/sha.h>
+#include <curl/curl.h>
 
 #include "utils.h"
+#include "acl.h"
 #include "views.h"
 #include "models/pool.h"
 #include "models/query.h"
@@ -33,24 +35,6 @@ static void  _app__upld_req_exist__row_fetch(db_query_t *target, db_query_result
     target->cfg.usr_data.entry[DB_OP__USRARG_IDX__NB_ROWS_RD] = (void *) num_rows_read + 1;
 } // end of _app__upld_req_exist__row_fetch
 
-static void  _app_resource_id_exist__row_fetch(db_query_t *target, db_query_result_t *rs)
-{
-    db_query_row_info_t *row = (db_query_row_info_t *)&rs->data[0];
-    if(row->values[0]) {
-        uint32_t resource_owner_id = (uint32_t) strtoul(row->values[0], NULL, 10);
-#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-        target->cfg.usr_data.entry[DB_OP__USRARG_IDX__RES_OWNER_ID] = (void *) resource_owner_id;
-#pragma GCC diagnostic pop
-    }
-    if(row->values[1]) {
-        uint32_t last_upld_req = (uint32_t) strtoul(row->values[1], NULL, 16);
-#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-        target->cfg.usr_data.entry[DB_OP__USRARG_IDX__UPLD_REQ_ID] = (void *) last_upld_req;
-#pragma GCC diagnostic pop
-    }
-    _app__upld_req_exist__row_fetch(target, rs);
-} // end of _app_resource_id_exist__row_fetch
-
 
 static void  _app__upld_req_exist__rs_free(db_query_t *target, db_query_result_t *rs)
 {
@@ -76,21 +60,6 @@ static void  _app__upld_req_exist__rs_free(db_query_t *target, db_query_result_t
         target->cfg.callbacks.error(target, rs);
     }
 } // end of _app__upld_req_exist__rs_free
-
-static void  _app_resource_id_exist__rs_free(db_query_t *target, db_query_result_t *rs)
-{
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    size_t num_rows_read = (size_t) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__NB_ROWS_RD];
-    uint32_t resource_owner_id = (uint32_t) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__RES_OWNER_ID];
-    uint32_t last_upld_req     = (uint32_t) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__UPLD_REQ_ID];
-#pragma GCC diagnostic pop
-    if(num_rows_read == 1) {
-        app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[DB_OP__USRARG_IDX__MIDDLEWARE_NODE];
-        app_save_int_to_hashmap(node->data, "last_upld_req", last_upld_req);
-        app_save_int_to_hashmap(node->data, "resource_owner_id", resource_owner_id);
-    }
-    _app__upld_req_exist__rs_free(target, rs);
-} // end of _app_resource_id_exist__rs_free
 
 
 #define GET_USR_PROF_ID(node, usr_id) \
@@ -144,39 +113,53 @@ DBA_RES_CODE  app_validate_uncommitted_upld_req(RESTAPI_HANDLER_ARGS(self, req),
 } // end of  app_validate_uncommitted_upld_req
 
 
-DBA_RES_CODE  app_verify_existence_resource_id (RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node,
-        void (*err_cb)(db_query_t *, db_query_result_t *), app_middleware_fn success_cb, app_middleware_fn failure_cb)
+const char *app_resource_id__url_decode(json_t *spec, json_t *err_info)
 {
-    if(!self || !req || !node || !err_cb || !failure_cb || !success_cb)
-        return DBA_RESULT_ERROR_ARG;
-    char  *res_id_encoded = (char *)app_fetch_from_hashmap(node->data, "res_id_encoded");
-    if(!res_id_encoded)
-        return DBA_RESULT_ERROR_ARG;
-#define SQL_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`, HEX(`last_upld_req`) FROM `uploaded_file` WHERE `id` = ?' USING FROM_BASE64('%s');"
-    size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(res_id_encoded);
-    char raw_sql[raw_sql_sz];
-    memset(&raw_sql[0], 0x0, raw_sql_sz);
-    size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, res_id_encoded);
-    assert(nwrite_sql < raw_sql_sz);
-#undef SQL_PATTERN
-#define  NUM_USR_ARGS  (DB_OP__USRARG_IDX__UPLD_REQ_ID + 1)
-    void *db_async_usr_data[NUM_USR_ARGS] = {(void *)req, (void *)self, (void *)node,
-            (void *)0, (void *)success_cb, (void *)failure_cb, (void *)0, (void *)0 };
-    db_query_cfg_t  cfg = {
-        .statements = {.entry = &raw_sql[0], .num_rs = 1},
-        .usr_data = {.entry = (void **)&db_async_usr_data, .len = NUM_USR_ARGS},
-        .pool = app_db_pool_get_pool("db_server_1"),
-        .loop = req->conn->ctx->loop,
-        .callbacks = {
-            .result_rdy  = app_db_async_dummy_cb,
-            .row_fetched = _app_resource_id_exist__row_fetch,
-            .result_free = _app_resource_id_exist__rs_free,
-            .error = err_cb,
+    const char *resource_id = json_string_value(json_object_get(spec, "res_id")); // URL-encoded
+    if(resource_id) {
+        size_t res_id_sz = strlen(resource_id);
+        size_t  max_res_id_sz = APP_RESOURCE_ID_SIZE * 3; // consider it is URL-encoded
+        if(res_id_sz > max_res_id_sz) {
+            json_object_set_new(err_info, "resource_id", json_string("exceeding max limit"));
+        } else { // resource ID from frontend client should always be URL-encoded
+            int   out_len  = 0;
+            char *res_id_uri_decoded = curl_easy_unescape(NULL, resource_id, (int)res_id_sz, &out_len);
+            json_object_set_new(spec, "res_id", json_string(res_id_uri_decoded));
+            free(res_id_uri_decoded);
+            resource_id = json_string_value(json_object_get(spec, "res_id"));
+            res_id_sz = strlen(resource_id);
+            int err = app_verify_printable_string(resource_id, res_id_sz);
+            if(err)
+                json_object_set_new(err_info, "resource_id", json_string("contains non-printable charater"));
         }
-    };
-    return app_db_query_start(&cfg);
-#undef NUM_USR_ARGS
-} // end of app_verify_existence_resource_id
+    } else {
+        json_object_set_new(err_info, "query", json_string("missing resource id in URL"));
+    }
+    return resource_id;
+} // end of  app_resource_id__url_decode
+
+
+int  api_http_resp_status__verify_resource_id (app_middleware_node_t *node, aacl_result_t *result, json_t *err_info)
+{
+    int resp_status = 0;
+    if(result->flag.error || result->flag.res_id_dup) {
+        h2o_error_printf("[api][common] line:%d, err=%u, dup=%u \n", __LINE__,
+                result->flag.error, result->flag.res_id_dup);
+        json_object_set_new(err_info, "res_id", json_string("internal error"));
+        resp_status = 500;
+    } else if (!result->flag.res_id_exists) {
+        json_object_set_new(err_info, "res_id", json_string("not exists"));
+        resp_status = 404;
+    } else {
+        json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
+        uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
+        if(curr_usr_id != result->owner_usr_id) {
+            json_object_set_new(err_info, "res_id", json_string("permission"));
+            resp_status = 403;
+        } // TODO , allow operations from the users who have access to the resource
+    }
+    return resp_status;
+} // end of  api_http_resp_status__verify_resource_id
 
 
 int  app_verify_printable_string(const char *str, size_t limit_sz)

@@ -30,14 +30,38 @@ static void api__dealloc_req_hashmap (app_middleware_node_t *node) {
     }
 } // end of api__dealloc_req_hashmap
 
+
+static void  _api_start_transcode__deinit_primitives (h2o_req_t *req, h2o_handler_t *hdlr, app_middleware_node_t *node)
+{
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
+    if(req->res.status == 0) {
+        req->res.status = 500;
+        fprintf(stderr, "[api][transcode] line:%d \n", __LINE__ );
+    }
+    // h2o_send_error_503(req, "server temporarily unavailable", "", H2O_SEND_ERROR_KEEP_HEADERS);
+    json_t *_resp_body = app_fetch_from_hashmap(node->data, "res_body_json");
+    size_t  nb_required = json_dumpb(_resp_body, NULL, 0, 0);
+    if(nb_required > 0) {
+        char  body[nb_required + 1];
+        size_t  nwrite = json_dumpb(_resp_body, &body[0], nb_required, JSON_COMPACT);
+        body[nwrite++] = 0x0;
+        assert(nwrite <= nb_required);
+        h2o_send_inline(req, body, strlen(&body[0]));
+    } else {
+        h2o_send_inline(req, "{}", 2);
+    }
+    api__dealloc_req_hashmap(node);
+    app_run_next_middleware(hdlr, req, node);
+} // end of  _api_start_transcode__deinit_primitives
+
+
 static void  api__start_transcoding__db_async_err(db_query_t *target, db_query_result_t *rs)
 {
     h2o_req_t     *req  = (h2o_req_t *) target->cfg.usr_data.entry[0];
     h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[1];
     app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
-    h2o_send_error_503(req, "server temporarily unavailable", "", H2O_SEND_ERROR_KEEP_HEADERS);
-    api__dealloc_req_hashmap(node);
-    app_run_next_middleware(self, req, node);
+    req->res.status = 503;
+    _api_start_transcode__deinit_primitives (req, self, node);
 } // end of api__start_transcoding__db_async_err
 
 
@@ -81,7 +105,6 @@ ARPC_STATUS_CODE api__start_transcoding__render_rpc_corr_id (
 
 static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jobs(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
 { // create async job send it to message queue, since it takes time to transcode media file
-    int http_resp_status = 0;
     char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
     json_t *res_body_json = app_fetch_from_hashmap(node->data, "res_body_json");
     json_t *req_body_json = app_fetch_from_hashmap(node->data, "req_body_json");
@@ -89,7 +112,7 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
     json_t *elm_streams = json_object_get(req_body_json, "elementary_streams");
     json_t *parts_size  = json_object_get(req_body_json, "parts_size");
     json_t *res_id_item = json_object_get(req_body_json, "resource_id");
-    json_t *usr_id_item   = json_object_get(req_body_json, "usr_id");
+    json_t *usr_id_item   = json_object_get(req_body_json, "usr_id"); // resource owner, not current authorized user
     json_t *upld_req_item = json_object_get(req_body_json, "last_upld_req");
     json_object_set(res_body_json, "resource_id", res_id_item);
     // determine source and destination storage for RPC consumers, TODO, scalability
@@ -137,27 +160,16 @@ static __attribute__((optimize("O0"))) void api__transcoding_file__send_async_jo
             .usr_data = (void *)msgq_body_item,
         }; // will start a new job and transcode asynchronously
         if(app_rpc_start(&rpc_arg) == APPRPC_RESP_ACCEPTED) {
-            http_resp_status = 202;
+            req->res.status = 202;
             json_object_set_new(res_body_json, "job_id", json_string(&job_id_raw[0]));
         } else {
-            http_resp_status = 503;
+            req->res.status = 503;
             json_object_set_new(res_body_json, "job_id", json_null());
         }
         free(msg_body_raw);
     } // end of construct message body
     json_decref(msgq_body_item);
-    {
-#define  MAX_BYTES_RESP_BODY  512
-        req->res.status = http_resp_status;
-        req->res.reason = "Accepted";
-        char body_raw[MAX_BYTES_RESP_BODY] = {0};
-        size_t nwrite = json_dumpb(res_body_json, &body_raw[0],  MAX_BYTES_RESP_BODY, JSON_COMPACT);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
-        h2o_send_inline(req, body_raw, nwrite);
-#undef MAX_BYTES_RESP_BODY
-    }
-    api__dealloc_req_hashmap(node);
-    app_run_next_middleware(self, req, node);
+    _api_start_transcode__deinit_primitives (req, self, node);
 } // end of api__transcoding_file__send_async_jobs
 
 
@@ -185,16 +197,17 @@ static  void  _mark_old_transcoded_version__rs_free(db_query_t *target, db_query
     h2o_req_t     *req  = (h2o_req_t *)     target->cfg.usr_data.entry[0];
     h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[1];
     app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
+    json_t *_req_body = (json_t *)app_fetch_from_hashmap(node->data, "req_body_json");
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    uint32_t resource_owner_id = (uint32_t) app_fetch_from_hashmap(node->data, "resource_owner_id"); 
-    uint32_t last_upld_req     = (uint32_t) app_fetch_from_hashmap(node->data, "last_upld_req"); 
+    uint32_t _resource_owner_id = (uint32_t) json_integer_value(json_object_get(_req_body, "usr_id"));
+    uint32_t _last_upld_req     = (uint32_t) json_integer_value(json_object_get(_req_body, "last_upld_req"));
 #pragma GCC diagnostic pop
 #define SQL_PATTERN "SELECT  `size_bytes` FROM `upload_filechunk` WHERE `usr_id` = %u " \
         " AND `req_id` = x'%08x' ORDER BY `part` ASC;"
-    size_t raw_sql_sz = sizeof(SQL_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(last_upld_req);
+    size_t raw_sql_sz = sizeof(SQL_PATTERN) + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(_last_upld_req);
     char raw_sql[raw_sql_sz];
     memset(&raw_sql[0], 0x0, raw_sql_sz);
-    size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, resource_owner_id, last_upld_req);
+    size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, _resource_owner_id, _last_upld_req);
     assert(nwrite_sql < raw_sql_sz);
 #undef SQL_PATTERN
 #define  NUM_USR_ARGS  3
@@ -202,27 +215,20 @@ static  void  _mark_old_transcoded_version__rs_free(db_query_t *target, db_query
     db_query_cfg_t  cfg = {
         .statements = {.entry = &raw_sql[0], .num_rs = 1},
         .usr_data = {.entry = (void **)&db_async_usr_data, .len = NUM_USR_ARGS},
-        .pool = app_db_pool_get_pool("db_server_1"),
-        .loop = req->conn->ctx->loop,
-        .callbacks = {
-            .result_rdy  = app_db_async_dummy_cb,
-            .row_fetched = _load_filepart_info__row_fetch,
-            .result_free = _load_filepart_info__rs_free,
-            .error = api__start_transcoding__db_async_err,
+        .pool = app_db_pool_get_pool("db_server_1"),   .loop = req->conn->ctx->loop,
+        .callbacks = {.result_rdy = app_db_async_dummy_cb,   .row_fetched = _load_filepart_info__row_fetch,
+            .result_free = _load_filepart_info__rs_free,  .error = api__start_transcoding__db_async_err,
         }
     };
 #undef NUM_USR_ARGS
     if(app_db_query_start(&cfg) == DBA_RESULT_OK) {
-        json_t *req_body_json = (json_t *)app_fetch_from_hashmap(node->data, "req_body_json");
-        json_object_set_new(req_body_json, "parts_size", json_array());
+        json_object_set_new(_req_body, "parts_size", json_array());
     } else {
-        void *args[3] = {(void *)req, (void *)self, (void *)node};
-        db_query_t  fake_q = {.cfg = {.usr_data = {.entry = (void **)&args[0], .len=3}}};
-        api__start_transcoding__db_async_err(&fake_q, NULL);
+        _api_start_transcode__deinit_primitives (req, self, node);
     }
 } // end of _mark_old_transcoded_version__rs_free
 
-static __attribute__((optimize("O0"))) void  _mark_old_transcoded_version__row_fetch(db_query_t *target, db_query_result_t *rs)
+static void  _mark_old_transcoded_version__row_fetch(db_query_t *target, db_query_result_t *rs)
 {
     db_query_row_info_t *row = (db_query_row_info_t *)&rs->data[0];
     app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
@@ -231,7 +237,8 @@ static __attribute__((optimize("O0"))) void  _mark_old_transcoded_version__row_f
     uint16_t height_pxl_stored = (uint16_t) strtoul(row->values[1], NULL, 10);
     uint16_t width_pxl_stored  = (uint16_t) strtoul(row->values[2], NULL, 10);
     uint8_t  framerate_stored  = (uint8_t)  strtoul(row->values[3], NULL, 10);
-    json_t *output_new = json_object_get(json_object_get(req_body_json, "outputs"), version_stored);
+    json_t *outputs_toplvl = json_object_get(req_body_json, "outputs");
+    json_t *output_new = json_object_get(outputs_toplvl, version_stored);
     json_t *output_internal = json_object_get(output_new, "__internal__");
     const char *video_key = json_string_value(json_object_get(output_internal, "video_key"));
     json_t *elm_streams = json_object_get(req_body_json, "elementary_streams");
@@ -243,10 +250,13 @@ static __attribute__((optimize("O0"))) void  _mark_old_transcoded_version__row_f
     uint8_t height_pxl_edit = height_pxl_stored != height_pxl_new;
     uint8_t width_pxl_edit  = width_pxl_stored  != width_pxl_new ;
     uint8_t framerate_edit  = framerate_stored  != framerate_new ;
+    // message-queue consumer (in later step) check this field and optionally rename exising version
+    // folder (to stale state, so it would be deleted after new version is transcoded)
     if(height_pxl_edit || width_pxl_edit || framerate_edit) {
-        // message-queue consumer (in later step) check this field and optionally rename exising version
-        // folder (to stale state, so it would be deleted after new version is transcoded)
         json_object_set_new(output_internal, "is_update", json_true());
+    } else { // discard if the existing version doesn't change all the attributes
+        // (no need to transcode again with the same attributes)
+        json_object_del(outputs_toplvl, version_stored);
     }
 } // end of _mark_old_transcoded_version__row_fetch
 
@@ -302,45 +312,64 @@ static void _mark_old_transcoded_version (RESTAPI_HANDLER_ARGS(self, req), app_m
         }
     };
 #undef NUM_USR_ARGS
-    if(app_db_query_start(&cfg) != DBA_RESULT_OK) {
-        void *args[3] = {(void *)req, (void *)self, (void *)node};
-        db_query_t  fake_q = {.cfg = {.usr_data = {.entry = (void **)&args[0], .len=3}}};
-        api__start_transcoding__db_async_err(&fake_q, NULL);
-    }
+    if(app_db_query_start(&cfg) != DBA_RESULT_OK)
+        _api_start_transcode__deinit_primitives (req, self, node);
 } // end of _mark_old_transcoded_version
 
-static int api__start_transcoding__resource_id_exist(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
-{
-    json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
-    uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    uint32_t resource_owner_id = (uint32_t) app_fetch_from_hashmap(node->data, "resource_owner_id"); 
-    uint32_t last_upld_req     = (uint32_t) app_fetch_from_hashmap(node->data, "last_upld_req"); 
-#pragma GCC diagnostic pop
-    if(curr_usr_id == resource_owner_id && last_upld_req != 0) {
-        json_t *req_body_json = (json_t *)app_fetch_from_hashmap(node->data, "req_body_json");
-        json_object_set_new(req_body_json, "usr_id", json_integer(curr_usr_id));
-        json_object_set_new(req_body_json, "last_upld_req", json_integer(last_upld_req));
-        _mark_old_transcoded_version(self, req, node);
-    } else {
-        char body_raw[] = "{\"resource_id\":\"not allowed to perform operation\"}";
-        req->res.status = 403;
-        h2o_send_inline(req, body_raw, strlen(body_raw));
-        api__dealloc_req_hashmap(node);
-        app_run_next_middleware(self, req, node);
-    }
-    return 0;
-} // end of api__start_transcoding__resource_id_exist
 
-static int api__start_transcoding__resource_id_notexist(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node) 
+
+static void _api_start_transcode__verify_resource_id_done (aacl_result_t *result, void **usr_args)
 {
-    char body_raw[] = "{\"resource_id\":\"not exist\"}";
-    req->res.status = 404;
-    h2o_send_inline(req, body_raw, strlen(body_raw));
-    api__dealloc_req_hashmap(node);
-    app_run_next_middleware(self, req, node);
+    h2o_req_t     *req  = usr_args[0];
+    h2o_handler_t *hdlr = usr_args[1];
+    app_middleware_node_t *node = usr_args[2];
+    json_t  *res_body   = usr_args[3];
+    req->res.status = api_http_resp_status__verify_resource_id (node, result, res_body);
+    if(json_object_size(res_body) == 0) {
+        json_t *_req_body = (json_t *)app_fetch_from_hashmap(node->data, "req_body_json");
+        json_object_set_new(_req_body, "usr_id", json_integer(result->owner_usr_id));
+        json_object_set_new(_req_body, "last_upld_req", json_integer(result->upld_req));
+        app_run_next_middleware(hdlr, req, node);
+    } else {
+        _api_start_transcode__deinit_primitives (req, hdlr, node);
+    }
+} // end of  _api_start_transcode__verify_resource_id_done
+
+
+static int api_acl_middleware__start_transcode (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node)
+{
+    json_error_t  j_err = {0};
+    json_t *req_body = json_loadb((const char *)req->entity.base, req->entity.len, JSON_REJECT_DUPLICATES, &j_err);
+    json_t *res_body = json_object();
+    app_save_ptr_to_hashmap(node->data, "res_body_json", (void *)res_body);
+    app_save_ptr_to_hashmap(node->data, "req_body_json", (void *)req_body);
+    if(j_err.line >= 0 || j_err.column >= 0) {
+        req->res.status = 400;
+        json_object_set_new(res_body, "non-field", json_string("json parsing error on request body"));
+    } else {
+        const char *resource_id = json_string_value(json_object_get(req_body, "resource_id"));
+        int err = app_verify_printable_string(resource_id, APP_RESOURCE_ID_SIZE);
+        if(err) {
+            req->res.status = 400;
+            json_object_set_new(res_body, "resource_id", json_string("contains non-printable charater"));
+        } else {
+            size_t out_len = 0;
+            unsigned char *res_id_encoded = base64_encode((const unsigned char *)resource_id,
+                    strlen(resource_id), &out_len);
+            app_save_ptr_to_hashmap(node->data, "res_id_encoded", (void *)res_id_encoded);
+            void *usr_args[4] = {req, hdlr, node, res_body};
+            aacl_cfg_t  cfg = {.usr_args={.entries=&usr_args[0], .size=4}, .resource_id=(char *)res_id_encoded,
+                    .db_pool=app_db_pool_get_pool("db_server_1"), .loop=req->conn->ctx->loop,
+                    .callback=_api_start_transcode__verify_resource_id_done };
+            int err = app_acl_verify_resource_id (&cfg);
+            if(err)
+                json_object_set_new(res_body, "reason", json_string("internal error"));
+        }
+    }
+    if(json_object_size(res_body) > 0)
+        _api_start_transcode__deinit_primitives (req, hdlr, node);
     return 0;
-}
+} // end of  api_acl_middleware__start_transcode
 
 
 #define VALIDATE_CODEC_LABEL_COMMON(codec_type) \
@@ -543,56 +572,21 @@ static  void _validate_request__outputs(json_t *outputs, json_t *elm_streams, js
 } // end of _validate_request__outputs
 
 
+// TODO, abstract interface for image and video, current implementation is
+//   closely tied to video transcoding
 RESTAPI_ENDPOINT_HANDLER(start_transcoding_file, POST, self, req)
 {
-    json_error_t  j_err = {0};
-    const char *resource_id = NULL;
-    json_t *req_body = json_loadb((const char *)req->entity.base, req->entity.len, JSON_REJECT_DUPLICATES, &j_err);
-    json_t *res_body = json_object();
-    if(j_err.line >= 0 || j_err.column >= 0) {
-        json_object_set_new(res_body, "non-field", json_string("json parsing error on request body"));
-    } else {
-        resource_id = json_string_value(json_object_get(req_body, "resource_id"));
-        int err = app_verify_printable_string(resource_id, APP_RESOURCE_ID_SIZE);
-        if(err)
-            json_object_set_new(res_body, "resource_id", json_string("contains non-printable charater"));
-    }
-    if(json_object_size(res_body) == 0) {
-        _validate_request__elementary_streams(json_object_get(req_body, "elementary_streams"), res_body);
-    }
-    if(json_object_size(res_body) == 0) {
+    json_t *req_body = (json_t *)app_fetch_from_hashmap(node->data, "req_body_json");
+    json_t *res_body = (json_t *)app_fetch_from_hashmap(node->data, "res_body_json");
+    _validate_request__elementary_streams(json_object_get(req_body, "elementary_streams"), res_body);
+    if(json_object_size(res_body) == 0)
         _validate_request__outputs( json_object_get(req_body, "outputs"),
                 json_object_get(req_body, "elementary_streams"), res_body );
-    }
     if(json_object_size(res_body) == 0) {
-        size_t out_len = 0;
-        unsigned char *res_id_encoded = base64_encode((const unsigned char *)resource_id,
-                strlen(resource_id), &out_len);
-        app_save_ptr_to_hashmap(node->data, "res_id_encoded", (void *)res_id_encoded);
-        app_save_ptr_to_hashmap(node->data, "res_body_json", (void *)res_body);
-        app_save_ptr_to_hashmap(node->data, "req_body_json", (void *)req_body);
-        DBA_RES_CODE result = app_verify_existence_resource_id (
-            self, req, node, api__start_transcoding__db_async_err,
-            api__start_transcoding__resource_id_exist,
-            api__start_transcoding__resource_id_notexist
-        );
-        if(result != DBA_RESULT_OK) {
-            void *args[3] = {(void *)req, (void *)self, (void *)node};
-            db_query_t  fake_q = {.cfg = {.usr_data = {.entry = (void **)&args[0], .len=3}}};
-            api__start_transcoding__db_async_err(&fake_q, NULL);
-        }
+        _mark_old_transcoded_version(self, req, node);
     } else {
-#define  MAX_BYTES_RESP_BODY  512
-        char body_raw[MAX_BYTES_RESP_BODY] = {0};
-        size_t nwrite = json_dumpb((const json_t *)res_body, &body_raw[0],  MAX_BYTES_RESP_BODY, JSON_COMPACT);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
         req->res.status = 400;
-        h2o_send_inline(req, body_raw, nwrite);
-        json_decref(res_body);
-        if(req_body)
-            json_decref(req_body);
-        app_run_next_middleware(self, req, node);
-#undef  MAX_BYTES_RESP_BODY
+        _api_start_transcode__deinit_primitives (req, self, node);
     }
     return 0;
 } // end of start_transcoding_file

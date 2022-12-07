@@ -18,23 +18,32 @@ typedef struct {
 
 typedef struct {
     H2O_VECTOR(aacl_data_t) data;
+    uint32_t  owner_usr_id;
+    uint32_t  upld_req;
     struct {
-        uint8_t error:1;
+        uint8_t error:1; // TODO, rename to db_error
         uint8_t write_ok:1;
+        uint8_t res_id_exists:1;
+        uint8_t res_id_dup:1;
     } flag;
 } aacl_result_t;
 
 #define  APP_ACL_CFG__COMMON_FIELDS \
     char  *resource_id; \
-    void  *usrdata; \
     uint32_t  usr_id; \
-    void (*callback)(aacl_result_t *, void *usr_data);
+    void (*callback)(aacl_result_t *, void **usr_args); \
 
 typedef struct {
     APP_ACL_CFG__COMMON_FIELDS
+    struct {
+        void   **entries;
+        uint16_t size;
+    } usr_args;
     db_pool_t *db_pool;
     void  *loop;
 } aacl_cfg_t;
+
+int  app_acl_verify_resource_id (aacl_cfg_t *);
 
 int  app_resource_acl_load(aacl_cfg_t *);
 

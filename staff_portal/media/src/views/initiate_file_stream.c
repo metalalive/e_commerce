@@ -2,7 +2,7 @@
 #include "utils.h"
 #include "base64.h"
 #include "views.h"
-#include "models/query.h"
+#include "models/pool.h"
 #include "storage/cfg_parser.h"
 #include "transcoder/file_processor.h"
 
@@ -13,8 +13,10 @@ static  void  _api_initiate_file_stream__deinit_primitives (h2o_req_t *req, h2o_
 {
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
     size_t  nb_required = json_dumpb(res_body, NULL, 0, 0);
+    if(req->res.status == 0)
+        req->res.status = 500;
     if(nb_required > 0) {
-        char  body[nb_required];
+        char  body[nb_required + 1];
         size_t  nwrite = json_dumpb(res_body, &body[0], nb_required, JSON_COMPACT);
         assert(nwrite <= nb_required);
         h2o_send_inline(req, body, nwrite);
@@ -23,11 +25,6 @@ static  void  _api_initiate_file_stream__deinit_primitives (h2o_req_t *req, h2o_
     }
     json_decref(res_body);
     json_decref(qparams);
-    char *res_id_encoded = app_fetch_from_hashmap(node->data, "res_id_encoded");
-    if(res_id_encoded) {
-        free(res_id_encoded);
-        app_save_ptr_to_hashmap(node->data, "res_id_encoded", (void *)NULL);
-    }
     // TODO, dealloc jwt if created for ACL check
     app_run_next_middleware(hdlr, req, node);
 } // end of  _api_initiate_file_stream__deinit_primitives
@@ -56,27 +53,73 @@ static void _api_atfp_init_stream__done_cb(atfp_t *processor)
 } // end of _api_atfp_init_stream__done_cb
 
 
-static void api__initiate_file_stream__db_async_err (db_query_t *target, db_query_result_t *rs)
+static void _api_init_fstream__verify_resource_id_done (aacl_result_t *result, void **usr_args)
 {
-    h2o_req_t     *req  = target->cfg.usr_data.entry[0];
-    h2o_handler_t *hdlr = target->cfg.usr_data.entry[1];
-    app_middleware_node_t *node = target->cfg.usr_data.entry[2];
-    json_t *err_info = app_fetch_from_hashmap(node->data, "err_info");
-    json_t *qparams  = app_fetch_from_hashmap(node->data, "qparams");
-    json_object_set_new(err_info, "id", json_string("error happended during validation"));
-    req->res.status = 500;
-    _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-} // end of  api__initiate_file_stream__db_async_err
+    h2o_req_t     *req  = usr_args[0];
+    h2o_handler_t *hdlr = usr_args[1];
+    app_middleware_node_t *node = usr_args[2];
+    json_t *qparams  = usr_args[3];
+    json_t *err_info = usr_args[4];
+    int _resp_status =  api_http_resp_status__verify_resource_id (node, result, err_info);
+    if(_resp_status != 403) {
+        req->res.status = _resp_status;
+    } else { // TODO, check ACL prior to authentication
+        json_object_clear(err_info);
+    }
+    if(json_object_size(err_info) == 0) {
+        json_object_set_new(qparams, "last_upld_req", json_integer(result->upld_req));
+        json_object_set_new(qparams, "resource_owner_id", json_integer(result->owner_usr_id));
+        app_save_ptr_to_hashmap(node->data, "err_info", (void *)err_info);
+        app_save_ptr_to_hashmap(node->data, "qparams", (void *)qparams);
+        app_run_next_middleware(hdlr, req, node);
+    } else {
+        _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
+    }
+} // end of  _api_init_fstream__verify_resource_id_done
+
+static int api_acl_middleware__init_fstream (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node)
+{
+    json_t *err_info = json_object(),  *qparams = json_object();
+    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
+    const char *resource_id = app_resource_id__url_decode(qparams, err_info);
+    if(!resource_id || (json_object_size(err_info) > 0)) {
+        req->res.status = 400;
+    } else {
+        size_t out_len = 0;
+        char *_res_id_encoded = (char *) base64_encode((const unsigned char *)resource_id,
+                  strlen(resource_id), &out_len);
+        json_object_set_new(qparams, "res_id_encoded", json_string(_res_id_encoded));
+        free(_res_id_encoded);
+        _res_id_encoded = (char *)json_string_value(json_object_get(qparams, "res_id_encoded"));
+        void *usr_args[5] = {req, hdlr, node, qparams, err_info};
+        aacl_cfg_t  cfg = {.usr_args={.entries=&usr_args[0], .size=5}, .resource_id=_res_id_encoded,
+                .db_pool=app_db_pool_get_pool("db_server_1"), .loop=req->conn->ctx->loop,
+                .callback=_api_init_fstream__verify_resource_id_done };
+        int err = app_acl_verify_resource_id (&cfg);
+        if(err)
+            json_object_set_new(err_info, "reason", json_string("internal error"));
+    }
+    if(json_object_size(err_info) > 0)
+        _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
+    return 0;
+} // end of  api_acl_middleware__init_fstream
 
 
-static int api__initiate_file_stream__resource_id_exist (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node) 
+// TODO
+// * check whether json file exists (users ACL), if not, create one; or if it exists, then still refresh the 
+//   content if the last update is before certain time llmit.
+// * refresh users ACL from database to local api server (saved in temp buffer)
+//   (may improve the flow by sending message queue everytime when user ACL has been updaated)
+// * examine user ACL, if it is NOT public, authenticate client JWT, then check the auth user
+// has access to the file.
+
+
+RESTAPI_ENDPOINT_HANDLER(initiate_file_stream, POST, hdlr, req)
 {
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    uint32_t  last_upld_seq = (uint32_t) app_fetch_from_hashmap(node->data, "last_upld_req");
-    uint32_t  res_owner_id  = (uint32_t) app_fetch_from_hashmap(node->data, "resource_owner_id");
-#pragma GCC diagnostic pop
     json_t *err_info = app_fetch_from_hashmap(node->data, "err_info");
     json_t *qparams  = app_fetch_from_hashmap(node->data, "qparams");
+    uint32_t  last_upld_seq = (uint32_t) json_integer_value(json_object_get(qparams, "last_upld_req"));
+    uint32_t  res_owner_id  = (uint32_t) json_integer_value(json_object_get(qparams, "resource_owner_id"));
     const char *label = "hls"; // TODO, store stream types to database once there are more to support
     const char *storage_alias = "localfs";
     atfp_t  *processor = app_transcoder_file_processor(label);
@@ -112,93 +155,6 @@ static int api__initiate_file_stream__resource_id_exist (h2o_handler_t *hdlr, h2
 done:
     if(json_object_size(err_info) > 0)
         _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-    return 0;
-} // end of  api__initiate_file_stream__resource_id_exist
-
-
-static int api__initiate_file_stream__resource_id_notexist (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node) 
-{
-    json_t *err_info = app_fetch_from_hashmap(node->data, "err_info");
-    json_t *qparams  = app_fetch_from_hashmap(node->data, "qparams");
-    json_object_set_new(err_info, "id", json_string("not exists"));
-    req->res.status = 404;
-    _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-    return 0;
-} // end of  api__initiate_file_stream__resource_id_notexist
-
-
-static  int  app__validate_file_acl(const char *resource_id, h2o_req_t *req, app_middleware_node_t *node,
-        void **usr_args, size_t num_usr_args)
-{
-    int err = 0;
-    // TODO
-    // * check whether json file exists (users ACL), if not, create one; or if it exists, then still refresh the 
-    //   content if the last update is before certain time llmit.
-    // * refresh users ACL from database to local api server (saved in temp buffer)
-    //   (may improve the flow by sending message queue everytime when user ACL has been updaated)
-    // * examine user ACL, if it is NOT public, authenticate client JWT, then check the auth user
-    // has access to the file.
-    return  err;
-}
-
-
-RESTAPI_ENDPOINT_HANDLER(initiate_file_stream, POST, self, req)
-{
-    int  err = 0;
-    json_t *err_info = json_object();
-    json_t *qparams = json_object();
-    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
-    const char *resource_id = json_string_value(json_object_get(qparams, "id"));
-    size_t  res_id_sz = strlen(resource_id);
-    size_t  max_res_id_sz = APP_RESOURCE_ID_SIZE * 3; // consider it is URL-encoded
-    if(res_id_sz > max_res_id_sz) {
-        json_object_set_new(err_info, "id", json_string("exceeding max limit"));
-        req->res.status = 400;
-    } else { // resource ID from frontend client should always be URL-encoded
-        int   out_len  = 0;
-        char *res_id_uri_decoded = curl_easy_unescape(NULL, resource_id, (int)res_id_sz, &out_len);
-        json_object_set_new(qparams, "id", json_string(res_id_uri_decoded));
-        free(res_id_uri_decoded);
-        resource_id = json_string_value(json_object_get(qparams, "id"));
-        res_id_sz = strlen(resource_id);
-    }
-    if(json_object_size(err_info) == 0) {
-        err = app_verify_printable_string(resource_id, res_id_sz);
-        if(err) {
-            json_object_set_new(err_info, "id", json_string("contains non-printable charater"));
-            req->res.status = 400;
-        }
-    }
-    if(json_object_size(err_info) == 0) {
-#define  VALIDATE_FILE_ACL__USR_ARGS_SZ  3
-        void *usr_args[VALIDATE_FILE_ACL__USR_ARGS_SZ] = {self, qparams, err_info};
-        size_t num_usr_args = VALIDATE_FILE_ACL__USR_ARGS_SZ;
-        err  = app__validate_file_acl(resource_id, req, node, (void **)usr_args, num_usr_args);
-        if(err) {
-            json_object_set_new(err_info, "id", json_string("failed to validate file access control on the user"));
-            req->res.status = 403;
-        }
-#undef   VALIDATE_FILE_ACL__USR_ARGS_SZ
-    }
-    if(json_object_size(err_info) == 0) {
-        size_t out_len = 0;
-        unsigned char *res_id_encoded = base64_encode((const unsigned char *)resource_id,
-                 res_id_sz, &out_len);
-        app_save_ptr_to_hashmap(node->data, "res_id_encoded", (void *)res_id_encoded);
-        app_save_ptr_to_hashmap(node->data, "err_info", (void *)err_info);
-        app_save_ptr_to_hashmap(node->data, "qparams", (void *)qparams);
-        DBA_RES_CODE  result = app_verify_existence_resource_id (
-            self, req, node, api__initiate_file_stream__db_async_err,
-            api__initiate_file_stream__resource_id_exist,
-            api__initiate_file_stream__resource_id_notexist
-        );
-        if(result != DBA_RESULT_OK) {
-            json_object_set_new(err_info, "model", json_string("failed to validate resource ID"));
-            req->res.status = 503;
-        }
-    }
-    if(json_object_size(err_info) > 0)
-        _api_initiate_file_stream__deinit_primitives (req, self, node, qparams, err_info);
     return 0;
 } // end of initiate_file_stream
 

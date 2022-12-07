@@ -109,14 +109,6 @@ static int utest__uncommitted_upld_req_success(RESTAPI_HANDLER_ARGS(self, req), 
 static int utest__uncommitted_upld_req_failure(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
 { return mock(); }
 
-static int utest__find_resource_id_success(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
-{
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-    uint32_t resource_owner_id = (uint32_t)app_fetch_from_hashmap(node->data, "resource_owner_id");
-    uint32_t last_req_seq      = (uint32_t)app_fetch_from_hashmap(node->data, "last_upld_req");
-#pragma GCC diagnostic pop
-    return mock(resource_owner_id, last_req_seq);
-}
 
 Ensure(apiview_common_test__upload_request_found) {
 #define  UTEST_NUM_ENTRIES_HASHMAP  6
@@ -166,54 +158,6 @@ Ensure(apiview_common_test__upload_request_found) {
 } // end of apiview_common_test__upload_request_found
 
 
-Ensure(apiview_common_test__resource_id_found) {
-#define  UTEST_NUM_ENTRIES_HASHMAP  5
-    struct hsearch_data    htab = {0};
-    hcreate_r(UTEST_NUM_ENTRIES_HASHMAP, &htab);
-    app_save_ptr_to_hashmap(&htab, "res_id_encoded", "9cK4yf");
-    uv_loop_t     *mock_loop = uv_default_loop();
-    h2o_context_t  http_srv_ctx = {.loop=mock_loop};
-    h2o_conn_t     http_conn = {.ctx=&http_srv_ctx};
-    h2o_req_t      http_req = {.conn=&http_conn};
-    h2o_handler_t  hdlr = {0};
-    app_middleware_node_t  node = {.data=&htab};
-    app_db_pool_init(&utest_db_pool_cfg);
-    uint8_t mock_has_row = 1;
-    size_t  mock_num_cols = 2;
-    {
-        char  *mock_col_value = NULL;
-        expect(mock_dbpool__state_transition,
-                will_set_contents_of_parameter(has_row_ptr, &mock_has_row, sizeof(uint8_t)),
-                will_set_contents_of_parameter(num_cols_ptr, &mock_num_cols, sizeof(size_t)));
-        expect(mock_dbpool__state_transition,
-                will_set_contents_of_parameter(col_val_p, &mock_col_value, sizeof(char *)));
-        expect(mock_dbpool__state_transition,
-                will_set_contents_of_parameter(col_val_p, &mock_col_value, sizeof(char *)));
-        expect(utest__find_resource_id_success, when(resource_owner_id, is_equal_to(0)),
-                when(last_req_seq, is_equal_to(0)));
-        app_verify_existence_resource_id(&hdlr, &http_req, &node,  utest__db_async_err_cb,
-              utest__find_resource_id_success, utest__uncommitted_upld_req_failure );
-    }
-    {
-        char  *mock_col_upld_req = "10d"; // will be converted to decemal number 256 + 13
-        char  *mock_col_usr_id = "197";   // will be converted to decemal number 197
-        expect(mock_dbpool__state_transition,
-                will_set_contents_of_parameter(has_row_ptr, &mock_has_row, sizeof(uint8_t)),
-                will_set_contents_of_parameter(num_cols_ptr, &mock_num_cols, sizeof(size_t)));
-        expect(mock_dbpool__state_transition,
-                will_set_contents_of_parameter(col_val_p, &mock_col_usr_id, sizeof(char *)));
-        expect(mock_dbpool__state_transition,
-                will_set_contents_of_parameter(col_val_p, &mock_col_upld_req, sizeof(char *)));
-        expect(utest__find_resource_id_success, when(resource_owner_id, is_equal_to(197)),
-                when(last_req_seq, is_equal_to(256 + 13)));
-        app_verify_existence_resource_id(&hdlr, &http_req, &node, utest__db_async_err_cb,
-              utest__find_resource_id_success, utest__uncommitted_upld_req_failure );
-    }
-    app_db_pool_deinit(UTEST_DBPOOL_ALIAS);
-    hdestroy_r(&htab);
-} // end of apiview_common_test__resource_id_found
-
-
 Ensure(apiview_common_test__resource_id_format) {
     assert_that(app_verify_printable_string(NULL,0), is_not_equal_to(0));
     assert_that(app_verify_printable_string("",0), is_not_equal_to(0));
@@ -229,7 +173,6 @@ TestSuite *app_views_common_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, apiview_common_test__upload_request_found);
-    add_test(suite, apiview_common_test__resource_id_found);
     add_test(suite, apiview_common_test__resource_id_format);
     return suite;
 }
