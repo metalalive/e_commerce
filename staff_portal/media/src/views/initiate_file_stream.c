@@ -53,20 +53,15 @@ static void _api_atfp_init_stream__done_cb(atfp_t *processor)
 } // end of _api_atfp_init_stream__done_cb
 
 
-static void _api_init_fstream__verify_resource_id_done (aacl_result_t *result, void **usr_args)
+static void _api_abac_pdp__verify_resource_owner (aacl_result_t *result, void **usr_args)
 {
     h2o_req_t     *req  = usr_args[0];
     h2o_handler_t *hdlr = usr_args[1];
     app_middleware_node_t *node = usr_args[2];
     json_t *qparams  = usr_args[3];
     json_t *err_info = usr_args[4];
-    int _resp_status =  api_http_resp_status__verify_resource_id (node, result, err_info);
-    if(_resp_status != 403) {
-        req->res.status = _resp_status;
-    } else { // TODO, check ACL prior to authentication
-        json_object_clear(err_info);
-    }
-    if(json_object_size(err_info) == 0) {
+    int _resp_status =  api_http_resp_status__verify_resource_id (result, err_info);
+    if(json_object_size(err_info) == 0) { // TODO, load jwt token then further check access rules
         json_object_set_new(qparams, "last_upld_req", json_integer(result->upld_req));
         json_object_set_new(qparams, "resource_owner_id", json_integer(result->owner_usr_id));
         app_save_ptr_to_hashmap(node->data, "err_info", (void *)err_info);
@@ -75,9 +70,9 @@ static void _api_init_fstream__verify_resource_id_done (aacl_result_t *result, v
     } else {
         _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
     }
-} // end of  _api_init_fstream__verify_resource_id_done
+} // end of  _api_abac_pdp__verify_resource_owner
 
-static int api_acl_middleware__init_fstream (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node)
+static int api_abac_pep__init_fstream (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node)
 {
     json_t *err_info = json_object(),  *qparams = json_object();
     app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
@@ -94,7 +89,7 @@ static int api_acl_middleware__init_fstream (h2o_handler_t *hdlr, h2o_req_t *req
         void *usr_args[5] = {req, hdlr, node, qparams, err_info};
         aacl_cfg_t  cfg = {.usr_args={.entries=&usr_args[0], .size=5}, .resource_id=_res_id_encoded,
                 .db_pool=app_db_pool_get_pool("db_server_1"), .loop=req->conn->ctx->loop,
-                .callback=_api_init_fstream__verify_resource_id_done };
+                .callback=_api_abac_pdp__verify_resource_owner };
         int err = app_acl_verify_resource_id (&cfg);
         if(err)
             json_object_set_new(err_info, "reason", json_string("internal error"));
@@ -102,7 +97,7 @@ static int api_acl_middleware__init_fstream (h2o_handler_t *hdlr, h2o_req_t *req
     if(json_object_size(err_info) > 0)
         _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
     return 0;
-} // end of  api_acl_middleware__init_fstream
+} // end of  api_abac_pep__init_fstream
 
 
 // TODO

@@ -139,7 +139,7 @@ const char *app_resource_id__url_decode(json_t *spec, json_t *err_info)
 } // end of  app_resource_id__url_decode
 
 
-int  api_http_resp_status__verify_resource_id (app_middleware_node_t *node, aacl_result_t *result, json_t *err_info)
+int  api_http_resp_status__verify_resource_id (aacl_result_t *result, json_t *err_info)
 {
     int resp_status = 0;
     if(result->flag.error || result->flag.res_id_dup) {
@@ -150,16 +150,18 @@ int  api_http_resp_status__verify_resource_id (app_middleware_node_t *node, aacl
     } else if (!result->flag.res_id_exists) {
         json_object_set_new(err_info, "res_id", json_string("not exists"));
         resp_status = 404;
-    } else {
-        json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
-        uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
-        if(curr_usr_id != result->owner_usr_id) {
-            json_object_set_new(err_info, "res_id", json_string("permission"));
-            resp_status = 403;
-        } // TODO , allow operations from the users who have access to the resource
     }
     return resp_status;
 } // end of  api_http_resp_status__verify_resource_id
+
+#if 0
+    json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
+    uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
+    if(curr_usr_id != result->owner_usr_id) {
+        json_object_set_new(err_info, "res_id", json_string("permission"));
+        resp_status = 403;
+    } // TODO , allow operations from the users who have access to the resource
+#endif
 
 
 int  app_verify_printable_string(const char *str, size_t limit_sz)

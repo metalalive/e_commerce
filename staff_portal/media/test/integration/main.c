@@ -132,74 +132,13 @@ Ensure(api_discard_file_test) {
     json_decref(quota);
 }
 
-
-static void test_verify__edit_file_acl(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
-{
-    CURLcode res;
-    long expect_resp_code = 200;
-    long actual_resp_code = 0;
-    res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
-    assert_that(res, is_equal_to(CURLE_OK));
-    assert_that(expect_resp_code, is_equal_to(actual_resp_code));
-}
-
-Ensure(api_edit_file_acl_test) {
-    char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s?id=%s", "localhost", 8010, "/file/acl", "8gWs5oP");
-    const char *codename_list[2] = {"edit_file_access_control", NULL};
-    json_t *header_kv_serials = json_array();
-    json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
-    json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    json_t *quota = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
-    test_setup_pub_t  setup_data = {
-        .method = "PATCH", .verbose = 0,  .url = &url[0],
-        .req_body = {.serial_txt=NULL, .src_filepath="./media/test/integration/examples/edit_file_acl_req_body.json"},
-        .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
-        .headers = header_kv_serials
-    };
-    run_client_request(&setup_data, test_verify__edit_file_acl, NULL);
-    json_decref(header_kv_serials);
-    json_decref(quota);
-}
-
-
-
-static void test_verify__read_file_acl(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
-{
-    CURLcode res;
-    long expect_resp_code = 200;
-    long actual_resp_code = 0;
-    res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
-    assert_that(res, is_equal_to(CURLE_OK));
-    assert_that(expect_resp_code, is_equal_to(actual_resp_code));
-}
-
-Ensure(api_read_file_acl_test) {
-    char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s?id=%s", "localhost", 8010, "/file/acl", "8gWs5oP");
-    const char *codename_list[2] = {"edit_file_access_control", NULL};
-    json_t *header_kv_serials = json_array();
-    json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    json_t *quota = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
-    test_setup_pub_t  setup_data = {
-        .method = "GET", .verbose = 0,  .url = &url[0],
-        .req_body = {.serial_txt=NULL, .src_filepath=NULL},
-        .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
-        .headers = header_kv_serials
-    };
-    run_client_request(&setup_data, test_verify__read_file_acl, NULL);
-    json_decref(header_kv_serials);
-    json_decref(quota);
-}
-
 TestSuite *app_api_tests(json_t *root_cfg)
 {
     TestSuite *suite = create_test_suite();
     add_suite(suite, api_initiate_multipart_upload_tests());
     add_suite(suite, api_upload_part_tests(root_cfg));
     add_suite(suite, api_complete_multipart_upload_tests());
+    add_suite(suite, api_file_acl_tests());
     add_suite(suite, api_start_transcoding_file_tests());
     add_suite(suite, api_monitor_job_progress_tests());
     add_suite(suite, api_file_streaming_init_tests());
@@ -208,8 +147,6 @@ TestSuite *app_api_tests(json_t *root_cfg)
     add_test(suite, api_single_chunk_upload_test);
     add_test(suite, api_discard_ongoing_job_test);
     add_test(suite, api_discard_file_test);
-    add_test(suite, api_edit_file_acl_test);
-    add_test(suite, api_read_file_acl_test);
     return suite;
 }
 

@@ -78,7 +78,9 @@ def get_profile(self, ids:List[int], fields:List[str]):
         fields.append('id')
     qset = GenericUserProfile.objects.filter(id__in=ids)
     req = self.request # retrieve extra headers from celery task context
-    src_app_label = req.headers['src_app']
+    src_app_label = req.headers.get('src_app') if req.headers else None
+    if not src_app_label and (present_quota or present_roles):
+        raise ValueError('src_app_label is required for fetching quota/roles of user profile')
     class fake_request:
         query_params = {'fields':','.join(fields)}
     extra_context = {'request': fake_request}

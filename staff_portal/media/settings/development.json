@@ -112,20 +112,19 @@
             "alias": "app_mqbroker_1",
             "bindings": [
                 {
-                    "queue": "rpc_media_complete_multipart_upload",
+                    "queue": "rpc_usermgt_get_profile",
                     "exchange": "rpc-default-allapps",
-                    "routing_key": "rpc.media.complete_multipart_upload",
-                    "durable": true,
+                    "routing_key": "rpc.user_management.get_profile",
+                    "skip_declare": true,
                     "reply": {
                         "queue": {
                             "pattern":"rpc.reply.media.prof_id.%u",
                             "render_fn":"api__render_rpc_reply_qname"
                         },
                         "correlation_id": {
-                            "pattern":"rpc.media.mp_done.corr_id.1234",
-                            "render_fn":null
+                            "pattern":"rpc.media.get_usr_profile.corr_id.%s",
+                            "render_fn":"api__default__render_rpc_corr_id"
                         },
-                        "task_handler": "api_complete_multipart_upload__rpc_task_handler",
                         "durable": true,
                         "ttl_sec": 180
                     }
@@ -141,7 +140,7 @@
                             "render_fn":"api__render_rpc_reply_qname"
                         },
                         "correlation_id": {
-                            "pattern":"rpc.media.mp_done.corr_id.%s",
+                            "pattern":"rpc.media.transcode.corr_id.%s",
                             "render_fn":"api__start_transcoding__render_rpc_corr_id"
                         },
                         "task_handler": "api_rpc_task_handler__start_transcode",

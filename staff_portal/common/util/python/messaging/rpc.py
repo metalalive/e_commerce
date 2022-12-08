@@ -260,6 +260,7 @@ class MethodProxy:
         # extra headers :
         # * id : uuid4  string sequence
         # * task : python hierarchical path to Celery task function 
+        # https://docs.celeryq.dev/en/master/internals/protocol.html
         out = {}
         out['id'] = id
         out['content_type'] = content_type

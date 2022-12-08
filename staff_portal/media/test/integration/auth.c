@@ -22,7 +22,7 @@ typedef struct {
 
 static mock_jwks_t _mock_jwks = {0};
 
-#define _API_MIDDLEWARE_CHAIN_get_jwks_pubkey  1, API_FINAL_HANDLER_get_jwks_pubkey
+#define _API_MIDDLEWARE_CHAIN_get_jwks_pubkey  2, API_FINAL_HANDLER_get_jwks_pubkey, 1
 #define _RESTAPI_PERM_CODES_get_jwks_pubkey    NULL
 
 

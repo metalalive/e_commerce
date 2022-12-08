@@ -1,6 +1,8 @@
 #include <jansson.h>
 #include "../test/integration/test.h"
 
+#define  ITEST_URL_PATH  "https://localhost:8010/file/transcode"
+
 extern json_t *_app_itest_active_upload_requests;
 
 typedef struct {
@@ -154,14 +156,14 @@ static void  _api__start_transcoding_test__accepted_common(const char *req_body_
     assert_that(nwrite, is_less_than(MAX_BYTES_REQ_BODY));
     itest_usrarg_t  mock_usr_srg = {.upld_req=upld_req, .expect_resp_code=202,
         .expect_err_field=NULL, .fn_verify_job=_fn_verify };
-    char url[] = "https://localhost:8010/file/transcode";
+    char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     json_t *quota = json_array();
-    uint32_t usr_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
-    add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
+    uint32_t res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
+    add_auth_token_to_http_header(header_kv_serials, res_owner_id, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0,  .url = &url[0],  .headers = header_kv_serials,
         .req_body = {.serial_txt=req_body_raw, .src_filepath=NULL},
@@ -229,14 +231,14 @@ Ensure(api__start_transcoding_test__accepted) {
 
 Ensure(api__start_transcoding_test__invalid_body) {
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0); 
-    char url[] = "https://localhost:8010/file/transcode";
+    char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     json_t *quota = json_array();
-    uint32_t usr_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
-    add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
+    uint32_t  res_owner_id = json_integer_value(json_object_get(upld_req, "usr_id"));
+    add_auth_token_to_http_header(header_kv_serials, res_owner_id, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0,  .url = &url[0],  .headers = header_kv_serials,
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
@@ -246,16 +248,14 @@ Ensure(api__start_transcoding_test__invalid_body) {
     mock_usr_srg.expect_err_field = "non-field";
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
     setup_data.req_body.serial_txt = "{}";
-    mock_usr_srg.expect_err_field = "resource_id";
+    mock_usr_srg.expect_err_field = "res_id";
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
     setup_data.req_body.serial_txt = "{\"resource_id\":null}";
-    mock_usr_srg.expect_err_field = "resource_id";
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
     setup_data.req_body.serial_txt = "{\"resource_id\":\"aH1234s\"}";
-    mock_usr_srg.expect_err_field = "elementary_streams";
+    mock_usr_srg.expect_resp_code = 404;
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
-    setup_data.req_body.serial_txt = "{\"resource_id\":\"aH1234s\", \"elementary_streams\":{}}";
-    mock_usr_srg.expect_err_field = "elementary_streams";
+    setup_data.req_body.serial_txt = "{\"resource_id\":\"aH1234x\", \"elementary_streams\":{}}";
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
     json_decref(header_kv_serials);
     json_decref(quota);
@@ -275,7 +275,9 @@ static void test_verify__start_transcoding_invalid_elm_stream(CURL *handle, test
     json_decref(resp_obj);
 } // end of test_verify__start_transcoding_invalid_elm_stream
 
-Ensure(api__start_transcoding_test__invalid_elm_stream) {
+
+Ensure(api__start_transcoding_test__invalid_elm_stream)
+{
     json_t *upld_req = NULL, *resource_id_item = NULL;
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
     struct {
@@ -288,55 +290,62 @@ Ensure(api__start_transcoding_test__invalid_elm_stream) {
        {"./media/test/integration/examples/transcode_req_body_template/invalid_stream_video_attr_2.json", "framerate"},
        {"./media/test/integration/examples/transcode_req_body_template/invalid_stream_audio_attr_1.json", "bitrate_kbps"},
     };
-    char url[] = "https://localhost:8010/file/transcode";
+    char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     json_t *quota = json_array();
-    uint32_t usr_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
-    add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
+    uint32_t  res_owner_id = json_integer_value(json_object_get(upld_req, "usr_id"));
+    add_auth_token_to_http_header(header_kv_serials, res_owner_id, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0,  .url = &url[0],  .headers = header_kv_serials,
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
     };
     itest_usrarg_t  mock_usr_srg = {.upld_req=upld_req, .expect_resp_code=400, .expect_err_field=NULL };
     for (int idx = 0; idx < 5; idx++) {
-        setup_data.req_body.src_filepath = test_data[idx].template_filepath;
+        json_t *template = json_load_file(test_data[idx].template_filepath, 0, NULL);
+        assert_that(template, is_not_null);
+        if(!template) continue;
+        json_object_set(template, "resource_id", resource_id_item);
+        size_t nb_required = json_dumpb(template, NULL, 0, 0);
+        char renderred_req_body[nb_required];
+        size_t nwrite = json_dumpb(template, &renderred_req_body[0], nb_required, JSON_COMPACT);
+        renderred_req_body[nwrite] = 0;
+        setup_data.req_body.serial_txt = &renderred_req_body[0];
         mock_usr_srg.expect_err_field = test_data[idx].expect_field;
         run_client_request( &setup_data, test_verify__start_transcoding_invalid_elm_stream,
                 (void *)&mock_usr_srg );
-    }
+        json_decref(template);
+    } // end of loop
     json_decref(header_kv_serials);
     json_decref(quota);
 } // end of api__start_transcoding_test__invalid_elm_stream
 
 
-Ensure(api__start_transcoding_test__invalid_resource_id) {
+Ensure(api__start_transcoding_test__invalid_resource_id)
+{
     json_t *upld_req2 = NULL, *resource_id_item = NULL;
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0);
-    itest_usrarg_t  mock_usr_srg = {.upld_req=NULL, .expect_resp_code=0, .expect_err_field="resource_id"};
+    itest_usrarg_t  mock_usr_srg = {.upld_req=upld_req, .expect_resp_code=404, .expect_err_field="res_id"};
     const char *template_filepath = "./media/test/integration/examples/transcode_req_body_template/nonexist_resource_id.json";
-    char url[] = "https://localhost:8010/file/transcode";
+    char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     json_t *quota = json_array();
-    uint32_t usr_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
-    add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
+    uint32_t res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
+    add_auth_token_to_http_header(header_kv_serials, res_owner_id, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0,  .url = &url[0],  .headers = header_kv_serials,
         .req_body = {.serial_txt=NULL, .src_filepath=template_filepath},
     };
-    mock_usr_srg.expect_resp_code = 404;
-    mock_usr_srg.upld_req = upld_req;
     run_client_request(&setup_data, itest_api_verify__start_transcode,  (void *)&mock_usr_srg);
     char *req_body_raw = NULL;
     { // subcase #2, given user id doesn't match the owner of resource
         _available_resource_lookup(&upld_req2, &resource_id_item, "mp4");
-        json_error_t jerror = {0};
-        json_t *req_body_item = json_load_file(template_filepath, (size_t)0, &jerror);
+        json_t *req_body_item = json_load_file(template_filepath, (size_t)0, NULL);
         json_object_set(req_body_item, "resource_id", resource_id_item);
         size_t MAX_BYTES_REQ_BODY  = json_dumpb(req_body_item, NULL, 0, 0);
         req_body_raw = calloc(MAX_BYTES_REQ_BODY, sizeof(char));
@@ -348,6 +357,7 @@ Ensure(api__start_transcoding_test__invalid_resource_id) {
     }
     mock_usr_srg.expect_resp_code = 403;
     mock_usr_srg.upld_req = upld_req2;
+    mock_usr_srg.expect_err_field = "usr_id";
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
     json_decref(header_kv_serials);
     json_decref(quota);
@@ -371,40 +381,90 @@ static void test_verify__start_transcoding_invalid_outputs(CURL *handle, test_se
 
 
 Ensure(api__start_transcoding_test__invalid_output) {
-    json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0);
-    char url[] = "https://localhost:8010/file/transcode";
+    json_t *upld_req = NULL, *resource_id_item = NULL;
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+    char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     json_t *quota = json_array();
-    uint32_t usr_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
-    add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
+    uint32_t res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
+    add_auth_token_to_http_header(header_kv_serials, res_owner_id, codename_list, quota);
     test_setup_pub_t  setup_data = {
         .method = "POST", .verbose = 0,  .url = &url[0],  .headers = header_kv_serials,
         .req_body = {.serial_txt=NULL, .src_filepath=NULL},
     };
-    { // subcase #1, invalid muxer
-        setup_data.req_body.src_filepath = "./media/test/integration/examples/transcode_req_body_template/invalid_output_muxer.json";
-        const char *expect_fields_hier[2] = {"outputs", "container"};
-        run_client_request(&setup_data,  test_verify__start_transcoding_invalid_outputs,
-                (void *)&expect_fields_hier[0]);
-    }
-    { // subcase #3, invalid version label
-        setup_data.req_body.src_filepath = "./media/test/integration/examples/transcode_req_body_template/invalid_output_version.json";
-        const char *expect_fields_hier[2] = {"outputs", "version"};
-        run_client_request(&setup_data,  test_verify__start_transcoding_invalid_outputs,
-                (void *)&expect_fields_hier[0]);
-    }
-    { // subcase #3, invalid map to elementary stream
-        setup_data.req_body.src_filepath = "./media/test/integration/examples/transcode_req_body_template/invalid_elm_stream_map.json";
-        const char *expect_fields_hier[2] = {"outputs", "elementary_streams"};
-        run_client_request(&setup_data,  test_verify__start_transcoding_invalid_outputs,
-                (void *)&expect_fields_hier[0]);
-    }
+#define  RUN_CODE(temp_filepath, ...) { \
+    json_t *template = json_load_file(temp_filepath, 0, NULL); \
+    json_object_set(template, "resource_id", resource_id_item); \
+    size_t nb_required = json_dumpb(template, NULL, 0, 0); \
+    char renderred_req_body[nb_required]; \
+    size_t nwrite = json_dumpb(template, &renderred_req_body[0], nb_required, JSON_COMPACT); \
+    renderred_req_body[nwrite] = 0; \
+    setup_data.req_body.serial_txt = &renderred_req_body[0]; \
+    const char *expect_fields_hier[2] = {__VA_ARGS__}; \
+    run_client_request(&setup_data,  test_verify__start_transcoding_invalid_outputs, \
+            (void *)&expect_fields_hier[0]); \
+}
+    // subcase #1, invalid muxer
+    RUN_CODE("media/test/integration/examples/transcode_req_body_template/invalid_output_muxer.json", "outputs", "container")
+    // subcase #2, invalid version label
+    RUN_CODE("media/test/integration/examples/transcode_req_body_template/invalid_output_version.json", "outputs", "version")
+    // subcase #3, invalid map to elementary stream
+    RUN_CODE("media/test/integration/examples/transcode_req_body_template/invalid_elm_stream_map.json", "outputs", "elementary_streams")
     json_decref(header_kv_serials);
     json_decref(quota);
+#undef  RUN_CODE
 } // end of api__start_transcoding_test__invalid_output
+
+
+Ensure(api__start_transcoding_test__permission_denied)
+{
+#define  REQ_BODY_PATTERN  "{\"resource_id\":\"%s\"}"
+    json_t *upld_req = NULL, *resource_id_item = NULL;
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+    assert_that(upld_req, is_not_null);
+    assert_that(resource_id_item, is_not_null);
+    if(!upld_req || !resource_id_item)
+        return;
+    uint32_t approved_usr_id  = 0;
+    { // look for the user who does NOT have permission to transcode the file
+        int idx = 0;
+        json_t *existing_acl = json_object_get(upld_req, "acl"), *item = NULL;
+        json_array_foreach(existing_acl, idx, item) {
+            json_t *capability = json_object_get(item,"access_control");
+            uint8_t can_transcode = json_integer_value(json_object_get(capability, "transcode"));
+            if(!can_transcode) {
+                approved_usr_id = json_integer_value(json_object_get(item, "usr_id"));
+                break;
+            }
+        } // end of loop
+        assert_that(approved_usr_id, is_greater_than(0));
+        if(approved_usr_id == 0)
+            return;
+    }
+    const char *resource_id = json_string_value(resource_id_item);
+    size_t req_body_sz = sizeof(REQ_BODY_PATTERN) + strlen(resource_id);
+    char url[] = ITEST_URL_PATH, req_body[req_body_sz];
+    json_t *quota = json_array();
+    json_t *header_kv_serials = json_array();
+    const char *codename_list[2] = {"upload_files", NULL};
+    add_auth_token_to_http_header(header_kv_serials, approved_usr_id, codename_list, quota);
+    json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
+    json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
+    test_setup_pub_t  setup_data = {.method="POST", .verbose=0, .url=&url[0], .headers=header_kv_serials,
+        .req_body = {.serial_txt=&req_body[0], .src_filepath=NULL}};
+    itest_usrarg_t  usr_args = {.upld_req=upld_req, .expect_resp_code=403, .expect_err_field="usr_id"};
+    {
+        size_t nwrite = snprintf(&req_body[0], req_body_sz, REQ_BODY_PATTERN, resource_id);
+        req_body[nwrite] = 0;
+    }
+    run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&usr_args);
+    json_decref(header_kv_serials);
+    json_decref(quota);
+#undef   REQ_BODY_PATTERN 
+} // end of  api__start_transcoding_test__permission_denied
 
 
 TestSuite *api_start_transcoding_file_tests(void)
@@ -414,6 +474,7 @@ TestSuite *api_start_transcoding_file_tests(void)
     add_test(suite, api__start_transcoding_test__invalid_elm_stream);
     add_test(suite, api__start_transcoding_test__invalid_resource_id);
     add_test(suite, api__start_transcoding_test__invalid_output);
-    add_test(suite, api__start_transcoding_test__accepted);
+    add_test(suite, api__start_transcoding_test__permission_denied);
+    // add_test(suite, api__start_transcoding_test__accepted);
     return suite;
 }

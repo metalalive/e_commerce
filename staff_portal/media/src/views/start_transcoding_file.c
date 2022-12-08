@@ -317,26 +317,64 @@ static void _mark_old_transcoded_version (RESTAPI_HANDLER_ARGS(self, req), app_m
 } // end of _mark_old_transcoded_version
 
 
-
-static void _api_start_transcode__verify_resource_id_done (aacl_result_t *result, void **usr_args)
+static void _api_abac_pdp__try_match_rule (aacl_result_t *result, void **usr_args)
 {
     h2o_req_t     *req  = usr_args[0];
     h2o_handler_t *hdlr = usr_args[1];
     app_middleware_node_t *node = usr_args[2];
     json_t  *res_body   = usr_args[3];
-    req->res.status = api_http_resp_status__verify_resource_id (node, result, res_body);
-    if(json_object_size(res_body) == 0) {
-        json_t *_req_body = (json_t *)app_fetch_from_hashmap(node->data, "req_body_json");
-        json_object_set_new(_req_body, "usr_id", json_integer(result->owner_usr_id));
-        json_object_set_new(_req_body, "last_upld_req", json_integer(result->upld_req));
+    if(result->flag.error) {
+        req->res.status = 503;
+    } else if(result->data.size != 1 || !result->data.entries) {
+        req->res.status = 403;
+        json_object_set_new(res_body, "usr_id", json_string("missing access-control setup"));
+    } else {
+        aacl_data_t *d = &result->data.entries[0];
+        if(!d->capability.transcode) {
+            req->res.status = 403;
+            json_object_set_new(res_body, "usr_id", json_string("operation denied"));
+        }
+    }
+    if(req->res.status == 0) {
         app_run_next_middleware(hdlr, req, node);
     } else {
         _api_start_transcode__deinit_primitives (req, hdlr, node);
     }
-} // end of  _api_start_transcode__verify_resource_id_done
+} // end of  _api_abac_pdp__try_match_rule
 
 
-static int api_acl_middleware__start_transcode (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node)
+static void _api_abac_pdp__verify_resource_owner (aacl_result_t *result, void **usr_args)
+{
+    h2o_req_t     *req  = usr_args[0];
+    h2o_handler_t *hdlr = usr_args[1];
+    app_middleware_node_t *node = usr_args[2];
+    json_t  *res_body   = usr_args[3];
+    req->res.status = api_http_resp_status__verify_resource_id (result, res_body);
+    if(json_object_size(res_body) == 0) {
+        json_t *_req_body = (json_t *)app_fetch_from_hashmap(node->data, "req_body_json");
+        json_object_set_new(_req_body, "usr_id", json_integer(result->owner_usr_id));
+        json_object_set_new(_req_body, "last_upld_req", json_integer(result->upld_req));
+        json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
+        uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
+        if(curr_usr_id == result->owner_usr_id) {
+            app_run_next_middleware(hdlr, req, node);
+        } else {
+            char  *_res_id_encoded = (char *)app_fetch_from_hashmap(node->data, "res_id_encoded");
+            void *usr_args[4] = {req, hdlr, node, res_body};
+            aacl_cfg_t  cfg = {.usr_args={.entries=&usr_args[0], .size=4}, .resource_id=_res_id_encoded,
+                    .db_pool=app_db_pool_get_pool("db_server_1"), .loop=req->conn->ctx->loop,
+                    .usr_id=curr_usr_id, .callback=_api_abac_pdp__try_match_rule };
+            int err = app_resource_acl_load (&cfg);
+            if(err)
+                _api_start_transcode__deinit_primitives (req, hdlr, node);
+        }
+    } else {
+        _api_start_transcode__deinit_primitives (req, hdlr, node);
+    }
+} // end of  _api_abac_pdp__verify_resource_owner
+
+
+static int api_abac_pep__start_transcode (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node)
 {
     json_error_t  j_err = {0};
     json_t *req_body = json_loadb((const char *)req->entity.base, req->entity.len, JSON_REJECT_DUPLICATES, &j_err);
@@ -351,7 +389,7 @@ static int api_acl_middleware__start_transcode (h2o_handler_t *hdlr, h2o_req_t *
         int err = app_verify_printable_string(resource_id, APP_RESOURCE_ID_SIZE);
         if(err) {
             req->res.status = 400;
-            json_object_set_new(res_body, "resource_id", json_string("contains non-printable charater"));
+            json_object_set_new(res_body, "res_id", json_string("contains non-printable charater"));
         } else {
             size_t out_len = 0;
             unsigned char *res_id_encoded = base64_encode((const unsigned char *)resource_id,
@@ -360,7 +398,7 @@ static int api_acl_middleware__start_transcode (h2o_handler_t *hdlr, h2o_req_t *
             void *usr_args[4] = {req, hdlr, node, res_body};
             aacl_cfg_t  cfg = {.usr_args={.entries=&usr_args[0], .size=4}, .resource_id=(char *)res_id_encoded,
                     .db_pool=app_db_pool_get_pool("db_server_1"), .loop=req->conn->ctx->loop,
-                    .callback=_api_start_transcode__verify_resource_id_done };
+                    .callback=_api_abac_pdp__verify_resource_owner };
             int err = app_acl_verify_resource_id (&cfg);
             if(err)
                 json_object_set_new(res_body, "reason", json_string("internal error"));
@@ -369,7 +407,7 @@ static int api_acl_middleware__start_transcode (h2o_handler_t *hdlr, h2o_req_t *
     if(json_object_size(res_body) > 0)
         _api_start_transcode__deinit_primitives (req, hdlr, node);
     return 0;
-} // end of  api_acl_middleware__start_transcode
+} // end of  api_abac_pep__start_transcode
 
 
 #define VALIDATE_CODEC_LABEL_COMMON(codec_type) \

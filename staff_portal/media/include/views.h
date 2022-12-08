@@ -46,7 +46,7 @@ extern "C" {
 #define _API_MIDDLEWARE_CHAIN_start_transcoding_file \
     10, app_authenticate_user, 1, \
     PERMISSION_CHECK_start_transcoding_file, 0, \
-    api_acl_middleware__start_transcode, 0, \
+    api_abac_pep__start_transcode, 0, \
     API_FINAL_HANDLER_start_transcoding_file, 0, \
     app_deinit_auth_jwt_claims, 1
 
@@ -62,7 +62,7 @@ extern "C" {
     app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_initiate_file_stream \
-    4, api_acl_middleware__init_fstream, 1, \
+    4, api_abac_pep__init_fstream, 1, \
     API_FINAL_HANDLER_initiate_file_stream, 0
 
 #define _API_MIDDLEWARE_CHAIN_fetch_file_streaming_element \
@@ -75,8 +75,9 @@ extern "C" {
     app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_edit_file_acl \
-    8, app_authenticate_user, 1, \
+    10, app_authenticate_user, 1, \
     PERMISSION_CHECK_edit_file_acl, 0,  \
+    api_abac_pep__edit_acl, 0, \
     API_FINAL_HANDLER_edit_file_acl, 0, \
     app_deinit_auth_jwt_claims, 1
 
@@ -157,7 +158,7 @@ int  app_verify_printable_string(const char *str, size_t limit_sz);
 
 const char *app_resource_id__url_decode(json_t *spec, json_t *err_info);
 
-int  api_http_resp_status__verify_resource_id (app_middleware_node_t *, aacl_result_t *, json_t *err_info);
+int  api_http_resp_status__verify_resource_id (aacl_result_t *, json_t *err_info);
 
 void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
 

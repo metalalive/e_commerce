@@ -57,6 +57,7 @@ PKG_CHECK_MODULES(AVUTIL    REQUIRED  libavutil>=56.51.100)
 PKG_CHECK_MODULES(AVFILTER  REQUIRED  libavfilter>=7.85.100)
 PKG_CHECK_MODULES(AVDEVICE  REQUIRED  libavdevice>=58.10.100)
 
+PKG_CHECK_MODULES(LIBUUID  REQUIRED uuid>=2.20.0)
 PKG_CHECK_MODULES(LIBCURL  REQUIRED libcurl>=7.69.0)
 PKG_CHECK_MODULES(LIBNGHTTP2  REQUIRED libnghttp2>=1.46.0)
 
@@ -126,6 +127,7 @@ INCLUDE_DIRECTORIES(
     ${AVUTIL_INCLUDE_DIRS}
     ${AVFILTER_INCLUDE_DIRS}
     ${AVDEVICE_INCLUDE_DIRS}
+    ${LIBUUID_INCLUDE_DIRS}
     ${LIBCURL_INCLUDE_DIRS}
     ${LIBNGHTTP2_INCLUDE_DIRS}
     ${JANSSON_INCLUDE_DIRS})
@@ -148,6 +150,7 @@ LINK_DIRECTORIES(
     ${AVFILTER_LIBRARY_DIRS}
     ${AVDEVICE_LIBRARY_DIRS}
     ${JANSSON_LIBRARY_DIRS}
+    ${LIBUUID_LIBRARY_DIRS}
     ${LIBCURL_LIBRARY_DIRS}
     ${LIBNGHTTP2_LIBRARY_DIRS} )
 
@@ -198,6 +201,7 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/views/initiate_file_stream.c
     src/views/stream_file_lookup.c
     src/views/edit_file_access_control.c
+    src/views/read_file_access_control.c
     src/views/monitor_job_progress.c
     src/views/initiate_multipart_upload.c
     src/views/complete_multipart_upload.c
@@ -331,6 +335,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/mock/rabbitmq.c
     test/unit/mock/openssl.c
     test/unit/mock/curl.c
+    test/unit/mock/uuid.c
     test/unit/mock/ffmpeg/libavformat.c
     test/unit/mock/ffmpeg/libavcodec.c
     test/unit/mock/ffmpeg/libavfilter.c
@@ -343,10 +348,12 @@ SET(UNIT_TEST_SOURCE_FILES
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
-SET(INTEGRATION_TEST_SOURCE_FILES
+SET(ITEST_APPSRV_SOURCE_FILES
     test/integration/main.c
     test/integration/auth.c
     test/integration/client.c
+    test/integration/rpc_consumer.c
+    test/integration/api/access_control_list.c
     test/integration/api/monitor_job_progress.c
     test/integration/api/start_transcoding_file.c
     test/integration/api/complete_multipart_upload.c
@@ -355,6 +362,10 @@ SET(INTEGRATION_TEST_SOURCE_FILES
     test/integration/api/initiate_file_stream.c
     test/integration/api/stream_file_lookup.c
     ${APP_SERVER_SOURCE_FILES} )
+
+SET(ITEST_RPCCONSUMER_SOURCE_FILES
+    test/integration/rpc_consumer.c
+    ${RPC_CONSUMER_SOURCE_FILES} )
 
 SET(APP_COMMON_LIBRARIES
     ${LIBELF_LIBRARIES}
@@ -375,6 +386,7 @@ SET(APP_SERVER_DEV_LIBRARIES
     ${AVFORMAT_LIBRARIES}
     ${AVCODEC_LIBRARIES}
     ${LIBCURL_LIBRARIES}
+    ${LIBUUID_LIBRARIES}
     ${LIBNGHTTP2_LIBRARIES}
     ${APP_COMMON_LIBRARIES})
 
@@ -407,10 +419,14 @@ ADD_EXECUTABLE(${UNIT_TEST_EXE_NAME} ${UNIT_TEST_SOURCE_FILES})
 TARGET_INCLUDE_DIRECTORIES(${UNIT_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(${UNIT_TEST_EXE_NAME} ${APP_UNIT_TEST_LIBRARIES} ${CGREEN_LIBRARIES})
 
-SET(INTEGRATION_TEST_EXE_NAME  integration_test.out)
-ADD_EXECUTABLE(${INTEGRATION_TEST_EXE_NAME} ${INTEGRATION_TEST_SOURCE_FILES})
-TARGET_INCLUDE_DIRECTORIES(${INTEGRATION_TEST_EXE_NAME} PUBLIC ${CGREEN_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES(${INTEGRATION_TEST_EXE_NAME} ${APP_SERVER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
+SET(ITEST_API_SERVER_EXE_NAME    itest_app_server.out)
+SET(ITEST_RPC_CONSUMER_EXE_NAME  itest_rpc_consumer.out)
+ADD_EXECUTABLE(${ITEST_API_SERVER_EXE_NAME}   ${ITEST_APPSRV_SOURCE_FILES})
+ADD_EXECUTABLE(${ITEST_RPC_CONSUMER_EXE_NAME} ${ITEST_RPCCONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c)
+TARGET_INCLUDE_DIRECTORIES(${ITEST_API_SERVER_EXE_NAME}    PUBLIC  ${CGREEN_INCLUDE_DIR})
+TARGET_INCLUDE_DIRECTORIES(${ITEST_RPC_CONSUMER_EXE_NAME}  PUBLIC  ${CGREEN_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES(${ITEST_API_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${CGREEN_LIBRARIES})
+TARGET_LINK_LIBRARIES(${ITEST_RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
 
 
 SET(DEV_APPCFG_PATH    ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json)
@@ -449,14 +465,14 @@ ADD_CUSTOM_TARGET(integration_test
     python -m media.setup_test_env  TestCertRenewal    ${ITEST_APPCFG_PATH}
     COMMAND python -m  media.setup_test_env  FilechunkSetup   ${ITEST_APPCFG_PATH}
     COMMAND python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
-    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH} &
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH} &
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
         ##gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${INTEGRATION_TEST_EXE_NAME}  ${ITEST_APPCFG_PATH}
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_API_SERVER_EXE_NAME}  ${ITEST_APPCFG_PATH}
     COMMAND python -m  media.setup_test_env EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH}
     COMMAND python -m  media.setup_test_env  KillRPCconsumer  ${ITEST_APPCFG_PATH}
     COMMAND python -m  media.setup_test_env  FilechunkTeardown   ${ITEST_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS  ${INTEGRATION_TEST_EXE_NAME} ${RPC_CONSUMER_EXE_NAME})
+    DEPENDS  ${ITEST_API_SERVER_EXE_NAME} ${ITEST_RPC_CONSUMER_EXE_NAME})
 

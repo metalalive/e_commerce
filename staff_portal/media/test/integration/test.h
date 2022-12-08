@@ -55,11 +55,15 @@ void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, v
 TestSuite *api_initiate_multipart_upload_tests(void);
 TestSuite *api_upload_part_tests(json_t *root_cfg);
 TestSuite *api_complete_multipart_upload_tests(void);
+TestSuite *api_file_acl_tests(void);
 TestSuite *api_start_transcoding_file_tests(void);
 TestSuite *api_monitor_job_progress_tests(void);
 TestSuite *api_file_streaming_init_tests(void);
 TestSuite *api_file_stream_seek_elm_tests(void);
 void api_deinitiate_multipart_upload_tests(void);
+
+// declare & implementation in test/integration/rpc_consumer.c
+void  itest_rpc_usermgt__setup_usr_ids(uint32_t *in, size_t in_sz, uint8_t _no_resp);
 
 #ifdef __cplusplus
 } // end of extern C clause
