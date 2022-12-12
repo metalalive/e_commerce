@@ -26,7 +26,7 @@ typedef struct {
 } api_usr_data_t;
 
 
-static void  _api_edit_file_acl__deinit_primitives ( h2o_req_t *req, h2o_handler_t *hdlr,
+static void  _api_edit_usrlvl_acl__deinit_primitives ( h2o_req_t *req, h2o_handler_t *hdlr,
         app_middleware_node_t *node, json_t *spec, json_t *err_info )
 {
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
@@ -34,7 +34,7 @@ static void  _api_edit_file_acl__deinit_primitives ( h2o_req_t *req, h2o_handler
     size_t  nb_required = json_dumpb(resp_body, NULL, 0, 0);
     if(req->res.status == 0) {
         req->res.status = 500;
-        fprintf(stderr, "[api][edit_file_acl] line:%d \n", __LINE__ );
+        fprintf(stderr, "[api][edit_usrlvl_acl] line:%d \n", __LINE__ );
     }
     if(nb_required > 0) {
         char  body[nb_required + 1];
@@ -53,10 +53,10 @@ static void  _api_edit_file_acl__deinit_primitives ( h2o_req_t *req, h2o_handler
     json_decref(err_info);
     json_decref(spec);
     app_run_next_middleware(hdlr, req, node);
-} // end of  _api_edit_file_acl__deinit_primitives
+} // end of  _api_edit_usrlvl_acl__deinit_primitives
 
 
-static void  _api_edit_file_acl__deinit_usrdata (api_usr_data_t *udata)
+static void  _api_edit_usrlvl_acl__deinit_usrdata (api_usr_data_t *udata)
 {
     asa_op_base_cfg_t  *_asaobj = udata->asaobj;
     json_t *rpc_usrprofs = udata->rpc_returned_usrprofs;
@@ -68,13 +68,13 @@ static void  _api_edit_file_acl__deinit_usrdata (api_usr_data_t *udata)
         udata->rpc_returned_usrprofs = NULL;
         json_decref(rpc_usrprofs);
     }
-    _api_edit_file_acl__deinit_primitives(udata->req, udata->hdlr, udata->node,
+    _api_edit_usrlvl_acl__deinit_primitives(udata->req, udata->hdlr, udata->node,
             udata->spec, udata->err_info);
     free(udata);
-} // end of   _api_edit_file_acl__deinit_usrdata
+} // end of   _api_edit_usrlvl_acl__deinit_usrdata
 
 
-static void api__edit_file_acl__db_async_err (db_query_t *target, db_query_result_t *rs)
+static void api__edit_usrlvl_acl__db_async_err (db_query_t *target, db_query_result_t *rs)
 { // TODO, de-init api_usr_data_t object
     h2o_req_t     *req  = target->cfg.usr_data.entry[0];
     h2o_handler_t *hdlr = target->cfg.usr_data.entry[1];
@@ -83,7 +83,7 @@ static void api__edit_file_acl__db_async_err (db_query_t *target, db_query_resul
     json_t *spec     = app_fetch_from_hashmap(node->data, "spec");
     json_object_set_new(err_info, "res_id", json_string("error happended during validation"));
     req->res.status = 500;
-    _api_edit_file_acl__deinit_primitives (req, hdlr, node, spec, err_info);
+    _api_edit_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
 }
 
 
@@ -95,7 +95,7 @@ static void  _api_save_acl__done_cb (aacl_result_t *result, void **usr_args)
     } else {
         usrdata->req->res.status = 200;
     }
-    _api_edit_file_acl__deinit_usrdata (usrdata);
+    _api_edit_usrlvl_acl__deinit_usrdata (usrdata);
 }
 
 
@@ -112,11 +112,11 @@ static void _api_load_saved_acl__done_cb (aacl_result_t *result, void **usr_args
         void *usr_args[1] = {usrdata};
         aacl_cfg_t  aclcfg = {.usr_args={.entries=&usr_args[0], .size=1}, .db_pool=app_db_pool_get_pool("db_server_1"),
             .resource_id=res_id_encoded, .loop=usrdata->req->conn->ctx->loop, .callback=_api_save_acl__done_cb };
-        err = app_resource_acl_save(&aclcfg, result, req_body);
+        err = app_usrlvl_acl_save(&aclcfg, result, req_body);
     }
     if(err) {
         json_object_set_new(usrdata->err_info, "reason", json_string("internal error"));
-        _api_edit_file_acl__deinit_usrdata (usrdata);
+        _api_edit_usrlvl_acl__deinit_usrdata (usrdata);
     }
 } // end of  _api_load_saved_acl__done_cb
 
@@ -203,7 +203,7 @@ static  uint8_t _api_verify_otherusers_exist__update_cb (arpc_reply_cfg_t *cfg, 
     if(!_continue)
         usrdata->rpcreply_ctx = NULL;
     if(err)
-        _api_edit_file_acl__deinit_usrdata (usrdata);
+        _api_edit_usrlvl_acl__deinit_usrdata (usrdata);
     return _continue;
 } // end of  _api_verify_otherusers_exist__update_cb
 #undef  VERIFY_USERS_OR_RESTART_RPC
@@ -214,7 +214,7 @@ static  void _api_verify_otherusers_exist__err_cb (arpc_reply_cfg_t *cfg, ARPC_S
     api_usr_data_t *usrdata = cfg->usr_data;
     usrdata->req ->res.status = cfg->flags.replyq_nonexist ? 400: 503;
     usrdata->rpcreply_ctx = NULL;
-    _api_edit_file_acl__deinit_usrdata (usrdata);
+    _api_edit_usrlvl_acl__deinit_usrdata (usrdata);
 } // end of _api_verify_otherusers_exist__err_cb
 
 
@@ -324,7 +324,7 @@ static void _api_abac_pdp__try_match_rule (aacl_result_t *result, void **usr_arg
         app_save_ptr_to_hashmap(node->data, "spec", (void *)spec);
         app_run_next_middleware(hdlr, req, node);
     } else {
-        _api_edit_file_acl__deinit_primitives (req, hdlr, node, spec, err_info);
+        _api_edit_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
     }
 } // end of  _api_abac_pdp__try_match_rule
 
@@ -352,10 +352,10 @@ static void _api_abac_pdp__verify_resource_owner (aacl_result_t *result, void **
                     .usr_id=curr_usr_id, .callback=_api_abac_pdp__try_match_rule };
             int err = app_resource_acl_load(&cfg); // seen as Policy Information Point in ABAC
             if(err)
-                _api_edit_file_acl__deinit_primitives (req, hdlr, node, spec, err_info);
+                _api_edit_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
         }
     } else {
-        _api_edit_file_acl__deinit_primitives (req, hdlr, node, spec, err_info);
+        _api_edit_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
     }
 } // end of  _api_abac_pdp__verify_resource_owner
 
@@ -381,12 +381,12 @@ static int api_abac_pep__edit_acl (h2o_handler_t *hdlr, h2o_req_t *req, app_midd
             json_object_set_new(err_info, "reason", json_string("internal error"));
     }
     if(json_object_size(err_info) > 0)
-        _api_edit_file_acl__deinit_primitives (req, hdlr, node, spec, err_info);
+        _api_edit_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
     return 0;
 } // end of  api_abac_pep__edit_acl
 
 
-RESTAPI_ENDPOINT_HANDLER(edit_file_acl, PUT, self, req)
+RESTAPI_ENDPOINT_HANDLER(edit_usrlvl_acl, PUT, self, req)
 {
     int idx = 0;
     json_t *err_info = app_fetch_from_hashmap(node->data, "err_info");
@@ -417,12 +417,9 @@ RESTAPI_ENDPOINT_HANDLER(edit_file_acl, PUT, self, req)
             json_object_set_new(err_info, "usr_id", json_string("zero"));
         if(acl && json_object_size(acl) > 0) {
             uint8_t  bool_transcode = json_is_boolean(json_object_get(acl, "transcode"));
-            uint8_t  bool_renew     = json_is_boolean(json_object_get(acl, "renew"));
             uint8_t  bool_edit_acl  = json_is_boolean(json_object_get(acl, "edit_acl"));
             if(!bool_transcode)
                 json_object_set_new(err_info, "transcode", json_string("invalid value"));
-            if(!bool_renew)
-                json_object_set_new(err_info, "renew", json_string("invalid value"));
             if(!bool_edit_acl)
                 json_object_set_new(err_info, "edit_acl", json_string("invalid value"));
         } else {
@@ -436,7 +433,7 @@ RESTAPI_ENDPOINT_HANDLER(edit_file_acl, PUT, self, req)
     api_edit_acl__verify_otherusers_exist (self, req, node, spec, err_info);
 done:
     if(json_object_size(err_info) > 0)
-        _api_edit_file_acl__deinit_primitives (req, self, node, spec, err_info);
+        _api_edit_usrlvl_acl__deinit_primitives (req, self, node, spec, err_info);
     return 0;
-} // end of edit_file_acl
+} // end of edit_usrlvl_acl
 

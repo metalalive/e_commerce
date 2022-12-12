@@ -33,8 +33,9 @@
                 {"path":"/file"    , "entry_fn":"discard_file"},
                 {"path":"/file/stream/init" , "entry_fn":"initiate_file_stream"},
                 {"path":"/file/stream/seek" , "entry_fn":"fetch_file_streaming_element"},
-                {"path":"/file/acl", "entry_fn":"edit_file_acl"},
-                {"path":"/file/acl", "entry_fn":"read_file_acl"}
+                {"path":"/file/acl",     "entry_fn":"edit_filelvl_acl"},
+                {"path":"/file/acl/usr", "entry_fn":"edit_usrlvl_acl"},
+                {"path":"/file/acl/usr", "entry_fn":"read_usrlvl_acl"}
             ]
         },
         {

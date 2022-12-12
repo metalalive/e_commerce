@@ -2,7 +2,8 @@
 #include "acl.h"
 #include "models/query.h"
 
-#define  SQL_TABLE_NAME   "file_access_control"
+#define  FILELVL_ACL_TABLE  "filelvl_access_ctrl"
+#define  USRLVL_ACL_TABLE   "usrlvl_access_ctrl"
 #define  SQL_BASE64_ENCODED_RESOURCE_ID   "FROM_BASE64('%s')"
 
 #define  COPY_CFG_TO_CTX(_ctx, _cfg) { \
@@ -10,6 +11,7 @@
     _ctx->usr_id   = _cfg->usr_id; \
     _ctx->callback = _cfg->callback; \
     _ctx->_num_usr_args  = _cfg->usr_args.size; \
+    _ctx->fetch_acl = _cfg->fetch_acl; \
 }
 
 typedef struct {
@@ -72,13 +74,12 @@ static void  appacl_loaddb_row_fetched (db_query_t *q, db_query_result_t *rs)
         h2o_vector_reserve(NULL, &_result->data, curr_capacity);
     }
     db_query_row_info_t *row = (db_query_row_info_t *) &rs->data[0];
-    assert(row->num_cols == 4);
+    assert(row->num_cols == 3);
     uint32_t _usr_id = (uint32_t) strtoul(row->values[0], NULL, 10);
     uint8_t  _transcode_enable = (uint8_t) strtoul(row->values[1], NULL, 2);
-    uint8_t  _renew_enable    = (uint8_t) strtoul(row->values[2], NULL, 2);
-    uint8_t  _edit_acl_enable = (uint8_t) strtoul(row->values[3], NULL, 2);
+    uint8_t  _edit_acl_enable = (uint8_t) strtoul(row->values[2], NULL, 2);
     _result->data.entries[curr_num_rows++] = (aacl_data_t) {.usr_id=_usr_id, .capability={
-        .renew=_renew_enable, .transcode=_transcode_enable, .edit_acl=_edit_acl_enable }};
+         .transcode=_transcode_enable, .edit_acl=_edit_acl_enable }};
     _result->data.size = curr_num_rows;
 } // end of  appacl_loaddb_row_fetched
 
@@ -87,10 +88,10 @@ int  app_resource_acl_load(aacl_cfg_t *cfg)
 {
     _aacl_ctx_t  *ctx = calloc(1, sizeof(_aacl_ctx_t));
     COPY_CFG_TO_CTX(ctx, cfg)
-#define  SQL_PATTERN_1  "EXECUTE IMMEDIATE 'SELECT `usr_id`,`transcode_flg`,`renew_flg`,`edit_acl_flg` FROM" \
-    " `"SQL_TABLE_NAME"`  WHERE `file_id`=?' USING "SQL_BASE64_ENCODED_RESOURCE_ID";"
-#define  SQL_PATTERN_2  "EXECUTE IMMEDIATE 'SELECT `usr_id`,`transcode_flg`,`renew_flg`,`edit_acl_flg` FROM" \
-    " `"SQL_TABLE_NAME"`  WHERE `file_id`=? AND `usr_id`=?' USING "SQL_BASE64_ENCODED_RESOURCE_ID", %u;"
+#define  SQL_PATTERN_1  "EXECUTE IMMEDIATE 'SELECT `usr_id`,`transcode_flg`,`edit_acl_flg` FROM" \
+    " `"USRLVL_ACL_TABLE"`  WHERE `file_id`=?' USING "SQL_BASE64_ENCODED_RESOURCE_ID";"
+#define  SQL_PATTERN_2  "EXECUTE IMMEDIATE 'SELECT `usr_id`,`transcode_flg`,`edit_acl_flg` FROM" \
+    " `"USRLVL_ACL_TABLE"`  WHERE `file_id`=? AND `usr_id`=?' USING "SQL_BASE64_ENCODED_RESOURCE_ID", %u;"
     const char *sql_patt = NULL;
     size_t res_id_sz = strlen(ctx->resource_id), rawsql_sz = 1 + res_id_sz;
     if(ctx->usr_id == 0) {
@@ -136,15 +137,17 @@ static void _app_acl_resource_id__rs_free (db_query_t *q, db_query_result_t *rs)
     size_t num_rows_read = (size_t) q->cfg.usr_data.entry[1];
     uint32_t resource_owner_id = (uint32_t) q->cfg.usr_data.entry[2];
     uint32_t last_upld_req     = (uint32_t) q->cfg.usr_data.entry[3];
-#pragma GCC diagnostic pop
     aacl_result_t  *_result = &ctx->result;
     if(num_rows_read == 1) {
         _result->owner_usr_id = resource_owner_id;
         _result->upld_req = last_upld_req;
         _result->flag.res_id_exists = 1;
+        if(ctx->fetch_acl)
+            _result->flag.acl_visible = ((uint8_t) q->cfg.usr_data.entry[4]) & 0x1;
     } else if(num_rows_read > 1) {
         _result->flag.res_id_dup = 1;
     }
+#pragma GCC diagnostic pop
     void   **usr_args = &q->cfg.usr_data.entry[ ctx->_num_internal_args ];
     appacl_db_common_trigger_callback (ctx, usr_args);
 } // end of  _app_acl_resource_id__rs_free
@@ -152,23 +155,23 @@ static void _app_acl_resource_id__rs_free (db_query_t *q, db_query_result_t *rs)
 
 static void  _app_acl_resource_id__row_fetch (db_query_t *q, db_query_result_t *rs)
 {
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+    _aacl_ctx_t  *ctx = q->cfg.usr_data.entry[0];
     db_query_row_info_t *row = (db_query_row_info_t *)&rs->data[0];
-    if(row->values[0]) {
-        uint32_t resource_owner_id = (uint32_t) strtoul(row->values[0], NULL, 10);
-#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-        q->cfg.usr_data.entry[2] = (void *) resource_owner_id;
-#pragma GCC diagnostic pop
+    if(row->values[0]) // resource owner ID
+        q->cfg.usr_data.entry[2] = (void *) strtoul(row->values[0], NULL, 10);
+    if(row->values[1]) // last_upld_req
+        q->cfg.usr_data.entry[3] = (void *) strtoul(row->values[1], NULL, 16);
+    if(ctx->fetch_acl) { // visible flag
+        assert(row->num_cols == 3);
+        if(row->values[2]) {
+            q->cfg.usr_data.entry[4] = (void *) strtoul(row->values[2], NULL, 2);
+            ctx->result.flag.acl_exists = 1;
+        }
     }
-    if(row->values[1]) {
-        uint32_t last_upld_req = (uint32_t) strtoul(row->values[1], NULL, 16);
-#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-        q->cfg.usr_data.entry[3] = (void *) last_upld_req;
-#pragma GCC diagnostic pop
-    }
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
     size_t num_rows_read = (size_t) q->cfg.usr_data.entry[1];
+    q->cfg.usr_data.entry[1] = (void *) (num_rows_read + 1);
 #pragma GCC diagnostic pop
-    q->cfg.usr_data.entry[1] = (void *) num_rows_read + 1;
 } // end of  _app_acl_resource_id__row_fetch
 
 
@@ -177,37 +180,42 @@ int  app_acl_verify_resource_id (aacl_cfg_t *cfg)
     int err = 1;
     if(!cfg || !cfg->resource_id || !cfg->callback)
         return err;
-#define SQL_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`, HEX(`last_upld_req`) FROM `uploaded_file` WHERE `id` = ?' USING FROM_BASE64('%s');"
-    size_t raw_sql_sz = sizeof(SQL_PATTERN) + strlen(cfg->resource_id);
+#define SQL1_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`,HEX(`last_upld_req`) FROM `uploaded_file` WHERE `id`=?' USING FROM_BASE64('%s');"
+#define SQL2_PATTERN "EXECUTE IMMEDIATE 'SELECT `uf`.`usr_id`, HEX(`uf`.`last_upld_req`),`fac`.`visible_flg`" \
+    " FROM `uploaded_file` AS `uf` LEFT JOIN `"FILELVL_ACL_TABLE"` AS `fac` ON `uf`.`id`=`fac`.`file_id`" \
+    " WHERE `uf`.`id`=?' USING FROM_BASE64('%s');"
+    size_t raw_sql_sz = strlen(cfg->resource_id) + (cfg->fetch_acl?sizeof(SQL2_PATTERN):sizeof(SQL1_PATTERN));
     char raw_sql[raw_sql_sz];
-    memset(&raw_sql[0], 0x0, raw_sql_sz);
-    size_t nwrite_sql = snprintf(&raw_sql[0], raw_sql_sz, SQL_PATTERN, cfg->resource_id);
-    assert(nwrite_sql < raw_sql_sz);
-#undef SQL_PATTERN
+    {
+        const char *chosen_sql_patt = (cfg->fetch_acl?SQL2_PATTERN:SQL1_PATTERN);
+        size_t nwrite = snprintf(&raw_sql[0], raw_sql_sz, chosen_sql_patt, cfg->resource_id);
+        raw_sql[nwrite++] = 0x0;
+        assert(nwrite < raw_sql_sz);
+    }
+#undef SQL1_PATTERN
+#undef SQL2_PATTERN
     _aacl_ctx_t  *ctx = calloc(1, sizeof(_aacl_ctx_t));
     COPY_CFG_TO_CTX(ctx, cfg)
-    ctx->_num_internal_args = 4;
+    ctx->_num_internal_args = ctx->fetch_acl? 5: 4;
     uint16_t tot_num_usr_args = ctx->_num_internal_args + ctx->_num_usr_args;
     void *db_async_usr_args[tot_num_usr_args];
     db_async_usr_args[0] = ctx;
     db_async_usr_args[1] = (void *)0;
     db_async_usr_args[2] = (void *)0;
     db_async_usr_args[3] = (void *)0;
+    if(ctx->fetch_acl)
+        db_async_usr_args[4] = (void *)0;
     memcpy(&db_async_usr_args[ctx->_num_internal_args], cfg->usr_args.entries, sizeof(void *) * ctx->_num_usr_args);
     db_query_cfg_t  db_cfg = {
         .statements = {.entry=&raw_sql[0], .num_rs=1}, .pool=cfg->db_pool, .loop=cfg->loop,
         .usr_data = {.entry=(void **)&db_async_usr_args[0], .len=tot_num_usr_args},
-        .callbacks = {
-            .result_rdy=appacl_db_dummy_cb,  .error=appacl_db_common_error_cb,
-            .row_fetched = _app_acl_resource_id__row_fetch,
-            .result_free = _app_acl_resource_id__rs_free,
-        }
-    };
+        .callbacks = { .result_rdy=appacl_db_dummy_cb,  .error=appacl_db_common_error_cb,
+            .row_fetched = _app_acl_resource_id__row_fetch, .result_free = _app_acl_resource_id__rs_free,
+        }};
     DBA_RES_CODE  result = app_db_query_start(&db_cfg);
     err = result != DBA_RESULT_OK;
     return err;
 } // end of app_acl_verify_resource_id
-
 
 
 void  app_acl__build_update_lists (aacl_result_t *existing_data, json_t *new_data,
@@ -225,7 +233,6 @@ void  app_acl__build_update_lists (aacl_result_t *existing_data, json_t *new_dat
              size_t curr_usr_id = json_integer_value(json_object_get(new_item, "usr_id"));
              if(curr_usr_id == origin->usr_id) {
                  json_t *new_detail = json_object_get(new_item, "access_control");
-                 origin->capability.renew = (uint8_t) json_boolean_value(json_object_get(new_detail, "renew"));
                  origin->capability.edit_acl = (uint8_t) json_boolean_value(json_object_get(new_detail, "edit_acl"));
                  origin->capability.transcode = (uint8_t) json_boolean_value(json_object_get(new_detail, "transcode"));
                  json_object_set_new(new_item, "_is_updating", json_true());
@@ -244,7 +251,6 @@ void  app_acl__build_update_lists (aacl_result_t *existing_data, json_t *new_dat
         data_insert[_num_insertion++] = (aacl_data_t) {
             .usr_id = (uint32_t) json_integer_value(json_object_get(new_item, "usr_id")),
             .capability = {
-                .renew = (uint8_t) json_boolean_value(json_object_get(new_detail, "renew")),
                 .edit_acl = (uint8_t) json_boolean_value(json_object_get(new_detail, "edit_acl")),
                 .transcode = (uint8_t) json_boolean_value(json_object_get(new_detail, "transcode"))
             }
@@ -256,23 +262,44 @@ void  app_acl__build_update_lists (aacl_result_t *existing_data, json_t *new_dat
 } // end of app_acl__build_update_lists
 
 
-#define  PREP_STMT_LABEL_INSERT   "app_media_file_acl_insert"
-#define  PREP_STMT_LABEL_UPDATE   "app_media_file_acl_update"
-#define  PREP_STMT_LABEL_DELETE   "app_media_file_acl_delete"
-#define  SQL_EXEC_INSERT  "EXECUTE `"PREP_STMT_LABEL_INSERT"` USING %1u,%1u,%1u,"SQL_BASE64_ENCODED_RESOURCE_ID",%u;"
-#define  SQL_EXEC_UPDATE  "EXECUTE `"PREP_STMT_LABEL_UPDATE"` USING %1u,%1u,%1u,"SQL_BASE64_ENCODED_RESOURCE_ID",%u;"
+#define  SAVE_ACL__RUN_SQL__COMMON_CODE \
+    _aacl_ctx_t  *ctx = calloc(1, sizeof(_aacl_ctx_t)); \
+    COPY_CFG_TO_CTX(ctx, cfg) \
+    ctx->_num_internal_args = 1; \
+    uint16_t tot_num_usr_args = ctx->_num_internal_args + ctx->_num_usr_args; \
+    void *db_async_usr_args[tot_num_usr_args]; \
+    db_async_usr_args[0] = ctx; \
+    memcpy(&db_async_usr_args[ctx->_num_internal_args], cfg->usr_args.entries, sizeof(void *) * ctx->_num_usr_args); \
+    db_query_cfg_t  db_cfg = { .loop=cfg->loop, .pool=cfg->db_pool, \
+        .usr_data={.entry=(void **)&db_async_usr_args[0], .len=tot_num_usr_args}, \
+        .callbacks = {.result_rdy=appacl_db_write_done_cb, .row_fetched=appacl_db_dummy_cb, \
+            .result_free=appacl_db_dummy_cb,  .error=appacl_db_common_error_cb }, \
+        .statements = {.entry=&final_sql[0], .num_rs=1} \
+    }; \
+    DBA_RES_CODE  db_result = app_db_query_start(&db_cfg); \
+    int err = db_result != DBA_RESULT_OK; \
+    if(err) \
+        free(ctx); \
+    return err;
+
+
+int  app_usrlvl_acl_save(aacl_cfg_t *cfg, aacl_result_t *existing_data, json_t *new_data)
+{
+#define  PREP_STMT_LABEL_INSERT   "app_media_usrlvl_acl_insert"
+#define  PREP_STMT_LABEL_UPDATE   "app_media_usrlvl_acl_update"
+#define  PREP_STMT_LABEL_DELETE   "app_media_usrlvl_acl_delete"
+#define  SQL_EXEC_INSERT  "EXECUTE `"PREP_STMT_LABEL_INSERT"` USING %1u,%1u,"SQL_BASE64_ENCODED_RESOURCE_ID",%u;"
+#define  SQL_EXEC_UPDATE  "EXECUTE `"PREP_STMT_LABEL_UPDATE"` USING %1u,%1u,"SQL_BASE64_ENCODED_RESOURCE_ID",%u;"
 #define  SQL_EXEC_DELETE  "EXECUTE `"PREP_STMT_LABEL_DELETE"` USING "SQL_BASE64_ENCODED_RESOURCE_ID",%u;"
 #define  FINAL_SQL_PATTERN  \
     "BEGIN NOT ATOMIC" \
-    "  PREPARE `"PREP_STMT_LABEL_INSERT"` FROM 'INSERT INTO `"SQL_TABLE_NAME"`(`transcode_flg`,`renew_flg`,`edit_acl_flg`,`file_id`,`usr_id`) VALUES (?,?,?,?,?)';" \
-    "  PREPARE `"PREP_STMT_LABEL_UPDATE"` FROM 'UPDATE `"SQL_TABLE_NAME"` SET `transcode_flg`=?,`renew_flg`=?,`edit_acl_flg`=? WHERE `file_id`=? AND `usr_id`=?';" \
-    "  PREPARE `"PREP_STMT_LABEL_DELETE"` FROM 'DELETE FROM `"SQL_TABLE_NAME"` WHERE `file_id`=? AND `usr_id`=?';" \
+    "  PREPARE `"PREP_STMT_LABEL_INSERT"` FROM 'INSERT INTO `"USRLVL_ACL_TABLE"`(`transcode_flg`,`edit_acl_flg`,`file_id`,`usr_id`) VALUES (?,?,?,?)';" \
+    "  PREPARE `"PREP_STMT_LABEL_UPDATE"` FROM 'UPDATE `"USRLVL_ACL_TABLE"` SET `transcode_flg`=?,`edit_acl_flg`=? WHERE `file_id`=? AND `usr_id`=?';" \
+    "  PREPARE `"PREP_STMT_LABEL_DELETE"` FROM 'DELETE FROM `"USRLVL_ACL_TABLE"` WHERE `file_id`=? AND `usr_id`=?';" \
     "  START TRANSACTION;" \
     "    %s %s %s" \
     "  COMMIT;" \
     "END;"
-int  app_resource_acl_save(aacl_cfg_t *cfg, aacl_result_t *existing_data, json_t *new_data)
-{
     size_t  max_num_insertion = json_array_size(new_data), max_num_deletion = existing_data->data.size,
             max_num_update = max_num_deletion, num_insertion = 0, num_deletion = 0, num_update = 0;
     aacl_data_t  data_insert[max_num_insertion], *data_update[max_num_update],  *data_delete[max_num_deletion];
@@ -299,7 +326,7 @@ int  app_resource_acl_save(aacl_cfg_t *cfg, aacl_result_t *existing_data, json_t
             ptr = &insert_sqls[0];
             for(idx = 0; idx < num_insertion; idx++) {
                 aacl_data_t *data = &data_insert[idx];
-                nwrite = snprintf(ptr, avail_buf_sz, SQL_EXEC_INSERT, data->capability.transcode, data->capability.renew,
+                nwrite = snprintf(ptr, avail_buf_sz, SQL_EXEC_INSERT, data->capability.transcode,
                        data->capability.edit_acl, cfg->resource_id, data->usr_id);
                 assert(nwrite < avail_buf_sz);
                 ptr += nwrite; avail_buf_sz -= nwrite;
@@ -312,7 +339,7 @@ int  app_resource_acl_save(aacl_cfg_t *cfg, aacl_result_t *existing_data, json_t
             ptr = &update_sqls[0];
             for(idx = 0; idx < num_update; idx++) {
                 aacl_data_t *data = data_update[idx];
-                nwrite = snprintf(ptr, avail_buf_sz, SQL_EXEC_UPDATE, data->capability.transcode, data->capability.renew,
+                nwrite = snprintf(ptr, avail_buf_sz, SQL_EXEC_UPDATE, data->capability.transcode,
                        data->capability.edit_acl, cfg->resource_id, data->usr_id);
                 assert(nwrite < avail_buf_sz);
                 ptr += nwrite; avail_buf_sz -= nwrite;
@@ -336,25 +363,7 @@ int  app_resource_acl_save(aacl_cfg_t *cfg, aacl_result_t *existing_data, json_t
                 &delete_sqls[0], &update_sqls[0], &insert_sqls[0]);
         assert(tot_nwrite < final_sql_sz);
     } // end of list of sql queries construction
-    _aacl_ctx_t  *ctx = calloc(1, sizeof(_aacl_ctx_t));
-    COPY_CFG_TO_CTX(ctx, cfg)
-    ctx->_num_internal_args = 1;
-    uint16_t tot_num_usr_args = ctx->_num_internal_args + ctx->_num_usr_args;
-    void *db_async_usr_args[tot_num_usr_args];
-    db_async_usr_args[0] = ctx;
-    memcpy(&db_async_usr_args[ctx->_num_internal_args], cfg->usr_args.entries, sizeof(void *) * ctx->_num_usr_args);
-    db_query_cfg_t  db_cfg = { .loop=cfg->loop, .pool=cfg->db_pool,
-        .usr_data={.entry=(void **)&db_async_usr_args[0], .len=tot_num_usr_args},
-        .callbacks = {.result_rdy=appacl_db_write_done_cb, .row_fetched=appacl_db_dummy_cb,
-            .result_free=appacl_db_dummy_cb,  .error=appacl_db_common_error_cb },
-        .statements = {.entry=&final_sql[0], .num_rs=1}
-    };
-    DBA_RES_CODE  db_result = app_db_query_start(&db_cfg);
-    int err = db_result != DBA_RESULT_OK;
-    if(err)
-        free(ctx);
-    return err;
-} // end of app_resource_acl_save
+    SAVE_ACL__RUN_SQL__COMMON_CODE
 #undef   FINAL_SQL_PATTERN
 #undef   SQL_EXEC_INSERT
 #undef   SQL_EXEC_UPDATE
@@ -362,3 +371,30 @@ int  app_resource_acl_save(aacl_cfg_t *cfg, aacl_result_t *existing_data, json_t
 #undef   PREP_STMT_LABEL_INSERT
 #undef   PREP_STMT_LABEL_UPDATE
 #undef   PREP_STMT_LABEL_DELETE
+} // end of app_usrlvl_acl_save
+
+
+int  app_filelvl_acl_save(aacl_cfg_t *cfg, json_t *existing_data, json_t *new_data)
+{
+#define  SQL_INSERT_PATTERN   "EXECUTE IMMEDIATE 'INSERT INTO `"FILELVL_ACL_TABLE"`(`visible_flg`,`file_id`) VALUES(?,?)'" \
+    " USING %1u,"SQL_BASE64_ENCODED_RESOURCE_ID";"
+#define  SQL_UPDATE_PATTERN   "EXECUTE IMMEDIATE 'UPDATE `"FILELVL_ACL_TABLE"` SET `visible_flg`=? WHERE `file_id`=?'" \
+    " USING %1u,"SQL_BASE64_ENCODED_RESOURCE_ID";"
+    uint8_t visible_new = json_boolean_value(json_object_get(new_data, "visible"));
+    if(existing_data) {
+        uint8_t visible_old = json_boolean_value(json_object_get(existing_data, "visible"));
+        if(visible_old == visible_new)
+            return 1;
+    }
+    size_t  final_sql_sz = strlen(cfg->resource_id) + 1 + 
+        (existing_data ? sizeof(SQL_UPDATE_PATTERN): sizeof(SQL_INSERT_PATTERN));
+    char  final_sql[final_sql_sz];
+    {
+        const char *chosen_sql_patt = (existing_data ? SQL_UPDATE_PATTERN: SQL_INSERT_PATTERN);
+        size_t nwrite = snprintf(&final_sql[0], final_sql_sz, chosen_sql_patt, visible_new, cfg->resource_id);
+        assert(nwrite < final_sql_sz);
+    }
+    SAVE_ACL__RUN_SQL__COMMON_CODE
+#undef   SQL_INSERT_PATTERN
+#undef   SQL_UPDATE_PATTERN
+} // end of app_filelvl_acl_save

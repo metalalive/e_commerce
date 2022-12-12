@@ -1,0 +1,43 @@
+{
+    "elementary_streams":{
+        "vst_one": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 125,
+                "width_pixel": 170,
+                "framerate": 24
+            }
+        },
+        "vst_two": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 105,
+                "width_pixel": 150,
+                "framerate": 13
+            }
+        },
+        "ast_I": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 44 }
+        },
+        "ast_II": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 25 }
+        }
+    },
+    "resource_id": "iE938eu3",
+    "outputs":{
+        "Gn": {
+            "container": "hls",
+            "elementary_streams": ["vst_one", "ast_II"]
+        },
+        "RK": {
+            "container": "hls",
+            "elementary_streams": ["vst_two", "ast_I"]
+        }
+    }
+}

@@ -200,8 +200,9 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/views/common.c
     src/views/initiate_file_stream.c
     src/views/stream_file_lookup.c
-    src/views/edit_file_access_control.c
-    src/views/read_file_access_control.c
+    src/views/edit_filelvl_access_ctrl.c
+    src/views/edit_usrlvl_access_ctrl.c
+    src/views/read_usrlvl_access_ctrl.c
     src/views/monitor_job_progress.c
     src/views/initiate_multipart_upload.c
     src/views/complete_multipart_upload.c

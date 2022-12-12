@@ -431,7 +431,7 @@ Ensure(api__start_transcoding_test__permission_denied)
     uint32_t approved_usr_id  = 0;
     { // look for the user who does NOT have permission to transcode the file
         int idx = 0;
-        json_t *existing_acl = json_object_get(upld_req, "acl"), *item = NULL;
+        json_t *existing_acl = json_object_get(upld_req, "ulvl_acl"), *item = NULL;
         json_array_foreach(existing_acl, idx, item) {
             json_t *capability = json_object_get(item,"access_control");
             uint8_t can_transcode = json_integer_value(json_object_get(capability, "transcode"));
@@ -475,6 +475,6 @@ TestSuite *api_start_transcoding_file_tests(void)
     add_test(suite, api__start_transcoding_test__invalid_resource_id);
     add_test(suite, api__start_transcoding_test__invalid_output);
     add_test(suite, api__start_transcoding_test__permission_denied);
-    // add_test(suite, api__start_transcoding_test__accepted);
+    add_test(suite, api__start_transcoding_test__accepted);
     return suite;
 }

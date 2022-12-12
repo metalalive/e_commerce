@@ -239,5 +239,29 @@
     <changeSet id="tag_version_0.0.8" author="Haam">
         <tagDatabase tag="0.0.8" />
     </changeSet>
+    <changeSet id="modify-usrlvl-acl-add-filelvl-acl" author="Haam">
+        <comment>
+            redesign schema to separate to 2-level access-control list: file-level access control
+            and user-level access control.
+            `visible_flg`: whether the file resource is visible to everyone (including anonymous users)
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE  `file_access_control`  DROP COLUMN `renew_flg`;
+            RENAME TABLE `file_access_control` TO `usrlvl_access_ctrl`;
+            CREATE TABLE `filelvl_access_ctrl` (
+                `file_id`   VARCHAR(8) NOT NULL PRIMARY KEY,
+                `visible_flg`  BOOLEAN NOT NULL DEFAULT 0,
+                CONSTRAINT `c_fk4_uploadfile_id` FOREIGN KEY (`file_id`) REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `filelvl_access_ctrl`;
+            RENAME TABLE `usrlvl_access_ctrl` TO `file_access_control`;
+            ALTER TABLE  `file_access_control`  ADD COLUMN `renew_flg` BOOLEAN NOT NULL DEFAULT 0;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.9" author="Haam">
+        <tagDatabase tag="0.0.9" />
+    </changeSet>
 </databaseChangeLog>
 

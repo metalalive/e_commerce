@@ -7,7 +7,7 @@
 #include "models/pool.h"
 
 
-static void  _api_read_file_acl__deinit_primitives ( h2o_req_t *req, h2o_handler_t *hdlr,
+static void  _api_read_usrlvl_acl__deinit_primitives ( h2o_req_t *req, h2o_handler_t *hdlr,
         app_middleware_node_t *node, json_t *spec, json_t *err_info )
 {
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
@@ -15,7 +15,7 @@ static void  _api_read_file_acl__deinit_primitives ( h2o_req_t *req, h2o_handler
     size_t  nb_required = json_dumpb(resp_body, NULL, 0, 0);
     if(req->res.status == 0) {
         req->res.status = 500;
-        fprintf(stderr, "[api][read_file_acl] line:%d \n", __LINE__ );
+        fprintf(stderr, "[api][read_usrlvl_acl] line:%d \n", __LINE__ );
     }
     if(nb_required > 0) {
         char  body[nb_required + 1];
@@ -34,7 +34,7 @@ static void  _api_read_file_acl__deinit_primitives ( h2o_req_t *req, h2o_handler
     json_decref(err_info);
     json_decref(spec);
     app_run_next_middleware(hdlr, req, node);
-} // end of  _api_read_file_acl__deinit_primitives
+} // end of  _api_read_usrlvl_acl__deinit_primitives
 
 
 static void _api_read_acl__final (aacl_result_t *result, void **usr_args)
@@ -53,7 +53,6 @@ static void _api_read_acl__final (aacl_result_t *result, void **usr_args)
             aacl_data_t *d = &result->data.entries[idx];
             json_t *item = json_object();
             json_object_set_new(item, "usr_id", json_integer(d->usr_id));
-            json_object_set_new(item, "renew", json_boolean(d->capability.renew));
             json_object_set_new(item, "edit_acl", json_boolean(d->capability.edit_acl));
             json_object_set_new(item, "transcode", json_boolean(d->capability.transcode));
             json_array_append_new(outputs, item);
@@ -61,7 +60,7 @@ static void _api_read_acl__final (aacl_result_t *result, void **usr_args)
         json_object_set_new(err_info, "size", json_integer(result->data.size));
         json_object_set_new(err_info, "data", outputs);
     }
-    _api_read_file_acl__deinit_primitives (req, hdlr, node, spec, err_info);
+    _api_read_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
 } // end of  _api_read_acl__final
 
 static void _api_read_acl__verify_resource_exists (aacl_result_t *result, void **usr_args)
@@ -83,11 +82,11 @@ static void _api_read_acl__verify_resource_exists (aacl_result_t *result, void *
             json_object_set_new(err_info, "reason", json_string("internal error"));
     }
     if(json_object_size(err_info) > 0)
-        _api_read_file_acl__deinit_primitives (req, hdlr, node, spec, err_info);
+        _api_read_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
 } // end of  _api_read_acl__verify_resource_exists
 
 
-RESTAPI_ENDPOINT_HANDLER(read_file_acl, GET, hdlr, req)
+RESTAPI_ENDPOINT_HANDLER(read_usrlvl_acl, GET, hdlr, req)
 {
     json_t *err_info = json_object(), *spec = json_object();
     app_url_decode_query_param(&req->path.base[req->query_at + 1], spec);
@@ -108,6 +107,6 @@ RESTAPI_ENDPOINT_HANDLER(read_file_acl, GET, hdlr, req)
             json_object_set_new(err_info, "reason", json_string("internal error"));
     }
     if(json_object_size(err_info) > 0)
-        _api_read_file_acl__deinit_primitives (req, hdlr, node, spec, err_info);
+        _api_read_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
     return 0;
-} // end of  read_file_acl
+} // end of  read_usrlvl_acl

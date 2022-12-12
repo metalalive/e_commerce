@@ -1,18 +1,18 @@
 [
     {
         "usr_id":4,
-        "access_control": {"transcode":true,  "renew":true,  "edit_acl":false}
+        "access_control": {"transcode":true, "edit_acl":false}
     },
     {
         "usr_id":2,
-        "access_control": {"transcode":true,  "renew":false,  "edit_acl":true}
+        "access_control": {"transcode":true, "edit_acl":true}
     },
     {
         "usr_id":7,
-        "access_control": {"transcode":false,  "renew":false,  "edit_acl":true}
+        "access_control": {"transcode":false, "edit_acl":true}
     },
     {
         "usr_id":5,
-        "access_control": {"transcode":true,  "renew":true,  "edit_acl":false}
+        "access_control": {"transcode":true, "edit_acl":false}
     }
 ]

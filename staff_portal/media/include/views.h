@@ -74,17 +74,24 @@ extern "C" {
     API_FINAL_HANDLER_discard_file, 0, \
     app_deinit_auth_jwt_claims, 1
 
-#define _API_MIDDLEWARE_CHAIN_edit_file_acl \
+#define _API_MIDDLEWARE_CHAIN_edit_filelvl_acl \
     10, app_authenticate_user, 1, \
-    PERMISSION_CHECK_edit_file_acl, 0,  \
+    PERMISSION_CHECK_edit_filelvl_acl, 0,  \
     api_abac_pep__edit_acl, 0, \
-    API_FINAL_HANDLER_edit_file_acl, 0, \
+    API_FINAL_HANDLER_edit_filelvl_acl, 0, \
     app_deinit_auth_jwt_claims, 1
 
-#define _API_MIDDLEWARE_CHAIN_read_file_acl \
+#define _API_MIDDLEWARE_CHAIN_edit_usrlvl_acl \
+    10, app_authenticate_user, 1, \
+    PERMISSION_CHECK_edit_usrlvl_acl, 0,  \
+    api_abac_pep__edit_acl, 0, \
+    API_FINAL_HANDLER_edit_usrlvl_acl, 0, \
+    app_deinit_auth_jwt_claims, 1
+
+#define _API_MIDDLEWARE_CHAIN_read_usrlvl_acl \
     8, app_authenticate_user, 1, \
-    PERMISSION_CHECK_read_file_acl, 0, \
-    API_FINAL_HANDLER_read_file_acl, 0, \
+    PERMISSION_CHECK_read_usrlvl_acl, 0, \
+    API_FINAL_HANDLER_read_usrlvl_acl, 0, \
     app_deinit_auth_jwt_claims, 1
 
 
@@ -101,8 +108,9 @@ extern "C" {
 #define _RESTAPI_PERM_CODES_initiate_file_stream         NULL
 #define _RESTAPI_PERM_CODES_fetch_file_streaming_element    NULL
 #define _RESTAPI_PERM_CODES_discard_file              "upload_files"
-#define _RESTAPI_PERM_CODES_edit_file_acl             "edit_file_access_control"
-#define _RESTAPI_PERM_CODES_read_file_acl             "edit_file_access_control"
+#define _RESTAPI_PERM_CODES_edit_filelvl_acl          "edit_file_access_control"
+#define _RESTAPI_PERM_CODES_edit_usrlvl_acl           "edit_file_access_control"
+#define _RESTAPI_PERM_CODES_read_usrlvl_acl           "edit_file_access_control"
 
 #define RESTAPI_PERMISSIONS_MAP(func_name)  _RESTAPI_PERM_CODES_##func_name
 #define API_MIDDLEWARE_CHAIN(func_name)     _API_MIDDLEWARE_CHAIN_##func_name

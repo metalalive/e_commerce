@@ -43,6 +43,7 @@ Library Dependencies (for application)
 * [H2O](https://github.com/h2o/h2o) >= 2.3.0-DEV
 * [brotli](https://github.com/google/brotli)
 * [jansson](https://github.com/akheron/jansson) >= 2.14
+* [libuuid](https://github.com/util-linux/util-linux/tree/master/libuuid) >= 2.20.0
 * [rhonabwy](https://github.com/babelouest/rhonabwy) >= 1.1.2
 * [gnutls](https://github.com/gnutls/gnutls) >= 3.7.2
 * [nettle](https://github.com/gnutls/nettle) >= 3.7.2, automatically built when building `gnutls`
@@ -76,6 +77,7 @@ where `<YOUR_PATH_TO_PKG_CFG>` should include :
 * `/PATH/TO/mariadb/pkgconfig`
 * `/PATH/TO/rabbitmq-c/pkgconfig`
 * `/PATH/TO/ffmpeg/pkgconfig`
+* `/PATH/TO/libuuid/pkgconfig`
 * `/PATH/TO/libcurl/pkgconfig`
 * `/PATH/TO/nghttp2/pkgconfig`
 

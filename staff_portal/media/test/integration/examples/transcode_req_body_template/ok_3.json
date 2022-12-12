@@ -1,0 +1,52 @@
+{
+    "elementary_streams":{
+        "video_hd": {
+            "type": "video",
+            "codec": "libx265",
+            "attribute":{
+                "height_pixel": 150,
+                "width_pixel": 200,
+                "framerate": 16
+            }
+        },
+        "video_sd": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 135,
+                "width_pixel": 190,
+                "framerate": 15
+            }
+        },
+        "video_sld": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 120,
+                "width_pixel": 160,
+                "framerate": 11
+            }
+        },
+        "sound_q0": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 47 }
+        },
+        "sound_q1": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 39 }
+        }
+    },
+    "resource_id": "iE938eu3",
+    "outputs":{
+        "CH": {
+            "container": "hls",
+            "elementary_streams": ["video_sld", "sound_q1"]
+        },
+        "Py": {
+            "container": "hls",
+            "elementary_streams": ["video_hd", "sound_q0"]
+        }
+    }
+}

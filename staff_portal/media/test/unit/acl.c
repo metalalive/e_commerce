@@ -71,15 +71,16 @@ static __attribute__((optimize("O0"))) void utest_acl__operation_done_cb (aacl_r
     uint8_t flg_wr_ok = _result->flag.write_ok;
     uint8_t flg_res_id_exists = _result->flag.res_id_exists;
     uint8_t flg_res_id_dup    = _result->flag.res_id_dup;
+    uint8_t flg_acl_exists    = _result->flag.acl_exists;
+    uint8_t flg_acl_visible   = _result->flag.acl_visible;
     mock(actual_capacity, actual_num_rows, actual_entry_ptr, flg_err, flg_wr_ok, flg_res_id_exists,
-            flg_res_id_dup, actual_res_owner_id, actual_upld_req);
+            flg_res_id_dup, flg_acl_exists, flg_acl_visible, actual_res_owner_id, actual_upld_req);
     if(!_usr_args)
         return;
     if(_usr_args[0]) {
         aacl_data_t *expect_entry = _usr_args[0];
         for(size_t idx = 0; idx < actual_num_rows; idx++) {
             assert_that(actual_entry_ptr[idx].usr_id , is_equal_to(expect_entry[idx].usr_id));
-            assert_that(actual_entry_ptr[idx].capability.renew, is_equal_to(expect_entry[idx].capability.renew));
             assert_that(actual_entry_ptr[idx].capability.transcode, is_equal_to(expect_entry[idx].capability.transcode));
             assert_that(actual_entry_ptr[idx].capability.edit_acl,  is_equal_to(expect_entry[idx].capability.edit_acl));
         }
@@ -121,17 +122,17 @@ static __attribute__((optimize("O0"))) void utest_acl__operation_done_cb (aacl_r
 
 
 #define  UTEST_EXPECT_NUM_ROWS  3
-#define  UTEST_EXPECT_NUM_COLS  4
-Ensure(app_acl_test__load_ok)
+#define  UTEST_EXPECT_NUM_COLS  3
+Ensure(app_acl_test__usrlvl_load_ok)
 {
     UTEST_ACL_COMMON_SETUP(1)
     UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
     const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {
-            {"93804", "1", "0", "0"},  {"4095", "0", "0", "0"},  {"133847", "0", "1", "0"}  };
+            {"93804", "1", "0"},  {"4095", "0", "0"},  {"133847", "0", "1"}  };
     aacl_data_t  expect_row_data_int[UTEST_EXPECT_NUM_ROWS] = {
-        {.usr_id=93804,  .capability={.transcode=1, .renew=0, .edit_acl=0}},
-        {.usr_id=4095,   .capability={.transcode=0, .renew=0, .edit_acl=0}},
-        {.usr_id=133847, .capability={.transcode=0, .renew=1, .edit_acl=0}}
+        {.usr_id=93804,  .capability={.transcode=1, .edit_acl=0}},
+        {.usr_id=4095,   .capability={.transcode=0, .edit_acl=0}},
+        {.usr_id=133847, .capability={.transcode=0, .edit_acl=1}}
     };
     void *mock_usr_args[1] = {(void *)&expect_row_data_int[0]};
     mock_acl_cfg.usr_args.entries = (void **)&mock_usr_args[0];
@@ -153,19 +154,19 @@ Ensure(app_acl_test__load_ok)
     int err =  app_resource_acl_load(&mock_acl_cfg);
     assert_that(err, is_equal_to(0));
     UTEST_DB_QUERY_RESULT_TEARDOWN
-} // end of app_acl_test__load_ok
+} // end of app_acl_test__usrlvl_load_ok
 #undef  UTEST_EXPECT_NUM_ROWS
 #undef  UTEST_EXPECT_NUM_COLS
 
 
 #define  UTEST_EXPECT_NUM_ROWS  1
-#define  UTEST_EXPECT_NUM_COLS  4
-Ensure(app_acl_test__load_error)
+#define  UTEST_EXPECT_NUM_COLS  3
+Ensure(app_acl_test__usrlvl_load_error)
 {
     UTEST_ACL_COMMON_SETUP(1)
     UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
     uint8_t  expect_error = 1;
-    const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"351", "0", "1", "1"}};
+    const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"351", "0", "1"}};
     expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
     expect(utest_dbpool__acquire_free_conn, will_return(&mock_conn), when(_pool, is_equal_to(&mock_db_pool)));
     expect(utest_dbconn__add_new_query, when(_conn, is_equal_to(&mock_conn)), when(q, is_not_equal_to(NULL)));
@@ -185,7 +186,7 @@ Ensure(app_acl_test__load_error)
     int err =  app_resource_acl_load(&mock_acl_cfg);
     assert_that(err, is_equal_to(0));
     UTEST_DB_QUERY_RESULT_TEARDOWN
-} // end of app_acl_test__load_error
+} // end of app_acl_test__usrlvl_load_error
 #undef  UTEST_EXPECT_NUM_ROWS
 #undef  UTEST_EXPECT_NUM_COLS
 
@@ -195,37 +196,37 @@ Ensure(app_acl_test__build_update_list_1)
 #define  UTEST_NUM_ITEMS_EXISTING  6
 #define  UTEST_NUM_ITEMS_NEW       7
 #define  UTEST_NEW_ITEM_RAWDATA   \
-    "[{\"usr_id\":6178,\"access_control\":{\"transcode\":false,\"renew\":true, \"edit_acl\":true}}," \
-     "{\"usr_id\":8190,\"access_control\":{\"transcode\":true, \"renew\":true, \"edit_acl\":true}}," \
-     "{\"usr_id\":9384,\"access_control\":{\"transcode\":false,\"renew\":false,\"edit_acl\":true}}," \
-     "{\"usr_id\":1103,\"access_control\":{\"transcode\":false,\"renew\":false,\"edit_acl\":true}}," \
-     "{\"usr_id\":1615,\"access_control\":{\"transcode\":true, \"renew\":true, \"edit_acl\":false}}," \
-     "{\"usr_id\":9204,\"access_control\":{\"transcode\":false,\"renew\":false,\"edit_acl\":false}}," \
-     "{\"usr_id\":1885,\"access_control\":{\"transcode\":true, \"renew\":false,\"edit_acl\":false}}]"
+    "[{\"usr_id\":6178,\"access_control\":{\"transcode\":false,\"edit_acl\":true}}," \
+     "{\"usr_id\":8190,\"access_control\":{\"transcode\":true, \"edit_acl\":true}}," \
+     "{\"usr_id\":9384,\"access_control\":{\"transcode\":false,\"edit_acl\":true}}," \
+     "{\"usr_id\":1103,\"access_control\":{\"transcode\":false,\"edit_acl\":true}}," \
+     "{\"usr_id\":1615,\"access_control\":{\"transcode\":true, \"edit_acl\":false}}," \
+     "{\"usr_id\":9204,\"access_control\":{\"transcode\":false,\"edit_acl\":false}}," \
+     "{\"usr_id\":1885,\"access_control\":{\"transcode\":true, \"edit_acl\":false}}]"
     aacl_data_t mock_existing_data[UTEST_NUM_ITEMS_EXISTING] = {
-        {.usr_id=9384,  .capability={.transcode=1, .renew=0, .edit_acl=0}},
-        {.usr_id=3801,  .capability={.transcode=0, .renew=1, .edit_acl=0}},
-        {.usr_id=8046,  .capability={.transcode=1, .renew=0, .edit_acl=1}},
-        {.usr_id=416,   .capability={.transcode=1, .renew=1, .edit_acl=0}},
-        {.usr_id=1615,  .capability={.transcode=0, .renew=1, .edit_acl=1}},
-        {.usr_id=6178,  .capability={.transcode=1, .renew=1, .edit_acl=1}},
+        {.usr_id=9384,  .capability={.transcode=1, .edit_acl=0}},
+        {.usr_id=3801,  .capability={.transcode=0, .edit_acl=0}},
+        {.usr_id=8046,  .capability={.transcode=1, .edit_acl=1}},
+        {.usr_id=416,   .capability={.transcode=1, .edit_acl=0}},
+        {.usr_id=1615,  .capability={.transcode=0, .edit_acl=1}},
+        {.usr_id=6178,  .capability={.transcode=1, .edit_acl=1}},
     };
 #define  EXPECTED_NUM_UPDATE    3
 #define  EXPECTED_NUM_DELETE    3
 #define  EXPECTED_NUM_INSERT    4
     aacl_data_t  expect_data_update[EXPECTED_NUM_UPDATE] = {
-        {.usr_id=6178,  .capability={.transcode=0, .renew=1, .edit_acl=1}},
-        {.usr_id=9384,  .capability={.transcode=0, .renew=0, .edit_acl=1}},
-        {.usr_id=1615,  .capability={.transcode=1, .renew=1, .edit_acl=0}},
+        {.usr_id=6178,  .capability={.transcode=0, .edit_acl=1}},
+        {.usr_id=9384,  .capability={.transcode=0, .edit_acl=1}},
+        {.usr_id=1615,  .capability={.transcode=1, .edit_acl=0}},
     };
     aacl_data_t  expect_data_delete[EXPECTED_NUM_DELETE] = {
         {.usr_id=3801}, {.usr_id=8046}, {.usr_id=416},
     };
     aacl_data_t  expect_data_insert[EXPECTED_NUM_INSERT] = {
-        {.usr_id=8190,  .capability={.transcode=1, .renew=1, .edit_acl=1}},
-        {.usr_id=1103,  .capability={.transcode=0, .renew=0, .edit_acl=1}},
-        {.usr_id=9204,  .capability={.transcode=0, .renew=0, .edit_acl=0}},
-        {.usr_id=1885,  .capability={.transcode=1, .renew=0, .edit_acl=0}},
+        {.usr_id=8190,  .capability={.transcode=1, .edit_acl=1}},
+        {.usr_id=1103,  .capability={.transcode=0, .edit_acl=1}},
+        {.usr_id=9204,  .capability={.transcode=0, .edit_acl=0}},
+        {.usr_id=1885,  .capability={.transcode=1, .edit_acl=0}},
     };
     aacl_result_t  mock_saved_result = {.data={.entries=&mock_existing_data[0],
         .size=UTEST_NUM_ITEMS_EXISTING, .capacity=UTEST_NUM_ITEMS_EXISTING}};
@@ -249,7 +250,6 @@ Ensure(app_acl_test__build_update_list_1)
             aacl_data_t *actual = actual_data[jdx]; \
             if(actual->usr_id == expected->usr_id) { \
                 if(cap_flg_chk) { \
-                    assert_that(actual->capability.renew, is_equal_to(expected->capability.renew)); \
                     assert_that(actual->capability.transcode, is_equal_to(expected->capability.transcode)); \
                     assert_that(actual->capability.edit_acl, is_equal_to(expected->capability.edit_acl)); \
                 } \
@@ -276,14 +276,14 @@ Ensure(app_acl_test__build_update_list_2)
 {
 #define  UTEST_NUM_ITEMS_NEW       3
 #define  UTEST_NEW_ITEM_RAWDATA   \
-    "[{\"usr_id\":6178,\"access_control\":{\"transcode\":false,\"renew\":true, \"edit_acl\":true}}," \
-     "{\"usr_id\":1615,\"access_control\":{\"transcode\":true, \"renew\":true, \"edit_acl\":false}}," \
-     "{\"usr_id\":1885,\"access_control\":{\"transcode\":true, \"renew\":false,\"edit_acl\":false}}]"
+    "[{\"usr_id\":6178,\"access_control\":{\"transcode\":false,\"edit_acl\":true}}," \
+     "{\"usr_id\":1615,\"access_control\":{\"transcode\":true, \"edit_acl\":false}}," \
+     "{\"usr_id\":1885,\"access_control\":{\"transcode\":true, \"edit_acl\":false}}]"
 #define  EXPECTED_NUM_INSERT    UTEST_NUM_ITEMS_NEW
     aacl_data_t  expect_data_insert[EXPECTED_NUM_INSERT] = {
-        {.usr_id=6178,  .capability={.transcode=0, .renew=1, .edit_acl=1}},
-        {.usr_id=1615,  .capability={.transcode=1, .renew=1, .edit_acl=0}},
-        {.usr_id=1885,  .capability={.transcode=1, .renew=0, .edit_acl=0}},
+        {.usr_id=6178,  .capability={.transcode=0, .edit_acl=1}},
+        {.usr_id=1615,  .capability={.transcode=1, .edit_acl=0}},
+        {.usr_id=1885,  .capability={.transcode=1, .edit_acl=0}},
     };
     aacl_result_t  mock_saved_result = {.data={0}};
     json_t *mock_new_data = json_loadb(UTEST_NEW_ITEM_RAWDATA, sizeof(UTEST_NEW_ITEM_RAWDATA) - 1, 0, NULL);
@@ -308,8 +308,8 @@ Ensure(app_acl_test__build_update_list_2)
 #define  UTEST_ACL_SAVE_SETUP(rawsql_max_nkbytes, new_data_serialized) \
     UTEST_ACL_COMMON_SETUP(rawsql_max_nkbytes) \
     aacl_data_t mock_existing_data[2] = { \
-        {.usr_id=395,  .capability={.transcode=1, .renew=0, .edit_acl=1}}, \
-        {.usr_id=304,  .capability={.transcode=0, .renew=1, .edit_acl=0}}, \
+        {.usr_id=395,  .capability={.transcode=1, .edit_acl=1}}, \
+        {.usr_id=304,  .capability={.transcode=0, .edit_acl=1}}, \
     }; \
     aacl_result_t  mock_saved_result = {.data={.size=2, .capacity=2, .entries=&mock_existing_data[0]}}; \
     json_t *mock_new_data = json_loadb(new_data_serialized, sizeof(new_data_serialized) - 1, 0, NULL); \
@@ -318,11 +318,11 @@ Ensure(app_acl_test__build_update_list_2)
     json_decref(mock_new_data);
 
 
-Ensure(app_acl_test__save_ok)
+Ensure(app_acl_test__usrlvl_save_ok)
 {
 #define  UTEST_NEW_ITEM_RAWDATA   \
-    "[{\"usr_id\":1884,\"access_control\":{\"transcode\":false,\"renew\":true, \"edit_acl\":true}}," \
-     "{\"usr_id\":395,\"access_control\":{\"transcode\":true, \"renew\":false,\"edit_acl\":false}}]"
+    "[{\"usr_id\":1884,\"access_control\":{\"transcode\":false,\"edit_acl\":true}}," \
+     "{\"usr_id\":395,\"access_control\":{\"transcode\":true, \"edit_acl\":false}}]"
     UTEST_ACL_SAVE_SETUP(5, UTEST_NEW_ITEM_RAWDATA)
     db_query_result_t  mock_q_result = {._final=1}, *mock_q_result_p = &mock_q_result;
     uint8_t  expect_write_flg = 1;
@@ -336,18 +336,18 @@ Ensure(app_acl_test__save_ok)
           );
     expect(utest_acl__operation_done_cb, when(flg_err, is_equal_to(0)),  when(flg_wr_ok, is_equal_to(1)),
                when(actual_num_rows, is_equal_to(0)) );
-    int err = app_resource_acl_save(&mock_acl_cfg, &mock_saved_result, mock_new_data);
+    int err = app_usrlvl_acl_save(&mock_acl_cfg, &mock_saved_result, mock_new_data);
     assert_that(err, is_equal_to(0));
     UTEST_ACL_SAVE_TEARDOWN
 #undef  UTEST_NEW_ITEM_RAWDATA
-} // end of app_acl_test__save_ok
+} // end of app_acl_test__usrlvl_save_ok
 
 
-Ensure(app_acl_test__save_error) 
+Ensure(app_acl_test__usrlvl_save_error) 
 {
 #define  UTEST_NEW_ITEM_RAWDATA   \
-    "[{\"usr_id\":1884,\"access_control\":{\"transcode\":false,\"renew\":true, \"edit_acl\":true}}," \
-     "{\"usr_id\":395,\"access_control\":{\"transcode\":true, \"renew\":false,\"edit_acl\":false}}]"
+    "[{\"usr_id\":1884,\"access_control\":{\"transcode\":false,\"edit_acl\":true}}," \
+     "{\"usr_id\":395,\"access_control\":{\"transcode\":true,\"edit_acl\":false}}]"
     UTEST_ACL_SAVE_SETUP(5, UTEST_NEW_ITEM_RAWDATA)
     uint8_t  expect_write_flg = 1, expect_err_flg = 1;
     expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
@@ -360,11 +360,11 @@ Ensure(app_acl_test__save_error)
           );
     expect(utest_acl__operation_done_cb, when(flg_err, is_equal_to(1)),  when(flg_wr_ok, is_equal_to(0)),
                when(actual_num_rows, is_equal_to(0)) );
-    int err = app_resource_acl_save(&mock_acl_cfg, &mock_saved_result, mock_new_data);
+    int err = app_usrlvl_acl_save(&mock_acl_cfg, &mock_saved_result, mock_new_data);
     assert_that(err, is_equal_to(0));
     UTEST_ACL_SAVE_TEARDOWN
 #undef  UTEST_NEW_ITEM_RAWDATA
-} // end of app_acl_test__save_error
+} // end of app_acl_test__usrlvl_save_error
 
 
 #define  UTEST_EXPECT_NUM_ROWS  1
@@ -388,6 +388,7 @@ Ensure(app_acl_test__resource_id__exact_one)
     }
     expect(utest_acl__operation_done_cb, when(flg_err, is_equal_to(0)),  when(flg_res_id_exists, is_equal_to(1)),
           when(actual_res_owner_id, is_equal_to(139)),  when(actual_upld_req, is_equal_to(0x0a14f029)),
+          when(flg_acl_exists, is_equal_to(0)), when(flg_acl_visible, is_equal_to(0)),
     );
     int err = app_acl_verify_resource_id (&mock_acl_cfg);
     assert_that(err, is_equal_to(0));
@@ -457,17 +458,88 @@ Ensure(app_acl_test__resource_id__db_error)
 #undef  UTEST_EXPECT_NUM_COLS
 
 
+#define  UTEST_EXPECT_NUM_ROWS  1
+#define  UTEST_EXPECT_NUM_COLS  3
+Ensure(app_acl_test__resource_id__with_acl)
+{
+    UTEST_ACL_COMMON_SETUP(2)
+    UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
+    const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"139", "0a14f029", "1"}};
+    expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
+    expect(utest_dbpool__acquire_free_conn, will_return(&mock_conn), when(_pool, is_equal_to(&mock_db_pool)));
+    expect(utest_dbconn__add_new_query, when(_conn, is_equal_to(&mock_conn)), when(q, is_not_equal_to(NULL)));
+    expect(utest_dbpool__release_used_conn, will_return(DBA_RESULT_OK), when(_conn, is_equal_to(&mock_conn)));
+    expect(utest_dbconn__try_process_queries, will_return(DBA_RESULT_OK),
+                will_set_contents_of_parameter(exp_num_rows_p, &expect_num_rows, sizeof(uint8_t))  );
+    {
+        db_query_row_info_t *rowinfo = (db_query_row_info_t *) &expect_row[0]->data[0];
+        for(uint8_t jdx = 0; jdx < UTEST_EXPECT_NUM_COLS; jdx++)
+            rowinfo->values[jdx] = (char *) expect_row_data[0][jdx];
+        expect(utest_dbconn__try_process_queries, will_return(expect_row[0]));
+    }
+    expect(utest_acl__operation_done_cb, when(flg_err, is_equal_to(0)),  when(flg_res_id_exists, is_equal_to(1)),
+          when(actual_res_owner_id, is_equal_to(139)),  when(actual_upld_req, is_equal_to(0x0a14f029)),
+          when(flg_acl_exists, is_equal_to(1)), when(flg_acl_visible, is_equal_to(1)),
+    );
+    mock_acl_cfg.fetch_acl = 1;
+    int err = app_acl_verify_resource_id (&mock_acl_cfg);
+    assert_that(err, is_equal_to(0));
+    UTEST_DB_QUERY_RESULT_TEARDOWN
+} // end of app_acl_test__resource_id__with_acl
+#undef  UTEST_EXPECT_NUM_ROWS
+#undef  UTEST_EXPECT_NUM_COLS
+
+
+#define  UTEST_DATA1_SERIAL  "{\"visible\":true}"
+#define  UTEST_DATA2_SERIAL  "{\"visible\":false}"
+Ensure(app_acl_test__filelvl_save_ok)
+{
+    UTEST_ACL_COMMON_SETUP(1)
+    uint8_t expect_write_flg = 1;
+    db_query_result_t  mock_q_result = {._final=1}, *mock_q_result_p = &mock_q_result;
+    json_t *mock_data[2] = {
+        json_loadb(UTEST_DATA1_SERIAL, sizeof(UTEST_DATA1_SERIAL) - 1, 0, NULL),
+        json_loadb(UTEST_DATA2_SERIAL, sizeof(UTEST_DATA2_SERIAL) - 1, 0, NULL),
+    };
+#define   EXPECT_INVOKING_FUNC \
+    expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool))); \
+    expect(utest_dbpool__acquire_free_conn, will_return(&mock_conn), when(_pool, is_equal_to(&mock_db_pool))); \
+    expect(utest_dbconn__add_new_query, when(_conn, is_equal_to(&mock_conn)), when(q, is_not_equal_to(NULL))); \
+    expect(utest_dbpool__release_used_conn, will_return(DBA_RESULT_OK), when(_conn, is_equal_to(&mock_conn))); \
+    expect(utest_dbconn__try_process_queries, will_return(DBA_RESULT_OK), \
+            will_set_contents_of_parameter(expect_write_flg_p, &expect_write_flg, sizeof(uint8_t)), \
+            will_set_contents_of_parameter(q_result_p, &mock_q_result_p, sizeof(db_query_result_t *)), \
+          ); \
+    expect(utest_acl__operation_done_cb, when(flg_err, is_equal_to(0)),  when(flg_wr_ok, is_equal_to(1)), \
+               when(actual_num_rows, is_equal_to(0)) );
+    EXPECT_INVOKING_FUNC
+    int err = app_filelvl_acl_save(&mock_acl_cfg, NULL, mock_data[0]);
+    assert_that(err, is_equal_to(0));
+    err = app_filelvl_acl_save(&mock_acl_cfg, mock_data[0], mock_data[0]);
+    assert_that(err, is_equal_to(1)); // skipped
+    EXPECT_INVOKING_FUNC
+    err = app_filelvl_acl_save(&mock_acl_cfg, mock_data[0], mock_data[1]);
+    assert_that(err, is_equal_to(0));
+    json_decref(mock_data[0]);
+    json_decref(mock_data[1]);
+} // end of app_acl_test__filelvl_save_ok
+#undef   UTEST_DATA1_SERIAL
+#undef   UTEST_DATA2_SERIAL
+
+
 TestSuite *app_resource_acl_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test(suite, app_acl_test__load_ok);
-    add_test(suite, app_acl_test__load_error);
+    add_test(suite, app_acl_test__usrlvl_load_ok);
+    add_test(suite, app_acl_test__usrlvl_load_error);
     add_test(suite, app_acl_test__build_update_list_1);
     add_test(suite, app_acl_test__build_update_list_2);
-    add_test(suite, app_acl_test__save_ok);
-    add_test(suite, app_acl_test__save_error);
+    add_test(suite, app_acl_test__usrlvl_save_ok);
+    add_test(suite, app_acl_test__usrlvl_save_error);
     add_test(suite, app_acl_test__resource_id__exact_one);
     add_test(suite, app_acl_test__resource_id__duplicate);
     add_test(suite, app_acl_test__resource_id__db_error);
+    add_test(suite, app_acl_test__resource_id__with_acl);
+    add_test(suite, app_acl_test__filelvl_save_ok);
     return suite;
 }
