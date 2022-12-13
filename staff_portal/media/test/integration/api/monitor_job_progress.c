@@ -19,8 +19,9 @@ static void itest_verify__monitor_job_progress(CURL *handle, test_setup_priv_t *
     long actual_resp_code = 0;
     res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
     assert_that(res, is_equal_to(CURLE_OK));
+    assert_that(actual_resp_code, is_not_equal_to(0));
     assert_that(actual_resp_code, is_equal_to(expect_resp_code));
-    if(actual_resp_code < 400) { // ok
+    if(actual_resp_code > 0 && actual_resp_code < 400) { // ok
         json_t *fn_verify_item = json_object_get(usr_arg->job_item, "fn_verify_job");
         test_verify_cb_t  custom_fn =  (test_verify_cb_t)json_integer_value(fn_verify_item);
         assert_that(custom_fn, is_not_null);
@@ -63,7 +64,7 @@ Ensure(api_test__monitor_job_progress__nonexist_id) {
     json_t  *mock_job_item = json_object();
 #define  JOB_ID       "non_exist_id_123456abc"
     json_object_set_new(mock_job_item, "job_id", json_string(JOB_ID));
-    api_test_monitor_job_progress__update(usr_id, mock_job_item, 404);
+    api_test_monitor_job_progress__update(usr_id, mock_job_item, 400);
     json_decref(mock_job_item);
 #undef  JOB_ID
 } // end of api_test__monitor_job_progress__nonexist_id

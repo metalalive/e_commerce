@@ -154,14 +154,6 @@ int  api_http_resp_status__verify_resource_id (aacl_result_t *result, json_t *er
     return resp_status;
 } // end of  api_http_resp_status__verify_resource_id
 
-#if 0
-    json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
-    uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
-    if(curr_usr_id != result->owner_usr_id) {
-        json_object_set_new(err_info, "res_id", json_string("permission"));
-        resp_status = 403;
-    } // TODO , allow operations from the users who have access to the resource
-#endif
 
 
 int  app_verify_printable_string(const char *str, size_t limit_sz)
@@ -263,15 +255,21 @@ static void _api_progressinfo_update (int fd, json_t *reply_msgs)
         if(j_err.line >= 0 || j_err.column >= 0) { //  discard junk data
             fprintf(stderr, "[api][common] line:%d, corr_id:%s, msg:%s \n", __LINE__, corr_id, msg);
         } else { // -----------------------------
+            json_t  *job_item  = json_object_getn(info, corr_id, corr_id_sz);
+            uint8_t _new_item_add = !job_item;
+            if(_new_item_add)
+                job_item = json_object();
+            json_t  *err_info_item = json_object_get(_reply, "error");
             json_t  *progress_item = json_object_get(_reply, "progress");
-            float percent_done = (float) json_real_value(progress_item);
-            if(percent_done > 0.0f) {
-                json_t *job_item  = json_object();
-                json_object_set_new(job_item, "percent_done", json_real(percent_done) );
-                json_object_set_new(job_item, "timestamp", json_integer(ts_done) );
-                json_object_deln(    info, corr_id, corr_id_sz);
-                json_object_setn_new(info, corr_id, corr_id_sz, job_item);
+            if(progress_item) {
+                float _percent_done = (float) json_real_value(progress_item);
+                json_object_set_new(job_item, "percent_done", json_real(_percent_done));
             } // report error, error detail does not contain progress message
+            if(err_info_item)
+                json_object_set(job_item, "error", err_info_item);
+            json_object_set_new(job_item, "timestamp", json_integer(ts_done) );
+            if(_new_item_add)
+                json_object_setn_new(info, corr_id, corr_id_sz, job_item);
             json_decref(_reply);
         } // ---------------------------
     } // end of reply message iteration

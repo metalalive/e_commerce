@@ -22,6 +22,13 @@ extern "C" {
 #define   NUM_USRARGS_ASA_SRC       (ASA_USRARG_INDEX__ERROR_INFO + 1)
 #define   NUM_USRARGS_ASA_DST       (ASA_USRARG_INDEX__VERSION_EXIST_FLAG + 1)
 
+#define  API_RPC__SEND_ERROR_REPLY(_receipt, _err_info) { \
+    json_t *_wrapper = json_object(); \
+    json_object_set(_wrapper, "error", _err_info); \
+    app_rpc_task_send_reply(_receipt, _wrapper, 1); \
+    json_decref(_wrapper); \
+}
+
 void api_rpc_transcode__asa_localtmp_deinit(asa_op_base_cfg_t *);
 void api_rpc_transcode__asa_src_deinit(asa_op_base_cfg_t *);
 void api_rpc_transcode__asa_dst_deinit(asa_op_base_cfg_t *);

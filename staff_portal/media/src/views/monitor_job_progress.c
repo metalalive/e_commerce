@@ -73,11 +73,13 @@ static void  _api_job_progress_fileopened_cb (asa_op_base_cfg_t *asaobj, ASA_RES
         } else {
             req->res.status = 404;
             json_object_set_new(res_body, "reason", json_string("job ID not found"));
+            fprintf(stderr, "[api][monitor_job_progress] line:%d, job ID not found:%s \n", __LINE__, req_job_id);
         }
         json_decref(info);
     } else {
         req->res.status = 400;
         json_object_set_new(res_body, "reason", json_string("job queue not ready"));
+        fprintf(stderr, "[api][monitor_job_progress] line:%d, job queue not ready \n", __LINE__);
     }
     asaobj->op.close.cb = _api_job_progressinfo_final_cb;
     result = asaobj->storage->ops.fn_close(asaobj);

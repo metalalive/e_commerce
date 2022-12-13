@@ -33,13 +33,13 @@ static void  api_rpc_transcode__atfp_src_processing_cb (atfp_t  *processor)
     atfp_asa_map_t   *_map = asa_src->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
     uint8_t has_err = json_object_size(err_info) > 0;
     if(has_err) {
-        app_rpc_task_send_reply(receipt, err_info, 1);
+        API_RPC__SEND_ERROR_REPLY(receipt, err_info);
         api_rpc_transcoding__storagemap_deinit(_map);
     } else {
         ASA_DESTINATIONS_PROCESSING(_map, has_err);
         if(atfp_asa_map_all_dst_stopped(_map)) {
             if(has_err) {
-                app_rpc_task_send_reply(receipt, err_info, 1);
+                API_RPC__SEND_ERROR_REPLY(receipt, err_info);
                 api_rpc_transcoding__storagemap_deinit(_map);
             } else {
                 api_rpc_transcode__finalize(_map);
@@ -81,7 +81,7 @@ static void  api_rpc_transcode__atfp_dst_processing_cb (atfp_t  *processor)
     }
     if(has_err) {
          arpc_receipt_t *receipt = asa_dst->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
-         app_rpc_task_send_reply(receipt, err_info, 1);
+         API_RPC__SEND_ERROR_REPLY(receipt, err_info);
          api_rpc_transcoding__storagemap_deinit(_map);
     }
 } // end of api_rpc_transcode__atfp_dst_processing_cb
@@ -112,7 +112,7 @@ static  void api_rpc_transcode__atfp_dst_init_finish_cb (atfp_t  *processor)
 #endif
     if (json_object_size(err_info) > 0) {
          arpc_receipt_t *receipt = asa_dst->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
-         app_rpc_task_send_reply(receipt, err_info, 1);
+         API_RPC__SEND_ERROR_REPLY(receipt, err_info);
          api_rpc_transcoding__storagemap_deinit(_map);
     }
 } // end of api_rpc_transcode__atfp_dst_init_finish_cb
@@ -140,7 +140,7 @@ static  void api_rpc_transcode__atfp_src_init_finish_cb (atfp_t  *processor)
 #endif
     if(has_err && atfp_asa_map_all_dst_stopped(_map)) {
          arpc_receipt_t *receipt = asa_src->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
-         app_rpc_task_send_reply(receipt, err_info, 1);
+         API_RPC__SEND_ERROR_REPLY(receipt, err_info);
          api_rpc_transcoding__storagemap_deinit(_map);
     }
 } // end of api_rpc_transcode__atfp_src_init_finish_cb
@@ -238,7 +238,7 @@ static void api_rpc_transcode__src_first_chunk_read_cb (
     }
     if(_map->app_sync_cnt == 0 && json_object_size(err_info) > 0) {
         arpc_receipt_t *receipt = asaobj->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
-        app_rpc_task_send_reply(receipt, err_info, 1);
+        API_RPC__SEND_ERROR_REPLY(receipt, err_info);
         api_rpc_transcoding__storagemap_deinit(_map);
     }
 } // end of api_rpc_transcode__src_first_chunk_read_cb
@@ -262,7 +262,7 @@ static void api_rpc_transcode__open_src_first_chunk_cb(asa_op_base_cfg_t *asaobj
         atfp_asa_map_t *_map    = asaobj->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
         if(--_map->app_sync_cnt == 0) {
             arpc_receipt_t *receipt = asaobj->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
-            app_rpc_task_send_reply(receipt, err_info, 1);
+            API_RPC__SEND_ERROR_REPLY(receipt, err_info);
             api_rpc_transcoding__storagemap_deinit(_map);
         }
     } // TODO, figure out how to solve the problem if error happens to both event callbacks.
@@ -284,7 +284,7 @@ static void api_rpc_transcode__create_folder_common_cb (asa_op_base_cfg_t *asaob
     }
     if(_map->app_sync_cnt == 0 && json_object_size(err_info) > 0) {
         arpc_receipt_t *receipt = asaobj->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
-        app_rpc_task_send_reply(receipt, err_info, 1);
+        API_RPC__SEND_ERROR_REPLY(receipt, err_info);
         api_rpc_transcoding__storagemap_deinit(_map);
     }
 } // end of api_rpc_transcode__create_folder_common_cb
@@ -314,7 +314,7 @@ static void api_rpc_transcode__create_dst_basepath_cb (asa_op_base_cfg_t *asa_ds
     if(json_object_size(err_info) > 0) {
         if(--_map->app_sync_cnt == 0) {
             arpc_receipt_t *receipt = asa_dst->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
-            app_rpc_task_send_reply(receipt, err_info, 1);
+            API_RPC__SEND_ERROR_REPLY(receipt, err_info);
             api_rpc_transcoding__storagemap_deinit(_map);
         } // positive `app_sync_cnt` means more running tasks haven't been completed 
     }
@@ -481,7 +481,7 @@ error:
     if(_app_sync_cnt > 0) { // will send error message to reply queue in next event-loop cycle
         asaobj_map->app_sync_cnt = _app_sync_cnt;
     } else {
-        app_rpc_task_send_reply(receipt, err_info, 1);
+        API_RPC__SEND_ERROR_REPLY(receipt, err_info);
         if(asaobj_map) {
             api_rpc_transcoding__storagemap_deinit(asaobj_map);
         } else {

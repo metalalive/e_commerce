@@ -146,7 +146,7 @@
                             "render_fn":"api__render_rpc_reply_qname"
                         },
                         "correlation_id": {
-                            "pattern":"rpc.media.mp_done.corr_id.%s",
+                            "pattern":"rpc.media.transcode.corr_id.%s",
                             "render_fn":"api__start_transcoding__render_rpc_corr_id"
                         },
                         "task_handler": "api_rpc_task_handler__start_transcode",

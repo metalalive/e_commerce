@@ -140,7 +140,7 @@ void  api_rpc_transcode__finalize (atfp_asa_map_t *map)
     } // TODO, solve potential n + 1 problems
 #endif
     if(atfp_asa_map_all_dst_stopped(map) && has_err) {
-        app_rpc_task_send_reply(receipt, err_info, 1);
+        API_RPC__SEND_ERROR_REPLY(receipt, err_info);
         api_rpc_transcoding__storagemap_deinit(map);
     }
 } // end of api_rpc_transcode__finalize

@@ -17,17 +17,17 @@ static  __attribute__((optimize("O0"))) void  itest_verify__job_progress_update_
         CURL *curl, test_setup_priv_t *privdata, void *cb_arg)
 {
     json_t  *job_item = cb_arg;
-    const char *job_id = json_string_value(json_object_get(job_item, "job_id"));
     lseek(privdata->fds.resp_body, 0, SEEK_SET);
     json_t  *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
-    json_t  *result = json_object_get(resp_obj, job_id);
-    assert_that(result, is_not_equal_to(NULL));
-    if(json_object_get(result, "percent_done")) {
+    json_t  *err_info_recv = json_object_get(resp_obj, "error");
+    assert_that(resp_obj, is_not_equal_to(NULL));
+    assert_that(err_info_recv, is_equal_to(NULL));
+    if(json_object_get(resp_obj, "percent_done")) {
         // there should be only one item returned for specific job progress
         float  old_percent_done = json_real_value(json_object_get(job_item, "percent_done"));
         int    old_timestamp = json_integer_value(json_object_get(job_item, "timestamp"));
-        float  new_percent_done = json_real_value(json_object_get(result, "percent_done"));
-        int    new_timestamp = json_integer_value(json_object_get(result, "timestamp"));
+        float  new_percent_done = json_real_value(json_object_get(resp_obj, "percent_done"));
+        int    new_timestamp = json_integer_value(json_object_get(resp_obj, "timestamp"));
         assert_that((new_percent_done >= old_percent_done), is_equal_to(1));
         assert_that((new_timestamp >= old_timestamp), is_equal_to(1));
         if(new_timestamp > old_timestamp) {
@@ -48,14 +48,12 @@ static  __attribute__((optimize("O0"))) void  itest_verify__job_terminated_confl
         CURL *curl, test_setup_priv_t *privdata, void *cb_arg)
 {
     json_t  *job_item = cb_arg;
-    const char *job_id = json_string_value(json_object_get(job_item, "job_id"));
     lseek(privdata->fds.resp_body, 0, SEEK_SET);
     json_t  *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
-    json_t  *resp_obj_nested = json_object_get(resp_obj, job_id);
-    const char *errmsg =  json_string_value(json_object_get(resp_obj_nested, "storage"));
-    assert_that(errmsg, is_not_equal_to(NULL));
-    if(errmsg) // failed to create work folder for transcoded file
-        json_object_set_new(job_item, "errmsg", json_string(errmsg));
+    json_t  *err_info_recv = json_object_get(resp_obj, "error");
+    json_t  *err_storage = json_object_get(err_info_recv, "storage");
+    assert_that(err_info_recv, is_not_null);
+    assert_that(err_storage, is_not_null);
     json_object_set_new(job_item, "error", json_true());
     json_object_set_new(job_item, "done", json_true());
     json_decref(resp_obj);
@@ -66,14 +64,12 @@ static  __attribute__((optimize("O0"))) void  itest_verify__job_terminated_unsup
         CURL *curl, test_setup_priv_t *privdata, void *cb_arg)
 {
     json_t  *job_item = cb_arg;
-    const char *job_id = json_string_value(json_object_get(job_item, "job_id"));
     lseek(privdata->fds.resp_body, 0, SEEK_SET);
     json_t  *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
-    json_t  *resp_obj_nested = json_object_get(resp_obj, job_id);
-    const char *errmsg =  json_string_value(json_object_get(resp_obj_nested, "transcoder"));
-    assert_that(errmsg, is_not_equal_to(NULL));
-    if(errmsg) // unsupported source file format
-        json_object_set_new(job_item, "errmsg", json_string(errmsg));
+    json_t  *err_info_recv = json_object_get(resp_obj, "error");
+    json_t  *err_transcode = json_object_get(err_info_recv, "transcoder");
+    assert_that(err_info_recv, is_not_null);
+    assert_that(err_transcode, is_not_null);
     json_object_set_new(job_item, "error", json_true());
     json_object_set_new(job_item, "done", json_true());
     json_decref(resp_obj);
@@ -120,7 +116,7 @@ static void itest_api_verify__start_transcode(CURL *handle, test_setup_priv_t *p
     assert_that(res, is_equal_to(CURLE_OK));
     assert_that(actual_resp_code, is_equal_to(expect_resp_code));
     json_t *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
-    if(actual_resp_code < 400) { // ok
+    if(actual_resp_code > 0 && actual_resp_code < 400) { // ok
         const char *job_id = json_string_value(json_object_get(resp_obj, "job_id"));
         assert_that(job_id, is_not_equal_to(NULL));
         if(job_id) {
@@ -128,7 +124,7 @@ static void itest_api_verify__start_transcode(CURL *handle, test_setup_priv_t *p
             json_t *async_job_ids_item = json_object_get(upld_req_ref, "async_job_ids");
             json_array_append_new(async_job_ids_item, info);
             json_object_set_new(info, "job_id",  json_string(job_id));
-            json_object_set_new(info, "fn_verify_job",  json_integer((int)usr_arg ->fn_verify_job));
+            json_object_set_new(info, "fn_verify_job",  json_integer((size_t)usr_arg ->fn_verify_job));
         } // TODO, store version string, possibly transcoding detail
     } else { // error
         const char *err_field = usr_arg->expect_err_field;

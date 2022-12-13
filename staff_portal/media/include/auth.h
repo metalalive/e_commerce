@@ -8,6 +8,8 @@ extern "C" {
 
 int app_deinit_auth_jwt_claims(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node);
 
+json_t *app_auth_httphdr_decode_jwt (h2o_req_t *);
+
 int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node);
 
 int app_basic_permission_check(struct hsearch_data *hmap);
