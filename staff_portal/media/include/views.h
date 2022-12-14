@@ -62,8 +62,9 @@ extern "C" {
     app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_initiate_file_stream \
-    4, api_abac_pep__init_fstream, 1, \
-    API_FINAL_HANDLER_initiate_file_stream, 0
+    6, api_abac_pep__init_fstream, 1, \
+    API_FINAL_HANDLER_initiate_file_stream, 0, \
+    app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_fetch_file_streaming_element \
     2,  API_FINAL_HANDLER_fetch_file_streaming_element, 0

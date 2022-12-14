@@ -328,12 +328,14 @@ Ensure(MOCK_AUTH_PART, auth_jwt_succeed_tests) {
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
     mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
     // this contains json array without expected audience for this application
+    uint32_t mock_auth_usr_id = 182;
     json_t *mock_full_claims = json_object();
     json_t *mock_aud_claim = json_array();
     json_array_append_new(mock_aud_claim, json_string("unrelated_service_1"));
     json_array_append_new(mock_aud_claim, json_string(APP_LABEL));
     // Note r_jwt_get_claim_json_t_value() internally allocates extra memory space
     json_object_set (mock_full_claims, "aud", mock_aud_claim);
+    json_object_set_new (mock_full_claims, "profile", json_integer(mock_auth_usr_id));
     jwk_t  mock_jwk = {0};
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;

@@ -117,32 +117,43 @@ int app_deinit_auth_jwt_claims(RESTAPI_HANDLER_ARGS(self, req), app_middleware_n
 } // end of app_deinit_auth_jwt_claims
 
 
-int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
+json_t *app_auth_httphdr_decode_jwt (h2o_req_t *req)
 {
-#define AUTH_HEADER_NAME  "authorization"
     char   *encoded = NULL;
     json_t *decoded = NULL;
+#define AUTH_HEADER_NAME  "authorization"
     size_t  name_len = sizeof(AUTH_HEADER_NAME) - 1; // exclude final byte which represent NULL-terminating character
-    if(!self || !req || !node)
-        goto error;
     int found_idx = (int)h2o_find_header_by_str(&req->headers, AUTH_HEADER_NAME, name_len, -1);
+#undef AUTH_HEADER_NAME
     if(found_idx == -1) // not found
-        goto error;
+        goto done;
     encoded = extract_header_auth_token(req, found_idx);
     if(!encoded)
-        goto error;
-    struct app_jwks_t *jwks = (struct app_jwks_t *)req->conn->ctx->storage.entries[0].data;
-    if(r_jwks_is_valid(jwks->handle) != RHN_OK) {
-        h2o_send_error_500(req, "internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);
-        h2o_error_printf("[auth] failed to import JWKS from %s \n", jwks->src_url);
         goto done;
+    struct app_jwks_t *jwks = (struct app_jwks_t *)req->conn->ctx->storage.entries[0].data;
+    if(r_jwks_is_valid(jwks->handle) == RHN_OK) {
+        decoded = perform_jwt_authentication(jwks->handle, encoded);
+        if(decoded && json_integer_value(json_object_get(decoded, "profile")) == 0) {
+            h2o_error_printf("[auth] line:%d, jwt verified, missing usr profile ID\n", __LINE__);
+            json_decref(decoded);
+            decoded = NULL;
+        } // this might be security vulnerability
+    } else {
+        // h2o_send_error_500(req, "internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);
+        h2o_error_printf("[auth] line:%d, failed to import JWKS from %s \n", __LINE__, jwks->src_url);
     }
-    decoded = perform_jwt_authentication(jwks->handle, encoded);
+done:
+    return decoded;
+} // end of  app_auth_httphdr_decode_jwt
+
+
+int app_authenticate_user(RESTAPI_HANDLER_ARGS(self, req), app_middleware_node_t *node)
+{
+    if(!self || !req || !node)
+        goto error;
+    json_t *decoded = app_auth_httphdr_decode_jwt (req);
     if(!decoded) // authentication failure
         goto error;
-    if(json_integer_value(json_object_get(decoded, "profile")) < 0) {
-        goto error;
-    } // TODO: logging, this might be security vulnerability
     ENTRY  e = {.key = "auth", .data = (void*)decoded };
     ENTRY *e_ret = NULL; // add new item to the given hash map
     if(hsearch_r(e, ENTER, &e_ret, node->data)) {
@@ -161,7 +172,6 @@ error:
 done: // always switch to next middleware function ...
     app_run_next_middleware(self, req, node);
     return 0;
-#undef AUTH_HEADER_NAME
 } // end of app_authenticate_user
 
 

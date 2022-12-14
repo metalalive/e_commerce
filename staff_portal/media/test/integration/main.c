@@ -192,7 +192,16 @@ int main(int argc, char **argv) {
     // result = run_single_test(suite, test_name, reporter);
     result = run_test_suite(suite, reporter);
     pthread_kill(app_tid, SIGTERM);
-    pthread_join(app_tid, NULL);
+    result = ETIMEDOUT;
+    for (int idx = 0; (result != 0) && (idx < 10); idx++) {
+        result = pthread_tryjoin_np(app_tid, NULL);
+        if(result != 0)
+            sleep(1);
+    }
+    if(result != 0) {
+        fprintf(stderr, "[test] app server failed to terminate, error:%d \n", result);
+        pthread_kill(app_tid, SIGTERM); // forced shutdown
+    }
 done:
     api_deinitiate_multipart_upload_tests();
     deinit_mock_auth_server();

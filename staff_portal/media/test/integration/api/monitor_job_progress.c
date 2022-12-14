@@ -85,7 +85,7 @@ Ensure(api_test__monitor_job_progress__ok) {
             }// end of iteeration on processing jobs
         } // end of iteeration on upload request
         if(num_processing > 0)
-           sleep(10);
+           sleep(15);
     } while(num_processing > 0);
     json_decref(jobs_flatten);
 } // end of api_test__monitor_job_progress__ok
