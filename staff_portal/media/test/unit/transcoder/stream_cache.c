@@ -87,7 +87,7 @@ static uint8_t  utest_mock_fp_deinit_fn(atfp_t *processor)
     mock_appcfg->storages.capacity = 1; \
     mock_appcfg->storages.entries = &mock_storage_cfg; \
     json_object_set_new(mock_spec, "doc_basepath", json_string(UTEST_CACHE_TARGETPATH)); \
-    json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string(UTEST_CACHED_FILEPATH)); \
+    json_object_set_new(mock_spec, API_QPARAM_LABEL__DOC_DETAIL, json_string(UTEST_CACHED_FILEPATH)); \
     mkdir(UTEST_FILE_BASEPATH,   S_IRWXU); \
     mkdir(UTEST_ASALOCAL_BASEPATH, S_IRWXU); \
     mkdir(UTEST_CACHE_BASEPATH, S_IRWXU); \

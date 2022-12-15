@@ -199,7 +199,7 @@ static ASA_RES_CODE  atfp_hls_stream__enc_seg__init_asasrc (asa_op_base_cfg_t *a
     json_t *spec  =  processor->data.spec;
     uint32_t  _usr_id = processor->data.usr_id;
     uint32_t  _upld_req_id = processor->data.upld_req_id;
-    const char *_detail_path = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+    const char *_detail_path = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
 #define  PATH_PATTERN  "%s/%d/%08x/%s/%s"
     size_t filepath_sz = sizeof(PATH_PATTERN) + strlen(asa_src->storage->base_path) + USR_ID_STR_SIZE +
           UPLOAD_INT2HEX_SIZE(_upld_req_id) + sizeof(ATFP__COMMITTED_FOLDER_NAME) + strlen(_detail_path);

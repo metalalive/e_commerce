@@ -115,8 +115,8 @@ DBA_RES_CODE  app_validate_uncommitted_upld_req(RESTAPI_HANDLER_ARGS(self, req),
 
 const char *app_resource_id__url_decode(json_t *spec, json_t *err_info)
 {
-    const char *resource_id = json_string_value(json_object_get(spec, "res_id")); // URL-encoded
-    if(resource_id) {
+    const char *resource_id = json_string_value(json_object_get(spec, API_QPARAM_LABEL__RESOURCE_ID));
+    if(resource_id) { // has to be URL-encoded
         size_t res_id_sz = strlen(resource_id);
         size_t  max_res_id_sz = APP_RESOURCE_ID_SIZE * 3; // consider it is URL-encoded
         if(res_id_sz > max_res_id_sz) {
@@ -124,9 +124,9 @@ const char *app_resource_id__url_decode(json_t *spec, json_t *err_info)
         } else { // resource ID from frontend client should always be URL-encoded
             int   out_len  = 0;
             char *res_id_uri_decoded = curl_easy_unescape(NULL, resource_id, (int)res_id_sz, &out_len);
-            json_object_set_new(spec, "res_id", json_string(res_id_uri_decoded));
+            json_object_set_new(spec, API_QPARAM_LABEL__RESOURCE_ID, json_string(res_id_uri_decoded));
             free(res_id_uri_decoded);
-            resource_id = json_string_value(json_object_get(spec, "res_id"));
+            resource_id = json_string_value(json_object_get(spec, API_QPARAM_LABEL__RESOURCE_ID));
             res_id_sz = strlen(resource_id);
             int err = app_verify_printable_string(resource_id, res_id_sz);
             if(err)
@@ -145,10 +145,10 @@ int  api_http_resp_status__verify_resource_id (aacl_result_t *result, json_t *er
     if(result->flag.error || result->flag.res_id_dup) {
         h2o_error_printf("[api][common] line:%d, err=%u, dup=%u \n", __LINE__,
                 result->flag.error, result->flag.res_id_dup);
-        json_object_set_new(err_info, "res_id", json_string("internal error"));
+        json_object_set_new(err_info, API_QPARAM_LABEL__RESOURCE_ID, json_string("internal error"));
         resp_status = 500;
     } else if (!result->flag.res_id_exists) {
-        json_object_set_new(err_info, "res_id", json_string("not exists"));
+        json_object_set_new(err_info, API_QPARAM_LABEL__RESOURCE_ID, json_string("not exists"));
         resp_status = 404;
     }
     return resp_status;

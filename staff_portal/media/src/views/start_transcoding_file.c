@@ -389,7 +389,7 @@ static int api_abac_pep__start_transcode (h2o_handler_t *hdlr, h2o_req_t *req, a
         int err = app_verify_printable_string(resource_id, APP_RESOURCE_ID_SIZE);
         if(err) {
             req->res.status = 400;
-            json_object_set_new(res_body, "res_id", json_string("contains non-printable charater"));
+            json_object_set_new(res_body, API_QPARAM_LABEL__RESOURCE_ID, json_string("contains non-printable charater"));
         } else {
             size_t out_len = 0;
             unsigned char *res_id_encoded = base64_encode((const unsigned char *)resource_id,

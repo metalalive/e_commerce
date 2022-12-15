@@ -67,7 +67,7 @@ static  void _utest_hls_enc_segm__common_done_cb (atfp_t *processor)
         .internal={.op={.encrypt_segment=atfp_hls_stream__encrypt_segment__start, \
             .get_crypto_key=atfp_get_crypto_key}} \
     }; \
-    json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string(UTEST_QPARAM__DETAIL)); \
+    json_object_set_new(mock_spec, API_QPARAM_LABEL__DOC_DETAIL, json_string(UTEST_QPARAM__DETAIL)); \
     json_object_set_new(mock_spec, "loop", json_integer((uint64_t)loop)); \
     json_object_set_new(mock_spec, "buf_max_sz", json_integer(RD_BUF_MAX_SZ)); \
     json_object_set_new(mock_spec, "storage_alias", json_string(MOCK_STORAGE_ALIAS)); \

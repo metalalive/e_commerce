@@ -284,11 +284,11 @@ Ensure(atfp_hls_test__l2_pl__validate_tag_error) {
     size_t  serial_keyitem_sz = sizeof(UTEST__CRYPTOKEY_ITEM) - 1; \
     json_t *crypto_keyitem = json_loadb(UTEST__CRYPTOKEY_ITEM, serial_keyitem_sz, 0, NULL); \
     json_object_set_new(mock_spec, "_crypto_key", crypto_keyitem); \
-    json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__RESOURCE_ID, json_string(MOCK_ENCRYPTED_DOC_ID)); \
+    json_object_set_new(mock_spec, API_QPARAM_LABEL__STREAM_DOC_ID, json_string(MOCK_ENCRYPTED_DOC_ID)); \
     json_object_set_new(mock_spec, "host_domain", json_string(MOCK_HOST_DOMAIN)); \
     json_object_set_new(mock_spec, "host_path", json_string(MOCK_REST_PATH)); \
-    json_object_set_new(qp_labels, "doc_id", json_string(API_QUERYPARAM_LABEL__RESOURCE_ID)); \
-    json_object_set_new(qp_labels, "detail", json_string(API_QUERYPARAM_LABEL__DETAIL_ELEMENT)); \
+    json_object_set_new(qp_labels, "doc_id", json_string(API_QPARAM_LABEL__STREAM_DOC_ID)); \
+    json_object_set_new(qp_labels, "detail", json_string(API_QPARAM_LABEL__DOC_DETAIL)); \
     json_object_set_new(mock_spec, "query_param_label", qp_labels); \
     json_object_set_new(mock_spec, "wrbuf_max_sz", json_integer(RD_BUF_MAX_SZ)); \
     asa_op_base_cfg_t  mock_asa_src = {.op={.read={.dst_max_nbytes=RD_BUF_MAX_SZ, .dst=UTEST__PLIST_ORIGIN}}}; \
@@ -308,10 +308,10 @@ Ensure(atfp_hls_test__l2_pl__validate_tag_error) {
 #define   UTEST__IV_HEX  "296F986F0B7531A9"
 #define   UTEST__CRYPTOKEY_ITEM   "{\"iv\":{\"nbytes\":8,\"data\":\""UTEST__IV_HEX"\"},\"alg\":\"aes\"}"
 #define   UTEST__PLIST_TAG_KEY  "\n#EXT-X-KEY:METHOD=AES-64,URI=\"https://" MOCK_HOST_DOMAIN MOCK_REST_PATH \
-    "?" API_QUERYPARAM_LABEL__RESOURCE_ID"="MOCK_ENCRYPTED_DOC_ID "&" API_QUERYPARAM_LABEL__DETAIL_ELEMENT \
+    "?" API_QPARAM_LABEL__STREAM_DOC_ID"="MOCK_ENCRYPTED_DOC_ID "&" API_QPARAM_LABEL__DOC_DETAIL \
     "=" HLS_REQ_KEYFILE_LABEL "\",IV=0x" UTEST__IV_HEX
-#define   UTEST__INIT_MAP_URL  "https://" MOCK_HOST_DOMAIN MOCK_REST_PATH "?" API_QUERYPARAM_LABEL__RESOURCE_ID \
-    "=" MOCK_ENCRYPTED_DOC_ID "&" API_QUERYPARAM_LABEL__DETAIL_ELEMENT "=" MOCK_VERSION_STR "/" HLS_FMP4_FILENAME
+#define   UTEST__INIT_MAP_URL  "https://" MOCK_HOST_DOMAIN MOCK_REST_PATH "?" API_QPARAM_LABEL__STREAM_DOC_ID \
+    "=" MOCK_ENCRYPTED_DOC_ID "&" API_QPARAM_LABEL__DOC_DETAIL "=" MOCK_VERSION_STR "/" HLS_FMP4_FILENAME
 #define   UTEST__PLIST_TAG_MAP_PARSED    "\n#EXT-X-MAP:USR_ATTR=987,URI=\""UTEST__INIT_MAP_URL"\""
 #define   UTEST__MAX_TARGET_DURATION  "8299"
 #define   UTEST__PLIST_COMMON_HEADER  "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:" UTEST__MAX_TARGET_DURATION \
@@ -390,11 +390,11 @@ static ASA_RES_CODE utest_storage_read_fn (asa_op_base_cfg_t *asaobj)
     json_t *mock_err_info = json_object(); \
     json_t *mock_spec = json_object(); \
     json_t *qp_labels = json_object(); \
-    json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__RESOURCE_ID, json_string(MOCK_ENCRYPTED_DOC_ID)); \
+    json_object_set_new(mock_spec, API_QPARAM_LABEL__STREAM_DOC_ID, json_string(MOCK_ENCRYPTED_DOC_ID)); \
     json_object_set_new(mock_spec, "host_domain", json_string(MOCK_HOST_DOMAIN)); \
     json_object_set_new(mock_spec, "host_path", json_string(MOCK_REST_PATH)); \
-    json_object_set_new(qp_labels, "doc_id", json_string(API_QUERYPARAM_LABEL__RESOURCE_ID)); \
-    json_object_set_new(qp_labels, "detail", json_string(API_QUERYPARAM_LABEL__DETAIL_ELEMENT)); \
+    json_object_set_new(qp_labels, "doc_id", json_string(API_QPARAM_LABEL__STREAM_DOC_ID)); \
+    json_object_set_new(qp_labels, "detail", json_string(API_QPARAM_LABEL__DOC_DETAIL)); \
     json_object_set_new(mock_spec, "query_param_label", qp_labels); \
     json_object_set_new(mock_spec, "wrbuf_max_sz", json_integer(WR_BUF_MAX_SZ)); \
     void  *mock_asasrc_cb_args [NUM_CB_ARGS_ASAOBJ] = {0}; \
@@ -413,8 +413,8 @@ static ASA_RES_CODE utest_storage_read_fn (asa_op_base_cfg_t *asaobj)
     json_decref(mock_err_info); 
 
 #define   STRINGIFY_SEG_NUM(n) "000" #n
-#define   UTEST_DATASEG_PREFIX_URL  "https://" MOCK_HOST_DOMAIN MOCK_REST_PATH "?" API_QUERYPARAM_LABEL__RESOURCE_ID \
-    "=" MOCK_ENCRYPTED_DOC_ID "&" API_QUERYPARAM_LABEL__DETAIL_ELEMENT "=" MOCK_VERSION_STR "/" HLS_SEGMENT_FILENAME_PREFIX
+#define   UTEST_DATASEG_PREFIX_URL  "https://" MOCK_HOST_DOMAIN MOCK_REST_PATH "?" API_QPARAM_LABEL__STREAM_DOC_ID \
+    "=" MOCK_ENCRYPTED_DOC_ID "&" API_QPARAM_LABEL__DOC_DETAIL "=" MOCK_VERSION_STR "/" HLS_SEGMENT_FILENAME_PREFIX
 #define   SINGLE_EXTINF_PARSED_SZ   (sizeof("\n#EXTINF:,\n"UTEST_DATASEG_PREFIX_URL STRINGIFY_SEG_NUM(9)) \
         + HLS_PLIST_TARGET_DURATION_MAX_BYTES)
 

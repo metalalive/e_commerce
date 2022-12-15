@@ -31,9 +31,9 @@ extern "C" {
 #define APP_RESOURCE_ID_SIZE  8
 #define APP_TRANSCODED_VERSION_SIZE  2
 
-#define   API_QUERYPARAM_LABEL__RESOURCE_ID        "doc_id"
-#define   API_QUERYPARAM_LABEL__RESOURCE_VERSION   "doc_ver"
-#define   API_QUERYPARAM_LABEL__DETAIL_ELEMENT     "d_detail"
+#define   API_QPARAM_LABEL__RESOURCE_ID    "res_id"
+#define   API_QPARAM_LABEL__STREAM_DOC_ID  "doc_id"
+#define   API_QPARAM_LABEL__DOC_DETAIL     "d_detail"
 
 // valid code options represented for quota arrangement in this application
 typedef enum {

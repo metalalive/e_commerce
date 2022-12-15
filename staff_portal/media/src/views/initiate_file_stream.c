@@ -177,9 +177,8 @@ RESTAPI_ENDPOINT_HANDLER(initiate_file_stream, POST, hdlr, req)
         goto done;
     } {
         json_t *qp_labels = json_object(), *update_interval = json_object();
-        json_object_set_new(qp_labels, "resource_id", json_string(API_QUERYPARAM_LABEL__RESOURCE_ID));
-        // json_object_set_new(qp_labels, "version", json_string(API_QUERYPARAM_LABEL__RESOURCE_VERSION));
-        json_object_set_new(qp_labels, "detail", json_string(API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+        json_object_set_new(qp_labels, "resource_id", json_string(API_QPARAM_LABEL__STREAM_DOC_ID));
+        json_object_set_new(qp_labels, "detail", json_string(API_QPARAM_LABEL__DOC_DETAIL));
         json_object_set_new(update_interval, "keyfile",   json_real(APP_UPDATE_INTERVAL_SECS_KEYFILE));
         json_object_set_new(qparams, "host", json_string(req->authority.base));  // h2o_iovec_t, domain name + port
         json_object_set_new(qparams, "query_param_label", qp_labels);

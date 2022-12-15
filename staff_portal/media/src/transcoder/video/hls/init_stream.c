@@ -175,7 +175,7 @@ static  int  _atfp_hls__stream__crypto_key_rotation (json_t *keyinfo, json_t *er
         json_object_set_new(item, "timestamp", json_integer(curr_ts));  
         json_object_deln(keyinfo, key_id, HLS__NBYTES_KEY_ID);
         json_object_set_new(keyinfo, key_id, item);  
-    } else {
+    } else { // TODO, figure out how error happened 
         fprintf(stderr, "[hls][openssl] error on  generated rand bytes \r\n");
         json_object_set_new(err_info, "transcoder", json_string("[hls] rotation failure"));
         goto done;
@@ -429,7 +429,7 @@ void   atfp__video_hls__seek_stream_element (atfp_t *processor)
     json_t *_spec = processor->data.spec;
     atfp_hls_t *hlsproc = (atfp_hls_t *)processor;
     void  (*_fn)(atfp_hls_t *) = NULL;
-    const char *detail = json_string_value(json_object_get(_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+    const char *detail = json_string_value(json_object_get(_spec, API_QPARAM_LABEL__DOC_DETAIL));
 #define  CHECK_ELEMENT_FILE(fn0, fn1_name,  _pattern, _prefix_sz , _version_required, _extra_cond) \
     if (!fn0) { \
         size_t  pattern_sz = sizeof(_pattern) - 1; \

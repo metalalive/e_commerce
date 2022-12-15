@@ -61,9 +61,9 @@ static  void  _apprpc_replyq_identify_corr_id (arpc_cfg_t *cfg, arpc_exe_arg_t *
         }
         json_t *_packed = json_object(), *corr_id_item = json_object(), *msg_item = json_object();
         json_object_set_new(corr_id_item, "size", json_integer(arg->job_id.len));
-        json_object_set_new(corr_id_item, "data", json_string(arg->job_id.bytes));
+        json_object_set_new(corr_id_item, "data", json_stringn(arg->job_id.bytes, arg->job_id.len));
         json_object_set_new(msg_item, "size", json_integer(arg->msg_body.len));
-        json_object_set_new(msg_item, "data", json_string(arg->msg_body.bytes));
+        json_object_set_new(msg_item, "data", json_stringn(arg->msg_body.bytes, arg->msg_body.len));
         json_object_set_new(_packed, "corr_id", corr_id_item);
         json_object_set_new(_packed, "msg", msg_item);
         json_object_set_new(_packed, "timestamp", json_integer(arg->_timestamp));

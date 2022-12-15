@@ -164,9 +164,9 @@ Ensure(apiview_common_test__resource_id_format) {
     assert_that(app_verify_printable_string("abcde", 5), is_equal_to(0));
     assert_that(app_verify_printable_string("abc e", 5), is_not_equal_to(0));
     assert_that(app_verify_printable_string("a\x01cde", 5), is_not_equal_to(0));
-    char res_id[APP_RESOURCE_ID_SIZE + 5] = {0};
-    memset(&res_id[0], 0x61, sizeof(char) * (APP_RESOURCE_ID_SIZE + 3));
-    assert_that(app_verify_printable_string(&res_id[0], APP_RESOURCE_ID_SIZE), is_not_equal_to(0));
+    char _res_id[APP_RESOURCE_ID_SIZE + 5] = {0};
+    memset(&_res_id[0], 0x61, sizeof(char) * (APP_RESOURCE_ID_SIZE + 3));
+    assert_that(app_verify_printable_string(&_res_id[0], APP_RESOURCE_ID_SIZE), is_not_equal_to(0));
 } // end of apiview_common_test__resource_id_format
 
 TestSuite *app_views_common_tests(void)

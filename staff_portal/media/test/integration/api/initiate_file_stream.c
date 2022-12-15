@@ -4,7 +4,7 @@
 #include "../test/integration/test.h"
 
 #define  ITEST_STREAM_HOST  "localhost:8010"
-#define  ITEST_URL_PATTERN  "https://" ITEST_STREAM_HOST "/file/stream/init?res_id=%s"
+#define  ITEST_URL_PATTERN  "https://" ITEST_STREAM_HOST "/file/stream/init?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
 
 typedef struct {
     json_t  *_upld_req; // for recording result of stream init
@@ -67,8 +67,8 @@ static void test_verify__filestream_init (CURL *handle, test_setup_priv_t *privd
     json_t  *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
     const  char *actual_st_type = json_string_value(json_object_get(resp_obj, "type"));
     const  char *actual_st_host = json_string_value(json_object_get(resp_obj, "host"));
-    const  char *actual_doc_id = json_string_value(json_object_get(resp_obj, API_QUERYPARAM_LABEL__RESOURCE_ID));
-    const  char *actual_detail_keyword = json_string_value(json_object_get(resp_obj, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+    const  char *actual_doc_id = json_string_value(json_object_get(resp_obj, API_QPARAM_LABEL__STREAM_DOC_ID));
+    const  char *actual_detail_keyword = json_string_value(json_object_get(resp_obj, API_QPARAM_LABEL__DOC_DETAIL));
     assert_that(actual_st_type, is_equal_to_string(usr_arg->expect_st_type));
     assert_that(actual_st_host, is_equal_to_string(usr_arg->expect_st_host));
     assert_that(actual_doc_id, is_not_null);
@@ -139,7 +139,7 @@ Ensure(api_test__filestream_init__hls_auth_usr)
         json_t *st_prev_resp = json_object_get(__upld_req, "streaming"); \
         if(st_prev_resp) { \
             usr_arg.expect_doc_id = json_string_value(json_object_get( \
-                        st_prev_resp, API_QUERYPARAM_LABEL__RESOURCE_ID)); \
+                        st_prev_resp, API_QPARAM_LABEL__STREAM_DOC_ID)); \
         } \
         _api_test_filestream_init__send_request(&usr_arg, _usr_id); \
     } else { \

@@ -74,19 +74,6 @@ static void  _api_edit_usrlvl_acl__deinit_usrdata (api_usr_data_t *udata)
 } // end of   _api_edit_usrlvl_acl__deinit_usrdata
 
 
-static void api__edit_usrlvl_acl__db_async_err (db_query_t *target, db_query_result_t *rs)
-{ // TODO, de-init api_usr_data_t object
-    h2o_req_t     *req  = target->cfg.usr_data.entry[0];
-    h2o_handler_t *hdlr = target->cfg.usr_data.entry[1];
-    app_middleware_node_t *node = target->cfg.usr_data.entry[2];
-    json_t *err_info = app_fetch_from_hashmap(node->data, "err_info");
-    json_t *spec     = app_fetch_from_hashmap(node->data, "spec");
-    json_object_set_new(err_info, "res_id", json_string("error happended during validation"));
-    req->res.status = 500;
-    _api_edit_usrlvl_acl__deinit_primitives (req, hdlr, node, spec, err_info);
-}
-
-
 static void  _api_save_acl__done_cb (aacl_result_t *result, void **usr_args)
 {
     api_usr_data_t *usrdata = (api_usr_data_t *)usr_args[0];

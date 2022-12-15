@@ -136,7 +136,7 @@ static ASA_RES_CODE _atfp_cache_new_cachefile (asa_op_base_cfg_t *_asa_cch_local
 {
     json_t  *spec = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
     const char *_resource_path = json_string_value(json_object_get(spec, "doc_basepath"));
-    const char *_detail = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+    const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
 #define  PATTERN  "%s/%s"
     size_t _fullpath_sz = sizeof(PATTERN) + strlen(_resource_path) + strlen(_detail) + 1;
     char _fullpath[_fullpath_sz];
@@ -176,7 +176,7 @@ static ASA_RES_CODE _atfp_cache_new_cache_detailpath (asa_op_base_cfg_t *_asa_cc
 {
     json_t  *spec = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
     const char *_doc_basepath = json_string_value(json_object_get(spec, "doc_basepath"));
-    const char *_detail = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+    const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
     size_t _detail_path_sz = ((size_t)_path_end_pos - (size_t)_detail);
     size_t _fullpath_sz = strlen(_doc_basepath) + 2 + strlen(_detail);
     char *ptr = calloc((_fullpath_sz << 1), sizeof(char));
@@ -198,7 +198,7 @@ static void  _atfp_cache_processor_setup_ready_cb (atfp_t *processor)
     asa_op_base_cfg_t *_asa_cch_local = (asa_op_base_cfg_t *) json_integer_value(
             json_object_get(spec, "_asa_cache_local"));
     if (json_object_size(err_info) == 0) {
-        const char *_detail = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+        const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
         const char *_path_end_pos = strrchr(_detail, '/');
         if(_path_end_pos) {
             result = _atfp_cache_new_cache_detailpath(_asa_cch_local, _path_end_pos);
@@ -342,7 +342,7 @@ asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t 
     asa_cached_local->loop = loop;
     asa_cached_local->super.deinit = atfp_streamcache_deinit;
     const char *_cached_path = json_string_value(json_object_get(spec, "doc_basepath"));
-    const char *_detail = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+    const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
 #define  PATTERN  "%s/%s"
     size_t _fullpath_sz = sizeof(PATTERN) + strlen(_cached_path) + strlen(_detail) + 1;
     char _fullpath[_fullpath_sz];

@@ -39,7 +39,7 @@ static __attribute__((optimize("O0")))  void _atfp_hls_stream__lvl2_plist__parse
 #define  URL_PATTERN   "\nhttps://%s%s?%s=%s&%s=%s/" HLS_SEGMENT_FILENAME_PREFIX  HLS_SEGMENT_FILENAME_NUM_FORMAT
     const char *_host_domain = json_string_value(json_object_get(spec, "host_domain"));
     const char *_host_path   = json_string_value(json_object_get(spec, "host_path"));
-    const char *_doc_id      = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__RESOURCE_ID));
+    const char *_doc_id      = json_string_value(json_object_get(spec, API_QPARAM_LABEL__STREAM_DOC_ID));
     json_t *qp_labels = json_object_get(spec, "query_param_label");
     const char *doc_id_label = json_string_value(json_object_get(qp_labels, "doc_id"));
     const char *detail_label = json_string_value(json_object_get(qp_labels, "detail"));
@@ -150,7 +150,7 @@ static size_t  _atfp_hls__build_lvl2_plist__add_key_tag (json_t *spec, char **wr
 {
     const char *_host_domain = json_string_value(json_object_get(spec, "host_domain"));
     const char *_host_path   = json_string_value(json_object_get(spec, "host_path"));
-    const char *_doc_id      = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__RESOURCE_ID));
+    const char *_doc_id      = json_string_value(json_object_get(spec, API_QPARAM_LABEL__STREAM_DOC_ID));
     json_t *qp_labels = json_object_get(spec, "query_param_label");
     const char *doc_id_label = json_string_value(json_object_get(qp_labels, "doc_id"));
     const char *detail_label = json_string_value(json_object_get(qp_labels, "detail"));
@@ -202,7 +202,7 @@ static  __attribute__((optimize("O0"))) size_t  _atfp_hls__build_lvl2_plist__mod
     {
         const char *_host_domain = json_string_value(json_object_get(spec, "host_domain"));
         const char *_host_path   = json_string_value(json_object_get(spec, "host_path"));
-        const char *_doc_id      = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__RESOURCE_ID));
+        const char *_doc_id      = json_string_value(json_object_get(spec, API_QPARAM_LABEL__STREAM_DOC_ID));
         json_t *qp_labels = json_object_get(spec, "query_param_label");
         const char *doc_id_label = json_string_value(json_object_get(qp_labels, "doc_id"));
         const char *detail_label = json_string_value(json_object_get(qp_labels, "detail"));

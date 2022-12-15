@@ -88,10 +88,10 @@ static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_i
             *resource_id_item  = NULL;
             continue;
         }
-        const char *res_id = json_string_value(*resource_id_item);
+        const char *_res_id = json_string_value(*resource_id_item);
         size_t   num_async_jobs = json_array_size(async_job_ids_item);
         uint8_t  type_matched = strncmp(ftype, ftype_in, strlen(ftype_in)) == 0;
-        if(res_id && type_matched && num_async_jobs == 0) {
+        if(_res_id && type_matched && num_async_jobs == 0) {
             break;
         } else {
             *resource_id_item  = NULL;
@@ -244,7 +244,7 @@ Ensure(api__start_transcoding_test__invalid_body) {
     mock_usr_srg.expect_err_field = "non-field";
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
     setup_data.req_body.serial_txt = "{}";
-    mock_usr_srg.expect_err_field = "res_id";
+    mock_usr_srg.expect_err_field = API_QPARAM_LABEL__RESOURCE_ID;
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
     setup_data.req_body.serial_txt = "{\"resource_id\":null}";
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
@@ -323,7 +323,7 @@ Ensure(api__start_transcoding_test__invalid_resource_id)
 {
     json_t *upld_req2 = NULL, *resource_id_item = NULL;
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0);
-    itest_usrarg_t  mock_usr_srg = {.upld_req=upld_req, .expect_resp_code=404, .expect_err_field="res_id"};
+    itest_usrarg_t  mock_usr_srg = {.upld_req=upld_req, .expect_resp_code=404, .expect_err_field=API_QPARAM_LABEL__RESOURCE_ID};
     const char *template_filepath = "./media/test/integration/examples/transcode_req_body_template/nonexist_resource_id.json";
     char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};

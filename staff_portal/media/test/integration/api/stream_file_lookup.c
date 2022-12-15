@@ -23,7 +23,7 @@
 #define  ITEST_STREAM_SEEK_URI  "/file/stream/seek"
 
 #define  ITEST_URL_PATTERN  "https://" ITEST_STREAM_HOST  ITEST_STREAM_SEEK_URI "?" \
-    API_QUERYPARAM_LABEL__RESOURCE_ID "=%s&" API_QUERYPARAM_LABEL__DETAIL_ELEMENT "=%s"
+    API_QPARAM_LABEL__STREAM_DOC_ID "=%s&" API_QPARAM_LABEL__DOC_DETAIL "=%s"
 
 
 typedef void  (*client_req_cb_t) (CURL *, test_setup_priv_t *, void *usr_arg);
@@ -49,7 +49,7 @@ static int  _api_test__validate_url(char *in)
     ptr = strstr(ptr, ITEST_STREAM_SEEK_URI);
     assert_that(ptr, is_not_null);
     if(!ptr) return -1;
-    ptr = strstr(ptr, API_QUERYPARAM_LABEL__DETAIL_ELEMENT"=");
+    ptr = strstr(ptr, API_QPARAM_LABEL__DOC_DETAIL"=");
     assert_that(ptr, is_not_null);
     if(!ptr) return -1;
     return 0;
@@ -131,8 +131,8 @@ Ensure(api_test__filestream_seek__hls_mst_plist_ok)
         if(strncmp(st_type, "hls", 3))
             continue;
         _app_itest_started_streams[num_started_stream++] = upld_req;
-        const char *doc_id = json_string_value(json_object_get(stream_item, API_QUERYPARAM_LABEL__RESOURCE_ID));
-        const char *detail_keyword = json_string_value(json_object_get(stream_item, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+        const char *doc_id = json_string_value(json_object_get(stream_item, API_QPARAM_LABEL__STREAM_DOC_ID));
+        const char *detail_keyword = json_string_value(json_object_get(stream_item, API_QPARAM_LABEL__DOC_DETAIL));
         size_t  url_sz = sizeof(ITEST_URL_PATTERN) + strlen(doc_id) + strlen(detail_keyword);
         char _url[url_sz];
         size_t  nwrite = snprintf(&_url[0], url_sz, ITEST_URL_PATTERN, doc_id, detail_keyword);
@@ -319,10 +319,10 @@ static void  test_verify_stream__hls_segment (CURL *handle, test_setup_priv_t *p
         return;
     char *detail = NULL;  size_t detail_sz = 0;
     {
-        char *ptr1 = strstr(usr_arg->url, API_QUERYPARAM_LABEL__DETAIL_ELEMENT"=");
+        char *ptr1 = strstr(usr_arg->url, API_QPARAM_LABEL__DOC_DETAIL"=");
         assert_that(ptr1, is_not_null);
         if(!ptr1) return;
-        ptr1 += sizeof(API_QUERYPARAM_LABEL__DETAIL_ELEMENT"=") - 1;
+        ptr1 += sizeof(API_QPARAM_LABEL__DOC_DETAIL"=") - 1;
         char *ptr2 = strstr(ptr1, "&");
         if(ptr2) {
             detail_sz = (size_t)ptr2 - (size_t)ptr1 ;
@@ -333,7 +333,7 @@ static void  test_verify_stream__hls_segment (CURL *handle, test_setup_priv_t *p
         memcpy(detail, ptr1, detail_sz);
     }
     json_t  *stream_item  = json_object_get(usr_arg->_upld_req, "streaming");
-    const char *doc_id = json_string_value(json_object_get(stream_item, API_QUERYPARAM_LABEL__RESOURCE_ID));
+    const char *doc_id = json_string_value(json_object_get(stream_item, API_QPARAM_LABEL__STREAM_DOC_ID));
     app_cfg_t *acfg = app_get_global_cfg();
 #define  PATH_PATTERN   "%s/%s/%s/%s"
     size_t  path_sz = sizeof(PATH_PATTERN) + strlen(acfg->tmp_buf.path) + strlen(doc_id) +
@@ -412,7 +412,7 @@ Ensure(api_test__filestream_seek__hls_nonexist_detail)
         const  char *st_type = json_string_value(json_object_get(stream_item, "type"));
         if(strncmp(st_type, "hls", 3))
             continue;
-        const char *doc_id = json_string_value(json_object_get(stream_item, API_QUERYPARAM_LABEL__RESOURCE_ID));
+        const char *doc_id = json_string_value(json_object_get(stream_item, API_QPARAM_LABEL__STREAM_DOC_ID));
         const char *detail_keyword = "random/invalid/file";
         size_t  url_sz = sizeof(ITEST_URL_PATTERN) + strlen(doc_id) + strlen(detail_keyword);
         char _url[url_sz];

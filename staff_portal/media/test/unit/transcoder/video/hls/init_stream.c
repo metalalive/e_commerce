@@ -370,7 +370,7 @@ Ensure(atfp_hls_test__seek_stream_element__ok) {
     HLS_TEST__SEEK_STREAM_ELEMENT__SETUP
 #define RUN(_version, _path, fn_name) { \
         const char *_expect_version = _version; \
-        json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, \
+        json_object_set_new(mock_spec, API_QPARAM_LABEL__DOC_DETAIL, \
                 json_string(_version  _path)); \
         expect(fn_name, when(_hlsproc, is_equal_to(&mock_fp))); \
         atfp__video_hls__seek_stream_element (&mock_fp.super); \
@@ -396,9 +396,9 @@ Ensure(atfp_hls_test__seek_stream_element__invalid_detail) {
 #define RUN(_path) { \
         const char *__path = _path; \
         if(!__path || strlen(__path) == 0) { \
-            json_object_del(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT); \
+            json_object_del(mock_spec, API_QPARAM_LABEL__DOC_DETAIL); \
         } else  { \
-            json_object_set_new(mock_spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string(__path)); \
+            json_object_set_new(mock_spec, API_QPARAM_LABEL__DOC_DETAIL, json_string(__path)); \
         } \
         atfp__video_hls__seek_stream_element (&mock_fp.super); \
         assert_that(json_object_size(mock_err_info), is_greater_than(0)); \

@@ -46,7 +46,8 @@ static  void  utest_rpc_replytimer_err_cb (arpc_reply_cfg_t *cfg, ARPC_STATUS_CO
 static  uint8_t  utest_rpc_replytimer_updated_cb (arpc_reply_cfg_t *cfg, json_t *actual_info, ARPC_STATUS_CODE result)
 {
     json_t *expect_info = NULL, **expect_info_p = &expect_info;
-    uint8_t _continue = mock(result, expect_info_p);
+    uint8_t num_types_in_actual_msgset = json_object_size(actual_info);
+    uint8_t _continue = mock(result, expect_info_p, num_types_in_actual_msgset);
     if(expect_info) {
         json_t  *expect_recv = NULL, *actual_recv = NULL, *packed = NULL;
         const char *corr_id_pattern = NULL;
@@ -55,8 +56,9 @@ static  uint8_t  utest_rpc_replytimer_updated_cb (arpc_reply_cfg_t *cfg, json_t 
             if(!json_is_array(actual_recv)) // might be internal info e.g. usr_id
                 continue;
             expect_recv = json_object_get(expect_info, corr_id_pattern);
-            if(expect_recv)
-                assert_that(json_array_size(actual_recv), is_equal_to(json_array_size(expect_recv)));
+            if(!expect_recv)
+                continue;
+            assert_that(json_array_size(actual_recv), is_equal_to(json_array_size(expect_recv)));
             json_array_foreach(actual_recv, idx, packed) {
                 json_t *corr_id_item = json_object_get(packed, "corr_id");
                 json_t *msg_item = json_object_get(packed, "msg");
@@ -151,6 +153,7 @@ Ensure(rpc_replytimer__msg_batch)
     UTEST_RPC_REPLYTIMER__SETUP
     uint8_t  idx = 0, jdx = 0, proc_msg_idx = 0, mock_continue_flag = 0;
     uint8_t  expect_num_msg_recv[NUM_SETS] = {NUM_MSG_RECV_SET1, NUM_MSG_RECV_SET2, NUM_MSG_RECV_SET3};
+    uint8_t  expect_num_types_in_msgset[NUM_SETS] = {3,2,3}; 
     ut_recv_msg_t  expect_msg_sequence[TOT_NUM_MSG_RECV] = {
         MSG_SET1_ITEM1, MSG_SET1_ITEM2, MSG_SET1_ITEM3, MSG_SET1_ITEM4, MSG_SET1_ITEM5,
         MSG_SET2_ITEM1, MSG_SET2_ITEM2,
@@ -198,6 +201,7 @@ Ensure(rpc_replytimer__msg_batch)
         } // end of loop
         mock_continue_flag = (idx + 1) < NUM_SETS;
         expect(utest_rpc_replytimer_updated_cb, will_return(mock_continue_flag),
+                when(num_types_in_actual_msgset, is_greater_than(expect_num_types_in_msgset[idx])),
                 will_set_contents_of_parameter(expect_info_p, &expect_classified_msgs[idx], sizeof(json_t *)),
                 when(result, is_equal_to(APPRPC_RESP_OK))  );
     } // end of loop
@@ -259,12 +263,14 @@ Ensure(rpc_replytimer__missing_corr_id)
 } // end of rpc_replytimer__missing_corr_id
 
 
-Ensure(rpc_replytimer__recv_junk_msg)
+Ensure(rpc_replytimer__unknown_corr_id)
 {
     UTEST_RPC_REPLYTIMER__SETUP
+    const char *mock_corr_id_patt = "myapp.unknown.correlation_id.pattern";
     const char *mock_replyq_name = UTEST_Q_NAME_PREFIX "65535";
     uint8_t expect_num_msg_recv = 1;
-    ut_recv_msg_t  exp_msg = UT_MSG_ITEM_INIT("myapp.unknown.correlation_id.pattern", "message1240394", 270219);
+    ut_recv_msg_t  exp_msg = UT_MSG_ITEM_INIT(mock_corr_id_patt, "message1240394", 270219);
+    json_t *exp_msg_jobj = json_object();
     void *ctx = apprpc_recv_reply_start(&mock_cfg);
     assert_that(ctx, is_not_equal_to(NULL));
     { // the received message will be discarded due to lack of correlation ID
@@ -280,11 +286,58 @@ Ensure(rpc_replytimer__recv_junk_msg)
             will_set_contents_of_parameter(jobid_sz_p, &exp_msg.corr_id.len, sizeof(size_t)),
             will_set_contents_of_parameter(_ts_p, &exp_msg._ts, sizeof(uint64_t)),
         );
-        expect(utest_rpc_replytimer_updated_cb, will_return(0),  when(result, is_equal_to(APPRPC_RESP_OK)));
+        expect( utest_rpc_replytimer_updated_cb, will_return(0),  when(result, is_equal_to(APPRPC_RESP_OK)),
+                when(num_types_in_actual_msgset, is_greater_than(0)),
+                will_set_contents_of_parameter(expect_info_p, &exp_msg_jobj, sizeof(json_t *))   );
     }
     while(!work_done)
         uv_run(loop, UV_RUN_ONCE);
-} // end of rpc_replytimer__recv_junk_msg
+    json_decref(exp_msg_jobj);
+    UTEST_RPC_REPLYTIMER__TEARDOWN
+} // end of rpc_replytimer__unknown_corr_id
+
+
+#define  MSG_VALID_JSON_SERIAL  "{\"petshop\":\"bingo\"}"
+#define  MSG_JUNK_APPENDING  "1234567"
+Ensure(rpc_replytimer__msg_exclude_junkbytes)
+{
+    UTEST_RPC_REPLYTIMER__SETUP
+    const char *mock_corr_id_patt = UTEST_FUNC1_CORR_ID_PATTERN,  *mock_replyq_name = UTEST_Q_NAME_PREFIX "65535",
+          *msg_ends_with_junkbytes = MSG_VALID_JSON_SERIAL  MSG_JUNK_APPENDING;
+    uint8_t expect_num_msg_recv = 1;
+    ut_recv_msg_t  exp_msg = UT_MSG_ITEM_INIT(UTEST_FUNC1_CORR_ID_PREFIX "ruey", MSG_VALID_JSON_SERIAL, 71147303);
+    json_t *exp_msg_jobj = json_object();
+    {
+        json_object_set_new(exp_msg_jobj, mock_corr_id_patt, json_array());
+        json_t *items = json_object_get(exp_msg_jobj, mock_corr_id_patt);
+        json_array_append_new(items, json_integer((uint64_t)&exp_msg));
+    }
+    void *ctx = apprpc_recv_reply_start(&mock_cfg);
+    assert_that(ctx, is_not_equal_to(NULL));
+    { // the received message will be discarded due to lack of correlation ID
+        expect( utest_rpc_replytimer_lowlvl_fn, will_return(APPRPC_RESP_OK),
+            will_set_contents_of_parameter(_rpc_cfg_p, &mock_rpc_cfg, sizeof(arpc_cfg_t)),
+            will_set_contents_of_parameter(num_msg_recv_p, &expect_num_msg_recv, sizeof(uint8_t))
+        );
+        expect( utest_rpc_replytimer_lowlvl_fn,
+            will_set_contents_of_parameter(routekey_p, &mock_replyq_name, sizeof(char *)),
+            will_set_contents_of_parameter(msg_p,    &msg_ends_with_junkbytes, sizeof(char *)),
+            will_set_contents_of_parameter(msg_sz_p, &exp_msg.msg.len,  sizeof(size_t)),
+            will_set_contents_of_parameter(jobid_p,  &exp_msg.corr_id.data,  sizeof(char *)),
+            will_set_contents_of_parameter(jobid_sz_p, &exp_msg.corr_id.len, sizeof(size_t)),
+            will_set_contents_of_parameter(_ts_p, &exp_msg._ts, sizeof(uint64_t)),
+        );
+        expect(utest_rpc_replytimer_updated_cb, will_return(0),  when(result, is_equal_to(APPRPC_RESP_OK)),
+                when(num_types_in_actual_msgset, is_greater_than(1)),
+                will_set_contents_of_parameter(expect_info_p, &exp_msg_jobj, sizeof(json_t *))   );
+    }
+    while(!work_done)
+        uv_run(loop, UV_RUN_ONCE);
+    json_decref(exp_msg_jobj);
+    UTEST_RPC_REPLYTIMER__TEARDOWN
+} // end of  rpc_replytimer__msg_exclude_junkbytes
+#undef  MSG_JUNK_APPENDING
+#undef  MSG_VALID_JSON_SERIAL
 
 
 Ensure(rpc_replytimer__lowlvl_unknown_error)
@@ -418,8 +471,9 @@ TestSuite *app_rpc_replytimer_tests(void) {
     add_test(suite, rpc_replytimer__msg_batch);
     add_test(suite, rpc_replytimer__start_empty);
     add_test(suite, rpc_replytimer__missing_corr_id);
-    add_test(suite, rpc_replytimer__recv_junk_msg);
+    add_test(suite, rpc_replytimer__unknown_corr_id);
     add_test(suite, rpc_replytimer__lowlvl_unknown_error);
+    add_test(suite, rpc_replytimer__msg_exclude_junkbytes);
     add_test(suite, rpc_pycelery_extract_reply__start_ok);
     add_test(suite, rpc_pycelery_extract_reply__return_ok);
     add_test(suite, rpc_pycelery_extract_reply__invalid);

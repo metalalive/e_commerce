@@ -92,7 +92,6 @@ static int api_abac_pep__edit_acl (h2o_handler_t *hdlr, h2o_req_t *req, app_midd
 } // end of  api_abac_pep__edit_acl
 
 
-
 static void  _api_save_acl__done_cb (aacl_result_t *result, void **usr_args)
 {
     h2o_req_t     *req  = usr_args[0];

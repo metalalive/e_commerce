@@ -17,8 +17,8 @@
 #define  REQ_ITEM_11  ITEST_REQ_ITEM_GEN(71, false, true)
 #define  REQ_ITEM_12  ITEST_REQ_ITEM_GEN(34, true, false)
 
-#define  ULVL_ACL_URL_PATT  "https://localhost:8010/file/acl/usr?res_id=%s"
-#define  FLVL_ACL_URL_PATT  "https://localhost:8010/file/acl?res_id=%s"
+#define  ULVL_ACL_URL_PATT  "https://localhost:8010/file/acl/usr?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
+#define  FLVL_ACL_URL_PATT  "https://localhost:8010/file/acl?" API_QPARAM_LABEL__RESOURCE_ID "=%s"
 
 typedef struct {
     json_t  *upld_req;
@@ -31,20 +31,20 @@ extern json_t *_app_itest_active_upload_requests;
 static void _available_resource_lookup(json_t **upld_req, const char *lvl)
 {
     json_t *req = NULL, *existing_acl = NULL;
-    const char *res_id = NULL;
+    const char *_res_id = NULL;
     int idx = 0;
     *upld_req = NULL;
     json_array_foreach(_app_itest_active_upload_requests, idx, req) {
         existing_acl = json_object_get(req, lvl);
         if(existing_acl)
             continue;
-        res_id = json_string_value(json_object_get(req, "resource_id"));
-        if(res_id) {
+        _res_id = json_string_value(json_object_get(req, "resource_id"));
+        if(_res_id) {
             *upld_req = req;
             break;
         }
     }
-    if(!res_id)
+    if(!_res_id)
         fprintf(stderr, "[edit_acl] line:%d, no resource available \n", __LINE__);
 } // end of _available_resource_lookup
 

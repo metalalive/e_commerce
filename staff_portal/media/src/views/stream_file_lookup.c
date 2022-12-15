@@ -169,8 +169,8 @@ static void  _api_try_open_stream_element_file (h2o_req_t *req, h2o_handler_t *h
         json_object_set_new(spec, "storage_alias", json_string("localfs")); // for source storage
         json_object_set_new(spec, "host_domain", json_string(req->authority.base));  // h2o_iovec_t, domain name + port
         json_object_set_new(spec, "host_path", json_string( &endpoint_path[0] ));
-        json_object_set_new(qp_labels, "doc_id", json_string(API_QUERYPARAM_LABEL__RESOURCE_ID));
-        json_object_set_new(qp_labels, "detail", json_string(API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+        json_object_set_new(qp_labels, "doc_id", json_string(API_QPARAM_LABEL__STREAM_DOC_ID));
+        json_object_set_new(qp_labels, "detail", json_string(API_QPARAM_LABEL__DOC_DETAIL));
         json_object_set_new(spec, "query_param_label", qp_labels);
     }
 } // end of _api_try_open_stream_element_file
@@ -182,27 +182,27 @@ RESTAPI_ENDPOINT_HANDLER(fetch_file_streaming_element, GET, self, req)
     json_t *err_info = json_object();
     json_t *spec = json_object();
     app_url_decode_query_param(&req->path.base[req->query_at + 1], spec);
-    const char *doc_id = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__RESOURCE_ID));
-    const char *detail = json_string_value(json_object_get(spec, API_QUERYPARAM_LABEL__DETAIL_ELEMENT));
+    const char *doc_id = json_string_value(json_object_get(spec, API_QPARAM_LABEL__STREAM_DOC_ID));
+    const char *detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
     if(!doc_id)
-        json_object_set_new(err_info, API_QUERYPARAM_LABEL__RESOURCE_ID, json_string("not exist"));
+        json_object_set_new(err_info, API_QPARAM_LABEL__STREAM_DOC_ID, json_string("not exist"));
     if(!detail)
-        json_object_set_new(err_info, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string("not exist"));
+        json_object_set_new(err_info, API_QPARAM_LABEL__DOC_DETAIL, json_string("not exist"));
     if(json_object_size(err_info) > 0)
         goto done;
     size_t  doc_id_sz = strlen(doc_id),  detail_sz = strlen(detail);
     if(doc_id_sz > API__DOC_ID_MAX_SZ)
-        json_object_set_new(err_info, API_QUERYPARAM_LABEL__RESOURCE_ID, json_string("exceeding limit"));
+        json_object_set_new(err_info, API_QPARAM_LABEL__STREAM_DOC_ID, json_string("exceeding limit"));
     if(detail_sz > API__DETAIL_MAX_SZ)
-        json_object_set_new(err_info, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string("exceeding limit"));
+        json_object_set_new(err_info, API_QPARAM_LABEL__DOC_DETAIL, json_string("exceeding limit"));
     if(json_object_size(err_info) > 0)
         goto done;
     ret = is_base64_encoded((const unsigned char *)doc_id,  doc_id_sz);
     if(!ret)
-        json_object_set_new(err_info, API_QUERYPARAM_LABEL__RESOURCE_ID, json_string("contains invalid character"));
+        json_object_set_new(err_info, API_QPARAM_LABEL__STREAM_DOC_ID, json_string("contains invalid character"));
     ret = app_verify_printable_string(detail, detail_sz);
     if(ret || strstr(detail, "../")) // prevent users from switching to parent folder
-        json_object_set_new(err_info, API_QUERYPARAM_LABEL__DETAIL_ELEMENT, json_string("contains invalid character"));
+        json_object_set_new(err_info, API_QPARAM_LABEL__DOC_DETAIL, json_string("contains invalid character"));
     if(json_object_size(err_info) > 0)
         goto done;
     app_cfg_t *acfg = app_get_global_cfg();
@@ -220,8 +220,8 @@ RESTAPI_ENDPOINT_HANDLER(fetch_file_streaming_element, GET, self, req)
     _api_try_open_stream_element_file(req, self, node, spec, err_info);
 done:
     if(json_object_size(err_info) > 0) {
-        json_t *doc_id_err = json_object_get(err_info, API_QUERYPARAM_LABEL__RESOURCE_ID);
-        json_t *detail_err = json_object_get(err_info, API_QUERYPARAM_LABEL__DETAIL_ELEMENT);
+        json_t *doc_id_err = json_object_get(err_info, API_QPARAM_LABEL__STREAM_DOC_ID);
+        json_t *detail_err = json_object_get(err_info, API_QPARAM_LABEL__DOC_DETAIL);
         req->res.status = (doc_id_err || detail_err) ? 400: 500;
         _api_find_stream_elm__errmsg_response (req, err_info);
         _api_find_stream_elm__deinit_primitives(req, self, node, spec, err_info);
