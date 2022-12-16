@@ -94,7 +94,7 @@ static  void  _atfp_hls__close_crypto_keyfile_cb (asa_op_base_cfg_t *_asa_local,
         size_t  path_sz = atfp_get_encrypted_file_basepath(acfg->tmp_buf.path, &path[0],
                 max_path_sz, _enc_doc_id, doc_id_sz);
         if(path_sz == 0) {
-            fprintf(stderr, "[hls] line:%d, memory error, path_sz:%ld not sufficient \r\n", __LINE__, path_sz);
+            fprintf(stderr, "[hls][init_stream] line:%d, memory error, path_sz:%ld not sufficient \r\n", __LINE__, path_sz);
         } else {
             DEINIT_IF_EXISTS(_asa_local->op.mkdir.path.origin , free);
             char *ptr = calloc((++path_sz << 1), sizeof(char));
@@ -109,7 +109,7 @@ static  void  _atfp_hls__close_crypto_keyfile_cb (asa_op_base_cfg_t *_asa_local,
         if(result != ASTORAGE_RESULT_ACCEPT)
             json_object_set_new(err_info, "storage", json_string("[hls] failed to init stream"));
     } else {
-        fprintf(stderr, "[hls] line:%d, unknown error on closing crypto keyfile \r\n", __LINE__);
+        fprintf(stderr, "[hls][init_stream] line:%d, unknown error on closing crypto keyfile \r\n", __LINE__);
     }
     if (json_object_size(err_info) > 0)
         if(!json_object_get(spec, "http_resp_code"))
@@ -126,6 +126,7 @@ static  int  _atfp_hls__stream__crypto_key_rotation (json_t *keyinfo, json_t *er
     const char *key_id = NULL;
     char *del_key_id = NULL, *key_hex = NULL, *iv_hex = NULL;
     time_t  most_recent_ts = 0,  earlist_ts = 0, curr_ts = time(NULL);
+    BIGNUM *_bignum = BN_new();
     json_object_foreach(keyinfo, key_id, item) {
         const char *algo = json_string_value(json_object_get(item, "alg"));
         json_t *keyitem = json_object_get(item, "key");
@@ -144,13 +145,12 @@ static  int  _atfp_hls__stream__crypto_key_rotation (json_t *keyinfo, json_t *er
         }
     } // end of key item iteration
     key_id = NULL;
-    BIGNUM *_bignum = BN_new();
     ret = BN_rand(_bignum, HLS__NBYTES_KEY << 3, BN_RAND_TOP_ANY, BN_RAND_BOTTOM_ANY);
     if(!ret) {
         char buf[256] = {0};
         unsigned long err_code = ERR_get_error();
         ERR_error_string_n(err_code, &buf[0], 256);
-        fprintf(stderr, "[hls][openssl] failed to rotate key, reason:%s \r\n", &buf[0]);
+        fprintf(stderr, "[hls][init_stream] line:%d, failed to rotate key, reason:%s \r\n",__LINE__, &buf[0]);
         json_object_set_new(err_info, "transcoder", json_string("[hls] rotation failure"));
         goto done;
     }
@@ -159,24 +159,25 @@ static  int  _atfp_hls__stream__crypto_key_rotation (json_t *keyinfo, json_t *er
     iv_hex = BN_bn2hex(_bignum);
     BN_rand(_bignum, HLS__NBYTES_KEY_ID << (3 - 1), BN_RAND_TOP_ANY, BN_RAND_BOTTOM_ANY);
     key_id = BN_bn2hex(_bignum);
-    BN_free(_bignum);
-    if ((strlen(key_hex) == (HLS__NBYTES_KEY << 1)) && (strlen(iv_hex) == (HLS__NBYTES_IV << 1)) 
-            && (strlen(key_id) == HLS__NBYTES_KEY_ID)) { // new key item
-        json_t *key_item = json_object();
-        json_t *iv_item  = json_object();
+    uint32_t  actual_key_hex_sz = strlen(key_hex), actual_iv_hex_sz = strlen(iv_hex),
+              actual_key_id_sz = strlen(key_id);
+    if ((actual_key_hex_sz == (HLS__NBYTES_KEY << 1)) && (actual_iv_hex_sz == (HLS__NBYTES_IV << 1)) 
+            && (actual_key_id_sz == HLS__NBYTES_KEY_ID)) { // new key item
+        json_t *key_item = json_object(),  *iv_item  = json_object();
         json_object_set_new(key_item, "nbytes", json_integer(HLS__NBYTES_KEY));
-        json_object_set_new(key_item, "data",  json_string(key_hex));
+        json_object_set_new(key_item, "data",  json_stringn(key_hex, actual_key_hex_sz));
         json_object_set_new(iv_item, "nbytes", json_integer(HLS__NBYTES_IV));
-        json_object_set_new(iv_item, "data",   json_string(iv_hex));
+        json_object_set_new(iv_item, "data",   json_stringn(iv_hex, actual_iv_hex_sz));
         item = json_object();
-        json_object_set_new(item, "key", key_item);  
-        json_object_set_new(item, "iv",  iv_item);  
-        json_object_set_new(item, "alg", json_string("aes"));  
-        json_object_set_new(item, "timestamp", json_integer(curr_ts));  
+        json_object_set_new(item, "key", key_item);
+        json_object_set_new(item, "iv",  iv_item);
+        json_object_set_new(item, "alg", json_string("aes"));
+        json_object_set_new(item, "timestamp", json_integer(curr_ts));
         json_object_deln(keyinfo, key_id, HLS__NBYTES_KEY_ID);
-        json_object_set_new(keyinfo, key_id, item);  
-    } else { // TODO, figure out how error happened 
-        fprintf(stderr, "[hls][openssl] error on  generated rand bytes \r\n");
+        json_object_setn_new(keyinfo, key_id, HLS__NBYTES_KEY_ID, item);
+    } else { // TODO, figure out how error happenes 
+        fprintf(stderr, "[hls][init_stream] line:%d, key:sz=%u,data=0x%s, IV:sz=%u,data=0x%s, keyID:sz=%u,data=0x%s \r\n"
+                , __LINE__, actual_key_hex_sz, key_hex, actual_iv_hex_sz, iv_hex, actual_key_id_sz, key_id);
         json_object_set_new(err_info, "transcoder", json_string("[hls] rotation failure"));
         goto done;
     }
@@ -184,6 +185,7 @@ static  int  _atfp_hls__stream__crypto_key_rotation (json_t *keyinfo, json_t *er
         json_object_deln(keyinfo, del_key_id, HLS__NBYTES_KEY_ID);
     updated = 1;
 done:
+    BN_free(_bignum);
     if(key_id)
         free((char *)key_id);
     if(key_hex)
@@ -223,26 +225,26 @@ static  void  _atfp_hls__open_crypto_keyfile_cb (asa_op_base_cfg_t *_asa_local, 
             lseek(fd, 0, SEEK_SET);
             json_dumpfd((const json_t *)keyinfo, fd, JSON_COMPACT);
         } else {
-            fprintf(stderr, "[hls] line:%d, key rotation skipped \r\n", __LINE__);
+            fprintf(stderr, "[hls][init_stream] line:%d, key rotation skipped \r\n", __LINE__);
         }
         if(json_object_size(err_info) > 0)
             goto done;
     } else {
         json_object_set_new(err_info, "transcoder", json_string("[hls] internal error"));
-        fprintf(stderr, "[hls] line:%d,failed to open crypto key file \r\n", __LINE__);
+        fprintf(stderr, "[hls][init_stream] line:%d,failed to open crypto key file \r\n", __LINE__);
         goto done;
     }
     chosen_key_id = hlsproc->internal.op.get_crypto_key(keyinfo, ATFP__CRYPTO_KEY_MOST_RECENT, &chosen_keyitem);
     if(!chosen_key_id || !chosen_keyitem) {
         json_object_set_new(err_info, "transcoder", json_string("[hls] internal error"));
-        fprintf(stderr, "[hls] line:%d, failed to get crypto key \r\n", __LINE__);
+        fprintf(stderr, "[hls][init_stream] line:%d, failed to get crypto key \r\n", __LINE__);
         goto done;
     }
     hlsproc->internal.op.encrypt_document_id (&processor->data, chosen_keyitem,
             &encrypted_doc_id, &enc_doc_id_sz);
     if(!encrypted_doc_id || enc_doc_id_sz == 0) {
         json_object_set_new(err_info, "transcoder", json_string("[hls] internal error"));
-        fprintf(stderr, "[hls] line:%d,failed to encrypt document ID \r\n", __LINE__);
+        fprintf(stderr, "[hls][init_stream] line:%d,failed to encrypt document ID \r\n", __LINE__);
         goto done;
     } // TODO, might read IV so it can be written to playlist later
     json_object_set_new(_spec, "crypto_key_id", json_string(chosen_key_id));
@@ -258,7 +260,7 @@ done:
         int ret = json_object_set_new(_spec, "http_resp_code", json_integer(500));
         assert(ret == 0);
         json_object_set_new(err_info, "storage", json_string("[hls] failed to update playlist"));
-        fprintf(stderr, "[hls] line:%d, failed to open crypto key file \r\n", __LINE__);
+        fprintf(stderr, "[hls][init_stream] line:%d, failed to open crypto key file \r\n", __LINE__);
         _atfp_hls__final_dealloc(processor, 1);
     }
 } // end of  _atfp_hls__open_crypto_keyfile_cb
@@ -279,7 +281,7 @@ static  ASA_RES_CODE  atfp_hls__init_stream__crypto_keyfile (atfp_hls_t *hlsproc
     _asa_local->op.open.cb  = _atfp_hls__open_crypto_keyfile_cb;
     ASA_RES_CODE  result =  _asa_local->storage->ops.fn_open(_asa_local);
     if(result != ASTORAGE_RESULT_ACCEPT)
-        fprintf(stderr, "[hls] line:%d, failed to open crypto key file \r\n", __LINE__);
+        fprintf(stderr, "[hls][init_stream] line:%d, failed to open crypto key file \r\n", __LINE__);
     return result;
 } // end of  atfp_hls__init_stream__crypto_keyfile
 
@@ -294,7 +296,7 @@ static  void  _atfp_hls__ensure_local_basepath_cb (asa_op_base_cfg_t *_asa_local
     if (result == ASTORAGE_RESULT_COMPLETE) {
         result = atfp_hls__init_stream__crypto_keyfile(hlsproc);
     } else {
-        fprintf(stderr, "[hls] line:%d, failed to mkdir \r\n", __LINE__);
+        fprintf(stderr, "[hls][init_stream] line:%d, failed to mkdir \r\n", __LINE__);
     }
     if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(_spec,  "http_resp_code", json_integer(_http_resp_code));
@@ -352,7 +354,7 @@ void   atfp__video_hls__init_stream(atfp_t *processor)
     if(asa_result != ASTORAGE_RESULT_ACCEPT) {
         _http_resp_code = 500;
         json_object_set_new(_err_info, "storage", json_string("[hls] unable to send command for updating master playlist"));
-        fprintf(stderr, "[hls] line:%d, failed to send mkdir cmd \r\n", __LINE__);
+        fprintf(stderr, "[hls][init_stream] line:%d, failed to send mkdir cmd \r\n", __LINE__);
     }
 done:
     if(json_object_size(_err_info) > 0) {

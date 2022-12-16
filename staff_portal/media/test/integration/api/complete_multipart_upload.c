@@ -23,13 +23,12 @@ static void test_verify__app_server_response(CURL *handle, test_setup_priv_t *pr
     assert_that(actual_resp_code, is_equal_to(_usr_arg->expect_resp_code));
     json_t *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
     if(actual_resp_code < 300) {
-        const char *valid_resource_id = json_string_value(json_object_get(resp_obj, "resource_id"));
+        const char *valid_resource_id = json_string_value(json_object_get(resp_obj, API_QPARAM_LABEL__RESOURCE_ID));
         // assert_that(expect_upld_id, is_equal_to_string(actual_upld_id));
         json_t *stats = _usr_arg->upld_req_ref;
         assert_that(valid_resource_id , is_not_null);
-        if(valid_resource_id) {
+        if(valid_resource_id)
             json_object_set_new(stats, "resource_id", json_string(valid_resource_id));
-        }
     } else {
         const char *actual_err_msg = json_string_value(json_object_get(resp_obj, _usr_arg->err_field));
         if(_usr_arg->err_msg)
@@ -41,7 +40,7 @@ static void test_verify__app_server_response(CURL *handle, test_setup_priv_t *pr
 
 #define  MAX_BYTES_REQ_BODY  128
 static void _api_commit_upload_req__success_common (json_t *upld_req, const char *resource_id,
-        uint32_t expect_resp_code, const char *err_field, const char *err_msg)
+        const char *resource_typ, uint32_t expect_resp_code, const char *err_field, const char *err_msg)
 {
     char url[128] = {0};
     sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/complete");
@@ -53,11 +52,12 @@ static void _api_commit_upload_req__success_common (json_t *upld_req, const char
         json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
         add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
     }
-    const char req_body_raw[MAX_BYTES_REQ_BODY] = {0};
+    char req_body_raw[MAX_BYTES_REQ_BODY] = {0};
     {
         uint32_t req_seq = json_integer_value(json_object_get(upld_req, "req_seq"));
         json_t *req_body = json_object();
-        json_object_set_new(req_body, "resource_id", json_string(resource_id));
+        json_object_set_new(req_body, API_QPARAM_LABEL__RESOURCE_ID, json_string(resource_id));
+        json_object_set_new(req_body, "type", json_string(resource_typ));
         json_object_set_new(req_body, "req_seq", json_integer(req_seq));
         size_t nwrite = json_dumpb((const json_t *)req_body, &req_body_raw[0],  MAX_BYTES_REQ_BODY, JSON_COMPACT);
         json_decref(req_body);
@@ -96,10 +96,17 @@ Ensure(api_commit_upload_req__missing_auth_token) {
 
 Ensure(api_commit_upload_req__invalid_resource_id) {
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0);
-    if(upld_req) {
-        _api_commit_upload_req__success_common(upld_req, "' OR 1;'", 400, "resource_id", "invalid format");
-    }
+    if(upld_req)
+        _api_commit_upload_req__success_common(upld_req, "' OR 1;'", "video", 400,
+                API_QPARAM_LABEL__RESOURCE_ID, "invalid format");
 } // end of api_commit_upload_req__invalid_resource_id
+
+Ensure(api_commit_upload_req__invalid_resource_typ) {
+    json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0);
+    if(upld_req)
+        _api_commit_upload_req__success_common(upld_req, "abcdefg", "PDF", 400,
+                "type", "invalid");
+} // end of api_commit_upload_req__invalid_resource_typ
 
 Ensure(api_commit_upload_req__nonexistent_req) {
     json_t *upld_req_src = json_array_get(_app_itest_active_upload_requests, 0);
@@ -110,8 +117,8 @@ Ensure(api_commit_upload_req__nonexistent_req) {
         json_object_set_new(upld_req_dst, "usr_id" , json_integer(usr_id ));
         json_object_set_new(upld_req_dst, "req_seq", json_integer(req_seq));
     }
-    _api_commit_upload_req__success_common(upld_req_dst, EXPECT_RESOURCE_ID, 400,
-            "req_seq", "request not exists");
+    _api_commit_upload_req__success_common(upld_req_dst, EXPECT_RESOURCE_ID, "video", 400,
+            "req_seq", "not exists");
     json_decref(upld_req_dst);
 } // end of api_commit_upload_req__nonexistent_req
 
@@ -120,7 +127,7 @@ Ensure(api_commit_upload_req__incomplete_chunks) {
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 1);
     assert_that(upld_req, is_not_equal_to(NULL));
     if(upld_req) {
-        _api_commit_upload_req__success_common(upld_req, EXPECT_RESOURCE_ID, 400,
+        _api_commit_upload_req__success_common(upld_req, EXPECT_RESOURCE_ID, "video", 400,
                 "req_seq", "part numbers of file chunks are not adjacent");
     }
 } // end of api_commit_upload_req__incomplete_chunks
@@ -130,8 +137,12 @@ Ensure(api_commit_upload_req__add_resources) {
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 2);
     assert_that(upld_req, is_not_equal_to(NULL));
     if(upld_req) {
-        _api_commit_upload_req__success_common(upld_req, EXPECT_RESOURCE_ID, 201, NULL, NULL);
-        _api_commit_upload_req__success_common(upld_req, SECONDARY_RESOURCE_ID, 400, "req_seq", "request not exists");
+        const char *expect_ftyp  = json_string_value(json_object_get(upld_req, "type"));
+        assert_that(expect_ftyp, is_not_null);
+        if(!expect_ftyp)
+            return;
+        _api_commit_upload_req__success_common(upld_req, EXPECT_RESOURCE_ID, expect_ftyp, 201, NULL, NULL);
+        _api_commit_upload_req__success_common(upld_req, SECONDARY_RESOURCE_ID, expect_ftyp, 400, "req_seq", "not exists");
     } // the same upload request cannot be applied to `differeent resource
 } // end of api_commit_upload_req__add_resources
 
@@ -140,8 +151,12 @@ Ensure(api_commit_upload_req__resource_id_not_allowed) {
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 3);
     assert_that(upld_req, is_not_equal_to(NULL));
     if(upld_req) {
-        _api_commit_upload_req__success_common(upld_req, EXPECT_RESOURCE_ID, 403,
-                "resource_id", "NOT allowed to use the ID");
+        const char *expect_ftyp  = json_string_value(json_object_get(upld_req, "type"));
+        assert_that(expect_ftyp, is_not_null);
+        if(!expect_ftyp)
+            return;
+        _api_commit_upload_req__success_common(upld_req, EXPECT_RESOURCE_ID, expect_ftyp, 403,
+                API_QPARAM_LABEL__RESOURCE_ID, "NOT allowed to use the ID");
     } // the resource id was claimed by another user, different users are NOT allowed to use it
 } // end of api_commit_upload_req__resource_id_not_allowed
 
@@ -152,15 +167,21 @@ Ensure(api_commit_upload_req__use_existing_resource_id) {
     assert_that(upld_req_0, is_not_equal_to(NULL));
     assert_that(upld_req_1, is_not_equal_to(NULL));
     if(upld_req_0 && upld_req_1) {
+        const char *expect_req0_ftyp  = json_string_value(json_object_get(upld_req_0, "type"));
+        const char *expect_req1_ftyp  = json_string_value(json_object_get(upld_req_1, "type"));
+        assert_that(expect_req0_ftyp, is_not_null);
+        assert_that(expect_req1_ftyp, is_not_null);
+        if(!expect_req0_ftyp || !expect_req1_ftyp)
+            return;
         // pre-condition: req-seq at idx=2 and idx=4 should be generated by the same user
         uint32_t  usr_id_0 = json_integer_value(json_object_get(upld_req_0, "usr_id" ));
         uint32_t  usr_id_1 = json_integer_value(json_object_get(upld_req_1, "usr_id" ));
         assert_that(usr_id_0, is_greater_than(0));
         assert_that(usr_id_0, is_equal_to(usr_id_1));
-        _api_commit_upload_req__success_common(upld_req_0, EXPECT_RESOURCE_ID, 200, NULL, NULL);
+        _api_commit_upload_req__success_common(upld_req_0, EXPECT_RESOURCE_ID, expect_req0_ftyp, 200, NULL, NULL);
         // at this point, req-seq at idx=2 is rollbacked to `uncommitted state`, so it can be committed
         //  again with different `resource ID`
-        _api_commit_upload_req__success_common(upld_req_1, SECONDARY_RESOURCE_ID, 201, NULL, NULL);
+        _api_commit_upload_req__success_common(upld_req_1, SECONDARY_RESOURCE_ID, expect_req1_ftyp, 201, NULL, NULL);
     }
 } // end of api_commit_upload_req__use_existing_resource_id
 
@@ -174,16 +195,27 @@ Ensure(api_commit_upload_req__add_resources_2) {
         json_t *upld_req = json_array_get(_app_itest_active_upload_requests, idx);
         if(!upld_req)
             continue;
-        int num_parts = json_array_size(json_object_get(upld_req, "part"));
         const char *res_id_exists = json_string_value(json_object_get(upld_req, "resource_id"));
-        if (num_parts <= 0 || res_id_exists)
+        if (res_id_exists)
             continue;
+        uint32_t _expect_resp_code = 201;
+        uint32_t _req_seq = json_integer_value(json_object_get(upld_req, "req_seq"));
+        const char *expect_ftyp  = json_string_value(json_object_get(upld_req, "type"));
+        if(!expect_ftyp) {
+            fprintf(stderr, "[itest][complete_multipart_upload] line:%d, upload request,"
+                    " idx:%d, id:0x%08x, missing file type \n", __LINE__, idx, _req_seq);
+            expect_ftyp = "video";
+        }
+        int num_parts = json_array_size(json_object_get(upld_req, "part"));
+        if (num_parts <= 0)
+            _expect_resp_code = 400;
         int ret = BN_rand(bn_res_id, (nbits_res_id >> 1), BN_RAND_TOP_ANY, BN_RAND_BOTTOM_ANY);
         assert_that(ret, is_equal_to(1));
         char *mock_res_id = BN_bn2hex(bn_res_id);
         assert_that(ret, is_equal_to(1));
         assert_that(mock_res_id, is_not_equal_to(NULL));
-        _api_commit_upload_req__success_common(upld_req, mock_res_id, 201, NULL, NULL);
+        _api_commit_upload_req__success_common(upld_req, mock_res_id, expect_ftyp,
+                _expect_resp_code, NULL, NULL);
         OPENSSL_free(mock_res_id);
     } // end of loop
     BN_free(bn_res_id);
@@ -195,6 +227,7 @@ TestSuite *api_complete_multipart_upload_tests(void)
     TestSuite *suite = create_test_suite();
     add_test(suite, api_commit_upload_req__missing_auth_token);
     add_test(suite, api_commit_upload_req__invalid_resource_id);
+    add_test(suite, api_commit_upload_req__invalid_resource_typ);
     add_test(suite, api_commit_upload_req__nonexistent_req);
     add_test(suite, api_commit_upload_req__incomplete_chunks);
     add_test(suite, api_commit_upload_req__add_resources);

@@ -76,21 +76,21 @@ static  __attribute__((optimize("O0"))) void  itest_verify__job_terminated_unsup
 } // end of itest_verify__job_terminated_unsupported_format
 
 
-static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_item, const char *ftype_in)
+static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_item, const char *fsubtype_in)
 {
     json_t *req = NULL, *async_job_ids_item = NULL;
     int idx = 0;
     json_array_foreach(_app_itest_active_upload_requests, idx, req) {
         *resource_id_item  = json_object_get(req, "resource_id");
         async_job_ids_item = json_object_get(req, "async_job_ids");
-        const char *ftype  = json_string_value(json_object_get(req, "type"));
-        if(!ftype) {
+        const char *fsubtype  = json_string_value(json_object_get(req, "subtype"));
+        if(!fsubtype) {
             *resource_id_item  = NULL;
             continue;
         }
         const char *_res_id = json_string_value(*resource_id_item);
         size_t   num_async_jobs = json_array_size(async_job_ids_item);
-        uint8_t  type_matched = strncmp(ftype, ftype_in, strlen(ftype_in)) == 0;
+        uint8_t  type_matched = strncmp(fsubtype, fsubtype_in, strlen(fsubtype)) == 0;
         if(_res_id && type_matched && num_async_jobs == 0) {
             break;
         } else {
@@ -100,8 +100,8 @@ static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_i
     if(req && *resource_id_item) {
         *upld_req = req;
     } else {
-        fprintf(stderr, "[start_transcoding_file] add more ressources that meet the requirement, file type:%s \n",
-                   ftype_in );
+        fprintf(stderr, "[itest][start_transcoding_file] no more ressource"
+                " with the subtype:%s \n" , fsubtype_in);
     }
 } // end of _available_resource_lookup
 

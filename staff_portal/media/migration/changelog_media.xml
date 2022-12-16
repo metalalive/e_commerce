@@ -263,5 +263,18 @@
     <changeSet id="tag_version_0.0.9" author="Haam">
         <tagDatabase tag="0.0.9" />
     </changeSet>
+    <changeSet id="add-enum-type-uploaded-file" author="Haam">
+        <comment>  </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `uploaded_file` ADD COLUMN `type` ENUM('video') NULL;
+            UPDATE `uploaded_file` SET `type`='video' WHERE `last_upld_req` IS NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `uploaded_file` DROP COLUMN `type`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.10" author="Haam">
+        <tagDatabase tag="0.0.9" />
+    </changeSet>
 </databaseChangeLog>
 

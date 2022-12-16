@@ -270,6 +270,7 @@ Ensure(api_test_upload_part__multichunk_outoforder)
     json_array_foreach(files_info, idx, file_info) {
         chunkinfo = json_object_get(file_info, "chunks");
         const char *file_type = json_string_value(json_object_get(file_info, "type"));
+        const char *file_subtype = json_string_value(json_object_get(file_info, "subtype"));
         uint8_t     is_broken = json_boolean_value(json_object_get(file_info, "broken"));
         {
             is_array = json_is_array(chunkinfo);
@@ -280,7 +281,8 @@ Ensure(api_test_upload_part__multichunk_outoforder)
         json_t *upld_req = json_array_get(_app_itest_active_upload_requests, req_seq_idx);
         assert_that(upld_req, is_not_equal_to(NULL));
         if(!upld_req) { break; } // not have enough upload requests
-        json_object_set_new(upld_req, "type",   json_string(file_type));
+        json_object_set_new(upld_req, "type",    json_string(file_type));
+        json_object_set_new(upld_req, "subtype", json_string(file_subtype));
         json_object_set_new(upld_req, "broken", json_boolean(is_broken));
         uint32_t usr_id  = json_integer_value(json_object_get(upld_req, "usr_id" ));
         uint32_t req_seq = json_integer_value(json_object_get(upld_req, "req_seq"));
@@ -325,7 +327,7 @@ Ensure(api_test_upload_part__multichunk_outoforder)
             sprintf(&url[0], "https://%s:%d%s?req_seq=%d&part=%d", "localhost", 8010, "/upload/multipart/part",
                     req_seq, cb_arg.part );
             setup_data.url = &url[0];
-            setup_data.upload_filepaths.entries[0] = cb_arg.filepath;
+            setup_data.upload_filepaths.entries[0] = (char *) cb_arg.filepath;
             run_client_request(&setup_data, test_verify__app_server_response, (void *)&cb_arg);
         } // end of inner loop
     } // end of outer loop
@@ -333,6 +335,8 @@ done:
     json_decref(files_info);
     json_decref(header_kv_serials);
     json_decref(usr_upload_quota);
+    if(_itest_filechunk_metadata)
+        free(_itest_filechunk_metadata);
 } // end of api_test_upload_part__multichunk_outoforder
 
 
@@ -344,10 +348,10 @@ TestSuite *api_upload_part_tests(json_t *root_cfg)
     size_t metadata_fname_sz = strlen(metadata_fname);
     size_t base_folder_sz    = strlen(base_folder);
     size_t  _meta_filepath_sz = metadata_fname_sz + base_folder_sz + 2;
-    _itest_filechunk_metadata = calloc(_meta_filepath_sz, sizeof(char)); // TODO, dealloc
-    strncat(_itest_filechunk_metadata, base_folder, base_folder_sz);
-    strncat(_itest_filechunk_metadata, "/", 1);
-    strncat(_itest_filechunk_metadata, metadata_fname, metadata_fname_sz);
+    _itest_filechunk_metadata = calloc(_meta_filepath_sz, sizeof(char));
+    size_t  nwrite = snprintf(_itest_filechunk_metadata, _meta_filepath_sz, "%s/%s",
+            base_folder, metadata_fname);
+    assert(nwrite < _meta_filepath_sz);
     TestSuite *suite = create_test_suite();
     add_test(suite, api_test_upload_part__missing_auth_token);
     add_test(suite, api_test_upload_part__singlechunk_ok);

@@ -140,6 +140,7 @@ class FileChunkBasePreprocessor:
 class FilechunkSetup(FileChunkBasePreprocessor):
     def start_processing(self, fchunk_cfg):
         errors = []
+        errmsg_pattern = 'incomplete configuration, src_path={0}, num_chunks={1}, dst_path_patt={2}, file_type={3}, file_subtype={4}'
         base_path = Path(fchunk_cfg['base_folder'])
         if base_path.is_dir() and os.access(base_path, os.F_OK):
             if not os.access(base_path, os.R_OK | os.W_OK | os.X_OK):
@@ -161,27 +162,27 @@ class FilechunkSetup(FileChunkBasePreprocessor):
             num_chunks  = f_cfg.get('num_chunks', 0)
             dst_path_patt = f_cfg.get('dst_pattern')
             file_type   = f_cfg.get('type')
+            file_subtype = f_cfg.get('subtype')
             broken      = f_cfg.get('broken', False)
-            if not src_path or num_chunks <= 0 or not dst_path_patt:
-                errmsg = 'incomplete configuration, src_path={0}, num_chunks={1}, dst_path_patt={2}'.format(
-                       src_path, num_chunks, dst_path_patt)
+            if not src_path or num_chunks <= 0 or not dst_path_patt or not file_type or not file_subtype:
+                errmsg = errmsg_pattern.format(src_path, num_chunks, dst_path_patt, file_type, file_subtype)
                 print(errmsg)
                 errors.append(IOError(errmsg))
                 break
             self._build_filechunks(src_path, base_path=base_path, metadata=metadata, num_chunks=num_chunks,
-                    dst_path_patt=dst_path_patt, broken=broken, file_type=file_type)
+                    dst_path_patt=dst_path_patt, broken=broken, file_type=file_type, file_subtype=file_subtype)
         json.dump(metadata, fp=metadata_f)
         metadata_f.close()
         ##import pdb
         ##pdb.set_trace()
 
     def _build_filechunks(self, src_path:str, base_path, num_chunks:int, dst_path_patt:str,
-            metadata:list, file_type:str, broken:bool=False):
+            metadata:list, file_type:str, file_subtype:str, broken:bool=False):
         page_sz = 2048
         src_f = None
         dst_f = None
         chunk_cfg_list = []
-        metadata_item  = {'type':file_type, 'broken':broken, 'chunks':chunk_cfg_list}
+        metadata_item  = {'type':file_type, 'subtype':file_subtype, 'broken':broken, 'chunks':chunk_cfg_list}
         try:
             src_path = Path(src_path)
             tot_sz = Path.stat(src_path).st_size
