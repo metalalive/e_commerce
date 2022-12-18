@@ -238,6 +238,7 @@ SET(APP_TRANSCODE_TABLE_IN_HTTP_SERVER__SOURCE_FILES
 
 SET(APP_STREAMING_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
+    src/transcoder/validation.c
     src/transcoder/crypto.c
     src/transcoder/stream_cache.c
     src/transcoder/video/hls/seeker/common.c
@@ -313,6 +314,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/stream_cache.c
     test/unit/transcoder/crypto.c
     test/unit/transcoder/storage.c
+    test/unit/transcoder/validation.c
     test/unit/transcoder/video/mp4/init.c
     test/unit/transcoder/video/mp4/preload.c
     test/unit/transcoder/video/mp4/avcontext.c

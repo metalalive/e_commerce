@@ -9,6 +9,7 @@ extern "C" {
 #include <jansson.h>
 #include <h2o.h>
 
+#include "models/datatypes.h"
 #include "storage/datatypes.h"
 #include "storage/localfs.h"
 #include "rpc/datatypes.h"
@@ -242,6 +243,11 @@ size_t  atfp_get_encrypted_file_basepath (const char *basepath, char *out, size_
         const char *doc_id, size_t id_sz);
 const char * atfp_get_crypto_key (json_t *keyinfo, const char *key_id, json_t **item_out);
 int  atfp_encrypt_document_id (EVP_CIPHER_CTX *, atfp_data_t *, json_t *kitem, unsigned char **out, size_t *out_sz);
+
+// for validating frontend  request at API server
+int   atfp_validate_transcode_request (const char *resource_type, json_t *spec, json_t *err_info);
+void  atfp_validate_req_dup_version(const char *resource_type, json_t *spec, db_query_row_info_t *existing);
+const char * atfp_transcoded_version_sql_pattern(const char *res_typ, size_t *out_sz);
 
 // for cached streaming files at local API server
 asa_op_localfs_cfg_t  *atfp_streamcache_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,

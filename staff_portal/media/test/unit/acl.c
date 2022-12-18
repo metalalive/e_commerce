@@ -459,12 +459,12 @@ Ensure(app_acl_test__resource_id__db_error)
 
 
 #define  UTEST_EXPECT_NUM_ROWS  1
-#define  UTEST_EXPECT_NUM_COLS  3
+#define  UTEST_EXPECT_NUM_COLS  4
 Ensure(app_acl_test__resource_id__with_acl)
 {
     UTEST_ACL_COMMON_SETUP(2)
     UTEST_DB_QUERY_RESULT_SETUP(UTEST_EXPECT_NUM_ROWS, UTEST_EXPECT_NUM_COLS)
-    const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"139", "0a14f029", "1"}};
+    const char *expect_row_data[UTEST_EXPECT_NUM_ROWS][UTEST_EXPECT_NUM_COLS] = {{"139", "0a14f029", APP_FILETYPE_LABEL_VIDEO, "1"}};
     expect(utest_dbpool__is_conn_closing, will_return(0), when(_pool, is_equal_to(&mock_db_pool)));
     expect(utest_dbpool__acquire_free_conn, will_return(&mock_conn), when(_pool, is_equal_to(&mock_db_pool)));
     expect(utest_dbconn__add_new_query, when(_conn, is_equal_to(&mock_conn)), when(q, is_not_equal_to(NULL)));

@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 #include <h2o/memory.h>
+#include "datatypes.h"
 #include "models/datatypes.h"
 
 typedef struct {
@@ -19,6 +20,7 @@ typedef struct {
     H2O_VECTOR(aacl_data_t) data;
     uint32_t  owner_usr_id;
     uint32_t  upld_req;
+    char      type[sizeof(APP_FILETYPE_LABEL_VIDEO)];
     struct {
         uint8_t error:1; // TODO, rename to db_error
         uint8_t write_ok:1;

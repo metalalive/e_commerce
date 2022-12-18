@@ -162,10 +162,12 @@ static void  _app_acl_resource_id__row_fetch (db_query_t *q, db_query_result_t *
         q->cfg.usr_data.entry[2] = (void *) strtoul(row->values[0], NULL, 10);
     if(row->values[1]) // last_upld_req
         q->cfg.usr_data.entry[3] = (void *) strtoul(row->values[1], NULL, 16);
+    if(row->values[2]) // resource type
+        memcpy(&ctx->result.type[0], row->values[2], sizeof(APP_FILETYPE_LABEL_VIDEO) - 1);
     if(ctx->fetch_acl) { // visible flag
-        assert(row->num_cols == 3);
-        if(row->values[2]) {
-            q->cfg.usr_data.entry[4] = (void *) strtoul(row->values[2], NULL, 2);
+        assert(row->num_cols == 4);
+        if(row->values[3]) {
+            q->cfg.usr_data.entry[4] = (void *) strtoul(row->values[3], NULL, 2);
             ctx->result.flag.acl_exists = 1;
         }
     }
@@ -180,8 +182,8 @@ int  app_acl_verify_resource_id (aacl_cfg_t *cfg)
     int err = 1;
     if(!cfg || !cfg->resource_id || !cfg->callback)
         return err;
-#define SQL1_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`,HEX(`last_upld_req`) FROM `uploaded_file` WHERE `id`=?' USING FROM_BASE64('%s');"
-#define SQL2_PATTERN "EXECUTE IMMEDIATE 'SELECT `uf`.`usr_id`, HEX(`uf`.`last_upld_req`),`fac`.`visible_flg`" \
+#define SQL1_PATTERN "EXECUTE IMMEDIATE 'SELECT `usr_id`,HEX(`last_upld_req`),`type` FROM `uploaded_file` WHERE `id`=?' USING FROM_BASE64('%s');"
+#define SQL2_PATTERN "EXECUTE IMMEDIATE 'SELECT `uf`.`usr_id`, HEX(`uf`.`last_upld_req`),`uf`.`type`,`fac`.`visible_flg`" \
     " FROM `uploaded_file` AS `uf` LEFT JOIN `"FILELVL_ACL_TABLE"` AS `fac` ON `uf`.`id`=`fac`.`file_id`" \
     " WHERE `uf`.`id`=?' USING FROM_BASE64('%s');"
     size_t raw_sql_sz = strlen(cfg->resource_id) + (cfg->fetch_acl?sizeof(SQL2_PATTERN):sizeof(SQL1_PATTERN));
@@ -196,15 +198,11 @@ int  app_acl_verify_resource_id (aacl_cfg_t *cfg)
 #undef SQL2_PATTERN
     _aacl_ctx_t  *ctx = calloc(1, sizeof(_aacl_ctx_t));
     COPY_CFG_TO_CTX(ctx, cfg)
-    ctx->_num_internal_args = ctx->fetch_acl? 5: 4;
+    ctx->_num_internal_args = ctx->fetch_acl? 5: 4; // plus number of flags in file-lvl access control table
     uint16_t tot_num_usr_args = ctx->_num_internal_args + ctx->_num_usr_args;
     void *db_async_usr_args[tot_num_usr_args];
+    memset(&db_async_usr_args[0], 0x0, sizeof(void *) * ctx->_num_internal_args);
     db_async_usr_args[0] = ctx;
-    db_async_usr_args[1] = (void *)0;
-    db_async_usr_args[2] = (void *)0;
-    db_async_usr_args[3] = (void *)0;
-    if(ctx->fetch_acl)
-        db_async_usr_args[4] = (void *)0;
     memcpy(&db_async_usr_args[ctx->_num_internal_args], cfg->usr_args.entries, sizeof(void *) * ctx->_num_usr_args);
     db_query_cfg_t  db_cfg = {
         .statements = {.entry=&raw_sql[0], .num_rs=1}, .pool=cfg->db_pool, .loop=cfg->loop,

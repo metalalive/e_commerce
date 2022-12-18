@@ -266,8 +266,11 @@ static void test_verify__start_transcoding_invalid_elm_stream(CURL *handle, test
     itest_api_verify__start_transcode(handle, privdata, _usr_arg);
     lseek(privdata->fds.resp_body, 0, SEEK_SET);
     json_t *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
-    json_t *err_info = json_object_get(json_object_get(resp_obj, "elementary_streams"), err_field_in_st_elm);
-    assert_that(err_info, is_not_null);
+    json_t *err_detail = json_object_get(json_object_get(resp_obj, "elementary_streams"), err_field_in_st_elm);
+    assert_that(err_detail, is_not_null);
+    if(!err_detail)
+        fprintf(stderr, "[itest][api][transcode] line:%d, error detail not found, label:%s \n"
+               ,  __LINE__, err_field_in_st_elm);
     json_decref(resp_obj);
 } // end of test_verify__start_transcoding_invalid_elm_stream
 
