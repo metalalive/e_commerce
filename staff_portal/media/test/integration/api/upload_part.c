@@ -266,7 +266,7 @@ Ensure(api_test_upload_part__multichunk_outoforder)
     setup_data.upload_filepaths.size = 1;
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     json_t *info, *file_info, *chunkinfo;
-    size_t idx, jdx;
+    size_t idx, jdx, nwrite;
     json_array_foreach(files_info, idx, file_info) {
         chunkinfo = json_object_get(file_info, "chunks");
         const char *file_type = json_string_value(json_object_get(file_info, "type"));
@@ -324,8 +324,11 @@ Ensure(api_test_upload_part__multichunk_outoforder)
             usrarg_t  cb_arg = {.resp_code=200, .part=partnum, .f_chksum=chksum,
                 .filepath=path, .upld_req_ref=upld_req};
             char url[128] = {0};
-            sprintf(&url[0], "https://%s:%d%s?req_seq=%d&part=%d", "localhost", 8010, "/upload/multipart/part",
-                    req_seq, cb_arg.part );
+            nwrite = snprintf(&url[0], 128, "https://%s:%d%s?req_seq=%d&part=%d", "localhost", 8010,
+                    "/upload/multipart/part", req_seq, cb_arg.part );
+            assert_that(nwrite, is_less_than(128));
+            if(nwrite >= 128)
+                break;
             setup_data.url = &url[0];
             setup_data.upload_filepaths.entries[0] = (char *) cb_arg.filepath;
             run_client_request(&setup_data, test_verify__app_server_response, (void *)&cb_arg);

@@ -9,11 +9,13 @@
 static void _db_async_dummy_cb(db_query_t *target, db_query_result_t *detail)
 { (void *)detail; }
 
-static __attribute__((optimize("O0")))  void  atfp_video__dst_update_metadata__db_async_err(db_query_t *target, db_query_result_t *detail)
+static  void  atfp_video__dst_update_metadata__db_async_err(db_query_t *target, db_query_result_t *detail)
 {
     atfp_t *processor = (atfp_t *) target->cfg.usr_data.entry[0];
     json_object_set_new(processor->data.error, "model",
             json_string("failed to update metadata of transcoded video"));
+    fprintf(stderr, "[transcoder][video][metadata] line:%d, job_id:%s, unknown db error \n",
+            __LINE__, processor->data.rpc_receipt->job_id.bytes);
     processor->data.callback(processor);
 } // end of atfp_video__dst_update_metadata__db_async_err
 
@@ -74,8 +76,11 @@ void  atfp_video__dst_update_metadata(atfp_t *processor, void *loop)
         }
     };
     DBA_RES_CODE  db_result = app_db_query_start(&cfg);
-    if(db_result != DBA_RESULT_OK)
+    if(db_result != DBA_RESULT_OK) {
         json_object_set_new(processor->data.error, "model", json_string("failed to send SQL command for transcoded video"));
+        fprintf(stderr, "[transcoder][video][metadata] line:%d, job_id:%s, db_result:%d \n",
+                __LINE__, processor->data.rpc_receipt->job_id.bytes, db_result);
+    }
 } // end of atfp_video__dst_update_metadata
 
 #undef  SQL_PATTERN__METADATA_INSERT 

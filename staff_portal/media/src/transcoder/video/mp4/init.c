@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <string.h>
 #include <h2o/memory.h>
+#include <uuid/uuid.h>
 
 #include "transcoder/video/mp4.h"
 #include "transcoder/video/ffmpeg.h"
@@ -27,6 +28,9 @@ static void atfp_mp4__avinput_init_done_cb (atfp_mp4_t *mp4proc)
         int ret = uv_async_init(asa_local->loop, &mp4proc->async, atfp_mp4__postpone_usr_callback);
         if(ret < 0)
             json_object_set_new(err_info, "libav", json_string("[mp4] failed to init internal async handle"));
+    } else {
+        fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, avinput or validation error \n",
+                __LINE__, processor->data.rpc_receipt->job_id.bytes);
     }
     processor -> data.callback(processor);
 } // end of atfp_mp4__avinput_init_done_cb
@@ -38,8 +42,14 @@ static void atfp_mp4__preload_stream_info__done(atfp_mp4_t *mp4proc)
     json_t *err_info = processor->data.error;
     if(json_object_size(err_info) == 0) {
         ASA_RES_CODE result = mp4proc->internal.op.av_init(mp4proc, atfp_mp4__avinput_init_done_cb);
-        if(result != ASTORAGE_RESULT_ACCEPT)
+        if(result != ASTORAGE_RESULT_ACCEPT) {
             json_object_set_new(err_info, "libav", json_string("[mp4] failed to init avformat context"));
+            fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, result:%d \n",
+                  __LINE__, processor->data.rpc_receipt->job_id.bytes, result);
+        }
+    } else {
+        fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, error in preload buffer \n",
+                __LINE__, processor->data.rpc_receipt->job_id.bytes);
     }
     if(json_object_size(err_info) > 0)
         processor -> data.callback(processor);
@@ -55,8 +65,11 @@ static void atfp__video_mp4__open_local_tmpbuf_cb (asa_op_base_cfg_t *asaobj, AS
     json_t *err_info = processor->data.error;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         result = mp4proc->internal.op.preload_info(mp4proc, atfp_mp4__preload_stream_info__done);
-        if(result != ASTORAGE_RESULT_ACCEPT) 
+        if(result != ASTORAGE_RESULT_ACCEPT) {
             json_object_set_new(err_info, "storage", json_string("failed to issue read operation to mp4 input"));
+            fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, result:%d \n",
+                  __LINE__, processor->data.rpc_receipt->job_id.bytes, result);
+        }
     } else {
         json_object_set_new(err_info, "storage", json_string("failed to open local temp buffer"));
     }
@@ -74,19 +87,29 @@ static void atfp__video_mp4__init(atfp_t *processor)
     processor->filechunk_seq.curr = 0;
     processor->filechunk_seq.next = 0;
     processor->filechunk_seq.eof_reached = 0;
-    {
-        asa_local->super.op.open.cb = atfp__video_mp4__open_local_tmpbuf_cb;
-        asa_local->super.op.open.mode  = S_IRUSR | S_IWUSR;
-        asa_local->super.op.open.flags = O_RDWR | O_CREAT;
+#define  UUID_STR_SZ    36
+#define  PATH_PATTERN   "%s/%s-%s"
+    { // in case frontend client sent 2 requests which indicate the same source file
+        char _uid_postfix[UUID_STR_SZ + 1] = {0};
+        uuid_t  _uuid_obj;
+        uuid_generate_random(_uuid_obj);
+        uuid_unparse(_uuid_obj, &_uid_postfix[0]);
         size_t tmpbuf_basepath_sz = strlen(local_tmpbuf_basepath);
         size_t tmpbuf_filename_sz = strlen(LOCAL_BUFFER_FILENAME);
-        size_t tmpbuf_fullpath_sz = tmpbuf_basepath_sz + 1 + tmpbuf_filename_sz + 1;
+        size_t tmpbuf_fullpath_sz = sizeof(PATH_PATTERN) + tmpbuf_basepath_sz + tmpbuf_filename_sz + UUID_STR_SZ;
         char *ptr = calloc(tmpbuf_fullpath_sz, sizeof(char));
         asa_local->super.op.open.dst_path = ptr;
-        strncat(ptr, local_tmpbuf_basepath, tmpbuf_basepath_sz);
-        strncat(ptr, "/", 1);
-        strncat(ptr, LOCAL_BUFFER_FILENAME, tmpbuf_filename_sz);
+        size_t nwrite = snprintf( ptr, tmpbuf_fullpath_sz, PATH_PATTERN, local_tmpbuf_basepath,
+                LOCAL_BUFFER_FILENAME, &_uid_postfix[0] );
+        assert(nwrite < tmpbuf_fullpath_sz);
+        fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, local buffer path:%s \n",
+              __LINE__, processor->data.rpc_receipt->job_id.bytes, ptr);
     }
+#undef  UUID_STR_SZ
+#undef  PATH_PATTERN
+    asa_local->super.op.open.cb = atfp__video_mp4__open_local_tmpbuf_cb;
+    asa_local->super.op.open.mode  = S_IRUSR | S_IWUSR;
+    asa_local->super.op.open.flags = O_RDWR | O_CREAT;
     ASA_RES_CODE  asa_result = asa_local->super.storage->ops.fn_open(&asa_local->super);
     if(asa_result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(processor->data.error, "storage",
@@ -114,10 +137,13 @@ static  void  _atfp_mp4__final_dealloc (asa_op_base_cfg_t *asaobj, ASA_RES_CODE 
 
 static void  atfp_mp4__asalocal_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {   // TODO, clean up temp folder for locally storing transcoded files
+    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_asa_map_t    *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t *asa_local = atfp_asa_map_get_localtmp(_map);
     asa_local->super.op.unlink.path = asa_local->super.op.open.dst_path; // local temp buffer file
     asa_local->super.op.unlink.cb = _atfp_mp4__final_dealloc;
+    fprintf(stderr, "[transcoder][mp4][init] line:%d, local buffer path:%s \n",
+              __LINE__, asa_local->super.op.unlink.path);
     result = asa_local->super.storage->ops.fn_unlink(&asa_local->super);
     if(result != ASTORAGE_RESULT_ACCEPT)
         _atfp_mp4__final_dealloc(asaobj, ASTORAGE_RESULT_COMPLETE);
@@ -129,7 +155,9 @@ static  void  atfp_mp4__asaremote_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RE
     asa_op_localfs_cfg_t *asa_local =  atfp_asa_map_get_localtmp(_map);
     if(asa_local->file.file >= 0) {
         asa_local->super.op.close.cb =  atfp_mp4__asalocal_closefile_cb;
-        asa_local->super.storage->ops.fn_close(&asa_local->super);
+        result = asa_local->super.storage->ops.fn_close(&asa_local->super);
+        if(result != ASTORAGE_RESULT_ACCEPT)
+            atfp_mp4__asalocal_closefile_cb(&asa_local->super, ASTORAGE_RESULT_COMPLETE);
     } else {
         atfp_mp4__asalocal_closefile_cb(&asa_local->super, ASTORAGE_RESULT_COMPLETE);
     }

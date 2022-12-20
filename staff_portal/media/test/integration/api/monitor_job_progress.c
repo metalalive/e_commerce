@@ -87,6 +87,10 @@ Ensure(api_test__monitor_job_progress__ok) {
         if(num_processing > 0)
            sleep(15);
     } while(num_processing > 0);
+    json_array_foreach(_app_itest_active_upload_requests, idx, upld_req) {
+        async_job_ids_item = json_object_get(upld_req, "async_job_ids");
+        json_array_clear(async_job_ids_item);
+    }
     json_decref(jobs_flatten);
 } // end of api_test__monitor_job_progress__ok
 

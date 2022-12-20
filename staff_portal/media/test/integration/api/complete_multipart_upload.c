@@ -134,7 +134,7 @@ Ensure(api_commit_upload_req__incomplete_chunks) {
 
 
 Ensure(api_commit_upload_req__add_resources) {
-    json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 2);
+    json_t *upld_req = json_array_get(_app_itest_active_upload_requests, ITEST_UPLD_REQ__SAME_USER__IDX_1);
     assert_that(upld_req, is_not_equal_to(NULL));
     if(upld_req) {
         const char *expect_ftyp  = json_string_value(json_object_get(upld_req, "type"));
@@ -162,8 +162,8 @@ Ensure(api_commit_upload_req__resource_id_not_allowed) {
 
 
 Ensure(api_commit_upload_req__use_existing_resource_id) {
-    json_t *upld_req_0 = json_array_get(_app_itest_active_upload_requests, 4);
-    json_t *upld_req_1 = json_array_get(_app_itest_active_upload_requests, 2);
+    json_t *upld_req_0 = json_array_get(_app_itest_active_upload_requests, ITEST_UPLD_REQ__SAME_USER__IDX_2);
+    json_t *upld_req_1 = json_array_get(_app_itest_active_upload_requests, ITEST_UPLD_REQ__SAME_USER__IDX_1);
     assert_that(upld_req_0, is_not_equal_to(NULL));
     assert_that(upld_req_1, is_not_equal_to(NULL));
     if(upld_req_0 && upld_req_1) {

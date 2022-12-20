@@ -8,7 +8,10 @@
 #define  UTEST_FILE_BASEPATH   "tmp/utest"
 #define  UTEST_ASALOCAL_BASEPATH   UTEST_FILE_BASEPATH "/asalocal"
 #define  UTEST_ASADST_BASEPATH     UTEST_FILE_BASEPATH "/asadst"
-#define  UTEST_STRINGIFY(x)  #x
+#define  UTEST_USER_ID            123
+#define  UTEST_UPLD_REQ_ID        0x4a5b6c
+#define  UTEST_UPLD_REQ_ID_STR   "004a5b6c"
+#define  UTEST_ASADST_VERSION_FOLDER    "Nh"
 
 #define  DONE_FLAG_INDEX__IN_ASA_USRARG     (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define  NUM_CB_ARGS_ASAOBJ  (DONE_FLAG_INDEX__IN_ASA_USRARG + 1)
@@ -18,8 +21,7 @@ extern const atfp_ops_entry_t  atfp_ops_video_hls;
 
 static  ASA_RES_CODE utest_hls__storage_fn_close (asa_op_base_cfg_t *asaobj)
 {
-    ASA_RES_CODE  cb_result;
-    ASA_RES_CODE *cb_result_ptr = &cb_result;
+    ASA_RES_CODE  cb_result,  *cb_result_ptr = &cb_result;
     mock(asaobj, cb_result_ptr);
     {
         atfp_t *processor = (atfp_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
@@ -28,6 +30,34 @@ static  ASA_RES_CODE utest_hls__storage_fn_close (asa_op_base_cfg_t *asaobj)
     asaobj->op.close.cb(asaobj, cb_result);
     return  ASTORAGE_RESULT_ACCEPT;
 }
+
+static  ASA_RES_CODE  utest_hls__storage_fn_mkdir(asa_op_base_cfg_t *asaobj, uint8_t  allow_exists)
+{
+    ASA_RES_CODE  cb_result,  *cb_result_ptr = &cb_result;
+    mock(asaobj, allow_exists, cb_result_ptr);
+    asaobj->op.mkdir.cb(asaobj, cb_result);
+    return  ASTORAGE_RESULT_ACCEPT;
+}
+
+static ASA_RES_CODE utest_hls__storage_fn_scandir(asa_op_base_cfg_t *asaobj)
+{
+    ASA_RES_CODE  cb_result,  *cb_result_ptr = &cb_result;
+    mock(asaobj, cb_result_ptr);
+    asaobj->op.scandir.fileinfo.data = NULL; // avoid testing atfp_storage_video_remove_version 
+    asaobj->op.scandir.fileinfo.size = 0;
+    asaobj->op.scandir.fileinfo.rd_idx = 0;
+    asaobj->op.scandir.cb(asaobj, cb_result);
+    return  ASTORAGE_RESULT_ACCEPT;
+}
+
+static ASA_RES_CODE utest_hls__storage_fn_rmdir(asa_op_base_cfg_t *asaobj)
+{
+    ASA_RES_CODE  cb_result,  *cb_result_ptr = &cb_result;
+    mock(asaobj, cb_result_ptr);
+    asaobj->op.rmdir.cb(asaobj, cb_result);
+    return  ASTORAGE_RESULT_ACCEPT;
+}
+
 
 static int  utest_hls__avfilter_init (atfp_hls_t *hlsproc)
 {
@@ -118,23 +148,26 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
     atfp_asa_map_t  mock_map = {0}; \
     uint8_t done_flag = 0; \
     void  *asa_dst_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
-    asa_cfg_t  mock_storage_cfg = {.ops={.fn_close=utest_hls__storage_fn_close}}; \
+    asa_cfg_t  mock_storage_cfg = {.base_path=UTEST_ASADST_BASEPATH, .ops={.fn_mkdir=utest_hls__storage_fn_mkdir,\
+        .fn_scandir=utest_hls__storage_fn_scandir, .fn_rmdir=utest_hls__storage_fn_rmdir, \
+        .fn_close=utest_hls__storage_fn_close}}; \
     asa_op_localfs_cfg_t  mock_asa_local_srcside = { .loop=loop, \
         .super={.op={.mkdir={.path={.origin=UTEST_ASALOCAL_BASEPATH}}}} \
     }; \
     asa_op_base_cfg_t  *mock_asa_dst = calloc(1, sizeof(asa_op_base_cfg_t)); \
     *mock_asa_dst = (asa_op_base_cfg_t) { \
         .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_dst_cb_args}, \
-        .op={ \
-            .mkdir={.path={.origin=strdup(UTEST_ASADST_BASEPATH)}}, \
+        .op={ .mkdir={.path={.prefix=malloc(128), .origin=malloc(128), .curr_parent=malloc(128) }}, \
             .write={.src_max_nbytes=WR_BUF_MAX_SZ, .src=&mock_wr_buf[0]} \
         }, .storage=&mock_storage_cfg, .deinit=utest_hls__asa_dst_final_dealloc, \
     }; \
-    json_t *mock_spec = json_object(); \
-    json_t *mock_err_info = json_object(); \
+    json_t *mock_spec = json_object(), *mock_err_info = json_object(); \
+    arpc_receipt_t  mock_rpc_receipt = {0}; \
     atfp_hls_t *mock_fp = (atfp_hls_t *) atfp_ops_video_hls.ops.instantiate(); \
     mock_fp->super.data = (atfp_data_t) {.callback=utest_hls_done_usr_cb, .spec=mock_spec, \
-            .error=mock_err_info,  .storage={.handle=mock_asa_dst}, .version=strdup("Nh")  }; \
+            .error=mock_err_info,  .storage={.handle=mock_asa_dst}, .usr_id=UTEST_USER_ID, \
+            .upld_req_id=UTEST_UPLD_REQ_ID, .version=strdup(UTEST_ASADST_VERSION_FOLDER), \
+            .rpc_receipt = &mock_rpc_receipt }; \
     mock_fp->internal.op.avctx_init    = utest_hls__avctx_init; \
     mock_fp->internal.op.avfilter_init = utest_hls__avfilter_init; \
     mock_fp->internal.op.avctx_deinit  = utest_hls__avctx_deinit; \
@@ -142,11 +175,14 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
     asa_dst_cb_args[ATFP_INDEX__IN_ASA_USRARG] = mock_fp; \
     asa_dst_cb_args[ASAMAP_INDEX__IN_ASA_USRARG] = &mock_map; \
     asa_dst_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
-    const char *created_path = UTEST_ASALOCAL_BASEPATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" "Nh";
+    const char *created_path = UTEST_ASALOCAL_BASEPATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME \
+           "/" UTEST_ASADST_VERSION_FOLDER; \
+    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
 
 
 #define ATFP_HLS_TEST__INIT__TEARDOWN \
     json_decref(mock_spec); \
+    json_decref(mock_err_info); \
     rmdir(created_path); \
     rmdir(UTEST_ASALOCAL_BASEPATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME); \
     rmdir(UTEST_ASALOCAL_BASEPATH); \
@@ -155,7 +191,10 @@ static void  utest_hls_done_usr_cb(atfp_t *processor)
 
 Ensure(atfp_hls_test__init_deinit__ok) {
     ATFP_HLS_TEST__INIT__SETUP;
+    ASA_RES_CODE  expect_cb_result = ASTORAGE_RESULT_COMPLETE;
     { // init
+        expect(utest_hls__storage_fn_mkdir, when(allow_exists, is_equal_to(0)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
         atfp_ops_video_hls.ops.init(&mock_fp->super);
         assert_that(json_object_size(mock_err_info), is_equal_to(0));
         expect(utest_hls__avctx_init,    will_return(0), when(hlsproc, is_equal_to(mock_fp)));
@@ -165,25 +204,33 @@ Ensure(atfp_hls_test__init_deinit__ok) {
             uv_run(loop, UV_RUN_ONCE);
         assert_that(json_object_size(mock_err_info), is_equal_to(0));
         assert_that(access(created_path, F_OK), is_equal_to(0));
-        assert_that(mock_asa_dst->op.mkdir.path.origin, is_not_equal_to(NULL));
-        assert_that(mock_fp->asa_local.super.op.mkdir.path.origin, is_not_equal_to(NULL));
-        assert_that(mock_fp->internal.segment.fullpath._asa_local.data , is_not_equal_to(NULL));
-        assert_that(mock_fp->internal.segment.fullpath._asa_dst.data   , is_not_equal_to(NULL));
+        assert_that(mock_fp->asa_local.super.op.mkdir.path.origin, is_not_null);
+        assert_that(mock_fp->internal.segment.fullpath._asa_local.data , is_not_null);
+        assert_that(mock_fp->internal.segment.fullpath._asa_dst.data   , is_not_null);
         assert_that(mock_fp->internal.segment.fullpath._asa_local.sz , is_greater_than(0));
         assert_that(mock_fp->internal.segment.fullpath._asa_dst.sz   , is_greater_than(0));
+        assert_that(mock_fp->super.transfer.transcoded_dst.flags.version_created , is_equal_to(1));
         { // memory corruption test
-            char *buf = mock_fp->internal.segment.fullpath._asa_dst.data;
             size_t bufsz = mock_fp->internal.segment.fullpath._asa_dst.sz;
-            char *basepath = mock_asa_dst->op.mkdir.path.origin;
-            const char *filename = HLS_FMP4_FILENAME;
-            memset(buf, 0x0, sizeof(char) * bufsz);
-            strncat(buf, basepath, strlen(basepath));
-            strncat(buf, "/", 1);
-            strncat(buf, filename, strlen(filename));
+            size_t dst_path_prefix_sz = strlen(mock_asa_dst->op.mkdir.path.prefix);
+            size_t dst_path_origin_sz = strlen(mock_asa_dst->op.mkdir.path.origin);
+            assert_that(dst_path_prefix_sz, is_greater_than(0));
+            assert_that(dst_path_origin_sz, is_greater_than(0));
+            size_t nb_used = dst_path_prefix_sz + 1 + dst_path_origin_sz + 1 + sizeof(HLS_FMP4_FILENAME);
+            assert_that(bufsz, is_equal_to(nb_used));
         }
     } { // de-init
+        mock_fp->super.transfer.transcoded_dst.flags.version_exists = 1; // assume app set the flag
+        mock_fp->super.data.error = NULL;
         expect(utest_hls__avctx_deinit,  when(hlsproc, is_equal_to(mock_fp)));
-        expect(utest_hls_done_usr_cb, when(processor, is_equal_to(NULL)));
+        expect(utest_hls__storage_fn_scandir,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
+        expect(utest_hls__storage_fn_rmdir,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
+        expect(utest_hls__storage_fn_scandir,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
+        expect(utest_hls__storage_fn_rmdir,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
         uint8_t still_ongoing = atfp_ops_video_hls.ops.deinit(&mock_fp->super);
         assert_that(still_ongoing, is_equal_to(0));
     }
@@ -193,7 +240,10 @@ Ensure(atfp_hls_test__init_deinit__ok) {
 
 Ensure(atfp_hls_test__init_avctx_error) {
     ATFP_HLS_TEST__INIT__SETUP;
+    ASA_RES_CODE  expect_cb_result = ASTORAGE_RESULT_COMPLETE;
     { // init
+        expect(utest_hls__storage_fn_mkdir, when(allow_exists, is_equal_to(0)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
         atfp_ops_video_hls.ops.init(&mock_fp->super);
         assert_that(json_object_size(mock_err_info), is_equal_to(0));
         expect(utest_hls__avctx_init,    will_return(0), when(hlsproc, is_equal_to(mock_fp)));
@@ -204,8 +254,12 @@ Ensure(atfp_hls_test__init_avctx_error) {
         assert_that(json_object_size(mock_err_info), is_equal_to(1));
     } { // de-init
         json_object_clear(mock_err_info);
+        mock_fp->super.data.error = NULL;
         expect(utest_hls__avctx_deinit,  when(hlsproc, is_equal_to(mock_fp)));
-        expect(utest_hls_done_usr_cb, when(processor, is_equal_to(NULL)));
+        expect(utest_hls__storage_fn_scandir,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
+        expect(utest_hls__storage_fn_rmdir,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
         uint8_t still_ongoing = atfp_ops_video_hls.ops.deinit(&mock_fp->super);
         assert_that(still_ongoing, is_equal_to(0));
     }
@@ -215,8 +269,11 @@ Ensure(atfp_hls_test__init_avctx_error) {
 
 Ensure(atfp_hls_test__deinit_asa_close_files) {
     ATFP_HLS_TEST__INIT__SETUP;
+    ASA_RES_CODE  expect_cb_result = ASTORAGE_RESULT_COMPLETE;
     { // init
         done_flag = 0;
+        expect(utest_hls__storage_fn_mkdir, when(allow_exists, is_equal_to(0)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
         atfp_ops_video_hls.ops.init(&mock_fp->super);
         assert_that(json_object_size(mock_err_info), is_equal_to(0));
         expect(utest_hls__avctx_init,    will_return(0), when(hlsproc, is_equal_to(mock_fp)));
@@ -235,11 +292,14 @@ Ensure(atfp_hls_test__deinit_asa_close_files) {
         mock_fp->super.transfer.transcoded_dst.flags.asalocal_open  = 1;
         mock_fp->super.transfer.transcoded_dst.flags.asaremote_open = 1;
         mock_fp->super.transfer.transcoded_dst.flags.version_exists = 0;
+        mock_fp->super.data.error = NULL;
         expect(utest_hls__avctx_deinit,  when(hlsproc, is_equal_to(mock_fp)));
-        ASA_RES_CODE  expect_cb_result = ASTORAGE_RESULT_COMPLETE;
-        expect(utest_hls__storage_fn_close, will_set_contents_of_parameter(
-                    cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
-        expect(utest_hls_done_usr_cb, when(processor, is_equal_to(NULL)));
+        expect(utest_hls__storage_fn_close,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
+        expect(utest_hls__storage_fn_scandir,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
+        expect(utest_hls__storage_fn_rmdir,  when(asaobj, is_equal_to(mock_asa_dst)),
+                will_set_contents_of_parameter(cb_result_ptr, &expect_cb_result, sizeof(ASA_RES_CODE)));
         uint8_t still_ongoing = atfp_ops_video_hls.ops.deinit(&mock_fp->super);
         assert_that(still_ongoing, is_equal_to(1));
         if(still_ongoing) 
@@ -251,96 +311,6 @@ Ensure(atfp_hls_test__deinit_asa_close_files) {
     ATFP_HLS_TEST__INIT__TEARDOWN;
 } // end of atfp_hls_test__deinit_asa_close_files
 
-
-
-
-#define  ATFP_HLS_TEST__RMFILE__SETUP \
-    void  *asa_dst_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
-    uint8_t done_flag = 0; \
-    uv_loop_t *loop  = uv_default_loop(); \
-    asa_cfg_t  mock_storage_cfg = {.base_path=UTEST_FILE_BASEPATH, .ops={ \
-        .fn_scandir=app_storage_localfs_scandir,  .fn_scandir_next=app_storage_localfs_scandir_next, \
-        .fn_unlink=app_storage_localfs_unlink,    .fn_rmdir=app_storage_localfs_rmdir, \
-    }}; \
-    asa_op_localfs_cfg_t  mock_asa_dst = {.loop=loop, .super={ .storage=&mock_storage_cfg, \
-        .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asa_dst_cb_args }}};  \
-    json_t *mock_err_info = json_object();  \
-    atfp_hls_t  mock_fp = {.super = {.data = {.callback=utest_hls_done_usr_cb, .error=mock_err_info, \
-        .storage={.handle=&mock_asa_dst.super}, .version=UTEST_VERSION, .usr_id=UTEST_USER_ID, \
-        .upld_req_id=UTEST_UPLOAD_REQ_ID,}}};  \
-    asa_dst_cb_args[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp; \
-    asa_dst_cb_args[DONE_FLAG_INDEX__IN_ASA_USRARG] = &done_flag; \
-    mkdir(UTEST_FILE_BASEPATH, S_IRWXU); \
-    mkdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR, S_IRWXU); \
-    mkdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR, S_IRWXU); \
-    mkdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR "/" UTEST_TRANSCODE_STATUS, S_IRWXU); \
-    mkdir(UTEST_TARGET_PATH, S_IRWXU); \
-    int fd = open(UTEST_TARGET_PATH "/" UTEST_FILE_NAME_1, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
-    close(fd); \
-    fd = open(UTEST_TARGET_PATH "/" UTEST_FILE_NAME_2, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR); \
-    close(fd);
-
-#define  ATFP_HLS_TEST__RMFILE__TEARDOWN \
-    rmdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR "/" UTEST_TRANSCODE_STATUS); \
-    rmdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR); \
-    rmdir(UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR); \
-    rmdir(UTEST_FILE_BASEPATH); \
-    json_decref(mock_err_info); 
-
-#define  UTEST_USER_ID           426
-#define  UTEST_UPLOAD_REQ_ID     0x12345678
-#define  UTEST_VERSION          "Nh"
-#define  UTEST_TRANSCODE_STATUS     ATFP__DISCARDING_FOLDER_NAME
-#define  UTEST_USER_ID__STR         UTEST_STRINGIFY(426)
-#define  UTEST_UPLOAD_REQ_ID__STR   UTEST_STRINGIFY(12345678)
-#define  UTEST_TARGET_PATH       UTEST_FILE_BASEPATH "/" UTEST_USER_ID__STR "/" UTEST_UPLOAD_REQ_ID__STR "/"  UTEST_TRANSCODE_STATUS  "/" UTEST_VERSION
-#define  UTEST_NUM_FILES         2
-#define  UTEST_FILE_NAME_1       "segment_abc"
-#define  UTEST_FILE_NAME_2       "segment_xyz"
-Ensure(atfp_hls_test__removefile__ok) {
-    ATFP_HLS_TEST__RMFILE__SETUP;
-    {
-        atfp_hls__remove_file(&mock_fp.super, UTEST_TRANSCODE_STATUS);
-        expect(utest_hls_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
-        uv_run(loop, UV_RUN_ONCE);
-        assert_that(mock_asa_dst.super.op.scandir.fileinfo.size , is_equal_to(UTEST_NUM_FILES));
-        while(!done_flag)
-            uv_run(loop, UV_RUN_ONCE);
-        assert_that(access(UTEST_TARGET_PATH, F_OK), is_equal_to(-1));
-        assert_that(json_object_size(mock_err_info), is_equal_to(0));
-    }
-    ATFP_HLS_TEST__RMFILE__TEARDOWN;
-} // end of atfp_hls_test__removefile__ok
-
-
-Ensure(atfp_hls_test__removefile__missing_in_middle) {
-    ATFP_HLS_TEST__RMFILE__SETUP;
-    {
-        atfp_hls__remove_file(&mock_fp.super, UTEST_TRANSCODE_STATUS);
-        expect(utest_hls_done_usr_cb, when(processor, is_equal_to(&mock_fp)));
-        uv_run(loop, UV_RUN_ONCE);
-        assert_that(mock_asa_dst.super.op.scandir.fileinfo.size, is_equal_to(UTEST_NUM_FILES));
-        assert_that(mock_asa_dst.super.op.scandir.fileinfo.rd_idx, is_less_than(UTEST_NUM_FILES));
-        unlink(UTEST_TARGET_PATH "/" UTEST_FILE_NAME_1);
-        unlink(UTEST_TARGET_PATH "/" UTEST_FILE_NAME_2);
-        while(!done_flag)
-            uv_run(loop, UV_RUN_ONCE);
-        assert_that(access(UTEST_TARGET_PATH, F_OK), is_equal_to(0));
-        assert_that(json_object_size(mock_err_info), is_greater_than(0));
-        rmdir(UTEST_TARGET_PATH);
-    }
-    ATFP_HLS_TEST__RMFILE__TEARDOWN;
-} // end of atfp_hls_test__removefile__missing_in_middle
-#undef  UTEST_NUM_FILES  
-#undef  UTEST_FILE_NAME_1
-#undef  UTEST_FILE_NAME_2
-#undef  UTEST_TARGET_PATH   
-#undef  UTEST_UPLOAD_REQ_ID__STR
-#undef  UTEST_USER_ID__STR
-#undef  UTEST_USER_ID
-#undef  UTEST_UPLOAD_REQ_ID
-#undef  UTEST_VERSION
-#undef  UTEST_TRANSCODE_STATUS
 
 
 #define ATFP_HLS_TEST__PROCESS_FRAME__SETUP \
@@ -541,8 +511,6 @@ TestSuite *app_transcoder_hls_init_tests(void)
     add_test(suite, atfp_hls_test__init_deinit__ok);
     add_test(suite, atfp_hls_test__init_avctx_error);
     add_test(suite, atfp_hls_test__deinit_asa_close_files);
-    add_test(suite, atfp_hls_test__removefile__ok);
-    add_test(suite, atfp_hls_test__removefile__missing_in_middle);
     add_test(suite, atfp_hls_test__process__filter_encode_frames);
     add_test(suite, atfp_hls_test__process__filter_encode_error);
     add_test(suite, atfp_hls_test__process__flush_filter);

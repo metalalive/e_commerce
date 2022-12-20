@@ -75,6 +75,8 @@ static int  atfp__format_segment_fullpath(char *out, size_t out_sz, const char *
         strncat(out, &seg_num_str[0], max_num_digits);
     } else {
         ret = 3; // insufficient memory space
+        fprintf(stderr, "[transcoder][segment] line:%d, sz_required:%ld, out_sz:%ld \n",
+                __LINE__, sz_required, out_sz);
     }
     return  ret;
 } // end of atfp__format_segment_fullpath
@@ -100,6 +102,21 @@ static void   _atfp__transfer_basic_setup(
     asa_local->super.op.read.dst_sz = srcbuf_max_nbytes;
 }
 
+
+#define  ASA_DST__COPY_PATH_PREFIX(_seg_cfg, __asa_dst) \
+    char *_segf_fullpath_asa_dst_ptr  = _seg_cfg->fullpath._asa_dst.data; \
+    size_t  _segf_fullpath_asa_dst_sz = _seg_cfg->fullpath._asa_dst.sz; \
+    if(__asa_dst->op.mkdir.path.prefix) { \
+        size_t  asa_dst_path_prefix_sz = strlen(__asa_dst->op.mkdir.path.prefix); \
+        if(asa_dst_path_prefix_sz > 0) { \
+            memset(_segf_fullpath_asa_dst_ptr, 0x0, sizeof(char) * _segf_fullpath_asa_dst_sz); \
+            strncat(_segf_fullpath_asa_dst_ptr, __asa_dst->op.mkdir.path.prefix, asa_dst_path_prefix_sz); \
+            strncat(_segf_fullpath_asa_dst_ptr, "/", 1); \
+            _segf_fullpath_asa_dst_ptr += asa_dst_path_prefix_sz + 1; \
+            _segf_fullpath_asa_dst_sz  -= asa_dst_path_prefix_sz + 1; \
+        } \
+    }
+
 ASA_RES_CODE  atfp__segment_start_transfer(
         asa_op_base_cfg_t     *asa_dst,
         asa_op_localfs_cfg_t  *asa_local,
@@ -112,8 +129,9 @@ ASA_RES_CODE  atfp__segment_start_transfer(
             !asa_local->super.op.open.cb) {
         goto done;
     }
-    int ret1 = atfp__format_segment_fullpath( seg_cfg->fullpath._asa_dst.data,
-            seg_cfg->fullpath._asa_dst.sz,  asa_dst->op.mkdir.path.origin, seg_cfg, chosen_idx);
+    ASA_DST__COPY_PATH_PREFIX(seg_cfg, asa_dst)
+    int ret1 = atfp__format_segment_fullpath( _segf_fullpath_asa_dst_ptr, _segf_fullpath_asa_dst_sz,
+             asa_dst->op.mkdir.path.origin, seg_cfg, chosen_idx);
     int ret2 = atfp__format_segment_fullpath( seg_cfg->fullpath._asa_local.data,
             seg_cfg->fullpath._asa_local.sz,  asa_local->super.op.mkdir.path.origin, seg_cfg, chosen_idx);
     if(!ret1 && !ret2) {
@@ -140,8 +158,9 @@ ASA_RES_CODE  atfp__file_start_transfer(
     } else if(!asa_dst->op.open.cb || !asa_local->super.op.open.cb) {
         goto done;
     }
-    int ret1 = atfp__format_file_fullpath( seg_cfg->fullpath._asa_dst.data,
-            seg_cfg->fullpath._asa_dst.sz,  asa_dst->op.mkdir.path.origin, filename);
+    ASA_DST__COPY_PATH_PREFIX(seg_cfg, asa_dst)
+    int ret1 = atfp__format_file_fullpath( _segf_fullpath_asa_dst_ptr, _segf_fullpath_asa_dst_sz,
+            asa_dst->op.mkdir.path.origin, filename);
     int ret2 = atfp__format_file_fullpath( seg_cfg->fullpath._asa_local.data,
             seg_cfg->fullpath._asa_local.sz,  asa_local->super.op.mkdir.path.origin, filename);
     if(!ret1 && !ret2) {
@@ -213,16 +232,20 @@ void atfp__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_cfg,
 {
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     asa_op_base_cfg_t *_asa_local = asaobj;
-    int err = 1;
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_init(seg_cfg);
         processor->transfer.transcoded_dst.flags.asaremote_open = 1;
         result = _asa_local->storage->ops.fn_read(_asa_local);
-        err = result != ASTORAGE_RESULT_ACCEPT;
-    }
-    if(err) {
+        if(result != ASTORAGE_RESULT_ACCEPT) {
+            json_object_set_new(processor->data.error, "storage",
+                    json_string("failed to send read op in local segment file"));
+            processor -> data.callback(processor);
+        }
+    } else {
         json_object_set_new(processor->data.error, "storage",
                 json_string("failed to open segment file on destination side for transfer"));
+        fprintf(stderr, "[transcoder][segment] line:%d, job_id:%s, result:%d \n",
+               __LINE__, processor->data.rpc_receipt->job_id.bytes, result);
         processor -> data.callback(processor);
     }
 } // end of atfp__open_dst_seg__cb

@@ -222,6 +222,7 @@ SET(APP_TRANSCODER_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
     src/transcoder/segment.c
     src/transcoder/storage.c
+    src/transcoder/video/storage.c
     src/transcoder/video/metadata.c 
     src/transcoder/video/hls/init.c 
     src/transcoder/video/hls/deinit.c 
@@ -315,6 +316,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/crypto.c
     test/unit/transcoder/storage.c
     test/unit/transcoder/validation.c
+    test/unit/transcoder/video/storage.c
     test/unit/transcoder/video/mp4/init.c
     test/unit/transcoder/video/mp4/preload.c
     test/unit/transcoder/video/mp4/avcontext.c
@@ -403,6 +405,7 @@ SET(RPC_CONSUMER_DEV_LIBRARIES
     ${AVUTIL_LIBRARIES}
     ${AVFILTER_LIBRARIES}
     ${AVDEVICE_LIBRARIES}
+    ${LIBUUID_LIBRARIES}
     ${APP_COMMON_LIBRARIES})
 
 SET(APP_UNIT_TEST_LIBRARIES ${APP_COMMON_LIBRARIES})

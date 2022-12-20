@@ -1,0 +1,52 @@
+{
+    "elementary_streams":{
+        "video-stream0": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 136,
+                "width_pixel": 190,
+                "framerate": 13
+            }
+        },
+        "video-stream1": {
+            "type": "video",
+            "codec": "libx265",
+            "attribute":{
+                "height_pixel": 150,
+                "width_pixel": 200,
+                "framerate": 18
+            }
+        },
+        "video-stream2": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 180,
+                "width_pixel": 240,
+                "framerate": 17
+            }
+        },
+        "audio-stream0": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 44 }
+        },
+        "audio-stream1": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 47 }
+        }
+    },
+    "resource_id": "iE938eu3",
+    "outputs":{
+        "sb": {
+            "container": "hls",
+            "elementary_streams": ["video-stream0", "audio-stream1"]
+        },
+        "mS": {
+            "container": "hls",
+            "elementary_streams": ["video-stream1", "audio-stream0"]
+        }
+    }
+}

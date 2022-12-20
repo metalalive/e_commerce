@@ -425,8 +425,8 @@ int  atfp_mp4__av_decode_packet(atfp_av_ctx_t *avctx)
         }
     }
     if(ret < 0) {
-        av_log(NULL, AV_LOG_ERROR, "Failed to send packet to decoder, pos: 0x%08x size:%d \n",
-                (uint32_t)pkt->pos, pkt->size);        
+        av_log(NULL, AV_LOG_ERROR, "[transcoder][mp4][avctx] line:%d, Failed to send packet to"
+                " decoder, pos: 0x%08x size:%d \n", __LINE__, (uint32_t)pkt->pos, pkt->size);        
     } else if(ret == 1) {
         // skipped, new input data required
     } else {

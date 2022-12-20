@@ -4,7 +4,7 @@
             "type": "video",
             "codec": "libx264",
             "attribute":{
-                "height_pixel": 125,
+                "height_pixel": 128,
                 "width_pixel": 170,
                 "framerate": 24
             }
@@ -13,7 +13,7 @@
             "type": "video",
             "codec": "libx264",
             "attribute":{
-                "height_pixel": 105,
+                "height_pixel": 102,
                 "width_pixel": 150,
                 "framerate": 13
             }

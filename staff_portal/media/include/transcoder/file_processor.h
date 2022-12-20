@@ -94,7 +94,8 @@ typedef struct atfp_s {
             struct { // for transfer transcoded files from local to destination storage
                 uint8_t  asalocal_open:1;
                 uint8_t  asaremote_open:1;
-                uint8_t  version_exists:1;
+                uint8_t  version_exists:1; // TODO:rename to `version_metadata_exists`
+                uint8_t  version_created:1;
             }  flags;
         } transcoded_dst; // TODO, add new field of type `atfp_segment_t`
     } transfer;

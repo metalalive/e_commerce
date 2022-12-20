@@ -140,10 +140,11 @@ static void  _api__start_transcoding_test__accepted_common(const char *req_body_
 {
     json_error_t jerror = {0};
     json_t *req_body_template = json_load_file(req_body_template_filepath, (size_t)0, &jerror);
-    if(jerror.line >= 0 || jerror.column >= 0) {
-        assert_that(1, is_equal_to(0));
+    assert_that(req_body_template, is_not_null);
+    assert_that((jerror.line >= 0), is_equal_to(0));
+    assert_that((jerror.column >= 0), is_equal_to(0));
+    if(jerror.line >= 0 || jerror.column >= 0)
         return;
-    }
     char *req_body_raw = NULL;
     json_object_set(req_body_template, "resource_id", resource_id_item);
     size_t MAX_BYTES_REQ_BODY = json_dumpb(req_body_template, NULL, 0, 0);
@@ -173,7 +174,8 @@ static void  _api__start_transcoding_test__accepted_common(const char *req_body_
 } // end of _api__start_transcoding_test__accepted_common
 
 
-Ensure(api__start_transcoding_test__accepted) {
+Ensure(api__start_transcoding_test__accepted)
+{
     json_t *upld_req = NULL, *resource_id_item = NULL;
     // subcase #1 : normal case
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
@@ -181,38 +183,40 @@ Ensure(api__start_transcoding_test__accepted) {
 #define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_1.json"
         _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
                 resource_id_item,  itest_verify__job_progress_update_ok);
-        // subcase #2 : send another async job with the same resource and the same version,
+        // subcase #2 : send another async job with the same resource and the same versions,
         // the RPC consumer should reject the later-coming job
         sleep(1);
         _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
                 resource_id_item,  itest_verify__job_terminated_conflict);
 #undef  REQ_BODY_TEMPLATE_FILEPATH
     } else {
-        fprintf(stderr, "[itest] missing mp4 video in api__start_transcoding_test__accepted");
+        fprintf(stderr, "[itest][api][start_transcode] line:%d, missing mp4 video", __LINE__);
     }
     // subcase #3 : current only mp4 is supported. Try transcoding unsupported video,
     // rpc consumer will report error
-    sleep(10);
+    sleep(3);
     _available_resource_lookup(&upld_req, &resource_id_item, "avi");
     if(resource_id_item) {
 #define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_2.json"
         _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
                 resource_id_item,  itest_verify__job_terminated_unsupported_format);
 #undef  REQ_BODY_TEMPLATE_FILEPATH
+         sleep(3);
     } else {
-        fprintf(stderr, "[itest] missing avi video in api__start_transcoding_test__accepted");
+        fprintf(stderr, "[itest][api][start_transcode] line:%d, missing avi video", __LINE__);
     }
-    // subcase #4 : try transcoding another different mp4 video
-    do {
+#if  1
+    do {  // subcase #4 : try transcoding other different mp4 videos
         _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
         if(upld_req && resource_id_item) {
 #define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_3.json"
-            sleep(15);
+            sleep(13);
             _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
                     resource_id_item,  itest_verify__job_progress_update_ok);
 #undef  REQ_BODY_TEMPLATE_FILEPATH
         }
     } while (upld_req && resource_id_item);
+#endif
     //  subcase #5 : transcoding corrupted mp4 (TODO)
     {
         //// app_cfg_t *acfg = app_get_global_cfg();
@@ -223,6 +227,22 @@ Ensure(api__start_transcoding_test__accepted) {
         //// run_client_request(&setup_data, test_verify__complete_multipart_upload, NULL);
     }
 } // end of  api__start_transcoding_test__accepted
+
+
+Ensure(api__start_transcoding_test__overwrite_existing)
+{
+    json_t *upld_req = NULL, *resource_id_item = NULL;
+    // subcase #1 : normal case
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+    if(resource_id_item) {
+#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_1_overwrite_version.json"
+        _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
+                resource_id_item,  itest_verify__job_progress_update_ok);
+#undef  REQ_BODY_TEMPLATE_FILEPATH
+    } else {
+        fprintf(stderr, "[itest][api][start_transcode] line:%d, missing mp4 video", __LINE__);
+    }
+} // end of api__start_transcoding_test__overwrite_existing
 
 
 Ensure(api__start_transcoding_test__invalid_body) {
@@ -475,5 +495,12 @@ TestSuite *api_start_transcoding_file_tests(void)
     add_test(suite, api__start_transcoding_test__invalid_output);
     add_test(suite, api__start_transcoding_test__permission_denied);
     add_test(suite, api__start_transcoding_test__accepted);
+    return suite;
+}
+
+TestSuite *api_start_transcoding_file_v2_tests(void)
+{
+    TestSuite *suite = create_test_suite();
+    add_test(suite, api__start_transcoding_test__overwrite_existing);
     return suite;
 }

@@ -1,9 +1,9 @@
 #include <cgreen/mocks.h>
 #include <uuid/uuid.h>
 
-void uuid_generate_random(uuid_t out)
-{ mock(out); }
+void uuid_generate_random(uuid_t uuo)
+{ mock(uuo); }
 
-void uuid_unparse(const uuid_t uu, char *out)
-{ mock(uu, out); }
+void uuid_unparse(const uuid_t uuo, char *out)
+{ mock(uuo, out); }
 

@@ -75,8 +75,6 @@ void     atfp__video_hls__init_transcode(atfp_t *);
 void     atfp__video_hls__proceeding_transcode(atfp_t *);
 uint8_t  atfp__video_hls__has_done_processing(atfp_t *);
 uint8_t  atfp__video_hls__deinit_transcode(atfp_t *);
-void     atfp_hls__remove_file(atfp_t *, const char *status);
-
 
 // internal
 int   atfp_hls__av_init(atfp_hls_t *);

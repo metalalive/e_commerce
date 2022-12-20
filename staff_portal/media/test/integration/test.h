@@ -13,6 +13,10 @@ typedef struct {
     const char *exe_path;
 } test_init_app_data_t;
 
+#define  ITEST_NUM_UPLD_REQS__FOR_ERR_CHK   2
+#define  ITEST_UPLD_REQ__SAME_USER__IDX_1   (ITEST_NUM_UPLD_REQS__FOR_ERR_CHK + 0)
+#define  ITEST_UPLD_REQ__SAME_USER__IDX_2   (ITEST_NUM_UPLD_REQS__FOR_ERR_CHK + 2)
+
 typedef struct {
     const char  *url;
     const char  *method;
@@ -52,11 +56,12 @@ void api_test_common_permission_check_fail(test_setup_pub_t *setup_data);
 void run_client_request(test_setup_pub_t *pubdata, test_verify_cb_t verify_cb, void *cb_arg);
 
 // declare & implementation in test/integration/api/xxxx.c
-TestSuite *api_initiate_multipart_upload_tests(void);
+TestSuite *api_initiate_multipart_upload_tests(json_t *root_cfg);
 TestSuite *api_upload_part_tests(json_t *root_cfg);
 TestSuite *api_complete_multipart_upload_tests(void);
 TestSuite *api_file_acl_tests(void);
 TestSuite *api_start_transcoding_file_tests(void);
+TestSuite *api_start_transcoding_file_v2_tests(void);
 TestSuite *api_monitor_job_progress_tests(void);
 TestSuite *api_file_streaming_init_tests(void);
 TestSuite *api_file_stream_seek_elm_tests(void);

@@ -1,3 +1,4 @@
+#include <uuid/uuid.h>
 #include <cgreen/cgreen.h>
 #include <cgreen/unit.h>
 #include <cgreen/mocks.h>
@@ -8,7 +9,8 @@
 
 #define  UTEST_FILE_BASEPATH   "tmp/utest"
 #define  UTEST_ASALOCAL_BASEPATH    UTEST_FILE_BASEPATH "/asalocal"
-#define  UTEST_LOCAL_TMPBUF         UTEST_ASALOCAL_BASEPATH "/local_buffer"
+#define  UTEST_LOCAL_BUF_FNAME_POSTFIX    "a123-498bc9-0911e4f"
+#define  UTEST_LOCAL_TMPBUF         UTEST_ASALOCAL_BASEPATH "/local_buffer"  "-"  UTEST_LOCAL_BUF_FNAME_POSTFIX
 #define  UTEST_ASAREMOTE_BASEPATH   UTEST_FILE_BASEPATH "/asaremote"
 #define  UTEST_REMOTE_FINAL_FILE    UTEST_ASAREMOTE_BASEPATH  "/fchunk_final"
 
@@ -112,9 +114,11 @@ static  ASA_RES_CODE  utest_atfp_mockops_preload(atfp_mp4_t *mp4proc, size_t nby
 static void  utest_atfp_mockops_monitor_progress(atfp_av_ctx_t *avctx, arpc_receipt_t  *receipt)
 { mock(avctx, receipt); }
 
+
 #define  UTEST_ATFP_MP4__INIT_SETUP \
     uv_loop_t *loop  = uv_default_loop(); \
     atfp_asa_map_t  *mock_map = atfp_asa_map_init(1); \
+    char local_buf_fname_postfix[] = UTEST_LOCAL_BUF_FNAME_POSTFIX; \
     uint8_t done_flag = 0; \
     void  *asasrc_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     void  *asalocal_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
@@ -133,6 +137,7 @@ static void  utest_atfp_mockops_monitor_progress(atfp_av_ctx_t *avctx, arpc_rece
             .op={.mkdir={.path={.origin=strdup(UTEST_ASALOCAL_BASEPATH)}}}, \
     }}; \
     json_t *mock_errinfo = json_object(); \
+    arpc_receipt_t  mock_rpc_receipt = {0}; \
     atfp_mp4_t *mock_fp = (atfp_mp4_t *) atfp_ops_video_mp4.ops.instantiate(); \
     mock_fp->internal.op.av_init   = utest_mp4__av_init; \
     mock_fp->internal.op.av_deinit = utest_mp4__av_deinit; \
@@ -141,6 +146,7 @@ static void  utest_atfp_mockops_monitor_progress(atfp_av_ctx_t *avctx, arpc_rece
     mock_fp->internal.op.preload_info = utest_mp4__preload_info ; \
     mock_fp->super.data.callback = utest_atfp_usr_cb ; \
     mock_fp->super.data.error = mock_errinfo ; \
+    mock_fp->super.data.rpc_receipt = &mock_rpc_receipt; \
     mock_fp->super.data.storage.handle = &mock_asa_src->super; \
     atfp_asa_map_set_source(mock_map, &mock_asa_src->super); \
     atfp_asa_map_set_localtmp(mock_map, mock_asa_local); \
@@ -163,6 +169,9 @@ static void  utest_atfp_mockops_monitor_progress(atfp_av_ctx_t *avctx, arpc_rece
 Ensure(atfp_mp4_test__init_deinit__ok) {
     UTEST_ATFP_MP4__INIT_SETUP
     { // init
+        expect(uuid_generate_random, when(uuo, is_not_null));
+        expect(uuid_unparse, when(uuo, is_not_null),  will_set_contents_of_parameter(
+                    out, &local_buf_fname_postfix[0], sizeof(char) * strlen(&local_buf_fname_postfix[0]))  );
         atfp_ops_video_mp4.ops.init(&mock_fp->super);
         assert_that(json_object_size(mock_errinfo), is_equal_to(0));
         expect(utest_mp4__preload_info, will_return(ASTORAGE_RESULT_ACCEPT));
@@ -193,6 +202,9 @@ Ensure(atfp_mp4_test__init_deinit__ok) {
 Ensure(atfp_mp4_test__init_preload_error) {
     UTEST_ATFP_MP4__INIT_SETUP
     { // init
+        expect(uuid_generate_random, when(uuo, is_not_null));
+        expect(uuid_unparse, when(uuo, is_not_null),  will_set_contents_of_parameter(
+                    out, &local_buf_fname_postfix[0], sizeof(char) * strlen(&local_buf_fname_postfix[0]))  );
         atfp_ops_video_mp4.ops.init(&mock_fp->super);
         assert_that(json_object_size(mock_errinfo), is_equal_to(0));
         expect(utest_mp4__preload_info, will_return(ASTORAGE_RESULT_OS_ERROR));
@@ -217,6 +229,9 @@ Ensure(atfp_mp4_test__init_preload_error) {
 Ensure(atfp_mp4_test__init_avctx_error) {
     UTEST_ATFP_MP4__INIT_SETUP
     { // init
+        expect(uuid_generate_random, when(uuo, is_not_null));
+        expect(uuid_unparse, when(uuo, is_not_null),  will_set_contents_of_parameter(
+                    out, &local_buf_fname_postfix[0], sizeof(char) * strlen(&local_buf_fname_postfix[0]))  );
         atfp_ops_video_mp4.ops.init(&mock_fp->super);
         assert_that(json_object_size(mock_errinfo), is_equal_to(0));
         expect(utest_mp4__preload_info, will_return(ASTORAGE_RESULT_ACCEPT));
@@ -242,6 +257,9 @@ Ensure(atfp_mp4_test__init_avctx_error) {
 Ensure(atfp_mp4_test__init_avctx_validation_failure) {
     UTEST_ATFP_MP4__INIT_SETUP
     { // init
+        expect(uuid_generate_random, when(uuo, is_not_null));
+        expect(uuid_unparse, when(uuo, is_not_null),  will_set_contents_of_parameter(
+                    out, &local_buf_fname_postfix[0], sizeof(char) * strlen(&local_buf_fname_postfix[0]))  );
         atfp_ops_video_mp4.ops.init(&mock_fp->super);
         assert_that(json_object_size(mock_errinfo), is_equal_to(0));
         expect(utest_mp4__preload_info, will_return(ASTORAGE_RESULT_ACCEPT));

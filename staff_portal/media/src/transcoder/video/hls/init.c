@@ -12,7 +12,7 @@ atfp_t  *atfp__video_hls__instantiate_transcoder(void)
     if(out) {
         atfp_hls_t *hlsproc = (atfp_hls_t *)out;
         out->transfer.transcoded_dst.update_metadata = atfp_video__dst_update_metadata;
-        out->transfer.transcoded_dst.remove_file = atfp_hls__remove_file;
+        out->transfer.transcoded_dst.remove_file = atfp_storage_video_remove_version;
         hlsproc->internal.op.avctx_init   = atfp_hls__av_init;
         hlsproc->internal.op.avctx_deinit = atfp_hls__av_deinit;
         hlsproc->internal.op.avfilter_init = atfp_hls__avfilter_init;
@@ -42,23 +42,23 @@ static void atfp_hls__create_local_workfolder_cb (asa_op_base_cfg_t *asaobj, ASA
 } // end of atfp_hls__create_local_workfolder_cb
 
 
-void  atfp__video_hls__init_transcode(atfp_t *processor)
+static void  _atfp__hls_init__dst_version_folder_cb (asa_op_base_cfg_t *asa_dst, ASA_RES_CODE result)
 {
-    atfp_hls_t *hlsproc = (atfp_hls_t *)processor;
-    asa_op_base_cfg_t *asa_dst = processor -> data.storage.handle;
+    atfp_hls_t  *hlsproc = (atfp_hls_t *) asa_dst->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp_t *processor = &hlsproc -> super;
+    if(result != ASTORAGE_RESULT_COMPLETE) {
+        fprintf(stderr, "[transcoder][hls][init] line:%d, job_id:%s, result:%d \n",
+                __LINE__, processor->data.rpc_receipt->job_id.bytes, result);
+        json_object_set_new(processor->data.error, "storage",
+                json_string("[hls] failed to create version folder at remote storage"));
+        processor->data.callback(processor);
+        return;
+    }
+    processor->transfer.transcoded_dst.flags.version_created = 1;
     atfp_asa_map_t *_map = (atfp_asa_map_t *)asa_dst->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t  *asa_local_srcdata =  atfp_asa_map_get_localtmp(_map);
     asa_op_localfs_cfg_t  *asa_local_dstdata = &hlsproc->asa_local;
-    if(asa_dst->op.write.src_max_nbytes == 0 || !asa_dst->op.write.src) {
-        json_object_set_new(processor->data.error, "storage", json_string("[hls] no write buffer provided in asaobj"));
-        processor -> data.callback(processor);
-        return;
-    } else if (processor->transfer.transcoded_dst.flags.asalocal_open ||
-            processor->transfer.transcoded_dst.flags.asaremote_open) {
-        json_object_set_new(processor->data.error, "transcoder", json_string("[hls] asaobj is not cleaned"));
-        processor -> data.callback(processor);
-        return;
-    } {
+    {
         void **cb_args_entries = calloc(NUM_USRARGS_HLS_ASA_LOCAL, sizeof(void *));
         cb_args_entries[ATFP_INDEX__IN_ASA_USRARG]   = (void *) processor;
         cb_args_entries[ASAMAP_INDEX__IN_ASA_USRARG] = (void *) _map;
@@ -86,7 +86,8 @@ void  atfp__video_hls__init_transcode(atfp_t *processor)
         filename_max_sz = MAX(filename_max_sz, mst_playlist_name_sz);
         filename_max_sz = MAX(filename_max_sz, segment_name_sz) + 2; // extra slash char, and NUL-terminated char
         size_t fullpath_sz_local = strlen(asa_local_dstdata->super.op.mkdir.path.origin) + filename_max_sz;
-        size_t fullpath_sz_dst   = strlen(asa_dst->op.mkdir.path.origin) + filename_max_sz;
+        size_t fullpath_sz_dst   = strlen(asa_dst->op.mkdir.path.prefix) + 1 + 
+            strlen(asa_dst->op.mkdir.path.origin) + filename_max_sz;
         char  *asa_dst_fullpath_buf = calloc(fullpath_sz_dst, sizeof(char));
         char  *asa_local_fullpath_buf = calloc(fullpath_sz_local, sizeof(char));
         hlsproc->internal.segment = (atfp_segment_t) {
@@ -112,11 +113,30 @@ void  atfp__video_hls__init_transcode(atfp_t *processor)
         asa_local_dstdata->super.op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
         asa_local_dstdata->super.op.mkdir.cb = atfp_hls__create_local_workfolder_cb;
     }
-    ASA_RES_CODE  asa_result = app_storage_localfs_mkdir(&asa_local_dstdata->super, 1);
-    if(asa_result != ASTORAGE_RESULT_ACCEPT) {
+    result = app_storage_localfs_mkdir(&asa_local_dstdata->super, 1);
+    if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(processor->data.error, "storage",
                 json_string("[hls] failed to issue create-folder operation for internal local tmp buf"));
         processor -> data.callback(processor);
+    }
+} // end of _atfp__hls_init__dst_version_folder_cb
+
+
+void  atfp__video_hls__init_transcode(atfp_t *processor)
+{
+    asa_op_base_cfg_t *asa_dst = processor -> data.storage.handle;
+    if(asa_dst->op.write.src_max_nbytes == 0 || !asa_dst->op.write.src) {
+        json_object_set_new(processor->data.error, "storage", json_string("[hls] no write buffer provided in asaobj"));
+    } else if (processor->transfer.transcoded_dst.flags.asalocal_open ||
+            processor->transfer.transcoded_dst.flags.asaremote_open) {
+        json_object_set_new(processor->data.error, "transcoder", json_string("[hls] asaobj is not cleaned"));
+    } else {
+        atfp_storage_video_create_version(processor, _atfp__hls_init__dst_version_folder_cb);
+    }
+    if(json_object_size(processor->data.error) > 0) {
+        processor -> data.callback(processor);
+        fprintf(stderr, "[transcoder][hls][init] line:%d, job_id:%s, avinput or validation error \n",
+                __LINE__, processor->data.rpc_receipt->job_id.bytes);
     }
 } // end of atfp__video_hls__init_transcode
 

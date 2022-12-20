@@ -3,6 +3,8 @@
 
 json_t  *_app_itest_active_upload_requests = NULL;
 
+static int _itest_num_original_files = 0;
+
 static void test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
 {
     CURLcode res;
@@ -53,14 +55,17 @@ static void test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_p
 
 
 Ensure(api_test_initiate_multipart_upload_ok) {
-#define  NUM_USERS  7
     char url[128] = {0};
-    size_t idx = 0;
+    size_t idx = 0, NUM_USERS = ITEST_NUM_UPLD_REQS__FOR_ERR_CHK + _itest_num_original_files;
     // the resource id client wants to claim, server may return auth failure if the user doesn't
     //  have access to modify the resource pointed by this ID
     sprintf(&url[0], "https://%s:%d%s", "localhost", 8010, "/upload/multipart/initiate");
     const char *codename_list[3] = {"upload_files", "edit_file_access_control", NULL};
-    uint32_t usr_prof_ids[NUM_USERS] = {125, 127, 128, 130, 128, 137, 139};
+    uint32_t *usr_prof_ids = malloc(NUM_USERS * sizeof(uint32_t));
+    for(idx = 0; idx < NUM_USERS; idx++)
+        usr_prof_ids[idx] = 125 + idx;
+    // assume a user sent multiple upload requests
+    usr_prof_ids[ITEST_UPLD_REQ__SAME_USER__IDX_2] = usr_prof_ids[ITEST_UPLD_REQ__SAME_USER__IDX_1];
     json_t *header_kv_serials = json_array();
     json_t *quota = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
@@ -75,8 +80,7 @@ Ensure(api_test_initiate_multipart_upload_ok) {
         run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
         sleep(1); // then clean previous auth token and create new one
         json_array_remove(header_kv_serials, (json_array_size(header_kv_serials) - 1));
-    }
-    {
+    } { // subcase : number of initiated updaate requests exceeded
         add_auth_token_to_http_header(header_kv_serials, usr_prof_ids[NUM_USERS - 1], codename_list, quota);
         setup_data.expect_resp_code = 201;
         for(idx = 0; idx < MAX_NUM_ACTIVE_UPLOAD_REQUESTS; idx++) {
@@ -85,13 +89,12 @@ Ensure(api_test_initiate_multipart_upload_ok) {
         } // app server does NOT allow users to send several valid requests in one second
         setup_data.expect_resp_code = 400;
         sleep(1);
-        for(idx = 0; idx < 6; idx++) {
+        for(idx = 0; idx < 6; idx++)
             run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
-        }
     }
     json_decref(header_kv_serials);
     json_decref(quota);
-#undef NUM_USERS
+    free(usr_prof_ids);
 } // end of api_test_initiate_multipart_upload_ok
 
 
@@ -133,15 +136,27 @@ Ensure(api_test_initiate_multipart_upload_insufficient_permission) {
 } // end of api_test_initiate_multipart_upload_insufficient_permission
 
 
-TestSuite *api_initiate_multipart_upload_tests(void)
+TestSuite *api_initiate_multipart_upload_tests(json_t *root_cfg)
 {
+    json_t  *fchunk_cfg = json_object_get(json_object_get(root_cfg, "test"), "file_chunk");
+    json_t  *file_list = json_object_get(fchunk_cfg, "files");
+    if(file_list && json_is_array(file_list)) {
+        _itest_num_original_files = json_array_size(file_list);
+        int required = ITEST_UPLD_REQ__SAME_USER__IDX_2 - ITEST_NUM_UPLD_REQS__FOR_ERR_CHK + 1;
+        if(_itest_num_original_files < required)
+            fprintf(stderr, "[itest][api][init_upld_req] line:%d, required:%d, _itest_num_original_files:%d \n",
+                    __LINE__, required, _itest_num_original_files);
+    } else {
+        fprintf(stderr, "[itest][api][init_upld_req] line:%d, no test file list in config object \n",
+                __LINE__);
+    }
     _app_itest_active_upload_requests = json_array();
     TestSuite *suite = create_test_suite();
     add_test(suite, api_test_initiate_multipart_upload_auth_token_fail);
     add_test(suite, api_test_initiate_multipart_upload_insufficient_permission);
     add_test(suite, api_test_initiate_multipart_upload_ok);
     return suite;
-}
+} // end of  api_initiate_multipart_upload_tests
 
 void api_deinitiate_multipart_upload_tests(void) {
     if(_app_itest_active_upload_requests) {

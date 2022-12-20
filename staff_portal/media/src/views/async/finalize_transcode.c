@@ -92,9 +92,8 @@ static void api_rpc_transcode__update_metadata_done(struct atfp_s *processor)
     asa_op_base_cfg_t *asa_dst = processor->data.storage.handle;
     atfp_asa_map_t   *map = asa_dst->cb_args.entries[ASA_USRARG_INDEX__ASAOBJ_MAP];
     atfp_asa_map_dst_stop_working(map, asa_dst);
-    if(!atfp_asa_map_all_dst_stopped(map)) {
+    if(!atfp_asa_map_all_dst_stopped(map))
         return;
-    }
     asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(map);
     arpc_receipt_t  *receipt = asa_src->cb_args.entries[ASA_USRARG_INDEX__RPC_RECEIPT];
     json_t *err_info = asa_src->cb_args.entries[ASA_USRARG_INDEX__ERROR_INFO];
