@@ -43,7 +43,7 @@ static void atfp_mp4__preload_stream_info__done(atfp_mp4_t *mp4proc)
     if(json_object_size(err_info) == 0) {
         ASA_RES_CODE result = mp4proc->internal.op.av_init(mp4proc, atfp_mp4__avinput_init_done_cb);
         if(result != ASTORAGE_RESULT_ACCEPT) {
-            json_object_set_new(err_info, "libav", json_string("[mp4] failed to init avformat context"));
+            json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to init avformat context"));
             fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, result:%d \n",
                   __LINE__, processor->data.rpc_receipt->job_id.bytes, result);
         }

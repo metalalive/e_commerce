@@ -181,7 +181,7 @@
                 "audio":["aac"]
             },
             "video": {
-                "pixels": [[720, 540], [480, 360], [400, 300], [360, 270], [320, 240], [240, 180], [200, 150], [190,136], [170,128], [160, 120], [156, 90], [150, 102]],
+                "pixels": [[720, 540], [480, 360], [400, 300], [360, 270], [320, 240], [240, 180], [237, 140], [200, 150], [190,136], [170,128], [160, 120], [156, 90], [150, 102]],
                 "fps": [35,30,28,27,25,24,22,21,20,18,17,16,15,13,11]
             },
             "audio": {
@@ -206,7 +206,11 @@
                 {"type":"video", "subtype":"mp4", "dst_pattern":"video4/file{0}", "src":"media/test/integration/examples/video4.mp4",
                     "broken":false, "num_chunks":5 },
                 {"type":"video", "subtype":"avi", "dst_pattern":"video5/file{0}", "src":"media/test/integration/examples/video5.avi",
-                    "broken":false, "num_chunks":5 }
+                    "broken":false, "num_chunks":5 },
+                {"type":"video", "subtype":"mp4", "dst_pattern":"video6/file{0}", "src":"media/test/integration/examples/incomplete.mp4",
+                    "broken":true, "num_chunks":4 },
+                {"type":"video", "subtype":"mp4", "dst_pattern":"video7/file{0}", "src":"media/test/integration/examples/corrupted.mp4",
+                    "broken":true, "num_chunks":3 }
             ],
             "output_metadata": "filechunk_metadata.json"
         }

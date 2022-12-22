@@ -76,7 +76,23 @@ static  __attribute__((optimize("O0"))) void  itest_verify__job_terminated_unsup
 } // end of itest_verify__job_terminated_unsupported_format
 
 
-static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_item, const char *fsubtype_in)
+static  __attribute__((optimize("O0"))) void  itest_verify__job_input_video_corruption (
+        CURL *curl, test_setup_priv_t *privdata, void *cb_arg)
+{
+    json_t  *job_item = cb_arg;
+    lseek(privdata->fds.resp_body, 0, SEEK_SET);
+    json_t  *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
+    json_t  *err_info_recv = json_object_get(resp_obj, "error");
+    if(err_info_recv) {
+        json_object_set_new(job_item, "error", json_true());
+        json_object_set_new(job_item, "done", json_true());
+    }
+    json_decref(resp_obj);
+}
+
+
+static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_item,
+        const char *fsubtype_in, uint8_t _is_broken_in )
 {
     json_t *req = NULL, *async_job_ids_item = NULL;
     int idx = 0;
@@ -84,6 +100,7 @@ static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_i
         *resource_id_item  = json_object_get(req, "resource_id");
         async_job_ids_item = json_object_get(req, "async_job_ids");
         const char *fsubtype  = json_string_value(json_object_get(req, "subtype"));
+        uint8_t _is_broken_saved  = json_boolean_value(json_object_get(req, "broken"));
         if(!fsubtype) {
             *resource_id_item  = NULL;
             continue;
@@ -91,7 +108,8 @@ static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_i
         const char *_res_id = json_string_value(*resource_id_item);
         size_t   num_async_jobs = json_array_size(async_job_ids_item);
         uint8_t  type_matched = strncmp(fsubtype, fsubtype_in, strlen(fsubtype)) == 0;
-        if(_res_id && type_matched && num_async_jobs == 0) {
+        uint8_t  broken_cond_matched = _is_broken_saved == _is_broken_in;
+        if(_res_id && type_matched && broken_cond_matched && num_async_jobs == 0) {
             break;
         } else {
             *resource_id_item  = NULL;
@@ -100,6 +118,7 @@ static void _available_resource_lookup(json_t **upld_req, json_t **resource_id_i
     if(req && *resource_id_item) {
         *upld_req = req;
     } else {
+        *upld_req = NULL;
         fprintf(stderr, "[itest][start_transcoding_file] no more ressource"
                 " with the subtype:%s \n" , fsubtype_in);
     }
@@ -178,7 +197,7 @@ Ensure(api__start_transcoding_test__accepted)
 {
     json_t *upld_req = NULL, *resource_id_item = NULL;
     // subcase #1 : normal case
-    _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     if(resource_id_item) {
 #define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_1.json"
         _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
@@ -195,7 +214,7 @@ Ensure(api__start_transcoding_test__accepted)
     // subcase #3 : current only mp4 is supported. Try transcoding unsupported video,
     // rpc consumer will report error
     sleep(3);
-    _available_resource_lookup(&upld_req, &resource_id_item, "avi");
+    _available_resource_lookup(&upld_req, &resource_id_item, "avi", 0);
     if(resource_id_item) {
 #define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_2.json"
         _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
@@ -207,7 +226,7 @@ Ensure(api__start_transcoding_test__accepted)
     }
 #if  1
     do {  // subcase #4 : try transcoding other different mp4 videos
-        _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+        _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
         if(upld_req && resource_id_item) {
 #define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_3.json"
             sleep(13);
@@ -217,23 +236,43 @@ Ensure(api__start_transcoding_test__accepted)
         }
     } while (upld_req && resource_id_item);
 #endif
-    //  subcase #5 : transcoding corrupted mp4 (TODO)
-    {
-        //// app_cfg_t *acfg = app_get_global_cfg();
-        //// arpc_cfg_t *rpc_cfg = &acfg->rpc.entries[0];
-        //// size_t delay_secs = 4 * rpc_cfg->attributes.timeout_secs;
-        //// sleep(delay_secs);
-        //// setup_data.req_body.src_filepath = "./media/test/integration/examples/transcode_req_body_2.json";
-        //// run_client_request(&setup_data, test_verify__complete_multipart_upload, NULL);
-    }
 } // end of  api__start_transcoding_test__accepted
 
+
+Ensure(api__start_transcoding_test__corrupted_video)
+{
+#define  SELECT_BROKEN_VIDEO   1
+#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_3.json"
+    json_t *upld_req = NULL, *resource_id_item = NULL;
+    do {
+        _available_resource_lookup(&upld_req, &resource_id_item, "mp4", SELECT_BROKEN_VIDEO);
+         if(upld_req && resource_id_item) {
+             _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
+                resource_id_item,  itest_verify__job_input_video_corruption);
+         }
+    } while(upld_req && resource_id_item); 
+#undef  REQ_BODY_TEMPLATE_FILEPATH
+#undef  SELECT_BROKEN_VIDEO
+}
+
+Ensure(api__start_transcoding_test__improper_resolution)
+{ // will get transcoding error due to the improper odd number of the height
+    json_t *upld_req = NULL, *resource_id_item = NULL;
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
+    if(resource_id_item) {
+#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/improper_video_resolution.json"
+        _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
+                resource_id_item, itest_verify__job_input_video_corruption );
+#undef  REQ_BODY_TEMPLATE_FILEPATH
+    } else {
+        fprintf(stderr, "[itest][api][start_transcode] line:%d, missing mp4 video", __LINE__);
+    }
+}
 
 Ensure(api__start_transcoding_test__overwrite_existing)
 {
     json_t *upld_req = NULL, *resource_id_item = NULL;
-    // subcase #1 : normal case
-    _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     if(resource_id_item) {
 #define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_1_overwrite_version.json"
         _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
@@ -242,7 +281,7 @@ Ensure(api__start_transcoding_test__overwrite_existing)
     } else {
         fprintf(stderr, "[itest][api][start_transcode] line:%d, missing mp4 video", __LINE__);
     }
-} // end of api__start_transcoding_test__overwrite_existing
+}
 
 
 Ensure(api__start_transcoding_test__invalid_body) {
@@ -298,7 +337,7 @@ static void test_verify__start_transcoding_invalid_elm_stream(CURL *handle, test
 Ensure(api__start_transcoding_test__invalid_elm_stream)
 {
     json_t *upld_req = NULL, *resource_id_item = NULL;
-    _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     struct {
         const char *template_filepath;
         const char *expect_field;
@@ -363,7 +402,7 @@ Ensure(api__start_transcoding_test__invalid_resource_id)
     run_client_request(&setup_data, itest_api_verify__start_transcode,  (void *)&mock_usr_srg);
     char *req_body_raw = NULL;
     { // subcase #2, given user id doesn't match the owner of resource
-        _available_resource_lookup(&upld_req2, &resource_id_item, "mp4");
+        _available_resource_lookup(&upld_req2, &resource_id_item, "mp4", 0);
         json_t *req_body_item = json_load_file(template_filepath, (size_t)0, NULL);
         json_object_set(req_body_item, "resource_id", resource_id_item);
         size_t MAX_BYTES_REQ_BODY  = json_dumpb(req_body_item, NULL, 0, 0);
@@ -401,7 +440,7 @@ static void test_verify__start_transcoding_invalid_outputs(CURL *handle, test_se
 
 Ensure(api__start_transcoding_test__invalid_output) {
     json_t *upld_req = NULL, *resource_id_item = NULL;
-    _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
@@ -442,7 +481,7 @@ Ensure(api__start_transcoding_test__permission_denied)
 {
 #define  REQ_BODY_PATTERN  "{\"resource_id\":\"%s\"}"
     json_t *upld_req = NULL, *resource_id_item = NULL;
-    _available_resource_lookup(&upld_req, &resource_id_item, "mp4");
+    _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     assert_that(upld_req, is_not_null);
     assert_that(resource_id_item, is_not_null);
     if(!upld_req || !resource_id_item)
@@ -501,6 +540,8 @@ TestSuite *api_start_transcoding_file_tests(void)
 TestSuite *api_start_transcoding_file_v2_tests(void)
 {
     TestSuite *suite = create_test_suite();
+    add_test(suite, api__start_transcoding_test__corrupted_video);
     add_test(suite, api__start_transcoding_test__overwrite_existing);
+    add_test(suite, api__start_transcoding_test__improper_resolution);
     return suite;
 }

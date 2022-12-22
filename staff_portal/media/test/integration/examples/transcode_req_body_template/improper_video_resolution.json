@@ -1,0 +1,25 @@
+{
+    "elementary_streams":{
+        "video-st": {
+            "type": "video",
+            "codec": "libx264",
+            "attribute":{
+                "height_pixel": 140,
+                "width_pixel": 237,
+                "framerate": 28
+            }
+        },
+        "audio-st": {
+            "type": "audio",
+            "codec": "aac",
+            "attribute":{ "bitrate_kbps": 39 }
+        }
+    },
+    "resource_id": "iE938eu3",
+    "outputs":{
+        "hY": {
+            "container": "hls",
+            "elementary_streams": ["audio-st", "video-st"]
+        }
+    }
+}
