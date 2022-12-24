@@ -21,9 +21,20 @@
 #define  VDO_OUTPUT_ITEM_GEN(_label, _container, _elm_st_map_list) \
     "\""_label"\":{\"container\":\""_container"\",\"elementary_streams\": ["_elm_st_map_list"]}"
 
+#define  IMG_OUTPUT_ITEM_GEN(_label, _scale_w, _scale_h, _crop_w, _crop_h,  _crop_pos_x, \
+        _crop_pos_y, _msk_patt) \
+    "\"" _label "\":{\"mask\":{\"pattern\":\""_msk_patt"\"}," \
+        "\"scale\":{\"width\":" STRINGIFY(_scale_w) ",\"height\":" STRINGIFY(_scale_h) "}," \
+        "\"crop\":{\"x\":" STRINGIFY(_crop_pos_x) ", \"y\":" STRINGIFY(_crop_pos_y) \
+           ", \"width\":" STRINGIFY(_crop_w) ", \"height\":" STRINGIFY(_crop_h) "}}"
+
+
 #define  VIDEO_REQ_BODY_GEN(_resource_id, _elm_st_section, _output_section) \
     "{\"elementary_streams\":{"_elm_st_section"},\"resource_id\":\""_resource_id"\"," \
     "\"outputs\":{"_output_section"}}"
+
+#define  IMAGE_REQ_BODY_GEN(_resource_id, _output_section) \
+    "{\"resource_id\":\""_resource_id"\",\"outputs\":{"_output_section"}}"
 
 #define  ELM_ST_V1   ELEMENT_STREAM_VIDEO_GEN("vdo_one",  "libx264rgb", 400, 630, 20)
 #define  ELM_ST_V2   ELEMENT_STREAM_VIDEO_GEN("vdo_two",  "v410", 390, 620, 18)
@@ -310,6 +321,171 @@ Ensure(atfp_test__validate_video_req__err_output_map_elm_st)
 } // end of atfp_test__validate_video_req__err_output_map_elm_st
 
 
+
+#define  UTEST_VALIDATE_IMG_REQ__SETUP(_limit_width, _limit_height, msk_patt_basepath, _req_body_serial) \
+    json_t *mock_spec = json_loadb(_req_body_serial, sizeof(_req_body_serial) - 1, 0, NULL); \
+    assert_that(mock_spec, is_not_null); \
+    if(!mock_spec) \
+        return; \
+    json_t  *mock_err_info = json_object(); \
+    app_cfg_t  *acfg = app_get_global_cfg(); \
+    aav_cfg_img_t *mock_imgcfg = &acfg->transcoder.output.image; \
+    mock_imgcfg->mask.basepath = msk_patt_basepath; \
+    mock_imgcfg->limit = (aav_cfg_resolution_pix_t) {.width=_limit_width, .height=_limit_height}; \
+
+
+#define  UTEST_VALIDATE_IMG_REQ__TEARDOWN \
+    acfg->transcoder.output.image = (aav_cfg_img_t) {0}; \
+    json_decref(mock_spec); \
+    json_decref(mock_err_info);
+
+
+#define  OUT_ITEM1   IMG_OUTPUT_ITEM_GEN("Gx", 280, 210, 306, 225, 14, 64, "custom189")
+#define  OUT_ITEM2   IMG_OUTPUT_ITEM_GEN("jk", 240, 180, 306, 225, 97, 64, "custom190")
+#define  OUT_ITEM3   IMG_OUTPUT_ITEM_GEN("Dh", 250, 202, 320, 240, 123, 5, "custom191")
+#define  UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1","OUT_ITEM2","OUT_ITEM3)
+Ensure(atfp_test__validate_image_req__ok)
+{
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 250, "media/data/test/image/mask", UTEST_REQBODY)
+    int err = atfp_validate_transcode_request (APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
+    assert_that(err, is_equal_to(0));
+    assert_that(json_object_size(mock_err_info), is_equal_to(0));
+    UTEST_VALIDATE_IMG_REQ__TEARDOWN
+} // end of atfp_test__validate_image_req__ok
+
+Ensure(atfp_test__validate_image_req__ok_spare)
+{
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 250, "media/data/test/image/mask", UTEST_REQBODY)
+    {
+        json_t *outputs_item = json_object_get(mock_spec, "outputs");
+        json_t *output_item = json_object_get(outputs_item, "Gx");
+        json_object_del(output_item, "scale");
+        output_item = json_object_get(outputs_item, "jk");
+        json_object_del(output_item, "crop");
+        output_item = json_object_get(outputs_item, "Dh");
+        json_object_del(output_item, "mask");
+    }
+    int err = atfp_validate_transcode_request (APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
+    assert_that(err, is_equal_to(0));
+    assert_that(json_object_size(mock_err_info), is_equal_to(0));
+    UTEST_VALIDATE_IMG_REQ__TEARDOWN
+} // end of atfp_test__validate_image_req__ok_spare
+#undef  UTEST_REQBODY
+#undef  OUT_ITEM3
+#undef  OUT_ITEM2
+#undef  OUT_ITEM1
+
+
+
+#define  UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", "")
+Ensure(atfp_test__validate_image_req__empty)
+{
+    UTEST_VALIDATE_IMG_REQ__SETUP(100, 60, "media/data/test/image/mask", UTEST_REQBODY)
+    int err = atfp_validate_transcode_request (APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
+    assert_that(err, is_not_equal_to(0));
+    assert_that(json_object_size(mock_err_info), is_greater_than(0));
+    json_t * actual_err_detail = json_object_get(mock_err_info, "outputs");
+    assert_that(actual_err_detail, is_not_null);
+    UTEST_VALIDATE_IMG_REQ__TEARDOWN
+} // end of  atfp_test__validate_image_req__empty
+#undef  UTEST_REQBODY
+
+
+#define  EXPECT_VERSION    "Qe"
+#define  INVALID_OUTITEM   "\""EXPECT_VERSION"\":{\"junk\":true, \"rate\":9.040029}"
+#define  UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", INVALID_OUTITEM)
+Ensure(atfp_test__validate_image_req__invalid_attri_version)
+{
+    UTEST_VALIDATE_IMG_REQ__SETUP(100, 60, "media/data/test/image/mask", UTEST_REQBODY)
+    int err = atfp_validate_transcode_request (APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
+    assert_that(err, is_not_equal_to(0));
+    assert_that(json_object_size(mock_err_info), is_greater_than(0));
+    json_t * actual_err_detail = json_object_get(mock_err_info, "output");
+    assert_that(actual_err_detail, is_not_null);
+    const char * actual_err_version = json_string_value(json_object_get(mock_err_info, "version"));
+    assert_that(actual_err_version, is_equal_to_string(EXPECT_VERSION));
+    UTEST_VALIDATE_IMG_REQ__TEARDOWN
+} // end of  atfp_test__validate_image_req__invalid_attri_version
+#undef  UTEST_REQBODY
+#undef  INVALID_OUTITEM
+#undef  EXPECT_VERSION
+
+
+#define  EXPECT_VERSION    "jk"
+#define  OUT_ITEM1   IMG_OUTPUT_ITEM_GEN("Gx", 280, 210, 306, 225, 14, 64, "custom189")
+#define  OUT_ITEM2   IMG_OUTPUT_ITEM_GEN(EXPECT_VERSION, 240, 180, -1, 250, 9007, 64, "custom190")
+#define  UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1","OUT_ITEM2)
+Ensure(atfp_test__validate_image_req__invalid_crop)
+{
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask", UTEST_REQBODY)
+    int err = atfp_validate_transcode_request (APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
+    assert_that(err, is_not_equal_to(0));
+    assert_that(json_object_size(mock_err_info), is_greater_than(0));
+    const char * actual_err_version = json_string_value(json_object_get(mock_err_info, "version"));
+    assert_that(actual_err_version, is_equal_to_string(EXPECT_VERSION));
+    json_t * actual_err_detail = json_object_get(mock_err_info, "crop");
+    assert_that(actual_err_detail, is_not_null);
+    if(actual_err_detail) {
+        json_t *_err_width  = json_object_get(actual_err_detail, "width");
+        json_t *_err_height = json_object_get(actual_err_detail, "height");
+        json_t *_err_pos_x  = json_object_get(actual_err_detail, "x");
+        assert_that(_err_width , is_not_null);
+        assert_that(_err_height, is_not_null);
+        assert_that(_err_pos_x , is_not_null);
+    }
+    UTEST_VALIDATE_IMG_REQ__TEARDOWN
+} // end of  atfp_test__validate_image_req__invalid_crop
+#undef  UTEST_REQBODY
+#undef  OUT_ITEM2
+#undef  OUT_ITEM1
+#undef  EXPECT_VERSION
+
+
+#define  EXPECT_VERSION    "jk"
+#define  OUT_ITEM1   IMG_OUTPUT_ITEM_GEN(EXPECT_VERSION, 240, 180, 230, 170, 100, 32, "custom190")
+#define  UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1)
+Ensure(atfp_test__validate_image_req__invalid_scale)
+{
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask", UTEST_REQBODY)
+    int err = atfp_validate_transcode_request (APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
+    assert_that(err, is_not_equal_to(0));
+    assert_that(json_object_size(mock_err_info), is_greater_than(0));
+    json_t * actual_err_detail = json_object_get(mock_err_info, "scale");
+    assert_that(actual_err_detail, is_not_null);
+    if(actual_err_detail) {
+        json_t *_err_width  = json_object_get(actual_err_detail, "width");
+        json_t *_err_height = json_object_get(actual_err_detail, "height");
+        assert_that(_err_width , is_not_null);
+        assert_that(_err_height, is_not_null);
+    }
+    UTEST_VALIDATE_IMG_REQ__TEARDOWN
+} // end of  atfp_test__validate_image_req__invalid_scale
+#undef  UTEST_REQBODY
+#undef  OUT_ITEM1
+#undef  EXPECT_VERSION
+
+
+#define  OUT_ITEM1   IMG_OUTPUT_ITEM_GEN("jk", 240, 180, 250, 188, 100, 32, "nonexistMask")
+#define  UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1)
+Ensure(atfp_test__validate_image_req__mask_nonexist_pattern)
+{
+    UTEST_VALIDATE_IMG_REQ__SETUP(330, 248, "media/data/test/image/mask", UTEST_REQBODY)
+    int err = atfp_validate_transcode_request (APP_FILETYPE_LABEL_IMAGE, mock_spec, mock_err_info);
+    assert_that(err, is_not_equal_to(0));
+    assert_that(json_object_size(mock_err_info), is_greater_than(0));
+    json_t * actual_err_detail = json_object_get(mock_err_info, "mask");
+    assert_that(actual_err_detail, is_not_null);
+    if(actual_err_detail) {
+        json_t *_err_patt = json_object_get(actual_err_detail, "pattern");
+        assert_that(_err_patt, is_not_null);
+    }
+    UTEST_VALIDATE_IMG_REQ__TEARDOWN
+} // end of  atfp_test__validate_image_req__mask_nonexist_pattern
+#undef  UTEST_REQBODY
+#undef  OUT_ITEM1
+
+
+
 #define  VERSION_LABEL  "dA"
 #define  OUT_ITEM1   VDO_OUTPUT_ITEM_GEN(VERSION_LABEL, "avi", "\"vdo_one\",\"ado_one\"")
 #define  UTEST_REQBODY   VIDEO_REQ_BODY_GEN( "myResID", ELM_ST_A1","ELM_ST_V1, OUT_ITEM1 )
@@ -369,6 +545,61 @@ Ensure(atfp_test__chk_resource_version__unknown_type)
 #undef  VERSION_LABEL
 
 
+
+#define  VERSION_LABEL  "dA"
+#define  VALID_MASK_PATTERN  "custom191"
+#define  OUT_ITEM1   IMG_OUTPUT_ITEM_GEN(VERSION_LABEL, 250, 202, 320, 240, 123, 5, VALID_MASK_PATTERN)
+#define  UTEST_REQBODY  IMAGE_REQ_BODY_GEN("myResID", OUT_ITEM1)
+Ensure(atfp_test__chk_image_version__editing)
+{
+    const char *mock_db_row[8] = { VERSION_LABEL,
+        STRINGIFY(202), STRINGIFY(250), // scale height, width
+        STRINGIFY(240), NULL, // crop height, width, assume the width is the same as the original one
+        STRINGIFY(123),  STRINGIFY(15), // crop position (x,y) , only y-value is changed
+        VALID_MASK_PATTERN
+    };
+    db_query_row_info_t  mock_saved_version = {.num_cols=8, .values=(char **)&mock_db_row[0]};
+    json_t *mock_spec = json_loadb(UTEST_REQBODY, sizeof(UTEST_REQBODY) - 1, 0, NULL);
+    json_t *internal_item = json_object();
+    {
+        json_t *outputs_item = json_object_get(mock_spec, "outputs");
+        json_t *output_item = json_object_get(outputs_item, VERSION_LABEL);
+        json_object_set_new(output_item, "__internal__", internal_item);
+    }
+    atfp_validate_req_dup_version(APP_FILETYPE_LABEL_IMAGE, mock_spec, &mock_saved_version);
+    json_t *isupdate_item = json_object_get(internal_item, "is_update");
+    assert_that(isupdate_item, is_not_null);
+    assert_that(json_boolean_value(isupdate_item), is_true);
+    json_decref(mock_spec);
+} // end of  atfp_test__chk_image_version__editing
+
+
+Ensure(atfp_test__chk_image_version__duplicate)
+{
+    const char *mock_db_row[8] = { VERSION_LABEL,
+        NULL, STRINGIFY(250), // scale height, width, assume the height is the same as the original one
+        STRINGIFY(240), NULL, // crop height, width, assume the width is the same as the original one
+        STRINGIFY(123),  STRINGIFY(5), // crop position (x,y) , only y-value is changed
+        VALID_MASK_PATTERN
+    };
+    db_query_row_info_t  mock_saved_version = {.num_cols=8, .values=(char **)&mock_db_row[0]};
+    json_t *mock_spec = json_loadb(UTEST_REQBODY, sizeof(UTEST_REQBODY) - 1, 0, NULL);
+    json_t *outputs_item = json_object_get(mock_spec, "outputs");
+    {
+        json_t *output_item = json_object_get(outputs_item, VERSION_LABEL);
+        json_object_del(json_object_get(output_item, "scale"), "height");
+        json_object_del(json_object_get(output_item, "crop"), "width");
+        json_object_set_new(output_item, "__internal__", json_object());
+    }
+    atfp_validate_req_dup_version(APP_FILETYPE_LABEL_IMAGE, mock_spec, &mock_saved_version);
+    assert_that(json_object_get(outputs_item, VERSION_LABEL), is_null);
+    json_decref(mock_spec);
+} // end of  atfp_test__chk_image_version__duplicate
+#undef  UTEST_REQBODY
+#undef  OUT_ITEM1
+#undef  VERSION_LABEL
+
+
 TestSuite *app_transcoder_validation_tests(void)
 {
     TestSuite *suite = create_test_suite();
@@ -378,8 +609,17 @@ TestSuite *app_transcoder_validation_tests(void)
     add_test(suite, atfp_test__validate_video_req__err_elm_stream_v);
     add_test(suite, atfp_test__validate_video_req__err_output);
     add_test(suite, atfp_test__validate_video_req__err_output_map_elm_st);
+    add_test(suite, atfp_test__validate_image_req__ok);
+    add_test(suite, atfp_test__validate_image_req__ok_spare);
+    add_test(suite, atfp_test__validate_image_req__empty);
+    add_test(suite, atfp_test__validate_image_req__invalid_attri_version);
+    add_test(suite, atfp_test__validate_image_req__invalid_crop);
+    add_test(suite, atfp_test__validate_image_req__invalid_scale);
+    add_test(suite, atfp_test__validate_image_req__mask_nonexist_pattern);
     add_test(suite, atfp_test__chk_video_version__editing);
     add_test(suite, atfp_test__chk_video_version__duplicate);
+    add_test(suite, atfp_test__chk_image_version__editing);
+    add_test(suite, atfp_test__chk_image_version__duplicate);
     add_test(suite, atfp_test__chk_resource_version__unknown_type);
     return suite;
 }

@@ -180,6 +180,10 @@
                 "video":["libx264", "libx265"],
                 "audio":["aac"]
             },
+            "image": {
+                "pixel_limit":{"width":1440, "height":1080},
+                "mask":{"basepath":"media/data/test/image/mask"}
+            },
             "video": {
                 "pixels": [[720, 540], [480, 360], [400, 300], [360, 270], [320, 240], [240, 180], [237, 140], [200, 150], [190,136], [170,128], [160, 120], [156, 90], [150, 102]],
                 "fps": [35,30,28,27,25,24,22,21,20,18,17,16,15,13,11]
@@ -197,6 +201,8 @@
         "file_chunk": {
             "base_folder": "tmp/log/test/media",
             "files": [
+                {"type":"image", "subtype":"jpg", "dst_pattern":"img1/file{0}", "src":"media/test/integration/examples/image1.jpg",
+                    "broken":false, "num_chunks":1 },
                 {"type":"video", "subtype":"mp4", "dst_pattern":"video1/file{0}", "src":"media/test/integration/examples/video1.mp4",
                     "broken":false, "num_chunks":4 },
                 {"type":"video", "subtype":"mp4", "dst_pattern":"video2/file{0}", "src":"media/test/integration/examples/video2.mp4",

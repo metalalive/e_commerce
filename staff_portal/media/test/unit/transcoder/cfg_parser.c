@@ -165,8 +165,12 @@ Ensure(transcoder_cfg_test_ok) {
     AVCodec mock_decoders[4] = {0};
 #define  TEST_SERIALIZED_JSON \
     "{\"input\": {\"demuxers\":[\"mp4\"], \"decoders\": {\"video\":[\"h264\"], \"audio\":[\"aac\"]}}, " \
-    " \"output\": {\"muxers\":[\"webm\"], \"encoders\": {\"video\":[\"hevc\"], \"audio\":[\"ac3\"]}, " \
-    " \"video\":{\"pixels\":[[240,360],[78,49], [540,450]], \"fps\":[15,19]}, \"audio\":{\"bitrate_kbps\":[48, 80]}  }}"
+    " \"output\": {" \
+    "     \"muxers\":[\"webm\"], \"encoders\": {\"video\":[\"hevc\"], \"audio\":[\"ac3\"]}, " \
+    "     \"video\":{\"pixels\":[[240,360],[78,49], [540,450]], \"fps\":[15,19]}," \
+    "     \"audio\":{\"bitrate_kbps\":[48, 80]}," \
+    "     \"image\":{\"pixel_limit\":{\"width\":960,\"height\":480}, \"mask\":{\"basepath\":\"path/to/index/file\"}}" \
+    "}}"
     json_t *obj = json_loads(TEST_SERIALIZED_JSON, 0, NULL);
     expect(av_find_input_format, will_return(&ifmts[0]),  when(short_name, is_equal_to_string("mp4")));
     expect(avcodec_find_decoder_by_name, will_return(&mock_decoders[0]),  when(name, is_equal_to_string("h264")));

@@ -267,6 +267,7 @@
         <comment>  </comment>
         <sql dbms="mariadb">
             ALTER TABLE `uploaded_file` ADD COLUMN `type` ENUM('video') NULL;
+            ALTER TABLE `uploaded_file` MODIFY COLUMN `type` ENUM('video','image') NULL;
             UPDATE `uploaded_file` SET `type`='video' WHERE `last_upld_req` IS NOT NULL;
         </sql>
         <rollback>
@@ -274,7 +275,38 @@
         </rollback>
     </changeSet>
     <changeSet id="tag_version_0.0.10" author="Haam">
-        <tagDatabase tag="0.0.9" />
+        <tagDatabase tag="0.0.10" />
+    </changeSet>
+    <changeSet id="add-schema-metadata-transformed-image" author="Haam">
+        <comment>
+            * the table dedicates to metadata of transformed pictures.
+            * When this table grows larger, app developers have to consider whether the metadata is
+              important enough for the business model, if it isn't,  since these records are almost
+              never changed once inserted, the metadata could be stored in document-oriented databases
+              which support atomicity and durability (of ACID properties), e.g. MongoDB v4.0 later
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `transformed_image_metadata` (
+                `file_id`   VARCHAR(8) NOT NULL, 
+                `version`   VARCHAR(2) NOT NULL, 
+                `size_bytes`  INT UNSIGNED NOT NULL,
+                `scale_h`   SMALLINT UNSIGNED NULL,
+                `scale_w`   SMALLINT UNSIGNED NULL,
+                `crop_h`   SMALLINT UNSIGNED NULL,
+                `crop_w`   SMALLINT UNSIGNED NULL,
+                `crop_x`   SMALLINT UNSIGNED DEFAULT 0,
+                `crop_y`   SMALLINT UNSIGNED DEFAULT 0,
+                `mask_patt`   VARCHAR(32) NULL,
+                CONSTRAINT `c_fk5_uploadfile_id` FOREIGN KEY (`file_id`) REFERENCES `uploaded_file`(`id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                PRIMARY KEY (`file_id`, `version`)
+            );
+        </sql>
+        <rollback>
+            DROP  TABLE  `transformed_image_metadata`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.11" author="Haam">
+        <tagDatabase tag="0.0.11" />
     </changeSet>
 </databaseChangeLog>
 

@@ -1,6 +1,9 @@
 #include <jansson.h>
 #include "../test/integration/test.h"
 
+#define  REQBODY_BASEPATH  "media/test/integration/examples/transcode_req_body_template"
+#define  REQBODY_VIDEO_BASEPATH   REQBODY_BASEPATH "/video"
+#define  REQBODY_IMAGE_BASEPATH   REQBODY_BASEPATH "/image"
 #define  ITEST_URL_PATH  "https://localhost:8010/file/transcode"
 
 extern json_t *_app_itest_active_upload_requests;
@@ -193,13 +196,13 @@ static void  _api__start_transcoding_test__accepted_common(const char *req_body_
 } // end of _api__start_transcoding_test__accepted_common
 
 
-Ensure(api__start_transcoding_test__accepted)
+Ensure(api__transcode_test_video__accepted)
 {
     json_t *upld_req = NULL, *resource_id_item = NULL;
     // subcase #1 : normal case
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     if(resource_id_item) {
-#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_1.json"
+#define  REQ_BODY_TEMPLATE_FILEPATH   REQBODY_VIDEO_BASEPATH"/ok_1.json"
         _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
                 resource_id_item,  itest_verify__job_progress_update_ok);
         // subcase #2 : send another async job with the same resource and the same versions,
@@ -216,10 +219,8 @@ Ensure(api__start_transcoding_test__accepted)
     sleep(3);
     _available_resource_lookup(&upld_req, &resource_id_item, "avi", 0);
     if(resource_id_item) {
-#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_2.json"
-        _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
+        _api__start_transcoding_test__accepted_common(REQBODY_VIDEO_BASEPATH"/ok_2.json", upld_req,
                 resource_id_item,  itest_verify__job_terminated_unsupported_format);
-#undef  REQ_BODY_TEMPLATE_FILEPATH
          sleep(3);
     } else {
         fprintf(stderr, "[itest][api][start_transcode] line:%d, missing avi video", __LINE__);
@@ -228,63 +229,61 @@ Ensure(api__start_transcoding_test__accepted)
     do {  // subcase #4 : try transcoding other different mp4 videos
         _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
         if(upld_req && resource_id_item) {
-#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_3.json"
             sleep(13);
-            _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
-                    resource_id_item,  itest_verify__job_progress_update_ok);
-#undef  REQ_BODY_TEMPLATE_FILEPATH
+            _api__start_transcoding_test__accepted_common(REQBODY_VIDEO_BASEPATH"/ok_3.json",
+                     upld_req, resource_id_item,  itest_verify__job_progress_update_ok);
         }
     } while (upld_req && resource_id_item);
 #endif
-} // end of  api__start_transcoding_test__accepted
+} // end of  api__transcode_test_video__accepted
 
 
-Ensure(api__start_transcoding_test__corrupted_video)
+Ensure(api__transcode_test_video__corrupted_video)
 {
 #define  SELECT_BROKEN_VIDEO   1
-#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_3.json"
     json_t *upld_req = NULL, *resource_id_item = NULL;
     do {
         _available_resource_lookup(&upld_req, &resource_id_item, "mp4", SELECT_BROKEN_VIDEO);
          if(upld_req && resource_id_item) {
-             _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
-                resource_id_item,  itest_verify__job_input_video_corruption);
+             _api__start_transcoding_test__accepted_common(REQBODY_VIDEO_BASEPATH"/ok_3.json",
+                 upld_req, resource_id_item,  itest_verify__job_input_video_corruption);
          }
     } while(upld_req && resource_id_item); 
-#undef  REQ_BODY_TEMPLATE_FILEPATH
 #undef  SELECT_BROKEN_VIDEO
 }
 
-Ensure(api__start_transcoding_test__improper_resolution)
+Ensure(api__transcode_test_video__improper_resolution)
 { // will get transcoding error due to the improper odd number of the height
     json_t *upld_req = NULL, *resource_id_item = NULL;
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     if(resource_id_item) {
-#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/improper_video_resolution.json"
-        _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
-                resource_id_item, itest_verify__job_input_video_corruption );
-#undef  REQ_BODY_TEMPLATE_FILEPATH
+        _api__start_transcoding_test__accepted_common(REQBODY_VIDEO_BASEPATH"/improper_video_resolution.json",
+                upld_req,  resource_id_item, itest_verify__job_input_video_corruption );
     } else {
         fprintf(stderr, "[itest][api][start_transcode] line:%d, missing mp4 video", __LINE__);
     }
 }
 
-Ensure(api__start_transcoding_test__overwrite_existing)
+Ensure(api__transcode_test_video__overwrite_existing)
 {
     json_t *upld_req = NULL, *resource_id_item = NULL;
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     if(resource_id_item) {
-#define  REQ_BODY_TEMPLATE_FILEPATH  "./media/test/integration/examples/transcode_req_body_template/ok_1_overwrite_version.json"
-        _api__start_transcoding_test__accepted_common(REQ_BODY_TEMPLATE_FILEPATH, upld_req,
-                resource_id_item,  itest_verify__job_progress_update_ok);
-#undef  REQ_BODY_TEMPLATE_FILEPATH
+        _api__start_transcoding_test__accepted_common(REQBODY_VIDEO_BASEPATH"/ok_1_overwrite_version.json",
+                upld_req, resource_id_item,  itest_verify__job_progress_update_ok);
     } else {
         fprintf(stderr, "[itest][api][start_transcode] line:%d, missing mp4 video", __LINE__);
     }
 }
 
 
-Ensure(api__start_transcoding_test__invalid_body) {
+Ensure(api__transcode_test_image__accepted)
+{
+} // end of  api__transcode_test_image__accepted
+
+
+
+Ensure(api__transcode_test_video__invalid_body) {
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0); 
     char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
@@ -314,7 +313,7 @@ Ensure(api__start_transcoding_test__invalid_body) {
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&mock_usr_srg);
     json_decref(header_kv_serials);
     json_decref(quota);
-} // end of  api__start_transcoding_test__invalid_body 
+} // end of  api__transcode_test_video__invalid_body 
 
 
 static void test_verify__start_transcoding_invalid_elm_stream(CURL *handle, test_setup_priv_t *privdata, void *_usr_arg)
@@ -334,7 +333,7 @@ static void test_verify__start_transcoding_invalid_elm_stream(CURL *handle, test
 } // end of test_verify__start_transcoding_invalid_elm_stream
 
 
-Ensure(api__start_transcoding_test__invalid_elm_stream)
+Ensure(api__transcode_test_video__invalid_elm_stream)
 {
     json_t *upld_req = NULL, *resource_id_item = NULL;
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
@@ -342,11 +341,11 @@ Ensure(api__start_transcoding_test__invalid_elm_stream)
         const char *template_filepath;
         const char *expect_field;
     } test_data[] = {
-       {"./media/test/integration/examples/transcode_req_body_template/invalid_stream_type.json" , "type"},
-       {"./media/test/integration/examples/transcode_req_body_template/invalid_stream_codec.json", "codec"},
-       {"./media/test/integration/examples/transcode_req_body_template/invalid_stream_video_attr_1.json", "height_pixel"},
-       {"./media/test/integration/examples/transcode_req_body_template/invalid_stream_video_attr_2.json", "framerate"},
-       {"./media/test/integration/examples/transcode_req_body_template/invalid_stream_audio_attr_1.json", "bitrate_kbps"},
+       {REQBODY_VIDEO_BASEPATH"/invalid_stream_type.json" , "type"},
+       {REQBODY_VIDEO_BASEPATH"/invalid_stream_codec.json", "codec"},
+       {REQBODY_VIDEO_BASEPATH"/invalid_stream_video_attr_1.json", "height_pixel"},
+       {REQBODY_VIDEO_BASEPATH"/invalid_stream_video_attr_2.json", "framerate"},
+       {REQBODY_VIDEO_BASEPATH"/invalid_stream_audio_attr_1.json", "bitrate_kbps"},
     };
     char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
@@ -378,15 +377,15 @@ Ensure(api__start_transcoding_test__invalid_elm_stream)
     } // end of loop
     json_decref(header_kv_serials);
     json_decref(quota);
-} // end of api__start_transcoding_test__invalid_elm_stream
+} // end of api__transcode_test_video__invalid_elm_stream
 
 
-Ensure(api__start_transcoding_test__invalid_resource_id)
+Ensure(api__transcode_test_video__invalid_resource_id)
 {
     json_t *upld_req2 = NULL, *resource_id_item = NULL;
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0);
     itest_usrarg_t  mock_usr_srg = {.upld_req=upld_req, .expect_resp_code=404, .expect_err_field=API_QPARAM_LABEL__RESOURCE_ID};
-    const char *template_filepath = "./media/test/integration/examples/transcode_req_body_template/nonexist_resource_id.json";
+    const char *template_filepath = REQBODY_VIDEO_BASEPATH"/nonexist_resource_id.json";
     char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
@@ -421,7 +420,7 @@ Ensure(api__start_transcoding_test__invalid_resource_id)
     json_decref(quota);
     if(req_body_raw)
         free(req_body_raw);
-} // end of api__start_transcoding_test__invalid_resource_id
+} // end of api__transcode_test_video__invalid_resource_id
 
 
 static void test_verify__start_transcoding_invalid_outputs(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
@@ -438,7 +437,7 @@ static void test_verify__start_transcoding_invalid_outputs(CURL *handle, test_se
 } // end of test_verify__start_transcoding_invalid_outputs
 
 
-Ensure(api__start_transcoding_test__invalid_output) {
+Ensure(api__transcode_test_video__invalid_output) {
     json_t *upld_req = NULL, *resource_id_item = NULL;
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     char url[] = ITEST_URL_PATH;
@@ -466,18 +465,18 @@ Ensure(api__start_transcoding_test__invalid_output) {
             (void *)&expect_fields_hier[0]); \
 }
     // subcase #1, invalid muxer
-    RUN_CODE("media/test/integration/examples/transcode_req_body_template/invalid_output_muxer.json", "outputs", "container")
+    RUN_CODE(REQBODY_VIDEO_BASEPATH"/invalid_output_muxer.json", "outputs", "container")
     // subcase #2, invalid version label
-    RUN_CODE("media/test/integration/examples/transcode_req_body_template/invalid_output_version.json", "outputs", "version")
+    RUN_CODE(REQBODY_VIDEO_BASEPATH"/invalid_output_version.json", "outputs", "version")
     // subcase #3, invalid map to elementary stream
-    RUN_CODE("media/test/integration/examples/transcode_req_body_template/invalid_elm_stream_map.json", "outputs", "elementary_streams")
+    RUN_CODE(REQBODY_VIDEO_BASEPATH"/invalid_elm_stream_map.json", "outputs", "elementary_streams")
     json_decref(header_kv_serials);
     json_decref(quota);
 #undef  RUN_CODE
-} // end of api__start_transcoding_test__invalid_output
+} // end of api__transcode_test_video__invalid_output
 
 
-Ensure(api__start_transcoding_test__permission_denied)
+Ensure(api__transcode_test_video__permission_denied)
 {
 #define  REQ_BODY_PATTERN  "{\"resource_id\":\"%s\"}"
     json_t *upld_req = NULL, *resource_id_item = NULL;
@@ -492,10 +491,15 @@ Ensure(api__start_transcoding_test__permission_denied)
         json_t *existing_acl = json_object_get(upld_req, "ulvl_acl"), *item = NULL;
         json_array_foreach(existing_acl, idx, item) {
             json_t *capability = json_object_get(item,"access_control");
-            uint8_t can_transcode = json_integer_value(json_object_get(capability, "transcode"));
-            if(!can_transcode) {
-                approved_usr_id = json_integer_value(json_object_get(item, "usr_id"));
-                break;
+            if(capability) {
+                json_t *transcode_item = json_object_get(capability, "transcode");
+                if(transcode_item) {
+                    uint8_t can_transcode = json_boolean_value(transcode_item);
+                    if(!can_transcode) {
+                        approved_usr_id = json_integer_value(json_object_get(item, "usr_id"));
+                        break;
+                    }
+                }
             }
         } // end of loop
         assert_that(approved_usr_id, is_greater_than(0));
@@ -518,30 +522,33 @@ Ensure(api__start_transcoding_test__permission_denied)
         size_t nwrite = snprintf(&req_body[0], req_body_sz, REQ_BODY_PATTERN, resource_id);
         req_body[nwrite] = 0;
     }
+    fprintf(stderr, "[itest][api][transcode] line:%d, resource_id:%s, approved_usr_id:%d \n",
+            __LINE__, resource_id, approved_usr_id);
     run_client_request(&setup_data, itest_api_verify__start_transcode, (void *)&usr_args);
     json_decref(header_kv_serials);
     json_decref(quota);
 #undef   REQ_BODY_PATTERN 
-} // end of  api__start_transcoding_test__permission_denied
+} // end of  api__transcode_test_video__permission_denied
 
 
 TestSuite *api_start_transcoding_file_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test(suite, api__start_transcoding_test__invalid_body);
-    add_test(suite, api__start_transcoding_test__invalid_elm_stream);
-    add_test(suite, api__start_transcoding_test__invalid_resource_id);
-    add_test(suite, api__start_transcoding_test__invalid_output);
-    add_test(suite, api__start_transcoding_test__permission_denied);
-    add_test(suite, api__start_transcoding_test__accepted);
+    add_test(suite, api__transcode_test_video__invalid_body);
+    add_test(suite, api__transcode_test_video__invalid_elm_stream);
+    add_test(suite, api__transcode_test_video__invalid_resource_id);
+    add_test(suite, api__transcode_test_video__invalid_output);
+    add_test(suite, api__transcode_test_video__permission_denied);
+    add_test(suite, api__transcode_test_video__accepted);
+    add_test(suite, api__transcode_test_image__accepted);
     return suite;
 }
 
 TestSuite *api_start_transcoding_file_v2_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test(suite, api__start_transcoding_test__corrupted_video);
-    add_test(suite, api__start_transcoding_test__overwrite_existing);
-    add_test(suite, api__start_transcoding_test__improper_resolution);
+    add_test(suite, api__transcode_test_video__corrupted_video);
+    add_test(suite, api__transcode_test_video__overwrite_existing);
+    add_test(suite, api__transcode_test_video__improper_resolution);
     return suite;
 }

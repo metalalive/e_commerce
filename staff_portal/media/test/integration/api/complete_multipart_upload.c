@@ -57,7 +57,8 @@ static void _api_commit_upload_req__success_common (json_t *upld_req, const char
         uint32_t req_seq = json_integer_value(json_object_get(upld_req, "req_seq"));
         json_t *req_body = json_object();
         json_object_set_new(req_body, API_QPARAM_LABEL__RESOURCE_ID, json_string(resource_id));
-        json_object_set_new(req_body, "type", json_string(resource_typ));
+        if(resource_typ)
+            json_object_set_new(req_body, "type", json_string(resource_typ));
         json_object_set_new(req_body, "req_seq", json_integer(req_seq));
         size_t nwrite = json_dumpb((const json_t *)req_body, &req_body_raw[0],  MAX_BYTES_REQ_BODY, JSON_COMPACT);
         json_decref(req_body);
@@ -103,9 +104,12 @@ Ensure(api_commit_upload_req__invalid_resource_id) {
 
 Ensure(api_commit_upload_req__invalid_resource_typ) {
     json_t *upld_req = json_array_get(_app_itest_active_upload_requests, 0);
-    if(upld_req)
-        _api_commit_upload_req__success_common(upld_req, "abcdefg", "PDF", 400,
+    if(upld_req) {
+        _api_commit_upload_req__success_common(upld_req, "abcdefg", NULL, 400,
                 "type", "invalid");
+        _api_commit_upload_req__success_common(upld_req, "hijkmnop", "PDF", 400,
+                "type", "invalid");
+    }
 } // end of api_commit_upload_req__invalid_resource_typ
 
 Ensure(api_commit_upload_req__nonexistent_req) {

@@ -142,6 +142,37 @@ error:
 } // end of parse_cfg_transcoder_resolution_audio
 
 
+static int parse_cfg_transcoder_resolution_image (json_t *obj, aav_cfg_img_t *cfg)
+{
+    if(!obj || !cfg || !json_is_object(obj))
+        goto error;
+    json_t *pxl_limit = json_object_get(obj, "pixel_limit");
+    json_t *msk_item = json_object_get(obj, "mask");
+    if(!pxl_limit || !msk_item || !json_is_object(pxl_limit) || !json_is_object(msk_item)) {
+        fprintf(stderr, "[cfg-parser][transcoder] line:%d, missing attribute `mask` "
+                "or `pixel_limit`\n", __LINE__);
+        goto error;
+    }
+    int lmt_width  = (int)json_integer_value(json_object_get(pxl_limit, "width"));
+    int lmt_height = (int)json_integer_value(json_object_get(pxl_limit, "height"));
+    const char *masks_filepath = json_string_value(json_object_get(msk_item, "basepath"));
+    if(lmt_width <= 0 || lmt_height <= 0) {
+        fprintf(stderr, "[cfg-parser][transcoder] line:%d, invalid, lmt_width:%d, lmt_height:%d \n"
+                , __LINE__, lmt_width, lmt_height);
+        goto error;
+    } else if(!masks_filepath || strlen(masks_filepath) == 0) {
+        fprintf(stderr, "[cfg-parser][transcoder] line:%d, invalid masks_filepath \n"
+                , __LINE__);
+        goto error;
+    }
+    cfg->limit.width  = lmt_width ;
+    cfg->limit.height = lmt_height;
+    cfg->mask.basepath = strdup(masks_filepath);
+    return 0;
+error:
+    return -1;
+} // end of parse_cfg_transcoder_resolution_image
+
 static void *app_av_find_input_format(const char *label) {
     return (void *) av_find_input_format(label);
 }
@@ -178,6 +209,9 @@ static int parse_cfg_transcoder_output(json_t *obj, aav_cfg_output_t *cfg)
     if(err) { goto error; }
     err = parse_cfg_transcoder_resolution_audio(
             json_object_get(obj, "audio"), &cfg->resolution.audio);
+    if(err) { goto error; }
+    err = parse_cfg_transcoder_resolution_image(
+            json_object_get(obj, "image"), &cfg->image);
     if(err) { goto error; }
     return 0;
 error:
@@ -223,14 +257,15 @@ void app_transcoder_cfg_deinit(aav_cfg_transcode_t *cfg)
     transcoder_cfg_deinit_common((aav_cfg_input_t *)&cfg->output);
     aav_cfg_resolution_a_t  *rso_a = &cfg->output.resolution.audio;
     aav_cfg_resolution_v_t  *rso_v = &cfg->output.resolution.video;
-    if(rso_v->pixels.entries) {
+    if(rso_v->pixels.entries)
         free(rso_v->pixels.entries);
-    }
-    if(rso_v->fps.entries) {
+    if(rso_v->fps.entries)
         free(rso_v->fps.entries);
-    }
-    if(rso_a->bitrate_kbps.entries) {
+    if(rso_a->bitrate_kbps.entries)
         free(rso_a->bitrate_kbps.entries);
+    if(cfg->output.image.mask.basepath) {
+        free(cfg->output.image.mask.basepath);
+        cfg->output.image.mask.basepath = NULL;
     }
     memset(rso_a, 0, sizeof(aav_cfg_resolution_a_t));
     memset(rso_v, 0, sizeof(aav_cfg_resolution_v_t));

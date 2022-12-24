@@ -22,6 +22,7 @@ extern "C" {
 #define APP_LABEL_LEN  (sizeof(APP_LABEL) - 1) // 5
 
 #define APP_FILETYPE_LABEL_VIDEO  "video"
+#define APP_FILETYPE_LABEL_IMAGE  "image"
 
 #define APP_GRACEFUL_SHUTDOWN   1
 #define APP_HARD_SHUTDOWN       2 

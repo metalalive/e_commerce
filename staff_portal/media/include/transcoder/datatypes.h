@@ -21,6 +21,13 @@ typedef struct {
 } aav_cfg_resolution_v_t;
 
 typedef struct {
+    aav_cfg_resolution_pix_t  limit;
+    struct {
+        char *basepath;
+    } mask;
+} aav_cfg_img_t;
+
+typedef struct {
     H2O_VECTOR(void *) video;
     H2O_VECTOR(void *) audio;
 } aav_cfg_codec_t;
@@ -37,6 +44,7 @@ typedef struct {
         aav_cfg_resolution_a_t audio;
         aav_cfg_resolution_v_t video;
     } resolution;
+    aav_cfg_img_t  image;
 } aav_cfg_output_t;
 
 typedef struct {

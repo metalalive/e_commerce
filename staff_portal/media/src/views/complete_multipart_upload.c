@@ -278,6 +278,10 @@ static int app_validate_resource_type(const char *type)
 {
     int ret = strncmp(type, APP_FILETYPE_LABEL_VIDEO, sizeof(APP_FILETYPE_LABEL_VIDEO) - 1);
     int valid = ret == 0;
+    if(!valid) {
+        ret = strncmp(type, APP_FILETYPE_LABEL_IMAGE, sizeof(APP_FILETYPE_LABEL_IMAGE) - 1);
+        valid = ret == 0;
+    }
     return valid;
 } // end of  app_validate_resource_type
 
@@ -304,7 +308,7 @@ RESTAPI_ENDPOINT_HANDLER(complete_multipart_upload, PATCH, hdlr, req)
         }
         if(req_seq == 0)
             json_object_set_new(err_info, "req_seq", json_string("missing"));
-        if(!app_validate_resource_type(resource_typ))
+        if(!resource_typ || !app_validate_resource_type(resource_typ))
             json_object_set_new(err_info, "type", json_string("invalid"));
     }
     if(json_object_size(err_info) > 0) {
