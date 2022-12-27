@@ -201,6 +201,12 @@ static  void  api_rpc_transcode__try_init_file_processors(asa_op_base_cfg_t *asa
         const char *version = asa_dst->cb_args.entries[ASA_USRARG_INDEX__VERSION_LABEL];
         json_t *output = json_object_get(outputs, version);
         const char *ofmt_label = json_string_value(json_object_get(output, "container"));
+        if(!ofmt_label) {
+            json_t *_out_item_internal = json_object_get(output, "__internal__");
+            ofmt_label = json_string_value(json_object_get(_out_item_internal, "container"));
+            if(!ofmt_label)
+                fprintf(stderr, "[rpc][transcoder] line:%d, ofmt_label is null \n", __LINE__);
+        }
         processor = api_rpc_transcode__init_file_processor(asa_dst, ofmt_label, api_rpc_transcode__atfp_dst_init_finish_cb);
         if(processor == NULL) {
             json_object_set_new(err_info, "transcoder", json_string("unsupported destination file format"));

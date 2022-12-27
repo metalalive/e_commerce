@@ -11,12 +11,14 @@ static const atfp_ops_entry_t * atfp_file_processor_lookup(const char *label)
 {
     const atfp_ops_entry_t *found = NULL;
     uint32_t idx = 0;
-    for(idx = 0; !found && _atfp_ops_table[idx]; idx++) {
-        const atfp_ops_entry_t *item  = _atfp_ops_table[idx];
-        if(!item->ops.label_match)
-            continue;
-        if(item->ops.label_match(label))
-            found = item;
+    if(label) {
+        for(idx = 0; !found && _atfp_ops_table[idx]; idx++) {
+            const atfp_ops_entry_t *item  = _atfp_ops_table[idx];
+            if(!item->ops.label_match)
+                continue;
+            if(item->ops.label_match(label))
+                found = item;
+        }
     }
     return found;
 } // end of atfp_file_processor_lookup

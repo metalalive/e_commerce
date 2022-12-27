@@ -1,12 +1,10 @@
 #include <assert.h>
 #include <string.h>
 #include <h2o/memory.h>
-#include <uuid/uuid.h>
 
 #include "transcoder/video/mp4.h"
 #include "transcoder/video/ffmpeg.h"
 
-#define   LOCAL_BUFFER_FILENAME    "local_buffer"
 
 static void  atfp_mp4__postpone_usr_callback(uv_async_t* handle)
 {
@@ -80,38 +78,15 @@ static void atfp__video_mp4__open_local_tmpbuf_cb (asa_op_base_cfg_t *asaobj, AS
 
 static void atfp__video_mp4__init(atfp_t *processor)
 {
-    asa_op_base_cfg_t *asaobj = processor->data.storage.handle;
-    atfp_asa_map_t    *map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
-    asa_op_localfs_cfg_t *asa_local = atfp_asa_map_get_localtmp(map);
-    const char *local_tmpbuf_basepath = asa_local->super.op.mkdir.path.origin;
-    processor->filechunk_seq.curr = 0;
-    processor->filechunk_seq.next = 0;
+    processor->filechunk_seq.curr = processor->filechunk_seq.next = 0;
     processor->filechunk_seq.eof_reached = 0;
-#define  UUID_STR_SZ    36
-#define  PATH_PATTERN   "%s/%s-%s"
-    { // in case frontend client sent 2 requests which indicate the same source file
-        char _uid_postfix[UUID_STR_SZ + 1] = {0};
-        uuid_t  _uuid_obj;
-        uuid_generate_random(_uuid_obj);
-        uuid_unparse(_uuid_obj, &_uid_postfix[0]);
-        size_t tmpbuf_basepath_sz = strlen(local_tmpbuf_basepath);
-        size_t tmpbuf_filename_sz = strlen(LOCAL_BUFFER_FILENAME);
-        size_t tmpbuf_fullpath_sz = sizeof(PATH_PATTERN) + tmpbuf_basepath_sz + tmpbuf_filename_sz + UUID_STR_SZ;
-        char *ptr = calloc(tmpbuf_fullpath_sz, sizeof(char));
-        asa_local->super.op.open.dst_path = ptr;
-        size_t nwrite = snprintf( ptr, tmpbuf_fullpath_sz, PATH_PATTERN, local_tmpbuf_basepath,
-                LOCAL_BUFFER_FILENAME, &_uid_postfix[0] );
-        assert(nwrite < tmpbuf_fullpath_sz);
-        fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, local buffer path:%s \n",
-              __LINE__, processor->data.rpc_receipt->job_id.bytes, ptr);
-    }
-#undef  UUID_STR_SZ
-#undef  PATH_PATTERN
-    asa_local->super.op.open.cb = atfp__video_mp4__open_local_tmpbuf_cb;
-    asa_local->super.op.open.mode  = S_IRUSR | S_IWUSR;
-    asa_local->super.op.open.flags = O_RDWR | O_CREAT;
-    ASA_RES_CODE  asa_result = asa_local->super.storage->ops.fn_open(&asa_local->super);
-    if(asa_result != ASTORAGE_RESULT_ACCEPT) {
+    asa_op_base_cfg_t *asaobj = processor->data.storage.handle;
+    ASA_RES_CODE  result = atfp_src__open_localbuf(asaobj, atfp__video_mp4__open_local_tmpbuf_cb);
+#if  0
+    fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, local buffer path:%s \n",
+          __LINE__, processor->data.rpc_receipt->job_id.bytes, asa_local->super.op.open.dst_path);
+#endif
+    if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(processor->data.error, "storage",
                 json_string("failed to issue open operation for local temp buffer"));
         processor -> data.callback(processor);
@@ -137,7 +112,6 @@ static  void  _atfp_mp4__final_dealloc (asa_op_base_cfg_t *asaobj, ASA_RES_CODE 
 
 static void  atfp_mp4__asalocal_closefile_cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
 {   // TODO, clean up temp folder for locally storing transcoded files
-    atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_asa_map_t    *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t *asa_local = atfp_asa_map_get_localtmp(_map);
     asa_local->super.op.unlink.path = asa_local->super.op.open.dst_path; // local temp buffer file

@@ -113,37 +113,16 @@ static void atfp_mp4__read_input_byte_sequence_cb (
         asa_op_base_cfg_t *asa_src, ASA_RES_CODE result, size_t nread, asa_write_cb_t write_cb)
 {
     atfp_mp4_t *mp4proc = (atfp_mp4_t *)asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    atfp_t *processor = & mp4proc -> super;
-    json_t *err_info = processor->data.error;
-    if(result == ASTORAGE_RESULT_COMPLETE) {
-        atfp_asa_map_t *_map = (atfp_asa_map_t *)asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
-        asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
-        asa_local->super.op.write.src = asa_src->op.read.dst;
-        asa_local->super.op.write.src_sz = nread;
-        asa_local->super.op.write.src_max_nbytes = nread;
-        asa_local->super.op.write.offset = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
-        asa_local->super.op.write.cb = write_cb;
-        processor->filechunk_seq.eof_reached = asa_src ->op.read.dst_sz > nread;
-        result = asa_local->super.storage->ops.fn_write(&asa_local->super);
-        if(result != ASTORAGE_RESULT_ACCEPT)
-            json_object_set_new(err_info, "storage", json_string("[mp4] failed to issue write operation for atom body"));
-    } else {
-        json_object_set_new(err_info, "storage", json_string("failed to read atom body from mp4 input"));
-    }
-    if(json_object_size(err_info) > 0) 
+    int err = atfp_src__rd4localbuf_done_cb (asa_src, result, nread, write_cb);
+    if(err)
         mp4proc->internal.callback.preload_done(mp4proc) ;
 }
 
-
 static void atfp_mp4__read_input_atom_body_cb (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result, size_t nread)
-{
-    atfp_mp4__read_input_byte_sequence_cb (asa_src, result, nread, atfp_mp4__write_srcfile_atom_to_local_tmpbuf_cb);
-}
+{ atfp_mp4__read_input_byte_sequence_cb (asa_src, result, nread, atfp_mp4__write_srcfile_atom_to_local_tmpbuf_cb); }
 
 static void atfp_mp4__read_input_packet_fragment_cb (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result, size_t nread)
-{
-    atfp_mp4__read_input_byte_sequence_cb (asa_src, result, nread, atfp_mp4__write_srcfile_pkt_frag_to_local_tmpbuf_cb);
-}
+{ atfp_mp4__read_input_byte_sequence_cb (asa_src, result, nread, atfp_mp4__write_srcfile_pkt_frag_to_local_tmpbuf_cb); }
 
 
 static void atfp_mp4__switch_to_fchunk__for_atom_header_cb (asa_op_base_cfg_t *asa_src, ASA_RES_CODE result)

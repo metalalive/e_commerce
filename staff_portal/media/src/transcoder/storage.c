@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <string.h>
+#include <uuid/uuid.h>
 
 #include "transcoder/file_processor.h"
 
@@ -226,3 +227,59 @@ int  atfp_estimate_src_filechunk_idx(json_t *spec, int chunk_idx_start, size_t *
     }
     return chunk_idx_dst;
 } // end of atfp_estimate_src_filechunk_idx
+
+
+ASA_RES_CODE  atfp_src__open_localbuf(asa_op_base_cfg_t *asa_src, asa_open_cb_t  cb)
+{
+    atfp_asa_map_t    *map = asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t *asa_local = atfp_asa_map_get_localtmp(map);
+    const char *local_tmpbuf_basepath = asa_local->super.op.mkdir.path.origin;
+#define  LOCAL_BUFFER_FILENAME    "local_buffer"
+#define  UUID_STR_SZ    36
+#define  PATH_PATTERN   "%s/%s-%s"
+    { // in case frontend client sent 2 requests which indicate the same source file
+        char _uid_postfix[UUID_STR_SZ + 1] = {0};
+        uuid_t  _uuid_obj;
+        uuid_generate_random(_uuid_obj);
+        uuid_unparse(_uuid_obj, &_uid_postfix[0]);
+        size_t tmpbuf_basepath_sz = strlen(local_tmpbuf_basepath);
+        size_t tmpbuf_filename_sz = strlen(LOCAL_BUFFER_FILENAME);
+        size_t tmpbuf_fullpath_sz = sizeof(PATH_PATTERN) + tmpbuf_basepath_sz + tmpbuf_filename_sz + UUID_STR_SZ;
+        char *ptr = calloc(tmpbuf_fullpath_sz, sizeof(char));
+        asa_local->super.op.open.dst_path = ptr;
+        size_t nwrite = snprintf( ptr, tmpbuf_fullpath_sz, PATH_PATTERN, local_tmpbuf_basepath,
+                LOCAL_BUFFER_FILENAME, &_uid_postfix[0] );
+        assert(nwrite < tmpbuf_fullpath_sz);
+    }
+#undef  UUID_STR_SZ
+#undef  PATH_PATTERN
+#undef  LOCAL_BUFFER_FILENAME
+    asa_local->super.op.open.cb = cb;
+    asa_local->super.op.open.mode  = S_IRUSR | S_IWUSR;
+    asa_local->super.op.open.flags = O_RDWR | O_CREAT;
+    return  asa_local->super.storage->ops.fn_open(&asa_local->super);
+} // end of  atfp_src__open_localbuf
+
+
+int  atfp_src__rd4localbuf_done_cb ( asa_op_base_cfg_t *asa_src, ASA_RES_CODE result,
+        size_t nread, asa_write_cb_t write_cb )
+{
+    atfp_t *processor = (atfp_t *)asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    json_t *err_info = processor->data.error;
+    if(result == ASTORAGE_RESULT_COMPLETE) {
+        atfp_asa_map_t *_map = (atfp_asa_map_t *)asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
+        asa_local->super.op.write.src = asa_src->op.read.dst;
+        asa_local->super.op.write.src_sz = nread;
+        asa_local->super.op.write.src_max_nbytes = nread;
+        asa_local->super.op.write.offset = APP_STORAGE_USE_CURRENT_FILE_OFFSET;
+        asa_local->super.op.write.cb = write_cb;
+        processor->filechunk_seq.eof_reached = asa_src ->op.read.dst_sz > nread;
+        result = asa_local->super.storage->ops.fn_write(&asa_local->super);
+        if(result != ASTORAGE_RESULT_ACCEPT)
+            json_object_set_new(err_info, "storage", json_string("failed to issue write operation for atom body"));
+    } else {
+        json_object_set_new(err_info, "storage", json_string("failed to read atom body from mp4 input"));
+    }
+    return  json_object_size(err_info) > 0;
+}

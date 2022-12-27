@@ -216,12 +216,17 @@ SET(APP_TRANSCODE_COMMON_SOURCE_FILES
 
 SET(APP_TRANSCODE_TABLE_IN_RPC_CONSUMER__SOURCE_FILES
     src/transcoder/table_rpc_consumer.c
+    src/transcoder/image/ffmpeg/in/table_rpc_consumer.c
+    src/transcoder/image/ffmpeg/out/table_rpc_consumer.c
     src/transcoder/video/hls/table_rpc_consumer.c )
 
 SET(APP_TRANSCODER_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
     src/transcoder/segment.c
     src/transcoder/storage.c
+    src/transcoder/image/preload.c
+    src/transcoder/image/ffmpeg/in/init.c
+    src/transcoder/image/ffmpeg/out/init.c
     src/transcoder/video/storage.c
     src/transcoder/video/metadata.c 
     src/transcoder/video/hls/init.c 

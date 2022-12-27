@@ -189,11 +189,15 @@ atfp_t * app_transcoder_file_processor(const char *label);
 
 uint8_t  atfp_common__label_match(const char *label, size_t num, const char **exp_labels);
 
-ASA_RES_CODE  atfp_open_srcfile_chunk(
-        asa_op_base_cfg_t *cfg,   const char *basepath,
-        int         chunk_seq,    asa_open_cb_t  cb );
+ASA_RES_CODE  atfp_open_srcfile_chunk ( asa_op_base_cfg_t *,  const char *basepath,
+        int chunk_seq, asa_open_cb_t);
 
-ASA_RES_CODE  atfp_switch_to_srcfile_chunk(atfp_t *processor, int chunk_seq, asa_open_cb_t cb);
+ASA_RES_CODE  atfp_switch_to_srcfile_chunk(atfp_t *, int chunk_seq, asa_open_cb_t);
+
+// common callback for opening temp buffer file in local API server
+ASA_RES_CODE  atfp_src__open_localbuf(asa_op_base_cfg_t *, asa_open_cb_t);
+// common callback for reading bytes from the file in source storage, then perform write to local buffer
+int  atfp_src__rd4localbuf_done_cb (asa_op_base_cfg_t *, ASA_RES_CODE, size_t nread, asa_write_cb_t);
 
 // given a position in `pos` starting from the file chunk where index is specified in `chunk_idx_start`,
 // estimate index number of destination file chunk, and then update `pos` with read offset of the

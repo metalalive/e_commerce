@@ -456,7 +456,10 @@ static void _atfp_validate_image_request (json_t *spec, json_t *err_info)
         }
 iter_end:
         if(json_object_size(err_info) == 0) {
-            json_object_set_new(output, "__internal__", json_object());
+            json_t *out_item_internal = json_object();
+            // NOTE, refactor if there are more image-processing libraries integrated to this app
+            json_object_set_new(out_item_internal, "container", json_string("ffmpeg"));
+            json_object_set_new(output, "__internal__", out_item_internal);
         } else {
             json_object_set_new(err_info, "version", json_string(_version));
             break;
