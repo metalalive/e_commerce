@@ -204,7 +204,8 @@ static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
-    AVFormatContext  *fmt_ctx = mp4proc->av ->fmt_ctx;
+    atfp_av_ctx_t    *_avctx = mp4proc->av;
+    AVFormatContext  *fmt_ctx = _avctx ->fmt_ctx;
     asa_op_base_cfg_t *asaobj = mp4proc -> super.data.storage.handle;
     atfp_asa_map_t *_map = (atfp_asa_map_t *)asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t  *asa_local = atfp_asa_map_get_localtmp(_map);
@@ -218,7 +219,7 @@ static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc)
         goto done;
     }
     AVCodecContext **dec_ctxs = av_mallocz_array(fmt_ctx->nb_streams, sizeof(AVCodecContext *));
-    mp4proc->av->stream_ctx.decode = dec_ctxs;
+    _avctx->stream_ctx.decode = dec_ctxs;
     for(idx = 0; idx < fmt_ctx->nb_streams; idx++) {
         AVStream *stream  = fmt_ctx->streams[idx];
         AVCodec  *decoder = avcodec_find_decoder(stream->codecpar->codec_id);
@@ -226,7 +227,7 @@ static void atfp_mp4__preload_initial_packets_done (atfp_mp4_t *mp4proc)
             json_object_set_new(err_info, "transcoder", json_string("[mp4] failed to find decoder for the stream"));
             break;
         }
-        mp4proc->av->stats[idx].index_entry.preloaded = mp4proc->av -> stats[idx].index_entry.preloading;
+        _avctx->stats[idx].index_entry.preloaded = _avctx -> stats[idx].index_entry.preloading;
         AVCodecContext *codec_ctx = avcodec_alloc_context3(decoder);
         dec_ctxs[idx] = codec_ctx;
         if(!codec_ctx) {

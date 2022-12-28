@@ -143,7 +143,6 @@ static void  utest_atfp_mockops_monitor_progress(atfp_av_ctx_t *avctx, arpc_rece
     mock_fp->internal.op.av_deinit = utest_mp4__av_deinit; \
     mock_fp->internal.op.av_validate  = utest_mp4__av_validate; \
     mock_fp->internal.op.preload_info = utest_mp4__preload_info ; \
-    mock_fp->internal.op.preload_info = utest_mp4__preload_info ; \
     mock_fp->super.data.callback = utest_atfp_usr_cb ; \
     mock_fp->super.data.error = mock_errinfo ; \
     mock_fp->super.data.rpc_receipt = &mock_rpc_receipt; \

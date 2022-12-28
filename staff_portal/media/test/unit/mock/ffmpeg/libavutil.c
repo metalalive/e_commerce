@@ -7,10 +7,16 @@
 #include <cgreen/mocks.h>
 
 char *av_strdup(const char *s)
-{ return s; }
+{ return (char *)s; }
 
 void av_freep(void *ptr)
-{ mock(ptr); }
+{
+    void **addr2ptr = (void **)ptr;
+    void  *ptr2obj  = NULL;
+    if(addr2ptr)
+        ptr2obj = *addr2ptr;
+    mock(ptr, ptr2obj);
+}
 
 void *av_malloc(size_t sz)
 { return (void *) mock(sz); }

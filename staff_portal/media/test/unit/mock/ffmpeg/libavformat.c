@@ -41,13 +41,16 @@ void avformat_free_context(AVFormatContext *s)
 
 int avformat_open_input(AVFormatContext **ps, const char *url, ff_const59 AVInputFormat *fmt, AVDictionary **options)
 {
-    AVFormatContext *_fmt_ctx = *ps;
-    return (int) mock(_fmt_ctx, url, fmt, options);
+    AVFormatContext *_fmt_ctx = *ps, **_fmt_ctx_p = &_fmt_ctx;
+    int ret = (int) mock(_fmt_ctx, _fmt_ctx_p, url, fmt, options);
+    *ps = _fmt_ctx;
+    return ret;
 }
 
 void avformat_close_input(AVFormatContext **s)
 {
-    mock(s);
+    AVFormatContext *ref_fmtctx = *s;
+    mock(s, ref_fmtctx);
     *s = NULL;
 }
 

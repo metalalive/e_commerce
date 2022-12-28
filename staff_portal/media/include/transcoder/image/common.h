@@ -8,23 +8,21 @@ extern "C" {
 
 struct atfp_img_s;
 
-#define  IMG_S__COMMON_OP_FIELDS \
-    int  (*avfilter_init)(struct atfp_img_s *); \
-    int  (*avctx_init)(struct atfp_img_s *);    \
-    void (*avctx_deinit)(struct atfp_img_s *);
-
 typedef struct atfp_img_s {
     atfp_t        super;
     atfp_av_ctx_t   *av; // low-level A/V context
     union {
         struct {
-            IMG_S__COMMON_OP_FIELDS
+            void (*avctx_init)(atfp_av_ctx_t *, atfp_av_ctx_t *, const char *filepath, json_t *err_info);
+            void (*avctx_deinit)(atfp_av_ctx_t *);
             ASA_RES_CODE  (*save_to_storage)(struct atfp_img_s *);
-            int  (*encode)(atfp_av_ctx_t *dst);
+            int  (*encode)(atfp_av_ctx_t *);
             int  (*filter)(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
+            void (*avfilter_init)(atfp_av_ctx_t *, json_t *filt_spec, json_t *err_info);
         } dst;
         struct {
-            IMG_S__COMMON_OP_FIELDS
+            void (*avctx_init)(atfp_av_ctx_t *, const char *filepath, json_t *err_info);
+            void (*avctx_deinit)(atfp_av_ctx_t *);
             ASA_RES_CODE  (*preload_from_storage)(struct atfp_img_s *, void (*)(struct atfp_img_s *));
             int  (*decode)(atfp_av_ctx_t *);
         } src;
@@ -43,6 +41,8 @@ typedef struct atfp_img_s {
         } src;
     } internal;
 } atfp_img_t;
+
+#define  NUM_USRARGS_IMG_ASA_LOCAL   (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 
 ASA_RES_CODE  atfp__image_src_preload_start(atfp_img_t *, void (*cb)(atfp_img_t *));
 

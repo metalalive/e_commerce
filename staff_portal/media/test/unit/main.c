@@ -21,6 +21,8 @@ TestSuite *app_transcoder_hls_stream_build_mst_plist_tests(void);
 TestSuite *app_transcoder_hls_stream_build_lvl2_plist_tests(void);
 TestSuite *app_transcoder_hls_stream_cryptokey_request_tests(void);
 TestSuite *app_transcoder_hls_stream_encrypt_segment_tests(void);
+TestSuite *app_transcoder_img_ffm_in_init_tests(void);
+TestSuite *app_transcoder_img_ffm_in_avctx_tests(void);
 TestSuite *app_stream_cache_tests(void);
 TestSuite *app_rpc_cfg_parser_tests(void);
 TestSuite *app_rpc_core_tests(void);
@@ -84,6 +86,8 @@ int main(int argc, char **argv) {
     add_suite(suite, app_transcoder_hls_stream_build_lvl2_plist_tests());
     add_suite(suite, app_transcoder_hls_stream_cryptokey_request_tests());
     add_suite(suite, app_transcoder_hls_stream_encrypt_segment_tests());
+    add_suite(suite, app_transcoder_img_ffm_in_init_tests());
+    add_suite(suite, app_transcoder_img_ffm_in_avctx_tests());
     add_suite(suite, app_stream_cache_tests());
     add_suite(suite, app_resource_acl_tests());
     add_suite(suite, app_views_common_tests());

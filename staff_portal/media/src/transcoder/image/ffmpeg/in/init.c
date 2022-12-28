@@ -5,7 +5,13 @@ static void atfp__image_ffm_in__preload_done_cb (atfp_img_t *imgproc)
 {
     atfp_t *processor = &imgproc->super;
     json_t *err_info = processor->data.error;
-    json_object_set_new(err_info, "dev", json_string("implementation not finished"));
+    if(json_object_size(err_info) == 0) {
+        asa_op_base_cfg_t *_asa_src = processor->data.storage.handle;
+        atfp_asa_map_t    *_map = _asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        asa_op_localfs_cfg_t *_asa_local = atfp_asa_map_get_localtmp(_map);
+        char *localbuf_fullpath = _asa_local->super.op.open.dst_path;
+        imgproc->ops.src.avctx_init(imgproc->av, localbuf_fullpath, err_info);
+    }
     processor -> data.callback(processor);
 } // end of atfp__image_ffm_in__preload_done_cb
 
@@ -23,12 +29,12 @@ static void atfp_img_ff_in__open_localbuf_cb (asa_op_base_cfg_t *asaobj, ASA_RES
             json_object_set_new(err_info, "storage", json_string("failed to issue read operation to image input"));
             fprintf(stderr, "[transcoder][image][ff_in] line:%d, job_id:%s, result:%d \n",
                   __LINE__, processor->data.rpc_receipt->job_id.bytes, result);
+            processor -> data.callback(processor);
         }
     } else {
         json_object_set_new(err_info, "storage", json_string("failed to open local temp buffer"));
-    }
-    if(json_object_size(err_info) > 0) 
         processor -> data.callback(processor);
+    }
 } // end of  atfp_img_ff_in__open_localbuf_cb
 
 
@@ -36,8 +42,8 @@ void     atfp__image_ffm_in__init_transcode(atfp_t *processor)
 {
     processor->filechunk_seq.curr = processor->filechunk_seq.next = 0;
     processor->filechunk_seq.eof_reached = 0;
-    asa_op_base_cfg_t *asaobj = processor->data.storage.handle;
-    ASA_RES_CODE  result = atfp_src__open_localbuf(asaobj, atfp_img_ff_in__open_localbuf_cb);
+    asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
+    ASA_RES_CODE  result = atfp_src__open_localbuf(asa_src, atfp_img_ff_in__open_localbuf_cb);
     if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(processor->data.error, "storage",
                 json_string("failed to issue open operation for local temp buffer"));
@@ -88,6 +94,8 @@ static void  atfp_img__asaremote_closefile_cb(asa_op_base_cfg_t *asa_src, ASA_RE
 
 uint8_t  atfp__image_ffm_in__deinit_transcode(atfp_t *processor)
 {
+    atfp_img_t *imgproc = (atfp_img_t *)processor;
+    imgproc->ops.src.avctx_deinit(imgproc->av);
     asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
     asa_src->op.close.cb = atfp_img__asaremote_closefile_cb;
     uint8_t still_ongoing = asa_src->storage->ops.fn_close(asa_src) == ASTORAGE_RESULT_ACCEPT;
@@ -111,7 +119,7 @@ uint8_t  atfp__image_ffm_in__has_done_processing(atfp_t *processor)
 
 uint8_t  atfp__image_ffm_in__label_match (const char *label)
 { // this processor supports several image types
-    const char *exp_labels[7] = {"image/jpeg", "image/x-apple-ios-png", "image/tiff",
+    const char *exp_labels[7] = {"image/jpeg", "image/png", "image/tiff",
             "image/bmp", "jpg", "png", "bmp"};
     return atfp_common__label_match(label, 7, exp_labels);
 } // end of  atfp__image_ffm_in__label_match
@@ -122,9 +130,8 @@ struct atfp_s * atfp__image_ffm_in__instantiate_transcoder(void)
     size_t obj_sz = sizeof(atfp_img_t) + sizeof(atfp_av_ctx_t);
     atfp_img_t *out = calloc(0x1, obj_sz);
     out->ops.src.preload_from_storage = atfp__image_src_preload_start;
-    out->ops.src.avfilter_init = NULL;
-    out->ops.src.avctx_init = NULL;
-    out->ops.src.avctx_deinit = NULL;
+    out->ops.src.avctx_init = atfp__image_src__avctx_init;
+    out->ops.src.avctx_deinit = atfp__image_src__avctx_deinit;
     out->ops.src.decode = NULL;
     char *ptr = (char *)out + sizeof(atfp_img_t);
     out->av = (atfp_av_ctx_t *)ptr;
