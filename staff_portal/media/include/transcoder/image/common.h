@@ -13,12 +13,13 @@ typedef struct atfp_img_s {
     atfp_av_ctx_t   *av; // low-level A/V context
     union {
         struct {
-            void (*avctx_init)(atfp_av_ctx_t *, atfp_av_ctx_t *, const char *filepath, json_t *err_info);
+            void (*avctx_init)(atfp_av_ctx_t *, atfp_av_ctx_t *, const char *filepath,
+                    json_t *filt_spec, json_t *err_info);
             void (*avctx_deinit)(atfp_av_ctx_t *);
             ASA_RES_CODE  (*save_to_storage)(struct atfp_img_s *);
             int  (*encode)(atfp_av_ctx_t *);
             int  (*filter)(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
-            void (*avfilter_init)(atfp_av_ctx_t *, json_t *filt_spec, json_t *err_info);
+            void (*avfilter_init)(atfp_av_ctx_t *, atfp_av_ctx_t *, json_t *filt_spec, json_t *err_info);
         } dst;
         struct {
             void (*avctx_init)(atfp_av_ctx_t *, const char *filepath, json_t *err_info);

@@ -35,6 +35,10 @@ struct atfp_av_ctx_s {
             AVPacket  packet;
             uint8_t   num_filtered_frms;
             uint8_t   num_encoded_pkts;
+            struct {
+                uint8_t  file_trailer_wrote:1;
+                uint8_t  file_header_wrote:1;
+            } _final;
         } encode;
     } intermediate_data;
     uint8_t  decoder_flag:1;
@@ -59,8 +63,10 @@ struct atfp_s * atfp__image_ffm_out__instantiate_transcoder(void);
 void atfp__image_src__avctx_init (atfp_av_ctx_t *, const char *filepath, json_t *err_info);
 void atfp__image_src__avctx_deinit (atfp_av_ctx_t *);
 
-void  atfp__image_dst__avctx_init (atfp_av_ctx_t *, atfp_av_ctx_t *, const char *filepath, json_t *err_info);
-void  atfp__image_dst__avfilt_init (atfp_av_ctx_t *, json_t *filt_spec, json_t *err_info);
+void  atfp__image_dst__avctx_init (atfp_av_ctx_t *, atfp_av_ctx_t *,
+        const char *filepath, json_t *filt_spec, json_t *err_info);
+void  atfp__image_dst__avfilt_init (atfp_av_ctx_t *, atfp_av_ctx_t *,
+        json_t *filt_spec, json_t *err_info);
 void  atfp__image_dst__avctx_deinit (atfp_av_ctx_t *);
 
 #ifdef __cplusplus

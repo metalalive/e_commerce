@@ -168,7 +168,7 @@ static int atfp_hls__av_encoder_init(atfp_av_ctx_t *avctx_dst, atfp_av_ctx_t *av
             AVStream  *stream_in  = ifmt_ctx->streams[idx];
             err = avcodec_parameters_copy(stream_out->codecpar, stream_in->codecpar);
             if (err < 0) {
-                json_object_set_new(err_info, "transcoder", json_string("[mp4] Failed to copy parameters from input stream"));
+                json_object_set_new(err_info, "transcoder", json_string("[hls] Failed to copy parameters from input stream"));
                 break;
             }
             stream_out->time_base = stream_in->time_base;            

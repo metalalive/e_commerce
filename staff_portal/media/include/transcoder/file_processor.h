@@ -242,6 +242,7 @@ void  atfp_storage__commit_new_version(atfp_t *);
 
 int  atfp_check_fileupdate_required(atfp_data_t *, const char *basepath,
         const char *filename, float threshold_secs);
+json_t * atfp_image_mask_pattern_index (const char *basepath);
 
 // for crypto / key encryption
 size_t  atfp_get_encrypted_file_basepath (const char *basepath, char *out, size_t o_sz,

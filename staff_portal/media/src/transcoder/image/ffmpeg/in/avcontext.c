@@ -35,6 +35,10 @@ static void  _atfp_img_src__avctx_init_decoder(atfp_av_ctx_t *_avctx, json_t *er
         }
         if(codec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
             ret = avcodec_open2(codec_ctx, decoder, NULL);
+            if(codec_ctx->time_base.num == 0) { // for encoder, timebase should NOT be zero
+                codec_ctx->time_base.num = 1;
+                av_log(NULL, AV_LOG_INFO, "[atfp][img][ff-in][decoder] line:%d, zero time base \n", __LINE__);
+            }
         } else {
             ret = AVERROR_INVALIDDATA; // unsupported stream type
         }

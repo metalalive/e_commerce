@@ -122,7 +122,7 @@ static void  utest_atfp_usr_cb(atfp_t *processor) {
     rmdir(UTEST_FILE_BASEPATH);
 
 
-Ensure(atfp_img_ff_test__init_ok)
+Ensure(atfp_img_ffi_test__init_ok)
 {
     UTEST_ATFP_IMG__INIT_SETUP
     { // init
@@ -150,10 +150,10 @@ Ensure(atfp_img_ff_test__init_ok)
             uv_run(loop, UV_RUN_ONCE);
     }
     UTEST_ATFP_IMG__INIT_TEARDOWN
-} // end of  atfp_img_ff_test__init_ok
+} // end of  atfp_img_ffi_test__init_ok
 
 
-Ensure(atfp_img_ff_test__preload_error)
+Ensure(atfp_img_ffi_test__preload_error)
 {
     UTEST_ATFP_IMG__INIT_SETUP
     { // init
@@ -180,10 +180,10 @@ Ensure(atfp_img_ff_test__preload_error)
             uv_run(loop, UV_RUN_ONCE);
     }
     UTEST_ATFP_IMG__INIT_TEARDOWN
-} // end of  atfp_img_ff_test__preload_error
+} // end of  atfp_img_ffi_test__preload_error
 
 
-Ensure(atfp_img_ff_test__avctx_error)
+Ensure(atfp_img_ffi_test__avctx_error)
 {
     UTEST_ATFP_IMG__INIT_SETUP
     int expect_err = 1;
@@ -212,14 +212,14 @@ Ensure(atfp_img_ff_test__avctx_error)
             uv_run(loop, UV_RUN_ONCE);
     }
     UTEST_ATFP_IMG__INIT_TEARDOWN
-} // end of  atfp_img_ff_test__avctx_error
+} // end of  atfp_img_ffi_test__avctx_error
 
 
 TestSuite *app_transcoder_img_ffm_in_init_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test(suite, atfp_img_ff_test__init_ok);
-    add_test(suite, atfp_img_ff_test__preload_error);
-    add_test(suite, atfp_img_ff_test__avctx_error);
+    add_test(suite, atfp_img_ffi_test__init_ok);
+    add_test(suite, atfp_img_ffi_test__preload_error);
+    add_test(suite, atfp_img_ffi_test__avctx_error);
     return suite;
 }

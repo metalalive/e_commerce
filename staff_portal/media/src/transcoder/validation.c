@@ -385,18 +385,8 @@ static int _validate_image_req__mask (json_t *item, json_t *err_info, aav_cfg_im
                 break;
             }
         } // end of loop
-#define  MASK_INDEX_FILENAME  "index.json"
-#define  FILEPATH_PATTERN  "%s/%s"
         if(json_object_size(err_detail) == 0) {
-            size_t filepath_sz = sizeof(MASK_INDEX_FILENAME) + sizeof(FILEPATH_PATTERN)
-                       + strlen(img_cfg->mask.basepath);
-            char filepath[filepath_sz];
-            size_t nwrite = snprintf(&filepath[0], filepath_sz, FILEPATH_PATTERN,
-                    img_cfg->mask.basepath, MASK_INDEX_FILENAME);
-            assert(nwrite < filepath_sz);
-            // NOTE: currently there are only few mask patterns in use, so the file names are
-            //  recorded in plain text file, if it grows larger then move these records to database.
-            json_t *msk_fmap = json_load_file(&filepath[0], 0, NULL);
+            json_t *msk_fmap = atfp_image_mask_pattern_index (img_cfg->mask.basepath);
             if(msk_fmap) {
                 json_t *filename_item = json_object_getn(msk_fmap, _patt_label, patt_label_sz);
                 if(filename_item && json_is_string(filename_item)) {
@@ -407,8 +397,6 @@ static int _validate_image_req__mask (json_t *item, json_t *err_info, aav_cfg_im
                 json_decref(msk_fmap);
             }
         }
-#undef   FILEPATH_PATTERN
-#undef   MASK_INDEX_FILENAME
     } // if  _patt_label not null
     if(json_object_size(err_detail) == 0) {
         json_decref(err_detail);

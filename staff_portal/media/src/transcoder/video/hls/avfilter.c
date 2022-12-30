@@ -76,7 +76,7 @@ static  int atfp_hls__init_video_filter(atfp_avfilter_data_t *data) {
         av_log(NULL, AV_LOG_ERROR, "[atfp][HLS][filter] line:%d, video spec string exceeding \n", __LINE__);
         err = AVERROR(ENOMEM);
         goto done;
-    }
+    } // TODO, refactor code
     CREATE_AVFILTER_COMMON_CODE(args, buffersrc, buffersink, st_enc_ctx);
     err = av_opt_set_bin(st_enc_ctx->filt_sink_ctx, "pix_fmts", (uint8_t*)&enc_ctx->pix_fmt,
             sizeof(enc_ctx->pix_fmt), AV_OPT_SEARCH_CHILDREN);

@@ -110,6 +110,8 @@ uint8_t  atfp__image_ffm_in__deinit_transcode(atfp_t *processor)
 
 void     atfp__image_ffm_in__proceeding_transcode(atfp_t *processor)
 {
+    json_t *err_info = processor->data.error;
+    json_object_set_new(err_info, "dev", json_string("implementation not finished"));
 } // end of  atfp__image_ffm_in__proceeding_transcode
 
 uint8_t  atfp__image_ffm_in__has_done_processing(atfp_t *processor)

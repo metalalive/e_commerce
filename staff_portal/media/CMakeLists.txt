@@ -229,6 +229,7 @@ SET(APP_TRANSCODER_SOURCE_FILES
     src/transcoder/image/ffmpeg/in/avcontext.c
     src/transcoder/image/ffmpeg/out/init.c
     src/transcoder/image/ffmpeg/out/avcontext.c
+    src/transcoder/image/ffmpeg/out/avfilter.c
     src/transcoder/video/storage.c
     src/transcoder/video/metadata.c 
     src/transcoder/video/hls/init.c 
@@ -338,6 +339,9 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/hls/seeker/segment.c
     test/unit/transcoder/image/ffmpeg/in/init.c
     test/unit/transcoder/image/ffmpeg/in/avcontext.c
+    test/unit/transcoder/image/ffmpeg/out/init.c
+    test/unit/transcoder/image/ffmpeg/out/avcontext.c
+    test/unit/transcoder/image/ffmpeg/out/avfilter.c
     test/unit/rpc/cfg_parser.c
     test/unit/rpc/core.c
     test/unit/rpc/reply.c

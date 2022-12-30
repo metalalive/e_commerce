@@ -8,7 +8,7 @@
 
 #define  UTEST_FFM_INIT_SETUP \
     AVCodec  mock_av_decoder = {0}; \
-    AVCodecContext  mock_dec_ctxs[1] = {0}; \
+    AVCodecContext  mock_dec_ctxs[1] = {{.time_base={.num=0}}}; \
     AVCodecParameters  mock_codec_param = {0}; \
     AVStream   mock_vdo_stream = {.codecpar=&mock_codec_param}; \
     AVStream  *mock_av_streams_ptr[1] = {&mock_vdo_stream}; \
@@ -20,7 +20,7 @@
 #define  UTEST_FFM_INIT_TEARDOWN \
     json_decref(mock_err_info);
 
-Ensure(atfp_img_ff_test__avctx_init_ok)
+Ensure(atfp_img_ffi_test__avctx_init_ok)
 {
     UTEST_FFM_INIT_SETUP
     mock_dec_ctxs[0].codec_type = AVMEDIA_TYPE_VIDEO;
@@ -36,6 +36,7 @@ Ensure(atfp_img_ff_test__avctx_init_ok)
                 when(codec_ctx, is_equal_to(&mock_dec_ctxs[0])),   );
         expect(avcodec_open2, will_return(0),  when(codec, is_equal_to(&mock_av_decoder)),
                 when(ctx, is_equal_to(&mock_dec_ctxs[0])),   );
+        expect(av_log);
     }
     atfp__image_src__avctx_init (&mock_avctx, UTEST_FFM_FILENAME, mock_err_info);
     assert_that(json_object_size(mock_err_info), is_equal_to(0));
@@ -46,10 +47,10 @@ Ensure(atfp_img_ff_test__avctx_init_ok)
     }
     atfp__image_src__avctx_deinit (&mock_avctx);
     UTEST_FFM_INIT_TEARDOWN
-} // end of  atfp_img_ff_test__avctx_init_ok
+} // end of  atfp_img_ffi_test__avctx_init_ok
 
 
-Ensure(atfp_img_ff_test__avctx_format_error)
+Ensure(atfp_img_ffi_test__avctx_format_error)
 {
     UTEST_FFM_INIT_SETUP
     (void) mock_dec_ctxs;
@@ -65,10 +66,10 @@ Ensure(atfp_img_ff_test__avctx_format_error)
     expect(avformat_close_input, when(ref_fmtctx, is_equal_to(mock_avfmt_ctx_p)));
     atfp__image_src__avctx_deinit (&mock_avctx);
     UTEST_FFM_INIT_TEARDOWN
-} // end of  atfp_img_ff_test__avctx_format_error
+} // end of  atfp_img_ffi_test__avctx_format_error
 
 
-Ensure(atfp_img_ff_test__avctx_decoder_error)
+Ensure(atfp_img_ffi_test__avctx_decoder_error)
 {
     UTEST_FFM_INIT_SETUP
     int expect_errcode = AVERROR(ENOENT);
@@ -94,10 +95,10 @@ Ensure(atfp_img_ff_test__avctx_decoder_error)
     }
     atfp__image_src__avctx_deinit (&mock_avctx);
     UTEST_FFM_INIT_TEARDOWN
-} // end of  atfp_img_ff_test__avctx_decoder_error
+} // end of  atfp_img_ffi_test__avctx_decoder_error
 
 
-Ensure(atfp_img_ff_test__avctx_decctx_error)
+Ensure(atfp_img_ffi_test__avctx_decctx_error)
 {
     UTEST_FFM_INIT_SETUP
     mock_dec_ctxs[0].codec_type = AVMEDIA_TYPE_SUBTITLE;
@@ -123,15 +124,15 @@ Ensure(atfp_img_ff_test__avctx_decctx_error)
     }
     atfp__image_src__avctx_deinit (&mock_avctx);
     UTEST_FFM_INIT_TEARDOWN
-} // end of atfp_img_ff_test__avctx_decctx_error
+} // end of atfp_img_ffi_test__avctx_decctx_error
 
 
 TestSuite *app_transcoder_img_ffm_in_avctx_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test(suite, atfp_img_ff_test__avctx_init_ok);
-    add_test(suite, atfp_img_ff_test__avctx_format_error);
-    add_test(suite, atfp_img_ff_test__avctx_decoder_error);
-    add_test(suite, atfp_img_ff_test__avctx_decctx_error);
+    add_test(suite, atfp_img_ffi_test__avctx_init_ok);
+    add_test(suite, atfp_img_ffi_test__avctx_format_error);
+    add_test(suite, atfp_img_ffi_test__avctx_decoder_error);
+    add_test(suite, atfp_img_ffi_test__avctx_decctx_error);
     return suite;
 }
