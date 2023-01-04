@@ -5,6 +5,8 @@ static void  _atfp_img_src__avctx_init_decoder(atfp_av_ctx_t *_avctx, json_t *er
     AVFormatContext  *_fmt_ctx = _avctx ->fmt_ctx;
     if(_fmt_ctx->nb_streams != 1) {
         json_object_set_new(err_info, "transcoder", json_string("[ff_in] invalid image type"));
+        fprintf(stderr, "[atfp][img][ff-in] line:%d, currently this processor only support input"
+                " muxed with only one (video) stream \n", __LINE__);
         return;
     }
     int ret = avformat_find_stream_info(_fmt_ctx, NULL);
@@ -49,7 +51,6 @@ static void  _atfp_img_src__avctx_init_decoder(atfp_av_ctx_t *_avctx, json_t *er
     }
 } // end of  _atfp_img_src__avctx_init_decoder
 
-
 void atfp__image_src__avctx_init (atfp_av_ctx_t *_avctx, const char *filepath, json_t *err_info)
 {
     AVFormatContext *_fmt_ctx = NULL;
@@ -68,12 +69,89 @@ void atfp__image_src__avctx_init (atfp_av_ctx_t *_avctx, const char *filepath, j
 void atfp__image_src__avctx_deinit (atfp_av_ctx_t *_avctx)
 {
     AVCodecContext **dec_ctxs = _avctx->stream_ctx.decode;
+    AVPacket  *pkt = &_avctx->intermediate_data.decode.packet;
+    AVFrame   *frm = &_avctx->intermediate_data.decode.frame;
     if(dec_ctxs) {
         if(dec_ctxs[0])
             avcodec_free_context(&dec_ctxs[0]);
         av_freep(&_avctx->stream_ctx.decode);
     }
+    if(frm->format != -1)
+        av_frame_unref(frm);
+    if(pkt->pos != -1)
+        av_packet_unref(pkt);
     if(_avctx->fmt_ctx)
         avformat_close_input(&_avctx->fmt_ctx);
     *_avctx = (atfp_av_ctx_t) {0};
 } // end of  atfp__image_src__avctx_deinit
+
+
+int  atfp__image_src__avctx_fetch_next_packet(atfp_av_ctx_t *_avctx)
+{
+    int ret = 0;
+    AVFormatContext  *fmt_ctx = _avctx ->fmt_ctx;
+    AVPacket  *pkt = &_avctx->intermediate_data.decode.packet;
+    av_packet_unref(pkt);
+    // assert(pkt->pos == -1);
+    ret = av_read_frame(fmt_ctx, pkt);
+    if(ret == AVERROR_EOF) {
+        // can also use av_seek_frame() cuz entire image file is loaded (seekable)
+        ret = 1; // end of file
+    } else if (!ret) {
+        int is_corrupted = (pkt->flags & (int)AV_PKT_FLAG_CORRUPT);
+        ret = (pkt->stream_index < 0) || (is_corrupted != 0) || 
+            (pkt->stream_index >= fmt_ctx->nb_streams);
+        if(ret)
+            ret = AVERROR_INVALIDDATA;
+    }
+    if(!ret)
+        _avctx->intermediate_data.decode.num_decoded_frames = 0;
+    return ret;
+}
+
+
+int  atfp__image_src__avctx_decode_curr_packet(atfp_av_ctx_t *_avctx)
+{
+    int ret = 0, got_frame = 0;
+    uint16_t  num_decoded = _avctx->intermediate_data.decode.num_decoded_frames;
+    AVPacket *pkt  = &_avctx->intermediate_data.decode.packet;
+    AVFrame  *frm  = &_avctx->intermediate_data.decode.frame;
+    int stream_idx = pkt->stream_index;
+    AVFormatContext  *fmt_ctx = _avctx->fmt_ctx;
+    AVStream         *stream = fmt_ctx->streams[stream_idx];
+    AVCodecContext   *dec_ctx = _avctx->stream_ctx.decode[stream_idx];
+    if(num_decoded == 0) {
+        if(pkt->size > 0 && dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
+            av_packet_rescale_ts(pkt, stream->time_base, dec_ctx->time_base);
+            ret =  avcodec_send_packet(dec_ctx, pkt);
+        } else { // request to preload next packet
+            ret = 1;
+        } // the function only accepts packet from video stream, any sideband data will be discarded
+    }
+    if(ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "[atfp][img][ff-in][av-ctx] line:%d, Failed to send packet to"
+                " decoder, pos: 0x%08x size:%d \n", __LINE__, (uint32_t)pkt->pos, pkt->size);        
+    } else if(ret == 1) {
+        // skipped, new input data required
+    } else {
+        ret = avcodec_receive_frame(dec_ctx, frm); // internally call av_frame_unref() to clean up previous frame
+        if(ret == 0) {
+            frm->pts = frm->best_effort_timestamp;            
+            got_frame = 1;
+        } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            // new input data required (for EOF), or the current packet doesn't contain
+            //  useful frame to decode (EAGAIN)
+            ret = 1;
+        } else {
+            av_log(NULL, AV_LOG_ERROR, "[atfp][img][ff-in][av-ctx] line:%d, Failed to get decoded"
+                    " frame, pos: 0x%08x size:%d \n", __LINE__, (uint32_t)pkt->pos, pkt->size);
+        }
+    }
+    if(got_frame)
+        _avctx->intermediate_data.decode.num_decoded_frames = 1 + num_decoded;
+    return ret;
+} // end of  atfp__image_src__avctx_decode_curr_packet
+
+
+uint8_t  atfp__image_src__avctx_has_done_decoding(atfp_av_ctx_t *_avctx)
+{ return (uint8_t) _avctx->fmt_ctx->pb ->eof_reached; }

@@ -34,7 +34,7 @@ struct atfp_av_ctx_s {
             AVFrame   frame;
             AVPacket  packet;
             uint8_t   num_filtered_frms;
-            uint8_t   num_encoded_pkts;
+            uint8_t   num_encoded_pkts; // TODO, expand to 16-bit integer
             struct {
                 uint8_t  file_trailer_wrote:1;
                 uint8_t  file_header_wrote:1;
@@ -62,6 +62,9 @@ struct atfp_s * atfp__image_ffm_out__instantiate_transcoder(void);
 
 void atfp__image_src__avctx_init (atfp_av_ctx_t *, const char *filepath, json_t *err_info);
 void atfp__image_src__avctx_deinit (atfp_av_ctx_t *);
+int  atfp__image_src__avctx_decode_curr_packet(atfp_av_ctx_t *);
+int  atfp__image_src__avctx_fetch_next_packet(atfp_av_ctx_t *);
+uint8_t  atfp__image_src__avctx_has_done_decoding(atfp_av_ctx_t *);
 
 void  atfp__image_dst__avctx_init (atfp_av_ctx_t *, atfp_av_ctx_t *,
         const char *filepath, json_t *filt_spec, json_t *err_info);

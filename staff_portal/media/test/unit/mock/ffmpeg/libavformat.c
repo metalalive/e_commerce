@@ -81,7 +81,13 @@ void av_dump_format(AVFormatContext *ic, int index, const char *url, int is_outp
 { mock(ic, index, url, is_output); }
 
 int av_read_frame(AVFormatContext *fmt_ctx, AVPacket *pkt)
-{ return (int) mock(fmt_ctx, pkt); }
+{
+    int corrupted = 0, *corrupted_p = &corrupted;
+    int ret = (int) mock(fmt_ctx, pkt, corrupted_p);
+    if(corrupted)
+        pkt->flags |= AV_PKT_FLAG_CORRUPT;
+    return ret;
+}
 
 int av_interleaved_write_frame(AVFormatContext *fmt_ctx, AVPacket *pkt)
 { return (int) mock(fmt_ctx, pkt); }

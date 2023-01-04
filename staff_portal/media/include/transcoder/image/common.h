@@ -25,7 +25,9 @@ typedef struct atfp_img_s {
             void (*avctx_init)(atfp_av_ctx_t *, const char *filepath, json_t *err_info);
             void (*avctx_deinit)(atfp_av_ctx_t *);
             ASA_RES_CODE  (*preload_from_storage)(struct atfp_img_s *, void (*)(struct atfp_img_s *));
-            int  (*decode)(atfp_av_ctx_t *);
+            int  (*decode_pkt)(atfp_av_ctx_t *);
+            int  (*next_pkt)(atfp_av_ctx_t *);
+            uint8_t (*done_decoding)(atfp_av_ctx_t *);
         } src;
     } ops;
     union {

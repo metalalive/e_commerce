@@ -215,11 +215,80 @@ Ensure(atfp_img_ffi_test__avctx_error)
 } // end of  atfp_img_ffi_test__avctx_error
 
 
+
+static int utest_img__av_decode_pkt (atfp_av_ctx_t *_avctx)
+{ return (int)mock(_avctx); }
+
+static int utest_img__av_fetch_nxt_pkt (atfp_av_ctx_t *_avctx)
+{ return (int)mock(_avctx); }
+
+#define  UTEST_ATFP_IMG__PROCESS_SETUP \
+    json_t *mock_err_info = json_object(); \
+    atfp_av_ctx_t  mock_avctx = {0}; \
+    atfp_img_t  mock_fp = {.super={.data={.error=mock_err_info, .callback=utest_atfp_usr_cb}}, \
+         .ops={.src={.decode_pkt=utest_img__av_decode_pkt, .next_pkt=utest_img__av_fetch_nxt_pkt \
+    }}, .av=&mock_avctx,};
+
+
+#define  UTEST_ATFP_IMG__PROCESS_TEARDOWN \
+    json_decref(mock_err_info);
+
+Ensure(atfp_img_ffi_test__process_decode_pkt_ok)
+{
+    UTEST_ATFP_IMG__PROCESS_SETUP
+    expect(utest_img__av_decode_pkt, will_return(0), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp.super)));
+    atfp__image_ffm_in__proceeding_transcode(&mock_fp.super);
+    assert_that(json_object_size(mock_err_info), is_equal_to(0));
+    UTEST_ATFP_IMG__PROCESS_TEARDOWN
+}  // end of atfp_img_ffi_test__process_decode_pkt_ok
+
+Ensure(atfp_img_ffi_test__process_grab_nxt_pkt_ok)
+{
+    UTEST_ATFP_IMG__PROCESS_SETUP
+    expect(utest_img__av_decode_pkt, will_return(1), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_img__av_fetch_nxt_pkt, will_return(0), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_img__av_decode_pkt, will_return(0), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp.super)));
+    atfp__image_ffm_in__proceeding_transcode(&mock_fp.super);
+    assert_that(json_object_size(mock_err_info), is_equal_to(0));
+    UTEST_ATFP_IMG__PROCESS_TEARDOWN
+}  // end of atfp_img_ffi_test__process_grab_nxt_pkt_ok
+
+Ensure(atfp_img_ffi_test__process_eof_reached)
+{
+    UTEST_ATFP_IMG__PROCESS_SETUP
+    uint8_t end_of_file_flg = 1;
+    expect(utest_img__av_decode_pkt, will_return(1), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_img__av_fetch_nxt_pkt, will_return(end_of_file_flg), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp.super)));
+    atfp__image_ffm_in__proceeding_transcode(&mock_fp.super);
+    assert_that(json_object_size(mock_err_info), is_equal_to(0));
+    UTEST_ATFP_IMG__PROCESS_TEARDOWN
+}  // end of atfp_img_ffi_test__process_eof_reached
+
+Ensure(atfp_img_ffi_test__process_decode_error)
+{
+    UTEST_ATFP_IMG__PROCESS_SETUP
+    expect(utest_img__av_decode_pkt, will_return(1), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_img__av_fetch_nxt_pkt, will_return(0), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_img__av_decode_pkt, will_return(AVERROR(EBADF)), when(_avctx, is_equal_to(&mock_avctx)));
+    expect(utest_atfp_usr_cb, when(processor, is_equal_to(&mock_fp.super)));
+    atfp__image_ffm_in__proceeding_transcode(&mock_fp.super);
+    assert_that(json_object_size(mock_err_info), is_greater_than(0));
+    UTEST_ATFP_IMG__PROCESS_TEARDOWN
+}  // end of atfp_img_ffi_test__process_decode_error
+
+
 TestSuite *app_transcoder_img_ffm_in_init_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, atfp_img_ffi_test__init_ok);
     add_test(suite, atfp_img_ffi_test__preload_error);
     add_test(suite, atfp_img_ffi_test__avctx_error);
+    add_test(suite, atfp_img_ffi_test__process_decode_pkt_ok);
+    add_test(suite, atfp_img_ffi_test__process_grab_nxt_pkt_ok);
+    add_test(suite, atfp_img_ffi_test__process_eof_reached);
+    add_test(suite, atfp_img_ffi_test__process_decode_error);
     return suite;
 }

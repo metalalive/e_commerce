@@ -106,24 +106,45 @@ uint8_t  atfp__image_ffm_in__deinit_transcode(atfp_t *processor)
 
 
 
-
-
 void     atfp__image_ffm_in__proceeding_transcode(atfp_t *processor)
 {
+    atfp_img_t *_imgproc = (atfp_img_t *)processor;
     json_t *err_info = processor->data.error;
-    json_object_set_new(err_info, "dev", json_string("implementation not finished"));
+    uint8_t frame_avail = 0, err = 0, end_of_file = 1;
+    do {
+        err = _imgproc->ops.src.decode_pkt(_imgproc->av);
+        if(!err) {
+            frame_avail = 1;
+        } else if(err == 1) { // new packet required
+            err =  _imgproc->ops.src.next_pkt(_imgproc->av);
+            if(err) {
+                if(err != end_of_file)
+                    json_object_set_new(err_info, "transcoder", json_string("[img][ff-in] "
+                            "error when getting next packet from local temp buffer"));
+                break;
+            }
+        } else {
+            json_object_set_new(err_info, "transcoder", json_string("[img][ff-in] "
+                        "failed to decode next packet"));
+            break;
+        }
+    } while (!frame_avail);
+    processor -> data.callback(processor);
 } // end of  atfp__image_ffm_in__proceeding_transcode
+
 
 uint8_t  atfp__image_ffm_in__has_done_processing(atfp_t *processor)
 {
-    return 0;
+    atfp_img_t *_imgproc = (atfp_img_t *)processor;
+    return _imgproc->ops.src.done_decoding(_imgproc->av);
 } // end of  atfp__image_ffm_in__has_done_processing
+
 
 uint8_t  atfp__image_ffm_in__label_match (const char *label)
 { // this processor supports several image types
-    const char *exp_labels[7] = {"image/jpeg", "image/png", "image/tiff",
-            "image/bmp", "jpg", "png", "bmp"};
-    return atfp_common__label_match(label, 7, exp_labels);
+    const char *exp_labels[10] = {"image/jpeg", "image/png", "image/tiff",
+            "image/bmp", "image/gif", "jpg", "png", "bmp", "tiff", "gif"};
+    return atfp_common__label_match(label, 10, exp_labels);
 } // end of  atfp__image_ffm_in__label_match
 
 
@@ -134,7 +155,9 @@ struct atfp_s * atfp__image_ffm_in__instantiate_transcoder(void)
     out->ops.src.preload_from_storage = atfp__image_src_preload_start;
     out->ops.src.avctx_init = atfp__image_src__avctx_init;
     out->ops.src.avctx_deinit = atfp__image_src__avctx_deinit;
-    out->ops.src.decode = NULL;
+    out->ops.src.decode_pkt = atfp__image_src__avctx_decode_curr_packet;
+    out->ops.src.next_pkt   = atfp__image_src__avctx_fetch_next_packet;
+    out->ops.src.done_decoding = atfp__image_src__avctx_has_done_decoding;
     char *ptr = (char *)out + sizeof(atfp_img_t);
     out->av = (atfp_av_ctx_t *)ptr;
     return &out->super;
