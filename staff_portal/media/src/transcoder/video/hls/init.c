@@ -124,19 +124,25 @@ static void  _atfp__hls_init__dst_version_folder_cb (asa_op_base_cfg_t *asa_dst,
 
 void  atfp__video_hls__init_transcode(atfp_t *processor)
 {
+    json_t *err_info = processor->data.error;
     asa_op_base_cfg_t *asa_dst = processor -> data.storage.handle;
     if(asa_dst->op.write.src_max_nbytes == 0 || !asa_dst->op.write.src) {
-        json_object_set_new(processor->data.error, "storage", json_string("[hls] no write buffer provided in asaobj"));
+        json_object_set_new(err_info, "storage", json_string("[hls] no write buffer provided in asaobj"));
     } else if (processor->transfer.transcoded_dst.flags.asalocal_open ||
             processor->transfer.transcoded_dst.flags.asaremote_open) {
-        json_object_set_new(processor->data.error, "transcoder", json_string("[hls] asaobj is not cleaned"));
+        json_object_set_new(err_info, "transcoder", json_string("[hls] asaobj is not cleaned"));
     } else {
+#if  1
         atfp_storage_video_create_version(processor, _atfp__hls_init__dst_version_folder_cb);
+#else
+        json_object_set_new(err_info, "transcoder", json_string("[hls] assertion for dev"));
+#endif
     }
-    if(json_object_size(processor->data.error) > 0) {
-        processor -> data.callback(processor);
-        fprintf(stderr, "[transcoder][hls][init] line:%d, job_id:%s, avinput or validation error \n",
+    processor->op_async_done .init = json_object_size(err_info) == 0;
+    if(json_object_size(err_info) > 0) {
+        fprintf(stderr, "[atfp][hls][init] line:%d, job_id:%s, avinput or validation error \n",
                 __LINE__, processor->data.rpc_receipt->job_id.bytes);
+        processor -> data.callback(processor);
     }
 } // end of atfp__video_hls__init_transcode
 
@@ -191,6 +197,7 @@ void atfp__video_hls__proceeding_transcode(atfp_t *processor)
     } else if(ret < ATFP_AVCTX_RET__OK) {
         result = ASTORAGE_RESULT_UNKNOWN_ERROR;
     }
+    processor->op_async_done .processing = result == ASTORAGE_RESULT_ACCEPT;
     assert(result != ASTORAGE_RESULT_COMPLETE);
 } // end of atfp__video_hls__proceeding_transcode
 

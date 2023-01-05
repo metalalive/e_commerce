@@ -81,11 +81,14 @@ static void atfp__video_mp4__init(atfp_t *processor)
     processor->filechunk_seq.curr = processor->filechunk_seq.next = 0;
     processor->filechunk_seq.eof_reached = 0;
     asa_op_base_cfg_t *asaobj = processor->data.storage.handle;
+#if  1
     ASA_RES_CODE  result = atfp_src__open_localbuf(asaobj, atfp__video_mp4__open_local_tmpbuf_cb);
-#if  0
-    fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, local buffer path:%s \n",
-          __LINE__, processor->data.rpc_receipt->job_id.bytes, asa_local->super.op.open.dst_path);
+#else
+    ASA_RES_CODE  result  = 123;
 #endif
+    //fprintf(stderr, "[transcoder][mp4][init] line:%d, job_id:%s, local buffer path:%s \n",
+    //      __LINE__, processor->data.rpc_receipt->job_id.bytes, asa_local->super.op.open.dst_path);
+    processor->op_async_done.init = result == ASTORAGE_RESULT_ACCEPT;
     if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(processor->data.error, "storage",
                 json_string("failed to issue open operation for local temp buffer"));
@@ -167,8 +170,7 @@ static void _atfp_mp4__processing_one_frame(atfp_mp4_t *mp4proc)
 {
     atfp_t *processor = &mp4proc -> super;
     json_t *err_info = processor->data.error;
-    int frame_avail = 0, pkt_avail = 0;
-    int err = 0;
+    int frame_avail = 0, pkt_avail = 0, err = 0;
     do {
         err = mp4proc->internal.op.decode_pkt(mp4proc->av);
         if(!err) {
@@ -191,7 +193,12 @@ static void _atfp_mp4__processing_one_frame(atfp_mp4_t *mp4proc)
             break;
         }
     } while (!frame_avail);
-
+#if   0
+    if(processor->op_async_done.processing) {
+        frame_avail = 0;   err = 1;
+        json_object_set_new(err_info, "transcoder", json_string("[mp4] assertion for dev"));
+    }
+#endif
     if(frame_avail) {
         // invoke the callback asynchronously if a new frame is decoded successfully, which avoids
         // recursive calls between source and destination file processors when there are too many
@@ -203,11 +210,14 @@ static void _atfp_mp4__processing_one_frame(atfp_mp4_t *mp4proc)
     mp4proc->internal.op.monitor_progress(mp4proc->av, processor->data.rpc_receipt);
     if(err)
         processor -> data.callback(processor);
+    else
+        processor->op_async_done.processing = 1;
 } // end of _atfp_mp4__processing_one_frame
 
 
 static void atfp__video_mp4__processing(atfp_t *processor)
 {
+    processor->op_async_done.processing = 0;
     _atfp_mp4__processing_one_frame((atfp_mp4_t *)processor);
 } // end of atfp__video_mp4__processing
 

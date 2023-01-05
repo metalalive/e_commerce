@@ -174,7 +174,11 @@ static void  atfp_hls__scan_local_tmpbuf_cb(uv_fs_t* req)
             asa_local->super.op.close.cb = atfp_hls__close_local_seg__cb;
             asa_local->super.op.read.cb  = atfp_hls__read_local_seg__cb;
             asa_local->super.op.unlink.cb = atfp_hls__unlink_local_seg__cb;
+#if  1
             ASA_RES_CODE  result = atfp__segment_start_transfer(asa_dst, asa_local, seg_cfg, 0);
+#else
+            ASA_RES_CODE  result = 234;
+#endif
             end = result != ASTORAGE_RESULT_ACCEPT;
             if(end)
                 json_object_set_new(processor->data.error, "storage",

@@ -75,6 +75,13 @@ typedef struct atfp_s {
         // TODO, move into  `transfer`.`transcoded_dst` field below, it is used only
         // for source file processor during transcoding
     } filechunk_seq;
+    struct {
+        // indicate the operation can complete its task (regardless of errors happening) in
+        //  current loop cycle (value = 0), or it requires more event-loop cycles (value = 1)
+        // to get task done
+        uint8_t  init:1;
+        uint8_t  processing:1;
+    } op_async_done;
     union {
         struct {
             struct {

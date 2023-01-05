@@ -23,6 +23,8 @@ extern "C" {
 #define   NUM_USRARGS_ASA_DST       (ASA_USRARG_INDEX__VERSION_EXIST_FLAG + 1)
 
 #define  API_RPC__SEND_ERROR_REPLY(_receipt, _err_info) { \
+    fprintf(stderr, "[rpc][atfp] ready to send reply, file:%s, line:%d, errinfo:%p \n", \
+            __FILE__, __LINE__, _err_info); \
     json_t *_wrapper = json_object(); \
     json_object_set(_wrapper, "error", _err_info); \
     app_rpc_task_send_reply(_receipt, _wrapper, 1); \
@@ -33,8 +35,8 @@ void api_rpc_transcode__asa_localtmp_deinit(asa_op_base_cfg_t *);
 void api_rpc_transcode__asa_src_deinit(asa_op_base_cfg_t *);
 void api_rpc_transcode__asa_dst_deinit(asa_op_base_cfg_t *);
 
-void  api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *_map);
-void  api_rpc_transcode__finalize (atfp_asa_map_t *map);
+void  api_rpc_transcoding__storagemap_deinit(atfp_asa_map_t *);
+void  api_rpc_transcode__finalize (atfp_asa_map_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause

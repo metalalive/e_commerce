@@ -251,10 +251,11 @@ static int  _atfp_hls__av_encode_processing(atfp_av_ctx_t *dst, AVFrame *frame, 
             goto done;
         }
     }
-#if  1
+#if   1
     ret = avcodec_receive_packet(st_encode_ctx->enc_ctx, packet);
 #else
-    ret = AVERROR(EAGAIN);
+    if(num_encoded_pkts > 20)
+        ret = AVERROR(EBUSY);
 #endif
     if (ret == 0) {
         packet-> stream_index = stream_idx;

@@ -387,7 +387,16 @@ int  atfp_ffmpeg__next_local_packet(atfp_av_ctx_t *avctx)
     if(num_pkts_avail > 0) {
         AVPacket  *pkt = &avctx->intermediate_data.decode.packet;
         atfp_mp4__av_packet_deinit(pkt);
+#if  1
         ret = av_read_frame(fmt_ctx, pkt);
+#else
+        if(avctx->stats[0].index_entry.fetched < 4) { // assume error at subsequent packet
+        // if(0) { // assume error at first packet
+            ret = av_read_frame(fmt_ctx, pkt);
+        } else {
+            ret = AVERROR(EACCES);
+        }
+#endif
         if(!ret) {
             int is_corrupted = (pkt->flags & (int)AV_PKT_FLAG_CORRUPT);
             ret = (pkt->stream_index < 0) || (is_corrupted != 0) || 
