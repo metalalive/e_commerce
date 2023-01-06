@@ -64,6 +64,8 @@ Ensure(atfp_img_ffo_test__filt_init_ok)
             will_set_contents_of_parameter(filt_ctx_p, &mock_filt_sink_ctx_p, sizeof(AVFilterContext *)),
             when(args, is_equal_to(NULL)),
        );
+    expect(av_opt_set_bin, when(obj, is_equal_to(mock_filt_sink_ctx_p)),
+            when(name, is_equal_to_string("pix_fmts"))  );
     expect(avfilter_graph_parse_ptr, will_return(0), when(graph, is_equal_to(&mock_filt_grf)),
             when(inputs, is_equal_to(&mock_filt_in)), when(outputs, is_equal_to(&mock_filt_out)),
        );
@@ -79,7 +81,7 @@ Ensure(atfp_img_ffo_test__filt_init_ok)
 } // end of  atfp_img_ffo_test__filt_init_ok
 
 
-Ensure(atfp_img_ffo_test__gen_filt_spec_error)
+Ensure(atfp_img_ffo_test__init_gen_filt_spec_error)
 {
     UTEST_IMGFILT_INIT__SETUP("invalid/path/to/nowhere")
     (void)mock_filt_src_ctx_p;
@@ -94,10 +96,10 @@ Ensure(atfp_img_ffo_test__gen_filt_spec_error)
     atfp__image_dst__avfilt_init (&mock_avctx_src, &mock_avctx_dst, mock_filtspec, mock_err_info);
     assert_that(json_object_size(mock_err_info), is_greater_than(0));
     UTEST_IMGFILT_INIT__TEARDOWN
-} // end of  atfp_img_ffo_test__gen_filt_spec_error
+} // end of  atfp_img_ffo_test__init_gen_filt_spec_error
 
 
-Ensure(atfp_img_ffo_test__filt_ctx_spec_error)
+Ensure(atfp_img_ffo_test__init_filt_ctx_spec_error)
 {
     UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask")
     expect(avfilter_inout_alloc, will_return(&mock_filt_out));
@@ -123,10 +125,10 @@ Ensure(atfp_img_ffo_test__filt_ctx_spec_error)
     assert_that(mock_st_enc_ctxs[0].filt_src_ctx, is_equal_to(&mock_filt_src_ctx));
     assert_that(mock_st_enc_ctxs[0].filt_sink_ctx, is_equal_to(NULL));
     UTEST_IMGFILT_INIT__TEARDOWN
-} // end of  atfp_img_ffo_test__filt_ctx_spec_error
+} // end of  atfp_img_ffo_test__init_filt_ctx_spec_error
 
 
-Ensure(atfp_img_ffo_test__filt_grf_parse_spec_error)
+Ensure(atfp_img_ffo_test__init_filt_grf_parse_spec_error)
 {
     UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask")
     expect(avfilter_inout_alloc, will_return(&mock_filt_out));
@@ -142,6 +144,8 @@ Ensure(atfp_img_ffo_test__filt_grf_parse_spec_error)
             will_set_contents_of_parameter(filt_ctx_p, &mock_filt_sink_ctx_p, sizeof(AVFilterContext *)),
             when(args, is_equal_to(NULL)),
        );
+    expect(av_opt_set_bin, when(obj, is_equal_to(mock_filt_sink_ctx_p)),
+            when(name, is_equal_to_string("pix_fmts"))  );
     expect(avfilter_graph_parse_ptr, will_return(AVERROR(EBUSY)), when(graph, is_equal_to(&mock_filt_grf)),
             when(inputs, is_equal_to(&mock_filt_in)), when(outputs, is_equal_to(&mock_filt_out)),
        );
@@ -153,10 +157,10 @@ Ensure(atfp_img_ffo_test__filt_grf_parse_spec_error)
     assert_that(mock_st_enc_ctxs[0].filt_src_ctx, is_equal_to(&mock_filt_src_ctx));
     assert_that(mock_st_enc_ctxs[0].filt_sink_ctx, is_equal_to(&mock_filt_sink_ctx));
     UTEST_IMGFILT_INIT__TEARDOWN
-} // end of  atfp_img_ffo_test__filt_grf_parse_spec_error
+} // end of  atfp_img_ffo_test__init_filt_grf_parse_spec_error
 
 
-Ensure(atfp_img_ffo_test__filt_grf_conn_error)
+Ensure(atfp_img_ffo_test__init_filt_grf_conn_error)
 {
     UTEST_IMGFILT_INIT__SETUP("media/data/test/image/mask")
     expect(avfilter_inout_alloc, will_return(&mock_filt_out));
@@ -172,6 +176,8 @@ Ensure(atfp_img_ffo_test__filt_grf_conn_error)
             will_set_contents_of_parameter(filt_ctx_p, &mock_filt_sink_ctx_p, sizeof(AVFilterContext *)),
             when(args, is_equal_to(NULL)),
        );
+    expect(av_opt_set_bin, when(obj, is_equal_to(mock_filt_sink_ctx_p)),
+            when(name, is_equal_to_string("pix_fmts"))  );
     expect(avfilter_graph_parse_ptr, will_return(0), when(graph, is_equal_to(&mock_filt_grf)),
             when(inputs, is_equal_to(&mock_filt_in)), when(outputs, is_equal_to(&mock_filt_out)),
        );
@@ -184,16 +190,96 @@ Ensure(atfp_img_ffo_test__filt_grf_conn_error)
     assert_that(mock_st_enc_ctxs[0].filt_src_ctx, is_equal_to(&mock_filt_src_ctx));
     assert_that(mock_st_enc_ctxs[0].filt_sink_ctx, is_equal_to(&mock_filt_sink_ctx));
     UTEST_IMGFILT_INIT__TEARDOWN
-} // end of  atfp_img_ffo_test__filt_grf_conn_error
+} // end of  atfp_img_ffo_test__init_filt_grf_conn_error
+
+
+#define  UTEST_IMGFILT_PROCESS__SETUP  \
+    AVFilterContext  mock_filt_sink = {0},  mock_filt_src  = {0}; \
+    atfp_stream_enc_ctx_t  mock_stream_ctx = {.filt_src_ctx=&mock_filt_src, .filt_sink_ctx=&mock_filt_sink}; \
+    atfp_av_ctx_t  mock_avctx_src = {0},  mock_avctx_dst = {.stream_ctx={.encode=&mock_stream_ctx}};
+
+Ensure(atfp_img_ffo_test__filter_invalid_packet)
+{
+    UTEST_IMGFILT_PROCESS__SETUP
+    mock_avctx_src.intermediate_data.decode.packet.pos = -1;
+    int ret = atfp__image_dst__filter_frame(&mock_avctx_src, &mock_avctx_dst);
+    assert_that(ret, is_equal_to(ATFP_AVCTX_RET__NEED_MORE_DATA));
+} // end of atfp_img_ffo_test__filter_invalid_packet
+
+Ensure(atfp_img_ffo_test__filter_new_frame)
+{
+    UTEST_IMGFILT_PROCESS__SETUP
+    expect(av_buffersrc_add_frame_flags, will_return(0), when(filt_ctx, is_equal_to(&mock_filt_src)),
+            when(frm, is_equal_to(&mock_avctx_src.intermediate_data.decode.frame)) );
+    expect(av_frame_unref);
+    expect(av_buffersink_get_frame, will_return(0), when(filt_ctx, is_equal_to(&mock_filt_sink)),
+            when(frm, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)) );
+    int ret = atfp__image_dst__filter_frame(&mock_avctx_src, &mock_avctx_dst);
+    assert_that(ret, is_equal_to(ATFP_AVCTX_RET__OK));
+    assert_that(mock_avctx_dst.intermediate_data.encode.num_filtered_frms, is_equal_to(1));
+    // assume the source frame can be split to several destination frames through the filter graph
+    expect(av_frame_unref);
+    expect(av_buffersink_get_frame, will_return(0), when(filt_ctx, is_equal_to(&mock_filt_sink)),
+            when(frm, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)) );
+    ret = atfp__image_dst__filter_frame(&mock_avctx_src, &mock_avctx_dst);
+    assert_that(ret, is_equal_to(ATFP_AVCTX_RET__OK));
+    assert_that(mock_avctx_dst.intermediate_data.encode.num_filtered_frms, is_equal_to(2));
+} // end of atfp_img_ffo_test__filter_new_frame
+
+
+Ensure(atfp_img_ffo_test__filter_no_more_frame)
+{ // assume there've been several frames generated from the filter
+    UTEST_IMGFILT_PROCESS__SETUP
+    mock_avctx_dst.intermediate_data.encode.num_filtered_frms = 6;
+    expect(av_frame_unref);
+    expect(av_buffersink_get_frame, will_return(AVERROR(EAGAIN)),
+            when(filt_ctx, is_equal_to(&mock_filt_sink))  );
+    int ret = atfp__image_dst__filter_frame(&mock_avctx_src, &mock_avctx_dst);
+    assert_that(ret, is_equal_to(ATFP_AVCTX_RET__NEED_MORE_DATA));
+    assert_that(mock_avctx_dst.intermediate_data.encode.num_filtered_frms, is_equal_to(0));
+} // end of atfp_img_ffo_test__filter_no_more_frame
+
+
+Ensure(atfp_img_ffo_test__filter_final_new_frame)
+{
+    UTEST_IMGFILT_PROCESS__SETUP
+    expect(av_buffersrc_add_frame_flags, will_return(0), when(frm, is_equal_to(NULL)),
+            when(filt_ctx, is_equal_to(&mock_filt_src))  );
+    expect(av_frame_unref);
+    expect(av_buffersink_get_frame, will_return(0), when(filt_ctx, is_equal_to(&mock_filt_sink)),
+            when(frm, is_equal_to(&mock_avctx_dst.intermediate_data.encode.frame)) );
+    int ret = atfp__image_dst__flushing_filter(&mock_avctx_src, &mock_avctx_dst);
+    assert_that(ret, is_equal_to(ATFP_AVCTX_RET__OK));
+    assert_that(mock_avctx_dst.intermediate_data.encode.num_filtered_frms, is_equal_to(1));
+} // end of atfp_img_ffo_test__filter_final_new_frame
+
+
+Ensure(atfp_img_ffo_test__filter_final_no_more_frame)
+{
+    UTEST_IMGFILT_PROCESS__SETUP
+    mock_avctx_dst.intermediate_data.encode.num_filtered_frms = 1;
+    assert_that(mock_avctx_dst.intermediate_data.encode._final.filt_flush_done, is_equal_to(0));
+    expect(av_frame_unref);
+    expect(av_buffersink_get_frame, will_return(AVERROR(EAGAIN)),
+             when(filt_ctx, is_equal_to(&mock_filt_sink))   );
+    int ret = atfp__image_dst__flushing_filter(&mock_avctx_src, &mock_avctx_dst);
+    assert_that(ret, is_equal_to(ATFP_AVCTX_RET__NEED_MORE_DATA));
+    assert_that(mock_avctx_dst.intermediate_data.encode._final.filt_flush_done, is_equal_to(1));
+} // end of atfp_img_ffo_test__filter_final_no_more_frame
 
 
 TestSuite *app_transcoder_img_ffm_out_avfilt_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, atfp_img_ffo_test__filt_init_ok);
-    add_test(suite, atfp_img_ffo_test__gen_filt_spec_error);
-    add_test(suite, atfp_img_ffo_test__filt_ctx_spec_error);
-    add_test(suite, atfp_img_ffo_test__filt_grf_parse_spec_error);
-    add_test(suite, atfp_img_ffo_test__filt_grf_conn_error);
+    add_test(suite, atfp_img_ffo_test__init_gen_filt_spec_error);
+    add_test(suite, atfp_img_ffo_test__init_filt_ctx_spec_error);
+    add_test(suite, atfp_img_ffo_test__init_filt_grf_parse_spec_error);
+    add_test(suite, atfp_img_ffo_test__init_filt_grf_conn_error);
+    add_test(suite, atfp_img_ffo_test__filter_invalid_packet);
+    add_test(suite, atfp_img_ffo_test__filter_new_frame);
+    add_test(suite, atfp_img_ffo_test__filter_no_more_frame);
+    add_test(suite, atfp_img_ffo_test__filter_final_new_frame);
+    add_test(suite, atfp_img_ffo_test__filter_final_no_more_frame);
     return suite;
 }

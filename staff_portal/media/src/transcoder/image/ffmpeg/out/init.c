@@ -38,7 +38,8 @@ void     atfp__image_ffm_out__init_transcode(atfp_t *processor)
         if(json_object_size(err_info) == 0)
             imgproc->ops.dst.avfilter_init(_avctx_src, _avctx_dst, filt_spec, err_info);
     }
-    processor -> data.callback(processor); 
+    processor->op_async_done.init = 0;
+    processor -> data.callback(processor);
 } // end of  atfp__image_ffm_out__init_transcode
 
 
@@ -58,11 +59,11 @@ uint8_t  atfp__image_ffm_out__deinit_transcode(atfp_t *processor)
 
 
 void     atfp__image_ffm_out__proceeding_transcode(atfp_t *processor)
-{
+{ // TODO, wait an event loop cycle, avoid stack overflow
     atfp_img_t *imgproc = (atfp_img_t *)processor;
     uint8_t   _num_encoded_pkts = imgproc->av->intermediate_data.encode.num_encoded_pkts;
     json_t *err_info = processor->data.error;
-    if(++_num_encoded_pkts < 3) {
+    if(++_num_encoded_pkts < 4) {
         imgproc->av->intermediate_data.encode.num_encoded_pkts = _num_encoded_pkts;
         processor -> data.callback(processor);
     } else {

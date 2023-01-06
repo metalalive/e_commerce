@@ -36,6 +36,7 @@ static void  _atfp_img_src__avctx_init_decoder(atfp_av_ctx_t *_avctx, json_t *er
             return;
         }
         if(codec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
+            codec_ctx->framerate = av_guess_frame_rate(_fmt_ctx, stream, NULL);
             ret = avcodec_open2(codec_ctx, decoder, NULL);
             if(codec_ctx->time_base.num == 0) { // for encoder, timebase should NOT be zero
                 codec_ctx->time_base.num = 1;
@@ -88,16 +89,17 @@ void atfp__image_src__avctx_deinit (atfp_av_ctx_t *_avctx)
 
 int  atfp__image_src__avctx_fetch_next_packet(atfp_av_ctx_t *_avctx)
 {
-    int ret = 0;
+    int ret = ATFP_AVCTX_RET__OK;
     AVFormatContext  *fmt_ctx = _avctx ->fmt_ctx;
     AVPacket  *pkt = &_avctx->intermediate_data.decode.packet;
     av_packet_unref(pkt);
     // assert(pkt->pos == -1);
     ret = av_read_frame(fmt_ctx, pkt);
+    // Note , may also go backwards to previous frame using av_seek_frame() (if seekable)
     if(ret == AVERROR_EOF) {
-        // can also use av_seek_frame() cuz entire image file is loaded (seekable)
-        ret = 1; // end of file
-    } else if (!ret) {
+        ret = 1; // end of file, avio_feof(fmt_ctx ->pb) might not be consistent
+        // TODO, figure out why sometimes AVERROR_EOF is returned without setting `eof_reached`
+    } else if (ret == ATFP_AVCTX_RET__OK) {
         int is_corrupted = (pkt->flags & (int)AV_PKT_FLAG_CORRUPT);
         ret = (pkt->stream_index < 0) || (is_corrupted != 0) || 
             (pkt->stream_index >= fmt_ctx->nb_streams);
@@ -107,12 +109,12 @@ int  atfp__image_src__avctx_fetch_next_packet(atfp_av_ctx_t *_avctx)
     if(!ret)
         _avctx->intermediate_data.decode.num_decoded_frames = 0;
     return ret;
-}
+} // end of  atfp__image_src__avctx_fetch_next_packet
 
 
 int  atfp__image_src__avctx_decode_curr_packet(atfp_av_ctx_t *_avctx)
 {
-    int ret = 0, got_frame = 0;
+    int ret = ATFP_AVCTX_RET__OK, got_frame = 0;
     uint16_t  num_decoded = _avctx->intermediate_data.decode.num_decoded_frames;
     AVPacket *pkt  = &_avctx->intermediate_data.decode.packet;
     AVFrame  *frm  = &_avctx->intermediate_data.decode.frame;
@@ -135,7 +137,7 @@ int  atfp__image_src__avctx_decode_curr_packet(atfp_av_ctx_t *_avctx)
         // skipped, new input data required
     } else {
         ret = avcodec_receive_frame(dec_ctx, frm); // internally call av_frame_unref() to clean up previous frame
-        if(ret == 0) {
+        if(ret == ATFP_AVCTX_RET__OK) {
             frm->pts = frm->best_effort_timestamp;            
             got_frame = 1;
         } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {

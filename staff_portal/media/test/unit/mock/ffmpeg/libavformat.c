@@ -36,6 +36,18 @@ void avio_context_free(AVIOContext **s)
     *s = NULL;
 }
 
+int avio_open(AVIOContext **ioc_p, const char *filename, int flags)
+{
+    AVIOContext *ioc = *ioc_p;
+    return (int) mock(ioc, ioc_p, filename, flags);
+}
+
+int avio_closep(AVIOContext **ioc_p)
+{
+    AVIOContext *ioc = *ioc_p;
+    return (int) mock(ioc, ioc_p);
+}
+
 void avformat_free_context(AVFormatContext *s)
 { mock(s); }
 
@@ -90,6 +102,9 @@ int av_read_frame(AVFormatContext *fmt_ctx, AVPacket *pkt)
 }
 
 int av_interleaved_write_frame(AVFormatContext *fmt_ctx, AVPacket *pkt)
+{ return (int) mock(fmt_ctx, pkt); }
+
+int av_write_frame(AVFormatContext *fmt_ctx, AVPacket *pkt)
 { return (int) mock(fmt_ctx, pkt); }
 
 int av_write_trailer(AVFormatContext *fmt_ctx)

@@ -44,6 +44,7 @@ void     atfp__image_ffm_in__init_transcode(atfp_t *processor)
     processor->filechunk_seq.eof_reached = 0;
     asa_op_base_cfg_t *asa_src = processor->data.storage.handle;
     ASA_RES_CODE  result = atfp_src__open_localbuf(asa_src, atfp_img_ff_in__open_localbuf_cb);
+    processor->op_async_done.init = result == ASTORAGE_RESULT_ACCEPT;
     if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(processor->data.error, "storage",
                 json_string("failed to issue open operation for local temp buffer"));
@@ -129,6 +130,7 @@ void     atfp__image_ffm_in__proceeding_transcode(atfp_t *processor)
             break;
         }
     } while (!frame_avail);
+    processor->op_async_done.processing = 0;
     processor -> data.callback(processor);
 } // end of  atfp__image_ffm_in__proceeding_transcode
 

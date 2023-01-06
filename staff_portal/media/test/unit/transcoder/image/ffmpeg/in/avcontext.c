@@ -34,6 +34,9 @@ Ensure(atfp_img_ffi_test__avctx_init_ok)
         expect(avcodec_alloc_context3, will_return(&mock_dec_ctxs[0]), when(codec, is_equal_to(&mock_av_decoder)));
         expect(avcodec_parameters_to_context, will_return(0),  when(par, is_equal_to(&mock_codec_param)),
                 when(codec_ctx, is_equal_to(&mock_dec_ctxs[0])),   );
+        expect(av_guess_frame_rate, will_return(1), when(fmtctx, is_equal_to(mock_avfmt_ctx_p)),
+                when(stream, is_equal_to(&mock_vdo_stream))  );
+        expect(av_guess_frame_rate, will_return(1));
         expect(avcodec_open2, will_return(0),  when(codec, is_equal_to(&mock_av_decoder)),
                 when(ctx, is_equal_to(&mock_dec_ctxs[0])),   );
         expect(av_log);

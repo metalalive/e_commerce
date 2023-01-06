@@ -3,10 +3,10 @@
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
 #include <libavutil/opt.h>
-#include <libavutil/pixdesc.h>
 
 #include "transcoder/video/hls.h"
 #include "transcoder/video/ffmpeg.h"
+#include "transcoder/common/ffmpeg.h"
 
 typedef struct {
     AVCodecContext         *dec_ctx;
@@ -204,54 +204,23 @@ end:
 } // end of atfp_hls__avfilter_init
 
 
-static int  _atfp_hls__av_filter_processing(atfp_av_ctx_t *dst, AVFrame  *frame_origin, int8_t stream_idx)
-{
-    int ret = ATFP_AVCTX_RET__OK;
-    AVFrame   *frame_filt   = &dst->intermediate_data.encode.frame;
-    atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
-    uint16_t   num_filtered_frms  = dst->intermediate_data.encode.num_filtered_frms;
-    if(num_filtered_frms == 0) {
-        ret = av_buffersrc_add_frame_flags(st_encode_ctx->filt_src_ctx, frame_origin, 
-               AV_BUFFERSRC_FLAG_KEEP_REF ); // reference the same decoded frame in multiple filters
-        if (ret < 0) {
-            av_log(NULL, AV_LOG_ERROR, "Error while feeding the filtergraph\n");
-            goto done;
-        }
-    }
-    av_frame_unref(frame_filt);
-    ret = av_buffersink_get_frame(st_encode_ctx->filt_sink_ctx, frame_filt);
-    if (ret == ATFP_AVCTX_RET__OK) {
-        frame_filt ->pict_type = AV_PICTURE_TYPE_NONE;        
-        dst->intermediate_data.encode.num_filtered_frms = 1 + num_filtered_frms;
-        dst->intermediate_data.encode.stream_idx = stream_idx;
-    } else { // ret < 0
-        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            ret = ATFP_AVCTX_RET__NEED_MORE_DATA; // the filter has finished filtering source frame, request for next one
-            dst->intermediate_data.encode.num_filtered_frms = 0;
-        } else {
-            av_log(NULL, AV_LOG_WARNING, "error when pulling filtered frame from filters\n");
-        }
-    }
-done:
-    return ret;
-} // end of _atfp_hls__av_filter_processing
-
-
 int  atfp_hls__av_filter_processing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
 {
     int ret = ATFP_AVCTX_RET__OK;
     if(!src || !dst) {
         ret = AVERROR(EINVAL);
-        goto done;
+    } else {
+        int nb_streams_in = src->fmt_ctx->nb_streams;
+        int8_t  _stream_idx = (int8_t) src->intermediate_data.decode.packet.stream_index;
+        if(_stream_idx < 0 || _stream_idx >= nb_streams_in) {
+            ret = AVERROR(EINVAL);
+        } else {
+            ret = atfp_common__ffm_filter_processing( dst,
+                    &src->intermediate_data.decode.frame, _stream_idx);
+            if (ret == ATFP_AVCTX_RET__OK)
+                dst->intermediate_data.encode.stream_idx = _stream_idx;
+        }
     }
-    int nb_streams_in = src->fmt_ctx->nb_streams;
-    int8_t  stream_idx = (int8_t) src->intermediate_data.decode.packet.stream_index;
-    if(stream_idx < 0 || stream_idx >= nb_streams_in) {
-        ret = AVERROR(EINVAL);
-        goto done;
-    }
-    ret = _atfp_hls__av_filter_processing(dst, &src->intermediate_data.decode.frame, stream_idx);
-done:
     return ret;
 } // end of atfp_hls__av_filter_processing
 
@@ -260,11 +229,13 @@ int  atfp_hls__av_filter__finalize_processing(atfp_av_ctx_t *src, atfp_av_ctx_t 
 {
     int ret = ATFP_AVCTX_RET__OK;
     int8_t  nb_streams_in = (int8_t) src->fmt_ctx->nb_streams;
-    int8_t  stream_idx    = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
-    if(nb_streams_in > stream_idx) {
-        ret = _atfp_hls__av_filter_processing(dst, NULL, stream_idx);
-        if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA)
-            dst->intermediate_data.encode._final.filt_stream_idx = stream_idx + 1;
+    int8_t  _stream_idx   = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
+    if(nb_streams_in > _stream_idx) {
+        ret = atfp_common__ffm_filter_processing (dst, NULL, _stream_idx);
+        if (ret == ATFP_AVCTX_RET__OK)
+            dst->intermediate_data.encode.stream_idx = _stream_idx;
+        else if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA)
+            dst->intermediate_data.encode._final.filt_stream_idx = _stream_idx + 1;
     } else {
         ret = ATFP_AVCTX_RET__OK; // all frames were already flushed, skip
     }
@@ -274,7 +245,7 @@ int  atfp_hls__av_filter__finalize_processing(atfp_av_ctx_t *src, atfp_av_ctx_t 
 uint8_t  atfp_av_filter__has_done_flushing(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
 {
     int8_t  nb_streams_in = (int8_t) src->fmt_ctx->nb_streams;
-    int8_t  stream_idx    = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
-    return  (nb_streams_in > 0) && (nb_streams_in == stream_idx);
+    int8_t  _stream_idx   = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
+    return  (nb_streams_in > 0) && (nb_streams_in == _stream_idx);
 }
 

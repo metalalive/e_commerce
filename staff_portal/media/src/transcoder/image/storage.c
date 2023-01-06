@@ -80,3 +80,12 @@ ASA_RES_CODE  atfp__image_src_preload_start(atfp_img_t *imgproc, void (*cb)(atfp
     imgproc->internal.src.preload.done_cb = cb;
     return asa_src->storage->ops.fn_read(asa_src);
 } // end of  atfp__image_src_preload_start
+
+
+ASA_RES_CODE  atfp__image_dst__save_to_storage (atfp_img_t *imgproc, void (*cb)(atfp_img_t *))
+{
+    atfp_t *processor = & imgproc -> super;
+    json_t *err_info = processor->data.error;
+    json_object_set_new(err_info, "dev", json_string("implementation not finished"));
+    return ASTORAGE_RESULT_ARG_ERROR;
+} // end of  atfp__image_dst__save_to_storage

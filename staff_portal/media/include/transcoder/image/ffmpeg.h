@@ -36,6 +36,8 @@ struct atfp_av_ctx_s {
             uint8_t   num_filtered_frms;
             uint8_t   num_encoded_pkts; // TODO, expand to 16-bit integer
             struct {
+                uint8_t  filt_flush_done:1;
+                uint8_t  encoder_flush_done:1;
                 uint8_t  file_trailer_wrote:1;
                 uint8_t  file_header_wrote:1;
             } _final;
@@ -71,6 +73,14 @@ void  atfp__image_dst__avctx_init (atfp_av_ctx_t *, atfp_av_ctx_t *,
 void  atfp__image_dst__avfilt_init (atfp_av_ctx_t *, atfp_av_ctx_t *,
         json_t *filt_spec, json_t *err_info);
 void  atfp__image_dst__avctx_deinit (atfp_av_ctx_t *);
+
+int  atfp__image_dst__write_encoded_packet(atfp_av_ctx_t *);
+int  atfp__image_dst__encode_frame(atfp_av_ctx_t *);
+int  atfp__image_dst__filter_frame(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
+int  atfp__image_dst__flushing_filter(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
+int  atfp__image_dst__flushing_encoder(atfp_av_ctx_t *);
+int  atfp__image_dst__final_writefile(atfp_av_ctx_t *);
+int  atfp__image_dst__has_done_flush_filter(atfp_av_ctx_t *);
 
 #ifdef __cplusplus
 } // end of extern C clause

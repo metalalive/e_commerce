@@ -224,7 +224,8 @@ SET(APP_TRANSCODER_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
     src/transcoder/segment.c
     src/transcoder/storage.c
-    src/transcoder/image/preload.c
+    src/transcoder/image/storage.c
+    src/transcoder/image/metadata.c
     src/transcoder/image/ffmpeg/in/init.c
     src/transcoder/image/ffmpeg/in/avcontext.c
     src/transcoder/image/ffmpeg/out/init.c

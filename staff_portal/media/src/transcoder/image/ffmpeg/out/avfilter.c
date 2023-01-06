@@ -1,5 +1,6 @@
 #include "app_cfg.h"
 #include "transcoder/image/ffmpeg.h"
+#include "transcoder/common/ffmpeg.h"
 
 #define  AVFILTER_INPUT_PAD_LABEL    "nodestart"
 #define  AVFILTER_OUTPUT_PAD_LABEL   "nodesink"
@@ -7,9 +8,15 @@
 #define  FILT_SPEC_MASK     "movie=%s/%s"
 #define  FILT_SPEC_SCALE    "scale=%u:%u"
 #define  FILT_SPEC_CROP     "crop=%u:%u:%d:%d"
+
+#if  1
 #define  FILT_SPEC_PATTERN  FILT_SPEC_MASK ","FILT_SPEC_SCALE"[mask];" \
                 "[" AVFILTER_INPUT_PAD_LABEL "]" FILT_SPEC_CROP "," FILT_SPEC_SCALE "[fg];" \
                 "[fg][mask] overlay=0:0 [" AVFILTER_OUTPUT_PAD_LABEL "]"
+#else
+#define  FILT_SPEC_PATTERN  "[" AVFILTER_INPUT_PAD_LABEL "]" FILT_SPEC_CROP "," FILT_SPEC_SCALE \
+                "[" AVFILTER_OUTPUT_PAD_LABEL "]"
+#endif
 static int _atfp_img__gen_filter_spec (json_t *filt_spec, char *out, size_t out_sz)
 {
     int err = 0;
@@ -27,9 +34,14 @@ static int _atfp_img__gen_filter_spec (json_t *filt_spec, char *out, size_t out_
     aav_cfg_img_t *_imgcfg = &acfg->transcoder.output.image;
     json_t *msk_fmap = atfp_image_mask_pattern_index (_imgcfg->mask.basepath);
     if(msk_fmap) { // avfilter_graph_parse_ptr() will examine existence of the mask pattern file 
+#if  1
         const char *patt_filename = json_string_value(json_object_get(msk_fmap, _msk_patt_label));
         size_t nwrite = snprintf(out, out_sz, FILT_SPEC_PATTERN, _imgcfg->mask.basepath, patt_filename,
-                scale_w, scale_h, crop_w, crop_h, crop_pos_x, crop_pos_y, scale_w, scale_h );
+               scale_w, scale_h, crop_w, crop_h, crop_pos_x, crop_pos_y, scale_w, scale_h );
+#else
+        size_t nwrite = snprintf(out, out_sz, FILT_SPEC_PATTERN, crop_w, crop_h, crop_pos_x,
+                crop_pos_y, scale_w, scale_h );
+#endif
         if(nwrite >= out_sz) {
             err = AVERROR(ENOMEM);
             av_log(NULL, AV_LOG_ERROR, "[atfp][img][ff_out][filter] line:%d,"
@@ -139,6 +151,13 @@ void  atfp__image_dst__avfilt_init (atfp_av_ctx_t *src, atfp_av_ctx_t *dst, json
             err = AVERROR(EINVAL);
             goto done;
         } // Endpoints for the filter graph.
+        err = av_opt_set_bin(_img_enc_ctx->filt_sink_ctx, "pix_fmts", (const uint8_t *)&_img_enc_ctx->enc_ctx->pix_fmt,
+                sizeof(_img_enc_ctx->enc_ctx->pix_fmt), AV_OPT_SEARCH_CHILDREN);
+        if (err < 0) {
+            json_object_set_new(err_info, "transcoder", json_string("[img][ff_out]"
+                "[filter] failed to set option pix_fmts at the sink"));
+            goto done;
+        }
         filt_out->name = av_strdup(AVFILTER_INPUT_PAD_LABEL);
         filt_in ->name = av_strdup(AVFILTER_OUTPUT_PAD_LABEL);
         err = avfilter_graph_parse_ptr(_img_enc_ctx->filter_graph, &filter_spec_raw[0],
@@ -149,7 +168,7 @@ void  atfp__image_dst__avfilt_init (atfp_av_ctx_t *src, atfp_av_ctx_t *dst, json
             goto done;
         } // TODO, valgrind will crash if the function returns with error, figure out why
         err = avfilter_graph_config(_img_enc_ctx->filter_graph, NULL);
-        if (err < 0)
+        if (err < 0) 
             json_object_set_new(err_info, "transcoder", json_string("[img][ff_out]"
                 "[filter] failed to configure filter graph"));
 done:
@@ -162,3 +181,38 @@ done:
         json_object_set_new(err_info, "err_code", json_integer(err));
 } // end of atfp__image_dst__avfilt_init
 
+
+int  atfp__image_dst__filter_frame(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
+{
+    int ret = AVERROR(EINVAL);
+    if(src && dst) {
+        AVPacket *pkt_ori = &src->intermediate_data.decode.packet;
+        if(pkt_ori->pos >= 0) {
+            AVFrame  *frame_ori  = &src->intermediate_data.decode.frame;
+            AVFrame  *frame_filt = &dst->intermediate_data.encode.frame;
+            // always save filtered frame to stream 0
+            ret = atfp_common__ffm_filter_processing(dst, frame_ori, 0);
+            assert(ret != AVERROR(EINVAL));
+            if (ret == ATFP_AVCTX_RET__OK)
+                frame_filt ->pict_type = frame_ori->pict_type;
+        } else { // invalid input packet
+            ret = ATFP_AVCTX_RET__NEED_MORE_DATA;
+        }
+    }
+    return ret;
+} // end of  atfp__image_dst__filter_frame
+
+int  atfp__image_dst__flushing_filter(atfp_av_ctx_t *src, atfp_av_ctx_t *dst)
+{
+    (void)src;
+    int ret = ATFP_AVCTX_RET__OK;
+    if(!dst->intermediate_data.encode._final.filt_flush_done) {
+        ret = atfp_common__ffm_filter_processing (dst, NULL, 0);
+        if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA)
+            dst->intermediate_data.encode._final.filt_flush_done = 1;
+    }
+    return ret;
+}
+
+int  atfp__image_dst__has_done_flush_filter(atfp_av_ctx_t *_avctx)
+{ return  _avctx->intermediate_data.encode._final.filt_flush_done; }

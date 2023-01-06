@@ -3,6 +3,7 @@
 #include "transcoder/video/common.h"
 #include "transcoder/video/hls.h"
 #include "transcoder/video/ffmpeg.h"
+#include "transcoder/common/ffmpeg.h"
 
 #define  HLS_PLAYLIST_TYPE__VOD   2
 #define  HLS_SEGMENT_TYPE__FMP4   1  // fMP4, improves web delivery than its older alternative, mpeg-ts
@@ -238,50 +239,12 @@ int  atfp_hls__av_init(atfp_hls_t *hlsproc)
 } // end of atfp_hls__av_init
 
 
-static int  _atfp_hls__av_encode_processing(atfp_av_ctx_t *dst, AVFrame *frame, int8_t stream_idx)
-{
-    int ret = 0;
-    atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
-    AVPacket  *packet = &dst->intermediate_data.encode.packet;
-    uint16_t   num_encoded_pkts = dst->intermediate_data.encode. num_encoded_pkts;
-    if(num_encoded_pkts == 0) {
-        ret = avcodec_send_frame(st_encode_ctx->enc_ctx, frame);
-        if (ret < 0) {
-            av_log(NULL, AV_LOG_ERROR, "Error sending a frame for encoding.\n");
-            goto done;
-        }
-    }
-#if   1
-    ret = avcodec_receive_packet(st_encode_ctx->enc_ctx, packet);
-#else
-    if(num_encoded_pkts > 20)
-        ret = AVERROR(EBUSY);
-#endif
-    if (ret == 0) {
-        packet-> stream_index = stream_idx;
-        av_packet_rescale_ts(packet, st_encode_ctx->enc_ctx->time_base,
-                dst->fmt_ctx->streams[stream_idx]->time_base);
-        if(packet->duration == 0) { // always happens to video encoder
-            packet->duration = (frame && frame->pkt_duration) ? frame->pkt_duration: 1;
-        }
-        dst->intermediate_data.encode.num_encoded_pkts = 1 + num_encoded_pkts;
-    } else if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-        ret = ATFP_AVCTX_RET__NEED_MORE_DATA;
-        dst->intermediate_data.encode.num_encoded_pkts = 0;
-    } else { // ret < 0
-        av_log(NULL, AV_LOG_ERROR, "Error on receiving encoded packet.\n");
-    }
-done:
-    return ret;
-} // end of _atfp_hls__av_encode_processing
-
-
 int  atfp_hls__av_encode_processing(atfp_av_ctx_t *dst) {
     int ret = ATFP_AVCTX_RET__OK;
     if(dst) {
-        int8_t stream_idx =  dst->intermediate_data.encode.stream_idx;
-        AVFrame   *frame  = &dst->intermediate_data.encode.frame;
-        ret = _atfp_hls__av_encode_processing(dst, frame, stream_idx);
+        int8_t _stream_idx =  dst->intermediate_data.encode.stream_idx;
+        AVFrame   *frame = &dst->intermediate_data.encode.frame;
+        ret = atfp_common__ffm_encode_processing(dst, frame, _stream_idx);
     } else {
         ret = AVERROR(EINVAL);
     }
@@ -293,16 +256,16 @@ int   atfp_hls__av_encode__finalize_processing(atfp_av_ctx_t *dst) {
     int ret = AVERROR(EINVAL);
     if(dst) {
         int8_t nb_streams_in = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
-        int8_t stream_idx    = (int8_t) dst->intermediate_data.encode._final.enc_stream_idx;
-        if (nb_streams_in > stream_idx) {
-            ret = _atfp_hls__av_encode_processing(dst, NULL, stream_idx);
-            if((ret == 1) && (nb_streams_in > stream_idx)) {
-                ++stream_idx;
+        int8_t _stream_idx   = (int8_t) dst->intermediate_data.encode._final.enc_stream_idx;
+        if (nb_streams_in > _stream_idx) {
+            ret = atfp_common__ffm_encode_processing(dst, NULL, _stream_idx);
+            if((ret == 1) && (nb_streams_in > _stream_idx)) {
+                ++_stream_idx;
             }
         } else { // packets already flushed from all encoders, skip
             ret = ATFP_AVCTX_RET__END_OF_FLUSH_ENCODER;
         }
-        dst->intermediate_data.encode._final.enc_stream_idx = stream_idx;
+        dst->intermediate_data.encode._final.enc_stream_idx = _stream_idx;
     }
     return ret;
 } // end of atfp_hls__av_encode__finalize_processing
@@ -311,8 +274,8 @@ int   atfp_hls__av_encode__finalize_processing(atfp_av_ctx_t *dst) {
 uint8_t  atfp_av_encoder__has_done_flushing(atfp_av_ctx_t *dst)
 {
     int8_t nb_streams_in = (int8_t) dst->intermediate_data.encode._final.filt_stream_idx;
-    int8_t stream_idx    = (int8_t) dst->intermediate_data.encode._final.enc_stream_idx;
-    return  (nb_streams_in > 0) && (nb_streams_in == stream_idx);
+    int8_t _stream_idx   = (int8_t) dst->intermediate_data.encode._final.enc_stream_idx;
+    return  (nb_streams_in > 0) && (nb_streams_in == _stream_idx);
 }
 
 
