@@ -58,22 +58,81 @@ uint8_t  atfp__image_ffm_out__deinit_transcode(atfp_t *processor)
 } // end of  atfp__image_ffm_out__deinit_transcode
 
 
-void     atfp__image_ffm_out__proceeding_transcode(atfp_t *processor)
-{ // TODO, wait an event loop cycle, avoid stack overflow
-    atfp_img_t *imgproc = (atfp_img_t *)processor;
-    uint8_t   _num_encoded_pkts = imgproc->av->intermediate_data.encode.num_encoded_pkts;
+static  void _atfp__img_ffm_out__save_transcoded_file_done_cb (atfp_img_t *imgproc)
+{
+    atfp_t *processor = &imgproc->super;
+    imgproc->internal.dst._has_done_processing = 1;
+    processor -> data.callback(processor);
+}
+
+
+// __attribute__((optimize("O0")))
+void  atfp__image_ffm_out__proceeding_transcode(atfp_t *processor)
+{
+    int ret = ATFP_AVCTX_RET__OK;
     json_t *err_info = processor->data.error;
-    if(++_num_encoded_pkts < 4) {
-        imgproc->av->intermediate_data.encode.num_encoded_pkts = _num_encoded_pkts;
-        processor -> data.callback(processor);
-    } else {
-        json_object_set_new(err_info, "dev", json_string("implementation not finished"));
+    atfp_img_t *imgproc_dst = (atfp_img_t *)processor, *imgproc_src = NULL;
+    {
+        asa_op_base_cfg_t *asa_dst = processor -> data.storage.handle;
+        atfp_asa_map_t    *_map = (atfp_asa_map_t *)asa_dst->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+        asa_op_base_cfg_t  *asa_src = atfp_asa_map_get_source(_map);
+        imgproc_src = (atfp_img_t *) asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     }
+    while(ret == ATFP_AVCTX_RET__OK) {
+        ret = imgproc_dst->ops.dst.filter(imgproc_src->av, imgproc_dst->av);
+        if(ret) {
+            if(ret < ATFP_AVCTX_RET__OK)
+                json_object_set_new(err_info, "transcoder", json_string("[img][ff-out] error when filtering"));
+            continue;
+        } // may return error (ret < 0), or no more frames to filter (ret == 1)
+        int ret2 = ATFP_AVCTX_RET__OK;
+        while(ret2 == ATFP_AVCTX_RET__OK) {
+            ret2 = imgproc_dst->ops.dst.encode(imgproc_dst->av);
+            if(ret2 == ATFP_AVCTX_RET__OK) {
+                ret2 = imgproc_dst->ops.dst.write_pkt(imgproc_dst->av);
+            } else if(ret2 == ATFP_AVCTX_RET__NEED_MORE_DATA) {
+                // no more encoded frames to write, break to outer loop for next filtered frame
+            } else if(ret2 == ATFP_AVCTX_RET__END_OF_FLUSH_ENCODER) {
+                ret = ret2;
+            } // all packets already flushed from all encoders, break both loops
+            if(ret2 < ATFP_AVCTX_RET__OK) {
+                json_object_set_new(err_info, "transcoder", json_string("[img][ff-out] error when encoding"));
+                ret = ret2;
+            }
+        }
+    } // end of outer loop
+    ASA_RES_CODE result = ASTORAGE_RESULT_COMPLETE;
+    uint8_t  src_done = imgproc_src->super.ops->has_done_processing(&imgproc_src->super);
+    uint8_t  flush_filt_done = imgproc_dst->ops.dst.has_done_flush_filter(imgproc_dst->av);
+    if(src_done) // switch functions as soon as source file processor no longer provides data
+        imgproc_dst->ops.dst.filter = imgproc_dst->ops.dst.finalize.filter;
+    if(flush_filt_done)
+        imgproc_dst->ops.dst.encode = imgproc_dst->ops.dst.finalize.encode;
+    if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA) {
+        // pass, TODO, for animated picture which includes lot of frames, wait and resume in next event-loop
+        //  cycle after recursively invoking this function multiple times, to avoid potential stack overflow
+    } else if(ret == ATFP_AVCTX_RET__END_OF_FLUSH_ENCODER) {
+        ret = imgproc_dst->ops.dst.finalize.write(imgproc_dst->av);
+        // usually there's only one output file in picture processing,
+        // it would return `ASTORAGE_RESULT_ACCEPT` on success
+        if(ret == ATFP_AVCTX_RET__OK) {
+            result = imgproc_dst->ops.dst.save_to_storage(imgproc_dst,
+                _atfp__img_ffm_out__save_transcoded_file_done_cb);
+        } else {
+            json_object_set_new(err_info, "transcoder", json_string("[img][ff-out] error on finalized write"));
+        }
+    } else if(ret < ATFP_AVCTX_RET__OK) {
+        json_object_set_new(err_info, "err_code", json_integer(ret));
+        result = ASTORAGE_RESULT_UNKNOWN_ERROR;
+    }
+    processor->op_async_done .processing = result == ASTORAGE_RESULT_ACCEPT;
 } // end of  atfp__image_ffm_out__proceeding_transcode
+
 
 uint8_t  atfp__image_ffm_out__has_done_processing(atfp_t *processor)
 {
-    return  0;
+    atfp_img_t *imgproc = (atfp_img_t *)processor;
+    return  imgproc->internal.dst._has_done_processing;
 } // end of  atfp__image_ffm_out__has_done_processing
 
 
@@ -91,7 +150,15 @@ struct atfp_s * atfp__image_ffm_out__instantiate_transcoder(void)
     out->ops.dst.avctx_init = atfp__image_dst__avctx_init;
     out->ops.dst.avctx_deinit = atfp__image_dst__avctx_deinit;
     out->ops.dst.avfilter_init = atfp__image_dst__avfilt_init;
-    out->ops.dst.encode = NULL;
+    out->ops.dst.filter = atfp__image_dst__filter_frame;
+    out->ops.dst.encode = atfp__image_dst__encode_frame;
+    out->ops.dst.write_pkt = atfp__image_dst__write_encoded_packet;
+    out->ops.dst.finalize.filter = atfp__image_dst__flushing_filter;
+    out->ops.dst.finalize.encode = atfp__image_dst__flushing_encoder;
+    out->ops.dst.finalize.write  = atfp__image_dst__final_writefile;
+    out->ops.dst.has_done_flush_filter = atfp__image_dst__has_done_flush_filter;
+    out->ops.dst.save_to_storage = atfp__image_dst__save_to_storage;
+    out->super.transfer.transcoded_dst.update_metadata = atfp_image__dst_update_metadata;
     char *ptr = (char *)out + sizeof(atfp_img_t);
     out->av = (atfp_av_ctx_t *)ptr;
     return &out->super;
