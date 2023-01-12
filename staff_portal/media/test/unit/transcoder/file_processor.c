@@ -540,14 +540,15 @@ Ensure(transcoder_test__transfer_segment__memory_corruption) {
 
 
 Ensure(transcoder_test__start_transfer_genericfile_ok) {
-#define  EXPECT_FILENAME   "setup_map"
+#define  EXPECT_LOCAL_FILENAME    "transceiver_channel"
+#define  EXPECT_REMOTE_FILENAME   "receiver_capacity"
     UTEST_TRANSCODER__START_TRANSFER_SEGMENT_SETUP;
-    const char *expect_seg_local_path  = UTEST_ASA_LOCAL_BASEPATH  "/"  EXPECT_FILENAME;
-    const char *expect_seg_remote_path = UTEST_ASA_REMOTE_BASEPATH "/"  EXPECT_FILENAME;
+    const char *expect_seg_local_path  = UTEST_ASA_LOCAL_BASEPATH  "/"  EXPECT_LOCAL_FILENAME;
+    const char *expect_seg_remote_path = UTEST_ASA_REMOTE_BASEPATH "/"  EXPECT_REMOTE_FILENAME;
     int fd = open(expect_seg_local_path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
     close(fd);
     ASA_RES_CODE result = atfp__file_start_transfer(&mock_asa_remote, &mock_asa_local,
-            &mock_seg_cfg, EXPECT_FILENAME );
+            &mock_seg_cfg, EXPECT_LOCAL_FILENAME, EXPECT_REMOTE_FILENAME );
     assert_that(result, is_equal_to(ASTORAGE_RESULT_ACCEPT));
     assert_that(mock_asa_local.super.op.open.dst_path, is_equal_to_string(expect_seg_local_path));
     assert_that(mock_asa_remote.op.open.dst_path     , is_equal_to_string(expect_seg_remote_path));
@@ -555,7 +556,8 @@ Ensure(transcoder_test__start_transfer_genericfile_ok) {
     uv_run(loop, UV_RUN_ONCE);
     unlink(expect_seg_local_path);
     UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;
-#undef  EXPECT_FILENAME
+#undef  EXPECT_LOCAL_FILENAME
+#undef  EXPECT_REMOTE_FILENAME
 } // end of transcoder_test__start_transfer_genericfile_ok
 
 
@@ -564,7 +566,7 @@ Ensure(transcoder_test__transfer_genericfile__memory_corruption) {
     // filename exceeds max length of setup value
 #define  EXPECT_FILENAME    UTEST_DATA_SEGMENT_PREFIX  UTEST_DATA_SEGMENT_PREFIX  UTEST_DATA_SEGMENT_PREFIX
     ASA_RES_CODE result = atfp__file_start_transfer(&mock_asa_remote, &mock_asa_local,
-            &mock_seg_cfg, EXPECT_FILENAME );
+            &mock_seg_cfg, EXPECT_FILENAME, EXPECT_FILENAME );
     assert_that(result, is_equal_to(ASTORAGE_RESULT_DATA_ERROR));
 #undef  EXPECT_FILENAME
     UTEST_TRANSCODER__START_TRANSFER_SEGMENT_TEARDOWN;

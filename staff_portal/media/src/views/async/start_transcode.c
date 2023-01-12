@@ -463,13 +463,13 @@ static  __attribute__((optimize("O0"))) void  api_rpc_task_handler__start_transc
         asa_dst->op.mkdir.path.curr_parent = (void *)calloc(version_fullpath_sz, sizeof(char));
         // will be used later when application moves transcoded file from temporary buffer (locally
         // stored in transcoding server) to destination storage (may be remotely stored, e.g. in cloud platform)
-    } { // ensure transcoding folder by the first asa_dst object
-        atfp_asa_map_reset_dst_iteration(asaobj_map);
-        asa_dst = atfp_asa_map_iterate_destination(asaobj_map);
         size_t nwrite = snprintf(asa_dst->op.mkdir.path.origin, transcoding_fullpath_sz, "%s/%d/%08x/%s",
                 asa_dst->storage->base_path, _usr_id, _upld_req_id,  ATFP__TEMP_TRANSCODING_FOLDER_NAME);
         asa_dst->op.mkdir.path.origin[nwrite++] = 0x0; // NULL-terminated
         assert(nwrite <= transcoding_fullpath_sz);
+    } { // ensure transcoding folder by the first asa_dst object
+        atfp_asa_map_reset_dst_iteration(asaobj_map);
+        asa_dst = atfp_asa_map_iterate_destination(asaobj_map);
         asa_dst->op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
         asa_dst->op.mkdir.cb =  api_rpc_transcode__create_folder_common_cb;
         asa_result = asa_dst->storage->ops.fn_mkdir(asa_dst, 1);

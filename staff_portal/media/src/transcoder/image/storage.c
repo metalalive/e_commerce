@@ -82,10 +82,71 @@ ASA_RES_CODE  atfp__image_src_preload_start(atfp_img_t *imgproc, void (*cb)(atfp
 } // end of  atfp__image_src_preload_start
 
 
-ASA_RES_CODE  atfp__image_dst__save_to_storage (atfp_img_t *imgproc, void (*cb)(atfp_img_t *))
+
+static  void atfp_img__open_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{ atfp__open_local_seg__cb (asaobj, result); }
+
+static  void atfp_img__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{
+    atfp_img_t *igproc = (atfp_img_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp__open_dst_seg__cb (&igproc->internal.dst.asa_local.super,
+            &igproc->internal.dst.seginfo, result);
+}
+
+static  void atfp_img__close_dst_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{
+    atfp_img_t *igproc = (atfp_img_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp_t *processor = & igproc->super;
+    processor->transfer.transcoded_dst.flags.asaremote_open = 0;
+    if(result != ASTORAGE_RESULT_COMPLETE)
+        json_object_set_new(processor->data.error, "storage",
+                json_string("[img] failed to close playlist on destination side"));
+    igproc->internal.dst._has_done_processing = 1;
+    processor -> data.callback(processor);
+}
+
+static  void atfp_img__unlink_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{ atfp__unlink_local_seg__cb(asaobj, result); }
+
+
+static  void atfp_img__close_local_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result)
+{
+    atfp_img_t *igproc = (atfp_img_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp__close_local_seg__cb(asaobj, &igproc->internal.dst.seginfo, result);
+}
+
+static  void atfp_img__read_local_seg__cb (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result, size_t nread)
+{
+    atfp_img_t *igproc = (atfp_img_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp__read_local_seg__cb (asaobj, &igproc->internal.dst.seginfo, result, nread);
+}
+
+static  void atfp_img__write_dst_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE result, size_t nwrite)
+{
+    atfp_img_t *igproc = (atfp_img_t *) asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp__write_dst_seg__cb (&igproc->internal.dst.asa_local.super,
+            &igproc->internal.dst.seginfo, result, nwrite);
+}
+
+ASA_RES_CODE  atfp__image_dst__save_to_storage (atfp_img_t *imgproc)
 {
     atfp_t *processor = & imgproc -> super;
-    json_t *err_info = processor->data.error;
-    json_object_set_new(err_info, "dev", json_string("implementation not finished"));
-    return ASTORAGE_RESULT_ARG_ERROR;
+    asa_op_base_cfg_t  *asa_dst = processor->data.storage.handle;
+    asa_op_localfs_cfg_t *asa_local = &imgproc->internal.dst.asa_local;
+    atfp_segment_t *_seg_info = &imgproc->internal.dst.seginfo;
+    const char *filename_local = _seg_info->filename.prefix.data;
+    const char *filename_dst   = processor->data.version;
+    asa_dst->op.open.cb  = atfp_img__open_dst_seg__cb;
+    asa_dst->op.close.cb = atfp_img__close_dst_seg__cb;
+    asa_dst->op.write.cb = atfp_img__write_dst_seg__cb;
+    asa_local->super.op.open.cb  = atfp_img__open_local_seg__cb;
+    asa_local->super.op.close.cb = atfp_img__close_local_seg__cb;
+    asa_local->super.op.read.cb  = atfp_img__read_local_seg__cb;
+    asa_local->super.op.unlink.cb = atfp_img__unlink_local_seg__cb;
+    ASA_RES_CODE  result = atfp__file_start_transfer(asa_dst, asa_local,
+            _seg_info,  filename_local, filename_dst);
+    if(result != ASTORAGE_RESULT_ACCEPT)
+        json_object_set_new(processor->data.error, "transcoder", json_string(
+                    "[img][storage] error on transferring output file"));
+    return result;
 } // end of  atfp__image_dst__save_to_storage

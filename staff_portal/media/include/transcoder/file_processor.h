@@ -104,7 +104,7 @@ typedef struct atfp_s {
                 uint8_t  version_exists:1; // TODO:rename to `version_metadata_exists`
                 uint8_t  version_created:1;
             }  flags;
-        } transcoded_dst; // TODO, add new field of type `atfp_segment_t`
+        } transcoded_dst;
     } transfer;
 } atfp_t;
 
@@ -237,7 +237,8 @@ ASA_RES_CODE  atfp__file_start_transfer(
         asa_op_base_cfg_t     *asa_dst,
         asa_op_localfs_cfg_t  *asa_local,
         atfp_segment_t        *seg_cfg,
-        const char *filename );
+        const char *filename_local,
+        const char *filename_dst  );
 
 
 int atfp_segment_init(atfp_segment_t *);

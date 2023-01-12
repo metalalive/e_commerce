@@ -8,6 +8,7 @@
 extern const atfp_ops_entry_t  atfp_ops_image_ffmpg_out;
 
 #define  UTEST_SRC_FILE_LOCALBUF_PATH  "/path/to/src/buff"
+#define  UTEST_REMOTE_FILE_PATH  "/path/to/remote"
 #define  UTEST_FP_VERSION   "GY"
 #define  UTEST_SPEC_TOPLVL_SERIAL  "{\"outputs\":{\""UTEST_FP_VERSION"\":{}}}"
 #define  NUM_CB_ARGS_ASAOBJ  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
@@ -43,7 +44,7 @@ static void  utest_atfp_img_ffo__usr_cb (atfp_t *processor)
     void  *asasrc_cb_args[NUM_CB_ARGS_ASAOBJ] = {0},  *asadst_cb_args[NUM_CB_ARGS_ASAOBJ] = {0}; \
     asa_op_base_cfg_t  mock_asa_src = {.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asasrc_cb_args}}; \
     asa_op_base_cfg_t  mock_asa_dst = {.cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asadst_cb_args}, \
-            .deinit=utest_img_ffo__asaobj_deinit }; \
+            .deinit=utest_img_ffo__asaobj_deinit, .op={.mkdir={.path={.origin=UTEST_REMOTE_FILE_PATH}}} }; \
     asa_op_localfs_cfg_t  mock_asa_local = {.super={.op={.open={.dst_path=UTEST_SRC_FILE_LOCALBUF_PATH}}}}; \
     atfp_asa_map_t  *mock_map = atfp_asa_map_init(1); \
     atfp_asa_map_set_source(mock_map, &mock_asa_src); \
@@ -174,9 +175,9 @@ static int  utest_img_ffo__avctx_final_write_local(atfp_av_ctx_t *avobj)
 static int  utest_img_ffo__avctx_has_done_flush_filter (atfp_av_ctx_t *avobj)
 { return (int)mock(avobj); }
 
-static ASA_RES_CODE  utest_img_ffo__avctx_save2storage(atfp_img_t *fp, void (*cb)(atfp_img_t *))
+static ASA_RES_CODE  utest_img_ffo__avctx_save2storage(atfp_img_t *fp)
 {
-    ASA_RES_CODE result = (ASA_RES_CODE)mock(fp, cb);
+    ASA_RES_CODE result = (ASA_RES_CODE)mock(fp);
     if(result != ASTORAGE_RESULT_ACCEPT)
         json_object_set_new(fp->super.data.error, "reason", json_string("unit test error"));
     return result;

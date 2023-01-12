@@ -35,7 +35,7 @@ int atfp_segment_final(atfp_segment_t *seg_cfg, json_t *info) {
     return 0;
 } // end of atfp_segment_final
 
-static int  atfp__format_file_fullpath(char *out, size_t out_sz, const char *basepath, const char *filename)
+static  int  atfp__format_file_fullpath(char *out, size_t out_sz, const char *basepath, const char *filename)
 {
     size_t  basepath_sz = strlen(basepath);
     size_t  filename_sz = strlen(filename);
@@ -88,7 +88,7 @@ static void   _atfp__transfer_basic_setup(
         atfp_segment_t        *seg_cfg )
 {
     asa_dst->op.open.mode  = S_IRUSR | S_IWUSR;
-    asa_dst->op.open.flags = O_WRONLY | O_CREAT;
+    asa_dst->op.open.flags = O_WRONLY | O_CREAT | O_EXCL;
     asa_dst->op.write.offset = -1;
     asa_dst->op.open.dst_path = seg_cfg->fullpath._asa_dst.data;
     asa_local->super.op.open.mode  = S_IRUSR;
@@ -150,19 +150,21 @@ ASA_RES_CODE  atfp__file_start_transfer(
         asa_op_base_cfg_t     *asa_dst,
         asa_op_localfs_cfg_t  *asa_local,
         atfp_segment_t        *seg_cfg,
-        const char *filename )
+        const char *filename_local,
+        const char *filename_dst )
 {
     ASA_RES_CODE  result = ASTORAGE_RESULT_DATA_ERROR;
-    if(!asa_dst || !asa_local || !seg_cfg || !filename || !asa_dst->op.write.src) {
+    if(!asa_dst || !asa_local || !seg_cfg || !asa_dst->op.write.src
+            || !filename_local || !filename_dst) {
         goto done;
     } else if(!asa_dst->op.open.cb || !asa_local->super.op.open.cb) {
         goto done;
     }
     ASA_DST__COPY_PATH_PREFIX(seg_cfg, asa_dst)
     int ret1 = atfp__format_file_fullpath( _segf_fullpath_asa_dst_ptr, _segf_fullpath_asa_dst_sz,
-            asa_dst->op.mkdir.path.origin, filename);
+            asa_dst->op.mkdir.path.origin, filename_dst);
     int ret2 = atfp__format_file_fullpath( seg_cfg->fullpath._asa_local.data,
-            seg_cfg->fullpath._asa_local.sz,  asa_local->super.op.mkdir.path.origin, filename);
+            seg_cfg->fullpath._asa_local.sz,  asa_local->super.op.mkdir.path.origin, filename_local);
     if(!ret1 && !ret2) {
         _atfp__transfer_basic_setup( asa_dst, asa_local, seg_cfg );
         result = asa_local->super.storage->ops.fn_open(&asa_local->super);
@@ -175,6 +177,7 @@ done:
 // common callbacks used when transferring segemnt files from
 // local transcoding server to remote destination storage
 // -----------------------------------------------------------
+// TODO, rename prefix of the common callbacks below --> `atfp_seg2dst__xxx`
 void  atfp__close_local_seg__cb(asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_cfg, ASA_RES_CODE result)
 {
     int err = 1;

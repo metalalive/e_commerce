@@ -37,7 +37,7 @@ typedef struct atfp_hls_s {
             uint8_t  (*has_done_flush_filter)(atfp_av_ctx_t *src, atfp_av_ctx_t *dst);
             uint8_t  (*has_done_flush_encoder)(atfp_av_ctx_t *dst);
         } op;
-        atfp_segment_t  segment; // TODO, consider to move to parent type `atfp_t`
+        atfp_segment_t  segment;
         uint8_t  num_plist_merged; // for master playlist
     } internal;
 } atfp_hls_t;

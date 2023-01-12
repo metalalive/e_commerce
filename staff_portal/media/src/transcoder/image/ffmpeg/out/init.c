@@ -1,5 +1,6 @@
 #include "transcoder/image/common.h"
 #include "transcoder/image/ffmpeg.h"
+#define  NUM_USRARGS_FFO_ASA_LOCAL  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 
 #define  DEINIT_IF_EXISTS(var, fn_name) \
     if(var) { \
@@ -7,7 +8,7 @@
         (var) = NULL; \
     }
 
-void     atfp__image_ffm_out__init_transcode(atfp_t *processor)
+void   atfp__image_ffm_out__init_transcode(atfp_t *processor)
 {
     atfp_img_t *imgproc = (atfp_img_t *)processor;
     json_t *err_info = processor->data.error, *spec = processor->data.spec;
@@ -20,24 +21,43 @@ void     atfp__image_ffm_out__init_transcode(atfp_t *processor)
     {
         json_object_set_new(err_info, "transcoder", json_string("[ff_out] invalid backend"
                     " library in source file processor"));
-    } else { // create file lock, to address concurrent transcoding requests
+    } else {
         asa_op_localfs_cfg_t  *asalocal_src =  atfp_asa_map_get_localtmp(_map);
         asa_op_localfs_cfg_t  *asalocal_dst = &imgproc->internal.dst.asa_local;
         const char *_version = processor->data.version;
         json_t  *filt_spec = json_object_get(json_object_get(spec, "outputs"), _version);
 #define  PATH_PATTERN   "%s.%s"
         const char *local_tmpfile_basepath = asalocal_src->super.op.open.dst_path;
-        size_t path_sz = strlen(local_tmpfile_basepath) + sizeof(PATH_PATTERN) + strlen(_version);
-        char fullpath[path_sz];
-        size_t nwrite = snprintf(&fullpath[0], path_sz, PATH_PATTERN, local_tmpfile_basepath, _version);
-        assert(nwrite < path_sz);
+        size_t f_path_sz = strlen(local_tmpfile_basepath) + sizeof(PATH_PATTERN) + strlen(_version);
+        char f_fullpath[f_path_sz];
+        size_t nwrite = snprintf(&f_fullpath[0], f_path_sz, PATH_PATTERN, local_tmpfile_basepath, _version);
+        assert(nwrite < f_path_sz);
 #undef  PATH_PATTERN
-        asalocal_dst->super.op.open.dst_path = strdup(&fullpath[0]);
         _avctx_src = ((atfp_img_t *)fp_src)->av;
-        imgproc->ops.dst.avctx_init(_avctx_src, _avctx_dst, &fullpath[0], filt_spec, err_info);
+        imgproc->ops.dst.avctx_init(_avctx_src, _avctx_dst, &f_fullpath[0], filt_spec, err_info);
         if(json_object_size(err_info) == 0)
             imgproc->ops.dst.avfilter_init(_avctx_src, _avctx_dst, filt_spec, err_info);
-    }
+        if(json_object_size(err_info) == 0) {
+            char *f_name = strrchr(&f_fullpath[0], (int)'/') + 1;
+            size_t f_name_sz = strlen(f_name) ;
+            size_t dst_path_sz = strlen(asa_dst->op.mkdir.path.origin) + 2 + strlen(_version);
+            imgproc->internal.dst.seginfo = (atfp_segment_t) {
+                .filename = {.prefix={.data=strdup(f_name), .sz=f_name_sz}},
+                .fullpath = {
+                    ._asa_local = {.sz=f_path_sz, .data=calloc(f_path_sz, sizeof(char)) },
+                    ._asa_dst = {.sz=dst_path_sz, .data=calloc(dst_path_sz, sizeof(char)) },
+                }, .checksum = {0}, .transfer = {0}
+            };
+            void **cb_args_entries = calloc(NUM_USRARGS_FFO_ASA_LOCAL, sizeof(void *));
+            cb_args_entries[ATFP_INDEX__IN_ASA_USRARG]   = (void *) processor;
+            cb_args_entries[ASAMAP_INDEX__IN_ASA_USRARG] = (void *) _map;
+            asalocal_dst->super.cb_args.entries = cb_args_entries;
+            asalocal_dst->super.cb_args.size = NUM_USRARGS_FFO_ASA_LOCAL;
+            asalocal_dst->super.op.mkdir.path.origin = asalocal_src->super.op.mkdir.path.origin;
+            asalocal_dst->super.storage = asalocal_src->super.storage;
+            asalocal_dst->loop = asalocal_src->loop;
+        }
+    } // end of  if backend-id matches
     processor->op_async_done.init = 0;
     processor -> data.callback(processor);
 } // end of  atfp__image_ffm_out__init_transcode
@@ -47,23 +67,23 @@ uint8_t  atfp__image_ffm_out__deinit_transcode(atfp_t *processor)
 {
     atfp_img_t *imgproc = (atfp_img_t *)processor;
     imgproc->ops.dst.avctx_deinit(imgproc->av);
+    atfp_segment_t *_seg_info = &imgproc->internal.dst.seginfo;
     asa_op_base_cfg_t  *asalocal_dst = &imgproc->internal.dst.asa_local.super;
+    asa_op_base_cfg_t  *asa_dst = processor-> data.storage.handle;
+    // Note in this file processor, dst_path points to reference of seg_cfg->fullpath._asa_dst.data
+    asalocal_dst->op.mkdir.path.origin = NULL;
+    asalocal_dst->op.open.dst_path = NULL;
+    asa_dst->op.open.dst_path = NULL;
     DEINIT_IF_EXISTS(asalocal_dst->cb_args.entries, free);
-    DEINIT_IF_EXISTS(asalocal_dst->op.open.dst_path, free);
+    DEINIT_IF_EXISTS(_seg_info->filename.prefix.data, free);
+    DEINIT_IF_EXISTS(_seg_info->fullpath._asa_local.data, free);
+    DEINIT_IF_EXISTS(_seg_info->fullpath._asa_dst.data, free);
     asa_op_base_cfg_t *asaremote = processor ->data.storage.handle;
     asaremote->deinit(asaremote);
     processor->data.version = NULL; // app caller should dealloc it
     DEINIT_IF_EXISTS(processor, free);
     return  0;
 } // end of  atfp__image_ffm_out__deinit_transcode
-
-
-static  void _atfp__img_ffm_out__save_transcoded_file_done_cb (atfp_img_t *imgproc)
-{
-    atfp_t *processor = &imgproc->super;
-    imgproc->internal.dst._has_done_processing = 1;
-    processor -> data.callback(processor);
-}
 
 
 // __attribute__((optimize("O0")))
@@ -116,8 +136,7 @@ void  atfp__image_ffm_out__proceeding_transcode(atfp_t *processor)
         // usually there's only one output file in picture processing,
         // it would return `ASTORAGE_RESULT_ACCEPT` on success
         if(ret == ATFP_AVCTX_RET__OK) {
-            result = imgproc_dst->ops.dst.save_to_storage(imgproc_dst,
-                _atfp__img_ffm_out__save_transcoded_file_done_cb);
+            result = imgproc_dst->ops.dst.save_to_storage(imgproc_dst);
         } else {
             json_object_set_new(err_info, "transcoder", json_string("[img][ff-out] error on finalized write"));
         }

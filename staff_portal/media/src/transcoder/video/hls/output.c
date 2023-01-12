@@ -35,7 +35,8 @@ static  void  curr_cb_fn (asa_op_base_cfg_t *asaobj, ASA_RES_CODE result) \
         atfp_segment_t    *seg_cfg = &hlsproc->internal.segment; \
         asa_op_base_cfg_t *asa_dst = asaobj; \
         asa_op_localfs_cfg_t  *asa_local = &hlsproc->asa_local; \
-        result = atfp__file_start_transfer(asa_dst, asa_local, seg_cfg, cfgfile_name); \
+        result = atfp__file_start_transfer(asa_dst, asa_local, seg_cfg, \
+                cfgfile_name, cfgfile_name); \
         asa_dst->op.close.cb =  next_cb_fn; \
         err = result != ASTORAGE_RESULT_ACCEPT; \
     } \
@@ -70,7 +71,8 @@ static  void atfp_hls__close_dst_seg__cb(asa_op_base_cfg_t *asaobj, ASA_RES_CODE
         if(result == ASTORAGE_RESULT_COMPLETE) {
             uint8_t process_done = processor->ops->has_done_processing(processor);
             if(process_done) {
-                result = atfp__file_start_transfer(asa_dst, asa_local, seg_cfg, HLS_FMP4_FILENAME);
+                result = atfp__file_start_transfer(asa_dst, asa_local, seg_cfg,
+                        HLS_FMP4_FILENAME, HLS_FMP4_FILENAME);
                 // change file-close callback for initial map file and playlist
                 asa_dst->op.close.cb = atfp_hls__close_dst_initmap__cb;
                 err = result != ASTORAGE_RESULT_ACCEPT;

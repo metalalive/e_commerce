@@ -26,7 +26,7 @@ typedef struct atfp_img_s {
                 int  (*write)(atfp_av_ctx_t *);
             } finalize;
             int  (*has_done_flush_filter)(atfp_av_ctx_t *);
-            ASA_RES_CODE  (*save_to_storage)(struct atfp_img_s *, void (*)(struct atfp_img_s *));
+            ASA_RES_CODE  (*save_to_storage)(struct atfp_img_s *);
         } dst;
         struct {
             void (*avctx_init)(atfp_av_ctx_t *, const char *filepath, json_t *err_info);
@@ -39,8 +39,8 @@ typedef struct atfp_img_s {
     } ops;
     union {
         struct {
-            void (*_save_done_cb)(struct atfp_img_s *);
             asa_op_localfs_cfg_t  asa_local;
+            atfp_segment_t        seginfo;
             uint8_t  _has_done_processing:1;
         } dst;
         struct {
@@ -57,7 +57,7 @@ typedef struct atfp_img_s {
 
 ASA_RES_CODE  atfp__image_src_preload_start(atfp_img_t *, void (*)(atfp_img_t *));
 
-ASA_RES_CODE  atfp__image_dst__save_to_storage(atfp_img_t *, void (*)(atfp_img_t *));
+ASA_RES_CODE  atfp__image_dst__save_to_storage(atfp_img_t *);
 
 void  atfp_image__dst_update_metadata(atfp_t *, void *loop);
 
