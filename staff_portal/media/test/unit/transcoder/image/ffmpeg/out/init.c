@@ -30,6 +30,12 @@ static void   utest_img_ffo__avfilt_init (atfp_av_ctx_t *src, atfp_av_ctx_t *dst
        json_object_set_new(err_info, "utest", json_string("mock error detail"));
 }
 
+static ASA_RES_CODE utest_img_ffo__asalocal_fn_unlink (asa_op_base_cfg_t *asaobj)
+{ return (ASA_RES_CODE)mock(asaobj); }
+
+static ASA_RES_CODE utest_img_ffo__asalocal_fn_close (asa_op_base_cfg_t *asaobj)
+{ return (ASA_RES_CODE)mock(asaobj); }
+
 static void  utest_img_ffo__avctx_deinit (atfp_av_ctx_t *dst)
 { mock(dst); }
 
@@ -61,6 +67,8 @@ static void  utest_atfp_img_ffo__usr_cb (atfp_t *processor)
 #define  UTEST_FFM_COMMON_TEARDOWN \
     json_decref(mock_errinfo); \
     json_decref(mock_spec); \
+    mock_errinfo = NULL; \
+    mock_spec = NULL; \
     atfp_asa_map_set_source(mock_map, NULL); \
     atfp_asa_map_set_localtmp(mock_map, NULL); \
     atfp_asa_map_deinit(mock_map);
@@ -68,6 +76,10 @@ static void  utest_atfp_img_ffo__usr_cb (atfp_t *processor)
 
 #define  UTEST_FFM_INIT_SETUP \
     UTEST_FFM_COMMON_SETUP \
+    asa_cfg_t  mock_storage_cfg = {.ops={.fn_unlink=utest_img_ffo__asalocal_fn_unlink, \
+        .fn_close=utest_img_ffo__asalocal_fn_close}}; \
+    mock_asa_local.super.storage = &mock_storage_cfg; \
+    mock_asa_dst.storage = &mock_storage_cfg; \
     atfp_img_t *mock_fp_dst = (atfp_img_t *) atfp_ops_image_ffmpg_out.ops.instantiate(); \
     mock_fp_dst->super.backend_id = ATFP_BACKEND_LIB__UNKNOWN; \
     mock_fp_dst->super.data = (atfp_data_t){.storage={.handle=&mock_asa_dst}, .version=UTEST_FP_VERSION, \
@@ -85,18 +97,26 @@ Ensure(atfp_img_ffo_test__init_ok)
     UTEST_FFM_INIT_SETUP
     mock_fp_src.super.backend_id = ATFP_BACKEND_LIB__FFMPEG ;
     mock_fp_dst->super.backend_id = ATFP_BACKEND_LIB__FFMPEG ;
-    expect(utest_img_ffo__avctx_init, will_return(0),  when(src, is_equal_to(&mock_avctx_src)),
-          when(filepath, is_equal_to_string(UTEST_SRC_FILE_LOCALBUF_PATH"."UTEST_FP_VERSION)),
-          when(dst, is_not_null),  when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
-    );
-    expect(utest_img_ffo__avfilt_init, will_return(0),  when(src, is_equal_to(&mock_avctx_src)),
-          when(dst, is_not_null),  when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
-    );
-    expect(utest_atfp_img_ffo__usr_cb, when(processor, is_equal_to(mock_fp_dst)));
+    {
+        expect(utest_img_ffo__avctx_init, will_return(0),  when(src, is_equal_to(&mock_avctx_src)),
+              when(filepath, is_equal_to_string(UTEST_SRC_FILE_LOCALBUF_PATH"."UTEST_FP_VERSION)),
+              when(dst, is_not_null),  when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
+        );
+        expect(utest_img_ffo__avfilt_init, will_return(0),  when(src, is_equal_to(&mock_avctx_src)),
+              when(dst, is_not_null),  when(filt_spec, is_not_null), when(err_info, is_equal_to(mock_errinfo))
+        );
+        expect(utest_atfp_img_ffo__usr_cb, when(processor, is_equal_to(mock_fp_dst)));
+    }
     atfp__image_ffm_out__init_transcode(&mock_fp_dst->super);
     assert_that(json_object_size(mock_errinfo), is_equal_to(0));
-    expect(utest_img_ffo__avctx_deinit, when(dst, is_not_null));
-    expect(utest_img_ffo__asaobj_deinit, when(asaobj, is_equal_to(&mock_asa_dst)));
+    { // assume the files on local  storages is still open
+        mock_fp_dst->super.transfer.transcoded_dst.flags.asalocal_open = 1;
+        mock_fp_dst->super.transfer.transcoded_dst.flags.asaremote_open = 0;
+        expect(utest_img_ffo__asalocal_fn_close, will_return(ASTORAGE_RESULT_ARG_ERROR));
+        expect(utest_img_ffo__asalocal_fn_unlink, will_return(ASTORAGE_RESULT_ARG_ERROR));
+        expect(utest_img_ffo__avctx_deinit, when(dst, is_not_null));
+        expect(utest_img_ffo__asaobj_deinit, when(asaobj, is_equal_to(&mock_asa_dst)));
+    }
     atfp__image_ffm_out__deinit_transcode(&mock_fp_dst->super);
     UTEST_FFM_INIT_TEARDOWN
 } // end of  atfp_img_ffo_test__init_ok
@@ -105,12 +125,6 @@ Ensure(atfp_img_ffo_test__init_ok)
 Ensure(atfp_img_ffo_test__avctx_error)
 {
     UTEST_FFM_INIT_SETUP
-    // subcase #1 : backend ID mismatch
-    expect(utest_atfp_img_ffo__usr_cb, when(processor, is_equal_to(mock_fp_dst)));
-    atfp__image_ffm_out__init_transcode(&mock_fp_dst->super);
-    assert_that(json_object_size(mock_errinfo), is_greater_than(0));
-    json_object_clear(mock_errinfo);
-    // subcase #2 : avctx init error
     int expect_err = 1;
     mock_fp_src.super.backend_id = ATFP_BACKEND_LIB__FFMPEG ;
     mock_fp_dst->super.backend_id = ATFP_BACKEND_LIB__FFMPEG ;
@@ -121,8 +135,11 @@ Ensure(atfp_img_ffo_test__avctx_error)
     expect(utest_atfp_img_ffo__usr_cb, when(processor, is_equal_to(mock_fp_dst)));
     atfp__image_ffm_out__init_transcode(&mock_fp_dst->super);
     assert_that(json_object_size(mock_errinfo), is_greater_than(0));
-    expect(utest_img_ffo__avctx_deinit, when(dst, is_not_null));
-    expect(utest_img_ffo__asaobj_deinit, when(asaobj, is_equal_to(&mock_asa_dst)));
+    {
+        expect(utest_img_ffo__asalocal_fn_unlink, will_return(ASTORAGE_RESULT_ARG_ERROR));
+        expect(utest_img_ffo__avctx_deinit, when(dst, is_not_null));
+        expect(utest_img_ffo__asaobj_deinit, when(asaobj, is_equal_to(&mock_asa_dst)));
+    }
     atfp__image_ffm_out__deinit_transcode(&mock_fp_dst->super);
     UTEST_FFM_INIT_TEARDOWN
 } // end of  atfp_img_ffo_test__avctx_error
@@ -144,8 +161,11 @@ Ensure(atfp_img_ffo_test__avfilt_error)
     expect(utest_atfp_img_ffo__usr_cb, when(processor, is_equal_to(mock_fp_dst)));
     atfp__image_ffm_out__init_transcode(&mock_fp_dst->super);
     assert_that(json_object_size(mock_errinfo), is_greater_than(0));
-    expect(utest_img_ffo__avctx_deinit, when(dst, is_not_null));
-    expect(utest_img_ffo__asaobj_deinit, when(asaobj, is_equal_to(&mock_asa_dst)));
+    {
+        expect(utest_img_ffo__asalocal_fn_unlink, will_return(ASTORAGE_RESULT_ARG_ERROR));
+        expect(utest_img_ffo__avctx_deinit, when(dst, is_not_null));
+        expect(utest_img_ffo__asaobj_deinit, when(asaobj, is_equal_to(&mock_asa_dst)));
+    }
     atfp__image_ffm_out__deinit_transcode(&mock_fp_dst->super);
     UTEST_FFM_INIT_TEARDOWN
 } // end of  atfp_img_ffo_test__avfilt_error

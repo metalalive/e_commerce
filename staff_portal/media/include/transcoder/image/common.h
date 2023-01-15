@@ -41,6 +41,7 @@ typedef struct atfp_img_s {
         struct {
             asa_op_localfs_cfg_t  asa_local;
             atfp_segment_t        seginfo;
+            void (*deinit_final_cb)(struct atfp_img_s *);
             uint8_t  _has_done_processing:1;
         } dst;
         struct {
@@ -58,6 +59,10 @@ typedef struct atfp_img_s {
 ASA_RES_CODE  atfp__image_src_preload_start(atfp_img_t *, void (*)(atfp_img_t *));
 
 ASA_RES_CODE  atfp__image_dst__save_to_storage(atfp_img_t *);
+
+uint8_t  atfp_img_dst_common_deinit(atfp_img_t *, void (*)(atfp_img_t *));
+
+void  atfp_storage_image_remove_version(atfp_t *, const char *status);
 
 void  atfp_image__dst_update_metadata(atfp_t *, void *loop);
 

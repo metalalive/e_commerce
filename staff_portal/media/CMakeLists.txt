@@ -338,6 +338,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/video/hls/seeker/secondary_playlist.c
     test/unit/transcoder/video/hls/seeker/cryptokey.c
     test/unit/transcoder/video/hls/seeker/segment.c
+    test/unit/transcoder/image/storage.c
     test/unit/transcoder/image/ffmpeg/in/init.c
     test/unit/transcoder/image/ffmpeg/in/avcontext.c
     test/unit/transcoder/image/ffmpeg/out/init.c

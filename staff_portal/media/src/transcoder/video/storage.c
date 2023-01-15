@@ -66,7 +66,7 @@ static  void  _atfp_remove_version_unlinkfile_start (asa_op_base_cfg_t *asa_dst,
     ASA_RES_CODE result =  asa_dst->storage->ops.fn_unlink(asa_dst);
     if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(err_info, "transcode", json_string(
-           "[storage] failed to issue unlink operation for removing files"));
+           "[video][storage] failed to issue unlink operation for removing files"));
         atfp_t *processor = asa_dst->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
         fprintf(stderr, "[transcoder][video][storage] error, line:%d, version:%s, result:%d \n",
                 __LINE__, processor->data.version, result );
