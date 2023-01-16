@@ -1,15 +1,15 @@
 {
-    "resource_id": "iE938eu3",
+    "resource_id": "xxxx",
     "outputs":{
         "sY": {
-            "mask": {"pattern":"custom123"},
-            "crop": {"x":12, "y":25, "width":366, "height": 322},
-            "scale": {"width":356, "height": 288}
+            "mask": {"pattern":"custom189"},
+            "crop": {"x":11, "y":23, "width":200, "height": 204},
+            "scale": {"width":190, "height": 198}
         },
-        "ki": {
-            "mask": {"pattern":"custom124"},
-            "crop": {"x":34, "y":57, "width":262, "height": 188},
-            "scale": {"width":256, "height": 178}
+        "kv": {
+            "mask": {"pattern":"custom191"},
+            "crop": {"x":34, "y":57, "width":196, "height": 194},
+            "scale": {"width":188, "height": 186}
         }
     }
 }

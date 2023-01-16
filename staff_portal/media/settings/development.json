@@ -176,7 +176,7 @@
                 "audio":["aac"]
             },
             "image": {
-                "pixel_limit":{"width":1280, "height":960},
+                "pixel_limit":{"width":2080, "height":1960},
                 "mask":{"basepath":"media/data/dev/image/mask"}
             },
             "video": {

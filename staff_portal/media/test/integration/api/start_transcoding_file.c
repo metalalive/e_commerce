@@ -276,10 +276,37 @@ Ensure(api__transcode_test_video__overwrite_existing)
     }
 }
 
-
 Ensure(api__transcode_test_image__accepted)
 {
+    json_t *upld_req = NULL, *resource_id_item = NULL; int idx = 0;
+    const char *img_subtypes[4] = {"png", "gif", "jpg", "tiff"};
+    const char *reqbody_templates[4] = {
+        REQBODY_IMAGE_BASEPATH"/ok_1.json", REQBODY_IMAGE_BASEPATH"/ok_2.json",
+        REQBODY_IMAGE_BASEPATH"/ok_3.json", REQBODY_IMAGE_BASEPATH"/ok_4.json",
+    };
+    for(idx = 0; idx < 4; idx++) {
+        do {
+            _available_resource_lookup(&upld_req, &resource_id_item, img_subtypes[idx], 0);
+            if(upld_req && resource_id_item) {
+                sleep(1);
+                _api__start_transcoding_test__accepted_common (reqbody_templates[idx],
+                         upld_req, resource_id_item,  itest_verify__job_progress_update_ok);
+            }
+        } while (upld_req && resource_id_item);
+    } // end of loop
 } // end of  api__transcode_test_image__accepted
+
+Ensure(api__transcode_test_image__overwrite_existing)
+{
+    json_t *upld_req = NULL, *resource_id_item = NULL;
+    _available_resource_lookup(&upld_req, &resource_id_item, "png", 0);
+    if(upld_req && resource_id_item) {
+        _api__start_transcoding_test__accepted_common (REQBODY_IMAGE_BASEPATH"/ok_1_overwrite.json",
+                 upld_req, resource_id_item,  itest_verify__job_progress_update_ok);
+    } else {
+        fprintf(stderr, "[itest][api][start_transcode] line:%d, missing png picture", __LINE__);
+    }
+} // end of  api__transcode_test_image__overwrite_existing
 
 
 
@@ -550,5 +577,6 @@ TestSuite *api_start_transcoding_file_v2_tests(void)
     add_test(suite, api__transcode_test_video__corrupted_video);
     add_test(suite, api__transcode_test_video__overwrite_existing);
     add_test(suite, api__transcode_test_video__improper_resolution);
+    add_test(suite, api__transcode_test_image__overwrite_existing);
     return suite;
 }

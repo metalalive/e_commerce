@@ -1,0 +1,15 @@
+{
+    "resource_id": "xxxx",
+    "outputs":{
+        "In": {
+            "mask": {"pattern":"custom191"},
+            "crop": {"x":9, "y":23, "width":200, "height": 204},
+            "scale": {"width":196, "height": 118}
+        },
+        "vw": {
+            "mask": {"pattern":"custom190"},
+            "crop": {"x":46, "y":17, "width":156, "height": 184},
+            "scale": {"width":148, "height": 182}
+        }
+    }
+}
