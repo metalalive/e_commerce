@@ -1,34 +1,10 @@
-#include <curl/curl.h>
 #include "utils.h"
-#include "base64.h"
 #include "views.h"
-#include "models/pool.h"
+#include "views/filefetch_common.h"
 #include "storage/cfg_parser.h"
 #include "transcoder/file_processor.h"
 
 #define   APP_UPDATE_INTERVAL_SECS_KEYFILE      60.0f
-
-static  void  _api_initiate_file_stream__deinit_primitives (h2o_req_t *req, h2o_handler_t *hdlr,
-        app_middleware_node_t *node, json_t *qparams, json_t *res_body)
-{
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
-    size_t  nb_required = json_dumpb(res_body, NULL, 0, 0);
-    if(req->res.status == 0)
-        req->res.status = 500;
-    if(nb_required > 0) {
-        char  body[nb_required + 1];
-        size_t  nwrite = json_dumpb(res_body, &body[0], nb_required, JSON_COMPACT);
-        assert(nwrite <= nb_required);
-        h2o_send_inline(req, body, nwrite);
-    } else {
-        h2o_send_inline(req, "{}", 2);
-    }
-    json_decref(res_body);
-    json_decref(qparams);
-    // TODO, dealloc jwt if created for ACL check
-    app_run_next_middleware(hdlr, req, node);
-} // end of  _api_initiate_file_stream__deinit_primitives
-
 
 static void _api_atfp_init_stream__done_cb(atfp_t *processor)
 {
@@ -49,118 +25,8 @@ static void _api_atfp_init_stream__done_cb(atfp_t *processor)
     req->res.status = (int) json_integer_value(json_object_get(spec, "http_resp_code"));
     processor->data.error = NULL;
     processor->data.spec = NULL;
-    _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, resp_body);
+    api_init_filefetch__deinit_common (req, hdlr, node, qparams, resp_body);
 } // end of _api_atfp_init_stream__done_cb
-
-
-
-#define  TOWARD_NEXT_MIDDLEWARE_CODE \
-        app_save_ptr_to_hashmap(node->data, "err_info", (void *)err_info); \
-        app_save_ptr_to_hashmap(node->data, "qparams", (void *)qparams); \
-        app_run_next_middleware(hdlr, req, node);
-
-static void _api_abac_pdp__try_match_rule (aacl_result_t *result, void **usr_args)
-{
-    h2o_req_t     *req  = usr_args[0];
-    h2o_handler_t *hdlr = usr_args[1];
-    app_middleware_node_t *node = usr_args[2];
-    json_t *qparams  = usr_args[3];
-    json_t *err_info = usr_args[4];
-    if(result->flag.error) {
-        req->res.status = 503;
-    } else if(result->data.size != 1 || !result->data.entries) {
-        req->res.status = 403;
-        json_object_set_new(err_info, "usr_id", json_string("operation denied"));
-    } // a record fetched from database implicitly means read access to the file
-    if(req->res.status == 0) {
-        TOWARD_NEXT_MIDDLEWARE_CODE
-    } else {
-        _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-    }
-} // end of  _api_abac_pdp__try_match_rule
-
-
-#define  KEEP_FILE_LOCATION_CODE \
-        json_object_set_new(qparams, "last_upld_req", json_integer(result->upld_req)); \
-        json_object_set_new(qparams, "resource_owner_id", json_integer(result->owner_usr_id));
-
-static void _api_abac_pdp__verify_resource_owner (aacl_result_t *result, void **usr_args)
-{
-    h2o_req_t     *req  = usr_args[0];
-    h2o_handler_t *hdlr = usr_args[1];
-    app_middleware_node_t *node = usr_args[2];
-    json_t *qparams  = usr_args[3];
-    json_t *err_info = usr_args[4];
-    int _resp_status =  api_http_resp_status__verify_resource_id (result, err_info);
-    if(json_object_size(err_info) == 0) {
-        if(result->flag.acl_exists && result->flag.acl_visible) { // everyone can access
-            KEEP_FILE_LOCATION_CODE
-            TOWARD_NEXT_MIDDLEWARE_CODE
-        } else { // limited to authorized users, load jwt token
-            json_t *jwt_claims = app_auth_httphdr_decode_jwt (req);
-            if(jwt_claims) {
-                app_save_ptr_to_hashmap(node->data, "auth", (void *)jwt_claims);
-                KEEP_FILE_LOCATION_CODE
-                uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
-                if(curr_usr_id == result->owner_usr_id) {
-                    TOWARD_NEXT_MIDDLEWARE_CODE
-                } else { // further check access rules
-                    const char  *_res_id_encoded = json_string_value(json_object_get(qparams, "res_id_encoded"));
-                    void *usr_args[5] = {req, hdlr, node, qparams, err_info};
-                    aacl_cfg_t  cfg = {.usr_args={.entries=&usr_args[0], .size=5}, .resource_id=(char *)_res_id_encoded,
-                            .db_pool=app_db_pool_get_pool("db_server_1"), .loop=req->conn->ctx->loop,
-                            .usr_id=curr_usr_id, .callback=_api_abac_pdp__try_match_rule };
-                    int err = app_resource_acl_load (&cfg);
-                    if(err)
-                        _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-                }
-            } else {
-                req->res.status = 401;
-                _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-            }
-        }
-    } else {
-        req->res.status = _resp_status;
-        _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-    }
-} // end of  _api_abac_pdp__verify_resource_owner
-#undef  KEEP_FILE_LOCATION_CODE
-#undef  TOWARD_NEXT_MIDDLEWARE_CODE
-
-
-static int api_abac_pep__init_fstream (h2o_handler_t *hdlr, h2o_req_t *req, app_middleware_node_t *node)
-{
-    json_t *err_info = json_object(),  *qparams = json_object();
-    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
-    const char *resource_id = app_resource_id__url_decode(qparams, err_info);
-    if(!resource_id || (json_object_size(err_info) > 0)) {
-        req->res.status = 400;
-    } else {
-        size_t out_len = 0;
-        char *_res_id_encoded = (char *) base64_encode((const unsigned char *)resource_id,
-                  strlen(resource_id), &out_len);
-        json_object_set_new(qparams, "res_id_encoded", json_string(_res_id_encoded));
-        free(_res_id_encoded);
-        _res_id_encoded = (char *)json_string_value(json_object_get(qparams, "res_id_encoded"));
-        void *usr_args[5] = {req, hdlr, node, qparams, err_info};
-        aacl_cfg_t  cfg = {.usr_args={.entries=&usr_args[0], .size=5}, .resource_id=_res_id_encoded,
-                .db_pool=app_db_pool_get_pool("db_server_1"), .loop=req->conn->ctx->loop,
-                .fetch_acl=1, .callback=_api_abac_pdp__verify_resource_owner };
-        int err = app_acl_verify_resource_id (&cfg);
-        if(err)
-            json_object_set_new(err_info, "reason", json_string("internal error"));
-    }
-    if(json_object_size(err_info) > 0)
-        _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
-    return 0;
-} // end of  api_abac_pep__init_fstream
-
-
-// TODO
-// * check whether json file exists (users ACL), if not, create one; or if it exists, then still refresh the 
-//   content if the last update is before certain time llmit.
-// * refresh users ACL from database to local api server (saved in temp buffer)
-//   (may improve the flow by sending message queue everytime when user ACL has been updaated)
 
 
 RESTAPI_ENDPOINT_HANDLER(initiate_file_stream, POST, hdlr, req)
@@ -202,7 +68,7 @@ RESTAPI_ENDPOINT_HANDLER(initiate_file_stream, POST, hdlr, req)
         req->res.status = (int) json_integer_value(json_object_get(qparams, "http_resp_code"));
 done:
     if(json_object_size(err_info) > 0)
-        _api_initiate_file_stream__deinit_primitives (req, hdlr, node, qparams, err_info);
+        api_init_filefetch__deinit_common (req, hdlr, node, qparams, err_info);
     return 0;
 } // end of initiate_file_stream
 

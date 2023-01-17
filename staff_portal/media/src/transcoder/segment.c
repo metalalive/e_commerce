@@ -238,7 +238,11 @@ void atfp__open_dst_seg__cb (asa_op_base_cfg_t *asaobj, atfp_segment_t *seg_cfg,
     if(result == ASTORAGE_RESULT_COMPLETE) {
         atfp_segment_init(seg_cfg);
         processor->transfer.transcoded_dst.flags.asaremote_open = 1;
+#if  1
         result = _asa_local->storage->ops.fn_read(_asa_local);
+#else
+        result = ASTORAGE_RESULT_DATA_ERROR;
+#endif
         if(result != ASTORAGE_RESULT_ACCEPT) {
             json_object_set_new(processor->data.error, "storage",
                     json_string("failed to send read op in local segment file"));

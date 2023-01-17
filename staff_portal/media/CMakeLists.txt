@@ -198,6 +198,8 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/rpc/reply.c
     src/views/init.c
     src/views/common.c
+    src/views/filefetch_common.c
+    src/views/initiate_single_file.c
     src/views/initiate_file_stream.c
     src/views/stream_file_lookup.c
     src/views/edit_filelvl_access_ctrl.c
@@ -250,7 +252,7 @@ SET(APP_STREAMING_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
     src/transcoder/validation.c
     src/transcoder/crypto.c
-    src/transcoder/stream_cache.c
+    src/transcoder/cache.c
     src/transcoder/video/hls/seeker/common.c
     src/transcoder/video/hls/seeker/master_playlist.c
     src/transcoder/video/hls/seeker/secondary_playlist.c
@@ -321,7 +323,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/models/mariadb.c
     test/unit/transcoder/cfg_parser.c
     test/unit/transcoder/file_processor.c
-    test/unit/transcoder/stream_cache.c
+    test/unit/transcoder/cache.c
     test/unit/transcoder/crypto.c
     test/unit/transcoder/storage.c
     test/unit/transcoder/validation.c

@@ -337,10 +337,10 @@ static void  test_verify_stream__hls_segment (CURL *handle, test_setup_priv_t *p
     app_cfg_t *acfg = app_get_global_cfg();
 #define  PATH_PATTERN   "%s/%s/%s/%s"
     size_t  path_sz = sizeof(PATH_PATTERN) + strlen(acfg->tmp_buf.path) + strlen(doc_id) +
-        sizeof(ATFP_ENCRYPTED_FILE_FOLDERNAME) + detail_sz;
+        sizeof(ATFP_CACHED_FILE_FOLDERNAME) + detail_sz;
     char    path [path_sz];
     size_t  nwrite = snprintf( &path[0], path_sz, PATH_PATTERN, acfg->tmp_buf.path,
-            ATFP_ENCRYPTED_FILE_FOLDERNAME, doc_id, detail );
+            ATFP_CACHED_FILE_FOLDERNAME, doc_id, detail );
     assert(path_sz > nwrite);
 #undef   PATH_PATTERN
     free(detail);

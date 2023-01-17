@@ -190,9 +190,11 @@ void atfp__video_hls__proceeding_transcode(atfp_t *processor)
         hlsproc_dst->internal.op.filter = hlsproc_dst->internal.op.finalize.filter;
     if(flush_filt_done)
         hlsproc_dst->internal.op.encode = hlsproc_dst->internal.op.finalize.encode;
-    if(flush_enc_done)
+    if(flush_enc_done) // TODO, remove field  `has_done_flush_encoder()`
         ret = hlsproc_dst->internal.op.finalize.write(hlsproc_dst->av);
-    if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA) { // will return `ASTORAGE_RESULT_ACCEPT`
+    if(ret == ATFP_AVCTX_RET__NEED_MORE_DATA) {
+        // TODO add OR cond ret == ATFP_AVCTX_RET__END_OF_FLUSH_ENCODER
+        // would return `ASTORAGE_RESULT_ACCEPT` on success
         result = hlsproc_dst->internal.op.move_to_storage(hlsproc_dst);
     } else if(ret < ATFP_AVCTX_RET__OK) {
         result = ASTORAGE_RESULT_UNKNOWN_ERROR;

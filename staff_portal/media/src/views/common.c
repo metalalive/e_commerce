@@ -5,7 +5,7 @@
 #include <curl/curl.h>
 
 #include "utils.h"
-#include "acl.h"
+#include "base64.h"
 #include "views.h"
 #include "models/pool.h"
 #include "models/query.h"

@@ -138,7 +138,7 @@ void  api_rpc_transcode__finalize (atfp_asa_map_t *map)
             atfp_asa_map_dst_start_working(map, asa_dst);
     } // TODO, solve potential n + 1 problems
 #endif
-    if(atfp_asa_map_all_dst_stopped(map) && has_err) {
+    if(has_err) {
         API_RPC__SEND_ERROR_REPLY(receipt, err_info);
         api_rpc_transcoding__storagemap_deinit(map);
     }

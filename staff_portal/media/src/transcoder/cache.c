@@ -102,7 +102,7 @@ int  atfp_cache_save_metadata(const char *basepath, const char *mimetype, atfp_d
 } // end of  atfp_cache_save_metadata
 
 
-static void  _atfp_cache_new_cachefile_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
+static void  _atfp_cachecommon_ensure_localfile_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
 {
     asa_op_localfs_cfg_t  *asa_cch_local = (asa_op_localfs_cfg_t *) _asa_cch_local;
     json_t  *err_info = _asa_cch_local->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
@@ -129,10 +129,10 @@ static void  _atfp_cache_new_cachefile_cb (asa_op_base_cfg_t *_asa_cch_local, AS
         fprintf(stderr, "[atfp][cache] line:%d, failed to create new cache file \r\n", __LINE__);
     }
     INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
-} // end of  _atfp_cache_new_cachefile_cb
+} // end of  _atfp_cachecommon_ensure_localfile_cb
 
 
-static ASA_RES_CODE _atfp_cache_new_cachefile (asa_op_base_cfg_t *_asa_cch_local)
+static ASA_RES_CODE _atfp_cachecommon_new_localfile (asa_op_base_cfg_t *_asa_cch_local)
 {
     json_t  *spec = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
     const char *_resource_path = json_string_value(json_object_get(spec, "doc_basepath"));
@@ -146,21 +146,21 @@ static ASA_RES_CODE _atfp_cache_new_cachefile (asa_op_base_cfg_t *_asa_cch_local
     _asa_cch_local->op.open.dst_path = &_fullpath[0];
     _asa_cch_local->op.open.mode  = S_IWUSR | S_IRUSR;
     _asa_cch_local->op.open.flags = O_WRONLY | O_CREAT;
-    _asa_cch_local->op.open.cb = _atfp_cache_new_cachefile_cb;
+    _asa_cch_local->op.open.cb = _atfp_cachecommon_ensure_localfile_cb;
     ASA_RES_CODE  result = _asa_cch_local->storage->ops.fn_open(_asa_cch_local);
     _asa_cch_local->op.open.dst_path = NULL;
     return result;
-} // end of _atfp_cache_new_cachefile
+} // end of _atfp_cachecommon_new_localfile
 
 
-static void  _atfp_cache_new_cache_detailpath_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
-{
+static void  _atfp_cachecommon_ensure_detailpath_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
+{ // TODO, reuse
     json_t  *err_info = _asa_cch_local->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
     DEINIT_IF_EXISTS(_asa_cch_local->op.mkdir.path.origin, free);
     _asa_cch_local->op.mkdir.path.prefix = NULL;
     _asa_cch_local->op.mkdir.path.curr_parent = NULL;
     if (result == ASTORAGE_RESULT_COMPLETE) {
-        result = _atfp_cache_new_cachefile(_asa_cch_local);
+        result = _atfp_cachecommon_new_localfile(_asa_cch_local);
         if(result != ASTORAGE_RESULT_ACCEPT)
             json_object_set_new(err_info, "storage", json_string("internal error"));
     } else {
@@ -169,10 +169,10 @@ static void  _atfp_cache_new_cache_detailpath_cb (asa_op_base_cfg_t *_asa_cch_lo
     }
     if(result != ASTORAGE_RESULT_ACCEPT)
         INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
-} // end of  _atfp_cache_new_cache_detailpath_cb
+} // end of  _atfp_cachecommon_ensure_detailpath_cb
 
 
-static ASA_RES_CODE _atfp_cache_new_cache_detailpath (asa_op_base_cfg_t *_asa_cch_local, const char *_path_end_pos)
+static ASA_RES_CODE _atfp_streamcache_new_detailpath (asa_op_base_cfg_t *_asa_cch_local, const char *_path_end_pos)
 {
     json_t  *spec = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
     const char *_doc_basepath = json_string_value(json_object_get(spec, "doc_basepath"));
@@ -185,9 +185,9 @@ static ASA_RES_CODE _atfp_cache_new_cache_detailpath (asa_op_base_cfg_t *_asa_cc
     _asa_cch_local->op.mkdir.path.origin = ptr;
     _asa_cch_local->op.mkdir.path.curr_parent = ptr + _fullpath_sz;
     _asa_cch_local->op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
-    _asa_cch_local->op.mkdir.cb = _atfp_cache_new_cache_detailpath_cb;
+    _asa_cch_local->op.mkdir.cb = _atfp_cachecommon_ensure_detailpath_cb;
     return  _asa_cch_local->storage->ops.fn_mkdir(_asa_cch_local, 1);
-} // end of  _atfp_cache_new_cache_detailpath
+} // end of  _atfp_streamcache_new_detailpath
 
 
 static void  _atfp_cache_processor_setup_ready_cb (atfp_t *processor)
@@ -201,9 +201,9 @@ static void  _atfp_cache_processor_setup_ready_cb (atfp_t *processor)
         const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
         const char *_path_end_pos = strrchr(_detail, '/');
         if(_path_end_pos) {
-            result = _atfp_cache_new_cache_detailpath(_asa_cch_local, _path_end_pos);
+            result = _atfp_streamcache_new_detailpath(_asa_cch_local, _path_end_pos);
         } else {
-            result = _atfp_cache_new_cachefile(_asa_cch_local);
+            result = _atfp_cachecommon_new_localfile(_asa_cch_local);
         }  // check whether all parent folders in the path exist
         if(result != ASTORAGE_RESULT_ACCEPT) {
             json_object_set_new(err_info, "storage", json_string("internal error"));
@@ -215,7 +215,7 @@ static void  _atfp_cache_processor_setup_ready_cb (atfp_t *processor)
 } // end of _atfp_cache_processor_setup_ready_cb
 
 
-static void  _atfp_cache_metadata_close_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
+static void  _atfp_streamcache_metadata_close_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
 {
     json_t  *spec     = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
     json_t  *err_info = _asa_cch_local->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
@@ -242,10 +242,10 @@ static void  _atfp_cache_metadata_close_cb (asa_op_base_cfg_t *_asa_cch_local, A
     }
     if (json_object_size(err_info) > 0)
         INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
-} // end of  _atfp_cache_metadata_close_cb
+} // end of  _atfp_streamcache_metadata_close_cb
 
 
-static void  _atfp_cache_metadata_open_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
+static void  _atfp_streamcache_metadata_open_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
 {
     asa_op_localfs_cfg_t  *asa_cch_local = (asa_op_localfs_cfg_t *) _asa_cch_local;
     json_t  *spec     = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
@@ -264,14 +264,14 @@ static void  _atfp_cache_metadata_open_cb (asa_op_base_cfg_t *_asa_cch_local, AS
         json_object_set_new(err_info, "storage", json_string("internal error"));
         fprintf(stderr, "[atfp][cache] line:%d, failed to open metadata file \r\n", __LINE__);
     }
-    _asa_cch_local->op.close.cb = _atfp_cache_metadata_close_cb;
+    _asa_cch_local->op.close.cb = _atfp_streamcache_metadata_close_cb;
     result  = _asa_cch_local->storage->ops.fn_close(_asa_cch_local);
     if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(err_info, "storage", json_string("internal error"));
         fprintf(stderr, "[atfp][cache] line:%d, failed to close metadata file \r\n", __LINE__);
         INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
     }
-} // end of _atfp_cache_metadata_open_cb
+} // end of _atfp_streamcache_metadata_open_cb
 
 
 /* TODO, implement timeout attribute in cache so existing cache file can be evicted after specified expiry time
@@ -283,7 +283,7 @@ static void  _atfp_cache_metadata_open_cb (asa_op_base_cfg_t *_asa_cch_local, AS
  *       // start file processor
  *   }
 */
-static  void  _atfp_cachefile_existence_check (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
+static  void  _atfp_streamcache_existence_check (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
 {
     json_t  *spec     = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
     json_t  *err_info = _asa_cch_local->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
@@ -300,7 +300,7 @@ static  void  _atfp_cachefile_existence_check (asa_op_base_cfg_t *_asa_cch_local
         _asa_cch_local->op.open.dst_path = (char *)&filepath[0];
         _asa_cch_local->op.open.mode  = S_IRUSR;
         _asa_cch_local->op.open.flags = O_RDONLY;
-        _asa_cch_local->op.open.cb = _atfp_cache_metadata_open_cb;
+        _asa_cch_local->op.open.cb = _atfp_streamcache_metadata_open_cb;
         result  = _asa_cch_local->storage->ops.fn_open(_asa_cch_local);
         _asa_cch_local->op.open.dst_path = NULL;
         if(result != ASTORAGE_RESULT_ACCEPT) {
@@ -310,7 +310,7 @@ static  void  _atfp_cachefile_existence_check (asa_op_base_cfg_t *_asa_cch_local
         }
 #undef   PATTERN
     }
-} // end of  _atfp_cachefile_existence_check
+} // end of  _atfp_streamcache_existence_check
 
 
 asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
@@ -352,7 +352,7 @@ asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t 
     asa_cached_local->super.op.open.dst_path = &_fullpath[0];
     asa_cached_local->super.op.open.mode  = S_IRUSR;
     asa_cached_local->super.op.open.flags = O_RDONLY;
-    asa_cached_local->super.op.open.cb = _atfp_cachefile_existence_check;
+    asa_cached_local->super.op.open.cb = _atfp_streamcache_existence_check;
     ASA_RES_CODE result = asa_cached_local->super.storage->ops.fn_open(&asa_cached_local->super);
     // the storage operation function above should internally copy the path
     asa_cached_local->super.op.open.dst_path = NULL;

@@ -205,7 +205,7 @@ Ensure(atfp_hls_test__init_stream__skip_key_rotation) {
     ATFP_HLS_TEST__INIT_STREAM__SPEC_SETUP
     _COMMON_CODE(MOCK_KEY_ITEM_1, 0)
     {
-        const char *path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1"/"ATFP_ENCRYPT_METADATA_FILENAME;
+        const char *path = UTEST_ASALOCAL_BASEPATH"/"ATFP_CACHED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1"/"ATFP_ENCRYPT_METADATA_FILENAME;
         json_t *_metadata = json_load_file(path, 0, NULL);
         assert_that(json_string_value(json_object_get(_metadata, "key_id")), is_equal_to_string(key_id_hex));
         assert_that(json_string_value(json_object_get(_metadata, "mimetype")), is_equal_to_string("hls"));
@@ -224,19 +224,19 @@ Ensure(atfp_hls_test__init_stream__update_ok_2) {
     _COMMON_CODE(MOCK_KEY_ITEM_2, 1)
     {
         const char *path = NULL;
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1"/"ATFP_ENCRYPT_METADATA_FILENAME;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_CACHED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1"/"ATFP_ENCRYPT_METADATA_FILENAME;
         unlink(path);
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_2"/"ATFP_ENCRYPT_METADATA_FILENAME;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_CACHED_FILE_FOLDERNAME"/"MOCK_DOC_ID_2"/"ATFP_ENCRYPT_METADATA_FILENAME;
         unlink(path);
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_CACHED_FILE_FOLDERNAME"/"MOCK_DOC_ID_1;
         rmdir(path);
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID_2;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_CACHED_FILE_FOLDERNAME"/"MOCK_DOC_ID_2;
         rmdir(path);
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID1__HALF1;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_CACHED_FILE_FOLDERNAME"/"MOCK_DOC_ID1__HALF1;
         rmdir(path);
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME"/"MOCK_DOC_ID2__HALF1;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_CACHED_FILE_FOLDERNAME"/"MOCK_DOC_ID2__HALF1;
         rmdir(path);
-        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_ENCRYPTED_FILE_FOLDERNAME;
+        path = UTEST_ASALOCAL_BASEPATH"/"ATFP_CACHED_FILE_FOLDERNAME;
         rmdir(path);
     }
     UTEST_RUN_OPERATION_WITH_PATH(UTEST_ASALOCAL_BASEPATH, MOCK_USER_ID,

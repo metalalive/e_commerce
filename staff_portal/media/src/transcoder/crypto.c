@@ -8,10 +8,10 @@ size_t  atfp_get_encrypted_file_basepath (const char *basepath, char *out, size_
         const char *doc_id, size_t id_sz) {
     size_t  nwrite = 0;
 #define  PATTERN  "%s/%s/%s"
-    size_t  expect_out_sz = strlen(basepath) + 1 + sizeof(ATFP_ENCRYPTED_FILE_FOLDERNAME)
+    size_t  expect_out_sz = strlen(basepath) + 1 + sizeof(ATFP_CACHED_FILE_FOLDERNAME)
                  + 1 + strlen(doc_id) + 1;
     if (o_sz >= expect_out_sz)
-        nwrite = snprintf(out, o_sz, PATTERN, basepath, ATFP_ENCRYPTED_FILE_FOLDERNAME, doc_id);
+        nwrite = snprintf(out, o_sz, PATTERN, basepath, ATFP_CACHED_FILE_FOLDERNAME, doc_id);
     return nwrite;
 #undef   PATTERN
 } // end of atfp_get_encrypted_file_basepath

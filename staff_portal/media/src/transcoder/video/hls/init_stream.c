@@ -89,7 +89,7 @@ static  void  _atfp_hls__close_crypto_keyfile_cb (asa_op_base_cfg_t *_asa_local,
     if (result == ASTORAGE_RESULT_COMPLETE && json_object_size(err_info) == 0) {
         const char *_enc_doc_id = json_string_value(json_object_get(spec, "encrypted_doc_id"));
         size_t  doc_id_sz = strlen(_enc_doc_id);
-        size_t  max_path_sz = strlen(acfg->tmp_buf.path) + 3 + doc_id_sz + sizeof(ATFP_ENCRYPTED_FILE_FOLDERNAME);
+        size_t  max_path_sz = strlen(acfg->tmp_buf.path) + 3 + doc_id_sz + sizeof(ATFP_CACHED_FILE_FOLDERNAME);
         char    path[max_path_sz];
         size_t  path_sz = atfp_get_encrypted_file_basepath(acfg->tmp_buf.path, &path[0],
                 max_path_sz, _enc_doc_id, doc_id_sz);

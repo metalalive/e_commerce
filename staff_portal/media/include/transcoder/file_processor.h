@@ -180,7 +180,7 @@ typedef struct {
 #define   ATFP__DISCARDING_FOLDER_NAME        "discarding"
 #define   ATFP__MAXSZ_STATUS_FOLDER_NAME   MAX(sizeof(ATFP__TEMP_TRANSCODING_FOLDER_NAME),MAX(sizeof(ATFP__COMMITTED_FOLDER_NAME),sizeof(ATFP__DISCARDING_FOLDER_NAME)))
 
-#define  ATFP_ENCRYPTED_FILE_FOLDERNAME   "encrypted"
+#define  ATFP_CACHED_FILE_FOLDERNAME   "cached"
 #define  ATFP_ENCRYPT_METADATA_FILENAME   "metadata.json"
 #define  ATFP__CRYPTO_KEY_MOST_RECENT   "recent"
 // In the transcoder, `atfp_t` object requires that each object of `asa_op_base_cfg_t` type
