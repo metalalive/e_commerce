@@ -265,8 +265,11 @@ const char * atfp_transcoded_version_sql_pattern(const char *res_typ, size_t *ou
 
 // for cached streaming files at local API server
 asa_op_localfs_cfg_t  *atfp_streamcache_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
-       uint32_t buf_sz, asa_open_cb_t  _init_cb, asa_close_cb_t  _deinit_cb);
+       uint32_t buf_sz, asa_open_cb_t  usr_init_cb, asa_close_cb_t  usr_deinit_cb);
+asa_op_localfs_cfg_t  *atfp_cache_nonstream_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
+       uint32_t buf_sz, asa_open_cb_t  usr_init_cb, asa_close_cb_t  usr_deinit_cb);
 void  atfp_streamcache_proceed_datablock (asa_op_base_cfg_t *, asa_cch_proceed_cb_t);
+void  atfp_nonstreamcache_proceed_datablock (asa_op_base_cfg_t *, asa_cch_proceed_cb_t);
 int  atfp_cache_save_metadata(const char *basepath, const char *mimetype, atfp_data_t *);
 
 void  atfp__close_local_seg__cb  (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE);

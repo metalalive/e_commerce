@@ -28,25 +28,41 @@
     }
 
 
-static void  _atfp_cachefile_close_cb(asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
+static void  _atfp_cachecommon_localfile_closed_cb(asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
 {
     asa_op_localfs_cfg_t  *asa_cch_local = (asa_op_localfs_cfg_t *) _asa_cch_local;
     INVOKE_DEINIT_USR_CALLBACK(_asa_cch_local, result);
     DEINIT_IF_EXISTS(_asa_cch_local->op.mkdir.path.origin, free);
     _asa_cch_local->op.mkdir.path.prefix = NULL;
     _asa_cch_local->op.mkdir.path.curr_parent = NULL;
+    _asa_cch_local->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = NULL;
+    _asa_cch_local->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG] = NULL;
     DEINIT_IF_EXISTS(asa_cch_local->file.data, free); 
     DEINIT_IF_EXISTS(_asa_cch_local, free);
 }
 
-static void  atfp_streamcache_deinit (asa_op_base_cfg_t *_asa_cch_local)
+static void  _atfp_nonstreamcache_srcfile_remote_closed_cb(asa_op_base_cfg_t *_asa_src, ASA_RES_CODE result)
+{ DEINIT_IF_EXISTS(_asa_src, free); }
+
+static void  atfp_cachecommon_deinit (asa_op_base_cfg_t *_asa_cch_local)
 {
     asa_op_localfs_cfg_t  *asa_cch_local = (asa_op_localfs_cfg_t *) _asa_cch_local;
-    atfp_t *processor = _asa_cch_local->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp_t *processor    = _asa_cch_local->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp_asa_map_t *_map = _asa_cch_local->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     if(processor) {
         processor->data.error = NULL;
         processor->data.spec = NULL;
         processor->ops->deinit(processor);
+    }
+    if(_map) {
+        asa_op_base_cfg_t  *asa_src_remote = atfp_asa_map_get_source(_map);
+        asa_src_remote->op.close.cb = _atfp_nonstreamcache_srcfile_remote_closed_cb;
+        ASA_RES_CODE result = asa_src_remote->storage->ops.fn_close(asa_src_remote);
+        if(result != ASTORAGE_RESULT_ACCEPT)
+            _atfp_nonstreamcache_srcfile_remote_closed_cb(asa_src_remote,result);
+        atfp_asa_map_set_source(_map, NULL);
+        atfp_asa_map_set_localtmp(_map, NULL);
+        atfp_asa_map_deinit(_map);
     }
     int fd =  asa_cch_local->file.file;
     if(fd >= 0) {
@@ -55,14 +71,14 @@ static void  atfp_streamcache_deinit (asa_op_base_cfg_t *_asa_cch_local)
             flock(fd, LOCK_UN | LOCK_NB);
             usrdata->flags.locked = 0;
         }
-        _asa_cch_local->op.close.cb = _atfp_cachefile_close_cb;
+        _asa_cch_local->op.close.cb = _atfp_cachecommon_localfile_closed_cb;
         ASA_RES_CODE result  = _asa_cch_local->storage->ops.fn_close(_asa_cch_local);
         if(result != ASTORAGE_RESULT_ACCEPT)
-            _atfp_cachefile_close_cb(_asa_cch_local, result);
+            _atfp_cachecommon_localfile_closed_cb(_asa_cch_local, result);
     } else {
-        _atfp_cachefile_close_cb(_asa_cch_local, ASTORAGE_RESULT_COMPLETE);
+        _atfp_cachecommon_localfile_closed_cb(_asa_cch_local, ASTORAGE_RESULT_COMPLETE);
     }
-} // end of  atfp_streamcache_deinit
+} // end of  atfp_cachecommon_deinit
 
 
 int  atfp_cache_save_metadata(const char *basepath, const char *mimetype, atfp_data_t *fp_data)
@@ -297,6 +313,7 @@ static  void  _atfp_streamcache_existence_check (asa_op_base_cfg_t *_asa_cch_loc
         size_t nwrite = snprintf(&filepath[0], filepath_sz, PATTERN, _cached_path,
                   ATFP_ENCRYPT_METADATA_FILENAME);
         assert(filepath_sz >= nwrite);
+#undef   PATTERN
         _asa_cch_local->op.open.dst_path = (char *)&filepath[0];
         _asa_cch_local->op.open.mode  = S_IRUSR;
         _asa_cch_local->op.open.flags = O_RDONLY;
@@ -308,13 +325,95 @@ static  void  _atfp_streamcache_existence_check (asa_op_base_cfg_t *_asa_cch_loc
             fprintf(stderr, "[atfp][cache] line:%d, failed to open metadata file \r\n", __LINE__);
             INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
         }
-#undef   PATTERN
     }
 } // end of  _atfp_streamcache_existence_check
 
 
-asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
-       uint32_t buf_sz, asa_open_cb_t  _init_cb, asa_close_cb_t  _deinit_cb)
+static  __attribute__((optimize("O0"))) void  _atfp_nonstreamcache_remotesrc_open_cb(
+        asa_op_base_cfg_t *_asa_src, ASA_RES_CODE result) {
+    // TODO, ensure path in local cache folder
+    json_t  *err_info = _asa_src->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
+    atfp_asa_map_t *_map = _asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t  *tmp = atfp_asa_map_get_localtmp(_map);
+    asa_op_base_cfg_t  *_asa_cch_local = &tmp->super;
+    if (result == ASTORAGE_RESULT_COMPLETE) {
+        json_t  *spec = _asa_src->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
+        const char *_doc_basepath = json_string_value(json_object_get(spec, "doc_basepath"));
+        size_t _fullpath_sz = strlen(_doc_basepath) + 1;
+        char *ptr = calloc((_fullpath_sz << 1), sizeof(char));
+        strncpy(ptr, _doc_basepath, _fullpath_sz - 1);
+        _asa_cch_local->op.mkdir.path.prefix = NULL;
+        _asa_cch_local->op.mkdir.path.origin = ptr;
+        _asa_cch_local->op.mkdir.path.curr_parent = ptr + _fullpath_sz;
+        _asa_cch_local->op.mkdir.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
+        _asa_cch_local->op.mkdir.cb = _atfp_cachecommon_ensure_detailpath_cb;
+        result = _asa_cch_local->storage->ops.fn_mkdir(_asa_cch_local, 1);
+        if(result != ASTORAGE_RESULT_ACCEPT) {
+            json_object_set_new(err_info, "storage", json_string("internal error"));
+            fprintf(stderr, "[atfp][cache][storage] line:%d, failed to open file \r\n", __LINE__);
+            INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
+        }
+    } else {
+        json_object_set_new(err_info, "storage", json_string("internal error"));
+        fprintf(stderr, "[atfp][cache][storage] line:%d, failed to open file \r\n", __LINE__);
+        INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
+    }
+} // end of  _atfp_nonstreamcache_remotesrc_open_cb
+
+static  void  _atfp_nonstreamcache_existence_check (
+        asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
+{
+    json_t  *spec     = _asa_cch_local->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG];
+    json_t  *err_info = _asa_cch_local->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
+    if (result == ASTORAGE_RESULT_COMPLETE) {
+        INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
+    } else {
+        const char *_appstorage_alias = json_string_value(json_object_get(spec, "storage_alias"));
+        asa_cfg_t *storage = app_storage_cfg_lookup(_appstorage_alias);
+        asa_op_base_cfg_t  *asa_src_remote = (asa_op_base_cfg_t *) app_storage__init_asaobj_helper (
+            storage,  _asa_cch_local->cb_args.size , 0, 0);
+        atfp_asa_map_t *_map = atfp_asa_map_init(0);
+        atfp_asa_map_set_source(_map, asa_src_remote);
+        atfp_asa_map_set_localtmp(_map, (asa_op_localfs_cfg_t *)_asa_cch_local);
+        _asa_cch_local->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG] = _map;
+        asa_src_remote->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG] = _map;
+        asa_src_remote->cb_args.entries[SPEC_INDEX__IN_ASA_USRARG] = spec;
+        asa_src_remote->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG] = err_info;
+        asa_src_remote->op.read.dst = _asa_cch_local->op.write.src; // reuse the same buffer
+        asa_src_remote->op.read.dst_max_nbytes = _asa_cch_local->op.write.src_max_nbytes;
+        if(strncmp(_appstorage_alias, "localfs", sizeof("localfs") - 1) == 0) // TODO
+            ((asa_op_localfs_cfg_t *)asa_src_remote)->loop = ((asa_op_localfs_cfg_t *)_asa_cch_local)->loop;
+        // ----------
+        uint32_t  upld_req_id  = (uint32_t) json_integer_value(json_object_get(spec, "last_upld_req"));
+        uint32_t  res_owner_id = (uint32_t) json_integer_value(json_object_get(spec, "resource_owner_id"));
+        const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
+#define  PATTERN  "%s/%d/%08x/%s/%s"
+        size_t  fullpath_sz = sizeof(PATTERN) + strlen(asa_src_remote->storage->base_path)
+            + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(upld_req_id) + sizeof(ATFP__COMMITTED_FOLDER_NAME)
+            + strlen(_detail) + 1;
+        char  fullpath[fullpath_sz];
+        size_t  nwrite = snprintf(&fullpath[0], fullpath_sz, PATTERN, asa_src_remote->storage->base_path,
+                res_owner_id, upld_req_id, ATFP__COMMITTED_FOLDER_NAME, _detail);
+        assert(nwrite <= fullpath_sz);
+#undef  PATTERN
+        asa_src_remote->op.open.dst_path = (char *)&fullpath[0];
+        asa_src_remote->op.open.mode  = S_IRUSR;
+        asa_src_remote->op.open.flags = O_RDONLY;
+        asa_src_remote->op.open.cb = _atfp_nonstreamcache_remotesrc_open_cb;
+        result  = asa_src_remote->storage->ops.fn_open(asa_src_remote);
+        asa_src_remote->op.open.dst_path = NULL;
+        if(result != ASTORAGE_RESULT_ACCEPT) {
+            json_object_set_new(err_info, "storage", json_string("internal error"));
+            fprintf(stderr, "[atfp][cache][storage] line:%d, failed to open file \r\n", __LINE__);
+            INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
+        }
+    }
+} // end of  _atfp_nonstreamcache_existence_check
+
+
+static asa_op_localfs_cfg_t  * _atfp_cache_init_common (void *loop, json_t *spec, json_t *err_info,
+        uint8_t num_cb_args, uint32_t buf_sz, asa_open_cb_t  usr_init_cb, asa_close_cb_t  usr_deinit_cb,
+        asa_open_cb_t  nxt_evt_cb)
 {
     if(num_cb_args <= ERRINFO_INDEX__IN_ASA_USRARG) {
         json_object_set_new(err_info, "storage", json_string("internal error"));
@@ -329,10 +428,11 @@ asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t 
         return NULL;
     }
     asa_cch_usrdata_t *usrdata = calloc(1, sizeof(asa_cch_usrdata_t));
-    usrdata->callback.init = _init_cb;
-    usrdata->callback.deinit = _deinit_cb;
+    usrdata->callback.init   = usr_init_cb;
+    usrdata->callback.deinit = usr_deinit_cb;
     asa_cached_local->file.data = usrdata;
     asa_cached_local->super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = NULL;
+    asa_cached_local->super.cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG] = NULL;
     asa_cached_local->super.cb_args.entries[SPEC_INDEX__IN_ASA_USRARG] = spec;
     asa_cached_local->super.cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG] = err_info;
     // share the same buffer, a REST endpoint will NOT write cache file in parallel with
@@ -340,7 +440,6 @@ asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t 
     asa_cached_local->super.op.write.src            = asa_cached_local->super.op.read.dst;
     asa_cached_local->super.op.write.src_max_nbytes = asa_cached_local->super.op.read.dst_max_nbytes;
     asa_cached_local->loop = loop;
-    asa_cached_local->super.deinit = atfp_streamcache_deinit;
     const char *_cached_path = json_string_value(json_object_get(spec, "doc_basepath"));
     const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
 #define  PATTERN  "%s/%s"
@@ -352,7 +451,7 @@ asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t 
     asa_cached_local->super.op.open.dst_path = &_fullpath[0];
     asa_cached_local->super.op.open.mode  = S_IRUSR;
     asa_cached_local->super.op.open.flags = O_RDONLY;
-    asa_cached_local->super.op.open.cb = _atfp_streamcache_existence_check;
+    asa_cached_local->super.op.open.cb = nxt_evt_cb;
     ASA_RES_CODE result = asa_cached_local->super.storage->ops.fn_open(&asa_cached_local->super);
     // the storage operation function above should internally copy the path
     asa_cached_local->super.op.open.dst_path = NULL;
@@ -364,7 +463,27 @@ asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t 
         asa_cached_local = NULL;
     }
     return asa_cached_local;
-} // end of  atfp_streamcache_init
+} // end of  _atfp_cache_init_common
+
+asa_op_localfs_cfg_t  * atfp_streamcache_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
+       uint32_t buf_sz, asa_open_cb_t  usr_init_cb, asa_close_cb_t  usr_deinit_cb)
+{
+    asa_op_localfs_cfg_t  *out = _atfp_cache_init_common (loop, spec, err_info, num_cb_args,
+            buf_sz, usr_init_cb, usr_deinit_cb, _atfp_streamcache_existence_check);
+    if(out)
+        out->super.deinit = atfp_cachecommon_deinit;
+    return  out;
+}
+
+asa_op_localfs_cfg_t  * atfp_cache_nonstream_init (void *loop, json_t *spec, json_t *err_info, uint8_t num_cb_args,
+       uint32_t buf_sz, asa_open_cb_t  usr_init_cb, asa_close_cb_t  usr_deinit_cb)
+{
+    asa_op_localfs_cfg_t  *out = _atfp_cache_init_common (loop, spec, err_info, num_cb_args,
+            buf_sz, usr_init_cb, usr_deinit_cb, _atfp_nonstreamcache_existence_check);
+    if(out)
+        out->super.deinit = atfp_cachecommon_deinit;
+    return  out;
+}
 
 
 static void  _atfp_read_from_cachedfile_cb (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result, size_t nread)
@@ -380,12 +499,17 @@ static void  _atfp_write_to_cachedfile_cb (asa_op_base_cfg_t *_asa_cch_local,  A
 {
     _asa_cch_local->op.write.offset += nwrite;
     atfp_t *processor = _asa_cch_local->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    atfp_asa_map_t *_map = _asa_cch_local->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     h2o_iovec_t  buf = {.base=_asa_cch_local->op.write.src, .len=nwrite};
-    uint8_t  is_final = processor->transfer.streaming_dst.flags.is_final;
+    uint8_t  is_final = 1;
+    if(processor)
+        is_final = processor->transfer.streaming_dst.flags.is_final;
+    else if(_map)
+        is_final = nwrite < _asa_cch_local->op.write.src_max_nbytes;
     INVOKE_PROCEED_USR_CALLBACK(_asa_cch_local, result, &buf, is_final);
 } // end of  _atfp_write_to_cachedfile_cb
 
-static void _atfp_proceed_cachedata_ready_cb (atfp_t *processor)
+static void _atfp_s_proceed_cachedata_ready_cb (atfp_t *processor)
 {
     json_t  *spec = processor->data.spec;
     json_t  *err_info = processor->data.error;
@@ -414,25 +538,83 @@ static void _atfp_proceed_cachedata_ready_cb (atfp_t *processor)
                 "response data \r\n",  __LINE__ );
         INVOKE_PROCEED_USR_CALLBACK(_asa_cch_local, ASTORAGE_RESULT_UNKNOWN_ERROR, NULL, 1);
     }
-} // end of  _atfp_proceed_cachedata_ready_cb
+} // end of  _atfp_s_proceed_cachedata_ready_cb
 
+static void _atfp_ns_proceed_cachedata_ready_cb (asa_op_base_cfg_t *_asa_src, ASA_RES_CODE result, size_t nread)
+{
+    json_t  *err_info = _asa_src->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
+    atfp_asa_map_t *_map = _asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+    asa_op_localfs_cfg_t  *tmp = atfp_asa_map_get_localtmp(_map);
+    asa_op_base_cfg_t  *_asa_cch_local = &tmp->super;
+    if (result == ASTORAGE_RESULT_COMPLETE) {
+#if  1
+        assert(nread <= _asa_cch_local->op.write.src_max_nbytes);
+        assert(_asa_src->op.read.dst == _asa_cch_local->op.write.src);
+        assert(_asa_src->op.read.dst_max_nbytes == _asa_cch_local->op.write.src_max_nbytes);
+        if(nread < _asa_src->op.read.dst_max_nbytes)
+            _asa_src->op.read.dst[nread] = 0;
+        _asa_cch_local->op.write.src_sz  = nread;
+        _asa_cch_local->op.write.cb =  _atfp_write_to_cachedfile_cb;
+        ASA_RES_CODE  result = _asa_cch_local->storage->ops.fn_write(_asa_cch_local);
+        if(result != ASTORAGE_RESULT_ACCEPT) {
+            fprintf(stderr, "[atfp][cache] line:%d, failed to issue write opeation to"
+                "local file \r\n",  __LINE__ );
+            json_object_set_new(err_info, "storage", json_string("internal error"));
+            INVOKE_PROCEED_USR_CALLBACK(_asa_cch_local, result, NULL, 1);
+        }
+#else
+        h2o_iovec_t  buf = {.base=_asa_src->op.read.dst, .len=nread};
+        uint8_t  is_final = nread < (_asa_src->op.read.dst_max_nbytes - 1);
+        INVOKE_PROCEED_USR_CALLBACK(_asa_cch_local, result, &buf, is_final);
+#endif
+    } else {
+        json_object_set_new(err_info, "storage", json_string("internal error"));
+        fprintf(stderr, "[atfp][cache] line:%d, failed to load data block from source file"
+                "\r\n",  __LINE__ );
+        INVOKE_PROCEED_USR_CALLBACK(_asa_cch_local, ASTORAGE_RESULT_UNKNOWN_ERROR, NULL, 1);
+    }
+} // end of  _atfp_ns_proceed_cachedata_ready_cb
+
+
+#define  _CACHE_COMMON__PROCEED_START(process_cond, process_op_code) { \
+    json_t  *err_info = _asa_cch_local->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG]; \
+    asa_cch_usrdata_t  *usrdata = ((asa_op_localfs_cfg_t *)_asa_cch_local)->file.data; \
+    usrdata->callback.proceed = cb_p; \
+    if(process_cond) { \
+        process_op_code \
+    } else { \
+        _asa_cch_local->op.read.offset = _asa_cch_local->op.seek.pos; \
+        _asa_cch_local->op.read.dst_sz = _asa_cch_local->op.read.dst_max_nbytes; \
+        _asa_cch_local->op.read.cb = _atfp_read_from_cachedfile_cb; \
+        ASA_RES_CODE _result = _asa_cch_local->storage->ops.fn_read(_asa_cch_local); \
+        if(_result != ASTORAGE_RESULT_ACCEPT) \
+            json_object_set_new(err_info, "storage", json_string("internal error")); \
+    } \
+}
 
 void  atfp_streamcache_proceed_datablock (asa_op_base_cfg_t  *_asa_cch_local, asa_cch_proceed_cb_t  cb_p)
 {
-    json_t  *err_info = _asa_cch_local->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
     atfp_t *processor = _asa_cch_local->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
-    asa_cch_usrdata_t  *usrdata = ((asa_op_localfs_cfg_t *)_asa_cch_local)->file.data;
-    usrdata->callback.proceed = cb_p;
-    if(processor) {
-        processor->data.callback = _atfp_proceed_cachedata_ready_cb;
-        processor->ops->processing(processor);
-    } else {
-        _asa_cch_local->op.read.offset = _asa_cch_local->op.seek.pos;
-        _asa_cch_local->op.read.dst_sz = _asa_cch_local->op.read.dst_max_nbytes;
-        _asa_cch_local->op.read.cb = _atfp_read_from_cachedfile_cb;
-        ASA_RES_CODE result = _asa_cch_local->storage->ops.fn_read(_asa_cch_local);
-        if(result != ASTORAGE_RESULT_ACCEPT)
-            json_object_set_new(err_info, "storage", json_string("internal error"));
-    }
-} // end of  atfp_streamcache_proceed_datablock
+#define  RUN_CODE  { \
+    processor->data.callback = _atfp_s_proceed_cachedata_ready_cb; \
+    processor->ops->processing(processor); \
+}
+    _CACHE_COMMON__PROCEED_START(processor != NULL,RUN_CODE)
+#undef   RUN_CODE
+}
 
+void  atfp_nonstreamcache_proceed_datablock (asa_op_base_cfg_t  *_asa_cch_local, asa_cch_proceed_cb_t  cb_p)
+{
+    atfp_asa_map_t *_map = _asa_cch_local->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
+#define  RUN_CODE  { \
+    asa_op_base_cfg_t *_asa_src = atfp_asa_map_get_source(_map); \
+    _asa_src->op.read.offset = _asa_src->op.seek.pos; \
+    _asa_src->op.read.dst_sz = _asa_src->op.read.dst_max_nbytes; \
+    _asa_src->op.read.cb = _atfp_ns_proceed_cachedata_ready_cb; \
+    ASA_RES_CODE result = _asa_src->storage->ops.fn_read(_asa_src); \
+    if(result != ASTORAGE_RESULT_ACCEPT) \
+        json_object_set_new(err_info, "storage", json_string("internal error")); \
+}
+    _CACHE_COMMON__PROCEED_START(_map != NULL, RUN_CODE)
+#undef   RUN_CODE
+}
