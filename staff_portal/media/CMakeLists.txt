@@ -199,7 +199,7 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/views/init.c
     src/views/common.c
     src/views/filefetch_common.c
-    src/views/initiate_single_file.c
+    src/views/initiate_file_nonstream.c
     src/views/initiate_file_stream.c
     src/views/stream_file_lookup.c
     src/views/edit_filelvl_access_ctrl.c
@@ -381,6 +381,8 @@ SET(ITEST_APPSRV_SOURCE_FILES
     test/integration/api/complete_multipart_upload.c
     test/integration/api/initiate_multipart_upload.c
     test/integration/api/upload_part.c
+    test/integration/api/filefetch_common.c
+    test/integration/api/initiate_file_nonstream.c
     test/integration/api/initiate_file_stream.c
     test/integration/api/stream_file_lookup.c
     ${APP_SERVER_SOURCE_FILES} )
@@ -498,4 +500,11 @@ ADD_CUSTOM_TARGET(integration_test
     COMMAND python -m  media.setup_test_env  FilechunkTeardown   ${ITEST_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS  ${ITEST_API_SERVER_EXE_NAME} ${ITEST_RPC_CONSUMER_EXE_NAME})
+
+ADD_CUSTOM_TARGET(integration_test_rpc_worker
+    COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
+        gdb -args
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+    DEPENDS ${ITEST_RPC_CONSUMER_EXE_NAME})
 

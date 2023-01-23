@@ -28,7 +28,7 @@ typedef struct {
 
 extern json_t *_app_itest_active_upload_requests;
 
-static void _available_resource_lookup(json_t **upld_req, const char *lvl)
+static void _available_resource_lookup(json_t **upld_req, const char *lvl, const char *fsubtype_in)
 {
     json_t *req = NULL, *existing_acl = NULL;
     const char *_res_id = NULL;
@@ -38,12 +38,20 @@ static void _available_resource_lookup(json_t **upld_req, const char *lvl)
         existing_acl = json_object_get(req, lvl);
         if(existing_acl)
             continue;
+        if(fsubtype_in) {
+            const char *_fsubtype_saved  = json_string_value(json_object_get(req, "subtype"));
+            if(!_fsubtype_saved)
+                continue;
+            uint8_t  type_matched = strncmp(_fsubtype_saved, fsubtype_in, strlen(_fsubtype_saved)) == 0;
+            if(!type_matched)
+                continue;
+        }
         _res_id = json_string_value(json_object_get(req, "resource_id"));
         if(_res_id) {
             *upld_req = req;
             break;
         }
-    }
+    } // end of request iteration
     if(!_res_id)
         fprintf(stderr, "[edit_acl] line:%d, no resource available \n", __LINE__);
 } // end of _available_resource_lookup
@@ -144,7 +152,7 @@ static void _itest_read_usrlvl_acl__common (json_t *upld_req, uint32_t auth_usr_
 Ensure(api_edit_usrlvl_acl__test_ok)
 {
     json_t *upld_req = NULL;
-    _available_resource_lookup(&upld_req, "ulvl_acl");
+    _available_resource_lookup(&upld_req, "ulvl_acl", NULL);
     if(!upld_req)
         return;
     { // subcase 1
@@ -173,7 +181,7 @@ Ensure(api_edit_usrlvl_acl__test_ok)
         _itest_edit_usrlvl_acl__common (upld_req, 51, req_body_serialtxt, 200);
         _itest_read_usrlvl_acl__common (upld_req, 51, 200);
     } { // subcase 4, edit ACL of another resource
-        _available_resource_lookup(&upld_req, "ulvl_acl");
+        _available_resource_lookup(&upld_req, "ulvl_acl", NULL);
         uint32_t  res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
         uint32_t  other_usr_ids[3] = {29,71,34};
 #define  REQ_BODY_SERIALTXT  "["REQ_ITEM_10","REQ_ITEM_11","REQ_ITEM_12"]"
@@ -189,7 +197,7 @@ Ensure(api_edit_usrlvl_acl__test_ok)
 Ensure(api_edit_usrlvl_acl__test_invalid_usr_in_reqbody)
 {
     json_t *upld_req = NULL;
-    _available_resource_lookup(&upld_req, "ulvl_acl");
+    _available_resource_lookup(&upld_req, "ulvl_acl", NULL);
     if(!upld_req)
         return;
     uint32_t  res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
@@ -204,7 +212,7 @@ Ensure(api_edit_usrlvl_acl__test_invalid_usr_in_reqbody)
 Ensure(api_edit_usrlvl_acl__test_permission_denied)
 { // usr_id = 13, hasn't been added to ACL of the resource
     json_t *upld_req = NULL;
-    _available_resource_lookup(&upld_req, "ulvl_acl");
+    _available_resource_lookup(&upld_req, "ulvl_acl", NULL);
     if(!upld_req)
         return;
     uint32_t  other_usr_ids[3] = {13,38,24};
@@ -218,7 +226,7 @@ Ensure(api_edit_usrlvl_acl__test_permission_denied)
 Ensure(api_edit_usrlvl_acl__test_rpc_no_response)
 {
     json_t *upld_req = NULL;
-    _available_resource_lookup(&upld_req, "ulvl_acl");
+    _available_resource_lookup(&upld_req, "ulvl_acl", NULL);
     if(!upld_req)
         return;
     uint32_t  res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
@@ -234,7 +242,7 @@ Ensure(api_edit_usrlvl_acl__test_ok2)
 {
     json_t *upld_req = NULL;
     while(1) {
-        _available_resource_lookup(&upld_req, "ulvl_acl");
+        _available_resource_lookup(&upld_req, "ulvl_acl", NULL);
         if(!upld_req)
             break;
         uint32_t  res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
@@ -288,7 +296,7 @@ static void _itest_edit_filelvl_acl__common (json_t *upld_req, uint32_t auth_usr
 Ensure(api_edit_filelvl_acl__test_permission_denied) 
 {
     json_t *upld_req = NULL;
-    _available_resource_lookup(&upld_req, "flvl_acl");
+    _available_resource_lookup(&upld_req, "flvl_acl", NULL);
     if(!upld_req)
         return;
     uint32_t  other_usr_id = 999;
@@ -298,7 +306,7 @@ Ensure(api_edit_filelvl_acl__test_permission_denied)
 
 Ensure(api_edit_filelvl_acl__test_ok) {
     json_t *upld_req = NULL;
-    _available_resource_lookup(&upld_req, "flvl_acl");
+    _available_resource_lookup(&upld_req, "flvl_acl", "mp4");
     if(!upld_req)
         return;
     uint32_t  res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
@@ -307,9 +315,12 @@ Ensure(api_edit_filelvl_acl__test_ok) {
     _itest_edit_filelvl_acl__common (upld_req, res_owner_id, UTEST_FLVL_ACL_REQ_BODY_1,  200);
     _itest_edit_filelvl_acl__common (upld_req, res_owner_id, UTEST_FLVL_ACL_REQ_BODY_2,  200);
     _itest_edit_filelvl_acl__common (upld_req, res_owner_id, UTEST_FLVL_ACL_REQ_BODY_1,  200);
-    _available_resource_lookup(&upld_req, "flvl_acl");
+    _available_resource_lookup(&upld_req, "flvl_acl", "mp4");
     res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
     _itest_edit_filelvl_acl__common (upld_req, res_owner_id, UTEST_FLVL_ACL_REQ_BODY_2,  200);
+    _available_resource_lookup(&upld_req, "flvl_acl", "tiff");
+    res_owner_id  = json_integer_value(json_object_get(upld_req, "usr_id"));
+    _itest_edit_filelvl_acl__common (upld_req, res_owner_id, UTEST_FLVL_ACL_REQ_BODY_1,  200);
 }// end of api_edit_filelvl_acl__test_ok
 #undef   UTEST_FLVL_ACL_REQ_BODY_1
 #undef   UTEST_FLVL_ACL_REQ_BODY_2

@@ -142,6 +142,7 @@ TestSuite *app_api_tests(json_t *root_cfg)
     add_suite(suite, api_start_transcoding_file_tests());
     add_suite(suite, api_monitor_job_progress_tests());
     add_suite(suite, api_file_streaming_init_tests());
+    add_suite(suite, api_file_nonstream_init_tests());
     add_suite(suite, api_file_stream_seek_elm_tests());
     add_suite(suite, api_start_transcoding_file_v2_tests());
     add_suite(suite, api_monitor_job_progress_tests());

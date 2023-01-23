@@ -61,9 +61,9 @@ extern "C" {
     API_FINAL_HANDLER_monitor_job_progress, 0, \
     app_deinit_auth_jwt_claims, 1
 
-#define _API_MIDDLEWARE_CHAIN_initiate_single_file \
+#define _API_MIDDLEWARE_CHAIN_initiate_file_nonstream \
     6, api_abac_pep__init_filefetch, 1, \
-    API_FINAL_HANDLER_initiate_single_file, 0, \
+    API_FINAL_HANDLER_initiate_file_nonstream, 0, \
     app_deinit_auth_jwt_claims, 1
 
 #define _API_MIDDLEWARE_CHAIN_initiate_file_stream \
@@ -111,7 +111,7 @@ extern "C" {
 #define _RESTAPI_PERM_CODES_start_transcoding_file    "upload_files"
 #define _RESTAPI_PERM_CODES_discard_ongoing_job       "upload_files"
 #define _RESTAPI_PERM_CODES_monitor_job_progress      "upload_files" 
-#define _RESTAPI_PERM_CODES_initiate_single_file         NULL
+#define _RESTAPI_PERM_CODES_initiate_file_nonstream      NULL
 #define _RESTAPI_PERM_CODES_initiate_file_stream         NULL
 #define _RESTAPI_PERM_CODES_fetch_file_streaming_element    NULL
 #define _RESTAPI_PERM_CODES_discard_file              "upload_files"

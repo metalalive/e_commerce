@@ -30,7 +30,7 @@
                 {"path":"/file/transcode", "entry_fn":"start_transcoding_file"},
                 {"path":"/job"     , "entry_fn":"discard_ongoing_job"},
                 {"path":"/job"     , "entry_fn":"monitor_job_progress"},
-                {"path":"/file"    , "entry_fn":"initiate_single_file"},
+                {"path":"/file"    , "entry_fn":"initiate_file_nonstream"},
                 {"path":"/file"    , "entry_fn":"discard_file"},
                 {"path":"/file/stream/init" , "entry_fn":"initiate_file_stream"},
                 {"path":"/file/stream/seek" , "entry_fn":"fetch_file_streaming_element"},

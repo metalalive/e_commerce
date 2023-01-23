@@ -8,7 +8,7 @@ extern "C" {
 
 
 typedef asa_op_localfs_cfg_t * (*cache_init_fn_t)(void *loop, json_t *spec, json_t *err_info,
-       uint8_t num_cb_args, uint32_t buf_sz, asa_open_cb_t _init_cb, asa_close_cb_t _deinit_cb);
+       uint8_t num_cb_args, uint32_t buf_sz, asa_open_cb_t usr_init_cb, asa_close_cb_t usr_deinit_cb);
 
 typedef void (*cache_proceed_fn_t)(asa_op_base_cfg_t *, asa_cch_proceed_cb_t);
 

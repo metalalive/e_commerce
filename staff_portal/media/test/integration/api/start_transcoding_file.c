@@ -10,6 +10,7 @@ extern json_t *_app_itest_active_upload_requests;
 
 typedef struct {
     json_t  *upld_req;
+    json_t  *output_versions;
     int  expect_resp_code;
     const char *expect_err_field;
     test_verify_cb_t  fn_verify_job;
@@ -86,6 +87,7 @@ static  __attribute__((optimize("O0"))) void  itest_verify__job_input_video_corr
     lseek(privdata->fds.resp_body, 0, SEEK_SET);
     json_t  *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
     json_t  *err_info_recv = json_object_get(resp_obj, "error");
+    assert_that(err_info_recv, is_not_null);
     if(err_info_recv) {
         json_object_set_new(job_item, "error", json_true());
         json_object_set_new(job_item, "done", json_true());
@@ -132,8 +134,7 @@ static void itest_api_verify__start_transcode(CURL *handle, test_setup_priv_t *p
     CURLcode res;
     itest_usrarg_t *usr_arg = (itest_usrarg_t *)_usr_arg;
     json_t *upld_req_ref = usr_arg ->upld_req;
-    long expect_resp_code = usr_arg ->expect_resp_code;
-    long actual_resp_code = 0;
+    long actual_resp_code = 0, expect_resp_code = usr_arg ->expect_resp_code;
     res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
     assert_that(res, is_equal_to(CURLE_OK));
     assert_that(actual_resp_code, is_equal_to(expect_resp_code));
@@ -142,12 +143,22 @@ static void itest_api_verify__start_transcode(CURL *handle, test_setup_priv_t *p
         const char *job_id = json_string_value(json_object_get(resp_obj, "job_id"));
         assert_that(job_id, is_not_equal_to(NULL));
         if(job_id) {
-            json_t *info = json_object();
+            const char *ver_label = NULL;
+            json_t *info = json_object(), *tmp = NULL, *_version_map = json_object_get(upld_req_ref, "_versions");
             json_t *async_job_ids_item = json_object_get(upld_req_ref, "async_job_ids");
             json_array_append_new(async_job_ids_item, info);
             json_object_set_new(info, "job_id",  json_string(job_id));
             json_object_set_new(info, "fn_verify_job",  json_integer((size_t)usr_arg ->fn_verify_job));
-        } // TODO, store version string, possibly transcoding detail
+            if(!_version_map) {
+                _version_map = json_object();
+                json_object_set_new(upld_req_ref, "_versions", _version_map);
+            }
+            json_object_foreach(usr_arg->output_versions, ver_label, tmp) {
+                json_object_set_new(_version_map, ver_label, json_true());
+            } // store version string, (TODO, store transcoding detail)
+        } else {
+            fprintf(stderr, "[itest][api][start_transcode] line:%d, job_id NOT returned", __LINE__);
+        }
     } else { // error
         const char *err_field = usr_arg->expect_err_field;
         json_t *err_info = json_object_get(resp_obj, err_field);
@@ -173,8 +184,8 @@ static void  _api__start_transcoding_test__accepted_common(const char *req_body_
     req_body_raw = calloc(MAX_BYTES_REQ_BODY, sizeof(char));
     size_t nwrite = json_dumpb(req_body_template, req_body_raw,  MAX_BYTES_REQ_BODY, JSON_COMPACT);
     assert_that(nwrite, is_less_than(MAX_BYTES_REQ_BODY));
-    itest_usrarg_t  mock_usr_srg = {.upld_req=upld_req, .expect_resp_code=202,
-        .expect_err_field=NULL, .fn_verify_job=_fn_verify };
+    itest_usrarg_t  mock_usr_srg = {.upld_req=upld_req, .expect_resp_code=202, .expect_err_field=NULL,
+        .output_versions=json_object_get(req_body_template, "outputs"),  .fn_verify_job=_fn_verify };
     char url[] = ITEST_URL_PATH;
     const char *codename_list[2] = {"upload_files", NULL};
     json_t *header_kv_serials = json_array();
@@ -266,7 +277,11 @@ Ensure(api__transcode_test_video__improper_resolution)
 
 Ensure(api__transcode_test_video__overwrite_existing)
 {
-    json_t *upld_req = NULL, *resource_id_item = NULL;
+    json_t *upld_req = NULL, *resource_id_item = NULL; int idx = 0;
+    json_array_foreach(_app_itest_active_upload_requests, idx, upld_req) {
+        json_t *async_job_ids_item = json_object_get(upld_req, "async_job_ids");
+        json_array_clear(async_job_ids_item);
+    } // clean up all previous async jobs
     _available_resource_lookup(&upld_req, &resource_id_item, "mp4", 0);
     if(resource_id_item) {
         _api__start_transcoding_test__accepted_common(REQBODY_VIDEO_BASEPATH"/ok_1_overwrite_version.json",
@@ -274,10 +289,11 @@ Ensure(api__transcode_test_video__overwrite_existing)
     } else {
         fprintf(stderr, "[itest][api][start_transcode] line:%d, missing mp4 video", __LINE__);
     }
-}
+} // end of  api__transcode_test_video__overwrite_existing
 
 Ensure(api__transcode_test_image__accepted)
 {
+#if  1
     json_t *upld_req = NULL, *resource_id_item = NULL; int idx = 0;
     const char *img_subtypes[4] = {"png", "gif", "jpg", "tiff"};
     const char *reqbody_templates[4] = {
@@ -294,10 +310,12 @@ Ensure(api__transcode_test_image__accepted)
             }
         } while (upld_req && resource_id_item);
     } // end of loop
+#endif
 } // end of  api__transcode_test_image__accepted
 
 Ensure(api__transcode_test_image__overwrite_existing)
 {
+#if  1
     json_t *upld_req = NULL, *resource_id_item = NULL;
     _available_resource_lookup(&upld_req, &resource_id_item, "png", 0);
     if(upld_req && resource_id_item) {
@@ -306,6 +324,7 @@ Ensure(api__transcode_test_image__overwrite_existing)
     } else {
         fprintf(stderr, "[itest][api][start_transcode] line:%d, missing png picture", __LINE__);
     }
+#endif
 } // end of  api__transcode_test_image__overwrite_existing
 
 
@@ -574,8 +593,8 @@ TestSuite *api_start_transcoding_file_tests(void)
 TestSuite *api_start_transcoding_file_v2_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test(suite, api__transcode_test_video__corrupted_video);
     add_test(suite, api__transcode_test_video__overwrite_existing);
+    add_test(suite, api__transcode_test_video__corrupted_video);
     add_test(suite, api__transcode_test_video__improper_resolution);
     add_test(suite, api__transcode_test_image__overwrite_existing);
     return suite;

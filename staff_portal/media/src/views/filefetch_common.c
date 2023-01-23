@@ -58,27 +58,8 @@ static void  _api_common_cachefile_deinit_done (asa_op_base_cfg_t *_asa_cch_loca
 void  api_init_filefetch__deinit_common (h2o_req_t *req, h2o_handler_t *hdlr,
         app_middleware_node_t *node, json_t *qparams, json_t *res_body)
 {
-#if 0
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
-    size_t  nb_required = json_dumpb(res_body, NULL, 0, 0);
-    if(req->res.status == 0)
-        req->res.status = 500;
-    if(nb_required > 0) {
-        char  body[nb_required + 1];
-        size_t  nwrite = json_dumpb(res_body, &body[0], nb_required, JSON_COMPACT);
-        assert(nwrite <= nb_required);
-        h2o_send_inline(req, body, nwrite);
-    } else {
-        h2o_send_inline(req, "{}", 2);
-    }
-    json_decref(res_body);
-    json_decref(qparams);
-    // TODO, dealloc jwt if created for ACL check
-    app_run_next_middleware(hdlr, req, node);
-#else
     _api_filefetch__errmsg_response (req, res_body);
     _api_filefetch__deinit_primitives(req, hdlr, node, qparams, res_body);
-#endif
 } // end of  api_init_filefetch__deinit_common
 
 
@@ -121,7 +102,6 @@ static void  _api_cache__proceed_datablock_done (asa_op_base_cfg_t *_asa_cch_loc
     }
 }
 
-//  __attribute__((optimize("O0"))) 
 static  void _api_filefetch__cache_proceed_response (h2o_generator_t *self, h2o_req_t *req)
 {
     // due to the issue https://github.com/h2o/h2o/issues/142
