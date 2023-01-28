@@ -101,6 +101,9 @@ static void on_sigfatal(int sig_num) {
     // TODO, report error than exit
     deinit_app_cfg(acfg);
     raise(sig_num);
+#if   0
+    exit(1);
+#endif
 }
 #endif // end of LIBC_HAS_BACKTRACE
 

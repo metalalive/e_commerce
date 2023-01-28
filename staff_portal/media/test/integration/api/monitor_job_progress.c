@@ -10,8 +10,9 @@ typedef struct {
     int  expect_resp_code;
 } itest_usrarg_t;
 
-
-static void itest_verify__monitor_job_progress(CURL *handle, test_setup_priv_t *privdata, void *_usr_arg)
+//  __attribute__((optimize("O0")))
+static void itest_verify__monitor_job_progress (
+        CURL *handle, test_setup_priv_t *privdata, void *_usr_arg)
 {
     itest_usrarg_t *usr_arg = (itest_usrarg_t *)_usr_arg;
     CURLcode res;
@@ -21,6 +22,10 @@ static void itest_verify__monitor_job_progress(CURL *handle, test_setup_priv_t *
     assert_that(res, is_equal_to(CURLE_OK));
     assert_that(actual_resp_code, is_not_equal_to(0));
     assert_that(actual_resp_code, is_equal_to(expect_resp_code));
+#if  1
+    if(actual_resp_code != expect_resp_code)
+        fprintf(stderr, "[itest][monitor_job_progress] line:%d, response mismatch \n" , __LINE__);
+#endif
     if(actual_resp_code > 0 && actual_resp_code < 400) { // ok
         json_t *fn_verify_item = json_object_get(usr_arg->job_item, "fn_verify_job");
         test_verify_cb_t  custom_fn =  (test_verify_cb_t)json_integer_value(fn_verify_item);
@@ -31,28 +36,31 @@ static void itest_verify__monitor_job_progress(CURL *handle, test_setup_priv_t *
 } // end of itest_verify__monitor_job_progress
 
 
-static int  api_test_monitor_job_progress__update(uint32_t usr_id, json_t *job_item, int  expect_resp_code)
+static int  api_test_monitor_job_progress__update (uint32_t usr_id, json_t *job_item, int  expect_resp_code)
 {
-    const char *job_id = json_string_value(json_object_get(job_item, "job_id"));
-    size_t  URL_TOT_SZ = sizeof(URL_PATTERN) + strlen(job_id) + 1;
-    char url[URL_TOT_SZ];
-    size_t nwrite = snprintf(&url[0], URL_TOT_SZ, URL_PATTERN, job_id);
-    url[nwrite++] = 0;
-    assert_that((URL_TOT_SZ >= nwrite), is_equal_to(1));
-    const char *codename_list[2] = {"upload_files", NULL};
-    json_t *header_kv_serials = json_array();
-    json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
-    json_t *quota = json_array();
-    add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
-    itest_usrarg_t  usr_arg = {.job_item=job_item, .expect_resp_code=expect_resp_code};
-    test_setup_pub_t  setup_data = {
-        .method="GET", .verbose=0, .url=&url[0], .http_timeout_sec=7,
-        .upload_filepaths={.size=0, .capacity=0, .entries=NULL},  .headers = header_kv_serials
-    };
-    run_client_request(&setup_data, itest_verify__monitor_job_progress, &usr_arg);
     uint8_t done_flag = (uint8_t) json_boolean_value(json_object_get(job_item, "done"));
-    json_decref(header_kv_serials);
-    json_decref(quota);
+    if(!done_flag) {
+        const char *job_id = json_string_value(json_object_get(job_item, "job_id"));
+        size_t  URL_TOT_SZ = sizeof(URL_PATTERN) + strlen(job_id) + 1;
+        char url[URL_TOT_SZ];
+        size_t nwrite = snprintf(&url[0], URL_TOT_SZ, URL_PATTERN, job_id);
+        url[nwrite++] = 0;
+        assert_that((URL_TOT_SZ >= nwrite), is_equal_to(1));
+        const char *codename_list[2] = {"upload_files", NULL};
+        json_t *header_kv_serials = json_array();
+        json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
+        json_t *quota = json_array();
+        add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
+        itest_usrarg_t  usr_arg = {.job_item=job_item, .expect_resp_code=expect_resp_code};
+        test_setup_pub_t  setup_data = {
+            .method="GET", .verbose=0, .url=&url[0], .http_timeout_sec=7,
+            .upload_filepaths={.size=0, .capacity=0, .entries=NULL},  .headers = header_kv_serials
+        };
+        run_client_request(&setup_data, itest_verify__monitor_job_progress, &usr_arg);
+        done_flag = (uint8_t) json_boolean_value(json_object_get(job_item, "done"));
+        json_decref(header_kv_serials);
+        json_decref(quota);
+    } // reduce unecessary assertions stored in cgreen internal queue (implemented using Linux pipe)
     int still_processing = done_flag? 0: 1;
     return still_processing;
 } // end of api_test_monitor_job_progress__update
@@ -87,10 +95,6 @@ Ensure(api_test__monitor_job_progress__ok) {
         if(num_processing > 0)
            sleep(15);
     } while(num_processing > 0);
-    json_array_foreach(_app_itest_active_upload_requests, idx, upld_req) {
-        async_job_ids_item = json_object_get(upld_req, "async_job_ids");
-        json_array_clear(async_job_ids_item);
-    }
     json_decref(jobs_flatten);
 } // end of api_test__monitor_job_progress__ok
 

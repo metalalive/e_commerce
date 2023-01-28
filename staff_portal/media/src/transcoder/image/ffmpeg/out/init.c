@@ -1,3 +1,4 @@
+#include "storage/cfg_parser.h"
 #include "transcoder/image/common.h"
 #include "transcoder/image/ffmpeg.h"
 #define  NUM_USRARGS_FFO_ASA_LOCAL  (ASAMAP_INDEX__IN_ASA_USRARG + 1)
@@ -19,13 +20,12 @@ void   atfp__image_ffm_out__init_transcode(atfp_t *processor)
     atfp_t *fp_dst = processor, *fp_src = asa_src->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t  *asalocal_src =  atfp_asa_map_get_localtmp(_map);
     asa_op_localfs_cfg_t  *asalocal_dst = &imgproc->internal.dst.asa_local;
-    asalocal_dst->super.storage = asalocal_src->super.storage;
+#if  0
+    assert(asalocal_src->super.storage != NULL);
+    assert(asalocal_src->super.storage == asalocal_dst->super.storage);
+#endif
     asalocal_dst->loop = asalocal_src->loop;
-    void **cb_args_entries = calloc(NUM_USRARGS_FFO_ASA_LOCAL, sizeof(void *));
-    cb_args_entries[ATFP_INDEX__IN_ASA_USRARG]   = (void *) processor;
-    cb_args_entries[ASAMAP_INDEX__IN_ASA_USRARG] = (void *) _map;
-    asalocal_dst->super.cb_args.entries = cb_args_entries;
-    asalocal_dst->super.cb_args.size = NUM_USRARGS_FFO_ASA_LOCAL;
+    asalocal_dst->super.cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG] = (void *) _map;
     if((fp_dst->backend_id != fp_src->backend_id) || (fp_dst->backend_id == ATFP_BACKEND_LIB__UNKNOWN))
     {
         json_object_set_new(err_info, "transcoder", json_string("[ff_out] invalid backend"
@@ -88,6 +88,10 @@ uint8_t  atfp__image_ffm_out__deinit_transcode(atfp_t *processor)
     atfp_img_t *imgproc = (atfp_img_t *)processor;
     imgproc->ops.dst.avctx_deinit(imgproc->av);
     processor->data.error = NULL;
+#if  0
+    asa_op_localfs_cfg_t  *asalocal_dst = &imgproc->internal.dst.asa_local;
+    assert(asalocal_dst->super.storage != NULL);
+#endif
     return  atfp_img_dst_common_deinit(imgproc, atfp_img_ffm_out__final_dealloc);
 } // end of  atfp__image_ffm_out__deinit_transcode
 
@@ -183,6 +187,12 @@ struct atfp_s * atfp__image_ffm_out__instantiate_transcoder(void)
     out->ops.dst.finalize.write  = atfp__image_dst__final_writefile;
     out->ops.dst.has_done_flush_filter = atfp__image_dst__has_done_flush_filter;
     out->ops.dst.save_to_storage = atfp__image_dst__save_to_storage;
+    asa_op_localfs_cfg_t  *asalocal_dst = &out->internal.dst.asa_local;
+    asalocal_dst->super.storage = app_storage_cfg_lookup("localfs");
+    void **cb_args_entries = calloc(NUM_USRARGS_FFO_ASA_LOCAL, sizeof(void *));
+    cb_args_entries[ATFP_INDEX__IN_ASA_USRARG]   = (void *) out;
+    asalocal_dst->super.cb_args.entries = cb_args_entries;
+    asalocal_dst->super.cb_args.size = NUM_USRARGS_FFO_ASA_LOCAL;
     out->super.transfer.transcoded_dst.update_metadata = atfp_image__dst_update_metadata;
     out->super.transfer.transcoded_dst.remove_file = atfp_storage_image_remove_version;
     char *ptr = (char *)out + sizeof(atfp_img_t);

@@ -84,7 +84,10 @@ static void _app_db_pool_conns_deinit(db_pool_t *pool) {
         node = pool->conns.head;
         app_db_pool_remove_conn(pool, node);
         db_conn_t  *conn = (db_conn_t *) node->data;
-        assert(pool->cfg.ops.conn_deinit_fn(conn) == DBA_RESULT_OK);
+        DBA_RES_CODE result = pool->cfg.ops.conn_deinit_fn(conn);
+        if(result != DBA_RESULT_OK)
+            fprintf(stderr, "[model][pool] line:%d, cfg.alias:%s, result:%d \n",
+                     __LINE__, pool->cfg.alias, result);
         free(node);
     }
     pool->conns.tail = NULL;

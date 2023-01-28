@@ -153,7 +153,7 @@ static void _utest_hls_init_stream__done_cb(atfp_t *processor)
 #define  MOCK_DOC_ID_1      MOCK_DOC_ID1__HALF1 "/" MOCK_DOC_ID1__HALF2
 #define  MOCK_DOC_ID_2      MOCK_DOC_ID2__HALF1 "/" MOCK_DOC_ID2__HALF2
 #define  MOCK_KEY_ITEM_1    {"908e3873", "1d2a07b4836c998e""2a07b4836c939a08",  "e1d2a07b48360c99""1d2a07b48361c909", MOCK_DOC_ID_1}
-#define  MOCK_KEY_ITEM_2    {"08e3873a", "d2a07b4836c998e5""a07b4836c939a081",  "1d2a07b48360c9e9""d2a07b48361c9096", MOCK_DOC_ID_2}
+#define  MOCK_KEY_ITEM_2    { "8e3873a", "d2a07b4836c998e5""a07b4836c939a081",  "1d2a07b48360c9e9""d2a07b48361c9096", MOCK_DOC_ID_2}
 Ensure(atfp_hls_test__init_stream__update_ok_1) {
     ATFP_HLS_TEST__INIT_STREAM__SETUP
     ATFP_HLS_TEST__INIT_STREAM__SPEC_SETUP

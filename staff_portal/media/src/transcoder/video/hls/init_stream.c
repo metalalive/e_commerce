@@ -162,7 +162,7 @@ static  int  _atfp_hls__stream__crypto_key_rotation (json_t *keyinfo, json_t *er
     uint32_t  actual_key_hex_sz = strlen(key_hex), actual_iv_hex_sz = strlen(iv_hex),
               actual_key_id_sz = strlen(key_id);
     if ((actual_key_hex_sz == (HLS__NBYTES_KEY << 1)) && (actual_iv_hex_sz == (HLS__NBYTES_IV << 1)) 
-            && (actual_key_id_sz == HLS__NBYTES_KEY_ID)) { // new key item
+            && (actual_key_id_sz <= HLS__NBYTES_KEY_ID)) { // new key item
         json_t *key_item = json_object(),  *iv_item  = json_object();
         json_object_set_new(key_item, "nbytes", json_integer(HLS__NBYTES_KEY));
         json_object_set_new(key_item, "data",  json_stringn(key_hex, actual_key_hex_sz));
@@ -173,9 +173,9 @@ static  int  _atfp_hls__stream__crypto_key_rotation (json_t *keyinfo, json_t *er
         json_object_set_new(item, "iv",  iv_item);
         json_object_set_new(item, "alg", json_string("aes"));
         json_object_set_new(item, "timestamp", json_integer(curr_ts));
-        json_object_deln(keyinfo, key_id, HLS__NBYTES_KEY_ID);
-        json_object_setn_new(keyinfo, key_id, HLS__NBYTES_KEY_ID, item);
-    } else { // TODO, figure out how error happenes 
+        json_object_deln(keyinfo, key_id, actual_key_id_sz);
+        json_object_setn_new(keyinfo, key_id, actual_key_id_sz, item);
+    } else { // length of key ID might be less than HLS__NBYTES_KEY_ID bytes
         fprintf(stderr, "[hls][init_stream] line:%d, key:sz=%u,data=0x%s, IV:sz=%u,data=0x%s, keyID:sz=%u,data=0x%s \r\n"
                 , __LINE__, actual_key_hex_sz, key_hex, actual_iv_hex_sz, iv_hex, actual_key_id_sz, key_id);
         json_object_set_new(err_info, "transcoder", json_string("[hls] rotation failure"));

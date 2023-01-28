@@ -472,6 +472,10 @@ void  atfp_ffmpeg_avctx__monitor_progress(atfp_av_ctx_t *avctx, arpc_receipt_t  
     float   _percent_done = 1.0f * num_pkts_done / tot_num_pkts;
     float   diff = _percent_done - avctx->intermediate_data.decode.percent_done;
     float   percent_interval = avctx->intermediate_data.decode.report_interval;
+#if   0
+    if(diff > (percent_interval * 0.4))
+        usleep(5000);
+#endif
     if(diff < percent_interval)
         return;
     json_t *progress_info = json_object();

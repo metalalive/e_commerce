@@ -81,6 +81,8 @@ static void  utest_atfp_img_ffo__usr_cb (atfp_t *processor)
     mock_asa_local.super.storage = &mock_storage_cfg; \
     mock_asa_dst.storage = &mock_storage_cfg; \
     atfp_img_t *mock_fp_dst = (atfp_img_t *) atfp_ops_image_ffmpg_out.ops.instantiate(); \
+    if(!mock_fp_dst->internal.dst.asa_local.super.storage) \
+        mock_fp_dst->internal.dst.asa_local.super.storage = &mock_storage_cfg; \
     mock_fp_dst->super.backend_id = ATFP_BACKEND_LIB__UNKNOWN; \
     mock_fp_dst->super.data = (atfp_data_t){.storage={.handle=&mock_asa_dst}, .version=UTEST_FP_VERSION, \
          .error=mock_errinfo, .spec=mock_spec, .callback=utest_atfp_img_ffo__usr_cb}; \
