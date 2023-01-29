@@ -103,35 +103,6 @@ Ensure(api_discard_ongoing_job_test) {
     json_decref(quota);
 }
 
-
-static void test_verify__discard_file(CURL *handle, test_setup_priv_t *privdata, void *usr_arg)
-{
-    CURLcode res;
-    long expect_resp_code = 204;
-    long actual_resp_code = 0;
-    res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
-    assert_that(res, is_equal_to(CURLE_OK));
-    assert_that(expect_resp_code, is_equal_to(actual_resp_code));
-}
-
-Ensure(api_discard_file_test) {
-    char url[128] = {0};
-    sprintf(&url[0], "https://%s:%d%s?id=%s", "localhost", 8010, "/file", "1b2934ad4e2c9");
-    const char *codename_list[3] = {"upload_files", "edit_file_access_control", NULL};
-    json_t *header_kv_serials = json_array();
-    json_t *quota = json_array();
-    add_auth_token_to_http_header(header_kv_serials, 123, codename_list, quota);
-    test_setup_pub_t  setup_data = {
-        .method = "DELETE", .verbose = 0,  .url = &url[0],
-        .req_body = {.serial_txt=NULL, .src_filepath=NULL},
-        .upload_filepaths = {.size=0, .capacity=0, .entries=NULL},
-        .headers = header_kv_serials
-    };
-    run_client_request(&setup_data, test_verify__discard_file, NULL);
-    json_decref(header_kv_serials);
-    json_decref(quota);
-}
-
 TestSuite *app_api_tests(json_t *root_cfg)
 {
     TestSuite *suite = create_test_suite();
@@ -146,10 +117,10 @@ TestSuite *app_api_tests(json_t *root_cfg)
     add_suite(suite, api_file_stream_seek_elm_tests());
     add_suite(suite, api_start_transcoding_file_v2_tests());
     add_suite(suite, api_monitor_job_progress_tests());
+    add_suite(suite, api_discard_committed_file_tests());
     add_test(suite, api_abort_multipart_upload_test);
     add_test(suite, api_single_chunk_upload_test);
     add_test(suite, api_discard_ongoing_job_test);
-    add_test(suite, api_discard_file_test);
     return suite;
 }
 

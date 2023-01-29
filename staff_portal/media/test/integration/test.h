@@ -66,6 +66,7 @@ TestSuite *api_monitor_job_progress_tests(void);
 TestSuite *api_file_nonstream_init_tests(void);
 TestSuite *api_file_streaming_init_tests(void);
 TestSuite *api_file_stream_seek_elm_tests(void);
+TestSuite *api_discard_committed_file_tests(void);
 void api_deinitiate_multipart_upload_tests(void);
 
 // declare & implementation in test/integration/rpc_consumer.c

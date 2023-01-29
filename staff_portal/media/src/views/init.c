@@ -1,32 +1,6 @@
 #include "utils.h"
 #include "views.h"
-#include "models/pool.h"
-#include "models/query.h"
 
-/*
-    {
-        // TODO, figure out how to use generator to stream the response data
-        h2o_generator_t generator = {NULL, NULL};
-        json_t *res_body = json_object();
-        // upld id : sha1 digest, used to identify current upload request
-        json_object_set_new(res_body, "upld_id", json_string("9j3r8t483ugi32ut"));
-        req->res.status = 200;
-        req->res.reason = "OK";
-        {
-            size_t MAX_BYTES_RESP_BODY = 128;
-            char body_raw[MAX_BYTES_RESP_BODY];
-            size_t nwrite = json_dumpb((const json_t *)res_body, &body_raw[0],
-                    MAX_BYTES_RESP_BODY, JSON_COMPACT);
-            h2o_iovec_t body = h2o_strdup(&req->pool, &body_raw[0], nwrite);
-            size_t bufcnt = 1;
-            h2o_add_header(NULL, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));
-            h2o_start_response(req, &generator);
-            h2o_send(req, &body, bufcnt, H2O_SEND_STATE_FINAL);
-        }
-        json_decref(res_body);
-        app_run_next_middleware(self, req, node);
-    }
- * */
 RESTAPI_ENDPOINT_HANDLER(abort_multipart_upload, DELETE, self, req)
 {
     req->res.status = 204;
@@ -37,7 +11,6 @@ RESTAPI_ENDPOINT_HANDLER(abort_multipart_upload, DELETE, self, req)
     app_run_next_middleware(self, req, node);
     return 0;
 }
-
 
 RESTAPI_ENDPOINT_HANDLER(single_chunk_upload, POST, self, req)
 {
@@ -66,7 +39,6 @@ RESTAPI_ENDPOINT_HANDLER(single_chunk_upload, POST, self, req)
     return 0;
 }
 
-
 RESTAPI_ENDPOINT_HANDLER(discard_ongoing_job, DELETE, self, req)
 { // TODO:job ID required
     json_t *qparams = json_object();
@@ -82,26 +54,6 @@ RESTAPI_ENDPOINT_HANDLER(discard_ongoing_job, DELETE, self, req)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
     h2o_send_inline(req, "", 0);
     json_decref(qparams);
-    app_run_next_middleware(self, req, node);
-    return 0;
-}
-
-RESTAPI_ENDPOINT_HANDLER(discard_file, DELETE, self, req)
-{
-    json_t *qparams = json_object();
-    app_url_decode_query_param(&req->path.base[req->query_at + 1], qparams);
-    const char *resource_id = json_string_value(json_object_get(qparams, "id"));
-    const char *body = "";
-    if(resource_id) {
-        req->res.status = 204;
-        req->res.reason = "resource deleted";
-    } else {
-        req->res.status = 410;
-        req->res.reason = "resource already deleted";
-    }
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
-    h2o_send_inline(req, body, strlen(body));
-    // h2o_send_inline(req, "", 0);
     app_run_next_middleware(self, req, node);
     return 0;
 }

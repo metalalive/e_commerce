@@ -209,6 +209,7 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/views/initiate_multipart_upload.c
     src/views/complete_multipart_upload.c
     src/views/start_transcoding_file.c
+    src/views/discard_committed_file.c
     src/views/upload_part.c )
 
 SET(APP_TRANSCODE_COMMON_SOURCE_FILES
@@ -385,6 +386,7 @@ SET(ITEST_APPSRV_SOURCE_FILES
     test/integration/api/initiate_file_nonstream.c
     test/integration/api/initiate_file_stream.c
     test/integration/api/stream_file_lookup.c
+    test/integration/api/discard_committed_file.c
     ${APP_SERVER_SOURCE_FILES} )
 
 SET(ITEST_RPCCONSUMER_SOURCE_FILES
