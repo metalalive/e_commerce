@@ -105,6 +105,10 @@ typedef struct atfp_s {
                 uint8_t  version_created:1;
             }  flags;
         } transcoded_dst;
+        struct {
+            void  (*remove_ver_storage)(struct atfp_s *, const char *status);
+            void  (*usr_cb)(struct atfp_s *);
+        } discard;
     } transfer;
 } atfp_t;
 
@@ -271,6 +275,9 @@ asa_op_localfs_cfg_t  *atfp_cache_nonstream_init (void *loop, json_t *spec, json
 void  atfp_streamcache_proceed_datablock (asa_op_base_cfg_t *, asa_cch_proceed_cb_t);
 void  atfp_nonstreamcache_proceed_datablock (asa_op_base_cfg_t *, asa_cch_proceed_cb_t);
 int  atfp_cache_save_metadata(const char *basepath, const char *mimetype, atfp_data_t *);
+
+// for discarding transcoded files at local API server
+void  atfp_discard_transcoded(atfp_t *, void (*rm_ver)(atfp_t *, const char *), void (*usr_cb)(atfp_t *));
 
 void  atfp__close_local_seg__cb  (asa_op_base_cfg_t *, atfp_segment_t *, ASA_RES_CODE);
 void  atfp__unlink_local_seg__cb (asa_op_base_cfg_t *, ASA_RES_CODE);

@@ -215,6 +215,10 @@ SET(APP_HTTPSERVER_SOURCE_FILES
 SET(APP_TRANSCODE_COMMON_SOURCE_FILES
     src/transcoder/cfg_parser.c
     src/transcoder/file_processor.c
+    src/transcoder/segment.c
+    src/transcoder/storage.c
+    src/transcoder/image/storage.c
+    src/transcoder/video/storage.c
     src/transcoder/video/hls/common.c )
 
 SET(APP_TRANSCODE_TABLE_IN_RPC_CONSUMER__SOURCE_FILES
@@ -225,16 +229,12 @@ SET(APP_TRANSCODE_TABLE_IN_RPC_CONSUMER__SOURCE_FILES
 
 SET(APP_TRANSCODER_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
-    src/transcoder/segment.c
-    src/transcoder/storage.c
-    src/transcoder/image/storage.c
     src/transcoder/image/metadata.c
     src/transcoder/image/ffmpeg/in/init.c
     src/transcoder/image/ffmpeg/in/avcontext.c
     src/transcoder/image/ffmpeg/out/init.c
     src/transcoder/image/ffmpeg/out/avcontext.c
     src/transcoder/image/ffmpeg/out/avfilter.c
-    src/transcoder/video/storage.c
     src/transcoder/video/metadata.c 
     src/transcoder/video/hls/init.c 
     src/transcoder/video/hls/deinit.c 
@@ -260,6 +260,9 @@ SET(APP_STREAMING_SOURCE_FILES
     src/transcoder/video/hls/seeker/cryptokey.c
     src/transcoder/video/hls/seeker/segment.c
     src/transcoder/video/hls/init_stream.c )
+
+SET(APP_TRANSCODED_REMOVAL_SOURCE_FILES
+    src/transcoder/removal.c )
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
     src/views/async/start_transcode.c
@@ -291,6 +294,7 @@ SET(APP_SERVER_SOURCE_FILES
     ${APP_DBMODEL_SOURCE_FILES}
     ${APP_STORAGE_SOURCE_FILES}
     ${APP_STREAMING_SOURCE_FILES}
+    ${APP_TRANSCODED_REMOVAL_SOURCE_FILES}
     ${APP_TRANSCODE_TABLE_IN_HTTP_SERVER__SOURCE_FILES}
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
@@ -326,6 +330,7 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/transcoder/file_processor.c
     test/unit/transcoder/cache.c
     test/unit/transcoder/crypto.c
+    test/unit/transcoder/removal.c
     test/unit/transcoder/storage.c
     test/unit/transcoder/validation.c
     test/unit/transcoder/video/storage.c
@@ -368,6 +373,7 @@ SET(UNIT_TEST_SOURCE_FILES
     ${APP_TRANSCODER_SOURCE_FILES}
     ${APP_TRANSCODE_TABLE_IN_RPC_CONSUMER__SOURCE_FILES}
     ${APP_STREAMING_SOURCE_FILES}
+    ${APP_TRANSCODED_REMOVAL_SOURCE_FILES}
     ${APP_HTTPSERVER_SOURCE_FILES}
     ${APP_COMMON_SOURCE_FILES})
 
