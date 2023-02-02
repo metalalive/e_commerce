@@ -66,7 +66,7 @@ ASA_RES_CODE  atfp__image_src_preload_start(atfp_img_t *imgproc, void (*cb)(atfp
     size_t nbytes_to_load = 0;
     if(file_parts && json_is_array(file_parts) && json_array_size(file_parts) == 1) {
         nbytes_to_load = json_integer_value(json_array_get(file_parts, 0));
-    } else {
+    } else { // TODO, figure out why it is missing sometimes when num of consumer > 1
         fprintf(stderr, "[transcoder][image][preload] line:%d, job_id:%s, file_parts:%p \n",
               __LINE__, processor->data.rpc_receipt->job_id.bytes, file_parts);
         return ASTORAGE_RESULT_ARG_ERROR;
@@ -170,6 +170,7 @@ void  atfp_storage_image_remove_version(atfp_t *processor, const char *status)
     assert(_usr_id);
     assert(_upld_req_id);
     assert(version);
+    assert(asa_dst ->op.unlink.path == NULL);
     size_t  fullpath_sz = strlen(asa_dst->storage->base_path) + 1 + USR_ID_STR_SIZE + 1 +
             UPLOAD_INT2HEX_SIZE(_upld_req_id) + 1 + strlen(status) + 1 + strlen(version) + 1 ;
     char fullpath[fullpath_sz];
@@ -180,6 +181,7 @@ void  atfp_storage_image_remove_version(atfp_t *processor, const char *status)
     asa_dst->op.unlink.path = &fullpath[0];
     asa_dst->op.unlink.cb   =  _atfp_remove_version_unlinkfile_done;
     ASA_RES_CODE result = asa_dst->storage->ops.fn_unlink(asa_dst);
+    asa_dst->op.unlink.path = NULL;
     if(result != ASTORAGE_RESULT_ACCEPT) {
         json_object_set_new(err_info, "transcode", json_string(
            "[image][storage] failed to issue unlink operation for removing files"));

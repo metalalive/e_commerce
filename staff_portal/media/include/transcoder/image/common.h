@@ -57,13 +57,10 @@ typedef struct atfp_img_s {
 #define  NUM_USRARGS_IMG_ASA_LOCAL   (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 
 ASA_RES_CODE  atfp__image_src_preload_start(atfp_img_t *, void (*)(atfp_img_t *));
-
 ASA_RES_CODE  atfp__image_dst__save_to_storage(atfp_img_t *);
 
 uint8_t  atfp_img_dst_common_deinit(atfp_img_t *, void (*)(atfp_img_t *));
-
 void  atfp_storage_image_remove_version(atfp_t *, const char *status);
-
 void  atfp_image__dst_update_metadata(atfp_t *, void *loop);
 
 #ifdef __cplusplus

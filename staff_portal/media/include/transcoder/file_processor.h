@@ -209,6 +209,10 @@ ASA_RES_CODE  atfp_switch_to_srcfile_chunk(atfp_t *, int chunk_seq, asa_open_cb_
 ASA_RES_CODE  atfp_src__open_localbuf(asa_op_base_cfg_t *, asa_open_cb_t);
 // common callback for reading bytes from the file in source storage, then perform write to local buffer
 int  atfp_src__rd4localbuf_done_cb (asa_op_base_cfg_t *, ASA_RES_CODE, size_t nread, asa_write_cb_t);
+// basic function for removing folder and files in it. Note this function doesn't support recursive
+// deletion if any nested folder is found.
+// the argument `fullpath` incidates the path to given folder (must NOT be a file)
+void  atfp_remote_rmdir_generic (atfp_t *, const char *fullpath);
 
 // given a position in `pos` starting from the file chunk where index is specified in `chunk_idx_start`,
 // estimate index number of destination file chunk, and then update `pos` with read offset of the

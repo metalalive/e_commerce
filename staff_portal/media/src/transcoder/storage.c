@@ -283,3 +283,142 @@ int  atfp_src__rd4localbuf_done_cb ( asa_op_base_cfg_t *asa_src, ASA_RES_CODE re
     }
     return  json_object_size(err_info) > 0;
 }
+
+
+#define  DEALLOC_IF_EXISTS(var, fn_name) \
+    if(var) { \
+        fn_name((void *)var); \
+        (var) = NULL; \
+    }
+
+static  void _atfp_remote_rmdir_g_finalize(atfp_t *processor)
+{
+    asa_op_base_cfg_t *asa_remote = processor ->data.storage.handle;
+    asa_remote->op.unlink.path = NULL;
+    asa_remote->op.rmdir.path  = NULL;
+    DEALLOC_IF_EXISTS(asa_remote->op.scandir.path, free);
+    if(asa_remote->op.scandir.fileinfo.data) {
+        for(int idx = 0; idx < asa_remote->op.scandir.fileinfo.size; idx++) {
+            asa_dirent_t  *e = &asa_remote->op.scandir.fileinfo.data[idx];
+            DEALLOC_IF_EXISTS(e->name, free);
+        }
+    }
+    DEALLOC_IF_EXISTS(asa_remote->op.scandir.fileinfo.data, free);
+    asa_remote->op.scandir.fileinfo.size = 0;
+    processor->data.callback(processor);
+}
+
+static  void  _atfp_remote_rmdir_g_rmdir_done(asa_op_base_cfg_t *asa_remote, ASA_RES_CODE result)
+{
+    atfp_t *processor = asa_remote->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    json_t *err_info = processor->data.error;
+    if (result != ASTORAGE_RESULT_COMPLETE) {
+        json_object_set_new(err_info, "transcode", json_string("[storage] failed to remove folder"));
+        fprintf(stderr, "[transcoder][storage] error, line:%d, rmdir path:%s, result:%d \n",
+                __LINE__, asa_remote->op.scandir.path, result );
+    }
+    _atfp_remote_rmdir_g_finalize(processor);
+}
+
+static  void  _atfp_remote_rmdir_g_rmdir_start(asa_op_base_cfg_t *asa_remote, json_t *err_info)
+{
+    asa_remote->op.rmdir.path = asa_remote->op.scandir.path;
+    asa_remote->op.rmdir.cb   = _atfp_remote_rmdir_g_rmdir_done;
+    ASA_RES_CODE result =  asa_remote->storage->ops.fn_rmdir(asa_remote);
+    asa_remote->op.rmdir.path = NULL;
+    if(result != ASTORAGE_RESULT_ACCEPT) {
+        json_object_set_new(err_info, "transcode", json_string("[storage] failed to issue rmdir operation"));
+        fprintf(stderr, "[transcoder][storage] line:%d, rmdir path:%s, result:%d \n",
+                __LINE__, asa_remote->op.scandir.path, result );
+    }
+}
+
+static  void  _atfp_remote_rmdir_g_unlinkfile_start (asa_op_base_cfg_t *asa_remote, json_t *err_info, asa_unlink_cb_t cb)
+{
+    uint32_t  max_num_files = asa_remote->op.scandir.fileinfo.size;
+    uint32_t  curr_rd_idx   = asa_remote->op.scandir.fileinfo.rd_idx ++;
+    assert(max_num_files > curr_rd_idx);
+    asa_dirent_t  *e = &asa_remote->op.scandir.fileinfo.data[ curr_rd_idx ];
+    size_t  fullpath_sz = strlen(asa_remote->op.scandir.path) + 1 + strlen(e->name) + 1 ;
+    char  fullpath[fullpath_sz];
+    size_t nwrite = snprintf(&fullpath[0], fullpath_sz, "%s/%s", asa_remote->op.scandir.path, e->name);
+    fullpath[nwrite++] = 0x0; // NULL-terminated
+    assert(nwrite <= fullpath_sz);
+    asa_remote->op.unlink.path = &fullpath[0];
+    asa_remote->op.unlink.cb   =  cb;
+    ASA_RES_CODE result =  asa_remote->storage->ops.fn_unlink(asa_remote);
+    asa_remote->op.unlink.path = NULL;
+    if(result != ASTORAGE_RESULT_ACCEPT) {
+        json_object_set_new(err_info, "transcode", json_string(
+           "[storage] failed to issue unlink operation for removing files"));
+        fprintf(stderr, "[transcoder][storage] error, line:%d, result:%d, unlink path:%s, type:%d \n",
+                __LINE__, result, &fullpath[0], e->type);
+    }
+} // end of  _atfp_remote_rmdir_g_unlinkfile_start
+
+static  void  _atfp_remote_rmdir_g_unlinkfile_done(asa_op_base_cfg_t *asa_remote, ASA_RES_CODE result)
+{
+    atfp_t *processor = asa_remote->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    json_t *err_info = processor->data.error;
+    if (result == ASTORAGE_RESULT_COMPLETE) {
+        uint32_t  max_num_files = asa_remote->op.scandir.fileinfo.size;
+        uint32_t  curr_rd_idx   = asa_remote->op.scandir.fileinfo.rd_idx;
+        if(curr_rd_idx < max_num_files) {
+            _atfp_remote_rmdir_g_unlinkfile_start (asa_remote, err_info, _atfp_remote_rmdir_g_unlinkfile_done);
+        } else {
+            _atfp_remote_rmdir_g_rmdir_start(asa_remote, err_info);
+        }
+    } else {
+        uint32_t  curr_rd_idx   = asa_remote->op.scandir.fileinfo.rd_idx - 1;
+        asa_dirent_t  *e = &asa_remote->op.scandir.fileinfo.data[ curr_rd_idx ];
+        json_object_set_new(err_info, "transcode", json_string("[storage] failed to"
+                    " unlink file for removing folder"));
+        fprintf(stderr, "[transcoder][storage] error, line:%d, result:%d, unlink path:%s/%s, type:%d \n",
+                __LINE__, result, asa_remote->op.scandir.path, e->name, e->type);
+    }
+    if(err_info && json_object_size(err_info) > 0)
+        _atfp_remote_rmdir_g_finalize(processor);
+} // end of _atfp_remote_rmdir_g_unlinkfile_done
+
+
+static  void  _atfp_remote_rmdir_g_prescan_done(asa_op_base_cfg_t *asa_remote, ASA_RES_CODE result)
+{
+    atfp_t *processor = asa_remote->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
+    json_t *err_info = processor->data.error;
+    if (result == ASTORAGE_RESULT_COMPLETE) {
+        size_t num_files = asa_remote->op.scandir.fileinfo.size;
+        if(num_files > 0) {
+            int err = atfp_scandir_load_fileinfo (asa_remote, err_info);
+            if(!err)
+                _atfp_remote_rmdir_g_unlinkfile_start (asa_remote, err_info,
+                        _atfp_remote_rmdir_g_unlinkfile_done);
+        } else {
+            _atfp_remote_rmdir_g_rmdir_start(asa_remote, err_info);
+        }
+    } else {
+        json_object_set_new(err_info, "transcode", json_string(
+               "[storage] failed to scan folder path for removing files"));
+        fprintf(stderr, "[transcoder][storage] error, line:%d, result:%d, scan path:%s \n",
+                __LINE__, result, asa_remote->op.scandir.path );
+    }
+    if(err_info && json_object_size(err_info) > 0)
+        _atfp_remote_rmdir_g_finalize(processor);
+} // end of _atfp_remote_rmdir_g_prescan_done
+
+void  atfp_remote_rmdir_generic (atfp_t *processor, const char *fullpath)
+{
+    asa_op_base_cfg_t *asa_remote = processor ->data.storage.handle;
+    assert(asa_remote->op.scandir.path == NULL);
+    assert(asa_remote->op.rmdir.path == NULL);
+    assert(asa_remote->op.unlink.path == NULL);
+    asa_remote->op.scandir.path = strdup(fullpath);
+    asa_remote->op.scandir.cb   = _atfp_remote_rmdir_g_prescan_done;
+    ASA_RES_CODE  result =  asa_remote->storage->ops.fn_scandir(asa_remote);
+    if (result != ASTORAGE_RESULT_ACCEPT) {
+        json_object_set_new(processor->data.error, "transcode", json_string("[storage] failed to "
+                "issue scandir operation for removing folder"));
+        fprintf(stderr, "[transcoder][storage] error, line:%d, result:%d, scan path:%s \n",
+                __LINE__, result, fullpath);
+        _atfp_remote_rmdir_g_finalize(processor);
+    }
+}
