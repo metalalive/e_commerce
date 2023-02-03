@@ -26,13 +26,14 @@ static void  atfp_video__dst_update_metadata__rs_rdy(db_query_t *target, db_quer
     atfp_storage__commit_new_version(processor);
 } // end of atfp_video__dst_update_metadata__rs_rdy
 
+#define  DB_TABLE_NAME  "transcoded_video_metadata"
 
 #define SQL_PATTERN__METADATA_INSERT  \
-    "EXECUTE IMMEDIATE 'INSERT INTO `transcoded_video_metadata`(`file_id`,`version`,`size_bytes`" \
+    "EXECUTE IMMEDIATE 'INSERT INTO `"DB_TABLE_NAME"`(`file_id`,`version`,`size_bytes`" \
     ",`height_pixel`,`width_pixel`,`framerate`) VALUES (?,?,?,?,?,?)' USING FROM_BASE64('%s'),'%s',%u,%u,%u,%u;"
 
 #define SQL_PATTERN__METADATA_UPDATE  \
-    "EXECUTE IMMEDIATE 'UPDATE `transcoded_video_metadata` SET `height_pixel`=?,`width_pixel`=?,`framerate`=?" \
+    "EXECUTE IMMEDIATE 'UPDATE `"DB_TABLE_NAME"` SET `height_pixel`=?,`width_pixel`=?,`framerate`=?" \
     " ,`size_bytes`=? WHERE `file_id`=? AND `version`=?' USING %u,%u,%u,%u,FROM_BASE64('%s'),'%s';"
 
 void  atfp_video__dst_update_metadata(atfp_t *processor, void *loop)
@@ -85,3 +86,6 @@ void  atfp_video__dst_update_metadata(atfp_t *processor, void *loop)
 
 #undef  SQL_PATTERN__METADATA_INSERT 
 #undef  SQL_PATTERN__METADATA_UPDATE 
+
+const char *atfp_video__metadata_dbtable_name(void)
+{ return DB_TABLE_NAME; }

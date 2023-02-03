@@ -217,7 +217,9 @@ SET(APP_TRANSCODE_COMMON_SOURCE_FILES
     src/transcoder/file_processor.c
     src/transcoder/segment.c
     src/transcoder/storage.c
+    src/transcoder/image/metadata.c
     src/transcoder/image/storage.c
+    src/transcoder/video/metadata.c 
     src/transcoder/video/storage.c
     src/transcoder/video/hls/common.c )
 
@@ -229,13 +231,11 @@ SET(APP_TRANSCODE_TABLE_IN_RPC_CONSUMER__SOURCE_FILES
 
 SET(APP_TRANSCODER_SOURCE_FILES
     ${APP_TRANSCODE_COMMON_SOURCE_FILES}
-    src/transcoder/image/metadata.c
     src/transcoder/image/ffmpeg/in/init.c
     src/transcoder/image/ffmpeg/in/avcontext.c
     src/transcoder/image/ffmpeg/out/init.c
     src/transcoder/image/ffmpeg/out/avcontext.c
     src/transcoder/image/ffmpeg/out/avfilter.c
-    src/transcoder/video/metadata.c 
     src/transcoder/video/hls/init.c 
     src/transcoder/video/hls/deinit.c 
     src/transcoder/video/hls/avcontext.c 

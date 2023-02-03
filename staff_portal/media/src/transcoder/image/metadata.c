@@ -105,3 +105,7 @@ void  atfp_image__dst_update_metadata(atfp_t *processor, void *loop)
             __LINE__, processor->data.rpc_receipt->job_id.bytes, db_result);
     }
 } // end of  atfp_image__dst_update_metadata
+
+
+const char *atfp_image__metadata_dbtable_name(void)
+{ return  DB_TABLE_NAME; }

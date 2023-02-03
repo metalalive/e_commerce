@@ -72,7 +72,7 @@
             "db_name": "test_ecommerce_media",
             "max_connections": 3,
             "idle_timeout": 14,
-            "bulk_query_limit_kb": 2,
+            "bulk_query_limit_kb": 4,
             "credential": {
                 "hierarchy": ["backend_apps","databases","media_service"],
                 "filepath":"common/data/secrets.json"

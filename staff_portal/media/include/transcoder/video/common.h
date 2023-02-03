@@ -18,6 +18,7 @@ extern "C" {
 void  atfp_video__dst_update_metadata(atfp_t *, void *loop);
 void  atfp_storage_video_remove_version(atfp_t *, const char *status);
 void  atfp_storage_video_create_version(atfp_t *, asa_mkdir_cb_t);
+const char *atfp_video__metadata_dbtable_name(void);
 
 #ifdef __cplusplus
 } // end of extern C clause

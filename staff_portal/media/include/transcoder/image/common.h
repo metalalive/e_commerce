@@ -62,6 +62,7 @@ ASA_RES_CODE  atfp__image_dst__save_to_storage(atfp_img_t *);
 uint8_t  atfp_img_dst_common_deinit(atfp_img_t *, void (*)(atfp_img_t *));
 void  atfp_storage_image_remove_version(atfp_t *, const char *status);
 void  atfp_image__dst_update_metadata(atfp_t *, void *loop);
+const char *atfp_image__metadata_dbtable_name(void);
 
 #ifdef __cplusplus
 } // end of extern C clause
