@@ -10,7 +10,6 @@
 #include <openssl/evp.h>
 
 #include "app_cfg.h"
-#include "views.h"
 #include "transcoder/video/hls.h"
 
 // TODO, parameterize

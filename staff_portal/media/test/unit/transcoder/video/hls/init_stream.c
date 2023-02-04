@@ -7,7 +7,6 @@
 #include <uv.h>
 
 #include "app_cfg.h"
-#include "views.h"
 #include "storage/localfs.h"
 #include "transcoder/video/hls.h"
 

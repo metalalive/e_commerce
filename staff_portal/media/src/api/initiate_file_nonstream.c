@@ -1,7 +1,7 @@
 #include "app_cfg.h"
 #include "utils.h"
-#include "views.h"
-#include "views/filefetch_common.h"
+#include "api/setup.h"
+#include "api/filefetch_common.h"
 
 #define  API__DETAIL_MAX_SZ   20
 

@@ -1,5 +1,5 @@
 #include "utils.h"
-#include "views.h"
+#include "api/setup.h"
 
 RESTAPI_ENDPOINT_HANDLER(abort_multipart_upload, DELETE, self, req)
 {

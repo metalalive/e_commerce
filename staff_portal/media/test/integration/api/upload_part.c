@@ -1,4 +1,4 @@
-#include "views.h"
+#include "api/setup.h"
 #include "../test/integration/test.h"
 
 extern json_t *_app_itest_active_upload_requests;

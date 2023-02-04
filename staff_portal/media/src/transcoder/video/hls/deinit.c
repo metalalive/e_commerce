@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <string.h>
 
-#include "views.h"
 #include "transcoder/video/hls.h"
 
 #define  DEINIT_IF_EXISTS(var, fn_name) \

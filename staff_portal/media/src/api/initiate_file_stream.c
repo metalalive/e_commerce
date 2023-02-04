@@ -1,6 +1,6 @@
 #include "utils.h"
-#include "views.h"
-#include "views/filefetch_common.h"
+#include "api/setup.h"
+#include "api/filefetch_common.h"
 #include "storage/cfg_parser.h"
 #include "transcoder/file_processor.h"
 

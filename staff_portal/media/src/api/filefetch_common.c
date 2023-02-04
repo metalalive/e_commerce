@@ -1,6 +1,6 @@
 #include "base64.h"
-#include "views.h"
-#include "views/filefetch_common.h"
+#include "api/setup.h"
+#include "api/filefetch_common.h"
 #include "models/pool.h"
 #include "storage/cfg_parser.h"
 

@@ -1,7 +1,7 @@
 #include <openssl/sha.h>
 
 #include "utils.h"
-#include "views.h"
+#include "api/setup.h"
 #include "multipart_parser.h"
 #include "models/pool.h"
 #include "models/query.h"

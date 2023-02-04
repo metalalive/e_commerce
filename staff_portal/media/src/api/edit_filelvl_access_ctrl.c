@@ -3,7 +3,7 @@
 #include "utils.h"
 #include "base64.h"
 #include "acl.h"
-#include "views.h"
+#include "api/setup.h"
 #include "models/pool.h"
 
 static void  _api_edit_filelvl_acl__deinit_primitives ( h2o_req_t *req, h2o_handler_t *hdlr,

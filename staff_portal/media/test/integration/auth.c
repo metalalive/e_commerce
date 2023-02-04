@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "views.h"
+#include "api/setup.h"
 #include "../test/integration/test.h"
 
 #define NUM_KEY_PAIRS 2

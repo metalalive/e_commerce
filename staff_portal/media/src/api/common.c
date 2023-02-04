@@ -6,7 +6,7 @@
 
 #include "utils.h"
 #include "base64.h"
-#include "views.h"
+#include "api/setup.h"
 #include "models/pool.h"
 #include "models/query.h"
 #include "storage/cfg_parser.h"

@@ -2,7 +2,7 @@
 #include <magic.h>
 
 #include "app_cfg.h"
-#include "views.h"
+#include "api/setup.h"
 #include "rpc/core.h"
 #include "transcoder/rpc.h"
 #include "storage/cfg_parser.h"

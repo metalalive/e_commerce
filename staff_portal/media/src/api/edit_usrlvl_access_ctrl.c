@@ -4,7 +4,7 @@
 #include "utils.h"
 #include "base64.h"
 #include "acl.h"
-#include "views.h"
+#include "api/setup.h"
 #include "rpc/core.h"
 #include "rpc/reply.h"
 #include "models/pool.h"

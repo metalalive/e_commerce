@@ -6,7 +6,7 @@
 #include "models/pool.h"
 #include "models/query.h"
 #include "models/connection.h"
-#include "views.h"
+#include "api/setup.h"
 
 #define UTEST_DBPOOL_ALIAS "db_server_1"
 #define UTEST_DB_ASYNC_FETCH_ROW_READY      1

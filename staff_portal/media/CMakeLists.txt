@@ -196,21 +196,21 @@ SET(APP_HTTPSERVER_SOURCE_FILES
     src/network.c
     src/multipart_parser.c
     src/rpc/reply.c
-    src/views/init.c
-    src/views/common.c
-    src/views/filefetch_common.c
-    src/views/initiate_file_nonstream.c
-    src/views/initiate_file_stream.c
-    src/views/stream_file_lookup.c
-    src/views/edit_filelvl_access_ctrl.c
-    src/views/edit_usrlvl_access_ctrl.c
-    src/views/read_usrlvl_access_ctrl.c
-    src/views/monitor_job_progress.c
-    src/views/initiate_multipart_upload.c
-    src/views/complete_multipart_upload.c
-    src/views/start_transcoding_file.c
-    src/views/discard_committed_file.c
-    src/views/upload_part.c )
+    src/api/init.c
+    src/api/common.c
+    src/api/filefetch_common.c
+    src/api/initiate_file_nonstream.c
+    src/api/initiate_file_stream.c
+    src/api/stream_file_lookup.c
+    src/api/edit_filelvl_access_ctrl.c
+    src/api/edit_usrlvl_access_ctrl.c
+    src/api/read_usrlvl_access_ctrl.c
+    src/api/monitor_job_progress.c
+    src/api/initiate_multipart_upload.c
+    src/api/complete_multipart_upload.c
+    src/api/start_transcoding_file.c
+    src/api/discard_committed_file.c
+    src/api/upload_part.c )
 
 SET(APP_TRANSCODE_COMMON_SOURCE_FILES
     src/transcoder/cfg_parser.c
@@ -265,8 +265,8 @@ SET(APP_TRANSCODED_REMOVAL_SOURCE_FILES
     src/transcoder/removal.c )
 
 SET(APP_RPCCONSUMER_HANDLER_SOURCE_FILES
-    src/views/async/start_transcode.c
-    src/views/async/finalize_transcode.c )
+    src/api/async/start_transcode.c
+    src/api/async/finalize_transcode.c )
 
 SET(APP_DBMODEL_SOURCE_FILES
     src/models/cfg_parser.c

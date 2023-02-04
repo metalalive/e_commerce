@@ -1,5 +1,5 @@
 #include "utils.h"
-#include "views.h"
+#include "api/setup.h"
 #include "storage/cfg_parser.h"
 #include "storage/localfs.h"
 #include "rpc/core.h"
