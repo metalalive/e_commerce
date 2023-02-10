@@ -57,29 +57,46 @@ int app_save_ptr_to_hashmap(struct hsearch_data *hmap, const char *keyword, void
     return success;
 } // end of app_save_ptr_to_hashmap
 
-int app_url_decode_query_param(char *data, json_t *map) {
-    // this function does NOT check inproper characters appeared in name/value field
-    // and treat all value as string by default.
+int app_url_decode_query_param(char *data, json_t *map)
+{
     char *tok = data;
     char *ptr_kvpair = NULL;
     size_t num_items = 0;
     for(tok = strtok_r(tok, "&", &ptr_kvpair); tok; tok = strtok_r(NULL, "&", &ptr_kvpair))
     { // strtok_r is thread-safe
-        char *ptr = NULL;
-        char *name  = strtok_r(tok,  "=", &ptr);
+        char *ptr = NULL,  *blank_chr_pos = NULL, *name  = strtok_r(tok,  "=", &ptr);
         char *value = ptr; // in case the value contains equal symbol, do not use  strtok_r(NULL, "=", &ptr);
         if(!name)
             continue;
         json_t *obj_val = NULL;
-        if(value && strlen(value) > 0) {
-            obj_val = json_string(value);
+        // the given data comes from raw body of either http/2 or http/1 request,
+        // this function always finds blank character (ASCII code: 0x20) or NUL char
+        //  (ASCII code: 0x0), that indicates the end of entire URI query string.
+        if(value != NULL) {
+            size_t val_sz = 0;
+            blank_chr_pos = strchr((const char *)value, 0x20);
+            if(blank_chr_pos != NULL) {
+                val_sz = (size_t)blank_chr_pos - (size_t)value;
+            } else {
+                val_sz = strlen(value);
+            }
+            if(val_sz > 0) {
+                char val_cpy[val_sz + 1];
+                strncpy(&val_cpy[0], value, val_sz);
+                val_cpy[val_sz] = 0;
+                obj_val = json_string(&val_cpy[0]);
+            } else {
+                obj_val = json_true();
+            }
         } else {
             obj_val = json_true();
         }
         json_object_set_new(map, name, obj_val);
         num_items++;
+        if(blank_chr_pos != NULL)
+            break;
         //fprintf(stdout, "[debug] raw data of query params: %s = %s \n", name, value);
-    }
+    } // end of loop
     return num_items;
 } // end of app_url_decode_query_param
 

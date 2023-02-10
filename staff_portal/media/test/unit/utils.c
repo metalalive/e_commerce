@@ -128,9 +128,23 @@ Ensure(app_hashmap_access_test) {
 #undef  NUM_ENTRIES_HASHMAP
 
 
+#define  UTEST_URI_QPARAM__RUN_CODE(_map, _kv_item) { \
+    json_t *obj = json_object_get(_map, _kv_item[0]); \
+    if(json_is_string(obj)) { \
+        const char *expect_val = _kv_item[1]; \
+        const char *actual_val = json_string_value(obj); \
+        assert_that(actual_val, is_equal_to_string(expect_val)); \
+    } else if(json_is_boolean(obj)) { \
+        uint8_t actual_val = (uint8_t) json_boolean_value(obj); \
+        assert_that(actual_val, is_equal_to((uint8_t)1)); \
+    } else { \
+        assert_that(0, is_equal_to(1)); \
+    } \
+}
+
+#define  RAW_STRING_LEN    150
 #define  EXPECT_NUM_ITEMS  5
-#define  RAW_STRING_LEN    140
-Ensure(app_url_decode_query_param_test) {
+Ensure(app_url_decode_queryparam__simple_test) {
     const char *kv[EXPECT_NUM_ITEMS][2] = {
         {"cumin", "clove+garlic"},
         {"sesame","coriander"},
@@ -145,23 +159,35 @@ Ensure(app_url_decode_query_param_test) {
     json_t *map = json_object();
     int actual_num_items = app_url_decode_query_param(&raw_query_param[0], map);
     assert_that(actual_num_items, is_equal_to(EXPECT_NUM_ITEMS));
-    for(size_t idx = 0; idx < EXPECT_NUM_ITEMS; idx++) {
-        json_t *obj = json_object_get(map, kv[idx][0]);
-        if(json_is_string(obj)) {
-            const char *expect_val = kv[idx][1];
-            const char *actual_val = json_string_value(obj);
-            assert_that(actual_val, is_equal_to_string(expect_val));
-        } else if(json_is_boolean(obj)) {
-            uint8_t actual_val = (uint8_t) json_boolean_value(obj);
-            assert_that(actual_val, is_equal_to((uint8_t)1));
-        } else {
-            assert_that(0, is_equal_to(1));
-        }
-    } // end of loop
+    for(size_t idx = 0; idx < EXPECT_NUM_ITEMS; idx++)
+        UTEST_URI_QPARAM__RUN_CODE(map, kv[idx])
     json_decref(map);
-} // end of app_url_decode_query_param_test
-#undef  RAW_STRING_LEN
+} // end of app_url_decode_queryparam__simple_test
 #undef  EXPECT_NUM_ITEMS
+
+#define  EXPECT_NUM_ITEMS  2
+Ensure(app_url_decode_queryparam__blankchar_test) {
+    const char *kv[EXPECT_NUM_ITEMS][2] = {
+        {"cumin", "clove+garlic"},
+        {"sesame","coriander"},
+    }; // pairs of query parameters expected to be in raw URI
+    char raw_query_param[RAW_STRING_LEN] = {0};
+    json_t *map = json_object();
+    snprintf(&raw_query_param[0], (size_t)RAW_STRING_LEN, "%s=%s&%s=%s HTTP/1.1\r\n"
+            "mock request body starts", kv[0][0], kv[0][1], kv[1][0], kv[1][1] );
+    int actual_num_items = app_url_decode_query_param(&raw_query_param[0], map);
+    assert_that(actual_num_items, is_equal_to(EXPECT_NUM_ITEMS));
+    UTEST_URI_QPARAM__RUN_CODE(map, kv[0])
+    UTEST_URI_QPARAM__RUN_CODE(map, kv[1])
+    snprintf(&raw_query_param[0], (size_t)RAW_STRING_LEN, "%s=%s omitted part&%s=%s HTTP/1.1\r\n"
+            "mock req body...", kv[0][0], kv[0][1], kv[1][0], kv[1][1] );
+    actual_num_items = app_url_decode_query_param(&raw_query_param[0], map);
+    assert_that(actual_num_items, is_equal_to(1));
+    UTEST_URI_QPARAM__RUN_CODE(map, kv[0])
+    json_decref(map);
+} // end of  app_url_decode_queryparam__blankchar_test
+#undef  EXPECT_NUM_ITEMS
+#undef  RAW_STRING_LEN
 
 
 Ensure(app_chararray_to_hexstr_test) {
@@ -251,7 +277,8 @@ TestSuite *app_utils_tests(void)
     TestSuite *suite = create_test_suite();
     add_test(suite, app_llnode_link_test);
     add_test(suite, app_hashmap_access_test);
-    add_test(suite, app_url_decode_query_param_test);
+    add_test(suite, app_url_decode_queryparam__simple_test);
+    add_test(suite, app_url_decode_queryparam__blankchar_test);
     add_test(suite, app_chararray_to_hexstr_test);
     add_test(suite, app_hexstr_to_chararray_test);
     add_test(suite, app_base64_check_encoded_test);
