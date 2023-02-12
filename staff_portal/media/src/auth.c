@@ -2,21 +2,28 @@
 #include "utils.h"
 #include "auth.h"
 
+#define AUTH_HDR_VAL_PREFIX  "Bearer "
 #define H2O_STATUS_ERROR_401  H2O_STATUS_ERROR_403
 H2O_SEND_ERROR_XXX(401)
 
-static  char* extract_header_auth_token(h2o_req_t *req, size_t found_idx)
+static  char * extract_header_auth_token(h2o_req_t *req, size_t found_idx, size_t *o_sz)
 { // extract encoded JWT, e.g. `Authorization` header should contain : Bearer 401f7ac837da42b97f613d789819ff93537bee6a
+    char *out = NULL;
+    size_t hdr_val_prefix_sz = sizeof(AUTH_HDR_VAL_PREFIX) - 1;
     h2o_iovec_t *rawdata = &req->headers.entries[found_idx].value;
-    if(!rawdata || !rawdata->base) {
-        return NULL;
-    }
-    char *ptr = NULL;
-    char *bearer = strtok_r(rawdata->base,  " ", &ptr);
-    if(strncmp(bearer, "Bearer", sizeof("Bearer") - 1) || !ptr) {
-        return NULL;
-    }
-    return strtok_r(NULL, " ", &ptr);
+    if(!rawdata || !rawdata->base || rawdata->len == 0)
+        goto done;
+    int ret = strncmp(rawdata->base, AUTH_HDR_VAL_PREFIX, hdr_val_prefix_sz);
+    if(ret != 0)
+        goto done;
+    out = (char *)rawdata->base + hdr_val_prefix_sz; // find first blank char
+    *o_sz = rawdata->len - hdr_val_prefix_sz;
+done:
+    if(out == NULL)
+        fprintf(stderr, "[auth] line:%d, found_idx:%lu, header name:%s, value:%s, value-sz:%lu \n",
+               __LINE__, found_idx, req->headers.entries[found_idx].orig_name , rawdata->base,
+                rawdata->len);
+    return out;
 } // end of extract_header_auth_token
 
 
@@ -41,54 +48,60 @@ static int verify_jwt_claim_audience(jwt_t *jwt) {
 } // end of verify_jwt_claim_audience
 
 
-static json_t *perform_jwt_authentication(jwks_t *keyset, const char *encoded)
-{
-    // In this application , auth server (user_management) always issue new access token with `kid` field
+static json_t *perform_jwt_authentication(jwks_t *keyset, const char *in, size_t in_sz)
+{ // In this application , auth server (user_management) always issue new access token with `kid` field
     jwk_t  *pubkey = NULL;
+    jwt_t  *jwt = NULL;
     json_t *claims = NULL;
-    jwt_t  *jwt   = NULL;
-    int result = RHN_OK;
+    int result = RHN_OK, typ = 0;
     result = r_jwt_init(&jwt);
-    if(result != RHN_OK || !jwt) {
+    if(result != RHN_OK || !jwt)
         goto done;
-    }
     // only parse header & payload portion wihtout signature verification
-    result = r_jwt_parse(jwt, encoded, R_FLAG_IGNORE_REMOTE);
+    result = r_jwt_parsen(jwt, in, in_sz, R_FLAG_IGNORE_REMOTE);
     if(result != RHN_OK) {
+        fprintf(stderr, "[auth] line:%d, parsing failure, result:%d, in_sz:%lu \n",
+               __LINE__, result, in_sz );
         goto done;
     }
     // check whether essential claims exist prior to validating signature,
     result = verify_jwt_claim_audience(jwt);
     if(result != RHN_OK) {
+        fprintf(stderr, "[auth] line:%d, failed to claim audience, result:%d, in_sz:%lu \n",
+               __LINE__, result, in_sz );
         goto done;
     }
-    int typ =  r_jwt_get_type(jwt);
+    typ =  r_jwt_get_type(jwt);
     if(typ != R_JWT_TYPE_SIGN) {
         goto done;
-    } // TODO, support both encryption and signature on jwt (in auth server)
+    } // TODO, support both encryption (JWE) and signature on jwt object (in auth server)
     const char *kid = r_jwt_get_header_str_value(jwt, "kid");
-    if(!kid) {
+    if(!kid)
         goto done;
-    }
     pubkey =  r_jwks_get_by_kid(keyset, (const char *)kid);
     if(!pubkey) {
+        fprintf(stderr, "[auth] line:%d, failed to get key ID object,"
+                " result:%d, kid:%s \n", __LINE__, result, kid );
         goto done;
     }
     result = r_jwk_is_valid(pubkey);
     if(result != RHN_OK) {
+        fprintf(stderr, "[auth] line:%d, invalid pub key, result:%d, kid:%s "
+                "\n", __LINE__, result, kid );
         goto done;
     }
     result = r_jwt_verify_signature(jwt, pubkey, 0);
     if(result != RHN_OK) {
+        fprintf(stderr, "[auth] line:%d, fail to verify sign, result:%d, kid:%s "
+                "\n", __LINE__, result, kid );
         goto done;
     }
     result = r_jwt_validate_claims(jwt,
             R_JWT_CLAIM_EXP, R_JWT_CLAIM_NOW,
             R_JWT_CLAIM_IAT, R_JWT_CLAIM_NOW,
             R_JWT_CLAIM_NOP);
-    if(result != RHN_OK) {
+    if(result != RHN_OK)
         goto done;
-    }
     claims = r_jwt_get_full_claims_json_t(jwt); // do I need to copy it ?
 done:
     if(jwt) {
@@ -119,20 +132,21 @@ int app_deinit_auth_jwt_claims(RESTAPI_HANDLER_ARGS(self, req), app_middleware_n
 
 json_t *app_auth_httphdr_decode_jwt (h2o_req_t *req)
 {
+    size_t  encoded_sz = 0;
     char   *encoded = NULL;
     json_t *decoded = NULL;
 #define AUTH_HEADER_NAME  "authorization"
     size_t  name_len = sizeof(AUTH_HEADER_NAME) - 1; // exclude final byte which represent NULL-terminating character
     int found_idx = (int)h2o_find_header_by_str(&req->headers, AUTH_HEADER_NAME, name_len, -1);
 #undef AUTH_HEADER_NAME
-    if(found_idx == -1) // not found
+    if(found_idx == -1 || found_idx >= req->headers.size) // not found
         goto done;
-    encoded = extract_header_auth_token(req, found_idx);
-    if(!encoded)
+    encoded = extract_header_auth_token(req, found_idx, &encoded_sz);
+    if(encoded == NULL || encoded_sz == 0)
         goto done;
     struct app_jwks_t *jwks = (struct app_jwks_t *)req->conn->ctx->storage.entries[0].data;
     if(r_jwks_is_valid(jwks->handle) == RHN_OK) {
-        decoded = perform_jwt_authentication(jwks->handle, encoded);
+        decoded = perform_jwt_authentication(jwks->handle, encoded, encoded_sz);
         if(decoded && json_integer_value(json_object_get(decoded, "profile")) == 0) {
             h2o_error_printf("[auth] line:%d, jwt verified, missing usr profile ID\n", __LINE__);
             json_decref(decoded);

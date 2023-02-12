@@ -117,18 +117,26 @@ Ensure(MOCK_AUTH_PART, auth_jwt_init_failure_tests) {
 }
 
 Ensure(MOCK_AUTH_PART, auth_jwt_encode_error_tests) {
-    char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
+#define  HDR_VAL_PREFIX      "Bearer "
+#define  MOCK_ENCODED_TOKEN  "assume_it_is_encoded_access_token"
+#define  APPENDING_JUNK      "This-is-junk-data"
+    char mock_encoded_token[] = HDR_VAL_PREFIX  MOCK_ENCODED_TOKEN  APPENDING_JUNK;
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
-    mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
+    mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(HDR_VAL_PREFIX  MOCK_ENCODED_TOKEN) - 1,
+        .base=&mock_encoded_token[0]};
     jwt_t  mock_jwt = {0};
     jwt_t *mock_jwt_ptr = &mock_jwt;
     expect(r_jwks_is_valid, will_return(RHN_OK));
     expect(r_jwt_init, will_return(RHN_OK), will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
-    expect(r_jwt_parse, will_return(RHN_ERROR_INVALID));
+    expect(r_jwt_parsen, when(token_len, is_equal_to(sizeof(MOCK_ENCODED_TOKEN) - 1)),
+          when(token, begins_with_string(MOCK_ENCODED_TOKEN)), will_return(RHN_ERROR_INVALID));
     expect(r_jwt_free, when(jwt, is_equal_to(mock_jwt_ptr)));
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
     assert_that(mock_req.res.status, is_equal_to(401));
-}
+#undef  MOCK_ENCODED_TOKEN
+#undef  APPENDING_JUNK    
+#undef  HDR_VAL_PREFIX
+} // end of  auth_jwt_encode_error_tests
 
 Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_audience_1_tests) {
     char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
@@ -142,7 +150,7 @@ Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_audience_1_tests) {
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
-    expect(r_jwt_parse, will_return(RHN_OK));
+    expect(r_jwt_parsen, will_return(RHN_OK));
     expect(r_jwt_get_claim_json_t_value,
             will_return(mock_aud_claim),
             when(jwt, is_equal_to(mock_jwt_ptr)),
@@ -168,7 +176,7 @@ Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_audience_2_tests) {
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
-    expect(r_jwt_parse, will_return(RHN_OK));
+    expect(r_jwt_parsen, will_return(RHN_OK));
     expect(r_jwt_get_claim_json_t_value,
             will_return(mock_aud_claim),
             when(jwt, is_equal_to(mock_jwt_ptr)),
@@ -192,7 +200,7 @@ Ensure(MOCK_AUTH_PART, auth_jwt_missing_keyid_tests) {
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
-    expect(r_jwt_parse, will_return(RHN_OK));
+    expect(r_jwt_parsen, will_return(RHN_OK));
     expect(r_jwt_get_claim_json_t_value,
             will_return(mock_aud_claim),
             when(jwt, is_equal_to(mock_jwt_ptr)),
@@ -223,7 +231,7 @@ Ensure(MOCK_AUTH_PART, auth_jwt_incorrect_pubkey_tests) {
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
-    expect(r_jwt_parse, will_return(RHN_OK));
+    expect(r_jwt_parsen, will_return(RHN_OK));
     expect(r_jwt_get_claim_json_t_value,
             will_return(mock_aud_claim),
             when(jwt, is_equal_to(mock_jwt_ptr)),
@@ -257,7 +265,7 @@ Ensure(MOCK_AUTH_PART, auth_jwt_verify_signature_failure_tests) {
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
-    expect(r_jwt_parse, will_return(RHN_OK),  when(jwt, is_equal_to(mock_jwt_ptr)));
+    expect(r_jwt_parsen, will_return(RHN_OK),  when(jwt, is_equal_to(mock_jwt_ptr)));
     expect(r_jwt_get_claim_json_t_value,
             will_return(mock_aud_claim),
             when(jwt, is_equal_to(mock_jwt_ptr)),
@@ -298,7 +306,7 @@ Ensure(MOCK_AUTH_PART, auth_jwt_expiry_tests) {
     expect(r_jwt_init,
             will_return(RHN_OK),
             will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
-    expect(r_jwt_parse, will_return(RHN_OK),  when(jwt, is_equal_to(mock_jwt_ptr)));
+    expect(r_jwt_parsen, will_return(RHN_OK),  when(jwt, is_equal_to(mock_jwt_ptr)));
     expect(r_jwt_get_claim_json_t_value,
             will_return(mock_aud_claim),
             when(jwt, is_equal_to(mock_jwt_ptr)),
@@ -324,9 +332,13 @@ Ensure(MOCK_AUTH_PART, auth_jwt_expiry_tests) {
 
 
 Ensure(MOCK_AUTH_PART, auth_jwt_succeed_tests) {
-    char mock_encoded_token[] = "Bearer assume_it_is_encoded_access_token";
+#define  HDR_VAL_PREFIX      "Bearer "
+#define  MOCK_ENCODED_TOKEN  "assume_it_is_encoded_access_token"
+#define  APPENDING_JUNK      "This-is-junk-data"
+    char mock_encoded_token[] =  HDR_VAL_PREFIX  MOCK_ENCODED_TOKEN  APPENDING_JUNK;
     *mock_req.headers.entries[0].name = (h2o_iovec_t){.len=13, .base="authorization"};
-    mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(mock_encoded_token), .base=&mock_encoded_token[0]};
+    mock_req.headers.entries[0].value = (h2o_iovec_t){.len=sizeof(HDR_VAL_PREFIX  MOCK_ENCODED_TOKEN) - 1,
+        .base=&mock_encoded_token[0]};
     // this contains json array without expected audience for this application
     uint32_t mock_auth_usr_id = 182;
     json_t *mock_full_claims = json_object();
@@ -346,7 +358,9 @@ Ensure(MOCK_AUTH_PART, auth_jwt_succeed_tests) {
         expect(r_jwt_init,
                 will_return(RHN_OK),
                 will_set_contents_of_parameter(jwt, &mock_jwt_ptr, sizeof(jwt_t **)));
-        expect(r_jwt_parse, will_return(RHN_OK),  when(jwt, is_equal_to(mock_jwt_ptr)));
+        expect(r_jwt_parsen, when(token_len, is_equal_to(sizeof(MOCK_ENCODED_TOKEN) - 1)),
+              when(token, begins_with_string(MOCK_ENCODED_TOKEN)), will_return(RHN_OK),
+              when(jwt, is_equal_to(mock_jwt_ptr))  );
         expect(r_jwt_get_claim_json_t_value,
                 will_return(mock_aud_claim),
                 when(jwt, is_equal_to(mock_jwt_ptr)),
@@ -390,6 +404,9 @@ Ensure(MOCK_AUTH_PART, auth_jwt_succeed_tests) {
     }
     hdestroy_r(&mock_hashmap);
     json_decref(mock_full_claims);
+#undef  MOCK_ENCODED_TOKEN
+#undef  APPENDING_JUNK    
+#undef  HDR_VAL_PREFIX
 } // end of auth_jwt_succeed_tests
 
 

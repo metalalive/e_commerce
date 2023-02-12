@@ -40,9 +40,9 @@ void r_jwt_free(jwt_t * jwt)
     mock(jwt);
 }
 
-int r_jwt_parse(jwt_t * jwt, const char * token, int x5u_flags)
+int r_jwt_parsen(jwt_t * jwt, const char * token, size_t token_len, int x5u_flags)
 {
-    return (int)mock(jwt, token, x5u_flags);
+    return (int)mock(jwt, token, token_len, x5u_flags);
 }
 
 json_t * r_jwt_get_claim_json_t_value(jwt_t * jwt, const char * key)
