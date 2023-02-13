@@ -170,8 +170,9 @@ int  api_filefetch_start_caching (h2o_req_t *req, h2o_handler_t *hdlr, app_middl
         asa_cached_local->super.cb_args.entries[ASA_USRARG_INDEX__H2HDLR] = hdlr;
         asa_cached_local->super.cb_args.entries[ASA_USRARG_INDEX__MIDDLEWARE] = node;
         asa_cached_local->super.cb_args.entries[ASA_USRARG_INDEX__CACHE_PROCEED_FN_PTR] = proceed_fn;
+        if(json_object_get(spec, "storage_alias") == NULL)
+            json_object_set_new(spec, "storage_alias", json_string("localfs")); // for source storage
         json_object_set_new(spec, "db_alias", json_string("db_server_1"));
-        json_object_set_new(spec, "storage_alias", json_string("localfs")); // for source storage
         json_object_set_new(spec, "host_domain", json_string(req->authority.base));  // h2o_iovec_t, domain name + port
         json_object_set_new(spec, "host_path", json_string( &endpoint_path[0] ));
         json_object_set_new(qp_labels, "doc_id", json_string(API_QPARAM_LABEL__STREAM_DOC_ID));

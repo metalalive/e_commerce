@@ -330,8 +330,7 @@ Ensure(atfp_test__stcch_init__newentry_lock_fail)
 #define ATFP_NONSTREAM_CACHE_INIT__SETUP \
     ATFP_STREAM_CACHE_INIT__SETUP \
     json_object_set_new(mock_spec, "storage_alias", json_string(MOCK_STORAGE_ALIAS)); \
-    json_object_set_new(mock_spec, "last_upld_req", json_integer(MOCK_RESOURCE_ID)); \
-    json_object_set_new(mock_spec, "resource_owner_id", json_integer(MOCK_USR_ID)); \
+    json_object_set_new(mock_spec, "asa_src_basepath", json_string(UTEST_ASASRC_COMMIT_PATH)); \
     json_object_set_new(mock_spec, API_QPARAM_LABEL__DOC_DETAIL, json_string(MOCK_VERSION)); \
     mkdir(UTEST_ASASRC_USR_PATH, S_IRWXU); \
     mkdir(UTEST_ASASRC_RESOURCE_PATH, S_IRWXU); \
@@ -410,7 +409,7 @@ static  void utest_cachecommon_proceed_done_cb (asa_op_base_cfg_t *asaobj, ASA_R
     char   *out_bytes = NULL;
     if(buf) {
         out_sz = buf->len;
-        out_bytes = buf->base;
+        out_bytes = strndup(buf->base, out_sz); // ensure NULL-terminating string
     }
     atfp_t *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     atfp_asa_map_t *_map = asaobj->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
@@ -422,6 +421,8 @@ static  void utest_cachecommon_proceed_done_cb (asa_op_base_cfg_t *asaobj, ASA_R
         if(done_flg_p)
             *done_flg_p = 1;
     }
+    if(out_bytes)
+        free(out_bytes);
 } // end of utest_cachecommon_proceed_done_cb
 
 #define  ATFP_CACHECOMMON_PROCEED_DBLK__SETUP \

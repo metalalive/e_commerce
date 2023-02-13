@@ -329,9 +329,8 @@ static  void  _atfp_streamcache_existence_check (asa_op_base_cfg_t *_asa_cch_loc
 } // end of  _atfp_streamcache_existence_check
 
 
-static  __attribute__((optimize("O0"))) void  _atfp_nonstreamcache_remotesrc_open_cb(
-        asa_op_base_cfg_t *_asa_src, ASA_RES_CODE result) {
-    // TODO, ensure path in local cache folder
+static void  _atfp_nonstreamcache_remotesrc_open_cb(asa_op_base_cfg_t *_asa_src, ASA_RES_CODE result)
+{ // TODO, ensure path in local cache folder
     json_t  *err_info = _asa_src->cb_args.entries[ERRINFO_INDEX__IN_ASA_USRARG];
     atfp_asa_map_t *_map = _asa_src->cb_args.entries[ASAMAP_INDEX__IN_ASA_USRARG];
     asa_op_localfs_cfg_t  *tmp = atfp_asa_map_get_localtmp(_map);
@@ -384,16 +383,12 @@ static  void  _atfp_nonstreamcache_existence_check (
         if(strncmp(_appstorage_alias, "localfs", sizeof("localfs") - 1) == 0) // TODO
             ((asa_op_localfs_cfg_t *)asa_src_remote)->loop = ((asa_op_localfs_cfg_t *)_asa_cch_local)->loop;
         // ----------
-        uint32_t  upld_req_id  = (uint32_t) json_integer_value(json_object_get(spec, "last_upld_req"));
-        uint32_t  res_owner_id = (uint32_t) json_integer_value(json_object_get(spec, "resource_owner_id"));
         const char *_detail = json_string_value(json_object_get(spec, API_QPARAM_LABEL__DOC_DETAIL));
-#define  PATTERN  "%s/%d/%08x/%s/%s"
-        size_t  fullpath_sz = sizeof(PATTERN) + strlen(asa_src_remote->storage->base_path)
-            + USR_ID_STR_SIZE + UPLOAD_INT2HEX_SIZE(upld_req_id) + sizeof(ATFP__COMMITTED_FOLDER_NAME)
-            + strlen(_detail) + 1;
+        const char *_asasrc_path = json_string_value(json_object_get(spec, "asa_src_basepath"));
+#define  PATTERN  "%s/%s"
+        size_t  fullpath_sz = sizeof(PATTERN) + strlen(_asasrc_path) + strlen(_detail) + 1;
         char  fullpath[fullpath_sz];
-        size_t  nwrite = snprintf(&fullpath[0], fullpath_sz, PATTERN, asa_src_remote->storage->base_path,
-                res_owner_id, upld_req_id, ATFP__COMMITTED_FOLDER_NAME, _detail);
+        size_t  nwrite = snprintf(&fullpath[0], fullpath_sz, PATTERN, _asasrc_path, _detail);
         assert(nwrite <= fullpath_sz);
 #undef  PATTERN
         asa_src_remote->op.open.dst_path = (char *)&fullpath[0];
@@ -404,7 +399,8 @@ static  void  _atfp_nonstreamcache_existence_check (
         asa_src_remote->op.open.dst_path = NULL;
         if(result != ASTORAGE_RESULT_ACCEPT) {
             json_object_set_new(err_info, "storage", json_string("internal error"));
-            fprintf(stderr, "[atfp][cache][storage] line:%d, failed to open file \r\n", __LINE__);
+            fprintf(stderr, "[atfp][cache][storage] line:%d, failed to open file, path:%s \r\n",
+                    __LINE__, &fullpath[0]);
             INVOKE_INIT_USR_CALLBACK(_asa_cch_local, result);
         }
     }
