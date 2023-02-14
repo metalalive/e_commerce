@@ -26,8 +26,8 @@ typedef struct {
         uint8_t write_ok:1;
         uint8_t res_id_exists:1;
         uint8_t res_id_dup:1;
-        uint8_t acl_exists:1; // indicate status of file-level ACL
-        uint8_t acl_visible:1;
+        uint8_t acl_exists:1;  // indicates status of file-level ACL
+        uint8_t acl_visible:1; // means it is visible to everyone (even for anonymous clients)
     } flag;
 } aacl_result_t;
 

@@ -109,6 +109,10 @@ extern "C" {
 #define _RESTAPI_PERM_CODES_edit_usrlvl_acl           "edit_file_access_control"
 #define _RESTAPI_PERM_CODES_read_usrlvl_acl           "edit_file_access_control"
 
+// time interval for updating streamable / non-stream resource file
+#define   APP_UPDATE_INTERVAL_SECS      60.0f
+#define   APP_UPDATE_INTERVAL_SECS_STR  "60"
+
 #ifdef __cplusplus
 } // end of extern C clause
 #endif 

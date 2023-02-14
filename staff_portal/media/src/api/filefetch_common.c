@@ -52,6 +52,10 @@ static void  _api_common_cachefile_deinit_done (asa_op_base_cfg_t *_asa_cch_loca
     h2o_req_t      *req  = _asa_cch_local->cb_args.entries[ASA_USRARG_INDEX__H2REQ];
     h2o_handler_t  *hdlr = _asa_cch_local->cb_args.entries[ASA_USRARG_INDEX__H2HDLR];
     app_middleware_node_t *node = _asa_cch_local->cb_args.entries[ASA_USRARG_INDEX__MIDDLEWARE];
+    if(spec == NULL)
+        spec = app_fetch_from_hashmap(node->data, "qparams");
+    if(err_info == NULL)
+        err_info = app_fetch_from_hashmap(node->data, "err_info");
     _api_filefetch__deinit_primitives (req, hdlr, node, spec, err_info);
 } // end of  _api_common_cachefile_deinit_done
 
@@ -117,10 +121,36 @@ static  void _api_filefetch__cache_proceed_response (h2o_generator_t *self, h2o_
     }
 }
 
+static  void _api_filefetch__set_cachectrl_header (h2o_req_t *req, json_t *spec)
+{ // TODO, change caching strategy, to cache only popular resources
+#define  RESOURCE_CACHEABLE       "max-age=" APP_UPDATE_INTERVAL_SECS_STR
+#define  RESOURCE_NON_CACHEABLE   "private,no-cache"
+#define  RESOURCE_CACHEABLE_SZ        sizeof(RESOURCE_CACHEABLE) - 1
+#define  RESOURCE_NON_CACHEABLE_SZ    sizeof(RESOURCE_NON_CACHEABLE) - 1
+    uint8_t  _public_visible  = json_boolean_value(json_object_get(spec, "acl_public_visible"));
+    const char *hdr_value = NULL;
+    size_t hdr_value_sz = 0;
+    if(_public_visible) {
+        hdr_value = RESOURCE_CACHEABLE;
+        hdr_value_sz = RESOURCE_CACHEABLE_SZ;
+    } else {
+        // NOTE: differnt CDN interprets this header differently. For example, Nginx does NOT
+        //  cache such response, while other HTTP servers might do it.
+        hdr_value = RESOURCE_NON_CACHEABLE;
+        hdr_value_sz = RESOURCE_NON_CACHEABLE_SZ;
+    }
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL,
+            NULL, hdr_value, hdr_value_sz);
+#undef  RESOURCE_CACHEABLE
+#undef  RESOURCE_NON_CACHEABLE
+#undef  RESOURCE_CACHEABLE_SZ
+#undef  RESOURCE_NON_CACHEABLE_SZ
+} // end of _api_filefetch__set_cachectrl_header
 
 static void  _api_filefetch__init_sendfile(asa_op_base_cfg_t *_asa_cch_local)
 {
     h2o_req_t  *req  = _asa_cch_local->cb_args.entries[ASA_USRARG_INDEX__H2REQ];
+    json_t     *spec = _asa_cch_local->cb_args.entries[ASA_USRARG_INDEX__SPEC];
     api_stream_resp_t  *st_resp = h2o_mem_alloc_shared(NULL, sizeof(api_stream_resp_t),
             _api_filefetch__dispose_resp_generator);
     st_resp->super.proceed = _api_filefetch__cache_proceed_response;
@@ -130,14 +160,17 @@ static void  _api_filefetch__init_sendfile(asa_op_base_cfg_t *_asa_cch_local)
     st_resp->is_final = 0;
     _asa_cch_local->cb_args.entries[ASA_USRARG_INDEX__H2GENER] = st_resp;
     // status code  must be sent in the first frame of http response,
-    // TODO, error handling if it happenes in the middle of transmission ?
+    // TODO, how to handle error in the middle of transmission ?
     req->res.status = 200;
     // req->res.content_length = SIZE_MAX; // the size can not be known in advance, if it hasn't been cached
     // setup header that can be sent in advance
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/octet-stream"));    
+    _api_filefetch__set_cachectrl_header (req, spec);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL,
+            H2O_STRLIT("application/octet-stream"));
     h2o_start_response(req, &st_resp->super);
     _api_filefetch__cache_proceed_response (&st_resp->super, req);
 } // end of  _api_filefetch__init_sendfile
+
 
 static void  _api_common_cachefile_init_done (asa_op_base_cfg_t *_asa_cch_local, ASA_RES_CODE result)
 {
@@ -209,7 +242,8 @@ static void _api_abac_pdp__try_match_rule (aacl_result_t *result, void **usr_arg
 } // end of  _api_abac_pdp__try_match_rule
 
 
-#define  KEEP_FILE_LOCATION_CODE \
+#define  KEEP_RESOURCE_ATTRIBUTES_CODE \
+        json_object_set_new(qparams, "acl_public_visible", json_boolean(result->flag.acl_visible)); \
         json_object_set_new(qparams, "last_upld_req", json_integer(result->upld_req)); \
         json_object_set_new(qparams, "resource_owner_id", json_integer(result->owner_usr_id));
 
@@ -223,13 +257,13 @@ static void _api_abac_pdp__verify_resource_owner (aacl_result_t *result, void **
     int _resp_status =  api_http_resp_status__verify_resource_id (result, err_info);
     if(json_object_size(err_info) == 0) {
         if(result->flag.acl_exists && result->flag.acl_visible) { // everyone can access
-            KEEP_FILE_LOCATION_CODE
+            KEEP_RESOURCE_ATTRIBUTES_CODE
             TOWARD_NEXT_MIDDLEWARE_CODE
         } else { // limited to authorized users, load jwt token
             json_t *jwt_claims = app_auth_httphdr_decode_jwt (req);
             if(jwt_claims) {
                 app_save_ptr_to_hashmap(node->data, "auth", (void *)jwt_claims);
-                KEEP_FILE_LOCATION_CODE
+                KEEP_RESOURCE_ATTRIBUTES_CODE
                 uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
                 if(curr_usr_id == result->owner_usr_id) {
                     TOWARD_NEXT_MIDDLEWARE_CODE
@@ -253,7 +287,7 @@ static void _api_abac_pdp__verify_resource_owner (aacl_result_t *result, void **
         api_init_filefetch__deinit_common (req, hdlr, node, qparams, err_info);
     }
 } // end of  _api_abac_pdp__verify_resource_owner
-#undef  KEEP_FILE_LOCATION_CODE
+#undef  KEEP_RESOURCE_ATTRIBUTES_CODE
 #undef  TOWARD_NEXT_MIDDLEWARE_CODE
 
 // TODO
