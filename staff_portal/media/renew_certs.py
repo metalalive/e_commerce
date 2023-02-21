@@ -12,8 +12,10 @@ import pdb
 from cryptography import x509
 from cryptography.x509.oid import  NameOID
 from cryptography.x509.extensions import  SubjectAlternativeName
+from cryptography.hazmat.backends import  default_backend as crypto_default_backend
 from cryptography.hazmat.primitives import _serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 from common.util.python import import_module_string
 
@@ -21,24 +23,26 @@ def check_cert_expiry(listen):
     item = {}
     cert_file = None
     ssl_setup = listen['ssl']
+    cert_filepath = ssl_setup['cert_file']
+    pkey_filepath = ssl_setup['privkey_file']
     try:
-        cert_file = open(ssl_setup['cert_file'], 'rb')
+        cert_file = open(cert_filepath, 'rb')
         cert = x509.load_pem_x509_certificate(cert_file.read())
         if cert.not_valid_after < datetime.utcnow():
-            item = {'cert':ssl_setup['cert_file']}
+            item = {'cert':cert_filepath}
     except ValueError as e:
         can_handle = e.args[0].startswith('Unable to load PEM file')
         if can_handle:
-            item = {'cert':ssl_setup['cert_file']}
+            item = {'cert':cert_filepath}
         raise
     except (FileNotFoundError,) as e:
-        item = {'cert':ssl_setup['cert_file']}
+        item = {'cert':cert_filepath}
     finally:
         if cert_file and not cert_file.closed:
             cert_file.close()
-    if item.get('cert') :
-        item['privkey'] = ssl_setup['privkey_file']
-        item['host'] = listen['host']
+    if item.get('cert'):
+        item['privkey'] = pkey_filepath
+        item['host'] = listen.get('host')
     return item
 
 
@@ -46,30 +50,42 @@ class DevCertRenewal:
     def start(self, argv:list):
         assert len(argv) == 1, "arguments must include (1) app config file"
         setting_path  = argv[0]
-        f = None
-        renew_required = []
-        cfg_root = {}
-        try:
-            f = open(setting_path, 'r')
+        with open(setting_path, 'r') as f:
             cfg_root = json.load(f)
-            renew_required = map(check_cert_expiry, cfg_root['listen'])
-            renew_required = list(filter(any, renew_required))
-        finally:
-            f.close()
-        self.run_renewal(renew_required, cfg_root)
+            renew_servers = map(check_cert_expiry, cfg_root['listen'])
+            #renew_servers = list(filter(any, _gen))
+            ca_cfg = cfg_root['ca']
+            renew_ca = check_cert_expiry({'ssl':ca_cfg})
+            renew_ca['renew'] = any(renew_ca)
+            if renew_ca['renew'] is False:
+                renew_ca['cert'] = ca_cfg['cert_file']
+                renew_ca['privkey'] = ca_cfg['privkey_file']
+            self.run_renewal(renew_servers, renew_ca)
 
     # TODO, this function is used only for testing / development purpose
     # , for production it should be `certbot` that handles the renewal
-    def run_renewal(self, renew_required, cfg_root):
-        if not renew_required:
+    def run_renewal(self, renew_servers, renew_ca):
+        ca_privkey = None
+        ca_cert = None
+        num_renew_done = 0
+        if renew_ca['renew'] is True:
+            ca_privkey = self.create_test_privkey(wr_pem_path=renew_ca['privkey'], key_sz=4096)
+            ca_cert = self.create_test_ca(wr_pem_path=renew_ca['cert'], privkey=ca_privkey)
+        else: # load ca and its pkey
+            with open(renew_ca['privkey'], 'rb') as f:
+                ca_privkey = load_pem_private_key(f.read(), None, crypto_default_backend())
+            assert ca_privkey and isinstance(ca_privkey, rsa.RSAPrivateKey), 'loaded invalid private key for CA cert'
+            with open(renew_ca['cert'], 'rb') as f:
+                ca_cert  = x509.load_pem_x509_certificate(f.read())
+            assert ca_cert, 'loaded invalid CA cert'
+        for item in renew_servers:
+            if any(item):
+                self.run_renewal_item(req=item, ca_privkey=ca_privkey, ca_cert=ca_cert)
+                num_renew_done += 1
+        if num_renew_done > 0:
+            print('renew certificates successfully')
+        else:
             print('Server certificates still valid, nothing to renew')
-            return # all certs are still valid , no need to renew
-        assert cfg_root.get('ca') , 'missing object field `ca` in json config file'
-        ca_privkey = self.create_test_privkey(wr_pem_path=cfg_root['ca']['privkey_file'], key_sz=4096)
-        ca_cert = self.create_test_ca(wr_pem_path=cfg_root['ca']['cert_file'], privkey=ca_privkey)
-        for item in renew_required:
-            self.run_renewal_item(req=item, ca_privkey=ca_privkey, ca_cert=ca_cert)
-        print('renew certificates successfully')
 
     def create_test_ca(self, wr_pem_path:str, privkey):
         assert privkey,    'privkey must NOT be null'
