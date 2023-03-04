@@ -1,25 +1,25 @@
 {
     "pid_file" : {
-        "app_server"  :"tmp/proc/media_app_server.pid",
-        "rpc_consumer":"tmp/proc/media_rpc_consumer.pid"
+        "app_server"  :"tmp/proc/media_app_srv_replica1.pid",
+        "rpc_consumer":"tmp/proc/media_rpc_consumer_replica1.pid"
     },
     "error_log": {
-        "app_server"  :"tmp/log/dev/media_app_server.err",
-        "rpc_consumer":"tmp/log/dev/media_rpc_consumer.err"
+        "app_server"  :"tmp/log/dev/media_app_srv_replica1.err",
+        "rpc_consumer":"tmp/log/dev/media_rpc_consumer_replica1.err"
     },
     "access_log": {
-        "path":"tmp/log/dev/media_app_server.access.log",
+        "path":"tmp/log/dev/media_app_srv_replica1.access.log",
         "format":"%H %h %l %t \"%r\" %s %b"
     },
     "listen": [
         {
-            "port": 8010,
+            "port": 8011,
             "host":"localhost",
             "max_fails": 3,
-            "retry_after_unavail_secs": 9,
+            "retry_after_unavail_secs": 8,
             "ssl":{
-                "cert_file"   : "media/data/certs/development/localhost_8010.crt",
-                "privkey_file": "media/data/certs/development/localhost_8010.private.key",
+                "cert_file"   : "media/data/certs/development/localhost_8011.crt",
+                "privkey_file": "media/data/certs/development/localhost_8011.private.key",
                 "cipher_suites": "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384",
                 "min_version": 772
             },
@@ -40,19 +40,6 @@
                 {"path":"/file/acl/usr", "entry_fn":"edit_usrlvl_acl"},
                 {"path":"/file/acl/usr", "entry_fn":"read_usrlvl_acl"}
             ]
-        },
-        {
-            "port": 8020,
-            "host":"localhost",
-            "max_fails": 2,
-            "retry_after_unavail_secs": 18,
-            "ssl":{
-                "cert_file"   : "media/data/certs/development/localhost_8020.crt",
-                "privkey_file": "media/data/certs/development/localhost_8020.private.key",
-                "cipher_suites": "TLS_AES_128_CCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_8_SHA256",
-                "min_version": 772
-            },
-            "routes": []
         }
     ],
     "ca":{

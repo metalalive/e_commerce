@@ -25,7 +25,7 @@ IF (OPENSSL_VERSION VERSION_LESS 1.0.2)
         "   ****************************************************************\n"
         "   * OpenSSL 1.0.2 is required for HTTP/2 interoperability with   *\n"
         "   * web browsers.                                                *\n"
-        "   ****************************************************************\n")    
+        "   ****************************************************************\n")
 ENDIF (OPENSSL_VERSION VERSION_LESS 1.0.2)
 IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
     MESSAGE(WARNING 
@@ -34,7 +34,6 @@ IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
         "   * when using external cache.                                       *\n"
         "   ********************************************************************\n")
 ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
-
 
 PKG_CHECK_MODULES(LIBELF  REQUIRED libelf>=0.8.13)
 PKG_CHECK_MODULES(LIBUV   REQUIRED libuv>=1.42.0)
@@ -102,13 +101,56 @@ int main(void) {
 }" LIBC_HAS_BACKTRACE)
 CMAKE_POP_CHECK_STATE()
 
-
 IF (LIBC_HAS_BACKTRACE)
     ADD_DEFINITIONS("-DLIBC_HAS_BACKTRACE")
     IF (LIBC_BACKTRACE_LIB)
         LIST(APPEND EXTRA_LIBS ${LIBC_BACKTRACE_LIB})
     ENDIF()
 ENDIF ()
+
+IF(DEFINED PYVENV_PATH)
+    SET(PYVENV_BIN_PATH   ${PYVENV_PATH}/bin)
+    SET(PYVENV_EXEC_PATH  ${PYVENV_BIN_PATH}/python)
+    IF (EXISTS ${PYVENV_PATH} AND EXISTS ${PYVENV_BIN_PATH}
+             AND EXISTS ${PYVENV_EXEC_PATH})
+        SET(PYVENV_AVAIL  ON)
+    ELSE()
+        SET(PYVENV_AVAIL  OFF)
+    ENDIF()
+ELSE()
+    SET(PYVENV_AVAIL  OFF)
+ENDIF()
+
+IF(NOT ${PYVENV_AVAIL})
+    MESSAGE(SEND_ERROR "Path to Python virtual environment is missing \n")
+ENDIF()
+
+IF(DEFINED NGINX_INSTALL_PATH)
+    SET(NGINX_EXECUTABLE_PATH  ${NGINX_INSTALL_PATH}/sbin/nginx)
+    SET(NGINX_CONFIG_BASEPATH  ${NGINX_INSTALL_PATH}/conf)
+    IF(EXISTS ${NGINX_EXECUTABLE_PATH} AND EXISTS ${NGINX_CONFIG_BASEPATH}
+            AND EXISTS ${NGINX_INSTALL_PATH}/logs)
+        SET(NGINX_PATH_EXISTS  ON)
+    ELSE()
+        SET(NGINX_PATH_EXISTS  OFF)
+    ENDIF()
+ELSE()
+    SET(NGINX_PATH_EXISTS  OFF)
+ENDIF()
+
+IF (${NGINX_PATH_EXISTS} AND DEFINED CDN_USERNAME AND DEFINED CDN_USERGRP
+        AND ${PYVENV_AVAIL})
+    SET(CDN_ENABLE  ON)
+ELSE()
+    SET(CDN_ENABLE  OFF)
+ENDIF()
+
+MESSAGE(STATUS "PYVENV_PATH: ${PYVENV_PATH}")
+MESSAGE(STATUS "Nginx installed path exists: ${NGINX_PATH_EXISTS}")
+MESSAGE(STATUS "CDN_USERNAME: ${CDN_USERNAME}")
+MESSAGE(STATUS "CDN_USERGRP:  ${CDN_USERGRP}")
+MESSAGE(STATUS "CDN_ENABLE: ${CDN_ENABLE}")
+
 
 INCLUDE_DIRECTORIES(
     include 
@@ -461,18 +503,50 @@ TARGET_INCLUDE_DIRECTORIES(${ITEST_RPC_CONSUMER_EXE_NAME}  PUBLIC  ${CGREEN_INCL
 TARGET_LINK_LIBRARIES(${ITEST_API_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${CGREEN_LIBRARIES})
 TARGET_LINK_LIBRARIES(${ITEST_RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
 
-
+# TODO, better way to scale app servers, without manually adding more custom targets
+SET(DEV_CDN_CFG_PATH   ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-cdn.json)
+SET(APP_REP1_CFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-replica-1.json)
 SET(DEV_APPCFG_PATH    ${CMAKE_CURRENT_SOURCE_DIR}/settings/development.json)
 SET(ITEST_APPCFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
 
+# bash script for creating another shell process to run in specific python virtual environment
+SET(PYVENV_SHELL_FILEPATH  $ENV{PWD}/tmp_shell)
+#FILE(WRITE  ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_shell "source ${PYVENV_BIN_PATH}/activate;")
+#FILE(APPEND ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_shell "python --version;")
 ADD_CUSTOM_TARGET(dev_app_server
-    python -m  media.setup_test_env DevCertRenewal  ${DEV_APPCFG_PATH}
-    COMMAND
+    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader DevAppSrvCertRenewal  ${DEV_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND bash ${PYVENV_SHELL_FILEPATH}
+    COMMAND 
         ##gdb -args
         ##valgrind --leak-check=full   --show-leak-kinds=definite 
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME}  ${DEV_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${APP_SERVER_EXE_NAME})
+    DEPENDS ${APP_SERVER_EXE_NAME}
+    VERBATIM # properly esacpe every token of a command string
+)
+
+ADD_CUSTOM_TARGET(app_server_replica_1
+    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader DevAppSrvCertRenewal  ${APP_REP1_CFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND bash ${PYVENV_SHELL_FILEPATH}
+    COMMAND
+        ##gdb -args
+        ${CMAKE_CURRENT_SOURCE_DIR}/build/${APP_SERVER_EXE_NAME}  ${APP_REP1_CFG_PATH}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+    DEPENDS ${APP_SERVER_EXE_NAME}  VERBATIM)
+
+IF(${CDN_ENABLE})
+    ADD_CUSTOM_TARGET(dev_cdn_setup
+        COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
+        COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader DevAppCdnCertRenewal  ${DEV_CDN_CFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+        COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader NginxConfigGenerator  ${DEV_CDN_CFG_PATH}  ${CDN_USERNAME}  ${CDN_USERGRP}  2  ${DEV_APPCFG_PATH}  ${APP_REP1_CFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+        COMMAND ${CMAKE_COMMAND} -E echo "sudo -u ${CDN_USERNAME}  ${PYVENV_EXEC_PATH} -m  media.task_loader NginxPathSetup   ${DEV_CDN_CFG_PATH}  ${NGINX_INSTALL_PATH}" >>  ${PYVENV_SHELL_FILEPATH}
+        COMMAND bash ${PYVENV_SHELL_FILEPATH}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+        DEPENDS ${NGINX_EXECUTABLE_PATH} ${NGINX_CONFIG_BASEPATH}
+        VERBATIM)
+ENDIF()
 
 ADD_CUSTOM_TARGET(dev_rpc_worker
     ##gdb -args
@@ -493,25 +567,28 @@ ADD_CUSTOM_TARGET(unit_test
     DEPENDS ${UNIT_TEST_EXE_NAME})
 
 
-ADD_CUSTOM_TARGET(integration_test
+ADD_CUSTOM_TARGET(itest_app_server
     ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
-    python -m media.setup_test_env  TestCertRenewal    ${ITEST_APPCFG_PATH}
-    COMMAND python -m  media.setup_test_env  FilechunkSetup   ${ITEST_APPCFG_PATH}
-    COMMAND python -m media.setup_test_env  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH}
-    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH} &
+    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND bash ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
         ##gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_API_SERVER_EXE_NAME}  ${ITEST_APPCFG_PATH}
-    COMMAND python -m  media.setup_test_env EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH}
-    COMMAND python -m  media.setup_test_env  KillRPCconsumer  ${ITEST_APPCFG_PATH}
-    COMMAND python -m  media.setup_test_env  FilechunkTeardown   ${ITEST_APPCFG_PATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  FilechunkTeardown   ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND bash ${PYVENV_SHELL_FILEPATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS  ${ITEST_API_SERVER_EXE_NAME} ${ITEST_RPC_CONSUMER_EXE_NAME})
+    DEPENDS  ${ITEST_API_SERVER_EXE_NAME} ${ITEST_RPC_CONSUMER_EXE_NAME}
+    VERBATIM)
 
-ADD_CUSTOM_TARGET(integration_test_rpc_worker
+ADD_CUSTOM_TARGET(itest_rpc_worker
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
-        gdb -args
+        ##gdb -args
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${ITEST_RPC_CONSUMER_EXE_NAME})

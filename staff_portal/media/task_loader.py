@@ -1,6 +1,5 @@
 import sys
 import os
-import signal
 import json
 import inspect
 import math
@@ -8,10 +7,10 @@ import subprocess
 import shutil
 from pathlib import Path
 
-from MySQLdb import _mysql
 from cryptography.hazmat.primitives import hashes as crypto_hashes
 from common.util.python import import_module_string
 from media.renew_certs import *
+from media.render_template import *
 
 TEST_DB_MIGRATION_ALIAS = 'db_test_migration'
 
@@ -48,16 +47,18 @@ class AbstractTestDatabase:
                 target = target[token]
         if target:
             target = {'host' : target['HOST'],  'port' : int(target['PORT']),
-                'user' : target['USER'],  'passwd' : target['PASSWORD'] }
+                'user' : target['USER'],  'password' : target['PASSWORD'] }
         return target
 
     def setup_test_db(self, cfg):
         raise NotImplementedError()
 
-    def _create_drop_db(self, cfg, sql):
+    def _db_perform_operation(self, cfg, sql):
         credential = cfg['credential']
         credential.update({'connect_timeout':30})
         db_conn = None
+        # lazy loading due to libmariadb.so error when differnt OS user running this python code
+        from MySQLdb import _mysql
         try:
             db_conn = _mysql.connect(**credential)
             db_conn.query(sql)
@@ -73,7 +74,7 @@ class AbstractTestDatabase:
                 '--url=jdbc:mariadb://%s:%s/%s'
                     % (credential['host'], credential['port'], cfg['db_name']),
                 '--username=%s' % credential['user'],
-                '--password=%s' % credential['passwd'],
+                '--password=%s' % credential['password'],
                 '--log-level=info']
 ## end of AbstractTestDatabase
 
@@ -87,7 +88,7 @@ class StartTestDatabase(AbstractTestDatabase):
     def setup_test_db(self, cfg):
         sql = 'CREATE DATABASE `%s` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;' \
                 % cfg['db_name']
-        self._create_drop_db(cfg, sql)
+        self._db_perform_operation(cfg, sql)
         subprocess.run(self.db_schema_cmd(cfg))
 
 
@@ -100,24 +101,9 @@ class EndTestDatabase(AbstractTestDatabase):
     def setup_test_db(self, cfg):
         subprocess.run(self.db_schema_cmd(cfg))
         sql = 'DROP DATABASE `%s`;' % cfg['db_name']
-        self._create_drop_db(cfg, sql)
+        self._db_perform_operation(cfg, sql)
 
 
-class KillRPCconsumer:
-    def start(self, argv):
-        assert len(argv) == 1, "arguments must include (1) app config file"
-        setting_path  = argv[0]
-        pid = -1
-        with open(setting_path, 'r') as f:
-            cfg_root = json.load(f)
-            pid_file = cfg_root['pid_file']['rpc_consumer']
-            with open(pid_file, 'r') as f2:
-                pid = int(f2.readline())
-        if pid > 2:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError  as e:
-                print('failed to kill RPC consumer, PID {_pid} not found'.format(_pid=pid))
 
 
 class FileChunkBasePreprocessor:

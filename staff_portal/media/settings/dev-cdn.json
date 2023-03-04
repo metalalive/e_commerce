@@ -1,0 +1,30 @@
+{
+    "proxy":{
+        "port": 8050,
+        "host":"localhost",
+        "logging_level":"info",
+        "max_num_conns": 512,
+        "http_keepalive_timeout_secs": 25,
+        "template_path": "media/data/dev/ngx_cdn_template",
+        "genfile_path": "tmp/cache/dev/app_media_cdn",
+        "ssl":{
+            "session_timeout_secs": 420,
+            "cert_file"   : "media/data/certs/development/localhost_8050.crt",
+            "privkey_file": "media/data/certs/development/localhost_8050.private.key"
+        },
+        "cache":{
+            "basepath" : "customdata/nJeeks/cache",
+            "max_space_mbytes" : 17,
+            "lock_timeout_secs": 11,
+            "inactive_mins" : 4
+        },
+        "limit":{
+            "conns_per_sec": {"non-stream": 7, "stream":2},
+            "reqs_per_sec":23
+        }
+    },
+    "ca":{
+        "cert_file"   : "media/data/certs/development/ca.crt",
+        "privkey_file": "media/data/certs/development/ca.private.key"
+    }
+}

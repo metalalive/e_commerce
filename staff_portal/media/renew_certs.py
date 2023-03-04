@@ -1,4 +1,3 @@
-
 """
 This script currently renews SSL certificates for testing and development purpose
 """
@@ -48,19 +47,15 @@ def check_cert_expiry(listen):
 
 class DevCertRenewal:
     def start(self, argv:list):
-        assert len(argv) == 1, "arguments must include (1) app config file"
-        setting_path  = argv[0]
-        with open(setting_path, 'r') as f:
-            cfg_root = json.load(f)
-            renew_servers = map(check_cert_expiry, cfg_root['listen'])
-            #renew_servers = list(filter(any, _gen))
-            ca_cfg = cfg_root['ca']
-            renew_ca = check_cert_expiry({'ssl':ca_cfg})
-            renew_ca['renew'] = any(renew_ca)
-            if renew_ca['renew'] is False:
-                renew_ca['cert'] = ca_cfg['cert_file']
-                renew_ca['privkey'] = ca_cfg['privkey_file']
-            self.run_renewal(renew_servers, renew_ca)
+        raise NotImplementedError()
+
+    def check_ca_renew(self, cfg:dict):
+        out = check_cert_expiry({'ssl':cfg})
+        out['renew'] = any(out)
+        if out['renew'] is False:
+            out['cert']    = cfg['cert_file']
+            out['privkey'] = cfg['privkey_file']
+        return out
 
     # TODO, this function is used only for testing / development purpose
     # , for production it should be `certbot` that handles the renewal
@@ -181,9 +176,29 @@ class DevCertRenewal:
         return builder
 ## end of class DevCertRenewal
 
-class TestCertRenewal(DevCertRenewal):
+class DevAppSrvCertRenewal(DevCertRenewal):
+    def start(self, argv:list):
+        assert len(argv) == 1, "arguments must include (1) app config file"
+        setting_path  = argv[0]
+        with open(setting_path, 'r') as f:
+            cfg_root = json.load(f)
+            renew_ca = self.check_ca_renew(cfg_root['ca'])
+            renew_servers = map(check_cert_expiry, cfg_root['listen'])
+            #renew_servers = list(filter(any, _gen))
+            self.run_renewal(renew_servers, renew_ca)
+
+class DevAppCdnCertRenewal(DevCertRenewal):
+    def start(self, argv:list):
+        assert len(argv) == 1, "arguments must include (1) app config file"
+        setting_path  = argv[0]
+        with open(setting_path, 'r') as f:
+            cfg_root = json.load(f)
+            renew_ca = self.check_ca_renew(cfg_root['ca'])
+            renew_pxy = check_cert_expiry(cfg_root['proxy'])
+            self.run_renewal([renew_pxy], renew_ca)
+
+class TestAppSrvCertRenewal(DevAppSrvCertRenewal):
     pass
 
 
-__all__ = ['TestCertRenewal', 'DevCertRenewal']
-
+__all__ = ['TestAppSrvCertRenewal', 'DevAppSrvCertRenewal', 'DevAppCdnCertRenewal']
