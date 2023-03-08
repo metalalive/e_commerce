@@ -174,7 +174,9 @@ typedef struct {
         asa_close_cb_t   deinit;
         asa_cch_proceed_cb_t    proceed;
     } callback;
+    int  existing_cached_fd;
     struct {
+        uint8_t  already_exists:1;
         uint8_t  locked:1;
     } flags;
 } asa_cch_usrdata_t;

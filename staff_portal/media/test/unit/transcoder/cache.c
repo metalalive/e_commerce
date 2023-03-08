@@ -130,11 +130,15 @@ static uint8_t  utest_mock_fp_deinit_fn(atfp_t *processor)
     json_decref(mock_err_info);
 
 
-Ensure(atfp_test__stcch_init__newentry_ok) 
+#define  UTEST_ORIGIN_HOST   "backend1.app.com"
+#define  UTEST_PROXY_HOST    "cdn.app.com"
+Ensure(atfp_test__stcch_init__newentry_nopxy_ok) 
 {
     ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__SETUP
     ATFP_STREAM_CACHE_INIT__SETUP
     ATFP_STREAMCACHE_INIT__METADATA_SETUP
+    json_object_set_new(mock_spec, "host_domain", json_string(UTEST_ORIGIN_HOST));
+    json_object_set_new(mock_spec, "proxy_host_domain", json_string(UTEST_PROXY_HOST));
     asa_op_localfs_cfg_t  *_cch_entry = atfp_streamcache_init (loop, mock_spec, mock_err_info,
            NUM_CB_ARGS_ASAOBJ,  mock_buf_sz, utest__stcch_init__done_cb, utest__stcch_deinit__done_cb);
     assert_that(_cch_entry, is_not_null);
@@ -145,6 +149,15 @@ Ensure(atfp_test__stcch_init__newentry_ok)
                 when(processor, is_not_null),  when(err_cnt, is_equal_to(0))  );
         while(!mock_done_flag)
             uv_run(loop, UV_RUN_ONCE);
+        asa_cch_usrdata_t  *_cch_usrdata = _cch_entry->file.data;
+        assert_that(_cch_usrdata, is_not_null);
+        if(_cch_usrdata) {
+            assert_that(_cch_usrdata->flags.already_exists, is_equal_to(0));
+            assert_that(_cch_usrdata->existing_cached_fd, is_equal_to(-1));
+            assert_that(_cch_entry->file.file, is_greater_than(-1));
+            const char *actual_host = json_string_value(json_object_get(mock_spec, "host_domain"));
+            assert_that(actual_host, is_equal_to_string(UTEST_ORIGIN_HOST));
+        } // TODO, not a good idea to inspect internal structure, figure out better ways of verification
         expect(utest_mock_fp_deinit_fn,  when(processor, is_not_null));
         expect(utest__stcch_deinit__done_cb,   when(asaobj, is_equal_to(_cch_entry)),
                 when(processor, is_not_null)  );
@@ -153,13 +166,55 @@ Ensure(atfp_test__stcch_init__newentry_ok)
     }
     ATFP_STREAM_CACHE_INIT__TEARDOWN
     ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__TEARDOWN
-} // end of  atfp_test__stcch_init__newentry_ok
+} // end of  atfp_test__stcch_init__newentry_nopxy_ok
 
 
-Ensure(atfp_test__stcch_init__cached_found)
+Ensure(atfp_test__stcch_init__newentry_pxyhost_overwrite)
 {
     ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__SETUP
     ATFP_STREAM_CACHE_INIT__SETUP
+    json_object_set_new(mock_spec, "http_cacheable", json_true());
+    ATFP_STREAMCACHE_INIT__METADATA_SETUP
+    json_object_del(mock_spec, "http_cacheable");
+    json_object_set_new(mock_spec, "host_domain", json_string(UTEST_ORIGIN_HOST));
+    json_object_set_new(mock_spec, "proxy_host_domain", json_string(UTEST_PROXY_HOST));
+    asa_op_localfs_cfg_t  *_cch_entry = atfp_streamcache_init (loop, mock_spec, mock_err_info,
+           NUM_CB_ARGS_ASAOBJ,  mock_buf_sz, utest__stcch_init__done_cb, utest__stcch_deinit__done_cb);
+    assert_that(_cch_entry, is_not_null);
+    if(_cch_entry) {
+        _cch_entry->super.cb_args.entries[DONE_FLAG_INDEX__IN_ASA_USRARG] = (uint8_t *) &mock_done_flag;
+        expect(utest_mock_fp_processing_fn, will_return(0), when(processor, is_not_null));
+        expect(utest__stcch_init__done_cb,   when(asaobj, is_equal_to(_cch_entry)),
+                when(processor, is_not_null),  when(err_cnt, is_equal_to(0))  );
+        while(!mock_done_flag)
+            uv_run(loop, UV_RUN_ONCE);
+        asa_cch_usrdata_t  *_cch_usrdata = _cch_entry->file.data;
+        assert_that(_cch_usrdata, is_not_null);
+        if(_cch_usrdata) {
+            assert_that(_cch_usrdata->flags.already_exists, is_equal_to(0));
+            assert_that(_cch_usrdata->existing_cached_fd, is_equal_to(-1));
+            assert_that(_cch_entry->file.file, is_greater_than(-1));
+            const char *actual_host = json_string_value(json_object_get(mock_spec, "host_domain"));
+            assert_that(actual_host, is_equal_to_string(UTEST_PROXY_HOST));
+        } // TODO, not a good idea to inspect internal structure, figure out better ways of verification
+        expect(utest_mock_fp_deinit_fn,  when(processor, is_not_null));
+        expect(utest__stcch_deinit__done_cb,   when(asaobj, is_equal_to(_cch_entry)),
+                when(processor, is_not_null)  );
+        _cch_entry ->super.deinit(&_cch_entry->super);
+        uv_run(loop, UV_RUN_ONCE);
+    }
+    ATFP_STREAM_CACHE_INIT__TEARDOWN
+    ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__TEARDOWN
+} // end of  atfp_test__stcch_init__newentry_pxyhost_overwrite
+#undef  UTEST_ORIGIN_HOST
+#undef  UTEST_PROXY_HOST
+
+
+Ensure(atfp_test__stcch_init__cached_found_nopxy)
+{
+    ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__SETUP
+    ATFP_STREAM_CACHE_INIT__SETUP
+    ATFP_STREAMCACHE_INIT__METADATA_SETUP
     { // assume cached file already exists
         mkdir(UTEST_CACHE_TARGETPATH"/abc", S_IRWXU);
         mkdir(UTEST_CACHE_TARGETPATH"/abc/def", S_IRWXU);
@@ -176,6 +231,13 @@ Ensure(atfp_test__stcch_init__cached_found)
                 when(processor, is_null),  when(err_cnt, is_equal_to(0))  );
         while(!mock_done_flag)
             uv_run(loop, UV_RUN_ONCE);
+        asa_cch_usrdata_t  *_cch_usrdata = _cch_entry->file.data;
+        assert_that(_cch_usrdata, is_not_null);
+        if(_cch_usrdata) {
+            assert_that(_cch_usrdata->flags.already_exists, is_equal_to(1));
+            assert_that(_cch_usrdata->existing_cached_fd, is_equal_to(-1));
+            assert_that(_cch_entry->file.file, is_greater_than(-1));
+        } // TODO, not a good idea to inspect internal structure, figure out better ways of verification
         expect(utest__stcch_deinit__done_cb,   when(asaobj, is_equal_to(_cch_entry)),
                 when(processor, is_null)  );
         _cch_entry ->super.deinit(&_cch_entry->super);
@@ -183,10 +245,10 @@ Ensure(atfp_test__stcch_init__cached_found)
     }
     ATFP_STREAM_CACHE_INIT__TEARDOWN
     ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__TEARDOWN
-} // end of  atfp_test__stcch_init__cached_found
+} // end of  atfp_test__stcch_init__cached_found_nopxy
 
 
-Ensure(atfp_test__stcch_init__missing_metadata)
+Ensure(atfp_test__stcch_init__missing_origfile_metadata)
 {
     ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__SETUP
     ATFP_STREAM_CACHE_INIT__SETUP
@@ -206,7 +268,7 @@ Ensure(atfp_test__stcch_init__missing_metadata)
     }
     ATFP_STREAM_CACHE_INIT__TEARDOWN
     ATFP_STREAMCACHE_SWITCH_PROCESSING_FN__TEARDOWN
-} // end of  atfp_test__stcch_init__missing_metadata
+} // end of  atfp_test__stcch_init__missing_origfile_metadata
 
 
 Ensure(atfp_test__stcch_init__fileprocessor_error)
@@ -640,9 +702,10 @@ Ensure(atfp_test__nstcch_proceed_dblk__src_read_error) {
 TestSuite *app_stream_cache_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test(suite, atfp_test__stcch_init__newentry_ok);
-    add_test(suite, atfp_test__stcch_init__cached_found);
-    add_test(suite, atfp_test__stcch_init__missing_metadata);
+    add_test(suite, atfp_test__stcch_init__newentry_nopxy_ok);
+    add_test(suite, atfp_test__stcch_init__newentry_pxyhost_overwrite);
+    add_test(suite, atfp_test__stcch_init__cached_found_nopxy);
+    add_test(suite, atfp_test__stcch_init__missing_origfile_metadata);
     add_test(suite, atfp_test__stcch_init__fileprocessor_error);
     add_test(suite, atfp_test__stcch_init__mk_detailpath_error);
     add_test(suite, atfp_test__stcch_init__newentry_lock_fail);

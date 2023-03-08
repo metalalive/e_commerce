@@ -127,10 +127,10 @@ static  void _api_filefetch__set_cachectrl_header (h2o_req_t *req, json_t *spec)
 #define  RESOURCE_NON_CACHEABLE   "private,no-cache"
 #define  RESOURCE_CACHEABLE_SZ        sizeof(RESOURCE_CACHEABLE) - 1
 #define  RESOURCE_NON_CACHEABLE_SZ    sizeof(RESOURCE_NON_CACHEABLE) - 1
-    uint8_t  _public_visible  = json_boolean_value(json_object_get(spec, "acl_public_visible"));
+    uint8_t  _cchable_flg  = json_boolean_value(json_object_get(spec, "http_cacheable"));
     const char *hdr_value = NULL;
     size_t hdr_value_sz = 0;
-    if(_public_visible) {
+    if(_cchable_flg) {
         hdr_value = RESOURCE_CACHEABLE;
         hdr_value_sz = RESOURCE_CACHEABLE_SZ;
     } else {
@@ -186,6 +186,26 @@ static void  _api_common_cachefile_init_done (asa_op_base_cfg_t *_asa_cch_local,
     }
 }
 
+#define  HTTP_HEADER_NAME_PROXYSERVER  "x-proxy-host"
+
+static void  _api_filefetch__determine_host_domain (h2o_req_t *req, json_t *spec)
+{
+    h2o_iovec_t *value = NULL;
+    for(size_t idx = 0; idx < req->headers.size; idx++) {
+        h2o_iovec_t *name  =  req->headers.entries[idx].name;
+        int ret = strncmp(HTTP_HEADER_NAME_PROXYSERVER, name->base, name->len);
+        if(ret == 0) {
+            value = &req->headers.entries[idx].value;
+            json_object_set_new(spec, "proxy_host_domain", json_stringn(value->base, value->len));
+            break;
+        }
+    }
+    value = &req->hostconf->authority.hostport;
+    // req->authority.base  might not terminate with NULL char in HTTP/1.x request
+    json_object_set_new(spec, "host_domain", json_stringn(value->base, value->len));
+    // h2o_iovec_t, domain name + port
+}
+
 int  api_filefetch_start_caching (h2o_req_t *req, h2o_handler_t *hdlr, app_middleware_node_t *node,
         json_t *spec, json_t *err_info, cache_init_fn_t init_fn, cache_proceed_fn_t proceed_fn)
 { // look for cached file
@@ -206,7 +226,7 @@ int  api_filefetch_start_caching (h2o_req_t *req, h2o_handler_t *hdlr, app_middl
         if(json_object_get(spec, "storage_alias") == NULL)
             json_object_set_new(spec, "storage_alias", json_string("localfs")); // for source storage
         json_object_set_new(spec, "db_alias", json_string("db_server_1"));
-        json_object_set_new(spec, "host_domain", json_string(req->authority.base));  // h2o_iovec_t, domain name + port
+        _api_filefetch__determine_host_domain (req, spec);
         json_object_set_new(spec, "host_path", json_string( &endpoint_path[0] ));
         json_object_set_new(qp_labels, "doc_id", json_string(API_QPARAM_LABEL__STREAM_DOC_ID));
         json_object_set_new(qp_labels, "detail", json_string(API_QPARAM_LABEL__DOC_DETAIL));
@@ -243,7 +263,7 @@ static void _api_abac_pdp__try_match_rule (aacl_result_t *result, void **usr_arg
 
 
 #define  KEEP_RESOURCE_ATTRIBUTES_CODE \
-        json_object_set_new(qparams, "acl_public_visible", json_boolean(result->flag.acl_visible)); \
+        json_object_set_new(qparams, "http_cacheable", json_boolean(result->flag.acl_visible)); \
         json_object_set_new(qparams, "last_upld_req", json_integer(result->upld_req)); \
         json_object_set_new(qparams, "resource_owner_id", json_integer(result->owner_usr_id));
 
