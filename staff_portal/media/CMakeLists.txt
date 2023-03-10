@@ -232,11 +232,11 @@ SET(CMAKE_C_FLAGS_RELEASE  "-O2")
 
 SET(APP_HTTPSERVER_SOURCE_FILES
     src/acl.c
-    src/auth.c
     src/cfg_parser.c
-    src/middleware.c
-    src/network.c
-    src/multipart_parser.c
+    src/app_server/auth.c
+    src/app_server/middleware.c
+    src/app_server/multipart_parser.c
+    src/app_server/network.c
     src/rpc/reply.c
     src/api/init.c
     src/api/common.c
@@ -331,7 +331,7 @@ SET(APP_COMMON_SOURCE_FILES
     src/routes.c )
 
 SET(APP_SERVER_SOURCE_FILES
-    src/app_server.c
+    src/app_server/worker.c
     src/third_party/rhonabwy.c
     ${APP_DBMODEL_SOURCE_FILES}
     ${APP_STORAGE_SOURCE_FILES}
@@ -355,14 +355,14 @@ SET(UNIT_TEST_SOURCE_FILES
     test/unit/main.c
     test/unit/app_cfg.c
     test/unit/cfg_parser.c
-    test/unit/network.c
     test/unit/routes.c
     test/unit/acl.c
-    test/unit/auth.c
     test/unit/utils.c
     test/unit/timer_poll.c
-    test/unit/middleware.c
-    test/unit/multipart_parser.c
+    test/unit/app_server/auth.c
+    test/unit/app_server/middleware.c
+    test/unit/app_server/multipart_parser.c
+    test/unit/app_server/network.c
     test/unit/models/cfg_parser.c
     test/unit/models/pool.c
     test/unit/models/connection.c
@@ -482,7 +482,7 @@ SET(APP_UNIT_TEST_LIBRARIES ${APP_COMMON_LIBRARIES})
 
 SET(APP_SERVER_EXE_NAME   app_server.out)
 SET(RPC_CONSUMER_EXE_NAME rpc_consumer.out)
-ADD_EXECUTABLE(${APP_SERVER_EXE_NAME}   ${APP_SERVER_SOURCE_FILES}    src/app_server_main.c)
+ADD_EXECUTABLE(${APP_SERVER_EXE_NAME}   ${APP_SERVER_SOURCE_FILES}    src/app_server/main.c)
 ADD_EXECUTABLE(${RPC_CONSUMER_EXE_NAME} ${RPC_CONSUMER_SOURCE_FILES}  src/rpc/consumer_main.c)
 TARGET_INCLUDE_DIRECTORIES(${APP_SERVER_EXE_NAME}    PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_INCLUDE_DIRECTORIES(${RPC_CONSUMER_EXE_NAME}  PUBLIC ${OPENSSL_INCLUDE_DIR})
