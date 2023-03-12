@@ -12,11 +12,9 @@ from common.util.python import import_module_string
 from media.renew_certs import *
 from media.render_template import *
 
-TEST_DB_MIGRATION_ALIAS = 'db_test_migration'
+CFG_DB_MIGRATE_ALIAS = 'app_db_migration'
 
-_is_test_migration_found = lambda cfg: cfg.get('alias') == TEST_DB_MIGRATION_ALIAS
-
-class AbstractTestDatabase:
+class BaseDatabaseMigration:
     def start(self, argv):
         assert len(argv) == 2, "arguments must include (1) app config file (2) liquibase config file"
         setting_path   = argv[0]
@@ -24,19 +22,20 @@ class AbstractTestDatabase:
         f = None
         renew_required = []
         cfg_root = {}
+        _is_cfg_migration_found = lambda c: c.get('alias') == CFG_DB_MIGRATE_ALIAS
         with open(setting_path, 'r') as f:
             cfg_root = json.load(f)
-            test_cfg = list(filter(_is_test_migration_found, cfg_root['databases']))
-            if any(test_cfg):
-                test_cfg = test_cfg[0]
-                test_cfg['liquibase_path'] = liquibase_path
-                credential = self.load_db_credential(filepath=test_cfg['credential']['filepath'],
-                        hierarchy=test_cfg['credential']['hierarchy'])
-                test_cfg['credential'] = credential
-                self.setup_test_db(cfg=test_cfg)
+            filt_cfg = list(filter(_is_cfg_migration_found, cfg_root['databases']))
+            if any(filt_cfg):
+                filt_cfg = filt_cfg[0]
+                filt_cfg['liquibase_path'] = liquibase_path
+                credential = self.load_db_credential(filepath=filt_cfg['credential']['filepath'],
+                        hierarchy=filt_cfg['credential']['hierarchy'])
+                filt_cfg['credential'] = credential
+                self.setup_test_db(cfg=filt_cfg)
             else:
                 err_msg = 'the alias `%s` must be present in database configuration file' \
-                        % TEST_DB_MIGRATION_ALIAS
+                        % CFG_DB_MIGRATE_ALIAS
                 raise ValueError(err_msg)
 
     def load_db_credential(self, filepath:str, hierarchy):
@@ -76,10 +75,10 @@ class AbstractTestDatabase:
                 '--username=%s' % credential['user'],
                 '--password=%s' % credential['password'],
                 '--log-level=info']
-## end of AbstractTestDatabase
+## end of BaseDatabaseMigration
 
 
-class StartTestDatabase(AbstractTestDatabase):
+class DatabaseMigrationSetup(BaseDatabaseMigration):
     def db_schema_cmd(self, cfg):
         out = super().db_schema_cmd(cfg)
         out.append('update')
@@ -92,7 +91,7 @@ class StartTestDatabase(AbstractTestDatabase):
         subprocess.run(self.db_schema_cmd(cfg))
 
 
-class EndTestDatabase(AbstractTestDatabase):
+class DatabaseMigrationTeardown(BaseDatabaseMigration):
     def db_schema_cmd(self, cfg):
         out = super().db_schema_cmd(cfg)
         out.extend(['rollback', '0.0.0'])
@@ -102,7 +101,6 @@ class EndTestDatabase(AbstractTestDatabase):
         subprocess.run(self.db_schema_cmd(cfg))
         sql = 'DROP DATABASE `%s`;' % cfg['db_name']
         self._db_perform_operation(cfg, sql)
-
 
 
 

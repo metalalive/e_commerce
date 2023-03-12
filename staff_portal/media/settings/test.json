@@ -80,7 +80,7 @@
             "init_cfg_ops": "app_db_mariadb__cfg_ops"
         },
         {
-            "alias": "db_test_migration",
+            "alias": "app_db_migration",
             "db_name": "test_ecommerce_media",
             "max_connections": 1,
             "idle_timeout": 20,

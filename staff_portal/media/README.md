@@ -1,146 +1,97 @@
+## Features
+- video transcoding
+  - currently support only mp4 (input) and HLS (output)
+- image transformng
+  - currently support JPG/GIF/PNG/TIFF
+- video streaming
+  - currently support only HLS
+  - optional reverse proxy / load balancing
+- multi-part file upload
+- user-defined file access control
 
-### Build
-#### Schema migration ([liquibase](https://github.com/liquibase/liquibase))
-* upgrade
-```
+## Build
+### Prerequisite 
+| type | name | version required |
+|------|------|------------------|
+| Database | MariaDB | `10.3.22` |
+| Message Queue | RabbitMQ | `3.2.4` |
+| Build tool | [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.5.0` |
+| | [gcc](https://gcc.gnu.org/onlinedocs/) with [c17](https://en.wikipedia.org/wiki/C17_(C_standard_revision)) stardard | `>= 10.3.0` |
+| Dependency | [H2O](https://github.com/h2o/h2o) | `>= 2.3.0-DEV` |
+| | [OpenSSL](https://github.com/openssl/openssl) | `>= 1.1.1c` |
+| | [brotli](https://github.com/google/brotli) | `>= 1.0.2` |
+| | [jansson](https://github.com/akheron/jansson) | `>= 2.14` |
+| | [libuuid](https://github.com/util-linux/util-linux/tree/master/libuuid) | `>= 2.20.0` |
+| | [rhonabwy](https://github.com/babelouest/rhonabwy) | `>= 1.1.2` |
+| | [gnutls](https://github.com/gnutls/gnutls) | `>= 3.7.2` |
+| | [nettle](https://github.com/gnutls/nettle) | `>= 3.7.2` |
+| | [p11-kit](https://github.com/p11-glue/p11-kit) | `>= 0.24.0` |
+| | [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) | `>= 3.1.7` |
+| | [Rabbitmq/C](https://github.com/rabbitmq/rabbitmq-c) | `>= 0.11.0` |
+| | [FFMpeg](https://github.com/FFmpeg/FFmpeg) | `>= 4.3.3` |
+| | [libcurl](https://github.com/curl/curl) | `>= 7.69.1` |
+| Test | [nghttp2](https://github.com/nghttp2/nghttp2) | `>= 1.46.0` |
+| | [cgreen](https://github.com/cgreen-devs/cgreen) | `>= 2.14` |
+| Automation | python interpreter | `>= 3.9.6` |
+| | python packages | [detail](./py_venv_requirement.txt) |
+| DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
+| | | |
+| | | |
+
+Note: 
+* `Nettle` is automatically built when building `gnutls` 
+* `nghttp2` enables http/2 protocol in `libcurl` for testing
+
+### Grant access to Database
+- Currently this application works only with MariaDB.
+- Grant admin roles full access to the database
+  - for `site_dba` role (in `common/data/secrets.json`), it is the database `ecommerce_media`
+  - for `test_site_dba` role, it is the database `test_ecommerce_media`
+  - see [`init_db.sql`](../migrations/init_db.sql) for detail
+
+#### Configuration
+```bash
 cd /PATH/TO/PROJECT_HOME/staff_portal
 
-/PATH/TO/liquibase  --defaults-file=./media/liquibase.properties \
-  --changeLogFile=./media/migration/changelog_media.xml  \
-  --url=jdbc:mariadb://localhost:3306/ecommerce_media \
-  --username=YOUR_DBA_USERNAME  --password=YOUR_DBA_PASSWORD \
-  --log-level=info  update
-
-/PATH/TO/liquibase  --defaults-file=./media/liquibase.properties \
-  --changeLogFile=./media/migration/changelog_usermgt.xml  \
-  --url=jdbc:mariadb://localhost:3306/ecommerce_usermgt \
-  --username=YOUR_DBA_USERNAME  --password=YOUR_DBA_PASSWORD \
-  --log-level=info  update
-```
-
-* downgrade to the state before all tables were initially created
-```
-/PATH/TO/liquibase  --defaults-file=./media/liquibase.properties \
-    --changeLogFile=./media/migration/changelog_media.xml \
-    --url=jdbc:mariadb://localhost:3306/ecommerce_media \
-    --username=YOUR_DBA_USERNAME  --password=YOUR_DBA_PASSWORD \
-    --log-level=info  rollback  0.0.0
-
-/PATH/TO/liquibase  --defaults-file=./media/liquibase.properties \
-    --changeLogFile=./media/migration/changelog_usermgt.xml \
-    --url=jdbc:mariadb://localhost:3306/ecommerce_usermgt \
-    --username=YOUR_DBA_USERNAME  --password=YOUR_DBA_PASSWORD \
-    --log-level=info  rollback  0.0.0
-```
-
-#### application server
-##### Prerequisite
-Build system
-* [Cmake](https://cmake.org/cmake/help/latest/index.html) >= 3.5.0
-* [gcc](https://gcc.gnu.org/onlinedocs/) >= 10.3.0, with [c17](https://en.wikipedia.org/wiki/C17_(C_standard_revision)) stardard
-
-Library Dependencies (for application)
-* [H2O](https://github.com/h2o/h2o) >= 2.3.0-DEV
-* [brotli](https://github.com/google/brotli)
-* [jansson](https://github.com/akheron/jansson) >= 2.14
-* [libuuid](https://github.com/util-linux/util-linux/tree/master/libuuid) >= 2.20.0
-* [rhonabwy](https://github.com/babelouest/rhonabwy) >= 1.1.2
-* [gnutls](https://github.com/gnutls/gnutls) >= 3.7.2
-* [nettle](https://github.com/gnutls/nettle) >= 3.7.2, automatically built when building `gnutls`
-* [p11-kit](https://github.com/p11-glue/p11-kit) >= 0.24.0
-* [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) >= 3.1.7
-* [Rabbitmq/C](https://github.com/rabbitmq/rabbitmq-c) >= 0.11.0
-* [FFMpeg](https://github.com/FFmpeg/FFmpeg) >= 4.3.3
-Library Dependencies (for workaround in [rhonabwy](https://github.com/babelouest/rhonabwy))
-* [libcurl](https://github.com/curl/curl) >= 7.69.1
-* [nghttp2](https://github.com/nghttp2/nghttp2) >= 1.46.0 , for enabling http/2 in `libcurl`
-
-Library Dependencies (for testing)
-* [cgreen](https://github.com/cgreen-devs/cgreen) >= 2.14
-
-
-#### workflow
-Generate build files (CMake)
-```
 CC="/PATH/TO/gcc/10.3.0/installed/bin/gcc"   PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
-    cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  -DLIQUIBASE_PATH="/PATH/TO/liquibase"  ..
+    cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  -DLIQUIBASE_PATH="/PATH/TO/liquibase"  \
+        -DPYVENV_PATH="/PATH/TO/python/venv"  -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
+        -DCDN_USERNAME=<OS_USER_NAME>   -DCDN_USERGRP=<OS_USER_GROUP>   ..
 ```
-where `<YOUR_PATH_TO_PKG_CFG>` should include :
-* `/PATH/TO/brotli/pkgconfig`
-* `/PATH/TO/libuv/pkgconfig`
-* `/PATH/TO/h2o/pkgconfig`
-* `/PATH/TO/jansson/pkgconfig`
-* `/PATH/TO/rhonabwy/pkgconfig`
-* `/PATH/TO/gnutls/pkgconfig`
-* `/PATH/TO/nettle/pkgconfig`
-* `/PATH/TO/p11-kit/pkgconfig`
-* `/PATH/TO/mariadb/pkgconfig`
-* `/PATH/TO/rabbitmq-c/pkgconfig`
-* `/PATH/TO/ffmpeg/pkgconfig`
-* `/PATH/TO/libuuid/pkgconfig`
-* `/PATH/TO/libcurl/pkgconfig`
-* `/PATH/TO/nghttp2/pkgconfig`
-
-For those libraries that are NOT integrated with `pkg-config` , add path to `CMAKE_PREFIX_PATH`
-
-after cmake completed successfully, generate executable app server by :
-```
-make app.out
-```
-
-### Run
-#### start development server
-```
-./media/build/app.out  ./media/settings/development.json
-```
-or for debug mode
-```
-make dev_app_server
-make dev_rpc_worker
-```
-
-To test the development server, you can use web browsers or command-line tools like `cURL`
-```
-LD_LIBRARY_PATH="/PATH/TO/curl/installed/lib:$LD_LIBRARY_PATH" /PATH/TO/curl \
-   --cacert /PATH/TO/ca.crt \
-   --key /PATH/TO/ca.private.key \
-   --request <HTTP_METHOD> \
-   --http2 \
-   --header "Content-Type: application/json" \
-   --header "Accept: application/json" \
-   --header @/PATH/TO/FILE/CONTAINS/MULTI_LINE/HEADER_RAWDATA \
-   --data "<WHATEVER_DATA>" \
-   -v  "https://localhost:8010/ANY/VALID/PATH"
-```
-where :
-* `<HTTP_METHOD>` can be one of the valid HTTP methods e.g. `GET`, `POST`, `PATCH` ...etc
-* `--key` is optional
-* `--http` initiates HTTP/2 connections handled by [nghttp2](https://github.com/nghttp2/nghttp2)
-
-#### Run test
-##### unit test
-```
-make unit_test
-```
-##### Integration test
-###### Pre-requisite
-* the application uses [MySQLdb](xxx) for creating / dropping test database, be sure you have this package in your python execution environment.
-```
-make integration_test
-```
+Note
+- `<YOUR_PATH_TO_PKG_CFG>` should include:
+  - `/PATH/TO/brotli/pkgconfig`
+  - `/PATH/TO/libuv/pkgconfig`
+  - `/PATH/TO/h2o/pkgconfig`
+  - `/PATH/TO/jansson/pkgconfig`
+  - `/PATH/TO/rhonabwy/pkgconfig`
+  - `/PATH/TO/gnutls/pkgconfig`
+  - `/PATH/TO/nettle/pkgconfig`
+  - `/PATH/TO/p11-kit/pkgconfig`
+  - `/PATH/TO/mariadb/pkgconfig`
+  - `/PATH/TO/rabbitmq-c/pkgconfig`
+  - `/PATH/TO/ffmpeg/pkgconfig`
+  - `/PATH/TO/libuuid/pkgconfig`
+  - `/PATH/TO/libcurl/pkgconfig`
+  - `/PATH/TO/nghttp2/pkgconfig`
+  - `/PATH/TO/openssl/pkgconfig`
+- omit parameters `NGINX_INSTALL_PATH`, `CDN_USERNAME`, `CDN_USERGRP` if you don't need reverse proxy
 
 
-### NOTE
-* the database credential `YOUR_DBA_USERNAME` / `YOUR_DBA_PASSWORD` should have access to perform DDL to the specified database `ecommerce_media` and `ecommerce_usermgt` 
+### Database Migration (for development server)
+```bash
+make  dev_db_init
+```
+Note this command performs only schema migration
 
-### TO-DO
-* currently this application works only with Mysql / Mariadb because it access data by directly running raw SQL. Create [Data Access Ojbect](https://stackoverflow.com/questions/19154202) layer to separate database-specific SQL syntax from applicaiton logic (as well as make it easy to switch to other databaase).
-* Some of REST API endpoints (re)create and execute prepared SQL statement each time the endpoint is consumed. TO improve the workflow, create the prepare statements only once on API server initialization.
-* Integration test should synchronize max number of database connections with actual database configuration.
-* Parallelize transcoding process after stream metadata is parsed from media container, by splitting part of packets to different transcoding nodes(servers) . Then assemble encoded packets to final file(s)
-* write other less important metadata (e.g. checksum of each generated file, video title, tags for search, ...etc.) of transcoded file to storage, or document-oriented databases.
-* Upgrade Valgrind to latest version then check the memory usage again, current version (3.110.1) reports tons of false positive issues (e.g. read/write of unninitialized value) and may cause undefined program behaviour and stack buffer overflow.
-* Transcoding progress info is rarely updated once inserted to database / file, currently it is maintained in file for individual user. For better scalability of progress monitor, use distributed document-oriented database to keep the info. 
-* [Rabbitmq/C](https://github.com/rabbitmq/rabbitmq-c) is currently applied to this app for interacting with RabbitMQ, the library doesn't support asynchronous operations (except consume function), so I've been looking for other C libraries which implement AMQP in non-blocking manner.
-* [libh2o](https://github.com/h2o/h2o) might report assertion failure on `h2o_http2_stream_t -> _data.size` in rare unknown cases, the value may be junk (uninitialized) data, figure out how did that happen .
+### Compile and Run
+| env | target | command |
+|-----|--------|---------|
+| development | app server (primary) | `make  dev_app_server` |
+| development | app server (secondary) | `make  app_server_replica_1` |
+| | generate nginx config file, for reverse proxy | `make  dev_cdn_setup` |
+| development | RPC consumer  | `make  dev_rpc_worker` |
+| unit test |  | `make  unit_test` |
+| integration test | app server | `make  itest_app_server` |
+| integration test | RPC consumer | `make  itest_rpc_worker` |
 

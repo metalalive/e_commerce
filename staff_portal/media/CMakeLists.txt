@@ -513,6 +513,15 @@ SET(ITEST_APPCFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/test.json)
 SET(PYVENV_SHELL_FILEPATH  $ENV{PWD}/tmp_shell)
 #FILE(WRITE  ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_shell "source ${PYVENV_BIN_PATH}/activate;")
 #FILE(APPEND ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_shell "python --version;")
+    
+ADD_CUSTOM_TARGET(dev_db_init
+    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  DatabaseMigrationSetup  ${DEV_APPCFG_PATH}  ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND bash ${PYVENV_SHELL_FILEPATH}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+    DEPENDS ${LIQUIBASE_PATH} ${PYVENV_BIN_PATH}
+    VERBATIM)
+
 ADD_CUSTOM_TARGET(dev_app_server
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader DevAppSrvCertRenewal  ${DEV_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
@@ -572,14 +581,14 @@ ADD_CUSTOM_TARGET(itest_app_server
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  StartTestDatabase  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  DatabaseMigrationSetup  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND bash ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
         ##gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_API_SERVER_EXE_NAME}  ${ITEST_APPCFG_PATH}
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  EndTestDatabase  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  DatabaseMigrationTeardown  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  FilechunkTeardown   ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND bash ${PYVENV_SHELL_FILEPATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
