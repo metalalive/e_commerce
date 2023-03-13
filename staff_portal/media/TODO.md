@@ -30,10 +30,22 @@
   - happened after decoding / filtering / encoding over 10k video frames
   - Valgrind always crashes in such case
   - review transcoding process
+- For handling upload requests
+  - Enable users to replace particular file chunk of a given request with new data , in the endpoint `/upload/multipart/part`
+  - Assign timeout to a request, if the request remains incomplete beyond the specified duration, it will be invalid and automatically discarded.
+  - abort incomplete requests
+- Periodically clean up stale cached media files in application server
+  - create a cron job, check create time of each file
+- Periodically remove RPC reply queues infrequently utilized in message broker
+  - another cron job
+  - what is the method to retrieve timestamp of the last access to the queue ?
 - Integration test should synchronize max number of database connections with actual database configuration.
 - [Rabbitmq/C](https://github.com/rabbitmq/rabbitmq-c) is currently applied to this app for interacting with RabbitMQ, the library does not support asynchronous operations (except consume function)
   - looking for other C libraries which send AMQP requests in non-blocking manner.
 - [libh2o](https://github.com/h2o/h2o) might report assertion failure on `h2o_http2_stream_t -> _data.size` in rare unknown cases, the value may be junk (uninitialized) data, figure out how did that happen .
+
+#### Security
+- implement [CORS](https://security.stackexchange.com/q/108835/214639) middleware for some API endpoints
 
 #### Development
 - Upgrade Valgrind to latest version then check the memory usage again

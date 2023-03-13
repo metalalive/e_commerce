@@ -1,0 +1,890 @@
+openapi: 3.0.3
+info:
+  title: MyApp Media service
+  description: |-
+    This is API documentation of my media server based on the OpenAPI 3.0 specification. You can find out more about this service at following links :
+    - [README](https://github.com/metalalive/point_of_sale/blob/master/staff_portal/media/README.md)
+  termsOfService: http://swagger.io/terms/
+  contact:
+    email: xyz@my-media-app.io
+  license:
+    name: License Not Yet (TODO)
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+externalDocs:
+  description: N/A
+  url: http://swagger.io
+servers:
+  - url: https://doc.site.not.ready/api/v1
+tags:
+  - name: upload
+    description: Multipart upload of file
+    externalDocs:
+      description: Detail
+      url: https://doc.site.not.ready/api/upload
+  - name: resource
+    description: valid media file content
+    externalDocs:
+      description: Detail
+      url: https://doc.site.not.ready/api/resource
+  - name: transcoder
+    description: transcode a valid resource
+paths:
+  /upload/multipart/initiate:
+    post:
+      tags:
+        - upload
+      summary: start an upload request
+      description: Initiate a new **request** for large file upload,  the backend server returns temporary ID. Client receiving the ID can split a large file to chunks and then upload each of them associated with the ID. Note each user can start at most 3 active (uncommitted) requests.
+      responses:
+        '200':
+          description: new request created
+          content:
+            application/json:
+              schema:
+                 type: object
+                 properties:
+                   req_seq:
+                     type: integer
+                     format: uint32
+                     example: 19283781
+                   usr_id:
+                     type: integer
+                     format: uint32
+                     example: 105
+        '400':
+          description: exceed max number of active requests
+          content:
+            application/json:
+              schema:
+                 type: object
+                 properties:
+                   num_active:
+                     type: integer
+                     format: uint32
+                     example: 3
+                   max_limit:
+                     type: integer
+                     format: uint32
+                     example: 3
+        '503':
+          description: Temporarily unavailable
+      security:
+        - encodedJWThdr: []
+  /upload/multipart/part:
+    post:
+      tags:
+        - upload
+      summary: upload new file chunk
+      description: Upload a new file chunk associated with existing active upload request.
+      parameters:
+        - name: req_seq
+          in: query
+          description: ID of an active upload request
+          required: true
+          schema:
+            type: integer
+            format: uint32
+            example: 19283781
+        - name: part
+          in: query
+          description: sequence number which defines the position of the uploading chunk in the entire larger file. The number starts from 1 to 10000.
+          required: true
+          schema:
+            type: integer
+            format: uint16
+            example: 1
+      requestBody:
+        description: Raw octets of chosen file chunk. This endpoint handles only one file at a time. (even with `multipart/form-data` content type, it does not support multiple files upload)
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                my_file_chunk:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Successful upload
+          content:
+            application/json:
+              schema:
+                 type: object
+                 properties:
+                   part:
+                     type: integer
+                     format: uint32
+                     example: 1
+                   alg:
+                     type: string
+                     example: "sha1"
+                   checksum:
+                     type: string
+                     example: "f1d827486315c0635a151"
+        '400':
+          description: invalid input / request not exist
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - type: object
+                  properties:
+                    part:
+                      type: string
+                      example: "invalid part number"
+                    req_seq:
+                      type: string
+                      example: "missing request ID"
+                - type: object
+                  properties:
+                    req_seq:
+                      type: string
+                      example: "request not exists"
+                - type: object
+                  properties:
+                    body:
+                      type: string
+                      example: "invalid multipart body"
+        '403':
+          description: exceeding quota limit specified to current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quota:
+                    type: string
+                    example: "bytes of uploaded file exceed the limit"
+        '503':
+          description: Temporarily unavailable
+      security:
+        - encodedJWThdr: []
+  /upload/multipart/complete:
+    patch:
+      tags:
+        - upload
+      summary: finalize an upload request
+      description: finalize an incomplete upload request and turn it to available `resource`. The `resource` consists of (1) file chunks previously uploaded and (2) associated saved metadata. Upon receiving the request, the endpoint verifies  the order of all the uploaded chunks with their part numbers _(starts from `1` , maxinum part number depends on nunber of chunks)_ , all the chunks should be uploaded with appropriate part numbers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  description: current valid value are `video` and `image`
+                  type: string
+                  example: "video"
+                req_seq:
+                  description: ID of upload request
+                  type: integer
+                  format: uint32
+                  example: 19283781
+                res_id:
+                  description: ID of the resource, the ID should NOT be used in any other existing resource
+                  type: string
+                  example: "uy83kLmX"
+      responses:
+        '200':
+          description: content changed in existing resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/finalize-upload-req'
+        '201':
+          description: new resource commited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/finalize-upload-req'
+        '400':
+          description: invalid input / request not exist / invalid part number sequence
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - type: object
+                  properties:
+                    res_id:
+                      type: string
+                      example: "invalid format"
+                    req_seq:
+                      type: string
+                      example: "missing"
+                    type:
+                      type: string
+                      example: "invalid"
+                - type: object
+                  properties:
+                    req_seq:
+                      type: string
+                      example: "request not exists"
+                - type: object
+                  properties:
+                    req_seq:
+                      type: string
+                      example: "part numbers of file chunks are not adjacent"
+        '403':
+          description: invalid user for the existing resource
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  res_id:
+                    type: string
+                    example: "NOT allowed to use the ID"
+      security:
+        - encodedJWThdr: []
+            
+  /file:
+    get:
+      tags:
+        - resource
+      summary: Find non-streamable resource
+      description: |
+        Find non-streamable resource by ID. Resources in this application can be either streamable (e.g. mp4 video) and non-streamable (e.g. image)
+        
+        Note the authentication is optional depending on access control settings of the resource
+      parameters:
+        - $ref: "#/components/parameters/resource-id"
+        - name: d_detail
+          in: query
+          description: keyword string for identifying which transcoded version to load, client can also load original file by omitting this parameter.
+          required: false
+          schema:
+            type: string
+            example: "yU"
+      responses:
+        '200':
+          description: successful download 
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - type: object
+                  properties:
+                    res_id:
+                      type: string
+                      example: "contains non-printable charater"
+                    d_detail:
+                      type: string
+                      example: "invalid character"
+                - type: object
+                  properties:
+                    res_id:
+                      type: string
+                      example: "exceeding max limit"
+                    d_detail:
+                      type: string
+                      example: "exceeding limit"
+        '401':
+          description: authentication failure, the resource is not open to public
+        '403':
+          description: authorization failure, the resource is not open to public
+        '404':
+          description: resource not exists
+      security:
+        - encodedJWThdr: []
+    delete:
+      tags:
+        - resource
+      summary: Delete a resource
+      description: delete an existing resource by ID, including original uploaded file chunks and associated transcoded versions
+      parameters:
+        - $ref: "#/components/parameters/resource-id"
+      responses:
+        '204':
+          description: resource deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  res_id:
+                    type: string
+                    example: "exceeding max limit"
+        '403':
+          description: authorization failure
+        '404':
+          description: resource not exists
+      security:
+        - encodedJWThdr: []
+
+  /file/acl:
+    patch:
+      tags:
+        - resource
+      summary: edit file-level access control
+      description: edit file-level access control applied to all users
+      parameters:
+        - $ref: "#/components/parameters/resource-id"
+      requestBody:
+        description: |
+          attributes associated with the resource : \
+          (1) `visible`, whether the resource can be fetched by **everyone**
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                visible:
+                  type: boolean
+      responses:
+        '200':
+          description: update successfully
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  res_id:
+                    type: string
+                    example: "exceeding max limit"
+        '404':
+          description: resource not exists
+      security:
+        - encodedJWThdr: []
+  /file/acl/usr:
+    put:
+      tags:
+        - resource
+      summary: update user-level access control
+      description: update access control for specified users
+      parameters:
+        - $ref: "#/components/parameters/resource-id"
+      requestBody:
+        description: list of objects for access control of the users (other than the resource owner)
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                anyOf:
+                  - $ref: '#/components/schemas/file-acl-user-edit'
+                  - $ref: '#/components/schemas/file-acl-user-edit'
+      responses:
+        '200':
+          description: successful update
+        '400':
+          description: |
+            Invalid input
+            - for each field below, it is present only when error is detected
+            - the field `body` could be one of the error messages
+              - `decode error`
+              - `not array`
+              - `empty`, empty object
+              - `limit exceeding`
+            - the field `usr_id` could be one of the error messages
+              - `zero`, no user specified in request body
+              - `some of them do not exist`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  body:
+                    type: string
+                    example: "<various error messages>"
+                  res_id:
+                    type: string
+                    example: "exceeding max limit"
+                  usr_id:
+                    type: string
+                    example: "<various error messages>"
+                  access_control:
+                    type: string
+                    example: "non-existent"
+                  edit_acl:
+                    type: string
+                    example: "invalid value"
+                  transcode:
+                    type: string
+                    example: "invalid value"
+                    
+        '403':
+          description: |
+            Authorization failure on current user consuming the endpoint. \
+            The field `usr_id` could be one of the error messages
+              - `missing access-control setup`
+              - `operation denied`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usr_id:
+                    type: string
+                    example: "<various error messages>"
+        '404':
+          description: resource not exists
+        '503':
+          description: temporarily unavailable
+      security:
+        - encodedJWThdr: []
+    get:
+      tags:
+        - resource
+      summary: read user-level access control
+      description:  read user-level access control of the resource
+      parameters:
+        - $ref: "#/components/parameters/resource-id"
+      responses:
+        '200':
+          description: successful read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  size:
+                    type: integer
+                    example: 2
+                  data:
+                    type: array
+                    items:
+                      anyOf:
+                      - $ref: '#/components/schemas/file-acl-user-read'
+                      - $ref: '#/components/schemas/file-acl-user-read'
+        '400':
+          description: Invalid resource ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  res_id:
+                    type: string
+                    example: "exceeding max limit"
+        '404':
+          description: resource not exists
+      security:
+        - encodedJWThdr: []
+
+  /file/stream/init:
+    post:
+      tags:
+        - resource
+      summary: Initiate streamable resource
+      description: |
+        This endpoint initiates a stream accessible to clients.
+        
+        Note the authentication is optional depending on access control settings of the resource
+      parameters:
+        - $ref: "#/components/parameters/resource-id"
+      responses:
+        200:
+          description: Successful operation. Note that each stream is identified by `doc_id`, which has been valid for specific duration (default 60 seconds) once generated, beyond the time the stream will be no longer available and discarded by backend server.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    example: "hls"
+                  host:
+                    type: string
+                    example: "media.backend.app.com:8081"
+                  doc_id:
+                    type: string
+                    format: base64
+                    example: "P8u8Hei/hl23A8=="
+                  d_detail:
+                    type: string
+                    example: "hint-for-fetch-file"
+        400:
+          description: error when initiating stream, the detail depends on type of resource
+        404:
+          description: resource not exists
+      security:
+        - encodedJWThdr: []
+  /file/stream/seek:
+    get:
+      tags:
+        - resource
+      summary: Get file segemnt of a give stream
+      description: One stream typically consists of several files in  different transcoded versions _(e.g. media segment in HLS protocol)_, this endpoint loads file segment associated with the value of query parameter `d_detail`.
+      parameters:
+        - name: doc_id
+          in: query
+          description: retrieved previously from the endpoint `/file/stream/init`
+          required: true
+          schema:
+            type: string
+            example: "P8u8Hei/hl23A8=="
+        - name: d_detail
+          in: query
+          description: reference keyword for internal file lookup
+          required: true
+          schema:
+            type: string
+            example: "hint-for-fetch-file"
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        400:
+          description: |
+            error when seeking file segment \
+            the field `doc_id` and `d_detail` could be one of the error messages
+              - `exceeding limit`
+              - `contain invalid character`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  doc_id:
+                    type: string
+                    example: "<various error messages>"
+                  d_detail:
+                    type: string
+                    example: "<various error messages>"
+                  transcoder:
+                    type: string
+                    example: "<media type specific error>"
+        404:
+          description: file not found
+
+  /file/transcode:
+    post:
+      tags:
+        - transcoder
+      summary: transcode with different resolutions
+      description: transcode a valid resource with different resolutions
+      requestBody:
+        description: |
+          - `elementary_streams` field is available ONLY for a **video resource**, which contains video/audio frames
+            - for video frames, see the schema `transcode-element-vid-ex` below
+            - for audio frames, see the schema `transcode-element-au-ex` below
+          - `v0`, `v1` in the field `outputs` are alias to configuration object of the transcoded versions
+          - the content in `outputs` field must NOT be empty, and depends on **resource type**
+            - for video, see the schema `transcode-output-res-video` below
+            - for image, see the schema `transcode-output-res-image` below
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resource_id:
+                  type: string
+                  example: "swsxWaku"
+                elementary_streams:
+                  type: object
+                  properties:
+                     video-stream-0:
+                       $ref: "#/components/schemas/transcode-element-vid-ex"
+                     video-stream-1:
+                       $ref: "#/components/schemas/transcode-element-vid-ex"
+                     audio-stream-0:
+                       $ref: "#/components/schemas/transcode-element-au-ex"
+                     audio-stream-1:
+                       $ref: "#/components/schemas/transcode-element-au-ex"
+                outputs:
+                  type: object
+                  properties:
+                     v0:
+                       type: object
+                     v1:
+                       type: object
+      responses:
+        202:
+          description: transcoding request accepted, job ID returned for progress monitor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resource_id:
+                    type: string
+                    example: "swsxWaku"
+                  job_id:
+                    type: string
+                    example: "rpc.media.transcode.1902f9714086b35"
+                    description: see configuration `rpc` -> `bindings` -> `reply` -> `correlation_id`  in the file `media/settings/development.json` for detailed format
+        400:
+          description: |
+            Invalid input
+            - `elementary_stream` field is present only when error happened in transcoding video resource
+            - detail in `attribute` field differs depneding on the type of elementary stream object in `elementary_stream` field.
+            - detail in `outputs` field differs depneding on the type of resource.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  elementary_stream:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        example : "missing / unsupported"
+                      attribute:
+                        type: object
+                  outputs:
+                    type: object
+                  non-field:
+                    type: string
+                    example: "json parsing error on request body"
+                  res_id:
+                    type: string
+                    example: "contains non-printable charater"
+        403:
+          description: |
+            Authorization failure on current user consuming the endpoint. \
+            The field `usr_id` could be one of the error messages
+              - `missing access-control setup`
+              - `operation denied`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usr_id:
+                    type: string
+                    example: "<various error messages>"
+        404:
+          description: resource not exists
+      security:
+        - encodedJWThdr: []
+
+  /job:
+    get:
+      tags:
+        - transcoder
+      summary: progress update of a transcoding job
+      description: progress update of a transcoding job
+      parameters:
+        - name: id
+          in: query
+          description: job ID returned by the endpoint `/file/transcode`
+          required: true
+          schema:
+            type: string
+            example: "rpc.media.transcode.1902f9714086b35"
+      responses:
+        200:
+          description: |
+            successful operation, the content depends on whether the backend RPC worker reported error when transcoding resource.
+            - for progress update, the field `percent_done` must be present
+            - for error report, the field `error` must be present and contain detail
+            - the field `timestamp` must be always present
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  percent_done:
+                    type: number
+                    example: 0.389
+                  error:
+                    type: object
+                    properties:
+                      transcoder:
+                        type: string
+                        example: "xxx"
+                  timestamp:
+                    type: integer
+                    format: uint64
+                    example: 1676296313
+        400:
+          description: invalid input
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: "contains non-printable charater"
+                  reason:
+                    type: string
+                    example: "job queue not ready"
+        404:
+          description: job not found
+      security:
+        - encodedJWThdr: []
+
+components:
+  schemas:
+    finalize-upload-req:
+      type: object
+      properties:
+        usr_id:
+          type: integer
+          format: uint32
+          example: 126
+          description: user ID extracted from authorization context
+        req_seq:
+          type: integer
+          format: uint32
+          example: 19283781
+        res_id:
+          type: string
+          example: "uy83kLmX"
+          description: ID of the resource
+    file-acl-user-edit:
+      type: object
+      properties:
+        usr_id:
+          type: integer
+          format: uint32
+          example: 975
+        access_control:
+          type: object
+          properties:
+            transcode:
+              type: boolean
+            edit_acl:
+              type: boolean
+    file-acl-user-read:
+      type: object
+      properties:
+        usr_id:
+          type: integer
+          format: uint32
+          example: 978
+        transcode:
+          type: boolean
+        edit_acl:
+          type: boolean
+    transcode-element-vid-ex:
+      type: object
+      properties:
+        type:
+          type: string
+          example: "video"
+        codec:
+          description: current valid options are `libx264`, `libx265`
+          type: string
+          example: "libx264"
+        attribute:
+          type: object
+          properties:
+            height_pixel:
+              type: integer
+              format: uint16
+              example: 720
+            width_pixel:
+              type: integer
+              format: uint16
+              example: 1080
+            framerate:
+              type: integer
+              format: uint8
+              example: 17
+    transcode-element-au-ex:
+      type: object
+      properties:
+        type:
+          type: string
+          example: "audio"
+        codec:
+          description: current valid option is `aac`
+          type: string
+          example: "aac"
+        attribute:
+          type: object
+          properties:
+            bitrate_kbps:
+              type: integer
+              format: uint16
+              example: 55
+    transcode-output-res-video:
+      type: object
+      properties:
+        container:
+          description: current valid option is `hls`
+          type: string
+          example: "hls"
+        elementary_streams:
+          description: List of labels which match the keys in `elementary_streams` field. Currently it has to be exact one video stream and one audio stream bound to an output container.
+          type: array
+          items:
+            oneOf:
+            - type: string
+              example: "audio-stream-0"
+            - type: string
+              example: "video-stream-1"
+    transcode-output-res-image:
+      type: object
+      properties:
+        mask:
+          description: layer masking over the original image
+          type: object
+          properties:
+            pattern:
+              description: alias to a pattern file, currently users have to manually add new pattern files to the path `media/data/dev/image/mask` then edit `index.json` under the path
+              type: string
+              example: "custom123"
+        crop:
+          type: object
+          properties:
+            x:
+              type: integer
+              format: uint16
+              example: 24
+            y:
+              type: integer
+              format: uint16
+              example: 68
+            width:
+              type: integer
+              format: uint16
+              example: 135
+            height:
+              type: integer
+              format: uint16
+              example: 79
+        scale:
+          type: object
+          properties:
+            width:
+              type: integer
+              format: uint16
+              example: 134
+            height:
+              type: integer
+              format: uint16
+              example: 77
+      description: note that `width` / `height` in `scale` field have to be smaller than `width` / `height` in `crop` field 
+      
+  parameters:
+    resource-id:
+      name: res_id
+      in: query
+      description: ID of the resource
+      required: true
+      schema:
+        type: string
+        example: "swsxWaku"
+  securitySchemes:
+    encodedJWThdr:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      

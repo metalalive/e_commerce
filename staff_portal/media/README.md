@@ -95,3 +95,5 @@ Note this command performs only schema migration
 | integration test | app server | `make  itest_app_server` |
 | integration test | RPC consumer | `make  itest_rpc_worker` |
 
+### Reference
+- [API documentation (OpenAPI v3.0 specification)](./apidoc.yaml)
