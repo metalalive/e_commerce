@@ -1,0 +1,984 @@
+openapi: 3.0.3
+info:
+  title: MyApp Order Processing Service
+  description: |-
+    This is API documentation of my order processing server based on the OpenAPI 3.0 specification.
+    termsOfService: http://swagger.io/terms/
+  contact:
+    email: xyz@my-orderproc-app.io
+  license:
+    name: License Not Yet (TODO)
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+
+servers:
+  - url: https://doc.site.not.ready/api/v1
+tags:
+  - name: order
+    description: process a new order and monitor the progress
+    externalDocs:
+      description: Detail
+      url: https://doc.site.not.ready/api/order
+  - name: return
+    description: return ordered items
+    externalDocs:
+      description: Detail
+      url: https://doc.site.not.ready/api/return
+
+paths:
+  /policy/products:
+    post:
+      summary: Edit policies for products
+      description: Create / update policies for existing products during life cycle of an active order
+      tags:
+        - order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_id:
+                    type: integer
+                    format: uint64
+                    example: 10093183
+                  async_stock_chk:
+                    type: boolean
+                    example: true
+                  auto_cancel_secs:
+                    type: integer
+                    format: uint32
+                    example: 560
+                  warranty_hours:
+                    type: integer
+                    format: uint32
+                    example: 24000
+                required:
+                  - product_id
+                  - async_stock_chk
+                  - auto_cancel_secs
+                  - warranty_hours
+              minItems: 1
+      responses:
+        '200':
+          description: Policies saved successfully
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    product_id:
+                      type: integer
+                      format: uint32
+                      example: 10093183
+                    err_detail:
+                      type: string
+                      enum:
+                        - cancel-time-limit-exceeded
+                        - warranty-time-limit-exceeded
+                        - product-not-exist
+                  required:
+                    - product_id
+                    - err_detail
+        '503':
+          description: Service currently unavailable
+      security:
+        - BearerAuth: []
+        
+  /order:
+    post:
+      tags:
+        - order
+      summary: Place a new order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequestCreate'
+      responses:
+        '201':
+          description: Order generated, with all chosen items reserved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderSuccessResponse'
+        '202':
+          description: Order generated, some chosen items require asynchronous inventory level check
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAsyncResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderErrorResponse'
+        '429':
+          description: Too many requests
+        '503':
+          description: Service unavailable
+      security:
+        - BearerAuth: []
+  
+  /order/{order-id}:
+    get:
+      summary: Get detail of an order
+      description: Get some properties of an existing order.
+      tags:
+        - order
+      parameters:
+        - name: order-id
+          in: path
+          description: Identifier for the order
+          required: true
+          schema:
+            type: string
+        - name: shipping
+          in: query
+          description: 'load shipping detail'
+          schema:
+            type: boolean
+        - name: billing
+          in: query
+          description: 'load billing detail'
+          schema:
+            type: boolean
+        - name: lines
+          in: query
+          description: load order lines grouped by different states (pending, reserved, paid, shipping ...etc).
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: the resulting data from successful read operation will vary based on specific query parameters you specified in the URL path
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderInfoRead'
+        '404':
+          description: Order not found
+        '503':
+          description: Service unavailable
+      security:
+        - BearerAuth: []
+    patch:
+      summary: Update detail of an order
+      description: Update properties of an existing order, except chosen product items
+      tags:
+        - order
+      parameters:
+        - name: order-id
+          in: path
+          description: Identifier for the order
+          required: true
+          schema:
+            type: string
+        - name: shipping
+          in: query
+          description: 'enable update on shipping'
+          schema:
+            type: boolean
+        - name: billing
+          in: query
+          description: 'enable update on billing'
+          schema:
+            type: boolean
+      requestBody:
+        required: true
+        description: the properties to edit should correspond to specific query parameters you specified in the URL path
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequestEdit'
+      responses:
+        '200':
+          description: Successful update
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderEditErrorResponse'
+        '503':
+          description: Service unavailable
+      security:
+        - BearerAuth: []
+  
+  /order/{order-id}/payments:
+    post:
+      summary: Confirm payments of an order
+      description: Confirm payments for ordered items
+      tags:
+        - order
+      parameters:
+        - name: order-id
+          in: path
+          description: Identifier for the order
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentConfirmRequest'
+      responses:
+        '201':
+          description: Payments successfully confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentConfirmedObject'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentConfirmInvalidResponse'
+        '503':
+          description: Service unavailable
+      security:
+        - BearerAuth: []
+    
+  /order/{order-id}/payment/{payment-id}:
+    get:
+      summary: Retreive order payment
+      description: Retrieve payment within an order
+      tags:
+        - order
+      parameters:
+        - name: order-id
+          in: path
+          description: Identifier for the order
+          required: true
+          schema:
+            type: string
+        - name: payment-id
+          in: path
+          description: Identifier for the payment
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment successfully loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentConfirmedObject'
+        '404':
+          description: store not exists within the order
+        '503':
+          description: Service unavailable
+      security:
+        - BearerAuth: []
+          
+  /order/{order-id}/shipment:
+    post:
+      summary: Create a shipment
+      description: Create a new shipment associated with an order
+      tags:
+        - order
+      parameters:
+        - name: order-id
+          in: path
+          description: Identifier for the order
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Shipment successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentObject'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentInvalidResponse'
+        '503':
+          description: Service unavailable
+      security:
+        - BearerAuth: []
+    
+  /order/{order-id}/shipment/{shipment-id}:
+    get:
+      summary: Retrieve a shipment
+      description: Retrieve an existing shipment associated with an order
+      tags:
+        - order
+      parameters:
+        - name: order-id
+          in: path
+          description: Identifier for the order
+          required: true
+          schema:
+            type: string
+        - name: shipment-id
+          in: path
+          description: Identifier for the shipment
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Shipment retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentObject'
+        '503':
+          description: Service unavailable
+      security:
+        - BearerAuth: []
+
+components:
+  schemas:
+    OrderRequestCreate:
+      type: object
+      properties:
+        order_lines:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/OrderLineObject'
+            - $ref: '#/components/schemas/OrderLineObject'
+            - $ref: '#/components/schemas/OrderLineObject'
+        shipping:
+          $ref: '#/components/schemas/ShippingValid'
+        billing:
+          $ref: '#/components/schemas/BillingValid'
+      required:
+        - order_lines
+        - shipping
+        - billing
+    
+    OrderInfoRead:
+      type: object
+      properties:
+        reserved_lines:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/PayOrderLineObject'
+        async_stock_chk:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/OrderLineObject'
+            - $ref: '#/components/schemas/OrderLineObject'
+        paid_lines:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/PayOrderLineObject'
+            - $ref: '#/components/schemas/PayOrderLineObject'
+        shipping_lines:
+          type: array
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/OrderLineObject'
+        completed_lines:
+          type: array
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/OrderLineObject'
+          minItems: 0
+        shipping:
+          anyOf:
+          - $ref: '#/components/schemas/ShippingValid'
+          properties:
+            shipments:
+              type: array
+              items:
+                type: string
+              description: list of shipment IDs associated with the order
+              example: ['8x9e8r2tE', 'JiHuIIiKKUkm']
+        billing:
+          anyOf:
+          - $ref: '#/components/schemas/BillingValid'
+          properties:
+            payments:
+              type: array
+              items:
+                type: string
+              description: list of payment IDs associated with the order
+              example: ['9j8cj2r', '01k3kl1iK']
+    
+    OrderRequestEdit:
+      type: object
+      properties:
+        shipping:
+          $ref: '#/components/schemas/ShippingValid'
+        billing:
+          $ref: '#/components/schemas/BillingValid'
+
+    BaseOrderLineObject:
+      type: object
+      properties:
+        product_id:
+          type: integer
+          format: uint32
+          example: 270118
+        quantity:
+          type: integer
+          format: uint32
+          example: 5
+
+    PayAmountObject:
+      type: object
+      properties:
+        unit:
+          type: integer
+          format: uint32
+          example: 9
+        total:
+          type: integer
+          format: uint32
+          description: in case the seller provides discount or couple in the future.
+          example: 44
+
+    PayOrderLineObject:
+      anyOf:
+        - $ref: '#/components/schemas/BaseOrderLineObject'
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+          example: 986543
+        amount:
+          $ref: '#/components/schemas/PayAmountObject'
+      required:
+        - seller_id
+        - product_id
+        - quantity
+        - amount
+  
+    OrderLineWithoutSellerObject:
+      anyOf:
+        - $ref: '#/components/schemas/BaseOrderLineObject'
+      properties:
+        amount:
+          $ref: '#/components/schemas/PayAmountObject'
+      required:
+        - product_id
+        - quantity
+        - amount
+
+    OrderLineObject:
+      anyOf:
+        - $ref: '#/components/schemas/BaseOrderLineObject'
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+          example: 18830
+      required:
+        - seller_id
+        - product_id
+        - quantity
+        
+    OrderLineCreateError:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+          example: 18830
+        product_id:
+          type: integer
+          format: uint32
+          example: 270118
+        err_detail:
+          type: string
+          enum: [not-exist, out-of-stock, not-enough-to-claim]
+          example: out-of-stock
+    
+    BillingValid:
+      type: object
+      properties:
+        address:
+          $ref: '#/components/schemas/AddressValid'
+        contact:
+          $ref: '#/components/schemas/ContactValid'
+      required:
+        - contact
+    BillingErrDetail:
+      type: object
+      properties:
+        address:
+          $ref: '#/components/schemas/AddressErrDetail'
+        contact:
+          $ref: '#/components/schemas/ContactErrDetail'
+        non-field:
+          type: string
+          enum: [contact-required]
+    
+    ShippingValid:
+      type: object
+      properties:
+        address:
+          $ref: '#/components/schemas/AddressValid'
+        contact:
+          $ref: '#/components/schemas/ContactValid'
+        option:
+          $ref: '#/components/schemas/ShippingOptionValid'
+      required:
+        - contact
+        - option
+    ShippingErrDetail:
+      type: object
+      properties:
+        address:
+          $ref: '#/components/schemas/AddressErrDetail'
+        contact:
+          $ref: '#/components/schemas/ContactErrDetail'
+        option:
+          $ref: '#/components/schemas/ShippingOptionErrDetail'
+        non-field:
+          type: string
+          enum: [contact-required, option-required]
+    
+    AddressValid:
+      type: object
+      properties:
+        country:
+          type: string
+          enum: [TW, IN, TH, ID, US]
+        region:
+          type: string
+          example: Main island
+        city:
+          type: string
+          example: New Taipei City
+        distinct:
+          type: string
+          example: xyz678
+        street_name:
+          type: string
+          example: QWETY st.
+        detail:
+          type: string
+          example: 1-24-4 zabc building 2351
+      required:
+        - country
+        - region
+        - city
+        - distinct
+        - detail
+    AddressErrDetail:
+      type: object
+      properties:
+        country:
+          type: string
+          enum: [empty, invalid-char, not-exist, not-support]
+          example: not-support
+        region:
+          type: string
+          enum: [empty, invalid-char, not-exist, not-support]
+          example: not-exist
+        city:
+          type: string
+          enum: [empty, invalid-char, not-exist]
+          example: invalid-char
+        distinct:
+          type: string
+          enum: [empty, invalid-char]
+        street_name:
+          type: string
+          enum: [empty, invalid-char]
+        detail:
+          type: string
+          enum: [empty, invalid-char]
+    
+    ShippingMethodObject:
+      type: string
+      enum: [FedEx, UPS]
+    
+    ShippingOptionValid:
+      type: array
+      items:
+        type: object
+        properties:
+          seller_id:
+            type: integer
+            format: uint32
+          method:
+            $ref: '#/components/schemas/ShippingMethodObject'
+        required:
+          - method
+          - seller_id
+      example:
+        - method: UPS
+          seller_id: 27037
+        - method: FedEx
+          seller_id: 18830
+    
+    ShippingOptionErrDetail:
+      type: array
+      items:
+        type: object
+        properties:
+          seller_id:
+            type: string
+            enum: [empty, not-exist, not-support]
+            description: the error message `not-support` is present when user assigns an existing seller / store unrelated to the given order.
+          method:
+            type: string
+            enum: [empty, not-support]
+      example:
+        - method: not-support
+          seller_id: not-exist
+        - method: empty
+          seller_id: empty
+    
+    ContactValid:
+      type: object
+      properties:
+        first_name:
+          type: string
+          example: Jon
+        last_name:
+          type: string
+          example: Snow
+        emails:
+          type: array
+          items:
+            type: string
+          example: ['tobi@ninjacat.io', 'mindful@iowalab.idv', 'move@aheadof.light']
+          minItems: 1
+        phones:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/PhoneNumberValid'
+            - $ref: '#/components/schemas/PhoneNumberValid'
+          minItems: 1
+      required:
+        - first_name
+        - last_name
+        - emails
+        - phones
+    
+    ContactErrDetail:
+      type: object
+      properties:
+        first_name:
+          type: string
+          enum: [empty, invalid-char]
+        last_name:
+          type: string
+          enum: [empty, invalid-char]
+        emails:
+          type: array
+          description: error detail is located at corresponding index of the array element, `null` means the email has valid format.
+          items:
+            type: string
+            enum: [invalid-code, invalid-char]
+          example: [null, 'invalid-code', 'invalid-char']
+        phones:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumberErrDetail'
+        non-field:
+            type: string
+            enum: [email-missing, phone-missing]
+    
+    PhoneNumberValid:
+      type: object
+      properties:
+        nation:
+          type: integer
+          format: uint16
+          example: 886
+        number:
+          type: string
+          example: '09138411'
+      required:
+        - nation
+        - number
+    PhoneNumberErrDetail:
+      type: object
+      properties:
+        nation:
+          type: string
+          enum: [empty, invalid-code]
+        number:
+          type: string
+          enum: [invalid-char, empty]
+    
+    OrderSuccessResponse:
+      type: object
+      properties:
+        order_id:
+          type: string
+          example: GiJOe87
+        usr_id:
+          type: integer
+          format: uint32
+          example: 22761
+        time:
+          type: integer
+          format: uint64
+          example: 110827382
+        reserved_lines:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/PayOrderLineObject'
+            - $ref: '#/components/schemas/PayOrderLineObject'
+    
+    OrderAsyncResponse:
+      type: object
+      properties:
+        order_id:
+          type: string
+          example: DronEfLy
+        usr_id:
+          type: integer
+          format: uint32
+          example: 22761
+        time:
+          type: integer
+          format: uint64
+          example: 108273825
+        reserved_lines:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/PayOrderLineObject'
+        async_stock_chk:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/OrderLineObject'
+            - $ref: '#/components/schemas/OrderLineObject'
+    
+    OrderErrorResponse:
+      type: object
+      properties:
+        order_lines:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/OrderLineCreateError'
+            - $ref: '#/components/schemas/OrderLineCreateError'
+            - $ref: '#/components/schemas/OrderLineCreateError'
+        shipping:
+          $ref: '#/components/schemas/ShippingErrDetail'
+        billing:
+          $ref: '#/components/schemas/BillingErrDetail'
+    
+    OrderEditErrorResponse:
+      type: object
+      properties:
+        shipping:
+          $ref: '#/components/schemas/ShippingErrDetail'
+        billing:
+          $ref: '#/components/schemas/BillingErrDetail'
+        non-field:
+          type: string
+          enum: [billing-locked, shipping-locked, order-archived]
+        
+    PaymentConfirmRequest:
+      type: object
+      properties:
+        sellers:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+          description: ID of the sellers that have reserved the ordered items
+          example: [893012, 019902]
+        return_url:
+          type: string
+          description: This field specifies the URL for returning back to your frontend application if the payment service requests to  redirect to another web page hosted by the card-issuing bank.
+          example: 'https://path/to/your/site'
+        currency:
+          type: string
+          enum: [twd]
+          example: twd
+        method:
+          type: string
+          description: This field labels the user-defined configuration for describing the payment method in the internal payment service. Extra data for different payment methods should be placed in the options field.
+          example: 'my-pre-defined-card'
+        options:
+          type: object
+          properties:
+            cvc:
+              type: string
+              description: For credit-card payment method, the customer must provide the CVC (3-digit code at the back of the card) in this field.
+              example: '094'
+      required:
+        - sellers
+        - return_url
+        - currency
+        - method
+    
+    PaymentConfirmedSellerObject:
+      type: object
+      properties:
+        seller:
+          type: integer
+          example: 1703
+        amount:
+          type: object
+          description: amount to pay to the seller
+          properties:
+            confirmed:
+              type: integer
+              example: 93
+            received:
+              type: integer
+              description: amount received in the payment service
+            captured:
+              type: integer
+              description: amount captured by the merchant / seller
+          required:
+            - confirmed
+            - received
+        order_lines:
+          type: array
+          items:
+            anyOf:
+              - $ref: '#/components/schemas/OrderLineWithoutSellerObject'
+              - $ref: '#/components/schemas/OrderLineWithoutSellerObject'
+      required:
+        - seller
+        - amount
+        - order_lines
+        
+    PaymentConfirmedObject:
+      type: object
+      properties:
+        payment_id:
+          type: integer
+          format: string
+          example: G847toHiuytewr
+        currency:
+          type: string
+          enum: [twd]
+        time:
+          type: integer
+          format: uint64
+          description: the time created the payment
+          example: 119230408
+        sellers:
+          type: array
+          minItems: 1
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/PaymentConfirmedSellerObject'
+            - $ref: '#/components/schemas/PaymentConfirmedSellerObject'
+        redirect_to_url:
+          type: string
+          description: URL frontend app has to redirect to, e.g. card-issuing bank asks for 2 factor authentication
+          example: 'https://path.to.card.bank/site?return_url=0913ur2r2yrRugr'
+      required:
+        - payment_id
+        - currency
+        - time
+        - sellers
+    
+    PaymentConfirmInvalidResponse:
+      type: object
+      properties:
+        sellers:
+          type: array
+          items:
+            type: string
+            nullable: true
+            enum: [null, not-exist]
+          example: [null, not-exist]
+        return_url:
+          type: string
+          enum: [empty, invalid-char, invalid-format]
+          example: invalid-format
+        currency:
+          type: string
+          enum: [empty, invalid-char, not-support]
+          example: not-support
+        method:
+          type: string
+          enum: [empty, invalid-char, not-exist]
+          example: not-exist
+        options:
+          type: object
+          properties:
+            cvc:
+              type: string
+              enum: [empty, invalid-char]
+              example: invalid-char
+    
+    ShipmentPackageObject:
+      type: object
+      properties:
+        tracking_number:
+          type: integer
+          format: uint32
+          example: 54321
+        status:
+          type: string
+          enum: [in-transit, pending, out-for-delivery, delivered, returning, returned, cancelled, exception]
+        order_lines:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/OrderLineObject'
+            - $ref: '#/components/schemas/OrderLineObject'
+    
+    ShipmentObject:
+      type: object
+      description: this object represents a group of packages bound to a single shipment unit, each package is assigned with a single tracking number from shipping carrier. 
+      properties:
+        method:
+          $ref: '#/components/schemas/ShippingMethodObject'
+        shipment_id:
+          type: string
+          example: 'ola01aOlaoLa'
+        create_time:
+          type: integer
+          format: uint64
+          example: 110092042
+        estimated_delivery_date:
+          type: integer
+          format: uint64
+          example: 110582000
+          description: timestamp which represents a date arrival to customer, estimated by shipping carrier
+        documents:
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/ShipmentPackageObject'
+            - $ref: '#/components/schemas/ShipmentPackageObject'
+    
+    ShipmentInvalidResponse:
+      type: object
+      properties:
+        non-field:
+          type: string
+          enum: ['no-item-to-ship', 'seller-error']
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
