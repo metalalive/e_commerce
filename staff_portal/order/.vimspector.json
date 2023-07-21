@@ -9,15 +9,15 @@
         "MIMode": "gdb",
         "request": "launch",
         "program": "${workspaceRoot}/target/debug/web",
-	"logging": {
-	    "engineLogging": false
-	},
-	"args": [
-	    "${workspaceRoot}/..",
-	    "${workspaceRoot}",
-	    "common/data/secret.json",
-	    "settings/development.json"
-	]
+        "environment": [
+	        {"name":"SYS_BASE_PATH", "value":"${workspaceRoot}/.."} ,
+	        {"name":"SERVICE_BASE_PATH", "value":"${workspaceRoot}"} ,
+            {"name":"SECRET_FILE_PATH", "value":"common/data/secret.json"} ,
+            {"name":"CONFIG_FILE_PATH", "value":"settings/development.json"}
+        ],
+        "logging": {
+            "engineLogging": false
+        }
       },
       "default": false,
       "autoselect": false

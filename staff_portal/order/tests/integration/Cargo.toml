@@ -1,0 +1,21 @@
+[package]
+name = "order-integration-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = {version="1.0", features=["rc"]}
+serde_json = "1.0"
+tokio = {version="1.29", features=["rt", "macros"]}
+tower = "0.4.13"
+http = "0.2"
+http-body = "0.4"
+axum-core = "0.3.4"
+hyper = {version="0.14", features=["client", "runtime", "tcp", "http1"]}
+order = {path="../.."}
+
+[[test]]
+name = "web"
+path = "./web.rs" # the same folder as this cargo file
+test = true
+

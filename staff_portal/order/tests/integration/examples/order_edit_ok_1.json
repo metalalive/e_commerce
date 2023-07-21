@@ -1,0 +1,70 @@
+{
+  "shipping": {
+    "address": {
+      "country": "TW",
+      "region": "Main island",
+      "city": "New Taipei City",
+      "distinct": "xyz678",
+      "street_name": "QWETY st.",
+      "detail": "1-24-4 zabc building 2351"
+    },
+    "contact": {
+      "first_name": "Jon",
+      "last_name": "Snow",
+      "emails": [
+        "tobi@ninjacat.io",
+        "mindful@iowalab.idv",
+        "move@aheadof.light"
+      ],
+      "phones": [
+        {
+          "nation": 886,
+          "number": "09138411"
+        },
+        {
+          "nation": 886,
+          "number": "09138411"
+        }
+      ]
+    },
+    "option": [
+      {
+        "method": "UPS",
+        "seller_id": 27037
+      },
+      {
+        "method": "FedEx",
+        "seller_id": 18830
+      }
+    ]
+  },
+  "billing": {
+    "address": {
+      "country": "TW",
+      "region": "Main island",
+      "city": "New Taipei City",
+      "distinct": "xyz678",
+      "street_name": "QWETY st.",
+      "detail": "1-24-4 zabc building 2351"
+    },
+    "contact": {
+      "first_name": "Jon",
+      "last_name": "Snow",
+      "emails": [
+        "tobi@ninjacat.io",
+        "mindful@iowalab.idv",
+        "move@aheadof.light"
+      ],
+      "phones": [
+        {
+          "nation": 886,
+          "number": "09138411"
+        },
+        {
+          "nation": 886,
+          "number": "09138411"
+        }
+      ]
+    }
+  }
+}

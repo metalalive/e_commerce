@@ -1,0 +1,46 @@
+{
+    "pid_file" : {
+        "web_api"     :"tmp/proc/order_itest_app_server.pid",
+        "rpc_consumer":"tmp/proc/order_itest_rpc_consumer.pid"
+    },
+    "access_log": {
+        "path":"tmp/log/test/order_app_server.access.log",
+        "format":"%H %h %l %t \"%r\" %s %b"
+    },
+    "logging" : {
+        "handlers" : [
+            {"alias": "std-output-forall",
+             "min_level": "INFO",
+             "destination": "console"},
+            {"alias": "errlog-file-web-api",
+             "min_level": "DEBUG",
+             "path": "tmp/log/test/order_app_server.err",
+             "destination": "localfs"}
+        ],
+        "loggers" : [
+            {"alias": "order::api::web::order",
+             "handlers": ["errlog-file-web-api"],
+             "level": "INFO"},
+            {"alias": "order::api::web::product_policy",
+             "handlers": ["errlog-file-web-api"],
+             "level": "INFO"},
+            {"alias": "web",
+             "handlers": ["std-output-forall"] }
+        ]
+    },
+    "listen": {
+        "port": 8013,
+        "host":"localhost",
+        "max_failures": 5,
+        "api_version": "1.0.0",
+        "routes": [
+            {"path":"/policy/products", "handler":"modify_product_policy"},
+            {"path":"/order",  "handler":"create_new_order"},
+            {"path":"/order/:oid", "handler":"access_existing_order"}
+        ]
+    },
+    "max_connections": 50,
+    "limit_req_body_in_bytes": 10485760,
+    "num_workers": 1,
+    "stack_sz_kb": 128
+}

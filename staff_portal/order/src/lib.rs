@@ -4,6 +4,7 @@ pub mod api;
 pub mod error;
 pub mod logging;
 pub mod network;
+pub mod constant;
 
 mod config;
 pub use config::{
@@ -12,8 +13,6 @@ pub use config::{
     AppLoggerCfg, AppBasepathCfg
 };
 
-mod constant;
-pub(crate) use constant as AppConst;
 
 type WebApiPath = String;
 type WebApiHdlrLabel = & 'static str;

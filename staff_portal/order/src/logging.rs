@@ -16,7 +16,7 @@ use tracing_subscriber::fmt::{
 };
 
 use crate::{AppLogAlias, AppLoggingCfg, AppLogHandlerCfg, AppLoggerCfg, AppBasepathCfg};
-use crate::AppConst::logging::{Destination as DstOption, Level as AppLogLevelInner};
+use crate::constant::logging::{Destination as DstOption, Level as AppLogLevelInner};
 
 pub type AppLogLevel = AppLogLevelInner;
 type AppLogHandler = (WithMaxLevel<NonBlocking>, WorkerGuard);
@@ -88,7 +88,7 @@ fn _init_logger(cfg:&AppLoggerCfg, hdlrs:&HashMap<AppLogAlias, AppLogHandler>)
         let (io_writer, _) = hdlrs.get(alias).unwrap();
         TraceLayer::new()
             .with_writer(io_writer.clone())
-            .with_file(true)
+            .with_file(false) // to prevent full path exposed
             .with_line_number(true)
             .with_thread_ids(true)
             .with_level(true)

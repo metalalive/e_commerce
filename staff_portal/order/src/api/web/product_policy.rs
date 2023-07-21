@@ -7,23 +7,15 @@ use axum::http::{
     HeaderValue as HttpHeaderValue,
     header as HttpHeader
 };
-use serde::Deserialize;
 
 use crate::logging::AppLogLevel;
-use crate::{AppConst, AppSharedState, app_log_event};
-
-#[derive(Deserialize)]
-pub(crate) struct PolicyData {
-    product_id: u64,
-    auto_cancel_secs: u32,
-    warranty_hours: u32,
-    async_stock_chk: bool,
-}
+use crate::{constant as AppConst, AppSharedState, app_log_event};
+use crate::api::web::model::ProductPolicyData;
 
 #[debug_handler(state = AppSharedState)]
 pub(crate) async fn post_handler(
     appstate: ExtractState<AppSharedState>,
-    _body: ExtractJson<Vec<PolicyData>> ) -> impl IntoResponse
+    _body: ExtractJson<Vec<ProductPolicyData>> ) -> impl IntoResponse
 {
     let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
     let mut hdr_map = HttpHeaderMap::new();

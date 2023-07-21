@@ -1,10 +1,13 @@
+use std::collections::HashMap;
+use std::collections::hash_map::RandomState;
 use std::env;
 
 use tokio::runtime::Builder as RuntimeBuilder;
 
 use order::{AppConfig, AppSharedState};
+use order::constant::EXPECTED_ENV_VAR_LABELS;
 use order::logging::{AppLogContext, AppLogLevel, app_log_event};
-use order::network::{generate_webapi_route, generate_webapi_server};
+use order::network::{generate_web_service, start_web_service};
 use order::api::web::route_table as web_route_table;
 
 async fn start_server (shr_state:AppSharedState)
@@ -12,18 +15,20 @@ async fn start_server (shr_state:AppSharedState)
     let log_ctx_p = shr_state.log_context().clone();
     let cfg = shr_state.config().clone();
     let routes = web_route_table();
-    let (num_applied, router) = generate_webapi_route(
-           &cfg.api_server.listen, routes);
+    let listener = &cfg.api_server.listen;
+    let (num_applied, srv) = generate_web_service(
+            listener, routes, shr_state);
     if num_applied == 0 {
         app_log_event!(log_ctx_p, AppLogLevel::ERROR,
                 "no route created, web API server failed to start");
         return;
     }
-    match generate_webapi_server(&cfg.api_server, router, shr_state)
-    {
-        Ok(srv) => {
+    let result = start_web_service(
+        listener.host.clone(), listener.port, srv );
+    match result {
+        Ok(sr) => {
             app_log_event!(log_ctx_p, AppLogLevel::INFO, "API server starting");
-            let _ = srv.await;
+            let _ = sr.await;
             app_log_event!(log_ctx_p, AppLogLevel::INFO, "API server terminating");
         },
         Err(e) => {
@@ -60,10 +65,13 @@ fn start_async_runtime (cfg:AppConfig)
     };
 } // end of start_async_runtime
 
+
 fn main() {
-    let mut _args = env::args();
-    _args.next(); // omit path to the executable
-    match AppConfig::new(_args) {
+    let iter = env::vars().filter(
+        |(k,_v)| { EXPECTED_ENV_VAR_LABELS.contains(&k.as_str()) }
+    );
+    let arg_map: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
+    match AppConfig::new(arg_map) {
         Ok(cfg) => {
             start_async_runtime(cfg);
         },

@@ -1,6 +1,6 @@
 use std::fmt::{Display, Debug};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AppErrorCode {
     Unknown,
     MissingSysBasePath,
@@ -17,6 +17,7 @@ pub enum AppErrorCode {
     IOerror(std::io::ErrorKind),
 } // end of AppErrorCode
 
+#[derive(Debug, Clone)]
 pub struct AppError {
     pub code: AppErrorCode,
     pub detail: Option<String>

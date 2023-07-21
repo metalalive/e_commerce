@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use axum::routing::{patch, post, MethodRouter};
 
-use crate::{AppSharedState, AppConst, WebApiHdlrLabel};
+use crate::{AppSharedState, constant as AppConst, WebApiHdlrLabel};
 
 mod product_policy;
 mod order;
+pub mod model;
 
 pub type ApiRouteType = MethodRouter<AppSharedState>;
 pub type ApiRouteTableType = HashMap<WebApiHdlrLabel, ApiRouteType>;

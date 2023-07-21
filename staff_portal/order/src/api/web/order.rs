@@ -10,97 +10,14 @@ use axum::http::{
     HeaderValue as HttpHeaderValue,
     header as HttpHeader
 };
-use serde::{Deserialize, Serialize};
 use serde_json;
 
 use crate::logging::AppLogLevel;
-use crate::{AppConst, AppSharedState, app_log_event};
-
-
-#[derive(Deserialize)]
-enum CountryCode {TW,TH,IN,ID,US}
-
-#[derive(Deserialize)]
-enum ShippingMethod {UPS, FedEx, BlackCatExpress}
-
-#[derive(Deserialize, Serialize)]
-struct PayAmountModel {unit: u32, total: u32}
-
-#[derive(Deserialize, Serialize)]
-struct OrderLinePendingModel {
-    seller_id: u32,
-    product_id: u32,
-    quantity: u32
-}
-
-#[derive(Deserialize, Serialize)]
-struct OrderLinePayModel {
-    seller_id: u32,
-    product_id: u32,
-    quantity: u32,
-    amount: PayAmountModel
-}
-
-#[derive(Deserialize)]
-struct PhoneNumberModel {
-    nation: u16,
-    number: String,
-}
-
-#[derive(Deserialize)]
-struct ContactModel {
-    first_name: String,
-    last_name: String,
-    emails: Vec<String>,
-    phones: Vec<PhoneNumberModel>,
-}
-
-#[derive(Deserialize)]
-struct PhyAddrModel {
-    country: CountryCode,
-    region: String,
-    city: String,
-    distinct: String,
-    street_name: Option<String>,
-    detail: String
-}
-
-#[derive(Deserialize)]
-struct ShippingOptionModel {
-    seller_id: u32,
-    // #[serde(rename_all="_")]
-    method: ShippingMethod,
-}
-
-#[derive(Deserialize)]
-struct BillingModel {
-    contact: ContactModel,
-    address: Option<PhyAddrModel>,
-}
-
-#[derive(Deserialize)]
-struct ShippingModel {
-    contact: ContactModel,
-    address: Option<PhyAddrModel>,
-    option: Vec<ShippingOptionModel>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct OrderCreateReqData {
-    order_lines: Vec<OrderLinePendingModel>,
-    billing: BillingModel,
-    shipping: ShippingModel
-}
-
-#[derive(Serialize)]
-pub(crate) struct OrderCreateRespAsyncData {
-    order_id: String,
-    usr_id: u32,
-    time: u64,
-    reserved_lines: Vec<OrderLinePayModel>,
-    async_stock_chk: Vec<OrderLinePendingModel> 
-}
-
+use crate::{constant as AppConst, AppSharedState, app_log_event};
+use crate::api::web::model::{
+    OrderCreateReqData, OrderLinePayModel, PayAmountModel, OrderLinePendingModel,
+    OrderCreateRespAsyncData, OrderEditReqData,
+};
 
 
 // always to specify state type explicitly to the debug macro
@@ -139,12 +56,6 @@ pub(crate) async fn post_handler(
     (resp_status_code, hdr_map, serial_resp_body)
 } // end of post_handler
 
-
-#[derive(Deserialize)]
-pub(crate) struct OrderEditReqData {
-    billing: BillingModel,
-    shipping: ShippingModel
-}
 
 #[debug_handler(state=AppSharedState)]
 pub(crate) async fn patch_handler (

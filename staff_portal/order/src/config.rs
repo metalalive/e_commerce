@@ -1,13 +1,13 @@
-use std::iter::Iterator;
 use std::result::Result as DefaultResult;
 use std::fs::File;
 use std::io::BufReader;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+use std::collections::hash_map::RandomState;
 
 use serde::Deserialize;
 use serde_json;
 
-use crate::{WebApiPath, AppLogAlias, AppConst};
+use crate::{WebApiPath, AppLogAlias, constant as AppConst};
 use crate::error::{AppErrorCode, AppError};
 
 #[derive(Deserialize)]
@@ -81,19 +81,20 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn new(mut args: impl Iterator<Item=String>) -> DefaultResult<Self, AppError>
+    pub fn new(mut args: HashMap<String, String, RandomState>)
+        -> DefaultResult<Self, AppError>
     {
-        let sys_basepath = if let Some(s) = args.next() {
-            s + &"/" 
+        let sys_basepath = if let Some(s) = args.remove(AppConst::ENV_VAR_SYS_BASE_PATH) {
+            s + &"/"
         } else {
             return Err(AppError{ detail:None, code:AppErrorCode::MissingSysBasePath });
         };
-        let app_basepath = if let Some(a) = args.next() {
+        let app_basepath = if let Some(a) = args.remove(AppConst::ENV_VAR_SERVICE_BASE_PATH) {
             a + &"/" 
         } else {
             return Err(AppError{ detail:None, code:AppErrorCode::MissingAppBasePath });
         };
-        match args.next() {
+        match args.remove(AppConst::ENV_VAR_SECRET_FILE_PATH) {
             Some(_secret_path) => {
                 let _fullpath = sys_basepath.clone() + &_secret_path; 
             }, // TODO, parse necessary data
@@ -102,7 +103,7 @@ impl AppConfig {
                     code:AppErrorCode::MissingSecretPath });
             },
         }
-        let api_srv_cfg = if let Some(cfg_path) = args.next() {
+        let api_srv_cfg = if let Some(cfg_path) = args.remove(AppConst::ENV_VAR_CONFIG_FILE_PATH) {
             let fullpath = app_basepath.clone() + &cfg_path; 
             Self::parse_from_file(fullpath) ?
         } else {
