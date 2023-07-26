@@ -1,6 +1,6 @@
 use std::fmt::{Display, Debug};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AppErrorCode {
     Unknown,
     MissingSysBasePath,
@@ -9,6 +9,9 @@ pub enum AppErrorCode {
     MissingConfigPath,
     InvalidJsonFormat,
     InvalidVersion,
+    InvalidRouteConfig,
+    MissingAliasLogHdlerCfg,
+    MissingAliasLoggerCfg,
     NoRouteApiServerCfg,
     NoLogHandlerCfg,
     NoLoggerCfg,

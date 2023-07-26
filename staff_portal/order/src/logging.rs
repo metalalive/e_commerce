@@ -49,7 +49,11 @@ fn _gen_localfile_writer (basepath:&String, cfg:&AppLogHandlerCfg)
     -> (NonBlocking, WorkerGuard)
 {
     if let Some(rpath) = cfg.path.as_ref() {
-        let fullpath = basepath.clone() + &rpath;
+        let mut fullpath = basepath.clone();
+        if !basepath.ends_with("/") && !rpath.starts_with("/") {
+            fullpath = fullpath + "/";
+        }
+        fullpath = fullpath + &rpath;
         let p = Path::new(&fullpath);
         let (dir, fname_prefix) = (p.parent().unwrap(), p.file_name().unwrap()) ;
         let wr_dst = RollingFileAppender::new(Rotation::NEVER, dir, fname_prefix);

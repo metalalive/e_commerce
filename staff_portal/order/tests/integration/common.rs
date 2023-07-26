@@ -131,10 +131,11 @@ pub fn deserialize_json_template<T: for<'a> Deserialize<'a>>
     (basepath:&AppBasepathCfg, file_localpath:&str)
     -> DefaultResult<T, AppError>
 {
-    let fullpath = basepath.service.clone() + file_localpath;
+    let fullpath = basepath.service.clone() + "/" + file_localpath;
     let reader = match File::open(fullpath) {
         Ok(g) => g,
-        Err(e) => { return Err(AppError{ detail:None,
+        Err(e) => { return Err(AppError{
+            detail:Some(file_localpath.to_string()),
             code: AppErrorCode::IOerror(e.kind()) });
         }
     };

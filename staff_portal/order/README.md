@@ -28,6 +28,15 @@ SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
 I use the plug-in [vimspector](https://github.com/puremourning/vimspector) with NeoVim, please refer to configuration in `./order/.vimspector` as well as the article [NeoVim IDE setup from scratch](https://hackmd.io/@0V3cv8JJRnuK3jMwbJ-EeA/r1XR_hZL3)
 
 ## Test
+### Unit Test
+```shell
+cd ${SERVICE_BASE_PATH}
+
+SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
+    cargo test --test unittest -- --nocapture
+```
+Note `--nocapture` allows the program to print all messages to standard output console.
+
 ### Integration Test
 ```shell=?
 cd ${SERVICE_BASE_PATH}/test/acceptance

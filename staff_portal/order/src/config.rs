@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::collections::{HashSet, HashMap};
 use std::collections::hash_map::RandomState;
+use std::string::ToString;
 
 use serde::Deserialize;
 use serde_json;
@@ -47,6 +48,12 @@ struct AccessLogCfg {
 pub struct ApiServerRouteCfg {
     pub path: WebApiPath,
     pub handler: String
+}
+
+impl ToString for ApiServerRouteCfg {
+    fn to_string(&self) -> String {
+        format!("path:{}, handler:{}", self.path, self.handler)
+    }
 }
 
 #[derive(Deserialize)]
@@ -142,6 +149,9 @@ impl AppConfig {
         let mut iter = version.iter().filter(
             |i| { !i.parse::<u16>().is_ok() }
         );
+        let mut iter2 = obj.routes.iter().filter(
+            |i| { i.path.is_empty() || i.handler.is_empty() }
+        );
         if obj.routes.len() == 0 {
             Err(AppError{ detail:None, code:AppErrorCode::NoRouteApiServerCfg }) 
         } else if version.len() == 0 {
@@ -150,13 +160,16 @@ impl AppConfig {
         } else if let Some(_) = iter.next() {
             let err_msg = Some("version must be numeric".to_string());
             Err(AppError{ detail:err_msg, code:AppErrorCode::InvalidVersion }) 
+        } else if let Some(badroute) = iter2.next() {
+            let err_msg = Some(badroute.to_string());
+            Err(AppError{ detail:err_msg, code:AppErrorCode::InvalidRouteConfig }) 
         } else { Ok(()) }
-    }
+    } // end of _check_srv_listener
     
     fn _check_logging (obj:&AppLoggingCfg) -> DefaultResult<(), AppError>
     {
         let mut filtered = obj.loggers.iter().filter(
-            |item| {item.handlers.len() == 0}
+            |item| {item.handlers.is_empty()}
         );
         let mut filtered2 = obj.handlers.iter().filter(
             |item| {
@@ -166,6 +179,12 @@ impl AppConfig {
                 }
             }
         ); // for file-type handler, the field `path` has to be provided
+        let mut filtered3 = obj.handlers.iter().filter(
+            |item| {item.alias.is_empty()}
+        );
+        let mut filtered4 = obj.loggers.iter().filter(
+            |item| {item.alias.is_empty()}
+        );
         if obj.handlers.len() == 0 {
             Err(AppError{ detail:None, code:AppErrorCode::NoLogHandlerCfg }) 
         } else if obj.loggers.len() == 0 {
@@ -173,6 +192,10 @@ impl AppConfig {
         } else if let Some(alogger) = filtered.next() {
             let msg = format!("the logger does not have handler: {}", alogger.alias);
             Err(AppError{ detail: Some(msg), code:AppErrorCode::NoHandlerInLoggerCfg }) 
+        } else if let Some(_hdlr) = filtered3.next() {
+            Err(AppError{ detail: None, code:AppErrorCode::MissingAliasLogHdlerCfg }) 
+        } else if let Some(_logger) = filtered4.next() {
+            Err(AppError{ detail: None, code:AppErrorCode::MissingAliasLoggerCfg }) 
         } else if let Some(alogger) = filtered2.next() {
             let msg = format!("file-type handler does not contain path: {}", alogger.alias);
             Err(AppError{ detail: Some(msg), code:AppErrorCode::InvalidHandlerLoggerCfg }) 

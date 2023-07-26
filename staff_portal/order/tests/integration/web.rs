@@ -9,9 +9,9 @@ use order::api::web::model::{OrderCreateReqData, OrderCreateRespAsyncData, Order
 mod common;
 use common::{test_setup_shr_state, TestWebServer, deserialize_json_template};
 
-const FPATH_NEW_ORDER_OK_1:&'static str  = "/tests/acceptance/examples/order_new_ok_1.json";
-const FPATH_EDIT_ORDER_OK_1:&'static str = "/tests/acceptance/examples/order_edit_ok_1.json";
-const FPATH_EDIT_PRODUCTPOLICY_OK_1:&'static str = "/tests/acceptance/examples/policy_product_edit_ok_1.json";
+const FPATH_NEW_ORDER_OK_1:&'static str  = "/tests/integration/examples/order_new_ok_1.json";
+const FPATH_EDIT_ORDER_OK_1:&'static str = "/tests/integration/examples/order_edit_ok_1.json";
+const FPATH_EDIT_PRODUCTPOLICY_OK_1:&'static str = "/tests/integration/examples/policy_product_edit_ok_1.json";
 
 
 #[tokio::test]
