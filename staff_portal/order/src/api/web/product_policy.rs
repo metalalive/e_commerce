@@ -8,21 +8,57 @@ use axum::http::{
     header as HttpHeader
 };
 
+use crate::error::AppErrorCode;
 use crate::logging::AppLogLevel;
 use crate::{constant as AppConst, AppSharedState, app_log_event};
-use crate::api::web::model::ProductPolicyData;
+use crate::api::web::dto::ProductPolicyDto;
+use crate::usecase::{EditProductPolicyUseCase, EditProductPolicyResult};
 
-#[debug_handler(state = AppSharedState)]
-pub(crate) async fn post_handler(
-    appstate: ExtractState<AppSharedState>,
-    _body: ExtractJson<Vec<ProductPolicyData>> ) -> impl IntoResponse
+fn presenter (ucout:EditProductPolicyUseCase) -> impl IntoResponse
 {
     let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
     let mut hdr_map = HttpHeaderMap::new();
     hdr_map.insert(HttpHeader::CONTENT_TYPE, resp_ctype_val);
-    let serial_resp_body = "[]";
-    let log_ctx = appstate.log_context();
+    let default_body = "{}".to_string();
+    if let EditProductPolicyUseCase::OUTPUT { result, detail } = ucout
+    {
+        let serial_resp_body = detail.unwrap_or(default_body);
+        let status = match result {
+            EditProductPolicyResult::OK => HttpStatusCode::OK,
+            EditProductPolicyResult::ProductNotExists => HttpStatusCode::BAD_REQUEST,
+            EditProductPolicyResult::Other(ec) =>
+                match ec {
+                    AppErrorCode::InvalidInput => HttpStatusCode::BAD_REQUEST,
+                    AppErrorCode::RpcRemoteUnavail => HttpStatusCode::SERVICE_UNAVAILABLE,
+                    AppErrorCode::RpcRemoteInvalidReply => HttpStatusCode::NOT_IMPLEMENTED,
+                    _others => HttpStatusCode::INTERNAL_SERVER_ERROR,
+                }
+        };
+        (status, hdr_map, serial_resp_body)
+    } else {
+        (HttpStatusCode::INTERNAL_SERVER_ERROR, hdr_map, default_body)
+    }
+}
+
+#[debug_handler(state = AppSharedState)]
+pub(crate) async fn post_handler(
+    // wrap the variables with the macros, to extract the content automatically
+    ExtractState(appstate): ExtractState<AppSharedState>,
+    ExtractJson(req_body): ExtractJson<Vec<ProductPolicyDto>> ) -> impl IntoResponse
+{
+    let log_ctx = appstate.log_context().clone();
+    // TODO, extract user profile ID from authenticated JWT
+    let input = EditProductPolicyUseCase::INPUT {
+        data: req_body, app_state: appstate, profile_id : 1234u32
+    };
+    let output = input.execute().await ;
+    
+    // let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
+    // let mut hdr_map = HttpHeaderMap::new();
+    // hdr_map.insert(HttpHeader::CONTENT_TYPE, resp_ctype_val);
+    // let serial_resp_body = "[]";
     app_log_event!(log_ctx, AppLogLevel::INFO,
             "product policy updated, {} ", 3.18);
-    (HttpStatusCode::OK, hdr_map, serial_resp_body)
+    // (HttpStatusCode::OK, hdr_map, serial_resp_body)
+    presenter(output)
 } // end of endpoint

@@ -4,7 +4,7 @@ use hyper::Body as HyperBody;
 use http::{Request, StatusCode};
 
 use order::error::AppError;
-use order::api::web::model::{OrderCreateReqData, OrderCreateRespAsyncData, OrderEditReqData, ProductPolicyData};
+use order::api::web::dto::{OrderCreateReqData, OrderCreateRespAsyncData, OrderEditReqData, ProductPolicyDto};
 
 mod common;
 use common::{test_setup_shr_state, TestWebServer, deserialize_json_template};
@@ -60,7 +60,7 @@ async fn edit_order_contact_ok() -> DefaultResult<(), AppError>
         let rb = serde_json::to_string(&rb).unwrap();
         HyperBody::from(rb)
     };
-    let uri = format!("/{ver}/order/{oid}", oid = "8dj30Hr",
+    let uri = format!("/{ver}/order/{oid}", oid = "r8dj30H",
                       ver = top_lvl_cfg.api_server.listen.api_version);
     let req = Request::builder().uri(uri).method("PATCH")
         .header("content-type", "application/json")
@@ -79,7 +79,7 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
     let reqbody = {
-        let mut rb = deserialize_json_template::<Vec<ProductPolicyData>>
+        let mut rb = deserialize_json_template::<Vec<ProductPolicyDto>>
             (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_OK_1) ? ;
         assert!(rb.len() > 0);
         let item = rb.get_mut(0).unwrap();

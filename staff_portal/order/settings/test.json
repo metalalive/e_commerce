@@ -24,6 +24,9 @@
             {"alias": "order::api::web::product_policy",
              "handlers": ["errlog-file-web-api"],
              "level": "INFO"},
+            {"alias": "order::usecase::edit_product_policy",
+             "handlers": ["errlog-file-web-api", "std-output-forall"],
+             "level": "WARNING"},
             {"alias": "web",
              "handlers": ["std-output-forall"] }
         ]
@@ -42,5 +45,8 @@
     "max_connections": 50,
     "limit_req_body_in_bytes": 10485760,
     "num_workers": 1,
-    "stack_sz_kb": 128
+    "stack_sz_kb": 128,
+    "rpc": {
+	 "handler_type": "dummy"
+    }
 }

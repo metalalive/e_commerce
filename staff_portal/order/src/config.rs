@@ -65,6 +65,15 @@ pub struct ApiServerListenCfg {
     pub routes: Vec<ApiServerRouteCfg>,
 }
 
+#[allow(non_camel_case_types)]
+#[derive(Deserialize, Clone, PartialEq)]
+pub enum AppRpcTypeCfg {dummy, AMQP}
+
+#[derive(Deserialize)]
+pub struct AppRpcCfg {
+    pub handler_type: AppRpcTypeCfg
+}
+
 #[derive(Deserialize)]
 pub struct ApiServerCfg {
     pid_file: PIDfileCfg,
@@ -75,6 +84,7 @@ pub struct ApiServerCfg {
     limit_req_body_in_bytes: u32,
     pub num_workers: u8,
     pub stack_sz_kb: u16,
+    pub rpc: AppRpcCfg
 }
 
 pub struct AppBasepathCfg {

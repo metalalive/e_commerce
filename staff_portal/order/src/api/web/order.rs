@@ -14,8 +14,8 @@ use serde_json;
 
 use crate::logging::AppLogLevel;
 use crate::{constant as AppConst, AppSharedState, app_log_event};
-use crate::api::web::model::{
-    OrderCreateReqData, OrderLinePayModel, PayAmountModel, OrderLinePendingModel,
+use crate::api::web::dto::{
+    OrderCreateReqData, OrderLinePayDto, PayAmountDto, OrderLinePendingDto,
     OrderCreateRespAsyncData, OrderEditReqData,
 };
 
@@ -30,11 +30,11 @@ pub(crate) async fn post_handler(
     let mut hdr_map = HttpHeaderMap::new();
     hdr_map.insert(HttpHeader::CONTENT_TYPE, resp_ctype_val);
     let mut resp_status_code = HttpStatusCode::ACCEPTED;
-    let reserved_item = OrderLinePayModel{
+    let reserved_item = OrderLinePayDto{
         seller_id: 389u32, product_id: 1018u32, quantity: 9u32,
-        amount: PayAmountModel{unit:4u32, total:35u32}
+        amount: PayAmountDto{unit:4u32, total:35u32}
     };
-    let async_chk_item = OrderLinePendingModel{
+    let async_chk_item = OrderLinePendingDto{
         seller_id: 3827u32, product_id: 2088u32, quantity: 13u32,
     };
     let resp_body = OrderCreateRespAsyncData {

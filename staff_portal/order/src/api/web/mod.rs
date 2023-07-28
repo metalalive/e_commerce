@@ -5,7 +5,7 @@ use crate::{AppSharedState, constant as AppConst, WebApiHdlrLabel};
 
 mod product_policy;
 mod order;
-pub mod model;
+pub mod dto;
 
 pub type ApiRouteType = MethodRouter<AppSharedState>;
 pub type ApiRouteTableType = HashMap<WebApiHdlrLabel, ApiRouteType>;

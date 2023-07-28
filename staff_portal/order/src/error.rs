@@ -17,6 +17,12 @@ pub enum AppErrorCode {
     NoLoggerCfg,
     NoHandlerInLoggerCfg,
     InvalidHandlerLoggerCfg,
+    EmptyInputData,
+    InvalidInput,
+    RpcRemoteUnavail,
+    RpcPublishFailure,
+    RpcConsumeFailure,
+    RpcRemoteInvalidReply,
     IOerror(std::io::ErrorKind),
 } // end of AppErrorCode
 
