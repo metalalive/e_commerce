@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use order::AppConfig;
 use order::constant::{ENV_VAR_CONFIG_FILE_PATH, ENV_VAR_SECRET_FILE_PATH, ENV_VAR_SYS_BASE_PATH, ENV_VAR_SERVICE_BASE_PATH};
-use order::error::AppErrorCode;
+use order::error::{AppErrorCode, AppError};
 
 use crate::EXAMPLE_REL_PATH;
 
@@ -81,6 +81,7 @@ fn parse_ext_cfg_file_ok ()
 
 
 fn _parse_ext_cfg_file_error_common (cfg_filepath:&str, expect_err:AppErrorCode)
+    -> AppError
 {
     let service_basepath = std::env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap() ;
     let fullpath = service_basepath + EXAMPLE_REL_PATH + cfg_filepath;
@@ -88,6 +89,7 @@ fn _parse_ext_cfg_file_error_common (cfg_filepath:&str, expect_err:AppErrorCode)
     assert_eq!(result.is_err() , true);
     let err = result.err().unwrap();
     assert_eq!(err.code , expect_err);
+    err
 }
 
 #[test]
@@ -96,6 +98,10 @@ fn parse_ext_cfg_file_missing_fields ()
     _parse_ext_cfg_file_error_common (
         "config_missing_logging.json",
         AppErrorCode::InvalidJsonFormat );
+    let _ = _parse_ext_cfg_file_error_common (
+        "config_empty_host.json",
+         AppErrorCode::InvalidJsonFormat);
+    // println!("error detail: {}", x.detail.unwrap());
 }
 
 #[test]
@@ -133,5 +139,16 @@ fn parse_ext_cfg_file_log_invalid_fields ()
     _parse_ext_cfg_file_error_common (
         "config_logger_with_nonexist_handler.json",
          AppErrorCode::InvalidHandlerLoggerCfg);
+}
+
+#[test]
+fn parse_ext_cfg_file_dstore_exceed_limit ()
+{
+    _parse_ext_cfg_file_error_common (
+        "config_dstore_inmem_exceed_max_items.json",
+         AppErrorCode::ExceedingMaxLimit);
+    _parse_ext_cfg_file_error_common (
+        "config_dstore_sqldb_exceed_max_conns.json",
+         AppErrorCode::ExceedingMaxLimit);
 }
 

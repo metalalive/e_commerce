@@ -50,6 +50,20 @@
     "limit_req_body_in_bytes": 10485760,
     "num_workers": 1,
     "stack_sz_kb": 128,
+    "data_store": [
+	{
+	    "_type": "DbServer",
+	    "alias": "store-persistent-db",
+	    "srv_type": "MariaDB",
+	    "max_conns": 11,
+	    "idle_timeout_secs": 80
+	},
+	{
+	    "_type": "InMemory",
+	    "alias": "store-volatile-mem",
+	    "max_items": 561
+	}
+    ],
     "rpc": {
 	 "handler_type": "dummy"
     }

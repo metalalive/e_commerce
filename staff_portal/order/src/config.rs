@@ -6,6 +6,7 @@ use std::collections::hash_map::RandomState;
 use std::string::ToString;
 
 use serde::Deserialize;
+use serde::de::{Error as DeserializeError, Expected};
 use serde_json;
 
 use crate::{WebApiPath, AppLogAlias, constant as AppConst};
@@ -47,6 +48,7 @@ struct AccessLogCfg {
 #[derive(Deserialize)]
 pub struct ApiServerRouteCfg {
     pub path: WebApiPath,
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub handler: String
 }
 
@@ -58,7 +60,9 @@ impl ToString for ApiServerRouteCfg {
 
 #[derive(Deserialize)]
 pub struct ApiServerListenCfg {
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub api_version: String,
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub host: String,
     pub port: u16,
     max_failures: u8,
@@ -74,6 +78,37 @@ pub struct AppRpcCfg {
     pub handler_type: AppRpcTypeCfg
 }
 
+
+#[allow(non_camel_case_types)]
+#[derive(Deserialize, Debug, Clone)]
+pub enum AppDbServerType {
+    MariaDB, PostgreSQL
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AppInMemoryDbCfg {
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+    pub alias: String,
+    pub max_items: u32,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AppDbServerCfg {
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+    pub alias: String,
+    pub srv_type:AppDbServerType,
+    pub max_conns: u32,
+    pub idle_timeout_secs: u16,
+} // TODO, complete implementation
+
+#[allow(non_camel_case_types)]
+#[derive(Deserialize)]
+#[serde(tag = "_type")]
+pub enum AppDataStoreCfg {
+    InMemory(AppInMemoryDbCfg),
+    DbServer(AppDbServerCfg),
+}
+
 #[derive(Deserialize)]
 pub struct ApiServerCfg {
     pid_file: PIDfileCfg,
@@ -84,6 +119,7 @@ pub struct ApiServerCfg {
     limit_req_body_in_bytes: u32,
     pub num_workers: u8,
     pub stack_sz_kb: u16,
+    pub data_store: Vec<AppDataStoreCfg>,
     pub rpc: AppRpcCfg
 }
 
@@ -142,6 +178,7 @@ impl AppConfig {
                     Ok(jsnobj) => {
                         Self::_check_srv_listener(&jsnobj.listen) ? ;
                         Self::_check_logging(&jsnobj.logging) ? ;
+                        Self::_check_datastore (&jsnobj.data_store) ? ;
                         Ok(jsnobj)
                     },
                     Err(e) => Err(AppError{ detail:Some(e.to_string()),
@@ -164,9 +201,6 @@ impl AppConfig {
         );
         if obj.routes.len() == 0 {
             Err(AppError{ detail:None, code:AppErrorCode::NoRouteApiServerCfg }) 
-        } else if version.len() == 0 {
-            let err_msg = Some("empty string".to_string());
-            Err(AppError{ detail:err_msg, code:AppErrorCode::InvalidVersion }) 
         } else if let Some(_) = iter.next() {
             let err_msg = Some("version must be numeric".to_string());
             Err(AppError{ detail:err_msg, code:AppErrorCode::InvalidVersion }) 
@@ -228,5 +262,66 @@ impl AppConfig {
             }
         }
     } // end of _check_logging
+    
+    fn _check_datastore (obj:&Vec<AppDataStoreCfg>) -> DefaultResult<(), AppError>
+    {
+        if obj.is_empty() {
+            return Err(AppError{ detail: None, code:AppErrorCode::NoDatabaseCfg }) 
+        }
+        for item in obj {
+            match item {
+                AppDataStoreCfg::InMemory(c) => {
+                    let lmt = AppConst::limit::MAX_ITEMS_STORED_PER_MODEL;
+                    if c.max_items > lmt {
+                        let e = AppError{ detail:Some(format!("limit:{}", lmt)),
+                                code:AppErrorCode::ExceedingMaxLimit };
+                        return Err(e)
+                    }
+                },
+                AppDataStoreCfg::DbServer(c) => {
+                    let lmt_conn = AppConst::limit::MAX_DB_CONNECTIONS;
+                    let lmt_idle = AppConst::limit::MAX_SECONDS_DB_IDLE;
+                    if c.max_conns > lmt_conn {
+                        let e = AppError{ detail:Some(format!("limit-conn:{}", lmt_conn)),
+                                code:AppErrorCode::ExceedingMaxLimit };
+                        return Err(e)
+                    } else if c.idle_timeout_secs > lmt_idle {
+                        let e = AppError{ detail:Some(format!("limit-idle-time:{}", lmt_idle)),
+                                code:AppErrorCode::ExceedingMaxLimit };
+                        return Err(e)
+                    }
+                },
+            }
+        } // end of loop
+        Ok(())
+    } // end of _check_datastore
 } // end of impl AppConfig
+
+struct ExpectNonEmptyString {
+    min_len: u32
+}
+
+impl Expected for ExpectNonEmptyString
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let msg = format!("minimum string length >= {}", self.min_len);
+        formatter.write_str(msg.as_str())
+    }
+}
+
+fn jsn_deny_empty_string<'de, D>(raw:D) -> Result<String, D::Error>
+    where D: serde::Deserializer<'de>
+{
+    match String::deserialize(raw) {
+        Ok(s) => {
+            if s.is_empty() {
+                let unexp = s.len();
+                let exp = ExpectNonEmptyString{min_len:1};
+                let e = DeserializeError::invalid_length(unexp, &exp) ;
+                Err(e)
+            } else {Ok(s)}
+        },
+        Err(e) => Err(e),
+    }
+}
 

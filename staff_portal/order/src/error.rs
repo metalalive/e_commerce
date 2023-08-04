@@ -23,6 +23,8 @@ pub enum AppErrorCode {
     RpcPublishFailure,
     RpcConsumeFailure,
     RpcRemoteInvalidReply,
+    NoDatabaseCfg,
+    ExceedingMaxLimit,
     IOerror(std::io::ErrorKind),
 } // end of AppErrorCode
 

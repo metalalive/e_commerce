@@ -9,22 +9,20 @@
     },
     "logging" : {
         "handlers" : [
-            {"alias": "errlog-file-web-api",
-             "min_level": "DEBUG",
-             "path": "tmp/log/test/order_app_server.err",
-             "destination": "localfs"}
+            {"alias": "std-output-forall",
+             "min_level": "INFO",
+             "destination": "console"}
         ],
         "loggers" : [
-            {"alias": "order::api::web::order",
-             "handlers": ["errlog-file-web-api"],
-             "level": "INFO"}
+            {"alias": "web",
+             "handlers": ["std-output-forall"] }
         ]
     },
     "listen": {
         "port": 8013,
         "host":"localhost",
         "max_failures": 5,
-        "api_version": "1.0.a",
+        "api_version": "1.0.0",
         "routes": [
             {"path":"/order/:oid", "handler":"access_existing_order"}
         ]
@@ -35,9 +33,11 @@
     "stack_sz_kb": 128,
     "data_store": [
 	{
-	    "_type": "InMemory",
-	    "alias": "keep-123-mem",
-	    "max_items": 99
+	    "_type": "DbServer",
+	    "alias": "storage-big-table",
+	    "srv_type": "PostgreSQL",
+	    "max_conns": 10001,
+	    "idle_timeout_secs": 245
 	}
     ],
     "rpc": {

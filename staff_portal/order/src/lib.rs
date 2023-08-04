@@ -21,14 +21,23 @@ pub use rpc::{
     AppRpcReplyResult, AppRpcPublishProperty, AppRpcReplyProperty
 };
 
+mod adapter;
+use adapter::datastore::{self, AppSqlDbStore, AppInMemoryDStore};
+
 type WebApiPath = String;
 type WebApiHdlrLabel = & 'static str;
 type AppLogAlias = Arc<String>;
 
+pub struct AppDataStoreContext {
+    in_mem: Option<AppInMemoryDStore>,
+    sql_dbs: Option<Vec<AppSqlDbStore>>
+}
+
 pub struct AppSharedState {
     _cfg: Arc<AppConfig>,
     _log: Arc<logging::AppLogContext>,
-    _rpc: Arc<Box<dyn AbstractRpcContext>>
+    _rpc: Arc<Box<dyn AbstractRpcContext>>,
+    dstore: Arc<AppDataStoreContext> 
 }
 
 impl AppSharedState {
@@ -36,8 +45,10 @@ impl AppSharedState {
     {
         let _rpc_ctx = build_rpc_context(&cfg.api_server.rpc)
             .unwrap();
-        Self{_cfg:Arc::new(cfg), _log:Arc::new(log),
-            _rpc:Arc::new(_rpc_ctx) }
+        let (in_mem, sql_dbs) = datastore::build_context(&cfg.api_server.data_store);
+        let ds_ctx = AppDataStoreContext {in_mem, sql_dbs};
+        Self{_cfg:Arc::new(cfg), _log:Arc::new(log), _rpc:Arc::new(_rpc_ctx),
+             dstore:Arc::new(ds_ctx)  }
     }
 
     pub fn config(&self) -> &Arc<AppConfig>
@@ -48,14 +59,16 @@ impl AppSharedState {
     
     pub fn rpc(&self) -> Arc<Box<dyn AbstractRpcContext>>
     { self._rpc.clone() }
-}
+
+    pub fn datastore(&self) -> Arc<AppDataStoreContext>
+    { self.dstore.clone() }
+} // end of impl AppSharedState
 
 impl Clone for AppSharedState {
     fn clone(&self) -> Self {
         Self{
-            _cfg: self._cfg.clone(),
-            _log: self._log.clone(),
-            _rpc: self._rpc.clone()
+            _cfg: self._cfg.clone(),   _log: self._log.clone(),
+            _rpc: self._rpc.clone(),   dstore: self.dstore.clone()
         }
     }
 }
