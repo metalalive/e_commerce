@@ -25,6 +25,8 @@ pub enum AppErrorCode {
     RpcRemoteInvalidReply,
     NoDatabaseCfg,
     ExceedingMaxLimit,
+    AcquireLockFailure,
+    DataTableNotExist,
     IOerror(std::io::ErrorKind),
 } // end of AppErrorCode
 

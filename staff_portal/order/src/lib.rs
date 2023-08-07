@@ -11,7 +11,7 @@ mod config;
 pub use config::{
     AppConfig, ApiServerCfg, ApiServerListenCfg, ApiServerRouteCfg,
     AppLoggingCfg, AppLogHandlerCfg, AppLoggerCfg, AppBasepathCfg,
-    AppRpcCfg, AppRpcTypeCfg
+    AppRpcCfg, AppRpcTypeCfg, AppInMemoryDbCfg
 };
 
 mod rpc;
@@ -22,15 +22,15 @@ pub use rpc::{
 };
 
 mod adapter;
-use adapter::datastore::{self, AppSqlDbStore, AppInMemoryDStore};
+pub use adapter::datastore;
 
 type WebApiPath = String;
 type WebApiHdlrLabel = & 'static str;
 type AppLogAlias = Arc<String>;
 
 pub struct AppDataStoreContext {
-    in_mem: Option<AppInMemoryDStore>,
-    sql_dbs: Option<Vec<AppSqlDbStore>>
+    in_mem: Option<datastore::AppInMemoryDStore>,
+    sql_dbs: Option<Vec<datastore::AppSqlDbStore>>
 }
 
 pub struct AppSharedState {
