@@ -48,7 +48,7 @@
     },
     "max_connections": 256,
     "limit_req_body_in_bytes": 10485760,
-    "num_workers": 1,
+    "num_workers": 2,
     "stack_sz_kb": 128,
     "data_store": [
 	{

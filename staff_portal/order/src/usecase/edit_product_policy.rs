@@ -6,11 +6,13 @@ use std::collections::HashSet;
 use std::collections::hash_map::RandomState;
 
 use serde::{Serialize, Deserialize};
-use crate::{AppSharedState, AppRpcTypeCfg, app_log_event} ;
-use crate::api::web::dto::ProductPolicyDto;
+use crate::repository::app_repo_product_policy;
+use crate::{AppSharedState, AppRpcTypeCfg, app_log_event, AppDataStoreContext} ;
 use crate::error::{AppErrorCode, AppError};
 use crate::rpc::{AbstractRpcContext, AppRpcPublishProperty};
-use crate::logging::AppLogLevel;
+use crate::logging::{AppLogLevel, AppLogContext};
+
+use crate::api::web::dto::ProductPolicyDto;
 
 use super::{run_rpc, AppUCrunRPCfn, AppUCrunRPCreturn};
 
@@ -73,13 +75,18 @@ impl EditProductPolicyUseCase {
                 return Self::_gen_output_error(code, Some(detail));
             }
         }
-        // TODO, save valid update
-        Self::OUTPUT {
-            result: EditProductPolicyResult::OK,
-            detail: Some("{}".to_string())
+        if let Err(e) = Self::_save_to_repo(appstate.datastore(), &data, usr_prof_id).await
+        {
+            app_log_event!(log, AppLogLevel::ERROR, "{:?}", e);
+            let uc_errcode = EditProductPolicyResult::Other(e.code);
+            Self::_gen_output_error(uc_errcode, e.detail)
+        } else {
+            Self::OUTPUT {result: EditProductPolicyResult::OK,
+                detail: Some("{}".to_string()) }
         }
     } // end of _execute
-    
+
+
     pub async fn check_product_existence (
         data: &Vec<ProductPolicyDto>,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
@@ -134,6 +141,16 @@ impl EditProductPolicyUseCase {
         c1 == c2
     }
 
+    async fn _save_to_repo(ds:Arc<AppDataStoreContext>, data:&Vec<ProductPolicyDto>,
+                           usr_id : u32)  -> DefaultResult<(), AppError>
+    {
+        let repo = app_repo_product_policy(ds)?;
+        let ids = data.iter().map(|d| {d.product_id}).collect();
+        let previous_saved = repo.fetch(usr_id, ids).await?;
+        let updated = previous_saved.update(data);
+        repo.save(updated).await ?;
+        Ok(())
+    }
 
     fn _gen_output_error (result:EditProductPolicyResult, reason:Option<String>)
         -> Self

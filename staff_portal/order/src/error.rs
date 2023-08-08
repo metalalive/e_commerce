@@ -3,10 +3,12 @@ use std::fmt::{Display, Debug};
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppErrorCode {
     Unknown,
+    NotImplemented,
     MissingSysBasePath,
     MissingAppBasePath,
     MissingSecretPath,
     MissingConfigPath,
+    MissingDataStore,
     InvalidJsonFormat,
     InvalidVersion,
     InvalidRouteConfig,
