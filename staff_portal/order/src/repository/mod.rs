@@ -7,7 +7,8 @@ use async_trait::async_trait;
 use crate::AppDataStoreContext;
 use crate::error::AppError;
 use crate::model::ProductPolicyModelSet;
-use self::product_policy::ProductPolicyInMemRepo;
+// make it visible only for testing purpose
+pub use self::product_policy::ProductPolicyInMemRepo;
 
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads
@@ -20,7 +21,7 @@ pub trait AbstProductPolicyRepo : Sync + Send
     
     async fn fetch(&self, usr_id:u32, ids:Vec<u64>) -> Result<ProductPolicyModelSet, AppError>;
     
-    async fn save(&self, updated:ProductPolicyModelSet) -> Result<(), AppError>;
+    async fn save(&self, ppset:ProductPolicyModelSet) -> Result<(), AppError>;
     // TODO, delete operation
 }
 

@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use order::AppInMemoryDbCfg;
-use order::datastore::{AppInMemoryDStore, AppInMemUpdateData, AppInMemFetchKeys, AppInMemDeleteInfo};
+use order::datastore::{
+    AbstInMemoryDStore, AppInMemoryDStore, AppInMemUpdateData,
+    AppInMemFetchKeys, AppInMemDeleteInfo
+};
 use order::error::AppErrorCode;
 
 const UT_NUM_TABLES : usize = 3;

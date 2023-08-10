@@ -1,3 +1,4 @@
+use std::marker::{Sync, Send};
 use std::result::Result as DefaultResult;
 use std::collections::HashMap;
 use std::cell::RefCell;
@@ -19,19 +20,22 @@ pub type AppInMemDeleteInfo = InnerTable; // list of IDs per table
 pub type AppInMemFetchKeys = InnerTable; // list of IDs per table
 pub type AppInMemFetchedData = AllTable;
 
+pub trait AbstInMemoryDStore : Send + Sync
+{
+    fn new(cfg:&AppInMemoryDbCfg) -> Self where Self:Sized;
+    fn create_table (&self, label:&str) -> DefaultResult<(), AppError>;
+    fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>;
+    fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>;
+    fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>;
+}
 
+// make it visible for testing purpose, this type could be limited in super module.
 pub struct AppInMemoryDStore {
     max_items_per_table : u32,
     table_map : Mutex<RefCell<AllTable>> 
 }
 
 impl AppInMemoryDStore {
-    pub fn new(cfg:&AppInMemoryDbCfg) -> Self {
-        let t_map = HashMap::new();
-        let t_map = Mutex::new(RefCell::new(t_map));
-        Self { table_map: t_map, max_items_per_table: cfg.max_items }
-    }
-
     fn try_get_table (&self) -> DefaultResult<MutexGuard<RefCell<AllTable>> , AppError>
     {
         match self.table_map.lock() {
@@ -67,8 +71,17 @@ impl AppInMemoryDStore {
             Ok(())
         }
     }
+} // end of impl AppInMemoryDStore
 
-    pub fn create_table (&self, label:&str) -> DefaultResult<(), AppError>
+
+impl AbstInMemoryDStore for AppInMemoryDStore {
+    fn new(cfg:&AppInMemoryDbCfg) -> Self {
+        let t_map = HashMap::new();
+        let t_map = Mutex::new(RefCell::new(t_map));
+        Self { table_map: t_map, max_items_per_table: cfg.max_items }
+    }
+
+    fn create_table (&self, label:&str) -> DefaultResult<(), AppError>
     {
         let guard = self.try_get_table()?;
         let mut _map = guard.borrow_mut();
@@ -79,7 +92,7 @@ impl AppInMemoryDStore {
         Ok(())
     }
 
-    pub fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>
+    fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>
     {
         let guard = self.try_get_table()?;
         let mut _map = guard.borrow_mut();
@@ -96,7 +109,7 @@ impl AppInMemoryDStore {
         Ok(tot_cnt)
     } // end of save
 
-    pub fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>
+    fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>
     {
         let guard = self.try_get_table()?;
         let mut _map = guard.borrow_mut();
@@ -109,7 +122,7 @@ impl AppInMemoryDStore {
         Ok(tot_cnt)
     }
 
-    pub fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>
+    fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>
     {
         let guard = self.try_get_table()?;
         let mut _map = guard.borrow_mut();

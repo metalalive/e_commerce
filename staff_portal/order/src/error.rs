@@ -19,8 +19,8 @@ pub enum AppErrorCode {
     NoLoggerCfg,
     NoHandlerInLoggerCfg,
     InvalidHandlerLoggerCfg,
-    EmptyInputData,
-    InvalidInput,
+    EmptyInputData, // for internal server error, do NOT dump detail to http response
+    InvalidInput, // for frontend client error
     RpcRemoteUnavail,
     RpcPublishFailure,
     RpcConsumeFailure,

@@ -1,23 +1,26 @@
 mod in_mem;
 mod sql_db;
 
+use std::boxed::Box;
+
 pub use in_mem::{
-    AppInMemoryDStore, AppInMemUpdateData, AppInMemDeleteInfo,
-    AppInMemFetchKeys, AppInMemFetchedData
+    AbstInMemoryDStore, AppInMemUpdateData, AppInMemDeleteInfo,
+    AppInMemFetchKeys, AppInMemFetchedData, AppInMemoryDStore
 };
 pub use sql_db::AppSqlDbStore;
 
 use crate::config::AppDataStoreCfg;
 
 pub(crate) fn build_context(cfg:&Vec<AppDataStoreCfg>)
-    -> (Option<AppInMemoryDStore>, Option<Vec<AppSqlDbStore>>)
+    -> (Option<Box<dyn AbstInMemoryDStore>>, Option<Vec<AppSqlDbStore>>)
 {
     let mut inmem = None;
     let mut sqldb = None;
     for c in cfg {
         match c {
             AppDataStoreCfg::InMemory(d) => {
-                inmem = Some(AppInMemoryDStore::new(&d));
+                let item:Box<dyn AbstInMemoryDStore> = Box::new(AppInMemoryDStore::new(&d));
+                inmem = Some(item);
             },
             AppDataStoreCfg::DbServer(d) => {
                 if sqldb.is_none() {

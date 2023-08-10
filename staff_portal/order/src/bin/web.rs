@@ -27,9 +27,7 @@ async fn start_server (shr_state:AppSharedState)
         listener.host.clone(), listener.port, srv );
     match result {
         Ok(sr) => {
-            app_log_event!(log_ctx_p, AppLogLevel::INFO, "API server starting");
             let _ = sr.await;
-            app_log_event!(log_ctx_p, AppLogLevel::INFO, "API server terminating");
         },
         Err(e) => {
             app_log_event!(log_ctx_p, AppLogLevel::ERROR,
@@ -43,9 +41,22 @@ fn start_async_runtime (cfg:AppConfig)
     let log_ctx = AppLogContext::new(&cfg.basepath, &cfg.api_server.logging);
     let shr_state = AppSharedState::new(cfg, log_ctx);
     let cfg = shr_state.config();
+    let log_ctx  = shr_state.log_context().clone();
+    let log_ctx2 = log_ctx.clone();
     let stack_nbytes:usize = (cfg.api_server.stack_sz_kb as usize) << 10;
     let result = RuntimeBuilder::new_multi_thread()
         .worker_threads(cfg.api_server.num_workers as usize)
+        .on_thread_start(move || {
+            // this `Fn()` closure will be invoked several times by new thread,
+            // depending on number of work threads in the application, all variables
+            // moved into this closure have to be clonable.
+            let log_cpy = log_ctx.clone();
+            app_log_event!(log_cpy, AppLogLevel::INFO, "[API server] worker started");
+        })
+        .on_thread_stop(move || {
+            let log_cpy = log_ctx2.clone();
+            app_log_event!(log_cpy, AppLogLevel::INFO, "[API server] worker terminating");
+        })
         .thread_stack_size(stack_nbytes)
         .thread_name("web-api-worker")
         // manage low-level I/O drivers used by network types

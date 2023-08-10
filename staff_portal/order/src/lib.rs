@@ -31,8 +31,8 @@ type WebApiHdlrLabel = & 'static str;
 type AppLogAlias = Arc<String>;
 
 pub struct AppDataStoreContext {
-    in_mem: Option<Arc<datastore::AppInMemoryDStore>>,
-    sql_dbs: Option<Vec<Arc<datastore::AppSqlDbStore>>>
+    pub in_mem: Option<Arc<Box<dyn datastore::AbstInMemoryDStore>>>,
+    pub sql_dbs: Option<Vec<Arc<datastore::AppSqlDbStore>>>
 }
 
 // global state shared by all threads
