@@ -93,8 +93,7 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
         .body(reqbody)
         .unwrap();
     let response = TestWebServer::consume(&srv, req).await;
-    // at this moment the app haven't implemented model update with given data
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(response.status(), StatusCode::OK);
     Ok(())
 }
 

@@ -29,6 +29,7 @@ pub enum AppErrorCode {
     ExceedingMaxLimit,
     AcquireLockFailure,
     DataTableNotExist,
+    DataCorruption,
     IOerror(std::io::ErrorKind),
 } // end of AppErrorCode
 

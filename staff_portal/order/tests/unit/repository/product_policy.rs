@@ -6,6 +6,7 @@ use order::error::{AppErrorCode, AppError};
 use order::datastore::{AbstInMemoryDStore, AppInMemoryDStore, AppInMemUpdateData, AppInMemFetchKeys, AppInMemFetchedData, AppInMemDeleteInfo} ;
 use order::repository::{ProductPolicyInMemRepo, AbstProductPolicyRepo};
 use order::model::{ProductPolicyModelSet, ProductPolicyModel};
+use crate::ut_clone_productpolicy_model;
 
 const UTEST_INIT_DATA: [ProductPolicyModel;7] = [
     ProductPolicyModel {
@@ -37,14 +38,6 @@ const UTEST_INIT_DATA: [ProductPolicyModel;7] = [
         warranty_hours: 11086, async_stock_chk: true, is_create: false
     },
 ]; // end of UTEST_INIT_DATA
-
-fn ut_clone_productpolicy_model(src:&ProductPolicyModel) -> ProductPolicyModel
-{
-    ProductPolicyModel {
-        usr_id: src.usr_id, product_id: src.product_id, auto_cancel_secs: src.auto_cancel_secs,
-        warranty_hours: src.warranty_hours, async_stock_chk: src.async_stock_chk,
-        is_create: src.is_create }
-}
 
 #[test]
 fn in_mem_create_missing_dstore ()

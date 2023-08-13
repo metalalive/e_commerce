@@ -147,7 +147,7 @@ impl EditProductPolicyUseCase {
         let repo = app_repo_product_policy(ds)?;
         let ids = data.iter().map(|d| {d.product_id}).collect();
         let previous_saved = repo.fetch(usr_id, ids).await?;
-        let updated = previous_saved.update(data);
+        let updated = previous_saved.update(usr_id, data)?;
         repo.save(updated).await ?;
         Ok(())
     }
