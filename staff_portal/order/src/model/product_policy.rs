@@ -2,7 +2,7 @@ use std::cmp::PartialEq;
 use std::vec::Vec;
 use std::result::Result as DefaultResult;
 
-use crate::api::web::dto::ProductPolicyDto;
+use crate::api::web::dto::{ProductPolicyDto, ProductPolicyClientErrorDto, ProductPolicyClientLimitDto};
 use crate::error::{AppError, AppErrorCode};
 
 #[derive(Debug)]
@@ -38,41 +38,38 @@ pub struct ProductPolicyModelSet {
 
 impl ProductPolicyModelSet
 {
-    pub fn validate (newdata:&Vec<ProductPolicyDto>) -> DefaultResult<(), AppError>
+    pub fn validate (newdata:&Vec<ProductPolicyDto>) -> DefaultResult<(), Vec<ProductPolicyClientErrorDto>>
     {
         if newdata.is_empty() {
-            return Err(AppError { code:AppErrorCode::EmptyInputData,
-                detail: Some(format!("ProductPolicyModelSet::update"))
-            });
+            let ce = ProductPolicyClientErrorDto { product_id: 0u64, auto_cancel_secs: None,
+                err_type: format!("{:?}", AppErrorCode::EmptyInputData), warranty_hours:None };
+            return Err(vec![ce]);
         }
-        let detected_invalid = newdata.iter().find_map(|item| {
+        let detected_invalid = newdata.iter().filter_map(|item| {
             let cond = (item.auto_cancel_secs > HARD_LIMIT_AUTO_CANCEL_SECS) ||
                 (item.warranty_hours > HARD_LIMIT_WARRANTY_HOURS);
             if cond {
-                let errmsg = format!(
-                    r#"
-                      {{ "product_id":{}, "err_type":"{:?}",
-                         "warranty_hours":{{"given":{}, "limit":{} }},
-                         "auto_cancel_secs":{{"given":{}, "limit":{} }}
-                      }}
-                    "# , item.product_id, AppErrorCode::ExceedingMaxLimit,
-                    item.warranty_hours, HARD_LIMIT_WARRANTY_HOURS,
-                    item.auto_cancel_secs, HARD_LIMIT_AUTO_CANCEL_SECS
-                );
-                Some(errmsg)
+                let auto_cancel_secs = Some(ProductPolicyClientLimitDto {
+                    given:item.auto_cancel_secs, limit:HARD_LIMIT_AUTO_CANCEL_SECS});
+                let warranty_hours = Some(ProductPolicyClientLimitDto {
+                    given:item.warranty_hours, limit:HARD_LIMIT_WARRANTY_HOURS});
+                let ce = ProductPolicyClientErrorDto {
+                    product_id: item.product_id, auto_cancel_secs, warranty_hours, 
+                    err_type: format!("{:?}", AppErrorCode::ExceedingMaxLimit),
+                };
+                Some(ce)
             } else { None }
-        });
-        if let Some(msg) = detected_invalid {
-            Err(AppError{ code:AppErrorCode::InvalidInput, detail:Some(msg) })
-        } else {
+        }).collect::<Vec<ProductPolicyClientErrorDto>>();
+        if detected_invalid.is_empty() {
             Ok(())
+        } else {
+            Err(detected_invalid)
         }
     } // end of fn validate
 
     pub fn update(mut self,  usr_id: u32, newdata:&Vec<ProductPolicyDto>)
         -> DefaultResult<Self, AppError>
     {
-        Self::validate(newdata)?;
         self.check_user_consistency(usr_id)?;
         let mut _new_objs = newdata.iter().filter_map(|item| {
             let result = self.policies.iter_mut().find(|o| {o.product_id == item.product_id});

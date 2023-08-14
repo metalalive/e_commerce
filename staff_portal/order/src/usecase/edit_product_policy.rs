@@ -6,16 +6,18 @@ use std::collections::HashSet;
 use std::collections::hash_map::RandomState;
 
 use serde::{Serialize, Deserialize};
+use crate::model::ProductPolicyModelSet;
 use crate::repository::app_repo_product_policy;
 use crate::{AppSharedState, AppRpcTypeCfg, app_log_event, AppDataStoreContext} ;
 use crate::error::{AppErrorCode, AppError};
 use crate::rpc::{AbstractRpcContext, AppRpcPublishProperty};
-use crate::logging::{AppLogLevel, AppLogContext};
+use crate::logging::AppLogLevel;
 
-use crate::api::web::dto::ProductPolicyDto;
+use crate::api::web::dto::{ProductPolicyDto, ProductPolicyClientErrorDto};
 
 use super::{run_rpc, AppUCrunRPCfn, AppUCrunRPCreturn};
 
+// the product info types below represent message body to remote product service
 #[derive(Serialize)]
 struct ProductInfoReq {
     item_ids: Vec<u64>,
@@ -39,8 +41,7 @@ struct ProductInfoResp {
 
 #[derive(PartialEq, Debug)]
 pub enum EditProductPolicyResult {
-    OK, ProductNotExists,
-    Other(AppErrorCode),
+    OK, Other(AppErrorCode),
 }
 
 impl EditProductPolicyUseCase {
@@ -49,40 +50,50 @@ impl EditProductPolicyUseCase {
         match self {
             Self::INPUT { profile_id, data, app_state } =>
                 Self::_execute(data, app_state, profile_id).await,
-            Self::OUTPUT { result, detail } => Self::OUTPUT { result, detail }
+            Self::OUTPUT { result, client_err } =>
+                Self::OUTPUT { result, client_err }
         }
     }
 
     async fn _execute(data: Vec<ProductPolicyDto>, appstate: AppSharedState,
                       usr_prof_id : u32) -> Self
     {
-        if data.is_empty() {
-            return Self::_gen_output_error(
-                EditProductPolicyResult::Other(AppErrorCode::EmptyInputData) ,
-                None );
+        if let Err(ce) = ProductPolicyModelSet::validate(&data) {
+            return Self::OUTPUT { client_err: Some(ce),
+                result: EditProductPolicyResult::Other(AppErrorCode::InvalidInput) };
         }
         let log = appstate.log_context();
         let rpc = appstate.rpc();
         let rpctype = rpc.label();
-        if let Err((code, detail)) = Self::check_product_existence(
-            &data, rpc, run_rpc, usr_prof_id).await
-        {
-            if code == EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply)
-                && rpctype == AppRpcTypeCfg::dummy
-            {  // pass, for mocking purpose, TODO: better design
-               app_log_event!(log, AppLogLevel::WARNING, "dummy rpc is applied");
+        let result = Self::check_product_existence(&data,
+                                    rpc, run_rpc, usr_prof_id).await;
+        if let Err((code, detail)) = result {
+            if code == EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply) &&
+                rpctype == AppRpcTypeCfg::dummy {
+                // pass, for mocking purpose, TODO: better design
+                app_log_event!(log, AppLogLevel::WARNING, "dummy rpc is applied");
             } else {
-                return Self::_gen_output_error(code, Some(detail));
+                app_log_event!(log, AppLogLevel::ERROR, "detail:{:?}", detail);
+                return Self::OUTPUT { client_err:None, result:code };
+            } 
+        } else if let Ok(missing_prod_ids) = result {
+            if !missing_prod_ids.is_empty() {
+                app_log_event!(log, AppLogLevel::ERROR, "missing_prod_ids:{:?}", missing_prod_ids);
+                let code = EditProductPolicyResult::Other(AppErrorCode::InvalidInput);
+                let c_err = missing_prod_ids.into_iter().map(|product_id|{
+                    ProductPolicyClientErrorDto { product_id, auto_cancel_secs: None,
+                        err_type: format!("{:?}", AppErrorCode::ProductNotExist),
+                        warranty_hours:None }
+                }).collect();
+                return Self::OUTPUT {result: code, client_err:Some(c_err)};
             }
         }
         if let Err(e) = Self::_save_to_repo(appstate.datastore(), &data, usr_prof_id).await
         {
-            app_log_event!(log, AppLogLevel::ERROR, "{:?}", e);
-            let uc_errcode = EditProductPolicyResult::Other(e.code);
-            Self::_gen_output_error(uc_errcode, e.detail)
+            app_log_event!(log, AppLogLevel::ERROR, "error:{:?}", e);
+            Self::OUTPUT {result:EditProductPolicyResult::Other(e.code), client_err:None}
         } else {
-            Self::OUTPUT {result: EditProductPolicyResult::OK,
-                detail: Some("{}".to_string()) }
+            Self::OUTPUT {result:EditProductPolicyResult::OK, client_err:None }
         }
     } // end of _execute
 
@@ -91,7 +102,7 @@ impl EditProductPolicyUseCase {
         data: &Vec<ProductPolicyDto>,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
         run_rpc_fn: AppUCrunRPCfn<impl Future<Output = AppUCrunRPCreturn>>,
-        usr_prof_id: u32 ) -> DefaultResult<(), (EditProductPolicyResult, String)>
+        usr_prof_id: u32 ) -> DefaultResult<Vec<u64>, (EditProductPolicyResult, String)>
     {
         let mut msg_req = ProductInfoReq {
             pkg_ids: Vec::new(), pkg_fields: Vec::new(), profile: usr_prof_id,
@@ -104,41 +115,32 @@ impl EditProductPolicyUseCase {
         let properties = AppRpcPublishProperty {
             retry:3u8, msgbody, route:"product.get_product".to_string()
         };
-        let reply = match run_rpc_fn(rpc_ctx, properties).await
-        {
+        match run_rpc_fn(rpc_ctx, properties).await {
             Ok(r) => match serde_json::from_str::<ProductInfoResp>(r.body.as_str())
             {
-                Ok(s) => s,
+                Ok(reply) => Ok(Self::_compare_rpc_reply(reply, data)),
                 Err(e) => {
                     let code = EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply);
-                    return Err((code, e.to_string()));
+                    Err((code, e.to_string()))
                 }
             },
             Err(e) => {
                 let detail = e.detail.unwrap_or("RPC undefined error".to_string());
-                return Err((EditProductPolicyResult::Other(e.code), detail));
+                Err((EditProductPolicyResult::Other(e.code), detail))
             }
-        };
-        if Self::_compare_rpc_reply(reply, data) {
-            Ok(())
-        } else {
-            let detail = "xxx".to_string();
-            Err((EditProductPolicyResult::ProductNotExists, detail))
         }
-    } // end of check_product_existence
-   
+    } // end of check_product_existence 
 
-    fn _compare_rpc_reply (reply:ProductInfoResp, req:&Vec<ProductPolicyDto>) -> bool
+    fn _compare_rpc_reply (reply:ProductInfoResp, req:&Vec<ProductPolicyDto>)
+        -> Vec<u64>
     {
-        let n = reply.item.len() + reply.pkg.len();
-        if n != req.len() { return false; }
         let iter1 = reply.item.iter().map(|x| {x.id});
         let iter2 = reply.pkg.iter().map(|x| {x.id});
         let iter3 = req.iter().map(|x| {x.product_id});
         let mut c1:HashSet<u64, RandomState> = HashSet::from_iter(iter1);
         c1.extend(iter2);
         let c2 = HashSet::from_iter(iter3);
-        c1 == c2
+        c2.difference(&c1).map(u64::clone).collect() // c1 == c2
     }
 
     async fn _save_to_repo(ds:Arc<AppDataStoreContext>, data:&Vec<ProductPolicyDto>,
@@ -151,16 +153,6 @@ impl EditProductPolicyUseCase {
         repo.save(updated).await ?;
         Ok(())
     }
-
-    fn _gen_output_error (result:EditProductPolicyResult, reason:Option<String>)
-        -> Self
-    {
-        let msg = if let Some(r) = reason {
-            let o = format!(r#"{{"reason":"{:?}"}}"#, r);
-            Some(o)
-        } else { None };
-        Self::OUTPUT{ detail: msg, result }
-    }
 } // end of impl EditProductPolicyUseCase
 
 
@@ -172,6 +164,6 @@ pub enum EditProductPolicyUseCase {
     },
     OUTPUT {
         result: EditProductPolicyResult,
-        detail: Option<String>
+        client_err: Option<Vec<ProductPolicyClientErrorDto>>
     }
 }

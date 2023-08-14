@@ -30,6 +30,7 @@ pub enum AppErrorCode {
     AcquireLockFailure,
     DataTableNotExist,
     DataCorruption,
+    ProductNotExist,
     IOerror(std::io::ErrorKind),
 } // end of AppErrorCode
 

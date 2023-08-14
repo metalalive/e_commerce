@@ -101,3 +101,19 @@ pub struct ProductPolicyDto {
     pub async_stock_chk: bool,
 }
 
+#[derive(Serialize)]
+pub struct ProductPolicyClientLimitDto
+{
+    pub given:u32,
+    pub limit:u32
+}
+
+#[derive(Serialize)]
+pub struct ProductPolicyClientErrorDto
+{
+    pub product_id: u64,
+    pub err_type: String, // convert from AppError
+    pub auto_cancel_secs: Option<ProductPolicyClientLimitDto>,
+    pub warranty_hours: Option<ProductPolicyClientLimitDto>,
+}
+

@@ -26,10 +26,18 @@ fn validate_newdata_error_limit() {
     let result = ProductPolicyModelSet::validate(&newdata);
     assert_eq!(result.is_err(), true);
     let error = result.err().unwrap();
-    assert_eq!(error.code, AppErrorCode::InvalidInput);
-    // TODO, build and examine error struct
-    println!("detail msg : {} ", error.detail.unwrap());
-}
+    assert_eq!(error.len(), 2);
+    {
+        let ce = error.iter().find(|item|{item.product_id==123}).unwrap();
+        let detail = ce.warranty_hours.as_ref().unwrap();
+        assert_eq!(ce.err_type, "ExceedingMaxLimit");
+        assert!(detail.given > detail.limit);
+        let ce = error.iter().find(|item|{item.product_id==124}).unwrap();
+        let detail = ce.auto_cancel_secs.as_ref().unwrap();
+        assert_eq!(ce.err_type, "ExceedingMaxLimit");
+        assert!(detail.given > detail.limit);
+    }
+} // end of fn validate_newdata_error_limit
 
 #[test]
 fn update_instance_ok() {

@@ -74,10 +74,12 @@ async fn check_product_existence_ok ()
 {
     let data = setup_data();
     let rpc_ctx = UTestDummyRpcContext::test_build();
-    let actual = EditProductPolicyUseCase::check_product_existence(
+    let result = EditProductPolicyUseCase::check_product_existence(
         &data, rpc_ctx, mock_run_rpc_ok, UTEST_USR_PROF_ID
     ).await;
-    assert_eq!(actual.is_ok(), true);
+    assert_eq!(result.is_ok(), true);
+    let missing_product_ids = result.unwrap();
+    assert_eq!(missing_product_ids.is_empty(), true);
 }
 
 async fn mock_run_rpc_remote_down (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcPublishProperty)
@@ -144,11 +146,11 @@ async fn check_product_existence_found_nonexist_item ()
 {
     let data = setup_data();
     let rpc_ctx = UTestDummyRpcContext::test_build();
-    let actual = EditProductPolicyUseCase::check_product_existence(
+    let result = EditProductPolicyUseCase::check_product_existence(
         &data, rpc_ctx, mock_run_rpc_nonexist_found, UTEST_USR_PROF_ID
     ).await;
-    assert_eq!(actual.is_err(), true);
-    let (result, _) = actual.err().unwrap();
-    assert_eq!(result, EditProductPolicyResult::ProductNotExists);
+    assert_eq!(result.is_ok(), true);
+    let missing_product_ids = result.unwrap();
+    assert_eq!(missing_product_ids, vec![168]);
 }
 

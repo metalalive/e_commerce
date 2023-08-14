@@ -75,17 +75,40 @@ paths:
                   properties:
                     product_id:
                       type: integer
-                      format: uint32
+                      format: uint64
                       example: 10093183
-                    err_detail:
+                    err_type:
                       type: string
                       enum:
-                        - cancel-time-limit-exceeded
-                        - warranty-time-limit-exceeded
-                        - product-not-exist
+                        - ProductNotExist
+                        - ExceedingMaxLimit
+                    auto_cancel_secs:
+                      type: object
+                      description: present only when `err_type` is `ExceedingMaxLimit`
+                      properties:
+                        given:
+                          type: integer
+                          format: uint32
+                          example: 72001
+                        limit:
+                          type: integer
+                          format: uint32
+                          example: 72000
+                    warranty_hours:
+                      type: object
+                      description: present only when `err_type` is `ExceedingMaxLimit`
+                      properties:
+                        given:
+                          type: integer
+                          format: uint32
+                          example: 96001
+                        limit:
+                          type: integer
+                          format: uint32
+                          example: 96000
                   required:
                     - product_id
-                    - err_detail
+                    - err_type
         '503':
           description: Service currently unavailable
       security:

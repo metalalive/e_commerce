@@ -23,11 +23,10 @@ fn presenter (ucout:EditProductPolicyUseCase, log_ctx:Arc<AppLogContext>)
     let mut hdr_map = HttpHeaderMap::new();
     hdr_map.insert(HttpHeader::CONTENT_TYPE, resp_ctype_val);
     let default_body = "{}".to_string();
-    if let EditProductPolicyUseCase::OUTPUT { result, detail } = ucout
+    if let EditProductPolicyUseCase::OUTPUT { result, client_err } = ucout
     {
         let status = match result {
             EditProductPolicyResult::OK => HttpStatusCode::OK,
-            EditProductPolicyResult::ProductNotExists => HttpStatusCode::BAD_REQUEST,
             EditProductPolicyResult::Other(ec) =>
                 match ec {
                     AppErrorCode::InvalidInput => HttpStatusCode::BAD_REQUEST,
@@ -36,17 +35,10 @@ fn presenter (ucout:EditProductPolicyUseCase, log_ctx:Arc<AppLogContext>)
                     _others => HttpStatusCode::INTERNAL_SERVER_ERROR,
                 }
         };
-        let serial_resp_body = {
-            let detail = detail.unwrap_or(default_body.clone());
-            // TODO, move to middleware ? avoid writing internal server 
-            // to response body
-            let is_srv_err = status.ge(&HttpStatusCode::INTERNAL_SERVER_ERROR);
-            let is_nonhttp_err = status.lt(&HttpStatusCode::OK);
-            if is_srv_err || is_nonhttp_err {
-                app_log_event!(log_ctx, AppLogLevel::ERROR, "detail:{} ", detail);
-                default_body.clone()
-            } else { detail }
-        };
+        let serial_resp_body = if let Some(ce) = client_err {
+            let value = serde_json::to_value(ce).unwrap();
+            value.to_string()
+        } else { default_body.clone() } ;
         (status, hdr_map, serial_resp_body)
     } else {
         (HttpStatusCode::INTERNAL_SERVER_ERROR, hdr_map, default_body)
