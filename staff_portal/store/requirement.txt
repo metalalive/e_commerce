@@ -1,4 +1,4 @@
-alembic==1.7.4
+alembic==1.11.3
 amqp==5.0.6
 anyio==3.3.4
 asgiref==3.4.1
@@ -31,7 +31,7 @@ pyparsing==2.4.7
 pytest==6.2.5
 requests==2.26.0
 sniffio==1.2.0
-SQLAlchemy==1.4.26
+SQLAlchemy==1.4.49
 starlette==0.16.0
 toml==0.10.2
 typing_extensions==4.0.0

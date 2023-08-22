@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
+# proxied from EnvironmentContext instance
 from alembic import context
 
 from common.util.python import import_module_string
@@ -20,7 +21,11 @@ fileConfig(config.config_file_name)
 # target_metadata = mymodel.Base.metadata
 app_metadata_paths = config.get_main_option("app.orm_base")
 app_metadata_paths = app_metadata_paths.split(',')
-target_metadata = list(map(lambda path: import_module_string(dotted_path=path).metadata , app_metadata_paths))
+app_metadata_paths = filter(lambda path: path!='skip', app_metadata_paths)
+target_metadata = list(map(lambda path:
+    import_module_string(dotted_path=path).metadata , app_metadata_paths))
+if len(target_metadata) == 0:
+    target_metadata = None
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

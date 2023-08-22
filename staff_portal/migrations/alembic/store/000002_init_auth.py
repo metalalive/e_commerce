@@ -14,8 +14,8 @@ from store.models import StoreProfile, StoreStaff, StoreEmail, StorePhone, Store
 
 # revision identifiers, used by Alembic.
 revision = '000002'
-# In this project, multiple roots exist, this is new initial migration for different
-# database, which does NOT depend on order app. Don't set '000001'
+# In this project, multiple bases co-exist under migration folder, this is new initial
+# migration to the user-management database different from store app.
 down_revision = None
 branch_labels = None
 depends_on = None
