@@ -1,27 +1,26 @@
 from jwt.exceptions import (
     DecodeError,    ExpiredSignatureError,    ImmatureSignatureError,
     InvalidAudienceError,    InvalidIssuedAtError,    InvalidIssuerError,
-    MissingRequiredClaimError,
+    MissingRequiredClaimError,  PyJWKClientError
 )
 
-from common.auth.keystore import create_keystore_helper
-from common.util.python import import_module_string
 from common.auth.jwt import JWT
 
-def base_authentication(token:str, audience, ks_cfg, error_obj=None):
-    payld = None
-    keystore = create_keystore_helper(cfg=ks_cfg, import_fn=import_module_string)
+def base_authentication(token:str, audience, keystore, error_obj=None):
+    from fastapi import HTTPException, status as HTTPstatus
     try:
         jwt = JWT(encoded=token)
         payld = jwt.verify(keystore=keystore, audience=audience)
         if not payld:
             raise DecodeError("payload of jwt token is null, authentication failure")
+        return payld
+    except PyJWKClientError as e:
+        raise HTTPException( status_code=HTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='', headers={'www-Authenticate': 'Bearer'} )
     except (TypeError, DecodeError, ExpiredSignatureError, ImmatureSignatureError, InvalidAudienceError, \
             InvalidIssuedAtError, InvalidIssuerError, MissingRequiredClaimError,) as e:
-        if error_obj:
-            raise error_obj # TODO, log error
-        payld = None
-    return payld
+        raise HTTPException( status_code=HTTPstatus.HTTP_401_UNAUTHORIZED,
+            detail='authentication failure', headers={'www-Authenticate': 'Bearer'} )
 
 
 def base_permission_check(user:dict, app_code:int, required_perm_codes:set, error_obj):

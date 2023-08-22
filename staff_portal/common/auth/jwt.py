@@ -7,7 +7,7 @@ import jwt
 from jwt import PyJWKClient
 from jwt.api_jwk import PyJWK
 from jwt.utils import to_base64url_uint
-from jwt.exceptions import PyJWKClientError, PyJWKSetError
+from jwt.exceptions import PyJWKClientError, PyJWKClientConnectionError, PyJWKSetError
 
 from common.util.python  import ExtendedDict
 from common.auth.keystore import AbstractKeystorePersistReadMixin, RSAKeygenHandler
@@ -187,14 +187,23 @@ def stream_jwks_file(filepath):
 
 class RemoteJWKSPersistHandler(AbstractKeystorePersistReadMixin):
     def __init__(self, url, name='default persist handler'):
-        self._jwk_client = PyJWKClient(url)
+        # jwk set is internally cached and will be periodically refreshed
+        # inside the package
+        self._jwk_client = PyJWKClient(uri=url, max_cached_keys=9, lifespan=900)
         self._name = name
 
     def _get_signing_keys(self):
-        try: # TODO, cache response body of jwks
+        try:
             keys = self._jwk_client.get_signing_keys()
-        except PyJWKSetError as e: # TODO, logging error
+        except PyJWKSetError as e:
+            log_args = ['type', 'PyJWKSetError', 'detail', e.args[0]]
+            _logger.error(None, *log_args)
             keys = []
+        except PyJWKClientConnectionError as e:
+            log_args = ['type', type(e).__name__, 'url', self._jwk_client.uri,
+                    'msg', e.args[0]]
+            _logger.error(None, *log_args)
+            raise e
         return keys
 
     def __len__(self):

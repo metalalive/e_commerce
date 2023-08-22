@@ -214,6 +214,7 @@ def staff_data():
 def _product_avail_data_gen():
     sale_types = [opt for opt in SaleableTypeEnum]
     base_range = 10
+    price_range = 10000
     product_id_start = 1
     while True:
         product_id_end = product_id_start + base_range
@@ -223,6 +224,7 @@ def _product_avail_data_gen():
             # AppIdGapNumberFinder.MAX_GAP_VALUE
             'product_id': random.randrange(product_id_start, product_id_end),
             'start_after':start_after,  'end_before':end_before,
+            'price': random.randrange(0, price_range)
         }
         yield new_data
         product_id_start += base_range
@@ -233,8 +235,11 @@ def product_avail_data():
 
 @pytest.fixture(scope='session')
 def test_client():
-    _client = TestClient(app=app, base_url=settings.APP_HOST, raise_server_exceptions=True)
-    yield  _client
+    # _client = TestClient(app=app, base_url=settings.APP_HOST, raise_server_exceptions=True)
+    # yield  _client
+    with TestClient(app=app, base_url=settings.APP_HOST,
+            raise_server_exceptions=True) as _client :
+        yield  _client
 
 
 def _saved_obj_gen(store_data_gen, email_data_gen, phone_data_gen, loc_data_gen, session, staff_data_gen, product_avail_data_gen):

@@ -1,5 +1,7 @@
 import enum
 from pathlib import Path
+# set ExtendedLogger as default logger
+from common.logging.logger import ExtendedLogger
 
 APP_BASE_PATH = Path(__file__).resolve(strict=True).parent.parent
 
@@ -29,6 +31,8 @@ APP_HOST = cors_config.ALLOWED_ORIGIN['store']
 AUTH_APP_HOST = cors_config.ALLOWED_ORIGIN['user_management']
 
 REFRESH_ACCESS_TOKEN_API_URL = '%s/refresh_access_token' % AUTH_APP_HOST
+
+INIT_SHARED_CONTEXT_FN = 'store.views.app_shared_context_start'
 
 ROUTERS = ['store.views.router']
 

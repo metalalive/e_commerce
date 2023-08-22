@@ -73,10 +73,13 @@ class ExtendedLogger(logging.Logger):
     def sys_base_path(cls):
         if not hasattr(cls, '_sys_base_path'):
             _acquireLock()
-            try:
+            try: ## TODO, refactor, django should not be coupled with logging
                 from django.conf import  settings
                 cls._sys_base_path = str(settings.BASE_DIR)
-            except:
+            except ModuleNotFoundError as e:
+                cls._sys_base_path = ''
+                pass # current workaround if django is not used, will be removed later
+            except Exception as e:
                 _releaseLock()
                 raise
         return cls._sys_base_path

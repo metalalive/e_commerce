@@ -1,11 +1,12 @@
 import os
+import logging
 from datetime import datetime , time as py_time
 from functools import partial
 from typing import Optional, List, Any
 from importlib import import_module
 
 from mariadb.constants.CLIENT import MULTI_STATEMENTS
-from fastapi import APIRouter, Header, Depends as FastapiDepends
+from fastapi import FastAPI, APIRouter, Header, Depends as FastapiDepends
 from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
 from fastapi.security  import OAuth2AuthorizationCodeBearer
 from pydantic import BaseModel as PydanticBaseModel, PositiveInt, constr, EmailStr, validator, ValidationError
@@ -26,17 +27,32 @@ settings = import_module(settings_module_path)
 
 app_code = AppCodeOptions.store.value[0]
 
+_logger = logging.getLogger(__name__)
+
+shared_ctx = {}
+
+
+async def app_shared_context_start(_app:FastAPI):
+    from common.auth.keystore import create_keystore_helper
+    from common.util.python import import_module_string
+    shared_ctx['auth_keystore'] = create_keystore_helper(cfg=settings.KEYSTORE, import_fn=import_module_string)
+    return shared_ctx
+
+
 router = APIRouter(
-            prefix='', # could be /store/* /file/* ... etc
+            prefix='', # could be API versioning e.g. /v0.0.1/* ,  /v2.0.1/*
             tags=['generic_store'] ,
             # TODO: dependencies are function executed before hitting the API endpoint
             # , (like router-level middleware for all downstream endpoints ?)
             dependencies=[],
+            # the argument `lifespan` hasn't been integrated well in FastAPI an Starlette
             responses={
                 FastApiHTTPstatus.HTTP_404_NOT_FOUND: {'description':'resource not found'},
                 FastApiHTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR: {'description':'internal server error'}
             }
         )
+
+
 
 auth_app_rpc = RPCproxy(dst_app_name='user_management', src_app_name='store')
 product_app_rpc = RPCproxy(dst_app_name='product', src_app_name='store')
@@ -48,13 +64,8 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
 
 async def common_authentication(encoded_token:str=FastapiDepends(oauth2_scheme)):
     audience = ['store']
-    error_obj = FastApiHTTPException(
-            status_code=FastApiHTTPstatus.HTTP_401_UNAUTHORIZED,
-            detail='authentication failure',
-            headers={'www-Authenticate': 'Bearer'}
-        )
     return base_authentication(token=encoded_token, audience=audience,
-            ks_cfg=settings.KEYSTORE, error_obj=error_obj)
+            keystore=shared_ctx['auth_keystore'])
 
 
 class Authorization:
@@ -426,9 +437,10 @@ class BusinessHoursDaysReqBody(PydanticBaseModel):
         return values
 
 
-class AvailProductReqBody(PydanticBaseModel):
+class EditProductReqBody(PydanticBaseModel):
     product_type : SaleableTypeEnum
     product_id   : PositiveInt
+    price       : PositiveInt
     start_after : datetime
     end_before  : datetime
     class Config:
@@ -441,8 +453,8 @@ class AvailProductReqBody(PydanticBaseModel):
             raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
 
 
-class AvailProductsReqBody(PydanticBaseModel):
-    __root__ : List[AvailProductReqBody]
+class EditProductsReqBody(PydanticBaseModel):
+    __root__ : List[EditProductReqBody]
     class Config:
         orm_mode =True
 
@@ -489,6 +501,16 @@ class AvailProductsReqBody(PydanticBaseModel):
             err_detail['field'].extend( list(diff_pkg) )
         if any(err_detail['field']):
             raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+
+
+class DiscardProductReqBody(PydanticBaseModel):
+    product_type : SaleableTypeEnum
+    product_id   : PositiveInt
+
+class DiscardProductsReqBody(PydanticBaseModel):
+    __root__ : List[DiscardProductReqBody]
+    class Config:
+        orm_mode =True
 
 
 def _get_quota_arrangement_helper(supervisor_data, prof_id, quota_arrangement):
@@ -672,14 +694,12 @@ def edit_hours_operation(store_id:PositiveInt, request:BusinessHoursDaysReqBody,
         db_engine.dispose()
 
 
-
-# TODO, divide to 3 separate endpoints for adding/editing/deleting operations
 @router.patch('/profile/{store_id}/products',)
-def edit_products_available(store_id:PositiveInt, request: AvailProductsReqBody, \
+def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, \
         user:dict=FastapiDepends(edit_products_authorization)):
     request.validate_products(staff_id=user['profile'])
     db_engine = _init_db_engine()
-    try:
+    try: # TODO, modify this endpoint for editing-only operation
         with Session(bind=db_engine) as session:
             saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
             new_prod_objs = list(map(lambda d: StoreProductAvailable(**d.dict()), request.__root__ ))
@@ -690,6 +710,26 @@ def edit_products_available(store_id:PositiveInt, request: AvailProductsReqBody,
         db_engine.dispose()
 
 
+# TODO , complete implementation
+@router.delete('/profile/{store_id}/products', status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT)
+def discard_store_products(store_id:PositiveInt, request: DiscardProductsReqBody, \
+        user:dict=FastapiDepends(edit_products_authorization)):
+    raise FastApiHTTPException( detail='',  headers={},
+                status_code=FastApiHTTPstatus.HTTP_501_NOT_IMPLEMENTED )
+
+
+@router.get('/profile/{store_id}/products', response_model=EditProductsReqBody)
+def read_profile_products(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
+    db_engine = _init_db_engine()
+    try: # TODO, figure out how to handle large dataset, pagination or other techniques
+        with Session(bind=db_engine) as session:
+            saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
+            response = EditProductsReqBody.from_orm(saved_obj.products)
+    finally:
+        db_engine.dispose()
+    return response
+
+
 @router.get('/profile/{store_id}', response_model=StoreProfileReadResponseBody)
 def read_profile(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
     db_engine = _init_db_engine()
@@ -697,18 +737,6 @@ def read_profile(store_id:PositiveInt, user:dict=FastapiDepends(common_authentic
         with Session(bind=db_engine) as session:
             saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
             response = StoreProfileReadResponseBody.from_orm(saved_obj)
-    finally:
-        db_engine.dispose()
-    return response
-
-
-@router.get('/profile/{store_id}/products', response_model=AvailProductsReqBody)
-def read_profile_products(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
-    db_engine = _init_db_engine()
-    try: # TODO, figure out how to handle large dataset, pagination or other techniques
-        with Session(bind=db_engine) as session:
-            saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
-            response = AvailProductsReqBody.from_orm(saved_obj.products)
     finally:
         db_engine.dispose()
     return response

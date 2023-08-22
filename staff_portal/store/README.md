@@ -15,11 +15,20 @@ Where `subcommand` could be one of followings :
 
 ## Run
 ### Development Server
+```bash
+APP_SETTINGS="store.settings.development" uvicorn  --host 127.0.0.1 --port 8011 store.entry:app
+```
 
 ### Production Server
 (TODO)
 
 ## Test
 ### Integration Test
-
+```bash
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/models.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/views.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/staff.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/business_hours.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/products.py
+```
 

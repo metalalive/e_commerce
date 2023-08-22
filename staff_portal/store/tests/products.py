@@ -1,5 +1,6 @@
 import random
 from datetime import datetime
+from typing import List, Dict
 from unittest.mock import patch
 
 import pytest
@@ -28,17 +29,23 @@ class TestUpdate:
         # skip receiving message from RPC-reply-queue
         pass
 
+    def _setup_base_req_body(self, objs, product_avail_gen) -> List[Dict]:
+        body = [{'product_id':p.product_id, 'product_type':p.product_type.value,
+            'start_after':p.start_after.isoformat(), 'end_before':p.end_before.isoformat(),
+            'price':p.price } for p in objs]
+        if product_avail_gen is not None:
+            new_product_d = [next(product_avail_gen) for _ in range(2)]
+            for item in new_product_d:
+                item['product_type'] = item['product_type'].value
+                item['start_after'] = item['start_after'].isoformat()
+                item['end_before']  = item['end_before'].isoformat()
+            body.extend(new_product_d)
+        return body
+
     @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_ok(self, session_for_test, keystore, test_client, saved_store_objs, product_avail_data):
         obj = next(saved_store_objs)
-        body = [{'product_id':p.product_id, 'product_type':p.product_type.value, 'start_after':p.start_after.isoformat(),
-            'end_before':p.end_before.isoformat()} for p in obj.products[2:]]
-        new_product_d = [next(product_avail_data) for _ in range(2)]
-        for item in new_product_d:
-            item['product_type'] = item['product_type'].value
-            item['start_after'] = item['start_after'].isoformat()
-            item['end_before']  = item['end_before'].isoformat()
-        body.extend(new_product_d)
+        body = self._setup_base_req_body(obj.products[2:], product_avail_data)
         auth_data = self._auth_data_pattern
         # authorized user can be either supervisor or staff of the store
         auth_data['id'] = obj.staff[-1].staff_id
@@ -74,8 +81,7 @@ class TestUpdate:
     @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_invalid_product_id(self, session_for_test, keystore, test_client, saved_store_objs):
         obj = next(saved_store_objs)
-        body = [{'product_id':p.product_id, 'product_type':p.product_type.value, 'start_after':p.start_after.isoformat(),
-            'end_before':p.end_before.isoformat()} for p in obj.products]
+        body = self._setup_base_req_body(obj.products, None)
         auth_data = self._auth_data_pattern
         auth_data['id'] = obj.staff[0].staff_id
         auth_data['quotas'][0]['maxnum'] = len(body)
@@ -107,8 +113,7 @@ class TestUpdate:
     def test_invalid_staff_id(self, session_for_test, keystore, test_client, saved_store_objs):
         invalid_staff_id = 9999
         obj = next(saved_store_objs)
-        body = [{'product_id':p.product_id, 'product_type':p.product_type.value, 'start_after':p.start_after.isoformat(),
-            'end_before':p.end_before.isoformat()} for p in obj.products]
+        body = self._setup_base_req_body(obj.products, None)
         auth_data = self._auth_data_pattern
         auth_data['id'] = invalid_staff_id
         auth_data['quotas'][0]['maxnum'] = len(body)

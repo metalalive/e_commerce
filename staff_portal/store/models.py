@@ -206,6 +206,7 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
     # following 2 fields come from product app
     product_type = Column(sqlalchemy_enum(SaleableTypeEnum), primary_key=True)
     product_id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True)
+    price = Column(MYSQL_INTEGER(unsigned=True), nullable=False)
     store_applied = relationship('StoreProfile', back_populates='products')
     # NOTE, don't record inventory data at this app, do it in inventory app
     @classmethod
