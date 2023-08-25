@@ -7,6 +7,11 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import HTTP_HEADER_ENCODING
 from rest_framework.permissions import BasePermission
 from rest_framework.exceptions  import AuthenticationFailed
+from jwt.exceptions import (
+    DecodeError,    ExpiredSignatureError,    ImmatureSignatureError,
+    InvalidAudienceError,    InvalidIssuedAtError,    InvalidIssuerError,
+    MissingRequiredClaimError, InvalidKeyError
+)
 
 from common.auth.abstract import BaseGetProfileMixin
 from common.auth.keystore import create_keystore_helper
@@ -68,11 +73,16 @@ class RefreshJWTauthentication(DjangoGetProfileMixin):
         refresh_token_key = django_settings.JWT_NAME_REFRESH_TOKEN
         encoded_rfr_tok = request.COOKIES.get(refresh_token_key, None)
         account = None
+        result  = None
         payld_verified = None
-        if encoded_rfr_tok:
+        if encoded_rfr_tok: # TODO, move keystore to global shared context
             _keystore = create_keystore_helper(cfg=django_settings.AUTH_KEYSTORE, import_fn=import_module_string)
-            rfr_jwt = JWT()
-            result = rfr_jwt.verify(unverified=encoded_rfr_tok, audience=None, keystore=_keystore)
+            try:
+                rfr_jwt = JWT()
+                result = rfr_jwt.verify(unverified=encoded_rfr_tok, audience=None, keystore=_keystore)
+            except (DecodeError, ExpiredSignatureError, ImmatureSignatureError, InvalidAudienceError, \
+                InvalidIssuedAtError, InvalidIssuerError, MissingRequiredClaimError, InvalidKeyError) as e:
+                raise AuthenticationFailed('Invalid token.')
             if result:
                 payld_verified = result
                 profile_id = payld_verified.get('profile')
@@ -130,10 +140,15 @@ class AccessJWTauthentication(DjangoGetProfileMixin):
 
     def authenticate_credentials(self, encoded_acs_tok, audience):
         account = None
-        payld_verified = None
+        result = None
+        payld_verified = None # TODO, move keystore to global shared context
         _keystore = create_keystore_helper(cfg=django_settings.AUTH_KEYSTORE, import_fn=import_module_string)
-        acs_tok = JWT()
-        result = acs_tok.verify(unverified=encoded_acs_tok, audience=audience, keystore=_keystore)
+        try:
+            acs_tok = JWT()
+            result = acs_tok.verify(unverified=encoded_acs_tok, audience=audience, keystore=_keystore)
+        except (DecodeError, ExpiredSignatureError, ImmatureSignatureError, InvalidAudienceError, \
+            InvalidIssuedAtError, InvalidIssuerError, MissingRequiredClaimError, InvalidKeyError) as e:
+            raise AuthenticationFailed('Invalid token.')
         if result:
             payld_verified = result
             profile_id = payld_verified.get('profile')

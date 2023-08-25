@@ -7,7 +7,7 @@ import jwt
 from jwt import PyJWKClient
 from jwt.api_jwk import PyJWK
 from jwt.utils import to_base64url_uint
-from jwt.exceptions import PyJWKClientError, PyJWKClientConnectionError, PyJWKSetError
+from jwt.exceptions import InvalidKeyError, PyJWKClientConnectionError, PyJWKSetError
 
 from common.util.python  import ExtendedDict
 from common.auth.keystore import AbstractKeystorePersistReadMixin, RSAKeygenHandler
@@ -214,9 +214,9 @@ class RemoteJWKSPersistHandler(AbstractKeystorePersistReadMixin):
         signing_keys = self._get_signing_keys()
         signing_key = list(filter(lambda x: x.key_id == key_id, signing_keys))
         if not signing_key:
-            raise PyJWKClientError(
-                f'Unable to find a signing key that matches: "{key_id}"'
-            )
+            log_args = ['given_key_id', key_id, 'exists', 'false' ]
+            _logger.debug(None, *log_args)
+            raise InvalidKeyError(f'Unable to find the given key')
         return signing_key[0]
 
 
