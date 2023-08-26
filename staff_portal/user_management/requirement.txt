@@ -1,5 +1,5 @@
 amqp==5.0.1
-asgiref==3.3.0
+asgiref==3.7.2
 attrs==20.3.0
 autobahn==21.3.1
 Automat==20.2.0
@@ -15,8 +15,8 @@ click-repl==0.1.6
 constantly==15.1.0
 cryptography==3.4.6
 daphne==3.0.1
-Django==3.1
-djangorestframework==3.11.0
+Django==3.1.8
+djangorestframework==3.11.2
 dnspython==1.16.0
 elasticsearch==5.5.3
 hyperlink==21.0.0
@@ -26,15 +26,14 @@ incremental==21.3.0
 kombu==5.0.2
 limits==1.5.1
 mock==4.0.3
+my-c-extention-lib==0.0.1
 mysqlclient==1.4.6
-path==2.2
-path.py==12.5.0
 Pillow==7.2.0
 prompt-toolkit==3.0.7
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pycparser==2.20
-PyJWT==2.0.1
+PyJWT==2.8.0
 pylogbeat==2.0.0
 pyOpenSSL==20.0.1
 python-logstash-async==2.1.1
@@ -46,6 +45,7 @@ six==1.15.0
 sqlparse==0.3.1
 Twisted==21.2.0
 txaio==21.2.1
+typing_extensions==4.7.1
 urllib3==1.26.2
 vine==5.0.0
 wcwidth==0.2.5

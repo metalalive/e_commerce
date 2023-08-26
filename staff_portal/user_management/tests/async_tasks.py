@@ -170,7 +170,8 @@ class GetProfileCase(TransactionTestCase, UserNestedFieldSetupMixin, UserNestedF
         input_kwargs = {'ids':prof_ids, 'fields':['id', 'roles', 'quota']}
         eager_result = get_profile.apply_async(kwargs=input_kwargs, headers=headers)
         self.assertEqual(eager_result.state, CeleryStates.FAILURE)
-        self.assertTrue(isinstance(eager_result.result, KeyError))
+        self.assertTrue(isinstance(eager_result.result, ValueError))
+        self.assertTrue(eager_result.result.args[0].startswith('src_app_label is required'))
         chosen_app_label = 'non_existent_service'
         headers = {'src_app':chosen_app_label}
         eager_result = get_profile.apply_async(kwargs=input_kwargs, headers=headers)

@@ -81,7 +81,7 @@ class ProfileCommonTestCase(TransactionTestCase):
             {'id':3, 'app_code':appcodes.user_management.value, 'mat_code':1},
             {'id':4, 'app_code':appcodes.product.value, 'mat_code':2},
             {'id':5, 'app_code':appcodes.product.value, 'mat_code':1},
-            {'id':6, 'app_code':appcodes.fileupload.value, 'mat_code':1},
+            {'id':6, 'app_code':appcodes.media.value, 'mat_code':1},
         ]
         quota_mat = tuple(map(lambda d: QuotaMaterial(**d) , material_data))
         QuotaMaterial.objects.bulk_create(quota_mat)

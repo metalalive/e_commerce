@@ -25,12 +25,8 @@ Note
 
 ### Schema Migration
 #### Python/Django
-
-set `managed = False` in `User` and `Group` class in `django.contrib.auth.models` , this project does not need the 2 models provided by Django, users need to avoid database table creation like `auth_user` or `auth_group` which will no longer used in this project.
-
 For initializing database schema, run the commands below in following order.
 ```
-python3.9 -m  user_management.setup
 python3.9 -m  product.setup
 ```
 The modules above automatically performs following operations :
@@ -43,20 +39,17 @@ The modules above automatically performs following operations :
 For de-initializing database schema, run the commands below.
 ```
 python3.9 -m  product.setup reverse
-python3.9 -m  user_management.setup reverse
 ```
 
 ##### Side note
 By default Django provides a command which generates migration file template as shown below, the commands below are covered by `user_management.setup` so you do not need to run them manually :
-```
-python3.9 manage.py makemigrations user_management  --settings user_management.settings.migration
+```bash
 python3.9 manage.py makemigrations product          --settings product.settings.migration
 ```
 
 * Then you run `migrate` command on each of the application :
 
 ```
-python3.9 manage.py migrate user_management  0001  --settings user_management.settings  --database site_dba
 python3.9 manage.py migrate product       0004  --settings product.settings  --database site_dba
 ```
 

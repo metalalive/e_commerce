@@ -14,18 +14,6 @@ python3.9 ./manage.py test product.tests.attrtype.models   --settings product.se
 python3.9 ./manage.py test product.tests.attrtype.views    --settings product.settings.test --keepdb --verbosity=2
 python3.9 ./manage.py test product.tests.async_tasks       --settings product.settings.test --keepdb --verbosity=2
 
-python3.9 ./manage.py test user_management.tests.login    --settings user_management.settings.test --keepdb  --verbosity=2
-python3.9 ./manage.py test user_management.tests.role.views   --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.group.models --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.group.serializers  --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.group.views  --settings user_management.settings.test --keepdb  --verbosity=2
-python3.9 ./manage.py test user_management.tests.profile.models  --settings user_management.settings.test --keepdb  --verbosity=2
-python3.9 ./manage.py test user_management.tests.profile.serializers   --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.profile.views  --settings user_management.settings.test --keepdb  --verbosity=2
-python3.9 ./manage.py test user_management.tests.account.models --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.account.serializers  --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.account.views  --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.async_tasks    --settings user_management.settings.test --keepdb  --verbosity=2
 
 python3.9 ./manage.py test tests.python.middlewares.cors  --settings user_management.settings.test  --verbosity=2
 python3.9 ./manage.py test tests.python.middlewares.csrf  --settings user_management.settings.test  --verbosity=2
