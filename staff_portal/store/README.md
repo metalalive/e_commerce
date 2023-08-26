@@ -23,6 +23,11 @@ APP_SETTINGS="store.settings.development" uvicorn  --host 127.0.0.1 --port 8011 
 (TODO)
 
 ## Test
+### Unit Test
+```bash
+python3 -m unittest tests.python.util.rpc  -v
+```
+
 ### Integration Test
 ```bash
 APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/models.py

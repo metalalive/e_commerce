@@ -140,7 +140,7 @@ class NewStoreProfileReqBody(PydanticBaseModel):
 
 
 def _get_supervisor_auth(prof_ids):
-    reply_evt = auth_app_rpc.get_profile(ids=prof_ids, field_names=['id', 'auth', 'quota'])
+    reply_evt = auth_app_rpc.get_profile(ids=prof_ids, fields=['id', 'auth', 'quota'])
     if not reply_evt.finished:
         for _ in range(settings.NUM_RETRY_RPC_RESPONSE): # TODO, (1) async task (2) integration test
             reply_evt.refresh(retry=False, timeout=0.5, num_of_msgs_fetch=1)

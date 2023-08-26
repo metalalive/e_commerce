@@ -1,7 +1,9 @@
 import uuid
 import socket
+import logging
 from datetime import datetime, timedelta
-from amqp.exceptions import ConsumerCancelled
+from typing import Dict, Optional
+from amqp.exceptions import ConsumerCancelled, NotFound as AmqpNotFound
 from kombu import Exchange as KombuExchange, Queue as KombuQueue
 from kombu.exceptions import OperationalError as KombuOperationalError
 
@@ -9,14 +11,14 @@ from common.util.python import _get_amqp_url
 from .amqp import AMQPPublisher, AMQPQueueConsumer, get_connection, UndeliverableMessage
 from .constants import MSG_PAYLOAD_DEFAULT_CONTENT_TYPE, AMQP_SSL_CONFIG_KEY, SERIALIZER_CONFIG_KEY, DEFAULT_SERIALIZER, AMQP_EXCHANGE_NAME_CONFIG_KEY, AMQP_EXCHANGE_TYPE_CONFIG_KEY, RPC_EXCHANGE_DEFAULT_NAME,  RPC_EXCHANGE_DEFAULT_TYPE, RPC_ROUTE_KEY_PATTERN_SEND
 
-ROUTE_KEY_PATTERN_REPLYTO = 'rpc.reply.%s'
-RPC_REPLY_QUEUE_TTL = 30000  # ms (30 seconds)
+ROUTE_KEY_PATTERN_REPLYTO = 'rpc.reply.%s.%s'
+RPC_REPLY_MSG_TTL = 25000  # ms (25 seconds)
 RPC_DEFAULT_TASK_PATH_PATTERN = '%s.async_tasks.%s'
 
-_default_msg_broker_url = _get_amqp_url(secrets_path="./common/data/secrets.json")
+_logger = logging.getLogger(__name__)
 
 
-def get_rpc_exchange(config):
+def get_rpc_exchange(config:Dict):
     ex_name = config.get(AMQP_EXCHANGE_NAME_CONFIG_KEY, RPC_EXCHANGE_DEFAULT_NAME)
     ex_type = config.get(AMQP_EXCHANGE_TYPE_CONFIG_KEY, RPC_EXCHANGE_DEFAULT_TYPE)
     exchange = KombuExchange(ex_name, durable=False, type=ex_type)
@@ -24,14 +26,21 @@ def get_rpc_exchange(config):
 
 
 class ReplyListener:
-    _default_config = {}
-    queue_consumer = AMQPQueueConsumer(amqp_uri=_default_msg_broker_url)
+    _num_objs_created = 0 
+    # Currently there is only one consumer per application, if the application
+    # needs to scale, different consumers with different broker setups will
+    # be required (TODO)
+    queue_consumer: Optional[AMQPQueueConsumer] = None
 
-    def __init__(self, config=None):
+    def __init__(self, broker_url:str, dst_app_label:str, src_app_label:str,
+            msg_ttl:int = RPC_REPLY_MSG_TTL ):
+        cls = type(self)
+        if cls._num_objs_created == 0:
+            cls.queue_consumer = AMQPQueueConsumer(amqp_uri=broker_url)
+        cls._num_objs_created += 1 # TODO, lock required in async tasks
         self._reply_events = {}
-        self._config = self._default_config.copy()
-        if config:
-            self._config.update(config)
+        self._id = '{0}:{1}'.format(dst_app_label, src_app_label)
+        self._q_created = False
         reply_q_uuid = uuid.uuid4()
         # here RPC server side (see celery rpc backend) defaults to anon-exchange 
         # which means :
@@ -39,50 +48,78 @@ class ReplyListener:
         #    directly to the queue (whose name is given in reply_to)
         # * no need to create exchange and extra bindings for the reply queue
         # * routing key (reply_to) has to be the same as the name of the reply queue
-        self.routing_key = ROUTE_KEY_PATTERN_REPLYTO % (reply_q_uuid)
+        self.routing_key = ROUTE_KEY_PATTERN_REPLYTO % (src_app_label, reply_q_uuid)
         queue_name = self.routing_key
-        self.queue = KombuQueue(
-            queue_name,
-            routing_key=self.routing_key,
-            auto_delete=True,
-            queue_arguments={'x-expires': RPC_REPLY_QUEUE_TTL}
-        )
-        self.queue_consumer.register_provider(self) # declare the reply queue
+        log_args = ['type', 'python.messaging.rpc.ReplyListener',
+                'reply_queue', queue_name, 'msg_ttl_secs', str(msg_ttl)]
+        _logger.debug(None, *log_args)
+        # `auto-delete` property ensure unused queue is removed after last
+        # consumer unsubscribed, In this project I consider the internet
+        # might be unstable in both sides of producer / consumer, so always
+        # set this to false.
+        self.queue = KombuQueue( name=queue_name, routing_key=self.routing_key,
+            queue_arguments={'x-message-ttl': msg_ttl},  auto_delete=False )
+        self.queue_consumer.register_provider(self)
 
-    def __del__(self):
-        self.queue_consumer.unregister_provider(self) # delete the reply queue
+    def destroy(self):
+        self.queue_consumer.unregister_provider(self)
+        self.queue_consumer.undeclare(label=self._id)
 
-    def get_reply_event(self, correlation_id, timeout_s=20):
-        reply_event = RpcReplyEvent(listener=self, timeout_s=timeout_s)
+    @property
+    def identity(self):
+        return self._id
+ 
+    def declare_queue(self, conn):
+        if not self._q_created:
+            self._q_created = self.queue_consumer.declare(conn=conn, label=self._id)
+
+    def get_reply_event(self, correlation_id, timeout_s=10):
+        reply_event = RpcReplyEvent(listener=self, timeout_s=timeout_s,
+                corr_id=correlation_id )
         self._reply_events[correlation_id] = reply_event
         return reply_event
 
-    def refresh_reply_events(self, num_of_msgs_fetch=None, timeout=0.5):
+    def refresh_reply_events(self, num_of_msgs_fetch=None, timeout:float=0.5):
         # run consumer code, if there's no message in the queue then
         # immediately return back, let application callers decide when
         # to run this function again next time...
         # Note that `num_of_msgs_fetch`  defaults to None , which  means
         # unlimited number of messages to retrieve
+        err = None
         try:
-            for _ in self.queue_consumer.consume(limit=num_of_msgs_fetch, timeout=timeout):
+            for _ in self.queue_consumer.consume(limit=num_of_msgs_fetch,
+                    timeout=timeout):
                 pass
-        except socket.timeout:
-            print('timeout caught at ReplyListener.refresh_reply_events')
-            # TODO: log warning
-        except ConsumerCancelled:
-            print('consumer cancelled in the middle of ReplyListener.refresh_reply_events')
+        except socket.timeout as e:
+            log_args = ['action','listener-update-events','msg', e.args[0],
+                    'timeout', str(timeout), 'num_of_msgs_fetch', num_of_msgs_fetch]
+            _logger.warning(None, *log_args)
+            err = e
+        except AmqpNotFound as e:
+            # this happenes when queue was deleted and time-to-live of the
+            # queue (TTL, a.k.a `x-expires` in RabbitMQ) was enabled, 
+            log_args = ['method_name', e.method_name, 'msg', e.message
+                    , 'rpc_reply_status', str(e.reply_code)]
+            _logger.error(None, *log_args)
+            err = e
+        except ConsumerCancelled as e:
+            log_args = ['msg', str(e.args)]
+            _logger.error(None, *log_args)
+            err = e
+        return err
 
     def handle_message(self, body, message):
-        correlation_id = message.properties.get('correlation_id')
+        correlation_id:str = message.properties.get('correlation_id')
         reply_event = self._reply_events.get(correlation_id, None)
         if reply_event is not None:
             reply_event.send(body=body)
             if reply_event.finished:
                 self._reply_events.pop(correlation_id, None)
         else:
-            # TODO, log error 
-            print("Unknown correlation id on consume message: %s" % correlation_id)
+            log_args = ['msg', 'Unknown correlation id', 'correlation_id', correlation_id]
+            _logger.warning(None, *log_args)
         self.queue_consumer.ack_message(message)
+## end of class ReplyListener
 
 
 
@@ -112,11 +149,12 @@ class RpcReplyEvent:
     valid_finish_status = [status_opt.FAIL_CONN, status_opt.FAIL_PUBLISH,
             status_opt.REMOTE_ERROR, status_opt.SUCCESS]
 
-    def __init__(self, listener, timeout_s):
+    def __init__(self, listener, timeout_s, corr_id:str=''):
         self._listener = listener
         self._timeout_s = timedelta(seconds=timeout_s)
         self._time_deadline = datetime.utcnow() + self._timeout_s
-        self.resp_body = {'status': self.status_opt.INITED, 'result': None, 'timeout':False}
+        self.resp_body = {'status': self.status_opt.INITED, 'result': None,
+                'timeout':False, 'corr_id':corr_id}
 
     def send(self, body):
         """ validate state transition and update result """
@@ -138,16 +176,18 @@ class RpcReplyEvent:
         The result might still be empty at which caller runs this function
         if the listener hasn't received any message associated with this event.
         """
+        err = None
         _timeout = self.timeout
         if retry is True and _timeout is True:
             self._time_deadline = datetime.utcnow() + self._timeout_s
             _timeout = False
         if _timeout is False and self.finished is False:
-            self._listener.refresh_reply_events(num_of_msgs_fetch=num_of_msgs_fetch, \
+            err = self._listener.refresh_reply_events(num_of_msgs_fetch=num_of_msgs_fetch, \
                     timeout=timeout)
             _timeout = self.timeout
             # TODO, report timeout error
         self.resp_body['timeout'] = _timeout
+        return err
 
     @property
     def result(self):
@@ -165,14 +205,25 @@ class RpcReplyEvent:
 
 
 class RPCproxy:
-    # TODO, the listener shoud be created for each http connection,
-    # not each amqp connection, not system initialization
-    _rpc_reply_listener = ReplyListener()
-
-    def __init__(self, dst_app_name, src_app_name, **options):
+    """
+    Each RPC proxy object has independent listener in case several message brokers
+    are applied to one single application.
+    """
+    def __init__(self, dst_app_name:str, src_app_name:str, **options):
+        # TODO, parameterize
+        _default_msg_broker_url = _get_amqp_url(secrets_path="./common/data/secrets.json")
         self._dst_app_name = dst_app_name
         self._src_app_name = src_app_name
+        self._rpc_reply_listener = ReplyListener( broker_url=_default_msg_broker_url,
+                dst_app_label=dst_app_name, src_app_label=src_app_name )
         self._options = options
+        self._options.update({'broker_url':_default_msg_broker_url})
+    
+    def __del__(self):
+        listener = self._rpc_reply_listener
+        self._rpc_reply_listener = None
+        del self._rpc_reply_listener
+        listener.destroy()
 
     def __getattr__(self, name):
         return MethodProxy(
@@ -180,24 +231,23 @@ class RPCproxy:
                 src_app_name=self._src_app_name,
                 method_name=name,
                 reply_listener=self._rpc_reply_listener,
-                **self._options
-            )
+                **self._options )
 
 class MethodProxy:
     publisher_cls = AMQPPublisher
 
-    def __init__(self, dst_app_name, src_app_name, method_name, reply_listener, **options):
+    def __init__(self, dst_app_name:str, src_app_name:str, method_name:str,
+            broker_url:str, reply_listener, **options):
         self._dst_app_name = dst_app_name
         self._src_app_name = src_app_name
         self._method_name = method_name
+        self._broker_url = broker_url
         self._reply_listener = reply_listener
         self._config = options.pop('config', {})
         serializer = options.pop('serializer', self.serializer)
         self._options = options
-        self._publisher = self.publisher_cls(
-            amqp_uri=_default_msg_broker_url,
-            serializer=serializer, ssl=self.ssl, **options
-        )
+        self._publisher = self.publisher_cls( amqp_uri=broker_url,
+                serializer=serializer, ssl=self.ssl, **options )
 
     @property
     def ssl(self):
@@ -225,11 +275,12 @@ class MethodProxy:
         reply_to =  self._reply_listener.routing_key
         correlation_id = str(uuid.uuid4())
         context = self.get_message_context(id=correlation_id, src_app=self._src_app_name)
-        reply_event = self._reply_listener.get_reply_event(correlation_id)
+        reply_event = self._reply_listener.get_reply_event(correlation_id, \
+                timeout_s=self._options.get('reply_timeout_sec', 5) )
         deliver_err_body = {'result': {'exchange': exchange.name, 'routing_key': routing_key, }}
         try:
-            with get_connection(amqp_uri=_default_msg_broker_url, ssl=self.ssl) as conn:
-                self._reply_listener.queue_consumer.declare(conn=conn)
+            with get_connection(amqp_uri=self._broker_url, ssl=self.ssl) as conn:
+                self._reply_listener.declare_queue(conn=conn)
                 self._publisher.publish(
                     payload=payload,
                     exchange=exchange,
@@ -239,8 +290,7 @@ class MethodProxy:
                     reply_to=reply_to,
                     correlation_id=correlation_id,
                     extra_headers=context,
-                    conn=conn
-                )
+                    conn=conn )
         except UndeliverableMessage as ume:
             deliver_err_body['status'] = reply_event.status_opt.FAIL_PUBLISH
             deliver_err_body['error']  = ', '.join(ume.args)

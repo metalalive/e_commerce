@@ -4,9 +4,11 @@ from functools import partial
 from contextlib import contextmanager
 
 import kombu
+from kombu import Producer as KombuProducer
 from kombu.exceptions import ChannelError
 from kombu.pools import connections as KombuConnectionPool, producers as KombuProducerPool
 from kombu.mixins import ConsumerMixin as KombuConsumerMixin
+from amqp import ConsumerCancelled
 
 from common.logging.util  import log_fn_wrapper
 from .constants import AMQP_SSL_CONFIG_KEY, AMQP_DEFAULT_CONSUMER_ACCEPT_TYPES, AMQP_DEFAULT_HEARTBEAT, AMQP_HEARTBEAT_CONFIG_KEY, AMQP_TRANSPORT_OPTIONS_CONFIG_KEY, AMQP_DEFAULT_TRANSPORT_OPTIONS, AMQP_DEFAULT_RETRY_POLICY, amqp_delivery_mode
@@ -133,7 +135,7 @@ class AMQPPublisher:
         self.publish_kwargs = publish_kwargs
 
 
-    @log_fn_wrapper(logger=_logger, loglevel=logging.WARNING)
+    @log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
     def publish(self, payload, exchange, routing_key, conn=None , **kwargs):
         """
         Note :
@@ -168,8 +170,8 @@ class AMQPPublisher:
         declare.extend(kwargs.pop('declare', ()))
         publish_kwargs.update(kwargs)  # remaining publish-time kwargs win
 
+        result = None
         try:
-            result = None
             with get_connection(amqp_uri=self.amqp_uri, ssl=self.ssl, conn=conn, block=False, \
                     timeout=2.0, transport_options=transport_options) as conn_from_pool:
                 with get_producer(conn=conn_from_pool, block=False) as producer:
@@ -194,17 +196,16 @@ class AMQPPublisher:
             if "NO_ROUTE" in str(exc):
                 raise UndeliverableMessage(exchange=exchange.name, routing_key=routing_key)
             raise
+        return result
 
     #def on_return(self, *args, **kwargs):
     #    err = args[0]
-    #    import pdb
-    #    pdb.set_trace()
 ## end of class AMQPPublisher
 
 
 class ProviderCollector(object):
     def __init__(self, **kwargs):
-        self._providers = set()
+        self._providers = set() # should it be class variable ?
         self._unreg_providers = set()
         self._providers_registered = False
         super(ProviderCollector, self).__init__(**kwargs)
@@ -222,23 +223,46 @@ class ProviderCollector(object):
         self._unreg_providers.add(provider) # TODO, should it be atomic ?
         if len(self._providers) == 0:
             self._providers_registered = False
+    
+    def _find_provider(self, target, label:str):
+        try:
+            filt = filter(lambda x: x.identity == label, target)
+            provider = next(filt)
+        except StopIteration as e:
+            provider = None
+        return provider
 
-    def declare(self, conn):
-        for provider in self._providers:
+    def declare(self, conn, label:str) -> bool:
+        provider = self._find_provider(self._providers, label)
+        log_args = ['action', 'declare rpc queue', 'label', label,
+                'default_channel', conn.default_channel]
+        _logger.debug(None, *log_args)
+        result = None
+        if provider:
+            # TODO, it seems that `kombu` internal automatically declares all registered
+            # queues at one API call to remote broker, not just one specific queue
             bound_q = provider.queue(conn.default_channel)
-            bound_q.declare()
+            result = bound_q.declare()
+        return result is not None
 
-    def undeclare(self, conn):
-        # TODO, figure out when should I delete the queues of these unregistered providers
+    def undeclare(self, conn, label:str):
         if not hasattr(self, '_unreg_providers'):
             return
-        for provider in self._unreg_providers:
-            bound_q = provider.queue(conn.default_channel)
-            bound_q.delete()
+        provider = self._find_provider(self._unreg_providers, label)
+        if provider: # delete the queues of the unregistered providers
+            try: # sync with remote broker
+                bound_q = provider.queue(conn.default_channel)
+                bound_q.delete()
+            except ConsumerCancelled as e:
+                log_args = ['action', 'undeclare rpc queue', 'label', label,
+                    'msg', str(e.args)]
+                _logger.error(None, *log_args)
+            self._unreg_providers.remove(provider)
 
 
 class AMQPQueueConsumer(ProviderCollector, KombuConsumerMixin):
     def __init__(self, amqp_uri, config=None, **kwargs):
+        # this project embeds user passwd in the url, TODO, more secure design option
         self._amqp_uri = amqp_uri
         self._config = config or {}
         self._consumers = {}
@@ -249,44 +273,37 @@ class AMQPQueueConsumer(ProviderCollector, KombuConsumerMixin):
         self.connection = self._init_default_conn()
         super(AMQPQueueConsumer, self).__init__(**kwargs)
 
-    def _init_default_conn(self):
+    def _init_default_conn(self) -> kombu.Connection:
         heartbeat = self._config.get(AMQP_HEARTBEAT_CONFIG_KEY, AMQP_DEFAULT_HEARTBEAT)
-        transport_options = self._config.get(
-            AMQP_TRANSPORT_OPTIONS_CONFIG_KEY, AMQP_DEFAULT_TRANSPORT_OPTIONS
-        )
+        transport_options = self._config.get( AMQP_TRANSPORT_OPTIONS_CONFIG_KEY,
+                AMQP_DEFAULT_TRANSPORT_OPTIONS )
         ssl = self._config.get(AMQP_SSL_CONFIG_KEY, None)
-        conn = kombu.Connection(
-                  self._amqp_uri,
-                  transport_options=transport_options,
-                  heartbeat=heartbeat,
-                  ssl=ssl )
-        return conn
+        return kombu.Connection (
+                  self._amqp_uri, heartbeat=heartbeat, ssl=ssl,
+                  transport_options=transport_options )
+        # connection established lazily whenever needed
 
     @contextmanager
     def create_connection(self):
         with get_connection(conn=self.connection) as conn_from_pool:
             yield conn_from_pool
 
-    def declare(self, conn=None):
-        if conn: # assume the given connection is already established
-            super().declare(conn=conn)
-        else:
-            with self.create_connection() as default_conn:
-                super().declare(conn=default_conn)
-
-    def __del__(self):
-        with self.create_connection() as default_conn:
-            self.undeclare(conn=default_conn)
+    def undeclare(self, label:str):
+        ProviderCollector.undeclare(self, conn=self.connection, label=label)
 
     def get_consumers(self, consumer_cls, channel):
+        """
+        implement  kombu.mixins.ConsumerMixin.get_consumers() , will be
+        invoked by ConsumerMixin.consume() . This function creates consumers for
+        all registered providers, which means to consume all the queues at a time.
+        """
         for provider in self._providers:
             if self._consumers.get(provider, None):
                 continue
             consumer = consumer_cls(
                 queues=[provider.queue],
                 callbacks=[provider.handle_message],
-                accept=self._accept
-            )
+                accept=self._accept )
             consumer.qos(prefetch_count=1)
             self._consumers[provider] = consumer
         return self._consumers.values()
@@ -297,8 +314,11 @@ class AMQPQueueConsumer(ProviderCollector, KombuConsumerMixin):
         if message.channel.connection:
             try:
                 message.ack()
-            except ConnectionError:  # pragma: no cover
-                pass  # ignore connection closing inside conditional
+            except ConnectionError as e:
+                log_args = ['action', 'ack-msg-conn-err', 'msg', str(e.args),
+                        'channel', str(message.channel) ]
+                _logger.warning(None, *log_args)
+                # ignore connection closing inside conditional
 
 ## end of class AMQPQueueConsumer
 
