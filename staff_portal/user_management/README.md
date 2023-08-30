@@ -71,7 +71,17 @@ DJANGO_SETTINGS_MODULE='user_management.settings.development'  celery \
 ```
 
 ## Test
+### Unit Test
+```bash
+python3 ./manage.py test tests.python.middlewares.cors  --settings user_management.settings.test  --verbosity=2  
+python3 ./manage.py test tests.python.middlewares.csrf  --settings user_management.settings.test  --verbosity=2
+python3 -m unittest tests.python.keystore.persistence  -v
+python3 -m unittest tests.python.keystore.keygen  -v
+python3 -m unittest tests.python.keystore.manager  -v
+python3 -m unittest tests.python.util.graph -v
+```
 ### Integration Test
 ```bash
+./user_management/run_integration_test
 ```
 
