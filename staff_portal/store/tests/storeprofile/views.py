@@ -23,7 +23,6 @@ class TestCreation:
         response = test_client.post(self.url, headers={'Authorization': 'Bearer abc1234efg'}, json=[])
         assert response.status_code == 401
         result = response.json()
-        assert result['detail'] == 'authentication failure'
         profile_data = {'id':136 , 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
                 'roles':[{'app_code':app_code, 'codename':'view_storeprofile'},
                     {'app_code':app_code, 'codename':'add_xoxoxox'}]
@@ -141,8 +140,7 @@ class TestCreation:
         num_items = 4
         profile_data = {'id':99, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
                 'roles':[{'app_code':app_code, 'codename':'view_storeprofile'},
-                    {'app_code':app_code, 'codename':'add_storeprofile'}]
-                }
+                    {'app_code':app_code, 'codename':'add_storeprofile'}]  }
         encoded_token = keystore.gen_access_token(profile=profile_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         body = [next(store_data) for _ in range(num_items)]
@@ -160,7 +158,7 @@ class TestCreation:
         assert response.status_code == 400
         result = response.json()
         expect_data = {
-            0 : {'non-existent user profile', 'unable to login'} ,
+            0 : {'non-existent user profile'} ,
             1 : {'unable to login'} ,
         }
         for body_idx, expect_value in expect_data.items():
@@ -240,15 +238,13 @@ class TestCreation:
 
     @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_quota_limit_exceeds(self, session_for_test, keystore, test_client, store_data):
-        num_stores = 3
-        max_num_stores_per_user = 4
+        num_stores_saved, num_new_stores, max_num_stores_per_user = 3, 2, 4
         profile_data = {'id':71, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
                 'roles':[{'app_code':app_code, 'codename':'view_storeprofile'},
-                    {'app_code':app_code, 'codename':'add_storeprofile'}]
-                }
+                    {'app_code':app_code, 'codename':'add_storeprofile'}]  }
         encoded_token = keystore.gen_access_token(profile=profile_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
-        body = [next(store_data) for _ in range(num_stores)]
+        body = [next(store_data) for _ in range(num_stores_saved)]
         chosen_supervisor_id = body[0]['supervisor_id']
         reply_event = RpcReplyEvent(listener=self, timeout_s=7)
         reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
@@ -263,7 +259,7 @@ class TestCreation:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.post(self.url, headers=headers, json=body)
                 assert response.status_code == 201
-                body = [next(store_data) for _ in range(2)]
+                body = [next(store_data) for _ in range(num_new_stores)]
                 for item in body:
                     item['supervisor_id'] = chosen_supervisor_id
                 response = test_client.post(self.url, headers=headers, json=body)
@@ -271,9 +267,13 @@ class TestCreation:
                 response = test_client.post(self.url, headers=headers, json=body)
                 assert response.status_code == 403
                 result = response.json()
-                for err in result['detail']:
-                    pos = err['supervisor_id'][0].find('Limit exceeds')
-                    assert pos >= 0
+                assert len(result['detail']) == num_new_stores
+                err = result['detail'][0]
+                assert err['supervisor_id'] == chosen_supervisor_id
+                assert err['store_profile']['type'] == 'limit-exceed'
+                assert err['store_profile']['max_limit'] == max_num_stores_per_user
+                assert err['store_profile']['num_existing_items'] == num_stores_saved
+                assert err['store_profile']['num_new_items'] == num_new_stores
 
 
 class TestUpdateContact:
@@ -487,7 +487,7 @@ class TestSwitchSupervisor:
 
 
 class TestDeletion:
-    url = '/profiles'
+    url = '/profiles?ids=%s'
     _auth_data_pattern = { 'id':-1, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
         'roles':[
             {'app_code':app_code, 'codename':'view_storeprofile'},
@@ -503,11 +503,12 @@ class TestDeletion:
         auth_data['id'] = 214
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
-        body = {'ids': random.sample(list(map(lambda obj:obj.id, objs)), num_deleting)}
+        deleting_ids = random.sample(list(map(lambda obj:obj.id, objs)), num_deleting)
+        uri_renderred = self.url % ','.join(map(str, deleting_ids))
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            response = test_client.delete(self.url, headers=headers, json=body)
+            response = test_client.delete(uri_renderred, headers=headers)
             assert response.status_code == 204
-            response = test_client.delete(self.url, headers=headers, json=body)
+            response = test_client.delete(uri_renderred, headers=headers)
             assert response.status_code == 410
 
 
@@ -551,6 +552,4 @@ class TestRead:
         assert expect_data == actual_data
         for field in ('locality','street','detail', 'floor'):
             assert result['location'][field] == getattr(obj.location, field)
-
-
 

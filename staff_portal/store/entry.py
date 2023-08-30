@@ -26,6 +26,8 @@ async def toplvl_lifespan_cb(app:FastAPI):
     _logger.info('[app]life-span starting')
     yield shr_ctx
     _logger.info('[app]life-span terminating')
+    fn = import_module_string(dotted_path=settings.DEINIT_SHARED_CONTEXT_FN)
+    await fn(app)
 
 
 def _init_app(_setting):

@@ -2,7 +2,7 @@ import os
 import logging
 from datetime import datetime , time as py_time
 from functools import partial
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Union
 from importlib import import_module
 
 from mariadb.constants.CLIENT import MULTI_STATEMENTS
@@ -11,6 +11,7 @@ from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTP
 from fastapi.security  import OAuth2AuthorizationCodeBearer
 from pydantic import BaseModel as PydanticBaseModel, PositiveInt, constr, EmailStr, validator, ValidationError
 from pydantic.errors import StrRegexError
+from sqlalchemy import delete as SqlAlDelete
 from sqlalchemy.orm import Session
 
 from common.auth.fastapi import base_authentication, base_permission_check
@@ -35,9 +36,18 @@ shared_ctx = {}
 async def app_shared_context_start(_app:FastAPI):
     from common.auth.keystore import create_keystore_helper
     from common.util.python import import_module_string
+    shared_ctx['auth_app_rpc'] = RPCproxy(dst_app_name='user_management', src_app_name='store')
+    shared_ctx['product_app_rpc'] = RPCproxy(dst_app_name='product', src_app_name='store')
     shared_ctx['auth_keystore'] = create_keystore_helper(cfg=settings.KEYSTORE, import_fn=import_module_string)
     return shared_ctx
 
+async def app_shared_context_destroy(_app:FastAPI):
+    rpcobj = shared_ctx.pop('auth_app_rpc')
+    del rpcobj
+    rpcobj = shared_ctx.pop('product_app_rpc')
+    del rpcobj
+    # note intepreter might not invoke `__del__()` for some cases
+    # e.g. dependency cycle
 
 router = APIRouter(
             prefix='', # could be API versioning e.g. /v0.0.1/* ,  /v2.0.1/*
@@ -52,10 +62,6 @@ router = APIRouter(
             }
         )
 
-
-
-auth_app_rpc = RPCproxy(dst_app_name='user_management', src_app_name='store')
-product_app_rpc = RPCproxy(dst_app_name='product', src_app_name='store')
 
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
         authorizationUrl="no_auth_url",
@@ -138,9 +144,8 @@ class NewStoreProfileReqBody(PydanticBaseModel):
     location : Optional[OutletLocationBody] = None
 
 
-
 def _get_supervisor_auth(prof_ids):
-    reply_evt = auth_app_rpc.get_profile(ids=prof_ids, fields=['id', 'auth', 'quota'])
+    reply_evt = shared_ctx['auth_app_rpc'].get_profile(ids=prof_ids, fields=['id', 'auth', 'quota'])
     if not reply_evt.finished:
         for _ in range(settings.NUM_RETRY_RPC_RESPONSE): # TODO, (1) async task (2) integration test
             reply_evt.refresh(retry=False, timeout=0.5, num_of_msgs_fetch=1)
@@ -152,8 +157,7 @@ def _get_supervisor_auth(prof_ids):
     if rpc_response['status'] != reply_evt.status_opt.SUCCESS :
         raise FastApiHTTPException(
                 status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,  headers={},
-                detail={'app_code':[AppCodeOptions.user_management.value[0]]}
-            )
+                detail={'app_code':[AppCodeOptions.user_management.value[0]]} )
     return rpc_response['result']
 
 
@@ -167,14 +171,14 @@ class NewStoreProfilesReqBody(PydanticBaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        prof_ids = list(set(map(lambda obj: obj.supervisor_id, self.__root__)))
-        supervisor_data = _get_supervisor_auth(prof_ids)
-        quota_arrangement = self._get_quota_arrangement(supervisor_data, prof_ids)
+        req_prof_ids = list(set(map(lambda obj: obj.supervisor_id, self.__root__)))
+        supervisor_verified = _get_supervisor_auth(req_prof_ids)
+        quota_arrangement = self._get_quota_arrangement(supervisor_verified)
         self._storeemail_quota_check(quota_arrangement)
         self._storephone_quota_check(quota_arrangement)
         db_engine = _init_db_engine(conn_args={'client_flag':MULTI_STATEMENTS})
         self.metadata =  {'db_engine': db_engine}
-        sa_new_stores =self._storeprofile_quota_check(db_engine, prof_ids, quota_arrangement)
+        sa_new_stores = self._storeprofile_quota_check(db_engine, req_prof_ids, quota_arrangement)
         self.metadata['sa_new_stores'] = sa_new_stores
 
     def __del__(self):
@@ -190,51 +194,24 @@ class NewStoreProfilesReqBody(PydanticBaseModel):
         else:
             super().__setattr__(name, value)
 
-    def _get_quota_arrangement(self, supervisor_data, profile_ids):
-        # identity check, are they existing users ? through inter-apps message queue
-        err_content = []
-        quota_material_models = (StoreProfile, StoreEmail, StorePhone)
-        supervisor_data = {item['id']:item for item in supervisor_data}
-        quota_arrangement = {}
-        for item in self.__root__:
-            err_detail = []
-            prof_id = item.supervisor_id
-            err_detail = _get_quota_arrangement_helper(supervisor_data, prof_id, quota_arrangement)
-            err_content.append(err_detail)
+    def _get_quota_arrangement(self, supervisor_verified):
+        supervisor_verified = {item['id']:item for item in supervisor_verified}
+        out = {}
+        _fn  = lambda item: _get_quota_arrangement_helper(supervisor_verified, \
+                    req_prof_id=item.supervisor_id, out=out)
+        err_content = list(map(_fn, self.__root__))
         if any(err_content):
             raise FastApiHTTPException( detail=err_content,  headers={},
                     status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
-        return quota_arrangement
+        return out
 
     def _storeemail_quota_check(self, quota_arrangement):
-        err_content = []
-        for item in self.__root__:
-            err_item = {}
-            prof_id = item.supervisor_id
-            num_new_items = len(item.emails)
-            max_limit = quota_arrangement[prof_id][StoreEmail]
-            if max_limit < num_new_items:
-                err_msg = 'Limit exceeds, num_new_items:%s, max_limit:%s' % (num_new_items, max_limit)
-                err_item['emails'] = [err_msg]
-            err_content.append(err_item)
-        if any(err_content):
-            raise FastApiHTTPException( detail=err_content,  headers={},
-                    status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
+        _contact_common_quota_check(self.__root__, quota_arrangement,
+                label='emails', mat_model_cls=StoreEmail)
 
     def _storephone_quota_check(self, quota_arrangement):
-        err_content = []
-        for item in self.__root__:
-            err_item = {}
-            prof_id = item.supervisor_id
-            num_new_items = len(item.phones)
-            max_limit = quota_arrangement[prof_id][StorePhone]
-            if max_limit < num_new_items:
-                err_msg = 'Limit exceeds, num_new_items:%s, max_limit:%s' % (num_new_items, max_limit)
-                err_item['phones'] = [err_msg]
-            err_content.append(err_item)
-        if any(err_content):
-            raise FastApiHTTPException( detail=err_content,  headers={},
-                    status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
+        _contact_common_quota_check(self.__root__, quota_arrangement,
+                label='phones', mat_model_cls=StorePhone)
 
 
     def _storeprofile_quota_check(self, db_engine, profile_ids, quota_arrangement):
@@ -247,59 +224,25 @@ class NewStoreProfilesReqBody(PydanticBaseModel):
                 item['location'] = OutletLocation(**item['location'])
             obj = StoreProfile(**item)
             return obj
-        err_content = []
         new_stores = list(map(_pydantic_to_sqlalchemy, self.__root__))
         with Session(bind=db_engine) as session:
             quota_chk_result = StoreProfile.quota_stats(new_stores, session=session, target_ids=profile_ids)
-        for  item in self.__root__:
-            err_item = {}
-            prof_id = item.supervisor_id
-            num_existing_items = quota_chk_result[prof_id]['num_existing_items']
-            num_new_items = quota_chk_result[prof_id]['num_new_items']
+        def _inner_chk (item):
+            err = {}
+            num_existing_items = quota_chk_result[item.supervisor_id]['num_existing_items']
+            num_new_items = quota_chk_result[item.supervisor_id]['num_new_items']
             curr_used = num_existing_items + num_new_items
-            max_limit = quota_arrangement[prof_id][StoreProfile]
+            max_limit = quota_arrangement[item.supervisor_id][StoreProfile]
             if max_limit < curr_used:
-                err_msg = 'Limit exceeds, num_existing_items:%s, num_new_items:%s, max_limit:%s' % (num_existing_items, num_new_items, max_limit)
-                err_item['supervisor_id'] = [err_msg]
-            err_content.append(err_item)
+                err['supervisor_id'] = item.supervisor_id
+                err['store_profile'] = {'type':'limit-exceed', 'max_limit':max_limit,
+                    'num_new_items':num_new_items, 'num_existing_items':num_existing_items}
+            return err
+        err_content = list(map(_inner_chk, self.__root__))
         if any(err_content):
             raise FastApiHTTPException( detail=err_content, headers={}, status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
         return new_stores
 ## end of class NewStoreProfilesReqBody()
-
-
-class DeleteStoreProfilesReqBody(PydanticBaseModel):
-    ids : List[PositiveInt]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        db_engine = _init_db_engine()
-        session = Session(bind=db_engine)
-        self.metadata =  {'db_engine': db_engine, 'session':session}
-        query = session.query(StoreProfile).filter(StoreProfile.id.in_(self.ids))
-        objs = query.all()
-        actual_ids = set(map(lambda obj:obj.id , objs))
-        missing = set(self.ids) - actual_ids
-        if missing:
-            raise FastApiHTTPException( detail='Some of stores do not exist, ID = %s' % missing,
-                    headers={}, status_code=FastApiHTTPstatus.HTTP_410_GONE )
-        self.metadata['deleting_objs'] = objs
-
-    def __del__(self):
-        _metadata = getattr(self, 'metadata', {})
-        session = _metadata.get('session')
-        if session:
-            session.close()
-        db_engine = _metadata.get('db_engine')
-        if db_engine:
-            db_engine.dispose()
-
-    def __setattr__(self, name, value):
-        if name == 'metadata':
-            # the attribute is for internal use, skip type checking
-            self.__dict__[name] = value
-        else:
-            super().__setattr__(name, value)
 
 
 class ExistingStoreProfileReqBody(PydanticBaseModel):
@@ -315,12 +258,12 @@ class StoreSupervisorReqBody(PydanticBaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        prof_id = self.supervisor_id
-        supervisor_data = _get_supervisor_auth([prof_id])
-        quota_arrangement = self._get_quota_arrangement(supervisor_data, prof_id)
+        req_prof_id = self.supervisor_id
+        supervisor_verified = _get_supervisor_auth([req_prof_id])
+        quota_arrangement = self._get_quota_arrangement(supervisor_verified, req_prof_id)
         db_engine = _init_db_engine()
         self.metadata =  {'db_engine': db_engine,}
-        self._storeprofile_quota_check(db_engine, prof_id, quota_arrangement)
+        self._storeprofile_quota_check(db_engine, req_prof_id, quota_arrangement)
 
     def __del__(self):
         _metadata = getattr(self, 'metadata', {})
@@ -335,29 +278,30 @@ class StoreSupervisorReqBody(PydanticBaseModel):
         else:
             super().__setattr__(name, value)
 
-    def _get_quota_arrangement(self, supervisor_data, prof_id):
-        # identity check, are they existing users ? through inter-apps message queue
-        supervisor_data = {item['id']:item for item in supervisor_data}
-        quota_arrangement = {}
-        err_detail = _get_quota_arrangement_helper(supervisor_data, prof_id, quota_arrangement)
+    def _get_quota_arrangement(self, supervisor_verified, req_prof_id):
+        supervisor_verified = {item['id']:item for item in supervisor_verified}
+        out = {}
+        err_detail = _get_quota_arrangement_helper(supervisor_verified, \
+                req_prof_id=req_prof_id, out=out)
         if any(err_detail):
             raise FastApiHTTPException( detail=err_detail,  headers={},
                     status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
-        return quota_arrangement
+        return out
 
     def _storeprofile_quota_check(self, db_engine, prof_id, quota_arrangement):
         with Session(bind=db_engine) as session:
             quota_chk_result = StoreProfile.quota_stats([], session=session, target_ids=[prof_id])
-        err_item = {}
+        err = {}
         num_existing_items = quota_chk_result[prof_id]['num_existing_items']
         num_new_items = 1
         curr_used = num_existing_items + num_new_items
         max_limit = quota_arrangement[prof_id][StoreProfile]
         if max_limit < curr_used:
-            err_msg = 'Limit exceeds, num_existing_items:%s, num_new_items:%s, max_limit:%s' % (num_existing_items, num_new_items, max_limit)
-            err_item['supervisor_id'] = [err_msg]
-        if any(err_item):
-            raise FastApiHTTPException( detail=err_item, headers={}, status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
+            err['supervisor_id'] = prof_id
+            err['store_profile'] = {'type':'limit-exceed', 'max_limit':max_limit,
+                'num_new_items':num_new_items, 'num_existing_items':num_existing_items}
+        if any(err):
+            raise FastApiHTTPException( detail=err, headers={}, status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
 
 
 
@@ -388,7 +332,7 @@ class StoreStaffsReqBody(PydanticBaseModel):
 
     def validate_staff(self, supervisor_id:int):
         staff_ids = list(map(lambda obj:obj.staff_id , self.__root__))
-        reply_evt = auth_app_rpc.profile_descendant_validity(asc=supervisor_id, descs=staff_ids)
+        reply_evt = shared_ctx['auth_app_rpc'].profile_descendant_validity(asc=supervisor_id, descs=staff_ids)
         if not reply_evt.finished:
             for _ in range(settings.NUM_RETRY_RPC_RESPONSE): # TODO, (1) async task (2) integration test
                 reply_evt.refresh(retry=False, timeout=0.4, num_of_msgs_fetch=1)
@@ -472,8 +416,8 @@ class EditProductsReqBody(PydanticBaseModel):
         filtered = filter(lambda obj:obj.product_type == SaleableTypeEnum.PACKAGE , self.__root__)
         pkg_ids  = list(map(lambda obj:obj.product_id , filtered))
         fields_present = ['id',]
-        reply_evt = product_app_rpc.get_product(item_ids=item_ids, pkg_ids=pkg_ids, profile=staff_id,
-                item_fields=fields_present, pkg_fields=fields_present)
+        reply_evt = shared_ctx['product_app_rpc'].get_product(item_ids=item_ids, pkg_ids=pkg_ids,
+                profile=staff_id, item_fields=fields_present, pkg_fields=fields_present)
         if not reply_evt.finished:
             for _ in range(settings.NUM_RETRY_RPC_RESPONSE): # TODO, (1) async task (2) integration test
                 reply_evt.refresh(retry=False, timeout=0.4, num_of_msgs_fetch=1)
@@ -513,26 +457,46 @@ class DiscardProductsReqBody(PydanticBaseModel):
         orm_mode =True
 
 
-def _get_quota_arrangement_helper(supervisor_data, prof_id, quota_arrangement):
-    quota_material_models = (StoreProfile, StoreEmail, StorePhone)
+def _get_quota_arrangement_helper(supervisor_verified:dict, req_prof_id:int, out:dict):
     err_detail = []
-    item = supervisor_data.get(prof_id, {})
-    if not item:
+    item = supervisor_verified.get(req_prof_id, None)
+    if item:
+        auth_status = item.get('auth', ActivationStatus.ACCOUNT_NON_EXISTENT.value)
+        if auth_status != ActivationStatus.ACCOUNT_ACTIVATED.value:
+            err_detail.append('unable to login')
+        if out.get(req_prof_id):
+            log_args = ['action', 'duplicate-quota', 'req_prof_id', str(req_prof_id)]
+            _logger.warning(None, *log_args)
+        else:
+            quota_material_models = (StoreProfile, StoreEmail, StorePhone)
+            out[req_prof_id] = {}
+            quota = item.get('quota', [])
+            filter_fn = lambda d, model_cls: d['mat_code'] == model_cls.quota_material.value
+            for model_cls in quota_material_models:
+                bound_filter_fn = partial(filter_fn, model_cls=model_cls)
+                filtered = tuple(filter(bound_filter_fn, quota))
+                maxnum = filtered[0]['maxnum'] if any(filtered) else 0
+                out[req_prof_id][model_cls] = maxnum
+    else:
         err_detail.append('non-existent user profile')
-    auth_status = item.get('auth', None)
-    if auth_status != ActivationStatus.ACCOUNT_ACTIVATED.value:
-        err_detail.append('unable to login')
-    if quota_arrangement.get(prof_id, None) is None:
-        quota_arrangement[prof_id] = {}
-        quota = item.get('quota', [])
-        filter_fn = lambda d, model_cls: d['mat_code'] == model_cls.quota_material.value
-        for model_cls in quota_material_models:
-            bound_filter_fn = partial(filter_fn, model_cls=model_cls)
-            filtered = tuple(filter(bound_filter_fn, quota))
-            maxnum = filtered[0]['maxnum'] if any(filtered) else 0
-            quota_arrangement[prof_id][model_cls] = maxnum
     err_detail = {'supervisor_id':err_detail} if any(err_detail) else {}
     return  err_detail
+
+def _contact_common_quota_check(req, quota_arrangement:dict, label:str,
+        mat_model_cls:Union[StoreEmail, StorePhone] ):
+    def _inner_chk (item):
+        err = {}
+        num_new_items = len(getattr(item, label))
+        max_limit = quota_arrangement[item.supervisor_id][mat_model_cls]
+        if max_limit < num_new_items:
+            err['supervisor_id'] = item.supervisor_id
+            err[label] = {'type':'limit-exceed', 'max_limit':max_limit,
+                    'num_new_items':num_new_items}
+        return err
+    err_content = list(map(_inner_chk, req))
+    if any(err_content):
+        raise FastApiHTTPException( detail=err_content,  headers={},
+                status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
 
 
 class StoreProfileResponseBody(PydanticBaseModel):
@@ -554,13 +518,17 @@ class StoreProfileReadResponseBody(PydanticBaseModel):
 
 
 def _init_db_engine(conn_args:Optional[dict]=None):
+    """ TODO
+      - for development and production environment, use configurable parameter
+        to optionally set multi_statement for the API endpoints that require to run
+        multiple SQL statements in one go.
+      - the engine is the most efficient when created at module-level of application
+        , not per function or per request, modify the implementation in this app.
+    """ 
     kwargs = {
         'secrets_file_path':settings.SECRETS_FILE_PATH, 'base_folder':'staff_portal',
         'secret_map':(settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % settings.DB_USER_ALIAS),
         'driver_label':settings.DRIVER_LABEL, 'db_name':settings.DB_NAME,
-        # TODO, for development and production environment, use configurable parameter
-        # to optionally set multi_statement for the API endpoints that require to run
-        # multiple SQL statements in one go.
     }
     if conn_args:
         kwargs['conn_args'] = conn_args
@@ -654,12 +622,25 @@ def switch_supervisor(store_id:PositiveInt, request:StoreSupervisorReqBody, user
     return None
 
 @router.delete('/profiles', status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT)
-def delete_profile(request:DeleteStoreProfilesReqBody, user:dict=FastapiDepends(delete_profile_authorization)):
-    session = request.metadata['session']
-    deleting_objs = request.metadata['deleting_objs']
-    for obj in deleting_objs:
-        session.delete(obj)
-    session.commit()
+def delete_profile(ids:str, user:dict=FastapiDepends(delete_profile_authorization)):
+    try:
+        ids = list(map(int, ids.split(',')))
+        if len(ids) == 0:
+            raise FastApiHTTPException( detail={'ids':'empty'},  headers={},
+                    status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+    except ValueError as e:
+        raise FastApiHTTPException( detail={'ids':'invalid-id'},  headers={},
+                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+    db_engine = _init_db_engine()
+    with Session(bind=db_engine) as _session:
+        stmt = SqlAlDelete(StoreProfile).where(StoreProfile.id.in_(ids))
+        result = _session.execute(stmt) # TODO, consider soft-delete
+        _session.commit()
+    # Note python does not have `scope` concept, I can access the variables
+    # `result` and `ids` declared above.
+    if result.rowcount == 0:
+        raise FastApiHTTPException( detail={},  headers={},
+                status_code=FastApiHTTPstatus.HTTP_410_GONE )
     return None
 
 

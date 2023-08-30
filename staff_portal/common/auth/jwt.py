@@ -186,10 +186,11 @@ def stream_jwks_file(filepath):
 
 
 class RemoteJWKSPersistHandler(AbstractKeystorePersistReadMixin):
-    def __init__(self, url, name='default persist handler'):
+    def __init__(self, url, name='default persist handler', lifespan_hrs=1):
         # jwk set is internally cached and will be periodically refreshed
         # inside the package
-        self._jwk_client = PyJWKClient(uri=url, max_cached_keys=9, lifespan=900)
+        lifespan_secs = lifespan_hrs * 3600
+        self._jwk_client = PyJWKClient(uri=url, max_cached_keys=9, lifespan=lifespan_secs)
         self._name = name
 
     def _get_signing_keys(self):
