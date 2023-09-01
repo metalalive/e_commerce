@@ -45,12 +45,12 @@ def keystore():
 def db_engine_resource(request):
     # base setup / teardown for creating or deleting database and apply migration
     default_dbs_engine = sqlalchemy_init_engine(
-            secrets_file_path=settings.SECRETS_FILE_PATH, base_folder='staff_portal',
+            secrets_file_path=settings.SECRETS_FILE_PATH, base_folder=settings.SYS_BASE_PATH,
             secret_map=(settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % settings.DB_USER_ALIAS),
             driver_label=settings.DRIVER_LABEL
         ) # without specifying database name
     default_db_engine =  sqlalchemy_init_engine(
-            secrets_file_path=settings.SECRETS_FILE_PATH, base_folder='staff_portal',
+            secrets_file_path=settings.SECRETS_FILE_PATH, base_folder=settings.SYS_BASE_PATH,
             secret_map=(settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % settings.DB_USER_ALIAS),
             driver_label=settings.DRIVER_LABEL,  db_name=settings.DB_NAME,
             # TODO, for development and production environment, use configurable parameter

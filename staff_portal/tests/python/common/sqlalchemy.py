@@ -20,8 +20,9 @@ def deinit_test_database(dbs_engine, db_engine, dropdb_sql, keepdb):
 def clean_test_data(conn, metadatas):
     for metadata in metadatas:
         for table in metadata.tables.values():
-            stmt = table.delete()
-            result = conn.execute(stmt) # will commit automatically
+            with conn.begin():
+                stmt = table.delete()
+                result = conn.execute(stmt) # will commit automatically
             #if result.rowcount > 0:
             #    pass
 

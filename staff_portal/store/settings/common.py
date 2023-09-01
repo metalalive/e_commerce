@@ -4,6 +4,7 @@ from pathlib import Path
 from common.logging.logger import ExtendedLogger
 
 APP_BASE_PATH = Path(__file__).resolve(strict=True).parent.parent
+SYS_BASE_PATH = APP_BASE_PATH.parent
 
 AUTH_MIGRATION_PATH = APP_BASE_PATH.parent.joinpath('migrations/alembic/store')
 

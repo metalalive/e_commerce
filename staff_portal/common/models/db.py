@@ -1,4 +1,5 @@
 from time import sleep
+from pathlib import Path
 import functools
 import logging
 
@@ -34,11 +35,11 @@ def db_conn_retry_wrapper(func):
     return inner #### end of db_conn_retry_wrapper()
 
 
-def sqlalchemy_init_engine(secrets_file_path, secret_map, base_folder, driver_label,
-        db_name='', conn_args=None):
+def sqlalchemy_init_engine(secrets_file_path, secret_map, base_folder:Path,
+        driver_label, db_name='', conn_args=None):
     import sqlalchemy as sa
     conn_args = conn_args or {}
-    db_credentials = get_credential_from_secrets(base_folder=base_folder,
+    db_credentials = get_credential_from_secrets(base_path=base_folder,
             secret_path=secrets_file_path,  secret_map=dict([secret_map]))
     chosen_db_credential = db_credentials[secret_map[0]]
     if db_name:

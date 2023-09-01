@@ -29,12 +29,22 @@ class TestUpdate:
         # skip receiving message from RPC-reply-queue
         pass
 
-    def _setup_base_req_body(self, objs, product_avail_gen) -> List[Dict]:
+    def _setup_mock_rpc_reply(self, body, timeout_sec=7, status=RpcReplyEvent.status_opt.SUCCESS):
+        sale_items_d = filter(lambda d:d['product_type'] == SaleableTypeEnum.ITEM.value, body)
+        sale_pkgs_d  = filter(lambda d:d['product_type'] == SaleableTypeEnum.PACKAGE.value, body)
+        sale_items_d = map(lambda d:{'id':d['product_id']}, sale_items_d)
+        sale_pkgs_d  = map(lambda d:{'id':d['product_id']}, sale_pkgs_d )
+        reply_event = RpcReplyEvent(listener=self, timeout_s=timeout_sec)
+        reply_event.resp_body['status'] = status
+        reply_event.resp_body['result'] = {'item':list(sale_items_d), 'pkg':list(sale_pkgs_d)}
+        return reply_event
+
+    def _setup_base_req_body(self, objs, product_avail_gen, num_new_items:int=2) -> List[Dict]:
         body = [{'product_id':p.product_id, 'product_type':p.product_type.value,
             'start_after':p.start_after.isoformat(), 'end_before':p.end_before.isoformat(),
             'price':p.price } for p in objs]
         if product_avail_gen is not None:
-            new_product_d = [next(product_avail_gen) for _ in range(2)]
+            new_product_d = [next(product_avail_gen) for _ in range(num_new_items)]
             for item in new_product_d:
                 item['product_type'] = item['product_type'].value
                 item['start_after'] = item['start_after'].isoformat()
@@ -45,21 +55,17 @@ class TestUpdate:
     @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_ok(self, session_for_test, keystore, test_client, saved_store_objs, product_avail_data):
         obj = next(saved_store_objs)
-        body = self._setup_base_req_body(obj.products[2:], product_avail_data)
+        num_new, num_unmodified = 2, 2
+        body = self._setup_base_req_body(objs=obj.products[num_unmodified:],
+                product_avail_gen=product_avail_data, num_new_items=num_new)
         auth_data = self._auth_data_pattern
         # authorized user can be either supervisor or staff of the store
         auth_data['id'] = obj.staff[-1].staff_id
-        auth_data['quotas'][0]['maxnum'] = len(body)
+        auth_data['quotas'][0]['maxnum'] = len(obj.products) + num_new
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         url = self.url.format(store_id=obj.id)
-        sale_items_d = filter(lambda d:d['product_type'] == SaleableTypeEnum.ITEM.value, body)
-        sale_pkgs_d  = filter(lambda d:d['product_type'] == SaleableTypeEnum.PACKAGE.value, body)
-        sale_items_d = map(lambda d:{'id':d['product_id']}, sale_items_d)
-        sale_pkgs_d  = map(lambda d:{'id':d['product_id']}, sale_pkgs_d )
-        reply_event = RpcReplyEvent(listener=self, timeout_s=7)
-        reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
-        reply_event.resp_body['result'] = {'item':list(sale_items_d), 'pkg':list(sale_pkgs_d),}
+        reply_event = self._setup_mock_rpc_reply(body)
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
             with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_event
@@ -67,8 +73,10 @@ class TestUpdate:
         assert response.status_code == 200
         query = session_for_test.query(StoreProductAvailable).filter(StoreProductAvailable.store_id == obj.id)
         query = query.order_by(StoreProductAvailable.product_id.asc())
-        expect_value = sorted(body, key=lambda d:d['product_id'])
-        actual_value = list(map(lambda obj:obj.__dict__, query.all()))
+        expect_value = [*body, *self._setup_base_req_body(objs=obj.products[:num_unmodified],
+                product_avail_gen=None, num_new_items=0) ]
+        expect_value = sorted(expect_value, key=lambda d:d['product_id'])
+        actual_value = list(map(lambda obj:obj.__dict__, query))
         for item in actual_value:
             item.pop('_sa_instance_state', None)
             item.pop('store_id', None)
@@ -88,13 +96,7 @@ class TestUpdate:
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         url = self.url.format(store_id=obj.id)
-        sale_items_d = filter(lambda d:d['product_type'] == SaleableTypeEnum.ITEM.value, body[1:])
-        sale_pkgs_d  = filter(lambda d:d['product_type'] == SaleableTypeEnum.PACKAGE.value, body[1:])
-        sale_items_d = map(lambda d:{'id':d['product_id']}, sale_items_d)
-        sale_pkgs_d  = map(lambda d:{'id':d['product_id']}, sale_pkgs_d )
-        reply_event = RpcReplyEvent(listener=self, timeout_s=7)
-        reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
-        reply_event.resp_body['result'] = {'item':list(sale_items_d), 'pkg':list(sale_pkgs_d),}
+        reply_event = self._setup_mock_rpc_reply(body[1:])
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
             with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_event
@@ -120,13 +122,7 @@ class TestUpdate:
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         url = self.url.format(store_id=obj.id)
-        sale_items_d = filter(lambda d:d['product_type'] == SaleableTypeEnum.ITEM.value, body[:])
-        sale_pkgs_d  = filter(lambda d:d['product_type'] == SaleableTypeEnum.PACKAGE.value, body[:])
-        sale_items_d = map(lambda d:{'id':d['product_id']}, sale_items_d)
-        sale_pkgs_d  = map(lambda d:{'id':d['product_id']}, sale_pkgs_d )
-        reply_event = RpcReplyEvent(listener=self, timeout_s=7)
-        reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
-        reply_event.resp_body['result'] = {'item':list(sale_items_d), 'pkg':list(sale_pkgs_d),}
+        reply_event = self._setup_mock_rpc_reply(body[:])
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
             with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_event

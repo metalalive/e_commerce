@@ -16,7 +16,8 @@ Where `subcommand` could be one of followings :
 ## Run
 ### Development Server
 ```bash
-APP_SETTINGS="store.settings.development" uvicorn  --host 127.0.0.1 --port 8011 store.entry:app
+APP_SETTINGS="store.settings.development" uvicorn  --host 127.0.0.1 \
+    --port 8011 store.entry:app  >& ./tmp/log/dev/store_app.log &
 ```
 
 ### Production Server

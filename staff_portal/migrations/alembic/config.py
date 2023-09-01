@@ -25,12 +25,12 @@ class ExtendedConfig(Config):
 
 
 
-def _setup_db_credential(secret_path, db_usr_alias):
+def _setup_db_credential(base_path:Path, secret_path:str, db_usr_alias):
     _secret_map = {
         db_usr_alias      : 'backend_apps.databases.%s' % db_usr_alias,
         'usermgt_service' : 'backend_apps.databases.usermgt_service' ,
     }
-    out_map = get_credential_from_secrets(base_folder='staff_portal',
+    out_map = get_credential_from_secrets(base_path=base_path,
             secret_path=secret_path, secret_map=_secret_map )
     return out_map
 
@@ -47,7 +47,8 @@ def _copy_migration_scripts(src, dst):
 DEFAULT_VERSION_TABLE = 'alembic_version'
 
 
-def _init_common_params(app_base_path, secret_path, cfg_filename, db_usr_alias):
+def _init_common_params(sys_base_path:Path, app_base_path:Path,
+        secret_path, cfg_filename, db_usr_alias):
     cfg_file_path  = app_base_path.joinpath(cfg_filename)
     template_base_path = app_base_path.parent.joinpath('migrations/alembic/templates')
     cfg = ExtendedConfig(cfg_file_path, template_base_path=template_base_path)
@@ -55,7 +56,7 @@ def _init_common_params(app_base_path, secret_path, cfg_filename, db_usr_alias):
     vpath_delimiter = cfg.get_main_option('version_path_separator')
     mig_version_paths = cfg.get_main_option('version_locations').split(vpath_delimiter)
     mig_version_path = mig_version_paths[0]
-    db_credentials = _setup_db_credential(secret_path, db_usr_alias)
+    db_credentials = _setup_db_credential(sys_base_path, secret_path, db_usr_alias)
     return cfg, db_credentials, Path(migration_base_path), \
             Path(mig_version_path)
 
@@ -65,6 +66,7 @@ def auth_provider_upgrade (app_settings, init_round:bool, next_rev_id:str) :
     cfg, db_credentials, migration_base_path, version_path = _init_common_params(
             secret_path=app_settings.SECRETS_FILE_PATH,
             app_base_path=app_settings.APP_BASE_PATH,
+            sys_base_path=app_settings.SYS_BASE_PATH,
             db_usr_alias=db_usr_alias, cfg_filename='alembic_auth.ini' )
     chosen_db_credential = db_credentials[db_usr_alias]
     chosen_db_credential['NAME'] = app_settings.AUTH_DB_NAME
@@ -89,6 +91,7 @@ def resource_app_upgrade ( app_settings, next_rev_id:str, new_label:str,
     orm_base_cls_path = app_settings.ORM_BASE_CLASSES
     cfg, db_credentials, migration_base_path, version_path = _init_common_params(
             secret_path=app_settings.SECRETS_FILE_PATH,
+            sys_base_path=app_settings.SYS_BASE_PATH,
             app_base_path=app_settings.APP_BASE_PATH,
             db_usr_alias=db_usr_alias, cfg_filename='alembic_app.ini' )
     chosen_db_credential = db_credentials[db_usr_alias]
@@ -119,6 +122,7 @@ def _downgrade_app_migration(app_settings, prev_rev_id:str) -> Path:
     cfg, db_credentials, _, _ = _init_common_params(
             secret_path=app_settings.SECRETS_FILE_PATH,
             app_base_path=app_settings.APP_BASE_PATH,
+            sys_base_path=app_settings.SYS_BASE_PATH,
             db_usr_alias=db_usr_alias, cfg_filename='alembic_app.ini' )
     chosen_db_credential = db_credentials[db_usr_alias]
     chosen_db_credential['NAME'] = app_settings.DB_NAME
@@ -138,6 +142,7 @@ def _downgrade_auth_migration(app_settings, prev_rev_id:str) :
     cfg, db_credentials, _, _ = _init_common_params(
             secret_path=app_settings.SECRETS_FILE_PATH,
             app_base_path=app_settings.APP_BASE_PATH,
+            sys_base_path=app_settings.SYS_BASE_PATH,
             db_usr_alias=db_usr_alias, cfg_filename='alembic_auth.ini' )
     chosen_db_credential = db_credentials[db_usr_alias]
     chosen_db_credential['NAME'] = app_settings.AUTH_DB_NAME

@@ -173,13 +173,17 @@ def format_sqlalchemy_url(driver:str, db_credential):
         )
 
 
-def get_credential_from_secrets(secret_map:dict, base_folder:str, secret_path:str):
+def get_credential_from_secrets(secret_map:dict, base_path:Path, secret_path:str):
+    """ example of a database section within a secret file
+        db_credentials = {
+            'role_dba'           : secrets['backend_apps']['databases']['site_dba'] ,
+            'role_auth_service'  : secrets['backend_apps']['databases']['usermgt_service'] ,
+            'file_upload_service': secrets['backend_apps']['databases']['file_upload_service'] ,
+        }
+    """
     _credentials = {}
-    base_path = Path(__file__).resolve(strict=True)
-    while not (base_path.is_dir() and base_path.name == base_folder):
-        base_path = base_path.parent
-    secret_path = os.path.join(base_path, secret_path)
-    with open(secret_path) as f:
+    secret_fullpath = base_path.joinpath(secret_path)
+    with open(secret_fullpath) as f:
         secrets = json.load(f)
         node = None
         for k,v in secret_map.items():
@@ -188,11 +192,6 @@ def get_credential_from_secrets(secret_map:dict, base_folder:str, secret_path:st
             for v2 in hierarchy:
                 node = node.get(v2, None)
             _credentials[k] = node
-        ##db_credentials = {
-        ##    'site_dba'           : secrets['backend_apps']['databases']['site_dba'] ,
-        ##    'usermgt_service'    : secrets['backend_apps']['databases']['usermgt_service'] ,
-        ##    'file_upload_service': secrets['backend_apps']['databases']['file_upload_service'] ,
-        ##}
     return _credentials
 
 

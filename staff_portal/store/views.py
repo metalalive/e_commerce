@@ -11,7 +11,7 @@ from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTP
 from fastapi.security  import OAuth2AuthorizationCodeBearer
 from pydantic import BaseModel as PydanticBaseModel, PositiveInt, constr, EmailStr, validator, ValidationError
 from pydantic.errors import StrRegexError
-from sqlalchemy import delete as SqlAlDelete
+from sqlalchemy import delete as SqlAlDelete, select as SqlAlSelect, or_ as SqlAlOr, and_ as SqlAlAnd
 from sqlalchemy.orm import Session
 
 from common.auth.fastapi import base_authentication, base_permission_check
@@ -33,15 +33,40 @@ _logger = logging.getLogger(__name__)
 shared_ctx = {}
 
 
+def _init_db_engine(conn_args:Optional[dict]=None):
+    """ TODO
+      - for development and production environment, use configurable parameter
+        to optionally set multi_statement for the API endpoints that require to run
+        multiple SQL statements in one go.
+    """ 
+    kwargs = {
+        'secrets_file_path':settings.SECRETS_FILE_PATH, 'base_folder':settings.SYS_BASE_PATH,
+        'secret_map':(settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % settings.DB_USER_ALIAS),
+        'driver_label':settings.DRIVER_LABEL, 'db_name':settings.DB_NAME,
+    }
+    if conn_args:
+        kwargs['conn_args'] = conn_args
+    return sqlalchemy_init_engine(**kwargs)
+
+
 async def app_shared_context_start(_app:FastAPI):
     from common.auth.keystore import create_keystore_helper
     from common.util.python import import_module_string
     shared_ctx['auth_app_rpc'] = RPCproxy(dst_app_name='user_management', src_app_name='store')
     shared_ctx['product_app_rpc'] = RPCproxy(dst_app_name='product', src_app_name='store')
     shared_ctx['auth_keystore'] = create_keystore_helper(cfg=settings.KEYSTORE, import_fn=import_module_string)
+    # the engine is the most efficient when created at module-level of application
+    # , not per function or per request, modify the implementation in this app.
+    shared_ctx['db_engine'] = _init_db_engine(conn_args={'client_flag':MULTI_STATEMENTS})
     return shared_ctx
 
 async def app_shared_context_destroy(_app:FastAPI):
+    try:
+        _db_engine = shared_ctx.pop('db_engine')
+        _db_engine.dispose()
+    except Exception as e:
+        log_args = ['action', 'deinit-db-error-caught', 'detail', ','.join(e.args)]
+        _logger.error(None, *log_args)
     rpcobj = shared_ctx.pop('auth_app_rpc')
     del rpcobj
     rpcobj = shared_ctx.pop('product_app_rpc')
@@ -176,7 +201,7 @@ class NewStoreProfilesReqBody(PydanticBaseModel):
         quota_arrangement = self._get_quota_arrangement(supervisor_verified)
         self._storeemail_quota_check(quota_arrangement)
         self._storephone_quota_check(quota_arrangement)
-        db_engine = _init_db_engine(conn_args={'client_flag':MULTI_STATEMENTS})
+        db_engine = shared_ctx['db_engine']
         self.metadata =  {'db_engine': db_engine}
         sa_new_stores = self._storeprofile_quota_check(db_engine, req_prof_ids, quota_arrangement)
         self.metadata['sa_new_stores'] = sa_new_stores
@@ -261,15 +286,9 @@ class StoreSupervisorReqBody(PydanticBaseModel):
         req_prof_id = self.supervisor_id
         supervisor_verified = _get_supervisor_auth([req_prof_id])
         quota_arrangement = self._get_quota_arrangement(supervisor_verified, req_prof_id)
-        db_engine = _init_db_engine()
+        db_engine = shared_ctx['db_engine']
         self.metadata =  {'db_engine': db_engine,}
         self._storeprofile_quota_check(db_engine, req_prof_id, quota_arrangement)
-
-    def __del__(self):
-        _metadata = getattr(self, 'metadata', {})
-        db_engine = _metadata.get('db_engine')
-        if db_engine:
-            db_engine.dispose()
 
     def __setattr__(self, name, value):
         if name == 'metadata':
@@ -517,24 +536,6 @@ class StoreProfileReadResponseBody(PydanticBaseModel):
     open_days : Optional[List[BusinessHoursDayReqBody]] = []
 
 
-def _init_db_engine(conn_args:Optional[dict]=None):
-    """ TODO
-      - for development and production environment, use configurable parameter
-        to optionally set multi_statement for the API endpoints that require to run
-        multiple SQL statements in one go.
-      - the engine is the most efficient when created at module-level of application
-        , not per function or per request, modify the implementation in this app.
-    """ 
-    kwargs = {
-        'secrets_file_path':settings.SECRETS_FILE_PATH, 'base_folder':'staff_portal',
-        'secret_map':(settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % settings.DB_USER_ALIAS),
-        'driver_label':settings.DRIVER_LABEL, 'db_name':settings.DB_NAME,
-    }
-    if conn_args:
-        kwargs['conn_args'] = conn_args
-    return sqlalchemy_init_engine(**kwargs)
-
-
 def _store_existence_validity(session, store_id:PositiveInt):
     query = session.query(StoreProfile).filter(StoreProfile.id == store_id)
     saved_obj = query.first()
@@ -564,9 +565,8 @@ def _store_staff_validity(session, store_id:PositiveInt, usr_auth:dict):
 
 @router.post('/profiles', status_code=FastApiHTTPstatus.HTTP_201_CREATED, response_model=List[StoreProfileResponseBody])
 def add_profiles(request:NewStoreProfilesReqBody, user:dict=FastapiDepends(add_profile_authorization)):
-    db_engine = request.metadata['db_engine']
     sa_new_stores = request.metadata['sa_new_stores']
-    with db_engine.connect() as conn:
+    with shared_ctx['db_engine'].connect() as conn:
         with Session(bind=conn) as session:
             StoreProfile.bulk_insert(objs=sa_new_stores, session=session)
             _fn = lambda obj: StoreProfileResponseBody(id=obj.id, supervisor_id=obj.supervisor_id)
@@ -590,24 +590,20 @@ def edit_profile(store_id:PositiveInt, request:ExistingStoreProfileReqBody, user
         err_msg = 'Limit exceeds, num_new_items:%s, max_limit:%s' % (num_new_items, max_limit)
         raise FastApiHTTPException( detail={'phones':[err_msg]},  headers={}, status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
     # TODO, figure out better way to authorize with database connection
-    db_engine = _init_db_engine()
-    try:
-        with Session(bind=db_engine) as session:
-            saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
-            # perform update
-            saved_obj.label  = request.label
-            saved_obj.active = request.active
-            saved_obj.emails.clear()
-            saved_obj.phones.clear()
-            saved_obj.emails.extend( list(map(lambda d:StoreEmail(**d.dict()), request.emails)) )
-            saved_obj.phones.extend( list(map(lambda d:StorePhone(**d.dict()), request.phones)) )
-            if request.location:
-                saved_obj.location = OutletLocation(**request.location.dict())
-            else:
-                saved_obj.location = None
-            session.commit()
-    finally:
-        db_engine.dispose()
+    with Session(bind=shared_ctx['db_engine']) as session:
+        saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
+        # perform update
+        saved_obj.label  = request.label
+        saved_obj.active = request.active
+        saved_obj.emails.clear()
+        saved_obj.phones.clear()
+        saved_obj.emails.extend( list(map(lambda d:StoreEmail(**d.dict()), request.emails)) )
+        saved_obj.phones.extend( list(map(lambda d:StorePhone(**d.dict()), request.phones)) )
+        if request.location:
+            saved_obj.location = OutletLocation(**request.location.dict())
+        else:
+            saved_obj.location = None
+        session.commit()
     return None
 
 
@@ -631,8 +627,7 @@ def delete_profile(ids:str, user:dict=FastapiDepends(delete_profile_authorizatio
     except ValueError as e:
         raise FastApiHTTPException( detail={'ids':'invalid-id'},  headers={},
                 status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
-    db_engine = _init_db_engine()
-    with Session(bind=db_engine) as _session:
+    with Session(bind=shared_ctx['db_engine']) as _session:
         stmt = SqlAlDelete(StoreProfile).where(StoreProfile.id.in_(ids))
         result = _session.execute(stmt) # TODO, consider soft-delete
         _session.commit()
@@ -647,48 +642,63 @@ def delete_profile(ids:str, user:dict=FastapiDepends(delete_profile_authorizatio
 @router.patch('/profile/{store_id}/staff',)
 def edit_staff(store_id:PositiveInt, request:StoreStaffsReqBody, user:dict=FastapiDepends(edit_profile_authorization)):
     request.validate_staff(supervisor_id=user['profile'])
-    db_engine = _init_db_engine()
-    try:
-        with Session(bind=db_engine) as session:
-            saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
-            new_staff = list(map(lambda d:StoreStaff(**d.dict()), request.__root__ ))
-            saved_obj.staff.clear()
-            saved_obj.staff.extend(new_staff)
-            session.commit()
-    finally:
-        db_engine.dispose()
+    with Session(bind=shared_ctx['db_engine']) as session:
+        saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
+        new_staff = list(map(lambda d:StoreStaff(**d.dict()), request.__root__ ))
+        saved_obj.staff.clear()
+        saved_obj.staff.extend(new_staff)
+        session.commit()
     return None
 
 
 @router.patch('/profile/{store_id}/business_hours',)
 def edit_hours_operation(store_id:PositiveInt, request:BusinessHoursDaysReqBody, \
         user:dict=FastapiDepends(edit_profile_authorization)):
-    db_engine = _init_db_engine()
-    try:
-        with Session(bind=db_engine) as session:
-            saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
-            new_time = list(map(lambda d:HourOfOperation(**d.dict()), request.__root__))
-            saved_obj.open_days.clear()
-            saved_obj.open_days.extend(new_time)
-            session.commit()
-    finally:
-        db_engine.dispose()
+    with Session(bind=shared_ctx['db_engine']) as session:
+        saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
+        new_time = list(map(lambda d:HourOfOperation(**d.dict()), request.__root__))
+        saved_obj.open_days.clear()
+        saved_obj.open_days.extend(new_time)
+        session.commit()
 
 
 @router.patch('/profile/{store_id}/products',)
 def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, \
         user:dict=FastapiDepends(edit_products_authorization)):
     request.validate_products(staff_id=user['profile'])
-    db_engine = _init_db_engine()
-    try: # TODO, modify this endpoint for editing-only operation
-        with Session(bind=db_engine) as session:
-            saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
-            new_prod_objs = list(map(lambda d: StoreProductAvailable(**d.dict()), request.__root__ ))
-            saved_obj.products.clear()
-            saved_obj.products.extend(new_prod_objs)
+    # this endpoint is for editing-only operation
+    with Session(bind=shared_ctx['db_engine']) as session:
+        saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
+        product_id_cond = map(lambda d: SqlAlAnd(
+            StoreProductAvailable.product_type == d.product_type ,
+            StoreProductAvailable.product_id == d.product_id )
+            , request.__root__)
+        find_product_condition = SqlAlOr(*product_id_cond)
+        ## Don't use `saved_obj.products` generated by SQLAlchemy legacy Query API
+        ## , instead I use `select` function to query relation fields
+        stmt = SqlAlSelect(StoreProductAvailable) \
+                .where(StoreProductAvailable.store_id == saved_obj.id) \
+                .where(find_product_condition)
+        result = session.execute(stmt)
+        def _do_update(saved_product): # tuple
+            saved_product = saved_product[0]
+            newdata = filter(lambda d: d.product_type is saved_product.product_type
+                    and d.product_id == saved_product.product_id, request.__root__)
+            newdata = next(newdata)
+            assert newdata is not None
+            saved_product.price = newdata.price
+            saved_product.start_after = newdata.start_after
+            saved_product.end_before = newdata.end_before
+            return (newdata.product_type, newdata.product_id)
+        updatelist = tuple(map(_do_update, result))
+        newdata = filter(lambda d: (d.product_type, d.product_id) not in updatelist, request.__root__)
+        new_model_fn = lambda d: StoreProductAvailable(store_id=saved_obj.id, **d.dict())
+        new_products = map(new_model_fn, newdata)
+        session.add_all([*new_products])
+        try:
             session.commit()
-    finally:
-        db_engine.dispose()
+        except Exception as e:
+            raise
 
 
 # TODO , complete implementation
@@ -701,24 +711,17 @@ def discard_store_products(store_id:PositiveInt, request: DiscardProductsReqBody
 
 @router.get('/profile/{store_id}/products', response_model=EditProductsReqBody)
 def read_profile_products(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
-    db_engine = _init_db_engine()
-    try: # TODO, figure out how to handle large dataset, pagination or other techniques
-        with Session(bind=db_engine) as session:
-            saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
-            response = EditProductsReqBody.from_orm(saved_obj.products)
-    finally:
-        db_engine.dispose()
+    # TODO, figure out how to handle large dataset, pagination or other techniques
+    with Session(bind=shared_ctx['db_engine']) as session:
+        saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
+        response = EditProductsReqBody.from_orm(saved_obj.products)
     return response
 
 
 @router.get('/profile/{store_id}', response_model=StoreProfileReadResponseBody)
 def read_profile(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
-    db_engine = _init_db_engine()
-    try:
-        with Session(bind=db_engine) as session:
-            saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
-            response = StoreProfileReadResponseBody.from_orm(saved_obj)
-    finally:
-        db_engine.dispose()
+    with Session(bind=shared_ctx['db_engine']) as session:
+        saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
+        response = StoreProfileReadResponseBody.from_orm(saved_obj)
     return response
 
