@@ -28,17 +28,18 @@ class TestUpdate:
 
     @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_ok(self, session_for_test, keystore, test_client, saved_store_objs, staff_data):
+        num_new, num_unmodified = 1, 3
         obj = next(saved_store_objs)
         body = [{'staff_id': s.staff_id, 'start_after':s.start_after.isoformat(), \
-                'end_before':s.end_before.isoformat()} for s in obj.staff[1:]]
-        new_staff_d = [next(staff_data) for _ in range(3)]
+                'end_before':s.end_before.isoformat()} for s in obj.staff[num_new:]]
+        new_staff_d = [next(staff_data) for _ in range(num_unmodified)]
         for item in new_staff_d:
             item['start_after'] = item['start_after'].isoformat()
             item['end_before']  = item['end_before'].isoformat()
         body.extend(new_staff_d)
         auth_data = self._auth_data_pattern
         auth_data['id'] = obj.supervisor_id
-        auth_data['quotas'][0]['maxnum'] = len(body)
+        auth_data['quotas'][0]['maxnum'] = len(obj.staff) + num_new
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         url = self.url.format(store_id=obj.id)
@@ -52,6 +53,10 @@ class TestUpdate:
         assert response.status_code == 200
         query = session_for_test.query(StoreStaff).filter(StoreStaff.store_id == obj.id)
         query = query.order_by(StoreStaff.staff_id.asc())
+        
+        extra_expect_items = [{'staff_id': s.staff_id, 'start_after':s.start_after.isoformat(), \
+                'end_before':s.end_before.isoformat()} for s in obj.staff[:num_new]]
+        body.extend(extra_expect_items)
         expect_value = sorted(body, key=lambda d:d['staff_id'])
         actual_value = list(map(lambda obj:obj.__dict__, query.all()))
         for item in actual_value:

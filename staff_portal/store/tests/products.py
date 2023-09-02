@@ -10,7 +10,10 @@ from common.models.enums.base import AppCodeOptions, ActivationStatus
 from common.util.python.messaging.rpc import RpcReplyEvent
 
 from store.models import SaleableTypeEnum, StoreProductAvailable
-from store.tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
+from store.tests.common import \
+        db_engine_resource, session_for_test, session_for_setup, keystore, \
+        test_client, store_data, email_data, phone_data, loc_data, opendays_data, \
+        staff_data, product_avail_data, saved_store_objs, _saved_obj_gen
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -129,6 +132,62 @@ class TestUpdate:
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 403
 ## end of class TestUpdate
+
+
+class TestDiscard:
+    url = '/profile/{store_id}/products?pitems={ids1}&ppkgs={ids2}'
+    _auth_data_pattern = { 'id':-1, 'privilege_status':ROLE_ID_STAFF,
+        'quotas': [{'app_code':app_code, 'mat_code': StoreProductAvailable.quota_material.value, 'maxnum':-1}] ,
+        'roles':[
+            {'app_code':app_code, 'codename':'add_storeproductavailable'},
+            {'app_code':app_code, 'codename':'change_storeproductavailable'},
+            {'app_code':app_code, 'codename':'delete_storeproductavailable'},
+        ],
+    }
+
+    def test_ok(self, db_engine_resource, session_for_test, keystore, test_client,
+            store_data, product_avail_data, staff_data):
+        num_deleting, num_total = 2, 20
+        generator = _saved_obj_gen(store_data_gen=store_data, session=session_for_test,
+            product_avail_data_gen=product_avail_data, staff_data_gen=staff_data,
+            num_staff_per_store=1, num_products_per_store=num_total )
+        obj = next(generator)
+        auth_data = self._auth_data_pattern
+        auth_data['id'] = obj.staff[0].staff_id
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        extract_pkg_fn  = lambda d: d.product_type is SaleableTypeEnum.PACKAGE
+        extract_item_fn = lambda d: d.product_type is SaleableTypeEnum.ITEM
+        get_prod_id_fn = lambda d: d.product_id
+        prod_item_ids = list(map(get_prod_id_fn, filter(extract_item_fn, obj.products)))
+        prod_pkg_ids  = list(map(get_prod_id_fn, filter(extract_pkg_fn, obj.products)))
+        deleting_pitems = prod_item_ids[:num_deleting]
+        deleting_ppkgs  = prod_pkg_ids[:num_deleting]
+        renderred_url = self.url.format(store_id=obj.id, ids1=','.join(map(str,deleting_pitems)),
+                ids2=','.join(map(str,deleting_ppkgs)))
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            response = test_client.delete(renderred_url, headers=headers)
+            assert response.status_code == 204
+            response = test_client.delete(renderred_url, headers=headers)
+            assert response.status_code == 410
+        remaining_pitems = [(SaleableTypeEnum.ITEM, i) for i in prod_item_ids if i not in deleting_pitems]
+        remaining_ppkgs = [(SaleableTypeEnum.PACKAGE, i) for i in prod_pkg_ids if i not in deleting_ppkgs]
+        session_for_test.expire(obj)
+        from sqlalchemy import select as SqlAlSelect
+        from sqlalchemy.orm import Session
+        # extra session is created only for verifying what is persisting
+        # in database, SQLALchemy does not seem to allow original session to
+        # retrieve up-to-date records after previous deletion.
+        with db_engine_resource.connect() as conn:
+            with Session(bind=conn) as extra_session:
+                stmt = SqlAlSelect(StoreProductAvailable.product_type, StoreProductAvailable.product_id) \
+                        .where(StoreProductAvailable.store_id == obj.id)
+                actual_remain = extra_session.execute(stmt).all()
+                expect_remain = [*remaining_ppkgs, *remaining_pitems]
+                assert len(actual_remain) == num_total - 2 * num_deleting
+                assert set(actual_remain) == set(expect_remain)
+## end of class TestDiscard:
+
 
 
 class TestRead:

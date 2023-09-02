@@ -242,18 +242,22 @@ def test_client():
         yield  _client
 
 
-def _saved_obj_gen(store_data_gen, email_data_gen, phone_data_gen, loc_data_gen, session, staff_data_gen, product_avail_data_gen):
-    num_emails_per_store = 2
-    num_phones_per_store = 3
-    num_staff_per_store = 4
-    num_products_per_store = 5
+def _saved_obj_gen(store_data_gen, session, email_data_gen=None, phone_data_gen=None, loc_data_gen=None,
+        staff_data_gen=None, product_avail_data_gen=None, num_emails_per_store=2,
+        num_phones_per_store=3, num_staff_per_store=4, num_products_per_store=5 ):
     while True:
         new_item = next(store_data_gen)
-        new_item['location'] = OutletLocation(**next(loc_data_gen))
-        new_item['emails'] = [StoreEmail(**next(email_data_gen)) for _ in range(num_emails_per_store)]
-        new_item['phones'] = [StorePhone(**next(phone_data_gen)) for _ in range(num_phones_per_store)]
-        new_item['staff']  = [StoreStaff(**next(staff_data_gen)) for _ in range(num_staff_per_store)]
-        new_item['products'] = [StoreProductAvailable(**next(product_avail_data_gen)) for _ in range(num_products_per_store)]
+        if loc_data_gen:
+            new_item['location'] = OutletLocation(**next(loc_data_gen))
+        if email_data_gen:
+            new_item['emails'] = [StoreEmail(**next(email_data_gen)) for _ in range(num_emails_per_store)]
+        if phone_data_gen:
+            new_item['phones'] = [StorePhone(**next(phone_data_gen)) for _ in range(num_phones_per_store)]
+        if staff_data_gen:
+            new_item['staff']  = [StoreStaff(**next(staff_data_gen)) for _ in range(num_staff_per_store)]
+        if product_avail_data_gen:
+            new_item['products'] = [StoreProductAvailable(**next(product_avail_data_gen))
+                    for _ in range(num_products_per_store)]
         obj = StoreProfile(**new_item)
         StoreProfile.bulk_insert([obj], session=session)
         yield obj

@@ -464,16 +464,7 @@ class EditProductsReqBody(PydanticBaseModel):
             err_detail['field'].extend( list(diff_pkg) )
         if any(err_detail['field']):
             raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
-
-
-class DiscardProductReqBody(PydanticBaseModel):
-    product_type : SaleableTypeEnum
-    product_id   : PositiveInt
-
-class DiscardProductsReqBody(PydanticBaseModel):
-    __root__ : List[DiscardProductReqBody]
-    class Config:
-        orm_mode =True
+## end of class EditProductsReqBody
 
 
 def _get_quota_arrangement_helper(supervisor_verified:dict, req_prof_id:int, out:dict):
@@ -640,14 +631,35 @@ def delete_profile(ids:str, user:dict=FastapiDepends(delete_profile_authorizatio
 
 
 @router.patch('/profile/{store_id}/staff',)
-def edit_staff(store_id:PositiveInt, request:StoreStaffsReqBody, user:dict=FastapiDepends(edit_profile_authorization)):
+def edit_staff(store_id:PositiveInt, request:StoreStaffsReqBody, \
+        user:dict=FastapiDepends(edit_profile_authorization)):
     request.validate_staff(supervisor_id=user['profile'])
     with Session(bind=shared_ctx['db_engine']) as session:
         saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
-        new_staff = list(map(lambda d:StoreStaff(**d.dict()), request.__root__ ))
-        saved_obj.staff.clear()
-        saved_obj.staff.extend(new_staff)
-        session.commit()
+        staff_ids = list(map(lambda d: d.staff_id, request.__root__))
+        stmt = SqlAlSelect(StoreStaff).where(StoreStaff.store_id == saved_obj.id) \
+                .where(StoreStaff.staff_id.in_(staff_ids))
+        result = session.execute(stmt)
+        def _do_update(raw):
+            saved_staff = raw[0]
+            newdata = filter(lambda d: d.staff_id == saved_staff.staff_id, request.__root__)
+            newdata = next(newdata)
+            assert newdata is not None
+            saved_staff.staff_id  = newdata.staff_id
+            saved_staff.start_after = newdata.start_after
+            saved_staff.end_before  = newdata.end_before
+            return saved_staff.staff_id
+        updatelist = tuple(map(_do_update, result))
+        newdata = filter(lambda d: d.staff_id not in updatelist, request.__root__)
+        new_staffs = map(lambda d:StoreStaff(**d.dict()), newdata)
+        saved_obj.staff.extend(new_staffs)
+        try:
+            session.commit()
+        except Exception as e:
+            log_args = ['action', 'db-commit-error', 'detail', ','.join(e.args)]
+            _logger.error(None, *log_args)
+            raise FastApiHTTPException( detail={},  headers={},
+                status_code=FastApiHTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR )
     return None
 
 
@@ -666,7 +678,6 @@ def edit_hours_operation(store_id:PositiveInt, request:BusinessHoursDaysReqBody,
 def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, \
         user:dict=FastapiDepends(edit_products_authorization)):
     request.validate_products(staff_id=user['profile'])
-    # this endpoint is for editing-only operation
     with Session(bind=shared_ctx['db_engine']) as session:
         saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
         product_id_cond = map(lambda d: SqlAlAnd(
@@ -698,15 +709,42 @@ def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, 
         try:
             session.commit()
         except Exception as e:
-            raise
+            log_args = ['action', 'db-commit-error', 'detail', ','.join(e.args)]
+            _logger.error(None, *log_args)
+            raise FastApiHTTPException( detail={},  headers={},
+                status_code=FastApiHTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR )
 
 
-# TODO , complete implementation
 @router.delete('/profile/{store_id}/products', status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT)
-def discard_store_products(store_id:PositiveInt, request: DiscardProductsReqBody, \
+def discard_store_products(store_id:PositiveInt, pitems:str, ppkgs:str, \
         user:dict=FastapiDepends(edit_products_authorization)):
-    raise FastApiHTTPException( detail='',  headers={},
-                status_code=FastApiHTTPstatus.HTTP_501_NOT_IMPLEMENTED )
+    try:
+        pitems = list(map(int, pitems.split(',')))
+        ppkgs  = list(map(int, ppkgs.split(',')))
+        if len(pitems) == 0 and len(ppkgs) == 0:
+            raise FastApiHTTPException( detail={'ids':'empty'},  headers={},
+                    status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+    except ValueError as e:
+        raise FastApiHTTPException( detail={'ids':'invalid-id', 'detail':e.args},
+                headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
+    with Session(bind=shared_ctx['db_engine']) as _session:
+        saved_store = _store_staff_validity(_session, store_id, usr_auth=user)
+        _cond_fn = lambda d, t: SqlAlAnd(StoreProductAvailable.product_type == t,
+            StoreProductAvailable.product_id == d)
+        pitem_cond = map(partial(_cond_fn, t=SaleableTypeEnum.ITEM), pitems)
+        ppkg_cond  = map(partial(_cond_fn, t=SaleableTypeEnum.PACKAGE), ppkgs)
+        find_product_condition = SqlAlOr(*pitem_cond, *ppkg_cond)
+        stmt = SqlAlDelete(StoreProductAvailable) \
+                .where(StoreProductAvailable.store_id == saved_store.id) \
+                .where(find_product_condition)
+        result = _session.execute(stmt)
+        # print generated raw SOL with actual values
+        # str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        _session.commit()
+    if result.rowcount == 0:
+        raise FastApiHTTPException( detail={},  headers={},
+                status_code=FastApiHTTPstatus.HTTP_410_GONE )
+    return None
 
 
 @router.get('/profile/{store_id}/products', response_model=EditProductsReqBody)
