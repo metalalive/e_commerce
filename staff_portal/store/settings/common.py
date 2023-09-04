@@ -33,10 +33,10 @@ AUTH_APP_HOST = cors_config.ALLOWED_ORIGIN['user_management']
 
 REFRESH_ACCESS_TOKEN_API_URL = '%s/refresh_access_token' % AUTH_APP_HOST
 
-INIT_SHARED_CONTEXT_FN = 'store.views.app_shared_context_start'
-DEINIT_SHARED_CONTEXT_FN = 'store.views.app_shared_context_destroy'
+INIT_SHARED_CONTEXT_FN = 'store.shared.app_shared_context_start'
+DEINIT_SHARED_CONTEXT_FN = 'store.shared.app_shared_context_destroy'
 
-ROUTERS = ['store.views.router']
+ROUTERS = ['store.api.router']
 
 KEYSTORE = {
     "keystore": "common.auth.keystore.BaseAuthKeyStore",

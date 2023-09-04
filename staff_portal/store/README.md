@@ -32,7 +32,7 @@ python3 -m unittest tests.python.util.rpc  -v
 ### Integration Test
 ```bash
 APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/models.py
-APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/views.py
+APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/api.py
 APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/staff.py
 APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/business_hours.py
 APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/products.py
