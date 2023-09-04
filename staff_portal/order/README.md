@@ -35,11 +35,11 @@ cd ${SERVICE_BASE_PATH}
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
     cargo test --test unittest -- --nocapture
 ```
-Note `--nocapture` allows the program to print all messages to standard output console.
+Note the option `--nocapture` allows the program to print all messages to standard output console.
 
 ### Integration Test
 ```shell=?
-cd ${SERVICE_BASE_PATH}/test/acceptance
+cd ${SERVICE_BASE_PATH}/tests/integration
 
 SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
     SECRET_FILE_PATH="common/data/secret.json" \

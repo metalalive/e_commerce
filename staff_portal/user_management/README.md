@@ -1,5 +1,11 @@
 # User-Management service
-This service provides authentication / authorization / quota setup to registered users or groups.
+## Features
+- authentication (currently only support JWT and JWKS rotation)
+- authorization (currently only support user-level)
+- Hierarchical user / group management
+- user account management
+- Role-based access control
+- Quota management
 
 ## Pre-requisite
 | software | version | installation/setup guide |
@@ -20,18 +26,21 @@ This service provides authentication / authorization / quota setup to registered
 - Alternatively, developers can manually drop the tables `auth_user` or `auth_group` after they are created.
 
 ### Database Migration
-Initial migration
+#### Initial migration
 ```bash
 python3 -m  user_management.setup
 ```
 
-The `setup` module shortens the following migration script provided by Django :
-```
-python3 manage.py makemigrations user_management  --settings user_management.settings.migration
-python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings user_management.settings  --database site_dba
-```
+The `setup` module above automatically performs following operations :
+- Django migration script
+  ```bash
+  python3 manage.py makemigrations user_management  --settings user_management.settings.migration
+  python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings user_management.settings  --database site_dba
+  ```
+- copy custom migration script file(s) at `migrations/django/user_management` to `user_management/migrations` then immediately run the script. These are raw SQL statements required in the application.
+- auto-generate default fixture records (which includes default roles, default login users ... etc.) for data migrations in `user_management` application
 
-De-initialization
+#### De-initialization
 ```bash
 python3.9 -m  user_management.setup reverse
 ```
@@ -69,6 +78,11 @@ DJANGO_SETTINGS_MODULE='user_management.settings.development'  celery \
     --concurrency 1 --loglevel=INFO --logfile=./tmp/log/dev/usermgt_celery.log \
     --hostname=usermgt@%h  -E &
 ```
+Note:
+*  `-Q` is optional, without specifying `-Q`, Celery will enable all queues defined in celery configuration module (e.g. `user_management.celeryconfig`) on initialization.
+* `--logfile` is optional
+* `--concurrency` indicates number of celery processes to run at OS level, defaults to number of CPU on your host machine
+
 
 ## Test
 ### Unit Test

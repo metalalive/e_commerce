@@ -1,41 +1,22 @@
-# Point Of Sale
-
-## Introduction
-
-Point-of-sale backend system implemented with Python
+# E-commerce
+E-commerce backend system implemented in Python / C / Rust
 
 ## Features
-### Functional
-* Role-based access control
-* Hierarchical user group management
-* Quota management
+### services
+- user management
+- product
+- storefront
+- media
+- order processing
 
 ### Non-functional
-* Soft-delete & recovery
 * Logging
 * User activity track
 
 ## Demo
-Quick video demo
-
-## Tech Stack
-### Backend
-* Django
-* Django REST framework
-* Celery
-* RabbitMQ
-* MariaDB
-* Elasticsearch
-* Logstash
-
-### Frontend demonstration
-* React.js
-* Tagify
-* AdminLTE
 
 ## Documentation
-* [Build Guide](./BUILD_GUIDE.md)
-* [User Guide](./USER_GUIDE.md)
+* [Inter-service Note](./INTER_SERVICE.md)
 * Development Guide
 
 
