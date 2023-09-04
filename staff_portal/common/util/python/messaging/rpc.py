@@ -167,6 +167,9 @@ class RpcReplyEvent:
             self.resp_body['status'] = self.status_opt.INVALID_STATUS_TRANSITION
             old_result = self.resp_body['result']
             self.resp_body['result'] =  {'old_result': old_result,'new_message':body}
+        extra_err = body.get('error', None)
+        if extra_err:
+            self.resp_body['error'] = extra_err
 
     def refresh(self, retry=False, num_of_msgs_fetch=None, timeout=0.5):
         """
@@ -237,12 +240,13 @@ class MethodProxy:
     publisher_cls = AMQPPublisher
 
     def __init__(self, dst_app_name:str, src_app_name:str, method_name:str,
-            broker_url:str, reply_listener, **options):
+            broker_url:str, reply_listener, enable_confirm:Optional[bool]=None, **options):
         self._dst_app_name = dst_app_name
         self._src_app_name = src_app_name
         self._method_name = method_name
         self._broker_url = broker_url
         self._reply_listener = reply_listener
+        self.enable_confirm = enable_confirm # each published message has its own setup
         self._config = options.pop('config', {})
         serializer = options.pop('serializer', self.serializer)
         self._options = options
@@ -262,7 +266,6 @@ class MethodProxy:
         return self._config.get(SERIALIZER_CONFIG_KEY, DEFAULT_SERIALIZER)
 
     def __call__(self, *args, **kwargs):
-        # async call only
         reply = self._call(*args, **kwargs)
         return reply
 
@@ -279,9 +282,13 @@ class MethodProxy:
                 timeout_s=self._options.get('reply_timeout_sec', 5) )
         deliver_err_body = {'result': {'exchange': exchange.name, 'routing_key': routing_key, }}
         try:
-            with get_connection(amqp_uri=self._broker_url, ssl=self.ssl) as conn:
+            extra_transport_opts = {}
+            if self.enable_confirm is not None:
+                extra_transport_opts['confirm_publish'] = self.enable_confirm
+            with get_connection(amqp_uri=self._broker_url, ssl=self.ssl,
+                    transport_options=extra_transport_opts ) as conn:
                 self._reply_listener.declare_queue(conn=conn)
-                self._publisher.publish(
+                result = self._publisher.publish(
                     payload=payload,
                     exchange=exchange,
                     routing_key=routing_key,
@@ -291,6 +298,8 @@ class MethodProxy:
                     correlation_id=correlation_id,
                     extra_headers=context,
                     conn=conn )
+            if self.enable_confirm is True and result.ready is False:
+                raise UndeliverableMessage(exchange=exchange, routing_key=routing_key)
         except UndeliverableMessage as ume:
             deliver_err_body['status'] = reply_event.status_opt.FAIL_PUBLISH
             deliver_err_body['error']  = ', '.join(ume.args)

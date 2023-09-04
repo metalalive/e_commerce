@@ -120,10 +120,9 @@ class StoreProfile(Base, QuotaStatisticsMixin):
     def bulk_insert(cls, objs, session):
         if not hasattr(cls, '_id_gap_finder'):
             cls._id_gap_finder = AppIdGapNumberFinder(orm_model_class=cls)
-        def save_instance_fn():
+        def save_instance_fn(): # TODO, async
             try:
                 session.add_all(objs) # check state in session.new
-                # TODO, solve the warning : new instance with identity key conflicts with persistent instance
                 session.commit()
             except Exception as e:
                 # manually rollback, change random ID, then commit again

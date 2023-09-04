@@ -36,10 +36,12 @@ async def app_shared_context_start(_app:FastAPI):
     from common.util.python import import_module_string
     shared_ctx['auth_app_rpc'] = RPCproxy(dst_app_name='user_management', src_app_name='store')
     shared_ctx['product_app_rpc'] = RPCproxy(dst_app_name='product', src_app_name='store')
+    shared_ctx['order_app_rpc'] = RPCproxy(dst_app_name='order', src_app_name='store')
     shared_ctx['auth_keystore'] = create_keystore_helper(cfg=settings.KEYSTORE, import_fn=import_module_string)
     # the engine is the most efficient when created at module-level of application
     # , not per function or per request, modify the implementation in this app.
     shared_ctx['db_engine'] = _init_db_engine(conn_args={'client_flag':MULTI_STATEMENTS})
+    _logger.debug(None, 'action', 'init-shared-ctx-done')
     return shared_ctx
 
 async def app_shared_context_destroy(_app:FastAPI):
@@ -49,6 +51,8 @@ async def app_shared_context_destroy(_app:FastAPI):
     except Exception as e:
         log_args = ['action', 'deinit-db-error-caught', 'detail', ','.join(e.args)]
         _logger.error(None, *log_args)
+    rpcobj = shared_ctx.pop('order_app_rpc')
+    del rpcobj
     rpcobj = shared_ctx.pop('auth_app_rpc')
     del rpcobj
     rpcobj = shared_ctx.pop('product_app_rpc')

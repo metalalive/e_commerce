@@ -58,6 +58,11 @@ class TestCreation: # class name must start with TestXxxx
         objs[3].id = dup_ids[0]
         objs[4].id = dup_ids[1]
         objs[5].id = dup_ids[2]
+        # pytest will report the warning message :
+        # new instance with identity key conflicts with persistent instance
+        # , it can be ignored cuz StoreProfile implements ID gap finder which
+        # guarantees distinct identities among all records even when application
+        # users try to replicate the IDs on purpose.
         StoreProfile.bulk_insert(objs[3:], session=session_for_test)
         ids = map(lambda obj: obj.id, objs)
         ids = tuple(filter(lambda x: x is not None and x > 0, ids))

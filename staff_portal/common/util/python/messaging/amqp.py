@@ -2,6 +2,7 @@ import socket
 import logging
 from functools import partial
 from contextlib import contextmanager
+from typing import Optional
 
 import kombu
 from kombu import Producer as KombuProducer
@@ -16,12 +17,17 @@ from .constants import AMQP_SSL_CONFIG_KEY, AMQP_DEFAULT_CONSUMER_ACCEPT_TYPES, 
 _logger = logging.getLogger(__name__)
 
 @contextmanager
-def get_connection(amqp_uri=None, ssl=None, transport_options=None, conn=None, block=False, timeout=None):
+def get_connection(amqp_uri:Optional[str]=None, ssl=None, block:bool=False, timeout=None,
+        transport_options:Optional[dict]=None, conn=None):
     if conn is None:
         assert amqp_uri, 'invalid URL for AMQP broker'
-        if not transport_options:
-            transport_options = AMQP_DEFAULT_TRANSPORT_OPTIONS.copy()
-        conn = kombu.Connection(amqp_uri, transport_options=transport_options, ssl=ssl)
+        applied_tx_opts = AMQP_DEFAULT_TRANSPORT_OPTIONS.copy()
+        if transport_options:
+            applied_tx_opts.update(transport_options)
+        conn = kombu.Connection(amqp_uri, transport_options=applied_tx_opts, ssl=ssl)
+    else:
+        if transport_options:
+            conn.transport_options.update(transport_options)
     target_pool = KombuConnectionPool[conn]
     if conn is target_pool.connection or getattr(conn, '_acquired_from_pool', None) is True:
         yield conn # the given connection already comes from the pool, no need to acquire
@@ -42,15 +48,6 @@ def get_producer(conn, block=False, on_return=None):
 class AMQPPublisher:
     """
     Utility helper for publishing messages to RabbitMQ.
-    """
-    use_confirms = True
-    """
-    Enable `confirms <http://www.rabbitmq.com/confirms.html>`_ for this
-    publisher.
-    The publisher will wait for an acknowledgement from the broker that
-    the message was receieved and processed appropriately, and otherwise
-    raise. Confirms have a performance penalty but guarantee that messages
-    aren't lost, for example due to stale connections.
     """
     transport_options = AMQP_DEFAULT_TRANSPORT_OPTIONS.copy()
     """
@@ -105,14 +102,12 @@ class AMQPPublisher:
     """
 
     def __init__(
-        self, amqp_uri, use_confirms=None, serializer=None, compression=None,
+        self, amqp_uri, serializer=None, compression=None,
         delivery_mode=None, mandatory=None, priority=None, expiration=None,
         declare=None, retry=None, retry_policy=None, ssl=None, **publish_kwargs
     ):
         self.amqp_uri = amqp_uri
         self.ssl = ssl
-        if use_confirms is not None: # publish confirms
-            self.use_confirms = use_confirms
         if delivery_mode is not None: # delivery options
             self.delivery_mode = delivery_mode
         if mandatory is not None:
@@ -152,10 +147,7 @@ class AMQPPublisher:
         headers = publish_kwargs.pop('headers', {}).copy()
         headers.update(kwargs.pop('headers', {}))
         headers.update(kwargs.pop('extra_headers', {}))
-        use_confirms = kwargs.pop('use_confirms', self.use_confirms)
-        transport_options = kwargs.pop('transport_options',
-                               self.transport_options )
-        transport_options['confirm_publish'] = use_confirms
+        transport_options = kwargs.pop('transport_options', self.transport_options)
         delivery_mode = kwargs.pop('delivery_mode', self.delivery_mode)
         mandatory = kwargs.pop('mandatory', self.mandatory)
         #immediate = kwargs.pop('immediate', self.immediate)
@@ -172,8 +164,11 @@ class AMQPPublisher:
 
         result = None
         try:
-            with get_connection(amqp_uri=self.amqp_uri, ssl=self.ssl, conn=conn, block=False, \
-                    timeout=2.0, transport_options=transport_options) as conn_from_pool:
+            _get_conn_kwargs = {'conn':conn, 'block':False, 'timeout':2.0,
+                    'transport_options':transport_options}
+            if conn is None:
+                _get_conn_kwargs.update({'amqp_uri':self.amqp_uri, 'ssl':self.ssl})
+            with get_connection(**_get_conn_kwargs) as conn_from_pool:
                 with get_producer(conn=conn_from_pool, block=False) as producer:
                     result = producer.publish(
                         body=payload,
@@ -327,6 +322,7 @@ class UndeliverableMessage(Exception):
     def __init__(self, exchange, routing_key):
         self.exchange = exchange
         self.routing_key = routing_key
+        self.args = (type(self).__name__, str(self.exchange), str(self.routing_key))
 
     def __str__(self):
         return 'undeliverable message, exchange:%s , routing_key:%s' % \

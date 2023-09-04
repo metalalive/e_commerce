@@ -1,6 +1,6 @@
 import logging
 from functools import partial
-from typing import List
+from typing import Optional, List
 
 from fastapi import APIRouter, Header, Depends as FastapiDepends
 from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
@@ -150,6 +150,7 @@ def switch_supervisor(store_id:PositiveInt, request:StoreSupervisorReqBody, user
         session.commit()
     return None
 
+
 @router.delete('/profiles', status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT)
 def delete_profile(ids:str, user:dict=FastapiDepends(delete_profile_authorization)):
     try:
@@ -163,6 +164,8 @@ def delete_profile(ids:str, user:dict=FastapiDepends(delete_profile_authorizatio
     with Session(bind=shared_ctx['db_engine']) as _session:
         stmt = SqlAlDelete(StoreProfile).where(StoreProfile.id.in_(ids))
         result = _session.execute(stmt) # TODO, consider soft-delete
+        for s_id in ids:
+            emit_event_edit_products(s_id, rpc_hdlr=shared_ctx['order_app_rpc'], remove_all=True)
         _session.commit()
     # Note python does not have `scope` concept, I can access the variables
     # `result` and `ids` declared above.
@@ -216,6 +219,37 @@ def edit_hours_operation(store_id:PositiveInt, request:BusinessHoursDaysReqBody,
         session.commit()
 
 
+def emit_event_edit_products(_store_id:int, rpc_hdlr, remove_all:bool=False,
+        updating: Optional[List[StoreProductAvailable]]=None,
+        creating: Optional[List[StoreProductAvailable]]=None,
+        deleting: Optional[dict]=None  ):
+    convertor = lambda obj: {'price':obj.price, 'start_after':obj.start_after.isoformat(),
+            'end_before':obj.end_before.isoformat(), 'product_type':obj.product_type.value,
+            'product_id':obj.product_id }
+    _updating = map(convertor, updating) if updating else []
+    _creating = map(convertor, creating) if creating else []
+    _deleting = deleting or {}
+    kwargs = {'s_id':_store_id, 'rm_all':remove_all, 'deleting':_deleting,
+            'updating':[*_updating], 'creating':[*_creating] }
+    remote_fn =  rpc_hdlr.update_store_products
+    remote_fn.enable_confirm = True
+    reply_evt = remote_fn(**kwargs)
+    # Note this application is NOT responsible to create the RPC
+    # queue for order-processing application
+    rpc_response = reply_evt.result
+    # publish-confirm is enable here, this function only cares whether the message is sucessfully
+    # sent to message broker in the middle, the broker is responsible to prevent message loss
+    # currently I use RabbitMQ with durable queue so the data safety should be guaranteed.
+    if rpc_response['status'] != reply_evt.status_opt.INITED:
+        log_args = ['action', 'rpc-publish', 'status', rpc_response['status'],
+                'detail', str(rpc_response['result']),
+                'extra_err', rpc_response.get('error', 'N/A')  ]
+        _logger.error(None, *log_args)
+        raise FastApiHTTPException( detail={},  headers={},
+            status_code=FastApiHTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR )
+    # TODO, better design option for data consistency between `storefront` and `order` app
+
+
 @router.patch('/profile/{store_id}/products',)
 def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, \
         user:dict=FastapiDepends(edit_products_authorization)):
@@ -232,9 +266,8 @@ def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, 
         stmt = SqlAlSelect(StoreProductAvailable) \
                 .where(StoreProductAvailable.store_id == saved_obj.id) \
                 .where(find_product_condition)
-        result = session.execute(stmt)
-        def _do_update(saved_product): # tuple
-            saved_product = saved_product[0]
+        updating_products = list(map(lambda p: p[0], session.execute(stmt))) # tuple
+        def _do_update(saved_product):
             newdata = filter(lambda d: d.product_type is saved_product.product_type
                     and d.product_id == saved_product.product_id, request.__root__)
             newdata = next(newdata)
@@ -243,11 +276,13 @@ def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, 
             saved_product.start_after = newdata.start_after
             saved_product.end_before = newdata.end_before
             return (newdata.product_type, newdata.product_id)
-        updatelist = tuple(map(_do_update, result))
+        updatelist = list(map(_do_update, updating_products))
         newdata = filter(lambda d: (d.product_type, d.product_id) not in updatelist, request.__root__)
         new_model_fn = lambda d: StoreProductAvailable(store_id=saved_obj.id, **d.dict())
-        new_products = map(new_model_fn, newdata)
+        new_products = list(map(new_model_fn, newdata))
         session.add_all([*new_products])
+        emit_event_edit_products(store_id, rpc_hdlr=shared_ctx['order_app_rpc'],
+                updating=updating_products, creating=new_products)
         try:
             session.commit()
         except Exception as e:
@@ -280,6 +315,8 @@ def discard_store_products(store_id:PositiveInt, pitems:str, ppkgs:str, \
                 .where(StoreProductAvailable.store_id == saved_store.id) \
                 .where(find_product_condition)
         result = _session.execute(stmt)
+        emit_event_edit_products(store_id, rpc_hdlr=shared_ctx['order_app_rpc'],
+                deleting={'items':pitems, 'pkgs':ppkgs})
         # print generated raw SOL with actual values
         # str(stmt.compile(compile_kwargs={"literal_binds": True}))
         _session.commit()

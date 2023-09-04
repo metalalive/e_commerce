@@ -344,8 +344,7 @@ class EditProductsReqBody(PydanticBaseModel):
         if rpc_response['status'] != reply_evt.status_opt.SUCCESS :
             raise FastApiHTTPException(
                     status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,  headers={},
-                    detail={'app_code':[AppCodeOptions.product.value[0]]}
-                )
+                    detail={'app_code':[AppCodeOptions.product.value[0]]}  )
         validated_data = rpc_response['result']
         validated_item_ids = set(map(lambda d:d['id'], validated_data['item']))
         validated_pkg_ids  = set(map(lambda d:d['id'], validated_data['pkg']))

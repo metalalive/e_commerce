@@ -506,10 +506,17 @@ class TestDeletion:
         deleting_ids = random.sample(list(map(lambda obj:obj.id, objs)), num_deleting)
         uri_renderred = self.url % ','.join(map(str, deleting_ids))
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            response = test_client.delete(uri_renderred, headers=headers)
-            assert response.status_code == 204
-            response = test_client.delete(uri_renderred, headers=headers)
-            assert response.status_code == 410
+            reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
+            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+                # this endpoint will interact with 2 different services, send the
+                # reply events in the order which is acceptable to the backend
+                mocked_rpc_proxy_call.return_value = reply_evt_order
+                response = test_client.delete(uri_renderred, headers=headers)
+                assert response.status_code == 204
+                assert mocked_rpc_proxy_call.call_count == num_deleting
+                response = test_client.delete(uri_renderred, headers=headers)
+                assert response.status_code == 410
+                assert mocked_rpc_proxy_call.call_count == (num_deleting << 1)
 
 
 class TestRead:

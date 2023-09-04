@@ -1,6 +1,7 @@
 import random
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Iterable
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +17,7 @@ from store.tests.common import \
         staff_data, product_avail_data, saved_store_objs, _saved_obj_gen
 
 app_code = AppCodeOptions.store.value[0]
+
 
 class TestUpdate:
     url = '/profile/{store_id}/products'
@@ -33,6 +35,7 @@ class TestUpdate:
         pass
 
     def _setup_mock_rpc_reply(self, body, timeout_sec=7, status=RpcReplyEvent.status_opt.SUCCESS):
+        # mock reply from `product` service
         sale_items_d = filter(lambda d:d['product_type'] == SaleableTypeEnum.ITEM.value, body)
         sale_pkgs_d  = filter(lambda d:d['product_type'] == SaleableTypeEnum.PACKAGE.value, body)
         sale_items_d = map(lambda d:{'id':d['product_id']}, sale_items_d)
@@ -68,10 +71,13 @@ class TestUpdate:
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         url = self.url.format(store_id=obj.id)
-        reply_event = self._setup_mock_rpc_reply(body)
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            reply_evt_product = self._setup_mock_rpc_reply(body)
+            reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
             with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
-                mocked_rpc_proxy_call.return_value = reply_event
+                # this endpoint will interact with 2 different services, send the
+                # reply events in the order which is acceptable to the backend
+                mocked_rpc_proxy_call.side_effect = [reply_evt_product, reply_evt_order]
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 200
         query = session_for_test.query(StoreProductAvailable).filter(StoreProductAvailable.store_id == obj.id)
@@ -131,6 +137,40 @@ class TestUpdate:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 403
+    
+    def test_emit_event_orderapp(self, session_for_test, saved_store_objs, product_avail_data):
+        from store.api import emit_event_edit_products
+        # subcase 1
+        expect_store_id, num_new, num_unmodified = 2345, 3, 2
+        arg_creating = list(map(lambda d: StoreProductAvailable( **next(product_avail_data)
+            ), range(num_new)))
+        expect_creating = self._setup_base_req_body(objs=arg_creating,
+                product_avail_gen=None, num_new_items=num_new)
+        obj = next(saved_store_objs)
+        arg_updating = obj.products[:num_unmodified]
+        expect_updating = self._setup_base_req_body(objs=arg_updating,
+                product_avail_gen=None, num_new_items=num_unmodified)
+        mocked_rpc = MagicMock()
+        mocked_rpc_fn = mocked_rpc.update_store_products
+        mocked_evt = mocked_rpc_fn.return_value
+        mocked_evt.status_opt.INITED = RpcReplyEvent.status_opt.INITED
+        mocked_evt.result = {'status': RpcReplyEvent.status_opt.INITED, 'result':'unit-test'}
+        emit_event_edit_products(expect_store_id, rpc_hdlr=mocked_rpc,
+            updating=arg_updating,  creating=arg_creating  )
+        mocked_rpc_fn.assert_called_once()
+        assert expect_store_id == mocked_rpc_fn.call_args.kwargs['s_id']
+        assert mocked_rpc_fn.call_args.kwargs['rm_all'] == False
+        assert expect_updating == mocked_rpc_fn.call_args.kwargs['updating']
+        assert expect_creating == mocked_rpc_fn.call_args.kwargs['creating']
+        assert {} == mocked_rpc_fn.call_args.kwargs['deleting']
+        # subcase 2
+        expect_deleting = {'items':[2,3,4,5], 'pkgs':[16,79,203]}
+        emit_event_edit_products(expect_store_id, rpc_hdlr=mocked_rpc,
+            deleting=expect_deleting )
+        assert expect_store_id == mocked_rpc_fn.call_args.kwargs['s_id']
+        assert [] == mocked_rpc_fn.call_args.kwargs['updating']
+        assert [] == mocked_rpc_fn.call_args.kwargs['creating']
+        assert expect_deleting == mocked_rpc_fn.call_args.kwargs['deleting']
 ## end of class TestUpdate
 
 
@@ -145,6 +185,18 @@ class TestDiscard:
         ],
     }
 
+    def _setup_deleting_items(self, products:Iterable[StoreProductAvailable], num_deleting:int):
+        extract_pkg_fn  = lambda d: d.product_type is SaleableTypeEnum.PACKAGE
+        extract_item_fn = lambda d: d.product_type is SaleableTypeEnum.ITEM
+        get_prod_id_fn = lambda d: d.product_id
+        prod_item_ids = list(map(get_prod_id_fn, filter(extract_item_fn, products)))
+        prod_pkg_ids  = list(map(get_prod_id_fn, filter(extract_pkg_fn, products)))
+        deleting_pitems = prod_item_ids[:num_deleting]
+        deleting_ppkgs  = prod_pkg_ids[:num_deleting]
+        remaining_pitems = [(SaleableTypeEnum.ITEM, i) for i in prod_item_ids if i not in deleting_pitems]
+        remaining_ppkgs = [(SaleableTypeEnum.PACKAGE, i) for i in prod_pkg_ids if i not in deleting_ppkgs]
+        return (deleting_pitems, deleting_ppkgs, remaining_pitems, remaining_ppkgs)
+
     def test_ok(self, db_engine_resource, session_for_test, keystore, test_client,
             store_data, product_avail_data, staff_data):
         num_deleting, num_total = 2, 20
@@ -152,26 +204,22 @@ class TestDiscard:
             product_avail_data_gen=product_avail_data, staff_data_gen=staff_data,
             num_staff_per_store=1, num_products_per_store=num_total )
         obj = next(generator)
-        auth_data = self._auth_data_pattern
+        auth_data = self._auth_data_pattern.copy()
         auth_data['id'] = obj.staff[0].staff_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
-        extract_pkg_fn  = lambda d: d.product_type is SaleableTypeEnum.PACKAGE
-        extract_item_fn = lambda d: d.product_type is SaleableTypeEnum.ITEM
-        get_prod_id_fn = lambda d: d.product_id
-        prod_item_ids = list(map(get_prod_id_fn, filter(extract_item_fn, obj.products)))
-        prod_pkg_ids  = list(map(get_prod_id_fn, filter(extract_pkg_fn, obj.products)))
-        deleting_pitems = prod_item_ids[:num_deleting]
-        deleting_ppkgs  = prod_pkg_ids[:num_deleting]
+        deleting_pitems, deleting_ppkgs, remaining_pitems, remaining_ppkgs = \
+                self._setup_deleting_items(obj.products, num_deleting)
         renderred_url = self.url.format(store_id=obj.id, ids1=','.join(map(str,deleting_pitems)),
                 ids2=','.join(map(str,deleting_ppkgs)))
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            response = test_client.delete(renderred_url, headers=headers)
-            assert response.status_code == 204
-            response = test_client.delete(renderred_url, headers=headers)
-            assert response.status_code == 410
-        remaining_pitems = [(SaleableTypeEnum.ITEM, i) for i in prod_item_ids if i not in deleting_pitems]
-        remaining_ppkgs = [(SaleableTypeEnum.PACKAGE, i) for i in prod_pkg_ids if i not in deleting_ppkgs]
+            reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
+            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+                mocked_rpc_proxy_call.return_value = reply_evt_order
+                response = test_client.delete(renderred_url, headers=headers)
+                assert response.status_code == 204
+                response = test_client.delete(renderred_url, headers=headers)
+                assert response.status_code == 410
         session_for_test.expire(obj)
         from sqlalchemy import select as SqlAlSelect
         from sqlalchemy.orm import Session
@@ -186,6 +234,38 @@ class TestDiscard:
                 expect_remain = [*remaining_ppkgs, *remaining_pitems]
                 assert len(actual_remain) == num_total - 2 * num_deleting
                 assert set(actual_remain) == set(expect_remain)
+    
+    def test_error_emit_event(self, db_engine_resource, session_for_test, keystore, test_client,
+            store_data, product_avail_data, staff_data):
+        num_deleting, num_total = 2, 19
+        generator = _saved_obj_gen(store_data_gen=store_data, session=session_for_test,
+            product_avail_data_gen=product_avail_data, staff_data_gen=staff_data,
+            num_staff_per_store=1, num_products_per_store=num_total )
+        obj = next(generator)
+        auth_data = self._auth_data_pattern.copy()
+        auth_data['id'] = obj.staff[0].staff_id
+        encoded_token = keystore.gen_access_token(profile=auth_data, audience=['store'])
+        headers = {'Authorization': 'Bearer %s' % encoded_token}
+        deleting_pitems, deleting_ppkgs, remaining_pitems, remaining_ppkgs = \
+                self._setup_deleting_items(obj.products, num_deleting)
+        renderred_url = self.url.format(store_id=obj.id, ids1=','.join(map(str,deleting_pitems)),
+                ids2=','.join(map(str,deleting_ppkgs)))
+        with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
+            reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
+            reply_evt_order.send(body={'status':RpcReplyEvent.status_opt.FAIL_PUBLISH,
+                'error':'test-mock'})
+            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+                mocked_rpc_proxy_call.return_value = reply_evt_order
+                response = test_client.delete(renderred_url, headers=headers)
+                assert response.status_code == 500
+        from sqlalchemy import select as SqlAlSelect
+        from sqlalchemy.orm import Session
+        with db_engine_resource.connect() as conn:
+            with Session(bind=conn) as extra_session:
+                stmt = SqlAlSelect(StoreProductAvailable.product_type, StoreProductAvailable.product_id) \
+                        .where(StoreProductAvailable.store_id == obj.id)
+                actual_remain = extra_session.execute(stmt).all()
+                assert len(actual_remain) == num_total
 ## end of class TestDiscard:
 
 
