@@ -11,16 +11,16 @@ pub mod model;
 
 mod config;
 pub use config::{
-    AppConfig, ApiServerCfg, ApiServerListenCfg, ApiServerRouteCfg,
+    AppConfig, ApiServerCfg, WebApiListenCfg, WebApiRouteCfg,
     AppLoggingCfg, AppLogHandlerCfg, AppLoggerCfg, AppBasepathCfg,
-    AppRpcCfg, AppRpcTypeCfg, AppInMemoryDbCfg
+    AppRpcCfg, AppRpcAmqpCfg, AppInMemoryDbCfg
 };
 
 mod rpc;
 use rpc::build_context as build_rpc_context;
 pub use rpc::{
     AbstractRpcContext, AbstractRpcHandler, AppRpcPublishedResult,
-    AppRpcReplyResult, AppRpcPublishProperty, AppRpcReplyProperty
+    AppRpcConsumeResult, AppRpcPublishProperty, AppRpcConsumeProperty
 };
 
 mod adapter;

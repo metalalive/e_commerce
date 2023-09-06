@@ -8,7 +8,7 @@ use std::collections::hash_map::RandomState;
 use serde::{Serialize, Deserialize};
 use crate::model::ProductPolicyModelSet;
 use crate::repository::app_repo_product_policy;
-use crate::{AppSharedState, AppRpcTypeCfg, app_log_event, AppDataStoreContext} ;
+use crate::{AppSharedState, app_log_event, AppDataStoreContext} ;
 use crate::error::{AppErrorCode, AppError};
 use crate::rpc::{AbstractRpcContext, AppRpcPublishProperty};
 use crate::logging::AppLogLevel;
@@ -69,7 +69,7 @@ impl EditProductPolicyUseCase {
                                     rpc, run_rpc, usr_prof_id).await;
         if let Err((code, detail)) = result {
             if code == EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply) &&
-                rpctype == AppRpcTypeCfg::dummy {
+                rpctype == "dummy" {
                 // pass, for mocking purpose, TODO: better design
                 app_log_event!(log, AppLogLevel::WARNING, "dummy rpc is applied");
             } else {

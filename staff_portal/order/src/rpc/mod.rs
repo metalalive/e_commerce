@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::{AppRpcTypeCfg, AppRpcCfg};
+use crate::AppRpcCfg;
 use crate::error::AppError;
 use crate::rpc::dummy::DummyRpcContext;
 use crate::rpc::amqp::AmqpRpcContext;
@@ -16,9 +16,9 @@ use crate::rpc::amqp::AmqpRpcContext;
 pub(crate) fn build_context (cfg: &AppRpcCfg)
     -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
 {
-    match &cfg.handler_type {
-        AppRpcTypeCfg::dummy => DummyRpcContext::build(cfg),
-        AppRpcTypeCfg::AMQP => AmqpRpcContext::build(cfg),
+    match cfg {
+        AppRpcCfg::dummy => DummyRpcContext::build(),
+        AppRpcCfg::AMQP(detail_cfg) => AmqpRpcContext::build(detail_cfg),
     }
 }
 
@@ -26,11 +26,8 @@ pub(crate) fn build_context (cfg: &AppRpcCfg)
 pub trait AbstractRpcContext : Send + Sync {
     async fn acquire(&self, num_retry:u8)
         -> DefaultResult<Arc<Box<dyn AbstractRpcHandler>>, AppError>;
-
-    fn build (cfg: &AppRpcCfg) -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
-        where Self:Sized ; // for object safety
     
-    fn label (&self) -> AppRpcTypeCfg;
+    fn label (&self) -> &'static str ;
 }
 
 #[async_trait]
@@ -38,8 +35,8 @@ pub trait AbstractRpcHandler : Send + Sync {
     async fn publish(&mut self, props:AppRpcPublishProperty)
         -> DefaultResult<AppRpcPublishedResult, AppError>;
 
-    async fn consume(&mut self, props:AppRpcReplyProperty)
-        -> DefaultResult<AppRpcReplyResult, AppError>;
+    async fn consume(&mut self, props:AppRpcConsumeProperty)
+        -> DefaultResult<AppRpcConsumeResult, AppError>;
 }
 
 pub struct AppRpcPublishProperty {
@@ -47,7 +44,7 @@ pub struct AppRpcPublishProperty {
     pub msgbody:String,
     pub route:String
 }
-pub struct AppRpcReplyProperty{
+pub struct AppRpcConsumeProperty{
     pub retry:u8,
     pub route:String,
     pub corr_id: String
@@ -56,7 +53,8 @@ pub struct AppRpcPublishedResult {
     pub reply_route:String,
     pub job_id: String
 }
-pub struct AppRpcReplyResult {
+pub struct AppRpcConsumeResult {
     pub body:String,
+    pub properties:Option<AppRpcConsumeProperty>
 }
 

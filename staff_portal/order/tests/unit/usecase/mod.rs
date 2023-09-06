@@ -6,19 +6,18 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 
 use order::{
-    AbstractRpcContext, AppRpcCfg, AppRpcTypeCfg, AppRpcPublishProperty,
-    AbstractRpcHandler, AppRpcPublishedResult, AppRpcReplyResult,
-    AppRpcReplyProperty
+    AbstractRpcContext, AppRpcCfg, AppRpcPublishProperty,
+    AbstractRpcHandler, AppRpcPublishedResult, AppRpcConsumeResult,
+    AppRpcConsumeProperty
 };
 use order::error::{AppError, AppErrorCode};
 use order::usecase::run_rpc;
 
 type TestRpcAcquireReturn = DefaultResult<Arc<Box<dyn AbstractRpcHandler>>, AppError>;
 type TestRpcPublishReturn = DefaultResult<AppRpcPublishedResult, AppError>;
-type TestRpcConsumeReturn = DefaultResult<AppRpcReplyResult, AppError>;
+type TestRpcConsumeReturn = DefaultResult<AppRpcConsumeResult, AppError>;
 
 struct MockRpcContext {
-    _label:AppRpcTypeCfg,
     _mock_acquire: Mutex<RefCell<Option<TestRpcAcquireReturn>>> ,
 }
 struct MockRpcHandler {
@@ -29,15 +28,7 @@ struct MockRpcHandler {
 #[async_trait]
 impl AbstractRpcContext for MockRpcContext
 {
-    fn label(&self) -> AppRpcTypeCfg
-    { self._label.clone() }
-
-    fn build(cfg: &AppRpcCfg) -> Result<Box<dyn AbstractRpcContext> , AppError>
-        where Self:Sized
-    {
-        let obj = Self::_build(cfg) ;
-        Ok(Box::new(obj))
-    }
+    fn label(&self) -> &'static str { "unit-test" }
 
     async fn acquire (&self, _num_retry:u8) -> TestRpcAcquireReturn
     {
@@ -56,12 +47,15 @@ impl AbstractRpcContext for MockRpcContext
     }
 } // end of impl AbstractRpcContext
 impl MockRpcContext {
+    fn build(cfg: &AppRpcCfg) -> Result<Box<dyn AbstractRpcContext> , AppError>
+        where Self:Sized
+    {
+        let obj = Self::_build(cfg) ;
+        Ok(Box::new(obj))
+    }
     fn _build(cfg: &AppRpcCfg) -> Self
     {
-        Self{
-            _label:cfg.handler_type.clone(),
-            _mock_acquire: Mutex::new(RefCell::new(None))
-        }
+        Self{ _mock_acquire: Mutex::new(RefCell::new(None)) }
     }
     fn mock (&self, a:TestRpcAcquireReturn)
     {
@@ -84,7 +78,7 @@ impl AbstractRpcHandler for MockRpcHandler {
         }
     }
 
-    async fn consume(&mut self, _props:AppRpcReplyProperty) -> TestRpcConsumeReturn
+    async fn consume(&mut self, _props:AppRpcConsumeProperty) -> TestRpcConsumeReturn
     {
         if let Some(mocked) = self._mock_consume.take() {
             mocked
@@ -113,16 +107,15 @@ async fn uc_run_rpc_ok ()
 {
     const UTEST_REPLY_BODY_SERIAL : &'static str = "achieved";
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
-        let cfg = AppRpcCfg { handler_type: AppRpcTypeCfg::dummy };
+        let cfg = AppRpcCfg::dummy;
         let _ctx = MockRpcContext::_build(&cfg);
         let hdlr = {
             let h = MockRpcHandler::default();
             let m1 = AppRpcPublishedResult {
                 reply_route: "rpc.id.9G382re".to_string(), job_id: "m31".to_string()
             };
-            let m2 = AppRpcReplyResult {
-                body: UTEST_REPLY_BODY_SERIAL.to_string()
-            };
+            let m2 = AppRpcConsumeResult { properties:None,
+                body: UTEST_REPLY_BODY_SERIAL.to_string() };
             h.mock_pub(Ok(m1)).mock_con(Ok(m2))
         };
         let a:Arc<Box<dyn AbstractRpcHandler>> = Arc::new(Box::new(hdlr));
@@ -145,7 +138,7 @@ async fn uc_run_rpc_acquire_handler_failure ()
 {
     let ut_error_detail = format!("unit-test connection timeout");
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
-        let cfg = AppRpcCfg { handler_type: AppRpcTypeCfg::dummy };
+        let cfg = AppRpcCfg::dummy;
         let _ctx = MockRpcContext::_build(&cfg);
         let a = AppError { code: AppErrorCode::RpcRemoteUnavail,
              detail: Some(ut_error_detail.clone()) };
@@ -168,7 +161,7 @@ async fn uc_run_rpc_publish_error ()
 {
     let ut_error_detail = format!("some properties are invalid");
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
-        let cfg = AppRpcCfg { handler_type: AppRpcTypeCfg::dummy };
+        let cfg = AppRpcCfg::dummy ;
         let _ctx = MockRpcContext::_build(&cfg);
         let hdlr = {
             let h = MockRpcHandler::default();
@@ -197,7 +190,7 @@ async fn uc_run_rpc_consume_reply_error ()
 {
     let ut_error_detail = format!("job ID not found");
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
-        let cfg = AppRpcCfg { handler_type: AppRpcTypeCfg::dummy };
+        let cfg = AppRpcCfg::dummy;
         let _ctx = MockRpcContext::_build(&cfg);
         let hdlr = {
             let h = MockRpcHandler::default();

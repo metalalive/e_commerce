@@ -6,21 +6,22 @@ use axum::{self, Router};
 use axum::routing::IntoMakeService;
 use hyper::server::conn::AddrIncoming;
 
-use crate::{ApiServerRouteCfg, ApiServerListenCfg, AppSharedState};
+use crate::{WebApiRouteCfg, WebApiListenCfg, AppSharedState};
 use crate::error::{AppError, AppErrorCode};
 use crate::api::web::{ApiRouteType, ApiRouteTableType};
 
 pub type WebApiServer = Router<()>;
 type _WebServerResult = axum::Server<AddrIncoming, IntoMakeService<Router>>;
 
-pub fn generate_web_service(cfg: &ApiServerListenCfg, rtable: ApiRouteTableType,
+// TODO, add rate limit / CORS layers to the router
+pub fn generate_web_service(cfg: &WebApiListenCfg, rtable: ApiRouteTableType,
                             shr_state:AppSharedState)
     -> (u16, WebApiServer)
 { // state type should be explicitly annotated, since this application creates a
   // router first then specify the state later in different scope.
     let mut router:Router<AppSharedState> = Router::new();
     let iterator = cfg.routes.iter();
-    let filt_fn = |&item:&&ApiServerRouteCfg| -> bool {
+    let filt_fn = |&item:&&WebApiRouteCfg| -> bool {
         let hdlr_label = item.handler.as_str();
         rtable.contains_key(hdlr_label)
     };

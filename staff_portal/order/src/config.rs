@@ -46,36 +46,39 @@ struct AccessLogCfg {
 }
 
 #[derive(Deserialize)]
-pub struct ApiServerRouteCfg {
+pub struct WebApiRouteCfg {
     pub path: WebApiPath,
     #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub handler: String
 }
 
-impl ToString for ApiServerRouteCfg {
+impl ToString for WebApiRouteCfg {
     fn to_string(&self) -> String {
         format!("path:{}, handler:{}", self.path, self.handler)
     }
 }
 
 #[derive(Deserialize)]
-pub struct ApiServerListenCfg {
+pub struct WebApiListenCfg {
     #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub api_version: String,
     #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub host: String,
     pub port: u16,
     max_failures: u8,
-    pub routes: Vec<ApiServerRouteCfg>,
+    pub max_connections: u32,
+    pub routes: Vec<WebApiRouteCfg>,
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Deserialize, Clone, PartialEq)]
-pub enum AppRpcTypeCfg {dummy, AMQP}
-
 #[derive(Deserialize)]
-pub struct AppRpcCfg {
-    pub handler_type: AppRpcTypeCfg
+pub struct AppRpcAmqpCfg {}
+
+#[allow(non_camel_case_types)]
+#[derive(Deserialize)]
+#[serde(tag="handler_type")]
+pub enum AppRpcCfg {
+    dummy,
+    AMQP(AppRpcAmqpCfg),
 }
 
 
@@ -114,8 +117,7 @@ pub struct ApiServerCfg {
     pid_file: PIDfileCfg,
     pub logging: AppLoggingCfg,
     access_log: AccessLogCfg,
-    pub listen: ApiServerListenCfg,
-    max_connections: u32,
+    pub listen: WebApiListenCfg,
     limit_req_body_in_bytes: u32,
     pub num_workers: u8,
     pub stack_sz_kb: u16,
@@ -190,7 +192,7 @@ impl AppConfig {
         }
     }
 
-    fn _check_srv_listener(obj:&ApiServerListenCfg) -> DefaultResult<(), AppError>
+    fn _check_srv_listener(obj:&WebApiListenCfg) -> DefaultResult<(), AppError>
     {
         let version:Vec<&str> = obj.api_version.split(".").collect();
         let mut iter = version.iter().filter(

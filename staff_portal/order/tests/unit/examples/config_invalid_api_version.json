@@ -25,11 +25,11 @@
         "host":"localhost",
         "max_failures": 5,
         "api_version": "1.0.a",
+	"max_connections": 50,
         "routes": [
             {"path":"/order/:oid", "handler":"access_existing_order"}
         ]
     },
-    "max_connections": 50,
     "limit_req_body_in_bytes": 10485760,
     "num_workers": 1,
     "stack_sz_kb": 128,

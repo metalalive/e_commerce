@@ -40,13 +40,13 @@
         "host":"localhost",
         "max_failures": 3,
         "api_version": "1.0.0",
+	"max_connections": 256,
         "routes": [
             {"path":"/policy/products", "handler":"modify_product_policy"},
             {"path":"/order",  "handler":"create_new_order"},
             {"path":"/order/:oid", "handler":"access_existing_order"}
         ]
     },
-    "max_connections": 256,
     "limit_req_body_in_bytes": 10485760,
     "num_workers": 2,
     "stack_sz_kb": 128,
@@ -65,6 +65,6 @@
 	}
     ],
     "rpc": {
-	 "handler_type": "dummy"
+	"handler_type": "dummy"
     }
 }

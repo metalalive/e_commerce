@@ -3,10 +3,9 @@ use std::boxed::Box;
 use std::sync::Arc;
 use async_trait::async_trait;
 
-use crate::{AppRpcCfg, AppRpcTypeCfg};
 use crate::error::AppError;
 use super::{AbstractRpcContext, AbstractRpcHandler, AppRpcPublishedResult,
-    AppRpcReplyResult, AppRpcPublishProperty, AppRpcReplyProperty};
+    AppRpcConsumeResult, AppRpcPublishProperty, AppRpcConsumeProperty};
 
 pub(super) struct DummyRpcContext {}
 pub(super) struct DummyRpcHandler {}
@@ -19,14 +18,15 @@ impl AbstractRpcContext for DummyRpcContext {
         let hdlr = DummyRpcHandler{};
         Ok(Arc::new(Box::new(hdlr)))
     }
-    fn build (_cfg: &AppRpcCfg)
-        -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
+    fn label(&self) -> &'static str { "dummy" }
+}
+
+impl DummyRpcContext {
+    pub(crate) fn build () -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
     {
         let obj = Self{};
         Ok(Box::new(obj))
     }
-    fn label (&self) -> AppRpcTypeCfg
-    { AppRpcTypeCfg::dummy }
 }
 
 #[async_trait]
@@ -40,10 +40,10 @@ impl AbstractRpcHandler for DummyRpcHandler {
         })
     }
 
-    async fn consume(&mut self, _props:AppRpcReplyProperty)
-        -> DefaultResult<AppRpcReplyResult, AppError>
+    async fn consume(&mut self, _props:AppRpcConsumeProperty)
+        -> DefaultResult<AppRpcConsumeResult, AppError>
     {
-        Ok(AppRpcReplyResult { body: "{}".to_string() })
+        Ok(AppRpcConsumeResult {body: "{}".to_string(), properties:Some(_props) })
     }
 }
 

@@ -4,7 +4,7 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 use serde_json::from_str as deserialize_json;
 
-use order::{AbstractRpcContext, AppRpcTypeCfg, AppRpcCfg, AbstractRpcHandler, AppRpcReplyResult, AppRpcPublishProperty};
+use order::{AbstractRpcContext, AppRpcCfg, AbstractRpcHandler, AppRpcConsumeResult, AppRpcPublishProperty};
 use order::error::{AppError, AppErrorCode};
 use order::api::web::dto::ProductPolicyDto;
 use order::usecase::{EditProductPolicyUseCase, AppUCrunRPCreturn, EditProductPolicyResult};
@@ -14,15 +14,7 @@ struct UTestDummyRpcContext {}
 
 #[async_trait]
 impl AbstractRpcContext for UTestDummyRpcContext {
-    fn label(&self) -> AppRpcTypeCfg
-    { AppRpcTypeCfg::dummy }
-
-    fn build(_cfg: &AppRpcCfg) -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
-        where Self:Sized
-    {
-        let obj = Self{};
-        Ok(Box::new(obj))
-    }
+    fn label(&self) -> &'static str { "unit-test" }
 
     async fn acquire(&self, _num_retry:u8)
         -> DefaultResult<Arc<Box<dyn AbstractRpcHandler>>, AppError>
@@ -35,9 +27,16 @@ impl AbstractRpcContext for UTestDummyRpcContext {
 }
 
 impl UTestDummyRpcContext {
+    fn build(_cfg: &AppRpcCfg) -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
+        where Self:Sized
+    {
+        let obj = Self{};
+        Ok(Box::new(obj))
+    }
+
     fn test_build () -> Arc<Box<dyn AbstractRpcContext>>
     {
-        let cfg = AppRpcCfg { handler_type: AppRpcTypeCfg::dummy };
+        let cfg = AppRpcCfg::dummy;
         let obj = Self::build(&cfg).unwrap();
         Arc::new(obj)
     }
@@ -65,7 +64,7 @@ async fn mock_run_rpc_ok (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcP
         "pkg":[{"id":19}]
         }
     "#;
-    let res = AppRpcReplyResult { body: raw.to_string() };
+    let res = AppRpcConsumeResult { body:raw.to_string(), properties:None };
     Ok(res)
 }
 
@@ -109,7 +108,7 @@ async fn mock_run_rpc_reply_empty (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop
     -> AppUCrunRPCreturn
 {
     let raw = r#" {}  "#;
-    let res = AppRpcReplyResult { body: raw.to_string() };
+    let res = AppRpcConsumeResult { body:raw.to_string(), properties:None };
     Ok(res)
 }
 
@@ -137,7 +136,7 @@ async fn mock_run_rpc_nonexist_found (
         "pkg":[]
         }
     "#;
-    let res = AppRpcReplyResult { body: raw.to_string() };
+    let res = AppRpcConsumeResult { body:raw.to_string(), properties:None };
     Ok(res)
 }
 

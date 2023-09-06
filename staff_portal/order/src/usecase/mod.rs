@@ -8,10 +8,10 @@ pub use edit_product_policy::{
     EditProductPolicyUseCase, EditProductPolicyResult
 };
 
-use crate::rpc::{AppRpcReplyResult, AbstractRpcContext, AppRpcPublishProperty, AppRpcReplyProperty};
+use crate::rpc::{AppRpcConsumeResult, AbstractRpcContext, AppRpcPublishProperty, AppRpcConsumeProperty};
 use crate::error::AppError;
 
-pub type AppUCrunRPCreturn = DefaultResult<AppRpcReplyResult, AppError>;
+pub type AppUCrunRPCreturn = DefaultResult<AppRpcConsumeResult, AppError>;
 // the generic type R is `impl Future<Output = AppUCrunRPCreturn>`
 // it is workaround since I don't enable TAIT (type-alias-impl-trait) feature
 pub type AppUCrunRPCfn<R> = fn(Arc<Box<dyn AbstractRpcContext>>, AppRpcPublishProperty) -> R;
@@ -30,7 +30,7 @@ pub async fn run_rpc (rc_ctx: Arc<Box<dyn AbstractRpcContext>>, prop: AppRpcPubl
         Ok(p) => p,
         Err(e) => {return Err(e);}
     };
-    let prop = AppRpcReplyProperty {
+    let prop = AppRpcConsumeProperty {
         retry:3u8, route:published.reply_route,
         corr_id: published.job_id };
     hdlr1.consume(prop).await
