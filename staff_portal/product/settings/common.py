@@ -71,7 +71,7 @@ DATABASES = { # will be update with secrets at the bottom of file
     }, # if you uninstall the application `product` , you must also comment this setting off
     'usermgt_service': { # used for migrations
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'ecommerce_usermgt',
+        'NAME': 'ecommerce_usermgt_v2',
         'CONN_MAX_AGE': 0,
     },
 } # end of database settings
