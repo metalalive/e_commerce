@@ -6,16 +6,15 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 
 use order::{
-    AbstractRpcContext, AppRpcCfg, AppRpcPublishProperty,
-    AbstractRpcHandler, AppRpcPublishedResult, AppRpcConsumeResult,
-    AppRpcConsumeProperty
+    AbstractRpcContext, AppRpcCfg, AppRpcClientReqProperty,
+    AbstractRpcClient, AppRpcReply
 };
 use order::error::{AppError, AppErrorCode};
-use order::usecase::run_rpc;
+use order::usecase::initiate_rpc_request;
 
-type TestRpcAcquireReturn = DefaultResult<Arc<Box<dyn AbstractRpcHandler>>, AppError>;
-type TestRpcPublishReturn = DefaultResult<AppRpcPublishedResult, AppError>;
-type TestRpcConsumeReturn = DefaultResult<AppRpcConsumeResult, AppError>;
+type TestRpcAcquireReturn = DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
+type TestRpcPublishReturn = DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
+type TestRpcConsumeReturn = DefaultResult<AppRpcReply, AppError>;
 
 struct MockRpcContext {
     _mock_acquire: Mutex<RefCell<Option<TestRpcAcquireReturn>>> ,
@@ -46,6 +45,7 @@ impl AbstractRpcContext for MockRpcContext
         }
     }
 } // end of impl AbstractRpcContext
+
 impl MockRpcContext {
     fn build(cfg: &AppRpcCfg) -> Result<Box<dyn AbstractRpcContext> , AppError>
         where Self:Sized
@@ -67,8 +67,9 @@ impl MockRpcContext {
 
 
 #[async_trait]
-impl AbstractRpcHandler for MockRpcHandler {
-    async fn publish(&mut self, _props:AppRpcPublishProperty) -> TestRpcPublishReturn
+impl AbstractRpcClient for MockRpcHandler {
+    async fn send_request(mut self:Box<Self>, _props:AppRpcClientReqProperty)
+        -> TestRpcPublishReturn
     {
         if let Some(mocked) = self._mock_publish.take() {
             mocked
@@ -78,7 +79,7 @@ impl AbstractRpcHandler for MockRpcHandler {
         }
     }
 
-    async fn consume(&mut self, _props:AppRpcConsumeProperty) -> TestRpcConsumeReturn
+    async fn receive_response(&mut self) -> TestRpcConsumeReturn
     {
         if let Some(mocked) = self._mock_consume.take() {
             mocked
@@ -105,28 +106,26 @@ impl MockRpcHandler {
 #[tokio::test]
 async fn uc_run_rpc_ok ()
 {
-    const UTEST_REPLY_BODY_SERIAL : &'static str = "achieved";
+    const UTEST_REPLY_BODY_SERIAL :&[u8; 8] = br#"achieved"#;
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
         let cfg = AppRpcCfg::dummy;
         let _ctx = MockRpcContext::_build(&cfg);
         let hdlr = {
-            let h = MockRpcHandler::default();
-            let m1 = AppRpcPublishedResult {
-                reply_route: "rpc.id.9G382re".to_string(), job_id: "m31".to_string()
-            };
-            let m2 = AppRpcConsumeResult { properties:None,
-                body: UTEST_REPLY_BODY_SERIAL.to_string() };
-            h.mock_pub(Ok(m1)).mock_con(Ok(m2))
+            let h  = MockRpcHandler::default();
+            let h2 = MockRpcHandler::default();
+            let m2 = AppRpcReply { body: UTEST_REPLY_BODY_SERIAL.to_vec() };
+            let h2 = h2.mock_con(Ok(m2));
+            h.mock_pub(Ok(Box::new(h2)))
         };
-        let a:Arc<Box<dyn AbstractRpcHandler>> = Arc::new(Box::new(hdlr));
+        let a: Box<dyn AbstractRpcClient> = Box::new(hdlr);
         _ctx.mock(Ok(a));
         Arc::new(Box::new(_ctx))
     }; // setup
 
-    let prop = AppRpcPublishProperty {
-        retry: 4u8, msgbody: "".to_string(), route: "".to_string()
+    let prop = AppRpcClientReqProperty {
+        retry: 4u8, msgbody: Vec::new(), route: "".to_string()
     };
-    let actual = run_rpc(ctx, prop).await;
+    let actual = initiate_rpc_request(ctx, prop).await;
     assert_eq!(actual.is_ok(), true);
     let body = actual.unwrap().body;
     assert_eq!(body, UTEST_REPLY_BODY_SERIAL);
@@ -145,10 +144,10 @@ async fn uc_run_rpc_acquire_handler_failure ()
         _ctx.mock(Err(a));
         Arc::new(Box::new(_ctx))
     }; // setup
-    let prop = AppRpcPublishProperty {
-        retry: 4u8, msgbody: "".to_string(), route: "".to_string()
+    let prop = AppRpcClientReqProperty {
+        retry: 4u8, msgbody:  Vec::new(), route: "".to_string()
     };
-    let actual = run_rpc(ctx, prop).await;
+    let actual = initiate_rpc_request(ctx, prop).await;
     assert_eq!(actual.is_err(), true);
     let error = actual.err().unwrap();
     assert_eq!(error.code, AppErrorCode::RpcRemoteUnavail);
@@ -169,15 +168,15 @@ async fn uc_run_rpc_publish_error ()
                  detail: Some(ut_error_detail.clone()) };
             h.mock_pub(Err(m1))
         };
-        let a:Arc<Box<dyn AbstractRpcHandler>> = Arc::new(Box::new(hdlr));
+        let a: Box<dyn AbstractRpcClient> = Box::new(hdlr);
         _ctx.mock(Ok(a));
         Arc::new(Box::new(_ctx))
     }; // setup
 
-    let prop = AppRpcPublishProperty {
-        retry: 4u8, msgbody: "".to_string(), route: "".to_string()
+    let prop = AppRpcClientReqProperty {
+        retry: 4u8, msgbody: Vec::new(), route: "".to_string()
     };
-    let actual = run_rpc(ctx, prop).await;
+    let actual = initiate_rpc_request(ctx, prop).await;
     assert_eq!(actual.is_err(), true);
     let error = actual.err().unwrap();
     assert_eq!(error.code, AppErrorCode::RpcPublishFailure);
@@ -194,22 +193,21 @@ async fn uc_run_rpc_consume_reply_error ()
         let _ctx = MockRpcContext::_build(&cfg);
         let hdlr = {
             let h = MockRpcHandler::default();
-            let m1 = AppRpcPublishedResult {
-                reply_route: "rpc.id.9G382re".to_string(), job_id: "m31".to_string()
-            };
+            let h2 = MockRpcHandler::default();
             let m2 = AppError { code: AppErrorCode::RpcConsumeFailure,
                  detail: Some(ut_error_detail.clone()) };
-            h.mock_pub(Ok(m1)).mock_con(Err(m2))
+            let h2 = h2.mock_con(Err(m2));
+            h.mock_pub(Ok(Box::new(h2)))
         };
-        let a:Arc<Box<dyn AbstractRpcHandler>> = Arc::new(Box::new(hdlr));
+        let a:Box<dyn AbstractRpcClient> = Box::new(hdlr);
         _ctx.mock(Ok(a));
         Arc::new(Box::new(_ctx))
     }; // setup
 
-    let prop = AppRpcPublishProperty {
-        retry: 4u8, msgbody: "".to_string(), route: "".to_string()
+    let prop = AppRpcClientReqProperty {
+        retry: 4u8, msgbody: Vec::new(), route: "".to_string()
     };
-    let actual = run_rpc(ctx, prop).await;
+    let actual = initiate_rpc_request(ctx, prop).await;
     assert_eq!(actual.is_err(), true);
     let error = actual.err().unwrap();
     assert_eq!(error.code, AppErrorCode::RpcConsumeFailure);

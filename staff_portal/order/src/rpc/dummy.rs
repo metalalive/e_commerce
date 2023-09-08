@@ -1,11 +1,9 @@
 use std::result::Result as DefaultResult;
 use std::boxed::Box;
-use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::error::AppError;
-use super::{AbstractRpcContext, AbstractRpcHandler, AppRpcPublishedResult,
-    AppRpcConsumeResult, AppRpcPublishProperty, AppRpcConsumeProperty};
+use super::{AbstractRpcContext, AbstractRpcClient, AppRpcReply, AppRpcClientReqProperty};
 
 pub(super) struct DummyRpcContext {}
 pub(super) struct DummyRpcHandler {}
@@ -13,10 +11,10 @@ pub(super) struct DummyRpcHandler {}
 #[async_trait]
 impl AbstractRpcContext for DummyRpcContext {
     async fn acquire(&self, _num_retry:u8)
-        -> DefaultResult<Arc<Box<dyn AbstractRpcHandler>>, AppError>
+        -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     {
         let hdlr = DummyRpcHandler{};
-        Ok(Arc::new(Box::new(hdlr)))
+        Ok(Box::new(hdlr))
     }
     fn label(&self) -> &'static str { "dummy" }
 }
@@ -30,20 +28,14 @@ impl DummyRpcContext {
 }
 
 #[async_trait]
-impl AbstractRpcHandler for DummyRpcHandler {
-    async fn publish(&mut self, _props:AppRpcPublishProperty)
-        -> DefaultResult<AppRpcPublishedResult, AppError>
-    {
-        Ok(AppRpcPublishedResult {
-            reply_route: "rpc.dummy.route".to_string(),
-            job_id: "rpc.dummy.jobid".to_string()
-        })
-    }
+impl AbstractRpcClient for DummyRpcHandler {
+    async fn send_request(mut self:Box<Self>, _props:AppRpcClientReqProperty)
+        -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
+    { Ok(self) }
 
-    async fn consume(&mut self, _props:AppRpcConsumeProperty)
-        -> DefaultResult<AppRpcConsumeResult, AppError>
+    async fn receive_response(&mut self) -> DefaultResult<AppRpcReply, AppError>
     {
-        Ok(AppRpcConsumeResult {body: "{}".to_string(), properties:Some(_props) })
+        Ok(AppRpcReply {body: br#"{}"#.to_vec() })
     }
 }
 

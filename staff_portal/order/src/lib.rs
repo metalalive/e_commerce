@@ -18,10 +18,7 @@ pub use config::{
 
 mod rpc;
 use rpc::build_context as build_rpc_context;
-pub use rpc::{
-    AbstractRpcContext, AbstractRpcHandler, AppRpcPublishedResult,
-    AppRpcConsumeResult, AppRpcPublishProperty, AppRpcConsumeProperty
-};
+pub use rpc::{AbstractRpcContext, AbstractRpcClient, AppRpcReply, AppRpcClientReqProperty};
 
 mod adapter;
 pub use adapter::datastore;

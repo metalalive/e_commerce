@@ -8,31 +8,27 @@ pub use edit_product_policy::{
     EditProductPolicyUseCase, EditProductPolicyResult
 };
 
-use crate::rpc::{AppRpcConsumeResult, AbstractRpcContext, AppRpcPublishProperty, AppRpcConsumeProperty};
+use crate::rpc::{AppRpcReply, AbstractRpcContext, AppRpcClientReqProperty};
 use crate::error::AppError;
 
-pub type AppUCrunRPCreturn = DefaultResult<AppRpcConsumeResult, AppError>;
+pub type AppUCrunRPCreturn = DefaultResult<AppRpcReply, AppError>;
 // the generic type R is `impl Future<Output = AppUCrunRPCreturn>`
 // it is workaround since I don't enable TAIT (type-alias-impl-trait) feature
-pub type AppUCrunRPCfn<R> = fn(Arc<Box<dyn AbstractRpcContext>>, AppRpcPublishProperty) -> R;
+pub type AppUCrunRPCfn<R> = fn(Arc<Box<dyn AbstractRpcContext>>, AppRpcClientReqProperty) -> R;
 
-pub async fn run_rpc (rc_ctx: Arc<Box<dyn AbstractRpcContext>>, prop: AppRpcPublishProperty)
+pub async fn initiate_rpc_request (rc_ctx: Arc<Box<dyn AbstractRpcContext>>, prop: AppRpcClientReqProperty)
     -> AppUCrunRPCreturn
 {
     // `get_mut` returns `None` to avoid multiple mutable states
     // let ctx = Arc::get_mut(&mut rc_ctx).unwrap();
-    let mut hdlr = match rc_ctx.acquire(3u8).await {
-         Ok(c) => c,
-         Err(e) => {return Err(e);}
-    };
-    let hdlr1 = Arc::get_mut(&mut hdlr).unwrap();
-    let published = match hdlr1.publish(prop).await {
-        Ok(p) => p,
-        Err(e) => {return Err(e);}
-    };
-    let prop = AppRpcConsumeProperty {
-        retry:3u8, route:published.reply_route,
-        corr_id: published.job_id };
-    hdlr1.consume(prop).await
+    match rc_ctx.acquire(3u8).await {
+        Ok(mut _client) => 
+            match _client.send_request(prop).await {
+                Ok(mut evt) => evt.receive_response().await ,
+                Err(e) => Err(e),
+            },
+        Err(e) => Err(e)
+    }
+    // let _client1 = Arc::get_mut(&mut _client).unwrap();
 }
 

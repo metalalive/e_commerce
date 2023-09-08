@@ -10,12 +10,12 @@ use crate::model::ProductPolicyModelSet;
 use crate::repository::app_repo_product_policy;
 use crate::{AppSharedState, app_log_event, AppDataStoreContext} ;
 use crate::error::{AppErrorCode, AppError};
-use crate::rpc::{AbstractRpcContext, AppRpcPublishProperty};
+use crate::rpc::{AbstractRpcContext, AppRpcClientReqProperty};
 use crate::logging::AppLogLevel;
 
 use crate::api::web::dto::{ProductPolicyDto, ProductPolicyClientErrorDto};
 
-use super::{run_rpc, AppUCrunRPCfn, AppUCrunRPCreturn};
+use super::{initiate_rpc_request, AppUCrunRPCfn, AppUCrunRPCreturn};
 
 // the product info types below represent message body to remote product service
 #[derive(Serialize)]
@@ -66,7 +66,7 @@ impl EditProductPolicyUseCase {
         let rpc = appstate.rpc();
         let rpctype = rpc.label();
         let result = Self::check_product_existence(&data,
-                                    rpc, run_rpc, usr_prof_id).await;
+                            rpc, initiate_rpc_request, usr_prof_id).await;
         if let Err((code, detail)) = result {
             if code == EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply) &&
                 rpctype == "dummy" {
@@ -111,18 +111,23 @@ impl EditProductPolicyUseCase {
         let _: Vec<()>  = data.iter().map(|item| {
             msg_req.item_ids.push(item.product_id);
         }).collect();
-        let msgbody = serde_json::to_string(&msg_req).unwrap();
-        let properties = AppRpcPublishProperty {
+        let msgbody = serde_json::to_string(&msg_req).unwrap().into_bytes();
+        let properties = AppRpcClientReqProperty {
             retry:3u8, msgbody, route:"product.get_product".to_string()
         };
         match run_rpc_fn(rpc_ctx, properties).await {
-            Ok(r) => match serde_json::from_str::<ProductInfoResp>(r.body.as_str())
-            {
-                Ok(reply) => Ok(Self::_compare_rpc_reply(reply, data)),
-                Err(e) => {
-                    let code = EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply);
-                    Err((code, e.to_string()))
-                }
+            Ok(r) => match String::from_utf8(r.body) {
+                Ok(r) => match serde_json::from_str::<ProductInfoResp>(r.as_str())
+                {
+                    Ok(reply) => Ok(Self::_compare_rpc_reply(reply, data)),
+                    Err(e) => {
+                        let code = EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply);
+                        Err((code, e.to_string()))
+                    }
+                },
+                Err(e) => Err((
+                        EditProductPolicyResult::Other(AppErrorCode::DataCorruption),
+                        e.utf8_error().to_string()  )),
             },
             Err(e) => {
                 let detail = e.detail.unwrap_or("RPC undefined error".to_string());

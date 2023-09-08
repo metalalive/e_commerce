@@ -2,9 +2,9 @@ mod dummy;
 mod amqp;
 
 use std::boxed::Box;
+use std::vec::Vec;
 use std::result::Result as DefaultResult;
 use std::marker::{Send, Sync};
-use std::sync::Arc;
 
 use async_trait::async_trait;
 
@@ -24,37 +24,27 @@ pub(crate) fn build_context (cfg: &AppRpcCfg)
 
 #[async_trait]
 pub trait AbstractRpcContext : Send + Sync {
-    async fn acquire(&self, num_retry:u8)
-        -> DefaultResult<Arc<Box<dyn AbstractRpcHandler>>, AppError>;
+    async fn acquire(&self, num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
     
     fn label (&self) -> &'static str ;
 }
 
 #[async_trait]
-pub trait AbstractRpcHandler : Send + Sync {
-    async fn publish(&mut self, props:AppRpcPublishProperty)
-        -> DefaultResult<AppRpcPublishedResult, AppError>;
+pub trait AbstractRpcClient : Send + Sync {
+    async fn send_request(mut self:Box<Self> , props:AppRpcClientReqProperty)
+        -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
 
-    async fn consume(&mut self, props:AppRpcConsumeProperty)
-        -> DefaultResult<AppRpcConsumeResult, AppError>;
+    async fn receive_response(&mut self) -> DefaultResult<AppRpcReply, AppError>;
 }
 
-pub struct AppRpcPublishProperty {
+pub struct AppRpcClientReqProperty {
     pub retry:u8,
-    pub msgbody:String,
+    pub msgbody:Vec<u8>,
     pub route:String
 }
-pub struct AppRpcConsumeProperty{
-    pub retry:u8,
-    pub route:String,
-    pub corr_id: String
+
+pub struct AppRpcReply {
+    pub body:Vec<u8>,
 }
-pub struct AppRpcPublishedResult {
-    pub reply_route:String,
-    pub job_id: String
-}
-pub struct AppRpcConsumeResult {
-    pub body:String,
-    pub properties:Option<AppRpcConsumeProperty>
-}
+
 

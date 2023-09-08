@@ -4,7 +4,7 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 use serde_json::from_str as deserialize_json;
 
-use order::{AbstractRpcContext, AppRpcCfg, AbstractRpcHandler, AppRpcConsumeResult, AppRpcPublishProperty};
+use order::{AbstractRpcContext, AppRpcCfg, AbstractRpcClient, AppRpcReply, AppRpcClientReqProperty};
 use order::error::{AppError, AppErrorCode};
 use order::api::web::dto::ProductPolicyDto;
 use order::usecase::{EditProductPolicyUseCase, AppUCrunRPCreturn, EditProductPolicyResult};
@@ -16,8 +16,7 @@ struct UTestDummyRpcContext {}
 impl AbstractRpcContext for UTestDummyRpcContext {
     fn label(&self) -> &'static str { "unit-test" }
 
-    async fn acquire(&self, _num_retry:u8)
-        -> DefaultResult<Arc<Box<dyn AbstractRpcHandler>>, AppError>
+    async fn acquire(&self, _num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     {
         let detail = "remote server down".to_string();
         let error = AppError{ code: AppErrorCode::RpcRemoteUnavail
@@ -55,16 +54,16 @@ fn setup_data () -> Vec<ProductPolicyDto>
     deserialize_json(raw).unwrap()
 }
 
-async fn mock_run_rpc_ok (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcPublishProperty)
+async fn mock_run_rpc_ok (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcClientReqProperty)
     -> AppUCrunRPCreturn
 {
-    let raw = r#"
+    let raw = br#"
         {
         "item":[{"id":79},{"id":168},{"id":22}],
         "pkg":[{"id":19}]
         }
-    "#;
-    let res = AppRpcConsumeResult { body:raw.to_string(), properties:None };
+    "#; // bytes of raw string
+    let res = AppRpcReply { body:raw.to_vec() };
     Ok(res)
 }
 
@@ -81,7 +80,7 @@ async fn check_product_existence_ok ()
     assert_eq!(missing_product_ids.is_empty(), true);
 }
 
-async fn mock_run_rpc_remote_down (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcPublishProperty)
+async fn mock_run_rpc_remote_down (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcClientReqProperty)
     -> AppUCrunRPCreturn
 {
     let result = _ctx.acquire(1).await;
@@ -104,11 +103,11 @@ async fn check_product_existence_rpc_error ()
 }
 
 
-async fn mock_run_rpc_reply_empty (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcPublishProperty)
+async fn mock_run_rpc_reply_empty (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcClientReqProperty)
     -> AppUCrunRPCreturn
 {
-    let raw = r#" {}  "#;
-    let res = AppRpcConsumeResult { body:raw.to_string(), properties:None };
+    let raw = br#" {}  "#;
+    let res = AppRpcReply { body:raw.to_vec() };
     Ok(res)
 }
 
@@ -128,15 +127,15 @@ async fn check_product_existence_rpc_reply_invalid_format ()
 
 async fn mock_run_rpc_nonexist_found (
     _ctx: Arc<Box<dyn AbstractRpcContext>>,
-    _prop: AppRpcPublishProperty) -> AppUCrunRPCreturn
+    _prop: AppRpcClientReqProperty) -> AppUCrunRPCreturn
 {
-    let raw = r#"
+    let raw = br#"
         {
         "item":[{"id":79},{"id":19},{"id":22}],
         "pkg":[]
         }
     "#;
-    let res = AppRpcConsumeResult { body:raw.to_string(), properties:None };
+    let res = AppRpcReply { body:raw.to_vec() };
     Ok(res)
 }
 
