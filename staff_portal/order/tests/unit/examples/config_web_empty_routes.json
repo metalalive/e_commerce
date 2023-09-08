@@ -38,5 +38,9 @@
     ],
     "rpc": {
 	 "handler_type": "dummy"
+    },
+    "confidentiality": {
+	"source": "UserSpace",
+	"sys_path": "local/path/to/secret.json"
     }
 }

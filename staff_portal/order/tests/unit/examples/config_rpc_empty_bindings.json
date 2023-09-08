@@ -20,12 +20,12 @@
     },
     "listen": {
         "port": 8013,
-        "host":"localhost",
+        "host":"myapp.org",
         "max_failures": 5,
         "api_version": "1.0.0",
-        "max_connections": 50,
+	"max_connections": 50,
         "routes": [
-            {"path":"/order/:oid", "handler":"access_existing_order"}
+            {"path":"/policy/products", "handler":"modify_product_policy"}
         ]
     },
     "limit_req_body_in_bytes": 10485760,
@@ -33,13 +33,23 @@
     "stack_sz_kb": 128,
     "data_store": [
 	{
-	    "_type": "InMemory",
-	    "alias": "keep-123-mem",
-	    "max_items": 2201
+	    "_type": "DbServer",
+	    "alias": "storage-big-table",
+	    "srv_type": "PostgreSQL",
+	    "max_conns": 18,
+	    "idle_timeout_secs": 245
 	}
     ],
     "rpc": {
-	 "handler_type": "dummy"
+	"handler_type": "AMQP",
+	"bindings": [],
+	"attributes": {
+	    "vhost":"/unit/test",
+	    "max_channels": 128,
+	    "timeout_secs": 17
+	},
+	"max_connections": 5,
+	"confidential_id": "amqp_broker/2/ty"
     },
     "confidentiality": {
 	"source": "UserSpace",

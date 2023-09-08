@@ -70,8 +70,53 @@ pub struct WebApiListenCfg {
     pub routes: Vec<WebApiRouteCfg>,
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Deserialize)]
-pub struct AppRpcAmqpCfg {}
+#[serde(tag="side")]
+pub enum AppAmqpBindingReplyCfg {
+    client {
+        #[serde(deserialize_with = "jsn_deny_empty_string")]
+        queue: String,
+        #[serde(deserialize_with = "jsn_deny_empty_string")]
+        correlation_id_prefix: String,
+        ttl_sec: u16,
+    },
+    server {
+        #[serde(deserialize_with = "jsn_deny_empty_string")]
+        task_handler: String,
+        ttl_sec: u16,
+    },
+}
+
+#[derive(Deserialize)]
+pub struct AppAmqpBindingCfg {
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+    queue: String,
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+    exchange: String,
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+    routing_key: String,
+    ensure_declare: bool,
+    durable: bool,
+    reply: AppAmqpBindingReplyCfg,
+}
+
+#[derive(Deserialize)]
+pub struct AppAmqpAttriCfg {
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+	vhost: String,
+    max_channels: u16,
+    timeout_secs: u16
+}
+
+#[derive(Deserialize)]
+pub struct AppRpcAmqpCfg {
+	bindings: Vec<AppAmqpBindingCfg>,
+	attributes: AppAmqpAttriCfg,
+	max_connections: u16,
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+	confidential_id: String
+}
 
 #[allow(non_camel_case_types)]
 #[derive(Deserialize)]
@@ -81,6 +126,15 @@ pub enum AppRpcCfg {
     AMQP(AppRpcAmqpCfg),
 }
 
+#[derive(Deserialize)]
+#[serde(tag="source")]
+pub enum AppConfidentialCfg {
+    UserSpace {
+        #[serde(deserialize_with = "jsn_deny_empty_string")]
+        sys_path: String,
+    } // TODO, support kernel key management utility,
+      // or hardware-specific approach e.g. ARM TrustZone
+}
 
 #[allow(non_camel_case_types)]
 #[derive(Deserialize, Debug, Clone)]
@@ -122,7 +176,8 @@ pub struct ApiServerCfg {
     pub num_workers: u8,
     pub stack_sz_kb: u16,
     pub data_store: Vec<AppDataStoreCfg>,
-    pub rpc: AppRpcCfg
+    pub rpc: AppRpcCfg,
+    pub confidentiality: AppConfidentialCfg
 }
 
 pub struct AppBasepathCfg {
@@ -149,15 +204,6 @@ impl AppConfig {
         } else {
             return Err(AppError{ detail:None, code:AppErrorCode::MissingAppBasePath });
         };
-        match args.remove(AppConst::ENV_VAR_SECRET_FILE_PATH) {
-            Some(_secret_path) => {
-                let _fullpath = sys_basepath.clone() + &_secret_path; 
-            }, // TODO, parse necessary data
-            None => {
-                return Err(AppError{ detail:None,
-                    code:AppErrorCode::MissingSecretPath });
-            },
-        }
         let api_srv_cfg = if let Some(cfg_path) = args.remove(AppConst::ENV_VAR_CONFIG_FILE_PATH) {
             let fullpath = app_basepath.clone() + &cfg_path; 
             Self::parse_from_file(fullpath) ?
@@ -178,7 +224,8 @@ impl AppConfig {
                 match serde_json::from_reader::<BufReader<File>, ApiServerCfg>(reader)
                 {
                     Ok(jsnobj) => {
-                        Self::_check_srv_listener(&jsnobj.listen) ? ;
+                        Self::_check_web_listener(&jsnobj.listen) ? ;
+                        Self::_check_rpc(&jsnobj.rpc)? ;
                         Self::_check_logging(&jsnobj.logging) ? ;
                         Self::_check_datastore (&jsnobj.data_store) ? ;
                         Ok(jsnobj)
@@ -192,7 +239,7 @@ impl AppConfig {
         }
     }
 
-    fn _check_srv_listener(obj:&WebApiListenCfg) -> DefaultResult<(), AppError>
+    fn _check_web_listener(obj:&WebApiListenCfg) -> DefaultResult<(), AppError>
     {
         let version:Vec<&str> = obj.api_version.split(".").collect();
         let mut iter = version.iter().filter(
@@ -210,7 +257,18 @@ impl AppConfig {
             let err_msg = Some(badroute.to_string());
             Err(AppError{ detail:err_msg, code:AppErrorCode::InvalidRouteConfig }) 
         } else { Ok(()) }
-    } // end of _check_srv_listener
+    } // end of _check_web_listener
+    
+    fn _check_rpc(obj:&AppRpcCfg) -> DefaultResult<(), AppError>
+    {
+        match obj {
+            AppRpcCfg::dummy => Ok(()),
+            AppRpcCfg::AMQP(c) => if c.bindings.is_empty() {
+                Err(AppError{ detail:Some("rpc".to_string()),
+                    code:AppErrorCode::NoRouteApiServerCfg }) 
+            } else { Ok(()) },
+        }
+    } // end of _check_rpc
     
     fn _check_logging (obj:&AppLoggingCfg) -> DefaultResult<(), AppError>
     {

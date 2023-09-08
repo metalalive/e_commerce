@@ -2,12 +2,11 @@ use crate::WebApiHdlrLabel;
 
 pub const ENV_VAR_SYS_BASE_PATH :&'static str = "SYS_BASE_PATH";
 pub const ENV_VAR_SERVICE_BASE_PATH :&'static str = "SERVICE_BASE_PATH";
-pub const ENV_VAR_SECRET_FILE_PATH :&'static str  = "SECRET_FILE_PATH";
 pub const ENV_VAR_CONFIG_FILE_PATH :&'static str  = "CONFIG_FILE_PATH";
 
-pub const EXPECTED_ENV_VAR_LABELS : [&'static str; 4] = [
+pub const EXPECTED_ENV_VAR_LABELS : [&'static str; 3] = [
     ENV_VAR_SYS_BASE_PATH,    ENV_VAR_SERVICE_BASE_PATH,
-    ENV_VAR_SECRET_FILE_PATH, ENV_VAR_CONFIG_FILE_PATH
+    ENV_VAR_CONFIG_FILE_PATH
 ];
 
 pub mod limit {

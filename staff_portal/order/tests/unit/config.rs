@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use order::AppConfig;
-use order::constant::{ENV_VAR_CONFIG_FILE_PATH, ENV_VAR_SECRET_FILE_PATH, ENV_VAR_SYS_BASE_PATH, ENV_VAR_SERVICE_BASE_PATH};
+use order::constant::{ENV_VAR_CONFIG_FILE_PATH, ENV_VAR_SYS_BASE_PATH, ENV_VAR_SERVICE_BASE_PATH};
 use order::error::{AppErrorCode, AppError};
 
 use crate::EXAMPLE_REL_PATH;
@@ -11,7 +11,6 @@ fn cfg_extract_arg_ok()
 {
     let args = [
         (ENV_VAR_CONFIG_FILE_PATH.to_string(), "relative/to/mycfg.json".to_string()),
-        (ENV_VAR_SECRET_FILE_PATH.to_string(), "relative/to/secret.json".to_string()),
         (ENV_VAR_SYS_BASE_PATH.to_string(), "/path/sys".to_string()),
         (ENV_VAR_SERVICE_BASE_PATH.to_string(), "/path/service".to_string())
     ];
@@ -26,9 +25,7 @@ fn cfg_extract_arg_ok()
 #[test]
 fn cfg_extract_arg_missing_sys_path()
 {
-    let args = [
-        (ENV_VAR_SECRET_FILE_PATH.to_string(), "relative/to/secret.json".to_string()),
-    ];
+    let args = [];
     let args = HashMap::from(args) ;
     let result = AppConfig::new(args);
     assert_eq!(result.is_err() , true);
@@ -99,7 +96,7 @@ fn parse_ext_cfg_file_missing_fields ()
         "config_missing_logging.json",
         AppErrorCode::InvalidJsonFormat );
     let _ = _parse_ext_cfg_file_error_common (
-        "config_empty_host.json",
+        "config_web_empty_host.json",
          AppErrorCode::InvalidJsonFormat);
     // println!("error detail: {}", x.detail.unwrap());
 }
@@ -116,11 +113,14 @@ fn parse_ext_cfg_file_invalid_api_version ()
 fn parse_ext_cfg_file_listener_invalid_fields ()
 {
     _parse_ext_cfg_file_error_common (
-        "config_empty_routes.json",
+        "config_web_empty_routes.json",
          AppErrorCode::NoRouteApiServerCfg);
     _parse_ext_cfg_file_error_common (
         "config_invalid_route.json",
          AppErrorCode::InvalidRouteConfig);
+    _parse_ext_cfg_file_error_common (
+        "config_rpc_empty_bindings.json",
+         AppErrorCode::NoRouteApiServerCfg);
 }
 
 

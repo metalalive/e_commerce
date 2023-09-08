@@ -65,6 +65,44 @@
 	}
     ],
     "rpc": {
-	"handler_type": "dummy"
+	"handler_type": "AMQP",
+	"bindings": [
+	    {
+                "queue": "rpc_orderproc_update_store_products",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.update_store_products",
+                "ensure_declare": true,
+                "durable": true,
+                "reply": {
+		    "side": "server",
+                    "task_handler": "sync_storefront_products",
+                    "ttl_sec": 11
+                }
+	    },
+	    {
+                "queue": "rpc_productmgt_get_product",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.product.get_product",
+                "ensure_declare": false,
+                "durable": true,
+                "reply": {
+		    "side": "client",
+                    "queue": "rpc.reply.order.receive_product_info",
+                    "correlation_id_prefix": "rpc.order.get_product_info.corr_id",
+                    "ttl_sec": 15
+                }
+	    }
+	],
+	"attributes": {
+	    "vhost":"/",
+	    "max_channels": 128,
+	    "timeout_secs": 17
+	},
+	"max_connections": 3,
+	"confidential_id": "amqp_broker/0"
+    },
+    "confidentiality": {
+	"source": "UserSpace",
+	"sys_path": "common/data/secret.json"
     }
 }

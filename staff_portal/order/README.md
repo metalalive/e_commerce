@@ -10,7 +10,6 @@ cargo build  --bin web
 |--------|-----------|-------|
 |`SYS_BASE_PATH`| common path of all the services| `${PWD}/..` |
 |`SERVICE_BASE_PATH`| base path of the order service | `${PWD}` |
-|`SECRET_FILE_PATH`| path relative to `SYS_BASE_PATH` folder, it contains required credential data | `common/data/secret.json` |
 |`CONFIG_FILE_PATH`| path relative to `SERVICE_BASE_PATH` folder, it is JSON configuration file | `settings/development.json` |
 ||||
 
@@ -19,7 +18,6 @@ cargo build  --bin web
 cd ${SERVICE_BASE_PATH}
 
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    SECRET_FILE_PATH="common/data/secret.json" \
     CONFIG_FILE_PATH="settings/development.json" \
     cargo run  --bin web
 ```
@@ -42,7 +40,6 @@ Note the option `--nocapture` allows the program to print all messages to standa
 cd ${SERVICE_BASE_PATH}/tests/integration
 
 SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
-    SECRET_FILE_PATH="common/data/secret.json" \
     CONFIG_FILE_PATH="settings/test.json" \
     cargo test --test web
 ```
