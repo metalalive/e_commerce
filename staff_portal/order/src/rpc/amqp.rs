@@ -1,12 +1,16 @@
 use std::result::Result as DefaultResult;
 use std::boxed::Box;
+use std::sync::Arc;
 use async_trait::async_trait;
 
-use crate::AppRpcAmqpCfg;
+use crate::{AppRpcAmqpCfg, AppBasepathCfg};
+use crate::confidentiality::AbstractConfidentiality;
 use crate::error::{AppError, AppErrorCode};
 use super::{AbstractRpcContext, AbstractRpcClient, AppRpcClientReqProperty, AppRpcReply};
 
-pub(super) struct AmqpRpcContext {}
+pub(super) struct AmqpRpcContext {
+    confidential: Arc<Box<dyn AbstractConfidentiality>>
+}
 pub(super) struct AmqpRpcHandler {
     // retry:u8,
     // route:String,
@@ -25,9 +29,11 @@ impl AbstractRpcContext for AmqpRpcContext {
 }
 
 impl AmqpRpcContext {
-    pub(crate) fn build (_cfg: &AppRpcAmqpCfg) -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
+    pub(crate) fn build (_cfg: &AppRpcAmqpCfg, basepath:&AppBasepathCfg,
+                         confidential:Arc<Box<dyn AbstractConfidentiality>>)
+        -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
     {
-        let obj = Self{};
+        let obj = Self{confidential};
         Ok(Box::new(obj))
     }
 }

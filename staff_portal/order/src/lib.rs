@@ -8,12 +8,13 @@ pub mod constant;
 pub mod usecase;
 pub mod repository;
 pub mod model;
+pub mod confidentiality;
 
 mod config;
 pub use config::{
-    AppConfig, ApiServerCfg, WebApiListenCfg, WebApiRouteCfg,
-    AppLoggingCfg, AppLogHandlerCfg, AppLoggerCfg, AppBasepathCfg,
-    AppRpcCfg, AppRpcAmqpCfg, AppInMemoryDbCfg
+    AppConfig, ApiServerCfg, WebApiListenCfg, WebApiRouteCfg, AppLoggingCfg,
+    AppLogHandlerCfg, AppLoggerCfg, AppBasepathCfg, AppRpcCfg, AppRpcAmqpCfg,
+    AppInMemoryDbCfg, AppConfidentialCfg
 };
 
 mod rpc;
@@ -22,6 +23,8 @@ pub use rpc::{AbstractRpcContext, AbstractRpcClient, AppRpcReply, AppRpcClientRe
 
 mod adapter;
 pub use adapter::datastore;
+
+use confidentiality::AbstractConfidentiality;
 
 type WebApiPath = String;
 type WebApiHdlrLabel = & 'static str;
@@ -41,11 +44,12 @@ pub struct AppSharedState {
 }
 
 impl AppSharedState {
-    pub fn new(cfg:AppConfig, log:logging::AppLogContext) -> Self
+    pub fn new(cfg:AppConfig, log:logging::AppLogContext, confidential:Box<dyn AbstractConfidentiality>) -> Self
     {
-        let _rpc_ctx = build_rpc_context(&cfg.api_server.rpc)
-            .unwrap();
-        let (in_mem, sql_dbs) = datastore::build_context(&cfg.api_server.data_store);
+        let confidential = Arc::new(confidential);
+        let _rpc_ctx = build_rpc_context(&cfg.api_server.rpc, &cfg.basepath,
+                                         confidential.clone()  ).unwrap();
+        let (in_mem, sql_dbs) = datastore::build_context(&cfg.api_server.data_store, confidential);
         let in_mem = if let Some(m) = in_mem { Some(Arc::new(m)) } else {None};
         let sql_dbs = if let Some(m) = sql_dbs {
             Some(m.into_iter().map(Arc::new).collect())
@@ -53,7 +57,7 @@ impl AppSharedState {
         let ds_ctx = AppDataStoreContext {in_mem, sql_dbs};
         Self{_cfg:Arc::new(cfg), _log:Arc::new(log), _rpc:Arc::new(_rpc_ctx),
              dstore:Arc::new(ds_ctx)  }
-    }
+    } // end of fn new
 
     pub fn config(&self) -> &Arc<AppConfig>
     { &self._cfg }

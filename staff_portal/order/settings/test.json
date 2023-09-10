@@ -65,6 +65,6 @@
     },
     "confidentiality": {
 	"source": "UserSpace",
-	"sys_path": "common/data/secret.json"
+	"sys_path": "common/data/secrets.json"
     }
 }

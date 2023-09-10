@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::env;
+use std::boxed::Box;
 
 use tokio::runtime::Builder as RuntimeBuilder;
 
 use order::{AppConfig, AppSharedState};
 use order::constant::EXPECTED_ENV_VAR_LABELS;
+use order::confidentiality::{self, AbstractConfidentiality};
 use order::logging::{AppLogContext, AppLogLevel, app_log_event};
 use order::network::{generate_web_service, start_web_service};
 use order::api::web::route_table as web_route_table;
@@ -36,10 +38,10 @@ async fn start_server (shr_state:AppSharedState)
     }
 }
 
-fn start_async_runtime (cfg:AppConfig)
+fn start_async_runtime (cfg:AppConfig, confidential:Box<dyn AbstractConfidentiality>)
 {
     let log_ctx = AppLogContext::new(&cfg.basepath, &cfg.api_server.logging);
-    let shr_state = AppSharedState::new(cfg, log_ctx);
+    let shr_state = AppSharedState::new(cfg, log_ctx, confidential);
     let cfg = shr_state.config();
     let log_ctx  = shr_state.log_context().clone();
     let log_ctx2 = log_ctx.clone();
@@ -83,8 +85,11 @@ fn main() {
     );
     let arg_map: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
     match AppConfig::new(arg_map) {
-        Ok(cfg) => {
-            start_async_runtime(cfg);
+        Ok(cfg) => match confidentiality::build_context(&cfg) {
+            Ok(confidential) => start_async_runtime(cfg, confidential),
+            Err(e) => {
+                println!("app failed to init confidentiality handler, error code: {} ", e);
+            }
         },
         Err(e) => {
             println!("app failed to configure, error code: {} ", e);

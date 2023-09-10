@@ -2,6 +2,7 @@ mod in_mem;
 mod sql_db;
 
 use std::boxed::Box;
+use std::sync::Arc;
 
 pub use in_mem::{
     AbstInMemoryDStore, AppInMemUpdateData, AppInMemDeleteInfo,
@@ -10,8 +11,10 @@ pub use in_mem::{
 pub use sql_db::AppSqlDbStore;
 
 use crate::config::AppDataStoreCfg;
+use crate::confidentiality::AbstractConfidentiality;
 
-pub(crate) fn build_context(cfg:&Vec<AppDataStoreCfg>)
+pub(crate) fn build_context(cfg:&Vec<AppDataStoreCfg>,
+                            confidential:Arc<Box<dyn AbstractConfidentiality>> )
     -> (Option<Box<dyn AbstInMemoryDStore>>, Option<Vec<AppSqlDbStore>>)
 {
     let mut inmem = None;
@@ -27,7 +30,7 @@ pub(crate) fn build_context(cfg:&Vec<AppDataStoreCfg>)
                     sqldb = Some(Vec::new());
                 }
                 if let Some(lst) = &mut sqldb {
-                    let item = AppSqlDbStore::new(&d);
+                    let item = AppSqlDbStore::new(&d, confidential.clone());
                     lst.push(item);
                 }
             }

@@ -25,6 +25,7 @@ pub enum AppErrorCode {
     RpcPublishFailure,
     RpcConsumeFailure,
     RpcRemoteInvalidReply,
+    NoConfidentialityCfg,
     NoDatabaseCfg,
     ExceedingMaxLimit,
     AcquireLockFailure,

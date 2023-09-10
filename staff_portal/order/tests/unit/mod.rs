@@ -4,6 +4,7 @@ mod usecase;
 mod adapter;
 mod repository;
 mod model;
+mod confidentiality;
 
 use order::model::ProductPolicyModel;
 

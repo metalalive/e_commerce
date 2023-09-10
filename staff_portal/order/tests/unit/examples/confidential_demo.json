@@ -1,0 +1,67 @@
+{
+    "amqp_broker": [
+        {
+            "protocol": "pyamqp",
+            "host"    : "localhost",
+            "port"    : 5672,
+            "username": "AMQP_BROKER_USERNAME",
+            "password": "AMQP_BROKER_PASSWORD"
+        },
+        {
+            "protocol": "pyamqp",
+            "host"    : "your.host.domain",
+            "port"    : 5673,
+            "username": "AMQP_BROKER_USERNAME",
+            "password": "AMQP_BROKER_PASSWORD"
+        }
+    ],
+    "elasticsearch": {
+        "username": "ES_USERNAME",
+        "password": "ES_PASSWORD",
+        "nodes": [
+            {"host": "els.myapp.io", "port": 9200},
+            {"host": "els2.myapp.io", "port": 9202}
+        ]
+    },
+    "backend_apps": {
+        "databases": {
+            "site_dba": {
+                "HOST": "localhost",
+                "PORT": "1238",
+                "USER": "DB_USERNAME",
+                "PASSWORD": "DB_PASSWORD"
+            },
+            "test_site_dba": {
+                "HOST": "localhost",
+                "PORT": "1237",
+                "USER": "DB_USERNAME_FOR_TEST",
+                "PASSWORD": "DB_PASSWORD_FOR_TEST"
+            },
+            "abc_service": {
+                "HOST": "localhost",
+                "PORT": "1236",
+                "USER": "DB_USERNAME",
+                "PASSWORD": "DB_PASSWORD"
+            },
+            "bbc_service": {
+                "HOST": "bbc.myproject.org",
+                "PORT": "1235",
+                "USER": "DB_USERNAME",
+                "PASSWORD": "DB_PASSWORD"
+            },
+            "cbc_service": {
+                "HOST": "cbc.mysys.org",
+                "PORT": "1234",
+                "USER": "DB_USERNAME",
+                "PASSWORD": "DB_PASSWORD"
+            }
+        },
+        "smtp": {
+            "host": "YOUR_SMTP_HOST_DOMAIN",
+            "port": -1,
+            "username": "SMTP_USERNAME",
+            "password": "SMTP_PASSWORD"
+        }
+    }
+}
+
