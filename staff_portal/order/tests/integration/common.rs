@@ -15,7 +15,7 @@ use http_body::combinators::UnsyncBoxBody;
 use hyper::body::{Body as HyperBody, Bytes as HyperBytes};
 use axum_core::Error as AxumCoreError;
 
-use order::{AppConfig, AppSharedState, AppBasepathCfg};
+use order::{AppConfig, AppSharedState, AppBasepathCfg, confidentiality};
 use order::error::{AppError, AppErrorCode};
 use order::logging::AppLogContext;
 use order::constant::EXPECTED_ENV_VAR_LABELS;
@@ -38,12 +38,14 @@ pub fn test_setup_shr_state() -> DefaultResult<AppSharedState, AppError>
         );
         let args: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
         match AppConfig::new(args) {
-            Ok(top_lvl_cfg) => {
-                let log_ctx = AppLogContext::new(
-                    &top_lvl_cfg.basepath, &top_lvl_cfg.api_server.logging
-                );
-                let obj = AppSharedState::new(top_lvl_cfg, log_ctx);
-                unsafe { GLOBAL_SHARED_STATE = Some(Ok(obj)); }
+            Ok(top_lvl_cfg) => match confidentiality::build_context(&top_lvl_cfg) {
+                Ok(cfdntl) => {
+                    let log_ctx = AppLogContext::new(&top_lvl_cfg.basepath,
+                                        &top_lvl_cfg.api_server.logging );
+                    let obj = AppSharedState::new(top_lvl_cfg, log_ctx, cfdntl);
+                    unsafe { GLOBAL_SHARED_STATE = Some(Ok(obj)); }
+                },
+                Err(e) => unsafe { GLOBAL_SHARED_STATE = Some(Err(e)); }
             },
             Err(e) => unsafe { GLOBAL_SHARED_STATE = Some(Err(e)); }
         };

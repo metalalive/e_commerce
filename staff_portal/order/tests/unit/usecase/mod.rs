@@ -6,30 +6,29 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 
 use order::{
-    AbstractRpcContext, AppRpcCfg, AppRpcClientReqProperty,
-    AbstractRpcClient, AppRpcReply
+    AbstractRpcContext, AppRpcCfg, AppRpcClientReqProperty, AbstractRpcServer,
+    AbstractRpcClient, AppRpcReply, AbsRpcClientCtx, AbsRpcServerCtx
 };
 use order::error::{AppError, AppErrorCode};
 use order::usecase::initiate_rpc_request;
 
-type TestRpcAcquireReturn = DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
-type TestRpcPublishReturn = DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
-type TestRpcConsumeReturn = DefaultResult<AppRpcReply, AppError>;
+type TestAcquireClientResult = DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
+type TestAcquireServerResult = DefaultResult<Box<dyn AbstractRpcServer>, AppError>;
+
+type TestClientPublishResult = TestAcquireClientResult;
+type TestClientReplyResult = DefaultResult<AppRpcReply, AppError>;
 
 struct MockRpcContext {
-    _mock_acquire: Mutex<RefCell<Option<TestRpcAcquireReturn>>> ,
+    _mock_acquire: Mutex<RefCell<Option<TestAcquireClientResult>>> ,
 }
 struct MockRpcHandler {
-    _mock_publish: Option<TestRpcPublishReturn>,
-    _mock_consume: Option<TestRpcConsumeReturn>,
+    _mock_client_publish: Option<TestClientPublishResult>,
+    _mock_rreply: Option<TestClientReplyResult>,
 }
 
 #[async_trait]
-impl AbstractRpcContext for MockRpcContext
-{
-    fn label(&self) -> &'static str { "unit-test" }
-
-    async fn acquire (&self, _num_retry:u8) -> TestRpcAcquireReturn
+impl AbsRpcClientCtx for MockRpcContext {
+    async fn acquire (&self, _num_retry:u8) -> TestAcquireClientResult
     {
         if let Ok(guard) = self._mock_acquire.lock() {
             let mut objref = guard.borrow_mut();
@@ -44,6 +43,18 @@ impl AbstractRpcContext for MockRpcContext
             Err(AppError{detail:Some(detail), code:AppErrorCode::Unknown })
         }
     }
+}
+#[async_trait]
+impl AbsRpcServerCtx for MockRpcContext {
+    async fn acquire (&self, _num_retry:u8) -> TestAcquireServerResult
+    {
+        Err(AppError{detail:None, code:AppErrorCode::NotImplemented })
+    }
+}
+
+impl AbstractRpcContext for MockRpcContext
+{
+    fn label(&self) -> &'static str { "unit-test" }
 } // end of impl AbstractRpcContext
 
 impl MockRpcContext {
@@ -53,11 +64,11 @@ impl MockRpcContext {
         let obj = Self::_build(cfg) ;
         Ok(Box::new(obj))
     }
-    fn _build(cfg: &AppRpcCfg) -> Self
+    fn _build(_cfg: &AppRpcCfg) -> Self
     {
         Self{ _mock_acquire: Mutex::new(RefCell::new(None)) }
     }
-    fn mock (&self, a:TestRpcAcquireReturn)
+    fn mock (&self, a:TestAcquireClientResult)
     {
         let guard = self._mock_acquire.lock().unwrap();
         let mut objref = guard.borrow_mut();
@@ -69,9 +80,9 @@ impl MockRpcContext {
 #[async_trait]
 impl AbstractRpcClient for MockRpcHandler {
     async fn send_request(mut self:Box<Self>, _props:AppRpcClientReqProperty)
-        -> TestRpcPublishReturn
+        -> TestClientPublishResult
     {
-        if let Some(mocked) = self._mock_publish.take() {
+        if let Some(mocked) = self._mock_client_publish.take() {
             mocked
         } else {
             let detail = String::from("no mock object specified");
@@ -79,9 +90,9 @@ impl AbstractRpcClient for MockRpcHandler {
         }
     }
 
-    async fn receive_response(&mut self) -> TestRpcConsumeReturn
+    async fn receive_response(&mut self) -> TestClientReplyResult
     {
-        if let Some(mocked) = self._mock_consume.take() {
+        if let Some(mocked) = self._mock_rreply.take() {
             mocked
         } else {
             let detail = String::from("no mock object specified");
@@ -91,20 +102,20 @@ impl AbstractRpcClient for MockRpcHandler {
 }
 impl Default for MockRpcHandler {
     fn default() -> Self {
-        Self { _mock_publish:None, _mock_consume:None }
+        Self { _mock_client_publish:None, _mock_rreply:None }
     }
 }
 impl MockRpcHandler {
-    fn mock_pub(mut self, m:TestRpcPublishReturn) -> Self
-    { self._mock_publish = Some(m); self }
-    fn mock_con(mut self, m:TestRpcConsumeReturn) -> Self
-    { self._mock_consume = Some(m); self }
+    fn mock_c_pub(mut self, m:TestClientPublishResult) -> Self
+    { self._mock_client_publish = Some(m); self }
+    fn mock_reply(mut self, m:TestClientReplyResult) -> Self
+    { self._mock_rreply = Some(m); self }
 }
 
 
 
 #[tokio::test]
-async fn uc_run_rpc_ok ()
+async fn client_run_rpc_ok ()
 {
     const UTEST_REPLY_BODY_SERIAL :&[u8; 8] = br#"achieved"#;
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
@@ -114,8 +125,8 @@ async fn uc_run_rpc_ok ()
             let h  = MockRpcHandler::default();
             let h2 = MockRpcHandler::default();
             let m2 = AppRpcReply { body: UTEST_REPLY_BODY_SERIAL.to_vec() };
-            let h2 = h2.mock_con(Ok(m2));
-            h.mock_pub(Ok(Box::new(h2)))
+            let h2 = h2.mock_reply(Ok(m2));
+            h.mock_c_pub(Ok(Box::new(h2)))
         };
         let a: Box<dyn AbstractRpcClient> = Box::new(hdlr);
         _ctx.mock(Ok(a));
@@ -129,11 +140,11 @@ async fn uc_run_rpc_ok ()
     assert_eq!(actual.is_ok(), true);
     let body = actual.unwrap().body;
     assert_eq!(body, UTEST_REPLY_BODY_SERIAL);
-} // end of uc_run_rpc_ok
+}
 
 
 #[tokio::test]
-async fn uc_run_rpc_acquire_handler_failure ()
+async fn client_run_rpc_acquire_handler_failure ()
 {
     let ut_error_detail = format!("unit-test connection timeout");
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
@@ -156,7 +167,7 @@ async fn uc_run_rpc_acquire_handler_failure ()
 
 
 #[tokio::test]
-async fn uc_run_rpc_publish_error ()
+async fn client_run_rpc_publish_error ()
 {
     let ut_error_detail = format!("some properties are invalid");
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
@@ -166,7 +177,7 @@ async fn uc_run_rpc_publish_error ()
             let h = MockRpcHandler::default();
             let m1 = AppError { code: AppErrorCode::RpcPublishFailure,
                  detail: Some(ut_error_detail.clone()) };
-            h.mock_pub(Err(m1))
+            h.mock_c_pub(Err(m1))
         };
         let a: Box<dyn AbstractRpcClient> = Box::new(hdlr);
         _ctx.mock(Ok(a));
@@ -185,7 +196,7 @@ async fn uc_run_rpc_publish_error ()
 
 
 #[tokio::test]
-async fn uc_run_rpc_consume_reply_error ()
+async fn client_run_rpc_consume_reply_error ()
 {
     let ut_error_detail = format!("job ID not found");
     let ctx : Arc<Box<dyn AbstractRpcContext>> = {
@@ -196,8 +207,8 @@ async fn uc_run_rpc_consume_reply_error ()
             let h2 = MockRpcHandler::default();
             let m2 = AppError { code: AppErrorCode::RpcConsumeFailure,
                  detail: Some(ut_error_detail.clone()) };
-            let h2 = h2.mock_con(Err(m2));
-            h.mock_pub(Ok(Box::new(h2)))
+            let h2 = h2.mock_reply(Err(m2));
+            h.mock_c_pub(Ok(Box::new(h2)))
         };
         let a:Box<dyn AbstractRpcClient> = Box::new(hdlr);
         _ctx.mock(Ok(a));

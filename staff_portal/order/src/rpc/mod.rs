@@ -9,27 +9,32 @@ use std::marker::{Send, Sync};
 
 use async_trait::async_trait;
 
-use crate::{AppRpcCfg, AppBasepathCfg};
+use crate::AppRpcCfg;
 use crate::error::AppError;
 use crate::rpc::dummy::DummyRpcContext;
 use crate::rpc::amqp::AmqpRpcContext;
 use crate::confidentiality::AbstractConfidentiality;
 
-pub(crate) fn build_context (cfg: &AppRpcCfg, basepath:&AppBasepathCfg,
-                             confidential:Arc<Box<dyn AbstractConfidentiality>> )
-    -> DefaultResult<Box<dyn AbstractRpcContext> , AppError>
+pub(crate) fn build_context (cfg: &AppRpcCfg, confidential:Arc<Box<dyn AbstractConfidentiality>>)
+    -> Box<dyn AbstractRpcContext>
 {
     match cfg {
         AppRpcCfg::dummy => DummyRpcContext::build(),
-        AppRpcCfg::AMQP(detail_cfg) => AmqpRpcContext::build(
-            detail_cfg, basepath, confidential ),
+        AppRpcCfg::AMQP(detail_cfg) => AmqpRpcContext::build(detail_cfg, confidential),
     }
 }
 
 #[async_trait]
-pub trait AbstractRpcContext : Send + Sync {
-    async fn acquire(&self, num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
-    
+pub trait AbsRpcClientCtx : Send + Sync {
+    async fn acquire(&self, num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcClient>, AppError> ;
+}
+#[async_trait]
+pub trait AbsRpcServerCtx : Send + Sync {
+    async fn acquire(&self, num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcServer>, AppError> ;
+}
+
+pub trait AbstractRpcContext : AbsRpcClientCtx + AbsRpcServerCtx
+{
     fn label (&self) -> &'static str ;
 }
 
@@ -40,6 +45,16 @@ pub trait AbstractRpcClient : Send + Sync {
 
     async fn receive_response(&mut self) -> DefaultResult<AppRpcReply, AppError>;
 }
+
+#[async_trait]
+pub trait AbstractRpcServer : Send + Sync {
+    async fn send_response(mut self:Box<Self>, props:AppRpcReply)
+        -> DefaultResult<(), AppError>;
+
+    async fn receive_request(&mut self)
+        -> DefaultResult<AppRpcClientReqProperty, AppError>;
+}
+
 
 pub struct AppRpcClientReqProperty {
     pub retry:u8,

@@ -15,7 +15,7 @@ use crate::logging::AppLogLevel;
 
 use crate::api::web::dto::{ProductPolicyDto, ProductPolicyClientErrorDto};
 
-use super::{initiate_rpc_request, AppUCrunRPCfn, AppUCrunRPCreturn};
+use super::{initiate_rpc_request, AppUCrunRPCfn, AppUseKsRPCreply};
 
 // the product info types below represent message body to remote product service
 #[derive(Serialize)]
@@ -101,7 +101,7 @@ impl EditProductPolicyUseCase {
     pub async fn check_product_existence (
         data: &Vec<ProductPolicyDto>,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
-        run_rpc_fn: AppUCrunRPCfn<impl Future<Output = AppUCrunRPCreturn>>,
+        run_rpc_fn: AppUCrunRPCfn<impl Future<Output = AppUseKsRPCreply>>,
         usr_prof_id: u32 ) -> DefaultResult<Vec<u64>, (EditProductPolicyResult, String)>
     {
         let mut msg_req = ProductInfoReq {

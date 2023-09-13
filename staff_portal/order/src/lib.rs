@@ -19,7 +19,9 @@ pub use config::{
 
 mod rpc;
 use rpc::build_context as build_rpc_context;
-pub use rpc::{AbstractRpcContext, AbstractRpcClient, AppRpcReply, AppRpcClientReqProperty};
+pub use rpc::{AbstractRpcContext, AbsRpcServerCtx, AbsRpcClientCtx,  AbstractRpcClient,
+    AbstractRpcServer, AppRpcReply, AppRpcClientReqProperty
+};
 
 mod adapter;
 pub use adapter::datastore;
@@ -47,8 +49,7 @@ impl AppSharedState {
     pub fn new(cfg:AppConfig, log:logging::AppLogContext, confidential:Box<dyn AbstractConfidentiality>) -> Self
     {
         let confidential = Arc::new(confidential);
-        let _rpc_ctx = build_rpc_context(&cfg.api_server.rpc, &cfg.basepath,
-                                         confidential.clone()  ).unwrap();
+        let _rpc_ctx = build_rpc_context(&cfg.api_server.rpc, confidential.clone());
         let (in_mem, sql_dbs) = datastore::build_context(&cfg.api_server.data_store, confidential);
         let in_mem = if let Some(m) = in_mem { Some(Arc::new(m)) } else {None};
         let sql_dbs = if let Some(m) = sql_dbs {

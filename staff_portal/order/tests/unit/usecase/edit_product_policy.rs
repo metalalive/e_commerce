@@ -4,18 +4,27 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 use serde_json::from_str as deserialize_json;
 
-use order::{AbstractRpcContext, AppRpcCfg, AbstractRpcClient, AppRpcReply, AppRpcClientReqProperty};
+use order::{AbstractRpcContext, AppRpcCfg, AbstractRpcClient, AppRpcReply,
+    AppRpcClientReqProperty, AbsRpcClientCtx, AbsRpcServerCtx, AbstractRpcServer
+};
 use order::error::{AppError, AppErrorCode};
 use order::api::web::dto::ProductPolicyDto;
-use order::usecase::{EditProductPolicyUseCase, AppUCrunRPCreturn, EditProductPolicyResult};
+use order::usecase::{EditProductPolicyUseCase, AppUseKsRPCreply, EditProductPolicyResult};
 
 const UTEST_USR_PROF_ID: u32 = 99674;
 struct UTestDummyRpcContext {}
 
 #[async_trait]
-impl AbstractRpcContext for UTestDummyRpcContext {
-    fn label(&self) -> &'static str { "unit-test" }
-
+impl AbsRpcServerCtx for UTestDummyRpcContext {
+    async fn acquire(&self, _num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcServer>, AppError>
+    {
+        let error = AppError{ code: AppErrorCode::NotImplemented
+                       , detail:None };
+        Err(error)
+    }
+}
+#[async_trait]
+impl AbsRpcClientCtx for UTestDummyRpcContext {
     async fn acquire(&self, _num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     {
         let detail = "remote server down".to_string();
@@ -23,6 +32,10 @@ impl AbstractRpcContext for UTestDummyRpcContext {
                        , detail:Some(detail) };
         Err(error)
     }
+}
+
+impl AbstractRpcContext for UTestDummyRpcContext {
+    fn label(&self) -> &'static str { "unit-test" }
 }
 
 impl UTestDummyRpcContext {
@@ -55,7 +68,7 @@ fn setup_data () -> Vec<ProductPolicyDto>
 }
 
 async fn mock_run_rpc_ok (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcClientReqProperty)
-    -> AppUCrunRPCreturn
+    -> AppUseKsRPCreply
 {
     let raw = br#"
         {
@@ -81,9 +94,12 @@ async fn check_product_existence_ok ()
 }
 
 async fn mock_run_rpc_remote_down (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcClientReqProperty)
-    -> AppUCrunRPCreturn
+    -> AppUseKsRPCreply
 {
-    let result = _ctx.acquire(1).await;
+    // The pointer to trait object is accepted by trait method call
+    let _ctx = _ctx.as_ref();
+    let _ctx = _ctx.as_ref();
+    let result = AbsRpcClientCtx::acquire(_ctx, 1).await;
     let out = result.err().unwrap();
     Err(out)
 }
@@ -104,7 +120,7 @@ async fn check_product_existence_rpc_error ()
 
 
 async fn mock_run_rpc_reply_empty (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcClientReqProperty)
-    -> AppUCrunRPCreturn
+    -> AppUseKsRPCreply
 {
     let raw = br#" {}  "#;
     let res = AppRpcReply { body:raw.to_vec() };
@@ -127,7 +143,7 @@ async fn check_product_existence_rpc_reply_invalid_format ()
 
 async fn mock_run_rpc_nonexist_found (
     _ctx: Arc<Box<dyn AbstractRpcContext>>,
-    _prop: AppRpcClientReqProperty) -> AppUCrunRPCreturn
+    _prop: AppRpcClientReqProperty) -> AppUseKsRPCreply
 {
     let raw = br#"
         {
