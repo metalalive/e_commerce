@@ -39,6 +39,23 @@ pub trait AbstractRpcContext : AbsRpcClientCtx + AbsRpcServerCtx
 }
 
 #[async_trait]
+impl AbsRpcServerCtx for Box<dyn AbstractRpcContext> {
+    async fn acquire(&self, num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcServer>, AppError>
+    { // let box pointer of the trait object directly invoke the methods.
+        let tobj = self.as_ref();
+        AbsRpcServerCtx::acquire(tobj, num_retry).await
+    }
+} // TODO, deref coersion might achieve the same result ? figure out
+#[async_trait]
+impl AbsRpcClientCtx for Box<dyn AbstractRpcContext> {
+    async fn acquire(&self, num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
+    {
+        let tobj = self.as_ref();
+        AbsRpcClientCtx::acquire(tobj, num_retry).await
+    }
+}
+
+#[async_trait]
 pub trait AbstractRpcClient : Send + Sync {
     async fn send_request(mut self:Box<Self> , props:AppRpcClientReqProperty)
         -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>;
