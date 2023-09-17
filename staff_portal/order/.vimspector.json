@@ -12,7 +12,26 @@
         "environment": [
 	        {"name":"SYS_BASE_PATH", "value":"${workspaceRoot}/.."} ,
 	        {"name":"SERVICE_BASE_PATH", "value":"${workspaceRoot}"} ,
-            {"name":"SECRET_FILE_PATH", "value":"common/data/secret.json"} ,
+            {"name":"CONFIG_FILE_PATH", "value":"settings/development.json"}
+        ],
+        "logging": {
+            "engineLogging": false
+        }
+      },
+      "default": false,
+      "autoselect": false
+    },
+    "rpc-consumer-dev": {
+      "adapter": "vscode-cpptools",
+      "filetypes": ["rust"],
+      "configuration": {
+        "stopAtEntry": true,
+        "MIMode": "gdb",
+        "request": "launch",
+        "program": "${workspaceRoot}/target/debug/rpc_consumer",
+        "environment": [
+	    {"name":"SYS_BASE_PATH", "value":"${workspaceRoot}/.."} ,
+	    {"name":"SERVICE_BASE_PATH", "value":"${workspaceRoot}"} ,
             {"name":"CONFIG_FILE_PATH", "value":"settings/development.json"}
         ],
         "logging": {

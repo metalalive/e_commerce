@@ -31,6 +31,9 @@
             {"alias": "order::usecase::edit_product_policy",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
+            {"alias": "rpc_consumer",
+             "handlers": ["std-output-forall"],
+             "level": "INFO"},
             {"alias": "web",
              "handlers": ["errlog-file-web-api", "std-output-forall"]}
         ]
