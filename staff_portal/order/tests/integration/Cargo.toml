@@ -19,3 +19,8 @@ name = "web"
 path = "./web.rs" # the same folder as this cargo file
 test = true
 
+[[test]]
+name = "rpcsub"
+path = "./rpc_consumer.rs" # the same folder as this cargo file
+test = true
+

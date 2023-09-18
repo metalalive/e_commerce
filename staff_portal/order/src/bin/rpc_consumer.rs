@@ -11,7 +11,7 @@ use order::confidentiality::{self, AbstractConfidentiality};
 use order::constant::EXPECTED_ENV_VAR_LABELS;
 use order::logging::{AppLogContext, AppLogLevel, app_log_event};
 use order::usecase::rpc_server_process;
-use order::api::rpc::route_to_handler;
+use order::api::rpc::{route_to_handler, build_error_response};
 
 async fn app_request_handler(req:AppRpcClientReqProperty, shr_state:AppSharedState )
     -> AppRpcReply
@@ -22,17 +22,10 @@ async fn app_request_handler(req:AppRpcClientReqProperty, shr_state:AppSharedSta
     {
         Ok(raw_resp) => raw_resp,
         Err(e) => {
-            app_log_event!(logctx_p, AppLogLevel::ERROR,
-                    "[rpc][consumer] failed to handle the request, \
-                     route:{}, detail:{}", route_bak, e);
-            let pattern = r#" {"status":"error", "detail":""} "#;
-            let mut err: serde_json::Value = serde_json::from_str(pattern).unwrap();
-            if let Some(m) = err.as_object_mut() {
-                let _detail = format!("{}", e);
-                m.insert("detail".to_string(), serde_json::Value::String(_detail));
-            }
-            let msg = err.to_string();
-            msg.into_bytes()
+            app_log_event!(logctx_p, AppLogLevel::ERROR, "[rpc][consumer] failed to \
+                handle the request, route:{}, detail:{}", route_bak, e);
+            let e = build_error_response(e);
+            e.to_string().into_bytes()
         },
     };
     AppRpcReply { body:respbody }
