@@ -229,6 +229,10 @@ class StoreStaffReqBody(PydanticBaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # MariaDB DATETIME is not allowed to save time zone, currently should be removed.
+        # TODO, keep the time zone of invididual product if required
+        self.start_after = self.start_after.replace(tzinfo=None)
+        self.end_before  = self.end_before.replace(tzinfo=None)
         if self.start_after > self.end_before:
             err_detail = {'code':'invalid_time_period'}
             raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
@@ -307,6 +311,12 @@ class EditProductReqBody(PydanticBaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # MariaDB DATETIME is not allowed to save time zone, currently should be removed.
+        # TODO, keep the time zone of invididual product if required
+        #self._tz_start_after = self.start_after.tzinfo
+        #self._tz_end_before  = self.end_before.tzinfo
+        self.start_after = self.start_after.replace(tzinfo=None)
+        self.end_before  = self.end_before.replace(tzinfo=None)
         if self.start_after > self.end_before:
             err_detail = {'code':'invalid_time_period'}
             raise FastApiHTTPException( detail=err_detail, headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )

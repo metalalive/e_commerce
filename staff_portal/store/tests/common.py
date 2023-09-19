@@ -193,7 +193,7 @@ def _gen_time_period():
     start_after = datetime.utcnow().replace(microsecond=0)
     start_after += timedelta(minutes=start_minute)
     end_before = start_after + timedelta(days=day_length)
-    return start_after, end_before
+    return start_after.astimezone(), end_before.astimezone()
 
 
 def _staff_data_gen():

@@ -30,8 +30,8 @@ class TestUpdate:
     def test_ok(self, session_for_test, keystore, test_client, saved_store_objs, staff_data):
         num_new, num_unmodified = 1, 3
         obj = next(saved_store_objs)
-        body = [{'staff_id': s.staff_id, 'start_after':s.start_after.isoformat(), \
-                'end_before':s.end_before.isoformat()} for s in obj.staff[num_new:]]
+        body = [{'staff_id': s.staff_id, 'start_after':s.start_after.astimezone().isoformat(), \
+                'end_before':s.end_before.astimezone().isoformat()} for s in obj.staff[num_new:]]
         new_staff_d = [next(staff_data) for _ in range(num_unmodified)]
         for item in new_staff_d:
             item['start_after'] = item['start_after'].isoformat()
@@ -54,16 +54,18 @@ class TestUpdate:
         query = session_for_test.query(StoreStaff).filter(StoreStaff.store_id == obj.id)
         query = query.order_by(StoreStaff.staff_id.asc())
         
-        extra_expect_items = [{'staff_id': s.staff_id, 'start_after':s.start_after.isoformat(), \
-                'end_before':s.end_before.isoformat()} for s in obj.staff[:num_new]]
+        extra_expect_items = [{'staff_id': s.staff_id,
+            'start_after':s.start_after.astimezone().isoformat(),
+            'end_before':s.end_before.astimezone().isoformat()}
+            for s in obj.staff[:num_new]]
         body.extend(extra_expect_items)
         expect_value = sorted(body, key=lambda d:d['staff_id'])
         actual_value = list(map(lambda obj:obj.__dict__, query.all()))
         for item in actual_value:
             item.pop('_sa_instance_state', None)
             item.pop('store_id', None)
-            item['start_after'] = item['start_after'].isoformat()
-            item['end_before']  = item['end_before'].isoformat()
+            item['start_after'] = item['start_after'].astimezone().isoformat()
+            item['end_before']  = item['end_before'].astimezone().isoformat()
         assert expect_value == actual_value
 
 

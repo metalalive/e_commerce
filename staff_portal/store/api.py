@@ -223,8 +223,10 @@ def emit_event_edit_products(_store_id:int, rpc_hdlr, remove_all:bool=False,
         updating: Optional[List[StoreProductAvailable]]=None,
         creating: Optional[List[StoreProductAvailable]]=None,
         deleting: Optional[dict]=None  ):
-    convertor = lambda obj: {'price':obj.price, 'start_after':obj.start_after.isoformat(),
-            'end_before':obj.end_before.isoformat(), 'product_type':obj.product_type.value,
+    # currently this service uses server-side timezone
+    # TODO, switch to the time zones provided from client if required
+    convertor = lambda obj: {'price':obj.price, 'start_after':obj.start_after.astimezone().isoformat(),
+            'end_before':obj.end_before.astimezone().isoformat(), 'product_type':obj.product_type.value,
             'product_id':obj.product_id }
     _updating = map(convertor, updating) if updating else []
     _creating = map(convertor, creating) if creating else []

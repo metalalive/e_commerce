@@ -47,14 +47,15 @@ class TestUpdate:
 
     def _setup_base_req_body(self, objs, product_avail_gen, num_new_items:int=2) -> List[Dict]:
         body = [{'product_id':p.product_id, 'product_type':p.product_type.value,
-            'start_after':p.start_after.isoformat(), 'end_before':p.end_before.isoformat(),
+            'start_after':p.start_after.astimezone().isoformat(),
+            'end_before':p.end_before.astimezone().isoformat(),
             'price':p.price } for p in objs]
         if product_avail_gen is not None:
             new_product_d = [next(product_avail_gen) for _ in range(num_new_items)]
             for item in new_product_d:
                 item['product_type'] = item['product_type'].value
-                item['start_after'] = item['start_after'].isoformat()
-                item['end_before']  = item['end_before'].isoformat()
+                item['start_after'] = item['start_after'].astimezone().isoformat()
+                item['end_before']  = item['end_before'].astimezone().isoformat()
             body.extend(new_product_d)
         return body
 
@@ -90,8 +91,8 @@ class TestUpdate:
             item.pop('_sa_instance_state', None)
             item.pop('store_id', None)
             item['product_type'] = item['product_type'].value
-            item['start_after'] = item['start_after'].isoformat()
-            item['end_before']  = item['end_before'].isoformat()
+            item['start_after'] = item['start_after'].astimezone().isoformat()
+            item['end_before']  = item['end_before'].astimezone().isoformat()
         assert expect_value == actual_value
 
 
