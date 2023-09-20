@@ -1,5 +1,3 @@
-mod store_products;
-
 use std::result::Result as DefaultResult;
 use std::vec::Vec;
 use serde_json::Value as JsnVal;
@@ -8,6 +6,9 @@ use crate::AppSharedState;
 use crate::rpc::AppRpcClientReqProperty;
 use crate::error::{AppError, AppErrorCode} ;
 use crate::constant::RPCAPI_EDIT_PRODUCT_PRICE;
+
+pub mod dto;
+mod store_products;
 
 pub async fn route_to_handler(req:AppRpcClientReqProperty, shr_state:AppSharedState)
     -> DefaultResult<Vec<u8>, AppError>

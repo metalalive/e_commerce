@@ -17,7 +17,7 @@
              "path": "tmp/log/dev/order_app_server.err",
              "destination": "localfs"},
             {"alias": "errlog-file-rpc-consumer",
-             "min_level": "INFO",
+             "min_level": "DEBUG",
              "path": "tmp/log/dev/order_rpc_consumer.err",
              "destination": "localfs"}
         ],
@@ -31,8 +31,11 @@
             {"alias": "order::usecase::edit_product_policy",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
+            {"alias": "order::usecase::edit_product_price",
+             "handlers": ["errlog-file-rpc-consumer", "std-output-forall"],
+             "level": "WARNING"},
             {"alias": "rpc_consumer",
-             "handlers": ["std-output-forall"],
+             "handlers": ["errlog-file-rpc-consumer"],
              "level": "INFO"},
             {"alias": "web",
              "handlers": ["errlog-file-web-api", "std-output-forall"]}
