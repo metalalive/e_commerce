@@ -1,7 +1,7 @@
 use order::error::AppErrorCode;
 use order::model::{ProductPolicyModelSet, ProductPolicyModel};
 use order::api::web::dto::ProductPolicyDto;
-use crate::ut_clone_productpolicy_model;
+use super::ut_clone_productpolicy;
 
 #[test]
 fn validate_newdata_ok() {
@@ -60,8 +60,8 @@ fn update_instance_ok() {
             warranty_hours:478,  auto_cancel_secs:3597 }
     ];
     let ms = ProductPolicyModelSet {policies: vec![
-        ut_clone_productpolicy_model(&init_data[0]),
-        ut_clone_productpolicy_model(&init_data[1]),
+        ut_clone_productpolicy(&init_data[0]),
+        ut_clone_productpolicy(&init_data[1]),
     ]}; // assume these instances were stored somewhere
     let result = ms.update(usr_id, &newdata);
     assert_eq!(result.is_ok(), true);
@@ -91,8 +91,8 @@ fn update_instance_user_inconsistency() {
             warranty_hours:478,  auto_cancel_secs:3597 }
     ];
     let ms = ProductPolicyModelSet {policies: vec![
-        ut_clone_productpolicy_model(&init_data[0]),
-        ut_clone_productpolicy_model(&init_data[1]),
+        ut_clone_productpolicy(&init_data[0]),
+        ut_clone_productpolicy(&init_data[1]),
     ]}; // assume these instances were stored somewhere
     let result = ms.update(usr_ids[0], &newdata);
     assert_eq!(result.is_err(), true);

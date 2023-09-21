@@ -24,10 +24,12 @@ impl EditProductPriceUseCase {
             let ids = data.updating.iter().map(
                 |d| (d.product_type, d.product_id)).collect();
             match repo.fetch(data.s_id, ids).await {
-                Ok(previous_saved) => {
-                    let updated = previous_saved.update(data.updating, data.creating);
-                    repo.save(updated).await
-                }, Err(e) => Err(e)
+                Ok(pre_saved) =>
+                    match pre_saved.update(data.updating, data.creating) {
+                        Ok(updated) => repo.save(updated).await,
+                        Err(e) => Err(e)
+                    },
+                Err(e) => Err(e)
             }
         };
         if let Err(e) = &result {

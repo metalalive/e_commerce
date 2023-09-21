@@ -1,3 +1,4 @@
+use std::vec;
 use std::boxed::Box;
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
@@ -124,19 +125,18 @@ async fn update_ok ()
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {
-        store_id: mocked_store_id, items:Vec::new()
+        store_id: mocked_store_id, items: vec![
+            ProductPriceModel { price:1009, product_type:2, product_id:2613, is_create:false,
+                start_after: DateTime::parse_from_rfc3339("2022-04-26T08:15:47+01:00").unwrap().into(),
+                end_before: DateTime::parse_from_rfc3339("2024-08-28T21:35:26-08:00").unwrap().into(),
+            },
+            ProductPriceModel { price:1010, product_type:1, product_id:3072, is_create:false,
+                start_after: DateTime::parse_from_rfc3339("2021-03-20T10:58:39-06:00").unwrap().into(),
+                end_before: DateTime::parse_from_rfc3339("2023-05-16T04:19:07+08:00").unwrap().into(),
+            },
+        ]
     };
     let mut repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
-    let creating_products = vec![
-        ProductPriceEditDto { price:452, product_type:1, product_id:8299,
-            start_after: DateTime::parse_from_rfc3339("2022-11-27T09:13:39+05:00").unwrap().into(),
-            end_before: DateTime::parse_from_rfc3339("2023-04-13T01:48:07+06:00").unwrap().into(),
-        },
-        ProductPriceEditDto { price:6066, product_type:2, product_id:1712,
-            start_after: DateTime::parse_from_rfc3339("2022-01-19T06:05:39+05:00").unwrap().into(),
-            end_before: DateTime::parse_from_rfc3339("2024-08-31T21:44:25+11:00").unwrap().into(),
-        },
-    ];
     let updating_products = vec![
         ProductPriceEditDto { price:1322, product_type:1, product_id:3072,
             start_after: DateTime::parse_from_rfc3339("2021-03-29T10:58:39-06:00").unwrap().into(),
@@ -147,6 +147,16 @@ async fn update_ok ()
             end_before: DateTime::parse_from_rfc3339("2024-08-29T20:34:25-08:00").unwrap().into(),
         },
     ];
+    let creating_products = vec![
+        ProductPriceEditDto { price:452, product_type:1, product_id:8299,
+            start_after: DateTime::parse_from_rfc3339("2022-11-27T09:13:39+05:00").unwrap().into(),
+            end_before: DateTime::parse_from_rfc3339("2023-04-13T01:48:07+06:00").unwrap().into(),
+        },
+        ProductPriceEditDto { price:6066, product_type:2, product_id:1712,
+            start_after: DateTime::parse_from_rfc3339("2022-01-19T06:05:39+05:00").unwrap().into(),
+            end_before: DateTime::parse_from_rfc3339("2024-08-31T21:44:25+11:00").unwrap().into(),
+        },
+    ]; // product IDs here have to be consistent with the mocked fetched model set above
     let data = ProductPriceDto { s_id: mocked_store_id, rm_all: false,
         deleting: ProductPriceDeleteDto { items:None, pkgs:None },
         updating: updating_products,  creating: creating_products
@@ -192,7 +202,12 @@ async fn save_error ()
     let app_state = ut_setup_share_state();
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-2");
-    let mocked_ppset = ProductPriceModelSet {store_id:mocked_store_id, items:Vec::new()};
+    let mocked_ppset = ProductPriceModelSet {store_id:mocked_store_id, items:vec![
+        ProductPriceModel { is_create:false, price:4810, product_type:2, product_id:9914,
+            start_after: DateTime::parse_from_rfc3339("2022-11-23T09:13:41+07:00").unwrap().into(),
+            end_before: DateTime::parse_from_rfc3339("2023-10-12T21:23:00+08:00").unwrap().into(),
+        }
+    ]};
     let mut repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset),
           Err(AppError{code:AppErrorCode::DataCorruption, detail: Some(expect_errmsg.to_string()) })
     );

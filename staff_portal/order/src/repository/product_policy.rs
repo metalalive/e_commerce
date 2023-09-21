@@ -91,11 +91,18 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
             let mut h = HashMap::new();
             let table_data = {
                 let kv_pairs = ppset.policies.iter().map(|m|{
-                    let mut row:Vec<String> = Vec::with_capacity(InMemColIdx::TotNumColumns.into());
-                    row.insert(InMemColIdx::UserId.into(), m.usr_id.to_string());
-                    row.insert(InMemColIdx::AutoCancel.into(), m.auto_cancel_secs.to_string());
-                    row.insert(InMemColIdx::Warranty.into(), m.warranty_hours.to_string());
-                    row.insert(InMemColIdx::AsyncStockChk.into(), m.async_stock_chk.to_string());
+                    // manually allocate space in advance, instead of `Vec::with_capacity`
+                    let mut row = (0..InMemColIdx::TotNumColumns.into())
+                        .map(|_n| String::new())  .collect::<Vec<String>>();
+                    let _ = [ // so the order of columns can be arbitrary
+                        (InMemColIdx::AsyncStockChk, m.async_stock_chk.to_string()),
+                        (InMemColIdx::Warranty, m.warranty_hours.to_string()),
+                        (InMemColIdx::UserId, m.usr_id.to_string()),
+                        (InMemColIdx::AutoCancel, m.auto_cancel_secs.to_string()),
+                    ].into_iter().map(|(idx, val)| {
+                        let idx:usize = idx.into();
+                        row[idx] = val;
+                    }).collect::<Vec<()>>();
                     (m.product_id.to_string(), row)
                 });
                 HashMap::from_iter(kv_pairs)
