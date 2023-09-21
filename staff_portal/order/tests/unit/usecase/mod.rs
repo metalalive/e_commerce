@@ -1,4 +1,5 @@
 mod edit_product_policy;
+mod edit_product_price;
 
 use std::env;
 use std::cell::RefCell;

@@ -1,19 +1,18 @@
+use std::sync::Arc;
+use std::boxed::Box;
 use std::result::Result as DefaultResult;
 
-use crate::AppSharedState;
 use crate::error::AppError;
-use crate::logging::{app_log_event, AppLogLevel};
+use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
 use crate::api::rpc::dto::ProductPriceDto;
-use crate::repository::app_repo_product_price;
+use crate::repository::AbsProductPriceRepo;
 
 pub struct EditProductPriceUseCase {}
 
 impl EditProductPriceUseCase {
-    pub async fn execute(app_state:AppSharedState, data:ProductPriceDto)
-        -> DefaultResult<(), AppError>
+    pub async fn execute(repo:Box<dyn AbsProductPriceRepo>, data:ProductPriceDto,
+                         logctx:Arc<AppLogContext> ) -> DefaultResult<(), AppError>
     {
-        let ds = app_state.datastore();
-        let repo = app_repo_product_price(ds)?;
         let result = if data.rm_all {
             repo.delete_all(data.s_id).await
         } else if data.deleting.items.is_some() || data.deleting.pkgs.is_some() {
@@ -32,7 +31,6 @@ impl EditProductPriceUseCase {
             }
         };
         if let Err(e) = &result {
-            let logctx = app_state.log_context().clone();
             app_log_event!(logctx, AppLogLevel::ERROR, "detail:{}", e);    
         }
         result
