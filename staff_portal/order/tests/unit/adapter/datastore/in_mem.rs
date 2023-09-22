@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::RandomState;
 
 use order::AppInMemoryDbCfg;
 use order::datastore::{
     AbstInMemoryDStore, AppInMemoryDStore, AppInMemUpdateData,
-    AppInMemFetchKeys, AppInMemDeleteInfo
+    AppInMemFetchKeys, AppInMemDeleteInfo, AbsDStoreFilterKeyOp
 };
 use order::error::AppErrorCode;
 
@@ -16,7 +17,7 @@ const UT_TABLE_LABELS : [&'static str ; UT_NUM_TABLES] = [
 ];
 
 #[test]
-fn datastore_in_mem_save_ok_1 ()
+fn save_ok_1 ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
     let dstore = AppInMemoryDStore::new(&cfg);
@@ -82,11 +83,11 @@ fn datastore_in_mem_save_ok_1 ()
         assert_eq!(actual_item, ["mie", "0.076", "llama"]); 
         assert_eq!(a_table.get("18o0").is_none(), true);
     }
-} // end of datastore_in_mem_save_ok_1
+} // end of save_ok_1
 
 
 #[test]
-fn datastore_in_mem_save_ok_2 ()
+fn save_ok_2 ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
     let dstore = AppInMemoryDStore::new(&cfg);
@@ -142,11 +143,11 @@ fn datastore_in_mem_save_ok_2 ()
         let actual_item = a_table.get("G831").unwrap().iter().map(String::as_str).collect::<Vec<&str>>();
         assert_eq!(actual_item, ["Hit", "1.816", "107", "r6p4"]);
     }
-} // end of datastore_in_mem_save_ok_2
+} // end of save_ok_2
 
 
 #[test]
-fn datastore_in_mem_delete_ok ()
+fn delete_ok ()
 {
     let chosen_key = "Palau";
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
@@ -199,11 +200,11 @@ fn datastore_in_mem_delete_ok ()
             assert_eq!(a_table.get(chosen_key).is_none(), true);
         }
     }
-} // end of datastore_in_mem_delete_ok
+} // end of delete_ok
 
 
 #[test]
-fn datastore_in_mem_access_nonexist_table ()
+fn access_nonexist_table ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
     let dstore = AppInMemoryDStore::new(&cfg);
@@ -226,7 +227,7 @@ fn datastore_in_mem_access_nonexist_table ()
 
 
 #[test]
-fn datastore_in_mem_exceed_limit_error ()
+fn exceed_limit_error ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items:5 };
     let dstore = AppInMemoryDStore::new(&cfg);
@@ -269,5 +270,58 @@ fn datastore_in_mem_exceed_limit_error ()
     let actual = result.err().unwrap();
     assert_eq!(actual.code, AppErrorCode::ExceedingMaxLimit);
     assert_eq!(actual.detail.is_some(), true);
-} // end of datastore_in_mem_exceed_limit_error
+} // end of exceed_limit_error
+
+
+struct UtestDstoreFiltKeyOp {patt:String}
+
+impl AbsDStoreFilterKeyOp for UtestDstoreFiltKeyOp
+{
+    fn filter(&self, k:&String) -> bool {
+        k.contains(self.patt.as_str())
+    }
+}
+
+
+#[test]
+fn filter_key_ok ()
+{
+    let cfg = AppInMemoryDbCfg { alias: "Alishan".to_string(), max_items:8 };
+    let dstore = AppInMemoryDStore::new(&cfg);
+    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).is_ok(), true);
+    let search_id = "hemu";
+    let init_data:[Vec<String>;4] = [
+        ["teehe", "0.076", "1827", "r6p0"] .into_iter().map(String::from).collect(),
+        ["shaw", "10.14", "122", "r4p6"] .into_iter().map(String::from).collect(),
+        ["sbitz", "0.01101001", "59", "r4p10"] .into_iter().map(String::from).collect(),
+        ["tito", "0.01101001", "59", "watching"] .into_iter().map(String::from).collect(),
+    ];
+    let new_data : AppInMemUpdateData = {
+        let mut out = HashMap::new();
+        let t1 = {
+            let data = [
+                (format!("{search_id}-bisa"), init_data[0].clone()),
+                (format!("elf-schden"), init_data[1].clone()),
+                (format!("gopher-neihts"), init_data[2].clone()),
+                (format!("ferris-{search_id}"), init_data[3].clone()),
+            ];
+            HashMap::from_iter(data.into_iter())
+        };
+        out.insert(UT_TABLE_LABEL_A.to_string(), t1);
+        out
+    };
+    let result = dstore.save(new_data);
+    assert_eq!(result.is_ok(), true);
+    assert_eq!(result.unwrap(), 4);
+    let op = UtestDstoreFiltKeyOp{patt:search_id.to_string()};
+    let result = dstore.filter_keys(UT_TABLE_LABEL_A.to_string(), &op);
+    assert_eq!(result.is_ok(), true);
+    let actual_keys = result.unwrap();
+    let expect_keys = vec![format!("{search_id}-bisa"), format!("ferris-{search_id}")];
+    let actual_keys:HashSet<String,RandomState> = HashSet::from_iter(actual_keys.into_iter());
+    let expect_keys:HashSet<String,RandomState> = HashSet::from_iter(expect_keys.into_iter());
+    //let diff = actual_keys.difference(&expect_keys);
+    assert_eq!(actual_keys, expect_keys);
+    assert_eq!(actual_keys.contains("gopher-neihts"), false);
+} // end of filter_key_ok
 

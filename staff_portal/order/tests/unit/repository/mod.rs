@@ -6,7 +6,10 @@ use std::boxed::Box;
 
 use order::error::{AppErrorCode, AppError};
 use order::{AppDataStoreContext, AppInMemoryDbCfg};
-use order::datastore::{AbstInMemoryDStore, AppInMemUpdateData, AppInMemFetchKeys, AppInMemFetchedData, AppInMemDeleteInfo };
+use order::datastore::{
+    AbstInMemoryDStore, AppInMemUpdateData, AppInMemFetchKeys,
+    AppInMemFetchedData, AppInMemDeleteInfo, AbsDStoreFilterKeyOp
+};
 
 fn in_mem_ds_ctx_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
     -> Arc<AppDataStoreContext>
@@ -34,6 +37,11 @@ impl AbstInMemoryDStore for MockInMemDeadDataStore {
     }
     fn save(&self, _data:AppInMemUpdateData) -> Result<usize, AppError> {
         Err(AppError { code: AppErrorCode::DataTableNotExist, detail:Some(format!("utest")) })
+    }
+    fn filter_keys(&self, _tbl_label:String, _op:&dyn AbsDStoreFilterKeyOp)
+        -> Result<Vec<String>, AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail:Some(format!("utest")) })
     }
 }
 

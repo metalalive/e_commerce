@@ -109,7 +109,7 @@ async fn create_ok ()
         },
     ];
     let data = ProductPriceDto { s_id: mocked_store_id, rm_all: false,
-        deleting: ProductPriceDeleteDto { items:None, pkgs:None },
+        deleting: ProductPriceDeleteDto {items:None, pkgs:None, item_type:1, pkg_type:2},
         updating: Vec::new(),  creating: creating_products
     };
     repo.expect_callargs_fetch((mocked_store_id, vec![]));
@@ -158,7 +158,7 @@ async fn update_ok ()
         },
     ]; // product IDs here have to be consistent with the mocked fetched model set above
     let data = ProductPriceDto { s_id: mocked_store_id, rm_all: false,
-        deleting: ProductPriceDeleteDto { items:None, pkgs:None },
+        deleting: ProductPriceDeleteDto {items:None, pkgs:None, item_type:1, pkg_type:2},
         updating: updating_products,  creating: creating_products
     };
     repo.expect_callargs_fetch((mocked_store_id, vec![(1, 3072), (2, 2613)]));
@@ -183,7 +183,7 @@ async fn fetch_error ()
         },
     ];
     let data = ProductPriceDto { s_id: mocked_store_id, rm_all: false,
-        deleting: ProductPriceDeleteDto { items:None, pkgs:None },
+        deleting: ProductPriceDeleteDto {items:None, pkgs:None, item_type:1, pkg_type:2},
         updating: Vec::new(),  creating: creating_products
     };
     let result = EditProductPriceUseCase::execute(Box::new(repo), data, logctx).await;
@@ -218,7 +218,7 @@ async fn save_error ()
         },
     ];
     let data = ProductPriceDto { s_id: mocked_store_id, rm_all: false,
-        deleting: ProductPriceDeleteDto { items:None, pkgs:None },
+        deleting: ProductPriceDeleteDto {items:None, pkgs:None, item_type:1, pkg_type:2},
         updating: updating_products,  creating: Vec::new()
     };
     repo.expect_callargs_fetch((mocked_store_id, vec![(2, 9914)]));
@@ -241,7 +241,8 @@ async fn delete_subset_ok ()
     let mocked_ppset = ProductPriceModelSet {store_id: mocked_store_id, items:Vec::new()};
     let repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
     let data = ProductPriceDto { s_id: mocked_store_id, rm_all: false,
-        deleting: ProductPriceDeleteDto {items:Some(vec![23,45,67]), pkgs:Some(vec![8,90,123]) },
+        deleting: ProductPriceDeleteDto {item_type:1, pkg_type:2,
+            items:Some(vec![23,45,67]), pkgs:Some(vec![8,90,123]) },
         updating: Vec::new(),  creating: Vec::new()
     };
     let result = EditProductPriceUseCase::execute(Box::new(repo), data, logctx).await;
@@ -260,7 +261,8 @@ async fn delete_subset_error ()
         , Ok(mocked_ppset), Ok(())
     );
     let data = ProductPriceDto { s_id: mocked_store_id, rm_all: false,
-        deleting: ProductPriceDeleteDto {items:Some(vec![23,45,67]), pkgs:Some(vec![8,90,123]) },
+        deleting: ProductPriceDeleteDto {item_type:1, pkg_type:2,
+            items:Some(vec![23,45,67]), pkgs:Some(vec![8,90,123]) },
         updating: Vec::new(),  creating: Vec::new()
     };
     let result = EditProductPriceUseCase::execute(Box::new(repo), data, logctx).await;
@@ -281,7 +283,7 @@ async fn delete_all_ok ()
     let mocked_ppset = ProductPriceModelSet {store_id: mocked_store_id, items:Vec::new()};
     let repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
     let data = ProductPriceDto { s_id: mocked_store_id, rm_all: true,
-        deleting: ProductPriceDeleteDto {items:None, pkgs:None},
+        deleting: ProductPriceDeleteDto {items:None, pkgs:None, item_type:1, pkg_type:2},
         updating: Vec::new(),  creating: Vec::new()
     };
     let result = EditProductPriceUseCase::execute(Box::new(repo), data, logctx).await;

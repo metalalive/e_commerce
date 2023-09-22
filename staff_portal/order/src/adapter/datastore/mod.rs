@@ -5,7 +5,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 
 pub use in_mem::{
-    AbstInMemoryDStore, AppInMemUpdateData, AppInMemDeleteInfo,
+    AbstInMemoryDStore, AppInMemUpdateData, AppInMemDeleteInfo, AbsDStoreFilterKeyOp,
     AppInMemFetchKeys, AppInMemFetchedData, AppInMemoryDStore
 };
 pub use sql_db::AppSqlDbStore;

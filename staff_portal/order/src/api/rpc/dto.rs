@@ -7,7 +7,9 @@ use chrono::offset::Local;
 #[derive(Deserialize)]
 pub struct ProductPriceDeleteDto {
     pub items:Option<Vec<u64>>,
-    pub pkgs :Option<Vec<u64>>
+    pub pkgs :Option<Vec<u64>>,
+    pub item_type:u8,
+    pub pkg_type:u8,
 }
 
 #[derive(Deserialize)]

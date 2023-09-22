@@ -8,7 +8,7 @@ use chrono::DateTime;
 
 use crate::AppDataStoreContext;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
-use crate::datastore::{AbstInMemoryDStore, AppInMemFetchKeys};
+use crate::datastore::{AbstInMemoryDStore, AppInMemFetchKeys, AbsDStoreFilterKeyOp};
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{ProductPriceModelSet, ProductPriceModel};
 use super::AbsProductPriceRepo;
@@ -30,6 +30,22 @@ impl Into<usize> for InMemColIdx {
     }
 }
 
+struct InnerDStoreFilterKeyOp {pattern_prefix:String}
+
+impl AbsDStoreFilterKeyOp for InnerDStoreFilterKeyOp {
+    fn filter(&self, k:&String) -> bool {
+        if let Some(pos) = k.find(self.pattern_prefix.as_str()) {
+            pos == 0
+        } else {false}
+    }
+}
+impl InnerDStoreFilterKeyOp {
+    fn new(store_id:u32) -> Self {
+        let patt = format!("{store_id}-");
+        Self { pattern_prefix: patt }
+    }
+}
+
 pub struct ProductPriceInMemRepo {
     datastore: Arc<Box<dyn AbstInMemoryDStore>>
 }
@@ -45,10 +61,34 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         }
     }
     async fn delete_all(&self, store_id:u32) -> Result<(), AppError>
-    { Ok(()) }
+    {
+        let op = InnerDStoreFilterKeyOp::new(store_id);
+        let filtered = self.datastore.filter_keys(TABLE_LABEL.to_string(), &op)?;
+        let mut allkeys = HashMap::new();
+        allkeys.insert(TABLE_LABEL.to_string(), filtered);
+        self._delete_common(allkeys)
+    }
     
     async fn delete(&self, store_id:u32, ids:ProductPriceDeleteDto) -> Result<(), AppError>
-    { Ok(()) }
+    {
+        let _ids = {
+            let mut out = vec![];
+            if let Some(p) = &ids.pkgs {
+                out.extend(p.iter().map(|id| (ids.pkg_type, id.clone())));
+            }
+            if let Some(p) = &ids.items {
+                out.extend(p.iter().map(|id| (ids.item_type, id.clone())));
+            }
+            out
+        };
+        if _ids.is_empty() {
+            Err(AppError { code: AppErrorCode::EmptyInputData,
+                detail: Some(format!("deleting-prodcut-price-id")) })
+        } else {
+            let allkeys = self.gen_id_keys(store_id, _ids);
+            self._delete_common(allkeys)
+        }
+    }
 
     async fn fetch(&self, store_id:u32, ids:Vec<(u8,u64)>) -> Result<ProductPriceModelSet, AppError>
     {
@@ -124,10 +164,15 @@ impl ProductPriceInMemRepo {
     fn gen_id_keys(&self, store_id:u32, ids:Vec<(u8,u64)>) -> AppInMemFetchKeys
     {
         let str_ids = ids.into_iter().map(|(_typ, _id)| {
-            format!("{}-{}-{}", store_id.to_string(), _typ.to_string(), _id.to_string())
+            format!("{store_id}-{}-{}", _typ.to_string(), _id.to_string())
         }).collect();
         let mut h = HashMap::new();
         h.insert(TABLE_LABEL.to_string(), str_ids);
         h
+    }
+    fn _delete_common(&self, keys:AppInMemFetchKeys) -> Result<(), AppError>
+    {
+        let _num_del = self.datastore.delete(keys)?;
+        Ok(())
     }
 } // end of impl ProductPriceInMemRepo

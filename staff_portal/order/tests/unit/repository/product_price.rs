@@ -6,6 +6,7 @@ use order::error::AppErrorCode;
 use order::datastore::{AbstInMemoryDStore, AppInMemoryDStore};
 use order::repository::{AbsProductPriceRepo, ProductPriceInMemRepo};
 use order::model::{ProductPriceModelSet, ProductPriceModel};
+use order::api::rpc::dto::ProductPriceDeleteDto;
 
 use crate::model::ut_clone_productprice;
 use super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
@@ -198,4 +199,87 @@ async fn in_mem_fetch_dstore_error ()
     assert_eq!(error.code, AppErrorCode::AcquireLockFailure);
     assert_eq!(error.detail, Some("utest".to_string()));
 }
+
+#[tokio::test]
+async fn in_mem_delete_subset_ok ()
+{
+    let (mocked_store_id, pprice_data) = (512, pprice_init_data());
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15);
+    let ppset = {
+        let items = pprice_data.iter().map(ut_clone_productprice).collect();
+        ProductPriceModelSet { store_id:mocked_store_id, items }
+    };
+    let result = repo.save(ppset).await;
+    assert!(result.is_ok());
+    let fetching_ids = vec![(1,1005), (2,1002)];
+    let result = repo.fetch(mocked_store_id, fetching_ids.clone()).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        assert_eq!(fetched.items.len(), 2);
+    }
+    let deleting_req = ProductPriceDeleteDto {items: Some(vec![1005]),
+            pkgs:Some(vec![1002]),  item_type:1, pkg_type:2};
+    let result = repo.delete(mocked_store_id, deleting_req).await;
+    assert!(result.is_ok());
+    let result = repo.fetch(mocked_store_id, fetching_ids).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        assert_eq!(fetched.items.len(), 0);
+    }
+    let fetching_ids = vec![(1,1007), (2,1006), (2,1004), (1,1003), (1,1001)];
+    let result = repo.fetch(mocked_store_id, fetching_ids).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        assert_eq!(fetched.items.len(), 5);
+    }
+} // end of fn in_mem_delete_subset_ok
+
+
+#[tokio::test]
+async fn in_mem_delete_subset_id_empty ()
+{
+    let mocked_store_id = 512;
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(4);
+    let deleting_req = ProductPriceDeleteDto {items: Some(Vec::new()),
+            pkgs:Some(Vec::new()),  item_type:1, pkg_type:2};
+    let result = repo.delete(mocked_store_id, deleting_req).await;
+    assert!(result.is_err());
+    let actual_error = result.unwrap_err();
+    assert_eq!(actual_error.code , AppErrorCode::EmptyInputData);
+}
+
+#[tokio::test]
+async fn in_mem_delete_all_ok ()
+{
+    let (mocked_store_ids, pprice_data) = ([543u32, 995u32], pprice_init_data());
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15);
+    let ppset = ProductPriceModelSet {store_id:mocked_store_ids[0],
+        items: pprice_data[..4].iter().map(ut_clone_productprice).collect() };
+    let result = repo.save(ppset).await;
+    assert!(result.is_ok());
+    let ppset = ProductPriceModelSet {store_id:mocked_store_ids[1],
+        items: pprice_data[4..].iter().map(ut_clone_productprice).collect() };
+    let result = repo.save(ppset).await;
+    assert!(result.is_ok());
+    let deleting_id = mocked_store_ids[0];
+    let fetching_ids = vec![(1,1001), (1,1003), (2,1002), (2,1004)];
+    let result = repo.fetch(deleting_id, fetching_ids.clone()).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        assert_eq!(fetched.items.len(), 4);
+    }
+    let result = repo.delete_all(deleting_id).await;
+    assert!(result.is_ok());
+    let result = repo.fetch(deleting_id, fetching_ids).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        assert_eq!(fetched.items.len(), 0);
+    }
+    let fetching_ids = vec![(1,1005), (1,1007), (2,1006)];
+    let result = repo.fetch(mocked_store_ids[1], fetching_ids).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        assert_eq!(fetched.items.len(), 3);
+    }
+} // end of fn in_mem_delete_all_ok
 

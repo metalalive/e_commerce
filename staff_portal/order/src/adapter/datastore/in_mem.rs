@@ -3,6 +3,7 @@ use std::result::Result as DefaultResult;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::sync::{Mutex, MutexGuard};
+use std::vec;
 
 use crate::config::AppInMemoryDbCfg;
 use crate::error::{AppError, AppErrorCode};
@@ -12,13 +13,19 @@ use crate::error::{AppError, AppErrorCode};
 // application callers are responsible to maintain the structure
 // of each row in each table. Each element of a row is stringified 
 // regardless of its original types (integer, floating-point number)
+type InnerKey = String;
+type InnerTableLabel = String;
 type InnerRow = Vec<String>;
-type InnerTable = HashMap<String, InnerRow>;
-type AllTable = HashMap<String, InnerTable>;
+type InnerTable = HashMap<InnerKey, InnerRow>;
+type AllTable = HashMap<InnerTableLabel, InnerTable>;
 pub type AppInMemUpdateData = AllTable;
 pub type AppInMemDeleteInfo = InnerTable; // list of IDs per table
 pub type AppInMemFetchKeys = InnerTable; // list of IDs per table
 pub type AppInMemFetchedData = AllTable;
+
+pub trait AbsDStoreFilterKeyOp {
+    fn filter(&self, k:&InnerKey) -> bool;
+}
 
 pub trait AbstInMemoryDStore : Send + Sync
 {
@@ -27,6 +34,8 @@ pub trait AbstInMemoryDStore : Send + Sync
     fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>;
     fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>;
     fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>;
+    fn filter_keys(&self, tbl_label:InnerTableLabel, op:&dyn AbsDStoreFilterKeyOp)
+        -> DefaultResult<Vec<InnerKey>, AppError>;
 }
 
 // make it visible for testing purpose, this type could be limited in super module.
@@ -59,7 +68,7 @@ impl AppInMemoryDStore {
         }
     }
 
-    fn _check_table_existence (_map:&AllTable, keys:Vec<&String>) -> DefaultResult<(), AppError>
+    fn _check_table_existence (_map:&AllTable, keys:Vec<&InnerTableLabel>) -> DefaultResult<(), AppError>
     {
         let mut invalid = keys.iter().filter(
             |label| {!_map.contains_key(label.as_str())}
@@ -96,7 +105,7 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
     {
         let guard = self.try_get_table()?;
         let mut _map = guard.borrow_mut();
-        let unchecked_labels = _data.keys().collect::<Vec<&String>>();
+        let unchecked_labels = _data.keys().collect::<Vec<&InnerTableLabel>>();
         Self::_check_table_existence(&*_map, unchecked_labels)?;
         self._check_capacity(&*_map)?;
         let tot_cnt = _data.iter().map( |(label, d_grp)| {
@@ -113,7 +122,7 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
     {
         let guard = self.try_get_table()?;
         let mut _map = guard.borrow_mut();
-        let unchecked_labels = _info.keys().collect::<Vec<&String>>();
+        let unchecked_labels = _info.keys().collect::<Vec<&InnerTableLabel>>();
         Self::_check_table_existence(&*_map, unchecked_labels)?;
         let tot_cnt = _info.iter().map( |(label, ids)| {
             let table = _map.get_mut(label.as_str()).unwrap();
@@ -126,7 +135,7 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
     {
         let guard = self.try_get_table()?;
         let mut _map = guard.borrow_mut();
-        let unchecked_labels = _info.keys().collect::<Vec<&String>>();
+        let unchecked_labels = _info.keys().collect::<Vec<&InnerTableLabel>>();
         Self::_check_table_existence(&*_map, unchecked_labels)?;
         let rs_a = _info.iter().map( |(label, ids)| {
             let table = _map.get_mut(label.as_str()).unwrap();
@@ -137,12 +146,26 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
                         let row = table.get(id).unwrap();
                         (id.clone(), row.clone())
                     }
-                ).collect::<Vec<(String, InnerRow)>>();
+                ).collect::<Vec<(InnerKey, InnerRow)>>();
             let rs_t = HashMap::from_iter(rs_t.into_iter());
             (label.clone(), rs_t)
-        }).collect::<Vec<(String, InnerTable)>>();
+        }).collect::<Vec<(InnerTableLabel, InnerTable)>>();
         let rs_a = HashMap::from_iter(rs_a.into_iter());
         Ok(rs_a)
+    }
+
+    fn filter_keys(&self, tbl_label:InnerTableLabel, op:&dyn AbsDStoreFilterKeyOp)
+        -> DefaultResult<Vec<InnerKey>, AppError>
+    {
+        let guard = self.try_get_table()?;
+        let mut _map = guard.borrow_mut();
+        let unchecked_labels = vec![&tbl_label];
+        Self::_check_table_existence(&*_map, unchecked_labels)?;
+        let table = _map.get(tbl_label.as_str()).unwrap();
+        let out = table.keys().filter_map(|k| {
+            if op.filter(k) {Some(k.clone())} else {None}
+        }).collect();
+        Ok(out)
     }
 } // end of AppInMemoryDStore
 
