@@ -163,7 +163,8 @@ class TestUpdate:
         assert mocked_rpc_fn.call_args.kwargs['rm_all'] == False
         assert expect_updating == mocked_rpc_fn.call_args.kwargs['updating']
         assert expect_creating == mocked_rpc_fn.call_args.kwargs['creating']
-        assert {} == mocked_rpc_fn.call_args.kwargs['deleting']
+        assert mocked_rpc_fn.call_args.kwargs['deleting'].get('items') is None
+        assert mocked_rpc_fn.call_args.kwargs['deleting'].get('pkgs') is None
         # subcase 2
         expect_deleting = {'items':[2,3,4,5], 'pkgs':[16,79,203]}
         emit_event_edit_products(expect_store_id, rpc_hdlr=mocked_rpc,
@@ -171,6 +172,8 @@ class TestUpdate:
         assert expect_store_id == mocked_rpc_fn.call_args.kwargs['s_id']
         assert [] == mocked_rpc_fn.call_args.kwargs['updating']
         assert [] == mocked_rpc_fn.call_args.kwargs['creating']
+        expect_deleting.update({'item_type':SaleableTypeEnum.ITEM.value,
+            'pkg_type':SaleableTypeEnum.PACKAGE.value})
         assert expect_deleting == mocked_rpc_fn.call_args.kwargs['deleting']
 ## end of class TestUpdate
 

@@ -231,6 +231,8 @@ def emit_event_edit_products(_store_id:int, rpc_hdlr, remove_all:bool=False,
     _updating = map(convertor, updating) if updating else []
     _creating = map(convertor, creating) if creating else []
     _deleting = deleting or {}
+    _deleting.update({'item_type':SaleableTypeEnum.ITEM.value,
+        'pkg_type':SaleableTypeEnum.PACKAGE.value})
     kwargs = {'s_id':_store_id, 'rm_all':remove_all, 'deleting':_deleting,
             'updating':[*_updating], 'creating':[*_creating] }
     remote_fn =  rpc_hdlr.update_store_products
@@ -326,6 +328,7 @@ def discard_store_products(store_id:PositiveInt, pitems:str, ppkgs:str, \
         raise FastApiHTTPException( detail={},  headers={},
                 status_code=FastApiHTTPstatus.HTTP_410_GONE )
     return None
+## end of def discard_store_products
 
 
 @router.get('/profile/{store_id}/products', response_model=EditProductsReqBody)
