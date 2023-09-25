@@ -5,22 +5,24 @@ use serde_json::Value as JsnVal;
 use crate::AppSharedState;
 use crate::rpc::AppRpcClientReqProperty;
 use crate::error::{AppError, AppErrorCode} ;
-use crate::constant::RPCAPI_EDIT_PRODUCT_PRICE;
+use crate::constant::{RPCAPI_EDIT_PRODUCT_PRICE, RPCAPI_EDIT_STOCK_LEVEL};
 
 pub mod dto;
 mod store_products;
+mod stock_level;
 
 pub async fn route_to_handler(req:AppRpcClientReqProperty, shr_state:AppSharedState)
     -> DefaultResult<Vec<u8>, AppError>
 { // TODO, build a route table if number of different handling functions
   // grows over time
-    if req.route == RPCAPI_EDIT_PRODUCT_PRICE {
-        let resp = store_products::process(req, shr_state).await;
-        Ok(resp)
-    } else {
-        let err = AppError { code: AppErrorCode::NotImplemented,
+    match req.route.as_str() {
+        RPCAPI_EDIT_PRODUCT_PRICE => Ok(store_products::process(req, shr_state).await),
+        RPCAPI_EDIT_STOCK_LEVEL => Ok(stock_level::inventory_edit(req, shr_state).await),
+        _others => {
+            let err = AppError { code: AppErrorCode::NotImplemented,
             detail: Some("rpc-routing-failure".to_string()) };
-        Err(err)
+            Err(err)
+        }
     }
 }
 

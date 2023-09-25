@@ -1,4 +1,5 @@
 use std::result::Result as DefaultResult;
+use serde_json::Value as JsnVal;
 
 use order::api::rpc::route_to_handler;
 use order::error::AppError;
@@ -8,7 +9,7 @@ mod common;
 use common::test_setup_shr_state;
 
 #[tokio::test]
-async fn test_update_product_price_ok() -> DefaultResult<(), AppError>
+async fn  update_product_price_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
     let msgbody = br#"
@@ -48,7 +49,36 @@ async fn test_update_product_price_ok() -> DefaultResult<(), AppError>
             route: "update_store_products".to_string()  };
     let result = route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
+    let respbody = result.unwrap();
+    let respbody = String::from_utf8(respbody).unwrap();
+    assert!(respbody.is_empty()); // task done successfully
+    Ok(())
+} // end of fn update_product_price_ok
+
+
+#[tokio::test]
+async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
+{
+    let shrstate = test_setup_shr_state()?;
+    let msgbody = br#"
+            [
+                {"qty_add":12, "product_type": 1, "product_id": 9200125,
+                 "expiry": "2023-12-24T07:11:13.730050+07:00"},
+                {"qty_add":-18, "product_type": 2, "product_id": 7001,
+                 "expiry": "2023-12-27T22:19:13.730050+08:00"},
+                {"qty_add":50, "product_type": 2, "product_id": 20911,
+                 "expiry": "2023-12-25T16:27:13.730050+10:00"}
+            ]
+            "#;
+    let req = AppRpcClientReqProperty { retry: 2,  msgbody:msgbody.to_vec(),
+            route: "edit_stock_level".to_string()  };
+    let result = route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+    let respbody = result.unwrap();
+    let result = serde_json::from_slice(&respbody);
+    assert!(result.is_ok());
+    let value:JsnVal = result.unwrap();
+    assert!(value.is_object()); // TODO, should return current stock level
     Ok(())
 } // end of fn test_update_product_price_ok
-
 
