@@ -3,8 +3,9 @@ use std::vec::Vec;
 use crate::AppSharedState;
 use crate::error::{AppError, AppErrorCode};
 use crate::rpc::AppRpcClientReqProperty;
+use crate::logging::{app_log_event, AppLogLevel};
 use crate::repository::app_repo_order;
-use crate::usecase::EditStockLevelUseCase;
+use crate::usecase::StockLevelUseCase;
 
 use super::build_error_response;
 
@@ -20,12 +21,15 @@ pub(super) async fn inventory_edit(req:AppRpcClientReqProperty, shr_state:AppSha
             return build_error_response(e).to_string().into_bytes();
         }
     };
-    let logctx_p = shr_state.log_context().clone();
     let ds = shr_state.datastore();
     match app_repo_order(ds) {
-        Ok(repo) => match EditStockLevelUseCase::execute(reqbody, repo, logctx_p).await {
+        Ok(repo) => match StockLevelUseCase::try_edit(reqbody, repo).await {
             Ok(r) => serde_json::to_vec(&r).unwrap(),
-            Err(e) => build_error_response(e).to_string().into_bytes()
+            Err(e) => {
+                let logctx_p = shr_state.log_context().clone();
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "[fail-edit-stock-level]:{}", e);
+                build_error_response(e).to_string().into_bytes()
+            }
         },
         Err(e) => build_error_response(e).to_string().into_bytes()
     }

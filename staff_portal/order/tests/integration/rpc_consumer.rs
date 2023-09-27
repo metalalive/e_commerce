@@ -62,11 +62,11 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
     let shrstate = test_setup_shr_state()?;
     let msgbody = br#"
             [
-                {"qty_add":12, "product_type": 1, "product_id": 9200125,
+                {"qty_add":12, "store_id":1006, "product_type": 1, "product_id": 9200125,
                  "expiry": "2023-12-24T07:11:13.730050+07:00"},
-                {"qty_add":-18, "product_type": 2, "product_id": 7001,
+                {"qty_add":-18, "store_id":1009, "product_type": 2, "product_id": 7001,
                  "expiry": "2023-12-27T22:19:13.730050+08:00"},
-                {"qty_add":50, "product_type": 2, "product_id": 20911,
+                {"qty_add":50, "store_id":1007, "product_type": 2, "product_id": 20911,
                  "expiry": "2023-12-25T16:27:13.730050+10:00"}
             ]
             "#;
@@ -78,7 +78,7 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
     let result = serde_json::from_slice(&respbody);
     assert!(result.is_ok());
     let value:JsnVal = result.unwrap();
-    assert!(value.is_object()); // TODO, should return current stock level
+    assert!(value.is_array()); // TODO, should return current stock level
     Ok(())
 } // end of fn test_update_product_price_ok
 

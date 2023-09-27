@@ -4,14 +4,14 @@ mod order;
 
 use std::boxed::Box;
 use std::sync::Arc;
-use std::result::Result as DefaultResult;
 use std::vec::Vec;
+use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 
 use crate::AppDataStoreContext;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
 use crate::error::AppError;
-use crate::model::{ProductPolicyModelSet, ProductPriceModelSet};
+use crate::model::{ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet};
 
 // make it visible only for testing purpose
 pub use self::order::OrderInMemRepo;
@@ -44,9 +44,16 @@ pub trait AbsProductPriceRepo : Sync + Send
     async fn save(&self, updated:ProductPriceModelSet) -> DefaultResult<(), AppError> ;
 }
 
-pub trait AbsOrderRepo : Send + Sync {
+pub trait AbsOrderRepo : Sync + Send {
     fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
         where Self:Sized;
+    fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
+}
+
+#[async_trait]
+pub trait AbsOrderStockRepo : Sync +  Send {
+    async fn fetch(&self, pids:Vec<(u32,u8,u64)>) -> DefaultResult<StockLevelModelSet, AppError>;
+    async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
 }
 
 // TODO, consider runtime configuration for following repositories

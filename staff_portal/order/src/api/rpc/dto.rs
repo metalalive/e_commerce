@@ -41,6 +41,7 @@ pub struct InventoryEditStockLevelDto {
     // number to add to stock level, negative number means cancellation
     // from inventory application
     pub qty_add: i32,
+    pub store_id: u32,
     pub product_type: u8,
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<Local>
@@ -56,6 +57,7 @@ pub struct StockQuantityPresentDto {
 #[derive(Serialize)]
 pub struct StockLevelPresentDto {
     pub quantity: StockQuantityPresentDto,
+    pub store_id: u32,
     pub product_type: u8,
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<Local>
