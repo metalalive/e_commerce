@@ -1,5 +1,6 @@
 mod product_policy;
 mod product_price;
+mod order_stock;
 
 use std::sync::Arc;
 use std::boxed::Box;

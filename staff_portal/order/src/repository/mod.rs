@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use crate::AppDataStoreContext;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
 use crate::error::AppError;
-use crate::model::{ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet};
+use crate::model::{ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity};
 
 // make it visible only for testing purpose
 pub use self::order::OrderInMemRepo;
@@ -52,7 +52,7 @@ pub trait AbsOrderRepo : Sync + Send {
 
 #[async_trait]
 pub trait AbsOrderStockRepo : Sync +  Send {
-    async fn fetch(&self, pids:Vec<(u32,u8,u64)>) -> DefaultResult<StockLevelModelSet, AppError>;
+    async fn fetch(&self, pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>;
     async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
 }
 

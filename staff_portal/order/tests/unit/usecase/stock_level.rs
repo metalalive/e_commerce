@@ -9,7 +9,7 @@ use chrono::DateTime;
 use order::AppDataStoreContext;
 use order::api::rpc::dto::InventoryEditStockLevelDto;
 use order::error::{AppError, AppErrorCode};
-use order::model::StockLevelModelSet;
+use order::model::{StockLevelModelSet, ProductStockIdentity};
 use order::repository::{AbsOrderRepo, AbsOrderStockRepo};
 use order::usecase::StockLevelUseCase;
 
@@ -24,7 +24,7 @@ struct MockOrderRepo {
 
 #[async_trait]
 impl AbsOrderStockRepo for MockStockRepo {
-    async fn fetch(&self, _pids:Vec<(u32,u8,u64)>) -> DefaultResult<StockLevelModelSet, AppError>
+    async fn fetch(&self, _pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>
     { self._mocked_fetch_r.clone() }
     async fn save(&self, _slset:StockLevelModelSet) -> DefaultResult<(), AppError>
     { self._mocked_save_r.clone() }
@@ -70,7 +70,7 @@ fn ut_setup_data() -> Vec<InventoryEditStockLevelDto>
 async fn edit_ok ()
 {
     let init_data = ut_setup_data();
-    let (expect_fetch_res,expect_save_res) = (Ok(StockLevelModelSet{}), Ok(())); 
+    let (expect_fetch_res,expect_save_res) = (Ok(StockLevelModelSet{stores:vec![]}), Ok(())); 
     let repo = MockOrderRepo::build(expect_save_res, expect_fetch_res);
     let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
     assert!(result.is_ok());
@@ -100,7 +100,7 @@ async fn edit_fetch_error ()
 async fn edit_save_error ()
 {
     let init_data = ut_setup_data();
-    let expect_fetch_res = Ok(StockLevelModelSet{}); 
+    let expect_fetch_res = Ok(StockLevelModelSet{stores:vec![]}); 
     let expect_save_res = Err(AppError{code:AppErrorCode::DataTableNotExist,
             detail:Some("unit-test".to_string())});
     let repo = MockOrderRepo::build(expect_save_res, expect_fetch_res);

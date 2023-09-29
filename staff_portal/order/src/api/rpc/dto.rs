@@ -2,7 +2,7 @@ use std::vec::Vec;
 
 use serde::{Deserialize, Serialize};
 use chrono::DateTime;
-use chrono::offset::Local;
+use chrono::offset::{Local, FixedOffset};
 
 // TODO, merge the 2 DTO modules in `/web` and `/rpc` package
 
@@ -44,7 +44,7 @@ pub struct InventoryEditStockLevelDto {
     pub store_id: u32,
     pub product_type: u8,
     pub product_id: u64, // TODO, declare type alias
-    pub expiry: DateTime<Local>
+    pub expiry: DateTime<FixedOffset>
 }
 
 #[derive(Serialize)]
@@ -60,5 +60,5 @@ pub struct StockLevelPresentDto {
     pub store_id: u32,
     pub product_type: u8,
     pub product_id: u64, // TODO, declare type alias
-    pub expiry: DateTime<Local>
+    pub expiry: DateTime<FixedOffset>
 }
