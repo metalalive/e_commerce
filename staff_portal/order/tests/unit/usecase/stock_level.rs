@@ -9,7 +9,7 @@ use chrono::DateTime;
 use order::AppDataStoreContext;
 use order::api::rpc::dto::InventoryEditStockLevelDto;
 use order::error::{AppError, AppErrorCode};
-use order::model::{StockLevelModelSet, ProductStockIdentity};
+use order::model::{StockLevelModelSet, ProductStockIdentity, StoreStockModel, ProductStockModel, StockQuantityModel};
 use order::repository::{AbsOrderRepo, AbsOrderStockRepo};
 use order::usecase::StockLevelUseCase;
 
@@ -70,7 +70,14 @@ fn ut_setup_data() -> Vec<InventoryEditStockLevelDto>
 async fn edit_ok ()
 {
     let init_data = ut_setup_data();
-    let (expect_fetch_res,expect_save_res) = (Ok(StockLevelModelSet{stores:vec![]}), Ok(())); 
+    let expect_fetch_res = Ok(StockLevelModelSet{stores:vec![
+        StoreStockModel {store_id:init_data[2].store_id, products:vec![
+            ProductStockModel {type_:init_data[2].product_type, id_:init_data[2].product_id,
+                expiry: init_data[2].expiry, is_create:false,
+                quantity: StockQuantityModel {total: 2, booked: 0, cancelled: 0}}
+        ]}
+    ]}) ; 
+    let expect_save_res  = Ok(());
     let repo = MockOrderRepo::build(expect_save_res, expect_fetch_res);
     let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
     assert!(result.is_ok());
@@ -100,7 +107,13 @@ async fn edit_fetch_error ()
 async fn edit_save_error ()
 {
     let init_data = ut_setup_data();
-    let expect_fetch_res = Ok(StockLevelModelSet{stores:vec![]}); 
+    let expect_fetch_res = Ok(StockLevelModelSet{stores:vec![
+        StoreStockModel {store_id:init_data[2].store_id, products:vec![
+            ProductStockModel {type_:init_data[2].product_type, id_:init_data[2].product_id,
+                expiry: init_data[2].expiry, is_create:false,
+                quantity: StockQuantityModel {total: 2, booked: 0, cancelled: 0}}
+        ]}
+    ]}) ; 
     let expect_save_res = Err(AppError{code:AppErrorCode::DataTableNotExist,
             detail:Some("unit-test".to_string())});
     let repo = MockOrderRepo::build(expect_save_res, expect_fetch_res);

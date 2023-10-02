@@ -20,7 +20,7 @@ impl StockLevelUseCase {
         let saved = stockrepo.fetch(ids).await?;
         let updated = saved.update(data)?;
         let _ = stockrepo.save(updated.clone()).await?;
-        Ok(updated.present())
+        Ok(updated.into())
     }
 } // end of impl StockLevelUseCase
 

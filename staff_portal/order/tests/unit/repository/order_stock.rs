@@ -6,6 +6,7 @@ use order::model::{StockLevelModelSet, StoreStockModel, ProductStockModel, Stock
 use order::repository::{OrderInMemRepo, AbsOrderRepo};
 use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
 
+use crate::model::verify_stocklvl_model;
 use super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 
 fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(nitems:u32) -> OrderInMemRepo
@@ -103,31 +104,6 @@ async fn in_mem_save_fetch_ok ()
         verify_stocklvl_model(&actual, &expect_slset, [0,0], true);
     }
 } // end of in_mem_save_fetch_ok
-
-fn verify_stocklvl_model(actual:&StockLevelModelSet,
-                         expect:&StockLevelModelSet,
-                         idx:[usize;2] ,
-                         use_eq_op:bool )
-{
-    let rand_chosen_store = &expect.stores[idx[0]];
-    let result = actual.stores.iter().find(|m| {m.store_id == rand_chosen_store.store_id});
-    assert!(result.is_some());
-    if let Some(actual_st) = result {
-        let rand_chosen_product = &rand_chosen_store.products[idx[1]];
-        let result = actual_st.products.iter().find(|m| {
-            m.type_ == rand_chosen_product.type_ &&  m.id_ == rand_chosen_product.id_
-                && m.expiry_without_millis() == rand_chosen_product.expiry_without_millis()
-        });
-        assert!(result.is_some());
-        if let Some(actual_prod) = result {
-            if use_eq_op {
-                assert_eq!(actual_prod, rand_chosen_product);
-            } else {
-                assert_ne!(actual_prod, rand_chosen_product);
-            }
-        }
-    }
-} // end of verify_stocklvl_model
 
 
 #[tokio::test]

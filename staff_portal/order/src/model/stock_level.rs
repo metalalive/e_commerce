@@ -4,8 +4,8 @@ use std::result::Result as DefaultResult;
 use chrono::DateTime;
 use chrono::offset::FixedOffset;
 
-use crate::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto};
-use crate::error::AppError;
+use crate::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
+use crate::error::{AppError, AppErrorCode};
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
@@ -33,6 +33,13 @@ pub struct StoreStockModel {
 }
 pub struct StockLevelModelSet {
     pub stores: Vec<StoreStockModel>
+}
+
+impl Into<StockQuantityPresentDto> for StockQuantityModel {
+    fn into(self) -> StockQuantityPresentDto {
+        StockQuantityPresentDto { total: self.total, booked: self.booked,
+            cancelled: self.cancelled }
+    }
 }
 
 impl Clone for ProductStockIdentity {
@@ -95,12 +102,70 @@ impl ProductStockModel {
     }
 }
 
+impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
+    fn into(self) -> Vec<StockLevelPresentDto>
+    {
+        self.stores.into_iter().flat_map(|m| {
+            let store_id = m.store_id;
+            m.products.into_iter().map(move |p| {
+                StockLevelPresentDto {
+                    quantity: p.quantity.clone().into(), store_id, product_type: p.type_,
+                    product_id: p.id_,  expiry: p.expiry.clone()
+                }
+            })
+        }).collect()
+    }
+}
+
 impl StockLevelModelSet {
     pub fn update(mut self, data:Vec<InventoryEditStockLevelDto>)
         -> DefaultResult<Self, AppError>
-    { Ok(self) }
-    
-    pub fn present(&self) -> Vec<StockLevelPresentDto>
-    { Vec::new() }
-}
+    {
+        let mut errmsg = None;
+        let err_caught = data.into_iter().find(|d| {
+            let result = self.stores.iter_mut().find(|m| m.store_id==d.store_id);
+            let store_found = if let Some(m) = result {
+                m
+            } else {
+                let m = StoreStockModel {store_id:d.store_id, products:vec![]};
+                self.stores.push(m);
+                self.stores.last_mut().unwrap()
+            }; // TODO,refactor
+            let result = store_found.products.iter_mut().find(|m| {
+                let duration = m.expiry - d.expiry;
+                m.type_==d.product_type && m.id_==d.product_id && duration.num_seconds() == 0
+            });
+            if let Some(_product_found) = result {
+                if d.qty_add >= 0 {
+                    _product_found.quantity.total += d.qty_add as u32;
+                } else {
+                    let num_avail = _product_found.quantity.total - _product_found.quantity.cancelled;
+                    let num_cancel = num_avail.min(d.qty_add.abs() as u32);
+                    _product_found.quantity.cancelled += num_cancel;
+                }
+                false
+            } else { // insert new instance
+                if d.qty_add >= 0 {
+                    let new_prod = ProductStockModel { is_create: true, type_: d.product_type,
+                        id_: d.product_id, expiry: d.expiry,  quantity: StockQuantityModel {
+                            total: d.qty_add as u32, booked: 0, cancelled: 0}};
+                    store_found.products.push(new_prod);
+                    false
+                } else {
+                    errmsg = Some("negative-initial-quantity");
+                    true
+                }
+            }
+        }); // end of input-data iteration
+        if let Some(d) = err_caught {
+            let msg = errmsg.unwrap_or("");
+            let final_detail = format!("store:{}, product:({},{}), exp:{}, qty_add:{}, reason:{}",
+                                   d.store_id,  d.product_type, d.product_id, d.expiry.to_rfc3339(),
+                                   d.qty_add, msg) ;
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(final_detail) })
+        } else {
+            Ok(self)
+        }
+    } // end of fn update
+} // end of impl StockLevelModelSet
 
