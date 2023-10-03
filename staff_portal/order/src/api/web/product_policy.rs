@@ -1,4 +1,3 @@
-use std::sync::Arc;
 
 use axum::debug_handler;
 use axum::extract::{Json as ExtractJson, State as ExtractState};
@@ -11,13 +10,11 @@ use axum::http::{
 };
 
 use crate::error::AppErrorCode;
-use crate::logging::{AppLogLevel, AppLogContext};
-use crate::{constant as AppConst, AppSharedState, app_log_event};
+use crate::{constant as AppConst, AppSharedState};
 use crate::api::web::dto::ProductPolicyDto;
 use crate::usecase::{EditProductPolicyUseCase, EditProductPolicyResult};
 
-fn presenter (ucout:EditProductPolicyUseCase, log_ctx:Arc<AppLogContext>)
-    -> impl IntoResponse
+fn presenter (ucout:EditProductPolicyUseCase) -> impl IntoResponse
 {
     let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
     let mut hdr_map = HttpHeaderMap::new();
@@ -51,11 +48,10 @@ pub(crate) async fn post_handler(
     ExtractState(appstate): ExtractState<AppSharedState>,
     ExtractJson(req_body): ExtractJson<Vec<ProductPolicyDto>> ) -> impl IntoResponse
 {
-    let log_ctx = appstate.log_context().clone();
     // TODO, extract user profile ID from authenticated JWT
     let input = EditProductPolicyUseCase::INPUT {
         data: req_body, app_state: appstate, profile_id : 1234u32
     };
     let output = input.execute().await ;
-    presenter(output, log_ctx)
+    presenter(output)
 } // end of endpoint

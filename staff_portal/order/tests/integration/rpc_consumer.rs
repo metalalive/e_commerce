@@ -95,7 +95,7 @@ async fn inventory_edit_stock_level_run_req(shrstate:AppSharedState,
     let result = route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let respbody = result.unwrap();
-    println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
+    // println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
     let result = serde_json::from_slice(&respbody);
     assert!(result.is_ok());
     result.unwrap()

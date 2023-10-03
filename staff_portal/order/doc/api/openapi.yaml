@@ -9,10 +9,10 @@ info:
   license:
     name: License Not Yet (TODO)
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  version: 1.0.0
+  version: 1.1.0
 
 servers:
-  - url: https://doc.site.not.ready/api/v1.0.0
+  - url: https://doc.site.not.ready/api/v1.1.0
 tags:
   - name: order
     description: process a new order and monitor the progress
@@ -131,18 +131,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrderSuccessResponse'
-        '202':
-          description: Order generated, some chosen items require asynchronous inventory level check
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrderAsyncResponse'
         '400':
           description: Invalid input
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OrderErrorResponse'
+                $ref: '#/components/schemas/OrderCreateErrorResponse'
         '429':
           description: Too many requests
         '503':
@@ -401,12 +395,6 @@ components:
           items:
             anyOf:
             - $ref: '#/components/schemas/PayOrderLineObject'
-        async_stock_chk:
-          type: array
-          items:
-            anyOf:
-            - $ref: '#/components/schemas/OrderLineObject'
-            - $ref: '#/components/schemas/OrderLineObject'
         paid_lines:
           type: array
           items:
@@ -456,9 +444,13 @@ components:
     BaseOrderLineObject:
       type: object
       properties:
+        product_type:
+          type: integer
+          format: uint8
+          example: 1
         product_id:
           type: integer
-          format: uint32
+          format: uint64
           example: 270118
         quantity:
           type: integer
@@ -490,6 +482,7 @@ components:
           $ref: '#/components/schemas/PayAmountObject'
       required:
         - seller_id
+        - product_type
         - product_id
         - quantity
         - amount
@@ -501,6 +494,7 @@ components:
         amount:
           $ref: '#/components/schemas/PayAmountObject'
       required:
+        - product_type
         - product_id
         - quantity
         - amount
@@ -515,6 +509,7 @@ components:
           example: 18830
       required:
         - seller_id
+        - product_type
         - product_id
         - quantity
         
@@ -525,9 +520,13 @@ components:
           type: integer
           format: uint32
           example: 18830
+        product_type:
+          type: integer
+          format: uint8
+          example: 1
         product_id:
           type: integer
-          format: uint32
+          format: uint64
           example: 270118
         err_detail:
           type: string
@@ -768,33 +767,7 @@ components:
             - $ref: '#/components/schemas/PayOrderLineObject'
             - $ref: '#/components/schemas/PayOrderLineObject'
     
-    OrderAsyncResponse:
-      type: object
-      properties:
-        order_id:
-          type: string
-          example: DronEfLy
-        usr_id:
-          type: integer
-          format: uint32
-          example: 22761
-        time:
-          type: integer
-          format: uint64
-          example: 108273825
-        reserved_lines:
-          type: array
-          items:
-            anyOf:
-            - $ref: '#/components/schemas/PayOrderLineObject'
-        async_stock_chk:
-          type: array
-          items:
-            anyOf:
-            - $ref: '#/components/schemas/OrderLineObject'
-            - $ref: '#/components/schemas/OrderLineObject'
-    
-    OrderErrorResponse:
+    OrderCreateErrorResponse:
       type: object
       properties:
         order_lines:

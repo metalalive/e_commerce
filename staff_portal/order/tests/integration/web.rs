@@ -4,7 +4,7 @@ use hyper::Body as HyperBody;
 use http::{Request, StatusCode};
 
 use order::error::AppError;
-use order::api::web::dto::{OrderCreateReqData, OrderCreateRespAsyncData, OrderEditReqData, ProductPolicyDto};
+use order::api::web::dto::{OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ProductPolicyDto};
 
 mod common;
 use common::{test_setup_shr_state, TestWebServer, deserialize_json_template};
@@ -36,11 +36,10 @@ async fn place_new_order_ok() -> DefaultResult<(), AppError>
 
     let mut response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::ACCEPTED);
-    let actual = TestWebServer::to_custom_type::<OrderCreateRespAsyncData>
+    let actual = TestWebServer::to_custom_type::<OrderCreateRespOkDto>
         (response.body_mut())  .await  ? ;
     assert_eq!(actual.order_id.is_empty() ,  false);
-    assert_eq!(actual.async_stock_chk.is_empty() ,  false);
-    assert_eq!(actual.reserved_lines.is_empty() ,  false);
+    assert!(actual.reserved_lines.len() > 0);
     Ok(())
 } // end of place_new_order_ok
 

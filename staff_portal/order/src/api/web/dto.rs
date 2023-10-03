@@ -13,16 +13,18 @@ pub struct PayAmountDto {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct OrderLinePendingDto {
+pub struct OrderLineReqDto {
     pub seller_id: u32,
-    pub product_id: u32,
+    pub product_id: u64,
+    pub product_type: u8,
     pub quantity: u32
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderLinePayDto {
     pub seller_id: u32,
-    pub product_id: u32,
+    pub product_id: u64,
+    pub product_type: u8,
     pub quantity: u32,
     pub amount: PayAmountDto
 }
@@ -73,18 +75,17 @@ pub struct ShippingDto {
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderCreateReqData {
-    pub order_lines: Vec<OrderLinePendingDto>,
+    pub order_lines: Vec<OrderLineReqDto>,
     pub billing: BillingDto,
     pub shipping: ShippingDto
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct OrderCreateRespAsyncData {
+pub struct OrderCreateRespOkDto {
     pub order_id: String,
     pub usr_id: u32,
     pub time: u64,
     pub reserved_lines: Vec<OrderLinePayDto>,
-    pub async_stock_chk: Vec<OrderLinePendingDto> 
 }
 
 #[derive(Deserialize, Serialize)]
