@@ -3,7 +3,7 @@ use serde_json::Value as JsnVal;
 
 use order::api::rpc::route_to_handler;
 use order::error::AppError;
-use order::AppRpcClientReqProperty;
+use order::{AppRpcClientReqProperty, AppSharedState};
 
 mod common;
 use common::test_setup_shr_state;
@@ -56,6 +56,51 @@ async fn  update_product_price_ok() -> DefaultResult<(), AppError>
 } // end of fn update_product_price_ok
 
 
+fn verify_reply_stock_level(objs:&Vec<JsnVal>,  expect_product_id:u64,
+                            expect_product_type:u8,  expect_qty_total:u32,
+                            expect_qty_cancelled:u32 )
+{
+    let obj = objs.iter().find(|d| {
+        if let JsnVal::Object(item) = d {
+            let prod_id_v = item.get("product_id").unwrap();
+            let prod_typ_v = item.get("product_type").unwrap();
+            let actual_product_id = if let JsnVal::Number(id_) = prod_id_v {
+                id_.as_u64().unwrap()
+            } else { 0 };
+            let actual_product_type = if let JsnVal::Number(typ_) = prod_typ_v {
+                typ_.as_u64().unwrap()
+            } else { 0 };
+            expect_product_id == actual_product_id &&
+                expect_product_type as u64 == actual_product_type
+        } else { false }
+    }).unwrap();
+    let qty_v = obj.get("quantity").unwrap();
+    if let JsnVal::Object(qty) = qty_v {
+        let tot_v = qty.get("total").unwrap();
+        if let JsnVal::Number(total) = tot_v {
+            assert_eq!(total.as_u64().unwrap(), expect_qty_total as u64);
+        }
+        let cancel_v = qty.get("cancelled").unwrap();
+        if let JsnVal::Number(cancel) = cancel_v {
+            assert_eq!(cancel.as_u64().unwrap(), expect_qty_cancelled as u64);
+        }
+    }
+} // end of fn verify_reply_stock_level
+
+async fn inventory_edit_stock_level_run_req(shrstate:AppSharedState,
+                                            msgbody:Vec<u8> ) -> JsnVal
+{
+    let req = AppRpcClientReqProperty { retry: 2,  msgbody,
+            route: "edit_stock_level".to_string()  };
+    let result = route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+    let respbody = result.unwrap();
+    println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
+    let result = serde_json::from_slice(&respbody);
+    assert!(result.is_ok());
+    result.unwrap()
+}
+
 #[tokio::test]
 async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
 {
@@ -64,21 +109,36 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
             [
                 {"qty_add":12, "store_id":1006, "product_type": 1, "product_id": 9200125,
                  "expiry": "2023-12-24T07:11:13.730050+07:00"},
-                {"qty_add":-18, "store_id":1009, "product_type": 2, "product_id": 7001,
+                {"qty_add":18, "store_id":1009, "product_type": 2, "product_id": 7001,
                  "expiry": "2023-12-27T22:19:13.730050+08:00"},
                 {"qty_add":50, "store_id":1007, "product_type": 2, "product_id": 20911,
                  "expiry": "2023-12-25T16:27:13.730050+10:00"}
             ]
             "#;
-    let req = AppRpcClientReqProperty { retry: 2,  msgbody:msgbody.to_vec(),
-            route: "edit_stock_level".to_string()  };
-    let result = route_to_handler(req, shrstate).await;
-    assert!(result.is_ok());
-    let respbody = result.unwrap();
-    let result = serde_json::from_slice(&respbody);
-    assert!(result.is_ok());
-    let value:JsnVal = result.unwrap();
-    assert!(value.is_array()); // TODO, should return current stock level
+    let value = inventory_edit_stock_level_run_req(shrstate.clone(), msgbody.to_vec()).await;
+    assert!(value.is_array());
+    if let JsnVal::Array(items) = value {
+        assert_eq!(items.len(), 3);
+        verify_reply_stock_level(&items, 9200125, 1, 12, 0);
+        verify_reply_stock_level(&items, 20911, 2, 50, 0);
+    }
+    let msgbody = br#"
+            [
+                {"qty_add":2, "store_id":1006, "product_type": 1, "product_id": 9200125,
+                 "expiry": "2023-12-24T07:11:13.700450+07:00"},
+                {"qty_add":-2, "store_id":1009, "product_type": 2, "product_id": 7001,
+                 "expiry": "2023-12-27T22:19:13.730050+08:00"},
+                {"qty_add":19, "store_id":1007, "product_type": 2, "product_id": 20911,
+                 "expiry": "2023-12-25T16:27:14.0060+10:00"}
+            ]
+            "#;
+    let value = inventory_edit_stock_level_run_req(shrstate.clone(), msgbody.to_vec()).await;
+    assert!(value.is_array());
+    if let JsnVal::Array(items) = value {
+        assert_eq!(items.len(), 3);
+        verify_reply_stock_level(&items, 9200125, 1, 14, 0);
+        verify_reply_stock_level(&items, 7001, 2, 18, 2);
+    }
     Ok(())
 } // end of fn test_update_product_price_ok
 
