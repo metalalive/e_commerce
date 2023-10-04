@@ -2,6 +2,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 use std::result::Result as DefaultResult;
 use async_trait::async_trait;
+use order::constant::ProductType;
 use serde_json::from_str as deserialize_json;
 
 use order::{AbstractRpcContext, AppRpcCfg, AbstractRpcClient, AppRpcReply,
@@ -58,10 +59,14 @@ fn setup_data () -> Vec<ProductPolicyDto>
 {
     let raw = r#"
         [
-            {"product_id":22, "auto_cancel_secs":600, "warranty_hours":1800, "async_stock_chk":true },
-            {"product_id":168, "auto_cancel_secs":610, "warranty_hours":1700, "async_stock_chk":false },
-            {"product_id":79, "auto_cancel_secs":630, "warranty_hours":1600, "async_stock_chk":true },
-            {"product_id":19, "auto_cancel_secs":660, "warranty_hours":1500, "async_stock_chk":false }
+            {"product_id":22, "product_type":1, "auto_cancel_secs":600,
+                "warranty_hours":1800, "async_stock_chk":true },
+            {"product_id":168, "product_type":1, "auto_cancel_secs":610,
+                "warranty_hours":1700, "async_stock_chk":false },
+            {"product_id":79, "product_type":1, "auto_cancel_secs":630,
+                "warranty_hours":1600, "async_stock_chk":true },
+            {"product_id":19, "product_type":2, "auto_cancel_secs":660,
+                "warranty_hours":1500, "async_stock_chk":false }
         ]
     "#;
     deserialize_json(raw).unwrap()
@@ -90,6 +95,7 @@ async fn check_product_existence_ok ()
     ).await;
     assert_eq!(result.is_ok(), true);
     let missing_product_ids = result.unwrap();
+    // println!("missing_product_ids : {:?}", missing_product_ids );
     assert_eq!(missing_product_ids.is_empty(), true);
 }
 
@@ -147,8 +153,8 @@ async fn mock_run_rpc_nonexist_found (
 {
     let raw = br#"
         {
-        "item":[{"id":79},{"id":19},{"id":22}],
-        "pkg":[]
+        "item":[{"id":79},{"id":22}],
+        "pkg":[{"id":19}]
         }
     "#;
     let res = AppRpcReply { body:raw.to_vec() };
@@ -165,6 +171,6 @@ async fn check_product_existence_found_nonexist_item ()
     ).await;
     assert_eq!(result.is_ok(), true);
     let missing_product_ids = result.unwrap();
-    assert_eq!(missing_product_ids, vec![168]);
+    assert_eq!(missing_product_ids, vec![(ProductType::Item,168)]);
 }
 

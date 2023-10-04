@@ -3,11 +3,13 @@ use std::vec::Vec;
 use std::result::Result as DefaultResult;
 
 use crate::api::web::dto::{ProductPolicyDto, ProductPolicyClientErrorDto, ProductPolicyClientLimitDto};
+use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 
 #[derive(Debug)]
 pub struct ProductPolicyModel {
     pub usr_id : u32,
+    pub product_type: ProductType,
     pub product_id: u64,
     pub auto_cancel_secs: u32,
     pub warranty_hours: u32,
@@ -17,11 +19,13 @@ pub struct ProductPolicyModel {
 
 impl PartialEq for ProductPolicyModel {
     fn eq(&self, other: &Self) -> bool {
+        let p_typ_self: u8 = self.product_type.clone().into();
+        let p_typ_other: u8 = other.product_type.clone().into();
         (self.usr_id == other.usr_id) &&
-        (self.product_id == other.product_id) &&
-        (self.auto_cancel_secs == other.auto_cancel_secs) &&
-        (self.warranty_hours == other.warranty_hours) &&
-        (self.async_stock_chk == other.async_stock_chk)
+            (self.product_id == other.product_id) && (p_typ_self == p_typ_other) &&
+            (self.auto_cancel_secs == other.auto_cancel_secs) &&
+            (self.warranty_hours == other.warranty_hours) &&
+            (self.async_stock_chk == other.async_stock_chk)
     }
     fn ne(&self, other: &Self) -> bool {
         !self.eq(other)
@@ -41,8 +45,9 @@ impl ProductPolicyModelSet
     pub fn validate (newdata:&Vec<ProductPolicyDto>) -> DefaultResult<(), Vec<ProductPolicyClientErrorDto>>
     {
         if newdata.is_empty() {
-            let ce = ProductPolicyClientErrorDto { product_id: 0u64, auto_cancel_secs: None,
-                err_type: format!("{:?}", AppErrorCode::EmptyInputData), warranty_hours:None };
+            let ce = ProductPolicyClientErrorDto {product_type:ProductType::Unknown(0),
+                product_id: 0u64, auto_cancel_secs: None, warranty_hours:None,
+                err_type: format!("{:?}", AppErrorCode::EmptyInputData) };
             return Err(vec![ce]);
         }
         let detected_invalid = newdata.iter().filter_map(|item| {
@@ -54,7 +59,8 @@ impl ProductPolicyModelSet
                 let warranty_hours = Some(ProductPolicyClientLimitDto {
                     given:item.warranty_hours, limit:HARD_LIMIT_WARRANTY_HOURS});
                 let ce = ProductPolicyClientErrorDto {
-                    product_id: item.product_id, auto_cancel_secs, warranty_hours, 
+                    product_id: item.product_id, product_type: item.product_type.clone(),
+                    auto_cancel_secs, warranty_hours, 
                     err_type: format!("{:?}", AppErrorCode::ExceedingMaxLimit),
                 };
                 Some(ce)
@@ -72,7 +78,9 @@ impl ProductPolicyModelSet
     {
         self.check_user_consistency(usr_id)?;
         let mut _new_objs = newdata.iter().filter_map(|item| {
-            let result = self.policies.iter_mut().find(|o| {o.product_id == item.product_id});
+            let result = self.policies.iter_mut().find(|o| {
+                o.product_id == item.product_id && o.product_type == item.product_type
+            });
             if let Some(obj) = result {
                 obj.auto_cancel_secs = item.auto_cancel_secs;
                 obj.warranty_hours = item.warranty_hours;
@@ -81,6 +89,7 @@ impl ProductPolicyModelSet
             } else {
                 Some(ProductPolicyModel {
                     is_create: true, usr_id, product_id: item.product_id,
+                    product_type: item.product_type.clone(),
                     auto_cancel_secs: item.auto_cancel_secs,
                     warranty_hours: item.warranty_hours,
                     async_stock_chk: item.async_stock_chk,
@@ -97,12 +106,13 @@ impl ProductPolicyModelSet
             if obj.usr_id == usr_id {
                 None
             } else {
+                let p_typ_num:u8 = obj.product_type.clone().into();
                 let errmsg = format!(
                     r#"
-                      {{ "product_id":{}, "model":"ProductPolicyModel",
+                      {{ "product_type":{}, "product_id":{}, "model":"ProductPolicyModel",
                          "usr_id":{{"given":{}, "expect":{} }},
                       }}
-                    "# , obj.product_id, obj.usr_id, usr_id
+                    "# , p_typ_num, obj.product_id, obj.usr_id, usr_id
                 );
                 Some(errmsg)
             }

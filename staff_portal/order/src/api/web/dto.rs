@@ -117,7 +117,8 @@ pub struct ProductPolicyClientLimitDto
 #[derive(Serialize)]
 pub struct ProductPolicyClientErrorDto
 {
-    pub product_type: u8,
+    #[serde(serialize_with="jsn_serialize_product_type")]
+    pub product_type: ProductType,
     pub product_id: u64,
     pub err_type: String, // convert from AppError
     pub auto_cancel_secs: Option<ProductPolicyClientLimitDto>,
@@ -145,8 +146,8 @@ fn jsn_validate_product_type<'de, D>(raw:D) ->  Result<ProductType, D::Error>
     match u8::deserialize(raw) {
         Ok(d) => {
             let typ = ProductType::from(d);
-            if typ == ProductType::Unknown {
-                let unexp = Unexpected::Unsigned(d as u64);
+            if let ProductType::Unknown(uv) = typ {
+                let unexp = Unexpected::Unsigned(uv as u64);
                 let exp = ExpectProdTyp{ numbers: vec![
                     ProductType::Item.into(),
                     ProductType::Package.into()

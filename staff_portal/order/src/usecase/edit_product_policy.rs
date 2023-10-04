@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::collections::hash_map::RandomState;
 
 use serde::{Serialize, Deserialize};
+use crate::constant::ProductType;
 use crate::model::ProductPolicyModelSet;
 use crate::repository::app_repo_product_policy;
 use crate::{AppSharedState, app_log_event, AppDataStoreContext} ;
@@ -80,11 +81,13 @@ impl EditProductPolicyUseCase {
             if !missing_prod_ids.is_empty() {
                 app_log_event!(log, AppLogLevel::ERROR, "missing_prod_ids:{:?}", missing_prod_ids);
                 let code = EditProductPolicyResult::Other(AppErrorCode::InvalidInput);
-                let c_err = missing_prod_ids.into_iter().map(|product_id|{
-                    ProductPolicyClientErrorDto { product_id, auto_cancel_secs: None,
-                        err_type: format!("{:?}", AppErrorCode::ProductNotExist),
-                        warranty_hours:None }
-                }).collect();
+                let c_err = missing_prod_ids.into_iter().map(
+                    |(product_type, product_id)| {
+                        ProductPolicyClientErrorDto { product_id, product_type,
+                            err_type: format!("{:?}", AppErrorCode::ProductNotExist),
+                            warranty_hours:None, auto_cancel_secs: None }
+                    }
+                ).collect();
                 return Self::OUTPUT {result: code, client_err:Some(c_err)};
             }
         }
@@ -102,14 +105,19 @@ impl EditProductPolicyUseCase {
         data: &Vec<ProductPolicyDto>,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
         run_rpc_fn: AppUCrunRPCfn<impl Future<Output = AppUseKsRPCreply>>,
-        usr_prof_id: u32 ) -> DefaultResult<Vec<u64>, (EditProductPolicyResult, String)>
+        usr_prof_id: u32 )
+        -> DefaultResult<Vec<(ProductType,u64)>, (EditProductPolicyResult, String)>
     {
         let mut msg_req = ProductInfoReq {
             pkg_ids: Vec::new(), pkg_fields: Vec::new(), profile: usr_prof_id,
             item_ids: Vec::new(), item_fields : vec!["id".to_string()]
         };
         let _: Vec<()>  = data.iter().map(|item| {
-            msg_req.item_ids.push(item.product_id);
+            match &item.product_type {
+                ProductType::Item => {msg_req.item_ids.push(item.product_id);},
+                ProductType::Package => {msg_req.pkg_ids.push(item.product_id);},
+                _others => {}
+            }
         }).collect();
         let msgbody = serde_json::to_string(&msg_req).unwrap().into_bytes();
         let properties = AppRpcClientReqProperty {
@@ -137,22 +145,24 @@ impl EditProductPolicyUseCase {
     } // end of check_product_existence 
 
     fn _compare_rpc_reply (reply:ProductInfoResp, req:&Vec<ProductPolicyDto>)
-        -> Vec<u64>
+        -> Vec<(ProductType,u64)>
     {
-        let iter1 = reply.item.iter().map(|x| {x.id});
-        let iter2 = reply.pkg.iter().map(|x| {x.id});
-        let iter3 = req.iter().map(|x| {x.product_id});
-        let mut c1:HashSet<u64, RandomState> = HashSet::from_iter(iter1);
-        c1.extend(iter2);
-        let c2 = HashSet::from_iter(iter3);
-        c2.difference(&c1).map(u64::clone).collect() // c1 == c2
+        let (r_items, r_pkgs) = (reply.item, reply.pkg);
+        let iter_item = r_items.into_iter().map(|x| (ProductType::Item, x.id));
+        let iter_pkg  = r_pkgs.into_iter().map(|x| (ProductType::Package, x.id));
+        let iter_req = req.iter().map(|x| (x.product_type.clone(), x.product_id));
+        let mut c1:HashSet<(ProductType,u64), RandomState> = HashSet::from_iter(iter_item);
+        c1.extend(iter_pkg);
+        let c2 = HashSet::from_iter(iter_req);
+        c2.difference(&c1).map(|(typ_,id_)|
+                               (typ_.clone(), id_.clone())  ).collect()
     }
 
     async fn _save_to_repo(ds:Arc<AppDataStoreContext>, data:&Vec<ProductPolicyDto>,
                            usr_id : u32)  -> DefaultResult<(), AppError>
     {
         let repo = app_repo_product_policy(ds)?;
-        let ids = data.iter().map(|d| {d.product_id}).collect();
+        let ids = data.iter().map(|d| (d.product_type.clone(), d.product_id)).collect();
         let previous_saved = repo.fetch(usr_id, ids).await?;
         let updated = previous_saved.update(usr_id, data)?;
         repo.save(updated).await ?;

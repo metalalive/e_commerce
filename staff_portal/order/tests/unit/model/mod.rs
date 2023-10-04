@@ -9,7 +9,7 @@ pub(crate) fn ut_clone_productpolicy(src:&ProductPolicyModel) -> ProductPolicyMo
     ProductPolicyModel {
         usr_id: src.usr_id, product_id: src.product_id, auto_cancel_secs: src.auto_cancel_secs,
         warranty_hours: src.warranty_hours, async_stock_chk: src.async_stock_chk,
-        is_create: src.is_create }
+        is_create: src.is_create, product_type:src.product_type.clone() }
 }
 
 pub(crate) fn ut_clone_productprice(src:&ProductPriceModel) -> ProductPriceModel

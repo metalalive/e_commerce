@@ -2,9 +2,11 @@ use std::convert::Into;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::boxed::Box;
+use std::vec;
 use async_trait::async_trait;
 
 use crate::AppDataStoreContext;
+use crate::constant::ProductType;
 use crate::datastore::AbstInMemoryDStore;
 use crate::model::{ProductPolicyModelSet, ProductPolicyModel};
 use crate::error::{AppError, AppErrorCode};
@@ -48,22 +50,27 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
         }
     }
 
-    async fn fetch(&self, usr_id:u32, ids:Vec<u64>) -> Result<ProductPolicyModelSet, AppError>
+    async fn fetch(&self, usr_id:u32, ids:Vec<(ProductType, u64)>) -> Result<ProductPolicyModelSet, AppError>
     {
         let info = {
-            let mut h = HashMap::new();
-            let v = ids.iter().map(u64::to_string).collect();
-            h.insert(TABLE_LABEL.to_string(), v);
-            h
+            let v = ids.iter().map(|(ptyp, pid)| {
+                let ptyp:u8 = ptyp.clone().into();
+                format!("{}-{}", ptyp, pid)
+            }).collect();
+            let items = [(TABLE_LABEL.to_string(), v)];
+            HashMap::from(items)
         };
         let result_raw = self.datastore.fetch(info)?;
         let filtered = if let Some(d) = result_raw.get(TABLE_LABEL)
         { // raw strings to model instances
-            d.into_iter() .filter_map(|(pid,row)| {
+            d.into_iter() .filter_map(|(key,row)| {
                 let saved_uid:u32 = row.get::<usize>(InMemColIdx::UserId.into())
                     .unwrap() .parse() .unwrap();
                 if saved_uid == usr_id {
-                    let product_id = pid.parse().unwrap();
+                    let id_elms = key.split("-").collect::<Vec<&str>>();
+                    let prod_typ:u8 = id_elms[0].parse().unwrap();
+                    let product_id = id_elms[1].parse().unwrap();
+                    let product_type = ProductType::from(prod_typ);
                     let auto_cancel_secs = row.get::<usize>(InMemColIdx::AutoCancel.into())
                         .unwrap().parse().unwrap();
                     let warranty_hours = row.get::<usize>(InMemColIdx::Warranty.into())
@@ -71,7 +78,7 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
                     let async_stock_chk = row.get::<usize>(InMemColIdx::AsyncStockChk.into())
                         .unwrap().parse().unwrap();
                     Some(ProductPolicyModel {
-                        product_id,   auto_cancel_secs,  warranty_hours,
+                        product_id, product_type,  auto_cancel_secs,  warranty_hours,
                         async_stock_chk, usr_id:saved_uid,  is_create:false
                     })
                 } else {None}
@@ -91,6 +98,8 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
             let mut h = HashMap::new();
             let table_data = {
                 let kv_pairs = ppset.policies.iter().map(|m|{
+                    let prod_typ:u8 = m.product_type.clone().into();
+                    let pkey = format!("{}-{}", prod_typ,  m.product_id);
                     // manually allocate space in advance, instead of `Vec::with_capacity`
                     let mut row = (0..InMemColIdx::TotNumColumns.into())
                         .map(|_n| String::new())  .collect::<Vec<String>>();
@@ -103,7 +112,7 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
                         let idx:usize = idx.into();
                         row[idx] = val;
                     }).collect::<Vec<()>>();
-                    (m.product_id.to_string(), row)
+                    (pkey, row)
                 });
                 HashMap::from_iter(kv_pairs)
             };

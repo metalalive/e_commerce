@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use crate::WebApiHdlrLabel;
 
 pub const ENV_VAR_SYS_BASE_PATH :&'static str = "SYS_BASE_PATH";
@@ -23,22 +24,22 @@ pub(crate) const RPCAPI_EDIT_STOCK_LEVEL: WebApiHdlrLabel = "edit_stock_level";
 
 pub(crate) const HTTP_CONTENT_TYPE_JSON: &str = "application/json";
 
-#[derive(Debug, Eq)]
-pub enum ProductType {Item, Package, Unknown}
+#[derive(Debug, Eq, Hash)]
+pub enum ProductType {Item, Package, Unknown(u8)}
 
 impl From<u8> for ProductType {
     fn from(value: u8) -> Self {
         match value {
             1 => Self::Item,
             2 => Self::Package,
-            _others => Self::Unknown,
+            _others => Self::Unknown(value),
         }
     }
 }
 impl Into<u8> for ProductType {
     fn into(self) -> u8 {
         match self {
-            Self::Unknown => 0,
+            Self::Unknown(v) => v,
             Self::Item => 1,
             Self::Package => 2
         }
@@ -58,7 +59,7 @@ impl Clone for ProductType {
     fn clone(&self) -> Self {
         match self {
             Self::Item => Self::Item,
-            Self::Unknown => Self::Unknown,
+            Self::Unknown(v) => Self::Unknown(v.clone()),
             Self::Package => Self::Package
         }
     }

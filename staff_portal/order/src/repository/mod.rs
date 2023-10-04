@@ -10,6 +10,7 @@ use async_trait::async_trait;
 
 use crate::AppDataStoreContext;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
+use crate::constant::ProductType;
 use crate::error::AppError;
 use crate::model::{ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity};
 
@@ -27,7 +28,7 @@ pub trait AbstProductPolicyRepo : Sync + Send
     fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
         where Self:Sized ;
     
-    async fn fetch(&self, usr_id:u32, ids:Vec<u64>) -> DefaultResult<ProductPolicyModelSet, AppError>;
+    async fn fetch(&self, usr_id:u32, ids:Vec<(ProductType, u64)>) -> DefaultResult<ProductPolicyModelSet, AppError>;
     
     async fn save(&self, ppset:ProductPolicyModelSet) -> DefaultResult<(), AppError>;
     // TODO, delete operation
