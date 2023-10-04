@@ -23,6 +23,47 @@ pub(crate) const RPCAPI_EDIT_STOCK_LEVEL: WebApiHdlrLabel = "edit_stock_level";
 
 pub(crate) const HTTP_CONTENT_TYPE_JSON: &str = "application/json";
 
+#[derive(Debug, Eq)]
+pub enum ProductType {Item, Package, Unknown}
+
+impl From<u8> for ProductType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Self::Item,
+            2 => Self::Package,
+            _others => Self::Unknown,
+        }
+    }
+}
+impl Into<u8> for ProductType {
+    fn into(self) -> u8 {
+        match self {
+            Self::Unknown => 0,
+            Self::Item => 1,
+            Self::Package => 2
+        }
+    }
+}
+impl PartialEq for ProductType {
+    fn eq(&self, other: &Self) -> bool {
+        let a:u8 = self.clone().into();
+        let b:u8 = other.clone().into();
+        a == b
+    }
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
+}
+impl Clone for ProductType {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Item => Self::Item,
+            Self::Unknown => Self::Unknown,
+            Self::Package => Self::Package
+        }
+    }
+}
+
 pub(crate) mod logging {
     use serde::Deserialize;
 
