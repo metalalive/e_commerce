@@ -4,12 +4,16 @@ use hyper::Body as HyperBody;
 use http::{Request, StatusCode};
 
 use order::error::AppError;
-use order::api::web::dto::{OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ProductPolicyDto};
+use order::api::web::dto::{
+    OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ProductPolicyDto,
+    OrderCreateRespErrorDto, ContactNameErrorReason, PhoneNumNationErrorReason
+};
 
 mod common;
 use common::{test_setup_shr_state, TestWebServer, deserialize_json_template};
 
 const FPATH_NEW_ORDER_OK_1:&'static str  = "/tests/integration/examples/order_new_ok_1.json";
+const FPATH_NEW_ORDER_CONTACT_ERR:&'static str  = "/tests/integration/examples/order_new_contact_error.json";
 const FPATH_EDIT_ORDER_OK_1:&'static str = "/tests/integration/examples/order_edit_ok_1.json";
 const FPATH_EDIT_PRODUCTPOLICY_OK_1:&'static str = "/tests/integration/examples/policy_product_edit_ok_1.json";
 const FPATH_EDIT_PRODUCTPOLICY_ERR:&'static str = "/tests/integration/examples/policy_product_edit_exceed_limit.json";
@@ -35,13 +39,47 @@ async fn place_new_order_ok() -> DefaultResult<(), AppError>
         .unwrap();
 
     let mut response = TestWebServer::consume(&srv, req).await;
-    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(response.status(), StatusCode::CREATED);
     let actual = TestWebServer::to_custom_type::<OrderCreateRespOkDto>
         (response.body_mut())  .await  ? ;
     assert_eq!(actual.order_id.is_empty() ,  false);
     assert!(actual.reserved_lines.len() > 0);
     Ok(())
 } // end of place_new_order_ok
+
+#[tokio::test]
+async fn place_new_order_contact_error() -> DefaultResult<(), AppError>
+{
+    let shr_state = test_setup_shr_state() ? ;
+    let srv = TestWebServer::setup(shr_state.clone());
+    let top_lvl_cfg = shr_state.config();
+    let listener = &top_lvl_cfg.api_server.listen;
+    let reqbody = {
+        let rb = deserialize_json_template::<OrderCreateReqData>
+            (&top_lvl_cfg.basepath, FPATH_NEW_ORDER_CONTACT_ERR) ? ;
+        let rb = serde_json::to_string(&rb) .unwrap();
+        HyperBody::from(rb)
+    };
+    let uri = format!("/{}/order", listener.api_version);
+    let req = Request::builder().uri(uri).method("POST")
+        .header("content-type", "application/json")
+        .header("accept", "application/json")
+        .body(reqbody)  .unwrap();
+
+    let mut response = TestWebServer::consume(&srv, req).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let actual = TestWebServer::to_custom_type::<OrderCreateRespErrorDto>
+        (response.body_mut())  .await  ? ;
+    let contact_err = actual.shipping.unwrap().contact.unwrap();
+    let (name_err, phone_err) = (contact_err.first_name.unwrap(),
+                                 contact_err.phones.unwrap());
+    assert!(matches!(name_err, ContactNameErrorReason::Empty));
+    assert_eq!(phone_err.len(), 2);
+    assert!(phone_err[0].is_none());
+    let ph_err_1 = phone_err[1].as_ref().unwrap();
+    assert!(matches!(ph_err_1.nation.as_ref().unwrap(), PhoneNumNationErrorReason::InvalidCode));
+    Ok(())
+} // end of place_new_order_contact_error
 
 
 #[tokio::test]

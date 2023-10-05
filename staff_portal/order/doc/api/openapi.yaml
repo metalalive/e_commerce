@@ -538,10 +538,15 @@ components:
           type: integer
           format: uint64
           example: 270118
-        err_detail:
+        reason:
           type: string
           enum: [not-exist, out-of-stock, not-enough-to-claim]
           example: out-of-stock
+      required:
+        - seller_id
+        - product_type
+        - product_id
+        - reason
     
     BillingValid:
       type: object
@@ -559,7 +564,7 @@ components:
           $ref: '#/components/schemas/AddressErrDetail'
         contact:
           $ref: '#/components/schemas/ContactErrDetail'
-        non-field:
+        nonfield:
           type: string
           enum: [contact-required]
     
@@ -751,7 +756,7 @@ components:
       properties:
         nation:
           type: string
-          enum: [empty, invalid-code]
+          enum: [invalid-code]
         number:
           type: string
           enum: [invalid-char, empty]

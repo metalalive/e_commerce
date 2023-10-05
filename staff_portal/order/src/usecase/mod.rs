@@ -1,6 +1,7 @@
 mod edit_product_policy;
 mod edit_product_price;
 mod stock_level;
+mod manage_order;
 
 use std::sync::Arc;
 use std::boxed::Box;
@@ -11,6 +12,7 @@ use std::result::Result as DefaultResult;
 pub use edit_product_policy::{EditProductPolicyUseCase, EditProductPolicyResult};
 pub use edit_product_price::EditProductPriceUseCase;
 pub use stock_level::StockLevelUseCase;
+pub use manage_order::CreateOrderUseCase;
 
 use crate::AppSharedState;
 use crate::rpc::{AppRpcReply, AbstractRpcContext, AppRpcClientReqProperty, AbsRpcClientCtx,
