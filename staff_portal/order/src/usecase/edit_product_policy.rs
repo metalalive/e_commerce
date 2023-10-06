@@ -91,8 +91,8 @@ impl EditProductPolicyUseCase {
                 return Self::OUTPUT {result: code, client_err:Some(c_err)};
             }
         }
-        if let Err(e) = Self::_save_to_repo(appstate.datastore(), &data, usr_prof_id).await
-        {
+        if let Err(e) = Self::_save_to_repo(appstate.datastore(), &data).await
+        { // no need to pass `usr_prof_id`, the product ownership should be verified by previous RPC
             app_log_event!(log, AppLogLevel::ERROR, "error:{:?}", e);
             Self::OUTPUT {result:EditProductPolicyResult::Other(e.code), client_err:None}
         } else {
@@ -158,13 +158,13 @@ impl EditProductPolicyUseCase {
                                (typ_.clone(), id_.clone())  ).collect()
     }
 
-    async fn _save_to_repo(ds:Arc<AppDataStoreContext>, data:&Vec<ProductPolicyDto>,
-                           usr_id : u32)  -> DefaultResult<(), AppError>
+    async fn _save_to_repo(ds:Arc<AppDataStoreContext>, data:&Vec<ProductPolicyDto>)
+        -> DefaultResult<(), AppError>
     {
         let repo = app_repo_product_policy(ds)?;
         let ids = data.iter().map(|d| (d.product_type.clone(), d.product_id)).collect();
-        let previous_saved = repo.fetch(usr_id, ids).await?;
-        let updated = previous_saved.update(usr_id, data)?;
+        let previous_saved = repo.fetch(ids).await?;
+        let updated = previous_saved.update(data)?;
         repo.save(updated).await ?;
         Ok(())
     }

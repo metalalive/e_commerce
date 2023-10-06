@@ -2,7 +2,6 @@ use std::convert::Into;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::boxed::Box;
-use std::vec;
 use async_trait::async_trait;
 
 use crate::AppDataStoreContext;
@@ -14,16 +13,14 @@ use super::AbstProductPolicyRepo;
 
 const TABLE_LABEL: &'static str = "product_policy";
 
-enum InMemColIdx {UserId, AutoCancel, Warranty, AsyncStockChk, TotNumColumns}
+enum InMemColIdx {AutoCancel, Warranty, TotNumColumns}
 
 impl Into<usize> for InMemColIdx {
     fn into(self) -> usize {
         match self {
-            Self::UserId => 0,
-            Self::AutoCancel => 1,
-            Self::Warranty => 2,
-            Self::AsyncStockChk => 3,
-            Self::TotNumColumns => 4
+            Self::AutoCancel => 0,
+            Self::Warranty => 1,
+            Self::TotNumColumns => 2
         }
     }
 }
@@ -50,8 +47,8 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
         }
     }
 
-    async fn fetch(&self, usr_id:u32, ids:Vec<(ProductType, u64)>) -> Result<ProductPolicyModelSet, AppError>
-    {
+    async fn fetch(&self, ids:Vec<(ProductType, u64)>) -> Result<ProductPolicyModelSet, AppError>
+    { // TODO, remove `use_id`, it is no longer necessary
         let info = {
             let v = ids.iter().map(|(ptyp, pid)| {
                 let ptyp:u8 = ptyp.clone().into();
@@ -63,25 +60,19 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
         let result_raw = self.datastore.fetch(info)?;
         let filtered = if let Some(d) = result_raw.get(TABLE_LABEL)
         { // raw strings to model instances
-            d.into_iter() .filter_map(|(key,row)| {
-                let saved_uid:u32 = row.get::<usize>(InMemColIdx::UserId.into())
-                    .unwrap() .parse() .unwrap();
-                if saved_uid == usr_id {
-                    let id_elms = key.split("-").collect::<Vec<&str>>();
-                    let prod_typ:u8 = id_elms[0].parse().unwrap();
-                    let product_id = id_elms[1].parse().unwrap();
-                    let product_type = ProductType::from(prod_typ);
-                    let auto_cancel_secs = row.get::<usize>(InMemColIdx::AutoCancel.into())
-                        .unwrap().parse().unwrap();
-                    let warranty_hours = row.get::<usize>(InMemColIdx::Warranty.into())
-                        .unwrap().parse().unwrap();
-                    let async_stock_chk = row.get::<usize>(InMemColIdx::AsyncStockChk.into())
-                        .unwrap().parse().unwrap();
-                    Some(ProductPolicyModel {
-                        product_id, product_type,  auto_cancel_secs,  warranty_hours,
-                        async_stock_chk, usr_id:saved_uid,  is_create:false
-                    })
-                } else {None}
+            d.into_iter() .map(|(key,row)| {
+                let id_elms = key.split("-").collect::<Vec<&str>>();
+                let prod_typ:u8 = id_elms[0].parse().unwrap();
+                let product_id = id_elms[1].parse().unwrap();
+                let product_type = ProductType::from(prod_typ);
+                let auto_cancel_secs = row.get::<usize>(InMemColIdx::AutoCancel.into())
+                    .unwrap().parse().unwrap();
+                let warranty_hours = row.get::<usize>(InMemColIdx::Warranty.into())
+                    .unwrap().parse().unwrap();
+                ProductPolicyModel {
+                    product_id, product_type,  auto_cancel_secs,  warranty_hours,
+                    is_create:false
+                }
             }) .collect()
         } else { Vec::new() };
         Ok(ProductPolicyModelSet {policies:filtered})
@@ -104,9 +95,7 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
                     let mut row = (0..InMemColIdx::TotNumColumns.into())
                         .map(|_n| String::new())  .collect::<Vec<String>>();
                     let _ = [ // so the order of columns can be arbitrary
-                        (InMemColIdx::AsyncStockChk, m.async_stock_chk.to_string()),
                         (InMemColIdx::Warranty, m.warranty_hours.to_string()),
-                        (InMemColIdx::UserId, m.usr_id.to_string()),
                         (InMemColIdx::AutoCancel, m.auto_cancel_secs.to_string()),
                     ].into_iter().map(|(idx, val)| {
                         let idx:usize = idx.into();

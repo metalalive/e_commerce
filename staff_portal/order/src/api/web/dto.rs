@@ -190,7 +190,6 @@ pub struct ProductPolicyDto {
     pub product_id: u64,
     pub auto_cancel_secs: u32,
     pub warranty_hours: u32,
-    pub async_stock_chk: bool,
 }
 
 #[derive(Serialize)]

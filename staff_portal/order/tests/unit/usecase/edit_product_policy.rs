@@ -60,13 +60,13 @@ fn setup_data () -> Vec<ProductPolicyDto>
     let raw = r#"
         [
             {"product_id":22, "product_type":1, "auto_cancel_secs":600,
-                "warranty_hours":1800, "async_stock_chk":true },
+                "warranty_hours":1800 },
             {"product_id":168, "product_type":1, "auto_cancel_secs":610,
-                "warranty_hours":1700, "async_stock_chk":false },
+                "warranty_hours":1700 },
             {"product_id":79, "product_type":1, "auto_cancel_secs":630,
-                "warranty_hours":1600, "async_stock_chk":true },
+                "warranty_hours":1600 },
             {"product_id":19, "product_type":2, "auto_cancel_secs":660,
-                "warranty_hours":1500, "async_stock_chk":false }
+                "warranty_hours":1500 }
         ]
     "#;
     deserialize_json(raw).unwrap()

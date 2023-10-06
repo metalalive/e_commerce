@@ -12,34 +12,20 @@ use crate::model::ut_clone_productpolicy;
 use super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 
 const UTEST_INIT_DATA: [ProductPolicyModel;7] = [
-    ProductPolicyModel { product_type:ProductType::Item,
-        usr_id: 123, product_id: 1556, auto_cancel_secs: 309,
-        warranty_hours: 7400, async_stock_chk: true, is_create: true
-    },
-    ProductPolicyModel { product_type:ProductType::Package,
-        usr_id: 124, product_id: 9273, auto_cancel_secs: 900,
-        warranty_hours: 7209, async_stock_chk: false, is_create: true
-    },
-    ProductPolicyModel { product_type:ProductType::Item,
-        usr_id: 123, product_id: 40051, auto_cancel_secs: 707,
-        warranty_hours: 1295, async_stock_chk: true, is_create: true
-    },
-    ProductPolicyModel { product_type:ProductType::Package,
-        usr_id: 124, product_id: 1620, auto_cancel_secs: 1645,
-        warranty_hours: 1918, async_stock_chk: false, is_create: true
-    },
-    ProductPolicyModel { product_type:ProductType::Item,
-        usr_id: 123, product_id: 14005, auto_cancel_secs: 77,
-        warranty_hours: 5129, async_stock_chk: true, is_create: true
-    },
-    ProductPolicyModel { product_type:ProductType::Item,
-        usr_id: 124, product_id: 1622, auto_cancel_secs: 6451,
-        warranty_hours: 9181, async_stock_chk: false, is_create: true
-    },
-    ProductPolicyModel { product_type:ProductType::Item,
-        usr_id: 124, product_id: 1622, auto_cancel_secs: 1178,
-        warranty_hours: 11086, async_stock_chk: true, is_create: false
-    },
+    ProductPolicyModel { product_type:ProductType::Item, product_id: 1556,
+        auto_cancel_secs: 309, warranty_hours: 7400, is_create: true },
+    ProductPolicyModel { product_type:ProductType::Package, product_id: 9273,
+        auto_cancel_secs: 900, warranty_hours: 7209, is_create: true },
+    ProductPolicyModel { product_type:ProductType::Item, product_id: 40051,
+        auto_cancel_secs: 707, warranty_hours: 1295, is_create: true },
+    ProductPolicyModel { product_type:ProductType::Package, product_id: 1620,
+        auto_cancel_secs: 1645, warranty_hours: 1918, is_create: true },
+    ProductPolicyModel { product_type:ProductType::Item, product_id: 14005,
+        auto_cancel_secs: 77, warranty_hours: 5129, is_create: true },
+    ProductPolicyModel { product_type:ProductType::Item, product_id: 1622,
+        auto_cancel_secs: 6451, warranty_hours: 9181, is_create: true },
+    ProductPolicyModel { product_type:ProductType::Item, product_id: 1622,
+        auto_cancel_secs: 1178, warranty_hours: 11086, is_create: false },
 ]; // end of UTEST_INIT_DATA
 
 #[test]
@@ -73,10 +59,9 @@ async fn in_mem_save_fetch_ok_1 ()
     };
     let result = repo.save(ppset).await;
     assert_eq!(result.is_ok(), true);
-    let chosen_usr_id = 123;
     let chosen_ids = vec![(ProductType::Item,14005), (ProductType::Item,1556),
         (ProductType::Item,40051)];
-    let result = repo.fetch(chosen_usr_id, chosen_ids).await;
+    let result = repo.fetch(chosen_ids).await;
     {
         assert_eq!(result.is_ok(), true);
         let modelset = result.unwrap();
@@ -97,10 +82,9 @@ async fn in_mem_save_fetch_ok_1 ()
     };
     let result = repo.save(ppset).await;
     assert_eq!(result.is_ok(), true);
-    let chosen_usr_id = 124;
     let chosen_ids = vec![(ProductType::Item,1622), (ProductType::Package,1620),
         (ProductType::Package,9273)];
-    let result = repo.fetch(chosen_usr_id, chosen_ids).await;
+    let result = repo.fetch(chosen_ids).await;
     {
         let modelset = result.unwrap();
         let exists = modelset.policies.iter().find_map(
@@ -133,7 +117,7 @@ async fn in_mem_save_fetch_ok_2 ()
     let result = repo.save(ppset).await;
     assert_eq!(result.is_ok(), true);
 
-    let result = repo.fetch(124u32, vec![(ProductType::Item,1622u64)]).await;
+    let result = repo.fetch(vec![(ProductType::Item,1622u64)]).await;
     {
         assert_eq!(result.is_ok(), true);
         let modelset = result.unwrap();
@@ -178,7 +162,7 @@ async fn in_mem_save_dstore_error ()
 async fn in_mem_fetch_dstore_error ()
 {
     let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(10);
-    let result = repo.fetch(124u32, vec![(ProductType::Item,1622u64)]).await;
+    let result = repo.fetch(vec![(ProductType::Item,1622u64)]).await;
     assert_eq!(result.is_err(), true);
     let error = result.err().unwrap();
     assert_eq!(error.code, AppErrorCode::AcquireLockFailure);

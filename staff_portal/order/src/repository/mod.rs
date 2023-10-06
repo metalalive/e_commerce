@@ -28,7 +28,7 @@ pub trait AbstProductPolicyRepo : Sync + Send
     fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
         where Self:Sized ;
     
-    async fn fetch(&self, usr_id:u32, ids:Vec<(ProductType, u64)>) -> DefaultResult<ProductPolicyModelSet, AppError>;
+    async fn fetch(&self, ids:Vec<(ProductType, u64)>) -> DefaultResult<ProductPolicyModelSet, AppError>;
     
     async fn save(&self, ppset:ProductPolicyModelSet) -> DefaultResult<(), AppError>;
     // TODO, delete operation
