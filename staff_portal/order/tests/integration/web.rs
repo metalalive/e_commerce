@@ -6,7 +6,7 @@ use http::{Request, StatusCode};
 use order::error::AppError;
 use order::api::web::dto::{
     OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ProductPolicyDto,
-    OrderCreateRespErrorDto, ContactNameErrorReason, PhoneNumNationErrorReason
+    OrderCreateRespErrorDto, ContactErrorReason, PhoneNumNationErrorReason
 };
 
 mod common;
@@ -73,7 +73,7 @@ async fn place_new_order_contact_error() -> DefaultResult<(), AppError>
     let contact_err = actual.shipping.unwrap().contact.unwrap();
     let (name_err, phone_err) = (contact_err.first_name.unwrap(),
                                  contact_err.phones.unwrap());
-    assert!(matches!(name_err, ContactNameErrorReason::Empty));
+    assert!(matches!(name_err, ContactErrorReason::Empty));
     assert_eq!(phone_err.len(), 2);
     assert!(phone_err[0].is_none());
     let ph_err_1 = phone_err[1].as_ref().unwrap();

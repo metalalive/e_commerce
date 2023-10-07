@@ -57,12 +57,10 @@ pub struct PhoneNumberReqDto {
 #[derive(Deserialize, Serialize)]
 pub struct PhoneNumberErrorDto {
     pub nation: Option<PhoneNumNationErrorReason>,
-    pub number: Option<PhoneNumNumberErrorReason>,
+    pub number: Option<ContactErrorReason>,
 }
 #[derive(Deserialize, Serialize, Debug)]
 pub enum PhoneNumNationErrorReason {InvalidCode}
-#[derive(Deserialize, Serialize, Debug)]
-pub enum PhoneNumNumberErrorReason {Empty, InvalidChar}
 
 #[derive(Deserialize, Serialize)]
 pub struct ContactReqDto {
@@ -73,16 +71,14 @@ pub struct ContactReqDto {
 }
 #[derive(Deserialize, Serialize)]
 pub struct ContactErrorDto {
-    pub first_name: Option<ContactNameErrorReason>,
-    pub last_name: Option<ContactNameErrorReason>,
-    pub emails: Option<Vec<Option<ContactEmailErrorReason>>>,
+    pub first_name: Option<ContactErrorReason>,
+    pub last_name: Option<ContactErrorReason>,
+    pub emails: Option<Vec<Option<ContactErrorReason>>>,
     pub phones: Option<Vec<Option<PhoneNumberErrorDto>>>,
     pub nonfield: Option<ContactNonFieldErrorReason>
 }
 #[derive(Deserialize, Serialize, Debug)]
-pub enum ContactNameErrorReason {Empty, InvalidChar}
-#[derive(Deserialize, Serialize)]
-pub enum ContactEmailErrorReason {InvalidChar, InvalidCode}
+pub enum ContactErrorReason {Empty, InvalidChar}
 #[derive(Deserialize, Serialize)]
 pub enum ContactNonFieldErrorReason {EmailMissing, PhoneMissing}
 
@@ -97,19 +93,19 @@ pub struct PhyAddrReqDto {
 }
 #[derive(Deserialize, Serialize)]
 pub struct PhyAddrErrorDto {
-    pub country: Option<PhyAddrRegionErrorDto>,
-    pub region: Option<PhyAddrRegionErrorDto>,
-    pub city:   Option<PhyAddrCityErrorDto>,
-    pub distinct: Option<PhyAddrDistinctErrorDto>,
-    pub street_name: Option<PhyAddrDistinctErrorDto>,
-    pub detail: Option<PhyAddrDistinctErrorDto>
+    pub country: Option<PhyAddrNationErrorReason>,
+    pub region: Option<PhyAddrRegionErrorReason>,
+    pub city:   Option<PhyAddrRegionErrorReason>,
+    pub distinct: Option<PhyAddrDistinctErrorReason>,
+    pub street_name: Option<PhyAddrDistinctErrorReason>,
+    pub detail: Option<PhyAddrDistinctErrorReason>
 }
 #[derive(Deserialize, Serialize)]
-pub enum PhyAddrRegionErrorDto {Empty, InvalidChar, NotExist, NotSupport}
+pub enum PhyAddrNationErrorReason {NotSupport}
 #[derive(Deserialize, Serialize)]
-pub enum PhyAddrCityErrorDto {Empty, InvalidChar, NotExist}
+pub enum PhyAddrRegionErrorReason {Empty, InvalidChar, NotExist, NotSupport}
 #[derive(Deserialize, Serialize)]
-pub enum PhyAddrDistinctErrorDto {Empty, InvalidChar}
+pub enum PhyAddrDistinctErrorReason {Empty, InvalidChar}
 
 #[derive(Deserialize, Serialize)]
 pub struct ShippingOptionReqDto {
@@ -136,10 +132,7 @@ pub struct BillingReqDto {
 pub struct BillingErrorDto {
     pub contact: Option<ContactErrorDto>,
     pub address: Option<PhyAddrErrorDto>,
-    pub nonfield: Option<OrderNonFieldErrorReason>
 }
-#[derive(Deserialize, Serialize)]
-pub enum OrderNonFieldErrorReason {ContractRequired}
 
 #[derive(Deserialize, Serialize)]
 pub struct ShippingReqDto {
@@ -152,7 +145,6 @@ pub struct ShippingErrorDto {
     pub contact: Option<ContactErrorDto>,
     pub address: Option<PhyAddrErrorDto>,
     pub option: Option<Vec<Option<ShippingOptionErrorDto>>>,
-    pub nonfield: Option<OrderNonFieldErrorReason>
 }
 
 #[derive(Deserialize, Serialize)]

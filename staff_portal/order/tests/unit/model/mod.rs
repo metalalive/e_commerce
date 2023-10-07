@@ -1,6 +1,7 @@
 mod product_policy;
 mod product_price;
 mod stock_level;
+mod oorder;
 
 use order::model::{ProductPolicyModel, ProductPriceModel, StockLevelModelSet};
 

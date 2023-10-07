@@ -18,6 +18,7 @@ log = "0.4"
 tracing = {version="0.1", default-features=true}
 tracing-subscriber = {version="0.3.17", features=["std", "fmt", "registry"]}
 tracing-appender   = "0.2.2"
+regex = "1.9.6"
 # jsonwebtoken = "8.3"
 
 [[test]]
