@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use chrono::DateTime;
 use chrono::offset::{Local, FixedOffset};
 
-use crate::api::jsn_validate_product_type;
+use crate::api::{jsn_validate_product_type, jsn_serialize_product_type };
 use crate::constant::ProductType;
 
 // TODO, merge the 2 DTO modules in `/web` and `/rpc` package
@@ -48,7 +48,8 @@ pub struct InventoryEditStockLevelDto {
     // from inventory application
     pub qty_add: i32,
     pub store_id: u32,
-    pub product_type: u8,
+    #[serde(deserialize_with="jsn_validate_product_type")]
+    pub product_type: ProductType,
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<FixedOffset>
 }
@@ -64,7 +65,8 @@ pub struct StockQuantityPresentDto {
 pub struct StockLevelPresentDto {
     pub quantity: StockQuantityPresentDto,
     pub store_id: u32,
-    pub product_type: u8,
+    #[serde(serialize_with="jsn_serialize_product_type")]
+    pub product_type: ProductType,
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<FixedOffset>
 }

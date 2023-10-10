@@ -1,6 +1,7 @@
 use std::ptr;
 use chrono::DateTime;
 
+use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::model::{StockLevelModelSet, StoreStockModel, ProductStockModel, StockQuantityModel, ProductStockIdentity};
 use order::repository::{OrderInMemRepo, AbsOrderRepo};
@@ -20,41 +21,41 @@ fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(nitems:u32) -> OrderInMe
 fn ut_init_data_product() -> [ProductStockModel;9]
 {
     [   // ------ for insertion --------
-        ProductStockModel { type_:1, id_:9002, is_create:true,
+        ProductStockModel { type_:ProductType::Item, id_:9002, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap(),
            quantity: StockQuantityModel {total:5, booked:0, cancelled:0}
         },
-        ProductStockModel { type_:2, id_:9003, is_create:true,
+        ProductStockModel { type_:ProductType::Package, id_:9003, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap(),
            quantity: StockQuantityModel {total:11, booked:0, cancelled:0}
         },
-        ProductStockModel { type_:2, id_:9004, is_create:true,
+        ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
            quantity: StockQuantityModel {total:15, booked:0, cancelled:0}
         },
-        ProductStockModel { type_:1, id_:9005, is_create:true,
+        ProductStockModel { type_:ProductType::Item, id_:9005, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap(),
            quantity: StockQuantityModel {total:8, booked:0, cancelled:0}
         },
-        ProductStockModel { type_:1, id_:9006, is_create:true,
+        ProductStockModel { type_:ProductType::Item, id_:9006, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
            quantity: StockQuantityModel {total:14, booked:0, cancelled:0}
         },
         // ---------------------
-        ProductStockModel { type_:2, id_:9004, is_create:false,
+        ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
            quantity: StockQuantityModel {total:15, booked:0, cancelled:7}
         },
-        ProductStockModel { type_:1, id_:9006, is_create:false,
+        ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
            quantity: StockQuantityModel {total:18, booked:0, cancelled:1}
         },
         // ---------------------
-        ProductStockModel { type_:2, id_:9004, is_create:false,
+        ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.035-01:00").unwrap(),
            quantity: StockQuantityModel {total:22, booked:0, cancelled:8}
         },
-        ProductStockModel { type_:2, id_:9004, is_create:true,
+        ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T12:30:10.035-01:00").unwrap(),
            quantity: StockQuantityModel {total:20, booked:0, cancelled:0}
         },
@@ -88,7 +89,7 @@ async fn in_mem_save_fetch_ok ()
     assert!(result.is_ok());
     let pids = expect_slset.stores.iter().flat_map(|m1| {
         m1.products.iter().map(
-            |m2| ProductStockIdentity {store_id:m1.store_id, product_type:m2.type_,
+            |m2| ProductStockIdentity {store_id:m1.store_id, product_type:m2.type_.clone(),
                 product_id:m2.id_,  expiry:m2.expiry_without_millis()}
         )
     }).collect();
@@ -124,11 +125,11 @@ async fn in_mem_update_existing_ok ()
         let chosen_store = &expect_slset.stores[0];
         vec![
             ProductStockIdentity { store_id: chosen_store.store_id,
-                product_type: chosen_store.products[2].type_,
+                product_type: chosen_store.products[2].type_.clone(),
                 product_id:   chosen_store.products[2].id_,
                 expiry:    chosen_store.products[2].expiry  },
             ProductStockIdentity { store_id:chosen_store.store_id,
-                product_type: chosen_store.products[4].type_,
+                product_type: chosen_store.products[4].type_.clone(),
                 product_id:   chosen_store.products[4].id_,
                 expiry:    chosen_store.products[4].expiry  },
         ]
@@ -175,8 +176,8 @@ async fn in_mem_same_product_diff_expiry ()
     let stockrepo = repo.stock();
     let all_products = {
         let out = ut_init_data_product();
-        assert_eq!((out[2].type_, out[2].id_), (out[7].type_, out[7].id_));
-        assert_eq!((out[2].type_, out[2].id_), (out[8].type_, out[8].id_));
+        assert_eq!((&out[2].type_, out[2].id_), (&out[7].type_, out[7].id_));
+        assert_eq!((&out[2].type_, out[2].id_), (&out[8].type_, out[8].id_));
         out // return only if all pre-conditions hold true
     };
     let expect_slset = {
@@ -190,7 +191,7 @@ async fn in_mem_same_product_diff_expiry ()
         let chosen_store = &expect_slset.stores[0];
         vec![
             ProductStockIdentity { store_id: chosen_store.store_id,
-                product_type: chosen_store.products[0].type_,
+                product_type: chosen_store.products[0].type_.clone(),
                 product_id:   chosen_store.products[0].id_,
                 expiry:    chosen_store.products[0].expiry  },
         ]
@@ -216,11 +217,11 @@ async fn in_mem_same_product_diff_expiry ()
         let chosen_store = &expect_slset_ks2.stores[0];
         vec![
             ProductStockIdentity { store_id: chosen_store.store_id,
-                product_type: chosen_store.products[0].type_,
+                product_type: chosen_store.products[0].type_.clone(),
                 product_id:   chosen_store.products[0].id_,
                 expiry:    chosen_store.products[0].expiry  },
             ProductStockIdentity { store_id: chosen_store.store_id,
-                product_type: chosen_store.products[1].type_,
+                product_type: chosen_store.products[1].type_.clone(),
                 product_id:   chosen_store.products[1].id_,
                 expiry:    chosen_store.products[1].expiry  },
         ]
@@ -265,7 +266,7 @@ async fn in_mem_fetch_dstore_error ()
         let chosen_store = &UT_INIT_DATA_STORE[0];
         vec![
             ProductStockIdentity { store_id: chosen_store.store_id,
-                product_type: all_products[0].type_,
+                product_type: all_products[0].type_.clone(),
                 product_id:   all_products[0].id_,
                 expiry:    all_products[0].expiry  },
         ]

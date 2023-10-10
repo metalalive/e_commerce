@@ -5,11 +5,12 @@ use chrono::DateTime;
 use chrono::offset::FixedOffset;
 
 use crate::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
+use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
-    pub product_type: u8,
+    pub product_type: ProductType,
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<FixedOffset>,
 }
@@ -21,7 +22,7 @@ pub struct StockQuantityModel {
 }
 #[derive(Debug)]
 pub struct ProductStockModel {
-    pub type_: u8,
+    pub type_: ProductType,
     pub id_: u64, // TODO, declare type alias
     pub expiry: DateTime<FixedOffset>,
     pub quantity: StockQuantityModel,
@@ -44,7 +45,7 @@ impl Into<StockQuantityPresentDto> for StockQuantityModel {
 
 impl Clone for ProductStockIdentity {
     fn clone(&self) -> Self {
-        Self { store_id: self.store_id, product_type: self.product_type,
+        Self { store_id: self.store_id, product_type: self.product_type.clone(),
             product_id: self.product_id, expiry: self.expiry.clone() }
     }
 }
@@ -55,7 +56,7 @@ impl Clone for StockQuantityModel {
 }
 impl Clone for ProductStockModel {
     fn clone(&self) -> Self {
-        Self { type_: self.type_, id_: self.id_, expiry: self.expiry.clone(),
+        Self { type_: self.type_.clone(), id_: self.id_, expiry: self.expiry.clone(),
             quantity: self.quantity.clone(), is_create: self.is_create }
     }
 }
@@ -146,7 +147,7 @@ impl StockLevelModelSet {
                 false
             } else { // insert new instance
                 if d.qty_add >= 0 {
-                    let new_prod = ProductStockModel { is_create: true, type_: d.product_type,
+                    let new_prod = ProductStockModel { is_create: true, type_: d.product_type.clone(),
                         id_: d.product_id, expiry: d.expiry,  quantity: StockQuantityModel {
                             total: d.qty_add as u32, booked: 0, cancelled: 0}};
                     store_found.products.push(new_prod);
@@ -159,8 +160,9 @@ impl StockLevelModelSet {
         }); // end of input-data iteration
         if let Some(d) = err_caught {
             let msg = errmsg.unwrap_or("");
+            let prod_typ_num:u8 = d.product_type.into();
             let final_detail = format!("store:{}, product:({},{}), exp:{}, qty_add:{}, reason:{}",
-                                   d.store_id,  d.product_type, d.product_id, d.expiry.to_rfc3339(),
+                                   d.store_id, prod_typ_num, d.product_id, d.expiry.to_rfc3339(),
                                    d.qty_add, msg) ;
             Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(final_detail) })
         } else {

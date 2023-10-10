@@ -1,5 +1,6 @@
 use chrono::DateTime;
 
+use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::model::{StockLevelModelSet, ProductStockModel, StoreStockModel, StockQuantityModel};
 use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
@@ -9,23 +10,23 @@ use crate::model::verify_stocklvl_model;
 fn ut_mock_saved_product() -> [ProductStockModel;5]
 {
     [
-        ProductStockModel { type_:1, id_:9002, is_create:false,
+        ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap(),
            quantity: StockQuantityModel {total:5, booked:0, cancelled:0}
         },
-        ProductStockModel { type_:2, id_:9003, is_create:false,
+        ProductStockModel { type_:ProductType::Package, id_:9003, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap(),
            quantity: StockQuantityModel {total:11, booked:0, cancelled:0}
         },
-        ProductStockModel { type_:1, id_:9004, is_create:false,
+        ProductStockModel { type_:ProductType::Item, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
            quantity: StockQuantityModel {total:15, booked:0, cancelled:0}
         },
-        ProductStockModel { type_:2, id_:9005, is_create:false,
+        ProductStockModel { type_:ProductType::Package, id_:9005, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap(),
            quantity: StockQuantityModel {total:8, booked:0, cancelled:1}
         },
-        ProductStockModel { type_:1, id_:9006, is_create:false,
+        ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
            quantity: StockQuantityModel {total:14, booked:0, cancelled:0}
         },
@@ -44,35 +45,35 @@ fn add_update_mix_ok()
             .unwrap() .with_timezone(&saved_products[3].expiry.timezone());
     let newdata = vec![
         InventoryEditStockLevelDto {qty_add: 1, store_id: 1013,
-            product_type: saved_products[0].type_, product_id: saved_products[0].id_,
+            product_type: saved_products[0].type_.clone(), product_id: saved_products[0].id_,
             expiry: saved_products[0].expiry.clone()  },
-        InventoryEditStockLevelDto {qty_add: 12, store_id: 1013, product_type: 1, product_id: 5501,
-            expiry: saved_products[0].expiry.clone()  },
-        InventoryEditStockLevelDto {qty_add: 19, store_id: 1015, product_type: 2, product_id: 5502,
-            expiry: saved_products[1].expiry.clone()  },
+        InventoryEditStockLevelDto {qty_add: 12, store_id: 1013, product_type: ProductType::Item,
+            expiry: saved_products[0].expiry.clone(), product_id: 5501  },
+        InventoryEditStockLevelDto {qty_add: 19, store_id: 1015, product_type: ProductType::Package,
+            expiry: saved_products[1].expiry.clone(), product_id: 5502  },
         // the items below represent the same product with different expiry,
         // in this app, they are considered as separate stock-level model instances
         InventoryEditStockLevelDto {qty_add: -2, store_id: 1014,
-            product_type: saved_products[3].type_, product_id: saved_products[3].id_,
+            product_type: saved_products[3].type_.clone(), product_id: saved_products[3].id_,
             expiry: saved_products[3].expiry.clone()  },
         InventoryEditStockLevelDto {qty_add: 23, store_id: 1014,
-            product_type: saved_products[3].type_, product_id: saved_products[3].id_,
+            product_type: saved_products[3].type_.clone(), product_id: saved_products[3].id_,
             expiry: dt2.clone() },
     ];
     let expect_updated = {
         let mut out = mset.clone();
         out.stores[0].products[0].quantity.total += 1;
         out.stores[1].products[0].quantity.cancelled += 2;
-        out.stores[0].products.push(ProductStockModel { type_:1, id_:5501, is_create: true,
-            expiry: saved_products[0].expiry.clone(), quantity: StockQuantityModel{total:12,
-            booked:0, cancelled:0}  });
-        out.stores[1].products.push(ProductStockModel { is_create: true, type_:saved_products[3].type_,
-            id_:saved_products[3].id_, expiry: dt2, quantity: StockQuantityModel{total:23,
-            booked:0, cancelled:0}  });
+        out.stores[0].products.push(ProductStockModel { type_:ProductType::Item, id_:5501,
+            expiry: saved_products[0].expiry.clone(), is_create: true,
+            quantity: StockQuantityModel{total:12, booked:0, cancelled:0}  });
+        out.stores[1].products.push(ProductStockModel { type_:saved_products[3].type_.clone(),
+            id_:saved_products[3].id_, expiry: dt2, is_create: true,
+            quantity: StockQuantityModel{total:23, booked:0, cancelled:0}  });
         out.stores.push(StoreStockModel {store_id: 1015, products:vec![]});
-        out.stores[2].products.push(ProductStockModel { type_:2, id_:5502, is_create: true,
-            expiry: saved_products[1].expiry.clone(), quantity: StockQuantityModel{total:19,
-            booked:0, cancelled:0}  });
+        out.stores[2].products.push(ProductStockModel { type_:ProductType::Package, id_:5502,
+            expiry: saved_products[1].expiry.clone(), is_create: true,
+            quantity: StockQuantityModel{total:19, booked:0, cancelled:0}  });
         out
     };
     let result = mset.update(newdata);
@@ -100,7 +101,7 @@ fn update_cancelled_more_than_total()
     ]};
     let newdata = vec![
         InventoryEditStockLevelDto {qty_add: -3, store_id: 1013,
-            product_type: saved_products[4].type_, product_id: saved_products[4].id_,
+            product_type: saved_products[4].type_.clone(), product_id: saved_products[4].id_,
             expiry: saved_products[4].expiry.clone()  },
     ];
     assert_eq!(mset.stores[0].products[0].quantity.total, 14);
@@ -108,7 +109,7 @@ fn update_cancelled_more_than_total()
     let result = mset.update(newdata);
     assert!(result.is_ok());
     let mset = result.unwrap();
-    let expect = ProductStockModel { type_:saved_products[4].type_, id_:saved_products[4].id_,
+    let expect = ProductStockModel { type_:saved_products[4].type_.clone(), id_:saved_products[4].id_,
         is_create: false, expiry: saved_products[4].expiry.clone(),
         quantity: StockQuantityModel{total:14, booked:0, cancelled:3}
     };
@@ -116,13 +117,13 @@ fn update_cancelled_more_than_total()
     // ----------------
     let newdata = vec![
         InventoryEditStockLevelDto {qty_add: -13, store_id: 1013,
-            product_type: saved_products[4].type_, product_id: saved_products[4].id_,
+            product_type: saved_products[4].type_.clone(), product_id: saved_products[4].id_,
             expiry: saved_products[4].expiry.clone()  },
     ];
     let result = mset.update(newdata);
     assert!(result.is_ok());
     let mset = result.unwrap();
-    let expect = ProductStockModel { type_:saved_products[4].type_, id_:saved_products[4].id_,
+    let expect = ProductStockModel { type_:saved_products[4].type_.clone(), id_:saved_products[4].id_,
         is_create: false, expiry: saved_products[4].expiry.clone(),
         quantity: StockQuantityModel{total:14, booked:0, cancelled:14}
     };
@@ -136,7 +137,7 @@ fn add_instance_error()
     let saved_products = ut_mock_saved_product();
     let mset = StockLevelModelSet{ stores: vec![]};
     let newdata = vec![
-        InventoryEditStockLevelDto {qty_add: -3, store_id: 1013, product_type: 1,
+        InventoryEditStockLevelDto {qty_add: -3, store_id: 1013, product_type: ProductType::Item,
             product_id: 234, expiry: saved_products[0].expiry.clone() },
     ];
     let result = mset.update(newdata);
@@ -161,12 +162,12 @@ fn present_instance_ok()
         StockLevelPresentDto {
             expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap(),
             quantity: StockQuantityPresentDto  {total:11, booked:0, cancelled:0},
-            store_id:1013, product_type: 1, product_id: 9002
+            store_id:1013, product_type: ProductType::Item, product_id: 9002
         },
         StockLevelPresentDto {
             expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap(),
             quantity: StockQuantityPresentDto {total:8, booked:0, cancelled:1},
-            store_id:1014, product_type:2, product_id:9005, 
+            store_id:1014, product_type:ProductType::Package, product_id:9005, 
         },
     ];
     let actual:Vec<StockLevelPresentDto> = mset.into();

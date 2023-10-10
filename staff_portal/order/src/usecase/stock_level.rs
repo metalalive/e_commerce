@@ -13,7 +13,7 @@ impl StockLevelUseCase {
         -> DefaultResult<Vec<StockLevelPresentDto>, AppError>
     {
         let ids = data.iter().map(|d| ProductStockIdentity {
-            store_id:d.store_id, product_type: d.product_type,
+            store_id:d.store_id, product_type: d.product_type.clone(),
             product_id: d.product_id, expiry:d.expiry }
         ).collect();
         let stockrepo = repo.stock();

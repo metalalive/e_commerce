@@ -8,6 +8,7 @@ use chrono::DateTime;
 
 use order::AppDataStoreContext;
 use order::api::rpc::dto::InventoryEditStockLevelDto;
+use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
 use order::model::{StockLevelModelSet, ProductStockIdentity, StoreStockModel, ProductStockModel, StockQuantityModel};
 use order::repository::{AbsOrderRepo, AbsOrderStockRepo};
@@ -55,13 +56,13 @@ impl MockOrderRepo {
 fn ut_setup_data() -> Vec<InventoryEditStockLevelDto>
 {
     vec![
-        InventoryEditStockLevelDto {qty_add:13, store_id:91, product_type:1, product_id: 210094,
+        InventoryEditStockLevelDto {qty_add:13, store_id:91, product_type:ProductType::Item, product_id: 210094,
             expiry: DateTime::parse_from_rfc3339("2023-01-19T06:05:39.001+05:00").unwrap().into()  },
-        InventoryEditStockLevelDto {qty_add:2,  store_id:91, product_type:2, product_id: 210095,
+        InventoryEditStockLevelDto {qty_add:2,  store_id:91, product_type:ProductType::Package, product_id: 210095,
             expiry: DateTime::parse_from_rfc3339("2023-01-19T06:05:39.002+05:00").unwrap().into()  },
-        InventoryEditStockLevelDto {qty_add:-9, store_id:99, product_type:1, product_id: 210096,
+        InventoryEditStockLevelDto {qty_add:-9, store_id:99, product_type:ProductType::Item, product_id: 210096,
             expiry: DateTime::parse_from_rfc3339("2023-01-19T06:05:40.003+05:00").unwrap().into()  },
-        InventoryEditStockLevelDto {qty_add:5, store_id:101, product_type:2, product_id: 210097,
+        InventoryEditStockLevelDto {qty_add:5, store_id:101, product_type:ProductType::Package, product_id: 210097,
             expiry: DateTime::parse_from_rfc3339("2023-01-29T06:05:47.001+05:00").unwrap().into()  },
     ]
 }
@@ -72,8 +73,8 @@ async fn edit_ok ()
     let init_data = ut_setup_data();
     let expect_fetch_res = Ok(StockLevelModelSet{stores:vec![
         StoreStockModel {store_id:init_data[2].store_id, products:vec![
-            ProductStockModel {type_:init_data[2].product_type, id_:init_data[2].product_id,
-                expiry: init_data[2].expiry, is_create:false,
+            ProductStockModel {type_:init_data[2].product_type.clone(),
+                id_:init_data[2].product_id, expiry: init_data[2].expiry, is_create:false,
                 quantity: StockQuantityModel {total: 2, booked: 0, cancelled: 0}}
         ]}
     ]}) ; 
@@ -109,8 +110,8 @@ async fn edit_save_error ()
     let init_data = ut_setup_data();
     let expect_fetch_res = Ok(StockLevelModelSet{stores:vec![
         StoreStockModel {store_id:init_data[2].store_id, products:vec![
-            ProductStockModel {type_:init_data[2].product_type, id_:init_data[2].product_id,
-                expiry: init_data[2].expiry, is_create:false,
+            ProductStockModel {type_:init_data[2].product_type.clone(),
+                id_:init_data[2].product_id, expiry: init_data[2].expiry, is_create:false,
                 quantity: StockQuantityModel {total: 2, booked: 0, cancelled: 0}}
         ]}
     ]}) ; 

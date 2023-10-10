@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use chrono::DateTime;
 
 use crate::AppDataStoreContext;
+use crate::constant::ProductType;
 use crate::datastore::AbstInMemoryDStore;
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{StockLevelModelSet, ProductStockIdentity, ProductStockModel, StoreStockModel, StockQuantityModel};
@@ -42,8 +43,9 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
     async fn fetch(&self, pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>
     {
         let ids = pids.into_iter().map(|d| {
+            let prod_typ_num:u8 = d.product_type.into();
             let exp_fmt = d.expiry.format(self._expiry_key_fmt.as_str());
-            format!("{}-{}-{}-{}", d.store_id, d.product_type, d.product_id, exp_fmt)
+            format!("{}-{}-{}-{}", d.store_id, prod_typ_num, d.product_id, exp_fmt)
         }).collect();
         let info = HashMap::from([(_stock::TABLE_LABEL.to_string(), ids)]);
         let resultset = self.datastore.fetch(info) ?;
@@ -51,8 +53,9 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
             let mut out = StockLevelModelSet {stores:vec![]};
             let _ = rows.into_iter().map(|(key, row)| {
                 let id_elms = key.split("-").collect::<Vec<&str>>();
+                let prod_typ_num:u8 = id_elms[1].parse().unwrap();
                 let (store_id, prod_typ, prod_id, exp_from_combo) = (
-                    id_elms[0].parse().unwrap(),  id_elms[1].parse().unwrap(),
+                    id_elms[0].parse().unwrap(),  ProductType::from(prod_typ_num),
                     id_elms[2].parse().unwrap(),  id_elms[3]    );
                 let result = out.stores.iter_mut().find(|m| m.store_id==store_id);
                 let store_rd = if let Some(m) = result {
@@ -67,8 +70,9 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
                     m.type_==prod_typ && m.id_==prod_id && exp_fmt_verify==exp_from_combo
                 });
                 if let Some(_product_rd) = result {
+                    let _prod_typ_num:u8 = _product_rd.type_.clone().into();
                     panic!("report error, data corruption, store:{}, product: ({}, {})", 
-                           store_rd.store_id, _product_rd.type_, _product_rd.id_);
+                           store_rd.store_id, _prod_typ_num, _product_rd.id_);
                     // TODO, return error instead 
                 } else {
                     let total = row.get::<usize>(_stock::InMemColIdx::QtyTotal.into())
@@ -99,7 +103,8 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
             let kv_pairs = slset.stores.iter().flat_map(|m1| {
                 m1.products.iter().map(|m2| {
                     let exp_fmt = m2.expiry_without_millis().format(self._expiry_key_fmt.as_str());
-                    let pkey = format!("{}-{}-{}-{}", m1.store_id, m2.type_, m2.id_, exp_fmt);
+                    let prod_typ_num:u8 = m2.type_.clone().into();
+                    let pkey = format!("{}-{}-{}-{}", m1.store_id, prod_typ_num, m2.id_, exp_fmt);
                     let mut row = (0 .. _stock::InMemColIdx::TotNumColumns.into())
                         .map(|_n| {String::new()}).collect::<Vec<String>>();
                     let _ = [
