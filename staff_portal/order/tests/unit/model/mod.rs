@@ -16,7 +16,7 @@ pub(crate) fn ut_clone_productpolicy(src:&ProductPolicyModel) -> ProductPolicyMo
 pub(crate) fn ut_clone_productprice(src:&ProductPriceModel) -> ProductPriceModel
 {
     ProductPriceModel { price: src.price, product_id: src.product_id,
-        product_type: src.product_type, is_create: src.is_create,
+        product_type: src.product_type.clone(), is_create: src.is_create,
         start_after: src.start_after.clone(), end_before: src.end_before.clone() }
 }
 

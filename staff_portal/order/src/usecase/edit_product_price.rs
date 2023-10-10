@@ -22,7 +22,7 @@ impl EditProductPriceUseCase {
             repo.delete(data.s_id, data.deleting).await
         } else { // create and update
             let ids = data.updating.iter().map(
-                |d| (d.product_type, d.product_id)).collect();
+                |d| (d.product_type.clone(), d.product_id)).collect();
             match repo.fetch(data.s_id, ids).await {
                 Ok(pre_saved) =>
                     match pre_saved.update(data.updating, data.creating) {

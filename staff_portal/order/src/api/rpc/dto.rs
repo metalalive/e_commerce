@@ -4,14 +4,19 @@ use serde::{Deserialize, Serialize};
 use chrono::DateTime;
 use chrono::offset::{Local, FixedOffset};
 
+use crate::api::jsn_validate_product_type;
+use crate::constant::ProductType;
+
 // TODO, merge the 2 DTO modules in `/web` and `/rpc` package
 
 #[derive(Deserialize)]
 pub struct ProductPriceDeleteDto {
     pub items:Option<Vec<u64>>,
     pub pkgs :Option<Vec<u64>>,
-    pub item_type:u8,
-    pub pkg_type:u8,
+    #[serde(deserialize_with="jsn_validate_product_type")]
+    pub item_type:ProductType,
+    #[serde(deserialize_with="jsn_validate_product_type")]
+    pub pkg_type:ProductType,
 }
 
 #[derive(Deserialize)]
@@ -23,7 +28,8 @@ pub struct ProductPriceEditDto {
     // of the field `product type` from this API endpoint, it is just for identifying
     // specific product in specific storefront. There is no need to convert the value
     // at here.
-    pub product_type: u8,
+    #[serde(deserialize_with="jsn_validate_product_type")]
+    pub product_type: ProductType,
     pub product_id: u64, // TODO, declare type alias
 }
 

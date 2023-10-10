@@ -6,6 +6,7 @@ use chrono::offset::Local;
 
 use crate::api::rpc::dto::ProductPriceEditDto;
 use crate::error::{AppError, AppErrorCode};
+use crate::constant::ProductType;
 
 #[derive(Debug, Eq)]
 pub struct ProductPriceModel {
@@ -13,7 +14,7 @@ pub struct ProductPriceModel {
     pub start_after: DateTime<Local>,
     pub end_before: DateTime<Local>,
     pub product_id: u64,
-    pub product_type: u8,
+    pub product_type: ProductType,
     pub is_create: bool,
 }
 
@@ -55,7 +56,7 @@ impl ProductPriceModelSet {
                 detail: Some("updating-data-to-nonexist-obj".to_string()) });
         }
         let mut new_items = creating.iter().map(
-            |d| ProductPriceModel{ price:d.price, product_type:d.product_type,
+            |d| ProductPriceModel{ price:d.price, product_type:d.product_type.clone(),
                     product_id:d.product_id, start_after:d.start_after, is_create:true,
                     end_before:d.end_before }
         ).collect();

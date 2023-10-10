@@ -8,6 +8,7 @@ use chrono::DateTime;
 
 use crate::AppDataStoreContext;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
+use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchKeys, AbsDStoreFilterKeyOp};
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{ProductPriceModelSet, ProductPriceModel};
@@ -74,10 +75,10 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         let _ids = {
             let mut out = vec![];
             if let Some(p) = &ids.pkgs {
-                out.extend(p.iter().map(|id| (ids.pkg_type, id.clone())));
+                out.extend(p.iter().map(|id| (ids.pkg_type.clone(), id.clone())));
             }
             if let Some(p) = &ids.items {
-                out.extend(p.iter().map(|id| (ids.item_type, id.clone())));
+                out.extend(p.iter().map(|id| (ids.item_type.clone(), id.clone())));
             }
             out
         };
@@ -90,15 +91,16 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         }
     }
 
-    async fn fetch(&self, store_id:u32, ids:Vec<(u8,u64)>) -> Result<ProductPriceModelSet, AppError>
+    async fn fetch(&self, store_id:u32, ids:Vec<(ProductType,u64)>) -> Result<ProductPriceModelSet, AppError>
     {
         let info = self.gen_id_keys(store_id, ids);
         let result_raw = self.datastore.fetch(info)?;
         let filtered = if let Some(t) = result_raw.get(TABLE_LABEL)
         { // TODO, reliability check
             t.into_iter().map(|(_key, row)| {
-                let product_type = row.get::<usize>(InMemColIdx::ProductType.into())
-                    .unwrap().parse().unwrap();
+                let prod_typ_num:u8 = row.get::<usize>(InMemColIdx::ProductType.into())
+                    .unwrap().parse().unwrap() ;
+                let product_type = ProductType::from(prod_typ_num);
                 let product_id = row.get::<usize>(InMemColIdx::ProductId.into())
                     .unwrap().parse().unwrap();
                 let price = row.get::<usize>(InMemColIdx::Price.into())
@@ -123,14 +125,15 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         }
         let kv_pairs = ppset.items.iter().map(|m| {
             let store_id_str = ppset.store_id.to_string();
-            let pkey = format!("{}-{}-{}", store_id_str, m.product_type.to_string(),
+            let prod_typ_num:u8 = m.product_type.clone().into();
+            let pkey = format!("{}-{}-{}", store_id_str, prod_typ_num.to_string(),
                     m.product_id.to_string());
             // manually allocate space in advance, instead of `Vec::with_capacity`
             let mut row = (0..InMemColIdx::TotNumColumns.into()).map(
                 |_n| String::new())  .collect::<Vec<String>>();
             let _ = [ // so the order of columns can be arbitrary
                 (InMemColIdx::Price, m.price.to_string()),
-                (InMemColIdx::ProductType, m.product_type.to_string()),
+                (InMemColIdx::ProductType, prod_typ_num.to_string()),
                 (InMemColIdx::ProductId,  m.product_id.to_string()),
                 (InMemColIdx::StartAfter, m.start_after.to_rfc3339()),
                 (InMemColIdx::EndBefore,  m.end_before.to_rfc3339()),
@@ -161,10 +164,11 @@ impl ProductPriceInMemRepo {
                 detail: Some(format!("in-memory"))}  )
         }
     }
-    fn gen_id_keys(&self, store_id:u32, ids:Vec<(u8,u64)>) -> AppInMemFetchKeys
+    fn gen_id_keys(&self, store_id:u32, ids:Vec<(ProductType,u64)>) -> AppInMemFetchKeys
     {
         let str_ids = ids.into_iter().map(|(_typ, _id)| {
-            format!("{store_id}-{}-{}", _typ.to_string(), _id.to_string())
+            let typnum:u8 = _typ.into();
+            format!("{store_id}-{}-{}", typnum.to_string(), _id.to_string())
         }).collect();
         let mut h = HashMap::new();
         h.insert(TABLE_LABEL.to_string(), str_ids);

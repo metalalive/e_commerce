@@ -41,7 +41,7 @@ pub trait AbsProductPriceRepo : Sync + Send
         where Self:Sized ;
     async fn delete_all(&self, store_id:u32) -> DefaultResult<(), AppError>;
     async fn delete(&self, store_id:u32, ids:ProductPriceDeleteDto) -> DefaultResult<(), AppError> ;
-    async fn fetch(&self, store_id:u32, ids:Vec<(u8,u64)>) -> DefaultResult<ProductPriceModelSet, AppError> ;
+    async fn fetch(&self, store_id:u32, ids:Vec<(ProductType,u64)>) -> DefaultResult<ProductPriceModelSet, AppError> ;
     async fn save(&self, updated:ProductPriceModelSet) -> DefaultResult<(), AppError> ;
 }
 
