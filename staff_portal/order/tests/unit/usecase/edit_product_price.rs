@@ -51,6 +51,13 @@ impl AbsProductPriceRepo for MockRepository {
             Err(e) => Err(e.clone())
         }
     } 
+    
+    async fn fetch_many(&self, ids:Vec<(u32,ProductType,u64)>)
+        -> DefaultResult<Vec<ProductPriceModelSet>, AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail:None })
+    }
+
     async fn save(&self, _updated:ProductPriceModelSet) -> DefaultResult<(), AppError>
     { // embed verification logic at here, the use case invokes `fetch()` first
       // then `save()`, just ensure the call arguments are correct.

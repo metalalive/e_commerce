@@ -165,6 +165,58 @@ async fn in_mem_save_fetch_ok_2 ()
 
 
 #[tokio::test]
+async fn in_mem_save_fetch_ok_3 ()
+{
+    let pprice_data = pprice_init_data();
+    let mocked_store_ids = [5566u32, 7788u32];
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15);
+    {
+        let ppset = {
+            let items = pprice_data[0..2].iter().map(ut_clone_productprice).collect();
+            ProductPriceModelSet { store_id:mocked_store_ids[0], items }
+        };
+        let result = repo.save(ppset).await;
+        assert!(result.is_ok());
+        let ppset = {
+            let items = pprice_data[2..5].iter().map(ut_clone_productprice).collect();
+            ProductPriceModelSet { store_id:mocked_store_ids[1], items }
+        };
+        let result = repo.save(ppset).await;
+        assert!(result.is_ok());
+    }
+    let fetching_ids = {
+        let mut out = vec![];
+        let iter = pprice_data[0..2].iter().map(
+            |d| (mocked_store_ids[0], d.product_type.clone(), d.product_id));
+        out.extend(iter);
+        let iter = pprice_data[2..].iter().map(
+            |d| (mocked_store_ids[1], d.product_type.clone(), d.product_id));
+        out.extend(iter);
+        out
+    };
+    let result = repo.fetch_many(fetching_ids).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        assert_eq!(fetched.len(), 2);
+        let result = fetched.iter().find(|d| {d.store_id == mocked_store_ids[0]});
+        assert!(result.is_some());
+        if let Some(ppset) = result {
+            assert_eq!(ppset.items.len(), 2);
+            let pp = ppset.items.iter().find(|d|{
+                d.product_id==1002 && d.product_type==ProductType::Package
+            });
+            assert!(pp.is_some());
+        }
+        let result = fetched.iter().find(|d| {d.store_id == mocked_store_ids[1]});
+        assert!(result.is_some());
+        if let Some(ppset) = result {
+            assert_eq!(ppset.items.len(), 3);
+        }
+    }
+} // end of fn in_mem_save_fetch_ok_3
+
+
+#[tokio::test]
 async fn in_mem_save_empty_input ()
 {
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(4);

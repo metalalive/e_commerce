@@ -42,6 +42,9 @@ pub trait AbsProductPriceRepo : Sync + Send
     async fn delete_all(&self, store_id:u32) -> DefaultResult<(), AppError>;
     async fn delete(&self, store_id:u32, ids:ProductPriceDeleteDto) -> DefaultResult<(), AppError> ;
     async fn fetch(&self, store_id:u32, ids:Vec<(ProductType,u64)>) -> DefaultResult<ProductPriceModelSet, AppError> ;
+    // fetch prices of products from different sellers  at a time, the
+    // first element of the `ids` tuple should be valid seller ID
+    async fn fetch_many(&self, ids:Vec<(u32,ProductType,u64)>) -> DefaultResult<Vec<ProductPriceModelSet>, AppError> ;
     async fn save(&self, updated:ProductPriceModelSet) -> DefaultResult<(), AppError> ;
 }
 
