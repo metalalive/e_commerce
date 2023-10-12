@@ -12,7 +12,7 @@ use std::result::Result as DefaultResult;
 pub use edit_product_policy::{EditProductPolicyUseCase, EditProductPolicyResult};
 pub use edit_product_price::EditProductPriceUseCase;
 pub use stock_level::StockLevelUseCase;
-pub use manage_order::CreateOrderUseCase;
+pub use manage_order::{CreateOrderUseCase, CreateOrderUsKsErr};
 
 use crate::AppSharedState;
 use crate::rpc::{AppRpcReply, AbstractRpcContext, AppRpcClientReqProperty, AbsRpcClientCtx,

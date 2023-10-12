@@ -16,7 +16,7 @@ use crate::{constant as AppConst, AppSharedState, app_log_event};
 use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData};
 use crate::logging::AppLogLevel;
 use crate::repository::{app_repo_order, app_repo_product_price, app_repo_product_policy};
-use crate::usecase::CreateOrderUseCase;
+use crate::usecase::{CreateOrderUseCase, CreateOrderUsKsErr};
 
 
 // always to specify state type explicitly to the debug macro
@@ -41,11 +41,15 @@ pub(crate) async fn post_handler(
                 Err(_) => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
                            "{\"reason\":\"serialization-faulire\"}".to_string()),
             },
-            Err(value) => match serde_json::to_string(&value) {
-                Ok(s) => (HttpStatusCode::BAD_REQUEST, s),
-                Err(_) => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
+            Err(errwrap) => match errwrap {
+                CreateOrderUsKsErr::Client(value) => match serde_json::to_string(&value) {
+                    Ok(s) => (HttpStatusCode::BAD_REQUEST, s),
+                    Err(_) => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
                            "{\"reason\":\"serialization-faulire\"}".to_string()),
-            },
+                },
+                CreateOrderUsKsErr::Server => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
+                           "{\"reason\":\"internal-error\"}".to_string()),
+            }
         }
     } else {
         let mut errmsgs = Vec::new();

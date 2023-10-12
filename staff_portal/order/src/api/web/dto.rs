@@ -164,7 +164,7 @@ pub struct OrderCreateRespOkDto {
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderCreateRespErrorDto {
-    pub order_lines: Option<Vec<Option<OrderLineCreateErrorDto>>>,
+    pub order_lines: Option<Vec<OrderLineCreateErrorDto>>,
     pub billing: Option<BillingErrorDto>,
     pub shipping: Option<ShippingErrorDto>
 }

@@ -3,11 +3,13 @@ use std::result::Result as DefaultResult ;
 use hyper::Body as HyperBody;
 use http::{Request, StatusCode};
 
+use order::AppRpcClientReqProperty;
 use order::error::AppError;
 use order::api::web::dto::{
     OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ProductPolicyDto,
     OrderCreateRespErrorDto, ContactErrorReason, PhoneNumNationErrorReason
 };
+use order::api::rpc;
 
 mod common;
 use common::{test_setup_shr_state, TestWebServer, deserialize_json_template};
@@ -16,6 +18,7 @@ const FPATH_NEW_ORDER_OK_1:&'static str  = "/tests/integration/examples/order_ne
 const FPATH_NEW_ORDER_CONTACT_ERR:&'static str  = "/tests/integration/examples/order_new_contact_error.json";
 const FPATH_EDIT_ORDER_OK_1:&'static str = "/tests/integration/examples/order_edit_ok_1.json";
 const FPATH_EDIT_PRODUCTPOLICY_OK_1:&'static str = "/tests/integration/examples/policy_product_edit_ok_1.json";
+const FPATH_EDIT_PRODUCTPOLICY_OK_2:&'static str = "/tests/integration/examples/policy_product_edit_ok_2.json";
 const FPATH_EDIT_PRODUCTPOLICY_ERR:&'static str = "/tests/integration/examples/policy_product_edit_exceed_limit.json";
 
 #[tokio::test]
@@ -25,27 +28,67 @@ async fn place_new_order_ok() -> DefaultResult<(), AppError>
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
     let listener = &top_lvl_cfg.api_server.listen;
-    let reqbody = {
-        let rb = deserialize_json_template::<OrderCreateReqData>
-            (&top_lvl_cfg.basepath, FPATH_NEW_ORDER_OK_1) ? ;
-        let rb = serde_json::to_string(&rb) .unwrap();
-        HyperBody::from(rb)
-    };
-    let uri = format!("/{}/order", listener.api_version);
-    let req = Request::builder().uri(uri).method("POST")
-        .header("content-type", "application/json")
-        .header("accept", "application/json")
-        .body(reqbody)
-        .unwrap();
+    { // ---- add product policy first ----
+        let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
+        let reqbody = {
+            let  req_body_template = deserialize_json_template::<Vec<ProductPolicyDto>>
+                (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_OK_2) ? ;
+            assert!(req_body_template.len() > 0);
+            let rb = serde_json::to_string(&req_body_template).unwrap();
+            HyperBody::from(rb)
+        };
+        let req = Request::builder().uri(uri.clone()).method("POST")
+            .header("content-type", "application/json") .body(reqbody) .unwrap();
+        let response = TestWebServer::consume(&srv, req).await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    { // ------- add product price then --------
+        let msgbody = br#"
+                 [
+                     [],
+                     {"s_id": 18830, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+                      "updating": [],
+                      "creating": [
+                          {"price": 126, "start_after": "2023-09-04T09:11:13+08:00", "product_type": 1,
+                           "end_before": "2023-12-24T07:11:13.730050+08:00", "product_id": 270118},
+                          {"price": 135, "start_after": "2023-09-10T09:11:13+09:00", "product_type": 1,
+                           "end_before": "2023-12-24T07:11:13.730050+09:00", "product_id": 270119},
+                          {"price": 1038, "start_after": "2022-01-20T04:30:58.070020+10:00", "product_type": 2,
+                           "end_before": "2024-02-28T18:11:56.877000+10:00", "product_id": 270118}
+                      ]
+                     },
+                     {"callbacks": null, "errbacks": null, "chain": null, "chord": null}
+                ]
+                "#;
+        let req = AppRpcClientReqProperty { retry: 1,  msgbody:msgbody.to_vec(),
+                route: "update_store_products".to_string()  };
+        let result = rpc::route_to_handler(req, shr_state.clone()).await;
+        assert!(result.is_ok());
+    }
+    { // ------- call create-order web API -----------
+        let reqbody = {
+            let rb = deserialize_json_template::<OrderCreateReqData>
+                (&top_lvl_cfg.basepath, FPATH_NEW_ORDER_OK_1) ? ;
+            let rb = serde_json::to_string(&rb) .unwrap();
+            HyperBody::from(rb)
+        };
+        let uri = format!("/{}/order", listener.api_version);
+        let req = Request::builder().uri(uri).method("POST")
+            .header("content-type", "application/json")
+            .header("accept", "application/json")
+            .body(reqbody)
+            .unwrap();
 
-    let mut response = TestWebServer::consume(&srv, req).await;
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let actual = TestWebServer::to_custom_type::<OrderCreateRespOkDto>
-        (response.body_mut())  .await  ? ;
-    assert_eq!(actual.order_id.is_empty() ,  false);
-    assert!(actual.reserved_lines.len() > 0);
+        let mut response = TestWebServer::consume(&srv, req).await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let actual = TestWebServer::to_custom_type::<OrderCreateRespOkDto>
+            (response.body_mut())  .await  ? ;
+        assert_eq!(actual.order_id.is_empty() ,  false);
+        assert!(actual.reserved_lines.len() > 0);
+    }
     Ok(())
 } // end of place_new_order_ok
+
 
 #[tokio::test]
 async fn place_new_order_contact_error() -> DefaultResult<(), AppError>
