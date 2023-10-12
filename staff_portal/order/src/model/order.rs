@@ -1,4 +1,5 @@
 use std::result::Result as DefaultResult;
+use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
 use regex::Regex;
 
 use crate::api::web::dto::{
@@ -6,9 +7,11 @@ use crate::api::web::dto::{
     ContactErrorDto, PhyAddrErrorDto, ShippingOptionErrorDto, ShippingMethod, CountryCode,
     ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
     ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberReqDto, PhoneNumberErrorDto,
-    BillingReqDto, ShippingReqDto, PhoneNumNationErrorReason
+    BillingReqDto, ShippingReqDto, PhoneNumNationErrorReason, OrderLineReqDto
 };
-use crate::constant::REGEX_EMAIL_RFC5322;
+use crate::constant::{REGEX_EMAIL_RFC5322, ProductType};
+
+use super::{ProductPolicyModel, ProductPriceModel};
 
 pub struct ContactModel {
     pub first_name: String,
@@ -37,6 +40,19 @@ pub struct ShippingModel {
     pub contact: ContactModel,
     pub address: Option<PhyAddrModel>,
     pub option : Vec<ShippingOptionModel>
+}
+
+pub struct OrderLineAppliedPolicyModel {
+    pub reserved_until: DateTime<FixedOffset>,
+    pub warranty_until: DateTime<FixedOffset>
+}
+pub struct OrderLineModel {
+    pub seller_id: u32,
+    pub product_type: ProductType,
+    pub product_id : u64,
+    pub price: u32, // price per unit, TODO, advanced pricing model
+    pub qty: u32, // quantity to reserve,  TODO, record number cancelled
+    pub policy: OrderLineAppliedPolicyModel
 }
 
 impl TryFrom<ContactReqDto> for ContactModel {
@@ -235,4 +251,21 @@ impl TryFrom<ShippingReqDto> for ShippingModel {
         }
     } // end of try_from
 } // end of impl ShippingModel
+
+impl  OrderLineModel {
+    pub fn from(data:OrderLineReqDto, policym:&ProductPolicyModel, pricem:&ProductPriceModel) -> Self
+    {
+        assert_eq!(data.product_type, policym.product_type);
+        assert_eq!(data.product_id,   policym.product_id);
+        assert_eq!(data.product_type, pricem.product_type);
+        assert_eq!(data.product_id,   pricem.product_id);
+        let timenow = LocalTime::now().fixed_offset();
+        let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
+        let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
+        Self { seller_id: data.seller_id, product_type: data.product_type, price: pricem.price,
+            product_id: data.product_id, qty: data.quantity,
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        }
+    }
+}
 
