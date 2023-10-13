@@ -10,9 +10,13 @@ use async_trait::async_trait;
 
 use crate::AppDataStoreContext;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
+use crate::api::web::dto::{OrderLinePayDto, OrderLineCreateErrorDto};
 use crate::constant::ProductType;
 use crate::error::AppError;
-use crate::model::{ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity};
+use crate::model::{
+    ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity,
+    BillingModel, OrderLineModel, ShippingModel
+};
 
 // make it visible only for testing purpose
 pub use self::order::OrderInMemRepo;
@@ -48,10 +52,20 @@ pub trait AbsProductPriceRepo : Sync + Send
     async fn save(&self, updated:ProductPriceModelSet) -> DefaultResult<(), AppError> ;
 }
 
+pub enum OrderRepoCreateErrResult {
+    Finished(Vec<OrderLineCreateErrorDto>),
+    Aborted(AppError)
+}
+
+#[async_trait]
 pub trait AbsOrderRepo : Sync + Send {
     fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
         where Self:Sized;
+
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
+    
+    async fn create (&self, usr_id:u32, lines:Vec<OrderLineModel>, bl:BillingModel, sh:ShippingModel)
+        -> DefaultResult<(String, Vec<OrderLinePayDto>), OrderRepoCreateErrResult> ;
 }
 
 #[async_trait]

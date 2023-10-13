@@ -8,7 +8,7 @@ use order::repository::{OrderInMemRepo, AbsOrderRepo};
 use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
 
 use crate::model::verify_stocklvl_model;
-use super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
+use crate::repository::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 
 fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(nitems:u32) -> OrderInMemRepo
 {

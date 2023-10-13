@@ -7,7 +7,8 @@ use crate::api::web::dto::{
     ContactErrorDto, PhyAddrErrorDto, ShippingOptionErrorDto, ShippingMethod, CountryCode,
     ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
     ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberReqDto, PhoneNumberErrorDto,
-    BillingReqDto, ShippingReqDto, PhoneNumNationErrorReason, OrderLineReqDto
+    BillingReqDto, ShippingReqDto, PhoneNumNationErrorReason, OrderLineReqDto, OrderLinePayDto,
+    PayAmountDto
 };
 use crate::constant::{REGEX_EMAIL_RFC5322, ProductType};
 
@@ -273,6 +274,15 @@ impl  OrderLineModel {
             product_id: data.product_id, qty: data.quantity,
             price: OrderLinePriceModel { unit: pricem.price, total: price_total } ,
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        }
+    }
+}
+
+impl Into<OrderLinePayDto> for OrderLineModel {
+    fn into(self) -> OrderLinePayDto {
+        OrderLinePayDto { seller_id: self.seller_id, product_id: self.product_id,
+            product_type: self.product_type, quantity: self.qty,
+            amount: PayAmountDto { unit: self.price.unit, total: self.price.total}
         }
     }
 }

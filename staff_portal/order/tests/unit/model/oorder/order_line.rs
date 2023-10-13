@@ -1,10 +1,13 @@
 use chrono::{DateTime, Duration, Local as LocalTime};
-use order::api::web::dto::OrderLineReqDto;
+use order::api::web::dto::{OrderLineReqDto, OrderLinePayDto};
 use order::constant::ProductType;
-use order::model::{OrderLineModel, ProductPolicyModel, ProductPriceModel};
+use order::model::{
+    OrderLineModel, ProductPolicyModel, ProductPriceModel, OrderLinePriceModel,
+    OrderLineAppliedPolicyModel
+};
 
 #[test]
-fn convert_dto_ok()
+fn convert_from_req_dto_ok()
 {
     let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
     let policym = ProductPolicyModel { product_type:product_type.clone(), product_id,
@@ -23,5 +26,23 @@ fn convert_dto_ok()
     let timenow = LocalTime::now().fixed_offset();
     let expect_reserved_time = timenow + Duration::seconds(69i64);
     assert!(m.policy.reserved_until <= expect_reserved_time);
+}
+
+#[test]
+fn convert_to_pay_dto_ok()
+{
+    let reserved_until = DateTime::parse_from_rfc3339("2023-01-15T09:23:50+08:00").unwrap();
+    let warranty_until = DateTime::parse_from_rfc3339("2023-04-24T13:39:41+08:00").unwrap();
+    let m = OrderLineModel {seller_id:123, product_type:ProductType::Package,
+        product_id:124, qty:25, price:OrderLinePriceModel { unit: 7, total: 173 },
+        policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+    };
+    let payline: OrderLinePayDto = m.into();
+    assert_eq!(payline.seller_id, 123);
+    assert_eq!(payline.product_type, ProductType::Package);
+    assert_eq!(payline.product_id, 124);
+    assert_eq!(payline.quantity, 25);
+    assert_eq!(payline.amount.unit, 7);
+    assert_eq!(payline.amount.total, 173);
 }
 

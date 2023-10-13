@@ -5,9 +5,28 @@ use crate::api::{jsn_validate_product_type, jsn_serialize_product_type};
 
 #[derive(Deserialize, Serialize)]
 pub enum CountryCode {TW,TH,IN,ID,US}
+impl Into<String> for CountryCode {
+    fn into(self) -> String {
+        let out = match self {
+            Self::TW => "TW",  Self::TH => "TH",
+            Self::IN => "IN",  Self::ID => "ID",
+            Self::US => "US",
+        };
+        out.to_string()
+    }
+} // implement `Into` trait, not replying on serde 
 
 #[derive(Deserialize, Serialize)]
 pub enum ShippingMethod {UPS, FedEx, BlackCatExpress}
+impl Into<String> for ShippingMethod {
+    fn into(self) -> String {
+        let out = match self {
+            Self::UPS => "UPS",  Self::FedEx => "FedEx",
+            Self::BlackCatExpress => "BlackCatExpress",
+        };
+        out.to_string()
+    }
+} // implement `Into` trait, not replying on serde 
 
 
 #[derive(Deserialize, Serialize)]

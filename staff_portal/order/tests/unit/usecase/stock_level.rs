@@ -8,10 +8,14 @@ use chrono::DateTime;
 
 use order::AppDataStoreContext;
 use order::api::rpc::dto::InventoryEditStockLevelDto;
+use order::api::web::dto::OrderLinePayDto;
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
-use order::model::{StockLevelModelSet, ProductStockIdentity, StoreStockModel, ProductStockModel, StockQuantityModel};
-use order::repository::{AbsOrderRepo, AbsOrderStockRepo};
+use order::model::{
+    StockLevelModelSet, ProductStockIdentity, StoreStockModel, ProductStockModel,
+    StockQuantityModel, OrderLineModel, BillingModel, ShippingModel
+};
+use order::repository::{AbsOrderRepo, AbsOrderStockRepo, OrderRepoCreateErrResult};
 use order::usecase::StockLevelUseCase;
 
 struct MockStockRepo {
@@ -31,6 +35,7 @@ impl AbsOrderStockRepo for MockStockRepo {
     { self._mocked_save_r.clone() }
 }
 
+#[async_trait]
 impl AbsOrderRepo for MockOrderRepo {
     fn new(_ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
         where Self:Sized
@@ -42,6 +47,13 @@ impl AbsOrderRepo for MockOrderRepo {
             _mocked_fetch_r: self._mocked_fetch.clone(),
         };
         Arc::new(Box::new(obj))
+    }
+
+    async fn create (&self, _usr_id:u32, _lines:Vec<OrderLineModel>, _bl:BillingModel, _sh:ShippingModel)
+        -> DefaultResult<(String, Vec<OrderLinePayDto>), OrderRepoCreateErrResult>
+    {
+        let e = AppError { code: AppErrorCode::NotImplemented, detail:None };
+        Err(OrderRepoCreateErrResult::Aborted(e))
     }
 }
 
