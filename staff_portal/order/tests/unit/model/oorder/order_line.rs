@@ -17,7 +17,8 @@ fn convert_dto_ok()
     };
     let data = OrderLineReqDto { seller_id, product_id, product_type, quantity:26 };
     let m = OrderLineModel::from(data, &policym, &pricem);
-    assert_eq!(m.price, 1015);
+    assert_eq!(m.price.unit, 1015u32);
+    assert_eq!(m.price.total, 1015u32 * 26u32);
     assert_eq!(m.qty, 26);
     let timenow = LocalTime::now().fixed_offset();
     let expect_reserved_time = timenow + Duration::seconds(69i64);

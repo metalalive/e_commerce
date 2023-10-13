@@ -46,11 +46,17 @@ pub struct OrderLineAppliedPolicyModel {
     pub reserved_until: DateTime<FixedOffset>,
     pub warranty_until: DateTime<FixedOffset>
 }
+
+pub struct OrderLinePriceModel {
+    pub unit:u32,
+    pub total:u32
+} // TODO, advanced pricing model
+
 pub struct OrderLineModel {
     pub seller_id: u32,
     pub product_type: ProductType,
     pub product_id : u64,
-    pub price: u32, // price per unit, TODO, advanced pricing model
+    pub price: OrderLinePriceModel,
     pub qty: u32, // quantity to reserve,  TODO, record number cancelled
     pub policy: OrderLineAppliedPolicyModel
 }
@@ -262,8 +268,10 @@ impl  OrderLineModel {
         let timenow = LocalTime::now().fixed_offset();
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
-        Self { seller_id: data.seller_id, product_type: data.product_type, price: pricem.price,
+        let price_total = pricem.price * data.quantity;
+        Self { seller_id: data.seller_id, product_type: data.product_type,
             product_id: data.product_id, qty: data.quantity,
+            price: OrderLinePriceModel { unit: pricem.price, total: price_total } ,
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         }
     }

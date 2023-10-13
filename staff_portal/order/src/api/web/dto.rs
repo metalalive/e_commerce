@@ -41,12 +41,19 @@ pub enum OrderLineErrorReason {
 }
 
 #[derive(Deserialize, Serialize)]
+pub struct OrderLineCreateErrNonExistDto {
+    pub product_policy: bool,
+    pub product_price: bool,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct OrderLineCreateErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
     #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
     pub product_type: ProductType,
-    pub reason: OrderLineErrorReason
+    pub reason: OrderLineErrorReason,
+    pub nonexist: Option<OrderLineCreateErrNonExistDto>
 }
 
 #[derive(Deserialize, Serialize)]
