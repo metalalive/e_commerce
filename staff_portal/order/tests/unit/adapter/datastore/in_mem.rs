@@ -147,6 +147,71 @@ fn save_ok_2 ()
 
 
 #[test]
+fn fetch_acquire_save_release_ok ()
+{
+    let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
+    let dstore = AppInMemoryDStore::new(&cfg);
+    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).is_ok(), true);
+    let new_data : AppInMemUpdateData = {
+        let mut out = HashMap::new();
+        let t1 = {
+            let mut t = HashMap::new();
+            let row = ["tee", "0.076", "1827", "r6p0"] .into_iter().map(String::from).collect();
+            t.insert("G802".to_string(), row);
+            let row = ["sbitz", "0.01101001", "59", "r4p10"] .into_iter().map(String::from).collect();
+            t.insert("yoLo".to_string(), row);
+            let row = ["kay", "1.5883", "1007", "r6p1"] .into_iter().map(String::from).collect();
+            t.insert("Alie".to_string(), row);
+            t
+        };
+        out.insert(UT_TABLE_LABEL_A.to_string(), t1);
+        out
+    };
+    let result = dstore.save(new_data);
+    assert_eq!(result.is_ok(), true);
+    assert_eq!(result.unwrap(), 3);
+
+    let fetching_keys : AppInMemFetchKeys = {
+        let mut out = HashMap::new();
+        let t1 = ["Aaron", "yoLo", "G831", "G802"].into_iter().map(String::from).collect();
+        out.insert(UT_TABLE_LABEL_A.to_string(), t1);
+        out
+    };
+    let result = dstore.fetch_acquire(fetching_keys);
+    assert_eq!(result.is_ok(), true);
+    let (mut actual_fetched, actual_lock) = result.unwrap();
+    if let Some(a_table) = actual_fetched.get_mut(UT_TABLE_LABEL_A)
+    {
+        let actual_item = a_table.get("yoLo").unwrap().iter().map(String::as_str).collect::<Vec<&str>>();
+        assert_eq!(actual_item, ["sbitz", "0.01101001", "59", "r4p10"]);
+        let actual_item = a_table.get("G802").unwrap().iter().map(String::as_str).collect::<Vec<&str>>();
+        assert_eq!(actual_item, ["tee", "0.076", "1827", "r6p0"]);
+        let data_edit = a_table.get_mut("yoLo").unwrap();
+        data_edit.remove(0);
+        data_edit.insert(0, "have-eaten-yet".to_string());
+    }
+    let result = dstore.save_release(actual_fetched, actual_lock);
+    assert_eq!(result.is_ok(), true);
+    assert_eq!(result.unwrap(), 2);
+    
+    let fetching_keys : AppInMemFetchKeys = {
+        let mut out = HashMap::new();
+        let t1 = vec!["yoLo".to_string()];
+        out.insert(UT_TABLE_LABEL_A.to_string(), t1);
+        out
+    };
+    let result = dstore.fetch(fetching_keys);
+    assert_eq!(result.is_ok(), true);
+    let actual_fetched = result.unwrap();
+    if let Some(a_table) = actual_fetched.get(UT_TABLE_LABEL_A)
+    {
+        let actual_item = a_table.get("yoLo").unwrap().iter().map(String::as_str).collect::<Vec<&str>>();
+        assert_eq!(actual_item, ["have-eaten-yet", "0.01101001", "59", "r4p10"]);
+    }
+} // end of fetch_acquire_save_release_ok
+
+
+#[test]
 fn delete_ok ()
 {
     let chosen_key = "Palau";

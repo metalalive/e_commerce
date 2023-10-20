@@ -377,6 +377,9 @@ impl OrderInMemRepo {
         // - call `filter_keys()` to in-memory data store, to fetch all keys
         //   in stock-level table whoss records haven't expired yet.
         // - pass the filtered keys to `fetch()`, fetch the stock records
+        let op = xx;
+        let tbl_label = _stockm::TABLE_LABEL.to_string();
+        let result = self.datastore.filter_keys(tbl_label, op);
         Ok(())
     }
 } // end of impl OrderInMemRepo

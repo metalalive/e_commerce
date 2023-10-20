@@ -2,7 +2,8 @@ mod product_policy;
 mod product_price;
 mod oorder;
 
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::sync::{Arc, MutexGuard};
 use std::boxed::Box;
 
 use order::error::{AppErrorCode, AppError};
@@ -30,6 +31,11 @@ impl AbstInMemoryDStore for MockInMemDeadDataStore {
     fn fetch(&self, _info: AppInMemFetchKeys) -> Result<AppInMemFetchedData, AppError> {
         Err(AppError { code: AppErrorCode::AcquireLockFailure, detail:Some(format!("utest")) }) 
     }
+    fn fetch_acquire(&self, _info:AppInMemFetchKeys)
+            -> Result<(AppInMemFetchedData, MutexGuard<RefCell<AppInMemFetchedData>>), AppError>
+    { 
+        Err(AppError { code: AppErrorCode::AcquireLockFailure, detail:Some(format!("utest")) }) 
+    }
     fn delete(&self, _info:AppInMemDeleteInfo) -> Result<usize, AppError> {
         Err(AppError { code: AppErrorCode::NotImplemented, detail:Some(format!("utest")) })
     }
@@ -38,6 +44,11 @@ impl AbstInMemoryDStore for MockInMemDeadDataStore {
     }
     fn save(&self, _data:AppInMemUpdateData) -> Result<usize, AppError> {
         Err(AppError { code: AppErrorCode::DataTableNotExist, detail:Some(format!("utest")) })
+    }
+    fn save_release(&self, _data:AppInMemUpdateData, _lock:MutexGuard<RefCell<AppInMemFetchedData>>)
+            -> Result<usize, AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail:Some(format!("utest")) })
     }
     fn filter_keys(&self, _tbl_label:String, _op:&dyn AbsDStoreFilterKeyOp)
         -> Result<Vec<String>, AppError>
