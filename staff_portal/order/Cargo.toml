@@ -15,6 +15,10 @@ hyper = {version="0.14", features=["server", "runtime", "tcp", "http1"]}
 axum = {version="0.6.19", features=["macros"]}
 chrono  = {version="0.4.31", features=["std", "alloc", "serde"]}
 log = "0.4"
+## `uuid` internally uses `rand` without making the random-sequence-generating
+## function public, this app has to explicitly import the crate
+rand = "0.8"
+uuid = {version="1.5.0", features=["v8"]}
 tracing = {version="0.1", default-features=true}
 tracing-subscriber = {version="0.3.17", features=["std", "fmt", "registry"]}
 tracing-appender   = "0.2.2"

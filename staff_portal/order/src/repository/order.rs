@@ -5,6 +5,8 @@ use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
 use chrono::DateTime;
+use rand;
+use uuid::{Uuid, Builder, Timestamp, NoContext};
 
 use crate::AppDataStoreContext;
 use crate::api::web::dto::OrderLinePayDto;
@@ -313,8 +315,10 @@ impl AbsOrderRepo for OrderInMemRepo {
     async fn create (&self, usr_id:u32, lines:Vec<OrderLineModel>,
                      bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), OrderRepoCreateErrResult> 
-    {
-        let oid = self.generate_order_id();
+    { // TODO, machine code to UUID generator should be configurable
+        let machine_code = 1u8;
+        let uid = generate_rand_unique_sequence(machine_code);
+        let oid = Self::convert_to_order_id(uid);
         self.check_stock_level(&lines)?;
         let mut tabledata = vec![
             _contact::to_inmem_tbl(oid.as_str(), usr_id, _pkey_partial_label::BILLING, bl.contact),
@@ -360,6 +364,12 @@ impl OrderInMemRepo {
                 detail: Some(format!("in-memory"))}  )
         }
     }
+    fn convert_to_order_id(uid:Uuid) -> String
+    {
+        let bs = uid.into_bytes();
+        bs.into_iter().map(|b| format!("{:02x}",b))
+            .collect::<Vec<String>>().join("")
+    }
 
     fn check_stock_level(&self, _req:&Vec<OrderLineModel>) -> DefaultResult<(), OrderRepoCreateErrResult>
     {
@@ -369,13 +379,37 @@ impl OrderInMemRepo {
         // - pass the filtered keys to `fetch()`, fetch the stock records
         Ok(())
     }
-
-    fn generate_order_id (&self) -> String
-    {
-        // TODO, finish the implementation
-        // - consider to define this as trait method.
-        // - UUID or any other approachi for now
-        // - if the app needs to scale, maybe distributed ID
-        "9g6yfd5D".to_string()
-    }
 } // end of impl OrderInMemRepo
+
+fn  generate_rand_unique_sequence (machine_code:u8) -> Uuid
+{ // TODO  consider to declare this as trait method or utility.
+    // UUIDv7 is for single-node application. This app needs to consider
+    // scalability of multi-node environment, UUIDv8 can be utilized cuz it
+    // allows custom ID layout, so few bits of the ID can be assigned to
+    // represent each machine/node ID,  rest of that should be timestamp with
+    // random byte sequence
+    let ts_ctx = NoContext;
+    let (secs, nano) = Timestamp::now(ts_ctx).to_unix();
+    let millis = (secs * 1000).saturating_add((nano as u64) / 1_000_000);
+    let mut node_id = rand::random::<[u8;10]>();
+    node_id[0] = machine_code;
+    let builder = Builder::from_unix_timestamp_millis(millis, &node_id);
+    builder.into_uuid()
+}
+
+#[test]
+fn test_gen_rand_unique_seq() {
+    use std::collections::HashSet;
+    use std::collections::hash_map::RandomState;
+    let num_ids = 10;
+    let machine_code = 1;
+    let iter = (0 .. num_ids).into_iter().map(|_d| {
+        let uid = generate_rand_unique_sequence(machine_code);
+        let s = OrderInMemRepo::convert_to_order_id(uid);
+        // println!("generated ID : {}", s.as_str());
+        s
+    });
+    let hs : HashSet<String, RandomState> = HashSet::from_iter(iter);
+    assert_eq!(hs.len(), num_ids);
+}
+

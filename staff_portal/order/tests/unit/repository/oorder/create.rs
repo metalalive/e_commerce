@@ -86,7 +86,8 @@ async fn in_mem_create_ok ()
     let olines = ut_setup_orderline (&mock_seller_ids);
     let result = o_repo.create(mock_usr_id, olines, billing, shipping).await;
     assert!(result.is_ok());
-    if let Ok((_oid, ms)) = result {
+    if let Ok((oid, ms)) = result {
+        assert!(oid.len() > 10);
         assert_eq!(ms.len(), 4);
     };
     // TODO, fetch created order
