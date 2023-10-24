@@ -14,6 +14,12 @@ pub struct ProductStockIdentity {
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<FixedOffset>,
 }
+pub struct ProductStockIdentity2 {
+    pub store_id: u32,
+    pub product_type: ProductType,
+    pub product_id: u64, // TODO, declare type alias
+} // TODO, rename
+
 #[derive(Debug)]
 pub struct StockQuantityModel {
     pub total: u32,

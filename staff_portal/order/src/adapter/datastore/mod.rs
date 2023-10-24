@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 pub use in_mem::{
     AbstInMemoryDStore, AppInMemUpdateData, AppInMemDeleteInfo, AbsDStoreFilterKeyOp,
-    AppInMemFetchKeys, AppInMemFetchedData, AppInMemoryDStore
+    AppInMemFetchKeys, AppInMemFetchedData, AppInMemoryDStore, AppInMemDstoreLock
 };
 pub use sql_db::AppSqlDbStore;
 

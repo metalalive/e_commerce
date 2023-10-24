@@ -2,8 +2,9 @@ use std::marker::{Sync, Send};
 use std::result::Result as DefaultResult;
 use std::collections::HashMap;
 use std::cell::{RefCell, RefMut};
-use std::sync::{Mutex, MutexGuard};
 use std::vec;
+
+use tokio::sync::{Mutex, MutexGuard};
 
 use crate::config::AppInMemoryDbCfg;
 use crate::error::{AppError, AppErrorCode};
@@ -22,6 +23,7 @@ pub type AppInMemUpdateData = AllTable;
 pub type AppInMemDeleteInfo = InnerTable; // list of IDs per table
 pub type AppInMemFetchKeys = InnerTable; // list of IDs per table
 pub type AppInMemFetchedData = AllTable;
+pub type AppInMemDstoreLock<'a> = MutexGuard<'a, RefCell<AppInMemFetchedData>>;
 
 pub trait AbsDStoreFilterKeyOp {
     fn filter(&self, k:&InnerKey) -> bool;
@@ -31,30 +33,30 @@ pub trait AbstInMemoryDStore : Send + Sync
 {
     fn new(cfg:&AppInMemoryDbCfg) -> Self where Self:Sized;
     fn create_table (&self, label:&str) -> DefaultResult<(), AppError>;
-    fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>;
     fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>;
+    fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>;
     fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>;
     fn filter_keys(&self, tbl_label:InnerTableLabel, op:&dyn AbsDStoreFilterKeyOp)
         -> DefaultResult<Vec<InnerKey>, AppError>;
     // read-modify-write semantic, for atomic operation
     fn fetch_acquire(&self, _info:AppInMemFetchKeys)
-        -> DefaultResult<(AppInMemFetchedData, MutexGuard<RefCell<AppInMemFetchedData>>), AppError>;
-    fn save_release(&self, _data:AppInMemUpdateData, lock:MutexGuard<RefCell<AppInMemFetchedData>>)
+        -> DefaultResult<(AppInMemFetchedData, AppInMemDstoreLock), AppError>;
+    fn save_release(&self, _data:AppInMemUpdateData, lock:AppInMemDstoreLock )
         -> DefaultResult<usize, AppError>;
 }
 
 // make it visible for testing purpose, this type could be limited in super module.
 pub struct AppInMemoryDStore {
     max_items_per_table : u32,
-    // TODO, use read/write lock with async operation support
+    // TODO, replace with read/write lock
     table_map : Mutex<RefCell<AllTable>> 
 }
 
 impl AppInMemoryDStore {
     fn try_get_table (&self) -> DefaultResult<MutexGuard<RefCell<AllTable>> , AppError>
     {
-        match self.table_map.lock() {
-            Ok(guard) => Ok(guard),
+        match self.table_map.try_lock() {
+            Ok(guard) =>  Ok(guard),
             Err(e) => Err(AppError{detail:Some(e.to_string()),
                     code:AppErrorCode::AcquireLockFailure })
         }
@@ -160,7 +162,7 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         Self::fetch_common(guard.borrow_mut(), _info)
     }
     fn fetch_acquire(&self, _info:AppInMemFetchKeys)
-        -> DefaultResult<(AppInMemFetchedData, MutexGuard<RefCell<AppInMemFetchedData>>), AppError>
+        -> DefaultResult<(AppInMemFetchedData, AppInMemDstoreLock), AppError>
     {
         let guard = self.try_get_table()?;
         let rs_a = Self::fetch_common(guard.borrow_mut(), _info) ?;
@@ -172,7 +174,7 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         let guard = self.try_get_table()?;
         self.save_common(guard.borrow_mut(), _data)
     }
-    fn save_release(&self, _data:AppInMemUpdateData, lock:MutexGuard<RefCell<AppInMemFetchedData>>)
+    fn save_release(&self, _data:AppInMemUpdateData, lock:AppInMemDstoreLock)
         -> DefaultResult<usize, AppError>
     {
         self.save_common(lock.borrow_mut(), _data)

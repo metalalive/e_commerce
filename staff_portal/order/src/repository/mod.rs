@@ -72,6 +72,8 @@ pub trait AbsOrderRepo : Sync + Send {
 pub trait AbsOrderStockRepo : Sync +  Send {
     async fn fetch(&self, pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>;
     async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
+    async fn fetch_for_reserve(&self, pids:Vec<ProductStockIdentity2>) -> DefaultResult<StockLevelModelSet, AppError>;
+    async fn reserve(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
 }
 
 // TODO, consider runtime configuration for following repositories

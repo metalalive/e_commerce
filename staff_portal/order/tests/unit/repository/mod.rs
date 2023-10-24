@@ -2,14 +2,13 @@ mod product_policy;
 mod product_price;
 mod oorder;
 
-use std::cell::RefCell;
-use std::sync::{Arc, MutexGuard};
+use std::sync::Arc;
 use std::boxed::Box;
 
 use order::error::{AppErrorCode, AppError};
 use order::{AppDataStoreContext, AppInMemoryDbCfg};
 use order::datastore::{
-    AbstInMemoryDStore, AppInMemUpdateData, AppInMemFetchKeys,
+    AbstInMemoryDStore, AppInMemUpdateData, AppInMemFetchKeys, AppInMemDstoreLock,
     AppInMemFetchedData, AppInMemDeleteInfo, AbsDStoreFilterKeyOp
 };
 
@@ -32,7 +31,7 @@ impl AbstInMemoryDStore for MockInMemDeadDataStore {
         Err(AppError { code: AppErrorCode::AcquireLockFailure, detail:Some(format!("utest")) }) 
     }
     fn fetch_acquire(&self, _info:AppInMemFetchKeys)
-            -> Result<(AppInMemFetchedData, MutexGuard<RefCell<AppInMemFetchedData>>), AppError>
+            -> Result<(AppInMemFetchedData, AppInMemDstoreLock), AppError>
     { 
         Err(AppError { code: AppErrorCode::AcquireLockFailure, detail:Some(format!("utest")) }) 
     }
@@ -45,7 +44,7 @@ impl AbstInMemoryDStore for MockInMemDeadDataStore {
     fn save(&self, _data:AppInMemUpdateData) -> Result<usize, AppError> {
         Err(AppError { code: AppErrorCode::DataTableNotExist, detail:Some(format!("utest")) })
     }
-    fn save_release(&self, _data:AppInMemUpdateData, _lock:MutexGuard<RefCell<AppInMemFetchedData>>)
+    fn save_release(&self, _data:AppInMemUpdateData, _lock: AppInMemDstoreLock)
             -> Result<usize, AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail:Some(format!("utest")) })
