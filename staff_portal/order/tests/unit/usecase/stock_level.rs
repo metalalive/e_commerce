@@ -13,9 +13,11 @@ use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
 use order::model::{
     StockLevelModelSet, ProductStockIdentity, StoreStockModel, ProductStockModel,
-    StockQuantityModel, OrderLineModel, BillingModel, ShippingModel
+    StockQuantityModel, OrderLineModel, BillingModel, ShippingModel, ProductStockIdentity2
 };
-use order::repository::{AbsOrderRepo, AbsOrderStockRepo, OrderRepoCreateErrResult};
+use order::repository::{
+    AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn
+};
 use order::usecase::StockLevelUseCase;
 
 struct MockStockRepo {
@@ -33,6 +35,12 @@ impl AbsOrderStockRepo for MockStockRepo {
     { self._mocked_fetch_r.clone() }
     async fn save(&self, _slset:StockLevelModelSet) -> DefaultResult<(), AppError>
     { self._mocked_save_r.clone() }
+    async fn try_reserve(&self, _cb: AppStockRepoReserveUserFunc,
+                         _order_req: &Vec<OrderLineModel>) -> AppStockRepoReserveReturn
+    {
+        let e = AppError { code: AppErrorCode::NotImplemented, detail: None };
+        Err(Err(e))
+    }
 }
 
 #[async_trait]
@@ -50,10 +58,9 @@ impl AbsOrderRepo for MockOrderRepo {
     }
 
     async fn create (&self, _usr_id:u32, _lines:Vec<OrderLineModel>, _bl:BillingModel, _sh:ShippingModel)
-        -> DefaultResult<(String, Vec<OrderLinePayDto>), OrderRepoCreateErrResult>
+        -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError>
     {
-        let e = AppError { code: AppErrorCode::NotImplemented, detail:None };
-        Err(OrderRepoCreateErrResult::Aborted(e))
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
 }
 

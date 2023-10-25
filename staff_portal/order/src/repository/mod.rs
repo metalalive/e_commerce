@@ -52,10 +52,6 @@ pub trait AbsProductPriceRepo : Sync + Send
     async fn save(&self, updated:ProductPriceModelSet) -> DefaultResult<(), AppError> ;
 }
 
-pub enum OrderRepoCreateErrResult {
-    Finished(Vec<OrderLineCreateErrorDto>),
-    Aborted(AppError)
-}
 
 #[async_trait]
 pub trait AbsOrderRepo : Sync + Send {
@@ -65,15 +61,19 @@ pub trait AbsOrderRepo : Sync + Send {
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
     
     async fn create (&self, usr_id:u32, lines:Vec<OrderLineModel>, bl:BillingModel, sh:ShippingModel)
-        -> DefaultResult<(String, Vec<OrderLinePayDto>), OrderRepoCreateErrResult> ;
+        -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError> ;
 }
+
+pub type AppStockRepoReserveReturn = DefaultResult<(), DefaultResult<Vec<OrderLineCreateErrorDto>, AppError>>;
+pub type AppStockRepoReserveUserFunc = fn(&mut StockLevelModelSet, &Vec<OrderLineModel>)
+    -> AppStockRepoReserveReturn;
 
 #[async_trait]
 pub trait AbsOrderStockRepo : Sync +  Send {
     async fn fetch(&self, pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>;
     async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
-    async fn fetch_for_reserve(&self, pids:Vec<ProductStockIdentity2>) -> DefaultResult<StockLevelModelSet, AppError>;
-    async fn reserve(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
+    async fn try_reserve(&self, cb: AppStockRepoReserveUserFunc,
+                         order_req: &Vec<OrderLineModel>) -> AppStockRepoReserveReturn;
 }
 
 // TODO, consider runtime configuration for following repositories
@@ -88,7 +88,7 @@ pub fn app_repo_product_price (ds:Arc<AppDataStoreContext>)
 {
     ProductPriceInMemRepo::new(ds)
 }
-pub fn app_repo_order(ds:Arc<AppDataStoreContext>)
+pub fn app_repo_order (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
 {
     OrderInMemRepo::new(ds)
