@@ -80,11 +80,12 @@ async fn in_mem_create_ok ()
 {
     let o_repo = in_mem_repo_ds_setup(30);
     let (mock_usr_id, mock_seller_ids) = (124, [17u32,38]);
+    let mock_oid = OrderLineModel::generate_order_id(4);
     // TODO, add stock level and order ID verification
     let billing = ut_setup_billing();
     let shipping = ut_setup_shipping (&mock_seller_ids);
     let olines = ut_setup_orderline (&mock_seller_ids);
-    let result = o_repo.create(mock_usr_id, olines, billing, shipping).await;
+    let result = o_repo.create(mock_oid, mock_usr_id, olines, billing, shipping).await;
     assert!(result.is_ok());
     if let Ok((oid, ms)) = result {
         assert!(oid.len() > 10);

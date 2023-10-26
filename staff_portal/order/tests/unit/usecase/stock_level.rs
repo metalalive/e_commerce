@@ -5,6 +5,7 @@ use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
 use chrono::DateTime;
+use uuid::Uuid;
 
 use order::AppDataStoreContext;
 use order::api::rpc::dto::InventoryEditStockLevelDto;
@@ -13,7 +14,7 @@ use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
 use order::model::{
     StockLevelModelSet, ProductStockIdentity, StoreStockModel, ProductStockModel,
-    StockQuantityModel, OrderLineModel, BillingModel, ShippingModel, ProductStockIdentity2
+    StockQuantityModel, OrderLineModel, BillingModel, ShippingModel
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn
@@ -57,7 +58,8 @@ impl AbsOrderRepo for MockOrderRepo {
         Arc::new(Box::new(obj))
     }
 
-    async fn create (&self, _usr_id:u32, _lines:Vec<OrderLineModel>, _bl:BillingModel, _sh:ShippingModel)
+    async fn create (&self, oid:Uuid, _usr_id:u32, _lines:Vec<OrderLineModel>,
+                     _bl:BillingModel, _sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })

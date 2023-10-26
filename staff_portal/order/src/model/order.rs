@@ -1,6 +1,7 @@
 use std::result::Result as DefaultResult;
 use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
 use regex::Regex;
+use uuid::{Uuid, Builder, Timestamp, NoContext};
 
 use crate::api::web::dto::{
     BillingErrorDto, ShippingErrorDto, ContactReqDto, PhyAddrReqDto, ShippingOptionReqDto,
@@ -276,7 +277,22 @@ impl  OrderLineModel {
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         }
     }
-}
+    pub fn generate_order_id (machine_code:u8) -> Uuid
+    { // utility for generating top-level identifier to each order
+        // UUIDv7 is for single-node application. This app needs to consider
+        // scalability of multi-node environment, UUIDv8 can be utilized cuz it
+        // allows custom ID layout, so few bits of the ID can be assigned to
+        // represent each machine/node ID,  rest of that should be timestamp with
+        // random byte sequence
+        let ts_ctx = NoContext;
+        let (secs, nano) = Timestamp::now(ts_ctx).to_unix();
+        let millis = (secs * 1000).saturating_add((nano as u64) / 1_000_000);
+        let mut node_id = rand::random::<[u8;10]>();
+        node_id[0] = machine_code;
+        let builder = Builder::from_unix_timestamp_millis(millis, &node_id);
+        builder.into_uuid()
+    }
+} // end of impl OrderLineModel
 
 impl Into<OrderLinePayDto> for OrderLineModel {
     fn into(self) -> OrderLinePayDto {
