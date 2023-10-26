@@ -1,13 +1,17 @@
 use chrono::DateTime;
 
+use order::api::web::dto::OrderLineErrorReason;
 use order::constant::ProductType;
 use order::error::AppErrorCode;
-use order::model::{StockLevelModelSet, ProductStockModel, StoreStockModel, StockQuantityModel};
+use order::model::{
+    StockLevelModelSet, ProductStockModel, StoreStockModel, StockQuantityModel,
+    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel
+};
 use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
 
 use crate::model::verify_stocklvl_model;
 
-fn ut_mock_saved_product() -> [ProductStockModel;5]
+fn ut_mock_saved_product() -> [ProductStockModel;11]
 {
     [
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
@@ -30,8 +34,33 @@ fn ut_mock_saved_product() -> [ProductStockModel;5]
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
            quantity: StockQuantityModel {total:14, booked:0, cancelled:0}
         },
-    ]
-}
+        //--------
+        ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
+           expiry:DateTime::parse_from_rfc3339("2024-11-20T04:50:18.004+01:00").unwrap(),
+           quantity: StockQuantityModel {total:11, booked:1, cancelled:2}
+        },
+        ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
+           expiry:DateTime::parse_from_rfc3339("2024-11-23T05:11:57+01:00").unwrap(),
+           quantity: StockQuantityModel {total:13, booked:1, cancelled:1}
+        },
+        ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
+           expiry:DateTime::parse_from_rfc3339("2023-10-01T18:40:30.040+09:00").unwrap(),
+           quantity: StockQuantityModel {total:5, booked:1, cancelled:1}
+        },
+        ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
+           expiry:DateTime::parse_from_rfc3339("2023-10-07T08:01:00+09:00").unwrap(),
+           quantity: StockQuantityModel {total:19, booked:1, cancelled:10}
+        },
+        ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
+           expiry:DateTime::parse_from_rfc3339("2023-10-08T07:40:33.040+09:00").unwrap(),
+           quantity: StockQuantityModel {total:6, booked:1, cancelled:1}
+        },
+        ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
+           expiry:DateTime::parse_from_rfc3339("2023-10-09T07:58:30.1008+09:00").unwrap(),
+           quantity: StockQuantityModel {total:10, booked:1, cancelled:1}
+        },
+    ] // end of array
+} // end of fn ut_mock_saved_product
 
 #[test]
 fn add_update_mix_ok()
@@ -180,4 +209,178 @@ fn present_instance_ok()
         assert!(result.is_some());
     }
 } // end of present_instance_ok
+
+
+fn  ut_get_curr_qty (store:&StoreStockModel, req:&OrderLineModel)
+    -> Vec<StockQuantityModel>
+{
+    store.products.iter().filter_map(|p| {
+        if req.product_type == p.type_ && req.product_id == p.id_ {
+            Some(p.quantity.clone())
+        } else { None }
+    }).collect()
+}
+
+#[test]
+fn reserve_ok()
+{
+    let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let saved_products = ut_mock_saved_product();
+    let mut mset = StockLevelModelSet{ stores: vec![
+        StoreStockModel {store_id:1013, products: saved_products[0..5].to_vec()},
+        StoreStockModel {store_id:1014, products: saved_products[5..11].to_vec()},
+    ]};
+    // ------ subcase 1 --------
+    let mut expect_booked_qty = vec![13,4,10];
+    let reqs = vec![
+        OrderLineModel {seller_id:1014, product_type:saved_products[5].type_.clone(),
+            product_id:saved_products[5].id_, price:OrderLinePriceModel {unit:3, total:35},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[0]
+        },
+        OrderLineModel {seller_id:1013, product_type:saved_products[3].type_.clone(),
+            product_id:saved_products[3].id_, price:OrderLinePriceModel {unit:2, total:8},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[1]
+        },
+        OrderLineModel {seller_id:1014, product_type:saved_products[7].type_.clone(),
+            product_id:saved_products[7].id_, price:OrderLinePriceModel {unit:5, total:48},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[2]
+        },
+    ];
+    let mut qty_stats_before = vec![
+        ut_get_curr_qty(&mset.stores[1], &reqs[0]),
+        ut_get_curr_qty(&mset.stores[0], &reqs[1]),
+        ut_get_curr_qty(&mset.stores[1], &reqs[2]),
+    ];
+    let error = mset.try_reserve(&reqs);
+    assert!(error.is_empty());
+    [
+        ut_get_curr_qty(&mset.stores[1], &reqs[0]),
+        ut_get_curr_qty(&mset.stores[0], &reqs[1]),
+        ut_get_curr_qty(&mset.stores[1], &reqs[2]),
+    ].into_iter().map(|v1| {
+        let v0 = qty_stats_before.remove(0);
+        let tot_booked_v0:u32 = v0.into_iter().map(|d| d.booked).sum();
+        let tot_booked_v1:u32 = v1.into_iter().map(|d| d.booked).sum();
+        let actual = tot_booked_v1 - tot_booked_v0;
+        let expect = expect_booked_qty.remove(0);
+        assert!(actual > 0);
+        assert_eq!(actual, expect);
+    }).count();
+    // ------ subcase 2 -------
+    expect_booked_qty = vec![5,2];
+    let reqs = vec![
+        OrderLineModel {seller_id:1014, product_type:saved_products[7].type_.clone(),
+            product_id:saved_products[7].id_, price:OrderLinePriceModel {unit:10, total:50},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[0]
+        },
+        OrderLineModel {seller_id:1013, product_type:saved_products[3].type_.clone(),
+            product_id:saved_products[3].id_, price:OrderLinePriceModel {unit:2, total:8},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[1]
+        },
+    ];
+    qty_stats_before = vec![
+        ut_get_curr_qty(&mset.stores[1], &reqs[0]),
+        ut_get_curr_qty(&mset.stores[0], &reqs[1]),
+    ];
+    let error = mset.try_reserve(&reqs);
+    assert!(error.is_empty());
+    [
+        ut_get_curr_qty(&mset.stores[1], &reqs[0]),
+        ut_get_curr_qty(&mset.stores[0], &reqs[1]),
+    ].into_iter().map(|v1| {
+        let v0 = qty_stats_before.remove(0);
+        let tot_booked_v0:u32 = v0.into_iter().map(|d| d.booked).sum();
+        let tot_booked_v1:u32 = v1.into_iter().map(|d| d.booked).sum();
+        let actual = tot_booked_v1 - tot_booked_v0;
+        let expect = expect_booked_qty.remove(0);
+        assert!(actual > 0);
+        assert_eq!(actual, expect);
+    }).count();
+} // end of reserve_ok
+
+
+#[test]
+fn reserve_shortage()
+{
+    let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let saved_products = ut_mock_saved_product();
+    let mut mset = StockLevelModelSet{ stores: vec![
+        StoreStockModel {store_id:1013, products: saved_products[0..5].to_vec()},
+        StoreStockModel {store_id:1014, products: saved_products[5..11].to_vec()},
+    ]};
+    { // assume this product item has been out of stock
+        let qty_ref = &mut mset.stores[0].products[1].quantity;
+        qty_ref.booked = qty_ref.total - qty_ref.cancelled;
+    }
+    let expect_booked_qty = vec![22,4,1];
+    let reqs = vec![
+        OrderLineModel {seller_id:1014, product_type:saved_products[5].type_.clone(),
+            product_id:saved_products[5].id_, price:OrderLinePriceModel {unit:3, total:66},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[0]
+        },
+        OrderLineModel {seller_id:1013, product_type:saved_products[0].type_.clone(),
+            product_id:saved_products[0].id_, price:OrderLinePriceModel {unit:2, total:8},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[1]
+        },
+        OrderLineModel {seller_id:1013, product_type:saved_products[1].type_.clone(),
+            product_id:saved_products[1].id_, price:OrderLinePriceModel {unit:5, total:5},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[2]
+        },
+    ];
+    let error = mset.try_reserve(&reqs);
+    assert_eq!(error.len(), 2);
+    {
+        let (expect, actual) = (&reqs[0], &error[0]);
+        assert_eq!(expect.seller_id, actual.seller_id);
+        assert_eq!(expect.product_id, actual.product_id);
+        assert_eq!(expect.product_type, actual.product_type);
+        assert!(matches!(actual.reason, OrderLineErrorReason::NotEnoughToClaim));
+        let (expect, actual) = (&reqs[2], &error[1]);
+        assert_eq!(expect.seller_id, actual.seller_id);
+        assert_eq!(expect.product_id, actual.product_id);
+        assert_eq!(expect.product_type, actual.product_type);
+        assert!(matches!(actual.reason, OrderLineErrorReason::OutOfStock));
+    }
+} // end of fn reserve_shortage
+
+
+#[test]
+fn reserve_seller_nonexist()
+{
+    let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let saved_products = ut_mock_saved_product();
+    let mut mset = StockLevelModelSet{ stores: vec![
+        StoreStockModel {store_id:1013, products: saved_products[0..5].to_vec()},
+    ]};
+    let expect_booked_qty = vec![2,2];
+    let reqs = vec![
+        OrderLineModel {seller_id:1013, product_type:saved_products[0].type_.clone(),
+            product_id:saved_products[0].id_, price:OrderLinePriceModel {unit:2, total:4},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[1]
+        },
+        OrderLineModel {seller_id:1099, product_type:saved_products[2].type_.clone(),
+            product_id:saved_products[2].id_, price:OrderLinePriceModel {unit:3, total:6},
+            policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[0]
+        },
+    ];
+    let error = mset.try_reserve(&reqs);
+    assert_eq!(error.len(), 1);
+    {
+        let (expect, actual) = (&reqs[1], &error[0]);
+        assert_eq!(expect.seller_id, actual.seller_id);
+        assert_eq!(expect.product_id, actual.product_id);
+        assert_eq!(expect.product_type, actual.product_type);
+        assert!(matches!(actual.reason, OrderLineErrorReason::NotExist));
+    }
+} // end of reserve_seller_nonexist
 

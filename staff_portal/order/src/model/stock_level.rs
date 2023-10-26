@@ -1,12 +1,16 @@
-use std::vec::Vec;
+use std::cmp::min;
+use std::vec::{Vec, self};
 use std::result::Result as DefaultResult;
 
 use chrono::DateTime;
 use chrono::offset::FixedOffset;
 
 use crate::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
+use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineErrorReason, OrderLineCreateErrNonExistDto};
 use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
+
+use super::OrderLineModel;
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
@@ -175,5 +179,57 @@ impl StockLevelModelSet {
             Ok(self)
         }
     } // end of fn update
+
+
+    // If error happenes in the middle with some internal fields modified,
+    // this model instance will be no longer clean and should be discarded immediately.
+    pub fn try_reserve(&mut self, reqs:&Vec<OrderLineModel>) -> Vec<OrderLineCreateErrorDto>
+    {
+        reqs.iter().filter_map(|req| {
+            let mut error = OrderLineCreateErrorDto {seller_id:req.seller_id,
+                product_id:req.product_id, product_type:req.product_type.clone(),
+                reason: OrderLineErrorReason::NotExist,  nonexist:None, shortage:None
+            };
+            let result = self.stores.iter_mut().find(|m| {req.seller_id == m.store_id});
+            let opt_err = if let Some(store) = result {
+                let mut num_required = req.qty;
+                let _satisfied = store.products.iter().filter(|p| {
+                    req.product_type == p.type_ && req.product_id == p.id_
+                }).any(|p| {
+                    let num_avail = p.quantity.total - p.quantity.cancelled - p.quantity.booked;
+                    let num_taking = min(num_avail, num_required);
+                    num_required -= num_taking;
+                    num_required == 0
+                }); // dry-run
+                if num_required == 0 {
+                    assert!(_satisfied);
+                    num_required = req.qty;
+                    let _ = store.products.iter_mut().filter(|p| {
+                        req.product_type == p.type_ && req.product_id == p.id_
+                    }).any(|p| {
+                        let num_avail = p.quantity.total - p.quantity.cancelled - p.quantity.booked;
+                        let num_taking = min(num_avail, num_required);
+                        p.quantity.booked += num_taking;
+                        num_required -= num_taking;
+                        num_required == 0
+                    });
+                    None
+                } else if num_required < req.qty {
+                    error.shortage = Some(num_required);
+                    Some(OrderLineErrorReason::NotEnoughToClaim)
+                } else {
+                    Some(OrderLineErrorReason::OutOfStock)
+                }
+            } else {
+                error.nonexist = Some(OrderLineCreateErrNonExistDto { product_policy: false,
+                    product_price: false, stock_seller:true });
+                Some(OrderLineErrorReason::NotExist)
+            };
+            if let Some(e) = opt_err {
+                error.reason = e;
+                Some(error)
+            } else { None }
+        }) .collect()
+    } // end of try_reserve
 } // end of impl StockLevelModelSet
 
