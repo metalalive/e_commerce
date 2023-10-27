@@ -1,15 +1,19 @@
 use std::boxed::Box; 
 use std::result::Result as DefaultResult ; 
 
+use chrono::Local;
+
 use crate::AppSharedState;
 use crate::constant::ProductType;
 use crate::api::web::dto::{
-    OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLinePayDto, PayAmountDto,
+    OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLineErrorReason, OrderLineCreateErrNonExistDto,
     OrderCreateReqData, ShippingReqDto, BillingReqDto, OrderLineReqDto, OrderLineCreateErrorDto,
-    OrderLineErrorReason, OrderLineCreateErrNonExistDto
 };
-use crate::model::{BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet, ProductPolicyModelSet};
-use crate::repository::{AbsOrderRepo, AbsProductPriceRepo, AbstProductPolicyRepo};
+use crate::model::{
+    BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet,
+    ProductPolicyModelSet, StockLevelModelSet
+};
+use crate::repository::{AbsOrderRepo, AbsProductPriceRepo, AbstProductPolicyRepo, AppStockRepoReserveReturn};
 use crate::logging::{app_log_event, AppLogLevel};
 
 pub enum CreateOrderUsKsErr {Client(OrderCreateRespErrorDto), Server}
@@ -18,24 +22,37 @@ pub struct CreateOrderUseCase {
     pub glb_state:AppSharedState,
     pub repo_order: Box<dyn AbsOrderRepo>,
     pub repo_price: Box<dyn AbsProductPriceRepo>,
-    pub repo_policy:Box<dyn AbstProductPolicyRepo>
+    pub repo_policy:Box<dyn AbstProductPolicyRepo>,
+    pub usr_id: u32 // TODO, switch to auth token (e.g. JWT), check user quota
 }
 
 impl CreateOrderUseCase {
-    pub async fn execute(self, req:OrderCreateReqData) -> DefaultResult<OrderCreateRespOkDto, CreateOrderUsKsErr>
-    { // TODO, complete implementation
+    pub async fn execute(self, req:OrderCreateReqData)
+        -> DefaultResult<OrderCreateRespOkDto, CreateOrderUsKsErr>
+    {
         let  (sh_d, bl_d, ol_d) = (req.shipping, req.billing, req.order_lines);
-        let (_obl, _osh) = Self::validate_metadata(sh_d, bl_d)?;
+        let (o_bl, o_sh) = Self::validate_metadata(sh_d, bl_d)?;
         let (ms_policy, ms_price) = self.load_product_properties(&ol_d).await?;
-        let _oitems = Self::validate_orderline(ms_policy, ms_price, ol_d)?;
-        let reserved_item = OrderLinePayDto {
-            seller_id: 389u32, product_id: 1018u64, product_type:ProductType::Item,
-            quantity: 9u32, amount: PayAmountDto {unit:4u32, total:35u32}
-        };
-        let obj = OrderCreateRespOkDto { order_id: "ty033u29G".to_string(),
-            usr_id: 789u32, time: 29274692u64, reserved_lines: vec![reserved_item],
-        };
-        Ok(obj)
+        let o_items = Self::validate_orderline(ms_policy, ms_price, ol_d)?;
+        // TODO, machine code to UUID generator should be configurable
+        let machine_code = 1u8;
+        let oid = OrderLineModel::generate_order_id(machine_code);
+        self.try_reserve_stock(&o_items).await?;
+        // There might be under-booking issue if power outage happenes at here
+        // before successfully saving the order lines. TODO: Improve the code here
+        match self.repo_order.create(oid, self.usr_id, o_items, o_bl, o_sh).await {
+            Ok((order_id, lines)) => {
+                let timenow = Local::now().fixed_offset().timestamp();
+                let obj = OrderCreateRespOkDto { order_id, usr_id: self.usr_id,
+                    time: timenow as u64, reserved_lines: lines };
+                Ok(obj)
+            },
+            Err(e) => {
+                let logctx_p = self.glb_state.log_context().clone();
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "order repository error, detail:{e}");
+                Err(CreateOrderUsKsErr::Server)
+            }
+        }
     } // end of fn execute
 
     fn validate_metadata(sh_d:ShippingReqDto, bl_d:BillingReqDto)
@@ -103,7 +120,7 @@ impl CreateOrderUseCase {
                 let e = OrderLineCreateErrorDto { seller_id: d.seller_id, product_id: d.product_id,
                     reason: OrderLineErrorReason::NotExist, product_type: d.product_type,
                     nonexist:Some(OrderLineCreateErrNonExistDto {product_price:price_nonexist,
-                        product_policy:plc_nonexist })
+                        product_policy:plc_nonexist, stock_seller:false }), shortage:None
                 };
                 missing.push(e);
                 None
@@ -117,5 +134,38 @@ impl CreateOrderUseCase {
             Err(CreateOrderUsKsErr::Client(error))
         }
     } // end of fn validate_orderline
+
+    async fn try_reserve_stock(&self, req:&Vec<OrderLineModel>) -> DefaultResult<(), CreateOrderUsKsErr>
+    {
+        let logctx_p = self.glb_state.log_context().clone();
+        let repo_st = self.repo_order.stock();
+        match repo_st.try_reserve(Self::try_reserve_stock_cb, req).await {
+            Ok(()) =>  Ok(()),
+            Err(e) => match e {
+                Ok(client_e) => {
+                    app_log_event!(logctx_p, AppLogLevel::WARNING, "stock reserve client error");
+                    let ec = OrderCreateRespErrorDto {billing:None, shipping: None,
+                                                      order_lines: Some(client_e) };
+                    Err(CreateOrderUsKsErr::Client(ec))
+                },
+                Err(server_e) => {
+                    app_log_event!(logctx_p, AppLogLevel::ERROR,
+                                   "stock reserve server error, detail:{server_e}");
+                    Err(CreateOrderUsKsErr::Server)
+                }
+            }
+        }
+    } // end of fn try_reserve_stock
+
+    fn try_reserve_stock_cb (ms:&mut StockLevelModelSet, req:&Vec<OrderLineModel>)
+        -> AppStockRepoReserveReturn
+    {
+        let result = ms.try_reserve(req);
+        if result.is_empty() {
+            Ok(())
+        } else {
+            Err(Ok(result))
+        }
+    }
 } // end of impl CreateOrderUseCase
 

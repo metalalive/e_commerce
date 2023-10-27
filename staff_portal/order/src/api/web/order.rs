@@ -26,6 +26,7 @@ pub(crate) async fn post_handler(
     _wrapped_req_body: ExtractJson<OrderCreateReqData> ) -> impl IntoResponse
 {
     let ExtractJson(req_body) = _wrapped_req_body;
+    let usr_prof_id:u32  = 1234; // TODO, use auth token (e.g. JWT)
     let log_ctx = _appstate.log_context().clone();
     let ds = _appstate.datastore();
     let results = (app_repo_order(ds.clone()), app_repo_product_price(ds.clone()),
@@ -33,8 +34,8 @@ pub(crate) async fn post_handler(
     let (resp_status_code, serial_resp_body) = if let (Ok(repo_o), Ok(repo_price),
         Ok(repo_policy)) = results
     {
-        let uc = CreateOrderUseCase {glb_state:_appstate, repo_price,
-            repo_policy, repo_order:repo_o};
+        let uc = CreateOrderUseCase {glb_state:_appstate, repo_price, repo_policy,
+            repo_order:repo_o, usr_id:usr_prof_id};
         match uc.execute(req_body).await {
             Ok(value) => match serde_json::to_string(&value) {
                 Ok(s) => (HttpStatusCode::CREATED, s),
@@ -55,7 +56,7 @@ pub(crate) async fn post_handler(
         let mut errmsgs = Vec::new();
         if let Err(e) = results.0 {
             errmsgs.push(e.to_string());
-        }
+        } // TODO, improve error message format
         if let Err(e) = results.1 {
             errmsgs.push(e.to_string());
         }

@@ -44,24 +44,40 @@ async fn place_new_order_ok() -> DefaultResult<(), AppError>
     }
     { // ------- add product price then --------
         let msgbody = br#"
-                 [
-                     [],
-                     {"s_id": 18830, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
-                      "updating": [],
-                      "creating": [
-                          {"price": 126, "start_after": "2023-09-04T09:11:13+08:00", "product_type": 1,
-                           "end_before": "2023-12-24T07:11:13.730050+08:00", "product_id": 270118},
-                          {"price": 135, "start_after": "2023-09-10T09:11:13+09:00", "product_type": 1,
-                           "end_before": "2023-12-24T07:11:13.730050+09:00", "product_id": 270119},
-                          {"price": 1038, "start_after": "2022-01-20T04:30:58.070020+10:00", "product_type": 2,
-                           "end_before": "2024-02-28T18:11:56.877000+10:00", "product_id": 270118}
-                      ]
-                     },
-                     {"callbacks": null, "errbacks": null, "chain": null, "chord": null}
-                ]
-                "#;
+             [
+                 [],
+                 {"s_id": 18830, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+                  "updating": [],
+                  "creating": [
+                      {"price": 126, "start_after": "2023-09-04T09:11:13+08:00", "product_type": 1,
+                       "end_before": "2023-12-24T07:11:13.730050+08:00", "product_id": 270118},
+                      {"price": 135, "start_after": "2023-09-10T09:11:13+09:00", "product_type": 1,
+                       "end_before": "2023-12-24T07:11:13.730050+09:00", "product_id": 270119},
+                      {"price": 1038, "start_after": "2022-01-20T04:30:58.070020+10:00", "product_type": 2,
+                       "end_before": "2024-02-28T18:11:56.877000+10:00", "product_id": 270118}
+                  ]
+                 },
+                 {"callbacks": null, "errbacks": null, "chain": null, "chord": null}
+            ]
+            "#;
         let req = AppRpcClientReqProperty { retry: 1,  msgbody:msgbody.to_vec(),
                 route: "update_store_products".to_string()  };
+        let result = rpc::route_to_handler(req, shr_state.clone()).await;
+        assert!(result.is_ok());
+    }
+    { // ------- add product stock --------
+        let msgbody = br#"
+            [
+                {"qty_add":22, "store_id":18830, "product_type": 1, "product_id": 270118,
+                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
+                {"qty_add":38, "store_id":18830, "product_type": 1, "product_id": 270119,
+                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
+                {"qty_add":50, "store_id":18830, "product_type": 2, "product_id": 270118,
+                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
+            ]
+            "#; // TODO, generate expiry time from chrono::Local::now()
+        let req = AppRpcClientReqProperty { retry: 1,  msgbody:msgbody.to_vec(),
+                route: "edit_stock_level".to_string()  };
         let result = rpc::route_to_handler(req, shr_state.clone()).await;
         assert!(result.is_ok());
     }
