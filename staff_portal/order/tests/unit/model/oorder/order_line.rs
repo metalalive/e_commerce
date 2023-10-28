@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Local as LocalTime};
-use order::api::web::dto::{OrderLineReqDto, OrderLinePayDto};
+use order::api::dto::OrderLinePayDto;
+use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
 use order::model::{
     OrderLineModel, ProductPolicyModel, ProductPriceModel, OrderLinePriceModel,

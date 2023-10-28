@@ -1,15 +1,17 @@
+use std::vec::Vec;
 use std::result::Result as DefaultResult;
 use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
 use regex::Regex;
 use uuid::{Uuid, Builder, Timestamp, NoContext};
 
+use crate::api::dto::{OrderLinePayDto, PayAmountDto};
+use crate::api::rpc::dto::OrderLineReplicaInventoryDto;
 use crate::api::web::dto::{
     BillingErrorDto, ShippingErrorDto, ContactReqDto, PhyAddrReqDto, ShippingOptionReqDto,
     ContactErrorDto, PhyAddrErrorDto, ShippingOptionErrorDto, ShippingMethod, CountryCode,
     ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
     ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberReqDto, PhoneNumberErrorDto,
-    BillingReqDto, ShippingReqDto, PhoneNumNationErrorReason, OrderLineReqDto, OrderLinePayDto,
-    PayAmountDto
+    BillingReqDto, ShippingReqDto, PhoneNumNationErrorReason, OrderLineReqDto 
 };
 use crate::constant::{REGEX_EMAIL_RFC5322, ProductType};
 
@@ -298,8 +300,16 @@ impl Into<OrderLinePayDto> for OrderLineModel {
     fn into(self) -> OrderLinePayDto {
         OrderLinePayDto { seller_id: self.seller_id, product_id: self.product_id,
             product_type: self.product_type, quantity: self.qty,
+            reserved_until:self.policy.reserved_until.to_rfc3339(),
             amount: PayAmountDto { unit: self.price.unit, total: self.price.total}
         }
+    }
+}
+
+impl Into<OrderLineReplicaInventoryDto> for OrderLineModel {
+    fn into(self) -> OrderLineReplicaInventoryDto {
+        OrderLineReplicaInventoryDto { seller_id: self.seller_id, product_id: self.product_id,
+            product_type: self.product_type, qty_booked: self.qty }
     }
 }
 

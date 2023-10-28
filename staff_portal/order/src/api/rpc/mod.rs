@@ -5,11 +5,15 @@ use serde_json::Value as JsnVal;
 use crate::AppSharedState;
 use crate::rpc::AppRpcClientReqProperty;
 use crate::error::{AppError, AppErrorCode} ;
-use crate::constant::{RPCAPI_EDIT_PRODUCT_PRICE, RPCAPI_EDIT_STOCK_LEVEL};
+use crate::constant::{
+    RPCAPI_EDIT_PRODUCT_PRICE, RPCAPI_EDIT_STOCK_LEVEL, RPCAPI_ORDERLINE_RESERVED_PAYMENT,
+    RPCAPI_ORDERLINE_RESERVED_INVENTORY
+};
 
 pub mod dto;
 mod store_products;
 mod stock_level;
+mod oline_replica;
 
 pub async fn route_to_handler(req:AppRpcClientReqProperty, shr_state:AppSharedState)
     -> DefaultResult<Vec<u8>, AppError>
@@ -18,6 +22,8 @@ pub async fn route_to_handler(req:AppRpcClientReqProperty, shr_state:AppSharedSt
     match req.route.as_str() {
         RPCAPI_EDIT_PRODUCT_PRICE => Ok(store_products::process(req, shr_state).await),
         RPCAPI_EDIT_STOCK_LEVEL => Ok(stock_level::inventory_edit(req, shr_state).await),
+        RPCAPI_ORDERLINE_RESERVED_PAYMENT => Ok(oline_replica::read_reserved_payment(req, shr_state).await),
+        RPCAPI_ORDERLINE_RESERVED_INVENTORY => Ok(oline_replica::read_reserved_inventory(req, shr_state).await),
         _others => {
             let err = AppError { code: AppErrorCode::NotImplemented,
             detail: Some("rpc-routing-failure".to_string()) };

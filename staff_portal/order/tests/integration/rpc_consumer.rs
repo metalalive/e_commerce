@@ -142,3 +142,55 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
     Ok(())
 } // end of fn test_update_product_price_ok
 
+
+#[tokio::test]
+async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
+{
+    let shrstate = test_setup_shr_state()?;
+    let msgbody = br#" {"order_id":"18f00429638a0b"} "#;
+    let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
+            route: "replica/orderline/reserved/payment".to_string()  };
+    let result = route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+    let respbody = result.unwrap();
+    // println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
+    // verify fetched order lines
+    let result = serde_json::from_slice(&respbody);
+    let respbody:JsnVal = result.unwrap();
+    assert!(respbody.is_object());
+    if let JsnVal::Object(obj) = respbody {
+        let oid_v = obj.get("oid").unwrap();
+        let usr_id_v = obj.get("usr_id").unwrap();
+        let olines_v = obj.get("lines").unwrap();
+        assert!(oid_v.is_string());
+        assert!(usr_id_v.is_u64());
+        assert!(olines_v.is_array());
+    }
+    Ok(())
+} // end of fn generate_orderline_for_payment_ok
+
+#[tokio::test]
+async fn  generate_orderline_for_inventory_ok() -> DefaultResult<(), AppError>
+{
+    let shrstate = test_setup_shr_state()?;
+    let msgbody = br#" {"order_id":"18f00429638a0b"} "#;
+    let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
+            route: "replica/orderline/reserved/inventory".to_string()  };
+    let result = route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+    let respbody = result.unwrap();
+    // verify fetched order lines
+    let result = serde_json::from_slice(&respbody);
+    let respbody:JsnVal = result.unwrap();
+    assert!(respbody.is_object());
+    if let JsnVal::Object(obj) = respbody {
+        let oid_v = obj.get("oid").unwrap();
+        let usr_id_v = obj.get("usr_id").unwrap();
+        let olines_v = obj.get("lines").unwrap();
+        assert!(oid_v.is_string());
+        assert!(usr_id_v.is_u64());
+        assert!(olines_v.is_array());
+    }
+    Ok(())
+} // end of fn generate_orderline_for_inventory_ok
+

@@ -5,9 +5,8 @@ use chrono::DateTime;
 use chrono::offset::{Local, FixedOffset};
 
 use crate::api::{jsn_validate_product_type, jsn_serialize_product_type };
+use crate::api::dto::OrderLinePayDto;
 use crate::constant::ProductType;
-
-// TODO, merge the 2 DTO modules in `/web` and `/rpc` package
 
 #[derive(Deserialize)]
 pub struct ProductPriceDeleteDto {
@@ -46,6 +45,7 @@ pub struct ProductPriceDto {
 pub struct InventoryEditStockLevelDto {
     // number to add to stock level, negative number means cancellation
     // from inventory application
+    // TODO, redesign the quantity fields
     pub qty_add: i32,
     pub store_id: u32,
     #[serde(deserialize_with="jsn_validate_product_type")]
@@ -70,3 +70,32 @@ pub struct StockLevelPresentDto {
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<FixedOffset>
 }
+
+#[derive(Deserialize)]
+pub struct OrderReplicaReqDto {
+    pub order_id: String
+}
+
+#[derive(Serialize)]
+pub struct OrderReplicaPaymentDto {
+    pub oid: String,
+    pub usr_id: u32,
+    pub lines: Vec<OrderLinePayDto>,
+}
+
+#[derive(Serialize)]
+pub struct OrderLineReplicaInventoryDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    pub product_type: ProductType,
+    pub qty_booked: u32 // TODO, add `qty_cancelled` fields for order-line return
+}
+
+#[derive(Serialize)]
+pub struct OrderReplicaInventoryDto {
+    pub oid: String,
+    pub usr_id: u32,
+    pub lines: Vec<OrderLineReplicaInventoryDto>,
+}
+

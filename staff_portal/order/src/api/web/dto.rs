@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::constant::ProductType;
 use crate::api::{jsn_validate_product_type, jsn_serialize_product_type};
+use crate::api::dto::OrderLinePayDto;
 
 #[derive(Deserialize, Serialize)]
 pub enum CountryCode {TW,TH,IN,ID,US}
@@ -28,13 +29,6 @@ impl Into<String> for ShippingMethod {
     }
 } // implement `Into` trait, not replying on serde 
 
-
-#[derive(Deserialize, Serialize)]
-pub struct PayAmountDto {
-    pub unit: u32,
-    pub total: u32
-}
-
 #[derive(Deserialize, Serialize)]
 pub struct OrderLineReqDto {
     pub seller_id: u32,
@@ -42,16 +36,6 @@ pub struct OrderLineReqDto {
     #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
     pub product_type: ProductType,
     pub quantity: u32
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct OrderLinePayDto {
-    pub seller_id: u32,
-    pub product_id: u64,
-    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
-    pub product_type: ProductType,
-    pub quantity: u32,
-    pub amount: PayAmountDto
 }
 
 #[derive(Deserialize, Serialize)]
@@ -229,4 +213,3 @@ pub struct ProductPolicyClientErrorDto
     pub auto_cancel_secs: Option<ProductPolicyClientLimitDto>,
     pub warranty_hours: Option<ProductPolicyClientLimitDto>,
 }
-

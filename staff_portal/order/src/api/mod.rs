@@ -1,5 +1,6 @@
 pub mod web;
 pub mod rpc;
+pub mod dto;
 
 use serde::Deserialize;
 use serde::de::{Error as DeserializeError, Expected, Unexpected};

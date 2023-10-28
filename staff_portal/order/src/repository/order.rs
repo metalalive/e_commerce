@@ -6,10 +6,9 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 use uuid::Uuid;
-use rand;
 
 use crate::AppDataStoreContext;
-use crate::api::web::dto::OrderLinePayDto;
+use crate::api::dto::OrderLinePayDto;
 use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedData, AppInMemFetchedSingleTable};
 use crate::error::{AppError, AppErrorCode};
@@ -431,6 +430,13 @@ impl AbsOrderRepo for OrderInMemRepo {
         let paylines = lines.into_iter().map(OrderLineModel::into).collect();
         Ok((oid, paylines))
     } // end of fn create
+
+    async fn fetch_olines(&self, _oid:String) -> DefaultResult<(u32, Vec<OrderLineModel>), AppError>
+    {
+        let usr_id = 123;
+        let olines = vec![];
+        Ok((usr_id, olines))
+    }
 } // end of impl AbsOrderRepo
 
 

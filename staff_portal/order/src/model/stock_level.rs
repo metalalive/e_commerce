@@ -153,7 +153,9 @@ impl StockLevelModelSet {
                     let num_avail = _product_found.quantity.total - _product_found.quantity.cancelled;
                     let num_cancel = num_avail.min(d.qty_add.abs() as u32);
                     _product_found.quantity.cancelled += num_cancel;
-                }
+                } // TODO, consider to adjust  `product.quantity.booked` whenever customers :
+                  // - reserved stock items but cancel them later without paying them.
+                  // - return product items they paid (or even received) before the warranty
                 false
             } else { // insert new instance
                 if d.qty_add >= 0 {

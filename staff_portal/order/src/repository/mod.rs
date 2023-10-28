@@ -10,8 +10,9 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::AppDataStoreContext;
+use crate::api::dto::OrderLinePayDto;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
-use crate::api::web::dto::{OrderLinePayDto, OrderLineCreateErrorDto};
+use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::constant::ProductType;
 use crate::error::AppError;
 use crate::model::{
@@ -64,6 +65,8 @@ pub trait AbsOrderRepo : Sync + Send {
     async fn create (&self, oid:Uuid, usr_id:u32, lines:Vec<OrderLineModel>,
                      bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError> ;
+
+    async fn fetch_olines(&self, oid:String) -> DefaultResult<(u32, Vec<OrderLineModel>), AppError>;
 }
 
 pub type AppStockRepoReserveReturn = DefaultResult<(), DefaultResult<Vec<OrderLineCreateErrorDto>, AppError>>;

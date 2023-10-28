@@ -8,8 +8,8 @@ use chrono::DateTime;
 use uuid::Uuid;
 
 use order::AppDataStoreContext;
+use order::api::dto::OrderLinePayDto;
 use order::api::rpc::dto::InventoryEditStockLevelDto;
-use order::api::web::dto::OrderLinePayDto;
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
 use order::model::{
@@ -58,13 +58,17 @@ impl AbsOrderRepo for MockOrderRepo {
         Arc::new(Box::new(obj))
     }
 
-    async fn create (&self, oid:Uuid, _usr_id:u32, _lines:Vec<OrderLineModel>,
+    async fn create (&self, _oid:Uuid, _usr_id:u32, _lines:Vec<OrderLineModel>,
                      _bl:BillingModel, _sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
-}
+    async fn fetch_olines(&self, _oid:String) -> DefaultResult<(u32, Vec<OrderLineModel>), AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+} // end of impl MockOrderRepo
 
 impl MockOrderRepo {
     fn build(save_r:DefaultResult<(), AppError>,
