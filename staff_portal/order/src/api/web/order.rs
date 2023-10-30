@@ -29,8 +29,9 @@ pub(crate) async fn post_handler(
     let usr_prof_id:u32  = 1234; // TODO, use auth token (e.g. JWT)
     let log_ctx = _appstate.log_context().clone();
     let ds = _appstate.datastore();
-    let results = (app_repo_order(ds.clone()), app_repo_product_price(ds.clone()),
-        app_repo_product_policy(ds));
+    let results = (app_repo_order(ds.clone()).await,
+                   app_repo_product_price(ds.clone()).await,
+                   app_repo_product_policy(ds).await );
     let (resp_status_code, serial_resp_body) = if let (Ok(repo_o), Ok(repo_price),
         Ok(repo_policy)) = results
     {

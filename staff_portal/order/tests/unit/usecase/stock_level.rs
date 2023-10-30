@@ -46,7 +46,7 @@ impl AbsOrderStockRepo for MockStockRepo {
 
 #[async_trait]
 impl AbsOrderRepo for MockOrderRepo {
-    fn new(_ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
+    async fn new(_ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
         where Self:Sized
     { Err(AppError {code:AppErrorCode::NotImplemented, detail:None}) }
     

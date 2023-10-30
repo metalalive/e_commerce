@@ -10,7 +10,7 @@ use super::{build_error_response, py_celery_deserialize};
 pub(super) async fn process(req:AppRpcClientReqProperty, shr_state:AppSharedState) -> Vec<u8>
 {
     let ds = shr_state.datastore();
-    let repo = match app_repo_product_price(ds) {
+    let repo = match app_repo_product_price(ds).await {
         Ok(r) => r,
         Err(e) => { return build_error_response(e).to_string().into_bytes(); }
     };

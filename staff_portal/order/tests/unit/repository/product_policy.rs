@@ -28,22 +28,22 @@ const UTEST_INIT_DATA: [ProductPolicyModel;7] = [
         auto_cancel_secs: 1178, warranty_hours: 11086, is_create: false },
 ]; // end of UTEST_INIT_DATA
 
-#[test]
-fn in_mem_create_missing_dstore ()
+#[tokio::test]
+async fn in_mem_create_missing_dstore ()
 {
     let ds_ctx = Arc::new(AppDataStoreContext{in_mem:None, sql_dbs:None});
-    let result = ProductPolicyInMemRepo::new(ds_ctx);
+    let result = ProductPolicyInMemRepo::new(ds_ctx).await;
     assert_eq!(result.is_err(), true);
     let error = result.err().unwrap();
     assert_eq!(error.code, AppErrorCode::MissingDataStore);
     assert_eq!(error.detail, Some("in-memory".to_string()));
 }
 
-fn in_mem_repo_ds_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
+async fn in_mem_repo_ds_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
     -> Box<dyn AbstProductPolicyRepo>
 {
     let ds_ctx = in_mem_ds_ctx_setup::<T>(max_items);
-    let result = ProductPolicyInMemRepo::new(ds_ctx);
+    let result = ProductPolicyInMemRepo::new(ds_ctx).await;
     assert_eq!(result.is_ok(), true);
     result.unwrap()
 }
@@ -51,7 +51,7 @@ fn in_mem_repo_ds_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
 #[tokio::test]
 async fn in_mem_save_fetch_ok_1 ()
 {
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(20);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(20).await;
     // ------ subcase, first bulk update
     let ppset = {
         let items = UTEST_INIT_DATA[0..3].iter().map(ut_clone_productpolicy).collect();
@@ -103,7 +103,7 @@ async fn in_mem_save_fetch_ok_1 ()
 #[tokio::test]
 async fn in_mem_save_fetch_ok_2 ()
 {
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(20);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(20).await;
     let ppset = {
         let item = ut_clone_productpolicy(&UTEST_INIT_DATA[5]);
         ProductPolicyModelSet { policies: vec![item] }
@@ -133,7 +133,7 @@ async fn in_mem_save_fetch_ok_2 ()
 #[tokio::test]
 async fn in_mem_save_empty_input ()
 {
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(9);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(9).await;
     let ppset = ProductPolicyModelSet { policies: Vec::new() };
     let result = repo.save(ppset).await;
     assert_eq!(result.is_err(), true);
@@ -145,7 +145,7 @@ async fn in_mem_save_empty_input ()
 #[tokio::test]
 async fn in_mem_save_dstore_error ()
 {
-    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(10);
+    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(10).await;
     let ppset = {
         let item = ut_clone_productpolicy(&UTEST_INIT_DATA[0]);
         ProductPolicyModelSet { policies: vec![item] }
@@ -161,7 +161,7 @@ async fn in_mem_save_dstore_error ()
 #[tokio::test]
 async fn in_mem_fetch_dstore_error ()
 {
-    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(10);
+    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(10).await;
     let result = repo.fetch(vec![(ProductType::Item,1622u64)]).await;
     assert_eq!(result.is_err(), true);
     let error = result.err().unwrap();

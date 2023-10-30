@@ -161,7 +161,7 @@ impl EditProductPolicyUseCase {
     async fn _save_to_repo(ds:Arc<AppDataStoreContext>, data:&Vec<ProductPolicyDto>)
         -> DefaultResult<(), AppError>
     {
-        let repo = app_repo_product_policy(ds)?;
+        let repo = app_repo_product_policy(ds).await?;
         let ids = data.iter().map(|d| (d.product_type.clone(), d.product_id)).collect();
         let previous_saved = repo.fetch(ids).await?;
         let updated = previous_saved.update(data)?;

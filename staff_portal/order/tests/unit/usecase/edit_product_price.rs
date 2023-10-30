@@ -29,7 +29,7 @@ struct MockRepository {
 
 #[async_trait]
 impl AbsProductPriceRepo for MockRepository {
-    fn new(_dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
+    async fn new(_dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
         where Self:Sized
     { Err(AppError { code:AppErrorCode::NotImplemented, detail:None }) }
 

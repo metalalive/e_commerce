@@ -15,14 +15,14 @@ use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
 use crate::model::verify_stocklvl_model;
 use crate::repository::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 
-fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
+async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
     nitems:u32, mut curr_time:Option<DateTime<FixedOffset>> ) -> OrderInMemRepo
 {
     if curr_time.is_none() {
         curr_time = Some(Local::now().into());
     }
     let ds = in_mem_ds_ctx_setup::<T>(nitems);
-    let result = OrderInMemRepo::build(ds, curr_time.unwrap());
+    let result = OrderInMemRepo::build(ds, curr_time.unwrap()).await;
     assert_eq!(result.is_ok(), true);
     result.unwrap()
 }
@@ -86,7 +86,7 @@ const UT_INIT_DATA_STORE: [StoreStockModel; 4] =
 #[tokio::test]
 async fn in_mem_save_fetch_ok ()
 { // this test case verifies product stock level, each has different product ID
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(12, None);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(12, None).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
     let expect_slset = {
@@ -123,7 +123,7 @@ async fn in_mem_save_fetch_ok ()
 #[tokio::test]
 async fn in_mem_update_existing_ok ()
 {
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(8, None);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(8, None).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
     let mut expect_slset = {
@@ -185,7 +185,7 @@ async fn in_mem_update_existing_ok ()
 #[tokio::test]
 async fn in_mem_same_product_diff_expiry ()
 {
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(8, None);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(8, None).await;
     let stockrepo = repo.stock();
     let all_products = {
         let out = ut_init_data_product();
@@ -254,7 +254,7 @@ async fn in_mem_same_product_diff_expiry ()
 #[tokio::test]
 async fn in_mem_save_dstore_error ()
 {
-    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4, None);
+    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4, None).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
     let expect_slset = {
@@ -272,7 +272,7 @@ async fn in_mem_save_dstore_error ()
 #[tokio::test]
 async fn in_mem_fetch_dstore_error ()
 {
-    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4, None);
+    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4, None).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
     let pids = {
@@ -335,7 +335,7 @@ async fn in_mem_try_reserve_ok ()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time));
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time)).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
     let expect_slset = {
@@ -444,7 +444,7 @@ async fn in_mem_try_reserve_shortage ()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time));
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time)).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
     let expect_slset = {
@@ -505,7 +505,7 @@ async fn in_mem_try_reserve_user_cb_err ()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time));
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time)).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
     let expect_slset = {

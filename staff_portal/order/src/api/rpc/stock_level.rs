@@ -22,7 +22,7 @@ pub(super) async fn inventory_edit(req:AppRpcClientReqProperty, shr_state:AppSha
         }
     };
     let ds = shr_state.datastore();
-    match app_repo_order(ds) {
+    match app_repo_order(ds).await {
         Ok(repo) => match StockLevelUseCase::try_edit(reqbody, repo).await {
             Ok(r) => serde_json::to_vec(&r).unwrap(),
             Err(e) => {

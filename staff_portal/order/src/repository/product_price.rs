@@ -54,10 +54,10 @@ pub struct ProductPriceInMemRepo {
 
 #[async_trait]
 impl AbsProductPriceRepo for ProductPriceInMemRepo {
-    fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
+    async fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
         where Self:Sized
     {
-        match Self::_new(dstore) {
+        match Self::_new(dstore).await {
             Ok(rp) => Ok(Box::new(rp)),
             Err(e) => Err(e)
         }
@@ -65,10 +65,10 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
     async fn delete_all(&self, store_id:u32) -> Result<(), AppError>
     {
         let op = InnerDStoreFilterKeyOp::new(store_id);
-        let filtered = self.datastore.filter_keys(TABLE_LABEL.to_string(), &op)?;
+        let filtered = self.datastore.filter_keys(TABLE_LABEL.to_string(), &op).await?;
         let mut allkeys = HashMap::new();
         allkeys.insert(TABLE_LABEL.to_string(), filtered);
-        self._delete_common(allkeys)
+        self._delete_common(allkeys).await
     }
     
     async fn delete(&self, store_id:u32, ids:ProductPriceDeleteDto) -> Result<(), AppError>
@@ -90,7 +90,7 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
             let allkeys = self.gen_id_keys(store_id, _ids);
             let mut h = HashMap::new();
             h.insert(TABLE_LABEL.to_string(), allkeys);
-            self._delete_common(h)
+            self._delete_common(h).await
         }
     }
 
@@ -99,7 +99,7 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         let allkeys = self.gen_id_keys(store_id, ids);
         let mut info = HashMap::new();
         info.insert(TABLE_LABEL.to_string(), allkeys);
-        let items = self._fetch(info)?;
+        let items = self._fetch(info).await?;
         let items = items.into_iter().map(|(_seller_id, obj)| obj).collect();
         let obj = ProductPriceModelSet { items, store_id };
         Ok(obj)
@@ -118,7 +118,7 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
             a.insert(TABLE_LABEL.to_string(), allkeys);
             a
         };
-        let items = self._fetch(info)?;
+        let items = self._fetch(info).await?;
         let mut modelmap = HashMap::new();
         let _ = items.into_iter().map(|(seller_id, model)| {
             let mset = if let Some(m) = modelmap.get_mut(&seller_id) {
@@ -164,17 +164,17 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         let rows = HashMap::from_iter(kv_pairs);
         let mut data = HashMap::new();
         data.insert(TABLE_LABEL.to_string(), rows);
-        let _num = self.datastore.save(data)?;
+        let _num = self.datastore.save(data).await?;
         Ok(())
     } // end of fn save
 } // end of impl ProductPriceInMemRepo
 
 impl ProductPriceInMemRepo {
-    pub fn _new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Self, AppError>
+    pub async fn _new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Self, AppError>
         where Self:Sized
     {
         if let Some(m) = &dstore.in_mem {
-            m.create_table(TABLE_LABEL)?;
+            m.create_table(TABLE_LABEL).await?;
             let obj = Self { datastore: m.clone() };
             Ok(obj)
         } else {
@@ -190,9 +190,9 @@ impl ProductPriceInMemRepo {
         }).collect()
     }
 
-    fn _fetch(&self, ids:HashMap<String, Vec<String>>) ->  Result<Vec<(u32,ProductPriceModel)>, AppError>
+    async fn _fetch(&self, ids:HashMap<String, Vec<String>>) ->  Result<Vec<(u32,ProductPriceModel)>, AppError>
     {
-        let result_raw = self.datastore.fetch(ids)?;
+        let result_raw = self.datastore.fetch(ids).await?;
         let out = if let Some(t) = result_raw.get(TABLE_LABEL)
         { // TODO, reliability check
             t.into_iter().map(|(_key, row)| {
@@ -217,9 +217,9 @@ impl ProductPriceInMemRepo {
         Ok(out)
     } // end of fn _fetch
     
-    fn _delete_common(&self, keys:AppInMemFetchKeys) -> Result<(), AppError>
+    async fn _delete_common(&self, keys:AppInMemFetchKeys) -> Result<(), AppError>
     {
-        let _num_del = self.datastore.delete(keys)?;
+        let _num_del = self.datastore.delete(keys).await?;
         Ok(())
     }
 } // end of impl ProductPriceInMemRepo

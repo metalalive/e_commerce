@@ -22,7 +22,7 @@ async fn read_reserved_common (shr_state:AppSharedState, serial:&[u8])
         }
     };
     let ds = shr_state.datastore();
-    let repo = app_repo_order(ds)?;
+    let repo = app_repo_order(ds).await?;
     // apply relaxed layered architecture at here, since these endpoints
     // are simply source part of CQRS pattern, use-case layer is not necessary
     let (usr_id, ms) = repo.fetch_olines(order_id.clone()).await ?;

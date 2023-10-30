@@ -16,15 +16,15 @@ const UT_TABLE_LABELS : [&'static str ; UT_NUM_TABLES] = [
     UT_TABLE_LABEL_A, UT_TABLE_LABEL_B, UT_TABLE_LABEL_C
 ];
 
-#[test]
-fn save_ok_1 ()
+#[tokio::test]
+async fn save_ok_1 ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
     let dstore = AppInMemoryDStore::new(&cfg);
-    let all_created = UT_TABLE_LABELS.clone().into_iter().all(
-        |label| {dstore.create_table(label).is_ok()}
-    );
-    assert_eq!(all_created, true);
+    for label in UT_TABLE_LABELS.clone().into_iter() {
+        let result = dstore.create_table(label).await;
+        assert!(result.is_ok());
+    }
     let new_data : AppInMemUpdateData = {
         let mut out = HashMap::new();
         let t1 = {
@@ -47,7 +47,7 @@ fn save_ok_1 ()
         out.insert(UT_TABLE_LABEL_C.to_string(), t2);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_ok(), true);
     assert_eq!(result.unwrap(), 4);
 
@@ -61,7 +61,7 @@ fn save_ok_1 ()
         out.insert(UT_TABLE_LABEL_C.to_string(), t3);
         out
     };
-    let result = dstore.fetch(fetching_keys);
+    let result = dstore.fetch(fetching_keys).await;
     assert_eq!(result.is_ok(), true);
     let actual_fetched = result.unwrap();
     {
@@ -86,12 +86,12 @@ fn save_ok_1 ()
 } // end of save_ok_1
 
 
-#[test]
-fn save_ok_2 ()
+#[tokio::test]
+async fn save_ok_2 ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
     let dstore = AppInMemoryDStore::new(&cfg);
-    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).is_ok(), true);
+    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).await.is_ok(), true);
     let new_data : AppInMemUpdateData = {
         let mut out = HashMap::new();
         let t1 = {
@@ -105,7 +105,7 @@ fn save_ok_2 ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_ok(), true);
     assert_eq!(result.unwrap(), 2);
     let new_data : AppInMemUpdateData = {
@@ -121,7 +121,7 @@ fn save_ok_2 ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_ok(), true);
     assert_eq!(result.unwrap(), 2);
 
@@ -131,7 +131,7 @@ fn save_ok_2 ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.fetch(fetching_keys);
+    let result = dstore.fetch(fetching_keys).await;
     assert_eq!(result.is_ok(), true);
     let actual_fetched = result.unwrap();
     if let Some(a_table) = actual_fetched.get(UT_TABLE_LABEL_A)
@@ -146,12 +146,12 @@ fn save_ok_2 ()
 } // end of save_ok_2
 
 
-#[test]
-fn fetch_acquire_save_release_ok ()
+#[tokio::test]
+async fn fetch_acquire_save_release_ok ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
     let dstore = AppInMemoryDStore::new(&cfg);
-    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).is_ok(), true);
+    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).await.is_ok(), true);
     let new_data : AppInMemUpdateData = {
         let mut out = HashMap::new();
         let t1 = {
@@ -167,7 +167,7 @@ fn fetch_acquire_save_release_ok ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_ok(), true);
     assert_eq!(result.unwrap(), 3);
 
@@ -177,7 +177,7 @@ fn fetch_acquire_save_release_ok ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.fetch_acquire(fetching_keys);
+    let result = dstore.fetch_acquire(fetching_keys).await;
     assert_eq!(result.is_ok(), true);
     let (mut actual_fetched, actual_lock) = result.unwrap();
     if let Some(a_table) = actual_fetched.get_mut(UT_TABLE_LABEL_A)
@@ -200,7 +200,7 @@ fn fetch_acquire_save_release_ok ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.fetch(fetching_keys);
+    let result = dstore.fetch(fetching_keys).await;
     assert_eq!(result.is_ok(), true);
     let actual_fetched = result.unwrap();
     if let Some(a_table) = actual_fetched.get(UT_TABLE_LABEL_A)
@@ -211,13 +211,13 @@ fn fetch_acquire_save_release_ok ()
 } // end of fetch_acquire_save_release_ok
 
 
-#[test]
-fn delete_ok ()
+#[tokio::test]
+async fn delete_ok ()
 {
     let chosen_key = "Palau";
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
     let dstore = AppInMemoryDStore::new(&cfg);
-    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).is_ok(), true);
+    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).await.is_ok(), true);
     let new_data : AppInMemUpdateData = {
         let mut out = HashMap::new();
         let t1 = {
@@ -233,7 +233,7 @@ fn delete_ok ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_ok(), true);
     assert_eq!(result.unwrap(), 3);
     let fetching_keys : AppInMemFetchKeys = {
@@ -243,7 +243,7 @@ fn delete_ok ()
         out
     };
     {
-        let result = dstore.fetch(fetching_keys.clone());
+        let result = dstore.fetch(fetching_keys.clone()).await;
         assert_eq!(result.is_ok(), true);
         let actual_fetched = result.unwrap();
         if let Some(a_table) = actual_fetched.get(UT_TABLE_LABEL_A)
@@ -253,11 +253,11 @@ fn delete_ok ()
         }
     }
     let deleting_keys : AppInMemDeleteInfo = fetching_keys.clone();
-    let result = dstore.delete(deleting_keys);
+    let result = dstore.delete(deleting_keys).await;
     assert_eq!(result.is_ok(), true);
     assert_eq!(result.unwrap(), 1usize);
     {
-        let result = dstore.fetch(fetching_keys);
+        let result = dstore.fetch(fetching_keys).await;
         assert_eq!(result.is_ok(), true);
         let actual_fetched = result.unwrap();
         if let Some(a_table) = actual_fetched.get(UT_TABLE_LABEL_A)
@@ -268,8 +268,8 @@ fn delete_ok ()
 } // end of delete_ok
 
 
-#[test]
-fn access_nonexist_table ()
+#[tokio::test]
+async fn access_nonexist_table ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items: 10 };
     let dstore = AppInMemoryDStore::new(&cfg);
@@ -284,19 +284,19 @@ fn access_nonexist_table ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_err(), true);
     let actual = result.err().unwrap();
     assert_eq!(actual.code , AppErrorCode::DataTableNotExist);
 }
 
 
-#[test]
-fn exceed_limit_error ()
+#[tokio::test]
+async fn exceed_limit_error ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Sheipa".to_string(), max_items:5 };
     let dstore = AppInMemoryDStore::new(&cfg);
-    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).is_ok(), true);
+    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).await.is_ok(), true);
     let new_data : AppInMemUpdateData = {
         let mut out = HashMap::new();
         let t1 = {
@@ -312,7 +312,7 @@ fn exceed_limit_error ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_ok(), true);
     assert_eq!(result.unwrap(), 3);
     let new_data : AppInMemUpdateData = {
@@ -330,7 +330,7 @@ fn exceed_limit_error ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_err(), true);
     let actual = result.err().unwrap();
     assert_eq!(actual.code, AppErrorCode::ExceedingMaxLimit);
@@ -348,12 +348,12 @@ impl AbsDStoreFilterKeyOp for UtestDstoreFiltKeyOp
 }
 
 
-#[test]
-fn filter_key_ok ()
+#[tokio::test]
+async fn filter_key_ok ()
 {
     let cfg = AppInMemoryDbCfg { alias: "Alishan".to_string(), max_items:8 };
     let dstore = AppInMemoryDStore::new(&cfg);
-    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).is_ok(), true);
+    assert_eq!(dstore.create_table(UT_TABLE_LABEL_A).await.is_ok(), true);
     let search_id = "hemu";
     let init_data:[Vec<String>;4] = [
         ["teehe", "0.076", "1827", "r6p0"] .into_iter().map(String::from).collect(),
@@ -375,11 +375,11 @@ fn filter_key_ok ()
         out.insert(UT_TABLE_LABEL_A.to_string(), t1);
         out
     };
-    let result = dstore.save(new_data);
+    let result = dstore.save(new_data).await;
     assert_eq!(result.is_ok(), true);
     assert_eq!(result.unwrap(), 4);
     let op = UtestDstoreFiltKeyOp{patt:search_id.to_string()};
-    let result = dstore.filter_keys(UT_TABLE_LABEL_A.to_string(), &op);
+    let result = dstore.filter_keys(UT_TABLE_LABEL_A.to_string(), &op).await;
     assert_eq!(result.is_ok(), true);
     let actual_keys = result.unwrap();
     let expect_keys = vec![format!("{search_id}-bisa"), format!("ferris-{search_id}")];

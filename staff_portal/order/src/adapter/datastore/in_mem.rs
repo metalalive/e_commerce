@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::cell::{RefCell, RefMut};
 use std::vec;
 
+use async_trait::async_trait;
 use tokio::sync::{Mutex, MutexGuard};
 
 use crate::config::AppInMemoryDbCfg;
@@ -26,21 +27,22 @@ pub type AppInMemFetchedSingleTable = InnerTable; // list of IDs per table
 pub type AppInMemFetchedData = AllTable; // TODO, rename to data set
 pub type AppInMemDstoreLock<'a> = MutexGuard<'a, RefCell<AppInMemFetchedData>>;
 
-pub trait AbsDStoreFilterKeyOp {
+pub trait AbsDStoreFilterKeyOp : Send + Sync {
     fn filter(&self, k:&InnerKey) -> bool;
 }
 
+#[async_trait]
 pub trait AbstInMemoryDStore : Send + Sync
 {
     fn new(cfg:&AppInMemoryDbCfg) -> Self where Self:Sized;
-    fn create_table (&self, label:&str) -> DefaultResult<(), AppError>;
-    fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>;
-    fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>;
-    fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>;
-    fn filter_keys(&self, tbl_label:InnerTableLabel, op:&dyn AbsDStoreFilterKeyOp)
+    async fn create_table (&self, label:&str) -> DefaultResult<(), AppError>;
+    async fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>;
+    async fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>;
+    async fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>;
+    async fn filter_keys(&self, tbl_label:InnerTableLabel, op:&dyn AbsDStoreFilterKeyOp)
         -> DefaultResult<Vec<InnerKey>, AppError>;
     // read-modify-write semantic, for atomic operation
-    fn fetch_acquire(&self, _info:AppInMemFetchKeys)
+    async fn fetch_acquire(&self, _info:AppInMemFetchKeys)
         -> DefaultResult<(AppInMemFetchedData, AppInMemDstoreLock), AppError>;
     fn save_release(&self, _data:AppInMemUpdateData, lock:AppInMemDstoreLock )
         -> DefaultResult<usize, AppError>;
@@ -54,13 +56,9 @@ pub struct AppInMemoryDStore {
 }
 
 impl AppInMemoryDStore {
-    fn try_get_table (&self) -> DefaultResult<MutexGuard<RefCell<AllTable>> , AppError>
+    async fn try_get_table (&self) -> MutexGuard<RefCell<AllTable>>
     {
-        match self.table_map.try_lock() {
-            Ok(guard) =>  Ok(guard),
-            Err(e) => Err(AppError{detail:Some(e.to_string()),
-                    code:AppErrorCode::AcquireLockFailure })
-        }
+        self.table_map.lock().await
     }
     fn _check_capacity(&self, _map:&AllTable) -> DefaultResult<(), AppError>
     {
@@ -126,6 +124,7 @@ impl AppInMemoryDStore {
 } // end of impl AppInMemoryDStore
 
 
+#[async_trait]
 impl AbstInMemoryDStore for AppInMemoryDStore {
     fn new(cfg:&AppInMemoryDbCfg) -> Self {
         let t_map = HashMap::new();
@@ -133,9 +132,9 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         Self { table_map: t_map, max_items_per_table: cfg.max_items }
     }
 
-    fn create_table (&self, label:&str) -> DefaultResult<(), AppError>
+    async fn create_table (&self, label:&str) -> DefaultResult<(), AppError>
     {
-        let guard = self.try_get_table()?;
+        let guard = self.try_get_table().await;
         let mut _map = guard.borrow_mut();
         if !_map.contains_key(label) {
             let newtable = HashMap::new();
@@ -144,9 +143,9 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         Ok(())
     }
 
-    fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>
+    async fn delete(&self, _info:AppInMemDeleteInfo) -> DefaultResult<usize, AppError>
     {
-        let guard = self.try_get_table()?;
+        let guard = self.try_get_table().await;
         let mut _map = guard.borrow_mut();
         let unchecked_labels = _info.keys().collect::<Vec<&InnerTableLabel>>();
         Self::_check_table_existence(&*_map, unchecked_labels)?;
@@ -157,22 +156,22 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         Ok(tot_cnt)
     }
 
-    fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>
+    async fn fetch(&self, _info:AppInMemFetchKeys) -> DefaultResult<AppInMemFetchedData, AppError>
     {
-        let guard = self.try_get_table()?;
+        let guard = self.try_get_table().await;
         Self::fetch_common(guard.borrow_mut(), _info)
     }
-    fn fetch_acquire(&self, _info:AppInMemFetchKeys)
+    async fn fetch_acquire(&self, _info:AppInMemFetchKeys)
         -> DefaultResult<(AppInMemFetchedData, AppInMemDstoreLock), AppError>
     {
-        let guard = self.try_get_table()?;
+        let guard = self.try_get_table().await;
         let rs_a = Self::fetch_common(guard.borrow_mut(), _info) ?;
         Ok((rs_a, guard))
     }
 
-    fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>
+    async fn save(&self, _data:AppInMemUpdateData) -> DefaultResult<usize, AppError>
     {
-        let guard = self.try_get_table()?;
+        let guard = self.try_get_table().await;
         self.save_common(guard.borrow_mut(), _data)
     }
     fn save_release(&self, _data:AppInMemUpdateData, lock:AppInMemDstoreLock)
@@ -181,10 +180,10 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         self.save_common(lock.borrow_mut(), _data)
     }
 
-    fn filter_keys(&self, tbl_label:InnerTableLabel, op:&dyn AbsDStoreFilterKeyOp)
+    async fn filter_keys(&self, tbl_label:InnerTableLabel, op:&dyn AbsDStoreFilterKeyOp)
         -> DefaultResult<Vec<InnerKey>, AppError>
     {
-        let guard = self.try_get_table()?;
+        let guard = self.try_get_table().await;
         let mut _map = guard.borrow_mut();
         let unchecked_labels = vec![&tbl_label];
         Self::_check_table_existence(&*_map, unchecked_labels)?;

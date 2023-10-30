@@ -33,11 +33,11 @@ pub struct ProductPolicyInMemRepo
 #[async_trait]
 impl AbstProductPolicyRepo for ProductPolicyInMemRepo
 {
-    fn new(ds:Arc<AppDataStoreContext>) -> Result<Box<dyn AbstProductPolicyRepo>, AppError>
+    async fn new(ds:Arc<AppDataStoreContext>) -> Result<Box<dyn AbstProductPolicyRepo>, AppError>
         where Self:Sized
     {
         if let Some(m)= &ds.in_mem {
-            m.create_table(TABLE_LABEL) ? ;
+            m.create_table(TABLE_LABEL).await ? ;
             let obj = Self{datastore: m.clone()};
             Ok(Box::new(obj))
         } else { // TODO, logging more detail ?
@@ -57,7 +57,7 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
             let items = [(TABLE_LABEL.to_string(), v)];
             HashMap::from(items)
         };
-        let result_raw = self.datastore.fetch(info)?;
+        let result_raw = self.datastore.fetch(info).await?;
         let filtered = if let Some(d) = result_raw.get(TABLE_LABEL)
         { // raw strings to model instances
             d.into_iter() .map(|(key,row)| {
@@ -108,7 +108,7 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
             h.insert(TABLE_LABEL.to_string(), table_data);
             h
         };
-        let _num_saved = self.datastore.save(data)?;
+        let _num_saved = self.datastore.save(data).await?;
         Ok(())
     } // end of fn save
 } // end of impl AbstProductPolicyRepo

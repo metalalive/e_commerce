@@ -254,7 +254,7 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
             format!("{}/{}/{}/{}", d.store_id, prod_typ_num, d.product_id, exp_fmt)
         }).collect();
         let info = HashMap::from([(_stockm::TABLE_LABEL.to_string(), ids)]);
-        let resultset = self.datastore.fetch(info) ?;
+        let resultset = self.datastore.fetch(info).await ?;
         Self::try_into_modelset(resultset)
     } // end of fn fetch
  
@@ -263,7 +263,7 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
         let rows = AppInMemFetchedSingleTable::from(slset);
         let table = (_stockm::TABLE_LABEL.to_string(), rows);
         let data = HashMap::from([table]);
-        let _num_saved = self.datastore.save(data)?;
+        let _num_saved = self.datastore.save(data).await?;
         Ok(())
     } // end of fn save
     
@@ -274,7 +274,8 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
             ProductStockIdentity2 {product_type:d.product_type.clone(),
                 store_id:d.seller_id, product_id:d.product_id}
         ).collect();
-        let (mut stock_mset, d_lock) = match self.fetch_for_reserve(pids) {
+        let (mut stock_mset, d_lock) = match self.fetch_for_reserve(pids).await
+        {
             Ok(v) => v,
             Err(e) => {return Err(Err(e));}
         };
@@ -288,14 +289,14 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
 } // end of impl StockLvlInMemRepo
 
 impl StockLvlInMemRepo {
-    fn fetch_for_reserve(&self, pids:Vec<ProductStockIdentity2>)
+    async fn fetch_for_reserve(&self, pids:Vec<ProductStockIdentity2>)
         -> DefaultResult<(StockLevelModelSet, AppInMemDstoreLock), AppError> 
     {
         let tbl_label = _stockm::TABLE_LABEL.to_string();
         let op = _stockm::InMemDStoreFiltKeyOp::new(pids, self.curr_time.clone());
-        let stock_ids = self.datastore.filter_keys(tbl_label.clone(), &op)?;
+        let stock_ids = self.datastore.filter_keys(tbl_label.clone(), &op).await?;
         let info = HashMap::from([(tbl_label, stock_ids)]);
-        let (tableset, _lock) = self.datastore.fetch_acquire(info)?;
+        let (tableset, _lock) = self.datastore.fetch_acquire(info).await?;
         let ms =  Self::try_into_modelset(tableset)?;
         Ok((ms, _lock))
     }
@@ -394,11 +395,11 @@ impl From<StockLevelModelSet> for AppInMemFetchedSingleTable {
 
 #[async_trait]
 impl AbsOrderRepo for OrderInMemRepo {
-    fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
+    async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
         where Self:Sized
     {
         let timenow = LocalTime::now().into();
-        match Self::build(ds, timenow) {
+        match Self::build(ds, timenow).await {
             Ok(obj) => Ok(Box::new(obj)),
             Err(e) => Err(e)
         }
@@ -426,7 +427,7 @@ impl AbsOrderRepo for OrderInMemRepo {
             tabledata.push(item);
         }
         let data = HashMap::from_iter(tabledata.into_iter());
-        let _num = self.datastore.save(data)?;
+        let _num = self.datastore.save(data).await?;
         let paylines = lines.into_iter().map(OrderLineModel::into).collect();
         Ok((oid, paylines))
     } // end of fn create
@@ -441,15 +442,15 @@ impl AbsOrderRepo for OrderInMemRepo {
 
 
 impl OrderInMemRepo {
-    pub fn build(ds:Arc<AppDataStoreContext>, curr_time:DateTime<FixedOffset>)
+    pub async fn build(ds:Arc<AppDataStoreContext>, curr_time:DateTime<FixedOffset>)
         -> DefaultResult<Self, AppError>
     {
         if let Some(m) = &ds.in_mem {
-            m.create_table(_stockm::TABLE_LABEL)?;
-            m.create_table(_contact::TABLE_LABEL)?;
-            m.create_table(_phy_addr::TABLE_LABEL)?;
-            m.create_table(_ship_opt::TABLE_LABEL)?;
-            m.create_table(_orderline::TABLE_LABEL)?;
+            m.create_table(_stockm::TABLE_LABEL).await?;
+            m.create_table(_contact::TABLE_LABEL).await?;
+            m.create_table(_phy_addr::TABLE_LABEL).await?;
+            m.create_table(_ship_opt::TABLE_LABEL).await?;
+            m.create_table(_orderline::TABLE_LABEL).await?;
             let stock_repo = StockLvlInMemRepo { datastore: m.clone(), curr_time };
             let obj = Self{ _stock:Arc::new(Box::new(stock_repo)), datastore:m.clone() };
             Ok(obj)

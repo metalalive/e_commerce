@@ -10,10 +10,10 @@ use order::model::{
 
 use crate::repository::in_mem_ds_ctx_setup;
 
-fn in_mem_repo_ds_setup (nitems:u32) -> OrderInMemRepo
+async fn in_mem_repo_ds_setup (nitems:u32) -> OrderInMemRepo
 {
     let ds = in_mem_ds_ctx_setup::<AppInMemoryDStore>(nitems);
-    let result = OrderInMemRepo::build(ds, Local::now().into());
+    let result = OrderInMemRepo::build(ds, Local::now().into()).await;
     assert_eq!(result.is_ok(), true);
     result.unwrap()
 }
@@ -78,7 +78,7 @@ fn ut_setup_orderline (mock_seller_ids:&[u32;2])
 #[tokio::test]
 async fn in_mem_create_ok ()
 {
-    let o_repo = in_mem_repo_ds_setup(30);
+    let o_repo = in_mem_repo_ds_setup(30).await;
     let (mock_usr_id, mock_seller_ids) = (124, [17u32,38]);
     let mock_oid = OrderLineModel::generate_order_id(4);
     // TODO, add stock level and order ID verification

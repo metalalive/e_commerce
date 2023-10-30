@@ -39,11 +39,11 @@ fn pprice_init_data() -> [ProductPriceModel;7] {
     ]
 } // end of pprice_init_data
 
-fn in_mem_repo_ds_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
+async fn in_mem_repo_ds_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
     -> Box<dyn AbsProductPriceRepo>
 {
     let ds_ctx = in_mem_ds_ctx_setup::<T>(max_items);
-    let result = ProductPriceInMemRepo::new(ds_ctx);
+    let result = ProductPriceInMemRepo::new(ds_ctx).await;
     assert_eq!(result.is_ok(), true);
     result.unwrap()
 }
@@ -53,7 +53,7 @@ fn in_mem_repo_ds_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
 async fn in_mem_save_fetch_ok_1 ()
 {
     let (mocked_store_id, pprice_data) = (5678, pprice_init_data());
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15).await;
     // ------ subcase, the first bulk update
     let ppset = {
         let items = pprice_data[..3].iter().map(ut_clone_productprice).collect();
@@ -117,7 +117,7 @@ async fn in_mem_save_fetch_ok_1 ()
 async fn in_mem_save_fetch_ok_2 ()
 {
     let (mocked_store_id, pprice_data) = (5678, pprice_init_data());
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15).await;
     let ppset = {
         let items = pprice_data[4..6].iter().map(ut_clone_productprice).collect();
         ProductPriceModelSet { store_id:mocked_store_id, items }
@@ -169,7 +169,7 @@ async fn in_mem_save_fetch_ok_3 ()
 {
     let pprice_data = pprice_init_data();
     let mocked_store_ids = [5566u32, 7788u32];
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15).await;
     {
         let ppset = {
             let items = pprice_data[0..2].iter().map(ut_clone_productprice).collect();
@@ -219,7 +219,7 @@ async fn in_mem_save_fetch_ok_3 ()
 #[tokio::test]
 async fn in_mem_save_empty_input ()
 {
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(4);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(4).await;
     let ppset = ProductPriceModelSet { store_id:1234, items:Vec::new() };
     let result = repo.save(ppset).await;
     assert_eq!(result.is_err(), true);
@@ -232,7 +232,7 @@ async fn in_mem_save_empty_input ()
 async fn in_mem_save_dstore_error ()
 {
     let (mocked_store_id, pprice_data) = (5678, pprice_init_data());
-    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(5);
+    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(5).await;
     let ppset = {
         let item = ut_clone_productprice(&pprice_data[0]);
         ProductPriceModelSet { store_id: mocked_store_id, items:vec![item] }
@@ -247,7 +247,7 @@ async fn in_mem_save_dstore_error ()
 #[tokio::test]
 async fn in_mem_fetch_dstore_error ()
 {
-    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4);
+    let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4).await;
     let ids = vec![(ProductType::Item,1001)];
     let result = repo.fetch(124u32, ids).await;
     assert_eq!(result.is_err(), true);
@@ -260,7 +260,7 @@ async fn in_mem_fetch_dstore_error ()
 async fn in_mem_delete_subset_ok ()
 {
     let (mocked_store_id, pprice_data) = (512, pprice_init_data());
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15).await;
     let ppset = {
         let items = pprice_data.iter().map(ut_clone_productprice).collect();
         ProductPriceModelSet { store_id:mocked_store_id, items }
@@ -296,7 +296,7 @@ async fn in_mem_delete_subset_ok ()
 async fn in_mem_delete_subset_id_empty ()
 {
     let mocked_store_id = 512;
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(4);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(4).await;
     let deleting_req = ProductPriceDeleteDto {items: Some(Vec::new()),
             pkgs:Some(Vec::new()),  item_type:ProductType::Item, pkg_type:ProductType::Package};
     let result = repo.delete(mocked_store_id, deleting_req).await;
@@ -309,7 +309,7 @@ async fn in_mem_delete_subset_id_empty ()
 async fn in_mem_delete_all_ok ()
 {
     let (mocked_store_ids, pprice_data) = ([543u32, 995u32], pprice_init_data());
-    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15);
+    let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15).await;
     let ppset = ProductPriceModelSet {store_id:mocked_store_ids[0],
         items: pprice_data[..4].iter().map(ut_clone_productprice).collect() };
     let result = repo.save(ppset).await;

@@ -31,7 +31,7 @@ pub use self::product_price::ProductPriceInMemRepo;
 #[async_trait]
 pub trait AbstProductPolicyRepo : Sync + Send
 {
-    fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
+    async fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
         where Self:Sized ;
     
     async fn fetch(&self, ids:Vec<(ProductType, u64)>) -> DefaultResult<ProductPolicyModelSet, AppError>;
@@ -43,7 +43,7 @@ pub trait AbstProductPolicyRepo : Sync + Send
 #[async_trait]
 pub trait AbsProductPriceRepo : Sync + Send
 {
-    fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
+    async fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
         where Self:Sized ;
     async fn delete_all(&self, store_id:u32) -> DefaultResult<(), AppError>;
     async fn delete(&self, store_id:u32, ids:ProductPriceDeleteDto) -> DefaultResult<(), AppError> ;
@@ -57,7 +57,7 @@ pub trait AbsProductPriceRepo : Sync + Send
 
 #[async_trait]
 pub trait AbsOrderRepo : Sync + Send {
-    fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
+    async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
         where Self:Sized;
 
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
@@ -83,18 +83,18 @@ pub trait AbsOrderStockRepo : Sync +  Send {
 
 // TODO, consider runtime configuration for following repositories
 
-pub fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
+pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
 {
-    ProductPolicyInMemRepo::new(ds)
+    ProductPolicyInMemRepo::new(ds).await
 }
-pub fn app_repo_product_price (ds:Arc<AppDataStoreContext>)
+pub async fn app_repo_product_price (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
 {
-    ProductPriceInMemRepo::new(ds)
+    ProductPriceInMemRepo::new(ds).await
 }
-pub fn app_repo_order (ds:Arc<AppDataStoreContext>)
+pub async fn app_repo_order (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
 {
-    OrderInMemRepo::new(ds)
+    OrderInMemRepo::new(ds).await
 }
