@@ -187,6 +187,7 @@ impl StockLevelModelSet {
     // this model instance will be no longer clean and should be discarded immediately.
     pub fn try_reserve(&mut self, reqs:&Vec<OrderLineModel>) -> Vec<OrderLineCreateErrorDto>
     {
+        self.sort_by_expiry();
         reqs.iter().filter_map(|req| {
             let mut error = OrderLineCreateErrorDto {seller_id:req.seller_id,
                 product_id:req.product_id, product_type:req.product_type.clone(),
@@ -233,5 +234,12 @@ impl StockLevelModelSet {
             } else { None }
         }) .collect()
     } // end of try_reserve
+    
+    fn sort_by_expiry(&mut self) {
+        // to ensure the items that expire soon will be taken first
+        self.stores.iter_mut().map(|s| {
+            s.products.sort_by(|a, b| a.expiry.cmp(&b.expiry));
+        }).count();
+    } // end of sort_by_expiry
 } // end of impl StockLevelModelSet
 

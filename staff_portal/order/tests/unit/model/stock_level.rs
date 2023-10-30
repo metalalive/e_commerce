@@ -44,7 +44,7 @@ fn ut_mock_saved_product() -> [ProductStockModel;11]
            quantity: StockQuantityModel {total:13, booked:1, cancelled:1}
         },
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-10-01T18:40:30.040+09:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-10-21T18:40:30.040+09:00").unwrap(),
            quantity: StockQuantityModel {total:5, booked:1, cancelled:1}
         },
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
@@ -52,7 +52,7 @@ fn ut_mock_saved_product() -> [ProductStockModel;11]
            quantity: StockQuantityModel {total:19, booked:1, cancelled:10}
         },
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-10-08T07:40:33.040+09:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-10-18T07:40:33.040+09:00").unwrap(),
            quantity: StockQuantityModel {total:6, booked:1, cancelled:1}
         },
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
@@ -269,6 +269,17 @@ fn reserve_ok()
         assert!(actual > 0);
         assert_eq!(actual, expect);
     }).count();
+    { // verify the order product items were reserved
+        let p = mset.stores[1].products.iter().collect::<Vec<&ProductStockModel>>();
+        assert_eq!((p[0].type_.clone(), p[0].id_), (p[1].type_.clone(), p[1].id_));
+        assert_eq!((p[0].type_.clone(), p[0].id_), (p[2].type_.clone(), p[2].id_));
+        assert_eq!((p[0].type_.clone(), p[0].id_), (p[3].type_.clone(), p[3].id_));
+        assert!(p[0].expiry < p[1].expiry);
+        assert!(p[1].expiry < p[2].expiry);
+        assert!(p[2].expiry < p[3].expiry);
+        assert_eq!(p[0].quantity.total, (p[0].quantity.booked + p[0].quantity.cancelled));
+        assert!(p[1].quantity.total > (p[1].quantity.booked + p[1].quantity.cancelled));
+    }
     // ------ subcase 2 -------
     expect_booked_qty = vec![5,2];
     let reqs = vec![
