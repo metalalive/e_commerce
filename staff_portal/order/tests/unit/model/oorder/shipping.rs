@@ -1,7 +1,8 @@
-use order::api::web::dto::{
-    PhyAddrReqDto, CountryCode, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
-    ShippingReqDto, ContactReqDto, PhoneNumberReqDto, ShippingOptionReqDto, ShippingMethod
+use order::api::dto::{
+    ShippingDto, ContactDto, PhoneNumberDto, ShippingOptionDto, ShippingMethod,
+    PhyAddrDto, CountryCode
 };
+use order::api::web::dto::{PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,};
 use order::model::{PhyAddrModel, ShippingModel};
 
 #[test]
@@ -12,7 +13,7 @@ fn addr_convert_dto_ok()
     if let Ok(v) = result {
         assert!(v.is_none());
     }
-    let data = PhyAddrReqDto { country: CountryCode::TW, region: "Yilan".to_string(),
+    let data = PhyAddrDto { country: CountryCode::TW, region: "Yilan".to_string(),
         city: "WaiAo".to_string(), distinct: "shore-seaweed bay".to_string(),
         street_name: Some("Bumpy Road".to_string()), detail: "321-5".to_string() };
     let result = PhyAddrModel::try_from_opt(Some(data));
@@ -28,7 +29,7 @@ fn addr_convert_dto_ok()
 #[test]
 fn addr_convert_dto_error()
 {
-    let data = PhyAddrReqDto { country: CountryCode::TW, region: "Yilan".to_string(),
+    let data = PhyAddrDto { country: CountryCode::TW, region: "Yilan".to_string(),
         city: "Wai@Ao".to_string(), distinct: "shore-seaweed bay".to_string(),
         street_name: Some("Bumpy Road".to_string()), detail: "321-5-i\x00lla".to_string() };
     let result = PhyAddrModel::try_from_opt(Some(data));
@@ -48,11 +49,11 @@ fn addr_convert_dto_error()
 #[test]
 fn shipping_convert_dto_without_addr()
 {
-    let data = ShippingReqDto {contact:ContactReqDto {first_name: "Stu".to_string(),
+    let data = ShippingDto {contact:ContactDto {first_name: "Stu".to_string(),
             last_name: "Allabom".to_string(), emails: vec!["myacc@domain.org".to_string()],
-            phones: vec![PhoneNumberReqDto{nation:886, number:"0019283".to_string()}],
+            phones: vec![PhoneNumberDto{nation:886, number:"0019283".to_string()}],
         },  address:None,
-        option: vec![ShippingOptionReqDto {seller_id:87, method: ShippingMethod::UPS}]
+        option: vec![ShippingOptionDto {seller_id:87, method: ShippingMethod::UPS}]
     };
     let result = ShippingModel::try_from(data);
     assert!(result.is_ok());
@@ -67,13 +68,13 @@ fn shipping_convert_dto_without_addr()
 #[test]
 fn shipping_opt_convert_dto_error()
 {
-    let data = ShippingReqDto {contact:ContactReqDto {first_name: "Stu".to_string(),
+    let data = ShippingDto {contact:ContactDto {first_name: "Stu".to_string(),
             last_name: "Allabo==m".to_string(), emails: vec!["myacc@domain.org".to_string()],
-            phones: vec![PhoneNumberReqDto{nation:886, number:"0019283".to_string()}],
+            phones: vec![PhoneNumberDto{nation:886, number:"0019283".to_string()}],
         },  address:None,
         option: vec![
-            ShippingOptionReqDto {seller_id:190, method: ShippingMethod::FedEx} ,
-            ShippingOptionReqDto {seller_id:0, method: ShippingMethod::UPS} ,
+            ShippingOptionDto {seller_id:190, method: ShippingMethod::FedEx} ,
+            ShippingOptionDto {seller_id:0, method: ShippingMethod::UPS} ,
         ]
     };
     let result = ShippingModel::try_from(data);

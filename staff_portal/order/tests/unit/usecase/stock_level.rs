@@ -64,7 +64,15 @@ impl AbsOrderRepo for MockOrderRepo {
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
-    async fn fetch_olines(&self, _oid:String) -> DefaultResult<(u32, Vec<OrderLineModel>), AppError>
+    async fn fetch_all_lines(&self, _oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+    async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+    async fn fetch_shipping(&self, oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }

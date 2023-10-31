@@ -9,6 +9,8 @@ use crate::api::web::dto::{
     OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLineErrorReason, OrderLineCreateErrNonExistDto,
     OrderCreateReqData, ShippingReqDto, BillingReqDto, OrderLineReqDto, OrderLineCreateErrorDto,
 };
+use crate::api::rpc::dto::{OrderReplicaPaymentDto, OrderReplicaInventoryDto};
+use crate::error::AppError;
 use crate::model::{
     BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet,
     ProductPolicyModelSet, StockLevelModelSet
@@ -24,6 +26,13 @@ pub struct CreateOrderUseCase {
     pub repo_price: Box<dyn AbsProductPriceRepo>,
     pub repo_policy:Box<dyn AbstProductPolicyRepo>,
     pub usr_id: u32 // TODO, switch to auth token (e.g. JWT), check user quota
+}
+
+pub struct OrderReplicaPaymentUseCase {
+    pub repo: Box<dyn AbsOrderRepo>,
+}
+pub struct OrderReplicaInventoryUseCase {
+    pub repo: Box<dyn AbsOrderRepo>,
 }
 
 impl CreateOrderUseCase {
@@ -169,3 +178,28 @@ impl CreateOrderUseCase {
     }
 } // end of impl CreateOrderUseCase
 
+
+impl OrderReplicaPaymentUseCase {
+    pub async fn execute(self, oid:String) -> DefaultResult<OrderReplicaPaymentDto, AppError>
+    {
+        let olines = self.repo.fetch_all_lines(oid.clone()).await ?;
+        // TODO, lock billing instance so customers are no longer able to update it
+        let (billing, usr_id) = self.repo.fetch_billing(oid.clone()).await ?;
+        let resp = OrderReplicaPaymentDto {oid, usr_id, billing:billing.into(),
+            lines: olines.into_iter().map(OrderLineModel::into).collect()
+        };
+        Ok(resp)
+    }
+}
+impl OrderReplicaInventoryUseCase {
+    pub async fn execute(self, oid:String) -> DefaultResult<OrderReplicaInventoryDto, AppError>
+    {
+        let olines = self.repo.fetch_all_lines(oid.clone()).await ?;
+        // TODO, lock shipping instance so customers are no longer able to update it
+        let (shipping, usr_id) = self.repo.fetch_shipping(oid.clone()).await ?;
+        let resp = OrderReplicaInventoryDto {oid, usr_id, shipping:shipping.into(),
+            lines: olines.into_iter().map(OrderLineModel::into).collect()
+        };
+        Ok(resp)
+    }
+}

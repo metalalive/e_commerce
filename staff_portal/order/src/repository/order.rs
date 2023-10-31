@@ -14,7 +14,7 @@ use crate::datastore::{AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedDa
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockModel, StoreStockModel, StockQuantityModel, ProductStockIdentity2,  ProductStockIdentity,
-    StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel
+    StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel, ContactModel
 };
 
 use super::{AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn};
@@ -432,11 +432,28 @@ impl AbsOrderRepo for OrderInMemRepo {
         Ok((oid, paylines))
     } // end of fn create
 
-    async fn fetch_olines(&self, _oid:String) -> DefaultResult<(u32, Vec<OrderLineModel>), AppError>
+    async fn fetch_all_lines(&self, _oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
+    {
+        let olines = vec![];
+        Ok(olines)
+    }
+
+    async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>
     {
         let usr_id = 123;
-        let olines = vec![];
-        Ok((usr_id, olines))
+        let contact = ContactModel { first_name: "nobody".to_string(),
+            last_name: "nobody".to_string(), emails: vec![], phones: vec![] };
+        let out = BillingModel { contact, address:None };
+        Ok((out, usr_id))
+    }
+    
+    async fn fetch_shipping(&self, oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
+    {
+        let usr_id = 123;
+        let contact = ContactModel { first_name: "nobody".to_string(),
+            last_name: "nobody".to_string(), emails: vec![], phones: vec![] };
+        let out = ShippingModel { contact, address: None, option: vec![] };
+        Ok((out, usr_id))
     }
 } // end of impl AbsOrderRepo
 

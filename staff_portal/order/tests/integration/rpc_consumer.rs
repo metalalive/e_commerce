@@ -162,9 +162,11 @@ async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
         let oid_v = obj.get("oid").unwrap();
         let usr_id_v = obj.get("usr_id").unwrap();
         let olines_v = obj.get("lines").unwrap();
+        let bill_v = obj.get("billing").unwrap();
         assert!(oid_v.is_string());
         assert!(usr_id_v.is_u64());
         assert!(olines_v.is_array());
+        assert!(bill_v.is_object());
     }
     Ok(())
 } // end of fn generate_orderline_for_payment_ok
@@ -187,9 +189,11 @@ async fn  generate_orderline_for_inventory_ok() -> DefaultResult<(), AppError>
         let oid_v = obj.get("oid").unwrap();
         let usr_id_v = obj.get("usr_id").unwrap();
         let olines_v = obj.get("lines").unwrap();
+        let ship_v = obj.get("shipping").unwrap();
         assert!(oid_v.is_string());
         assert!(usr_id_v.is_u64());
         assert!(olines_v.is_array());
+        assert!(ship_v.is_object());
     }
     Ok(())
 } // end of fn generate_orderline_for_inventory_ok

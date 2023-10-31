@@ -6,6 +6,74 @@ use crate::api::{jsn_validate_product_type, jsn_serialize_product_type};
 // TODO, merge the 2 DTO modules in `/web` and `/rpc` package
 
 #[derive(Deserialize, Serialize)]
+pub struct PhoneNumberDto {
+    pub nation: u16,
+    pub number: String,
+}
+#[derive(Deserialize, Serialize)]
+pub struct ContactDto {
+    pub first_name: String,
+    pub last_name: String,
+    pub emails: Vec<String>,
+    pub phones: Vec<PhoneNumberDto>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub enum CountryCode {TW,TH,IN,ID,US}
+impl Into<String> for CountryCode {
+    fn into(self) -> String {
+        let out = match self {
+            Self::TW => "TW",  Self::TH => "TH",
+            Self::IN => "IN",  Self::ID => "ID",
+            Self::US => "US",
+        };
+        out.to_string()
+    }
+} // implement `Into` trait, not replying on serde 
+
+#[derive(Deserialize, Serialize)]
+pub struct PhyAddrDto {
+    pub country: CountryCode,
+    pub region: String,
+    pub city: String,
+    pub distinct: String,
+    pub street_name: Option<String>,
+    pub detail: String
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct ShippingOptionDto {
+    pub seller_id: u32,
+    // #[serde(rename_all="_")]
+    pub method: ShippingMethod,
+}
+
+#[derive(Deserialize, Serialize)]
+pub enum ShippingMethod {UPS, FedEx, BlackCatExpress}
+impl Into<String> for ShippingMethod {
+    fn into(self) -> String {
+        let out = match self {
+            Self::UPS => "UPS",  Self::FedEx => "FedEx",
+            Self::BlackCatExpress => "BlackCatExpress",
+        };
+        out.to_string()
+    }
+} // implement `Into` trait, not replying on serde 
+
+#[derive(Deserialize, Serialize)]
+pub struct ShippingDto {
+    pub contact: ContactDto,
+    pub address: Option<PhyAddrDto>,
+    pub option: Vec<ShippingOptionDto>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct BillingDto {
+    pub contact: ContactDto,
+    pub address: Option<PhyAddrDto>,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct PayAmountDto {
     pub unit: u32,
     pub total: u32

@@ -4,14 +4,16 @@ use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
 use regex::Regex;
 use uuid::{Uuid, Builder, Timestamp, NoContext};
 
-use crate::api::dto::{OrderLinePayDto, PayAmountDto};
+use crate::api::dto::{
+    ContactDto, PhyAddrDto, ShippingOptionDto, ShippingMethod, CountryCode,
+    BillingDto, ShippingDto, PhoneNumberDto, OrderLinePayDto, PayAmountDto
+};
 use crate::api::rpc::dto::OrderLineReplicaInventoryDto;
 use crate::api::web::dto::{
-    BillingErrorDto, ShippingErrorDto, ContactReqDto, PhyAddrReqDto, ShippingOptionReqDto,
-    ContactErrorDto, PhyAddrErrorDto, ShippingOptionErrorDto, ShippingMethod, CountryCode,
+    BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto,
     ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
-    ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberReqDto, PhoneNumberErrorDto,
-    BillingReqDto, ShippingReqDto, PhoneNumNationErrorReason, OrderLineReqDto 
+    ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberErrorDto,
+    PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto 
 };
 use crate::constant::{REGEX_EMAIL_RFC5322, ProductType};
 
@@ -21,7 +23,7 @@ pub struct ContactModel {
     pub first_name: String,
     pub last_name: String,
     pub emails: Vec<String>,
-    pub phones: Vec<PhoneNumberReqDto>,
+    pub phones: Vec<PhoneNumberDto>,
 } // TODO, fraud check
 
 pub struct PhyAddrModel {
@@ -65,9 +67,16 @@ pub struct OrderLineModel {
     pub policy: OrderLineAppliedPolicyModel
 }
 
-impl TryFrom<ContactReqDto> for ContactModel {
+impl Into<ContactDto> for ContactModel {
+    fn into(self) -> ContactDto {
+        ContactDto { first_name: self.first_name, last_name: self.last_name,
+            emails: self.emails, phones: self.phones }
+    }
+}
+
+impl TryFrom<ContactDto> for ContactModel {
     type Error = ContactErrorDto;
-    fn try_from(value: ContactReqDto) -> DefaultResult<Self, Self::Error> {
+    fn try_from(value: ContactDto) -> DefaultResult<Self, Self::Error> {
         let fnam_rs = Self::check_alphabetic(value.first_name.as_str());
         let lnam_rs = Self::check_alphabetic(value.last_name.as_str());
         let (em_rs, ph_rs, nonfd_rs) = if value.emails.is_empty() {
@@ -120,7 +129,7 @@ impl ContactModel {
         }).collect();
         if num_err == 0 {None} else {Some(out)}
     }
-    fn check_phones (value:&Vec<PhoneNumberReqDto>) -> Option<Vec<Option<PhoneNumberErrorDto>>>
+    fn check_phones (value:&Vec<PhoneNumberDto>) -> Option<Vec<Option<PhoneNumberErrorDto>>>
     {
         let mut num_err:usize = 0;
         let out = value.iter().map(|d| {
@@ -138,9 +147,17 @@ impl ContactModel {
     }
 } // end of impl ContactModel
 
-impl TryFrom<PhyAddrReqDto> for PhyAddrModel {
+
+impl Into<PhyAddrDto> for PhyAddrModel {
+    fn into(self) -> PhyAddrDto {
+        PhyAddrDto { country: self.country, region: self.region, city: self.city,
+            distinct: self.distinct, street_name: self.street_name, detail: self.detail }
+    }
+}
+
+impl TryFrom<PhyAddrDto> for PhyAddrModel {
     type Error = PhyAddrErrorDto;
-    fn try_from(value: PhyAddrReqDto) -> DefaultResult<Self, Self::Error> {
+    fn try_from(value: PhyAddrDto) -> DefaultResult<Self, Self::Error> {
         let region_rs = Self::check_region(value.region.as_str());
         let citi_rs = Self::check_region(value.city.as_str());
         let dist_rs = Self::contain_ctrl_char(value.distinct.as_str());
@@ -160,7 +177,7 @@ impl TryFrom<PhyAddrReqDto> for PhyAddrModel {
     }
 } // end of impl PhyAddrModel
 impl PhyAddrModel {
-    pub fn try_from_opt(value: Option<PhyAddrReqDto>) -> DefaultResult<Option<Self>, PhyAddrErrorDto>
+    pub fn try_from_opt(value: Option<PhyAddrDto>) -> DefaultResult<Option<Self>, PhyAddrErrorDto>
     {
         if let Some(d) = value {
             match PhyAddrModel::try_from(d) {
@@ -189,9 +206,16 @@ impl PhyAddrModel {
     }
 } // end of impl PhyAddrModel
 
-impl TryFrom<ShippingOptionReqDto> for ShippingOptionModel {
+
+impl Into<ShippingOptionDto> for ShippingOptionModel {
+    fn into(self) -> ShippingOptionDto {
+        ShippingOptionDto { seller_id: self.seller_id, method:self.method }
+    }
+}
+
+impl TryFrom<ShippingOptionDto> for ShippingOptionModel {
     type Error = ShippingOptionErrorDto;
-    fn try_from(value: ShippingOptionReqDto) -> DefaultResult<Self, Self::Error> {
+    fn try_from(value: ShippingOptionDto) -> DefaultResult<Self, Self::Error> {
         if value.seller_id == 0 {
             let e = Self::Error { method: None,
                 seller_id: Some(ShipOptionSellerErrorReason::Empty) };
@@ -202,7 +226,7 @@ impl TryFrom<ShippingOptionReqDto> for ShippingOptionModel {
     }
 }
 impl ShippingOptionModel {
-    pub fn try_from_vec(value :Vec<ShippingOptionReqDto>)
+    pub fn try_from_vec(value :Vec<ShippingOptionDto>)
         -> DefaultResult<Vec<Self>, Vec<Option<ShippingOptionErrorDto>>>
     {
         let results = value.into_iter().map(Self::try_from).collect
@@ -223,9 +247,19 @@ impl ShippingOptionModel {
     }
 } // end of impl ShippingOptionModel
 
-impl TryFrom<BillingReqDto> for BillingModel {
+impl Into<BillingDto> for BillingModel {
+    fn into(self) -> BillingDto {
+        let (c, pa) = (self.contact.into(), self.address);
+        let a = if let Some(v) = pa {
+            Some(v.into())
+        } else {None};
+        BillingDto { contact: c, address: a }
+    }
+}
+
+impl TryFrom<BillingDto> for BillingModel {
     type Error = BillingErrorDto;
-    fn try_from(value: BillingReqDto) -> DefaultResult<Self, Self::Error>
+    fn try_from(value: BillingDto) -> DefaultResult<Self, Self::Error>
     {
         let results = (ContactModel::try_from(value.contact),
                        PhyAddrModel::try_from_opt(value.address));
@@ -241,9 +275,20 @@ impl TryFrom<BillingReqDto> for BillingModel {
     }
 } // end of impl BillingModel
 
-impl TryFrom<ShippingReqDto> for ShippingModel {
+impl Into<ShippingDto> for ShippingModel {
+    fn into(self) -> ShippingDto {
+        let (c, pa, opt) = (self.contact.into(), self.address, self.option);
+        let a = if let Some(v) = pa {
+            Some(v.into())
+        } else {None};
+        let opt = opt.into_iter().map(ShippingOptionModel::into).collect();
+        ShippingDto { contact: c, address: a, option: opt }
+    }
+}
+
+impl TryFrom<ShippingDto> for ShippingModel {
     type Error = ShippingErrorDto;
-    fn try_from(value: ShippingReqDto) -> DefaultResult<Self, Self::Error>
+    fn try_from(value: ShippingDto) -> DefaultResult<Self, Self::Error>
     {
         let results = (ContactModel::try_from(value.contact),
                        PhyAddrModel::try_from_opt(value.address),

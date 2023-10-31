@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use order::api::web::dto::{PhoneNumberReqDto, CountryCode, ShippingMethod};
+use order::api::dto::{PhoneNumberDto, CountryCode, ShippingMethod};
 use order::constant::ProductType;
 use order::datastore::AppInMemoryDStore;
 use order::repository::{OrderInMemRepo, AbsOrderRepo};
@@ -23,8 +23,8 @@ fn ut_setup_billing () -> BillingModel
     let (first_name, last_name) = ("Ken".to_string(), "Kabaacis".to_string());
     let emails = vec!["sz16@crossroad.au".to_string(), "hay0123@pitch.io".to_string()];
     let phones = vec![
-        PhoneNumberReqDto{nation:43, number:"002081264".to_string()},
-        PhoneNumberReqDto{nation:43, number:"300801211".to_string()}
+        PhoneNumberDto{nation:43, number:"002081264".to_string()},
+        PhoneNumberDto{nation:43, number:"300801211".to_string()}
     ];
     let contact = ContactModel {first_name, last_name, emails, phones};
     let address = PhyAddrModel { country: CountryCode::TW, region: "PengHu".to_string(),
@@ -37,8 +37,8 @@ fn ut_setup_shipping (mock_seller_ids:&[u32;2]) -> ShippingModel
     let (first_name, last_name) = ("Johan".to_string(), "Kazzhitsch".to_string());
     let emails = vec!["high@aman.at".to_string(), "low@hunt.io".to_string()];
     let phones = vec![
-        PhoneNumberReqDto{nation:43, number:"500020812".to_string()},
-        PhoneNumberReqDto{nation:43, number:"130080121".to_string()}
+        PhoneNumberDto{nation:43, number:"500020812".to_string()},
+        PhoneNumberDto{nation:43, number:"130080121".to_string()}
     ];
     let contact = ContactModel {first_name, last_name, emails, phones};
     let address = PhyAddrModel { country: CountryCode::TW, region: "NewTaipei".to_string(),

@@ -66,7 +66,11 @@ pub trait AbsOrderRepo : Sync + Send {
                      bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError> ;
 
-    async fn fetch_olines(&self, oid:String) -> DefaultResult<(u32, Vec<OrderLineModel>), AppError>;
+    async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>;
+
+    async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>;
+    
+    async fn fetch_shipping(&self, oid:String) -> DefaultResult<(ShippingModel, u32), AppError>;
 }
 
 pub type AppStockRepoReserveReturn = DefaultResult<(), DefaultResult<Vec<OrderLineCreateErrorDto>, AppError>>;
