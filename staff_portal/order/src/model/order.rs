@@ -324,7 +324,7 @@ impl  OrderLineModel {
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         }
     }
-    pub fn generate_order_id (machine_code:u8) -> Uuid
+    pub fn generate_order_id (machine_code:u8) -> String
     { // utility for generating top-level identifier to each order
         // UUIDv7 is for single-node application. This app needs to consider
         // scalability of multi-node environment, UUIDv8 can be utilized cuz it
@@ -337,7 +337,14 @@ impl  OrderLineModel {
         let mut node_id = rand::random::<[u8;10]>();
         node_id[0] = machine_code;
         let builder = Builder::from_unix_timestamp_millis(millis, &node_id);
-        builder.into_uuid()
+        let oid = builder.into_uuid();
+        Self::hex_str_order_id(oid)
+    }
+    fn hex_str_order_id(oid:Uuid) -> String
+    {
+        let bs = oid.into_bytes();
+        bs.into_iter().map(|b| format!("{:02x}",b))
+            .collect::<Vec<String>>().join("")
     }
 } // end of impl OrderLineModel
 

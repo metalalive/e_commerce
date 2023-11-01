@@ -167,6 +167,9 @@ async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
         assert!(usr_id_v.is_u64());
         assert!(olines_v.is_array());
         assert!(bill_v.is_object());
+        if let JsnVal::Array(olines) = olines_v {
+            assert_eq!(olines.len(), 0);
+        }
     }
     Ok(())
 } // end of fn generate_orderline_for_payment_ok
@@ -194,6 +197,9 @@ async fn  generate_orderline_for_inventory_ok() -> DefaultResult<(), AppError>
         assert!(usr_id_v.is_u64());
         assert!(olines_v.is_array());
         assert!(ship_v.is_object());
+        if let JsnVal::Array(olines) = olines_v {
+            assert_eq!(olines.len(), 0);
+        }
     }
     Ok(())
 } // end of fn generate_orderline_for_inventory_ok

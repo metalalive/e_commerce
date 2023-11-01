@@ -5,16 +5,15 @@ use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
-use uuid::Uuid;
 
 use crate::AppDataStoreContext;
 use crate::api::dto::OrderLinePayDto;
 use crate::constant::ProductType;
-use crate::datastore::{AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedData, AppInMemFetchedSingleTable};
+use crate::datastore::{AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedData, AppInMemFetchedSingleTable, AppInMemFetchedSingleRow};
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockModel, StoreStockModel, StockQuantityModel, ProductStockIdentity2,  ProductStockIdentity,
-    StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel, ContactModel
+    StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel, ContactModel, OrderLinePriceModel, OrderLineAppliedPolicyModel
 };
 
 use super::{AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn};
@@ -175,6 +174,7 @@ mod _ship_opt {
 
 mod _orderline {
     use super::{HashMap, ProductType};
+    use crate::datastore::AbsDStoreFilterKeyOp;
     use crate::model::OrderLineModel;
     
     pub(super) const TABLE_LABEL: &'static str = "order_line_reserved";
@@ -189,6 +189,16 @@ mod _orderline {
                 Self::PolicyReserved => 6,    Self::PolicyWarranty => 7,
                 Self::TotNumColumns => 8,
             }
+        }
+    }
+    pub(super) struct InMemDStoreFiltKeyOID<'a> {
+        pub oid: &'a str,
+    }
+    impl<'a> AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOID<'a> {
+        fn filter(&self, k:&String) -> bool {
+            let mut id_elms = k.split("-");
+            let oid_rd = id_elms.next().unwrap();
+            self.oid == oid_rd
         }
     }
     pub(super) fn to_inmem_tbl(oid:&str, data:&Vec<OrderLineModel>)
@@ -391,6 +401,31 @@ impl From<StockLevelModelSet> for AppInMemFetchedSingleTable {
     }
 } // end of impl From for StockLevelModelSet
 
+impl Into<OrderLineModel> for (String, AppInMemFetchedSingleRow) {
+    fn into(self) -> OrderLineModel {
+        let (id, row) = self;
+        let mut id_elms = id.split("-");
+        let (_oid, seller_id, prod_typ, product_id) = (
+            id_elms.next().unwrap(),
+            id_elms.next().unwrap().parse().unwrap(),
+            id_elms.next().unwrap().parse::<u8>().unwrap(),
+            id_elms.next().unwrap().parse().unwrap(),
+        );
+        let qty = row.get::<usize>(_orderline::InMemColIdx::Quantity.into()).unwrap().parse().unwrap() ;
+        let price = OrderLinePriceModel {
+            unit: row.get::<usize>(_orderline::InMemColIdx::PriceUnit.into()).unwrap().parse().unwrap(),
+            total: row.get::<usize>(_orderline::InMemColIdx::PriceTotal.into()).unwrap().parse().unwrap()
+        };
+        let reserved_until = row.get::<usize>(_orderline::InMemColIdx::PolicyReserved.into()).unwrap();
+        let warranty_until = row.get::<usize>(_orderline::InMemColIdx::PolicyReserved.into()).unwrap();
+        let reserved_until = DateTime::parse_from_rfc3339(reserved_until.as_str()).unwrap();
+        let warranty_until = DateTime::parse_from_rfc3339(warranty_until.as_str()).unwrap();
+        let policy = OrderLineAppliedPolicyModel { reserved_until, warranty_until };
+        OrderLineModel { seller_id, product_type: ProductType::from(prod_typ),
+            product_id, price, qty, policy }
+    }
+}
+
 
 
 #[async_trait]
@@ -407,11 +442,10 @@ impl AbsOrderRepo for OrderInMemRepo {
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>
     { self._stock.clone() }
 
-    async fn create (&self, oid:Uuid, usr_id:u32, lines:Vec<OrderLineModel>,
+    async fn create (&self, oid:String, usr_id:u32, lines:Vec<OrderLineModel>,
                      bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError> 
     {
-        let oid = Self::hex_str_order_id(oid);
         let mut tabledata = vec![
             _contact::to_inmem_tbl(oid.as_str(), usr_id, _pkey_partial_label::BILLING, bl.contact),
             _contact::to_inmem_tbl(oid.as_str(), usr_id, _pkey_partial_label::SHIPPING, sh.contact),
@@ -432,9 +466,16 @@ impl AbsOrderRepo for OrderInMemRepo {
         Ok((oid, paylines))
     } // end of fn create
 
-    async fn fetch_all_lines(&self, _oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
+    async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
-        let olines = vec![];
+        let op = _orderline::InMemDStoreFiltKeyOID {oid:oid.as_str()};
+        let tbl_label = _orderline::TABLE_LABEL.to_string();
+        let keys = self.datastore.filter_keys(tbl_label.clone(), &op).await?;
+        let info = HashMap::from([(tbl_label.clone(), keys)]);
+        let mut data = self.datastore.fetch(info).await ?;
+        let data = data.remove(&tbl_label).unwrap();
+        let olines = data.into_iter().map(|kv| kv.into())
+            .collect::<Vec<OrderLineModel>>();
         Ok(olines)
     }
 
@@ -476,28 +517,5 @@ impl OrderInMemRepo {
                 detail: Some(format!("in-memory"))}  )
         }
     }
-    fn hex_str_order_id(oid:Uuid) -> String
-    {
-        let bs = oid.into_bytes();
-        bs.into_iter().map(|b| format!("{:02x}",b))
-            .collect::<Vec<String>>().join("")
-    }
 } // end of impl OrderInMemRepo
-
-
-#[test]
-fn test_gen_rand_unique_seq() {
-    use std::collections::HashSet;
-    use std::collections::hash_map::RandomState;
-    let num_ids = 10;
-    let machine_code = 1;
-    let iter = (0 .. num_ids).into_iter().map(|_d| {
-        let oid = OrderLineModel::generate_order_id(machine_code);
-        let s = OrderInMemRepo::hex_str_order_id(oid);
-        // println!("generated ID : {}", s.as_str());
-        s
-    });
-    let hs : HashSet<String, RandomState> = HashSet::from_iter(iter);
-    assert_eq!(hs.len(), num_ids);
-}
 

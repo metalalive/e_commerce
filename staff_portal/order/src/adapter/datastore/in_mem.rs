@@ -23,6 +23,7 @@ type AllTable = HashMap<InnerTableLabel, InnerTable>;
 pub type AppInMemUpdateData = AllTable;
 pub type AppInMemDeleteInfo = InnerTable; // list of IDs per table
 pub type AppInMemFetchKeys = InnerTable; // list of IDs per table
+pub type AppInMemFetchedSingleRow = InnerRow; // list of IDs per table
 pub type AppInMemFetchedSingleTable = InnerTable; // list of IDs per table
 pub type AppInMemFetchedData = AllTable; // TODO, rename to data set
 pub type AppInMemDstoreLock<'a> = MutexGuard<'a, RefCell<AppInMemFetchedData>>;

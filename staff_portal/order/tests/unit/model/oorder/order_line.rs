@@ -47,3 +47,19 @@ fn convert_to_pay_dto_ok()
     assert_eq!(payline.amount.total, 173);
 }
 
+
+#[test]
+fn gen_order_id_seq() {
+    use std::collections::HashSet;
+    use std::collections::hash_map::RandomState;
+    let num_ids = 10;
+    let machine_code = 1;
+    let iter = (0 .. num_ids).into_iter().map(|_d| {
+        let oid = OrderLineModel::generate_order_id(machine_code);
+        // println!("generated ID : {oid}");
+        oid
+    });
+    let hs : HashSet<String, RandomState> = HashSet::from_iter(iter);
+    assert_eq!(hs.len(), num_ids);
+}
+

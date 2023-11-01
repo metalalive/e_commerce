@@ -50,7 +50,6 @@ There are private functions in this source-code crate  containing few test cases
 cd ${SERVICE_BASE_PATH}
 
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  api::rpc
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  repository::order
 ```
 
 ### Integration Test

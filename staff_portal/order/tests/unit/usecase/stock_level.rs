@@ -5,7 +5,6 @@ use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
 use chrono::DateTime;
-use uuid::Uuid;
 
 use order::AppDataStoreContext;
 use order::api::dto::OrderLinePayDto;
@@ -58,7 +57,7 @@ impl AbsOrderRepo for MockOrderRepo {
         Arc::new(Box::new(obj))
     }
 
-    async fn create (&self, _oid:Uuid, _usr_id:u32, _lines:Vec<OrderLineModel>,
+    async fn create (&self, _oid:String, _usr_id:u32, _lines:Vec<OrderLineModel>,
                      _bl:BillingModel, _sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError>
     {

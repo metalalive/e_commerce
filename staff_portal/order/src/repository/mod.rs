@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::vec::Vec;
 use std::result::Result as DefaultResult;
 use async_trait::async_trait;
-use uuid::Uuid;
 
 use crate::AppDataStoreContext;
 use crate::api::dto::OrderLinePayDto;
@@ -62,7 +61,7 @@ pub trait AbsOrderRepo : Sync + Send {
 
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
     
-    async fn create (&self, oid:Uuid, usr_id:u32, lines:Vec<OrderLineModel>,
+    async fn create (&self, oid:String, usr_id:u32, lines:Vec<OrderLineModel>,
                      bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError> ;
 
