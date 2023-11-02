@@ -51,7 +51,7 @@ pub fn test_setup_shr_state() -> DefaultResult<AppSharedState, AppError>
         };
     });
     unsafe {
-        match &GLOBAL_SHARED_STATE {
+        match GLOBAL_SHARED_STATE.as_ref() {
             Some(r) => match r {
                     Ok(state) => Ok(state.clone()),
                     Err(e) => Err(e.clone())

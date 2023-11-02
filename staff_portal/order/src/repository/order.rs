@@ -7,13 +7,14 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 
 use crate::AppDataStoreContext;
-use crate::api::dto::OrderLinePayDto;
+use crate::api::dto::{OrderLinePayDto, PhoneNumberDto};
 use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedData, AppInMemFetchedSingleTable, AppInMemFetchedSingleRow};
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockModel, StoreStockModel, StockQuantityModel, ProductStockIdentity2,  ProductStockIdentity,
-    StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel, ContactModel, OrderLinePriceModel, OrderLineAppliedPolicyModel
+    StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel, ContactModel, OrderLinePriceModel,
+    OrderLineAppliedPolicyModel, PhyAddrModel
 };
 
 use super::{AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn};
@@ -67,57 +68,47 @@ mod _stockm {
 } // end of inner module _stockm
 
 mod _contact {
-    use super::HashMap;
-    use crate::model::ContactModel;
+    use super::{HashMap, AppInMemFetchedSingleRow, ContactModel};
 
-    const MULTI_VAL_COLUMN_SEPARATOR :&'static str = " ";
+    pub(super) const MULTI_VAL_COLUMN_SEPARATOR :&'static str = " ";
     pub(super) const TABLE_LABEL: &'static str = "order_contact";
-    pub(super) enum InMemColIdx {UsrProfId, FirstName, LastName, Emails, Phones, TotNumColumns}
+    pub(super) enum InMemColIdx {FirstName, LastName, Emails, Phones, TotNumColumns}
     impl Into<usize> for InMemColIdx {
         fn into(self) -> usize {
             match self {
-                Self::FirstName => 0,  Self::LastName => 1,
-                Self::Emails => 2,     Self::Phones => 3,
-                Self::UsrProfId => 4,  Self::TotNumColumns => 5,
+                Self::FirstName => 0,  Self::LastName => 1,  Self::Emails => 2,
+                Self::Phones => 3,  Self::TotNumColumns => 4,
             }
         }
     }
     pub(super) fn to_inmem_tbl(oid:&str, usr_id:u32, pk_label:&str, data:ContactModel)
         -> (String, HashMap<String, Vec<String>>)
     { // each item in emails / phones array must NOT contain space character
-        let phones_str = data.phones.iter().map(|d| {
-            format!("{}-{}", d.nation.to_string(), d.number)
-        }).collect::<Vec<String>>();
-        let mut row = (0 .. InMemColIdx::TotNumColumns.into())
-            .map(|_num| {String::new()}).collect::<Vec<String>>();
-        let _ = [
-            (InMemColIdx::Emails,  data.emails.join(MULTI_VAL_COLUMN_SEPARATOR)),
-            (InMemColIdx::Phones,  phones_str.join(MULTI_VAL_COLUMN_SEPARATOR)),
-            (InMemColIdx::UsrProfId, usr_id.to_string()),
-            (InMemColIdx::FirstName, data.first_name),
-            (InMemColIdx::LastName,  data.last_name),
-        ].into_iter().map(|(idx, val)| {
-            let idx:usize = idx.into();
-            row[idx] = val;
-        }).collect::<Vec<()>>();
-        let pkey = format!("{}-{}", oid, pk_label);
+        let row = AppInMemFetchedSingleRow::from(data);
+        let pkey = format!("{}-{}-{}", oid, pk_label, usr_id);
         let table = HashMap::from([(pkey, row)]);
         (self::TABLE_LABEL.to_string(), table)
+    }
+    pub(super) fn inmem_parse_usr_id (pkey:&str) -> u32 {
+        let mut id_elms = pkey.split("-");
+        let (_oid, _label, usr_id) = (
+            id_elms.next().unwrap(), id_elms.next().unwrap(),
+            id_elms.next().unwrap().parse::<u32>().unwrap(),
+        );
+        usr_id
     }
 } // end of inner module _contact
 
 mod _phy_addr {
-    use super::HashMap;
-    use crate::model::PhyAddrModel;
+    use super::{HashMap, PhyAddrModel};
 
     pub(super) const TABLE_LABEL: &'static str = "order_phyaddr";
     pub(super) enum InMemColIdx {Country, Region, City, Distinct, Street, Detail, TotNumColumns}
     impl Into<usize> for InMemColIdx {
         fn into(self) -> usize {
             match self {
-                Self::Country => 0,    Self::Region => 1,
-                Self::City => 2,       Self::Distinct => 3,
-                Self::Street => 4,     Self::Detail => 5,
+                Self::Country => 0,    Self::Region => 1,   Self::City => 2,
+                Self::Distinct => 3,   Self::Street => 4,   Self::Detail => 5,
                 Self::TotNumColumns => 6,
             }
         }
@@ -125,19 +116,7 @@ mod _phy_addr {
     pub(super) fn to_inmem_tbl(oid:&str, pk_label:&str, data:PhyAddrModel)
         -> (String, HashMap<String, Vec<String>>)
     {
-        let mut row = (0..InMemColIdx::TotNumColumns.into())
-            .map(|_num| {String::new()}).collect::<Vec<String>>();
-        let _ = [
-            (InMemColIdx::Detail, data.detail),
-            (InMemColIdx::Distinct, data.distinct),
-            (InMemColIdx::Street, data.street_name.unwrap_or("".to_string())),
-            (InMemColIdx::Region, data.region),
-            (InMemColIdx::City,   data.city),
-            (InMemColIdx::Country, data.country.into() ),
-        ].into_iter().map(|(idx,val)| {
-            let idx:usize = idx.into();
-            row[idx] = val;
-        }).collect::<()>();
+        let row = data.into();
         let pkey = format!("{}-{}", oid, pk_label);
         let table = HashMap::from([(pkey, row)]);
         (self::TABLE_LABEL.to_string(), table)
@@ -232,8 +211,21 @@ mod _orderline {
 } // end of inner module _orderline
 
 mod _pkey_partial_label {
+    use crate::datastore::AbsDStoreFilterKeyOp;
     pub(super) const  BILLING:  &'static str = "billing";
     pub(super) const  SHIPPING: &'static str = "shipping";
+    pub(super) struct InMemDStoreFiltKeyOID<'a> {
+        pub oid: &'a str,
+        pub label: &'a str,
+    }
+    impl<'a> AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOID<'a> {
+        fn filter(&self, k:&String) -> bool {
+            let mut id_elms = k.split("-");
+            let oid_rd   = id_elms.next().unwrap();
+            let label_rd = id_elms.next().unwrap();
+            (self.oid == oid_rd) && (self.label == label_rd)
+        }
+    }
 }
 
 
@@ -423,10 +415,81 @@ impl Into<OrderLineModel> for (String, AppInMemFetchedSingleRow) {
         let policy = OrderLineAppliedPolicyModel { reserved_until, warranty_until };
         OrderLineModel { seller_id, product_type: ProductType::from(prod_typ),
             product_id, price, qty, policy }
+    } // TODO, parse product id/typs from fields
+} // end of impl into OrderLineModel
+
+impl From<ContactModel> for AppInMemFetchedSingleRow {
+    fn from(value: ContactModel) -> Self {
+        let phones_str = value.phones.iter().map(|d| {
+            format!("{}-{}", d.nation.to_string(), d.number)
+        }).collect::<Vec<String>>();
+        let mut row = (0 .. _contact::InMemColIdx::TotNumColumns.into())
+            .map(|_num| {String::new()}).collect::<Vec<String>>();
+        let _ = [
+            (_contact::InMemColIdx::Emails,  value.emails.join(_contact::MULTI_VAL_COLUMN_SEPARATOR)),
+            (_contact::InMemColIdx::Phones,  phones_str.join(_contact::MULTI_VAL_COLUMN_SEPARATOR)),
+            (_contact::InMemColIdx::FirstName, value.first_name),
+            (_contact::InMemColIdx::LastName,  value.last_name),
+        ].into_iter().map(|(idx, val)| {
+            let idx:usize = idx.into();
+            row[idx] = val;
+        }).collect::<Vec<()>>();
+        row
+    }
+}
+impl Into<ContactModel> for AppInMemFetchedSingleRow {
+    fn into(self) -> ContactModel {
+        let emails = self.get::<usize>(_contact::InMemColIdx::Emails.into())
+            .unwrap().split(_contact::MULTI_VAL_COLUMN_SEPARATOR).into_iter()
+            .map(|s| s.to_string())  .collect() ;
+        let phones = self.get::<usize>(_contact::InMemColIdx::Phones.into())
+            .unwrap().split(_contact::MULTI_VAL_COLUMN_SEPARATOR).into_iter()
+            .map(|s| {
+                let mut s = s.split("-");
+                let nation = s.next().unwrap().parse().unwrap();
+                let number = s.next().unwrap().to_string();
+                PhoneNumberDto { nation, number }
+            }).collect();
+        let (first_name, last_name) = (
+            self.get::<usize>(_contact::InMemColIdx::FirstName.into()).unwrap().to_owned(),
+            self.get::<usize>(_contact::InMemColIdx::LastName.into()).unwrap().to_owned()
+        );
+        ContactModel { first_name, last_name, emails, phones }
     }
 }
 
-
+impl From<PhyAddrModel> for AppInMemFetchedSingleRow {
+    fn from(value: PhyAddrModel) -> Self {
+        let mut row = (0 .. _phy_addr::InMemColIdx::TotNumColumns.into())
+            .map(|_num| {String::new()}).collect::<Vec<String>>();
+        let _ = [
+            (_phy_addr::InMemColIdx::Detail,  value.detail),
+            (_phy_addr::InMemColIdx::Distinct, value.distinct),
+            (_phy_addr::InMemColIdx::Street,  value.street_name.unwrap_or("".to_string())),
+            (_phy_addr::InMemColIdx::Region,  value.region),
+            (_phy_addr::InMemColIdx::City,    value.city),
+            (_phy_addr::InMemColIdx::Country, value.country.into() ),
+        ].into_iter().map(|(idx,val)| {
+            let idx:usize = idx.into();
+            row[idx] = val;
+        }).collect::<()>();
+        row
+    }
+}
+impl Into<PhyAddrModel> for AppInMemFetchedSingleRow {
+    fn into(self) -> PhyAddrModel {
+        let (country, region, city, distinct, street, detail) = (
+            self.get::<usize>(_phy_addr::InMemColIdx::Country.into()).unwrap().to_owned().into() ,
+            self.get::<usize>(_phy_addr::InMemColIdx::Region.into()).unwrap().to_owned(),
+            self.get::<usize>(_phy_addr::InMemColIdx::City.into()).unwrap().to_owned(),
+            self.get::<usize>(_phy_addr::InMemColIdx::Distinct.into()).unwrap().to_owned(),
+            self.get::<usize>(_phy_addr::InMemColIdx::Street.into()).unwrap().to_owned(),
+            self.get::<usize>(_phy_addr::InMemColIdx::Detail.into()).unwrap().to_owned()
+        );
+        let street_name = if street.is_empty() {None} else {Some(street)};
+        PhyAddrModel { country, region, city, distinct, street_name, detail }
+    }
+}
 
 #[async_trait]
 impl AbsOrderRepo for OrderInMemRepo {
@@ -446,19 +509,27 @@ impl AbsOrderRepo for OrderInMemRepo {
                      bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError> 
     {
-        let mut tabledata = vec![
-            _contact::to_inmem_tbl(oid.as_str(), usr_id, _pkey_partial_label::BILLING, bl.contact),
-            _contact::to_inmem_tbl(oid.as_str(), usr_id, _pkey_partial_label::SHIPPING, sh.contact),
+        let mut tabledata:[(String, AppInMemFetchedSingleTable);4] = [
+            (_contact::TABLE_LABEL.to_string(), HashMap::new()),
+            (_phy_addr::TABLE_LABEL.to_string(), HashMap::new()),
             _ship_opt::to_inmem_tbl(oid.as_str(), sh.option),
             _orderline::to_inmem_tbl(oid.as_str(), &lines),
         ];
+        {
+            let (_, contact_data) = _contact::to_inmem_tbl(oid.as_str(), usr_id,
+                 _pkey_partial_label::SHIPPING, sh.contact);
+            contact_data.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
+            let (_, contact_data) = _contact::to_inmem_tbl(oid.as_str(), usr_id,
+                 _pkey_partial_label::BILLING, bl.contact);
+            contact_data.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
+        }
         if let Some(addr) = bl.address {
-            let item = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::BILLING, addr);
-            tabledata.push(item);
+            let (_, items) = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::BILLING, addr);
+            items.into_iter().map(|(k,v)| {tabledata[1].1.insert(k, v);}).count();
         }
         if let Some(addr) = sh.address {
-            let item = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::SHIPPING, addr);
-            tabledata.push(item);
+            let (_, items) = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::SHIPPING, addr);
+            items.into_iter().map(|(k,v)| {tabledata[1].1.insert(k, v);}).count();
         }
         let data = HashMap::from_iter(tabledata.into_iter());
         let _num = self.datastore.save(data).await?;
@@ -481,12 +552,33 @@ impl AbsOrderRepo for OrderInMemRepo {
 
     async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>
     {
-        let usr_id = 123;
-        let contact = ContactModel { first_name: "nobody".to_string(),
-            last_name: "nobody".to_string(), emails: vec![], phones: vec![] };
-        let out = BillingModel { contact, address:None };
-        Ok((out, usr_id))
-    }
+        let op = _pkey_partial_label::InMemDStoreFiltKeyOID {
+                oid:oid.as_str(),  label: _pkey_partial_label::BILLING };
+        let tbl_labels = [ _contact::TABLE_LABEL , _phy_addr::TABLE_LABEL ];
+        let mut info = vec![];
+        for table_name in tbl_labels.iter() {
+            let keys = self.datastore.filter_keys(table_name.to_string(), &op).await?;
+            info.push ((table_name.to_string(), keys));
+        };
+        let info = HashMap::from_iter(info.into_iter());
+        let mut data = self.datastore.fetch(info).await ?;
+        let (result1, result2) = (data.remove(tbl_labels[0]).unwrap(),
+                                  data.remove(tbl_labels[1]).unwrap() );
+        if let Some((pkey,raw_cta)) = result1.into_iter().next() {
+            let usr_id  = _contact::inmem_parse_usr_id(pkey.as_str());
+            let contact = raw_cta.into();
+            let address = if let Some((_pk,raw_pa)) = result2.into_iter().next() {
+                Some(raw_pa.into())
+            } else { None };
+            let out = BillingModel { contact, address };
+            Ok((out, usr_id))
+        } else {
+            let ioe = std::io::ErrorKind::NotFound;
+            let detail = format!("no-contact-data");
+            let e = AppError {code:AppErrorCode::IOerror(ioe), detail:Some(detail)};
+            Err(e)
+        }
+    } // end of fn fetch_billing
     
     async fn fetch_shipping(&self, oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
     {

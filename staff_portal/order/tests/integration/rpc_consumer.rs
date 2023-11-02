@@ -1,9 +1,10 @@
 use std::result::Result as DefaultResult;
+use std::sync::Arc;
 use serde_json::Value as JsnVal;
 
 use order::api::rpc::route_to_handler;
 use order::error::AppError;
-use order::{AppRpcClientReqProperty, AppSharedState};
+use order::{AppRpcClientReqProperty, AppSharedState, AppDataStoreContext};
 
 mod common;
 use common::test_setup_shr_state;
@@ -143,17 +144,56 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
 } // end of fn test_update_product_price_ok
 
 
+
+async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u32)
+    -> DefaultResult<(), AppError>
+{
+    use order::repository::app_repo_order;
+    use order::api::dto::{CountryCode, PhoneNumberDto, ShippingOptionDto};
+    use order::model::{BillingModel, ShippingModel,ContactModel, PhyAddrModel};
+    let repo = app_repo_order(ds).await ?;
+    let lines = vec![];
+    let bl = BillingModel {
+        contact: ContactModel { first_name: "Mick".to_string(), last_name: "Alrndre".to_string(),
+            phones: vec![PhoneNumberDto{nation:15,number:"55088381".to_string()}],
+            emails: vec!["mick@myhome.io".to_string()],
+        },
+        address: Some(PhyAddrModel { country: CountryCode::ID, region: "Assam".to_string(),
+            city: "parikitru".to_string(), distinct: "Beileyz".to_string(),
+            street_name: None, detail: "jrkj8h844".to_string()
+        })
+    };
+    let sh = ShippingModel {
+        contact: ContactModel { first_name: "Gojira".to_string(), last_name: "Giant".to_string(),
+            phones: vec![PhoneNumberDto{nation:102,number:"0080032013".to_string()}],
+            emails: vec!["skydiving@a10kmetre.tw".to_string()],
+        },
+        address: Some(PhyAddrModel { country: CountryCode::TH, region: "ChiangMai".to_string(),
+            city: "903ruriufH".to_string(), distinct: "RiceMiller".to_string(),
+            street_name: Some("Hodoop".to_string()), detail: "oh8bur".to_string() },
+        ),
+        option: vec![]
+    };
+    let _ = repo.create(oid.to_string(), usr_id, lines, bl, sh).await?;
+    Ok(())
+} // end of itest_mock_create_order
+
+
+
 #[tokio::test]
 async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
+    // assume web server has created the order.
+    itest_mock_create_order(shrstate.datastore().clone(),
+                            "18f00429638a0b", 2345).await?;
     let msgbody = br#" {"order_id":"18f00429638a0b"} "#;
     let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
             route: "replica/orderline/reserved/payment".to_string()  };
     let result = route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let respbody = result.unwrap();
-    // println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
+    //println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
     // verify fetched order lines
     let result = serde_json::from_slice(&respbody);
     let respbody:JsnVal = result.unwrap();

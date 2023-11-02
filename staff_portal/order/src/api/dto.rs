@@ -19,17 +19,27 @@ pub struct ContactDto {
 }
 
 #[derive(Deserialize, Serialize)]
-pub enum CountryCode {TW,TH,IN,ID,US}
+pub enum CountryCode {TW,TH,IN,ID,US,Unknown}
 impl Into<String> for CountryCode {
     fn into(self) -> String {
         let out = match self {
             Self::TW => "TW",  Self::TH => "TH",
             Self::IN => "IN",  Self::ID => "ID",
-            Self::US => "US",
+            Self::US => "US",  Self::Unknown => "Unknown",
         };
         out.to_string()
     }
 } // implement `Into` trait, not replying on serde 
+impl From<String> for CountryCode {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "TW" => Self::TW,  "TH" => Self::TH,
+            "IN" => Self::IN,  "ID" => Self::ID,
+            "US" => Self::US,  _others => Self::Unknown,
+        }
+    }
+}
+
 
 #[derive(Deserialize, Serialize)]
 pub struct PhyAddrDto {
