@@ -82,12 +82,11 @@ mod _contact {
         }
     }
     pub(super) fn to_inmem_tbl(oid:&str, usr_id:u32, pk_label:&str, data:ContactModel)
-        -> (String, HashMap<String, Vec<String>>)
+        -> HashMap<String, Vec<String>>
     { // each item in emails / phones array must NOT contain space character
         let row = AppInMemFetchedSingleRow::from(data);
         let pkey = format!("{}-{}-{}", oid, pk_label, usr_id);
-        let table = HashMap::from([(pkey, row)]);
-        (self::TABLE_LABEL.to_string(), table)
+        HashMap::from([(pkey, row)])
     }
     pub(super) fn inmem_parse_usr_id (pkey:&str) -> u32 {
         let mut id_elms = pkey.split("-");
@@ -114,12 +113,11 @@ mod _phy_addr {
         }
     }
     pub(super) fn to_inmem_tbl(oid:&str, pk_label:&str, data:PhyAddrModel)
-        -> (String, HashMap<String, Vec<String>>)
+        -> HashMap<String, Vec<String>>
     {
         let row = data.into();
         let pkey = format!("{}-{}", oid, pk_label);
-        let table = HashMap::from([(pkey, row)]);
-        (self::TABLE_LABEL.to_string(), table)
+        HashMap::from([(pkey, row)])
     }
 } // end of inner module _phy_addr
 
@@ -138,7 +136,7 @@ mod _ship_opt {
     }
     pub(super) const TABLE_LABEL: &'static str = "order_shipping_option";
     pub(super) fn to_inmem_tbl(oid:&str, data:Vec<ShippingOptionModel>)
-        -> (String, HashMap<String, Vec<String>>)
+        -> HashMap<String, Vec<String>>
     {
         let kv_iter = data.into_iter().map(|m| {
             let seller_id_s = m.seller_id.to_string();
@@ -146,8 +144,7 @@ mod _ship_opt {
             let row = vec![seller_id_s, m.method.into()];
             (pkey, row)
         });
-        let table = HashMap::from_iter(kv_iter);
-        (self::TABLE_LABEL.to_string(), table)
+        HashMap::from_iter(kv_iter)
     }
 } // end of inner module _ship_opt
 
@@ -181,32 +178,16 @@ mod _orderline {
         }
     }
     pub(super) fn to_inmem_tbl(oid:&str, data:&Vec<OrderLineModel>)
-        -> (String, HashMap<String, Vec<String>>)
+        ->  HashMap<String, Vec<String>>
     {
         let kv_iter = data.iter().map(|m| {
-            let seller_id_s = m.seller_id.to_string();
-            let prod_typ = <ProductType as Into<u8>>::into(m.product_type.clone()).to_string();
-            let prod_id  = m.product_id.to_string();
+            let seller_id_s = m.seller_id;
+            let prod_typ = <ProductType as Into<u8>>::into(m.product_type.clone());
+            let prod_id  = m.product_id;
             let pkey = format!("{oid}-{seller_id_s}-{prod_typ}-{prod_id}");
-            let mut row = (0..InMemColIdx::TotNumColumns.into())
-                .map(|_num| {String::new()}).collect::<Vec<String>>();
-            let _ = [
-                (InMemColIdx::Quantity,   m.qty.to_string()),
-                (InMemColIdx::PriceUnit,  m.price.unit.to_string()),
-                (InMemColIdx::PriceTotal, m.price.total.to_string()),
-                (InMemColIdx::PolicyReserved, m.policy.reserved_until.to_rfc3339()),
-                (InMemColIdx::PolicyWarranty, m.policy.warranty_until.to_rfc3339()),
-                (InMemColIdx::ProductType, prod_typ),
-                (InMemColIdx::ProductId, prod_id),
-                (InMemColIdx::SellerID, seller_id_s),
-            ].into_iter().map(|(idx,val)| {
-                let idx:usize = idx.into();
-                row[idx] = val;
-            }).collect::<()>();
-            (pkey, row)
+            (pkey, m.into())
         });
-        let table = HashMap::from_iter(kv_iter);
-        (self::TABLE_LABEL.to_string(), table)
+        HashMap::from_iter(kv_iter)
     } // end of fn to_inmem_tbl
 } // end of inner module _orderline
 
@@ -393,16 +374,35 @@ impl From<StockLevelModelSet> for AppInMemFetchedSingleTable {
     }
 } // end of impl From for StockLevelModelSet
 
-impl Into<OrderLineModel> for (String, AppInMemFetchedSingleRow) {
+impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
+    fn from(value: &OrderLineModel) -> Self { 
+        let seller_id_s = value.seller_id.to_string();
+        let prod_typ = <ProductType as Into<u8>>::into(value.product_type.clone()).to_string();
+        let prod_id  = value.product_id.to_string();
+        let mut row = (0.. _orderline::InMemColIdx::TotNumColumns.into())
+            .map(|_num| {String::new()}).collect::<Vec<String>>();
+        let _ = [
+            (_orderline::InMemColIdx::Quantity,   value.qty.to_string()),
+            (_orderline::InMemColIdx::PriceUnit,  value.price.unit.to_string()),
+            (_orderline::InMemColIdx::PriceTotal, value.price.total.to_string()),
+            (_orderline::InMemColIdx::PolicyReserved, value.policy.reserved_until.to_rfc3339()),
+            (_orderline::InMemColIdx::PolicyWarranty, value.policy.warranty_until.to_rfc3339()),
+            (_orderline::InMemColIdx::ProductType, prod_typ),
+            (_orderline::InMemColIdx::ProductId, prod_id),
+            (_orderline::InMemColIdx::SellerID, seller_id_s),
+        ].into_iter().map(|(idx,val)| {
+            let idx:usize = idx.into();
+            row[idx] = val;
+        }).collect::<()>();
+        row
+    }
+}
+impl Into<OrderLineModel> for AppInMemFetchedSingleRow {
     fn into(self) -> OrderLineModel {
-        let (id, row) = self;
-        let mut id_elms = id.split("-");
-        let (_oid, seller_id, prod_typ, product_id) = (
-            id_elms.next().unwrap(),
-            id_elms.next().unwrap().parse().unwrap(),
-            id_elms.next().unwrap().parse::<u8>().unwrap(),
-            id_elms.next().unwrap().parse().unwrap(),
-        );
+        let row = self;
+        let seller_id = row.get::<usize>(_orderline::InMemColIdx::SellerID.into()).unwrap().parse().unwrap();
+        let prod_typ = row.get::<usize>(_orderline::InMemColIdx::ProductType.into()).unwrap().parse::<u8>().unwrap();
+        let product_id = row.get::<usize>(_orderline::InMemColIdx::ProductId.into()).unwrap().parse().unwrap() ;
         let qty = row.get::<usize>(_orderline::InMemColIdx::Quantity.into()).unwrap().parse().unwrap() ;
         let price = OrderLinePriceModel {
             unit: row.get::<usize>(_orderline::InMemColIdx::PriceUnit.into()).unwrap().parse().unwrap(),
@@ -512,23 +512,23 @@ impl AbsOrderRepo for OrderInMemRepo {
         let mut tabledata:[(String, AppInMemFetchedSingleTable);4] = [
             (_contact::TABLE_LABEL.to_string(), HashMap::new()),
             (_phy_addr::TABLE_LABEL.to_string(), HashMap::new()),
-            _ship_opt::to_inmem_tbl(oid.as_str(), sh.option),
-            _orderline::to_inmem_tbl(oid.as_str(), &lines),
+            (_ship_opt::TABLE_LABEL.to_string(), _ship_opt::to_inmem_tbl(oid.as_str(), sh.option)),
+            (_orderline::TABLE_LABEL.to_string(), _orderline::to_inmem_tbl(oid.as_str(), &lines)),
         ];
         {
-            let (_, contact_data) = _contact::to_inmem_tbl(oid.as_str(), usr_id,
+            let items = _contact::to_inmem_tbl(oid.as_str(), usr_id,
                  _pkey_partial_label::SHIPPING, sh.contact);
-            contact_data.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
-            let (_, contact_data) = _contact::to_inmem_tbl(oid.as_str(), usr_id,
+            items.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
+            let items = _contact::to_inmem_tbl(oid.as_str(), usr_id,
                  _pkey_partial_label::BILLING, bl.contact);
-            contact_data.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
+            items.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
         }
         if let Some(addr) = bl.address {
-            let (_, items) = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::BILLING, addr);
+            let items = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::BILLING, addr);
             items.into_iter().map(|(k,v)| {tabledata[1].1.insert(k, v);}).count();
         }
         if let Some(addr) = sh.address {
-            let (_, items) = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::SHIPPING, addr);
+            let items = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::SHIPPING, addr);
             items.into_iter().map(|(k,v)| {tabledata[1].1.insert(k, v);}).count();
         }
         let data = HashMap::from_iter(tabledata.into_iter());
@@ -545,7 +545,7 @@ impl AbsOrderRepo for OrderInMemRepo {
         let info = HashMap::from([(tbl_label.clone(), keys)]);
         let mut data = self.datastore.fetch(info).await ?;
         let data = data.remove(&tbl_label).unwrap();
-        let olines = data.into_iter().map(|kv| kv.into())
+        let olines = data.into_iter().map(|(_k, v)| v.into())
             .collect::<Vec<OrderLineModel>>();
         Ok(olines)
     }
