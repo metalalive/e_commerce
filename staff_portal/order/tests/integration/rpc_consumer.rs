@@ -148,11 +148,24 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
 async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u32)
     -> DefaultResult<(), AppError>
 {
+    use chrono::DateTime;
+    use order::constant::ProductType;
     use order::repository::app_repo_order;
-    use order::api::dto::{CountryCode, PhoneNumberDto, ShippingOptionDto};
-    use order::model::{BillingModel, ShippingModel,ContactModel, PhyAddrModel};
+    use order::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
+    use order::model::{
+        BillingModel, ShippingModel,ContactModel, PhyAddrModel, ShippingOptionModel,
+        OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel
+    };
     let repo = app_repo_order(ds).await ?;
-    let lines = vec![];
+    let seller_id = 543;
+    let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
+    let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
+    let lines = vec![
+        OrderLineModel {seller_id, product_type:ProductType::Item, product_id:92, qty:5,
+            price: OrderLinePriceModel { unit: 34, total: 170 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        }
+    ];
     let bl = BillingModel {
         contact: ContactModel { first_name: "Mick".to_string(), last_name: "Alrndre".to_string(),
             phones: vec![PhoneNumberDto{nation:15,number:"55088381".to_string()}],
@@ -172,7 +185,9 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u
             city: "903ruriufH".to_string(), distinct: "RiceMiller".to_string(),
             street_name: Some("Hodoop".to_string()), detail: "oh8bur".to_string() },
         ),
-        option: vec![]
+        option: vec![
+            ShippingOptionModel {seller_id, method:ShippingMethod::FedEx}
+        ]
     };
     let _ = repo.create(oid.to_string(), usr_id, lines, bl, sh).await?;
     Ok(())
@@ -208,7 +223,7 @@ async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
         assert!(olines_v.is_array());
         assert!(bill_v.is_object());
         if let JsnVal::Array(olines) = olines_v {
-            assert_eq!(olines.len(), 0);
+            assert_eq!(olines.len(), 1);
         }
     }
     Ok(())
@@ -218,7 +233,10 @@ async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
 async fn  generate_orderline_for_inventory_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
-    let msgbody = br#" {"order_id":"18f00429638a0b"} "#;
+    // assume web server has created the order.
+    itest_mock_create_order(shrstate.datastore().clone(),
+                            "18f00429c638a0", 2345).await?;
+    let msgbody = br#" {"order_id":"18f00429c638a0"} "#;
     let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
             route: "replica/orderline/reserved/inventory".to_string()  };
     let result = route_to_handler(req, shrstate).await;
@@ -238,7 +256,7 @@ async fn  generate_orderline_for_inventory_ok() -> DefaultResult<(), AppError>
         assert!(olines_v.is_array());
         assert!(ship_v.is_object());
         if let JsnVal::Array(olines) = olines_v {
-            assert_eq!(olines.len(), 0);
+            assert_eq!(olines.len(), 1);
         }
     }
     Ok(())

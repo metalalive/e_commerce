@@ -12,6 +12,7 @@ http = "0.2"
 http-body = "0.4"
 axum-core = "0.3.4"
 hyper = {version="0.14", features=["client", "runtime", "tcp", "http1"]}
+chrono  = {version="0.4.31", features=["std", "alloc", "serde"]}
 order = {path="../.."}
 
 [[test]]

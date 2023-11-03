@@ -59,16 +59,27 @@ pub struct ShippingOptionDto {
 }
 
 #[derive(Deserialize, Serialize)]
-pub enum ShippingMethod {UPS, FedEx, BlackCatExpress}
+pub enum ShippingMethod {UPS, FedEx, BlackCatExpress, Unknown}
+
 impl Into<String> for ShippingMethod {
     fn into(self) -> String {
         let out = match self {
             Self::UPS => "UPS",  Self::FedEx => "FedEx",
             Self::BlackCatExpress => "BlackCatExpress",
+            Self::Unknown => "Unknown",
         };
         out.to_string()
     }
 } // implement `Into` trait, not replying on serde 
+impl From<String> for ShippingMethod {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "UPS" => Self::UPS,  "FedEx" => Self::FedEx,
+            "BlackCatExpress" => Self::BlackCatExpress,
+            _others => Self::Unknown,
+        }
+    }
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct ShippingDto {

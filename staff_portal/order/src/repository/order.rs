@@ -7,14 +7,14 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 
 use crate::AppDataStoreContext;
-use crate::api::dto::{OrderLinePayDto, PhoneNumberDto};
+use crate::api::dto::{OrderLinePayDto, PhoneNumberDto, ShippingMethod};
 use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedData, AppInMemFetchedSingleTable, AppInMemFetchedSingleRow};
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockModel, StoreStockModel, StockQuantityModel, ProductStockIdentity2,  ProductStockIdentity,
     StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel, ContactModel, OrderLinePriceModel,
-    OrderLineAppliedPolicyModel, PhyAddrModel
+    OrderLineAppliedPolicyModel, PhyAddrModel, ShippingOptionModel
 };
 
 use super::{AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn};
@@ -122,8 +122,7 @@ mod _phy_addr {
 } // end of inner module _phy_addr
 
 mod _ship_opt {
-    use super::HashMap;
-    use crate::model::ShippingOptionModel;
+    use super::{HashMap, ShippingOptionModel};
 
     pub(super) enum InMemColIdx {SellerID, Method, TotNumColumns}
     impl Into<usize> for InMemColIdx {
@@ -139,10 +138,8 @@ mod _ship_opt {
         -> HashMap<String, Vec<String>>
     {
         let kv_iter = data.into_iter().map(|m| {
-            let seller_id_s = m.seller_id.to_string();
-            let pkey = format!("{oid}-{seller_id_s}");
-            let row = vec![seller_id_s, m.method.into()];
-            (pkey, row)
+            let pkey = format!("{}-{}", oid, m.seller_id);
+            (pkey, m.into())
         });
         HashMap::from_iter(kv_iter)
     }
@@ -150,7 +147,6 @@ mod _ship_opt {
 
 mod _orderline {
     use super::{HashMap, ProductType};
-    use crate::datastore::AbsDStoreFilterKeyOp;
     use crate::model::OrderLineModel;
     
     pub(super) const TABLE_LABEL: &'static str = "order_line_reserved";
@@ -165,16 +161,6 @@ mod _orderline {
                 Self::PolicyReserved => 6,    Self::PolicyWarranty => 7,
                 Self::TotNumColumns => 8,
             }
-        }
-    }
-    pub(super) struct InMemDStoreFiltKeyOID<'a> {
-        pub oid: &'a str,
-    }
-    impl<'a> AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOID<'a> {
-        fn filter(&self, k:&String) -> bool {
-            let mut id_elms = k.split("-");
-            let oid_rd = id_elms.next().unwrap();
-            self.oid == oid_rd
         }
     }
     pub(super) fn to_inmem_tbl(oid:&str, data:&Vec<OrderLineModel>)
@@ -197,14 +183,18 @@ mod _pkey_partial_label {
     pub(super) const  SHIPPING: &'static str = "shipping";
     pub(super) struct InMemDStoreFiltKeyOID<'a> {
         pub oid: &'a str,
-        pub label: &'a str,
+        pub label: Option<&'a str>,
     }
     impl<'a> AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOID<'a> {
         fn filter(&self, k:&String) -> bool {
             let mut id_elms = k.split("-");
             let oid_rd   = id_elms.next().unwrap();
             let label_rd = id_elms.next().unwrap();
-            (self.oid == oid_rd) && (self.label == label_rd)
+            let mut cond = self.oid == oid_rd;
+            if let Some(l) = self.label {
+                cond = cond && (l == label_rd);
+            }
+            cond
         }
     }
 }
@@ -491,6 +481,31 @@ impl Into<PhyAddrModel> for AppInMemFetchedSingleRow {
     }
 }
 
+impl From<ShippingOptionModel> for AppInMemFetchedSingleRow {
+    fn from(value: ShippingOptionModel) -> Self {
+        let mut row = (0 .. _ship_opt::InMemColIdx::TotNumColumns.into())
+            .map(|_num| {String::new()}).collect::<Vec<String>>();
+        let _ = [
+            (_ship_opt::InMemColIdx::SellerID,  value.seller_id.to_string()),
+            (_ship_opt::InMemColIdx::Method, value.method.into()),
+        ].into_iter().map(|(idx,val)| {
+            let idx:usize = idx.into();
+            row[idx] = val;
+        }).collect::<()>();
+        row
+    }
+}
+impl Into<ShippingOptionModel> for AppInMemFetchedSingleRow {
+    fn into(self) -> ShippingOptionModel {
+        let (seller_id, method) = (
+            self.get::<usize>(_ship_opt::InMemColIdx::SellerID.into()).unwrap().parse().unwrap() ,
+            self.get::<usize>(_ship_opt::InMemColIdx::Method.into()).unwrap().to_owned()
+        );
+        ShippingOptionModel { seller_id, method:ShippingMethod::from(method) } 
+    }
+}
+
+
 #[async_trait]
 impl AbsOrderRepo for OrderInMemRepo {
     async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
@@ -539,13 +554,13 @@ impl AbsOrderRepo for OrderInMemRepo {
 
     async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
-        let op = _orderline::InMemDStoreFiltKeyOID {oid:oid.as_str()};
+        let op = _pkey_partial_label::InMemDStoreFiltKeyOID {oid:oid.as_str(), label:None};
         let tbl_label = _orderline::TABLE_LABEL.to_string();
         let keys = self.datastore.filter_keys(tbl_label.clone(), &op).await?;
         let info = HashMap::from([(tbl_label.clone(), keys)]);
         let mut data = self.datastore.fetch(info).await ?;
         let data = data.remove(&tbl_label).unwrap();
-        let olines = data.into_iter().map(|(_k, v)| v.into())
+        let olines = data.into_values().map(AppInMemFetchedSingleRow::into)
             .collect::<Vec<OrderLineModel>>();
         Ok(olines)
     }
@@ -553,7 +568,7 @@ impl AbsOrderRepo for OrderInMemRepo {
     async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>
     {
         let op = _pkey_partial_label::InMemDStoreFiltKeyOID {
-                oid:oid.as_str(),  label: _pkey_partial_label::BILLING };
+                oid:oid.as_str(),  label: Some(_pkey_partial_label::BILLING) };
         let tbl_labels = [ _contact::TABLE_LABEL , _phy_addr::TABLE_LABEL ];
         let mut info = vec![];
         for table_name in tbl_labels.iter() {
@@ -562,16 +577,17 @@ impl AbsOrderRepo for OrderInMemRepo {
         };
         let info = HashMap::from_iter(info.into_iter());
         let mut data = self.datastore.fetch(info).await ?;
-        let (result1, result2) = (data.remove(tbl_labels[0]).unwrap(),
-                                  data.remove(tbl_labels[1]).unwrap() );
-        if let Some((pkey,raw_cta)) = result1.into_iter().next() {
+        let (result1, result2) = (
+            data.remove(tbl_labels[0]).unwrap().into_iter().next(),
+            data.remove(tbl_labels[1]).unwrap().into_values().next()
+        );
+        if let Some((pkey,raw_cta)) = result1 {
             let usr_id  = _contact::inmem_parse_usr_id(pkey.as_str());
             let contact = raw_cta.into();
-            let address = if let Some((_pk,raw_pa)) = result2.into_iter().next() {
+            let address = if let Some(raw_pa) = result2 {
                 Some(raw_pa.into())
             } else { None };
-            let out = BillingModel { contact, address };
-            Ok((out, usr_id))
+            Ok((BillingModel{contact, address}, usr_id))
         } else {
             let ioe = std::io::ErrorKind::NotFound;
             let detail = format!("no-contact-data");
@@ -582,12 +598,42 @@ impl AbsOrderRepo for OrderInMemRepo {
     
     async fn fetch_shipping(&self, oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
     {
-        let usr_id = 123;
-        let contact = ContactModel { first_name: "nobody".to_string(),
-            last_name: "nobody".to_string(), emails: vec![], phones: vec![] };
-        let out = ShippingModel { contact, address: None, option: vec![] };
-        Ok((out, usr_id))
-    }
+        let ops = [
+            _pkey_partial_label::InMemDStoreFiltKeyOID {oid:oid.as_str(), label: Some(_pkey_partial_label::SHIPPING)},
+            _pkey_partial_label::InMemDStoreFiltKeyOID {oid:oid.as_str(), label: None }
+        ];
+        let data = [ 
+            (_contact::TABLE_LABEL, &ops[0]),
+            (_phy_addr::TABLE_LABEL, &ops[0]),
+            (_ship_opt::TABLE_LABEL, &ops[1])
+        ];
+        let mut info = vec![];
+        for (table_name, op) in data.into_iter() {
+            let keys = self.datastore.filter_keys(table_name.to_string(), op).await?;
+            info.push ((table_name.to_string(), keys));
+        };
+        let info = HashMap::from_iter(info.into_iter());
+        let mut data = self.datastore.fetch(info).await ?;
+        let (result1, result2, result3) = (
+            data.remove(_contact::TABLE_LABEL).unwrap().into_iter().next(),
+            data.remove(_phy_addr::TABLE_LABEL).unwrap().into_values().next(),
+            data.remove(_ship_opt::TABLE_LABEL).unwrap().into_values(),
+        );
+        if let Some((pkey, raw_cta)) = result1 {
+            let usr_id  = _contact::inmem_parse_usr_id(pkey.as_str());
+            let contact = raw_cta.into();
+            let address = if let Some(raw_pa) = result2 {
+                Some(raw_pa.into())
+            } else { None }; // shipping option can be empty
+            let option = result3.map(AppInMemFetchedSingleRow::into).collect();
+            Ok((ShippingModel{contact, address, option}, usr_id))
+        } else {
+            let ioe = std::io::ErrorKind::NotFound;
+            let detail = format!("no-contact-data");
+            let e = AppError {code:AppErrorCode::IOerror(ioe), detail:Some(detail)};
+            Err(e)
+        }
+    } // end of fetch_shipping
 } // end of impl AbsOrderRepo
 
 

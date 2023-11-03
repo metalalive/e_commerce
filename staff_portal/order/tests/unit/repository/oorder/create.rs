@@ -20,49 +20,68 @@ async fn in_mem_repo_ds_setup (nitems:u32) -> OrderInMemRepo
 
 fn ut_setup_billing () -> Vec<BillingModel>
 {
-    let (first_name, last_name) = ("Ken".to_string(), "Kabaacis".to_string());
-    let emails = vec!["sz16@crossroad.au".to_string(), "hay0123@pitch.io".to_string()];
-    let phones = vec![
-        PhoneNumberDto{nation:43, number:"002081264".to_string()},
-        PhoneNumberDto{nation:43, number:"300801211".to_string()}
-    ];
-    let contact = ContactModel {first_name, last_name, emails, phones};
-    let address = PhyAddrModel { country: CountryCode::TW, region: "PengHu".to_string(),
-        city: "MaGong".to_string(), distinct: "xy923utn3".to_string(),
-        street_name: Some("Sujaa st".to_string()), detail: "no limit 780".to_string() };
-    let item1 = BillingModel {contact, address:Some(address)};
-    
-    let (first_name, last_name) = ("Jordan".to_string(), "NormanKabboa".to_string());
-    let emails = vec!["banker@blueocean.ic".to_string(), "bee@gituye.com".to_string()];
-    let phones = vec![
-        PhoneNumberDto{nation:48, number:"000208126".to_string()},
-        PhoneNumberDto{nation:49, number:"030001211".to_string()}
-    ];
-    let contact = ContactModel {first_name, last_name, emails, phones};
-    let address = PhyAddrModel { country: CountryCode::US, region: "CA".to_string(),
-        city: "i9ru24t".to_string(), distinct: "bliidlib".to_string(),
-        street_name: Some("du iye j0y".to_string()), detail: "eu ur4 to4o".to_string() };
-    let item2 = BillingModel {contact, address:Some(address)};
+    let item1 = {
+        let (first_name, last_name) = ("Ken".to_string(), "Kabaacis".to_string());
+        let emails = vec!["sz16@crossroad.au".to_string(), "hay0123@pitch.io".to_string()];
+        let phones = vec![
+            PhoneNumberDto{nation:43, number:"002081264".to_string()},
+            PhoneNumberDto{nation:43, number:"300801211".to_string()}
+        ];
+        let contact = ContactModel {first_name, last_name, emails, phones};
+        let address = PhyAddrModel { country: CountryCode::TW, region: "PengHu".to_string(),
+            city: "MaGong".to_string(), distinct: "xy923utn3".to_string(),
+            street_name: Some("Sujaa st".to_string()), detail: "no limit 780".to_string() };
+        BillingModel {contact, address:Some(address)}
+    }; 
+    let item2 = { 
+        let (first_name, last_name) = ("Jordan".to_string(), "NormanKabboa".to_string());
+        let emails = vec!["banker@blueocean.ic".to_string(), "bee@gituye.com".to_string()];
+        let phones = vec![
+            PhoneNumberDto{nation:48, number:"000208126".to_string()},
+            PhoneNumberDto{nation:49, number:"030001211".to_string()}
+        ];
+        let contact = ContactModel {first_name, last_name, emails, phones};
+        let address = PhyAddrModel { country: CountryCode::US, region: "CA".to_string(),
+            city: "i9ru24t".to_string(), distinct: "bliidlib".to_string(),
+            street_name: Some("du iye j0y".to_string()), detail: "eu ur4 to4o".to_string() };
+        BillingModel {contact, address:Some(address)}
+    };
     vec![item1, item2]
 }
 
-fn ut_setup_shipping (mock_seller_ids:&[u32;2]) -> ShippingModel
+fn ut_setup_shipping (mock_seller_ids:&[u32;2]) -> Vec<ShippingModel>
 {
-    let (first_name, last_name) = ("Johan".to_string(), "Kazzhitsch".to_string());
-    let emails = vec!["high@aman.at".to_string(), "low@hunt.io".to_string()];
-    let phones = vec![
-        PhoneNumberDto{nation:43, number:"500020812".to_string()},
-        PhoneNumberDto{nation:43, number:"130080121".to_string()}
-    ];
-    let contact = ContactModel {first_name, last_name, emails, phones};
-    let address = PhyAddrModel { country: CountryCode::TW, region: "NewTaipei".to_string(),
-        city: "Yonghe".to_string(), distinct: "demgur".to_string(), street_name: None,
-        detail: "postal building 1-53-70".to_string() };
-    let option = vec![
-        ShippingOptionModel{seller_id:mock_seller_ids[0], method:ShippingMethod::FedEx},
-        ShippingOptionModel{seller_id:mock_seller_ids[1], method:ShippingMethod::UPS},
-    ];
-    ShippingModel {contact, option, address:Some(address)}
+    let item1 = {
+        let (first_name, last_name) = ("Pepek".to_string(), "LaughOutLoud".to_string());
+        let emails = vec!["hotsauce@windows.cg".to_string(), "paste@shrimp.hebi".to_string()];
+        let phones = vec![
+            PhoneNumberDto{nation:37, number:"950002081".to_string()},
+            PhoneNumberDto{nation:36, number:"00101300802".to_string()}
+        ];
+        let contact = ContactModel {first_name, last_name, emails, phones};
+        let address = PhyAddrModel { country: CountryCode::ID, region: "NusaXX".to_string(),
+            city: "Heirrotyyr".to_string(), distinct: "d9emoss".to_string(), street_name: None,
+            detail: "m8 warehouse 1-53-70".to_string() };
+        ShippingModel {contact, option:vec![], address:Some(address)}
+    }; 
+    let item2 = {
+        let (first_name, last_name) = ("Johan".to_string(), "Kazzhitsch".to_string());
+        let emails = vec!["high@aman.at".to_string(), "low@hunt.io".to_string()];
+        let phones = vec![
+            PhoneNumberDto{nation:43, number:"500020812".to_string()},
+            PhoneNumberDto{nation:44, number:"130080121".to_string()}
+        ];
+        let contact = ContactModel {first_name, last_name, emails, phones};
+        let address = PhyAddrModel { country: CountryCode::TW, region: "NewTaipei".to_string(),
+            city: "Yonghe".to_string(), distinct: "demgur".to_string(), street_name: None,
+            detail: "postal building 1-53-70".to_string() };
+        let option = vec![
+            ShippingOptionModel{seller_id:mock_seller_ids[0], method:ShippingMethod::FedEx},
+            ShippingOptionModel{seller_id:mock_seller_ids[1], method:ShippingMethod::UPS},
+        ];
+        ShippingModel {contact, option, address:Some(address)}
+    };
+    vec![item1, item2]
 }
 
 fn ut_setup_orderlines (mock_seller_ids:&[u32;2]) -> Vec<OrderLineModel>
@@ -113,19 +132,18 @@ async fn in_mem_create_ok ()
     ];
     let mut orderlines = ut_setup_orderlines(&mock_seller_ids);
     let mut billings = ut_setup_billing();
+    let mut shippings = ut_setup_shipping(&mock_seller_ids);
     { // ---- subcase 1, create new order
-        let shipping = ut_setup_shipping(&mock_seller_ids);
         let result = o_repo.create(mock_oid[0].clone(), mock_usr_id,
                                    orderlines.drain(0..4).collect(),
-                                   billings.remove(0), shipping).await;
+                                   billings.remove(0), shippings.remove(0)).await;
         assert!(result.is_ok());
         if let Ok((oid, dtos)) = result {
             assert_eq!(oid, mock_oid[0]);
             assert_eq!(dtos.len(), 4);
         };
-        let shipping = ut_setup_shipping(&mock_seller_ids);
-        let result = o_repo.create(mock_oid[1].clone(), mock_usr_id,
-                                   orderlines, billings.remove(0), shipping).await;
+        let result = o_repo.create(mock_oid[1].clone(), mock_usr_id, orderlines,
+                                   billings.remove(0), shippings.remove(0)).await;
         assert!(result.is_ok());
         assert!(result.is_ok());
         if let Ok((oid, dtos)) = result {
@@ -165,7 +183,7 @@ async fn in_mem_create_ok ()
         if let Ok((fetched_bl, fetched_usr_id)) = result {
             assert_eq!(fetched_usr_id, mock_usr_id);
             assert_eq!(fetched_bl.contact.first_name.as_str(), "Ken");
-            assert_eq!(fetched_bl.contact.phones.get(0).unwrap().number.as_str(), "002081264");
+            assert!(fetched_bl.contact.phones.iter().any(|m| m.number.as_str()=="002081264"));
             assert!(matches!(fetched_bl.address.as_ref().unwrap().country, CountryCode::TW));
         }
         let result = o_repo.fetch_billing(mock_oid[1].clone()).await;
@@ -175,6 +193,31 @@ async fn in_mem_create_ok ()
             assert_eq!(fetched_bl.contact.last_name.as_str(), "NormanKabboa");
             assert_eq!(fetched_bl.contact.emails.get(0).unwrap().as_str(), "banker@blueocean.ic");
             assert!(matches!(fetched_bl.address.as_ref().unwrap().country, CountryCode::US));
+        }
+    }
+    { // ---- subcase 4, fetch shippings
+        let result = o_repo.fetch_shipping(mock_oid[0].clone()).await;
+        assert!(result.is_ok());
+        if let Ok((fetched_sh, fetched_usr_id)) = result {
+            assert_eq!(fetched_usr_id, mock_usr_id);
+            assert_eq!(fetched_sh.contact.last_name.as_str(), "LaughOutLoud");
+            let ph = fetched_sh.contact.phones.iter().find(|m| m.nation==36).unwrap();
+            assert_eq!(ph.number.as_str(), "00101300802");
+            assert_eq!(fetched_sh.address.as_ref().unwrap().city.as_str(), "Heirrotyyr");
+            assert!(fetched_sh.option.is_empty());
+        }
+        let result = o_repo.fetch_shipping(mock_oid[1].clone()).await;
+        assert!(result.is_ok());
+        if let Ok((fetched_sh, fetched_usr_id)) = result {
+            assert_eq!(fetched_usr_id, mock_usr_id);
+            assert_eq!(fetched_sh.contact.first_name.as_str(), "Johan");
+            assert!(fetched_sh.contact.phones.iter().any(|m| m.nation==43));
+            assert!(fetched_sh.contact.phones.iter().any(|m| m.nation==44));
+            assert_eq!(fetched_sh.address.as_ref().unwrap().distinct.as_str(), "demgur");
+            let opt = fetched_sh.option.iter().find(|m| m.seller_id == mock_seller_ids[0]).unwrap();
+            assert!(matches!(opt.method, ShippingMethod::FedEx));
+            let opt = fetched_sh.option.iter().find(|m| m.seller_id == mock_seller_ids[1]).unwrap();
+            assert!(matches!(opt.method, ShippingMethod::UPS));
         }
     }
 } // end of in_mem_create_ok
