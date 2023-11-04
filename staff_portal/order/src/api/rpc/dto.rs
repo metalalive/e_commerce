@@ -100,3 +100,35 @@ pub struct OrderReplicaInventoryDto {
     pub lines: Vec<OrderLineReplicaInventoryDto>,
     pub shipping: ShippingDto,
 }
+
+
+#[derive(Deserialize)]
+pub struct OrderLinePaidUpdateDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    #[serde(deserialize_with="jsn_validate_product_type")]
+    pub product_type: ProductType,
+    pub time: DateTime<FixedOffset>,
+    pub qty: u32 
+}
+
+#[derive(Deserialize)]
+pub struct OrderPaymentUpdateDto {
+    pub oid: String,
+    pub lines: Vec<OrderLinePaidUpdateDto>,
+}
+
+#[derive(Serialize)]
+pub struct OrderLinePaidUpdateErrorDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    #[serde(serialize_with="jsn_serialize_product_type")]
+    pub product_type: ProductType,
+    pub reason: String,
+}
+
+#[derive(Serialize)]
+pub struct OrderPaymentUpdateErrorDto {
+    pub oid: String,
+    pub lines: Vec<OrderLinePaidUpdateErrorDto>,
+}

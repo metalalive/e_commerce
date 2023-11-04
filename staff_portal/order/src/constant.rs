@@ -19,10 +19,12 @@ pub mod limit {
 pub(crate) const WEBAPI_ADD_PRODUCT_POLICY: WebApiHdlrLabel = "modify_product_policy";
 pub(crate) const WEBAPI_CREATE_NEW_ORDER: WebApiHdlrLabel = "create_new_order";
 pub(crate) const WEBAPI_ACCESS_EXISTING_ORDER: WebApiHdlrLabel = "access_existing_order";
+
 pub(crate) const RPCAPI_EDIT_PRODUCT_PRICE: WebApiHdlrLabel = "update_store_products";
 pub(crate) const RPCAPI_EDIT_STOCK_LEVEL: WebApiHdlrLabel = "edit_stock_level";
-pub(crate) const RPCAPI_ORDERLINE_RESERVED_INVENTORY: WebApiHdlrLabel = "replica/orderline/reserved/inventory";
-pub(crate) const RPCAPI_ORDERLINE_RESERVED_PAYMENT: WebApiHdlrLabel = "replica/orderline/reserved/payment";
+pub(crate) const RPCAPI_ORDER_RSV_READ_INVENTORY: WebApiHdlrLabel = "order_reserved_replica_inventory";
+pub(crate) const RPCAPI_ORDER_RSV_READ_PAYMENT: WebApiHdlrLabel   = "order_reserved_replica_payment";
+pub(crate) const RPCAPI_ORDER_RSV_UPDATE_PAYMENT: WebApiHdlrLabel = "order_reserved_update_payment";
 
 pub(crate) const HTTP_CONTENT_TYPE_JSON: &str = "application/json";
 

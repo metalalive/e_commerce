@@ -9,11 +9,13 @@ use crate::api::web::dto::{
     OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLineErrorReason, OrderLineCreateErrNonExistDto,
     OrderCreateReqData, ShippingReqDto, BillingReqDto, OrderLineReqDto, OrderLineCreateErrorDto,
 };
-use crate::api::rpc::dto::{OrderReplicaPaymentDto, OrderReplicaInventoryDto};
+use crate::api::rpc::dto::{
+    OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto
+};
 use crate::error::AppError;
 use crate::model::{
-    BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet,
-    ProductPolicyModelSet, StockLevelModelSet
+    BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet, ProductPolicyModelSet,
+    StockLevelModelSet
 };
 use crate::repository::{AbsOrderRepo, AbsProductPriceRepo, AbstProductPolicyRepo, AppStockRepoReserveReturn};
 use crate::logging::{app_log_event, AppLogLevel};
@@ -32,6 +34,9 @@ pub struct OrderReplicaPaymentUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
 }
 pub struct OrderReplicaInventoryUseCase {
+    pub repo: Box<dyn AbsOrderRepo>,
+}
+pub struct OrderPaymentUpdateUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
 }
 
@@ -180,7 +185,7 @@ impl CreateOrderUseCase {
 
 
 impl OrderReplicaPaymentUseCase {
-    pub async fn execute(self, oid:String) -> DefaultResult<OrderReplicaPaymentDto, AppError>
+    pub(crate) async fn execute(self, oid:String) -> DefaultResult<OrderReplicaPaymentDto, AppError>
     {
         let olines = self.repo.fetch_all_lines(oid.clone()).await ?;
         // TODO, lock billing instance so customers are no longer able to update it
@@ -192,7 +197,7 @@ impl OrderReplicaPaymentUseCase {
     }
 }
 impl OrderReplicaInventoryUseCase {
-    pub async fn execute(self, oid:String) -> DefaultResult<OrderReplicaInventoryDto, AppError>
+    pub(crate) async fn execute(self, oid:String) -> DefaultResult<OrderReplicaInventoryDto, AppError>
     {
         let olines = self.repo.fetch_all_lines(oid.clone()).await ?;
         // TODO, lock shipping instance so customers are no longer able to update it
@@ -201,5 +206,13 @@ impl OrderReplicaInventoryUseCase {
             lines: olines.into_iter().map(OrderLineModel::into).collect()
         };
         Ok(resp)
+    }
+}
+impl OrderPaymentUpdateUseCase {
+    pub async fn execute(self, data:OrderPaymentUpdateDto)
+        -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
+    {
+        self.repo.update_lines_payment(data,
+                OrderLineModel::update_lines_payment).await
     }
 }

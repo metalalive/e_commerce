@@ -8,7 +8,7 @@ use crate::api::dto::{
     ContactDto, PhyAddrDto, ShippingOptionDto, ShippingMethod, CountryCode,
     BillingDto, ShippingDto, PhoneNumberDto, OrderLinePayDto, PayAmountDto
 };
-use crate::api::rpc::dto::OrderLineReplicaInventoryDto;
+use crate::api::rpc::dto::{OrderLineReplicaInventoryDto, OrderPaymentUpdateErrorDto, OrderLinePaidUpdateErrorDto, OrderPaymentUpdateDto};
 use crate::api::web::dto::{
     BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto,
     ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
@@ -63,7 +63,8 @@ pub struct OrderLineModel {
     pub product_type: ProductType,
     pub product_id : u64,
     pub price: OrderLinePriceModel,
-    pub qty: u32, // quantity to reserve,  TODO, record number cancelled
+    pub qty: u32, // quantity to reserve,
+                  // TODO, record number paid, delivered, and cancelled
     pub policy: OrderLineAppliedPolicyModel
 }
 
@@ -345,6 +346,11 @@ impl  OrderLineModel {
         let bs = oid.into_bytes();
         bs.into_iter().map(|b| format!("{:02x}",b))
             .collect::<Vec<String>>().join("")
+    }
+    pub fn update_lines_payment(models:&mut Vec<OrderLineModel>, data:OrderPaymentUpdateDto)
+        -> Vec<OrderLinePaidUpdateErrorDto>
+    {
+        vec![]
     }
 } // end of impl OrderLineModel
 

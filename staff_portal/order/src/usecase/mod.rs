@@ -13,7 +13,8 @@ pub use edit_product_policy::{EditProductPolicyUseCase, EditProductPolicyResult}
 pub use edit_product_price::EditProductPriceUseCase;
 pub use stock_level::StockLevelUseCase;
 pub use manage_order::{
-    CreateOrderUseCase, CreateOrderUsKsErr, OrderReplicaInventoryUseCase, OrderReplicaPaymentUseCase
+    CreateOrderUseCase, CreateOrderUsKsErr, OrderReplicaInventoryUseCase, OrderReplicaPaymentUseCase,
+    OrderPaymentUpdateUseCase
 };
 
 use crate::AppSharedState;

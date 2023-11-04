@@ -196,7 +196,7 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u
 
 
 #[tokio::test]
-async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
+async fn  replica_orderinfo_payment_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
     // assume web server has created the order.
@@ -204,7 +204,7 @@ async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
                             "18f00429638a0b", 2345).await?;
     let msgbody = br#" {"order_id":"18f00429638a0b"} "#;
     let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
-            route: "replica/orderline/reserved/payment".to_string()  };
+            route: "order_reserved_replica_payment".to_string()  };
     let result = route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let respbody = result.unwrap();
@@ -227,10 +227,10 @@ async fn  generate_orderline_for_payment_ok() -> DefaultResult<(), AppError>
         }
     }
     Ok(())
-} // end of fn generate_orderline_for_payment_ok
+} // end of fn replica_orderinfo_payment_ok
 
 #[tokio::test]
-async fn  generate_orderline_for_inventory_ok() -> DefaultResult<(), AppError>
+async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
     // assume web server has created the order.
@@ -238,7 +238,7 @@ async fn  generate_orderline_for_inventory_ok() -> DefaultResult<(), AppError>
                             "18f00429c638a0", 2345).await?;
     let msgbody = br#" {"order_id":"18f00429c638a0"} "#;
     let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
-            route: "replica/orderline/reserved/inventory".to_string()  };
+            route: "order_reserved_replica_inventory".to_string()  };
     let result = route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let respbody = result.unwrap();
@@ -260,5 +260,25 @@ async fn  generate_orderline_for_inventory_ok() -> DefaultResult<(), AppError>
         }
     }
     Ok(())
-} // end of fn generate_orderline_for_inventory_ok
+} // end of fn replica_orderinfo_inventory_ok
 
+#[tokio::test]
+async fn  update_order_payment_staus_ok() -> DefaultResult<(), AppError>
+{
+    let shrstate = test_setup_shr_state()?;
+    // assume web server has created the order.
+    itest_mock_create_order(shrstate.datastore().clone(),
+                            "18f00429638a0b", 2345).await?;
+    let msgbody = br#"
+            {"oid":"18f00429638a0b", lines:[
+                {"seller_id": 543, "product_id": 92, "product_type": 1,
+                 "time": "2023-09-17T06:02:45.008+04:00", "qty": 3}
+            ]} 
+        "#;
+    let req = AppRpcClientReqProperty { retry: 2, msgbody:msgbody.to_vec(), 
+            route: "order_reserved_update_payment".to_string()  };
+    let result = route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+    let _respbody = result.unwrap();
+    Ok(())
+}

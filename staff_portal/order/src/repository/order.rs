@@ -8,6 +8,7 @@ use chrono::{DateTime, FixedOffset, Local as LocalTime};
 
 use crate::AppDataStoreContext;
 use crate::api::dto::{OrderLinePayDto, PhoneNumberDto, ShippingMethod};
+use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedData, AppInMemFetchedSingleTable, AppInMemFetchedSingleRow};
 use crate::error::{AppError, AppErrorCode};
@@ -17,7 +18,7 @@ use crate::model::{
     OrderLineAppliedPolicyModel, PhyAddrModel, ShippingOptionModel
 };
 
-use super::{AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn};
+use super::{AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc};
 
 mod _stockm {
     use std::collections::HashSet;
@@ -634,6 +635,14 @@ impl AbsOrderRepo for OrderInMemRepo {
             Err(e)
         }
     } // end of fetch_shipping
+    
+    async fn update_lines_payment(&self, data:OrderPaymentUpdateDto,
+                                  cb:AppOrderRepoUpdateLinesUserFunc)
+        -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
+    {
+        let out = OrderPaymentUpdateErrorDto {oid:data.oid, lines:vec![]};
+        Ok(out)
+    }
 } // end of impl AbsOrderRepo
 
 

@@ -8,7 +8,7 @@ use chrono::DateTime;
 
 use order::AppDataStoreContext;
 use order::api::dto::OrderLinePayDto;
-use order::api::rpc::dto::InventoryEditStockLevelDto;
+use order::api::rpc::dto::{InventoryEditStockLevelDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
 use order::model::{
@@ -16,7 +16,8 @@ use order::model::{
     StockQuantityModel, OrderLineModel, BillingModel, ShippingModel
 };
 use order::repository::{
-    AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn
+    AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc,
+    AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc
 };
 use order::usecase::StockLevelUseCase;
 
@@ -67,11 +68,17 @@ impl AbsOrderRepo for MockOrderRepo {
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
-    async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>
+    async fn fetch_billing(&self, _oid:String) -> DefaultResult<(BillingModel, u32), AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
-    async fn fetch_shipping(&self, oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
+    async fn fetch_shipping(&self, _oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+    async fn update_lines_payment(&self, _data:OrderPaymentUpdateDto,
+                                  _cb:AppOrderRepoUpdateLinesUserFunc)
+        -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
