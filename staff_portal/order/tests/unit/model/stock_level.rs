@@ -5,7 +5,7 @@ use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::model::{
     StockLevelModelSet, ProductStockModel, StoreStockModel, StockQuantityModel,
-    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel
+    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel
 };
 use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
 
@@ -236,17 +236,20 @@ fn reserve_ok()
         OrderLineModel {seller_id:1014, product_type:saved_products[5].type_.clone(),
             product_id:saved_products[5].id_, price:OrderLinePriceModel {unit:3, total:35},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[0]
+                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
+                    reserved: expect_booked_qty[0], paid:0, paid_last_update: None}
         },
         OrderLineModel {seller_id:1013, product_type:saved_products[3].type_.clone(),
             product_id:saved_products[3].id_, price:OrderLinePriceModel {unit:2, total:8},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[1]
+                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
+                    reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
         OrderLineModel {seller_id:1014, product_type:saved_products[7].type_.clone(),
             product_id:saved_products[7].id_, price:OrderLinePriceModel {unit:5, total:48},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[2]
+                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
+                    reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
         },
     ];
     let mut qty_stats_before = vec![
@@ -286,12 +289,14 @@ fn reserve_ok()
         OrderLineModel {seller_id:1014, product_type:saved_products[7].type_.clone(),
             product_id:saved_products[7].id_, price:OrderLinePriceModel {unit:10, total:50},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[0]
+                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
+                    reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
         },
         OrderLineModel {seller_id:1013, product_type:saved_products[3].type_.clone(),
             product_id:saved_products[3].id_, price:OrderLinePriceModel {unit:2, total:8},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[1]
+                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
+                    reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
     ];
     qty_stats_before = vec![
@@ -333,17 +338,20 @@ fn reserve_shortage()
         OrderLineModel {seller_id:1014, product_type:saved_products[5].type_.clone(),
             product_id:saved_products[5].id_, price:OrderLinePriceModel {unit:3, total:66},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[0]
+                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
+                    reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
         },
         OrderLineModel {seller_id:1013, product_type:saved_products[0].type_.clone(),
             product_id:saved_products[0].id_, price:OrderLinePriceModel {unit:2, total:8},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[1]
+                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
+                    reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
         OrderLineModel {seller_id:1013, product_type:saved_products[1].type_.clone(),
             product_id:saved_products[1].id_, price:OrderLinePriceModel {unit:5, total:5},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[2]
+                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
+                    reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
         },
     ];
     let error = mset.try_reserve(&reqs);
@@ -376,12 +384,14 @@ fn reserve_seller_nonexist()
         OrderLineModel {seller_id:1013, product_type:saved_products[0].type_.clone(),
             product_id:saved_products[0].id_, price:OrderLinePriceModel {unit:2, total:4},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[1]
+                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
+                    reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
         OrderLineModel {seller_id:1099, product_type:saved_products[2].type_.clone(),
             product_id:saved_products[2].id_, price:OrderLinePriceModel {unit:3, total:6},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:expect_booked_qty[0]
+                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
+                    reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
         },
     ];
     let error = mset.try_reserve(&reqs);

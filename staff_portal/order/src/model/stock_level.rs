@@ -195,7 +195,7 @@ impl StockLevelModelSet {
             };
             let result = self.stores.iter_mut().find(|m| {req.seller_id == m.store_id});
             let opt_err = if let Some(store) = result {
-                let mut num_required = req.qty;
+                let mut num_required = req.qty.reserved;
                 let _satisfied = store.products.iter().filter(|p| {
                     req.product_type == p.type_ && req.product_id == p.id_
                 }).any(|p| {
@@ -206,7 +206,7 @@ impl StockLevelModelSet {
                 }); // dry-run
                 if num_required == 0 {
                     assert!(_satisfied);
-                    num_required = req.qty;
+                    num_required = req.qty.reserved;
                     let _ = store.products.iter_mut().filter(|p| {
                         req.product_type == p.type_ && req.product_id == p.id_
                     }).any(|p| {
@@ -217,7 +217,7 @@ impl StockLevelModelSet {
                         num_required == 0
                     });
                     None
-                } else if num_required < req.qty {
+                } else if num_required < req.qty.reserved {
                     error.shortage = Some(num_required);
                     Some(OrderLineErrorReason::NotEnoughToClaim)
                 } else {

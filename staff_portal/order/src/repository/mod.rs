@@ -10,7 +10,10 @@ use async_trait::async_trait;
 
 use crate::AppDataStoreContext;
 use crate::api::dto::OrderLinePayDto;
-use crate::api::rpc::dto::{ProductPriceDeleteDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, OrderLinePaidUpdateErrorDto};
+use crate::api::rpc::dto::{
+    ProductPriceDeleteDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
+    OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto
+};
 use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::constant::ProductType;
 use crate::error::AppError;
@@ -76,8 +79,8 @@ pub trait AbsOrderRepo : Sync + Send {
         -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>;
 } // end of trait AbsOrderRepo
 
-pub type AppOrderRepoUpdateLinesUserFunc = fn(&mut Vec<OrderLineModel>, OrderPaymentUpdateDto)
-    -> Vec<OrderLinePaidUpdateErrorDto>;
+pub type AppOrderRepoUpdateLinesUserFunc = fn(&mut Vec<OrderLineModel>, Vec<OrderLinePaidUpdateDto>)
+    -> Vec<OrderLinePayUpdateErrorDto>;
 pub type AppStockRepoReserveReturn = DefaultResult<(), DefaultResult<Vec<OrderLineCreateErrorDto>, AppError>>;
 pub type AppStockRepoReserveUserFunc = fn(&mut StockLevelModelSet, &Vec<OrderLineModel>)
     -> AppStockRepoReserveReturn;

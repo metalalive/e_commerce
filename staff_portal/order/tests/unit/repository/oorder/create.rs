@@ -5,7 +5,7 @@ use order::datastore::AppInMemoryDStore;
 use order::repository::{OrderInMemRepo, AbsOrderRepo};
 use order::model::{
     BillingModel, ContactModel, PhyAddrModel, ShippingModel, ShippingOptionModel,
-    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel
+    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel
 };
 
 use crate::repository::in_mem_ds_ctx_setup;
@@ -90,31 +90,38 @@ fn ut_setup_orderlines (mock_seller_ids:&[u32;2]) -> Vec<OrderLineModel>
     let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
     vec![
         OrderLineModel {seller_id:mock_seller_ids[0], product_type:ProductType::Item,
-            product_id: 190, qty:4, price:OrderLinePriceModel { unit:10, total: 39 },
+            product_id: 190, price:OrderLinePriceModel { unit:10, total: 39 },
+            qty: OrderLineQuantityModel {reserved: 4, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
         OrderLineModel {seller_id:mock_seller_ids[1], product_type:ProductType::Item,
-            product_id: 190, qty:5, price:OrderLinePriceModel { unit:12, total: 60 },
+            product_id: 190, price:OrderLinePriceModel { unit:12, total: 60 },
+            qty: OrderLineQuantityModel {reserved: 5, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
         OrderLineModel {seller_id:mock_seller_ids[0], product_type:ProductType::Package,
-            product_id: 190, qty:10, price:OrderLinePriceModel { unit:9, total: 67 },
+            product_id: 190, price:OrderLinePriceModel { unit:9, total: 67 },
+            qty: OrderLineQuantityModel {reserved: 10, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
         OrderLineModel {seller_id:mock_seller_ids[1], product_type:ProductType::Package,
-            product_id: 190, qty:6, price:OrderLinePriceModel { unit:40, total: 225 },
+            product_id: 190, price:OrderLinePriceModel { unit:40, total: 225 },
+            qty: OrderLineQuantityModel {reserved: 6, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
         OrderLineModel {seller_id:mock_seller_ids[1], product_type:ProductType::Item,
-            product_id: 192, qty:18, price:OrderLinePriceModel { unit:10, total: 80 },
+            product_id: 192, price:OrderLinePriceModel { unit:10, total: 80 },
+            qty: OrderLineQuantityModel {reserved: 18, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
         OrderLineModel {seller_id:mock_seller_ids[0], product_type:ProductType::Item,
-            product_id: 193, qty:32, price:OrderLinePriceModel { unit:12, total: 320 },
+            product_id: 193, price:OrderLinePriceModel { unit:12, total: 320 },
+            qty: OrderLineQuantityModel {reserved: 32, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
         OrderLineModel {seller_id:mock_seller_ids[1], product_type:ProductType::Package,
-            product_id: 194, qty:16, price:OrderLinePriceModel { unit:15, total: 240 },
+            product_id: 194, price:OrderLinePriceModel { unit:15, total: 240 },
+            qty: OrderLineQuantityModel {reserved: 16, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
     ]
@@ -156,12 +163,12 @@ async fn in_mem_create_ok ()
         assert!(result.is_ok());
         if let Ok(mut lines) = result {
             assert_eq!(lines.len(), 4);
-            lines.sort_by(|a,b| { a.qty.cmp(&b.qty) });
-            assert_eq!(lines[0].qty, 4);
+            lines.sort_by(|a,b| { a.qty.reserved.cmp(&b.qty.reserved) });
+            assert_eq!(lines[0].qty.reserved, 4);
             assert_eq!(lines[0].seller_id, mock_seller_ids[0]);
             assert_eq!(lines[0].product_type, ProductType::Item);
             assert_eq!(lines[0].product_id, 190);
-            assert_eq!(lines[2].qty, 6);
+            assert_eq!(lines[2].qty.reserved, 6);
             assert_eq!(lines[2].seller_id, mock_seller_ids[1]);
             assert_eq!(lines[2].product_type, ProductType::Package);
             assert_eq!(lines[2].product_id, 190);
@@ -170,8 +177,8 @@ async fn in_mem_create_ok ()
         assert!(result.is_ok());
         if let Ok(mut lines) = result {
             assert_eq!(lines.len(), 3);
-            lines.sort_by(|a,b| { a.qty.cmp(&b.qty) });
-            assert_eq!(lines[0].qty, 16);
+            lines.sort_by(|a,b| { a.qty.reserved.cmp(&b.qty.reserved) });
+            assert_eq!(lines[0].qty.reserved, 16);
             assert_eq!(lines[0].seller_id, mock_seller_ids[1]);
             assert_eq!(lines[0].product_type, ProductType::Package);
             assert_eq!(lines[0].product_id, 194);

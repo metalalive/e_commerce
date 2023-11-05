@@ -7,7 +7,7 @@ use order::constant::ProductType;
 use order::error::{AppErrorCode, AppError};
 use order::model::{
     StockLevelModelSet, StoreStockModel, ProductStockModel, StockQuantityModel,
-    ProductStockIdentity, OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel
+    ProductStockIdentity, OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel
 };
 use order::repository::{OrderInMemRepo, AbsOrderRepo, AppStockRepoReserveReturn, AbsOrderStockRepo};
 use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
@@ -319,10 +319,10 @@ fn mock_reserve_usr_cb_1 (ms:&mut StockLevelModelSet, req:&Vec<OrderLineModel>)
             assert!(result.is_some());
             if let Some(p) = result {
                 let num_avail = p.quantity.total - p.quantity.cancelled;
-                assert!(p.quantity.total > om.qty);
+                assert!(p.quantity.total > om.qty.reserved);
                 assert!(num_avail > 0);
-                assert!(num_avail > om.qty);
-                p.quantity.booked += om.qty;
+                assert!(num_avail > om.qty.reserved);
+                p.quantity.booked += om.qty.reserved;
             }
         }
     }
@@ -363,19 +363,22 @@ async fn in_mem_try_reserve_ok ()
     }
     let order_req = vec![
         OrderLineModel {
-            seller_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_, qty:2,
+            seller_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_,
+            qty: OrderLineQuantityModel {reserved: 2, paid: 0, paid_last_update: None},
             product_type: all_products[2].type_.clone(), price: OrderLinePriceModel {unit:3, total:6}
             , policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }
         },
         OrderLineModel {
-            seller_id: expect_slset.stores[1].store_id, product_id: all_products[3].id_, qty:1,
+            seller_id: expect_slset.stores[1].store_id, product_id: all_products[3].id_,
+            qty: OrderLineQuantityModel {reserved: 1, paid: 0, paid_last_update: None},
             product_type: all_products[3].type_.clone(), price: OrderLinePriceModel {unit:4, total:4}
             , policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }
         },
         OrderLineModel {
-            seller_id: expect_slset.stores[2].store_id, product_id: all_products[7].id_, qty:13,
+            seller_id: expect_slset.stores[2].store_id, product_id: all_products[7].id_,
+            qty: OrderLineQuantityModel {reserved: 13, paid: 0, paid_last_update: None},
             product_type: all_products[7].type_.clone(), price: OrderLinePriceModel {unit:20, total:190}
             , policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }
@@ -414,9 +417,9 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&Vec<OrderLineModel>)
     assert!(result.is_some());
     if let Some(p) = result {
         let num_avail = p.quantity.total - p.quantity.booked - p.quantity.cancelled;
-        assert!(p.quantity.total > req[0].qty);
+        assert!(p.quantity.total > req[0].qty.reserved);
         assert!(num_avail > 0);
-        assert!(num_avail < req[0].qty);
+        assert!(num_avail < req[0].qty.reserved);
         let err = OrderLineCreateErrorDto { seller_id: req[0].seller_id, product_id: req[0].product_id,
             product_type: req[0].product_type.clone(), reason: OrderLineErrorReason::NotEnoughToClaim,
             nonexist:None, shortage:None };
@@ -428,9 +431,9 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&Vec<OrderLineModel>)
     assert!(result.is_some());
     if let Some(p) = result {
         let num_avail = p.quantity.total - p.quantity.booked - p.quantity.cancelled;
-        assert!(p.quantity.total > req[1].qty);
+        assert!(p.quantity.total > req[1].qty.reserved);
         assert!(num_avail == 0);
-        assert!(num_avail < req[1].qty);
+        assert!(num_avail < req[1].qty.reserved);
         let err = OrderLineCreateErrorDto { seller_id: req[1].seller_id, product_id: req[1].product_id,
             product_type: req[1].product_type.clone(), reason: OrderLineErrorReason::OutOfStock,
             nonexist:None, shortage:None  };
@@ -460,13 +463,15 @@ async fn in_mem_try_reserve_shortage ()
     assert!(result.is_ok());
     let order_req = vec![
         OrderLineModel {
-            seller_id: expect_slset.stores[0].store_id, product_id: all_products[0].id_, qty:3,
+            seller_id: expect_slset.stores[0].store_id, product_id: all_products[0].id_,
+            qty: OrderLineQuantityModel {reserved: 3, paid: 0, paid_last_update: None},
             product_type: all_products[0].type_.clone(), price: OrderLinePriceModel {unit:4, total:11}
             , policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }
         },
         OrderLineModel {
-            seller_id: expect_slset.stores[0].store_id, product_id: all_products[1].id_, qty:9,
+            seller_id: expect_slset.stores[0].store_id, product_id: all_products[1].id_,
+            qty: OrderLineQuantityModel {reserved: 9, paid: 0, paid_last_update: None},
             product_type: all_products[1].type_.clone(), price: OrderLinePriceModel {unit:20, total:179}
             , policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }
@@ -517,7 +522,8 @@ async fn in_mem_try_reserve_user_cb_err ()
     assert!(result.is_ok());
     let order_req = vec![
         OrderLineModel {
-            seller_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_, qty:9,
+            seller_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_,
+            qty: OrderLineQuantityModel {reserved: 9, paid: 0, paid_last_update: None},
             product_type: all_products[2].type_.clone(), price: OrderLinePriceModel {unit:20, total:179}
             , policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }

@@ -212,7 +212,6 @@ impl OrderPaymentUpdateUseCase {
     pub async fn execute(self, data:OrderPaymentUpdateDto)
         -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
     {
-        self.repo.update_lines_payment(data,
-                OrderLineModel::update_lines_payment).await
+        self.repo.update_lines_payment(data, OrderLineModel::update_payments).await
     }
 }

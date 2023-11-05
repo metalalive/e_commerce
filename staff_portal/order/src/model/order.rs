@@ -8,7 +8,10 @@ use crate::api::dto::{
     ContactDto, PhyAddrDto, ShippingOptionDto, ShippingMethod, CountryCode,
     BillingDto, ShippingDto, PhoneNumberDto, OrderLinePayDto, PayAmountDto
 };
-use crate::api::rpc::dto::{OrderLineReplicaInventoryDto, OrderPaymentUpdateErrorDto, OrderLinePaidUpdateErrorDto, OrderPaymentUpdateDto};
+use crate::api::rpc::dto::{
+    OrderLineReplicaInventoryDto, OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto,
+    OrderLinePayUpdateErrorReason,
+};
 use crate::api::web::dto::{
     BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto,
     ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
@@ -58,13 +61,18 @@ pub struct OrderLinePriceModel {
     pub total:u32
 } // TODO, advanced pricing model
 
+pub struct OrderLineQuantityModel {
+    pub reserved: u32,
+    pub paid: u32,
+    pub paid_last_update: Option<DateTime<FixedOffset>>,
+} // TODO, record number delivered, and cancelled
+
 pub struct OrderLineModel {
     pub seller_id: u32,
     pub product_type: ProductType,
     pub product_id : u64,
     pub price: OrderLinePriceModel,
-    pub qty: u32, // quantity to reserve,
-                  // TODO, record number paid, delivered, and cancelled
+    pub qty: OrderLineQuantityModel,
     pub policy: OrderLineAppliedPolicyModel
 }
 
@@ -319,8 +327,8 @@ impl  OrderLineModel {
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
         let price_total = pricem.price * data.quantity;
-        Self { seller_id: data.seller_id, product_type: data.product_type,
-            product_id: data.product_id, qty: data.quantity,
+        Self { seller_id: data.seller_id, product_type: data.product_type, product_id: data.product_id,
+            qty: OrderLineQuantityModel { reserved: data.quantity, paid:0, paid_last_update:None },
             price: OrderLinePriceModel { unit: pricem.price, total: price_total } ,
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         }
@@ -347,17 +355,42 @@ impl  OrderLineModel {
         bs.into_iter().map(|b| format!("{:02x}",b))
             .collect::<Vec<String>>().join("")
     }
-    pub fn update_lines_payment(models:&mut Vec<OrderLineModel>, data:OrderPaymentUpdateDto)
-        -> Vec<OrderLinePaidUpdateErrorDto>
+    pub fn update_payments(models:&mut Vec<OrderLineModel>, data:Vec<OrderLinePaidUpdateDto>)
+        -> Vec<OrderLinePayUpdateErrorDto>
     {
-        vec![]
-    }
+        let dt_now = LocalTime::now();
+        data.into_iter().filter_map(|d| {
+            let result = models.iter_mut().find(|m| {
+                (m.seller_id == d.seller_id) && (m.product_id == d.product_id) && 
+                    (m.product_type == d.product_type)
+            });
+            let possible_error = if let Some(m) = result {
+                if dt_now < m.policy.reserved_until {
+                    if m.qty.reserved >= d.qty {
+                        if let Some(old_dt) = m.qty.paid_last_update.as_ref() {
+                            if old_dt < &d.time {
+                                (m.qty.paid, m.qty.paid_last_update) = (d.qty, Some(d.time));
+                                None
+                            } else { Some(OrderLinePayUpdateErrorReason::Omitted) }
+                        } else {
+                            (m.qty.paid, m.qty.paid_last_update) = (d.qty, Some(d.time));
+                            None
+                        }
+                    } else { Some(OrderLinePayUpdateErrorReason::InvalidQuantity) }
+                } else { Some(OrderLinePayUpdateErrorReason::ReservationExpired) }
+            } else { Some(OrderLinePayUpdateErrorReason::NotExist) };
+            if let Some(reason) = possible_error {
+                Some(OrderLinePayUpdateErrorDto { seller_id: d.seller_id, reason,
+                    product_id: d.product_id, product_type: d.product_type })
+            } else { None }
+        }).collect()
+    } // end of update_payments
 } // end of impl OrderLineModel
 
 impl Into<OrderLinePayDto> for OrderLineModel {
     fn into(self) -> OrderLinePayDto {
         OrderLinePayDto { seller_id: self.seller_id, product_id: self.product_id,
-            product_type: self.product_type, quantity: self.qty,
+            product_type: self.product_type, quantity: self.qty.reserved,
             reserved_until:self.policy.reserved_until.to_rfc3339(),
             amount: PayAmountDto { unit: self.price.unit, total: self.price.total}
         }
@@ -367,7 +400,7 @@ impl Into<OrderLinePayDto> for OrderLineModel {
 impl Into<OrderLineReplicaInventoryDto> for OrderLineModel {
     fn into(self) -> OrderLineReplicaInventoryDto {
         OrderLineReplicaInventoryDto { seller_id: self.seller_id, product_id: self.product_id,
-            product_type: self.product_type, qty_booked: self.qty }
+            product_type: self.product_type, qty_booked: self.qty.reserved }
     }
 }
 

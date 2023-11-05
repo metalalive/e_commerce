@@ -119,16 +119,21 @@ pub struct OrderPaymentUpdateDto {
 }
 
 #[derive(Serialize)]
-pub struct OrderLinePaidUpdateErrorDto {
+pub enum OrderLinePayUpdateErrorReason {
+    NotExist, ReservationExpired, InvalidQuantity, Omitted
+}
+
+#[derive(Serialize)]
+pub struct OrderLinePayUpdateErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
     #[serde(serialize_with="jsn_serialize_product_type")]
     pub product_type: ProductType,
-    pub reason: String,
+    pub reason: OrderLinePayUpdateErrorReason,
 }
 
 #[derive(Serialize)]
 pub struct OrderPaymentUpdateErrorDto {
     pub oid: String,
-    pub lines: Vec<OrderLinePaidUpdateErrorDto>,
+    pub lines: Vec<OrderLinePayUpdateErrorDto>,
 }

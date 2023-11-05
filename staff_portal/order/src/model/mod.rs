@@ -11,4 +11,5 @@ pub use stock_level::{
 pub use order::{
     BillingModel, ShippingModel, PhyAddrModel, ContactModel, OrderLineModel,
     OrderLinePriceModel, OrderLineAppliedPolicyModel, ShippingOptionModel,
+    OrderLineQuantityModel,
 };

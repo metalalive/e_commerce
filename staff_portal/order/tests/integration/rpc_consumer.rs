@@ -1,5 +1,6 @@
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
+use order::model::OrderLineQuantityModel;
 use serde_json::Value as JsnVal;
 
 use order::api::rpc::route_to_handler;
@@ -161,7 +162,8 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u
     let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
     let lines = vec![
-        OrderLineModel {seller_id, product_type:ProductType::Item, product_id:92, qty:5,
+        OrderLineModel {seller_id, product_type:ProductType::Item, product_id:92,
+            qty: OrderLineQuantityModel {reserved: 5, paid: 0, paid_last_update: None},
             price: OrderLinePriceModel { unit: 34, total: 170 },
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         }

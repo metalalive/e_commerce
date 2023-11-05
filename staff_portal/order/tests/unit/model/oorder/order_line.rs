@@ -1,10 +1,11 @@
 use chrono::{DateTime, Duration, Local as LocalTime};
 use order::api::dto::OrderLinePayDto;
+use order::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason};
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
 use order::model::{
     OrderLineModel, ProductPolicyModel, ProductPriceModel, OrderLinePriceModel,
-    OrderLineAppliedPolicyModel
+    OrderLineAppliedPolicyModel, OrderLineQuantityModel
 };
 
 #[test]
@@ -23,7 +24,7 @@ fn convert_from_req_dto_ok()
     let m = OrderLineModel::from(data, &policym, &pricem);
     assert_eq!(m.price.unit, 1015u32);
     assert_eq!(m.price.total, 1015u32 * 26u32);
-    assert_eq!(m.qty, 26);
+    assert_eq!(m.qty.reserved, 26);
     let timenow = LocalTime::now().fixed_offset();
     let expect_reserved_time = timenow + Duration::seconds(69i64);
     assert!(m.policy.reserved_until <= expect_reserved_time);
@@ -34,8 +35,9 @@ fn convert_to_pay_dto_ok()
 {
     let reserved_until = DateTime::parse_from_rfc3339("2023-01-15T09:23:50+08:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-04-24T13:39:41+08:00").unwrap();
-    let m = OrderLineModel {seller_id:123, product_type:ProductType::Package,
-        product_id:124, qty:25, price:OrderLinePriceModel { unit: 7, total: 173 },
+    let m = OrderLineModel {seller_id:123, product_type:ProductType::Package, product_id:124,
+        qty:OrderLineQuantityModel { reserved: 25, paid: 4, paid_last_update: Some(reserved_until.clone())},
+        price:OrderLinePriceModel { unit: 7, total: 173 },
         policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
     };
     let payline: OrderLinePayDto = m.into();
@@ -62,4 +64,199 @@ fn gen_order_id_seq() {
     let hs : HashSet<String, RandomState> = HashSet::from_iter(iter);
     assert_eq!(hs.len(), num_ids);
 }
+
+
+#[test]
+fn update_payments_ok() {
+    let dt_now = LocalTime::now().fixed_offset();
+    let reserved_until = dt_now + Duration::hours(1);
+    let warranty_until = dt_now + Duration::days(1);
+    let paid_last_update = dt_now - Duration::minutes(10);
+    let seller_id = 123;
+    let mut models = vec![
+        OrderLineModel {seller_id, product_type:ProductType::Package, product_id:812,
+            qty:OrderLineQuantityModel { reserved: 10, paid: 0, paid_last_update: None},
+            price:OrderLinePriceModel { unit: 7, total: 69 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {seller_id, product_type:ProductType::Item, product_id:890,
+            qty:OrderLineQuantityModel { reserved: 9, paid: 1, paid_last_update: Some(paid_last_update)},
+            price:OrderLinePriceModel { unit: 10, total: 90 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+    ];
+    let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
+    let data = vec![
+        OrderLinePaidUpdateDto { seller_id, product_id: 890, product_type: ProductType::Item,
+            time: last_updates[1], qty: 7 },
+        OrderLinePaidUpdateDto { seller_id, product_id: 812, product_type: ProductType::Package,
+            time: last_updates[0], qty: 4 },
+    ];
+    let errors = OrderLineModel::update_payments(&mut models, data);
+    assert_eq!(errors.len(), 0);
+    assert_eq!(models[0].product_id, 812);
+    assert_eq!(models[0].qty.paid, 4);
+    assert!(models[0].qty.paid_last_update.is_some());
+    assert_eq!(models[0].qty.paid_last_update.as_ref().unwrap(), &last_updates[0]);
+    assert_eq!(models[1].product_id, 890);
+    assert_eq!(models[1].qty.paid, 7);
+    assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &last_updates[1]);
+} // end of fn update_payments_ok
+
+
+#[test]
+fn update_payments_nonexist() {
+    let dt_now = LocalTime::now().fixed_offset();
+    let reserved_until = dt_now + Duration::hours(1);
+    let warranty_until = dt_now + Duration::days(1);
+    let paid_last_update = dt_now - Duration::minutes(10);
+    let seller_id = 123;
+    let mut models = vec![
+        OrderLineModel {seller_id, product_type:ProductType::Package, product_id:812,
+            qty:OrderLineQuantityModel { reserved: 10, paid: 0, paid_last_update: None},
+            price:OrderLinePriceModel { unit: 7, total: 69 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {seller_id, product_type:ProductType::Item, product_id:890,
+            qty:OrderLineQuantityModel { reserved: 9, paid: 1, paid_last_update: Some(paid_last_update)},
+            price:OrderLinePriceModel { unit: 10, total: 90 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+    ];
+    let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
+    let data = vec![
+        OrderLinePaidUpdateDto { seller_id, product_id: 889, product_type: ProductType::Item,
+            time: last_updates[1], qty: 7 },
+        OrderLinePaidUpdateDto { seller_id, product_id: 812, product_type: ProductType::Package,
+            time: last_updates[0], qty: 4 },
+    ];
+    let errors = OrderLineModel::update_payments(&mut models, data);
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].product_id, 889);
+    assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::NotExist));
+    assert_eq!(models[0].product_id, 812);
+    assert_eq!(models[0].qty.paid, 4);
+    assert!(models[0].qty.paid_last_update.is_some());
+} // end of fn update_payments_nonexist
+
+
+#[test]
+fn update_payments_rsv_expired() {
+    let dt_now = LocalTime::now().fixed_offset();
+    let warranty_until = dt_now + Duration::days(1);
+    let paid_last_update = dt_now - Duration::minutes(10);
+    let seller_id = 123;
+    let mut models = vec![
+        OrderLineModel {seller_id, product_type:ProductType::Package, product_id:812,
+            qty:OrderLineQuantityModel { reserved: 10, paid: 0, paid_last_update: None},
+            price:OrderLinePriceModel { unit: 7, total: 69 },
+            policy: OrderLineAppliedPolicyModel {reserved_until: dt_now + Duration::minutes(2),
+                warranty_until }
+        },
+        OrderLineModel {seller_id, product_type:ProductType::Item, product_id:890,
+            qty:OrderLineQuantityModel { reserved: 9, paid: 1, paid_last_update: Some(paid_last_update)},
+            price:OrderLinePriceModel { unit: 10, total: 90 },
+            policy: OrderLineAppliedPolicyModel { reserved_until: dt_now - Duration::seconds(30),
+                warranty_until }
+        },
+    ];
+    let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
+    let data = vec![
+        OrderLinePaidUpdateDto { seller_id, product_id: 890, product_type: ProductType::Item,
+            time: last_updates[1], qty: 7 },
+        OrderLinePaidUpdateDto { seller_id, product_id: 812, product_type: ProductType::Package,
+            time: last_updates[0], qty: 4 },
+    ];
+    let errors = OrderLineModel::update_payments(&mut models, data);
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].product_id, 890);
+    assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::ReservationExpired));
+    assert_eq!(models[0].product_id, 812);
+    assert_eq!(models[0].qty.paid, 4);
+    assert!(models[0].qty.paid_last_update.is_some());
+    assert_eq!(models[0].qty.paid_last_update.as_ref().unwrap(), &last_updates[0]);
+    assert_eq!(models[1].product_id, 890);
+    assert_eq!(models[1].qty.reserved, 9);
+    assert_eq!(models[1].qty.paid, 1); // not modified
+    assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &paid_last_update);
+} // end of fn update_payments_rsv_expired
+
+
+#[test]
+fn update_payments_invalid_quantity() {
+    let dt_now = LocalTime::now().fixed_offset();
+    let reserved_until = dt_now + Duration::hours(1);
+    let warranty_until = dt_now + Duration::days(1);
+    let paid_last_update = dt_now - Duration::minutes(10);
+    let seller_id = 123;
+    let mut models = vec![
+        OrderLineModel {seller_id, product_type:ProductType::Package, product_id:812,
+            qty:OrderLineQuantityModel { reserved: 10, paid: 0, paid_last_update: None},
+            price:OrderLinePriceModel { unit: 7, total: 69 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {seller_id, product_type:ProductType::Item, product_id:890,
+            qty:OrderLineQuantityModel { reserved: 9, paid: 1, paid_last_update: Some(paid_last_update)},
+            price:OrderLinePriceModel { unit: 10, total: 90 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+    ];
+    let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
+    let data = vec![
+        OrderLinePaidUpdateDto { seller_id, product_id: 890, product_type: ProductType::Item,
+            time: last_updates[1], qty: 8 },
+        OrderLinePaidUpdateDto { seller_id, product_id: 812, product_type: ProductType::Package,
+            time: last_updates[0], qty: models[0].qty.reserved + 1 },
+    ];
+    let errors = OrderLineModel::update_payments(&mut models, data);
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].product_id, 812);
+    assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::InvalidQuantity));
+    assert_eq!(models[0].product_id, 812);
+    assert_eq!(models[0].qty.paid, 0); // not modified
+    assert!(models[0].qty.paid_last_update.is_none());
+    assert_eq!(models[1].product_id, 890);
+    assert_eq!(models[1].qty.paid, 8);
+    assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &last_updates[1]);
+} // end of fn update_payments_invalid_quantity
+
+
+#[test]
+fn update_payments_old_record_omitted() {
+    let dt_now = LocalTime::now().fixed_offset();
+    let reserved_until = dt_now + Duration::hours(1);
+    let warranty_until = dt_now + Duration::days(1);
+    let paid_last_update = dt_now - Duration::minutes(10);
+    let seller_id = 123;
+    let mut models = vec![
+        OrderLineModel {seller_id, product_type:ProductType::Package, product_id:812,
+            qty:OrderLineQuantityModel { reserved: 10, paid: 0, paid_last_update: None},
+            price:OrderLinePriceModel { unit: 7, total: 69 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {seller_id, product_type:ProductType::Item, product_id:890,
+            qty:OrderLineQuantityModel { reserved: 9, paid: 1, paid_last_update: Some(paid_last_update)},
+            price:OrderLinePriceModel { unit: 10, total: 90 },
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+    ];
+    let last_updates = [dt_now - Duration::minutes(1), paid_last_update - Duration::seconds(15)];
+    let data = vec![
+        OrderLinePaidUpdateDto { seller_id, product_id: 890, product_type: ProductType::Item,
+            time: last_updates[1], qty: 7 },
+        OrderLinePaidUpdateDto { seller_id, product_id: 812, product_type: ProductType::Package,
+            time: last_updates[0], qty: 4 },
+    ];
+    let errors = OrderLineModel::update_payments(&mut models, data);
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].product_id, 890);
+    assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::Omitted));
+    assert_eq!(models[0].product_id, 812);
+    assert_eq!(models[0].qty.paid, 4);
+    assert!(models[0].qty.paid_last_update.is_some());
+    assert_eq!(models[0].qty.paid_last_update.as_ref().unwrap(), &last_updates[0]);
+    assert_eq!(models[1].product_id, 890);
+    assert_eq!(models[1].qty.paid, 1); // not modified
+    assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &paid_last_update);
+} // end of fn update_payments_old_record_omitted
 

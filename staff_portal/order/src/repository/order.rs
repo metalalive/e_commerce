@@ -15,7 +15,7 @@ use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockModel, StoreStockModel, StockQuantityModel, ProductStockIdentity2,  ProductStockIdentity,
     StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel, ContactModel, OrderLinePriceModel,
-    OrderLineAppliedPolicyModel, PhyAddrModel, ShippingOptionModel
+    OrderLineAppliedPolicyModel, PhyAddrModel, ShippingOptionModel, OrderLineQuantityModel
 };
 
 use super::{AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc};
@@ -151,16 +151,17 @@ mod _orderline {
     use crate::model::OrderLineModel;
     
     pub(super) const TABLE_LABEL: &'static str = "order_line_reserved";
-    pub(super) enum InMemColIdx {SellerID, ProductType, ProductId, Quantity, PriceUnit,
-        PriceTotal, PolicyReserved, PolicyWarranty, TotNumColumns}
+    pub(super) enum InMemColIdx { SellerID, ProductType, ProductId, QtyReserved, PriceUnit,
+        PriceTotal, PolicyReserved, PolicyWarranty, QtyPaid, QtyPaidLastUpdate, TotNumColumns}
     impl Into<usize> for InMemColIdx {
         fn into(self) -> usize {
             match self {
                 Self::SellerID => 0,    Self::ProductType => 1,
-                Self::ProductId => 2,   Self::Quantity => 3,
-                Self::PriceUnit => 4,   Self::PriceTotal => 5,
-                Self::PolicyReserved => 6,    Self::PolicyWarranty => 7,
-                Self::TotNumColumns => 8,
+                Self::ProductId => 2,   Self::QtyReserved => 3,
+                Self::QtyPaid => 4,     Self::QtyPaidLastUpdate => 5,
+                Self::PriceUnit => 6,   Self::PriceTotal => 7,
+                Self::PolicyReserved => 8,    Self::PolicyWarranty => 9,
+                Self::TotNumColumns => 10,
             }
         }
     }
@@ -370,10 +371,18 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
         let seller_id_s = value.seller_id.to_string();
         let prod_typ = <ProductType as Into<u8>>::into(value.product_type.clone()).to_string();
         let prod_id  = value.product_id.to_string();
+        let _paid_last_update = if let Some(v) = value.qty.paid_last_update.as_ref()
+        { v.to_rfc3339() }
+        else {
+            assert_eq!(value.qty.paid, 0);
+            String::new()
+        };
         let mut row = (0.. _orderline::InMemColIdx::TotNumColumns.into())
             .map(|_num| {String::new()}).collect::<Vec<String>>();
         let _ = [
-            (_orderline::InMemColIdx::Quantity,   value.qty.to_string()),
+            (_orderline::InMemColIdx::QtyReserved,  value.qty.reserved.to_string()),
+            (_orderline::InMemColIdx::QtyPaid,      value.qty.paid.to_string()),
+            (_orderline::InMemColIdx::QtyPaidLastUpdate,  _paid_last_update),
             (_orderline::InMemColIdx::PriceUnit,  value.price.unit.to_string()),
             (_orderline::InMemColIdx::PriceTotal, value.price.total.to_string()),
             (_orderline::InMemColIdx::PolicyReserved, value.policy.reserved_until.to_rfc3339()),
@@ -387,26 +396,45 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
         }).collect::<()>();
         row
     }
-}
+} // end of impl From for OrderLineModel reference
 impl Into<OrderLineModel> for AppInMemFetchedSingleRow {
     fn into(self) -> OrderLineModel {
         let row = self;
         let seller_id = row.get::<usize>(_orderline::InMemColIdx::SellerID.into()).unwrap().parse().unwrap();
         let prod_typ = row.get::<usize>(_orderline::InMemColIdx::ProductType.into()).unwrap().parse::<u8>().unwrap();
         let product_id = row.get::<usize>(_orderline::InMemColIdx::ProductId.into()).unwrap().parse().unwrap() ;
-        let qty = row.get::<usize>(_orderline::InMemColIdx::Quantity.into()).unwrap().parse().unwrap() ;
         let price = OrderLinePriceModel {
             unit: row.get::<usize>(_orderline::InMemColIdx::PriceUnit.into()).unwrap().parse().unwrap(),
             total: row.get::<usize>(_orderline::InMemColIdx::PriceTotal.into()).unwrap().parse().unwrap()
         };
-        let reserved_until = row.get::<usize>(_orderline::InMemColIdx::PolicyReserved.into()).unwrap();
-        let warranty_until = row.get::<usize>(_orderline::InMemColIdx::PolicyReserved.into()).unwrap();
-        let reserved_until = DateTime::parse_from_rfc3339(reserved_until.as_str()).unwrap();
-        let warranty_until = DateTime::parse_from_rfc3339(warranty_until.as_str()).unwrap();
+        let qty_paid_last_update = {
+            let p = row.get::<usize>(_orderline::InMemColIdx::QtyPaidLastUpdate.into());
+            let p = p.unwrap().as_str();
+            if let Ok(v) = DateTime::parse_from_rfc3339(p) {
+                Some(v)
+            } else { None }
+        };
+        let qty = OrderLineQuantityModel {
+            reserved: row.get::<usize>(_orderline::InMemColIdx::QtyReserved.into()).unwrap().parse().unwrap(),
+            paid: row.get::<usize>(_orderline::InMemColIdx::QtyPaid.into()).unwrap().parse().unwrap(),
+            paid_last_update: qty_paid_last_update
+        };
+        if qty.paid_last_update.is_none() {
+            assert_eq!(qty.paid, 0);
+        }
+        let reserved_until = {
+            let s = row.get::<usize>(_orderline::InMemColIdx::PolicyReserved.into()).unwrap();
+            DateTime::parse_from_rfc3339(s.as_str()).unwrap()
+        };
+        let warranty_until = {
+            let s = row.get::<usize>(_orderline::InMemColIdx::PolicyReserved.into()).unwrap();
+            DateTime::parse_from_rfc3339(s.as_str()).unwrap()
+        };
         let policy = OrderLineAppliedPolicyModel { reserved_until, warranty_until };
         OrderLineModel { seller_id, product_type: ProductType::from(prod_typ),
-            product_id, price, qty, policy }
-    } // TODO, parse product id/typs from fields
+            product_id,  price, policy, qty
+        }
+    }
 } // end of impl into OrderLineModel
 
 impl From<ContactModel> for AppInMemFetchedSingleRow {
