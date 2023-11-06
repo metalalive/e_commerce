@@ -165,14 +165,18 @@ mod _orderline {
             }
         }
     }
+    pub(super) fn inmem_pkey(oid:&str, seller_id:u32, prod_typ:ProductType,
+                             prod_id:u64) -> String
+    {
+        let prod_typ = <ProductType as Into<u8>>::into(prod_typ);
+        format!("{oid}-{seller_id}-{prod_typ}-{prod_id}")
+    }
     pub(super) fn to_inmem_tbl(oid:&str, data:&Vec<OrderLineModel>)
         ->  HashMap<String, Vec<String>>
     {
         let kv_iter = data.iter().map(|m| {
-            let seller_id_s = m.seller_id;
-            let prod_typ = <ProductType as Into<u8>>::into(m.product_type.clone());
-            let prod_id  = m.product_id;
-            let pkey = format!("{oid}-{seller_id_s}-{prod_typ}-{prod_id}");
+            let pkey = inmem_pkey(oid, m.seller_id, m.product_type.clone(),
+                                  m.product_id);
             (pkey, m.into())
         });
         HashMap::from_iter(kv_iter)
@@ -665,12 +669,30 @@ impl AbsOrderRepo for OrderInMemRepo {
     } // end of fetch_shipping
     
     async fn update_lines_payment(&self, data:OrderPaymentUpdateDto,
-                                  cb:AppOrderRepoUpdateLinesUserFunc)
+                                  usr_cb:AppOrderRepoUpdateLinesUserFunc)
         -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
     {
-        let out = OrderPaymentUpdateErrorDto {oid:data.oid, lines:vec![]};
-        Ok(out)
-    }
+        let table_name = _orderline::TABLE_LABEL;
+        let (oid, d_lines) = (data.oid, data.lines);
+        let num_data_items = d_lines.len();
+        let (mut models, g_lock) = {
+            let pids = d_lines.iter().map(|d| {
+                _orderline::inmem_pkey(oid.as_ref(), d.seller_id, d.product_type.clone(), d.product_id)
+            }).collect();
+            let info = HashMap::from([(table_name.to_string(), pids)]);
+            let (mut rawdata, lock) = self.datastore.fetch_acquire(info).await?;
+            let rawdata = rawdata.remove(table_name).unwrap();
+            let ms = rawdata.into_values().map(AppInMemFetchedSingleRow::into).collect();
+            (ms, lock)
+        };
+        let errors = usr_cb(&mut models, d_lines);
+        if errors.len() < num_data_items {
+            let rows = _orderline::to_inmem_tbl(oid.as_str(), &models);
+            let info = HashMap::from([(table_name.to_string(), rows)]);
+            let _num = self.datastore.save_release(info, g_lock)?;
+        } // no need to save if all data items cause errors
+        Ok(OrderPaymentUpdateErrorDto {oid, lines:errors})
+    } // end of fn update_lines_payment
 } // end of impl AbsOrderRepo
 
 
