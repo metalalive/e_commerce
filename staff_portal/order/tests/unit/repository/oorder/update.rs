@@ -78,7 +78,6 @@ fn ut_usr_cb_ok_2(models:&mut Vec<OrderLineModel>, data:Vec<OrderLinePaidUpdateD
     vec![]
 }
 
-
 #[tokio::test]
 async fn in_mem_update_lines_payment_ok()
 {
@@ -156,4 +155,3 @@ async fn in_mem_update_lines_payment_usr_cb_err()
     let result = o_repo.update_lines_payment(data, ut_usr_cb_err_2).await;
     assert!(result.is_ok());
 }
-
