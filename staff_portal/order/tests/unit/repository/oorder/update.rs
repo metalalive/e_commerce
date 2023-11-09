@@ -2,7 +2,7 @@ use chrono::{DateTime, FixedOffset};
 use order::api::rpc::dto::{OrderLinePaidUpdateDto, OrderPaymentUpdateDto, OrderLinePayUpdateErrorDto, OrderLinePayUpdateErrorReason};
 use order::constant::ProductType;
 use order::repository::{AbsOrderRepo, OrderInMemRepo};
-use order::model::OrderLineModel;
+use order::model::{OrderLineModel, OrderLineModelSet};
 
 use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_shipping, ut_setup_orderlines};
 
@@ -11,11 +11,12 @@ async fn ut_setup_saved_order() -> (OrderInMemRepo, String)
     let o_repo = in_mem_repo_ds_setup(30).await;
     let (mock_usr_id, mock_seller_ids) = (124, [17u32,38]);
     let mock_oid = OrderLineModel::generate_order_id(7);
-    let orderlines = ut_setup_orderlines(&mock_seller_ids);
+    let lines = ut_setup_orderlines(&mock_seller_ids);
     let mut billings = ut_setup_billing();
     let mut shippings = ut_setup_shipping(&mock_seller_ids);
-    let result = o_repo.create(mock_oid.clone(), mock_usr_id,  orderlines,
-                               billings.remove(0), shippings.remove(0)).await;
+    let ol_set = OrderLineModelSet {order_id:mock_oid.clone(), lines};
+    let result = o_repo.create(mock_usr_id, ol_set, billings.remove(0),
+                               shippings.remove(0)).await;
     assert!(result.is_ok());
     (o_repo, mock_oid)
 }

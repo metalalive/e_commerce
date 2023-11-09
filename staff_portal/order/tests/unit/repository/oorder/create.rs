@@ -1,7 +1,7 @@
 use order::api::dto::{CountryCode, ShippingMethod};
 use order::constant::ProductType;
 use order::repository::AbsOrderRepo;
-use order::model::OrderLineModel;
+use order::model::{OrderLineModel, OrderLineModelSet};
 
 use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_shipping, ut_setup_orderlines};
 
@@ -19,20 +19,19 @@ async fn in_mem_create_ok ()
     let mut billings = ut_setup_billing();
     let mut shippings = ut_setup_shipping(&mock_seller_ids);
     { // ---- subcase 1, create new order
-        let result = o_repo.create(mock_oid[0].clone(), mock_usr_id,
-                                   orderlines.drain(0..4).collect(),
-                                   billings.remove(0), shippings.remove(0)).await;
+        let ol_set = OrderLineModelSet {order_id:mock_oid[0].clone(),
+            lines: orderlines.drain(0..4).collect() };
+        let result = o_repo.create(mock_usr_id, ol_set, billings.remove(0),
+                                   shippings.remove(0)).await;
         assert!(result.is_ok());
-        if let Ok((oid, dtos)) = result {
-            assert_eq!(oid, mock_oid[0]);
+        if let Ok(dtos) = result {
             assert_eq!(dtos.len(), 4);
         };
-        let result = o_repo.create(mock_oid[1].clone(), mock_usr_id, orderlines,
-                                   billings.remove(0), shippings.remove(0)).await;
+        let ol_set = OrderLineModelSet {order_id:mock_oid[1].clone(), lines: orderlines };
+        let result = o_repo.create(mock_usr_id, ol_set, billings.remove(0),
+                                   shippings.remove(0)).await;
         assert!(result.is_ok());
-        assert!(result.is_ok());
-        if let Ok((oid, dtos)) = result {
-            assert_eq!(oid, mock_oid[1]);
+        if let Ok(dtos) = result {
             assert_eq!(dtos.len(), 3);
         };
     }

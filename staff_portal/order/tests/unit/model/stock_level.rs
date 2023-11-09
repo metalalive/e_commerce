@@ -5,7 +5,7 @@ use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::model::{
     StockLevelModelSet, ProductStockModel, StoreStockModel, StockQuantityModel,
-    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel
+    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel, OrderLineModelSet
 };
 use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
 
@@ -257,12 +257,13 @@ fn reserve_ok()
         ut_get_curr_qty(&mset.stores[0], &reqs[1]),
         ut_get_curr_qty(&mset.stores[1], &reqs[2]),
     ];
-    let error = mset.try_reserve(&reqs);
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs} ;
+    let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
     [
-        ut_get_curr_qty(&mset.stores[1], &reqs[0]),
-        ut_get_curr_qty(&mset.stores[0], &reqs[1]),
-        ut_get_curr_qty(&mset.stores[1], &reqs[2]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[0]),
+        ut_get_curr_qty(&mset.stores[0], &ol_set.lines[1]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[2]),
     ].into_iter().map(|v1| {
         let v0 = qty_stats_before.remove(0);
         let tot_booked_v0:u32 = v0.into_iter().map(|d| d.booked).sum();
@@ -303,11 +304,12 @@ fn reserve_ok()
         ut_get_curr_qty(&mset.stores[1], &reqs[0]),
         ut_get_curr_qty(&mset.stores[0], &reqs[1]),
     ];
-    let error = mset.try_reserve(&reqs);
+    let ol_set = OrderLineModelSet {order_id:"xx2".to_string(), lines:reqs} ;
+    let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
     [
-        ut_get_curr_qty(&mset.stores[1], &reqs[0]),
-        ut_get_curr_qty(&mset.stores[0], &reqs[1]),
+        ut_get_curr_qty(&mset.stores[1], &ol_set.lines[0]),
+        ut_get_curr_qty(&mset.stores[0], &ol_set.lines[1]),
     ].into_iter().map(|v1| {
         let v0 = qty_stats_before.remove(0);
         let tot_booked_v0:u32 = v0.into_iter().map(|d| d.booked).sum();
@@ -354,15 +356,16 @@ fn reserve_shortage()
                     reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
         },
     ];
-    let error = mset.try_reserve(&reqs);
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs} ;
+    let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 2);
     {
-        let (expect, actual) = (&reqs[0], &error[0]);
+        let (expect, actual) = (&ol_set.lines[0], &error[0]);
         assert_eq!(expect.seller_id, actual.seller_id);
         assert_eq!(expect.product_id, actual.product_id);
         assert_eq!(expect.product_type, actual.product_type);
         assert!(matches!(actual.reason, OrderLineErrorReason::NotEnoughToClaim));
-        let (expect, actual) = (&reqs[2], &error[1]);
+        let (expect, actual) = (&ol_set.lines[2], &error[1]);
         assert_eq!(expect.seller_id, actual.seller_id);
         assert_eq!(expect.product_id, actual.product_id);
         assert_eq!(expect.product_type, actual.product_type);
@@ -394,10 +397,11 @@ fn reserve_seller_nonexist()
                     reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
         },
     ];
-    let error = mset.try_reserve(&reqs);
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs} ;
+    let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 1);
     {
-        let (expect, actual) = (&reqs[1], &error[0]);
+        let (expect, actual) = (&ol_set.lines[1], &error[0]);
         assert_eq!(expect.seller_id, actual.seller_id);
         assert_eq!(expect.product_id, actual.product_id);
         assert_eq!(expect.product_type, actual.product_type);

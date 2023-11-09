@@ -10,7 +10,7 @@ use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineErrorReason, OrderL
 use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 
-use super::OrderLineModel;
+use super::OrderLineModelSet;
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
@@ -29,6 +29,7 @@ pub struct StockQuantityModel {
     pub total: u32,
     pub booked: u32,
     pub cancelled: u32,
+    // TODO, new field for reservation detail, such as order ID and quantity
 }
 #[derive(Debug)]
 pub struct ProductStockModel {
@@ -185,10 +186,10 @@ impl StockLevelModelSet {
 
     // If error happenes in the middle with some internal fields modified,
     // this model instance will be no longer clean and should be discarded immediately.
-    pub fn try_reserve(&mut self, reqs:&Vec<OrderLineModel>) -> Vec<OrderLineCreateErrorDto>
+    pub fn try_reserve(&mut self, ol_set:&OrderLineModelSet) -> Vec<OrderLineCreateErrorDto>
     {
         self.sort_by_expiry();
-        reqs.iter().filter_map(|req| {
+        ol_set.lines.iter().filter_map(|req| {
             let mut error = OrderLineCreateErrorDto {seller_id:req.seller_id,
                 product_id:req.product_id, product_type:req.product_type.clone(),
                 reason: OrderLineErrorReason::NotExist,  nonexist:None, shortage:None

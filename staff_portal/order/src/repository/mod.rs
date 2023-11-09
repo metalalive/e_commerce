@@ -19,7 +19,7 @@ use crate::constant::ProductType;
 use crate::error::AppError;
 use crate::model::{
     ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity,
-    BillingModel, OrderLineModel, ShippingModel
+    BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel
 };
 
 // make it visible only for testing purpose
@@ -64,9 +64,8 @@ pub trait AbsOrderRepo : Sync + Send {
 
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
     
-    async fn create (&self, oid:String, usr_id:u32, lines:Vec<OrderLineModel>,
-                     bl:BillingModel, sh:ShippingModel)
-        -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError> ;
+    async fn create (&self, usr_id:u32, lines:OrderLineModelSet, bl:BillingModel, sh:ShippingModel)
+        -> DefaultResult<Vec<OrderLinePayDto>, AppError> ;
 
     async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>;
 
@@ -82,7 +81,7 @@ pub trait AbsOrderRepo : Sync + Send {
 pub type AppOrderRepoUpdateLinesUserFunc = fn(&mut Vec<OrderLineModel>, Vec<OrderLinePaidUpdateDto>)
     -> Vec<OrderLinePayUpdateErrorDto>;
 pub type AppStockRepoReserveReturn = DefaultResult<(), DefaultResult<Vec<OrderLineCreateErrorDto>, AppError>>;
-pub type AppStockRepoReserveUserFunc = fn(&mut StockLevelModelSet, &Vec<OrderLineModel>)
+pub type AppStockRepoReserveUserFunc = fn(&mut StockLevelModelSet, &OrderLineModelSet)
     -> AppStockRepoReserveReturn;
 
 #[async_trait]
@@ -90,7 +89,7 @@ pub trait AbsOrderStockRepo : Sync +  Send {
     async fn fetch(&self, pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>;
     async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
     async fn try_reserve(&self, cb: AppStockRepoReserveUserFunc,
-                         order_req: &Vec<OrderLineModel>) -> AppStockRepoReserveReturn;
+                         order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn;
 }
 
 // TODO, consider runtime configuration for following repositories

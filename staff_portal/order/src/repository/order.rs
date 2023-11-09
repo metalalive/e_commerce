@@ -15,7 +15,7 @@ use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockModel, StoreStockModel, StockQuantityModel, ProductStockIdentity2,  ProductStockIdentity,
     StockLevelModelSet, OrderLineModel, BillingModel, ShippingModel, ContactModel, OrderLinePriceModel,
-    OrderLineAppliedPolicyModel, PhyAddrModel, ShippingOptionModel, OrderLineQuantityModel
+    OrderLineAppliedPolicyModel, PhyAddrModel, ShippingOptionModel, OrderLineQuantityModel, OrderLineModelSet
 };
 
 use super::{AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc};
@@ -247,9 +247,9 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
     } // end of fn save
     
     async fn try_reserve(&self, usr_cb: AppStockRepoReserveUserFunc,
-                         order_req: &Vec<OrderLineModel>) -> AppStockRepoReserveReturn
+                         order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn
     {
-        let pids = order_req.iter().map(|d|
+        let pids = order_req.lines.iter().map(|d|
             ProductStockIdentity2 {product_type:d.product_type.clone(),
                 store_id:d.seller_id, product_id:d.product_id}
         ).collect();
@@ -553,36 +553,37 @@ impl AbsOrderRepo for OrderInMemRepo {
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>
     { self._stock.clone() }
 
-    async fn create (&self, oid:String, usr_id:u32, lines:Vec<OrderLineModel>,
+    async fn create (&self, usr_id:u32, lineset:OrderLineModelSet,
                      bl:BillingModel, sh:ShippingModel)
-        -> DefaultResult<(String, Vec<OrderLinePayDto>), AppError> 
+        -> DefaultResult<Vec<OrderLinePayDto>, AppError> 
     {
+        let oid = lineset.order_id.as_str();
         let mut tabledata:[(String, AppInMemFetchedSingleTable);4] = [
             (_contact::TABLE_LABEL.to_string(), HashMap::new()),
             (_phy_addr::TABLE_LABEL.to_string(), HashMap::new()),
-            (_ship_opt::TABLE_LABEL.to_string(), _ship_opt::to_inmem_tbl(oid.as_str(), sh.option)),
-            (_orderline::TABLE_LABEL.to_string(), _orderline::to_inmem_tbl(oid.as_str(), &lines)),
+            (_ship_opt::TABLE_LABEL.to_string(), _ship_opt::to_inmem_tbl(oid, sh.option)),
+            (_orderline::TABLE_LABEL.to_string(), _orderline::to_inmem_tbl(oid, &lineset.lines)),
         ];
         {
-            let items = _contact::to_inmem_tbl(oid.as_str(), usr_id,
+            let items = _contact::to_inmem_tbl(oid, usr_id,
                  _pkey_partial_label::SHIPPING, sh.contact);
             items.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
-            let items = _contact::to_inmem_tbl(oid.as_str(), usr_id,
+            let items = _contact::to_inmem_tbl(oid, usr_id,
                  _pkey_partial_label::BILLING, bl.contact);
             items.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
         }
         if let Some(addr) = bl.address {
-            let items = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::BILLING, addr);
+            let items = _phy_addr::to_inmem_tbl(oid, _pkey_partial_label::BILLING, addr);
             items.into_iter().map(|(k,v)| {tabledata[1].1.insert(k, v);}).count();
         }
         if let Some(addr) = sh.address {
-            let items = _phy_addr::to_inmem_tbl(oid.as_str(), _pkey_partial_label::SHIPPING, addr);
+            let items = _phy_addr::to_inmem_tbl(oid, _pkey_partial_label::SHIPPING, addr);
             items.into_iter().map(|(k,v)| {tabledata[1].1.insert(k, v);}).count();
         }
         let data = HashMap::from_iter(tabledata.into_iter());
         let _num = self.datastore.save(data).await?;
-        let paylines = lines.into_iter().map(OrderLineModel::into).collect();
-        Ok((oid, paylines))
+        let paylines = lineset.lines.into_iter().map(OrderLineModel::into).collect();
+        Ok(paylines)
     } // end of fn create
 
     async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>

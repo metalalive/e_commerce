@@ -1,6 +1,6 @@
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
-use order::model::OrderLineQuantityModel;
+use order::model::{OrderLineQuantityModel, OrderLineModelSet};
 use serde_json::Value as JsnVal;
 
 use order::api::rpc::route_to_handler;
@@ -191,7 +191,8 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u
             ShippingOptionModel {seller_id, method:ShippingMethod::FedEx}
         ]
     };
-    let _ = repo.create(oid.to_string(), usr_id, lines, bl, sh).await?;
+    let ol_set = OrderLineModelSet {order_id:oid.to_string(), lines};
+    let _ = repo.create(usr_id, ol_set, bl, sh).await?;
     Ok(())
 } // end of itest_mock_create_order
 

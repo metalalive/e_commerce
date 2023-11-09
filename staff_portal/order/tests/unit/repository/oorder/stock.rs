@@ -7,7 +7,7 @@ use order::constant::ProductType;
 use order::error::{AppErrorCode, AppError};
 use order::model::{
     StockLevelModelSet, StoreStockModel, ProductStockModel, StockQuantityModel,
-    ProductStockIdentity, OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel
+    ProductStockIdentity, OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel, OrderLineModelSet
 };
 use order::repository::{OrderInMemRepo, AbsOrderRepo, AppStockRepoReserveReturn, AbsOrderStockRepo};
 use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
@@ -305,11 +305,11 @@ async fn ut_retrieve_stocklvl_qty (stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
     } else { (0,0,0) }
 }
 
-fn mock_reserve_usr_cb_1 (ms:&mut StockLevelModelSet, req:&Vec<OrderLineModel>)
+fn mock_reserve_usr_cb_1 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     -> AppStockRepoReserveReturn
 {
     assert_eq!(ms.stores.len(), 3);
-    for om in req.iter() {
+    for om in req.lines.iter() {
         let result = ms.stores.iter_mut().find(|m| {om.seller_id == m.store_id});
         assert!(result.is_some());
         if let Some(s) = result {
@@ -384,7 +384,8 @@ async fn in_mem_try_reserve_ok ()
                 warranty_until: mock_warranty.clone() }
         },
     ];
-    let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &order_req).await;
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:order_req} ;
+    let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
     { // after reservation
         let pid = ProductStockIdentity { store_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_,
@@ -405,38 +406,38 @@ async fn in_mem_try_reserve_ok ()
 
 
 
-fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&Vec<OrderLineModel>)
+fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     -> AppStockRepoReserveReturn
 {
     assert_eq!(ms.stores.len(), 1);
     assert_eq!(ms.stores[0].products.len(), 2);
     let mut out = vec![];
     let result = ms.stores[0].products.iter_mut().find(|p| {
-        req[0].product_type == p.type_ && req[0].product_id == p.id_
+        req.lines[0].product_type == p.type_ && req.lines[0].product_id == p.id_
     });
     assert!(result.is_some());
     if let Some(p) = result {
         let num_avail = p.quantity.total - p.quantity.booked - p.quantity.cancelled;
-        assert!(p.quantity.total > req[0].qty.reserved);
+        assert!(p.quantity.total > req.lines[0].qty.reserved);
         assert!(num_avail > 0);
-        assert!(num_avail < req[0].qty.reserved);
-        let err = OrderLineCreateErrorDto { seller_id: req[0].seller_id, product_id: req[0].product_id,
-            product_type: req[0].product_type.clone(), reason: OrderLineErrorReason::NotEnoughToClaim,
-            nonexist:None, shortage:None };
+        assert!(num_avail < req.lines[0].qty.reserved);
+        let err = OrderLineCreateErrorDto { seller_id: req.lines[0].seller_id,
+            product_id: req.lines[0].product_id, product_type: req.lines[0].product_type.clone(),
+            reason: OrderLineErrorReason::NotEnoughToClaim, nonexist:None, shortage:None };
         out.push(err);
     }
     let result = ms.stores[0].products.iter_mut().find(|p| {
-        req[1].product_type == p.type_ && req[1].product_id == p.id_
+        req.lines[1].product_type == p.type_ && req.lines[1].product_id == p.id_
     });
     assert!(result.is_some());
     if let Some(p) = result {
         let num_avail = p.quantity.total - p.quantity.booked - p.quantity.cancelled;
-        assert!(p.quantity.total > req[1].qty.reserved);
+        assert!(p.quantity.total > req.lines[1].qty.reserved);
         assert!(num_avail == 0);
-        assert!(num_avail < req[1].qty.reserved);
-        let err = OrderLineCreateErrorDto { seller_id: req[1].seller_id, product_id: req[1].product_id,
-            product_type: req[1].product_type.clone(), reason: OrderLineErrorReason::OutOfStock,
-            nonexist:None, shortage:None  };
+        assert!(num_avail < req.lines[1].qty.reserved);
+        let err = OrderLineCreateErrorDto { seller_id: req.lines[1].seller_id,
+            product_id: req.lines[1].product_id, product_type: req.lines[1].product_type.clone(),
+            reason: OrderLineErrorReason::OutOfStock, nonexist:None, shortage:None  };
         out.push(err);
     }
     Err(Ok(out))
@@ -477,7 +478,8 @@ async fn in_mem_try_reserve_shortage ()
                 warranty_until: mock_warranty.clone() }
         },
     ];
-    let result = stockrepo.try_reserve(mock_reserve_usr_cb_2, &order_req).await;
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:order_req} ;
+    let result = stockrepo.try_reserve(mock_reserve_usr_cb_2, &ol_set).await;
     assert!(result.is_err());
     if let Err(e) = result {
         assert!(e.is_ok());
@@ -497,7 +499,7 @@ async fn in_mem_try_reserve_shortage ()
 } // end of in_mem_try_reserve_shortage
 
 
-fn mock_reserve_usr_cb_3 (_ms:&mut StockLevelModelSet, _req:&Vec<OrderLineModel>)
+fn mock_reserve_usr_cb_3 (_ms:&mut StockLevelModelSet, _req:&OrderLineModelSet)
     -> AppStockRepoReserveReturn
 {
     let detail = Some(format!("unit-test"));
@@ -529,7 +531,8 @@ async fn in_mem_try_reserve_user_cb_err ()
                 warranty_until: mock_warranty.clone() }
         },
     ];
-    let result = stockrepo.try_reserve(mock_reserve_usr_cb_3, &order_req).await;
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:order_req} ;
+    let result = stockrepo.try_reserve(mock_reserve_usr_cb_3, &ol_set).await;
     assert!(result.is_err());
     if let Err(e) = result {
         assert!(e.is_err());

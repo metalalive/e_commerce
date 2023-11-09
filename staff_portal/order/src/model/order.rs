@@ -76,6 +76,11 @@ pub struct OrderLineModel {
     pub policy: OrderLineAppliedPolicyModel
 }
 
+pub struct OrderLineModelSet {
+    pub order_id: String,
+    pub lines: Vec<OrderLineModel>,
+}
+
 impl Into<ContactDto> for ContactModel {
     fn into(self) -> ContactDto {
         ContactDto { first_name: self.first_name, last_name: self.last_name,

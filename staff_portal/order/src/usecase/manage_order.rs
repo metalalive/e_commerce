@@ -15,7 +15,7 @@ use crate::api::rpc::dto::{
 use crate::error::AppError;
 use crate::model::{
     BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet, ProductPolicyModelSet,
-    StockLevelModelSet
+    StockLevelModelSet, OrderLineModelSet
 };
 use crate::repository::{AbsOrderRepo, AbsProductPriceRepo, AbstProductPolicyRepo, AppStockRepoReserveReturn};
 use crate::logging::{app_log_event, AppLogLevel};
@@ -51,13 +51,14 @@ impl CreateOrderUseCase {
         // TODO, machine code to UUID generator should be configurable
         let machine_code = 1u8;
         let oid = OrderLineModel::generate_order_id(machine_code);
-        self.try_reserve_stock(&o_items).await?;
+        let ol_set = OrderLineModelSet {order_id:oid.clone(), lines:o_items};
+        self.try_reserve_stock(&ol_set).await?;
         // There might be under-booking issue if power outage happenes at here
         // before successfully saving the order lines. TODO: Improve the code here
-        match self.repo_order.create(oid, self.usr_id, o_items, o_bl, o_sh).await {
-            Ok((order_id, lines)) => {
+        match self.repo_order.create(self.usr_id, ol_set, o_bl, o_sh).await {
+            Ok(lines) => {
                 let timenow = Local::now().fixed_offset().timestamp();
-                let obj = OrderCreateRespOkDto { order_id, usr_id: self.usr_id,
+                let obj = OrderCreateRespOkDto { order_id:oid, usr_id: self.usr_id,
                     time: timenow as u64, reserved_lines: lines };
                 Ok(obj)
             },
@@ -149,7 +150,7 @@ impl CreateOrderUseCase {
         }
     } // end of fn validate_orderline
 
-    async fn try_reserve_stock(&self, req:&Vec<OrderLineModel>) -> DefaultResult<(), CreateOrderUsKsErr>
+    async fn try_reserve_stock(&self, req:&OrderLineModelSet) -> DefaultResult<(), CreateOrderUsKsErr>
     {
         let logctx_p = self.glb_state.log_context().clone();
         let repo_st = self.repo_order.stock();
@@ -171,7 +172,7 @@ impl CreateOrderUseCase {
         }
     } // end of fn try_reserve_stock
 
-    fn try_reserve_stock_cb (ms:&mut StockLevelModelSet, req:&Vec<OrderLineModel>)
+    fn try_reserve_stock_cb (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
         -> AppStockRepoReserveReturn
     {
         let result = ms.try_reserve(req);
