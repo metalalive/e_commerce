@@ -10,7 +10,7 @@ use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineErrorReason, OrderL
 use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 
-use super::OrderLineModelSet;
+use super::{OrderLineModelSet, OrderLineModel};
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
@@ -27,8 +27,8 @@ pub struct ProductStockIdentity2 {
 #[derive(Debug)]
 pub struct StockQuantityModel {
     pub total: u32,
-    pub booked: u32,
     pub cancelled: u32,
+    booked: u32,
     // TODO, new field for reservation detail, such as order ID and quantity
 }
 #[derive(Debug)]
@@ -102,6 +102,20 @@ impl PartialEq for ProductStockModel {
     }
 }
 
+impl StockQuantityModel {
+    pub fn new(total:u32, cancelled:u32, booked:u32) -> Self {
+        Self { total, cancelled, booked }
+    }
+    pub fn num_avail(&self) -> u32 {
+        self.total - self.cancelled - self.booked
+    }
+    pub fn num_booked(&self) -> u32 { self.booked }
+    
+    pub fn reserve(&mut self, num:u32) {
+        self.booked += num;
+    }
+}
+
 impl ProductStockModel {
     pub fn expiry_without_millis(&self) -> DateTime<FixedOffset>
     { // ignore more-previse-but-impractical detail less than one second.
@@ -113,6 +127,37 @@ impl ProductStockModel {
         out
     }
 }
+
+impl StoreStockModel {
+    pub fn try_reserve(&mut self, req:&OrderLineModel) -> Option<(OrderLineErrorReason, u32)>
+    {
+        let mut num_required = req.qty.reserved;
+        let _satisfied = self.products.iter().filter(|p| {
+            req.product_type == p.type_ && req.product_id == p.id_
+        }).any(|p| {
+            let num_taking = min(p.quantity.num_avail(), num_required);
+            num_required -= num_taking;
+            num_required == 0
+        }); // dry-run
+        if num_required == 0 {
+            assert!(_satisfied);
+            num_required = req.qty.reserved;
+            let _ = self.products.iter_mut().filter(|p| {
+                req.product_type == p.type_ && req.product_id == p.id_
+            }).any(|p| {
+                let num_taking = min(p.quantity.num_avail(), num_required);
+                p.quantity.reserve(num_taking);
+                num_required -= num_taking;
+                num_required == 0
+            });
+            None
+        } else if num_required < req.qty.reserved {
+            Some((OrderLineErrorReason::NotEnoughToClaim, num_required))
+        } else {
+            Some((OrderLineErrorReason::OutOfStock, num_required))
+        }
+    }
+} // end of impl StoreStockModel
 
 impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
     fn into(self) -> Vec<StockLevelPresentDto>
@@ -196,34 +241,10 @@ impl StockLevelModelSet {
             };
             let result = self.stores.iter_mut().find(|m| {req.seller_id == m.store_id});
             let opt_err = if let Some(store) = result {
-                let mut num_required = req.qty.reserved;
-                let _satisfied = store.products.iter().filter(|p| {
-                    req.product_type == p.type_ && req.product_id == p.id_
-                }).any(|p| {
-                    let num_avail = p.quantity.total - p.quantity.cancelled - p.quantity.booked;
-                    let num_taking = min(num_avail, num_required);
-                    num_required -= num_taking;
-                    num_required == 0
-                }); // dry-run
-                if num_required == 0 {
-                    assert!(_satisfied);
-                    num_required = req.qty.reserved;
-                    let _ = store.products.iter_mut().filter(|p| {
-                        req.product_type == p.type_ && req.product_id == p.id_
-                    }).any(|p| {
-                        let num_avail = p.quantity.total - p.quantity.cancelled - p.quantity.booked;
-                        let num_taking = min(num_avail, num_required);
-                        p.quantity.booked += num_taking;
-                        num_required -= num_taking;
-                        num_required == 0
-                    });
-                    None
-                } else if num_required < req.qty.reserved {
+                if let Some((errtype, num_required)) = store.try_reserve(req) {
                     error.shortage = Some(num_required);
-                    Some(OrderLineErrorReason::NotEnoughToClaim)
-                } else {
-                    Some(OrderLineErrorReason::OutOfStock)
-                }
+                    Some(errtype)
+                } else { None }
             } else {
                 error.nonexist = Some(OrderLineCreateErrNonExistDto { product_policy: false,
                     product_price: false, stock_seller:true });

@@ -102,7 +102,7 @@ impl Into<StockLevelModelSet> for AppInMemFetchedSingleTable {
                 let expiry = row.get::<usize>(_stockm::InMemColIdx::Expiry.into()).unwrap();
                 let expiry = DateTime::parse_from_rfc3339(&expiry).unwrap();
                 let m = ProductStockModel {is_create:false, type_:prod_typ, id_:prod_id,
-                    expiry, quantity: StockQuantityModel{total, booked, cancelled}
+                    expiry, quantity: StockQuantityModel::new(total, cancelled, booked)
                 };
                 store_rd.products.push(m);
             }
@@ -122,7 +122,7 @@ impl From<StockLevelModelSet> for AppInMemFetchedSingleTable {
                     .map(|_n| {String::new()}).collect::<Vec<String>>();
                 let _ = [
                     (_stockm::InMemColIdx::QtyCancelled, m2.quantity.cancelled.to_string()),
-                    (_stockm::InMemColIdx::QtyBooked, m2.quantity.booked.to_string()),
+                    (_stockm::InMemColIdx::QtyBooked, m2.quantity.num_booked().to_string()),
                     (_stockm::InMemColIdx::QtyTotal,  m2.quantity.total.to_string()),
                     (_stockm::InMemColIdx::Expiry,  m2.expiry.to_rfc3339()),
                 ].into_iter().map(|(idx, val)| {

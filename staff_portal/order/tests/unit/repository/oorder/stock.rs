@@ -32,45 +32,45 @@ fn ut_init_data_product() -> [ProductStockModel;10]
     [   // ------ for insertion --------
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap(),
-           quantity: StockQuantityModel {total:5, booked:0, cancelled:0}
+           quantity: StockQuantityModel::new(5, 0, 0)
         },
         ProductStockModel { type_:ProductType::Package, id_:9003, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap(),
-           quantity: StockQuantityModel {total:11, booked:0, cancelled:0}
+           quantity: StockQuantityModel::new(11, 0, 0)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
-           quantity: StockQuantityModel {total:15, booked:0, cancelled:0}
+           quantity: StockQuantityModel::new(15, 0, 0)
         },
         ProductStockModel { type_:ProductType::Item, id_:9005, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap(),
-           quantity: StockQuantityModel {total:8, booked:0, cancelled:0}
+           quantity: StockQuantityModel::new(8, 0, 0)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
-           quantity: StockQuantityModel {total:14, booked:0, cancelled:0}
+           quantity: StockQuantityModel::new(14, 0, 0)
         },
         // ---------------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
-           quantity: StockQuantityModel {total:15, booked:0, cancelled:7}
+           quantity: StockQuantityModel::new(15, 7, 0)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
-           quantity: StockQuantityModel {total:18, booked:0, cancelled:1}
+           quantity: StockQuantityModel::new(18, 1, 0)
         },
         // ---------------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.035-01:00").unwrap(),
-           quantity: StockQuantityModel {total:22, booked:0, cancelled:8}
+           quantity: StockQuantityModel::new(22, 8, 0)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T12:30:10.035-01:00").unwrap(),
-           quantity: StockQuantityModel {total:20, booked:0, cancelled:1}
+           quantity: StockQuantityModel::new(20, 1, 0)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2020-03-15T12:55:08.035-11:00").unwrap(),
-           quantity: StockQuantityModel {total:18, booked:0, cancelled:3}
+           quantity: StockQuantityModel::new(18, 3, 0)
         },
     ]
 } // end of ut_init_data_product
@@ -300,7 +300,7 @@ async fn ut_retrieve_stocklvl_qty (stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
         assert_eq!(actual.stores.len(), 1);
         assert_eq!(actual.stores[0].products.len(), 1);
         let product_sold = &actual.stores[0].products[0];
-        (product_sold.quantity.booked, product_sold.quantity.cancelled,
+        (product_sold.quantity.num_booked(), product_sold.quantity.cancelled,
          product_sold.quantity.total)
     } else { (0,0,0) }
 }
@@ -322,7 +322,7 @@ fn mock_reserve_usr_cb_1 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
                 assert!(p.quantity.total > om.qty.reserved);
                 assert!(num_avail > 0);
                 assert!(num_avail > om.qty.reserved);
-                p.quantity.booked += om.qty.reserved;
+                p.quantity.reserve(om.qty.reserved);
             }
         }
     }
@@ -417,7 +417,7 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     });
     assert!(result.is_some());
     if let Some(p) = result {
-        let num_avail = p.quantity.total - p.quantity.booked - p.quantity.cancelled;
+        let num_avail = p.quantity.num_avail();
         assert!(p.quantity.total > req.lines[0].qty.reserved);
         assert!(num_avail > 0);
         assert!(num_avail < req.lines[0].qty.reserved);
@@ -431,7 +431,7 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     });
     assert!(result.is_some());
     if let Some(p) = result {
-        let num_avail = p.quantity.total - p.quantity.booked - p.quantity.cancelled;
+        let num_avail = p.quantity.num_avail();
         assert!(p.quantity.total > req.lines[1].qty.reserved);
         assert!(num_avail == 0);
         assert!(num_avail < req.lines[1].qty.reserved);
@@ -455,9 +455,9 @@ async fn in_mem_try_reserve_shortage ()
         let mut stores = UT_INIT_DATA_STORE[..1].to_vec();
         stores[0].products.extend_from_slice(&all_products[0..4]);
         let qty_edit = &mut stores[0].products[0].quantity;
-        qty_edit.booked = qty_edit.total - qty_edit.cancelled - 1;
+        qty_edit.reserve(qty_edit.total - qty_edit.cancelled - 1);
         let qty_edit = &mut stores[0].products[1].quantity;
-        qty_edit.booked = qty_edit.total - qty_edit.cancelled;
+        qty_edit.reserve(qty_edit.total - qty_edit.cancelled);
         StockLevelModelSet {stores}
     }; // assume someone already booked for some items
     let result = stockrepo.save(expect_slset.clone()).await;
