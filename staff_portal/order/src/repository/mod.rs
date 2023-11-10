@@ -1,5 +1,6 @@
 mod product_policy;
 mod product_price;
+mod stock_level;
 mod order;
 
 use std::boxed::Box;
@@ -26,6 +27,7 @@ use crate::model::{
 pub use self::order::OrderInMemRepo;
 pub use self::product_policy::ProductPolicyInMemRepo;
 pub use self::product_price::ProductPriceInMemRepo;
+use self::stock_level::StockLvlInMemRepo;
 
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads
