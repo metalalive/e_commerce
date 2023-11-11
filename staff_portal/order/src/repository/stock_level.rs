@@ -25,12 +25,12 @@ mod _stockm {
 
     pub(super) const TABLE_LABEL: &'static str = "order_stock_lvl";
     pub(super) const EXPIRY_KEY_FORMAT: &'static str = "%Y%m%d%H%M%S%z";
-    pub(super) enum InMemColIdx {Expiry, QtyTotal, QtyBooked, QtyCancelled, TotNumColumns}
+    pub(super) enum InMemColIdx {Expiry, QtyTotal, QtyRsvDetail, QtyCancelled, TotNumColumns}
     impl Into<usize> for InMemColIdx {
         fn into(self) -> usize {
             match self {
                 Self::Expiry => 0,  Self::QtyTotal  => 1,
-                Self::QtyBooked => 2, Self::QtyCancelled  => 3,
+                Self::QtyRsvDetail => 2, Self::QtyCancelled  => 3,
                 Self::TotNumColumns => 4,
             }
         }
@@ -95,14 +95,22 @@ impl Into<StockLevelModelSet> for AppInMemFetchedSingleTable {
             } else {
                 let total = row.get::<usize>(_stockm::InMemColIdx::QtyTotal.into())
                     .unwrap().parse().unwrap();
-                let booked = row.get::<usize>(_stockm::InMemColIdx::QtyBooked.into())
-                    .unwrap().parse().unwrap();
+                let rsv_str = row.get::<usize>(_stockm::InMemColIdx::QtyRsvDetail.into()).unwrap() ; 
+                let rsv_detail = if rsv_str.len() > 0 {
+                    let out = rsv_str.split(" ").into_iter().map(|d| {
+                        let mut kv = d.split("/");
+                        let key = kv.next().unwrap();
+                        let value = kv.next().unwrap().parse().unwrap();
+                        (key, value)
+                    }) .collect();
+                    Some(out)
+                } else { None };
                 let cancelled = row.get::<usize>(_stockm::InMemColIdx::QtyCancelled.into())
                     .unwrap().parse().unwrap();
                 let expiry = row.get::<usize>(_stockm::InMemColIdx::Expiry.into()).unwrap();
                 let expiry = DateTime::parse_from_rfc3339(&expiry).unwrap();
                 let m = ProductStockModel {is_create:false, type_:prod_typ, id_:prod_id,
-                    expiry, quantity: StockQuantityModel::new(total, cancelled, booked)
+                    expiry, quantity: StockQuantityModel::new(total, cancelled, rsv_detail)
                 };
                 store_rd.products.push(m);
             }
@@ -118,11 +126,13 @@ impl From<StockLevelModelSet> for AppInMemFetchedSingleTable {
                 let exp_fmt = m2.expiry_without_millis().format(_stockm::EXPIRY_KEY_FORMAT);
                 let prod_typ_num:u8 = m2.type_.clone().into();
                 let pkey = format!("{}/{}/{}/{}", m1.store_id, prod_typ_num, m2.id_, exp_fmt);
+                let rsv_detail_str = m2.quantity.reservation().iter().map(
+                    |(k,v)| format!("{k}/{v}")) .collect::<Vec<String>>() .join(" ");
                 let mut row = (0 .. _stockm::InMemColIdx::TotNumColumns.into())
                     .map(|_n| {String::new()}).collect::<Vec<String>>();
                 let _ = [
                     (_stockm::InMemColIdx::QtyCancelled, m2.quantity.cancelled.to_string()),
-                    (_stockm::InMemColIdx::QtyBooked, m2.quantity.num_booked().to_string()),
+                    (_stockm::InMemColIdx::QtyRsvDetail, rsv_detail_str),
                     (_stockm::InMemColIdx::QtyTotal,  m2.quantity.total.to_string()),
                     (_stockm::InMemColIdx::Expiry,  m2.expiry.to_rfc3339()),
                 ].into_iter().map(|(idx, val)| {

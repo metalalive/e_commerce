@@ -3,7 +3,7 @@ mod product_price;
 mod stock_level;
 mod oorder;
 
-use order::model::{ProductPolicyModel, ProductPriceModel, StockLevelModelSet};
+use order::model::{ProductPolicyModel, ProductPriceModel, StockLevelModelSet, ProductStockModel};
 
 pub(crate) fn ut_clone_productpolicy(src:&ProductPolicyModel) -> ProductPolicyModel
 {
@@ -20,10 +20,9 @@ pub(crate) fn ut_clone_productprice(src:&ProductPriceModel) -> ProductPriceModel
         start_after: src.start_after.clone(), end_before: src.end_before.clone() }
 }
 
-pub(crate) fn verify_stocklvl_model(actual:&StockLevelModelSet,
-                         expect:&StockLevelModelSet,
-                         idx:[usize;2] ,
-                         use_eq_op:bool )
+pub(crate) fn verify_stocklvl_model<'a> (actual:&'a StockLevelModelSet,
+            expect:&StockLevelModelSet, idx:[usize;2],  use_eq_op:bool )
+    -> Option<&'a ProductStockModel>
 {
     let rand_chosen_store = &expect.stores[idx[0]];
     let result = actual.stores.iter().find(|m| {m.store_id == rand_chosen_store.store_id});
@@ -41,6 +40,7 @@ pub(crate) fn verify_stocklvl_model(actual:&StockLevelModelSet,
             } else {
                 assert_ne!(actual_prod, rand_chosen_product);
             }
-        }
-    }
+            Some(actual_prod)
+        } else { None }
+    } else { None }
 } // end of verify_stocklvl_model

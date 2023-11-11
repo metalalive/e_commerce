@@ -1,5 +1,7 @@
 use std::cmp::min;
-use std::vec::{Vec, self};
+use std::vec::Vec;
+use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::RandomState;
 use std::result::Result as DefaultResult;
 
 use chrono::DateTime;
@@ -28,8 +30,7 @@ pub struct ProductStockIdentity2 {
 pub struct StockQuantityModel {
     pub total: u32,
     pub cancelled: u32,
-    booked: u32,
-    // TODO, new field for reservation detail, such as order ID and quantity
+    rsv_detail: HashMap<String, u32>, // reserved quantity for specific order ID
 }
 #[derive(Debug)]
 pub struct ProductStockModel {
@@ -49,8 +50,8 @@ pub struct StockLevelModelSet {
 
 impl Into<StockQuantityPresentDto> for StockQuantityModel {
     fn into(self) -> StockQuantityPresentDto {
-        StockQuantityPresentDto { total: self.total, booked: self.booked,
-            cancelled: self.cancelled }
+        StockQuantityPresentDto { total: self.total, cancelled: self.cancelled,
+            booked: self.num_booked() }
     }
 }
 
@@ -62,7 +63,8 @@ impl Clone for ProductStockIdentity {
 }
 impl Clone for StockQuantityModel {
     fn clone(&self) -> Self {
-        Self {total:self.total, booked:self.booked, cancelled:self.cancelled}
+        Self {total:self.total, cancelled:self.cancelled,
+            rsv_detail:self.rsv_detail.clone() }
     }
 }
 impl Clone for ProductStockModel {
@@ -84,7 +86,10 @@ impl Clone for StockLevelModelSet {
 
 impl PartialEq for StockQuantityModel {
     fn eq(&self, other: &Self) -> bool {
-        self.total == other.total && self.booked == other.booked
+        let b1:HashSet<(&String,&u32), RandomState>  = HashSet::from_iter(self.rsv_detail.iter());
+        let b2 = HashSet::from_iter(other.rsv_detail.iter());
+        let rsv_any_diff = b2.difference(&b1).any(|(_k, _v)| true);
+        self.total == other.total  && rsv_any_diff == false
             && self.cancelled == other.cancelled
     }
     fn ne(&self, other: &Self) -> bool {
@@ -103,18 +108,37 @@ impl PartialEq for ProductStockModel {
 }
 
 impl StockQuantityModel {
-    pub fn new(total:u32, cancelled:u32, booked:u32) -> Self {
-        Self { total, cancelled, booked }
+    pub fn new(total:u32, cancelled:u32, detail:Option<Vec<(&str,u32)>>) -> Self
+    {
+        let rsv_detail = if let Some(d) = detail {
+            let data_iter = d.into_iter().map(|(k, v)| (k.to_string(), v));
+            HashMap::from_iter(data_iter)
+        } else { HashMap::new() };
+        Self { total, cancelled, rsv_detail }
+    }
+    pub fn reservation(&self) -> &HashMap<String, u32> {
+        &self.rsv_detail
+    }
+    pub fn num_booked(&self) -> u32 {
+        self.rsv_detail.values().sum()
     }
     pub fn num_avail(&self) -> u32 {
-        self.total - self.cancelled - self.booked
+        self.total - self.cancelled - self.num_booked()
     }
-    pub fn num_booked(&self) -> u32 { self.booked }
-    
-    pub fn reserve(&mut self, num:u32) {
-        self.booked += num;
+    pub fn reserve(&mut self, oid:&str, num_req:u32) -> u32
+    {
+        let n_avail = self.num_avail();
+        let num_taking = min(n_avail, num_req);
+        if num_taking > 0 {
+            if let Some(entry) = self.rsv_detail.get_mut(oid) {
+                *entry += num_taking;
+            } else {
+                self.rsv_detail.insert(oid.to_string(), num_taking);
+            }
+        }
+        num_taking
     }
-}
+} // end of impl StockQuantityModel
 
 impl ProductStockModel {
     pub fn expiry_without_millis(&self) -> DateTime<FixedOffset>
@@ -129,7 +153,7 @@ impl ProductStockModel {
 }
 
 impl StoreStockModel {
-    pub fn try_reserve(&mut self, req:&OrderLineModel) -> Option<(OrderLineErrorReason, u32)>
+    pub fn try_reserve(&mut self, oid:&str, req:&OrderLineModel) -> Option<(OrderLineErrorReason, u32)>
     {
         let mut num_required = req.qty.reserved;
         let _satisfied = self.products.iter().filter(|p| {
@@ -145,8 +169,7 @@ impl StoreStockModel {
             let _ = self.products.iter_mut().filter(|p| {
                 req.product_type == p.type_ && req.product_id == p.id_
             }).any(|p| {
-                let num_taking = min(p.quantity.num_avail(), num_required);
-                p.quantity.reserve(num_taking);
+                let num_taking = p.quantity.reserve(oid, num_required);
                 num_required -= num_taking;
                 num_required == 0
             });
@@ -205,9 +228,10 @@ impl StockLevelModelSet {
                 false
             } else { // insert new instance
                 if d.qty_add >= 0 {
-                    let new_prod = ProductStockModel { is_create: true, type_: d.product_type.clone(),
-                        id_: d.product_id, expiry: d.expiry,  quantity: StockQuantityModel {
-                            total: d.qty_add as u32, booked: 0, cancelled: 0}};
+                    let new_prod = ProductStockModel {type_: d.product_type.clone(),
+                        id_: d.product_id, expiry: d.expiry, is_create: true, 
+                        quantity: StockQuantityModel::new(d.qty_add as u32, 0, None) 
+                    };
                     store_found.products.push(new_prod);
                     false
                 } else {
@@ -234,6 +258,7 @@ impl StockLevelModelSet {
     pub fn try_reserve(&mut self, ol_set:&OrderLineModelSet) -> Vec<OrderLineCreateErrorDto>
     {
         self.sort_by_expiry();
+        let oid = ol_set.order_id.as_str();
         ol_set.lines.iter().filter_map(|req| {
             let mut error = OrderLineCreateErrorDto {seller_id:req.seller_id,
                 product_id:req.product_id, product_type:req.product_type.clone(),
@@ -241,8 +266,8 @@ impl StockLevelModelSet {
             };
             let result = self.stores.iter_mut().find(|m| {req.seller_id == m.store_id});
             let opt_err = if let Some(store) = result {
-                if let Some((errtype, num_required)) = store.try_reserve(req) {
-                    error.shortage = Some(num_required);
+                if let Some((errtype, num)) = store.try_reserve(oid, req) {
+                    error.shortage = Some(num);
                     Some(errtype)
                 } else { None }
             } else {

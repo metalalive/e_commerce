@@ -29,48 +29,49 @@ async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
 
 fn ut_init_data_product() -> [ProductStockModel;10]
 {
+    let rsv_detail = vec![("AceMan", 3), ("BatMan", 1), ("SpiderMan", 2)];
     [   // ------ for insertion --------
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap(),
-           quantity: StockQuantityModel::new(5, 0, 0)
+           quantity: StockQuantityModel::new(5, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9003, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap(),
-           quantity: StockQuantityModel::new(11, 0, 0)
+           quantity: StockQuantityModel::new(11, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
-           quantity: StockQuantityModel::new(15, 0, 0)
+           quantity: StockQuantityModel::new(15, 0, Some(rsv_detail))
         },
         ProductStockModel { type_:ProductType::Item, id_:9005, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap(),
-           quantity: StockQuantityModel::new(8, 0, 0)
+           quantity: StockQuantityModel::new(8, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
-           quantity: StockQuantityModel::new(14, 0, 0)
+           quantity: StockQuantityModel::new(14, 0, None)
         },
         // ---------------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
-           quantity: StockQuantityModel::new(15, 7, 0)
+           quantity: StockQuantityModel::new(15, 7, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
-           quantity: StockQuantityModel::new(18, 1, 0)
+           quantity: StockQuantityModel::new(18, 1, None)
         },
         // ---------------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.035-01:00").unwrap(),
-           quantity: StockQuantityModel::new(22, 8, 0)
+           quantity: StockQuantityModel::new(22, 8, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T12:30:10.035-01:00").unwrap(),
-           quantity: StockQuantityModel::new(20, 1, 0)
+           quantity: StockQuantityModel::new(20, 1, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2020-03-15T12:55:08.035-11:00").unwrap(),
-           quantity: StockQuantityModel::new(18, 3, 0)
+           quantity: StockQuantityModel::new(18, 3, None)
         },
     ]
 } // end of ut_init_data_product
@@ -113,9 +114,15 @@ async fn in_mem_save_fetch_ok ()
         assert_eq!(actual.stores.len(), expect_slset.stores.len());
         verify_stocklvl_model(&actual, &expect_slset, [1,1], true);
         verify_stocklvl_model(&actual, &expect_slset, [0,1], true);
-        verify_stocklvl_model(&actual, &expect_slset, [1,0], true);
         verify_stocklvl_model(&actual, &expect_slset, [1,2], true);
         verify_stocklvl_model(&actual, &expect_slset, [0,0], true);
+        let result = verify_stocklvl_model(&actual, &expect_slset, [1,0], true);
+        let product = result.unwrap();
+        let actual_rsv_detail = product.quantity.reservation();
+        assert_eq!(actual_rsv_detail.len(), 3);
+        assert_eq!(actual_rsv_detail.get("SpiderMan").unwrap().clone(), 2u32);
+        assert_eq!(actual_rsv_detail.get("BatMan").unwrap().clone(), 1u32);
+        assert_eq!(actual_rsv_detail.get("AceMan").unwrap().clone(), 3u32);
     }
 } // end of in_mem_save_fetch_ok
 
@@ -322,7 +329,7 @@ fn mock_reserve_usr_cb_1 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
                 assert!(p.quantity.total > om.qty.reserved);
                 assert!(num_avail > 0);
                 assert!(num_avail > om.qty.reserved);
-                p.quantity.reserve(om.qty.reserved);
+                p.quantity.reserve(req.order_id.as_str(), om.qty.reserved);
             }
         }
     }
@@ -350,7 +357,7 @@ async fn in_mem_try_reserve_ok ()
     { // before reservation
         let pid = ProductStockIdentity { store_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_,
                 product_type: all_products[2].type_.clone(),  expiry: all_products[2].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (0, 0, 15)) ;
+        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (3+1+2, 0, 15)) ;
         let pid = ProductStockIdentity { store_id: expect_slset.stores[1].store_id, product_id: all_products[3].id_,
                 product_type: all_products[3].type_.clone(),  expiry: all_products[3].expiry} ;
         assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (0, 0, 8));
@@ -384,13 +391,13 @@ async fn in_mem_try_reserve_ok ()
                 warranty_until: mock_warranty.clone() }
         },
     ];
-    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:order_req} ;
+    let ol_set = OrderLineModelSet {order_id:"AnotherMan".to_string(), lines:order_req} ;
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
     { // after reservation
         let pid = ProductStockIdentity { store_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_,
                 product_type: all_products[2].type_.clone(),  expiry: all_products[2].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (2, 0, 15));
+        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (3+1+2+2, 0, 15));
         let pid = ProductStockIdentity { store_id: expect_slset.stores[1].store_id, product_id: all_products[3].id_,
                 product_type: all_products[3].type_.clone(),  expiry: all_products[3].expiry} ;
         assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (1, 0, 8));
@@ -455,9 +462,9 @@ async fn in_mem_try_reserve_shortage ()
         let mut stores = UT_INIT_DATA_STORE[..1].to_vec();
         stores[0].products.extend_from_slice(&all_products[0..4]);
         let qty_edit = &mut stores[0].products[0].quantity;
-        qty_edit.reserve(qty_edit.total - qty_edit.cancelled - 1);
+        qty_edit.reserve("CustomerTwo", qty_edit.total - qty_edit.cancelled - 1);
         let qty_edit = &mut stores[0].products[1].quantity;
-        qty_edit.reserve(qty_edit.total - qty_edit.cancelled);
+        qty_edit.reserve("CustomerThree", qty_edit.total - qty_edit.cancelled);
         StockLevelModelSet {stores}
     }; // assume someone already booked for some items
     let result = stockrepo.save(expect_slset.clone()).await;
