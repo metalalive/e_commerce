@@ -14,7 +14,7 @@ pub use edit_product_price::EditProductPriceUseCase;
 pub use stock_level::StockLevelUseCase;
 pub use manage_order::{
     CreateOrderUseCase, CreateOrderUsKsErr, OrderReplicaInventoryUseCase, OrderReplicaPaymentUseCase,
-    OrderPaymentUpdateUseCase
+    OrderPaymentUpdateUseCase, OrderDiscardUnpaidItemsUseCase
 };
 
 use crate::AppSharedState;

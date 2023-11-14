@@ -1,96 +1,15 @@
-use std::sync::Arc;
-use std::boxed::Box;
 use std::vec::Vec;
-use std::result::Result as DefaultResult;
-
-use async_trait::async_trait;
 use chrono::DateTime;
 
-use order::AppDataStoreContext;
-use order::api::dto::OrderLinePayDto;
-use order::api::rpc::dto::{InventoryEditStockLevelDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
+use order::api::rpc::dto::InventoryEditStockLevelDto;
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
 use order::model::{
-    StockLevelModelSet, ProductStockIdentity, StoreStockModel, ProductStockModel,
-    StockQuantityModel, OrderLineModel, BillingModel, ShippingModel, OrderLineModelSet
-};
-use order::repository::{
-    AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc,
-    AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc
+    StockLevelModelSet, StoreStockModel, ProductStockModel, StockQuantityModel
 };
 use order::usecase::StockLevelUseCase;
 
-struct MockStockRepo {
-    _mocked_save_r:  DefaultResult<(), AppError>,
-    _mocked_fetch_r: DefaultResult<StockLevelModelSet, AppError>,
-}
-struct MockOrderRepo {
-    _mocked_save:  DefaultResult<(), AppError>,
-    _mocked_fetch: DefaultResult<StockLevelModelSet, AppError>,
-}
-
-#[async_trait]
-impl AbsOrderStockRepo for MockStockRepo {
-    async fn fetch(&self, _pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>
-    { self._mocked_fetch_r.clone() }
-    async fn save(&self, _slset:StockLevelModelSet) -> DefaultResult<(), AppError>
-    { self._mocked_save_r.clone() }
-    async fn try_reserve(&self, _cb: AppStockRepoReserveUserFunc,
-                         _order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn
-    {
-        let e = AppError { code: AppErrorCode::NotImplemented, detail: None };
-        Err(Err(e))
-    }
-}
-
-#[async_trait]
-impl AbsOrderRepo for MockOrderRepo {
-    async fn new(_ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
-        where Self:Sized
-    { Err(AppError {code:AppErrorCode::NotImplemented, detail:None}) }
-    
-    fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>> {
-        let obj = MockStockRepo {
-            _mocked_save_r:  self._mocked_save.clone(),
-            _mocked_fetch_r: self._mocked_fetch.clone(),
-        };
-        Arc::new(Box::new(obj))
-    }
-
-    async fn create (&self, _usr_id:u32, _lineset:OrderLineModelSet,
-                     _bl:BillingModel, _sh:ShippingModel)
-        -> DefaultResult<Vec<OrderLinePayDto>, AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
-    async fn fetch_all_lines(&self, _oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
-    async fn fetch_billing(&self, _oid:String) -> DefaultResult<(BillingModel, u32), AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
-    async fn fetch_shipping(&self, _oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
-    async fn update_lines_payment(&self, _data:OrderPaymentUpdateDto,
-                                  _cb:AppOrderRepoUpdateLinesUserFunc)
-        -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
-} // end of impl MockOrderRepo
-
-impl MockOrderRepo {
-    fn build(save_r:DefaultResult<(), AppError>,
-             fetch_r:DefaultResult<StockLevelModelSet, AppError> ) -> Self
-    {
-        Self{_mocked_save:save_r, _mocked_fetch:fetch_r}
-    }
-}
+use super::MockOrderRepo;
 
 fn ut_setup_data() -> Vec<InventoryEditStockLevelDto>
 {
@@ -118,7 +37,9 @@ async fn edit_ok ()
         ]}
     ]}) ; 
     let expect_save_res  = Ok(());
-    let repo = MockOrderRepo::build(expect_save_res, expect_fetch_res);
+    let repo = MockOrderRepo::build(
+        expect_save_res, expect_fetch_res, vec![], vec![], vec![]
+    );
     let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
     assert!(result.is_ok());
     let _stock_lvl_rd = result.unwrap();
@@ -132,7 +53,9 @@ async fn edit_fetch_error ()
     let expect_fetch_res = Err(AppError{code:AppErrorCode::DataCorruption,
             detail:Some("unit-test".to_string())}); 
     let expect_save_res = Ok(()); 
-    let repo = MockOrderRepo::build(expect_save_res, expect_fetch_res);
+    let repo = MockOrderRepo::build(
+        expect_save_res, expect_fetch_res, vec![], vec![], vec![]
+    );
     let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
     assert!(result.is_err());
     if let Err(error) = result {
@@ -156,7 +79,9 @@ async fn edit_save_error ()
     ]}) ; 
     let expect_save_res = Err(AppError{code:AppErrorCode::DataTableNotExist,
             detail:Some("unit-test".to_string())});
-    let repo = MockOrderRepo::build(expect_save_res, expect_fetch_res);
+    let repo = MockOrderRepo::build(
+        expect_save_res, expect_fetch_res, vec![], vec![], vec![]
+    );
     let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
     assert!(result.is_err());
     if let Err(error) = result {

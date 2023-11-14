@@ -19,7 +19,8 @@ use crate::model::{
 };
 
 use super::{
-    AbsOrderRepo, AbsOrderStockRepo, StockLvlInMemRepo, AppOrderRepoUpdateLinesUserFunc
+    AbsOrderRepo, AbsOrderStockRepo, StockLvlInMemRepo, AppOrderRepoUpdateLinesUserFunc,
+    AppOrderFetchRangeCallback
 };
 
 mod _contact {
@@ -488,6 +489,35 @@ impl AbsOrderRepo for OrderInMemRepo {
         } // no need to save if all data items cause errors
         Ok(OrderPaymentUpdateErrorDto {oid, lines:errors})
     } // end of fn update_lines_payment
+
+    async fn fetch_lines_by_range(&self, _time_start: DateTime<FixedOffset>,
+                                  _time_end: DateTime<FixedOffset>,
+                                  usr_cb: AppOrderFetchRangeCallback )
+        -> DefaultResult<(), AppError>
+    {
+        let stubs = [
+            OrderLineModelSet {order_id: "xx0".to_string(), lines:vec![]},
+            OrderLineModelSet {order_id: "xx1".to_string(), lines:vec![]},
+        ];
+        for ms in stubs.into_iter() {
+            usr_cb(self, ms).await?;
+        }
+        Ok(())
+    }
+
+    async fn update_lines_return(&self, ms:OrderLineModelSet) -> DefaultResult<(), AppError>
+    {
+        Ok(())
+    }
+
+    async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
+    {
+        DateTime::parse_from_rfc3339("2021-05-22T20:16:54+09:00").unwrap()
+    }
+
+    async fn scheduled_job_time_update(&self)
+    {
+    }
 } // end of impl AbsOrderRepo
 
 

@@ -1,8 +1,18 @@
+use std::result::Result as DefaultResult;
+
 use chrono::DateTime;
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
-use order::model::{ProductPolicyModelSet, ProductPolicyModel, ProductPriceModelSet, ProductPriceModel};
-use order::usecase::{CreateOrderUseCase, CreateOrderUsKsErr};
+use order::error::{AppError, AppErrorCode};
+use order::model::{
+    ProductPolicyModelSet, ProductPolicyModel, ProductPriceModelSet, ProductPriceModel,
+    OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, OrderLineAppliedPolicyModel,
+    OrderLineModel
+};
+use order::repository::AbsOrderRepo;
+use order::usecase::{CreateOrderUseCase, CreateOrderUsKsErr, OrderDiscardUnpaidItemsUseCase};
+
+use super::{ut_setup_share_state, MockOrderRepo};
 
 fn ut_setup_prod_policies () -> ProductPolicyModelSet
 {
@@ -122,3 +132,108 @@ fn validate_orderline_missing_properties ()
     }
 } // end of validate_orderline_missing_properties
 
+
+fn ut_setup_orderlines () -> Vec<OrderLineModel>
+{
+    let paid_last_update = Some(DateTime::parse_from_rfc3339("2023-11-15T09:23:49+02:00").unwrap());
+    let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
+    let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
+    vec![
+        OrderLineModel {seller_id:108 , product_type:ProductType::Item,
+            product_id: 190, price:OrderLinePriceModel { unit:10, total: 39 },
+            qty: OrderLineQuantityModel {reserved: 4, paid: 3, paid_last_update},
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {seller_id:800, product_type:ProductType::Item,
+            product_id: 191, price:OrderLinePriceModel { unit:12, total: 60 },
+            qty: OrderLineQuantityModel {reserved: 5, paid: 5, paid_last_update},
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {seller_id:426, product_type:ProductType::Package,
+            product_id: 192, price:OrderLinePriceModel { unit:12, total: 60 },
+            qty: OrderLineQuantityModel {reserved: 8, paid: 5, paid_last_update},
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+    ]
+}
+
+
+async fn discard_unpaid_items_common(
+        stock_return_results: Vec<DefaultResult<(), AppError>>,
+        fetched_ol_sets:Vec<OrderLineModelSet>,
+        oline_cancel_results: Vec<DefaultResult<(), AppError>>
+    )
+    -> DefaultResult<(), AppError>
+{
+    let shr_state = ut_setup_share_state();
+    let logctx = shr_state.log_context().clone();
+    let not_impl_err = AppError{detail:None, code:AppErrorCode::NotImplemented};
+    let repo = MockOrderRepo::build(
+        Err(not_impl_err.clone()),
+        Err(not_impl_err.clone()),
+        stock_return_results,
+        fetched_ol_sets,
+        oline_cancel_results
+    );
+    let repo:Box<dyn AbsOrderRepo> = Box::new(repo);
+    let uc = OrderDiscardUnpaidItemsUseCase::new(repo, logctx);
+    uc.execute().await
+}
+
+#[tokio::test]
+async fn discard_unpaid_items_ok()
+{
+    let mut mocked_olines = ut_setup_orderlines();
+    let stock_return_results = vec![ Ok(()), Ok(()) ];
+    let fetched_ol_sets = vec![
+        OrderLineModelSet {order_id:"xx1".to_string(), lines:mocked_olines.drain(0..2).collect()},
+        OrderLineModelSet {order_id:"xx2".to_string(), lines:mocked_olines},
+    ];
+    let oline_cancel_results = vec![ Ok(()), Ok(()) ];
+    let result = discard_unpaid_items_common(
+        stock_return_results, fetched_ol_sets, oline_cancel_results
+    ).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn discard_unpaid_items_err_stocklvl()
+{
+    let mut mocked_olines = ut_setup_orderlines();
+    let data_corrupt = AppError{detail:Some(format!("unit-test")), code:AppErrorCode::DataCorruption};
+    let stock_return_results = vec![ Ok(()), Err(data_corrupt) ];
+    let fetched_ol_sets = vec![
+        OrderLineModelSet {order_id:"xx1".to_string(), lines:mocked_olines.drain(0..1).collect()},
+        OrderLineModelSet {order_id:"xx2".to_string(), lines:mocked_olines},
+    ];
+    let oline_cancel_results = vec![ Ok(()), Ok(()) ];
+    let result = discard_unpaid_items_common(
+        stock_return_results, fetched_ol_sets, oline_cancel_results
+    ).await;
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::DataCorruption);
+        assert_eq!(e.detail.as_ref().unwrap(), "unit-test");
+    }
+}
+
+#[tokio::test]
+async fn discard_unpaid_items_err_o_repo()
+{
+    let mut mocked_olines = ut_setup_orderlines();
+    let data_corrupt = AppError{detail:Some(format!("unit-test")), code:AppErrorCode::DataCorruption};
+    let stock_return_results = vec![ Ok(()), Ok(()) ];
+    let fetched_ol_sets = vec![
+        OrderLineModelSet {order_id:"xx1".to_string(), lines:mocked_olines.drain(0..1).collect()},
+        OrderLineModelSet {order_id:"xx2".to_string(), lines:mocked_olines},
+    ];
+    let oline_cancel_results = vec![ Ok(()), Err(data_corrupt) ];
+    let result = discard_unpaid_items_common(
+        stock_return_results, fetched_ol_sets, oline_cancel_results
+    ).await;
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::DataCorruption);
+        assert_eq!(e.detail.as_ref().unwrap(), "unit-test");
+    }
+}

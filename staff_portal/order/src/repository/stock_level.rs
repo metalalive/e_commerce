@@ -13,7 +13,7 @@ use crate::datastore::{
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockModel, StoreStockModel, StockQuantityModel, ProductStockIdentity2,  ProductStockIdentity,
-    StockLevelModelSet, OrderLineModelSet
+    StockLevelModelSet, OrderLineModelSet, StockReturnModelSet
 };
 
 use super::{AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn};
@@ -201,6 +201,15 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
             Ok(())
         }
     } // end of fn try_reserve
+    
+    async fn try_return(&self,
+                        cb: fn(&mut StockLevelModelSet, StockReturnModelSet)
+                            -> DefaultResult<(), AppError> ,
+                        data: StockReturnModelSet )
+        -> DefaultResult<(), AppError>
+    {
+        Ok(())
+    }
 } // end of impl StockLvlInMemRepo
 
 impl StockLvlInMemRepo {

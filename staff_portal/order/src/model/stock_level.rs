@@ -48,6 +48,18 @@ pub struct StockLevelModelSet {
     pub stores: Vec<StoreStockModel>
 }
 
+// TODO , consider to reuse `StockLevelPresentDto` instead of following model
+pub struct ProductStockReturnModel {
+    pub store_id: u32,
+    pub product_type: ProductType,
+    pub product_id: u64, // TODO, declare type alias
+    pub quantity: u32,
+}
+pub struct StockReturnModelSet {
+    pub items: Vec<ProductStockReturnModel>,
+    pub order_id: String
+}
+
 impl Into<StockQuantityPresentDto> for StockQuantityModel {
     fn into(self) -> StockQuantityPresentDto {
         StockQuantityPresentDto { total: self.total, cancelled: self.cancelled,
@@ -288,5 +300,18 @@ impl StockLevelModelSet {
             s.products.sort_by(|a, b| a.expiry.cmp(&b.expiry));
         }).count();
     } // end of sort_by_expiry
+    
+    pub fn try_return(&mut self, data: StockReturnModelSet) -> DefaultResult<(), AppError>
+    { Ok(()) }
 } // end of impl StockLevelModelSet
+
+impl From<&OrderLineModel> for ProductStockReturnModel {
+    fn from(value: &OrderLineModel) -> Self {
+        assert!(value.qty.reserved >= value.qty.paid);
+        let num_returning = value.qty.reserved - value.qty.paid;
+        Self { store_id: value.seller_id, product_id: value.product_id,
+            product_type: value.product_type.clone(), quantity: num_returning
+        }
+    }
+}
 

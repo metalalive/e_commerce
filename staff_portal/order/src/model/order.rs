@@ -321,6 +321,12 @@ impl TryFrom<ShippingDto> for ShippingModel {
     } // end of try_from
 } // end of impl ShippingModel
 
+impl OrderLineQuantityModel {
+    pub fn cancel_unpaid(&mut self) {
+        
+    }
+}
+
 impl  OrderLineModel {
     pub fn from(data:OrderLineReqDto, policym:&ProductPolicyModel, pricem:&ProductPriceModel) -> Self
     {
@@ -390,6 +396,10 @@ impl  OrderLineModel {
             } else { None }
         }).collect()
     } // end of update_payments
+    
+    pub fn has_unpaid(&self) -> bool {
+        true
+    }
 } // end of impl OrderLineModel
 
 impl Into<OrderLinePayDto> for OrderLineModel {
@@ -408,4 +418,3 @@ impl Into<OrderLineReplicaInventoryDto> for OrderLineModel {
             product_type: self.product_type, qty_booked: self.qty.reserved }
     }
 }
-

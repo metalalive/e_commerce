@@ -1,4 +1,7 @@
 use std::boxed::Box; 
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc; 
 use std::result::Result as DefaultResult ; 
 
 use chrono::Local;
@@ -15,10 +18,10 @@ use crate::api::rpc::dto::{
 use crate::error::AppError;
 use crate::model::{
     BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet, ProductPolicyModelSet,
-    StockLevelModelSet, OrderLineModelSet
+    StockLevelModelSet, OrderLineModelSet, ProductStockReturnModel, StockReturnModelSet
 };
 use crate::repository::{AbsOrderRepo, AbsProductPriceRepo, AbstProductPolicyRepo, AppStockRepoReserveReturn};
-use crate::logging::{app_log_event, AppLogLevel};
+use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
 
 pub enum CreateOrderUsKsErr {Client(OrderCreateRespErrorDto), Server}
 
@@ -38,6 +41,10 @@ pub struct OrderReplicaInventoryUseCase {
 }
 pub struct OrderPaymentUpdateUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
+}
+pub struct OrderDiscardUnpaidItemsUseCase {
+    repo: Box<dyn AbsOrderRepo>,
+    logctx: Arc<AppLogContext>
 }
 
 impl CreateOrderUseCase {
@@ -216,3 +223,51 @@ impl OrderPaymentUpdateUseCase {
         self.repo.update_lines_payment(data, OrderLineModel::update_payments).await
     }
 }
+
+impl OrderDiscardUnpaidItemsUseCase {
+    pub fn new(repo: Box<dyn AbsOrderRepo>, logctx: Arc<AppLogContext>) -> Self {
+        Self{ repo, logctx }
+    }
+
+    pub async fn execute(self) -> DefaultResult<(),AppError>
+    {
+        let time_start = self.repo.scheduled_job_last_time().await;
+        let time_end = Local::now().fixed_offset();
+        let result = self.repo.fetch_lines_by_range( time_start,
+                            time_end, Self::read_oline_set_cb ).await;
+        if let Err(e) = result.as_ref() {
+            let lctx = &self.logctx;
+            app_log_event!(lctx, AppLogLevel::ERROR, "error: {:?}", e);
+        } else {
+            self.repo.scheduled_job_time_update().await;
+        }
+        result
+    }
+    fn read_oline_set_cb<'a>(o_repo: &'a dyn AbsOrderRepo, ol_set: OrderLineModelSet)
+        -> Pin<Box<dyn Future<Output=DefaultResult<(),AppError>> + Send + 'a>>
+    {
+        let fut = async move {
+            let (oid, mut unpaid_lines) = (
+                ol_set.order_id , ol_set.lines.into_iter().filter(
+                    |m| m.has_unpaid()
+                ).collect::<Vec<OrderLineModel>>()
+            );
+            if unpaid_lines.is_empty() {
+                Ok(()) // all items have been paid, nothing to discard for now.
+            } else {
+                let st_repo = o_repo.stock();
+                unpaid_lines.iter_mut().map(|mp| { mp.qty.cancel_unpaid(); }).count();
+                let items = unpaid_lines.iter().map(ProductStockReturnModel::from).collect();
+                let return_set = StockReturnModelSet{items, order_id:oid.clone()};
+                st_repo.try_return(Self::read_stocklvl_cb, return_set).await?;
+                let ol_set = OrderLineModelSet{order_id:oid, lines:unpaid_lines};
+                o_repo.update_lines_return(ol_set).await?;
+                Ok(())
+            }
+        }; // lifetime of the Future trait object must outlive `'static` 
+        Box::pin(fut)
+    }
+    fn read_stocklvl_cb(ms: &mut StockLevelModelSet, data: StockReturnModelSet)
+        -> DefaultResult<(), AppError>
+    { ms.try_return(data) }
+} // end of impl OrderDiscardUnpaidItemsUseCase

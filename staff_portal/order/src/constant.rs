@@ -25,6 +25,7 @@ pub(crate) const RPCAPI_EDIT_STOCK_LEVEL: WebApiHdlrLabel = "edit_stock_level";
 pub(crate) const RPCAPI_ORDER_RSV_READ_INVENTORY: WebApiHdlrLabel = "order_reserved_replica_inventory";
 pub(crate) const RPCAPI_ORDER_RSV_READ_PAYMENT: WebApiHdlrLabel   = "order_reserved_replica_payment";
 pub(crate) const RPCAPI_ORDER_RSV_UPDATE_PAYMENT: WebApiHdlrLabel = "order_reserved_update_payment";
+pub(crate) const RPCAPI_ORDER_RSV_DISCARD_UNPAID: WebApiHdlrLabel = "order_reserved_discard_unpaid";
 
 pub(crate) const HTTP_CONTENT_TYPE_JSON: &str = "application/json";
 

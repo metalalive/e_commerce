@@ -7,7 +7,7 @@ use crate::rpc::AppRpcClientReqProperty;
 use crate::error::{AppError, AppErrorCode} ;
 use crate::constant::{
     RPCAPI_EDIT_PRODUCT_PRICE, RPCAPI_EDIT_STOCK_LEVEL, RPCAPI_ORDER_RSV_READ_INVENTORY,
-    RPCAPI_ORDER_RSV_READ_PAYMENT, RPCAPI_ORDER_RSV_UPDATE_PAYMENT
+    RPCAPI_ORDER_RSV_READ_PAYMENT, RPCAPI_ORDER_RSV_UPDATE_PAYMENT, RPCAPI_ORDER_RSV_DISCARD_UNPAID
 };
 
 pub mod dto;
@@ -25,6 +25,7 @@ pub async fn route_to_handler(req:AppRpcClientReqProperty, shr_state:AppSharedSt
         RPCAPI_ORDER_RSV_READ_PAYMENT => Ok(order_status::read_reserved_payment(req, shr_state).await),
         RPCAPI_ORDER_RSV_READ_INVENTORY => Ok(order_status::read_reserved_inventory(req, shr_state).await),
         RPCAPI_ORDER_RSV_UPDATE_PAYMENT => Ok(order_status::update_paid_lines(req, shr_state).await),
+        RPCAPI_ORDER_RSV_DISCARD_UNPAID => Ok(order_status::discard_unpaid_lines(req, shr_state).await) ,
         _others => {
             let err = AppError { code: AppErrorCode::NotImplemented,
             detail: Some("rpc-routing-failure".to_string()) };

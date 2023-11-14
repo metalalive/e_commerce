@@ -5,8 +5,8 @@ mod order;
 pub use product_policy::{ProductPolicyModel, ProductPolicyModelSet};
 pub use product_price::{ProductPriceModel, ProductPriceModelSet};
 pub use stock_level::{
-    StockLevelModelSet, StoreStockModel, ProductStockModel, StockQuantityModel,
-    ProductStockIdentity, ProductStockIdentity2
+    StockLevelModelSet, StoreStockModel, ProductStockModel, StockQuantityModel, ProductStockIdentity,
+    ProductStockIdentity2, ProductStockReturnModel, StockReturnModelSet
 };
 pub use order::{
     BillingModel, ShippingModel, PhyAddrModel, ContactModel, OrderLineModel,

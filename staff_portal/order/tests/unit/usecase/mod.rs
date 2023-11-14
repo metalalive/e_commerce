@@ -3,25 +3,179 @@ mod edit_product_price;
 mod stock_level;
 mod manage_order;
 
-use std::env;
-use std::cell::RefCell;
+use std::{env, vec};
+use std::boxed::Box;
+use std::cell::{RefCell, Cell};
 use std::sync::{Arc, Mutex};
 use std::result::Result as DefaultResult;
+
 use async_trait::async_trait;
+use chrono::{DateTime, FixedOffset};
 use tokio::task;
+use tokio::sync::Mutex as AsyncMutex;
 
 use order::{
     AppSharedState, AppConfig, AppBasepathCfg, AbstractRpcContext, AppRpcCfg,
     AbstractRpcServer, AbstractRpcClient, AbsRpcClientCtx, AbsRpcServerCtx,
-    AppRpcClientReqProperty, AppRpcReply
+    AppRpcClientReqProperty, AppRpcReply, AppDataStoreContext
 };
+use order::api::dto::OrderLinePayDto;
+use order::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use order::error::{AppError, AppErrorCode};
-use order::usecase::{initiate_rpc_request, rpc_server_process};
 use order::constant::{ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
 use order::logging::AppLogContext;
 use order::confidentiality::AbstractConfidentiality;
+use order::model::{
+    StockLevelModelSet, ProductStockIdentity, OrderLineModel, BillingModel,
+    ShippingModel, OrderLineModelSet, StockReturnModelSet
+};
+use order::repository::{
+    AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc,
+    AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback
+};
+use order::usecase::{initiate_rpc_request, rpc_server_process};
 
 use crate::EXAMPLE_REL_PATH;
+
+
+
+struct MockStockRepo {
+    _mocked_save_r:  DefaultResult<(), AppError>,
+    _mocked_fetch_r: DefaultResult<StockLevelModelSet, AppError>,
+    _mocked_stk_return: AsyncMutex<Cell<Vec<DefaultResult<(), AppError>>>>,
+}
+struct MockOrderRepo {
+    _mocked_stock_save:  DefaultResult<(), AppError>,
+    _mocked_stock_fetch: DefaultResult<StockLevelModelSet, AppError>,
+    _mocked_stock_return: Mutex<Cell<Vec<DefaultResult<(), AppError>>>>,
+    _mocked_ol_sets: AsyncMutex<Cell<Vec<OrderLineModelSet>>>,
+    _mocked_ol_return:  AsyncMutex<Cell<Vec<DefaultResult<(), AppError>>>>,
+}
+
+#[async_trait]
+impl AbsOrderStockRepo for MockStockRepo {
+    async fn fetch(&self, _pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>
+    { self._mocked_fetch_r.clone() }
+    async fn save(&self, _slset:StockLevelModelSet) -> DefaultResult<(), AppError>
+    { self._mocked_save_r.clone() }
+    async fn try_reserve(&self, _cb: AppStockRepoReserveUserFunc,
+                         _order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn
+    {
+        let e = AppError { code: AppErrorCode::NotImplemented, detail: None };
+        Err(Err(e))
+    }
+    async fn try_return(&self, _cb: fn(&mut StockLevelModelSet, StockReturnModelSet)
+                                    -> DefaultResult<(), AppError> ,
+                        _return_set:StockReturnModelSet )
+        -> DefaultResult<(), AppError>
+    {
+        let mut g = self._mocked_stk_return.lock().await;
+        let returns = g.get_mut();
+        if returns.is_empty() {
+            let detail = format!("MockStockRepo::try_return");
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        } else {
+            returns.remove(0)
+        }
+    }
+}
+
+#[async_trait]
+impl AbsOrderRepo for MockOrderRepo {
+    async fn new(_ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
+        where Self:Sized
+    { Err(AppError {code:AppErrorCode::NotImplemented, detail:None}) }
+    
+    fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>> {
+        let mock_return = if let Ok(mut g) = self._mocked_stock_return.lock() {
+            let v = g.get_mut();
+            if v.is_empty() {
+                vec![]
+            } else {
+                vec![v.remove(0)]
+            }
+        } else { vec![] };
+        let obj = MockStockRepo {
+            _mocked_save_r:  self._mocked_stock_save.clone(),
+            _mocked_fetch_r: self._mocked_stock_fetch.clone(),
+            _mocked_stk_return: AsyncMutex::new(Cell::new(mock_return)),
+        };
+        Arc::new(Box::new(obj))
+    }
+
+    async fn create (&self, _usr_id:u32, _lineset:OrderLineModelSet,
+                     _bl:BillingModel, _sh:ShippingModel)
+        -> DefaultResult<Vec<OrderLinePayDto>, AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+    async fn fetch_all_lines(&self, _oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+    async fn fetch_billing(&self, _oid:String) -> DefaultResult<(BillingModel, u32), AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+    async fn fetch_shipping(&self, _oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+    async fn update_lines_payment(&self, _data:OrderPaymentUpdateDto,
+                                  _cb:AppOrderRepoUpdateLinesUserFunc)
+        -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
+    {
+        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    }
+    async fn fetch_lines_by_range(&self, _time_start: DateTime<FixedOffset>,
+                                  _time_end: DateTime<FixedOffset>,
+                                  usr_cb: AppOrderFetchRangeCallback )
+        -> DefaultResult<(), AppError>
+    {
+        let mut g = self._mocked_ol_sets.lock().await;
+        let ol_sets = g.get_mut();
+        while let Some(ms) = ol_sets.pop() {
+            usr_cb(self, ms).await?
+        }
+        Ok(())
+    }
+    async fn update_lines_return(&self, _ms:OrderLineModelSet)  -> DefaultResult<(), AppError>
+    {
+        let mut g = self._mocked_ol_return.lock().await;
+        let returns = g.get_mut();
+        if returns.is_empty() {
+            let detail = format!("MockOrderRepo::update_lines_return");
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        } else {
+            returns.remove(0)
+        }
+    }
+    async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
+    {
+        DateTime::parse_from_rfc3339("1999-07-31T23:59:58+09:00").unwrap()
+    }
+    async fn scheduled_job_time_update(&self)
+    { }
+} // end of impl MockOrderRepo
+
+impl MockOrderRepo {
+    fn build(stk_save_r:DefaultResult<(), AppError>,
+             stk_fetch_r:DefaultResult<StockLevelModelSet, AppError>,
+             stk_returns: Vec<DefaultResult<(), AppError>>,
+             ol_sets: Vec<OrderLineModelSet>,
+             ol_returns: Vec<DefaultResult<(), AppError>>,
+        ) -> Self
+    {
+        Self{_mocked_stock_save: stk_save_r,
+             _mocked_stock_fetch: stk_fetch_r,
+             _mocked_stock_return: Mutex::new(Cell::new(stk_returns)),
+             _mocked_ol_sets: AsyncMutex::new(Cell::new(ol_sets)),
+             _mocked_ol_return: AsyncMutex::new(Cell::new(ol_returns)),
+        }
+    }
+}
+
+// ---------- RPC ----------
 
 type TestAcquireResult<T> = DefaultResult<Box<T>, AppError>;
 type TestAcquireClientResult = TestAcquireResult<dyn AbstractRpcClient>;
