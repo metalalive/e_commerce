@@ -44,8 +44,8 @@ pub struct ProductPriceDto {
 #[derive(Deserialize)]
 pub struct InventoryEditStockLevelDto {
     // number to add to stock level, negative number means cancellation
-    // from inventory application
-    // TODO, redesign the quantity fields
+    // from either order-line model or inventory application
+    // TODO, redesign the quantity field, double-meaning field doesn't look like good practice
     pub qty_add: i32,
     pub store_id: u32,
     #[serde(deserialize_with="jsn_validate_product_type")]
@@ -69,6 +69,12 @@ pub struct StockLevelPresentDto {
     pub product_type: ProductType,
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<FixedOffset>
+}
+
+#[derive(Deserialize)]
+pub struct StockLevelReturnDto {
+    pub order_id: String,
+    pub items: Vec<InventoryEditStockLevelDto>
 }
 
 #[derive(Deserialize)]

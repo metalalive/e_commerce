@@ -7,7 +7,9 @@ use std::result::Result as DefaultResult;
 use chrono::DateTime;
 use chrono::offset::FixedOffset;
 
-use crate::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
+use crate::api::rpc::dto::{
+    InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto
+};
 use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineErrorReason, OrderLineCreateErrNonExistDto};
 use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
@@ -46,18 +48,6 @@ pub struct StoreStockModel {
 }
 pub struct StockLevelModelSet {
     pub stores: Vec<StoreStockModel>
-}
-
-// TODO , consider to reuse `StockLevelPresentDto` instead of following model
-pub struct ProductStockReturnModel {
-    pub store_id: u32,
-    pub product_type: ProductType,
-    pub product_id: u64, // TODO, declare type alias
-    pub quantity: u32,
-}
-pub struct StockReturnModelSet {
-    pub items: Vec<ProductStockReturnModel>,
-    pub order_id: String
 }
 
 impl Into<StockQuantityPresentDto> for StockQuantityModel {
@@ -294,24 +284,16 @@ impl StockLevelModelSet {
         }) .collect()
     } // end of try_reserve
     
+    pub fn return_by_expiry(&mut self, _data:StockLevelReturnDto) -> DefaultResult<(), AppError>
+    {
+        Ok(())
+    }
+    
     fn sort_by_expiry(&mut self) {
         // to ensure the items that expire soon will be taken first
         self.stores.iter_mut().map(|s| {
             s.products.sort_by(|a, b| a.expiry.cmp(&b.expiry));
         }).count();
     } // end of sort_by_expiry
-    
-    pub fn try_return(&mut self, data: StockReturnModelSet) -> DefaultResult<(), AppError>
-    { Ok(()) }
 } // end of impl StockLevelModelSet
-
-impl From<&OrderLineModel> for ProductStockReturnModel {
-    fn from(value: &OrderLineModel) -> Self {
-        assert!(value.qty.reserved >= value.qty.paid);
-        let num_returning = value.qty.reserved - value.qty.paid;
-        Self { store_id: value.seller_id, product_id: value.product_id,
-            product_type: value.product_type.clone(), quantity: num_returning
-        }
-    }
-}
 

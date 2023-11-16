@@ -505,11 +505,6 @@ impl AbsOrderRepo for OrderInMemRepo {
         Ok(())
     }
 
-    async fn update_lines_return(&self, ms:OrderLineModelSet) -> DefaultResult<(), AppError>
-    {
-        Ok(())
-    }
-
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
     {
         DateTime::parse_from_rfc3339("2021-05-22T20:16:54+09:00").unwrap()

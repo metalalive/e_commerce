@@ -38,7 +38,7 @@ async fn edit_ok ()
     ]}) ; 
     let expect_save_res  = Ok(());
     let repo = MockOrderRepo::build(
-        expect_save_res, expect_fetch_res, vec![], vec![], vec![]
+        expect_save_res, expect_fetch_res, vec![], vec![]
     );
     let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
     assert!(result.is_ok());
@@ -54,7 +54,7 @@ async fn edit_fetch_error ()
             detail:Some("unit-test".to_string())}); 
     let expect_save_res = Ok(()); 
     let repo = MockOrderRepo::build(
-        expect_save_res, expect_fetch_res, vec![], vec![], vec![]
+        expect_save_res, expect_fetch_res, vec![], vec![]
     );
     let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
     assert!(result.is_err());
@@ -80,7 +80,7 @@ async fn edit_save_error ()
     let expect_save_res = Err(AppError{code:AppErrorCode::DataTableNotExist,
             detail:Some("unit-test".to_string())});
     let repo = MockOrderRepo::build(
-        expect_save_res, expect_fetch_res, vec![], vec![], vec![]
+        expect_save_res, expect_fetch_res, vec![], vec![]
     );
     let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
     assert!(result.is_err());

@@ -1,3 +1,4 @@
+use std::ops::Neg;
 use std::vec::Vec;
 use std::result::Result as DefaultResult;
 use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
@@ -10,7 +11,7 @@ use crate::api::dto::{
 };
 use crate::api::rpc::dto::{
     OrderLineReplicaInventoryDto, OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto,
-    OrderLinePayUpdateErrorReason,
+    OrderLinePayUpdateErrorReason, InventoryEditStockLevelDto,
 };
 use crate::api::web::dto::{
     BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto,
@@ -322,8 +323,8 @@ impl TryFrom<ShippingDto> for ShippingModel {
 } // end of impl ShippingModel
 
 impl OrderLineQuantityModel {
-    pub fn cancel_unpaid(&mut self) {
-        
+    pub fn has_unpaid(&self) -> bool {
+        self.reserved > self.paid
     }
 }
 
@@ -396,10 +397,6 @@ impl  OrderLineModel {
             } else { None }
         }).collect()
     } // end of update_payments
-    
-    pub fn has_unpaid(&self) -> bool {
-        true
-    }
 } // end of impl OrderLineModel
 
 impl Into<OrderLinePayDto> for OrderLineModel {
@@ -416,5 +413,19 @@ impl Into<OrderLineReplicaInventoryDto> for OrderLineModel {
     fn into(self) -> OrderLineReplicaInventoryDto {
         OrderLineReplicaInventoryDto { seller_id: self.seller_id, product_id: self.product_id,
             product_type: self.product_type, qty_booked: self.qty.reserved }
+    }
+}
+
+impl Into<InventoryEditStockLevelDto> for OrderLineModel {
+    fn into(self) -> InventoryEditStockLevelDto {
+        assert!(self.qty.reserved >= self.qty.paid);
+        let num_returning = self.qty.reserved - self.qty.paid;
+        let num_returning = (num_returning as i32).neg();
+        InventoryEditStockLevelDto {
+            store_id: self.seller_id, product_id: self.product_id, qty_add: num_returning,
+            product_type: self.product_type.clone(), expiry:self.policy.reserved_until
+        } // NOTE, the field `expiry` should NOT be referenced by the entire application
+          // , becuase the editing data, converted from order line, does NOT really reflect
+          // the expiry time of the original stock item
     }
 }

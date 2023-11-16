@@ -20,14 +20,14 @@ use order::{
     AppRpcClientReqProperty, AppRpcReply, AppDataStoreContext
 };
 use order::api::dto::OrderLinePayDto;
-use order::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
+use order::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto};
 use order::error::{AppError, AppErrorCode};
 use order::constant::{ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
 use order::logging::AppLogContext;
 use order::confidentiality::AbstractConfidentiality;
 use order::model::{
     StockLevelModelSet, ProductStockIdentity, OrderLineModel, BillingModel,
-    ShippingModel, OrderLineModelSet, StockReturnModelSet
+    ShippingModel, OrderLineModelSet
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc,
@@ -49,7 +49,6 @@ struct MockOrderRepo {
     _mocked_stock_fetch: DefaultResult<StockLevelModelSet, AppError>,
     _mocked_stock_return: Mutex<Cell<Vec<DefaultResult<(), AppError>>>>,
     _mocked_ol_sets: AsyncMutex<Cell<Vec<OrderLineModelSet>>>,
-    _mocked_ol_return:  AsyncMutex<Cell<Vec<DefaultResult<(), AppError>>>>,
 }
 
 #[async_trait]
@@ -64,9 +63,9 @@ impl AbsOrderStockRepo for MockStockRepo {
         let e = AppError { code: AppErrorCode::NotImplemented, detail: None };
         Err(Err(e))
     }
-    async fn try_return(&self, _cb: fn(&mut StockLevelModelSet, StockReturnModelSet)
+    async fn try_return(&self, _cb: fn(&mut StockLevelModelSet, StockLevelReturnDto)
                                     -> DefaultResult<(), AppError> ,
-                        _return_set:StockReturnModelSet )
+                        _data: StockLevelReturnDto )
         -> DefaultResult<(), AppError>
     {
         let mut g = self._mocked_stk_return.lock().await;
@@ -139,17 +138,6 @@ impl AbsOrderRepo for MockOrderRepo {
         }
         Ok(())
     }
-    async fn update_lines_return(&self, _ms:OrderLineModelSet)  -> DefaultResult<(), AppError>
-    {
-        let mut g = self._mocked_ol_return.lock().await;
-        let returns = g.get_mut();
-        if returns.is_empty() {
-            let detail = format!("MockOrderRepo::update_lines_return");
-            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
-        } else {
-            returns.remove(0)
-        }
-    }
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
     {
         DateTime::parse_from_rfc3339("1999-07-31T23:59:58+09:00").unwrap()
@@ -163,14 +151,12 @@ impl MockOrderRepo {
              stk_fetch_r:DefaultResult<StockLevelModelSet, AppError>,
              stk_returns: Vec<DefaultResult<(), AppError>>,
              ol_sets: Vec<OrderLineModelSet>,
-             ol_returns: Vec<DefaultResult<(), AppError>>,
         ) -> Self
     {
         Self{_mocked_stock_save: stk_save_r,
              _mocked_stock_fetch: stk_fetch_r,
              _mocked_stock_return: Mutex::new(Cell::new(stk_returns)),
              _mocked_ol_sets: AsyncMutex::new(Cell::new(ol_sets)),
-             _mocked_ol_return: AsyncMutex::new(Cell::new(ol_returns)),
         }
     }
 }

@@ -6,7 +6,7 @@ pub use product_policy::{ProductPolicyModel, ProductPolicyModelSet};
 pub use product_price::{ProductPriceModel, ProductPriceModelSet};
 pub use stock_level::{
     StockLevelModelSet, StoreStockModel, ProductStockModel, StockQuantityModel, ProductStockIdentity,
-    ProductStockIdentity2, ProductStockReturnModel, StockReturnModelSet
+    ProductStockIdentity2
 };
 pub use order::{
     BillingModel, ShippingModel, PhyAddrModel, ContactModel, OrderLineModel,

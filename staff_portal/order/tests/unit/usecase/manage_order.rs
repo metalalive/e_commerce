@@ -160,8 +160,7 @@ fn ut_setup_orderlines () -> Vec<OrderLineModel>
 
 async fn discard_unpaid_items_common(
         stock_return_results: Vec<DefaultResult<(), AppError>>,
-        fetched_ol_sets:Vec<OrderLineModelSet>,
-        oline_cancel_results: Vec<DefaultResult<(), AppError>>
+        fetched_ol_sets:Vec<OrderLineModelSet>
     )
     -> DefaultResult<(), AppError>
 {
@@ -172,8 +171,7 @@ async fn discard_unpaid_items_common(
         Err(not_impl_err.clone()),
         Err(not_impl_err.clone()),
         stock_return_results,
-        fetched_ol_sets,
-        oline_cancel_results
+        fetched_ol_sets
     );
     let repo:Box<dyn AbsOrderRepo> = Box::new(repo);
     let uc = OrderDiscardUnpaidItemsUseCase::new(repo, logctx);
@@ -189,10 +187,7 @@ async fn discard_unpaid_items_ok()
         OrderLineModelSet {order_id:"xx1".to_string(), lines:mocked_olines.drain(0..2).collect()},
         OrderLineModelSet {order_id:"xx2".to_string(), lines:mocked_olines},
     ];
-    let oline_cancel_results = vec![ Ok(()), Ok(()) ];
-    let result = discard_unpaid_items_common(
-        stock_return_results, fetched_ol_sets, oline_cancel_results
-    ).await;
+    let result = discard_unpaid_items_common(stock_return_results, fetched_ol_sets).await;
     assert!(result.is_ok());
 }
 
@@ -206,31 +201,7 @@ async fn discard_unpaid_items_err_stocklvl()
         OrderLineModelSet {order_id:"xx1".to_string(), lines:mocked_olines.drain(0..1).collect()},
         OrderLineModelSet {order_id:"xx2".to_string(), lines:mocked_olines},
     ];
-    let oline_cancel_results = vec![ Ok(()), Ok(()) ];
-    let result = discard_unpaid_items_common(
-        stock_return_results, fetched_ol_sets, oline_cancel_results
-    ).await;
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert_eq!(e.code, AppErrorCode::DataCorruption);
-        assert_eq!(e.detail.as_ref().unwrap(), "unit-test");
-    }
-}
-
-#[tokio::test]
-async fn discard_unpaid_items_err_o_repo()
-{
-    let mut mocked_olines = ut_setup_orderlines();
-    let data_corrupt = AppError{detail:Some(format!("unit-test")), code:AppErrorCode::DataCorruption};
-    let stock_return_results = vec![ Ok(()), Ok(()) ];
-    let fetched_ol_sets = vec![
-        OrderLineModelSet {order_id:"xx1".to_string(), lines:mocked_olines.drain(0..1).collect()},
-        OrderLineModelSet {order_id:"xx2".to_string(), lines:mocked_olines},
-    ];
-    let oline_cancel_results = vec![ Ok(()), Err(data_corrupt) ];
-    let result = discard_unpaid_items_common(
-        stock_return_results, fetched_ol_sets, oline_cancel_results
-    ).await;
+    let result = discard_unpaid_items_common(stock_return_results, fetched_ol_sets).await;
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.code, AppErrorCode::DataCorruption);

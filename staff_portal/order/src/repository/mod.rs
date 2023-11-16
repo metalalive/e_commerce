@@ -16,14 +16,14 @@ use crate::AppDataStoreContext;
 use crate::api::dto::OrderLinePayDto;
 use crate::api::rpc::dto::{
     ProductPriceDeleteDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
-    OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto
+    OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto, StockLevelReturnDto
 };
 use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::constant::ProductType;
 use crate::error::AppError;
 use crate::model::{
     ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity,
-    BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel, StockReturnModelSet
+    BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel
 };
 
 // make it visible only for testing purpose
@@ -87,8 +87,6 @@ pub trait AbsOrderRepo : Sync + Send {
                                   usr_cb: AppOrderFetchRangeCallback )
         -> DefaultResult<(), AppError>;
 
-    async fn update_lines_return(&self, ms:OrderLineModelSet)  -> DefaultResult<(), AppError>;
-
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>;
 
     async fn scheduled_job_time_update(&self);
@@ -119,10 +117,9 @@ pub trait AbsOrderStockRepo : Sync +  Send {
     async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
     async fn try_reserve(&self, cb: AppStockRepoReserveUserFunc,
                          order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn;
-    async fn try_return(&self,
-                        cb: fn(&mut StockLevelModelSet, StockReturnModelSet)
-                            -> DefaultResult<(), AppError> ,
-                        return_set:StockReturnModelSet )
+    async fn try_return(&self,  cb: fn(&mut StockLevelModelSet, StockLevelReturnDto)
+                                    -> DefaultResult<(), AppError> ,
+                        data:StockLevelReturnDto )
         -> DefaultResult<(), AppError>;
 }
 

@@ -13,12 +13,13 @@ use crate::api::web::dto::{
     OrderCreateReqData, ShippingReqDto, BillingReqDto, OrderLineReqDto, OrderLineCreateErrorDto,
 };
 use crate::api::rpc::dto::{
-    OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto
+    OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto,
+    OrderPaymentUpdateErrorDto, StockLevelReturnDto
 };
 use crate::error::AppError;
 use crate::model::{
     BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet, ProductPolicyModelSet,
-    StockLevelModelSet, OrderLineModelSet, ProductStockReturnModel, StockReturnModelSet
+    StockLevelModelSet, OrderLineModelSet
 };
 use crate::repository::{AbsOrderRepo, AbsProductPriceRepo, AbstProductPolicyRepo, AppStockRepoReserveReturn};
 use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
@@ -247,27 +248,24 @@ impl OrderDiscardUnpaidItemsUseCase {
         -> Pin<Box<dyn Future<Output=DefaultResult<(),AppError>> + Send + 'a>>
     {
         let fut = async move {
-            let (oid, mut unpaid_lines) = (
+            let (order_id, unpaid_lines) = (
                 ol_set.order_id , ol_set.lines.into_iter().filter(
-                    |m| m.has_unpaid()
+                    |m| m.qty.has_unpaid()
                 ).collect::<Vec<OrderLineModel>>()
             );
             if unpaid_lines.is_empty() {
                 Ok(()) // all items have been paid, nothing to discard for now.
             } else {
                 let st_repo = o_repo.stock();
-                unpaid_lines.iter_mut().map(|mp| { mp.qty.cancel_unpaid(); }).count();
-                let items = unpaid_lines.iter().map(ProductStockReturnModel::from).collect();
-                let return_set = StockReturnModelSet{items, order_id:oid.clone()};
-                st_repo.try_return(Self::read_stocklvl_cb, return_set).await?;
-                let ol_set = OrderLineModelSet{order_id:oid, lines:unpaid_lines};
-                o_repo.update_lines_return(ol_set).await?;
+                let items = unpaid_lines.into_iter().map(OrderLineModel::into).collect();
+                let data = StockLevelReturnDto{items, order_id};
+                st_repo.try_return(Self::read_stocklvl_cb, data).await?;
                 Ok(())
             }
         }; // lifetime of the Future trait object must outlive `'static` 
         Box::pin(fut)
     }
-    fn read_stocklvl_cb(ms: &mut StockLevelModelSet, data: StockReturnModelSet)
+    fn read_stocklvl_cb(ms: &mut StockLevelModelSet, data: StockLevelReturnDto)
         -> DefaultResult<(), AppError>
-    { ms.try_return(data) }
+    { ms.return_by_expiry(data) }
 } // end of impl OrderDiscardUnpaidItemsUseCase
