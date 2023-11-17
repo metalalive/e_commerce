@@ -14,7 +14,7 @@ use crate::api::web::dto::{
 };
 use crate::api::rpc::dto::{
     OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto,
-    OrderPaymentUpdateErrorDto, StockLevelReturnDto
+    OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto
 };
 use crate::error::AppError;
 use crate::model::{
@@ -259,13 +259,15 @@ impl OrderDiscardUnpaidItemsUseCase {
                 let st_repo = o_repo.stock();
                 let items = unpaid_lines.into_iter().map(OrderLineModel::into).collect();
                 let data = StockLevelReturnDto{items, order_id};
-                st_repo.try_return(Self::read_stocklvl_cb, data).await?;
-                Ok(())
+                let _return_result = st_repo.try_return(
+                    Self::read_stocklvl_cb, data).await?;
+                Ok(()) // TODO, pass the stock-return result
             }
         }; // lifetime of the Future trait object must outlive `'static` 
         Box::pin(fut)
     }
     fn read_stocklvl_cb(ms: &mut StockLevelModelSet, data: StockLevelReturnDto)
-        -> DefaultResult<(), AppError>
-    { ms.return_by_expiry(data) }
+        -> Vec<StockReturnErrorDto>
+    { ms.return_across_expiry(data) }
 } // end of impl OrderDiscardUnpaidItemsUseCase
+

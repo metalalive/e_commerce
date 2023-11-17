@@ -6,7 +6,7 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 
-use crate::api::rpc::dto::StockLevelReturnDto;
+use crate::api::rpc::dto::{StockLevelReturnDto, StockReturnErrorDto};
 use crate::constant::ProductType;
 use crate::datastore::{
     AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedData, AppInMemFetchedSingleTable
@@ -204,11 +204,11 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
     } // end of fn try_reserve
     
     async fn try_return(&self,  _cb: fn(&mut StockLevelModelSet, StockLevelReturnDto)
-                                    -> DefaultResult<(), AppError> ,
+                                    -> Vec<StockReturnErrorDto> ,
                         _data: StockLevelReturnDto )
-        -> DefaultResult<(), AppError>
+        -> DefaultResult<Vec<StockReturnErrorDto>, AppError>
     {
-        Ok(())
+        Ok(vec![])
     }
 } // end of impl StockLvlInMemRepo
 

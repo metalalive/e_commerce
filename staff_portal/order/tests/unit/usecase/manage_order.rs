@@ -1,6 +1,7 @@
 use std::result::Result as DefaultResult;
 
 use chrono::DateTime;
+use order::api::rpc::dto::StockReturnErrorDto;
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
@@ -159,7 +160,7 @@ fn ut_setup_orderlines () -> Vec<OrderLineModel>
 
 
 async fn discard_unpaid_items_common(
-        stock_return_results: Vec<DefaultResult<(), AppError>>,
+        stock_return_results: Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>,
         fetched_ol_sets:Vec<OrderLineModelSet>
     )
     -> DefaultResult<(), AppError>
@@ -182,7 +183,7 @@ async fn discard_unpaid_items_common(
 async fn discard_unpaid_items_ok()
 {
     let mut mocked_olines = ut_setup_orderlines();
-    let stock_return_results = vec![ Ok(()), Ok(()) ];
+    let stock_return_results = vec![ Ok(vec![]), Ok(vec![]) ];
     let fetched_ol_sets = vec![
         OrderLineModelSet {order_id:"xx1".to_string(), lines:mocked_olines.drain(0..2).collect()},
         OrderLineModelSet {order_id:"xx2".to_string(), lines:mocked_olines},
@@ -196,7 +197,7 @@ async fn discard_unpaid_items_err_stocklvl()
 {
     let mut mocked_olines = ut_setup_orderlines();
     let data_corrupt = AppError{detail:Some(format!("unit-test")), code:AppErrorCode::DataCorruption};
-    let stock_return_results = vec![ Ok(()), Err(data_corrupt) ];
+    let stock_return_results = vec![ Ok(vec![]), Err(data_corrupt) ];
     let fetched_ol_sets = vec![
         OrderLineModelSet {order_id:"xx1".to_string(), lines:mocked_olines.drain(0..1).collect()},
         OrderLineModelSet {order_id:"xx2".to_string(), lines:mocked_olines},

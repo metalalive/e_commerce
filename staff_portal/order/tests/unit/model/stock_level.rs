@@ -7,7 +7,7 @@ use order::model::{
     StockLevelModelSet, ProductStockModel, StoreStockModel, StockQuantityModel,
     OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel, OrderLineModelSet
 };
-use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto};
+use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto, StockReturnErrorReason};
 
 use crate::model::verify_stocklvl_model;
 
@@ -406,3 +406,67 @@ fn reserve_seller_nonexist()
     }
 } // end of reserve_seller_nonexist
 
+
+#[test]
+fn return_reserved_ok()
+{
+    let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let saved_products = ut_mock_saved_product();
+    let mut mset = StockLevelModelSet{ stores: vec![
+        StoreStockModel {store_id:1013, products: saved_products[0..5].to_vec()},
+        StoreStockModel {store_id:1014, products: saved_products[5..11].to_vec()},
+    ]};
+    let data = StockLevelReturnDto { order_id: format!("ChadBookedThis"), items: vec![
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
+            product_id:9002, qty_add:2 , expiry:mock_warranty},
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
+            product_id:9006, qty_add:1 , expiry:mock_warranty},
+    ]};
+    let error = mset.return_across_expiry(data);
+    assert!(error.is_empty());
+} // end of fn return_reserved_ok
+
+#[test]
+fn return_reserved_nonexist()
+{
+    let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let saved_products = ut_mock_saved_product();
+    let mut mset = StockLevelModelSet{ stores: vec![
+        StoreStockModel {store_id:1013, products: saved_products[0..5].to_vec()},
+        StoreStockModel {store_id:1014, products: saved_products[5..11].to_vec()},
+    ]};
+    let data = StockLevelReturnDto { order_id: format!("ChadBookedThis"), items: vec![
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
+            product_id:9006, qty_add:1 , expiry:mock_warranty},
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Package,
+            product_id:9999, qty_add:2 , expiry:mock_warranty},
+    ]};
+    let error = mset.return_across_expiry(data);
+    assert_eq!(error.len(), 1);
+    assert_eq!(error[0].product_id, 9999);
+    assert_eq!(error[0].product_type, ProductType::Package);
+    assert!(matches!(error[0].reason, StockReturnErrorReason::NotExist));
+}
+
+#[test]
+fn return_reserved_invalid_qty()
+{
+    let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
+    let saved_products = ut_mock_saved_product();
+    let mut mset = StockLevelModelSet{ stores: vec![
+        StoreStockModel {store_id:1014, products: saved_products[5..11].to_vec()},
+    ]};
+    let data = StockLevelReturnDto { order_id: format!("ChadBookedThis"), items: vec![
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
+            product_id:9006, qty_add:1 , expiry:mock_warranty},
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
+            product_id:9002, qty_add:3 , expiry:mock_warranty},
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
+            product_id:9006, qty_add:3 , expiry:mock_warranty},
+    ]};
+    let error = mset.return_across_expiry(data);
+    assert_eq!(error.len(), 1);
+    assert_eq!(error[0].product_id, 9006);
+    assert_eq!(error[0].product_type, ProductType::Item);
+    assert!(matches!(error[0].reason, StockReturnErrorReason::InvalidQuantity));
+}

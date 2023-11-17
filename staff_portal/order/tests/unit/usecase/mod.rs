@@ -20,7 +20,7 @@ use order::{
     AppRpcClientReqProperty, AppRpcReply, AppDataStoreContext
 };
 use order::api::dto::OrderLinePayDto;
-use order::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto};
+use order::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto};
 use order::error::{AppError, AppErrorCode};
 use order::constant::{ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
 use order::logging::AppLogContext;
@@ -42,12 +42,12 @@ use crate::EXAMPLE_REL_PATH;
 struct MockStockRepo {
     _mocked_save_r:  DefaultResult<(), AppError>,
     _mocked_fetch_r: DefaultResult<StockLevelModelSet, AppError>,
-    _mocked_stk_return: AsyncMutex<Cell<Vec<DefaultResult<(), AppError>>>>,
+    _mocked_stk_return: AsyncMutex<Cell<Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>>>,
 }
 struct MockOrderRepo {
     _mocked_stock_save:  DefaultResult<(), AppError>,
     _mocked_stock_fetch: DefaultResult<StockLevelModelSet, AppError>,
-    _mocked_stock_return: Mutex<Cell<Vec<DefaultResult<(), AppError>>>>,
+    _mocked_stock_return: Mutex<Cell<Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>>>,
     _mocked_ol_sets: AsyncMutex<Cell<Vec<OrderLineModelSet>>>,
 }
 
@@ -64,9 +64,9 @@ impl AbsOrderStockRepo for MockStockRepo {
         Err(Err(e))
     }
     async fn try_return(&self, _cb: fn(&mut StockLevelModelSet, StockLevelReturnDto)
-                                    -> DefaultResult<(), AppError> ,
+                                    -> Vec<StockReturnErrorDto> ,
                         _data: StockLevelReturnDto )
-        -> DefaultResult<(), AppError>
+        -> DefaultResult<Vec<StockReturnErrorDto>, AppError>
     {
         let mut g = self._mocked_stk_return.lock().await;
         let returns = g.get_mut();
@@ -149,7 +149,7 @@ impl AbsOrderRepo for MockOrderRepo {
 impl MockOrderRepo {
     fn build(stk_save_r:DefaultResult<(), AppError>,
              stk_fetch_r:DefaultResult<StockLevelModelSet, AppError>,
-             stk_returns: Vec<DefaultResult<(), AppError>>,
+             stk_returns: Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>,
              ol_sets: Vec<OrderLineModelSet>,
         ) -> Self
     {

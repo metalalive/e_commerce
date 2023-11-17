@@ -8,7 +8,7 @@ use chrono::DateTime;
 use chrono::offset::FixedOffset;
 
 use crate::api::rpc::dto::{
-    InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto
+    InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto, StockReturnErrorDto, StockReturnErrorReason
 };
 use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineErrorReason, OrderLineCreateErrNonExistDto};
 use crate::constant::ProductType;
@@ -140,6 +140,18 @@ impl StockQuantityModel {
         }
         num_taking
     }
+    pub fn try_return(&mut self, oid:&str, num_req:u32) -> u32
+    {
+        let num_returned = 0;
+        if let Some(entry) = self.rsv_detail.get_mut(oid) {
+            let n_taking = min(*entry, num_req);
+            *entry -= n_taking;
+            if *entry == 0 {
+                let _ = self.rsv_detail.remove(oid);
+            }
+            n_taking
+        } else { 0 }
+    }
 } // end of impl StockQuantityModel
 
 impl ProductStockModel {
@@ -182,6 +194,37 @@ impl StoreStockModel {
             Some((OrderLineErrorReason::OutOfStock, num_required))
         }
     }
+    pub fn return_across_expiry(&mut self, oid:&str, req:InventoryEditStockLevelDto)
+        -> Option<StockReturnErrorReason>
+    {
+        assert!(req.qty_add > 0);
+        let mut num_returning = req.qty_add as u32;
+        let _ = self.products.iter().filter(|p| {
+            p.type_ == req.product_type && p.id_ == req.product_id
+        }).any(|p| {
+            if let Some(num_rsved) = p.quantity.reservation().get(oid) {
+                let num_return  = min(*num_rsved, num_returning);
+                num_returning -= num_return;
+            }
+            num_returning == 0
+        }); // dry-run
+        if num_returning == 0 {
+            num_returning = req.qty_add as u32;
+            let _ = self.products.iter_mut().filter(|p| {
+                p.type_ == req.product_type && p.id_ == req.product_id
+            }).any(|p| {
+                let num_returned  = p.quantity.try_return(oid, num_returning);
+                num_returning -= num_returned;
+                num_returning == 0
+            });
+            assert_eq!(num_returning, 0);
+            None
+        } else if num_returning < (req.qty_add as u32) {
+            Some(StockReturnErrorReason::InvalidQuantity)
+        } else {
+            Some(StockReturnErrorReason::NotExist)
+        }
+    } // end of fn return_across_expiry
 } // end of impl StoreStockModel
 
 impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
@@ -259,7 +302,7 @@ impl StockLevelModelSet {
     // this model instance will be no longer clean and should be discarded immediately.
     pub fn try_reserve(&mut self, ol_set:&OrderLineModelSet) -> Vec<OrderLineCreateErrorDto>
     {
-        self.sort_by_expiry();
+        self.sort_by_expiry(true);
         let oid = ol_set.order_id.as_str();
         ol_set.lines.iter().filter_map(|req| {
             let mut error = OrderLineCreateErrorDto {seller_id:req.seller_id,
@@ -284,15 +327,33 @@ impl StockLevelModelSet {
         }) .collect()
     } // end of try_reserve
     
-    pub fn return_by_expiry(&mut self, _data:StockLevelReturnDto) -> DefaultResult<(), AppError>
+    pub fn return_across_expiry(&mut self, data:StockLevelReturnDto) -> Vec<StockReturnErrorDto>
     {
-        Ok(())
-    }
+        self.sort_by_expiry(false);
+        let oid = data.order_id.as_str();
+        data.items.into_iter().filter_map(|req| {
+            let mut error = StockReturnErrorDto {
+                reason: StockReturnErrorReason::NotExist, product_id: req.product_id,
+                seller_id: req.store_id, product_type: req.product_type.clone()
+            };
+            let found = self.stores.iter_mut().find(|m| {m.store_id == req.store_id});
+            let opt_detail = if let Some(store) = found {
+                store.return_across_expiry(oid, req)
+            } else { Some(StockReturnErrorReason::NotExist) };
+            if let Some(r) = opt_detail {
+                error.reason = r;
+                Some(error)
+            } else { None }
+        }).collect()
+    } // end of fn return_across_expiry
     
-    fn sort_by_expiry(&mut self) {
+    fn sort_by_expiry(&mut self, ascending:bool) {
         // to ensure the items that expire soon will be taken first
         self.stores.iter_mut().map(|s| {
-            s.products.sort_by(|a, b| a.expiry.cmp(&b.expiry));
+            s.products.sort_by(|a, b| {
+                if ascending { a.expiry.cmp(&b.expiry) }
+                else { b.expiry.cmp(&a.expiry) }
+            });
         }).count();
     } // end of sort_by_expiry
 } // end of impl StockLevelModelSet

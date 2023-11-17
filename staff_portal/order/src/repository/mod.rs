@@ -16,7 +16,7 @@ use crate::AppDataStoreContext;
 use crate::api::dto::OrderLinePayDto;
 use crate::api::rpc::dto::{
     ProductPriceDeleteDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
-    OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto, StockLevelReturnDto
+    OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto, StockLevelReturnDto, StockReturnErrorDto
 };
 use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::constant::ProductType;
@@ -118,9 +118,9 @@ pub trait AbsOrderStockRepo : Sync +  Send {
     async fn try_reserve(&self, cb: AppStockRepoReserveUserFunc,
                          order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn;
     async fn try_return(&self,  cb: fn(&mut StockLevelModelSet, StockLevelReturnDto)
-                                    -> DefaultResult<(), AppError> ,
+                                    -> Vec<StockReturnErrorDto> ,
                         data:StockLevelReturnDto )
-        -> DefaultResult<(), AppError>;
+        -> DefaultResult<Vec<StockReturnErrorDto>, AppError>;
 }
 
 // TODO, consider runtime configuration for following repositories

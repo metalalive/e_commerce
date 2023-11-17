@@ -1,4 +1,3 @@
-use std::ops::Neg;
 use std::vec::Vec;
 use std::result::Result as DefaultResult;
 use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
@@ -420,7 +419,7 @@ impl Into<InventoryEditStockLevelDto> for OrderLineModel {
     fn into(self) -> InventoryEditStockLevelDto {
         assert!(self.qty.reserved >= self.qty.paid);
         let num_returning = self.qty.reserved - self.qty.paid;
-        let num_returning = (num_returning as i32).neg();
+        let num_returning = num_returning as i32;
         InventoryEditStockLevelDto {
             store_id: self.seller_id, product_id: self.product_id, qty_add: num_returning,
             product_type: self.product_type.clone(), expiry:self.policy.reserved_until

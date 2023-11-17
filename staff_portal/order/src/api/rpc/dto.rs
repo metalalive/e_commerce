@@ -143,3 +143,14 @@ pub struct OrderPaymentUpdateErrorDto {
     pub oid: String,
     pub lines: Vec<OrderLinePayUpdateErrorDto>,
 }
+
+pub enum StockReturnErrorReason {
+    NotExist, InvalidQuantity
+}
+
+pub struct StockReturnErrorDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    pub product_type: ProductType,
+    pub reason: StockReturnErrorReason,
+}
