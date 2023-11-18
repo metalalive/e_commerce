@@ -31,7 +31,7 @@ use order::model::{
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc,
-    AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback
+    AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback, AppStockRepoReturnUserFunc
 };
 use order::usecase::{initiate_rpc_request, rpc_server_process};
 
@@ -63,9 +63,7 @@ impl AbsOrderStockRepo for MockStockRepo {
         let e = AppError { code: AppErrorCode::NotImplemented, detail: None };
         Err(Err(e))
     }
-    async fn try_return(&self, _cb: fn(&mut StockLevelModelSet, StockLevelReturnDto)
-                                    -> Vec<StockReturnErrorDto> ,
-                        _data: StockLevelReturnDto )
+    async fn try_return(&self, _cb: AppStockRepoReturnUserFunc, _data: StockLevelReturnDto )
         -> DefaultResult<Vec<StockReturnErrorDto>, AppError>
     {
         let mut g = self._mocked_stk_return.lock().await;

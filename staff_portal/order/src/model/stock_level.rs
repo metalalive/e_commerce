@@ -142,7 +142,6 @@ impl StockQuantityModel {
     }
     pub fn try_return(&mut self, oid:&str, num_req:u32) -> u32
     {
-        let num_returned = 0;
         if let Some(entry) = self.rsv_detail.get_mut(oid) {
             let n_taking = min(*entry, num_req);
             *entry -= n_taking;

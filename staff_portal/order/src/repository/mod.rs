@@ -108,18 +108,23 @@ pub type AppOrderFetchRangeCallback = fn(&dyn AbsOrderRepo, OrderLineModelSet)
     -> Pin<Box<dyn Future<Output=DefaultResult<(),AppError>> + Send + '_>>;
 
 pub type AppStockRepoReserveReturn = DefaultResult<(), DefaultResult<Vec<OrderLineCreateErrorDto>, AppError>>;
+
 pub type AppStockRepoReserveUserFunc = fn(&mut StockLevelModelSet, &OrderLineModelSet)
     -> AppStockRepoReserveReturn;
 
+// if the function pointer type is declared directly in function signature of a
+// trait method, the function pointer will be viewed as closure block
+pub type AppStockRepoReturnUserFunc = fn(&mut StockLevelModelSet, StockLevelReturnDto)
+    -> Vec<StockReturnErrorDto>;
+
 #[async_trait]
-pub trait AbsOrderStockRepo : Sync +  Send {
+pub trait AbsOrderStockRepo : Sync + Send {
     async fn fetch(&self, pids:Vec<ProductStockIdentity>) -> DefaultResult<StockLevelModelSet, AppError>;
     async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>;
     async fn try_reserve(&self, cb: AppStockRepoReserveUserFunc,
                          order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn;
-    async fn try_return(&self,  cb: fn(&mut StockLevelModelSet, StockLevelReturnDto)
-                                    -> Vec<StockReturnErrorDto> ,
-                        data:StockLevelReturnDto )
+    async fn try_return(&self,  cb: AppStockRepoReturnUserFunc,
+                        data: StockLevelReturnDto )
         -> DefaultResult<Vec<StockReturnErrorDto>, AppError>;
 }
 

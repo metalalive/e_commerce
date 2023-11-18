@@ -17,7 +17,9 @@ use crate::model::{
     StockLevelModelSet, OrderLineModelSet
 };
 
-use super::{AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn};
+use super::{
+    AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppStockRepoReturnUserFunc
+};
 
 mod _stockm {
     use std::collections::HashSet;
@@ -39,7 +41,7 @@ mod _stockm {
     pub(super) struct InMemDStoreFiltKeyOp {
         // it is combo of seller-id, product-type as u8, product-id
         options : HashSet<(u32, u8, u64)>,
-        timenow: DateTime<FixedOffset>
+        timenow: Option<DateTime<FixedOffset>>
     }
     impl AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOp {
         fn filter(&self, k:&String) -> bool {
@@ -52,12 +54,16 @@ mod _stockm {
             if self.options.contains(&(store_id, prod_typ, prod_id)) {
                 // business logic in domain model should include more advanced expiry check,
                 // this repository simply filters out the stock items which have expired
-                exp_from_combo > self.timenow
+                if let Some(v) = self.timenow.as_ref() {
+                    &exp_from_combo > v 
+                } else {true}
             } else {false}
         }
     } // to fetch all keys in stock-level table whose records haven't expired yet.
     impl InMemDStoreFiltKeyOp {
-        pub fn new(pids: Vec<ProductStockIdentity2>, timenow: DateTime<FixedOffset>) -> Self {
+        pub fn new(pids: Vec<ProductStockIdentity2>, timenow: Option<DateTime<FixedOffset>>)
+            -> Self
+        {
             let iter = pids.into_iter().map(|d| {
                 let prod_typ_num:u8 = d.product_type.into();
                 (d.store_id, prod_typ_num, d.product_id)
@@ -190,25 +196,34 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
             ProductStockIdentity2 {product_type:d.product_type.clone(),
                 store_id:d.seller_id, product_id:d.product_id}
         ).collect();
-        let (mut stock_mset, d_lock) = match self.fetch_for_reserve(pids).await
+        let (mut stock_mset, d_lock) = match self.fetch_with_lock(
+            pids, Some(self.curr_time.clone())).await
         {
             Ok(v) => v,
             Err(e) => {return Err(Err(e));}
         };
         usr_cb(&mut stock_mset, order_req)?;
-        if let Err(e) = self.save_reserved(stock_mset, d_lock) {
+        if let Err(e) = self.save_with_lock(stock_mset, d_lock) {
             Err(Err(e))
         } else {
             Ok(())
         }
     } // end of fn try_reserve
     
-    async fn try_return(&self,  _cb: fn(&mut StockLevelModelSet, StockLevelReturnDto)
-                                    -> Vec<StockReturnErrorDto> ,
-                        _data: StockLevelReturnDto )
+    async fn try_return(&self,  cb: AppStockRepoReturnUserFunc, data: StockLevelReturnDto )
         -> DefaultResult<Vec<StockReturnErrorDto>, AppError>
     {
-        Ok(vec![])
+        let pids = data.items.iter().map(|d|
+            ProductStockIdentity2 {product_type: d.product_type.clone(),
+                store_id: d.store_id, product_id: d.product_id}
+        ).collect();
+        // omit expiry check in the key filter
+        let (mut mset, d_lock) = self.fetch_with_lock(pids, None).await?;
+        let caller_errors = cb(&mut mset, data);
+        if caller_errors.is_empty() {
+            self.save_with_lock(mset, d_lock)?;
+        }
+        Ok(caller_errors)
     }
 } // end of impl StockLvlInMemRepo
 
@@ -221,18 +236,19 @@ impl StockLvlInMemRepo {
         Ok(out)
     }
 
-    async fn fetch_for_reserve(&self, pids:Vec<ProductStockIdentity2>)
+    async fn fetch_with_lock(&self, pids:Vec<ProductStockIdentity2>,
+                             curr_time:Option<DateTime<FixedOffset>> )
         -> DefaultResult<(StockLevelModelSet, AppInMemDstoreLock), AppError> 
     {
         let tbl_label = _stockm::TABLE_LABEL.to_string();
-        let op = _stockm::InMemDStoreFiltKeyOp::new(pids, self.curr_time.clone());
+        let op = _stockm::InMemDStoreFiltKeyOp::new(pids, curr_time);
         let stock_ids = self.datastore.filter_keys(tbl_label.clone(), &op).await?;
         let info = HashMap::from([(tbl_label, stock_ids)]);
         let (tableset, _lock) = self.datastore.fetch_acquire(info).await?;
         let ms =  Self::try_into_modelset(tableset)?;
         Ok((ms, _lock))
     }
-    fn save_reserved(&self, slset:StockLevelModelSet, lock:AppInMemDstoreLock)
+    fn save_with_lock(&self, slset:StockLevelModelSet, lock:AppInMemDstoreLock)
         -> DefaultResult<(), AppError>
     {
         let rows = AppInMemFetchedSingleTable::from(slset);
