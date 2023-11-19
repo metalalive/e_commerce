@@ -82,7 +82,7 @@ pub trait AbsOrderRepo : Sync + Send {
                                   cb:AppOrderRepoUpdateLinesUserFunc)
         -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>;
 
-    async fn fetch_lines_by_range(&self, time_start: DateTime<FixedOffset>,
+    async fn fetch_lines_by_rsvtime(&self, time_start: DateTime<FixedOffset>,
                                   time_end: DateTime<FixedOffset>,
                                   usr_cb: AppOrderFetchRangeCallback )
         -> DefaultResult<(), AppError>;

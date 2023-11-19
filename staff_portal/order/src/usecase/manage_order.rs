@@ -234,7 +234,7 @@ impl OrderDiscardUnpaidItemsUseCase {
     {
         let time_start = self.repo.scheduled_job_last_time().await;
         let time_end = Local::now().fixed_offset();
-        let result = self.repo.fetch_lines_by_range( time_start,
+        let result = self.repo.fetch_lines_by_rsvtime( time_start,
                             time_end, Self::read_oline_set_cb ).await;
         if let Err(e) = result.as_ref() {
             let lctx = &self.logctx;
@@ -261,7 +261,8 @@ impl OrderDiscardUnpaidItemsUseCase {
                 let data = StockLevelReturnDto{items, order_id};
                 let _return_result = st_repo.try_return(
                     Self::read_stocklvl_cb, data).await?;
-                Ok(()) // TODO, pass the stock-return result
+                Ok(()) // TODO, logging the stock-return result, the result may not be able
+                       // to pass to the output of the method `fetch_lines_by_rsvtime`
             }
         }; // lifetime of the Future trait object must outlive `'static` 
         Box::pin(fut)

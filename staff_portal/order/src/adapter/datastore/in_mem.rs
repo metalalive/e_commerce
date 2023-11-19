@@ -29,7 +29,7 @@ pub type AppInMemFetchedData = AllTable; // TODO, rename to data set
 pub type AppInMemDstoreLock<'a> = MutexGuard<'a, RefCell<AppInMemFetchedData>>;
 
 pub trait AbsDStoreFilterKeyOp : Send + Sync {
-    fn filter(&self, k:&InnerKey) -> bool;
+    fn filter(&self, k:&InnerKey, v:&InnerRow) -> bool;
 }
 
 #[async_trait]
@@ -189,8 +189,8 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         let unchecked_labels = vec![&tbl_label];
         Self::_check_table_existence(&*_map, unchecked_labels)?;
         let table = _map.get(tbl_label.as_str()).unwrap();
-        let out = table.keys().filter_map(|k| {
-            if op.filter(k) {Some(k.clone())} else {None}
+        let out = table.iter().filter_map(|(k,v)| {
+            if op.filter(k,v) {Some(k.clone())} else {None}
         }).collect();
         Ok(out)
     }

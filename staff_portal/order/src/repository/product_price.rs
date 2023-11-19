@@ -35,7 +35,7 @@ impl Into<usize> for InMemColIdx {
 struct InnerDStoreFilterKeyOp {pattern_prefix:String}
 
 impl AbsDStoreFilterKeyOp for InnerDStoreFilterKeyOp {
-    fn filter(&self, k:&String) -> bool {
+    fn filter(&self, k:&String, _v:&Vec<String>) -> bool {
         if let Some(pos) = k.find(self.pattern_prefix.as_str()) {
             pos == 0
         } else {false}

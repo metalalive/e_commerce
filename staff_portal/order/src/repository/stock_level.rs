@@ -44,7 +44,7 @@ mod _stockm {
         timenow: Option<DateTime<FixedOffset>>
     }
     impl AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOp {
-        fn filter(&self, k:&String) -> bool {
+        fn filter(&self, k:&String, _v:&Vec<String>) -> bool {
             let id_elms = k.split("/").collect::<Vec<&str>>();
             let (store_id, prod_typ, prod_id, exp_from_combo) = (
                 id_elms[0].parse().unwrap(),  id_elms[1].parse().unwrap(),

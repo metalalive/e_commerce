@@ -342,7 +342,7 @@ struct UtestDstoreFiltKeyOp {patt:String}
 
 impl AbsDStoreFilterKeyOp for UtestDstoreFiltKeyOp
 {
-    fn filter(&self, k:&String) -> bool {
+    fn filter(&self, k:&String, _v:&Vec<String>) -> bool {
         k.contains(self.patt.as_str())
     }
 }

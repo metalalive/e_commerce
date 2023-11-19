@@ -5,6 +5,7 @@ use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
+use tokio::sync::Mutex;
 
 use crate::AppDataStoreContext;
 use crate::api::dto::{OrderLinePayDto, PhoneNumberDto, ShippingMethod};
@@ -136,10 +137,25 @@ mod _orderline {
         });
         HashMap::from_iter(kv_iter)
     } // end of fn to_inmem_tbl
+    pub(super) fn pk_group_by_oid(flattened:Vec<String>) -> HashMap<String, Vec<String>>
+    {
+        let mut out: HashMap<String, Vec<String>> = HashMap::new();
+        flattened.into_iter().map(|key| {
+            let oid = key.split("-").next().unwrap();
+            if let Some(v) = out.get_mut(oid) {
+                v.push(key);
+            } else {
+                out.insert(oid.to_string(), vec![key]);
+            }
+        }).count();
+        out
+    }
 } // end of inner module _orderline
 
 mod _pkey_partial_label {
     use crate::datastore::AbsDStoreFilterKeyOp;
+    use super::{DateTime, FixedOffset, HashMap};
+
     pub(super) const  BILLING:  &'static str = "billing";
     pub(super) const  SHIPPING: &'static str = "shipping";
     pub(super) struct InMemDStoreFiltKeyOID<'a> {
@@ -147,7 +163,7 @@ mod _pkey_partial_label {
         pub label: Option<&'a str>,
     }
     impl<'a> AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOID<'a> {
-        fn filter(&self, k:&String) -> bool {
+        fn filter(&self, k:&String, _v:&Vec<String>) -> bool {
             let mut id_elms = k.split("-");
             let oid_rd   = id_elms.next().unwrap();
             let label_rd = id_elms.next().unwrap();
@@ -158,11 +174,24 @@ mod _pkey_partial_label {
             cond
         }
     }
-}
+    pub(super) struct InMemDStoreFilterTimeRangeOp {
+        pub t0: DateTime<FixedOffset>,
+        pub t1: DateTime<FixedOffset>,
+        pub col_idx: usize, // column which stores the time to compare with
+    }
+    impl AbsDStoreFilterKeyOp for InMemDStoreFilterTimeRangeOp {
+        fn filter(&self, _k:&String, row:&Vec<String>) -> bool {
+            let rsv_time = row.get(self.col_idx).unwrap();
+            let rsv_time = DateTime::parse_from_rfc3339(rsv_time.as_str()).unwrap();
+            (self.t0 < rsv_time) && (rsv_time < self.t1)
+        }
+    }
+} // end of mod _pkey_partial_label
 
 pub struct OrderInMemRepo {
     datastore: Arc<Box<dyn AbstInMemoryDStore>>,
-    _stock: Arc<Box<dyn AbsOrderStockRepo>>
+    _stock: Arc<Box<dyn AbsOrderStockRepo>>,
+    _sched_job_last_launched: Mutex<DateTime<FixedOffset>>,
 }
 
 impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
@@ -490,28 +519,40 @@ impl AbsOrderRepo for OrderInMemRepo {
         Ok(OrderPaymentUpdateErrorDto {oid, lines:errors})
     } // end of fn update_lines_payment
 
-    async fn fetch_lines_by_range(&self, _time_start: DateTime<FixedOffset>,
-                                  _time_end: DateTime<FixedOffset>,
+    async fn fetch_lines_by_rsvtime(&self, time_start: DateTime<FixedOffset>,
+                                  time_end: DateTime<FixedOffset>,
                                   usr_cb: AppOrderFetchRangeCallback )
         -> DefaultResult<(), AppError>
-    {
-        let stubs = [
-            OrderLineModelSet {order_id: "xx0".to_string(), lines:vec![]},
-            OrderLineModelSet {order_id: "xx1".to_string(), lines:vec![]},
-        ];
-        for ms in stubs.into_iter() {
-            usr_cb(self, ms).await?;
+    { // fetch lines by range of reserved time
+        let table_name = _orderline::TABLE_LABEL;
+        let op = _pkey_partial_label::InMemDStoreFilterTimeRangeOp {
+            col_idx: _orderline::InMemColIdx::PolicyReserved.into(),
+            t0:time_start, t1:time_end,
+        };
+        let keys_flattened = self.datastore.filter_keys(table_name.to_string(), &op).await?;
+        let key_grps = _orderline::pk_group_by_oid(keys_flattened);
+        for (oid, keys) in key_grps.into_iter() {
+            let info = HashMap::from([(table_name.to_string(), keys)]);
+            let mut rawdata = self.datastore.fetch(info).await?;
+            let rawdata = rawdata.remove(table_name).unwrap();
+            let ms = rawdata.into_values().map(AppInMemFetchedSingleRow::into).collect();
+            let mset = OrderLineModelSet { order_id:oid, lines: ms };
+            usr_cb(self, mset).await?;
         }
         Ok(())
-    }
+    } // end of fn fetch_lines_by_rsvtime
 
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
     {
-        DateTime::parse_from_rfc3339("2021-05-22T20:16:54+09:00").unwrap()
+        let guard = self._sched_job_last_launched.lock().await;
+        guard.clone()
     }
 
     async fn scheduled_job_time_update(&self)
     {
+        let mut guard = self._sched_job_last_launched.lock().await;
+        let t:DateTime<FixedOffset> = LocalTime::now().into();
+        *guard = t;
     }
 } // end of impl AbsOrderRepo
 
@@ -526,7 +567,11 @@ impl OrderInMemRepo {
             m.create_table(_ship_opt::TABLE_LABEL).await?;
             m.create_table(_orderline::TABLE_LABEL).await?;
             let stock_repo = StockLvlInMemRepo::build(m.clone(), curr_time).await ?;
-            let obj = Self{ _stock:Arc::new(Box::new(stock_repo)), datastore:m.clone() };
+            let job_time = DateTime::parse_from_rfc3339("2019-03-13T12:59:54+08:00").unwrap();
+            let obj = Self {
+                _sched_job_last_launched: Mutex::new(job_time),
+                _stock:Arc::new(Box::new(stock_repo)), datastore:m.clone(),
+            };
             Ok(obj)
         } else {
             Err(AppError {code:AppErrorCode::MissingDataStore,
