@@ -16,9 +16,11 @@ pub fn route_table () -> ApiRouteTableType
     out.insert( AppConst::WEBAPI_ADD_PRODUCT_POLICY,
                 post(product_policy::post_handler)  );
     out.insert( AppConst::WEBAPI_CREATE_NEW_ORDER,
-                post(order::post_handler)  );
+                post(order::create_handler)  );
     out.insert( AppConst::WEBAPI_ACCESS_EXISTING_ORDER,
-                patch(order::patch_handler)  );
+                patch(order::edit_billing_shipping_handler)  );
+    out.insert( AppConst::WEBAPI_RETURN_OLINES_REQ,
+                patch(order::return_lines_request_handler)  );
     out
 }
 

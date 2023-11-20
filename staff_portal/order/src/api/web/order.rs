@@ -13,7 +13,7 @@ use axum::http::{
 use serde_json;
 
 use crate::{constant as AppConst, AppSharedState, app_log_event};
-use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData};
+use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData, OrderLineReqDto};
 use crate::logging::AppLogLevel;
 use crate::repository::{app_repo_order, app_repo_product_price, app_repo_product_policy};
 use crate::usecase::{CreateOrderUseCase, CreateOrderUsKsErr};
@@ -21,7 +21,7 @@ use crate::usecase::{CreateOrderUseCase, CreateOrderUsKsErr};
 
 // always to specify state type explicitly to the debug macro
 #[debug_handler(state=AppSharedState)]
-pub(crate) async fn post_handler(
+pub(crate) async fn create_handler(
     ExtractState(_appstate): ExtractState<AppSharedState>,
     _wrapped_req_body: ExtractJson<OrderCreateReqData> ) -> impl IntoResponse
 {
@@ -73,14 +73,33 @@ pub(crate) async fn post_handler(
     let mut hdr_map = HttpHeaderMap::new();
     hdr_map.insert(HttpHeader::CONTENT_TYPE, resp_ctype_val);
     (resp_status_code, hdr_map, serial_resp_body)
-} // end of post_handler
+} // end of create_handler
 
 
 #[debug_handler(state=AppSharedState)]
-pub(crate) async fn patch_handler (
+pub(crate) async fn return_lines_request_handler(
+        ExtractPath(oid): ExtractPath<String>,
+        ExtractState(_app_state): ExtractState<AppSharedState>,
+        req_body: ExtractJson<Vec<OrderLineReqDto>>,
+    ) -> impl IntoResponse
+{
+    let logctx = _app_state.log_context().clone();
+    app_log_event!(logctx, AppLogLevel::INFO,
+                   "return order-line request sent:{} ", oid.as_str());
+    let resp_status_code = HttpStatusCode::OK;
+    let serial_resp_body = r#"{}"#.to_string();
+    let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
+    let hdr_kv_pairs = [(HttpHeader::CONTENT_TYPE, resp_ctype_val)];
+    let hdr_map = HttpHeaderMap::from_iter(hdr_kv_pairs.into_iter());
+    (resp_status_code, hdr_map, serial_resp_body)
+}
+
+
+#[debug_handler(state=AppSharedState)]
+pub(crate) async fn edit_billing_shipping_handler (
     oid:ExtractPath<String>,
-    billing:Option<ExtractQuery<bool>>,
-    shipping:Option<ExtractQuery<bool>>,
+    _billing:Option<ExtractQuery<bool>>,
+    _shipping:Option<ExtractQuery<bool>>,
     ExtractState(_appstate): ExtractState<AppSharedState>,
     _req_body: ExtractJson<OrderEditReqData>) -> impl IntoResponse
 {

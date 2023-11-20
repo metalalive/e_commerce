@@ -7,7 +7,7 @@ use order::AppRpcClientReqProperty;
 use order::error::AppError;
 use order::api::web::dto::{
     OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ProductPolicyDto,
-    OrderCreateRespErrorDto, ContactErrorReason, PhoneNumNationErrorReason
+    OrderCreateRespErrorDto, ContactErrorReason, PhoneNumNationErrorReason, OrderLineReqDto
 };
 use order::api::rpc;
 
@@ -20,6 +20,7 @@ const FPATH_EDIT_ORDER_OK_1:&'static str = "/tests/integration/examples/order_ed
 const FPATH_EDIT_PRODUCTPOLICY_OK_1:&'static str = "/tests/integration/examples/policy_product_edit_ok_1.json";
 const FPATH_EDIT_PRODUCTPOLICY_OK_2:&'static str = "/tests/integration/examples/policy_product_edit_ok_2.json";
 const FPATH_EDIT_PRODUCTPOLICY_ERR:&'static str = "/tests/integration/examples/policy_product_edit_exceed_limit.json";
+const FPATH_RETURN_OLINE_REQ_OK_1:&'static str  = "/tests/integration/examples/oline_return_request_ok_1.json";
 
 #[tokio::test]
 async fn place_new_order_ok() -> DefaultResult<(), AppError>
@@ -239,4 +240,26 @@ async fn add_product_policy_error() -> DefaultResult<(), AppError>
     }
     Ok(())
 } // end of fn add_product_policy_error
+
+
+#[tokio::test]
+async fn return_olines_request_ok() -> DefaultResult<(), AppError>
+{
+    let shr_state = test_setup_shr_state() ? ;
+    let srv = TestWebServer::setup(shr_state.clone());
+    let top_lvl_cfg = shr_state.config();
+    let oid = "xyz12345";
+    let uri = format!("/{}/order/{}/return", top_lvl_cfg.api_server.listen.api_version, oid);
+    let req_body = {
+        let obj = deserialize_json_template::<Vec<OrderLineReqDto>>
+                  (&top_lvl_cfg.basepath, FPATH_RETURN_OLINE_REQ_OK_1) ?;
+        let rb = serde_json::to_string(&obj).unwrap();
+        HyperBody::from(rb)
+    };
+    let req = Request::builder().uri(uri).method("PATCH")
+        .header("content-type", "application/json").body(req_body).unwrap();
+    let response = TestWebServer::consume(&srv, req).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    Ok(())
+} // end of fn return_olines_request_ok
 
