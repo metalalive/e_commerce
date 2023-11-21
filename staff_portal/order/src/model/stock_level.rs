@@ -10,11 +10,11 @@ use chrono::offset::FixedOffset;
 use crate::api::rpc::dto::{
     InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto, StockReturnErrorDto, StockReturnErrorReason
 };
-use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineErrorReason, OrderLineCreateErrNonExistDto};
+use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason, OrderLineCreateErrNonExistDto};
 use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 
-use super::{OrderLineModelSet, OrderLineModel};
+use super::{OrderLineModelSet, OrderLineModel, BaseProductIdentity};
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
@@ -22,11 +22,7 @@ pub struct ProductStockIdentity {
     pub product_id: u64, // TODO, declare type alias
     pub expiry: DateTime<FixedOffset>,
 }
-pub struct ProductStockIdentity2 {
-    pub store_id: u32,
-    pub product_type: ProductType,
-    pub product_id: u64, // TODO, declare type alias
-} // TODO, rename
+pub type ProductStockIdentity2 = BaseProductIdentity; // TODO, rename
 
 #[derive(Debug)]
 pub struct StockQuantityModel {
@@ -166,7 +162,7 @@ impl ProductStockModel {
 }
 
 impl StoreStockModel {
-    pub fn try_reserve(&mut self, oid:&str, req:&OrderLineModel) -> Option<(OrderLineErrorReason, u32)>
+    pub fn try_reserve(&mut self, oid:&str, req:&OrderLineModel) -> Option<(OrderLineCreateErrorReason, u32)>
     {
         let mut num_required = req.qty.reserved;
         let _satisfied = self.products.iter().filter(|p| {
@@ -188,9 +184,9 @@ impl StoreStockModel {
             });
             None
         } else if num_required < req.qty.reserved {
-            Some((OrderLineErrorReason::NotEnoughToClaim, num_required))
+            Some((OrderLineCreateErrorReason::NotEnoughToClaim, num_required))
         } else {
-            Some((OrderLineErrorReason::OutOfStock, num_required))
+            Some((OrderLineCreateErrorReason::OutOfStock, num_required))
         }
     }
     pub fn return_across_expiry(&mut self, oid:&str, req:InventoryEditStockLevelDto)
@@ -306,7 +302,7 @@ impl StockLevelModelSet {
         ol_set.lines.iter().filter_map(|req| {
             let mut error = OrderLineCreateErrorDto {seller_id:req.seller_id,
                 product_id:req.product_id, product_type:req.product_type.clone(),
-                reason: OrderLineErrorReason::NotExist,  nonexist:None, shortage:None
+                reason: OrderLineCreateErrorReason::NotExist,  nonexist:None, shortage:None
             };
             let result = self.stores.iter_mut().find(|m| {req.seller_id == m.store_id});
             let opt_err = if let Some(store) = result {
@@ -317,7 +313,7 @@ impl StockLevelModelSet {
             } else {
                 error.nonexist = Some(OrderLineCreateErrNonExistDto { product_policy: false,
                     product_price: false, stock_seller:true });
-                Some(OrderLineErrorReason::NotExist)
+                Some(OrderLineCreateErrorReason::NotExist)
             };
             if let Some(e) = opt_err {
                 error.reason = e;

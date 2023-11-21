@@ -8,12 +8,15 @@ use order::error::{AppError, AppErrorCode};
 use order::model::{
     ProductPolicyModelSet, ProductPolicyModel, ProductPriceModelSet, ProductPriceModel,
     OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, OrderLineAppliedPolicyModel,
-    OrderLineModel
+    OrderLineModel, OrderReturnModel, OrderLineIdentity
 };
-use order::repository::AbsOrderRepo;
-use order::usecase::{CreateOrderUseCase, CreateOrderUsKsErr, OrderDiscardUnpaidItemsUseCase};
+use order::repository::{AbsOrderRepo, AbsOrderReturnRepo};
+use order::usecase::{
+    CreateOrderUseCase, CreateOrderUsKsErr, OrderDiscardUnpaidItemsUseCase,
+    ReturnLinesReqUseCase, ReturnLinesReqUcOutput
+};
 
-use super::{ut_setup_share_state, MockOrderRepo};
+use super::{ut_setup_share_state, MockOrderRepo, MockOrderReturnRepo};
 
 fn ut_setup_prod_policies () -> ProductPolicyModelSet
 {
@@ -158,6 +161,25 @@ fn ut_setup_orderlines () -> Vec<OrderLineModel>
     ]
 }
 
+fn ut_setup_olines_returns () -> Vec<OrderReturnModel>
+{
+    let return_time = DateTime::parse_from_rfc3339("2023-11-18T02:39:04+02:00").unwrap();
+    vec![
+        OrderReturnModel {
+            id_:OrderLineIdentity {store_id:108, product_id:190, product_type:ProductType::Item},
+            qty:vec![(1, return_time.clone())],  price:OrderLinePriceModel { unit:10, total: 10 }
+        },
+        OrderReturnModel {
+            id_:OrderLineIdentity {store_id:800, product_id:191, product_type:ProductType::Item},
+            qty:vec![(1, return_time.clone())],  price:OrderLinePriceModel { unit:12, total: 12 }
+        },
+        OrderReturnModel {
+            id_:OrderLineIdentity {store_id:426, product_id:192, product_type:ProductType::Package},
+            qty:vec![(2, return_time.clone())],  price:OrderLinePriceModel { unit:12, total: 24 }
+        },
+    ]
+}
+
 
 async fn discard_unpaid_items_common(
         stock_return_results: Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>,
@@ -172,7 +194,7 @@ async fn discard_unpaid_items_common(
         Err(not_impl_err.clone()),
         Err(not_impl_err.clone()),
         stock_return_results,
-        fetched_ol_sets
+        fetched_ol_sets, vec![], None
     );
     let repo:Box<dyn AbsOrderRepo> = Box::new(repo);
     let uc = OrderDiscardUnpaidItemsUseCase::new(repo, logctx);
@@ -206,6 +228,87 @@ async fn discard_unpaid_items_err_stocklvl()
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.code, AppErrorCode::DataCorruption);
+        assert_eq!(e.detail.as_ref().unwrap(), "unit-test");
+    }
+}
+
+
+async fn request_lines_request_common(
+        fetched_olines: Vec<OrderLineModel>,
+        fetched_returns: DefaultResult<Vec<OrderReturnModel>, AppError>,
+        save_result: DefaultResult<usize, AppError>, 
+        req_usr_id: u32, 
+        owner_usr_id: u32
+    )
+    -> DefaultResult<ReturnLinesReqUcOutput, AppError>
+{
+    let shr_state = ut_setup_share_state();
+    let logctx = shr_state.log_context().clone();
+    let not_impl_err = AppError{detail:None, code:AppErrorCode::NotImplemented};
+    let o_repo:Box<dyn AbsOrderRepo> = {
+        let repo = MockOrderRepo::build(
+            Err(not_impl_err.clone()),
+            Err(not_impl_err.clone()),
+            vec![], vec![], fetched_olines, Some(owner_usr_id)
+        );
+        Box::new(repo)
+    };
+    let or_repo:Box<dyn AbsOrderReturnRepo> = {
+        let repo = MockOrderReturnRepo::build(fetched_returns, save_result);
+        Box::new(repo)
+    };
+    let mock_order_id = "SomebodyOrderedThis".to_string();
+    let mock_return_req = vec![
+        OrderLineReqDto {seller_id:145, product_type:ProductType::Package,
+            product_id:599, quantity:2 }
+    ];
+    let uc = ReturnLinesReqUseCase {logctx, usr_prof_id:req_usr_id, o_repo, or_repo };
+    uc.execute(mock_order_id, mock_return_req).await
+} // end of fnf request_lines_request_common
+
+#[tokio::test]
+async fn return_lines_request_ok()
+{
+    let fetched_olines = ut_setup_orderlines();
+    let fetched_returns = Ok(ut_setup_olines_returns());
+    let save_result = Ok(fetched_olines.len()); 
+    let owner_usr_id = 1710u32;
+    let result = request_lines_request_common(
+        fetched_olines, fetched_returns,  save_result, 
+        owner_usr_id , owner_usr_id ).await ;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn return_lines_request_fetch_error()
+{
+    let fetched_olines = ut_setup_orderlines();
+    let fetched_returns = Err(AppError{code: AppErrorCode::DataCorruption, detail: Some(format!("unit-test")) });
+    let save_result = Ok(fetched_olines.len()); 
+    let owner_usr_id = 1710u32;
+    let result = request_lines_request_common(
+        fetched_olines, fetched_returns,  save_result, 
+        owner_usr_id , owner_usr_id ).await ;
+    assert!(result.is_err());
+    if let Err(e) = result.as_ref() {
+        assert_eq!(e.code, AppErrorCode::DataCorruption);
+        assert_eq!(e.detail.as_ref().unwrap(), "unit-test");
+    }
+}
+
+#[tokio::test]
+async fn return_lines_request_save_error()
+{
+    let fetched_olines = ut_setup_orderlines();
+    let fetched_returns = Ok(ut_setup_olines_returns());
+    let save_result = Err(AppError{code: AppErrorCode::DataTableNotExist, detail: Some(format!("unit-test")) });
+    let owner_usr_id = 1710u32;
+    let result = request_lines_request_common(
+        fetched_olines, fetched_returns,  save_result, 
+        owner_usr_id , owner_usr_id ).await ;
+    assert!(result.is_err());
+    if let Err(e) = result.as_ref() {
+        assert_eq!(e.code, AppErrorCode::DataTableNotExist);
         assert_eq!(e.detail.as_ref().unwrap(), "unit-test");
     }
 }

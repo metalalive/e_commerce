@@ -9,8 +9,9 @@ use chrono::Local;
 use crate::AppSharedState;
 use crate::constant::ProductType;
 use crate::api::web::dto::{
-    OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLineErrorReason, OrderLineCreateErrNonExistDto,
+    OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLineCreateErrorReason, OrderLineCreateErrNonExistDto,
     OrderCreateReqData, ShippingReqDto, BillingReqDto, OrderLineReqDto, OrderLineCreateErrorDto,
+    OrderLineReturnErrorDto, 
 };
 use crate::api::rpc::dto::{
     OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto,
@@ -19,9 +20,12 @@ use crate::api::rpc::dto::{
 use crate::error::AppError;
 use crate::model::{
     BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet, ProductPolicyModelSet,
-    StockLevelModelSet, OrderLineModelSet
+    StockLevelModelSet, OrderLineModelSet, OrderLineIdentity, OrderReturnModel
 };
-use crate::repository::{AbsOrderRepo, AbsProductPriceRepo, AbstProductPolicyRepo, AppStockRepoReserveReturn};
+use crate::repository::{
+    AbsOrderRepo, AbsProductPriceRepo, AbstProductPolicyRepo, AppStockRepoReserveReturn,
+    AbsOrderReturnRepo
+};
 use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
 
 pub enum CreateOrderUsKsErr {Client(OrderCreateRespErrorDto), Server}
@@ -46,6 +50,12 @@ pub struct OrderPaymentUpdateUseCase {
 pub struct OrderDiscardUnpaidItemsUseCase {
     repo: Box<dyn AbsOrderRepo>,
     logctx: Arc<AppLogContext>
+}
+pub struct ReturnLinesReqUseCase {
+    pub usr_prof_id: u32,
+    pub o_repo: Box<dyn AbsOrderRepo>,
+    pub or_repo: Box<dyn AbsOrderReturnRepo>,
+    pub logctx: Arc<AppLogContext>,
 }
 
 impl CreateOrderUseCase {
@@ -141,7 +151,7 @@ impl CreateOrderUseCase {
                 Some(OrderLineModel::from(d, plc, price))
             } else {
                 let e = OrderLineCreateErrorDto { seller_id: d.seller_id, product_id: d.product_id,
-                    reason: OrderLineErrorReason::NotExist, product_type: d.product_type,
+                    reason: OrderLineCreateErrorReason::NotExist, product_type: d.product_type,
                     nonexist:Some(OrderLineCreateErrNonExistDto {product_price:price_nonexist,
                         product_policy:plc_nonexist, stock_seller:false }), shortage:None
                 };
@@ -272,3 +282,28 @@ impl OrderDiscardUnpaidItemsUseCase {
     { ms.return_across_expiry(data) }
 } // end of impl OrderDiscardUnpaidItemsUseCase
 
+pub enum ReturnLinesReqUcOutput {
+    Success,  InvalidOwner,
+    InvalidRequest(Vec<OrderLineReturnErrorDto>),
+}
+
+impl ReturnLinesReqUseCase {
+    pub async fn execute(self, oid:String, data:Vec<OrderLineReqDto>)
+        -> DefaultResult<ReturnLinesReqUcOutput, AppError>
+    {
+        let o_usr_id = self.o_repo.owner_id(oid.as_str()).await ?;
+        if o_usr_id != self.usr_prof_id {
+            return Ok(ReturnLinesReqUcOutput::InvalidOwner);
+        }
+        let pids = data.iter().map(OrderLineIdentity::from).collect::<Vec<OrderLineIdentity>>();
+        let o_lines  = self.o_repo.fetch_lines_by_pid(oid.as_str(), pids.clone()).await ?;
+        let o_returned = self.or_repo.fetch_by_pid(oid.as_str(), pids).await ?;
+        match OrderReturnModel::filter_requests(data, o_lines, o_returned) {
+            Ok(new_reqs) => {
+                let _num = self.or_repo.create(oid.as_str(), new_reqs).await ?;
+                Ok(ReturnLinesReqUcOutput::Success)
+            },
+            Err(errors) => Ok(ReturnLinesReqUcOutput::InvalidRequest(errors))
+        }
+    }
+}

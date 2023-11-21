@@ -16,7 +16,7 @@ use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     OrderLineModel, BillingModel, ShippingModel, ContactModel, OrderLinePriceModel,
     OrderLineAppliedPolicyModel, PhyAddrModel, ShippingOptionModel, OrderLineQuantityModel,
-    OrderLineModelSet
+    OrderLineModelSet, OrderLineIdentity
 };
 
 use super::{
@@ -154,7 +154,7 @@ mod _orderline {
 
 mod _pkey_partial_label {
     use crate::datastore::AbsDStoreFilterKeyOp;
-    use super::{DateTime, FixedOffset, HashMap};
+    use super::{DateTime, FixedOffset};
 
     pub(super) const  BILLING:  &'static str = "billing";
     pub(super) const  SHIPPING: &'static str = "shipping";
@@ -541,6 +541,15 @@ impl AbsOrderRepo for OrderInMemRepo {
         }
         Ok(())
     } // end of fn fetch_lines_by_rsvtime
+        
+    async fn fetch_lines_by_pid(&self, _oid:&str, _pids:Vec<OrderLineIdentity>)
+        -> DefaultResult<Vec<OrderLineModel>, AppError>
+    {
+        Ok(vec![])
+    }
+
+    async fn owner_id(&self, _order_id:&str) -> DefaultResult<u32, AppError>
+    { Ok(1234) }
 
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
     {
@@ -570,7 +579,8 @@ impl OrderInMemRepo {
             let job_time = DateTime::parse_from_rfc3339("2019-03-13T12:59:54+08:00").unwrap();
             let obj = Self {
                 _sched_job_last_launched: Mutex::new(job_time),
-                _stock:Arc::new(Box::new(stock_repo)), datastore:m.clone(),
+                _stock:Arc::new(Box::new(stock_repo)),
+               datastore:m.clone(),
             };
             Ok(obj)
         } else {

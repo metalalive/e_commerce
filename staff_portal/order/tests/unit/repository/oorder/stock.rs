@@ -3,7 +3,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Local, FixedOffset};
 
 use order::api::rpc::dto::{StockLevelReturnDto, InventoryEditStockLevelDto, StockReturnErrorDto, StockReturnErrorReason};
-use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineErrorReason};
+use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
 use order::constant::ProductType;
 use order::error::{AppErrorCode, AppError};
 use order::model::{
@@ -428,7 +428,7 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
         assert!(num_avail < req.lines[0].qty.reserved);
         let err = OrderLineCreateErrorDto { seller_id: req.lines[0].seller_id,
             product_id: req.lines[0].product_id, product_type: req.lines[0].product_type.clone(),
-            reason: OrderLineErrorReason::NotEnoughToClaim, nonexist:None, shortage:None };
+            reason: OrderLineCreateErrorReason::NotEnoughToClaim, nonexist:None, shortage:None };
         out.push(err);
     }
     let result = ms.stores[0].products.iter_mut().find(|p| {
@@ -442,7 +442,7 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
         assert!(num_avail < req.lines[1].qty.reserved);
         let err = OrderLineCreateErrorDto { seller_id: req.lines[1].seller_id,
             product_id: req.lines[1].product_id, product_type: req.lines[1].product_type.clone(),
-            reason: OrderLineErrorReason::OutOfStock, nonexist:None, shortage:None  };
+            reason: OrderLineCreateErrorReason::OutOfStock, nonexist:None, shortage:None  };
         out.push(err);
     }
     Err(Ok(out))
@@ -490,8 +490,8 @@ async fn in_mem_try_reserve_shortage ()
         assert!(e.is_ok());
         if let Ok(usr_e) = e {
             assert_eq!(usr_e.len(), 2);
-            assert!(matches!(usr_e[0].reason, OrderLineErrorReason::NotEnoughToClaim));
-            assert!(matches!(usr_e[1].reason, OrderLineErrorReason::OutOfStock));
+            assert!(matches!(usr_e[0].reason, OrderLineCreateErrorReason::NotEnoughToClaim));
+            assert!(matches!(usr_e[1].reason, OrderLineCreateErrorReason::OutOfStock));
         }
     } { // after reservation, nothing is changed
         let pid = ProductStockIdentity { store_id: expect_slset.stores[0].store_id, product_id: all_products[0].id_,

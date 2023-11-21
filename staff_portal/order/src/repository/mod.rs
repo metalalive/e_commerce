@@ -2,6 +2,7 @@ mod product_policy;
 mod product_price;
 mod stock_level;
 mod order;
+mod oline_return;
 
 use std::boxed::Box;
 use std::future::Future;
@@ -23,11 +24,12 @@ use crate::constant::ProductType;
 use crate::error::AppError;
 use crate::model::{
     ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity,
-    BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel
+    BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel, OrderLineIdentity, OrderReturnModel
 };
 
 // make it visible only for testing purpose
 pub use self::order::OrderInMemRepo;
+pub use self::oline_return::OrderReturnInMemRepo;
 pub use self::product_policy::ProductPolicyInMemRepo;
 pub use self::product_price::ProductPriceInMemRepo;
 use self::stock_level::StockLvlInMemRepo;
@@ -86,6 +88,11 @@ pub trait AbsOrderRepo : Sync + Send {
                                   time_end: DateTime<FixedOffset>,
                                   usr_cb: AppOrderFetchRangeCallback )
         -> DefaultResult<(), AppError>;
+        
+    async fn fetch_lines_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
+        -> DefaultResult<Vec<OrderLineModel>, AppError>;
+
+    async fn owner_id(&self, order_id:&str) -> DefaultResult<u32, AppError>;
 
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>;
 
@@ -128,6 +135,17 @@ pub trait AbsOrderStockRepo : Sync + Send {
         -> DefaultResult<Vec<StockReturnErrorDto>, AppError>;
 }
 
+
+#[async_trait]
+pub trait AbsOrderReturnRepo : Sync + Send {
+    async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>
+        where Self: Sized;
+    async fn fetch_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
+        -> DefaultResult<Vec<OrderReturnModel>, AppError>;
+    async fn create(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
+}
+
+
 // TODO, consider runtime configuration for following repositories
 
 pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
@@ -144,4 +162,9 @@ pub async fn app_repo_order (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
 {
     OrderInMemRepo::new(ds).await
+}
+pub async fn app_repo_order_return (ds:Arc<AppDataStoreContext>)
+    -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>
+{
+    OrderReturnInMemRepo::new(ds).await
 }

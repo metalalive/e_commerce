@@ -14,8 +14,13 @@ pub struct OrderLineReqDto {
 }
 
 #[derive(Deserialize, Serialize)]
-pub enum OrderLineErrorReason {
+pub enum OrderLineCreateErrorReason {
     NotExist, OutOfStock, NotEnoughToClaim 
+} // TODO, rename to line-create error reason
+
+#[derive(Serialize)]
+pub enum OrderLineReturnErrorReason {
+    NotExist, WarrantyExpired, QtyLimitExceed
 }
 
 #[derive(Deserialize, Serialize)]
@@ -31,9 +36,18 @@ pub struct OrderLineCreateErrorDto {
     pub product_id: u64,
     #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
     pub product_type: ProductType,
-    pub reason: OrderLineErrorReason,
+    pub reason: OrderLineCreateErrorReason,
     pub nonexist: Option<OrderLineCreateErrNonExistDto>,
     pub shortage: Option<u32>
+}
+
+#[derive(Serialize)]
+pub struct OrderLineReturnErrorDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    pub product_type: ProductType,
+    pub reason: OrderLineReturnErrorReason
 }
 
 #[derive(Deserialize, Serialize)]

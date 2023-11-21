@@ -15,9 +15,12 @@ use serde_json;
 use crate::{constant as AppConst, AppSharedState, app_log_event};
 use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData, OrderLineReqDto};
 use crate::logging::AppLogLevel;
-use crate::repository::{app_repo_order, app_repo_product_price, app_repo_product_policy};
-use crate::usecase::{CreateOrderUseCase, CreateOrderUsKsErr};
-
+use crate::repository::{
+    app_repo_order, app_repo_product_price, app_repo_product_policy, app_repo_order_return
+};
+use crate::usecase::{
+    CreateOrderUseCase, CreateOrderUsKsErr, ReturnLinesReqUseCase, ReturnLinesReqUcOutput
+};
 
 // always to specify state type explicitly to the debug macro
 #[debug_handler(state=AppSharedState)]
@@ -80,19 +83,50 @@ pub(crate) async fn create_handler(
 pub(crate) async fn return_lines_request_handler(
         ExtractPath(oid): ExtractPath<String>,
         ExtractState(_app_state): ExtractState<AppSharedState>,
-        req_body: ExtractJson<Vec<OrderLineReqDto>>,
+        ExtractJson(req_body): ExtractJson<Vec<OrderLineReqDto>>,
     ) -> impl IntoResponse
 {
     let logctx = _app_state.log_context().clone();
-    app_log_event!(logctx, AppLogLevel::INFO,
-                   "return order-line request sent:{} ", oid.as_str());
-    let resp_status_code = HttpStatusCode::OK;
-    let serial_resp_body = r#"{}"#.to_string();
+    let usr_prof_id:u32  = 1234; // TODO, use auth token (e.g. JWT)
+    let ds = _app_state.datastore();
+    let results = (app_repo_order(ds.clone()).await,
+                   app_repo_order_return(ds).await );
+    let (status_code, resp_body) = if results.0.is_ok() && results.1.is_ok()
+    {
+        let o_repo = results.0.unwrap();
+        let or_repo = results.1.unwrap();
+        let uc = ReturnLinesReqUseCase {usr_prof_id, o_repo, or_repo, logctx:logctx.clone()};
+        match uc.execute(oid.clone(), req_body).await {
+            Ok(output) => match output {
+                ReturnLinesReqUcOutput::Success => (HttpStatusCode::OK, r#"{}"#.to_string()),
+                ReturnLinesReqUcOutput::InvalidOwner => (HttpStatusCode::FORBIDDEN, r#"{}"#.to_string()),
+                ReturnLinesReqUcOutput::InvalidRequest(errors) => {
+                    let serialized = serde_json::to_string(&errors).unwrap();
+                    (HttpStatusCode::BAD_REQUEST, serialized)
+                }
+            },
+            Err(e) => {
+                app_log_event!(logctx, AppLogLevel::ERROR,
+                    "internal error from use-case, oid:{}<, reason:{:?}", oid.as_str(), e);
+                (HttpStatusCode::INTERNAL_SERVER_ERROR, r#"{}"#.to_string())
+            },
+        }
+    } else {
+        if let Err(e) = results.0.as_ref() {
+            app_log_event!(logctx, AppLogLevel::ERROR,
+                "failed to init order repo, oid:{}, reason:{:?}", oid, e);
+        }
+        if let Err(e) = results.1.as_ref() {
+            app_log_event!(logctx, AppLogLevel::ERROR,
+                "failed to init order-return repo, oid:{}, reason:{:?}", oid, e);
+        }
+        (HttpStatusCode::INTERNAL_SERVER_ERROR, r#"{}"#.to_string())
+    };
     let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
     let hdr_kv_pairs = [(HttpHeader::CONTENT_TYPE, resp_ctype_val)];
     let hdr_map = HttpHeaderMap::from_iter(hdr_kv_pairs.into_iter());
-    (resp_status_code, hdr_map, serial_resp_body)
-}
+    (status_code, hdr_map, resp_body)
+} // end of return_lines_request_handler 
 
 
 #[debug_handler(state=AppSharedState)]

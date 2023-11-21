@@ -1,6 +1,6 @@
 use chrono::DateTime;
 
-use order::api::web::dto::OrderLineErrorReason;
+use order::api::web::dto::OrderLineCreateErrorReason;
 use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::model::{
@@ -361,12 +361,12 @@ fn reserve_shortage()
         assert_eq!(expect.seller_id, actual.seller_id);
         assert_eq!(expect.product_id, actual.product_id);
         assert_eq!(expect.product_type, actual.product_type);
-        assert!(matches!(actual.reason, OrderLineErrorReason::NotEnoughToClaim));
+        assert!(matches!(actual.reason, OrderLineCreateErrorReason::NotEnoughToClaim));
         let (expect, actual) = (&ol_set.lines[2], &error[1]);
         assert_eq!(expect.seller_id, actual.seller_id);
         assert_eq!(expect.product_id, actual.product_id);
         assert_eq!(expect.product_type, actual.product_type);
-        assert!(matches!(actual.reason, OrderLineErrorReason::OutOfStock));
+        assert!(matches!(actual.reason, OrderLineCreateErrorReason::OutOfStock));
     }
 } // end of fn reserve_shortage
 
@@ -402,7 +402,7 @@ fn reserve_seller_nonexist()
         assert_eq!(expect.seller_id, actual.seller_id);
         assert_eq!(expect.product_id, actual.product_id);
         assert_eq!(expect.product_type, actual.product_type);
-        assert!(matches!(actual.reason, OrderLineErrorReason::NotExist));
+        assert!(matches!(actual.reason, OrderLineCreateErrorReason::NotExist));
     }
 } // end of reserve_seller_nonexist
 

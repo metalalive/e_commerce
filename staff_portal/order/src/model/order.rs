@@ -16,11 +16,11 @@ use crate::api::web::dto::{
     BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto,
     ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
     ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberErrorDto,
-    PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto 
+    PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto, OrderLineReturnErrorDto 
 };
 use crate::constant::{REGEX_EMAIL_RFC5322, ProductType};
 
-use super::{ProductPolicyModel, ProductPriceModel};
+use super::{ProductPolicyModel, ProductPriceModel, BaseProductIdentity};
 
 pub struct ContactModel {
     pub first_name: String,
@@ -51,6 +51,8 @@ pub struct ShippingModel {
     pub option : Vec<ShippingOptionModel>
 }
 
+pub type OrderLineIdentity = BaseProductIdentity;
+
 pub struct OrderLineAppliedPolicyModel {
     pub reserved_until: DateTime<FixedOffset>,
     pub warranty_until: DateTime<FixedOffset>
@@ -68,12 +70,18 @@ pub struct OrderLineQuantityModel {
 } // TODO, record number delivered, and cancelled
 
 pub struct OrderLineModel {
-    pub seller_id: u32,
+    pub seller_id: u32, // TODO, replaced with `OrderLineIdentity`
     pub product_type: ProductType,
     pub product_id : u64,
     pub price: OrderLinePriceModel,
     pub qty: OrderLineQuantityModel,
     pub policy: OrderLineAppliedPolicyModel
+}
+
+pub struct OrderReturnModel {
+    pub id_: OrderLineIdentity,
+    pub price: OrderLinePriceModel,
+    pub qty: Vec<(u32, DateTime<FixedOffset>)>,
 }
 
 pub struct OrderLineModelSet {
@@ -428,3 +436,14 @@ impl Into<InventoryEditStockLevelDto> for OrderLineModel {
           // the expiry time of the original stock item
     }
 }
+
+impl OrderReturnModel {
+    pub fn filter_requests(data: Vec<OrderLineReqDto>,
+                           o_lines: Vec<OrderLineModel>,
+                           o_returns: Vec<OrderReturnModel>)
+        -> DefaultResult<Vec<OrderReturnModel>, Vec<OrderLineReturnErrorDto>>
+    {
+        Ok(vec![])
+    }
+}
+
