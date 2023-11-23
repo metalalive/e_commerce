@@ -14,7 +14,7 @@ use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason, 
 use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 
-use super::{OrderLineModelSet, OrderLineModel, BaseProductIdentity};
+use super::{OrderLineModelSet, OrderLineModel, BaseProductIdentity, dtime_without_millis};
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
@@ -151,14 +151,7 @@ impl StockQuantityModel {
 
 impl ProductStockModel {
     pub fn expiry_without_millis(&self) -> DateTime<FixedOffset>
-    { // ignore more-previse-but-impractical detail less than one second.
-        let orig_tz = self.expiry.timezone();
-        let ts_secs = self.expiry.timestamp(); // erase milliseconds
-        let _dt = DateTime::from_timestamp(ts_secs, 0).unwrap();
-        let out = _dt.with_timezone(&orig_tz);
-        //println!("time1:{}, time2: {}", self.expiry.to_rfc3339(), out.to_rfc3339());
-        out
-    }
+    { dtime_without_millis(&self.expiry) }
 }
 
 impl StoreStockModel {

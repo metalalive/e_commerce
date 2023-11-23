@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::vec::Vec;
 use std::result::Result as DefaultResult;
-use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
+use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration, DurationRound};
 use regex::Regex;
 use uuid::{Uuid, Builder, Timestamp, NoContext};
 
@@ -16,9 +17,10 @@ use crate::api::web::dto::{
     BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto,
     ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
     ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberErrorDto,
-    PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto, OrderLineReturnErrorDto 
+    PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto, OrderLineReturnErrorDto, OrderLineReturnErrorReason 
 };
 use crate::constant::REGEX_EMAIL_RFC5322;
+use crate::error::{AppError, AppErrorCode};
 
 use super::{ProductPolicyModel, ProductPriceModel, BaseProductIdentity};
 
@@ -78,8 +80,7 @@ pub struct OrderLineModel {
 
 pub struct OrderReturnModel {
     pub id_: OrderLineIdentity,
-    pub price: OrderLinePriceModel,
-    pub qty: Vec<(u32, DateTime<FixedOffset>)>,
+    pub qty: HashMap<DateTime<FixedOffset>, (u32, OrderLinePriceModel)>,
 }
 
 pub struct OrderLineModelSet {
@@ -403,6 +404,14 @@ impl  OrderLineModel {
             } else { None }
         }).collect()
     } // end of update_payments
+    
+    pub(crate) fn num_reserved(&self, time_now:DateTime<FixedOffset>) -> u32 {
+        if time_now < self.policy.reserved_until {
+            self.qty.reserved
+        } else {
+            self.qty.paid
+        }
+    }
 } // end of impl OrderLineModel
 
 impl Into<OrderLinePayDto> for OrderLineModel {
@@ -436,13 +445,86 @@ impl Into<InventoryEditStockLevelDto> for OrderLineModel {
     }
 }
 
+
 impl OrderReturnModel {
-    pub fn filter_requests(data: Vec<OrderLineReqDto>,
-                           o_lines: Vec<OrderLineModel>,
-                           o_returns: Vec<OrderReturnModel>)
+    pub fn num_returned (&self) -> u32 {
+        self.qty.values().map(|q| q.0).sum::<u32>()
+    }
+
+    pub fn dtime_round_secs(time:&DateTime<FixedOffset>, n_secs:i64)
+        -> DefaultResult<DateTime<FixedOffset>, AppError> 
+    {
+        let dr = Duration::seconds(n_secs);
+        match time.duration_trunc(dr) {
+            Ok(t) => Ok(t),
+            Err(e) => Err(AppError { code: AppErrorCode::ExceedingMaxLimit,
+                detail: Some(e.to_string()) })
+        }
+    }
+
+    pub fn filter_requests(data: Vec<OrderLineReqDto>,  o_lines: Vec<OrderLineModel>,
+                           mut o_returns: Vec<OrderReturnModel>)
         -> DefaultResult<Vec<OrderReturnModel>, Vec<OrderLineReturnErrorDto>>
     {
-        Ok(vec![])
-    }
+        let time_now = LocalTime::now().fixed_offset();
+        let time_now = Self::dtime_round_secs(&time_now, 5i64).unwrap();
+        let errors = data.iter().filter_map(|d| {
+            let result = o_lines.iter().find(|oline| {
+                d.seller_id == oline.id_.store_id && d.product_id == oline.id_.product_id
+                    && d.product_type == oline.id_.product_type
+            });
+            let opt = if let Some(oline) = result {
+                if oline.policy.warranty_until > time_now {
+                    let result = o_returns.iter().find(|r| {r.id_ == oline.id_});
+                    let num_returned = if let Some(r) = result.as_ref() {
+                        r.num_returned()
+                    } else {0u32};
+                    let tot_num_return = num_returned + d.quantity;
+                    if tot_num_return > oline.num_reserved(time_now) {
+                        Some(OrderLineReturnErrorReason::QtyLimitExceed)
+                    } else {
+                        if let Some(r) = result {
+                            if r.qty.contains_key(&time_now) {
+                                Some(OrderLineReturnErrorReason::DuplicateReturn)
+                            } else { None }
+                        } else { None }
+                    }
+                } else { Some(OrderLineReturnErrorReason::WarrantyExpired) }
+            } else { Some(OrderLineReturnErrorReason::NotExist) };
+            if let Some(reason) = opt {
+                let e = OrderLineReturnErrorDto { seller_id: d.seller_id, reason,
+                    product_id: d.product_id, product_type: d.product_type.clone() };
+                Some(e)
+            } else { None }
+        }).collect::<Vec<OrderLineReturnErrorDto>>();
+        if !errors.is_empty() {
+            //println!("filter-return-request : {:?}", errors[0].reason);
+            return Err(errors);
+        }
+        let new_returns = data.into_iter().filter_map(|d| {
+            let result = o_returns.iter_mut().find(|ret| {
+                d.seller_id == ret.id_.store_id && d.product_id == ret.id_.product_id
+                    && d.product_type == ret.id_.product_type
+            });
+            let oline = o_lines.iter().find(|item| {
+                d.seller_id == item.id_.store_id && d.product_id == item.id_.product_id
+                    && d.product_type == item.id_.product_type
+            }).unwrap();
+            let total = oline.price.unit * d.quantity;
+            let refund = OrderLinePriceModel { unit: oline.price.unit, total };
+            let val = (d.quantity, refund);
+            if let Some(r) = result {
+                r.qty.insert(time_now, val);
+                None
+            } else {
+                let id_ = OrderLineIdentity { store_id:d.seller_id,
+                    product_id:d.product_id, product_type:d.product_type };
+                let qty = HashMap::from([(time_now, val)]);
+                Some(OrderReturnModel {id_, qty})
+            }
+        }).collect::<Vec<OrderReturnModel>>();
+        o_returns.extend(new_returns.into_iter());
+        Ok(o_returns)
+    } // end of fn filter_requests
 }
 

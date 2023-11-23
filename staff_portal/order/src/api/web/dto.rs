@@ -20,7 +20,7 @@ pub enum OrderLineCreateErrorReason {
 
 #[derive(Serialize)]
 pub enum OrderLineReturnErrorReason {
-    NotExist, WarrantyExpired, QtyLimitExceed
+    NotExist, WarrantyExpired, QtyLimitExceed, DuplicateReturn
 }
 
 #[derive(Deserialize, Serialize)]

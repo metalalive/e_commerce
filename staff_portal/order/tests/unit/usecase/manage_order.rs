@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::result::Result as DefaultResult;
+use chrono::{DateTime, Local, Duration};
 
-use chrono::DateTime;
 use order::api::rpc::dto::StockReturnErrorDto;
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
@@ -142,9 +143,10 @@ fn validate_orderline_missing_properties ()
 
 fn ut_setup_orderlines () -> Vec<OrderLineModel>
 {
-    let paid_last_update = Some(DateTime::parse_from_rfc3339("2023-11-15T09:23:49+02:00").unwrap());
-    let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
-    let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
+    let base_time = Local::now().fixed_offset();
+    let paid_last_update = Some(base_time + Duration::minutes(4));
+    let reserved_until = base_time + Duration::minutes(5);
+    let warranty_until = base_time + Duration::days(14);
     vec![
         OrderLineModel {id_: OrderLineIdentity {store_id:108 , product_type:ProductType::Item,
             product_id: 190}, price:OrderLinePriceModel { unit:10, total: 39 },
@@ -170,15 +172,21 @@ fn ut_setup_olines_returns () -> Vec<OrderReturnModel>
     vec![
         OrderReturnModel {
             id_:OrderLineIdentity {store_id:108, product_id:190, product_type:ProductType::Item},
-            qty:vec![(1, return_time.clone())],  price:OrderLinePriceModel { unit:10, total: 10 }
+            qty: HashMap::from([
+                (return_time.clone(), (1, OrderLinePriceModel{unit:10, total: 10}))
+            ])
         },
         OrderReturnModel {
             id_:OrderLineIdentity {store_id:800, product_id:191, product_type:ProductType::Item},
-            qty:vec![(1, return_time.clone())],  price:OrderLinePriceModel { unit:12, total: 12 }
+            qty: HashMap::from([
+                (return_time.clone(), (1, OrderLinePriceModel{unit:12, total: 12}))
+            ])
         },
         OrderReturnModel {
             id_:OrderLineIdentity {store_id:426, product_id:192, product_type:ProductType::Package},
-            qty:vec![(2, return_time.clone())],  price:OrderLinePriceModel { unit:12, total: 24 }
+            qty: HashMap::from([
+                (return_time.clone(), (2, OrderLinePriceModel{unit:12, total: 24}))
+            ])
         },
     ]
 }
@@ -262,8 +270,8 @@ async fn request_lines_request_common(
     };
     let mock_order_id = "SomebodyOrderedThis".to_string();
     let mock_return_req = vec![
-        OrderLineReqDto {seller_id:145, product_type:ProductType::Package,
-            product_id:599, quantity:2 }
+        OrderLineReqDto {seller_id:800, product_type:ProductType::Item,
+            product_id:191, quantity:2 }
     ];
     let uc = ReturnLinesReqUseCase {logctx, usr_prof_id:req_usr_id, o_repo, or_repo };
     uc.execute(mock_order_id, mock_return_req).await
