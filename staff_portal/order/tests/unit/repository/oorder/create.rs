@@ -42,13 +42,13 @@ async fn in_mem_create_ok ()
             assert_eq!(lines.len(), 4);
             lines.sort_by(|a,b| { a.qty.reserved.cmp(&b.qty.reserved) });
             assert_eq!(lines[0].qty.reserved, 4);
-            assert_eq!(lines[0].seller_id, mock_seller_ids[0]);
-            assert_eq!(lines[0].product_type, ProductType::Item);
-            assert_eq!(lines[0].product_id, 190);
+            assert_eq!(lines[0].id_.store_id, mock_seller_ids[0]);
+            assert_eq!(lines[0].id_.product_type, ProductType::Item);
+            assert_eq!(lines[0].id_.product_id, 190);
             assert_eq!(lines[2].qty.reserved, 6);
-            assert_eq!(lines[2].seller_id, mock_seller_ids[1]);
-            assert_eq!(lines[2].product_type, ProductType::Package);
-            assert_eq!(lines[2].product_id, 190);
+            assert_eq!(lines[2].id_.store_id, mock_seller_ids[1]);
+            assert_eq!(lines[2].id_.product_type, ProductType::Package);
+            assert_eq!(lines[2].id_.product_id, 190);
         }
         let result = o_repo.fetch_all_lines(mock_oid[1].clone()).await;
         assert!(result.is_ok());
@@ -56,9 +56,9 @@ async fn in_mem_create_ok ()
             assert_eq!(lines.len(), 3);
             lines.sort_by(|a,b| { a.qty.reserved.cmp(&b.qty.reserved) });
             assert_eq!(lines[0].qty.reserved, 16);
-            assert_eq!(lines[0].seller_id, mock_seller_ids[1]);
-            assert_eq!(lines[0].product_type, ProductType::Package);
-            assert_eq!(lines[0].product_id, 194);
+            assert_eq!(lines[0].id_.store_id, mock_seller_ids[1]);
+            assert_eq!(lines[0].id_.product_type, ProductType::Package);
+            assert_eq!(lines[0].id_.product_id, 194);
         }
     }
     { // ---- subcase 3, fetch billings

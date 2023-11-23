@@ -193,8 +193,8 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
                          order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn
     {
         let pids = order_req.lines.iter().map(|d|
-            ProductStockIdentity2 {product_type:d.product_type.clone(),
-                store_id:d.seller_id, product_id:d.product_id}
+            ProductStockIdentity2 {product_type:d.id_.product_type.clone(),
+                store_id:d.id_.store_id, product_id:d.id_.product_id}
         ).collect();
         let (mut stock_mset, d_lock) = match self.fetch_with_lock(
             pids, Some(self.curr_time.clone())).await

@@ -59,8 +59,8 @@ fn ut_usr_cb_ok_1(models:&mut Vec<OrderLineModel>, data:Vec<OrderLinePaidUpdateD
     assert_eq!(data.len(), 3);
     data.into_iter().map(|d| {
         let result = models.iter_mut().find(
-            |m| (m.seller_id==d.seller_id && m.product_id==d.product_id
-                 && m.product_type==d.product_type )
+            |m| (m.id_.store_id==d.seller_id && m.id_.product_id==d.product_id
+                 && m.id_.product_type==d.product_type )
         );
         assert!(result.is_some());
         let saved = result.unwrap();
@@ -77,8 +77,8 @@ fn ut_usr_cb_ok_2(models:&mut Vec<OrderLineModel>, data:Vec<OrderLinePaidUpdateD
     assert_eq!(models.len(), 3);
     data.into_iter().map(|d| {
         let result = models.iter().find(
-            |m| (m.seller_id==d.seller_id && m.product_id==d.product_id
-                 && m.product_type==d.product_type )
+            |m| (m.id_.store_id==d.seller_id && m.id_.product_id==d.product_id
+                 && m.id_.product_type==d.product_type )
         );
         assert!(result.is_some());
         let saved = result.unwrap();
@@ -143,8 +143,8 @@ fn ut_usr_cb_err_2(models:&mut Vec<OrderLineModel>, data:Vec<OrderLinePaidUpdate
     assert_eq!(models.len(), 3);
     data.into_iter().map(|d| {
         let result = models.iter().find(
-            |m| (m.seller_id==d.seller_id && m.product_id==d.product_id
-                 && m.product_type==d.product_type )
+            |m| (m.id_.store_id==d.seller_id && m.id_.product_id==d.product_id
+                 && m.id_.product_type==d.product_type )
         );
         assert!(result.is_some());
         let saved = result.unwrap();
@@ -213,7 +213,7 @@ fn ut_rd_oline_set_usr_cb<'a>(_repo: &'a dyn AbsOrderRepo, ol_set: OrderLineMode
         };
         let mut product_id_set : HashSet<(u32, ProductType, u64)>  = HashSet::from_iter(product_ids.into_iter());
         let all_items_found = ol_set.lines.iter().all(|m| {
-            let key = (m.seller_id, m.product_type.clone(), m.product_id);
+            let key = (m.id_.store_id, m.id_.product_type.clone(), m.id_.product_id);
             product_id_set.remove(&key)
         });
         assert!(all_items_found);

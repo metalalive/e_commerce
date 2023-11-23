@@ -5,7 +5,7 @@ use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::model::{
     StockLevelModelSet, ProductStockModel, StoreStockModel, StockQuantityModel,
-    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel, OrderLineModelSet
+    OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel, OrderLineModelSet, OrderLineIdentity
 };
 use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto, StockReturnErrorReason};
 
@@ -216,7 +216,7 @@ fn  ut_get_curr_qty (store:&StoreStockModel, req:&OrderLineModel)
     -> Vec<StockQuantityModel>
 {
     store.products.iter().filter_map(|p| {
-        if req.product_type == p.type_ && req.product_id == p.id_ {
+        if req.id_.product_type == p.type_ && req.id_.product_id == p.id_ {
             Some(p.quantity.clone())
         } else { None }
     }).collect()
@@ -234,23 +234,23 @@ fn reserve_ok()
     // ------ subcase 1 --------
     let mut expect_booked_qty = vec![13,4,10];
     let reqs = vec![
-        OrderLineModel {seller_id:1014, product_type:saved_products[5].type_.clone(),
-            product_id:saved_products[5].id_, price:OrderLinePriceModel {unit:3, total:35},
+        OrderLineModel { id_:OrderLineIdentity{ store_id:1014, product_id:saved_products[5].id_,
+            product_type:saved_products[5].type_.clone()},  price:OrderLinePriceModel {unit:3, total:35},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
-                    reserved: expect_booked_qty[0], paid:0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty: OrderLineQuantityModel {reserved: expect_booked_qty[0], paid:0, paid_last_update: None}
         },
-        OrderLineModel {seller_id:1013, product_type:saved_products[3].type_.clone(),
-            product_id:saved_products[3].id_, price:OrderLinePriceModel {unit:2, total:8},
+        OrderLineModel { id_:OrderLineIdentity{ store_id:1013, product_id:saved_products[3].id_,
+            product_type:saved_products[3].type_.clone()}, price:OrderLinePriceModel {unit:2, total:8},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
-                    reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty: OrderLineQuantityModel {reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
-        OrderLineModel {seller_id:1014, product_type:saved_products[7].type_.clone(),
-            product_id:saved_products[7].id_, price:OrderLinePriceModel {unit:5, total:48},
+        OrderLineModel { id_:OrderLineIdentity{ store_id:1014, product_id:saved_products[7].id_,
+            product_type:saved_products[7].type_.clone()},  price:OrderLinePriceModel {unit:5, total:48},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
-                    reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty: OrderLineQuantityModel {reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
         },
     ];
     let ol_set = OrderLineModelSet {order_id:"AliceOrdered".to_string(), lines:reqs} ;
@@ -286,17 +286,17 @@ fn reserve_ok()
     // ------ subcase 2 -------
     expect_booked_qty = vec![5,2];
     let reqs = vec![
-        OrderLineModel {seller_id:1014, product_type:saved_products[7].type_.clone(),
-            product_id:saved_products[7].id_, price:OrderLinePriceModel {unit:10, total:50},
+        OrderLineModel {id_: OrderLineIdentity{ store_id:1014, product_id:saved_products[7].id_,
+            product_type:saved_products[7].type_.clone()}, price:OrderLinePriceModel {unit:10, total:50},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
-                    reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty: OrderLineQuantityModel {reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
         },
-        OrderLineModel {seller_id:1013, product_type:saved_products[3].type_.clone(),
-            product_id:saved_products[3].id_, price:OrderLinePriceModel {unit:2, total:8},
+        OrderLineModel {id_: OrderLineIdentity{ store_id:1013, product_id:saved_products[3].id_,
+            product_type:saved_products[3].type_.clone()}, price:OrderLinePriceModel {unit:2, total:8},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty: OrderLineQuantityModel {
-                    reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty: OrderLineQuantityModel {reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
     ];
     let ol_set = OrderLineModelSet {order_id:"BobCart".to_string(), lines:reqs} ;
@@ -334,23 +334,23 @@ fn reserve_shortage()
     }
     let expect_booked_qty = vec![22,4,1];
     let reqs = vec![
-        OrderLineModel {seller_id:1014, product_type:saved_products[5].type_.clone(),
-            product_id:saved_products[5].id_, price:OrderLinePriceModel {unit:3, total:66},
+        OrderLineModel {id_:OrderLineIdentity{ store_id:1014, product_id:saved_products[5].id_,
+            product_type:saved_products[5].type_.clone()}, price:OrderLinePriceModel {unit:3, total:66},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
-                    reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty:OrderLineQuantityModel {reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
         },
-        OrderLineModel {seller_id:1013, product_type:saved_products[0].type_.clone(),
-            product_id:saved_products[0].id_, price:OrderLinePriceModel {unit:2, total:8},
+        OrderLineModel {id_:OrderLineIdentity{ store_id:1013, product_id:saved_products[0].id_,
+            product_type:saved_products[0].type_.clone()}, price:OrderLinePriceModel {unit:2, total:8},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
-                    reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty:OrderLineQuantityModel {reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
-        OrderLineModel {seller_id:1013, product_type:saved_products[1].type_.clone(),
-            product_id:saved_products[1].id_, price:OrderLinePriceModel {unit:5, total:5},
+        OrderLineModel {id_:OrderLineIdentity{ store_id:1013, product_id:saved_products[1].id_,
+            product_type:saved_products[1].type_.clone()}, price:OrderLinePriceModel {unit:5, total:5},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
-                    reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty:OrderLineQuantityModel {reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
         },
     ];
     let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs} ;
@@ -358,14 +358,14 @@ fn reserve_shortage()
     assert_eq!(error.len(), 2);
     {
         let (expect, actual) = (&ol_set.lines[0], &error[0]);
-        assert_eq!(expect.seller_id, actual.seller_id);
-        assert_eq!(expect.product_id, actual.product_id);
-        assert_eq!(expect.product_type, actual.product_type);
+        assert_eq!(expect.id_.store_id, actual.seller_id);
+        assert_eq!(expect.id_.product_id, actual.product_id);
+        assert_eq!(expect.id_.product_type, actual.product_type);
         assert!(matches!(actual.reason, OrderLineCreateErrorReason::NotEnoughToClaim));
         let (expect, actual) = (&ol_set.lines[2], &error[1]);
-        assert_eq!(expect.seller_id, actual.seller_id);
-        assert_eq!(expect.product_id, actual.product_id);
-        assert_eq!(expect.product_type, actual.product_type);
+        assert_eq!(expect.id_.store_id, actual.seller_id);
+        assert_eq!(expect.id_.product_id, actual.product_id);
+        assert_eq!(expect.id_.product_type, actual.product_type);
         assert!(matches!(actual.reason, OrderLineCreateErrorReason::OutOfStock));
     }
 } // end of fn reserve_shortage
@@ -381,17 +381,17 @@ fn reserve_seller_nonexist()
     ]};
     let expect_booked_qty = vec![2,2];
     let reqs = vec![
-        OrderLineModel {seller_id:1013, product_type:saved_products[0].type_.clone(),
-            product_id:saved_products[0].id_, price:OrderLinePriceModel {unit:2, total:4},
+        OrderLineModel {id_: OrderLineIdentity {store_id:1013, product_id:saved_products[0].id_,
+            product_type:saved_products[0].type_.clone()}, price:OrderLinePriceModel {unit:2, total:4},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
-                    reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty:OrderLineQuantityModel {reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
-        OrderLineModel {seller_id:1099, product_type:saved_products[2].type_.clone(),
-            product_id:saved_products[2].id_, price:OrderLinePriceModel {unit:3, total:6},
+        OrderLineModel {id_: OrderLineIdentity {store_id:1099, product_id:saved_products[2].id_,
+            product_type:saved_products[2].type_.clone()}, price:OrderLinePriceModel {unit:3, total:6},
             policy:OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, qty:OrderLineQuantityModel {
-                    reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
+                warranty_until: mock_warranty.clone() },
+            qty:OrderLineQuantityModel {reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
         },
     ];
     let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs} ;
@@ -399,9 +399,9 @@ fn reserve_seller_nonexist()
     assert_eq!(error.len(), 1);
     {
         let (expect, actual) = (&ol_set.lines[1], &error[0]);
-        assert_eq!(expect.seller_id, actual.seller_id);
-        assert_eq!(expect.product_id, actual.product_id);
-        assert_eq!(expect.product_type, actual.product_type);
+        assert_eq!(expect.id_.store_id, actual.seller_id);
+        assert_eq!(expect.id_.product_id, actual.product_id);
+        assert_eq!(expect.id_.product_type, actual.product_type);
         assert!(matches!(actual.reason, OrderLineCreateErrorReason::NotExist));
     }
 } // end of reserve_seller_nonexist

@@ -78,15 +78,18 @@ fn validate_orderline_ok ()
     if let Ok(v) = result {
         assert_eq!(v.len(), 3);
         let found = v.iter().any(|m| {
-            m.seller_id==52 && m.product_type==ProductType::Item && m.product_id==168
+            m.id_.store_id==52 && m.id_.product_id==168
+                && m.id_.product_type==ProductType::Item
         });
         assert!(found);
         let found = v.iter().any(|m| {
-            m.seller_id==51 && m.product_type==ProductType::Item && m.product_id==168
+            m.id_.store_id==51 && m.id_.product_id==168
+                && m.id_.product_type==ProductType::Item
         });
         assert!(found);
         let found = v.iter().any(|m| {
-            m.seller_id==51 && m.product_type==ProductType::Package && m.product_id==168
+            m.id_.store_id==51 && m.id_.product_id==168
+                && m.id_.product_type==ProductType::Package
         });
         assert!(found);
     }
@@ -143,18 +146,18 @@ fn ut_setup_orderlines () -> Vec<OrderLineModel>
     let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
     vec![
-        OrderLineModel {seller_id:108 , product_type:ProductType::Item,
-            product_id: 190, price:OrderLinePriceModel { unit:10, total: 39 },
+        OrderLineModel {id_: OrderLineIdentity {store_id:108 , product_type:ProductType::Item,
+            product_id: 190}, price:OrderLinePriceModel { unit:10, total: 39 },
             qty: OrderLineQuantityModel {reserved: 4, paid: 3, paid_last_update},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
-        OrderLineModel {seller_id:800, product_type:ProductType::Item,
-            product_id: 191, price:OrderLinePriceModel { unit:12, total: 60 },
+        OrderLineModel {id_: OrderLineIdentity {store_id:800, product_type:ProductType::Item,
+            product_id: 191}, price:OrderLinePriceModel { unit:12, total: 60 },
             qty: OrderLineQuantityModel {reserved: 5, paid: 5, paid_last_update},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
-        OrderLineModel {seller_id:426, product_type:ProductType::Package,
-            product_id: 192, price:OrderLinePriceModel { unit:12, total: 60 },
+        OrderLineModel {id_: OrderLineIdentity {store_id:426, product_type:ProductType::Package,
+            product_id: 192}, price:OrderLinePriceModel { unit:12, total: 60 },
             qty: OrderLineQuantityModel {reserved: 8, paid: 5, paid_last_update},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },

@@ -166,7 +166,7 @@ impl StoreStockModel {
     {
         let mut num_required = req.qty.reserved;
         let _satisfied = self.products.iter().filter(|p| {
-            req.product_type == p.type_ && req.product_id == p.id_
+            req.id_.product_type == p.type_ && req.id_.product_id == p.id_
         }).any(|p| {
             let num_taking = min(p.quantity.num_avail(), num_required);
             num_required -= num_taking;
@@ -176,7 +176,7 @@ impl StoreStockModel {
             assert!(_satisfied);
             num_required = req.qty.reserved;
             let _ = self.products.iter_mut().filter(|p| {
-                req.product_type == p.type_ && req.product_id == p.id_
+                req.id_.product_type == p.type_ && req.id_.product_id == p.id_
             }).any(|p| {
                 let num_taking = p.quantity.reserve(oid, num_required);
                 num_required -= num_taking;
@@ -300,11 +300,11 @@ impl StockLevelModelSet {
         self.sort_by_expiry(true);
         let oid = ol_set.order_id.as_str();
         ol_set.lines.iter().filter_map(|req| {
-            let mut error = OrderLineCreateErrorDto {seller_id:req.seller_id,
-                product_id:req.product_id, product_type:req.product_type.clone(),
+            let mut error = OrderLineCreateErrorDto {seller_id:req.id_.store_id,
+                product_id:req.id_.product_id, product_type:req.id_.product_type.clone(),
                 reason: OrderLineCreateErrorReason::NotExist,  nonexist:None, shortage:None
             };
-            let result = self.stores.iter_mut().find(|m| {req.seller_id == m.store_id});
+            let result = self.stores.iter_mut().find(|m| {req.id_.store_id == m.store_id});
             let opt_err = if let Some(store) = result {
                 if let Some((errtype, num)) = store.try_reserve(oid, req) {
                     error.shortage = Some(num);

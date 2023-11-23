@@ -131,8 +131,8 @@ mod _orderline {
         ->  HashMap<String, Vec<String>>
     {
         let kv_iter = data.iter().map(|m| {
-            let pkey = inmem_pkey(oid, m.seller_id, m.product_type.clone(),
-                                  m.product_id);
+            let pkey = inmem_pkey(oid, m.id_.store_id, m.id_.product_type.clone(),
+                                  m.id_.product_id);
             (pkey, m.into())
         });
         HashMap::from_iter(kv_iter)
@@ -196,9 +196,9 @@ pub struct OrderInMemRepo {
 
 impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
     fn from(value: &OrderLineModel) -> Self { 
-        let seller_id_s = value.seller_id.to_string();
-        let prod_typ = <ProductType as Into<u8>>::into(value.product_type.clone()).to_string();
-        let prod_id  = value.product_id.to_string();
+        let seller_id_s = value.id_.store_id.to_string();
+        let prod_typ = <ProductType as Into<u8>>::into(value.id_.product_type.clone()).to_string();
+        let prod_id  = value.id_.product_id.to_string();
         let _paid_last_update = if let Some(v) = value.qty.paid_last_update.as_ref()
         { v.to_rfc3339() }
         else {
@@ -259,9 +259,8 @@ impl Into<OrderLineModel> for AppInMemFetchedSingleRow {
             DateTime::parse_from_rfc3339(s.as_str()).unwrap()
         };
         let policy = OrderLineAppliedPolicyModel { reserved_until, warranty_until };
-        OrderLineModel { seller_id, product_type: ProductType::from(prod_typ),
-            product_id,  price, policy, qty
-        }
+        OrderLineModel { id_: OrderLineIdentity{store_id: seller_id,  product_id,
+              product_type: ProductType::from(prod_typ)}, price, policy, qty }
     }
 } // end of impl into OrderLineModel
 

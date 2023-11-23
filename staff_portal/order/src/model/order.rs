@@ -18,7 +18,7 @@ use crate::api::web::dto::{
     ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberErrorDto,
     PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto, OrderLineReturnErrorDto 
 };
-use crate::constant::{REGEX_EMAIL_RFC5322, ProductType};
+use crate::constant::REGEX_EMAIL_RFC5322;
 
 use super::{ProductPolicyModel, ProductPriceModel, BaseProductIdentity};
 
@@ -70,9 +70,7 @@ pub struct OrderLineQuantityModel {
 } // TODO, record number delivered, and cancelled
 
 pub struct OrderLineModel {
-    pub seller_id: u32, // TODO, replaced with `OrderLineIdentity`
-    pub product_type: ProductType,
-    pub product_id : u64,
+    pub id_: OrderLineIdentity,
     pub price: OrderLinePriceModel,
     pub qty: OrderLineQuantityModel,
     pub policy: OrderLineAppliedPolicyModel
@@ -346,7 +344,8 @@ impl  OrderLineModel {
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
         let price_total = pricem.price * data.quantity;
-        Self { seller_id: data.seller_id, product_type: data.product_type, product_id: data.product_id,
+        Self { id_: OrderLineIdentity{store_id: data.seller_id, product_type: data.product_type,
+                    product_id: data.product_id} ,
             qty: OrderLineQuantityModel { reserved: data.quantity, paid:0, paid_last_update:None },
             price: OrderLinePriceModel { unit: pricem.price, total: price_total } ,
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
@@ -380,8 +379,8 @@ impl  OrderLineModel {
         let dt_now = LocalTime::now();
         data.into_iter().filter_map(|d| {
             let result = models.iter_mut().find(|m| {
-                (m.seller_id == d.seller_id) && (m.product_id == d.product_id) && 
-                    (m.product_type == d.product_type)
+                (m.id_.store_id == d.seller_id) && (m.id_.product_id == d.product_id) && 
+                    (m.id_.product_type == d.product_type)
             });
             let possible_error = if let Some(m) = result {
                 if dt_now < m.policy.reserved_until {
@@ -408,8 +407,8 @@ impl  OrderLineModel {
 
 impl Into<OrderLinePayDto> for OrderLineModel {
     fn into(self) -> OrderLinePayDto {
-        OrderLinePayDto { seller_id: self.seller_id, product_id: self.product_id,
-            product_type: self.product_type, quantity: self.qty.reserved,
+        OrderLinePayDto { seller_id: self.id_.store_id, product_id: self.id_.product_id,
+            product_type: self.id_.product_type, quantity: self.qty.reserved,
             reserved_until:self.policy.reserved_until.to_rfc3339(),
             amount: PayAmountDto { unit: self.price.unit, total: self.price.total}
         }
@@ -418,8 +417,8 @@ impl Into<OrderLinePayDto> for OrderLineModel {
 
 impl Into<OrderLineReplicaInventoryDto> for OrderLineModel {
     fn into(self) -> OrderLineReplicaInventoryDto {
-        OrderLineReplicaInventoryDto { seller_id: self.seller_id, product_id: self.product_id,
-            product_type: self.product_type, qty_booked: self.qty.reserved }
+        OrderLineReplicaInventoryDto { seller_id: self.id_.store_id, product_id: self.id_.product_id,
+            product_type: self.id_.product_type, qty_booked: self.qty.reserved }
     }
 }
 
@@ -429,8 +428,8 @@ impl Into<InventoryEditStockLevelDto> for OrderLineModel {
         let num_returning = self.qty.reserved - self.qty.paid;
         let num_returning = num_returning as i32;
         InventoryEditStockLevelDto {
-            store_id: self.seller_id, product_id: self.product_id, qty_add: num_returning,
-            product_type: self.product_type.clone(), expiry:self.policy.reserved_until
+            store_id: self.id_.store_id, product_id: self.id_.product_id, qty_add: num_returning,
+            product_type: self.id_.product_type.clone(), expiry:self.policy.reserved_until
         } // NOTE, the field `expiry` should NOT be referenced by the entire application
           // , becuase the editing data, converted from order line, does NOT really reflect
           // the expiry time of the original stock item
