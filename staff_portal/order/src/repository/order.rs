@@ -547,8 +547,23 @@ impl AbsOrderRepo for OrderInMemRepo {
         Ok(vec![])
     }
 
-    async fn owner_id(&self, _order_id:&str) -> DefaultResult<u32, AppError>
-    { Ok(1234) }
+    async fn owner_id(&self, order_id:&str) -> DefaultResult<u32, AppError>
+    {
+        let tbl_label = _contact::TABLE_LABEL.to_string();
+        let op = _pkey_partial_label::InMemDStoreFiltKeyOID {
+                oid: order_id,  label: Some(_pkey_partial_label::BILLING) };
+        let keys = self.datastore.filter_keys(tbl_label.clone(), &op).await?;
+        let info = HashMap::from([(tbl_label.clone(), keys)]);
+        let mut data = self.datastore.fetch(info).await ?;
+        let result = data.remove(tbl_label.as_str()).unwrap().into_iter().next();
+        if let Some((pkey, _raw_val)) = result {
+            let usr_id = _contact::inmem_parse_usr_id(pkey.as_str());
+            Ok(usr_id)
+        } else {
+            let detail = order_id.to_string();
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        }
+    }
 
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
     {
