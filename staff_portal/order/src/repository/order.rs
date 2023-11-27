@@ -413,13 +413,8 @@ impl AbsOrderRepo for OrderInMemRepo {
     {
         let op = _pkey_partial_label::InMemDStoreFiltKeyOID {oid:oid.as_str(), label:None};
         let tbl_label = _orderline::TABLE_LABEL.to_string();
-        let keys = self.datastore.filter_keys(tbl_label.clone(), &op).await?;
-        let info = HashMap::from([(tbl_label.clone(), keys)]);
-        let mut data = self.datastore.fetch(info).await ?;
-        let data = data.remove(&tbl_label).unwrap();
-        let olines = data.into_values().map(AppInMemFetchedSingleRow::into)
-            .collect::<Vec<OrderLineModel>>();
-        Ok(olines)
+        let keys = self.datastore.filter_keys(tbl_label, &op).await?;
+        self.fetch_lines_common(keys).await
     }
 
     async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>
@@ -531,20 +526,20 @@ impl AbsOrderRepo for OrderInMemRepo {
         let keys_flattened = self.datastore.filter_keys(table_name.to_string(), &op).await?;
         let key_grps = _orderline::pk_group_by_oid(keys_flattened);
         for (oid, keys) in key_grps.into_iter() {
-            let info = HashMap::from([(table_name.to_string(), keys)]);
-            let mut rawdata = self.datastore.fetch(info).await?;
-            let rawdata = rawdata.remove(table_name).unwrap();
-            let ms = rawdata.into_values().map(AppInMemFetchedSingleRow::into).collect();
+            let ms = self.fetch_lines_common(keys).await?;
             let mset = OrderLineModelSet { order_id:oid, lines: ms };
             usr_cb(self, mset).await?;
         }
         Ok(())
     } // end of fn fetch_lines_by_rsvtime
         
-    async fn fetch_lines_by_pid(&self, _oid:&str, _pids:Vec<OrderLineIdentity>)
+    async fn fetch_lines_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
         -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
-        Ok(vec![])
+        let keys = pids.into_iter().map(|d| {
+            _orderline::inmem_pkey(oid, d.store_id, d.product_type, d.product_id)
+        }).collect() ;
+        self.fetch_lines_common(keys).await
     }
 
     async fn owner_id(&self, order_id:&str) -> DefaultResult<u32, AppError>
@@ -601,6 +596,17 @@ impl OrderInMemRepo {
             Err(AppError {code:AppErrorCode::MissingDataStore,
                 detail: Some(format!("in-memory"))}  )
         }
+    }
+    async fn fetch_lines_common(&self, keys:Vec<String>)
+        -> DefaultResult<Vec<OrderLineModel>, AppError>
+    {
+        let tbl_label = _orderline::TABLE_LABEL;
+        let info = HashMap::from([(tbl_label.to_string(), keys)]);
+        let mut data = self.datastore.fetch(info).await ?;
+        let data = data.remove(tbl_label).unwrap();
+        let olines = data.into_values().map(AppInMemFetchedSingleRow::into)
+            .collect();
+        Ok(olines)
     }
 } // end of impl OrderInMemRepo
 

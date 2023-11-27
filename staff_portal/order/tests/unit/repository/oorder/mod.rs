@@ -129,6 +129,16 @@ fn ut_setup_orderlines (mock_seller_ids:&[u32;2]) -> Vec<OrderLineModel>
             qty: OrderLineQuantityModel {reserved: 16, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
+        OrderLineModel {id_: OrderLineIdentity {store_id:mock_seller_ids[1], product_id: 198,
+            product_type:ProductType::Item},  price:OrderLinePriceModel { unit:12, total: 240 },
+            qty: OrderLineQuantityModel {reserved: 20, paid: 0, paid_last_update: None},
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {id_: OrderLineIdentity {store_id:mock_seller_ids[0], product_id: 199,
+            product_type:ProductType::Item},  price:OrderLinePriceModel { unit:8, total: 264 },
+            qty: OrderLineQuantityModel {reserved: 33, paid: 0, paid_last_update: None},
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
     ]
 } // end of ut_setup_orderlines
 
