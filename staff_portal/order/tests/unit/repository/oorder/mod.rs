@@ -14,6 +14,7 @@ use super::in_mem_ds_ctx_setup;
 mod stock;
 mod create;
 mod update;
+mod oline_return;
 
 async fn in_mem_repo_ds_setup (nitems:u32) -> OrderInMemRepo
 {

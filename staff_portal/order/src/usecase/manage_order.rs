@@ -300,7 +300,7 @@ impl ReturnLinesReqUseCase {
         let o_returned = self.or_repo.fetch_by_pid(oid.as_str(), pids).await ?;
         match OrderReturnModel::filter_requests(data, o_lines, o_returned) {
             Ok(modified) => {
-                let _num = self.or_repo.create(oid.as_str(), modified).await ?;
+                let _num = self.or_repo.save(oid.as_str(), modified).await ?;
                 Ok(ReturnLinesReqUcOutput::Success)
             },
             Err(errors) => Ok(ReturnLinesReqUcOutput::InvalidRequest(errors))

@@ -206,7 +206,7 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
             String::new()
         };
         let mut row = (0.. _orderline::InMemColIdx::TotNumColumns.into())
-            .map(|_num| {String::new()}).collect::<Vec<String>>();
+            .map(|_num| {String::new()}).collect::<Self>();
         let _ = [
             (_orderline::InMemColIdx::QtyReserved,  value.qty.reserved.to_string()),
             (_orderline::InMemColIdx::QtyPaid,      value.qty.paid.to_string()),
@@ -270,7 +270,7 @@ impl From<ContactModel> for AppInMemFetchedSingleRow {
             format!("{}-{}", d.nation.to_string(), d.number)
         }).collect::<Vec<String>>();
         let mut row = (0 .. _contact::InMemColIdx::TotNumColumns.into())
-            .map(|_num| {String::new()}).collect::<Vec<String>>();
+            .map(|_num| {String::new()}).collect::<Self>();
         let _ = [
             (_contact::InMemColIdx::Emails,  value.emails.join(_contact::MULTI_VAL_COLUMN_SEPARATOR)),
             (_contact::InMemColIdx::Phones,  phones_str.join(_contact::MULTI_VAL_COLUMN_SEPARATOR)),
@@ -307,7 +307,7 @@ impl Into<ContactModel> for AppInMemFetchedSingleRow {
 impl From<PhyAddrModel> for AppInMemFetchedSingleRow {
     fn from(value: PhyAddrModel) -> Self {
         let mut row = (0 .. _phy_addr::InMemColIdx::TotNumColumns.into())
-            .map(|_num| {String::new()}).collect::<Vec<String>>();
+            .map(|_num| {String::new()}).collect::<Self>();
         let _ = [
             (_phy_addr::InMemColIdx::Detail,  value.detail),
             (_phy_addr::InMemColIdx::Distinct, value.distinct),
@@ -340,7 +340,7 @@ impl Into<PhyAddrModel> for AppInMemFetchedSingleRow {
 impl From<ShippingOptionModel> for AppInMemFetchedSingleRow {
     fn from(value: ShippingOptionModel) -> Self {
         let mut row = (0 .. _ship_opt::InMemColIdx::TotNumColumns.into())
-            .map(|_num| {String::new()}).collect::<Vec<String>>();
+            .map(|_num| {String::new()}).collect::<Self>();
         let _ = [
             (_ship_opt::InMemColIdx::SellerID,  value.seller_id.to_string()),
             (_ship_opt::InMemColIdx::Method, value.method.into()),

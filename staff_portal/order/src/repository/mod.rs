@@ -142,7 +142,7 @@ pub trait AbsOrderReturnRepo : Sync + Send {
         where Self: Sized;
     async fn fetch_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
         -> DefaultResult<Vec<OrderReturnModel>, AppError>;
-    async fn create(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
+    async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
 }
 
 

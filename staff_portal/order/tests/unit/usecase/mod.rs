@@ -209,7 +209,7 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
             Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
         }
     }
-    async fn create(&self, _oid:&str, _reqs:Vec<OrderReturnModel>)
+    async fn save(&self, _oid:&str, _reqs:Vec<OrderReturnModel>)
         -> DefaultResult<usize, AppError>
     {
         let mut g = self._mocked_save_result.lock().await;
