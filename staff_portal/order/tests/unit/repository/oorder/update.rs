@@ -18,19 +18,19 @@ use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_shipping, ut_setup_
 
 async fn ut_setup_saved_order(o_repo:&OrderInMemRepo,
                               mock_oid: String,
+                              mock_usr_id: u32,
                               lines:Vec<OrderLineModel>,
-                              mock_seller_ids: [u32; 2]
-                            )
+                              mock_seller_ids: [u32; 2]  )
 {
-    let mock_usr_id = 124;
     let mut billings = ut_setup_billing();
     let mut shippings = ut_setup_shipping(&mock_seller_ids);
     assert!(lines.len() >= 3);
     assert!(!billings.is_empty());
     assert!(!shippings.is_empty());
-    let ol_set = OrderLineModelSet {order_id:mock_oid, lines};
-    let result = o_repo.create(mock_usr_id, ol_set, billings.remove(0),
-                               shippings.remove(0)).await;
+    let ol_set = OrderLineModelSet {order_id:mock_oid, lines, owner_id: mock_usr_id,
+            create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap()
+    };
+    let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
     assert!(result.is_ok());
 }
 
@@ -98,7 +98,7 @@ async fn in_mem_update_lines_payment_ok()
     let oid = OrderLineModel::generate_order_id(7);
     let o_repo = in_mem_repo_ds_setup(30).await;
     let lines = ut_setup_orderlines(&mock_seller_ids);
-    ut_setup_saved_order(&o_repo, oid.clone(), lines, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, oid.clone(), 124, lines, mock_seller_ids).await;
     let data = OrderPaymentUpdateDto {oid:oid.clone(), lines:ut_setup_oline_new_payment()};
     let result = o_repo.update_lines_payment(data, ut_usr_cb_ok_1).await;
     assert!(result.is_ok());
@@ -161,7 +161,7 @@ async fn in_mem_update_lines_payment_usr_cb_err()
     let oid = OrderLineModel::generate_order_id(7);
     let o_repo = in_mem_repo_ds_setup(30).await;
     let lines = ut_setup_orderlines(&mock_seller_ids);
-    ut_setup_saved_order(&o_repo, oid.clone(), lines, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, oid.clone(), 124, lines, mock_seller_ids).await;
     let mut lines = ut_setup_oline_new_payment();
     lines[1].qty  = 9999;
     lines[2].time = DateTime::parse_from_rfc3339("1999-07-31T23:59:59+09:00").unwrap();
@@ -182,25 +182,25 @@ fn ut_rd_oline_set_usr_cb<'a>(_repo: &'a dyn AbsOrderRepo, ol_set: OrderLineMode
     -> Pin<Box<dyn Future<Output=DefaultResult<(),AppError>> + Send + 'a>>
 {
     let fut = async move {
-        let product_ids = match ol_set.order_id.as_str() {
+        let (owner_id, product_ids) = match ol_set.order_id.as_str() {
             "OrderIDone" => {
                 assert_eq!(ol_set.lines.len(), 3);
-                vec![
+                (126u32, vec![
                     (576u32, ProductType::Item, 190u64),
                     (576u32, ProductType::Item, 192u64),
                     (117u32, ProductType::Item, 193u64),
-                ]
+                ])
             },
             "OrderIDtwo" => {
                 assert_eq!(ol_set.lines.len(), 1);
-                vec![(117u32, ProductType::Package, 190)]
+                (127u32, vec![(117u32, ProductType::Package, 190)])
             },
             "OrderIDthree" => {
                 assert_eq!(ol_set.lines.len(), 2);
-                vec![
+                (128u32, vec![
                     (576u32, ProductType::Package, 190),
                     (576u32, ProductType::Package, 194)
-                ]
+                ])
             },
             "OrderIDfive" => {
                 return Err(AppError { code: AppErrorCode::Unknown,
@@ -208,9 +208,10 @@ fn ut_rd_oline_set_usr_cb<'a>(_repo: &'a dyn AbsOrderRepo, ol_set: OrderLineMode
             },
             _others => {
                 assert!(false);
-                vec![]
+                (0u32, vec![])
             }
         };
+        assert_eq!(ol_set.owner_id, owner_id);
         let mut product_id_set : HashSet<(u32, ProductType, u64)>  = HashSet::from_iter(product_ids.into_iter());
         let all_items_found = ol_set.lines.iter().all(|m| {
             let key = (m.id_.store_id, m.id_.product_type.clone(), m.id_.product_id);
@@ -243,10 +244,10 @@ async fn in_mem_fetch_lines_rsvtime_ok()
         lines.0[5].policy.reserved_until = start_time + ChronoDuration::minutes(13);
         lines.2[6].policy.reserved_until = start_time + ChronoDuration::minutes(17);
     }
-    ut_setup_saved_order(&o_repo, format!("OrderIDone"),  lines.0, mock_seller_ids).await;
-    ut_setup_saved_order(&o_repo, format!("OrderIDtwo"), lines.1, mock_seller_ids).await;
-    ut_setup_saved_order(&o_repo, format!("OrderIDthree"),  lines.2, mock_seller_ids).await;
-    ut_setup_saved_order(&o_repo, format!("OrderIDfour"),  lines.3, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, format!("OrderIDone"), 126,  lines.0, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, format!("OrderIDtwo"), 127, lines.1, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, format!("OrderIDthree"), 128,  lines.2, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, format!("OrderIDfour"), 129, lines.3, mock_seller_ids).await;
     let result = o_repo.fetch_lines_by_rsvtime(start_time, end_time,
                                              ut_rd_oline_set_usr_cb).await;
     assert!(result.is_ok());
@@ -268,8 +269,8 @@ async fn in_mem_fetch_lines_rsvtime_usrcb_err()
         lines.0[5].policy.reserved_until = start_time + ChronoDuration::minutes(45);
         lines.1[2].policy.reserved_until = start_time + ChronoDuration::minutes(18);
     }
-    ut_setup_saved_order(&o_repo, format!("OrderIDfive"), lines.0, mock_seller_ids).await;
-    ut_setup_saved_order(&o_repo, format!("OrderIDtwo"),  lines.1, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, format!("OrderIDfive"), 130, lines.0, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, format!("OrderIDtwo"),  127, lines.1, mock_seller_ids).await;
     let result = o_repo.fetch_lines_by_rsvtime(start_time, end_time,
                                              ut_rd_oline_set_usr_cb).await;
     assert!(result.is_err());

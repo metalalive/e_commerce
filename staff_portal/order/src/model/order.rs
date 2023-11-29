@@ -85,6 +85,8 @@ pub struct OrderReturnModel {
 
 pub struct OrderLineModelSet {
     pub order_id: String,
+    pub owner_id: u32,
+    pub create_time: DateTime<FixedOffset>,
     pub lines: Vec<OrderLineModel>,
 }
 

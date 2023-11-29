@@ -225,6 +225,7 @@ fn  ut_get_curr_qty (store:&StoreStockModel, req:&OrderLineModel)
 #[test]
 fn reserve_ok()
 {
+    let create_time   = DateTime::parse_from_rfc3339("2022-09-16T14:59:00.091-08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
     let saved_products = ut_mock_saved_product();
     let mut mset = StockLevelModelSet{ stores: vec![
@@ -253,7 +254,8 @@ fn reserve_ok()
             qty: OrderLineQuantityModel {reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
         },
     ];
-    let ol_set = OrderLineModelSet {order_id:"AliceOrdered".to_string(), lines:reqs} ;
+    let ol_set = OrderLineModelSet {order_id:"AliceOrdered".to_string(), lines:reqs,
+                 create_time:create_time.clone(), owner_id:123 };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
     [
@@ -299,7 +301,8 @@ fn reserve_ok()
             qty: OrderLineQuantityModel {reserved: expect_booked_qty[1], paid: 0, paid_last_update: None}
         },
     ];
-    let ol_set = OrderLineModelSet {order_id:"BobCart".to_string(), lines:reqs} ;
+    let ol_set = OrderLineModelSet {order_id:"BobCart".to_string(), lines:reqs,
+                    create_time, owner_id:321 } ;
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
     [
@@ -353,7 +356,9 @@ fn reserve_shortage()
             qty:OrderLineQuantityModel {reserved: expect_booked_qty[2], paid: 0, paid_last_update: None}
         },
     ];
-    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs} ;
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs, owner_id:123,
+            create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap()
+    };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 2);
     {
@@ -394,7 +399,9 @@ fn reserve_seller_nonexist()
             qty:OrderLineQuantityModel {reserved: expect_booked_qty[0], paid: 0, paid_last_update: None}
         },
     ];
-    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs} ;
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:reqs, owner_id:321,
+            create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap()
+    } ;
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 1);
     {

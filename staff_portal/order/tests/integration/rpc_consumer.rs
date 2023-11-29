@@ -159,6 +159,7 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u
     };
     let repo = app_repo_order(ds).await ?;
     let seller_id = 543;
+    let create_time    = DateTime::parse_from_rfc3339("2023-05-30T18:58:04+03:00").unwrap();
     let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
     let lines = vec![
@@ -191,8 +192,9 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u
             ShippingOptionModel {seller_id, method:ShippingMethod::FedEx}
         ]
     };
-    let ol_set = OrderLineModelSet {order_id:oid.to_string(), lines};
-    let _ = repo.create(usr_id, ol_set, bl, sh).await?;
+    let ol_set = OrderLineModelSet {order_id:oid.to_string(), lines,
+                 owner_id:usr_id, create_time };
+    let _ = repo.create(ol_set, bl, sh).await?;
     Ok(())
 } // end of itest_mock_create_order
 

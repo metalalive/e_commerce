@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::Arc; 
 use std::result::Result as DefaultResult ; 
 
-use chrono::Local;
+use chrono::Local as LocalTime;
 
 use crate::AppSharedState;
 use crate::constant::ProductType;
@@ -69,15 +69,16 @@ impl CreateOrderUseCase {
         // TODO, machine code to UUID generator should be configurable
         let machine_code = 1u8;
         let oid = OrderLineModel::generate_order_id(machine_code);
-        let ol_set = OrderLineModelSet {order_id:oid.clone(), lines:o_items};
+        let timenow = LocalTime::now().fixed_offset();
+        let ol_set = OrderLineModelSet { order_id:oid.clone(), lines:o_items,
+                         create_time: timenow.clone(), owner_id:self.usr_id };
         self.try_reserve_stock(&ol_set).await?;
         // There might be under-booking issue if power outage happenes at here
         // before successfully saving the order lines. TODO: Improve the code here
-        match self.repo_order.create(self.usr_id, ol_set, o_bl, o_sh).await {
+        match self.repo_order.create(ol_set, o_bl, o_sh).await {
             Ok(lines) => {
-                let timenow = Local::now().fixed_offset().timestamp();
                 let obj = OrderCreateRespOkDto { order_id:oid, usr_id: self.usr_id,
-                    time: timenow as u64, reserved_lines: lines };
+                    time: timenow.timestamp() as u64, reserved_lines: lines };
                 Ok(obj)
             },
             Err(e) => {
@@ -207,8 +208,9 @@ impl OrderReplicaPaymentUseCase {
     pub(crate) async fn execute(self, oid:String) -> DefaultResult<OrderReplicaPaymentDto, AppError>
     {
         let olines = self.repo.fetch_all_lines(oid.clone()).await ?;
-        // TODO, lock billing instance so customers are no longer able to update it
-        let (billing, usr_id) = self.repo.fetch_billing(oid.clone()).await ?;
+        // TODO, lock billing instance so customers are no longer able to update
+        let usr_id = self.repo.owner_id(oid.as_str()).await?;
+        let billing = self.repo.fetch_billing(oid.clone()).await ?;
         let resp = OrderReplicaPaymentDto {oid, usr_id, billing:billing.into(),
             lines: olines.into_iter().map(OrderLineModel::into).collect()
         };
@@ -220,7 +222,8 @@ impl OrderReplicaInventoryUseCase {
     {
         let olines = self.repo.fetch_all_lines(oid.clone()).await ?;
         // TODO, lock shipping instance so customers are no longer able to update it
-        let (shipping, usr_id) = self.repo.fetch_shipping(oid.clone()).await ?;
+        let usr_id = self.repo.owner_id(oid.as_str()).await?;
+        let shipping = self.repo.fetch_shipping(oid.clone()).await ?;
         let resp = OrderReplicaInventoryDto {oid, usr_id, shipping:shipping.into(),
             lines: olines.into_iter().map(OrderLineModel::into).collect()
         };
@@ -243,7 +246,7 @@ impl OrderDiscardUnpaidItemsUseCase {
     pub async fn execute(self) -> DefaultResult<(),AppError>
     {
         let time_start = self.repo.scheduled_job_last_time().await;
-        let time_end = Local::now().fixed_offset();
+        let time_end = LocalTime::now().fixed_offset();
         let result = self.repo.fetch_lines_by_rsvtime( time_start,
                             time_end, Self::read_oline_set_cb ).await;
         if let Err(e) = result.as_ref() {

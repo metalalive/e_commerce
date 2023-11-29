@@ -385,7 +385,9 @@ async fn in_mem_try_reserve_ok ()
                 warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:20, total:190}
         },
     ];
-    let ol_set = OrderLineModelSet {order_id:"AnotherMan".to_string(), lines:order_req} ;
+    let ol_set = OrderLineModelSet {order_id:"AnotherMan".to_string(), lines:order_req,
+        owner_id:123, create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap()
+    };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
     { // after reservation
@@ -483,7 +485,9 @@ async fn in_mem_try_reserve_shortage ()
                 warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:20, total:179}
         },
     ];
-    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:order_req} ;
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:order_req, owner_id:123,
+            create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap()
+    } ;
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_2, &ol_set).await;
     assert!(result.is_err());
     if let Err(e) = result {
@@ -536,7 +540,9 @@ async fn in_mem_try_reserve_user_cb_err ()
                 warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:20, total:179}
         },
     ];
-    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:order_req} ;
+    let ol_set = OrderLineModelSet {order_id:"xx1".to_string(), lines:order_req, owner_id:321,
+            create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap()
+    } ;
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_3, &ol_set).await;
     assert!(result.is_err());
     if let Err(e) = result {

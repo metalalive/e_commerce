@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use order::api::dto::{CountryCode, ShippingMethod};
 use order::constant::ProductType;
 use order::repository::{AbsOrderRepo, OrderInMemRepo};
@@ -15,17 +16,19 @@ async fn ut_verify_create_order(mock_oid:[String;2], mock_usr_ids:[u32;2],
 {
     let total_num_olines = orderlines.len();
     let orders_num_lines = [4, total_num_olines - 4];
-    let ol_set = OrderLineModelSet {order_id:mock_oid[0].clone(),
-        lines: orderlines.drain(0..orders_num_lines[0]).collect() };
-    let result = o_repo.create(mock_usr_ids[0], ol_set, billings.remove(0),
-                               shippings.remove(0)).await;
+    let ol_set = OrderLineModelSet {order_id:mock_oid[0].clone(), owner_id:mock_usr_ids[0],
+        create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
+        lines: orderlines.drain(0..orders_num_lines[0]).collect()
+    };
+    let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
     assert!(result.is_ok());
     if let Ok(dtos) = result {
         assert_eq!(dtos.len(), orders_num_lines[0]);
     };
-    let ol_set = OrderLineModelSet {order_id:mock_oid[1].clone(), lines: orderlines };
-    let result = o_repo.create(mock_usr_ids[1], ol_set, billings.remove(0),
-                               shippings.remove(0)).await;
+    let ol_set = OrderLineModelSet {order_id:mock_oid[1].clone(), lines: orderlines, owner_id:mock_usr_ids[1],
+            create_time: DateTime::parse_from_rfc3339("2022-11-08T12:09:30.519+04:00").unwrap()
+    };
+    let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
     assert!(result.is_ok());
     if let Ok(dtos) = result {
         assert_eq!(dtos.len(), orders_num_lines[1]);
@@ -118,21 +121,18 @@ async fn ut_verify_fetch_owner_id(mock_oids:[String;2], mock_usr_ids:[u32;2],
     }
 }
 
-async fn ut_verify_fetch_billing(mock_oid:[String;2], mock_usr_ids:[u32;2],
-                               o_repo :&OrderInMemRepo)
+async fn ut_verify_fetch_billing(mock_oid:[String;2], o_repo :&OrderInMemRepo)
 {
     let result = o_repo.fetch_billing(mock_oid[0].clone()).await;
     assert!(result.is_ok());
-    if let Ok((fetched_bl, fetched_usr_id)) = result {
-        assert_eq!(fetched_usr_id, mock_usr_ids[0]);
+    if let Ok(fetched_bl) = result {
         assert_eq!(fetched_bl.contact.first_name.as_str(), "Ken");
         assert!(fetched_bl.contact.phones.iter().any(|m| m.number.as_str()=="002081264"));
         assert!(matches!(fetched_bl.address.as_ref().unwrap().country, CountryCode::TW));
     }
     let result = o_repo.fetch_billing(mock_oid[1].clone()).await;
     assert!(result.is_ok());
-    if let Ok((fetched_bl, fetched_usr_id)) = result {
-        assert_eq!(fetched_usr_id, mock_usr_ids[1]);
+    if let Ok(fetched_bl) = result {
         assert_eq!(fetched_bl.contact.last_name.as_str(), "NormanKabboa");
         assert_eq!(fetched_bl.contact.emails.get(0).unwrap().as_str(), "banker@blueocean.ic");
         assert!(matches!(fetched_bl.address.as_ref().unwrap().country, CountryCode::US));
@@ -140,12 +140,11 @@ async fn ut_verify_fetch_billing(mock_oid:[String;2], mock_usr_ids:[u32;2],
 }
 
 async fn ut_verify_fetch_shipping(mock_oid:[String;2], mock_seller_ids:[u32;2],
-                                  mock_usr_ids:[u32;2], o_repo :&OrderInMemRepo )
+                                  o_repo :&OrderInMemRepo )
 {
     let result = o_repo.fetch_shipping(mock_oid[0].clone()).await;
     assert!(result.is_ok());
-    if let Ok((fetched_sh, fetched_usr_id)) = result {
-        assert_eq!(fetched_usr_id, mock_usr_ids[0]);
+    if let Ok(fetched_sh) = result {
         assert_eq!(fetched_sh.contact.last_name.as_str(), "LaughOutLoud");
         let ph = fetched_sh.contact.phones.iter().find(|m| m.nation==36).unwrap();
         assert_eq!(ph.number.as_str(), "00101300802");
@@ -154,8 +153,7 @@ async fn ut_verify_fetch_shipping(mock_oid:[String;2], mock_seller_ids:[u32;2],
     }
     let result = o_repo.fetch_shipping(mock_oid[1].clone()).await;
     assert!(result.is_ok());
-    if let Ok((fetched_sh, fetched_usr_id)) = result {
-        assert_eq!(fetched_usr_id, mock_usr_ids[1]);
+    if let Ok(fetched_sh) = result {
         assert_eq!(fetched_sh.contact.first_name.as_str(), "Johan");
         assert!(fetched_sh.contact.phones.iter().any(|m| m.nation==43));
         assert!(fetched_sh.contact.phones.iter().any(|m| m.nation==44));
@@ -183,9 +181,9 @@ async fn in_mem_create_ok ()
                         ).await ;
     ut_verify_fetch_all_olines(mock_oid.clone(), mock_seller_ids.clone(),  &o_repo).await;
     ut_verify_fetch_specific_olines(mock_oid.clone(), mock_seller_ids.clone(),  &o_repo).await;
-    ut_verify_fetch_owner_id(mock_oid.clone(), mock_usr_ids.clone(), &o_repo).await ;
-    ut_verify_fetch_billing(mock_oid.clone(), mock_usr_ids.clone(), &o_repo).await ;
-    ut_verify_fetch_shipping(mock_oid, mock_seller_ids, mock_usr_ids, &o_repo).await;
+    ut_verify_fetch_owner_id(mock_oid.clone(), mock_usr_ids, &o_repo).await ;
+    ut_verify_fetch_billing(mock_oid.clone(), &o_repo).await ;
+    ut_verify_fetch_shipping(mock_oid, mock_seller_ids, &o_repo).await;
 } // end of in_mem_create_ok
 
 

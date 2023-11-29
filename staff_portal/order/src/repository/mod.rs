@@ -71,14 +71,14 @@ pub trait AbsOrderRepo : Sync + Send {
 
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
     
-    async fn create (&self, usr_id:u32, lines:OrderLineModelSet, bl:BillingModel, sh:ShippingModel)
+    async fn create (&self, lines:OrderLineModelSet, bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<Vec<OrderLinePayDto>, AppError> ;
 
     async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>;
 
-    async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>;
+    async fn fetch_billing(&self, oid:String) -> DefaultResult<BillingModel, AppError>;
     
-    async fn fetch_shipping(&self, oid:String) -> DefaultResult<(ShippingModel, u32), AppError>;
+    async fn fetch_shipping(&self, oid:String) -> DefaultResult<ShippingModel, AppError>;
     
     async fn update_lines_payment(&self, data:OrderPaymentUpdateDto,
                                   cb:AppOrderRepoUpdateLinesUserFunc)

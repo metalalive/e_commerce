@@ -106,8 +106,7 @@ impl AbsOrderRepo for MockOrderRepo {
         Arc::new(Box::new(obj))
     }
 
-    async fn create (&self, _usr_id:u32, _lineset:OrderLineModelSet,
-                     _bl:BillingModel, _sh:ShippingModel)
+    async fn create (&self, _lineset:OrderLineModelSet, _bl:BillingModel, _sh:ShippingModel)
         -> DefaultResult<Vec<OrderLinePayDto>, AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
@@ -116,11 +115,11 @@ impl AbsOrderRepo for MockOrderRepo {
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
-    async fn fetch_billing(&self, _oid:String) -> DefaultResult<(BillingModel, u32), AppError>
+    async fn fetch_billing(&self, _oid:String) -> DefaultResult<BillingModel, AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
-    async fn fetch_shipping(&self, _oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
+    async fn fetch_shipping(&self, _oid:String) -> DefaultResult<ShippingModel, AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }

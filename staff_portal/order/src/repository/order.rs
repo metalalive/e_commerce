@@ -38,25 +38,17 @@ mod _contact {
             }
         }
     }
-    pub(super) fn to_inmem_tbl(oid:&str, usr_id:u32, pk_label:&str, data:ContactModel)
-        -> HashMap<String, Vec<String>>
+    pub(super) fn to_inmem_tbl(oid:&str, pk_label:&str, data:ContactModel)
+        -> HashMap<String, AppInMemFetchedSingleRow>
     { // each item in emails / phones array must NOT contain space character
         let row = AppInMemFetchedSingleRow::from(data);
-        let pkey = format!("{}-{}-{}", oid, pk_label, usr_id);
+        let pkey = format!("{}-{}", oid, pk_label);
         HashMap::from([(pkey, row)])
-    }
-    pub(super) fn inmem_parse_usr_id (pkey:&str) -> u32 {
-        let mut id_elms = pkey.split("-");
-        let (_oid, _label, usr_id) = (
-            id_elms.next().unwrap(), id_elms.next().unwrap(),
-            id_elms.next().unwrap().parse::<u32>().unwrap(),
-        );
-        usr_id
     }
 } // end of inner module _contact
 
 mod _phy_addr {
-    use super::{HashMap, PhyAddrModel};
+    use super::{HashMap, PhyAddrModel, AppInMemFetchedSingleRow};
 
     pub(super) const TABLE_LABEL: &'static str = "order_phyaddr";
     pub(super) enum InMemColIdx {Country, Region, City, Distinct, Street, Detail, TotNumColumns}
@@ -70,7 +62,7 @@ mod _phy_addr {
         }
     }
     pub(super) fn to_inmem_tbl(oid:&str, pk_label:&str, data:PhyAddrModel)
-        -> HashMap<String, Vec<String>>
+        -> HashMap<String, AppInMemFetchedSingleRow>
     {
         let row = data.into();
         let pkey = format!("{}-{}", oid, pk_label);
@@ -103,7 +95,7 @@ mod _ship_opt {
 } // end of inner module _ship_opt
 
 mod _orderline {
-    use super::{HashMap, ProductType};
+    use super::{HashMap, ProductType, AppInMemFetchedSingleRow};
     use crate::model::OrderLineModel;
     
     pub(super) const TABLE_LABEL: &'static str = "order_line_reserved";
@@ -128,7 +120,7 @@ mod _orderline {
         format!("{oid}-{seller_id}-{prod_typ}-{prod_id}")
     }
     pub(super) fn to_inmem_tbl(oid:&str, data:&Vec<OrderLineModel>)
-        ->  HashMap<String, Vec<String>>
+        ->  HashMap<String, AppInMemFetchedSingleRow>
     {
         let kv_iter = data.iter().map(|m| {
             let pkey = inmem_pkey(oid, m.id_.store_id, m.id_.product_type.clone(),
@@ -151,6 +143,28 @@ mod _orderline {
         out
     }
 } // end of inner module _orderline
+
+mod _order_toplvl_meta {
+    use super::{HashMap, OrderLineModelSet, AppInMemFetchedSingleRow};
+
+    pub(super) const TABLE_LABEL: &'static str = "order_toplvl_meta";
+    pub(super) enum InMemColIdx { OwnerUsrID, CreateTime}
+    impl Into<usize> for InMemColIdx {
+        fn into(self) -> usize {
+            match self {
+                Self::OwnerUsrID => 0,    Self::CreateTime => 1,
+            }
+        }
+    }
+    pub(super) fn to_inmem_tbl(data:&OrderLineModelSet)
+        ->  HashMap<String, AppInMemFetchedSingleRow>
+    {
+        let pkey = data.order_id.clone();
+        let value = vec![data.owner_id.to_string(), data.create_time.to_rfc3339()];
+        HashMap::from([(pkey, value)])
+    } // end of fn to_inmem_tbl
+} // end of inner module _order_toplvl_meta
+
 
 mod _pkey_partial_label {
     use crate::datastore::AbsDStoreFilterKeyOp;
@@ -376,23 +390,21 @@ impl AbsOrderRepo for OrderInMemRepo {
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>
     { self._stock.clone() }
 
-    async fn create (&self, usr_id:u32, lineset:OrderLineModelSet,
-                     bl:BillingModel, sh:ShippingModel)
+    async fn create (&self, lineset:OrderLineModelSet, bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<Vec<OrderLinePayDto>, AppError> 
     {
         let oid = lineset.order_id.as_str();
-        let mut tabledata:[(String, AppInMemFetchedSingleTable);4] = [
+        let mut tabledata:[(String, AppInMemFetchedSingleTable);5] = [
             (_contact::TABLE_LABEL.to_string(), HashMap::new()),
             (_phy_addr::TABLE_LABEL.to_string(), HashMap::new()),
             (_ship_opt::TABLE_LABEL.to_string(), _ship_opt::to_inmem_tbl(oid, sh.option)),
             (_orderline::TABLE_LABEL.to_string(), _orderline::to_inmem_tbl(oid, &lineset.lines)),
+            (_order_toplvl_meta::TABLE_LABEL.to_string(), _order_toplvl_meta::to_inmem_tbl(&lineset)),
         ];
         {
-            let items = _contact::to_inmem_tbl(oid, usr_id,
-                 _pkey_partial_label::SHIPPING, sh.contact);
+            let items = _contact::to_inmem_tbl(oid, _pkey_partial_label::SHIPPING, sh.contact);
             items.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
-            let items = _contact::to_inmem_tbl(oid, usr_id,
-                 _pkey_partial_label::BILLING, bl.contact);
+            let items = _contact::to_inmem_tbl(oid, _pkey_partial_label::BILLING, bl.contact);
             items.into_iter().map(|(k,v)| {tabledata[0].1.insert(k, v);}).count();
         }
         if let Some(addr) = bl.address {
@@ -417,7 +429,7 @@ impl AbsOrderRepo for OrderInMemRepo {
         self.fetch_lines_common(keys).await
     }
 
-    async fn fetch_billing(&self, oid:String) -> DefaultResult<(BillingModel, u32), AppError>
+    async fn fetch_billing(&self, oid:String) -> DefaultResult<BillingModel, AppError>
     {
         let op = _pkey_partial_label::InMemDStoreFiltKeyOID {
                 oid:oid.as_str(),  label: Some(_pkey_partial_label::BILLING) };
@@ -430,16 +442,15 @@ impl AbsOrderRepo for OrderInMemRepo {
         let info = HashMap::from_iter(info.into_iter());
         let mut data = self.datastore.fetch(info).await ?;
         let (result1, result2) = (
-            data.remove(tbl_labels[0]).unwrap().into_iter().next(),
+            data.remove(tbl_labels[0]).unwrap().into_values().next(),
             data.remove(tbl_labels[1]).unwrap().into_values().next()
         );
-        if let Some((pkey,raw_cta)) = result1 {
-            let usr_id  = _contact::inmem_parse_usr_id(pkey.as_str());
+        if let Some(raw_cta) = result1 {
             let contact = raw_cta.into();
             let address = if let Some(raw_pa) = result2 {
                 Some(raw_pa.into())
             } else { None };
-            Ok((BillingModel{contact, address}, usr_id))
+            Ok(BillingModel{contact, address})
         } else {
             let ioe = std::io::ErrorKind::NotFound;
             let detail = format!("no-contact-data");
@@ -448,7 +459,7 @@ impl AbsOrderRepo for OrderInMemRepo {
         }
     } // end of fn fetch_billing
     
-    async fn fetch_shipping(&self, oid:String) -> DefaultResult<(ShippingModel, u32), AppError>
+    async fn fetch_shipping(&self, oid:String) -> DefaultResult<ShippingModel, AppError>
     {
         let ops = [
             _pkey_partial_label::InMemDStoreFiltKeyOID {oid:oid.as_str(), label: Some(_pkey_partial_label::SHIPPING)},
@@ -467,18 +478,17 @@ impl AbsOrderRepo for OrderInMemRepo {
         let info = HashMap::from_iter(info.into_iter());
         let mut data = self.datastore.fetch(info).await ?;
         let (result1, result2, result3) = (
-            data.remove(_contact::TABLE_LABEL).unwrap().into_iter().next(),
+            data.remove(_contact::TABLE_LABEL).unwrap().into_values().next(),
             data.remove(_phy_addr::TABLE_LABEL).unwrap().into_values().next(),
             data.remove(_ship_opt::TABLE_LABEL).unwrap().into_values(),
         );
-        if let Some((pkey, raw_cta)) = result1 {
-            let usr_id  = _contact::inmem_parse_usr_id(pkey.as_str());
+        if let Some(raw_cta) = result1 {
             let contact = raw_cta.into();
             let address = if let Some(raw_pa) = result2 {
                 Some(raw_pa.into())
             } else { None }; // shipping option can be empty
             let option = result3.map(AppInMemFetchedSingleRow::into).collect();
-            Ok((ShippingModel{contact, address, option}, usr_id))
+            Ok(ShippingModel{contact, address, option})
         } else {
             let ioe = std::io::ErrorKind::NotFound;
             let detail = format!("no-contact-data");
@@ -526,8 +536,9 @@ impl AbsOrderRepo for OrderInMemRepo {
         let keys_flattened = self.datastore.filter_keys(table_name.to_string(), &op).await?;
         let key_grps = _orderline::pk_group_by_oid(keys_flattened);
         for (oid, keys) in key_grps.into_iter() {
+            let (owner_id, create_time) = self.fetch_toplvl_meta(oid.as_str()).await?;
             let ms = self.fetch_lines_common(keys).await?;
-            let mset = OrderLineModelSet { order_id:oid, lines: ms };
+            let mset = OrderLineModelSet { order_id:oid, owner_id, create_time, lines: ms };
             usr_cb(self, mset).await?;
         }
         Ok(())
@@ -544,20 +555,8 @@ impl AbsOrderRepo for OrderInMemRepo {
 
     async fn owner_id(&self, order_id:&str) -> DefaultResult<u32, AppError>
     {
-        let tbl_label = _contact::TABLE_LABEL.to_string();
-        let op = _pkey_partial_label::InMemDStoreFiltKeyOID {
-                oid: order_id,  label: Some(_pkey_partial_label::BILLING) };
-        let keys = self.datastore.filter_keys(tbl_label.clone(), &op).await?;
-        let info = HashMap::from([(tbl_label.clone(), keys)]);
-        let mut data = self.datastore.fetch(info).await ?;
-        let result = data.remove(tbl_label.as_str()).unwrap().into_iter().next();
-        if let Some((pkey, _raw_val)) = result {
-            let usr_id = _contact::inmem_parse_usr_id(pkey.as_str());
-            Ok(usr_id)
-        } else {
-            let detail = order_id.to_string();
-            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
-        }
+        let (usr_id, _create_time) = self.fetch_toplvl_meta(order_id).await?;
+        Ok(usr_id)
     }
 
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
@@ -584,6 +583,7 @@ impl OrderInMemRepo {
             m.create_table(_phy_addr::TABLE_LABEL).await?;
             m.create_table(_ship_opt::TABLE_LABEL).await?;
             m.create_table(_orderline::TABLE_LABEL).await?;
+            m.create_table(_order_toplvl_meta::TABLE_LABEL).await?;
             let stock_repo = StockLvlInMemRepo::build(m.clone(), curr_time).await ?;
             let job_time = DateTime::parse_from_rfc3339("2019-03-13T12:59:54+08:00").unwrap();
             let obj = Self {
@@ -607,6 +607,25 @@ impl OrderInMemRepo {
         let olines = data.into_values().map(AppInMemFetchedSingleRow::into)
             .collect();
         Ok(olines)
+    }
+    async fn fetch_toplvl_meta(&self, order_id:&str)
+        -> DefaultResult<(u32, DateTime<FixedOffset>), AppError>
+    {
+        let tbl_label = _order_toplvl_meta::TABLE_LABEL;
+        let keys = vec![order_id.to_string()];
+        let info = HashMap::from([(tbl_label.to_string(), keys)]);
+        let mut data = self.datastore.fetch(info).await ?;
+        let result = data.remove(tbl_label).unwrap().into_values().next();
+        if let Some(row) = result {
+            let idx:usize = _order_toplvl_meta::InMemColIdx::OwnerUsrID.into();
+            let usr_id = row[idx].parse().unwrap();
+            let idx:usize = _order_toplvl_meta::InMemColIdx::CreateTime.into();
+            let create_time = DateTime::parse_from_rfc3339(row[idx].as_str()).unwrap();
+            Ok((usr_id, create_time))
+        } else {
+            let detail = order_id.to_string();
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        }
     }
 } // end of impl OrderInMemRepo
 
