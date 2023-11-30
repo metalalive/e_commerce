@@ -92,10 +92,15 @@ pub trait AbsOrderRepo : Sync + Send {
     async fn fetch_lines_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
         -> DefaultResult<Vec<OrderLineModel>, AppError>;
 
+    async fn fetch_ids_by_created_time(&self,  start: DateTime<FixedOffset>,
+                                       end: DateTime<FixedOffset>)
+        -> DefaultResult<Vec<String>, AppError>;
+
     async fn owner_id(&self, order_id:&str) -> DefaultResult<u32, AppError>;
+    async fn created_time(&self, order_id:&str) -> DefaultResult<DateTime<FixedOffset>, AppError>;
 
+    // TODO, rename to `cancel_unpaid_last_time()` and `cancel_unpaid_time_update()`
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>;
-
     async fn scheduled_job_time_update(&self);
 } // end of trait AbsOrderRepo
 
@@ -141,7 +146,9 @@ pub trait AbsOrderReturnRepo : Sync + Send {
     async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>
         where Self: Sized;
     async fn fetch_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
-        -> DefaultResult<Vec<OrderReturnModel>, AppError>;
+        -> DefaultResult<Vec<OrderReturnModel>, AppError>; 
+    async fn fetch_by_created_time(&self, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
+        -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>;
     async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
 }
 

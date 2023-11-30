@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::result::Result as DefaultResult;
-use chrono::{DateTime, Local, Duration};
+use chrono::{DateTime, Local, Duration, FixedOffset};
 
-use order::api::rpc::dto::StockReturnErrorDto;
+use order::api::rpc::dto::{StockReturnErrorDto, OrderReplicaInventoryDto, OrderReplicaInventoryReqDto};
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
@@ -14,7 +14,7 @@ use order::model::{
 use order::repository::{AbsOrderRepo, AbsOrderReturnRepo};
 use order::usecase::{
     CreateOrderUseCase, CreateOrderUsKsErr, OrderDiscardUnpaidItemsUseCase,
-    ReturnLinesReqUseCase, ReturnLinesReqUcOutput
+    ReturnLinesReqUseCase, ReturnLinesReqUcOutput, OrderReplicaInventoryUseCase
 };
 
 use super::{ut_setup_share_state, MockOrderRepo, MockOrderReturnRepo};
@@ -205,7 +205,7 @@ async fn discard_unpaid_items_common(
         Err(not_impl_err.clone()),
         Err(not_impl_err.clone()),
         stock_return_results,
-        fetched_ol_sets, vec![], None
+        fetched_ol_sets, vec![], vec![], None, None
     );
     let repo:Box<dyn AbsOrderRepo> = Box::new(repo);
     let uc = OrderDiscardUnpaidItemsUseCase::new(repo, logctx);
@@ -250,30 +250,55 @@ async fn discard_unpaid_items_err_stocklvl()
 }
 
 
+
+
+
+
+fn ut_oreturn_setup_repository_1 (
+    fetched_olines: Vec<OrderLineModel>,
+    fetched_oids_ctime: Vec<String>,
+    owner_usr_id: u32,
+    order_ctime:Option<DateTime<FixedOffset>>,
+) -> Box<dyn AbsOrderRepo>
+{
+    let not_impl_err = AppError{detail:None, code:AppErrorCode::NotImplemented};
+    let repo = MockOrderRepo::build(
+        Err(not_impl_err.clone()), Err(not_impl_err.clone()),
+        vec![], vec![], fetched_olines, fetched_oids_ctime,
+        Some(owner_usr_id), order_ctime
+    );
+    Box::new(repo)
+}
+
+fn ut_oreturn_setup_repository_2 (
+    fetched_returns: DefaultResult<Vec<OrderReturnModel>, AppError>,
+    fetched_oid_returns: DefaultResult<Vec<(String,OrderReturnModel)>, AppError> ,
+    save_result: DefaultResult<usize, AppError>, 
+) ->  Box<dyn AbsOrderReturnRepo>
+{
+    let repo = MockOrderReturnRepo::build(
+        fetched_returns, fetched_oid_returns, save_result
+    );
+    Box::new(repo)
+}
+
+
 async fn request_lines_request_common(
-        fetched_olines: Vec<OrderLineModel>,
-        fetched_returns: DefaultResult<Vec<OrderReturnModel>, AppError>,
-        save_result: DefaultResult<usize, AppError>, 
-        req_usr_id: u32, 
-        owner_usr_id: u32
-    )
-    -> DefaultResult<ReturnLinesReqUcOutput, AppError>
+    fetched_olines: Vec<OrderLineModel>,
+    fetched_returns: DefaultResult<Vec<OrderReturnModel>, AppError>,
+    save_result: DefaultResult<usize, AppError>, 
+    req_usr_id: u32, 
+    owner_usr_id: u32
+) -> DefaultResult<ReturnLinesReqUcOutput, AppError>
 {
     let shr_state = ut_setup_share_state();
     let logctx = shr_state.log_context().clone();
-    let not_impl_err = AppError{detail:None, code:AppErrorCode::NotImplemented};
-    let o_repo:Box<dyn AbsOrderRepo> = {
-        let repo = MockOrderRepo::build(
-            Err(not_impl_err.clone()),
-            Err(not_impl_err.clone()),
-            vec![], vec![], fetched_olines, Some(owner_usr_id)
-        );
-        Box::new(repo)
-    };
-    let or_repo:Box<dyn AbsOrderReturnRepo> = {
-        let repo = MockOrderReturnRepo::build(fetched_returns, save_result);
-        Box::new(repo)
-    };
+    let o_repo = ut_oreturn_setup_repository_1(
+        fetched_olines, vec![], owner_usr_id, None
+    );
+    let or_repo = ut_oreturn_setup_repository_2(
+        fetched_returns, Ok(vec![]), save_result
+    );
     let mock_order_id = "SomebodyOrderedThis".to_string();
     let mock_return_req = vec![
         OrderLineReqDto {seller_id:800, product_type:ProductType::Item,
@@ -327,5 +352,77 @@ async fn return_lines_request_save_error()
     if let Err(e) = result.as_ref() {
         assert_eq!(e.code, AppErrorCode::DataTableNotExist);
         assert_eq!(e.detail.as_ref().unwrap(), "unit-test");
+    }
+}
+
+
+
+async fn replica_inventory_common(
+    // --- order repo
+    fetched_olines: Vec<OrderLineModel>,
+    fetched_oids_ctime: Vec<String>,
+    owner_usr_id: u32,
+    order_ctime:Option<DateTime<FixedOffset>>,
+    // --- order-return repo
+    fetched_oid_returns: DefaultResult<Vec<(String,OrderReturnModel)>, AppError> ,
+) -> DefaultResult<OrderReplicaInventoryDto, AppError>
+{
+    let unknown_err = AppError{detail:None, code:AppErrorCode::Unknown};
+    let o_repo = ut_oreturn_setup_repository_1(
+        fetched_olines, fetched_oids_ctime, owner_usr_id, order_ctime
+    );
+    let ret_repo = ut_oreturn_setup_repository_2(
+        Ok(vec![]), fetched_oid_returns, Err(unknown_err)
+    );
+    let mock_req = OrderReplicaInventoryReqDto {
+        start: DateTime::parse_from_rfc3339("2022-11-06T02:33:00.519-09:00").unwrap(),
+        end:   DateTime::parse_from_rfc3339("2022-11-07T02:30:00.770-09:00").unwrap(),
+    };
+    let uc = OrderReplicaInventoryUseCase {ret_repo, o_repo};
+    uc.execute(mock_req).await
+}
+
+#[tokio::test]
+async fn replica_inventory_ok()
+{
+    let fetched_olines = ut_setup_orderlines();
+    let fetched_oids_ctime = vec!["order739".to_string()];
+    let owner_usr_id = 1710u32;
+    let order_ctime = Some(Local::now().fixed_offset());
+    let mut oids_ret = vec![
+        "order446".to_string(), "order701".to_string(), "order880".to_string(),
+    ];
+    let fetched_oid_returns = ut_setup_olines_returns().into_iter().map(
+        |m| (oids_ret.remove(0), m)
+    ).collect();
+    let result = replica_inventory_common(
+        fetched_olines, fetched_oids_ctime, owner_usr_id, order_ctime, 
+        Ok(fetched_oid_returns)
+    ).await;
+    assert!(result.is_ok());
+    if let Ok(v) = result {
+        assert_eq!(v.reservations.len(), 1);
+        assert_eq!(v.returns.len(), 3);
+        assert_eq!(v.reservations[0].oid.as_str(), "order739");
+    }
+}
+
+#[tokio::test]
+async fn replica_inventory_err()
+{
+    let fetched_olines = ut_setup_orderlines();
+    let fetched_oids_ctime = vec!["order739".to_string()];
+    let owner_usr_id = 1710u32;
+    let order_ctime = Some(Local::now().fixed_offset());
+    let fetched_oid_ret_err = AppError { code: AppErrorCode::DataCorruption,
+            detail: Some(format!("unit-test")) };
+    let result = replica_inventory_common(
+        fetched_olines, fetched_oids_ctime, owner_usr_id, order_ctime, 
+        Err(fetched_oid_ret_err)
+    ).await;
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::DataCorruption);
+        assert_eq!(e.detail.as_ref().unwrap().as_str(), "unit-test");
     }
 }

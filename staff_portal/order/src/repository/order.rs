@@ -552,11 +552,21 @@ impl AbsOrderRepo for OrderInMemRepo {
         }).collect() ;
         self.fetch_lines_common(keys).await
     }
+    async fn fetch_ids_by_created_time(&self,  start: DateTime<FixedOffset>,
+                                       end: DateTime<FixedOffset>)
+        -> DefaultResult<Vec<String>, AppError>
+    {
+        Ok(vec![])
+    }
 
     async fn owner_id(&self, order_id:&str) -> DefaultResult<u32, AppError>
     {
         let (usr_id, _create_time) = self.fetch_toplvl_meta(order_id).await?;
         Ok(usr_id)
+    }
+    async fn created_time(&self, order_id:&str) -> DefaultResult<DateTime<FixedOffset>, AppError>
+    {
+        Ok(LocalTime::now().fixed_offset())
     }
 
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>

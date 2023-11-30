@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
-use chrono::DateTime;
+use chrono::{DateTime, FixedOffset};
 
 use crate::AppDataStoreContext;
 use crate::constant::ProductType;
@@ -115,6 +115,11 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
         let rows = data.remove(table_name).unwrap();
         let out = rows.into_values().map(AppInMemFetchedSingleRow::into).collect();
         Ok(out)
+    }
+    async fn fetch_by_created_time(&self, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
+        -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>
+    {
+        Ok(vec![])
     }
     async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>
     {

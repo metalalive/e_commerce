@@ -4,14 +4,14 @@ use serde_json::Value as JsnVal;
 use crate::AppSharedState;
 use crate::error::{AppError, AppErrorCode};
 use crate::rpc::AppRpcClientReqProperty;
-use crate::repository::app_repo_order;
+use crate::repository::{app_repo_order, app_repo_order_return};
 use crate::usecase::{
     OrderReplicaPaymentUseCase, OrderReplicaInventoryUseCase, OrderPaymentUpdateUseCase,
     OrderDiscardUnpaidItemsUseCase
 };
 
 use super::build_error_response;
-use super::dto::{OrderReplicaReqDto, OrderPaymentUpdateDto};
+use super::dto::{OrderReplicaPaymentReqDto, OrderReplicaInventoryReqDto, OrderPaymentUpdateDto};
 
 #[macro_export]
 macro_rules! common_setup {
@@ -35,7 +35,7 @@ macro_rules! common_setup {
 pub(super) async fn read_reserved_payment (req:AppRpcClientReqProperty,
                                            shr_state:AppSharedState) -> Vec<u8>
 {
-    match common_setup!(OrderReplicaReqDto, shr_state, req.msgbody.as_slice())
+    match common_setup!(OrderReplicaPaymentReqDto, shr_state, req.msgbody.as_slice())
     {
         Ok((v, repo)) => {
             let uc = OrderReplicaPaymentUseCase {repo};
@@ -51,11 +51,16 @@ pub(super) async fn read_reserved_payment (req:AppRpcClientReqProperty,
 pub(super) async fn read_reserved_inventory (req:AppRpcClientReqProperty,
                                              shr_state:AppSharedState) -> Vec<u8>
 {
-    match common_setup!(OrderReplicaReqDto, shr_state, req.msgbody.as_slice())
+    let ds = shr_state.datastore();
+    let ret_repo = match app_repo_order_return(ds).await {
+        Ok(v) => v,
+        Err(e) => {return build_error_response(e).to_string().into_bytes();}
+    };
+    match common_setup!(OrderReplicaInventoryReqDto, shr_state, req.msgbody.as_slice())
     {
-        Ok((v, repo)) => {
-            let uc = OrderReplicaInventoryUseCase {repo};
-            match uc.execute(v.order_id).await {
+        Ok((v, o_repo)) => {
+            let uc = OrderReplicaInventoryUseCase {o_repo, ret_repo};
+            match uc.execute(v).await {
                 Ok(resp) => serde_json::to_vec(&resp).unwrap(),
                 Err(e) => build_error_response(e).to_string().into_bytes()
             }

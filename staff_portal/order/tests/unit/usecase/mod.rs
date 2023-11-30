@@ -19,7 +19,7 @@ use order::{
     AbstractRpcServer, AbstractRpcClient, AbsRpcClientCtx, AbsRpcServerCtx,
     AppRpcClientReqProperty, AppRpcReply, AppDataStoreContext
 };
-use order::api::dto::OrderLinePayDto;
+use order::api::dto::{OrderLinePayDto, ShippingMethod};
 use order::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto};
 use order::error::{AppError, AppErrorCode};
 use order::constant::{ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
@@ -27,7 +27,8 @@ use order::logging::AppLogContext;
 use order::confidentiality::AbstractConfidentiality;
 use order::model::{
     StockLevelModelSet, ProductStockIdentity, OrderLineModel, BillingModel,
-    ShippingModel, OrderLineModelSet, OrderLineIdentity, OrderReturnModel
+    ShippingModel, OrderLineModelSet, OrderLineIdentity, OrderReturnModel,
+    ContactModel, ShippingOptionModel
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc,
@@ -49,12 +50,15 @@ struct MockOrderRepo {
     _mocked_stock_fetch: DefaultResult<StockLevelModelSet, AppError>,
     _mocked_stock_return: Mutex<Cell<Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>>>,
     _mocked_ol_sets: AsyncMutex<Cell<Vec<OrderLineModelSet>>>,
-    _mocked_olines : AsyncMutex<Cell<Vec<OrderLineModel>>>,
+    _mocked_olines :  AsyncMutex<Vec<OrderLineModel>>,
+    _mock_oids_ctime: AsyncMutex<Vec<String>>,
     _mock_usr_id: Option<u32>,
+    _mock_ctime: Option<DateTime<FixedOffset>>,
 }
 struct MockOrderReturnRepo {
-     _mocked_fetched_returns: AsyncMutex<Cell<Option<DefaultResult<Vec<OrderReturnModel>, AppError>>>> ,
-     _mocked_save_result: AsyncMutex<Cell<Option<DefaultResult<usize, AppError>>>> ,
+     _mocked_fetched_returns: AsyncMutex<Option<DefaultResult<Vec<OrderReturnModel>, AppError>>> ,
+     _mocked_fetched_oid_returns: AsyncMutex<Option<DefaultResult<Vec<(String,OrderReturnModel)>, AppError>>> ,
+     _mocked_save_result: AsyncMutex<Option<DefaultResult<usize, AppError>>> ,
 }
 
 #[async_trait]
@@ -113,7 +117,13 @@ impl AbsOrderRepo for MockOrderRepo {
     }
     async fn fetch_all_lines(&self, _oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let mut g = self._mocked_olines.lock().await;
+        if g.is_empty() {
+            let detail = format!("MockOrderRepo::fetch_all_lines");
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        } else {
+            Ok(g.drain(0..).collect())
+        }
     }
     async fn fetch_billing(&self, _oid:String) -> DefaultResult<BillingModel, AppError>
     {
@@ -121,7 +131,11 @@ impl AbsOrderRepo for MockOrderRepo {
     }
     async fn fetch_shipping(&self, _oid:String) -> DefaultResult<ShippingModel, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let contact = ContactModel { first_name: "Llama".to_string(),
+            last_name: "Ant".to_string(), emails: vec![], phones: vec![] };
+        let option = vec![ShippingOptionModel {seller_id:123, method:ShippingMethod::FedEx }];
+        let obj = ShippingModel { contact, address:None, option };
+        Ok(obj)
     }
     async fn update_lines_payment(&self, _data:OrderPaymentUpdateDto,
                                   _cb:AppOrderRepoUpdateLinesUserFunc)
@@ -145,13 +159,24 @@ impl AbsOrderRepo for MockOrderRepo {
         -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
         let mut g = self._mocked_olines.lock().await;
-        let src = g.get_mut();
-        if src.is_empty() {
+        if g.is_empty() {
             let detail = format!("MockOrderRepo::fetch_lines_by_pid");
             Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
         } else {
-            let dst = src.drain(0..).collect::<Vec<OrderLineModel>>();
+            let dst = g.drain(0..).collect::<Vec<OrderLineModel>>();
             Ok(dst)
+        }
+    }
+    async fn fetch_ids_by_created_time(&self, _start: DateTime<FixedOffset>,
+                                       _end: DateTime<FixedOffset>)
+        -> DefaultResult<Vec<String>, AppError>
+    {
+        let mut g = self._mock_oids_ctime.lock().await;
+        if g.is_empty() {
+            let detail = format!("MockOrderRepo::fetch_ids_by_created_time");
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        } else {
+            Ok(g.drain(..).collect())
         }
     }
     async fn owner_id(&self, _order_id:&str) -> DefaultResult<u32, AppError>
@@ -160,6 +185,15 @@ impl AbsOrderRepo for MockOrderRepo {
             Ok(usr_id.clone())
         } else {
             let detail = format!("MockOrderRepo::owner_id");
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        }
+    }
+    async fn created_time(&self, _order_id:&str) -> DefaultResult<DateTime<FixedOffset>, AppError>
+    {
+        if let Some(create_time) = self._mock_ctime.as_ref() {
+            Ok(create_time.clone())
+        } else {
+            let detail = format!("MockOrderRepo::created_time");
             Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
         }
     }
@@ -177,14 +211,18 @@ impl MockOrderRepo {
              stk_returns: Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>,
              ol_sets: Vec<OrderLineModelSet>,
              olines : Vec<OrderLineModel>,
+             oids_ctime: Vec<String>,
              usr_id: Option<u32>,
+             create_time: Option<DateTime<FixedOffset>>,
         ) -> Self
     {
         Self{_mocked_stock_save: stk_save_r,
              _mocked_stock_fetch: stk_fetch_r,
              _mocked_stock_return: Mutex::new(Cell::new(stk_returns)),
              _mocked_ol_sets: AsyncMutex::new(Cell::new(ol_sets)),
-             _mocked_olines : AsyncMutex::new(Cell::new(olines)),
+             _mocked_olines : AsyncMutex::new(olines),
+             _mock_oids_ctime: AsyncMutex::new(oids_ctime),
+             _mock_ctime: create_time,
              _mock_usr_id: usr_id,
         }
     }
@@ -201,10 +239,21 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
         -> DefaultResult<Vec<OrderReturnModel>, AppError>
     {
         let mut g = self._mocked_fetched_returns.lock().await;
-        if let Some(v) = g.get_mut().take() {
+        if let Some(v) = g.take() {
             v
         } else {
             let detail = format!("MockOrderRepo::fetch_by_pid");
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        }
+    }
+    async fn fetch_by_created_time(&self, _start:DateTime<FixedOffset>, _end:DateTime<FixedOffset>)
+        -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>
+    {
+        let mut g = self._mocked_fetched_oid_returns.lock().await;
+        if let Some(v) = g.take() {
+            v
+        } else {
+            let detail = format!("MockOrderRepo::fetch_by_created_time");
             Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
         }
     }
@@ -212,7 +261,7 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
         -> DefaultResult<usize, AppError>
     {
         let mut g = self._mocked_save_result.lock().await;
-        if let Some(v) = g.get_mut().take() {
+        if let Some(v) = g.take() {
             v
         } else {
             let detail = format!("MockOrderRepo::fetch_by_pid");
@@ -223,12 +272,14 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
 
 impl MockOrderReturnRepo {
     fn build( fetched_returns: DefaultResult<Vec<OrderReturnModel>, AppError>,
+              fetched_oid_returns: DefaultResult<Vec<(String,OrderReturnModel)>, AppError> ,
               save_result: DefaultResult<usize, AppError>
         ) -> Self
     {
         Self {
-            _mocked_fetched_returns: AsyncMutex::new(Cell::new(Some(fetched_returns))),
-            _mocked_save_result: AsyncMutex::new(Cell::new(Some(save_result)))
+            _mocked_fetched_returns: AsyncMutex::new(Some(fetched_returns)),
+            _mocked_fetched_oid_returns: AsyncMutex::new(Some(fetched_oid_returns)),
+            _mocked_save_result: AsyncMutex::new(Some(save_result))
         }
     }
 }

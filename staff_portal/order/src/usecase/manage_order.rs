@@ -14,8 +14,9 @@ use crate::api::web::dto::{
     OrderLineReturnErrorDto, 
 };
 use crate::api::rpc::dto::{
-    OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto,
-    OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto
+    OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
+    StockLevelReturnDto, StockReturnErrorDto, OrderReplicaInventoryReqDto, OrderReplicaStockReservingDto,
+    OrderReplicaStockReturningDto, OrderLineStockReturningDto
 };
 use crate::error::AppError;
 use crate::model::{
@@ -42,7 +43,8 @@ pub struct OrderReplicaPaymentUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
 }
 pub struct OrderReplicaInventoryUseCase {
-    pub repo: Box<dyn AbsOrderRepo>,
+    pub  ret_repo: Box<dyn AbsOrderReturnRepo>,
+    pub  o_repo: Box<dyn AbsOrderRepo>,
 }
 pub struct OrderPaymentUpdateUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
@@ -218,18 +220,42 @@ impl OrderReplicaPaymentUseCase {
     }
 }
 impl OrderReplicaInventoryUseCase {
-    pub(crate) async fn execute(self, oid:String) -> DefaultResult<OrderReplicaInventoryDto, AppError>
+    pub async fn execute(self, req:OrderReplicaInventoryReqDto)
+        -> DefaultResult<OrderReplicaInventoryDto, AppError>
     {
-        let olines = self.repo.fetch_all_lines(oid.clone()).await ?;
-        // TODO, lock shipping instance so customers are no longer able to update it
-        let usr_id = self.repo.owner_id(oid.as_str()).await?;
-        let shipping = self.repo.fetch_shipping(oid.clone()).await ?;
-        let resp = OrderReplicaInventoryDto {oid, usr_id, shipping:shipping.into(),
-            lines: olines.into_iter().map(OrderLineModel::into).collect()
-        };
+        let (start, end) = (req.start, req.end);
+        let order_ids = self.o_repo.fetch_ids_by_created_time(start.clone(), end.clone()).await?;
+        let mut reservations = vec![];
+        let mut returns = vec![];
+        for oid in order_ids {
+            let olines = self.o_repo.fetch_all_lines(oid.clone()).await ?;
+            let usr_id = self.o_repo.owner_id(oid.as_str()).await?;
+            let create_time = self.o_repo.created_time(oid.as_str()).await?;
+            let shipping = self.o_repo.fetch_shipping(oid.clone()).await ?;
+            let obj = OrderReplicaStockReservingDto {
+                oid, usr_id, create_time, shipping:shipping.into(),
+                lines: olines.into_iter().map(OrderLineModel::into).collect()
+            };
+            reservations.push(obj);
+        }
+        let combo = self.ret_repo.fetch_by_created_time(start, end).await?;
+        for (oid, ret_m) in combo {
+            let usr_id = self.o_repo.owner_id(oid.as_str()).await?;
+            let lines = ret_m.qty.into_iter().map(
+                |(create_time, (qty, _refund))| {
+                    OrderLineStockReturningDto { seller_id: ret_m.id_.store_id,
+                        product_id: ret_m.id_.product_id, create_time, qty,
+                        product_type: ret_m.id_.product_type.clone() }
+                }
+            ).collect();
+            let obj = OrderReplicaStockReturningDto { oid, usr_id, lines };
+            returns.push(obj);
+        }
+        let resp = OrderReplicaInventoryDto { reservations, returns };
         Ok(resp)
-    }
-}
+    } // end of fn execute
+} // end of impl OrderReplicaInventoryUseCase
+
 impl OrderPaymentUpdateUseCase {
     pub async fn execute(self, data:OrderPaymentUpdateDto)
         -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>

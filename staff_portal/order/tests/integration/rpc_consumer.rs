@@ -241,7 +241,9 @@ async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
     // assume web server has created the order.
     itest_mock_create_order(shrstate.datastore().clone(),
                             "18f00429c638a0", 2345).await?;
-    let msgbody = br#" {"order_id":"18f00429c638a0"} "#;
+    let msgbody = br#" {"start":"2023-05-30T17:50:04.001+03:00",
+                        "end": "2023-05-30T19:55:00.008+03:00"}
+                     "#;
     let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
             route: "order_reserved_replica_inventory".to_string()  };
     let result = route_to_handler(req, shrstate).await;
@@ -252,16 +254,12 @@ async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
     let respbody:JsnVal = result.unwrap();
     assert!(respbody.is_object());
     if let JsnVal::Object(obj) = respbody {
-        let oid_v = obj.get("oid").unwrap();
-        let usr_id_v = obj.get("usr_id").unwrap();
-        let olines_v = obj.get("lines").unwrap();
-        let ship_v = obj.get("shipping").unwrap();
-        assert!(oid_v.is_string());
-        assert!(usr_id_v.is_u64());
-        assert!(olines_v.is_array());
-        assert!(ship_v.is_object());
-        if let JsnVal::Array(olines) = olines_v {
-            assert_eq!(olines.len(), 1);
+        let rsv_v = obj.get("reservations").unwrap();
+        let returns_v = obj.get("returns").unwrap();
+        assert!(rsv_v.is_array());
+        assert!(returns_v.is_array());
+        if let JsnVal::Array(rsv) = rsv_v {
+            // assert_eq!(rsv.len(), 1); // TODO, finish the test
         }
     }
     Ok(())

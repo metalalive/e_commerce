@@ -78,10 +78,9 @@ pub struct StockLevelReturnDto {
 }
 
 #[derive(Deserialize)]
-pub struct OrderReplicaReqDto {
+pub struct OrderReplicaPaymentReqDto {
     pub order_id: String
 }
-
 #[derive(Serialize)]
 pub struct OrderReplicaPaymentDto {
     pub oid: String,
@@ -90,21 +89,48 @@ pub struct OrderReplicaPaymentDto {
     pub billing: BillingDto,
 }
 
+
+#[derive(Deserialize)]
+pub struct OrderReplicaInventoryReqDto {
+    pub start: DateTime<FixedOffset>,
+    pub end:   DateTime<FixedOffset>,
+}
 #[derive(Serialize)]
-pub struct OrderLineReplicaInventoryDto {
+pub struct OrderLineStockReservingDto {
     pub seller_id: u32,
     pub product_id: u64,
     #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
     pub product_type: ProductType,
-    pub qty_booked: u32 // TODO, add `qty_cancelled` fields for order-line return
+    pub qty: u32 
 }
+#[derive(Serialize)]
+pub struct OrderLineStockReturningDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    pub product_type: ProductType,
+    pub create_time: DateTime<FixedOffset>,
+    pub qty: u32 
+}
+#[derive(Serialize)]
+pub struct OrderReplicaStockReservingDto {
+    pub oid: String,
+    pub usr_id: u32,
+    pub create_time: DateTime<FixedOffset>,
+    pub lines: Vec<OrderLineStockReservingDto>,
+    pub shipping: ShippingDto,
+}
+#[derive(Serialize)]
+pub struct OrderReplicaStockReturningDto {
+    pub oid: String,
+    pub usr_id: u32,
+    pub lines: Vec<OrderLineStockReturningDto>,
+} // TODO, add shipping addresses for different returns
 
 #[derive(Serialize)]
 pub struct OrderReplicaInventoryDto {
-    pub oid: String,
-    pub usr_id: u32,
-    pub lines: Vec<OrderLineReplicaInventoryDto>,
-    pub shipping: ShippingDto,
+    pub reservations: Vec<OrderReplicaStockReservingDto>,
+    pub returns:      Vec<OrderReplicaStockReturningDto>,
 }
 
 

@@ -10,7 +10,7 @@ use crate::api::dto::{
     BillingDto, ShippingDto, PhoneNumberDto, OrderLinePayDto, PayAmountDto
 };
 use crate::api::rpc::dto::{
-    OrderLineReplicaInventoryDto, OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto,
+    OrderLineStockReservingDto, OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto,
     OrderLinePayUpdateErrorReason, InventoryEditStockLevelDto,
 };
 use crate::api::web::dto::{
@@ -81,7 +81,8 @@ pub struct OrderLineModel {
 pub struct OrderReturnModel {
     pub id_: OrderLineIdentity,
     pub qty: HashMap<DateTime<FixedOffset>, (u32, OrderLinePriceModel)>,
-}
+} // TODO, declare new struct which collects the hash entry
+  // , add different shipping address for each return
 
 pub struct OrderLineModelSet {
     pub order_id: String,
@@ -426,10 +427,10 @@ impl Into<OrderLinePayDto> for OrderLineModel {
     }
 }
 
-impl Into<OrderLineReplicaInventoryDto> for OrderLineModel {
-    fn into(self) -> OrderLineReplicaInventoryDto {
-        OrderLineReplicaInventoryDto { seller_id: self.id_.store_id, product_id: self.id_.product_id,
-            product_type: self.id_.product_type, qty_booked: self.qty.reserved }
+impl Into<OrderLineStockReservingDto> for OrderLineModel {
+    fn into(self) -> OrderLineStockReservingDto {
+        OrderLineStockReservingDto { seller_id: self.id_.store_id, product_id: self.id_.product_id,
+            product_type: self.id_.product_type, qty: self.qty.reserved }
     }
 }
 
