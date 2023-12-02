@@ -52,7 +52,14 @@ fn ut_setup_billing () -> Vec<BillingModel>
             street_name: Some("du iye j0y".to_string()), detail: "eu ur4 to4o".to_string() };
         BillingModel {contact, address:Some(address)}
     };
-    vec![item1, item2]
+    let item3 = { 
+        let (first_name, last_name) = ("Ben".to_string(), "MingkriokraDo".to_string());
+        let emails = vec![];
+        let phones = vec![PhoneNumberDto{nation:886, number:"0900260812".to_string()},];
+        let contact = ContactModel {first_name, last_name, emails, phones};
+        BillingModel {contact, address:None}
+    };
+    vec![item1, item2, item3]
 }
 
 fn ut_setup_shipping (mock_seller_ids:&[u32;2]) -> Vec<ShippingModel>
@@ -87,7 +94,17 @@ fn ut_setup_shipping (mock_seller_ids:&[u32;2]) -> Vec<ShippingModel>
         ];
         ShippingModel {contact, option, address:Some(address)}
     };
-    vec![item1, item2]
+    let item3 = {
+        let (first_name, last_name) = ("Biseakral".to_string(), "Kazzhitsch".to_string());
+        let emails = vec!["low@hunt.io".to_string()];
+        let phones = vec![PhoneNumberDto{nation:43, number:"500020812".to_string()},];
+        let contact = ContactModel {first_name, last_name, emails, phones};
+        let option = vec![
+            ShippingOptionModel{seller_id:mock_seller_ids[0], method:ShippingMethod::FedEx},
+        ];
+        ShippingModel {contact, option, address:None}
+    };
+    vec![item1, item2, item3]
 }
 
 fn ut_setup_orderlines (mock_seller_ids:&[u32;2]) -> Vec<OrderLineModel>
@@ -138,6 +155,16 @@ fn ut_setup_orderlines (mock_seller_ids:&[u32;2]) -> Vec<OrderLineModel>
         OrderLineModel {id_: OrderLineIdentity {store_id:mock_seller_ids[0], product_id: 199,
             product_type:ProductType::Item},  price:OrderLinePriceModel { unit:8, total: 264 },
             qty: OrderLineQuantityModel {reserved: 33, paid: 0, paid_last_update: None},
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {id_: OrderLineIdentity {store_id:mock_seller_ids[0], product_id: 201,
+            product_type:ProductType::Package},  price:OrderLinePriceModel { unit:5, total: 165 },
+            qty: OrderLineQuantityModel {reserved: 33, paid: 0, paid_last_update: None},
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
+        OrderLineModel {id_: OrderLineIdentity {store_id:mock_seller_ids[0], product_id: 202,
+            product_type:ProductType::Item},  price:OrderLinePriceModel { unit:23, total: 69 },
+            qty: OrderLineQuantityModel {reserved: 3, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
     ]

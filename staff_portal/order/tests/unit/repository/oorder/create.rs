@@ -7,32 +7,25 @@ use order::model::{
 };
 use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_shipping, ut_setup_orderlines};
 
+const ORDERS_NUM_LINES:[usize;3] = [4,5,2];
 
-async fn ut_verify_create_order(mock_oid:[String;2], mock_usr_ids:[u32;2],
-                               o_repo :&OrderInMemRepo,
-                               mut orderlines: Vec<OrderLineModel>,
-                               mut billings: Vec<BillingModel>,
-                               mut shippings: Vec<ShippingModel> )
+async fn ut_verify_create_order(
+    mock_oid:[String;3], mock_usr_ids:[u32;3], mock_create_time:[&str;3],
+    o_repo :&OrderInMemRepo, mut orderlines: Vec<OrderLineModel>,
+    mut billings: Vec<BillingModel>, mut shippings: Vec<ShippingModel> )
 {
-    let total_num_olines = orderlines.len();
-    let orders_num_lines = [4, total_num_olines - 4];
-    let ol_set = OrderLineModelSet {order_id:mock_oid[0].clone(), owner_id:mock_usr_ids[0],
-        create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
-        lines: orderlines.drain(0..orders_num_lines[0]).collect()
-    };
-    let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
-    assert!(result.is_ok());
-    if let Ok(dtos) = result {
-        assert_eq!(dtos.len(), orders_num_lines[0]);
-    };
-    let ol_set = OrderLineModelSet {order_id:mock_oid[1].clone(), lines: orderlines, owner_id:mock_usr_ids[1],
-            create_time: DateTime::parse_from_rfc3339("2022-11-08T12:09:30.519+04:00").unwrap()
-    };
-    let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
-    assert!(result.is_ok());
-    if let Ok(dtos) = result {
-        assert_eq!(dtos.len(), orders_num_lines[1]);
-    };
+    assert!(orderlines.len() >= ORDERS_NUM_LINES.iter().sum::<usize>());
+    for idx in 0..3 {
+        let ol_set = OrderLineModelSet {order_id:mock_oid[idx].clone(), owner_id:mock_usr_ids[idx],
+            create_time: DateTime::parse_from_rfc3339(mock_create_time[idx]).unwrap(),
+            lines: orderlines.drain(0..ORDERS_NUM_LINES[idx]).collect()
+        };
+        let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
+        assert!(result.is_ok());
+        if let Ok(dtos) = result {
+            assert_eq!(dtos.len(), ORDERS_NUM_LINES[idx]);
+        }; 
+    }
 }
 
 async fn ut_verify_fetch_all_olines(mock_oid:[String;2], mock_seller_ids:[u32;2],
@@ -41,7 +34,7 @@ async fn ut_verify_fetch_all_olines(mock_oid:[String;2], mock_seller_ids:[u32;2]
     let result = o_repo.fetch_all_lines(mock_oid[0].clone()).await;
     assert!(result.is_ok());
     if let Ok(mut lines) = result {
-        assert_eq!(lines.len(), 4);
+        assert_eq!(lines.len(), ORDERS_NUM_LINES[0]);
         lines.sort_by(|a,b| { a.qty.reserved.cmp(&b.qty.reserved) });
         assert_eq!(lines[0].qty.reserved, 4);
         assert_eq!(lines[0].id_.store_id, mock_seller_ids[0]);
@@ -59,7 +52,7 @@ async fn ut_verify_fetch_all_olines(mock_oid:[String;2], mock_seller_ids:[u32;2]
     let result = o_repo.fetch_all_lines(mock_oid[1].clone()).await;
     assert!(result.is_ok());
     if let Ok(mut lines) = result {
-        assert_eq!(lines.len(), 5);
+        assert_eq!(lines.len(), ORDERS_NUM_LINES[1]);
         lines.sort_by(|a,b| { a.qty.reserved.cmp(&b.qty.reserved) });
         assert_eq!(lines[0].qty.reserved, 16);
         assert_eq!(lines[0].id_.store_id, mock_seller_ids[1]);
@@ -107,21 +100,51 @@ async fn ut_verify_fetch_specific_olines(mock_oid:[String;2], mock_seller_ids:[u
     }
 } // end of fn ut_verify_fetch_specific_olines
 
-async fn ut_verify_fetch_owner_id(mock_oids:[String;2], mock_usr_ids:[u32;2],
+async fn ut_verify_fetch_owner_id(mock_oids:[String;3], mock_usr_ids:[u32;3],
                                   o_repo :&OrderInMemRepo)
 {
     let mut uid_iter = mock_usr_ids.into_iter();
     for oid in mock_oids.into_iter() {
         let result = o_repo.owner_id(oid.as_str()).await;
         assert!(result.is_ok());
-        if let Ok(fetched_usr_id) = result {
+        if let Ok(fetched) = result {
             let expect = uid_iter.next().unwrap() ;
-            assert_eq!(fetched_usr_id, expect);
+            assert_eq!(fetched, expect);
+        }
+    }
+}
+async fn ut_verify_fetch_create_time(mock_oids:[String;3],
+                                     verify_create_time:[&str;3],
+                                     o_repo:&OrderInMemRepo )
+{
+    let mut ctime_iter = verify_create_time.into_iter();
+    for oid in mock_oids.into_iter() {
+        let result = o_repo.created_time(oid.as_str()).await;
+        assert!(result.is_ok());
+        if let Ok(fetched) = result {
+            let expect = ctime_iter.next().unwrap();
+            let expect = DateTime::parse_from_rfc3339(expect).unwrap();
+            assert_eq!(fetched, expect);
+        }
+    }
+}
+async fn ut_verify_fetch_ids_by_ctime (data:[(&str, &str, Vec<String>);3],
+                                       o_repo:&OrderInMemRepo )
+{
+    for (start, end, mut expect_ids) in data {
+        let t_start = DateTime::parse_from_rfc3339(start).unwrap();
+        let t_end = DateTime::parse_from_rfc3339(end).unwrap();
+        let result = o_repo.fetch_ids_by_created_time(t_start, t_end).await;
+        assert!(result.is_ok());
+        if let Ok(mut actual) = result {
+            actual.sort();
+            expect_ids.sort();
+            assert_eq!(actual, expect_ids);
         }
     }
 }
 
-async fn ut_verify_fetch_billing(mock_oid:[String;2], o_repo :&OrderInMemRepo)
+async fn ut_verify_fetch_billing(mock_oid:[String;3], o_repo :&OrderInMemRepo)
 {
     let result = o_repo.fetch_billing(mock_oid[0].clone()).await;
     assert!(result.is_ok());
@@ -137,9 +160,14 @@ async fn ut_verify_fetch_billing(mock_oid:[String;2], o_repo :&OrderInMemRepo)
         assert_eq!(fetched_bl.contact.emails.get(0).unwrap().as_str(), "banker@blueocean.ic");
         assert!(matches!(fetched_bl.address.as_ref().unwrap().country, CountryCode::US));
     }
+    let result = o_repo.fetch_billing(mock_oid[2].clone()).await;
+    assert!(result.is_ok());
+    if let Ok(fetched_bl) = result {
+        assert!(fetched_bl.address.is_none());
+    }
 }
 
-async fn ut_verify_fetch_shipping(mock_oid:[String;2], mock_seller_ids:[u32;2],
+async fn ut_verify_fetch_shipping(mock_oid:[String;3], mock_seller_ids:[u32;2],
                                   o_repo :&OrderInMemRepo )
 {
     let result = o_repo.fetch_shipping(mock_oid[0].clone()).await;
@@ -163,25 +191,47 @@ async fn ut_verify_fetch_shipping(mock_oid:[String;2], mock_seller_ids:[u32;2],
         let opt = fetched_sh.option.iter().find(|m| m.seller_id == mock_seller_ids[1]).unwrap();
         assert!(matches!(opt.method, ShippingMethod::UPS));
     }
+    let result = o_repo.fetch_shipping(mock_oid[2].clone()).await;
+    assert!(result.is_ok());
+    if let Ok(fetched_sh) = result {
+        assert!(fetched_sh.address.is_none());
+    }
 }
 
 #[tokio::test]
 async fn in_mem_create_ok ()
 {
-    let o_repo = in_mem_repo_ds_setup(30).await;
-    let (mock_usr_ids, mock_seller_ids) = ([124u32, 421], [17u32,38]);
+    let o_repo = in_mem_repo_ds_setup(50).await;
+    let (mock_usr_ids, mock_seller_ids) = ([124u32, 421, 124], [17u32,38]);
     let mock_oid = [
         OrderLineModel::generate_order_id(4),
         OrderLineModel::generate_order_id(2),
+        OrderLineModel::generate_order_id(7),
     ];
-    ut_verify_create_order(mock_oid.clone(), mock_usr_ids.clone(), &o_repo,
-                          ut_setup_orderlines(&mock_seller_ids),
-                          ut_setup_billing(), 
-                          ut_setup_shipping(&mock_seller_ids)
-                        ).await ;
-    ut_verify_fetch_all_olines(mock_oid.clone(), mock_seller_ids.clone(),  &o_repo).await;
-    ut_verify_fetch_specific_olines(mock_oid.clone(), mock_seller_ids.clone(),  &o_repo).await;
+    let mock_create_time = [
+        "2022-11-07T04:00:01.519-01:00",
+        "2022-11-08T12:09:33.8101+04:00",
+        "2022-11-09T06:07:18.150-01:00",
+    ];
+    ut_verify_create_order(
+        mock_oid.clone(), mock_usr_ids.clone(), mock_create_time.clone(),
+        &o_repo, ut_setup_orderlines(&mock_seller_ids), ut_setup_billing(), 
+        ut_setup_shipping(&mock_seller_ids)
+    ).await ;
+    ut_verify_fetch_all_olines([mock_oid[0].clone(), mock_oid[1].clone()],
+                               mock_seller_ids.clone(),  &o_repo).await;
+    ut_verify_fetch_specific_olines([mock_oid[0].clone(), mock_oid[1].clone()],
+                              mock_seller_ids.clone(),  &o_repo).await;
     ut_verify_fetch_owner_id(mock_oid.clone(), mock_usr_ids, &o_repo).await ;
+    ut_verify_fetch_create_time(mock_oid.clone(), mock_create_time, &o_repo).await ;
+    ut_verify_fetch_ids_by_ctime([
+            ("2022-11-07T03:59:06.503-01:00", "2022-11-07T04:00:08.990-01:00",
+             vec![mock_oid[0].clone()] ),
+            ("2022-11-07T03:58:17.001-01:00", "2022-11-09T22:13:18.409+04:00",
+             mock_oid.to_vec() ),
+            ("2022-11-07T03:58:16.503-01:00", "2022-11-07T03:59:58.990-01:00",
+             vec![] ),
+        ], &o_repo ).await;
     ut_verify_fetch_billing(mock_oid.clone(), &o_repo).await ;
     ut_verify_fetch_shipping(mock_oid, mock_seller_ids, &o_repo).await;
 } // end of in_mem_create_ok

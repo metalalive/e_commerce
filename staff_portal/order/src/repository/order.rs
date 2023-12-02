@@ -195,9 +195,9 @@ mod _pkey_partial_label {
     }
     impl AbsDStoreFilterKeyOp for InMemDStoreFilterTimeRangeOp {
         fn filter(&self, _k:&String, row:&Vec<String>) -> bool {
-            let rsv_time = row.get(self.col_idx).unwrap();
-            let rsv_time = DateTime::parse_from_rfc3339(rsv_time.as_str()).unwrap();
-            (self.t0 < rsv_time) && (rsv_time < self.t1)
+            let time_mid = row.get(self.col_idx).unwrap();
+            let time_mid = DateTime::parse_from_rfc3339(time_mid.as_str()).unwrap();
+            (self.t0 < time_mid) && (time_mid < self.t1)
         }
     }
 } // end of mod _pkey_partial_label
@@ -552,11 +552,18 @@ impl AbsOrderRepo for OrderInMemRepo {
         }).collect() ;
         self.fetch_lines_common(keys).await
     }
+
     async fn fetch_ids_by_created_time(&self,  start: DateTime<FixedOffset>,
                                        end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<String>, AppError>
     {
-        Ok(vec![])
+        let table_name = _order_toplvl_meta::TABLE_LABEL;
+        let op = _pkey_partial_label::InMemDStoreFilterTimeRangeOp {
+            col_idx: _order_toplvl_meta::InMemColIdx::CreateTime.into(),
+            t0: start, t1: end,
+        };
+        let keys = self.datastore.filter_keys(table_name.to_string(), &op).await?;
+        Ok(keys)
     }
 
     async fn owner_id(&self, order_id:&str) -> DefaultResult<u32, AppError>
@@ -566,7 +573,8 @@ impl AbsOrderRepo for OrderInMemRepo {
     }
     async fn created_time(&self, order_id:&str) -> DefaultResult<DateTime<FixedOffset>, AppError>
     {
-        Ok(LocalTime::now().fixed_offset())
+        let (_usr_id, create_time) = self.fetch_toplvl_meta(order_id).await?;
+        Ok(create_time)
     }
 
     async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
