@@ -13,7 +13,7 @@ pub use stock_level::{
 pub use order::{
     BillingModel, ShippingModel, PhyAddrModel, ContactModel, OrderLinePriceModel,
     OrderLineAppliedPolicyModel, ShippingOptionModel, OrderLineModel, OrderLineQuantityModel,
-    OrderLineModelSet, OrderLineIdentity, OrderReturnModel
+    OrderLineModelSet, OrderLineIdentity, OrderReturnModel, OrderReturnQuantityModel
 };
 use crate::constant::ProductType;
 use crate::api::web::dto::OrderLineReqDto;

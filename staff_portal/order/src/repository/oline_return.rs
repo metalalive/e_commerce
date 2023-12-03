@@ -10,11 +10,13 @@ use crate::AppDataStoreContext;
 use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow};
 use crate::error::{AppError, AppErrorCode};
-use crate::model::{OrderLineIdentity, OrderReturnModel, OrderLinePriceModel};
+use crate::model::{OrderLineIdentity, OrderReturnModel};
 use super::AbsOrderReturnRepo;
 
 mod _oline_return {
-    use crate::constant::ProductType;
+    use crate::datastore::AbsDStoreFilterKeyOp;
+    use crate::model::{OrderReturnQuantityModel, OrderLinePriceModel};
+    use super::{HashMap, DateTime, FixedOffset, ProductType};
 
     pub(super) const TABLE_LABEL:&'static str = "order_line_return";
     pub(super) const QTY_DELIMITER:&'static str = "/";
@@ -35,6 +37,37 @@ mod _oline_return {
         let prod_typ: u8 = prod_typ.into();
         format!("{oid}-{seller_id}-{prod_typ}-{prod_id}")
     }
+    pub(super) fn inmem_qty2col(map:OrderReturnQuantityModel) -> String {
+        map.into_iter().map(|(time, (qty, refund))| {
+            format!("{} {} {} {}", time.format(QTY_KEY_FORMAT).to_string(),
+                qty, refund.unit, refund.total)
+        }).collect::<Vec<String>>().join(QTY_DELIMITER)
+    }
+    pub(super) fn inmem_col2qty(raw:String) -> OrderReturnQuantityModel {
+        let iter = raw.split(QTY_DELIMITER).map(|tkn| {
+            let mut tokens = tkn.split(" ");
+            let (time, q, unit, total) = (
+                DateTime::parse_from_str(tokens.next().unwrap(), QTY_KEY_FORMAT).unwrap() ,
+                tokens.next().unwrap().parse().unwrap(),
+                tokens.next().unwrap().parse().unwrap(),
+                tokens.next().unwrap().parse().unwrap(),
+            );
+            (time, (q, OrderLinePriceModel{unit, total}))
+        });
+        HashMap::from_iter(iter)
+    }
+    pub(super) struct InMemDStoreFilterTimeRangeOp {
+        pub t0: DateTime<FixedOffset>,
+        pub t1: DateTime<FixedOffset>,
+    }
+    impl AbsDStoreFilterKeyOp for InMemDStoreFilterTimeRangeOp {
+        fn filter(&self, _key:&String, row:&Vec<String>) -> bool {
+            let col_idx:usize = InMemColIdx::QtyRefund.into();
+            let qty_raw = row.get(col_idx).unwrap();
+            let map = inmem_col2qty(qty_raw.clone());
+            map.keys().into_iter().any(|t| ((&self.t0 <= t) && (t <= &self.t1)) )
+        }
+    }
 } // end of inner module _oline_return
 
 pub struct OrderReturnInMemRepo {
@@ -44,10 +77,7 @@ pub struct OrderReturnInMemRepo {
 impl From<OrderReturnModel> for AppInMemFetchedSingleRow {
     fn from(value: OrderReturnModel) -> Self {
         let (id_, map) = (value.id_ , value.qty);
-        let qty_serial = map.into_iter().map(|(time, (qty, refund))| {
-            format!("{} {} {} {}", time.format(_oline_return::QTY_KEY_FORMAT).to_string(),
-                qty, refund.unit, refund.total)
-        }).collect::<Vec<String>>().join(_oline_return::QTY_DELIMITER);
+        let qty_serial = _oline_return::inmem_qty2col(map);
         let mut rows = (0.._oline_return::InMemColIdx::TotNumColumns.into())
             .into_iter().map(|_n| String::new()).collect::<Self>();
         let _ = [
@@ -77,19 +107,9 @@ impl Into<OrderReturnModel> for AppInMemFetchedSingleRow {
                 .unwrap().to_owned(),
         );
         let product_type = ProductType::from(prod_typ_num);
-        let iter = qty_serial.split(_oline_return::QTY_DELIMITER).map(|tkn| {
-            let mut tokens = tkn.split(" ");
-            let (time, q, unit, total) = (
-                DateTime::parse_from_str(tokens.next().unwrap(), _oline_return::QTY_KEY_FORMAT).unwrap() ,
-                tokens.next().unwrap().parse().unwrap(),
-                tokens.next().unwrap().parse().unwrap(),
-                tokens.next().unwrap().parse().unwrap(),
-            );
-            (time, (q, OrderLinePriceModel{unit, total}))
-        });
         OrderReturnModel {
             id_: OrderLineIdentity {store_id, product_id, product_type},
-            qty: HashMap::from_iter(iter)
+            qty: _oline_return::inmem_col2qty(qty_serial)
         }
     }
 }
@@ -119,7 +139,17 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
     async fn fetch_by_created_time(&self, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>
     {
-        Ok(vec![])
+        let table_name = _oline_return::TABLE_LABEL;
+        let op = _oline_return::InMemDStoreFilterTimeRangeOp {t0:start, t1:end};
+        let pkeys = self.datastore.filter_keys(table_name.to_string(), &op).await?;
+        let info = HashMap::from([(table_name.to_string(), pkeys)]);
+        let mut data = self.datastore.fetch(info).await?;
+        let rows = data.remove(table_name).unwrap();
+        let out = rows.into_iter().map(|(key, row)| {
+            let oid = key.split("-").next().unwrap().to_string();
+            (oid, row.into())
+        }).collect();
+        Ok(out)
     }
     async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>
     {

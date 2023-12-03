@@ -78,9 +78,11 @@ pub struct OrderLineModel {
     pub policy: OrderLineAppliedPolicyModel
 }
 
+pub type OrderReturnQuantityModel = HashMap<DateTime<FixedOffset>, (u32, OrderLinePriceModel)>;
+
 pub struct OrderReturnModel {
     pub id_: OrderLineIdentity,
-    pub qty: HashMap<DateTime<FixedOffset>, (u32, OrderLinePriceModel)>,
+    pub qty: OrderReturnQuantityModel,
 } // TODO, declare new struct which collects the hash entry
   // , add different shipping address for each return
 
