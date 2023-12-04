@@ -17,9 +17,9 @@ _logger = logging.getLogger(__name__)
 def clean_old_log_localhost(max_days_keep=100):
     num_removed = 0
     curr_pos = django_settings.BASE_DIR
-    while curr_pos.name != 'staff_portal':
+    while curr_pos.name != 'services':
         curr_pos = curr_pos.parent
-    log_path = curr_pos.joinpath('./tmp/log/staffsite')
+    log_path = curr_pos.joinpath('./tmp/log/dev')
     if log_path.exists():
         for curr_node in log_path.iterdir():
             stat = curr_node.stat()
