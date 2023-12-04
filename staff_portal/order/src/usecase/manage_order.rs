@@ -241,14 +241,7 @@ impl OrderReplicaInventoryUseCase {
         let combo = self.ret_repo.fetch_by_created_time(start, end).await?;
         for (oid, ret_m) in combo {
             let usr_id = self.o_repo.owner_id(oid.as_str()).await?;
-            let lines = ret_m.qty.into_iter().map(
-                |(create_time, (qty, _refund))| {
-                    OrderLineStockReturningDto { seller_id: ret_m.id_.store_id,
-                        product_id: ret_m.id_.product_id, create_time, qty,
-                        product_type: ret_m.id_.product_type.clone() }
-                }
-            ).collect();
-            let obj = OrderReplicaStockReturningDto { oid, usr_id, lines };
+            let obj = OrderReplicaStockReturningDto { oid, usr_id, lines:ret_m.into() };
             returns.push(obj);
         }
         let resp = OrderReplicaInventoryDto { reservations, returns };

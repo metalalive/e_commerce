@@ -10,14 +10,14 @@ use crate::api::dto::{
     BillingDto, ShippingDto, PhoneNumberDto, OrderLinePayDto, PayAmountDto
 };
 use crate::api::rpc::dto::{
-    OrderLineStockReservingDto, OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto,
-    OrderLinePayUpdateErrorReason, InventoryEditStockLevelDto,
+    OrderLineStockReservingDto, OrderLineStockReturningDto, OrderLinePayUpdateErrorDto,
+    OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason, InventoryEditStockLevelDto,
 };
 use crate::api::web::dto::{
-    BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto,
-    ShipOptionSellerErrorReason, PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason,
-    ContactErrorReason, ContactNonFieldErrorReason, PhoneNumberErrorDto,
-    PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto, OrderLineReturnErrorDto, OrderLineReturnErrorReason 
+    BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto, ShipOptionSellerErrorReason,
+    PhyAddrRegionErrorReason, PhyAddrDistinctErrorReason, ContactErrorReason, ContactNonFieldErrorReason,
+    PhoneNumberErrorDto, PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto,
+    OrderLineReturnErrorDto, OrderLineReturnErrorReason 
 };
 use crate::constant::REGEX_EMAIL_RFC5322;
 use crate::error::{AppError, AppErrorCode};
@@ -450,6 +450,19 @@ impl Into<InventoryEditStockLevelDto> for OrderLineModel {
     }
 }
 
+
+impl Into<Vec<OrderLineStockReturningDto>> for OrderReturnModel {
+    fn into(self) -> Vec<OrderLineStockReturningDto> {
+        let (id_, map) = (self.id_, self.qty);
+        map.into_iter().map(
+            |(create_time, (qty, _refund))| {
+                OrderLineStockReturningDto {
+                    seller_id: id_.store_id, product_id: id_.product_id, create_time,
+                    qty, product_type: id_.product_type.clone() }
+            }
+        ).collect()
+    }
+}
 
 impl OrderReturnModel {
     pub fn num_returned (&self) -> u32 {

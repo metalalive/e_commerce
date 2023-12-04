@@ -1,11 +1,14 @@
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
-use order::model::{OrderLineQuantityModel, OrderLineModelSet, OrderLineIdentity};
+use chrono::DateTime;
 use serde_json::Value as JsnVal;
+
+use order::constant::ProductType;
 
 use order::api::rpc::route_to_handler;
 use order::error::AppError;
 use order::{AppRpcClientReqProperty, AppSharedState, AppDataStoreContext};
+use order::model::{OrderLineModel, OrderLinePriceModel, OrderLineQuantityModel, OrderLineModelSet, OrderLineIdentity};
 
 mod common;
 use common::test_setup_shr_state;
@@ -146,26 +149,30 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
 
 
 
-async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u32)
+async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str,
+                                 usr_id:u32, create_time:&str )
     -> DefaultResult<(), AppError>
 {
-    use chrono::DateTime;
-    use order::constant::ProductType;
     use order::repository::app_repo_order;
     use order::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
     use order::model::{
         BillingModel, ShippingModel,ContactModel, PhyAddrModel, ShippingOptionModel,
-        OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel
+        OrderLineAppliedPolicyModel
     };
     let repo = app_repo_order(ds).await ?;
     let seller_id = 543;
-    let create_time    = DateTime::parse_from_rfc3339("2023-05-30T18:58:04+03:00").unwrap();
+    let create_time    = DateTime::parse_from_rfc3339(create_time).unwrap();
     let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
     let lines = vec![
+        OrderLineModel {id_: OrderLineIdentity {store_id: seller_id, product_id:94,
+            product_type:ProductType::Package}, price: OrderLinePriceModel { unit: 50, total: 200 },
+            qty: OrderLineQuantityModel {reserved: 4, paid: 0, paid_last_update: None},
+            policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+        },
         OrderLineModel {id_: OrderLineIdentity {store_id: seller_id, product_id:92,
-            product_type:ProductType::Item}, price: OrderLinePriceModel { unit: 34, total: 170 },
-            qty: OrderLineQuantityModel {reserved: 5, paid: 0, paid_last_update: None},
+            product_type:ProductType::Item}, price: OrderLinePriceModel { unit: 34, total: 204 },
+            qty: OrderLineQuantityModel {reserved: 6, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         }
     ];
@@ -198,6 +205,34 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str, usr_id:u
     Ok(())
 } // end of itest_mock_create_order
 
+async fn itest_mock_create_oline_return(ds:Arc<AppDataStoreContext>, oid:&str,
+                                  create_time:&str )
+    -> DefaultResult<(), AppError>
+{
+    use std::collections::HashMap;
+    use order::repository::app_repo_order_return;
+    use order::model::OrderReturnModel;
+    let repo = app_repo_order_return(ds).await?;
+    let seller_id = 543;
+    let ms = vec![
+        OrderReturnModel {
+            id_: OrderLineIdentity {store_id: seller_id, product_id:92, product_type:ProductType::Item},
+            qty: HashMap::from([(
+                    DateTime::parse_from_rfc3339(create_time).unwrap(),
+                    (1, (OrderLinePriceModel {unit: 34, total: 34}))
+                )])
+        },
+        OrderReturnModel {
+            id_: OrderLineIdentity {store_id: seller_id, product_id:94, product_type:ProductType::Package},
+            qty: HashMap::from([(
+                    DateTime::parse_from_rfc3339(create_time).unwrap(),
+                    (1, (OrderLinePriceModel {unit: 50, total: 50}))
+                )])
+        }
+    ];
+    let _num = repo.save(oid, ms).await ?;
+    Ok(())
+} // end of fn itest_mock_create_oline_return
 
 
 #[tokio::test]
@@ -205,8 +240,8 @@ async fn  replica_orderinfo_payment_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
     // assume web server has created the order.
-    itest_mock_create_order(shrstate.datastore().clone(),
-                            "18f00429638a0b", 2345).await?;
+    itest_mock_create_order(shrstate.datastore().clone(), "18f00429638a0b",
+                            2345, "2023-06-01T09:05:30+03:00").await?;
     let msgbody = br#" {"order_id":"18f00429638a0b"} "#;
     let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
             route: "order_reserved_replica_payment".to_string()  };
@@ -228,7 +263,7 @@ async fn  replica_orderinfo_payment_ok() -> DefaultResult<(), AppError>
         assert!(olines_v.is_array());
         assert!(bill_v.is_object());
         if let JsnVal::Array(olines) = olines_v {
-            assert_eq!(olines.len(), 1);
+            assert_eq!(olines.len(), 2);
         }
     }
     Ok(())
@@ -239,8 +274,10 @@ async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
     // assume web server has created the order.
-    itest_mock_create_order(shrstate.datastore().clone(),
-                            "18f00429c638a0", 2345).await?;
+    itest_mock_create_order(shrstate.datastore().clone(), "18f00429c638a0",
+                            2345, "2023-05-30T18:58:04+03:00").await?;
+    itest_mock_create_oline_return(shrstate.datastore().clone(), "18f00429c638a0",
+                                  "2023-05-30T19:05:45+03:00" ).await?;
     let msgbody = br#" {"start":"2023-05-30T17:50:04.001+03:00",
                         "end": "2023-05-30T19:55:00.008+03:00"}
                      "#;
@@ -259,7 +296,10 @@ async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
         assert!(rsv_v.is_array());
         assert!(returns_v.is_array());
         if let JsnVal::Array(rsv) = rsv_v {
-            // assert_eq!(rsv.len(), 1); // TODO, finish the test
+            assert_eq!(rsv.len(), 1);
+        }
+        if let JsnVal::Array(ret) = returns_v {
+            assert_eq!(ret.len(), 2);
         }
     }
     Ok(())
@@ -270,8 +310,8 @@ async fn  update_order_payment_staus_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
     // assume web server has created the order.
-    itest_mock_create_order(shrstate.datastore().clone(),
-                            "18f00429638a0b", 2345).await?;
+    itest_mock_create_order(shrstate.datastore().clone(), "18f00429638a0b",
+                            3456,   "2023-06-01T16:33:40+08:00").await?;
     let msgbody = br#"
             {"oid":"18f00429638a0b", lines:[
                 {"seller_id": 543, "product_id": 92, "product_type": 1,
