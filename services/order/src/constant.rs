@@ -22,7 +22,8 @@ pub(crate) const WEBAPI_ACCESS_EXISTING_ORDER: WebApiHdlrLabel = "access_existin
 pub(crate) const WEBAPI_RETURN_OLINES_REQ: WebApiHdlrLabel = "return_lines_request";
 
 pub(crate) const RPCAPI_EDIT_PRODUCT_PRICE: WebApiHdlrLabel = "update_store_products";
-pub(crate) const RPCAPI_EDIT_STOCK_LEVEL: WebApiHdlrLabel = "edit_stock_level";
+pub(crate) const RPCAPI_STOCK_LEVEL_EDIT: WebApiHdlrLabel = "stock_level_edit";
+pub(crate) const RPCAPI_STOCK_RETURN_CANCELLED: WebApiHdlrLabel = "stock_return_cancelled";
 pub(crate) const RPCAPI_ORDER_RSV_READ_INVENTORY: WebApiHdlrLabel = "order_reserved_replica_inventory";
 pub(crate) const RPCAPI_ORDER_RSV_READ_PAYMENT: WebApiHdlrLabel   = "order_reserved_replica_payment";
 pub(crate) const RPCAPI_ORDER_RSV_UPDATE_PAYMENT: WebApiHdlrLabel = "order_reserved_update_payment";

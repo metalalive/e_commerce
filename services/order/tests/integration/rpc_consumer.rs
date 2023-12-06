@@ -92,11 +92,11 @@ fn verify_reply_stock_level(objs:&Vec<JsnVal>,  expect_product_id:u64,
     }
 } // end of fn verify_reply_stock_level
 
-async fn inventory_edit_stock_level_run_req(shrstate:AppSharedState,
-                                            msgbody:Vec<u8> ) -> JsnVal
+async fn itest_common_run_rpc_req(shrstate:AppSharedState, route:&str,
+                                  msgbody:Vec<u8> ) -> JsnVal
 {
     let req = AppRpcClientReqProperty { retry: 2,  msgbody,
-            route: "edit_stock_level".to_string()  };
+            route: route.to_string()  };
     let result = route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let respbody = result.unwrap();
@@ -107,20 +107,21 @@ async fn inventory_edit_stock_level_run_req(shrstate:AppSharedState,
 }
 
 #[tokio::test]
-async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
+async fn inventory_stock_level_edit_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
     let msgbody = br#"
             [
                 {"qty_add":12, "store_id":1006, "product_type": 1, "product_id": 9200125,
-                 "expiry": "2023-12-24T07:11:13.730050+07:00"},
+                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
                 {"qty_add":18, "store_id":1009, "product_type": 2, "product_id": 7001,
-                 "expiry": "2023-12-27T22:19:13.730050+08:00"},
+                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
                 {"qty_add":50, "store_id":1007, "product_type": 2, "product_id": 20911,
-                 "expiry": "2023-12-25T16:27:13.730050+10:00"}
+                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
             ]
             "#;
-    let value = inventory_edit_stock_level_run_req(shrstate.clone(), msgbody.to_vec()).await;
+    let value = itest_common_run_rpc_req(
+        shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
     assert!(value.is_array());
     if let JsnVal::Array(items) = value {
         assert_eq!(items.len(), 3);
@@ -130,14 +131,15 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
     let msgbody = br#"
             [
                 {"qty_add":2, "store_id":1006, "product_type": 1, "product_id": 9200125,
-                 "expiry": "2023-12-24T07:11:13.700450+07:00"},
+                 "expiry": "2099-12-24T07:11:13.700450+07:00"},
                 {"qty_add":-2, "store_id":1009, "product_type": 2, "product_id": 7001,
-                 "expiry": "2023-12-27T22:19:13.730050+08:00"},
+                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
                 {"qty_add":19, "store_id":1007, "product_type": 2, "product_id": 20911,
-                 "expiry": "2023-12-25T16:27:14.0060+10:00"}
+                 "expiry": "2099-12-25T16:27:14.0060+10:00"}
             ]
             "#;
-    let value = inventory_edit_stock_level_run_req(shrstate.clone(), msgbody.to_vec()).await;
+    let value = itest_common_run_rpc_req(
+        shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
     assert!(value.is_array());
     if let JsnVal::Array(items) = value {
         assert_eq!(items.len(), 3);
@@ -145,8 +147,39 @@ async fn inventory_edit_stock_level_ok() -> DefaultResult<(), AppError>
         verify_reply_stock_level(&items, 7001, 2, 18, 2);
     }
     Ok(())
-} // end of fn test_update_product_price_ok
+} // end of fn inventory_stock_level_edit_ok
 
+
+#[tokio::test]
+async fn inventory_stock_level_return_caancelled_ok() -> DefaultResult<(), AppError>
+{
+    let shrstate = test_setup_shr_state()?;
+    let msgbody = br#"
+            [
+                {"qty_add":21, "store_id":1016, "product_type": 2, "product_id": 9200125,
+                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
+                {"qty_add":40, "store_id":1019, "product_type": 2, "product_id": 7001,
+                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
+                {"qty_add":39, "store_id":1017, "product_type": 1, "product_id": 20911,
+                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
+            ]
+            "#;
+    let value = itest_common_run_rpc_req(
+        shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    let msgbody = br#"
+            {"order_id":"on1yfa05", "items":[
+                {"qty_add":21, "store_id":1016, "product_type": 2, "product_id": 9200125,
+                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
+                {"qty_add":39, "store_id":1017, "product_type": 1, "product_id": 20911,
+                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
+            ]}
+            "#;
+    let value = itest_common_run_rpc_req(
+        shrstate, "stock_return_cancelled", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    Ok(())
+} // end of fn inventory_stock_level_return_caancelled_ok
 
 
 async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str,
@@ -243,15 +276,8 @@ async fn  replica_orderinfo_payment_ok() -> DefaultResult<(), AppError>
     itest_mock_create_order(shrstate.datastore().clone(), "18f00429638a0b",
                             2345, "2023-06-01T09:05:30+03:00").await?;
     let msgbody = br#" {"order_id":"18f00429638a0b"} "#;
-    let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
-            route: "order_reserved_replica_payment".to_string()  };
-    let result = route_to_handler(req, shrstate).await;
-    assert!(result.is_ok());
-    let respbody = result.unwrap();
-    //println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
-    // verify fetched order lines
-    let result = serde_json::from_slice(&respbody);
-    let respbody:JsnVal = result.unwrap();
+    let respbody:JsnVal = itest_common_run_rpc_req(
+        shrstate, "order_reserved_replica_payment", msgbody.to_vec()).await;
     assert!(respbody.is_object());
     if let JsnVal::Object(obj) = respbody {
         let oid_v = obj.get("oid").unwrap();
@@ -281,14 +307,8 @@ async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
     let msgbody = br#" {"start":"2023-05-30T17:50:04.001+03:00",
                         "end": "2023-05-30T19:55:00.008+03:00"}
                      "#;
-    let req = AppRpcClientReqProperty { retry: 3, msgbody:msgbody.to_vec(), 
-            route: "order_reserved_replica_inventory".to_string()  };
-    let result = route_to_handler(req, shrstate).await;
-    assert!(result.is_ok());
-    let respbody = result.unwrap();
-    // verify fetched order lines
-    let result = serde_json::from_slice(&respbody);
-    let respbody:JsnVal = result.unwrap();
+    let respbody = itest_common_run_rpc_req(
+        shrstate, "order_reserved_replica_inventory", msgbody.to_vec()).await;
     assert!(respbody.is_object());
     if let JsnVal::Object(obj) = respbody {
         let rsv_v = obj.get("reservations").unwrap();
@@ -306,7 +326,7 @@ async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
 } // end of fn replica_orderinfo_inventory_ok
 
 #[tokio::test]
-async fn  update_order_payment_staus_ok() -> DefaultResult<(), AppError>
+async fn  update_order_payment_status_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
     // assume web server has created the order.
@@ -318,10 +338,7 @@ async fn  update_order_payment_staus_ok() -> DefaultResult<(), AppError>
                  "time": "2023-09-17T06:02:45.008+04:00", "qty": 3}
             ]} 
         "#;
-    let req = AppRpcClientReqProperty { retry: 2, msgbody:msgbody.to_vec(), 
-            route: "order_reserved_update_payment".to_string()  };
-    let result = route_to_handler(req, shrstate).await;
-    assert!(result.is_ok());
-    let _respbody = result.unwrap();
+    let _respbody = itest_common_run_rpc_req(
+        shrstate, "order_reserved_update_payment", msgbody.to_vec()).await;
     Ok(())
 }

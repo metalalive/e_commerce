@@ -6,8 +6,9 @@ use crate::AppSharedState;
 use crate::rpc::AppRpcClientReqProperty;
 use crate::error::{AppError, AppErrorCode} ;
 use crate::constant::{
-    RPCAPI_EDIT_PRODUCT_PRICE, RPCAPI_EDIT_STOCK_LEVEL, RPCAPI_ORDER_RSV_READ_INVENTORY,
-    RPCAPI_ORDER_RSV_READ_PAYMENT, RPCAPI_ORDER_RSV_UPDATE_PAYMENT, RPCAPI_ORDER_RSV_DISCARD_UNPAID
+    RPCAPI_EDIT_PRODUCT_PRICE, RPCAPI_STOCK_LEVEL_EDIT, RPCAPI_ORDER_RSV_READ_INVENTORY,
+    RPCAPI_ORDER_RSV_READ_PAYMENT, RPCAPI_ORDER_RSV_UPDATE_PAYMENT, RPCAPI_ORDER_RSV_DISCARD_UNPAID,
+    RPCAPI_STOCK_RETURN_CANCELLED
 };
 
 pub mod dto;
@@ -21,7 +22,8 @@ pub async fn route_to_handler(req:AppRpcClientReqProperty, shr_state:AppSharedSt
   // grows over time
     match req.route.as_str() {
         RPCAPI_EDIT_PRODUCT_PRICE => Ok(store_products::process(req, shr_state).await),
-        RPCAPI_EDIT_STOCK_LEVEL => Ok(stock_level::inventory_edit(req, shr_state).await),
+        RPCAPI_STOCK_LEVEL_EDIT => Ok(stock_level::inventory_edit(req, shr_state).await),
+        RPCAPI_STOCK_RETURN_CANCELLED => Ok(stock_level::inventory_return_cancelled(req, shr_state).await),
         RPCAPI_ORDER_RSV_READ_PAYMENT => Ok(order_status::read_reserved_payment(req, shr_state).await),
         RPCAPI_ORDER_RSV_READ_INVENTORY => Ok(order_status::read_reserved_inventory(req, shr_state).await),
         RPCAPI_ORDER_RSV_UPDATE_PAYMENT => Ok(order_status::update_paid_lines(req, shr_state).await),

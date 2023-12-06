@@ -13,7 +13,6 @@ use crate::usecase::{
 use super::build_error_response;
 use super::dto::{OrderReplicaPaymentReqDto, OrderReplicaInventoryReqDto, OrderPaymentUpdateDto};
 
-#[macro_export]
 macro_rules! common_setup {
     ($target_dto:ty , $shr_state:ident, $serial:expr) => {{
         let ds = $shr_state.datastore();
