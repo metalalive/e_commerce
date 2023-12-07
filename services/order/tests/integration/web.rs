@@ -83,7 +83,7 @@ async fn setup_product_stock_ok(shr_state:AppSharedState)
         ]
         "#; // TODO, generate expiry time from chrono::Local::now()
     let req = AppRpcClientReqProperty { retry: 1,  msgbody:msgbody.to_vec(),
-            route: "edit_stock_level".to_string()  };
+            route: "stock_level_edit".to_string()  };
     let result = rpc::route_to_handler(req, shr_state.clone()).await;
     assert!(result.is_ok());
 }

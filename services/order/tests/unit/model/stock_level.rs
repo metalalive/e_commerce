@@ -1,4 +1,4 @@
-use chrono::DateTime;
+use chrono::{DateTime, Duration};
 
 use order::api::web::dto::OrderLineCreateErrorReason;
 use order::constant::ProductType;
@@ -7,7 +7,10 @@ use order::model::{
     StockLevelModelSet, ProductStockModel, StoreStockModel, StockQuantityModel,
     OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel, OrderLineModelSet, OrderLineIdentity
 };
-use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto, StockReturnErrorReason};
+use order::api::rpc::dto::{
+    InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto,
+    StockReturnErrorReason
+};
 
 use crate::model::verify_stocklvl_model;
 
@@ -415,7 +418,7 @@ fn reserve_seller_nonexist()
 
 
 #[test]
-fn return_reserved_ok()
+fn return_across_expiry_ok()
 {
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
     let saved_products = ut_mock_saved_product();
@@ -431,10 +434,10 @@ fn return_reserved_ok()
     ]};
     let error = mset.return_across_expiry(data);
     assert!(error.is_empty());
-} // end of fn return_reserved_ok
+}
 
 #[test]
-fn return_reserved_nonexist()
+fn return_across_expiry_nonexist()
 {
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
     let saved_products = ut_mock_saved_product();
@@ -456,7 +459,7 @@ fn return_reserved_nonexist()
 }
 
 #[test]
-fn return_reserved_invalid_qty()
+fn return_across_expiry_invalid_qty()
 {
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
     let saved_products = ut_mock_saved_product();
@@ -477,3 +480,95 @@ fn return_reserved_invalid_qty()
     assert_eq!(error[0].product_type, ProductType::Item);
     assert!(matches!(error[0].reason, StockReturnErrorReason::InvalidQuantity));
 }
+
+fn return_by_id_common(mock_oid: &str) -> StockLevelModelSet
+{
+    let saved_products = ut_mock_saved_product();
+    let mut mset = StockLevelModelSet {stores: vec![
+        StoreStockModel {store_id:1013, products:saved_products[5..8].to_vec()},
+        StoreStockModel {store_id:1014, products:saved_products[8..11].to_vec()},
+    ]};
+    { // assume more reservations were done within the order
+        let num = mset.stores[0].products[1].quantity.reserve(mock_oid, 3);
+        assert_eq!(num, 3);
+        let num = mset.stores[1].products[0].quantity.reserve(mock_oid, 2);
+        assert_eq!(num, 2);
+        let qty_map = mset.stores[0].products[1].quantity.reservation();
+        assert_eq!(qty_map.get(mock_oid).unwrap().clone(), 4);
+        let qty_map = mset.stores[1].products[0].quantity.reservation();
+        assert_eq!(qty_map.get(mock_oid).unwrap().clone(), 3);
+    }
+    mset
+}
+
+#[test]
+fn return_by_id_ok()
+{
+    let mock_oid = "ChadBookedThis";
+    let mut mset = return_by_id_common(mock_oid);
+    let data = StockLevelReturnDto {
+        order_id:mock_oid.to_string(), items: vec![
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
+            product_id:9002, qty_add:2, expiry:mset.stores[1].products[0].expiry.clone() },
+        InventoryEditStockLevelDto {store_id:1013, product_type:ProductType::Item,
+            product_id:9006, qty_add:2, expiry:mset.stores[0].products[1].expiry.clone() },
+    ]}; // the expiry time has to be exactly the same
+    let error = mset.return_by_id(data);
+    assert!(error.is_empty());
+    {
+        let qty_map = mset.stores[0].products[1].quantity.reservation();
+        assert_eq!(qty_map.get(mock_oid).unwrap().clone(), 2);
+        let qty_map = mset.stores[1].products[0].quantity.reservation();
+        assert_eq!(qty_map.get(mock_oid).unwrap().clone(), 1);
+    }
+} // end of fn return_by_id_ok
+
+
+#[test]
+fn return_by_id_nonexist()
+{
+    let mock_oid = "ChadBookedThis";
+    let saved_products = ut_mock_saved_product();
+    let mut mset = StockLevelModelSet {stores: vec![
+        StoreStockModel {store_id:1013, products:saved_products[5..8].to_vec()},
+        StoreStockModel {store_id:1014, products:saved_products[8..11].to_vec()},
+    ]};
+    let data = StockLevelReturnDto {
+        order_id:mock_oid.to_string(), items: vec![
+        InventoryEditStockLevelDto {
+            store_id:1014, product_type:ProductType::Item, product_id:9002, qty_add:1,
+            expiry:mset.stores[1].products[0].expiry + Duration::milliseconds(43) },
+        InventoryEditStockLevelDto {
+            store_id:1013, product_type:ProductType::Item, product_id:9006, qty_add:1,
+            expiry:mset.stores[0].products[1].expiry + Duration::milliseconds(16) },
+    ]};
+    let error = mset.return_by_id(data);
+    assert_eq!(error.len(), 2);
+    assert_eq!(error[0].seller_id, 1014);
+    assert_eq!(error[0].product_id, 9002);
+    assert_eq!(error[1].seller_id, 1013);
+    assert_eq!(error[1].product_id, 9006);
+    assert!(matches!(error[0].reason, StockReturnErrorReason::NotExist));
+    assert!(matches!(error[1].reason, StockReturnErrorReason::NotExist));
+}
+
+#[test]
+fn return_by_id_invalid_qty()
+{
+    let mock_oid = "ChadBookedThis";
+    let mut mset = return_by_id_common(mock_oid);
+    let data = StockLevelReturnDto {
+        order_id:mock_oid.to_string(), items: vec![
+        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
+            product_id:9002, qty_add:6, expiry:mset.stores[1].products[0].expiry.clone() },
+        InventoryEditStockLevelDto {store_id:1013, product_type:ProductType::Item,
+            product_id:9006, qty_add:7, expiry:mset.stores[0].products[1].expiry.clone() },
+    ]};
+    let error = mset.return_by_id(data);
+    assert_eq!(error.len(), 2);
+    assert_eq!(error[0].product_id, 9002);
+    assert_eq!(error[1].product_id, 9006);
+    assert!(matches!(error[0].reason, StockReturnErrorReason::InvalidQuantity));
+    assert!(matches!(error[1].reason, StockReturnErrorReason::InvalidQuantity));
+}
+

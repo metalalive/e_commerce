@@ -182,6 +182,7 @@ impl StoreStockModel {
             Some((OrderLineCreateErrorReason::OutOfStock, num_required))
         }
     }
+
     pub fn return_across_expiry(&mut self, oid:&str, req:InventoryEditStockLevelDto)
         -> Option<StockReturnErrorReason>
     {
@@ -213,6 +214,25 @@ impl StoreStockModel {
             Some(StockReturnErrorReason::NotExist)
         }
     } // end of fn return_across_expiry
+    
+    pub fn return_by_id(&mut self, oid:&str, req:InventoryEditStockLevelDto)
+        -> Option<StockReturnErrorReason>
+    {
+        assert!(req.qty_add > 0);
+        let result = self.products.iter_mut().find(|p| {
+            p.type_ == req.product_type && p.id_ == req.product_id && p.expiry == req.expiry
+        });
+        if let Some(p) = result  {
+            if let Some(num_rsved) = p.quantity.reservation().get(oid) {
+                let num_returning = req.qty_add as u32;
+                if *num_rsved >= num_returning {
+                    let num_returned  = p.quantity.try_return(oid, num_returning);
+                    assert_eq!(num_returning, num_returned);
+                    None
+                } else { Some(StockReturnErrorReason::InvalidQuantity) }
+            } else { Some(StockReturnErrorReason::InvalidQuantity) }
+        } else { Some(StockReturnErrorReason::NotExist) }
+    } // end of fn return_by_id
 } // end of impl StoreStockModel
 
 impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
@@ -229,6 +249,9 @@ impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
         }).collect()
     }
 }
+
+type InnerStoreStockReturnFn = fn(&mut StoreStockModel, &str, InventoryEditStockLevelDto)
+    -> Option<StockReturnErrorReason>;
 
 impl StockLevelModelSet {
     pub fn update(mut self, data:Vec<InventoryEditStockLevelDto>)
@@ -315,9 +338,9 @@ impl StockLevelModelSet {
         }) .collect()
     } // end of try_reserve
     
-    pub fn return_across_expiry(&mut self, data:StockLevelReturnDto) -> Vec<StockReturnErrorDto>
+    fn return_common(&mut self, data:StockLevelReturnDto, store_fn: InnerStoreStockReturnFn)
+        -> Vec<StockReturnErrorDto>
     {
-        self.sort_by_expiry(false);
         let oid = data.order_id.as_str();
         data.items.into_iter().filter_map(|req| {
             let mut error = StockReturnErrorDto {
@@ -326,7 +349,7 @@ impl StockLevelModelSet {
             };
             let found = self.stores.iter_mut().find(|m| {m.store_id == req.store_id});
             let opt_detail = if let Some(store) = found {
-                store.return_across_expiry(oid, req)
+                store_fn(store, oid, req)
             } else { Some(StockReturnErrorReason::NotExist) };
             if let Some(r) = opt_detail {
                 error.reason = r;
@@ -334,6 +357,16 @@ impl StockLevelModelSet {
             } else { None }
         }).collect()
     } // end of fn return_across_expiry
+    
+    pub fn return_across_expiry(&mut self, data:StockLevelReturnDto) -> Vec<StockReturnErrorDto>
+    {
+        self.sort_by_expiry(false);
+        self.return_common(data, StoreStockModel::return_across_expiry)
+    } 
+    pub fn return_by_id(&mut self, data:StockLevelReturnDto) -> Vec<StockReturnErrorDto>
+    {
+        self.return_common(data, StoreStockModel::return_by_id)
+    }
     
     fn sort_by_expiry(&mut self, ascending:bool) {
         // to ensure the items that expire soon will be taken first

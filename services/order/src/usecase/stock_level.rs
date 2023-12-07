@@ -1,10 +1,12 @@
 use std::boxed::Box;
 use std::result::Result as DefaultResult;
 
-use crate::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelPresentDto, StockLevelReturnDto};
+use crate::api::rpc::dto::{
+    InventoryEditStockLevelDto, StockLevelPresentDto, StockLevelReturnDto, StockReturnErrorDto
+};
 use crate::error::AppError;
 use crate::repository::AbsOrderRepo;
-use crate::model::ProductStockIdentity;
+use crate::model::{ProductStockIdentity, StockLevelModelSet};
 
 pub struct StockLevelUseCase {}
 
@@ -22,10 +24,17 @@ impl StockLevelUseCase {
         let _ = stockrepo.save(updated.clone()).await?;
         Ok(updated.into())
     }
-    pub async fn try_return(_data:StockLevelReturnDto, _repo:Box<dyn AbsOrderRepo>)
-        -> DefaultResult<Vec<StockLevelPresentDto>, AppError>
-    {
-        Ok(vec![])
+
+    pub async fn try_return(data:StockLevelReturnDto, repo:Box<dyn AbsOrderRepo>)
+        -> DefaultResult<Vec<StockReturnErrorDto>, AppError>
+    { // TODO,
+      // this use case does not check the quantity of returning items by loading past
+      // order-line returns, the checking process should be done in inventory service
+        let st_repo = repo.stock();
+        st_repo.try_return(Self::read_stocklvl_cb, data).await
     }
+    fn read_stocklvl_cb(ms:&mut StockLevelModelSet, data:StockLevelReturnDto)
+        -> Vec<StockReturnErrorDto>
+    { ms.return_by_id(data) }
 } // end of impl StockLevelUseCase
 
