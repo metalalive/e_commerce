@@ -8,10 +8,28 @@ use order::constant::ProductType;
 use order::api::rpc::route_to_handler;
 use order::error::AppError;
 use order::{AppRpcClientReqProperty, AppSharedState, AppDataStoreContext};
-use order::model::{OrderLineModel, OrderLinePriceModel, OrderLineQuantityModel, OrderLineModelSet, OrderLineIdentity};
+use order::model::{
+    OrderLineModel, OrderLinePriceModel, OrderLineQuantityModel, OrderLineModelSet, 
+    OrderLineIdentity, OrderLineAppliedPolicyModel, StockLevelModelSet
+};
+use order::repository::{app_repo_order, AppStockRepoReserveReturn};
 
 mod common;
 use common::test_setup_shr_state;
+
+async fn itest_common_run_rpc_req(shrstate:AppSharedState, route:&str,
+                                  msgbody:Vec<u8> ) -> JsnVal
+{
+    let req = AppRpcClientReqProperty { retry: 2,  msgbody,
+            route: route.to_string()  };
+    let result = route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+    let respbody = result.unwrap();
+    // println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
+    let result = serde_json::from_slice(&respbody);
+    assert!(result.is_ok());
+    result.unwrap()
+}
 
 #[tokio::test]
 async fn  update_product_price_ok() -> DefaultResult<(), AppError>
@@ -61,9 +79,118 @@ async fn  update_product_price_ok() -> DefaultResult<(), AppError>
 } // end of fn update_product_price_ok
 
 
+async fn itest_inventory_stock_level_init(shrstate:AppSharedState)
+{
+    let msgbody = br#"
+            [
+                {"qty_add":12, "store_id":1006, "product_type": 1, "product_id": 9200125,
+                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
+                {"qty_add":18, "store_id":1009, "product_type": 2, "product_id": 7001,
+                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
+                {"qty_add":50, "store_id":1007, "product_type": 2, "product_id": 20911,
+                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
+            ] "#;
+    let value = itest_common_run_rpc_req(shrstate, "stock_level_edit", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    if let JsnVal::Array(items) = value {
+        assert_eq!(items.len(), 3);
+        verify_reply_stock_level(&items, 7001, 2, 18, 0, 0);
+        verify_reply_stock_level(&items, 9200125, 1, 12, 0, 0);
+        verify_reply_stock_level(&items, 20911, 2, 50, 0, 0);
+    }
+}
+async fn itest_inventory_stock_level_modify_1(shrstate:AppSharedState)
+{
+    let msgbody = br#"
+            [
+                {"qty_add":2, "store_id":1006, "product_type": 1, "product_id": 9200125,
+                 "expiry": "2099-12-24T07:11:13.700450+07:00"},
+                {"qty_add":-2, "store_id":1009, "product_type": 2, "product_id": 7001,
+                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
+                {"qty_add":19, "store_id":1007, "product_type": 2, "product_id": 20911,
+                 "expiry": "2099-12-25T16:27:14.0060+10:00"}
+            ] "#;
+    let value = itest_common_run_rpc_req(
+        shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    if let JsnVal::Array(items) = value {
+        assert_eq!(items.len(), 3);
+        verify_reply_stock_level(&items, 9200125, 1, 14, 0, 0);
+        verify_reply_stock_level(&items, 7001, 2, 18, 2, 0);
+        verify_reply_stock_level(&items, 20911, 2, 19, 0, 0);
+    }
+}
+async fn itest_inventory_stock_level_modify_2(shrstate:AppSharedState)
+{
+    let msgbody = br#"
+            [
+                {"qty_add":-1, "store_id":1006, "product_type": 1, "product_id": 9200125,
+                 "expiry": "2099-12-24T07:11:13.700450+07:00"},
+                {"qty_add":-1, "store_id":1009, "product_type": 2, "product_id": 7001,
+                 "expiry": "2099-12-27T22:19:13.730050+08:00"}
+            ] "#;
+    let value = itest_common_run_rpc_req(
+        shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    if let JsnVal::Array(items) = value {
+        assert_eq!(items.len(), 2);
+        verify_reply_stock_level(&items, 9200125, 1, 14, 1, 1);
+        verify_reply_stock_level(&items, 7001, 2, 18, 3, 2);
+    }
+}
+
+fn itest_try_reserve_stock_cb(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
+    -> AppStockRepoReserveReturn
+{
+    let errors = ms.try_reserve(req);
+    assert_eq!(errors.len(), 0);
+    Ok(())
+}
+async fn itest_mock_reserve_stock_level(shrstate:AppSharedState)
+{
+    let o_repo = app_repo_order(shrstate.datastore()).await.unwrap() ;
+    let st_repo = o_repo.stock();
+    let reserved_until = DateTime::parse_from_rfc3339("2022-11-09T09:23:58+02:00").unwrap();
+    let warranty_until = DateTime::parse_from_rfc3339("2022-12-09T22:59:04+02:00").unwrap();
+    let order_req = OrderLineModelSet {
+        order_id: "on1yfa05".to_string(), owner_id: 123,
+        create_time: DateTime::parse_from_rfc3339("2022-09-30T16:34:50.9044+08:00").unwrap(),
+        lines: vec![
+            OrderLineModel {id_: OrderLineIdentity {store_id: 1006, product_id:9200125,
+                product_type:ProductType::Item}, price: OrderLinePriceModel { unit: 50, total: 150 },
+                qty: OrderLineQuantityModel {reserved: 3, paid: 0, paid_last_update: None},
+                policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+            },
+            OrderLineModel {id_: OrderLineIdentity {store_id: 1009, product_id:7001,
+                product_type:ProductType::Package}, price: OrderLinePriceModel { unit: 34, total: 170 },
+                qty: OrderLineQuantityModel {reserved: 5, paid: 0, paid_last_update: None},
+                policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
+            }
+        ]
+    };
+    if let Err(_e) = st_repo.try_reserve(itest_try_reserve_stock_cb, &order_req).await
+    { assert!(false) }
+}
+async fn itest_inventory_stock_level_return_caancelled(shrstate:AppSharedState)
+{
+    let msgbody = br#"
+            {"order_id":"on1yfa05", "items":[
+                {"qty_add":2, "store_id":1006, "product_type": 1, "product_id": 9200125,
+                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
+                {"qty_add":3, "store_id":1009, "product_type": 2, "product_id": 7001,
+                 "expiry": "2099-12-27T22:19:13.730050+08:00"}
+            ]} "#;
+    let value = itest_common_run_rpc_req(
+        shrstate, "stock_return_cancelled", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    if let JsnVal::Array(errors) = value {
+        assert_eq!(errors.len(), 0);
+    }
+} // end of fn inventory_stock_level_return_caancelled_ok
+
 fn verify_reply_stock_level(objs:&Vec<JsnVal>,  expect_product_id:u64,
                             expect_product_type:u8,  expect_qty_total:u32,
-                            expect_qty_cancelled:u32 )
+                            expect_qty_cancelled:u32, expect_qty_booked:u32 )
 {
     let obj = objs.iter().find(|d| {
         if let JsnVal::Object(item) = d {
@@ -89,108 +216,33 @@ fn verify_reply_stock_level(objs:&Vec<JsnVal>,  expect_product_id:u64,
         if let JsnVal::Number(cancel) = cancel_v {
             assert_eq!(cancel.as_u64().unwrap(), expect_qty_cancelled as u64);
         }
+        let book_v = qty.get("booked").unwrap();
+        if let JsnVal::Number(book) = book_v {
+            assert_eq!(book.as_u64().unwrap(), expect_qty_booked as u64);
+        }
     }
 } // end of fn verify_reply_stock_level
-
-async fn itest_common_run_rpc_req(shrstate:AppSharedState, route:&str,
-                                  msgbody:Vec<u8> ) -> JsnVal
-{
-    let req = AppRpcClientReqProperty { retry: 2,  msgbody,
-            route: route.to_string()  };
-    let result = route_to_handler(req, shrstate).await;
-    assert!(result.is_ok());
-    let respbody = result.unwrap();
-    // println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
-    let result = serde_json::from_slice(&respbody);
-    assert!(result.is_ok());
-    result.unwrap()
-}
 
 #[tokio::test]
 async fn inventory_stock_level_edit_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
-    let msgbody = br#"
-            [
-                {"qty_add":12, "store_id":1006, "product_type": 1, "product_id": 9200125,
-                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
-                {"qty_add":18, "store_id":1009, "product_type": 2, "product_id": 7001,
-                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
-                {"qty_add":50, "store_id":1007, "product_type": 2, "product_id": 20911,
-                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
-            ]
-            "#;
-    let value = itest_common_run_rpc_req(
-        shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
-    assert!(value.is_array());
-    if let JsnVal::Array(items) = value {
-        assert_eq!(items.len(), 3);
-        verify_reply_stock_level(&items, 9200125, 1, 12, 0);
-        verify_reply_stock_level(&items, 20911, 2, 50, 0);
-    }
-    let msgbody = br#"
-            [
-                {"qty_add":2, "store_id":1006, "product_type": 1, "product_id": 9200125,
-                 "expiry": "2099-12-24T07:11:13.700450+07:00"},
-                {"qty_add":-2, "store_id":1009, "product_type": 2, "product_id": 7001,
-                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
-                {"qty_add":19, "store_id":1007, "product_type": 2, "product_id": 20911,
-                 "expiry": "2099-12-25T16:27:14.0060+10:00"}
-            ]
-            "#;
-    let value = itest_common_run_rpc_req(
-        shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
-    assert!(value.is_array());
-    if let JsnVal::Array(items) = value {
-        assert_eq!(items.len(), 3);
-        verify_reply_stock_level(&items, 9200125, 1, 14, 0);
-        verify_reply_stock_level(&items, 7001, 2, 18, 2);
-    }
+    itest_inventory_stock_level_init(shrstate.clone()).await;
+    itest_inventory_stock_level_modify_1(shrstate.clone()).await;
+    itest_mock_reserve_stock_level(shrstate.clone()).await;
+    itest_inventory_stock_level_return_caancelled(shrstate.clone()).await;
+    itest_inventory_stock_level_modify_2(shrstate).await;
     Ok(())
 } // end of fn inventory_stock_level_edit_ok
-
-
-#[tokio::test]
-async fn inventory_stock_level_return_caancelled_ok() -> DefaultResult<(), AppError>
-{
-    let shrstate = test_setup_shr_state()?;
-    let msgbody = br#"
-            [
-                {"qty_add":21, "store_id":1016, "product_type": 2, "product_id": 9200125,
-                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
-                {"qty_add":40, "store_id":1019, "product_type": 2, "product_id": 7001,
-                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
-                {"qty_add":39, "store_id":1017, "product_type": 1, "product_id": 20911,
-                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
-            ]
-            "#;
-    let value = itest_common_run_rpc_req(
-        shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
-    assert!(value.is_array());
-    let msgbody = br#"
-            {"order_id":"on1yfa05", "items":[
-                {"qty_add":21, "store_id":1016, "product_type": 2, "product_id": 9200125,
-                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
-                {"qty_add":39, "store_id":1017, "product_type": 1, "product_id": 20911,
-                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
-            ]}
-            "#;
-    let value = itest_common_run_rpc_req(
-        shrstate, "stock_return_cancelled", msgbody.to_vec()).await;
-    assert!(value.is_array());
-    Ok(())
-} // end of fn inventory_stock_level_return_caancelled_ok
 
 
 async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str,
                                  usr_id:u32, create_time:&str )
     -> DefaultResult<(), AppError>
 {
-    use order::repository::app_repo_order;
     use order::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
     use order::model::{
         BillingModel, ShippingModel,ContactModel, PhyAddrModel, ShippingOptionModel,
-        OrderLineAppliedPolicyModel
     };
     let repo = app_repo_order(ds).await ?;
     let seller_id = 543;
