@@ -12,6 +12,7 @@ use crate::api::dto::{
 use crate::api::rpc::dto::{
     OrderLineStockReservingDto, OrderLineStockReturningDto, OrderLinePayUpdateErrorDto,
     OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason, InventoryEditStockLevelDto,
+    OrderLineReplicaRefundDto,
 };
 use crate::api::web::dto::{
     BillingErrorDto, ShippingErrorDto, ContactErrorDto, PhyAddrErrorDto, ShipOptionSellerErrorReason,
@@ -461,6 +462,11 @@ impl Into<Vec<OrderLineStockReturningDto>> for OrderReturnModel {
                     qty, product_type: id_.product_type.clone() }
             }
         ).collect()
+    }
+}
+impl Into<Vec<OrderLineReplicaRefundDto>> for OrderReturnModel {
+    fn into(self) -> Vec<OrderLineReplicaRefundDto> {
+        vec![]
     }
 }
 

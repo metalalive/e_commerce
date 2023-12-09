@@ -16,7 +16,7 @@ use crate::api::web::dto::{
 use crate::api::rpc::dto::{
     OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
     StockLevelReturnDto, StockReturnErrorDto, OrderReplicaInventoryReqDto, OrderReplicaStockReservingDto,
-    OrderReplicaStockReturningDto
+    OrderReplicaStockReturningDto, OrderLineReplicaRefundDto, OrderReplicaRefundReqDto
 };
 use crate::error::AppError;
 use crate::model::{
@@ -41,6 +41,9 @@ pub struct CreateOrderUseCase {
 
 pub struct OrderReplicaPaymentUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
+}
+pub struct OrderReplicaRefundUseCase{
+    pub repo: Box<dyn AbsOrderReturnRepo>,
 }
 pub struct OrderReplicaInventoryUseCase {
     pub  ret_repo: Box<dyn AbsOrderReturnRepo>,
@@ -216,6 +219,17 @@ impl OrderReplicaPaymentUseCase {
         let resp = OrderReplicaPaymentDto {oid, usr_id, billing:billing.into(),
             lines: olines.into_iter().map(OrderLineModel::into).collect()
         };
+        Ok(resp)
+    }
+}
+impl OrderReplicaRefundUseCase {
+    pub(crate) async fn execute(self, req:OrderReplicaRefundReqDto)
+        -> DefaultResult<Vec<OrderLineReplicaRefundDto>, AppError>
+    {
+        let (oid, start, end) = (req.order_id, req.start, req.end);
+        let ret_ms = self.repo.fetch_by_oid_ctime(oid.as_str(), start, end).await?;
+        let resp = ret_ms.into_iter().flat_map::<Vec<OrderLineReplicaRefundDto>, _>
+            (OrderReturnModel::into).collect();
         Ok(resp)
     }
 }

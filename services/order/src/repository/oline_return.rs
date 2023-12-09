@@ -151,6 +151,11 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
         }).collect();
         Ok(out)
     }
+    async fn fetch_by_oid_ctime(&self, oid:&str, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
+        -> DefaultResult<Vec<OrderReturnModel>, AppError>
+    {
+        Ok(vec![])
+    }
     async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>
     {
         let table_name = _oline_return::TABLE_LABEL.to_string();

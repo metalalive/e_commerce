@@ -5,7 +5,7 @@ use chrono::DateTime;
 use chrono::offset::{Local, FixedOffset};
 
 use crate::api::{jsn_validate_product_type, jsn_serialize_product_type };
-use crate::api::dto::{OrderLinePayDto, BillingDto, ShippingDto};
+use crate::api::dto::{OrderLinePayDto, BillingDto, ShippingDto, PayAmountDto};
 use crate::constant::ProductType;
 
 #[derive(Deserialize)]
@@ -87,6 +87,22 @@ pub struct OrderReplicaPaymentDto {
     pub usr_id: u32,
     pub lines: Vec<OrderLinePayDto>,
     pub billing: BillingDto,
+}
+
+#[derive(Deserialize)]
+pub struct OrderReplicaRefundReqDto {
+    pub order_id: String,
+    pub start: DateTime<FixedOffset>,
+    pub end:   DateTime<FixedOffset>,
+}
+#[derive(Serialize)]
+pub struct OrderLineReplicaRefundDto {
+    pub seller_id: u32,
+    pub product_id: u64,
+    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    pub product_type: ProductType,
+    pub create_time: DateTime<FixedOffset>,
+    pub amount: PayAmountDto
 }
 
 

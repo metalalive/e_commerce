@@ -348,6 +348,28 @@ async fn  replica_orderinfo_payment_ok() -> DefaultResult<(), AppError>
 } // end of fn replica_orderinfo_payment_ok
 
 #[tokio::test]
+async fn  replica_orderinfo_refund_ok() -> DefaultResult<(), AppError>
+{
+    let shrstate = test_setup_shr_state()?;
+    // assume web server has created the order.
+    itest_mock_create_order(shrstate.datastore().clone(), "order000id12345",
+                            3456, "2023-05-20T18:58:04+03:00").await?;
+    itest_mock_create_oline_return(shrstate.datastore().clone(), "order000id12345",
+                                  "2023-05-20T19:05:45+03:00" ).await?;
+    let msgbody = br#" {"start":"2023-05-20T17:50:04.001+03:00",
+                        "end": "2023-05-20T19:55:00.008+03:00",
+                        "order_id": "order000id12345"}
+                     "#;
+    let respbody = itest_common_run_rpc_req(
+        shrstate, "order_returned_replica_refund", msgbody.to_vec()).await;
+    assert!(respbody.is_array());
+    if let JsnVal::Array(_refunds) = respbody {
+    }
+    Ok(())
+} // end of fn replica_orderinfo_refund_ok
+
+
+#[tokio::test]
 async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;

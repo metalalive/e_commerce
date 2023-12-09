@@ -15,7 +15,7 @@ pub use stock_level::StockLevelUseCase;
 pub use manage_order::{
     CreateOrderUseCase, CreateOrderUsKsErr, OrderReplicaInventoryUseCase, OrderReplicaPaymentUseCase,
     OrderPaymentUpdateUseCase, OrderDiscardUnpaidItemsUseCase, ReturnLinesReqUcOutput,
-    ReturnLinesReqUseCase
+    OrderReplicaRefundUseCase, ReturnLinesReqUseCase
 };
 
 use crate::AppSharedState;

@@ -149,6 +149,8 @@ pub trait AbsOrderReturnRepo : Sync + Send {
         -> DefaultResult<Vec<OrderReturnModel>, AppError>; 
     async fn fetch_by_created_time(&self, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>;
+    async fn fetch_by_oid_ctime(&self, oid:&str, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
+        -> DefaultResult<Vec<OrderReturnModel>, AppError>;
     async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
 }
 
