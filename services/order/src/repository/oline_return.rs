@@ -37,6 +37,9 @@ mod _oline_return {
         let prod_typ: u8 = prod_typ.into();
         format!("{oid}-{seller_id}-{prod_typ}-{prod_id}")
     }
+    pub(super) fn inmem_get_oid(pkey:&str) -> &str {
+        pkey.split("-").next().unwrap()
+    }
     pub(super) fn inmem_qty2col(map:OrderReturnQuantityModel) -> String {
         map.into_iter().map(|(time, (qty, refund))| {
             format!("{} {} {} {}", time.format(QTY_KEY_FORMAT).to_string(),
@@ -56,16 +59,23 @@ mod _oline_return {
         });
         HashMap::from_iter(iter)
     }
-    pub(super) struct InMemDStoreFilterTimeRangeOp {
+    pub(super) struct InMemDStoreFilterTimeRangeOp<'a> {
         pub t0: DateTime<FixedOffset>,
         pub t1: DateTime<FixedOffset>,
+        pub oid: Option<&'a str>,
     }
-    impl AbsDStoreFilterKeyOp for InMemDStoreFilterTimeRangeOp {
-        fn filter(&self, _key:&String, row:&Vec<String>) -> bool {
-            let col_idx:usize = InMemColIdx::QtyRefund.into();
-            let qty_raw = row.get(col_idx).unwrap();
-            let map = inmem_col2qty(qty_raw.clone());
-            map.keys().into_iter().any(|t| ((&self.t0 <= t) && (t <= &self.t1)) )
+    impl<'a> AbsDStoreFilterKeyOp for InMemDStoreFilterTimeRangeOp<'a> {
+        fn filter(&self, key:&String, row:&Vec<String>) -> bool {
+            let passed = if let Some(d) = self.oid.as_ref() {
+                let curr_oid = inmem_get_oid(key);
+                d.clone().eq(curr_oid)
+            } else {true};
+            if passed {
+                let col_idx:usize = InMemColIdx::QtyRefund.into();
+                let qty_raw = row.get(col_idx).unwrap();
+                let map = inmem_col2qty(qty_raw.clone());
+                map.keys().into_iter().any(|t| ((&self.t0 <= t) && (t <= &self.t1)) )
+            } else { false }
         }
     }
 } // end of inner module _oline_return
@@ -140,13 +150,13 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
         -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>
     {
         let table_name = _oline_return::TABLE_LABEL;
-        let op = _oline_return::InMemDStoreFilterTimeRangeOp {t0:start, t1:end};
+        let op = _oline_return::InMemDStoreFilterTimeRangeOp {t0:start, t1:end, oid:None};
         let pkeys = self.datastore.filter_keys(table_name.to_string(), &op).await?;
         let info = HashMap::from([(table_name.to_string(), pkeys)]);
         let mut data = self.datastore.fetch(info).await?;
         let rows = data.remove(table_name).unwrap();
         let out = rows.into_iter().map(|(key, row)| {
-            let oid = key.split("-").next().unwrap().to_string();
+            let oid = _oline_return::inmem_get_oid(key.as_str()).to_string();
             (oid, row.into())
         }).collect();
         Ok(out)
@@ -154,7 +164,14 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
     async fn fetch_by_oid_ctime(&self, oid:&str, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<OrderReturnModel>, AppError>
     {
-        Ok(vec![])
+        let table_name = _oline_return::TABLE_LABEL;
+        let op = _oline_return::InMemDStoreFilterTimeRangeOp {t0:start, t1:end, oid:Some(oid)};
+        let pkeys = self.datastore.filter_keys(table_name.to_string(), &op).await?;
+        let info = HashMap::from([(table_name.to_string(), pkeys)]);
+        let mut data = self.datastore.fetch(info).await?;
+        let rows = data.remove(table_name).unwrap();
+        let out = rows.into_values().map(AppInMemFetchedSingleRow::into).collect();
+        Ok(out)
     }
     async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>
     {

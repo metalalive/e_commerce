@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::hash_map::RandomState;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{Local, Duration, DateTime, FixedOffset};
 use order::constant::ProductType;
@@ -87,75 +88,121 @@ async fn in_mem_fetch_by_ctime_ok()
     let mock_time = DateTime::parse_from_rfc3339("2023-01-07T19:23:50+02:00").unwrap();
     { // begin setup
         let mut reqs = ut_setup_ret_models(mock_time);
-        {
-            reqs[1].qty.remove(&(mock_time - Duration::minutes(10)));
-        }
+        reqs[1].qty.remove(&(mock_time - Duration::minutes(10)));
         let result = repo.save("order0019286", reqs).await;
         assert!(result.is_ok());
+    } {
         let mut reqs = ut_setup_ret_models(mock_time.clone());
-        {
-            reqs[1].qty.insert(
-                mock_time + Duration::minutes(5), (1, OrderLinePriceModel {unit:16, total:16}),
-            );
-            reqs[0].qty.remove(&(mock_time - Duration::minutes(41)));
-        }
+        reqs[1].qty.insert(
+            mock_time + Duration::minutes(5), (1, OrderLinePriceModel {unit:16, total:16}),
+        );
+        reqs[0].qty.remove(&(mock_time - Duration::minutes(41)));
         let result = repo.save("order00080273", reqs).await;
         assert!(result.is_ok());
+    } {
         let mut reqs = ut_setup_ret_models(mock_time.clone());
-        {
-            reqs.drain(0..2).count();
-            reqs.last_mut().unwrap().qty.insert(
-                mock_time + Duration::seconds(34), (1, OrderLinePriceModel {unit:18, total:18}),
-            );
-        }
+        reqs.drain(0..2).count();
+        let ret = reqs.last_mut().unwrap();
+        let prev_entry = ret.qty.insert(
+            mock_time + Duration::seconds(34), (1, OrderLinePriceModel {unit:18, total:18}),
+        );
+        assert!(prev_entry.is_none());
+        let prev_entry = ret.qty.insert(
+            mock_time + Duration::seconds(51), (3, OrderLinePriceModel {unit:21, total:63}),
+        );
+        assert!(prev_entry.is_none());
+        assert_eq!(ret.qty.len(), 3);
         let result = repo.save("order10029803", reqs).await;
         assert!(result.is_ok());
     } // end setup
-    in_mem_fetch_by_ctime_common(&repo, mock_time.clone(),
-         mock_time + Duration::seconds(30),
-         mock_time + Duration::minutes(6),
-         in_mem_fetch_by_ctime_subcase_1 ).await;
-    in_mem_fetch_by_ctime_common(&repo, mock_time.clone(),
-         mock_time - Duration::minutes(42),
-         mock_time - Duration::minutes(9),
-         in_mem_fetch_by_ctime_subcase_2 ).await;
+    in_mem_fetch_by_ctime_common( &repo,
+        mock_time + Duration::seconds(30),
+        mock_time + Duration::minutes(6),
+        vec![
+            (format!("order10029803"), (49, ProductType::Package, 195, mock_time + Duration::seconds(51), 3, 63)),
+            (format!("order10029803"), (49, ProductType::Package, 195, mock_time + Duration::seconds(34), 1, 18)),
+            (format!("order00080273"), (48, ProductType::Item, 574, mock_time + Duration::minutes(5), 1, 16)),
+        ]
+    ).await;
+    in_mem_fetch_by_ctime_common( &repo,
+        mock_time - Duration::minutes(42),
+        mock_time - Duration::minutes(9),
+        vec![
+            (format!("order0019286"),  (18, ProductType::Item, 465, mock_time - Duration::minutes(41), 1, 15)),
+            (format!("order00080273"), (48, ProductType::Item, 574, mock_time - Duration::minutes(10), 5, 65)),
+        ]
+    ).await;
+    in_mem_fetch_by_oid_ctime_common( &repo, "order00080273",
+        mock_time - Duration::seconds(2),
+        mock_time + Duration::minutes(6),
+        vec![
+            (48, ProductType::Item, 574, mock_time + Duration::minutes(5), 1, 16),
+            (18, ProductType::Item, 465, mock_time - Duration::seconds(1), 5, 75),
+        ]
+    ).await;
+    in_mem_fetch_by_oid_ctime_common( &repo, "order0019286",
+        mock_time - Duration::seconds(70),
+        mock_time - Duration::seconds(3),
+        vec![
+            (48, ProductType::Item,    574, mock_time - Duration::seconds(3), 3, 39),
+            (49, ProductType::Package, 195, mock_time - Duration::seconds(4), 7, 112),
+            (48, ProductType::Item,    574, mock_time - Duration::seconds(55), 2, 26),
+        ]
+    ).await;
 } // end of fn in_mem_fetch_by_ctime_ok
 
+
+
+type UTflatReturnExpectData = (u32, ProductType, u64, DateTime<FixedOffset>, u32, u32);
+
 async fn in_mem_fetch_by_ctime_common(
-    repo:&OrderReturnInMemRepo, mock_time:DateTime<FixedOffset>,
-    t_start:DateTime<FixedOffset>, t_end:DateTime<FixedOffset>,
-    verify_data: fn(DateTime<FixedOffset>, &str) -> (DateTime<FixedOffset>,u32,u32)
+    repo:&OrderReturnInMemRepo,
+    t_start:DateTime<FixedOffset>,
+    t_end:DateTime<FixedOffset>,
+    expect_data: Vec<(String, UTflatReturnExpectData)>
 )
 {
     let result = repo.fetch_by_created_time(t_start, t_end).await;
     assert!(result.is_ok());
     if let Ok(fetched) = result {
-        assert_eq!(fetched.len(), 2);
-        fetched.into_iter().map(|(oid, mut m)| {
+        assert!(fetched.len() <= expect_data.len());
+        let actual_iter = fetched.into_iter().flat_map(
+            |(oid, m)| {
+                assert!(m.qty.len() >= 1);
+                let (seller_id, prod_typ, prod_id) = (m.id_.store_id, m.id_.product_type, m.id_.product_id);
+                m.qty.into_iter().map(move |(create_time, (q, refund))| {
+                    (oid.clone(), (seller_id, prod_typ.clone(),
+                     prod_id, create_time, q, refund.total))
+                })
+            }
+        );
+        let expect: HashSet<(String,UTflatReturnExpectData), RandomState> = HashSet::from_iter(expect_data.into_iter());
+        let actual: HashSet<(String,UTflatReturnExpectData), RandomState> = HashSet::from_iter(actual_iter);
+        let diff_cnt = expect.difference(&actual).count();
+        assert_eq!(diff_cnt, 0);
+    }
+}
+async fn in_mem_fetch_by_oid_ctime_common(
+    repo:&OrderReturnInMemRepo, oid:&str,
+    t_start:DateTime<FixedOffset>,
+    t_end:DateTime<FixedOffset>,
+    expect_data: Vec<UTflatReturnExpectData>
+)
+{
+    let result = repo.fetch_by_oid_ctime(oid, t_start, t_end).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        assert!(fetched.len() <= expect_data.len());
+        let actual_iter = fetched.into_iter().flat_map(|m| {
             assert!(m.qty.len() >= 1);
-            let (key, expect_qty, expect_refund) = verify_data(mock_time.clone(), oid.as_str());
-            let (actual_qty, actual_refund) = m.qty.remove(&key).unwrap();
-            assert_eq!(actual_qty, expect_qty);
-            assert_eq!(actual_refund.total, expect_refund);
-        }).count();
+            let (seller_id, prod_typ, prod_id) = (m.id_.store_id, m.id_.product_type, m.id_.product_id);
+            m.qty.into_iter().map(move |(create_time, (q, refund))| {
+                (seller_id, prod_typ.clone(), prod_id, create_time, q, refund.total)
+            })
+        });
+        let expect: HashSet<UTflatReturnExpectData, RandomState> = HashSet::from_iter(expect_data.into_iter());
+        let actual: HashSet<UTflatReturnExpectData, RandomState> = HashSet::from_iter(actual_iter);
+        let diff_cnt = expect.difference(&actual).count();
+        assert_eq!(diff_cnt, 0);
     }
 }
-fn in_mem_fetch_by_ctime_subcase_1(mock_time:DateTime<FixedOffset>, oid:&str)
- -> (DateTime<FixedOffset>,u32,u32)
-{
-    match oid {
-        "order00080273" => (mock_time + Duration::minutes(5), 1, 16),
-        "order10029803" => (mock_time + Duration::seconds(34), 1, 18),
-        _others => (mock_time, 0, 0),
-    }
-}
-fn in_mem_fetch_by_ctime_subcase_2(mock_time:DateTime<FixedOffset>, oid:&str)
- -> (DateTime<FixedOffset>,u32,u32)
-{
-    match oid {
-        "order0019286" => (mock_time - Duration::minutes(41), 1, 15),
-        "order00080273" => (mock_time - Duration::minutes(10), 5, 65),
-        _others => (mock_time, 0, 0),
-    }
-}
-
