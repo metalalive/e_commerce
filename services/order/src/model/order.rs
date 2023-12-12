@@ -466,7 +466,13 @@ impl Into<Vec<OrderLineStockReturningDto>> for OrderReturnModel {
 }
 impl Into<Vec<OrderLineReplicaRefundDto>> for OrderReturnModel {
     fn into(self) -> Vec<OrderLineReplicaRefundDto> {
-        vec![]
+        let (pid, map)  = (self.id_, self.qty);
+        map.into_iter().map(|(ctime, (_q, refund))| {
+            OrderLineReplicaRefundDto { seller_id: pid.store_id, product_id: pid.product_id,
+                product_type: pid.product_type.clone(), create_time: ctime,
+                amount: PayAmountDto { unit: refund.unit, total: refund.total }
+            }
+        }).collect()
     }
 }
 
@@ -550,5 +556,5 @@ impl OrderReturnModel {
         o_returns.extend(new_returns.into_iter());
         Ok(o_returns)
     } // end of fn filter_requests
-}
+} // end of impl OrderReturnModel
 

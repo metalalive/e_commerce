@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::collections::hash_map::RandomState;
+use std::collections::{HashMap, HashSet};
 use std::result::Result as DefaultResult;
 use chrono::{DateTime, Local, Duration, FixedOffset};
 
-use order::api::rpc::dto::{StockReturnErrorDto, OrderReplicaInventoryDto, OrderReplicaInventoryReqDto};
+use order::api::rpc::dto::{
+    StockReturnErrorDto, OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, OrderReplicaRefundReqDto
+};
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
@@ -14,7 +17,8 @@ use order::model::{
 use order::repository::{AbsOrderRepo, AbsOrderReturnRepo};
 use order::usecase::{
     CreateOrderUseCase, CreateOrderUsKsErr, OrderDiscardUnpaidItemsUseCase,
-    ReturnLinesReqUseCase, ReturnLinesReqUcOutput, OrderReplicaInventoryUseCase
+    ReturnLinesReqUseCase, ReturnLinesReqUcOutput, OrderReplicaInventoryUseCase,
+    OrderReplicaRefundUseCase
 };
 
 use super::{ut_setup_share_state, MockOrderRepo, MockOrderReturnRepo};
@@ -149,18 +153,18 @@ fn ut_setup_orderlines () -> Vec<OrderLineModel>
     let warranty_until = base_time + Duration::days(14);
     vec![
         OrderLineModel {id_: OrderLineIdentity {store_id:108 , product_type:ProductType::Item,
-            product_id: 190}, price:OrderLinePriceModel { unit:10, total: 39 },
-            qty: OrderLineQuantityModel {reserved: 4, paid: 3, paid_last_update},
+            product_id: 190}, price:OrderLinePriceModel { unit:10, total: 139 },
+            qty: OrderLineQuantityModel {reserved: 14, paid: 13, paid_last_update},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
         OrderLineModel {id_: OrderLineIdentity {store_id:800, product_type:ProductType::Item,
-            product_id: 191}, price:OrderLinePriceModel { unit:12, total: 60 },
-            qty: OrderLineQuantityModel {reserved: 5, paid: 5, paid_last_update},
+            product_id: 191}, price:OrderLinePriceModel { unit:12, total: 180 },
+            qty: OrderLineQuantityModel {reserved: 15, paid: 15, paid_last_update},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
         OrderLineModel {id_: OrderLineIdentity {store_id:426, product_type:ProductType::Package,
-            product_id: 192}, price:OrderLinePriceModel { unit:12, total: 60 },
-            qty: OrderLineQuantityModel {reserved: 8, paid: 5, paid_last_update},
+            product_id: 192}, price:OrderLinePriceModel { unit:12, total: 216 },
+            qty: OrderLineQuantityModel {reserved: 18, paid: 15, paid_last_update},
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         },
     ]
@@ -173,19 +177,25 @@ fn ut_setup_olines_returns () -> Vec<OrderReturnModel>
         OrderReturnModel {
             id_:OrderLineIdentity {store_id:108, product_id:190, product_type:ProductType::Item},
             qty: HashMap::from([
-                (return_time.clone(), (1, OrderLinePriceModel{unit:10, total: 10}))
+                (return_time + Duration::seconds(11), (1, OrderLinePriceModel{unit:10, total: 10})),
+                (return_time + Duration::seconds(30), (5, OrderLinePriceModel{unit:13, total: 65}))
             ])
         },
         OrderReturnModel {
             id_:OrderLineIdentity {store_id:800, product_id:191, product_type:ProductType::Item},
             qty: HashMap::from([
-                (return_time.clone(), (1, OrderLinePriceModel{unit:12, total: 12}))
+                (return_time + Duration::seconds(6), (1, OrderLinePriceModel{unit:12, total: 12})),
+                (return_time + Duration::seconds(28),(1, OrderLinePriceModel{unit:12, total: 12})),
+                (return_time + Duration::seconds(65),(2, OrderLinePriceModel{unit:12, total: 24})),
+                (return_time + Duration::seconds(99),(1, OrderLinePriceModel{unit:12, total: 12})),
             ])
         },
         OrderReturnModel {
             id_:OrderLineIdentity {store_id:426, product_id:192, product_type:ProductType::Package},
             qty: HashMap::from([
-                (return_time.clone(), (2, OrderLinePriceModel{unit:12, total: 24}))
+                (return_time + Duration::seconds(12), (2, OrderLinePriceModel{unit:11, total: 22})),
+                (return_time + Duration::seconds(73), (3, OrderLinePriceModel{unit:11, total: 33})),
+                (return_time + Duration::seconds(94), (1, OrderLinePriceModel{unit:11, total: 11}))
             ])
         },
     ]
@@ -319,6 +329,9 @@ async fn return_lines_request_ok()
         fetched_olines, fetched_returns,  save_result, 
         owner_usr_id , owner_usr_id ).await ;
     assert!(result.is_ok());
+    if let Ok(out) = result {
+        assert!(matches!(out, ReturnLinesReqUcOutput::Success));
+    }
 }
 
 #[tokio::test]
@@ -402,10 +415,21 @@ async fn replica_inventory_ok()
     assert!(result.is_ok());
     if let Ok(v) = result {
         assert_eq!(v.reservations.len(), 1);
-        assert_eq!(v.returns.len(), 3);
         assert_eq!(v.reservations[0].oid.as_str(), "order739");
+        assert_eq!(v.reservations[0].lines.len(), 3);
+        assert_eq!(v.returns.len(), 3);
+        v.returns.into_iter().map(|d| {
+            let actual_num_lines = d.lines.len();
+            let actual_num_returns = d.lines.iter().map(|r| {r.qty}).sum::<u32>();
+            let (expect_num_lines, expect_num_returns) = match d.oid.as_str() {
+                "order446" => (2, 6),  "order701" => (4, 5),
+                "order880" => (3, 6),  _others => (0, 0)
+            };
+            assert_eq!(actual_num_lines, expect_num_lines);
+            assert_eq!(actual_num_returns, expect_num_returns);
+        }).count();
     }
-}
+} // end of fn replica_inventory_ok
 
 #[tokio::test]
 async fn replica_inventory_err()
@@ -426,3 +450,40 @@ async fn replica_inventory_err()
         assert_eq!(e.detail.as_ref().unwrap().as_str(), "unit-test");
     }
 }
+
+#[tokio::test]
+async fn replica_refund_ok()
+{
+    let unknown_err = AppError{detail:None, code:AppErrorCode::Unknown};
+    let fetched_returns = ut_setup_olines_returns();
+    let expect_num_returns = fetched_returns.iter().map(|ret| ret.qty.len()).sum::<usize>(); 
+    let expect_refunds: HashSet<(u32,u64,DateTime<FixedOffset>,u32), RandomState> = {
+        let iter = fetched_returns.iter().flat_map(|ret| {
+            ret.qty.iter().map(|(t, (_q, refund))|
+                (ret.id_.store_id, ret.id_.product_id, t.clone(), refund.total)
+            )
+        });
+        HashSet::from_iter(iter)
+    };
+    let repo = ut_oreturn_setup_repository_2(
+        Ok(fetched_returns), Ok(vec![]), Err(unknown_err)
+    );
+    let req = OrderReplicaRefundReqDto {
+        order_id:"My391004".to_string(),
+        start: DateTime::parse_from_rfc3339("2023-11-17T12:00:04+02:00").unwrap(),
+        end: DateTime::parse_from_rfc3339("2023-11-19T12:00:04+02:00").unwrap(),
+    };
+    let uc = OrderReplicaRefundUseCase {repo};
+    let result = uc.execute(req).await;
+    assert!(result.is_ok());
+    if let Ok(v) = result {
+        assert_eq!(v.len(), expect_num_returns);
+        let iter = v.into_iter().map(|item|
+            (item.seller_id, item.product_id, item.create_time, item.amount.total)
+        );
+        let actual_refunds = HashSet::from_iter(iter);
+        let diff_cnt = expect_refunds.difference(&actual_refunds).count();
+        assert_eq!(diff_cnt, 0);
+    }
+} // end of fn replica_refund_ok
+

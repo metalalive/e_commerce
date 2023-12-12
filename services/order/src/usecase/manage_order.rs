@@ -223,7 +223,7 @@ impl OrderReplicaPaymentUseCase {
     }
 }
 impl OrderReplicaRefundUseCase {
-    pub(crate) async fn execute(self, req:OrderReplicaRefundReqDto)
+    pub async fn execute(self, req:OrderReplicaRefundReqDto)
         -> DefaultResult<Vec<OrderLineReplicaRefundDto>, AppError>
     {
         let (oid, start, end) = (req.order_id, req.start, req.end);

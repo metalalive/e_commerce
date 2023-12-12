@@ -257,11 +257,10 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
             Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
         }
     }
-    async fn fetch_by_oid_ctime(&self, _oid:&str, _start: DateTime<FixedOffset>, _end: DateTime<FixedOffset>)
+    async fn fetch_by_oid_ctime(&self, oid:&str, _start: DateTime<FixedOffset>, _end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<OrderReturnModel>, AppError>
-    {
-        let e = AppError { code: AppErrorCode::NotImplemented, detail: None };
-        Err(e)
+    { // use the same mock variable internally, TODO, improve the test readability
+        self.fetch_by_pid(oid, vec![]).await
     }
     async fn save(&self, _oid:&str, _reqs:Vec<OrderReturnModel>)
         -> DefaultResult<usize, AppError>
