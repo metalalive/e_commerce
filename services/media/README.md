@@ -51,7 +51,9 @@ Note:
 
 #### Configuration
 ```bash
-cd /PATH/TO/PROJECT_HOME/services
+cd /PATH/TO/PROJECT_HOME/services/media
+mkdir -p build
+cd build
 
 CC="/PATH/TO/gcc/10.3.0/installed/bin/gcc"   PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
     cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  -DLIQUIBASE_PATH="/PATH/TO/liquibase"  \
