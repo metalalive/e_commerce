@@ -107,11 +107,14 @@ async fn in_mem_fetch_by_ctime_ok()
             mock_time + Duration::seconds(34), (1, OrderLinePriceModel {unit:18, total:18}),
         );
         assert!(prev_entry.is_none());
-        let prev_entry = ret.qty.insert(
+        ret.qty.insert(
             mock_time + Duration::seconds(51), (3, OrderLinePriceModel {unit:21, total:63}),
         );
+        let prev_entry = ret.qty.insert(
+            mock_time + Duration::seconds(388), (1, OrderLinePriceModel {unit:21, total:21}),
+        );
         assert!(prev_entry.is_none());
-        assert_eq!(ret.qty.len(), 3);
+        assert_eq!(ret.qty.len(), 4);
         let result = repo.save("order10029803", reqs).await;
         assert!(result.is_ok());
     } // end setup
@@ -171,15 +174,14 @@ async fn in_mem_fetch_by_ctime_common(
                 assert!(m.qty.len() >= 1);
                 let (seller_id, prod_typ, prod_id) = (m.id_.store_id, m.id_.product_type, m.id_.product_id);
                 m.qty.into_iter().map(move |(create_time, (q, refund))| {
-                    (oid.clone(), (seller_id, prod_typ.clone(),
-                     prod_id, create_time, q, refund.total))
+                    (oid.clone(), (seller_id, prod_typ.clone(), prod_id, create_time, q, refund.total))
                 })
             }
         );
         let expect: HashSet<(String,UTflatReturnExpectData), RandomState> = HashSet::from_iter(expect_data.into_iter());
         let actual: HashSet<(String,UTflatReturnExpectData), RandomState> = HashSet::from_iter(actual_iter);
-        let diff_cnt = expect.difference(&actual).count();
-        assert_eq!(diff_cnt, 0);
+        assert_eq!(actual.difference(&expect).count(), 0);
+        assert_eq!(expect.difference(&actual).count(), 0);
     }
 }
 async fn in_mem_fetch_by_oid_ctime_common(
@@ -202,7 +204,7 @@ async fn in_mem_fetch_by_oid_ctime_common(
         });
         let expect: HashSet<UTflatReturnExpectData, RandomState> = HashSet::from_iter(expect_data.into_iter());
         let actual: HashSet<UTflatReturnExpectData, RandomState> = HashSet::from_iter(actual_iter);
-        let diff_cnt = expect.difference(&actual).count();
-        assert_eq!(diff_cnt, 0);
+        assert_eq!(actual.difference(&expect).count(), 0);
+        assert_eq!(expect.difference(&actual).count(), 0);
     }
 }

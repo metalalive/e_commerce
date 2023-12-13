@@ -16,7 +16,7 @@ use super::AbsOrderReturnRepo;
 mod _oline_return {
     use crate::datastore::AbsDStoreFilterKeyOp;
     use crate::model::{OrderReturnQuantityModel, OrderLinePriceModel};
-    use super::{HashMap, DateTime, FixedOffset, ProductType};
+    use super::{HashMap, DateTime, FixedOffset, OrderReturnModel, ProductType};
 
     pub(super) const TABLE_LABEL:&'static str = "order_line_return";
     pub(super) const QTY_DELIMITER:&'static str = "/";
@@ -58,6 +58,18 @@ mod _oline_return {
             (time, (q, OrderLinePriceModel{unit, total}))
         });
         HashMap::from_iter(iter)
+    }
+    pub(super) fn inmem_filt_qty_detail(
+        src: OrderReturnModel, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>
+    ) -> OrderReturnModel
+    {
+        let (id_, map) = (src.id_, src.qty);
+        let drained = map.into_iter().filter(
+            |(time, _combo)| ((&start <= time) && (time <= &end))
+        );
+        let map = HashMap::from_iter(drained);
+        assert!(!map.is_empty());
+        OrderReturnModel {id_, qty:map}
     }
     pub(super) struct InMemDStoreFilterTimeRangeOp<'a> {
         pub t0: DateTime<FixedOffset>,
@@ -157,7 +169,8 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
         let rows = data.remove(table_name).unwrap();
         let out = rows.into_iter().map(|(key, row)| {
             let oid = _oline_return::inmem_get_oid(key.as_str()).to_string();
-            (oid, row.into())
+            let ret = _oline_return::inmem_filt_qty_detail(row.into(), start, end);
+            (oid, ret)
         }).collect();
         Ok(out)
     }
@@ -170,7 +183,9 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
         let info = HashMap::from([(table_name.to_string(), pkeys)]);
         let mut data = self.datastore.fetch(info).await?;
         let rows = data.remove(table_name).unwrap();
-        let out = rows.into_values().map(AppInMemFetchedSingleRow::into).collect();
+        let out = rows.into_values().map(|row| {
+            _oline_return::inmem_filt_qty_detail(row.into(), start, end)
+        }).collect();
         Ok(out)
     }
     async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>
