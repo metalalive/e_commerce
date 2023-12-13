@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+
 use axum::routing::{patch, post, MethodRouter};
+use http_body::Body as HttpBody;
 
 use crate::{AppSharedState, constant as AppConst, WebApiHdlrLabel};
 
@@ -7,12 +9,17 @@ mod product_policy;
 mod order;
 pub mod dto;
 
-pub type ApiRouteType = MethodRouter<AppSharedState>;
-pub type ApiRouteTableType = HashMap<WebApiHdlrLabel, ApiRouteType>;
+// type parameter `B` for http body of the method router has to match the same
+// type parameter in `axum::Router`
+pub type ApiRouteType<HB> = MethodRouter<AppSharedState, HB>;
+pub type ApiRouteTableType<HB> = HashMap<WebApiHdlrLabel, ApiRouteType<HB>>;
 
-pub fn route_table () -> ApiRouteTableType
+pub fn route_table<HB>() -> ApiRouteTableType<HB>
+    where HB:  HttpBody + Send + 'static,
+          <HB as HttpBody>::Data: Send,
+          <HB as HttpBody>::Error: Into<Box<dyn  std::error::Error + Send + Sync>>
 {
-    let mut out: ApiRouteTableType = HashMap::new();
+    let mut out: ApiRouteTableType<HB> = HashMap::new();
     out.insert( AppConst::WEBAPI_ADD_PRODUCT_POLICY,
                 post(product_policy::post_handler)  );
     out.insert( AppConst::WEBAPI_CREATE_NEW_ORDER,

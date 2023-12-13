@@ -3,40 +3,56 @@ use std::collections::hash_map::RandomState;
 use std::env;
 use std::boxed::Box;
 
+use http_body::Limited;
+// use tower_http::follow_redirect::policy::Limited;
+use hyper::Body as HyperBody;
 use tokio::runtime::Builder as RuntimeBuilder;
+use tower::ServiceBuilder;
 
 use order::{AppConfig, AppSharedState};
 use order::constant::EXPECTED_ENV_VAR_LABELS;
 use order::confidentiality::{self, AbstractConfidentiality};
 use order::logging::{AppLogContext, AppLogLevel, app_log_event};
-use order::network::{generate_web_service, start_web_service};
-use order::api::web::route_table as web_route_table;
+use order::network::{net_server_listener, app_web_service, AppWebService};
+use order::api::web::route_table;
+
+type AppFinalHttpBody = Limited<HyperBody>; // HyperBody;
 
 async fn start_server (shr_state:AppSharedState)
 {
     let log_ctx_p = shr_state.log_context().clone();
     let cfg = shr_state.config().clone();
-    let routes = web_route_table();
+    let routes = route_table::<AppFinalHttpBody>();
     let listener = &cfg.api_server.listen;
-    let (num_applied, srv) = generate_web_service(
-            listener, routes, shr_state);
+    let (service, num_applied) = app_web_service::<AppFinalHttpBody>(listener, routes, shr_state);
     if num_applied == 0 {
         app_log_event!(log_ctx_p, AppLogLevel::ERROR,
                 "no route created, web API server failed to start");
         return;
     }
-    let result = start_web_service(
-        listener.host.clone(), listener.port, srv );
+    let result = net_server_listener(listener.host.clone(), listener.port);
     match result {
-        Ok(sr) => {
+        Ok(b) => {
+            let ratelm = AppWebService::rate_limit(listener.max_connections);
+            let reqlm = AppWebService::req_body_limit(cfg.api_server.limit_req_body_in_bytes);
+            let co  = AppWebService::cors();
+            let middlewares1 = ServiceBuilder::new()
+                .layer(reqlm)
+                .layer(co);
+            let service = service.layer(middlewares1);
+            let middlewares2 = ServiceBuilder::new()
+                .layer(ratelm) // rate-limit not allowed to clone
+                .service(service.into_make_service());
+            let sr = b.serve(middlewares2);
             let _ = sr.await;
+            app_log_event!(log_ctx_p, AppLogLevel::WARNING, "API server terminating ");
         },
         Err(e) => {
             app_log_event!(log_ctx_p, AppLogLevel::ERROR,
                     "API server failed to start, {} ", e);
         }
     }
-}
+} // end of fn start_server
 
 fn start_async_runtime (cfg:AppConfig, confidential:Box<dyn AbstractConfidentiality>)
 {
@@ -63,6 +79,8 @@ fn start_async_runtime (cfg:AppConfig, confidential:Box<dyn AbstractConfidential
         .thread_name("web-api-worker")
         // manage low-level I/O drivers used by network types
         .enable_io()
+        // rate limiter in crate `tower` requires the timer in the runtime builder
+        .enable_time()
         .build();
     match result {
         Ok(rt) => { // new worker threads spawned

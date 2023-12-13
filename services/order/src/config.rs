@@ -172,7 +172,7 @@ pub struct ApiServerCfg {
     pub logging: AppLoggingCfg,
     access_log: AccessLogCfg,
     pub listen: WebApiListenCfg,
-    limit_req_body_in_bytes: u32,
+    pub limit_req_body_in_bytes: usize,
     pub num_workers: u8,
     pub stack_sz_kb: u16,
     pub data_store: Vec<AppDataStoreCfg>,
