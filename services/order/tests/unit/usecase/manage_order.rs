@@ -21,7 +21,8 @@ use order::usecase::{
     OrderReplicaRefundUseCase
 };
 
-use super::{ut_setup_share_state, MockOrderRepo, MockOrderReturnRepo};
+use crate::ut_setup_share_state;
+use super::{MockOrderRepo, MockOrderReturnRepo};
 
 fn ut_setup_prod_policies () -> ProductPolicyModelSet
 {
@@ -208,7 +209,7 @@ async fn discard_unpaid_items_common(
     )
     -> DefaultResult<(), AppError>
 {
-    let shr_state = ut_setup_share_state();
+    let shr_state = ut_setup_share_state("config_ok.json");
     let logctx = shr_state.log_context().clone();
     let not_impl_err = AppError{detail:None, code:AppErrorCode::NotImplemented};
     let repo = MockOrderRepo::build(
@@ -301,7 +302,7 @@ async fn request_lines_request_common(
     owner_usr_id: u32
 ) -> DefaultResult<ReturnLinesReqUcOutput, AppError>
 {
-    let shr_state = ut_setup_share_state();
+    let shr_state = ut_setup_share_state("config_ok.json");
     let logctx = shr_state.log_context().clone();
     let o_repo = ut_oreturn_setup_repository_1(
         fetched_olines, vec![], owner_usr_id, None

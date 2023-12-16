@@ -50,6 +50,7 @@
         "max_failures": 3,
         "api_version": "1.0.0",
 	"max_connections": 256,
+        "cors": "common/data/cors.json",
         "routes": [
             {"path":"/policy/products", "handler":"modify_product_policy"},
             {"path":"/order",  "handler":"create_new_order"},

@@ -49,6 +49,7 @@
         "host":"localhost",
         "max_failures": 5,
         "api_version": "1.0.0",
+        "cors": "common/data/cors.json",
 	"max_connections": 50,
         "routes": [
             {"path":"/policy/products", "handler":"modify_product_policy"},

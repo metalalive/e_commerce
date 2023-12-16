@@ -20,6 +20,7 @@
         "max_failures": 5,
         "api_version": "1.0.0",
 	"max_connections": 50,
+        "cors": "order/tests/unit/examples/cors_ok.json",
         "routes": [
             {"path":"/policy/products", "handler":"modify_product_policy"}
         ]

@@ -19,12 +19,13 @@ use order::{AppConfig, AppSharedState, AppBasepathCfg, confidentiality};
 use order::error::{AppError, AppErrorCode};
 use order::logging::AppLogContext;
 use order::constant::EXPECTED_ENV_VAR_LABELS;
-use order::network::{generate_web_service, WebApiServer};
+use order::network::{app_web_service, WebServiceRoute};
 use order::api::web::route_table;
 
+pub(crate) type ITestFinalHttpBody = HyperBody;
 
 static mut GLOBAL_SHARED_STATE : Option<DefaultResult<AppSharedState, AppError>> = None;
-static mut SHARED_WEB_SERVER : Option<Arc<Mutex<WebApiServer>>> = None;
+static mut SHARED_WEB_SERVER : Option<Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>> = None;
 
 static GLB_STATE_INIT : Once = Once::new();
 static WEB_SRV_INIT : Once = Once::new();
@@ -62,17 +63,18 @@ pub fn test_setup_shr_state() -> DefaultResult<AppSharedState, AppError>
 } // end of test_setup_shr_state
 
 
-pub struct TestWebServer {}
+pub(crate) struct TestWebServer {}
 type InnerRespBody = UnsyncBoxBody<HyperBytes, AxumCoreError>; 
 
 impl TestWebServer {
-    pub fn setup (shr_state:AppSharedState) -> Arc<Mutex<WebApiServer>>
+    pub fn setup (shr_state:AppSharedState) -> Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>
     {
         WEB_SRV_INIT.call_once(|| {
-            let rtable = route_table();
+            let rtable = route_table::<ITestFinalHttpBody>();
             let top_lvl_cfg = shr_state.config().clone();
             let listener = & top_lvl_cfg.api_server.listen ;
-            let (_, srv) = generate_web_service(listener, rtable, shr_state);
+            let (srv, _) = app_web_service::<ITestFinalHttpBody>(
+                               listener, rtable, shr_state);
             let srv = Arc::new(Mutex::new(srv));
             unsafe { SHARED_WEB_SERVER = Some(srv); }
         });
@@ -84,7 +86,7 @@ impl TestWebServer {
         }
     }
 
-    pub async fn consume (srv: &Arc<Mutex<WebApiServer>>, req:Request<HyperBody>)
+    pub async fn consume (srv: &Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>, req:Request<HyperBody>)
         -> Response<InnerRespBody> {
         let mut guard = srv.lock().await;
         let inner_sv = guard.borrow_mut();

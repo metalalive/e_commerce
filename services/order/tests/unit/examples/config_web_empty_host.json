@@ -23,6 +23,7 @@
         "host":"",
         "max_failures": 5,
         "api_version": "1.0.0",
+        "cors": "order/tests/unit/examples/cors_ok.json",
 	"max_connections": 50,
         "routes": [
             {"path":"/policy/products", "handler":"modify_product_policy"}

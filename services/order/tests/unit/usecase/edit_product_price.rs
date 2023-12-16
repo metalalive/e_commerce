@@ -14,7 +14,7 @@ use order::api::rpc::dto::{ProductPriceDto, ProductPriceDeleteDto, ProductPriceE
 use order::model::{ProductPriceModelSet, ProductPriceModel};
 use order::repository::AbsProductPriceRepo;
 use order::usecase::EditProductPriceUseCase;
-use super::ut_setup_share_state;
+use crate::ut_setup_share_state;
 
 type RepoFetchCallArgType = (u32, Vec<(ProductType,u64)>);
 
@@ -102,7 +102,7 @@ impl MockRepository {
 #[tokio::test]
 async fn create_ok ()
 {
-    let app_state = ut_setup_share_state();
+    let app_state = ut_setup_share_state("config_ok.json");
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet { store_id: mocked_store_id, items:Vec::new() };
@@ -131,7 +131,7 @@ async fn create_ok ()
 #[tokio::test]
 async fn update_ok ()
 {
-    let app_state = ut_setup_share_state();
+    let app_state = ut_setup_share_state("config_ok.json");
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {
@@ -182,7 +182,7 @@ async fn update_ok ()
 #[tokio::test]
 async fn fetch_error ()
 {
-    let app_state = ut_setup_share_state();
+    let app_state = ut_setup_share_state("config_ok.json");
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-1");
     let repo = MockRepository::_new(Ok(()), Ok(()),
@@ -212,7 +212,7 @@ async fn fetch_error ()
 #[tokio::test]
 async fn save_error ()
 {
-    let app_state = ut_setup_share_state();
+    let app_state = ut_setup_share_state("config_ok.json");
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-2");
     let mocked_ppset = ProductPriceModelSet {store_id:mocked_store_id, items:vec![
@@ -249,7 +249,7 @@ async fn save_error ()
 #[tokio::test]
 async fn delete_subset_ok ()
 {
-    let app_state = ut_setup_share_state();
+    let app_state = ut_setup_share_state("config_ok.json");
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {store_id: mocked_store_id, items:Vec::new()};
@@ -266,7 +266,7 @@ async fn delete_subset_ok ()
 #[tokio::test]
 async fn delete_subset_error ()
 {
-    let app_state = ut_setup_share_state();
+    let app_state = ut_setup_share_state("config_ok.json");
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-1");
     let mocked_ppset = ProductPriceModelSet {store_id: mocked_store_id, items:Vec::new()};
@@ -291,7 +291,7 @@ async fn delete_subset_error ()
 #[tokio::test]
 async fn delete_all_ok ()
 {
-    let app_state = ut_setup_share_state();
+    let app_state = ut_setup_share_state("config_ok.json");
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {store_id: mocked_store_id, items:Vec::new()};

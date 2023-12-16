@@ -26,6 +26,7 @@
         "max_failures": 5,
         "api_version": "1.0.0",
 	"max_connections": 50,
+        "cors": "order/tests/unit/examples/cors_ok.json",
         "routes": [
             {"path":"/order",  "handler":"create_new_order"},
             {"path":"", "handler":"access_existing_order"}

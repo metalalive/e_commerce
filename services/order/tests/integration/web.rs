@@ -1,7 +1,6 @@
 use std::result::Result as DefaultResult ;
 use std::sync::Arc;
 
-use http_body::Body;
 use hyper::Body as HyperBody;
 use http::{Request, StatusCode};
 
@@ -12,10 +11,12 @@ use order::api::web::dto::{
     OrderCreateRespErrorDto, ContactErrorReason, PhoneNumNationErrorReason, OrderLineReqDto
 };
 use order::api::rpc;
-use order::network::WebApiServer;
+use order::network::WebServiceRoute;
 
 mod common;
-use common::{test_setup_shr_state, TestWebServer, deserialize_json_template};
+use common::{
+    test_setup_shr_state, TestWebServer, deserialize_json_template, ITestFinalHttpBody
+};
 use tokio::sync::Mutex;
 
 const FPATH_NEW_ORDER_OK_1:&'static str  = "/tests/integration/examples/order_new_ok_1.json";
@@ -27,7 +28,7 @@ const FPATH_EDIT_PRODUCTPOLICY_ERR:&'static str = "/tests/integration/examples/p
 const FPATH_RETURN_OLINE_REQ_OK_1:&'static str  = "/tests/integration/examples/oline_return_request_ok_1.json";
 
 
-async fn setup_product_policy_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebApiServer>>,
+async fn setup_product_policy_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
                                  req_fpath:&'static str)
     -> DefaultResult<(), AppError>
 { // ---- add product policy ----
@@ -88,7 +89,7 @@ async fn setup_product_stock_ok(shr_state:AppSharedState)
     assert!(result.is_ok());
 }
 
-async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebApiServer>>,
+async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
                             req_fpath:&'static str)
     -> DefaultResult<String, AppError>
 {
@@ -115,7 +116,7 @@ async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebApiServer>>,
     Ok(actual.order_id)
 }
 
-async fn return_olines_request_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebApiServer>>,
+async fn return_olines_request_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
                             req_fpath:&'static str, oid:&str)
     -> DefaultResult<(), AppError>
 {
@@ -128,7 +129,7 @@ async fn return_olines_request_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebApiServer
     };
     let req = Request::builder().uri(uri).method("PATCH")
         .header("content-type", "application/json").body(req_body).unwrap();
-    let mut response = TestWebServer::consume(&srv, req).await;
+    let response = TestWebServer::consume(&srv, req).await;
     // let bodydata = response.body_mut().data().await.unwrap().unwrap();
     // println!("reponse serial body : {:?}", bodydata);
     assert_eq!(response.status(), StatusCode::OK);

@@ -35,9 +35,11 @@
         "port": 8013,
         "host":"localhost",
         "max_failures": 5,
-        "api_version": "1.0.0",
+        "api_version": "1.0.33",
+        "cors": "order/tests/unit/examples/cors_ok.json",
 	"max_connections": 50,
         "routes": [
+            {"path":"/gram/increment", "handler":"gram_increment"},
             {"path":"/policy/products", "handler":"modify_product_policy"},
             {"path":"/order",  "handler":"create_new_order"},
             {"path":"/order/:oid", "handler":"access_existing_order"}

@@ -1,0 +1,13 @@
+{
+    "ALLOWED_ORIGIN": {
+        "order"   : "http://localhost:8012",
+        "user_management" : "http://localhost:8008",
+        "store"   : "http://localhost:8011",
+        "inventory"   :"http://localhost:8024"
+    },
+    "ALLOWED_METHODS": ["GET", "OPTIONS", "cUstoMize-htTP-METHod", "PUT", "DELETE", "PATCH"],
+    "ALLOWED_HEADERS": ["authorization", "x-anti-csrf-tok", "accept"],
+    "ALLOW_CREDENTIALS": true,
+    "PREFLIGHT_MAX_AGE": 12
+}
+

@@ -1,16 +1,14 @@
 {
     "ALLOWED_ORIGIN": {
-        "fronted_dev" : "http://localhost:3000",
         "web" : "http://localhost:8006",
-        "user_management" : "http://localhost:8008",
-        "product" : "http://localhost:8009",
-        "store"   : "http://localhost:8011",
         "order"   : "http://localhost:8012",
-        "media"   : "http://localhost:8010"
+        "user_management" : "http://localhost:8008",
+        "store"   : "http://localhost:8011",
+        "inventory"   :"http://localhost:8024"
     },
     "ALLOWED_METHODS": ["GET", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],
     "ALLOWED_HEADERS": ["authorization","content-type", "x-anti-csrf-tok", "accept"],
     "ALLOW_CREDENTIALS": true,
-    "PREFLIGHT_MAX_AGE": 8
+    "PREFLIGHT_MAX_AGE": 12
 }
 

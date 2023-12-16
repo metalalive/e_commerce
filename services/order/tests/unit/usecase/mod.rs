@@ -3,7 +3,7 @@ mod edit_product_price;
 mod stock_level;
 mod manage_order;
 
-use std::{env, vec};
+use std::vec;
 use std::boxed::Box;
 use std::cell::{RefCell, Cell};
 use std::sync::{Arc, Mutex};
@@ -15,28 +15,27 @@ use tokio::task;
 use tokio::sync::Mutex as AsyncMutex;
 
 use order::{
-    AppSharedState, AppConfig, AppBasepathCfg, AbstractRpcContext, AppRpcCfg,
-    AbstractRpcServer, AbstractRpcClient, AbsRpcClientCtx, AbsRpcServerCtx,
-    AppRpcClientReqProperty, AppRpcReply, AppDataStoreContext
+    AppSharedState, AbstractRpcContext, AppRpcCfg, AbstractRpcServer, AbstractRpcClient,
+    AbsRpcClientCtx, AbsRpcServerCtx, AppRpcClientReqProperty, AppRpcReply, AppDataStoreContext
 };
 use order::api::dto::{OrderLinePayDto, ShippingMethod};
-use order::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto};
+use order::api::rpc::dto::{
+    OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto
+};
 use order::error::{AppError, AppErrorCode};
-use order::constant::{ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
-use order::logging::AppLogContext;
-use order::confidentiality::AbstractConfidentiality;
 use order::model::{
     StockLevelModelSet, ProductStockIdentity, OrderLineModel, BillingModel,
     ShippingModel, OrderLineModelSet, OrderLineIdentity, OrderReturnModel,
     ContactModel, ShippingOptionModel
 };
 use order::repository::{
-    AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc,
-    AppStockRepoReserveReturn, AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback, AppStockRepoReturnUserFunc, AbsOrderReturnRepo
+    AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn,
+    AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback, AppStockRepoReturnUserFunc,
+    AbsOrderReturnRepo
 };
 use order::usecase::{initiate_rpc_request, rpc_server_process};
 
-use crate::EXAMPLE_REL_PATH;
+use crate::ut_setup_share_state;
 
 
 
@@ -548,27 +547,6 @@ async fn client_run_rpc_consume_reply_error ()
 }
 
 
-struct MockConfidential {}
-impl AbstractConfidentiality for MockConfidential {
-    fn try_get_payload(&self, _id:&str) -> DefaultResult<String, AppError> {
-        Ok("unit-test".to_string())
-    }
-}
-
-fn ut_setup_share_state() -> AppSharedState {
-    let service_basepath = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
-    let sys_basepath = env::var(ENV_VAR_SYS_BASE_PATH).unwrap();
-    const CFG_FNAME: &str = "config_ok.json";
-    let fullpath = service_basepath.clone() + EXAMPLE_REL_PATH + CFG_FNAME;
-    let cfg = AppConfig {
-        api_server: AppConfig::parse_from_file(fullpath).unwrap(),
-        basepath: AppBasepathCfg { system:sys_basepath , service:service_basepath },
-    };
-    let logctx = AppLogContext::new(&cfg.basepath, &cfg.api_server.logging);
-    let cfdntl:Box<dyn AbstractConfidentiality> = Box::new(MockConfidential{});
-    AppSharedState::new(cfg, logctx, cfdntl)
-}
-
 async fn mock_rpc_request_handler (_r:AppRpcClientReqProperty, _ss:AppSharedState )
     -> AppRpcReply
 { // request and error handling
@@ -591,7 +569,7 @@ async fn server_run_rpc_ok ()
         _ctx.mock_s(Ok(a));
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state();
+    let shr_state = ut_setup_share_state("config_ok.json");
     let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
     assert!(result.is_ok());
     let newtask = result.unwrap();
@@ -613,7 +591,7 @@ async fn server_run_rpc_acquire_error ()
         _ctx.mock_s(Err(e));
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state();
+    let shr_state = ut_setup_share_state("config_ok.json");
     let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
     assert!(result.is_err());
     if let Err(e) = result {
@@ -638,7 +616,7 @@ async fn server_run_rpc_receive_request_error ()
         _ctx.mock_s(Ok(a));
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state();
+    let shr_state = ut_setup_share_state("config_ok.json");
     let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
     assert!(result.is_err());
     if let Err(e) = result {
@@ -665,7 +643,7 @@ async fn server_run_rpc_send_response_error ()
         _ctx.mock_s(Ok(a));
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state();
+    let shr_state = ut_setup_share_state("config_ok.json");
     let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
     assert!(result.is_ok());
     let newtask = result.unwrap();

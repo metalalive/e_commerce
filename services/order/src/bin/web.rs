@@ -13,8 +13,9 @@ use order::{AppConfig, AppSharedState};
 use order::constant::EXPECTED_ENV_VAR_LABELS;
 use order::confidentiality::{self, AbstractConfidentiality};
 use order::logging::{AppLogContext, AppLogLevel, app_log_event};
-use order::network::{net_server_listener, app_web_service, AppWebService};
+use order::network::{net_server_listener, app_web_service, middleware};
 use order::api::web::route_table;
+use tower_http::cors::CorsLayer;
 
 type AppFinalHttpBody = Limited<HyperBody>; // HyperBody;
 
@@ -33,9 +34,17 @@ async fn start_server (shr_state:AppSharedState)
     let result = net_server_listener(listener.host.clone(), listener.port);
     match result {
         Ok(b) => {
-            let ratelm = AppWebService::rate_limit(listener.max_connections);
-            let reqlm = AppWebService::req_body_limit(cfg.api_server.limit_req_body_in_bytes);
-            let co  = AppWebService::cors();
+            let ratelm = middleware::rate_limit(listener.max_connections);
+            let reqlm = middleware::req_body_limit(cfg.api_server.limit_req_body_in_bytes);
+            let co  = match middleware::cors(cfg.basepath.system.clone() +"/"+ listener.cors.as_str())
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    app_log_event!(log_ctx_p, AppLogLevel::ERROR,
+                                   "cors layer init error, detail: {:?}", e);
+                    CorsLayer::new()
+                }
+            };
             let middlewares1 = ServiceBuilder::new()
                 .layer(reqlm)
                 .layer(co);

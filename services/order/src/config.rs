@@ -67,6 +67,7 @@ pub struct WebApiListenCfg {
     pub port: u16,
     max_failures: u8,
     pub max_connections: u32,
+    pub cors: String,
     pub routes: Vec<WebApiRouteCfg>,
 }
 
