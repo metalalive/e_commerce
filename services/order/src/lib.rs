@@ -14,8 +14,11 @@ mod config;
 pub use config::{
     AppConfig, ApiServerCfg, WebApiListenCfg, WebApiRouteCfg, AppLoggingCfg,
     AppLogHandlerCfg, AppLoggerCfg, AppBasepathCfg, AppRpcCfg, AppRpcAmqpCfg,
-    AppInMemoryDbCfg, AppConfidentialCfg
+    AppInMemoryDbCfg, AppConfidentialCfg, AppAuthCfg
 };
+
+mod auth;
+pub use auth::AppAuthKeystore;
 
 mod rpc;
 use rpc::build_context as build_rpc_context;
@@ -42,7 +45,8 @@ pub struct AppSharedState {
     _cfg: Arc<AppConfig>,
     _log: Arc<logging::AppLogContext>,
     _rpc: Arc<Box<dyn AbstractRpcContext>>,
-    dstore: Arc<AppDataStoreContext> 
+    dstore: Arc<AppDataStoreContext>,
+    _auth_keys: Arc<AppAuthKeystore>
 }
 
 impl AppSharedState {
@@ -56,8 +60,9 @@ impl AppSharedState {
             Some(m.into_iter().map(Arc::new).collect())
         } else {None};
         let ds_ctx = AppDataStoreContext {in_mem, sql_dbs};
+        let auth_keys = AppAuthKeystore::new(&cfg.api_server.auth);
         Self{_cfg:Arc::new(cfg), _log:Arc::new(log), _rpc:Arc::new(_rpc_ctx),
-             dstore:Arc::new(ds_ctx)  }
+             dstore: Arc::new(ds_ctx), _auth_keys: Arc::new(auth_keys) }
     } // end of fn new
 
     pub fn config(&self) -> &Arc<AppConfig>
@@ -71,21 +76,17 @@ impl AppSharedState {
 
     pub fn datastore(&self) -> Arc<AppDataStoreContext>
     { self.dstore.clone() }
-} // end of impl AppSharedState
 
+    pub fn auth_keystore(&self) -> Arc<AppAuthKeystore>
+    { self._auth_keys.clone() }
+} // end of impl AppSharedState
 
 impl Clone for AppSharedState {
     fn clone(&self) -> Self {
         Self{
             _cfg: self._cfg.clone(),   _log: self._log.clone(),
-            _rpc: self._rpc.clone(),   dstore: self.dstore.clone()
+            _rpc: self._rpc.clone(),   dstore: self.dstore.clone(),
+            _auth_keys: self._auth_keys.clone(),
         }
     }
 }
-
-// #[derive(Clone)]
-// pub struct AppSharedState2 {
-//     cn1: Arc<logging::AppLogContext>,
-//     tvb: f32,
-// }
-

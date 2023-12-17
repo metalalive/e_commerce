@@ -15,7 +15,8 @@ http-body = "^0.4.6"
 tower = {version="^0.4.13", features=["log", "limit", "util"]}
 tower-http = {version="^0.4.3", features=["cors", "limit", "util"]}
 
-hyper = {version="^0.14", features=["server", "runtime", "tcp", "http1"]}
+# TODO, upgrade `hyper` to version 1.x
+hyper = {version="^0.14.26", features=["server", "client", "runtime", "tcp", "http1"]}
 axum = {version="^0.6.19", features=["macros"]}
 chrono  = {version="0.4.31", features=["std", "alloc", "serde"]}
 log = "0.4"
@@ -30,7 +31,7 @@ tracing-subscriber = {version="0.3.17", features=["std", "fmt", "registry"]}
 tracing-appender   = "0.2.2"
 regex = "1.9.6"
 
-# jsonwebtoken = "8.3"
+jsonwebtoken = "9.2"
 
 [[test]]
 name = "unittest"

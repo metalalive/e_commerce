@@ -52,6 +52,10 @@
 	"max_connections": 5,
 	"confidential_id": "amqp_broker/2/ty"
     },
+    "auth": {
+	"keystore_url": "http://localhost:12345",
+	"update_interval_minutes": 15
+    },
     "confidentiality": {
 	"source": "UserSpace",
 	"sys_path": "local/path/to/secret.json"

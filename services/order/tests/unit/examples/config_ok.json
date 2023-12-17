@@ -65,6 +65,10 @@
     "rpc": {
 	 "handler_type": "dummy"
     },
+    "auth": {
+	"keystore_url": "http://localhost:12345",
+	"update_interval_minutes": 15
+    },
     "confidentiality": {
 	"source": "UserSpace",
 	"sys_path": "local/path/to/secret.json"

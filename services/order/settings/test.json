@@ -78,6 +78,10 @@
     "rpc": {
 	 "handler_type": "dummy"
     },
+    "auth": {
+	"keystore_url": "http://localhost:8008/jwks",
+	"update_interval_minutes": 360
+    },
     "confidentiality": {
 	"source": "UserSpace",
 	"sys_path": "common/data/secrets.json"

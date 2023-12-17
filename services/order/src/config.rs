@@ -128,6 +128,12 @@ pub enum AppRpcCfg {
 }
 
 #[derive(Deserialize)]
+pub struct AppAuthCfg {
+	pub keystore_url: String,
+    pub update_interval_minutes: u32
+} // TODO, certificate for secure connection
+
+#[derive(Deserialize)]
 #[serde(tag="source")]
 pub enum AppConfidentialCfg {
     UserSpace {
@@ -178,6 +184,7 @@ pub struct ApiServerCfg {
     pub stack_sz_kb: u16,
     pub data_store: Vec<AppDataStoreCfg>,
     pub rpc: AppRpcCfg,
+    pub auth: AppAuthCfg,
     pub confidentiality: AppConfidentialCfg
 }
 

@@ -8,6 +8,7 @@ use http_body::Limited;
 use hyper::Body as HyperBody;
 use tokio::runtime::Builder as RuntimeBuilder;
 use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
 
 use order::{AppConfig, AppSharedState};
 use order::constant::EXPECTED_ENV_VAR_LABELS;
@@ -15,7 +16,6 @@ use order::confidentiality::{self, AbstractConfidentiality};
 use order::logging::{AppLogContext, AppLogLevel, app_log_event};
 use order::network::{net_server_listener, app_web_service, middleware};
 use order::api::web::route_table;
-use tower_http::cors::CorsLayer;
 
 type AppFinalHttpBody = Limited<HyperBody>; // HyperBody;
 
@@ -63,6 +63,39 @@ async fn start_server (shr_state:AppSharedState)
     }
 } // end of fn start_server
 
+
+async fn start_jwks_refresh(shr_state:AppSharedState) {
+    let log_ctx = shr_state.log_context().clone();
+    let keystore = shr_state.auth_keystore();
+    let period_secs = keystore.update_period.num_seconds()  as u64;
+    loop {
+        let period = match keystore.refresh().await {
+            Ok(stats) => {
+                app_log_event!(log_ctx, AppLogLevel::DEBUG, "JWK set refreshed, \
+                               period-to-next-op:{}, num-added:{}, num-discarded:{}",
+                               stats.period_next_op.num_minutes(),
+                               stats.num_added,
+                               stats.num_discarded);
+                match stats.period_next_op.to_std() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        app_log_event!(log_ctx, AppLogLevel::WARNING,
+                                       "return period error, reason: {:?} ", e);
+                        std::time::Duration::new(period_secs, 0)
+                    }
+                }
+            },
+            Err(e) => {
+                app_log_event!(log_ctx, AppLogLevel::ERROR,
+                    "failed to refrech JWK set, reason: {:?} ", e);
+                std::time::Duration::new(120, 0)
+            }
+        };
+        tokio::time::sleep(period).await;
+    } // end of loop
+} // end of fn start_jwks_refresh
+
+
 fn start_async_runtime (cfg:AppConfig, confidential:Box<dyn AbstractConfidentiality>)
 {
     let log_ctx = AppLogContext::new(&cfg.basepath, &cfg.api_server.logging);
@@ -94,6 +127,8 @@ fn start_async_runtime (cfg:AppConfig, confidential:Box<dyn AbstractConfidential
     match result {
         Ok(rt) => { // new worker threads spawned
             rt.block_on(async move {
+                let task_jwk = start_jwks_refresh(shr_state.clone());
+                tokio::task::spawn(task_jwk);
                 start_server(shr_state).await;
             }); // runtime started
         },
