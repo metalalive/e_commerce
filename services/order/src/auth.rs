@@ -1,26 +1,58 @@
-use std::borrow::BorrowMut;
+use std::boxed::Box;
+use std::pin::Pin;
+use std::future::Future;
+use std::borrow::{BorrowMut, Borrow};
 use std::collections::HashSet;
 use std::collections::hash_map::RandomState;
 use std::io::ErrorKind;
 use std::result::Result as DefaultResult;
+use std::sync::Arc;
 
+use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
+use serde::{Deserialize, Serialize};
+
 use http_body::Body as HttpBody;
+use http_body::combinators::UnsyncBoxBody;
 use tokio::task;
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
+use tower_http::auth::AsyncAuthorizeRequest;
 use hyper::{Uri, Request, header, Body as HyperBody, Response, StatusCode};
+use hyper::body::Bytes as HyBodyBytes;
 use hyper::client::conn as ClientConn;
+use axum::{Error as AxumError, RequestPartsExt, TypedHeader};
+use axum::headers::Authorization;
+use axum::headers::authorization::Bearer;
+use axum::response::IntoResponse;
+
+use jsonwebtoken::{
+    decode_header as jwt_decode_header, decode as jwt_decode, DecodingKey,
+    Validation as JwtValidation, errors as JwtErrors
+};
 use jsonwebtoken::jwk::{JwkSet, Jwk};
 
 use crate::AppAuthCfg;
 use crate::error::{AppError, AppErrorCode};
-use crate::constant::HTTP_CONTENT_TYPE_JSON;
+use crate::constant::{app_meta, HTTP_CONTENT_TYPE_JSON};
 
 const MAX_NBYTES_LOADED_RESPONSE_KEYSTORE: usize = 102400;
 
+type ApiRespBody = UnsyncBoxBody<HyBodyBytes, AxumError>;
+
+#[async_trait]
+pub trait AbstractAuthKeystore : Send + Sync { 
+    fn new(cfg:&AppAuthCfg) -> Self where Self: Sized;
+    
+    fn update_period(&self) -> Duration;
+
+    async fn refresh(&self) -> DefaultResult<AppKeystoreRefreshResult, AppError>;
+    
+    async fn find(&self, kid:&str) -> DefaultResult<Jwk, AppError>;
+}
+
 pub struct AppAuthKeystore {
-    pub update_period: Duration,
+    update_period: Duration,
     inner: RwLock<InnerKeystoreContext>
 }
 struct InnerKeystoreContext {
@@ -35,8 +67,34 @@ pub struct AppKeystoreRefreshResult {
     pub num_added: usize,
 }
 
-impl AppAuthKeystore {
-    pub fn new(cfg:&AppAuthCfg) -> Self {
+pub struct AppJwtAuthentication {
+    keystore: Arc<Box<dyn AbstractAuthKeystore>>
+}
+
+#[derive(Deserialize)]
+pub struct AppAuthClaimPermission {
+    pub app_code: u8,
+    pub codename: String
+}
+#[derive(Deserialize)]
+pub struct AppAuthClaimQuota {
+    pub app_code: u8,
+    pub mat_code: u8,
+    pub maxnum: u32,
+}
+#[derive(Deserialize)]
+pub struct AppAuthedClaim {
+    pub profile: u32,
+    pub iat: i64,
+    pub exp: i64, // TODO, add timezone
+    pub aud: Vec<String>,
+    pub perms: Vec<AppAuthClaimPermission>,
+    pub quota: Vec<AppAuthClaimQuota>,
+}
+
+#[async_trait]
+impl AbstractAuthKeystore for AppAuthKeystore { 
+    fn new(cfg:&AppAuthCfg) -> Self {
         let update_period = Duration::minutes(cfg.update_interval_minutes as i64);
         // caller can start refresh operation immediately after initialization
         let last_update = LocalTime::now().fixed_offset() - update_period - Duration::seconds(5);
@@ -45,7 +103,10 @@ impl AppAuthKeystore {
             keystore_url, last_update };
         Self { inner: RwLock::new(inner), update_period }
     }
-    pub async fn refresh(&self) -> DefaultResult<AppKeystoreRefreshResult, AppError>
+    fn update_period(&self) -> Duration
+    { self.update_period.clone() }
+
+    async fn refresh(&self) -> DefaultResult<AppKeystoreRefreshResult, AppError>
     {
         let mut guard = self.inner.write().await;
         let ctx = guard.borrow_mut();
@@ -66,6 +127,19 @@ impl AppAuthKeystore {
         }
     }
     
+    async fn find(&self, kid:&str) -> DefaultResult<Jwk, AppError>
+    {
+        let guard = self.inner.write().await;
+        let ctx = guard.borrow();
+        match ctx.keyset.find(kid) {
+            Some(v) => Ok(v.clone()),
+            None => Err(AppError { detail:Some("auth-key".to_string()),
+                code: AppErrorCode::IOerror(ErrorKind::NotFound) })
+        }
+    }
+} // end of impl AppAuthKeystore
+
+impl AppAuthKeystore { 
     pub fn merge(target:&mut JwkSet, new:JwkSet) -> (usize, usize)
     {
         let get_kid = |item:&Jwk| -> Option<String> {
@@ -197,3 +271,132 @@ impl From<&hyper::Error> for AppErrorCode {
     }
 }
 
+
+impl Clone for AppJwtAuthentication {
+    fn clone(&self) -> Self {
+        Self {keystore: self.keystore.clone()}
+    }
+}
+
+impl<REQB> AsyncAuthorizeRequest<REQB> for AppJwtAuthentication
+where REQB: Send + 'static
+{ // response body type of authentication middleware is coupled to web API endpoints
+  // TODO, better design approach
+    type RequestBody = REQB;
+    type ResponseBody = ApiRespBody;
+    type Future = Pin<Box< dyn Future<Output = 
+        DefaultResult<Request<Self::RequestBody>, Response<Self::ResponseBody> >>
+        + Send + 'static  >>;
+
+    fn authorize(& mut self, request: Request<REQB>) -> Self::Future {
+        type AuthTokenHdr = TypedHeader<Authorization<Bearer>>;
+        let ks = self.keystore.clone();
+        let fut = async move {
+            let (mut parts, body) = request.into_parts();
+            let resp = Self::error_response();
+            match parts.extract::<AuthTokenHdr>().await {
+                Ok(TypedHeader(Authorization(bearer))) =>
+                    match Self::validate_token(ks, bearer.token()).await {
+                        Ok(claim) => {
+                            let _ = parts.extensions.insert(claim);
+                            Ok(Request::from_parts(parts, body))
+                        },
+                        Err(_e) => {
+                            //println!("error found: {:?}", _e);
+                            Err(resp)
+                        }
+                    },
+                Err(_e) => {
+                    // println!("error found: {:?}", _e);
+                    Err(resp)
+                }
+            }
+        };
+        Box::pin(fut)
+    }
+}
+
+impl  AppJwtAuthentication {
+    fn error_response() -> Response<ApiRespBody>
+    {
+        (StatusCode::UNAUTHORIZED, "").into_response()
+    }
+
+    pub fn new(ks:Arc<Box<dyn AbstractAuthKeystore>>) -> Self {
+        Self { keystore: ks }
+    }
+
+    async fn validate_token(ks:Arc<Box<dyn AbstractAuthKeystore>>, encoded:&str)
+        -> DefaultResult<AppAuthedClaim, AppError>
+    {
+        let hdr = match jwt_decode_header(encoded) {
+            Ok(v) => v,
+            Err(ce) => {
+                //println!("error jwt_decode_header : {:?}", ce);
+                return Err(AppError::from(ce))
+            }
+        };
+        if hdr.kid.is_none() {
+            return Err(AppError { code: AppErrorCode::InvalidJsonFormat,
+                detail: Some("missing-jwt-key-id".to_string()) });
+        }
+        let kid = hdr.kid.as_ref().unwrap();
+        let jwk = ks.find(kid.as_str()).await ?;
+        let key = match  DecodingKey::from_jwk(&jwk) {
+            Ok(v) => v,
+            Err(ce) => {
+                //println!("error Decoding key from jwk : {:?}", ce);
+                return Err(AppError::from(ce))
+            }
+        };
+        let validation = {
+            let required_claims = ["profile", "aud", "exp", "iat", "perms", "quota"];
+            let mut vd = JwtValidation::new(hdr.alg);
+            let aud = [app_meta::LABAL];
+            vd.set_audience(&aud);
+            vd.set_required_spec_claims(&required_claims);
+            vd
+        };
+        match jwt_decode::<AppAuthedClaim>(encoded, &key, &validation) {
+            Ok(v) => Ok(v.claims) ,
+            Err(ce) => {
+                // println!("error jwt_decode : {:?}", ce);
+                Err(AppError::from(ce))
+            }
+        }
+    } // end of fn validate_token
+} // end of impl AppJwtAuthentication
+
+
+impl From<JwtErrors::Error> for AppError {
+    fn from(value: JwtErrors::Error) -> Self {
+        let (code, detail) = match value.kind() {
+            JwtErrors::ErrorKind::Base64(r) =>
+                (AppErrorCode::DataCorruption, r.to_string() + ", Base64 error"),
+            JwtErrors::ErrorKind::Utf8(r)  =>
+                (AppErrorCode::DataCorruption, r.to_string() + ", UTF-8 error"),
+            JwtErrors::ErrorKind::InvalidToken  =>
+                (AppErrorCode::DataCorruption, "invalid-token".to_string()),
+            JwtErrors::ErrorKind::Crypto(r) =>
+                (AppErrorCode::CryptoFailure, r.to_string()),
+            JwtErrors::ErrorKind::InvalidSignature | JwtErrors::ErrorKind::ImmatureSignature =>
+                (AppErrorCode::CryptoFailure, "invalid-signature".to_string()),
+            JwtErrors::ErrorKind::ExpiredSignature =>
+                (AppErrorCode::CryptoFailure, value.to_string()),
+            JwtErrors::ErrorKind::InvalidRsaKey(r) =>
+                (AppErrorCode::CryptoFailure, r.clone()),
+            JwtErrors::ErrorKind::InvalidEcdsaKey =>
+                (AppErrorCode::CryptoFailure, "ECDSA-key-invalid".to_string()),
+            JwtErrors::ErrorKind::Json(r) =>
+                (AppErrorCode::InvalidJsonFormat, r.to_string()),
+            JwtErrors::ErrorKind::RsaFailedSigning  =>
+                (AppErrorCode::CryptoFailure, "rsa-sign-key".to_string()),
+            JwtErrors::ErrorKind::InvalidAudience | JwtErrors::ErrorKind::InvalidAlgorithm |
+                JwtErrors::ErrorKind::InvalidAlgorithmName | JwtErrors::ErrorKind::InvalidKeyFormat |
+                JwtErrors::ErrorKind::MissingAlgorithm =>
+                (AppErrorCode::InvalidInput, value.to_string()),
+            _others => (AppErrorCode::Unknown, value.to_string())
+        };
+        Self { code, detail: Some(detail) } 
+    } // end of fn from
+} // end of impl AppError

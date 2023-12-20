@@ -18,7 +18,10 @@ pub use config::{
 };
 
 mod auth;
-pub use auth::AppAuthKeystore;
+pub use auth::{
+    AbstractAuthKeystore, AppAuthKeystore, AppJwtAuthentication, AppKeystoreRefreshResult,
+    AppAuthedClaim, AppAuthClaimQuota, AppAuthClaimPermission
+};
 
 mod rpc;
 use rpc::build_context as build_rpc_context;
@@ -46,7 +49,7 @@ pub struct AppSharedState {
     _log: Arc<logging::AppLogContext>,
     _rpc: Arc<Box<dyn AbstractRpcContext>>,
     dstore: Arc<AppDataStoreContext>,
-    _auth_keys: Arc<AppAuthKeystore>
+    _auth_keys: Arc<Box<dyn AbstractAuthKeystore>>
 }
 
 impl AppSharedState {
@@ -62,7 +65,7 @@ impl AppSharedState {
         let ds_ctx = AppDataStoreContext {in_mem, sql_dbs};
         let auth_keys = AppAuthKeystore::new(&cfg.api_server.auth);
         Self{_cfg:Arc::new(cfg), _log:Arc::new(log), _rpc:Arc::new(_rpc_ctx),
-             dstore: Arc::new(ds_ctx), _auth_keys: Arc::new(auth_keys) }
+             dstore: Arc::new(ds_ctx), _auth_keys: Arc::new(Box::new(auth_keys)) }
     } // end of fn new
 
     pub fn config(&self) -> &Arc<AppConfig>
@@ -77,7 +80,7 @@ impl AppSharedState {
     pub fn datastore(&self) -> Arc<AppDataStoreContext>
     { self.dstore.clone() }
 
-    pub fn auth_keystore(&self) -> Arc<AppAuthKeystore>
+    pub fn auth_keystore(&self) -> Arc<Box<dyn AbstractAuthKeystore>>
     { self._auth_keys.clone() }
 } // end of impl AppSharedState
 

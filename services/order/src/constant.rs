@@ -1,6 +1,11 @@
 use std::hash::Hash;
 use crate::WebApiHdlrLabel;
 
+pub mod app_meta {
+    pub const LABAL:&'static str = "order";
+    pub const CODE:u8 = 4;
+}
+
 pub const ENV_VAR_SYS_BASE_PATH :&'static str = "SYS_BASE_PATH";
 pub const ENV_VAR_SERVICE_BASE_PATH :&'static str = "SERVICE_BASE_PATH";
 pub const ENV_VAR_CONFIG_FILE_PATH :&'static str  = "CONFIG_FILE_PATH";

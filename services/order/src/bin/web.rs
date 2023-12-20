@@ -4,13 +4,13 @@ use std::env;
 use std::boxed::Box;
 
 use http_body::Limited;
-// use tower_http::follow_redirect::policy::Limited;
 use hyper::Body as HyperBody;
 use tokio::runtime::Builder as RuntimeBuilder;
 use tower::ServiceBuilder;
+use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::cors::CorsLayer;
 
-use order::{AppConfig, AppSharedState};
+use order::{AppConfig, AppSharedState, AppJwtAuthentication};
 use order::constant::EXPECTED_ENV_VAR_LABELS;
 use order::confidentiality::{self, AbstractConfidentiality};
 use order::logging::{AppLogContext, AppLogLevel, app_log_event};
@@ -23,6 +23,7 @@ async fn start_server (shr_state:AppSharedState)
 {
     let log_ctx_p = shr_state.log_context().clone();
     let cfg = shr_state.config().clone();
+    let keystore = shr_state.auth_keystore();
     let routes = route_table::<AppFinalHttpBody>();
     let listener = &cfg.api_server.listen;
     let (service, num_applied) = app_web_service::<AppFinalHttpBody>(listener, routes, shr_state);
@@ -36,8 +37,12 @@ async fn start_server (shr_state:AppSharedState)
         Ok(b) => {
             let ratelm = middleware::rate_limit(listener.max_connections);
             let reqlm = middleware::req_body_limit(cfg.api_server.limit_req_body_in_bytes);
-            let co  = match middleware::cors(cfg.basepath.system.clone() +"/"+ listener.cors.as_str())
-            {
+            let authm = {
+                let jwtauth = AppJwtAuthentication::new(keystore);
+                AsyncRequireAuthorizationLayer::new(jwtauth)
+            };
+            let cors_cfg_fullpath = cfg.basepath.system.clone() +"/"+ listener.cors.as_str();
+            let co  = match middleware::cors(cors_cfg_fullpath) {
                 Ok(v) => v,
                 Err(e) => {
                     app_log_event!(log_ctx_p, AppLogLevel::ERROR,
@@ -47,7 +52,8 @@ async fn start_server (shr_state:AppSharedState)
             };
             let middlewares1 = ServiceBuilder::new()
                 .layer(reqlm)
-                .layer(co);
+                .layer(co)
+                .layer(authm);
             let service = service.layer(middlewares1);
             let middlewares2 = ServiceBuilder::new()
                 .layer(ratelm) // rate-limit not allowed to clone
@@ -67,7 +73,7 @@ async fn start_server (shr_state:AppSharedState)
 async fn start_jwks_refresh(shr_state:AppSharedState) {
     let log_ctx = shr_state.log_context().clone();
     let keystore = shr_state.auth_keystore();
-    let period_secs = keystore.update_period.num_seconds()  as u64;
+    let period_secs = keystore.update_period().num_seconds()  as u64;
     loop {
         let period = match keystore.refresh().await {
             Ok(stats) => {
