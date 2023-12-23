@@ -38,7 +38,7 @@ async fn start_server (shr_state:AppSharedState)
             let ratelm = middleware::rate_limit(listener.max_connections);
             let reqlm = middleware::req_body_limit(cfg.api_server.limit_req_body_in_bytes);
             let authm = {
-                let jwtauth = AppJwtAuthentication::new(keystore);
+                let jwtauth = AppJwtAuthentication::new(keystore, Some(log_ctx_p.clone()));
                 AsyncRequireAuthorizationLayer::new(jwtauth)
             };
             let cors_cfg_fullpath = cfg.basepath.system.clone() +"/"+ listener.cors.as_str();

@@ -35,6 +35,7 @@ use jsonwebtoken::jwk::{JwkSet, Jwk};
 use crate::AppAuthCfg;
 use crate::error::{AppError, AppErrorCode};
 use crate::constant::{app_meta, HTTP_CONTENT_TYPE_JSON};
+use crate::logging::{AppLogContext, app_log_event, AppLogLevel};
 
 const MAX_NBYTES_LOADED_RESPONSE_KEYSTORE: usize = 102400;
 
@@ -68,21 +69,22 @@ pub struct AppKeystoreRefreshResult {
 }
 
 pub struct AppJwtAuthentication {
+    logctx:Option<Arc<AppLogContext>>,
     keystore: Arc<Box<dyn AbstractAuthKeystore>>
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct AppAuthClaimPermission {
     pub app_code: u8,
     pub codename: String
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct AppAuthClaimQuota {
     pub app_code: u8,
     pub mat_code: u8,
     pub maxnum: u32,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct AppAuthedClaim {
     pub profile: u32,
     pub iat: i64,
@@ -274,7 +276,8 @@ impl From<&hyper::Error> for AppErrorCode {
 
 impl Clone for AppJwtAuthentication {
     fn clone(&self) -> Self {
-        Self {keystore: self.keystore.clone()}
+        Self {keystore: self.keystore.clone(),
+              logctx: self.logctx.clone()}
     }
 }
 
@@ -290,31 +293,35 @@ where REQB: Send + 'static
 
     fn authorize(& mut self, request: Request<REQB>) -> Self::Future {
         type AuthTokenHdr = TypedHeader<Authorization<Bearer>>;
+        let _logctx = self.logctx.clone() ;
         let ks = self.keystore.clone();
         let fut = async move {
             let (mut parts, body) = request.into_parts();
-            let resp = Self::error_response();
+            let mut resp = Self::error_response();
             match parts.extract::<AuthTokenHdr>().await {
                 Ok(TypedHeader(Authorization(bearer))) =>
-                    match Self::validate_token(ks, bearer.token()).await {
+                    match Self::validate_token(ks, bearer.token(), _logctx).await {
                         Ok(claim) => {
                             let _ = parts.extensions.insert(claim);
                             Ok(Request::from_parts(parts, body))
                         },
-                        Err(_e) => {
-                            //println!("error found: {:?}", _e);
+                        Err(e) => {
+                            let _ = resp.extensions_mut().insert(e);
                             Err(resp)
                         }
                     },
-                Err(_e) => {
-                    // println!("error found: {:?}", _e);
+                Err(e) => {
+                    if let Some(lctx) = _logctx {
+                        app_log_event!(lctx, AppLogLevel::INFO, "failed to extract auth header : {:?}", e);
+                    }
+                    let _ = resp.extensions_mut().insert(e);
                     Err(resp)
                 }
             }
         };
         Box::pin(fut)
-    }
-}
+    } // end of fn authorize
+} // end of impl  AppJwtAuthentication
 
 impl  AppJwtAuthentication {
     fn error_response() -> Response<ApiRespBody>
@@ -322,30 +329,35 @@ impl  AppJwtAuthentication {
         (StatusCode::UNAUTHORIZED, "").into_response()
     }
 
-    pub fn new(ks:Arc<Box<dyn AbstractAuthKeystore>>) -> Self {
-        Self { keystore: ks }
-    }
+    pub fn new(ks:Arc<Box<dyn AbstractAuthKeystore>>,
+               logctx:Option<Arc<AppLogContext>>) -> Self
+    { Self { keystore: ks, logctx } }
 
-    async fn validate_token(ks:Arc<Box<dyn AbstractAuthKeystore>>, encoded:&str)
+    async fn validate_token(ks:Arc<Box<dyn AbstractAuthKeystore>>,
+                            encoded:&str, logctx:Option<Arc<AppLogContext>>)
         -> DefaultResult<AppAuthedClaim, AppError>
     {
         let hdr = match jwt_decode_header(encoded) {
             Ok(v) => v,
             Err(ce) => {
-                //println!("error jwt_decode_header : {:?}", ce);
+                if let Some(lctx) = logctx.as_ref() {
+                    app_log_event!(lctx, AppLogLevel::WARNING, "failed to decode JWT header : {:?}", ce);
+                }
                 return Err(AppError::from(ce))
             }
         };
         if hdr.kid.is_none() {
             return Err(AppError { code: AppErrorCode::InvalidJsonFormat,
-                detail: Some("missing-jwt-key-id".to_string()) });
+                detail: Some("jwt-missing-key-id".to_string()) });
         }
         let kid = hdr.kid.as_ref().unwrap();
         let jwk = ks.find(kid.as_str()).await ?;
         let key = match  DecodingKey::from_jwk(&jwk) {
             Ok(v) => v,
             Err(ce) => {
-                //println!("error Decoding key from jwk : {:?}", ce);
+                if let Some(lctx) = logctx.as_ref() {
+                    app_log_event!(lctx, AppLogLevel::ERROR, "Decoding key from jwk : {:?}", ce);
+                }
                 return Err(AppError::from(ce))
             }
         };
@@ -360,7 +372,9 @@ impl  AppJwtAuthentication {
         match jwt_decode::<AppAuthedClaim>(encoded, &key, &validation) {
             Ok(v) => Ok(v.claims) ,
             Err(ce) => {
-                // println!("error jwt_decode : {:?}", ce);
+                if let Some(lctx) = logctx.as_ref() {
+                    app_log_event!(lctx, AppLogLevel::WARNING, "failed to decode jwt : {:?}", ce);
+                }
                 Err(AppError::from(ce))
             }
         }
@@ -372,9 +386,9 @@ impl From<JwtErrors::Error> for AppError {
     fn from(value: JwtErrors::Error) -> Self {
         let (code, detail) = match value.kind() {
             JwtErrors::ErrorKind::Base64(r) =>
-                (AppErrorCode::DataCorruption, r.to_string() + ", Base64 error"),
+                (AppErrorCode::DataCorruption, r.to_string() + ", encoder:Base64"),
             JwtErrors::ErrorKind::Utf8(r)  =>
-                (AppErrorCode::DataCorruption, r.to_string() + ", UTF-8 error"),
+                (AppErrorCode::DataCorruption, r.to_string() + ", encoder:UTF-8"),
             JwtErrors::ErrorKind::InvalidToken  =>
                 (AppErrorCode::DataCorruption, "invalid-token".to_string()),
             JwtErrors::ErrorKind::Crypto(r) =>
@@ -384,7 +398,7 @@ impl From<JwtErrors::Error> for AppError {
             JwtErrors::ErrorKind::ExpiredSignature =>
                 (AppErrorCode::CryptoFailure, value.to_string()),
             JwtErrors::ErrorKind::InvalidRsaKey(r) =>
-                (AppErrorCode::CryptoFailure, r.clone()),
+                (AppErrorCode::CryptoFailure, r.clone() + ", low-level:invalid-rsa-key"),
             JwtErrors::ErrorKind::InvalidEcdsaKey =>
                 (AppErrorCode::CryptoFailure, "ECDSA-key-invalid".to_string()),
             JwtErrors::ErrorKind::Json(r) =>

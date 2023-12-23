@@ -1,0 +1,6 @@
+{
+    "kid":"12317a13-9e82-4506-b858-ba0040e2d781", "alg": "RS256", "kty": "RSA", "use": "sig",
+    "n": "s7zgha7xORgFGg7MFukm-cr9cEP6blfyYlN6N8fQhKMLCGmJNClMS9oLn_-fI4VeHFh4dCZbhuCwIxilpcLzm5a2AAjJZTpVpbzffbcRvtK5kI1hqUCPODBo6IlOvb6hlkZAX8DWNzsM8Z-cE3GXrScLh_ruhqi22pfwmN60QbVeIIlyZskttFfRtd2xJbnEoxkfiDd5mBd2x2vdqAHE0r47bKV0BEaQNwO-Y7sOWrO0bHIVNIoveAw1crvxwmQMKqI6TknmS7h66nz_n8763Lx05AD48vegnqCKBYvXXjVHZWqKPamexU0qZqQzcHc6wZC1jU6HR7F54S2qTYfhww",
+    "e": "AQAB",
+    "error_reason": "the modulus component are correctly encoded using Base64Url encoder, but just not the key for the unit test case"
+}
