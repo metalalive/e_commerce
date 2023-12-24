@@ -1,4 +1,3 @@
-
 use axum::debug_handler;
 use axum::extract::{Json as ExtractJson, State as ExtractState};
 use axum::response::IntoResponse;
@@ -10,7 +9,7 @@ use axum::http::{
 };
 
 use crate::error::AppErrorCode;
-use crate::{constant as AppConst, AppSharedState};
+use crate::{constant as AppConst, AppSharedState, AppAuthedClaim};
 use crate::api::web::dto::ProductPolicyDto;
 use crate::usecase::{EditProductPolicyUseCase, EditProductPolicyResult};
 
@@ -43,14 +42,14 @@ fn presenter (ucout:EditProductPolicyUseCase) -> impl IntoResponse
 } // end of fn presenter
 
 #[debug_handler(state = AppSharedState)]
-pub(crate) async fn post_handler(
+pub(super) async fn post_handler(
     // wrap the variables with the macros, to extract the content automatically
+    authed: AppAuthedClaim,
     ExtractState(appstate): ExtractState<AppSharedState>,
     ExtractJson(req_body): ExtractJson<Vec<ProductPolicyDto>> ) -> impl IntoResponse
 {
-    // TODO, extract user profile ID from authenticated JWT
     let input = EditProductPolicyUseCase::INPUT {
-        data: req_body, app_state: appstate, profile_id : 1234u32
+        data: req_body, app_state: appstate, profile_id : authed.profile
     };
     let output = input.execute().await ;
     presenter(output)

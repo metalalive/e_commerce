@@ -64,6 +64,7 @@ pub struct ReturnLinesReqUseCase {
 }
 
 impl CreateOrderUseCase {
+    // TODO, Attribute-Based Access Control, and quota check for each product
     pub async fn execute(self, req:OrderCreateReqData)
         -> DefaultResult<OrderCreateRespOkDto, CreateOrderUsKsErr>
     {

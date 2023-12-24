@@ -12,9 +12,10 @@ use axum::http::{
 };
 use serde_json;
 
-use crate::{constant as AppConst, AppSharedState, app_log_event};
+use crate::{AppSharedState, AppAuthedClaim};
 use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData, OrderLineReqDto};
-use crate::logging::AppLogLevel;
+use crate::constant as AppConst;
+use crate::logging::{AppLogLevel, app_log_event};
 use crate::repository::{
     app_repo_order, app_repo_product_price, app_repo_product_policy, app_repo_order_return
 };
@@ -24,12 +25,13 @@ use crate::usecase::{
 
 // always to specify state type explicitly to the debug macro
 #[debug_handler(state=AppSharedState)]
-pub(crate) async fn create_handler(
+pub(super) async fn create_handler(
+    authed: AppAuthedClaim,
     ExtractState(_appstate): ExtractState<AppSharedState>,
     _wrapped_req_body: ExtractJson<OrderCreateReqData> ) -> impl IntoResponse
 {
+    let usr_id = authed.profile;
     let ExtractJson(req_body) = _wrapped_req_body;
-    let usr_prof_id:u32  = 1234; // TODO, use auth token (e.g. JWT)
     let log_ctx = _appstate.log_context().clone();
     let ds = _appstate.datastore();
     let results = (app_repo_order(ds.clone()).await,
@@ -38,13 +40,13 @@ pub(crate) async fn create_handler(
     let (resp_status_code, serial_resp_body) = if let (Ok(repo_o), Ok(repo_price),
         Ok(repo_policy)) = results
     {
-        let uc = CreateOrderUseCase {glb_state:_appstate, repo_price, repo_policy,
-            repo_order:repo_o, usr_id:usr_prof_id};
+        let uc = CreateOrderUseCase {glb_state:_appstate, repo_price,
+            repo_policy, repo_order:repo_o, usr_id};
         match uc.execute(req_body).await {
             Ok(value) => match serde_json::to_string(&value) {
                 Ok(s) => (HttpStatusCode::CREATED, s),
                 Err(_) => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
-                           "{\"reason\":\"serialization-faulire\"}".to_string()),
+                           r#"{"reason":"serialization-faulire"}"#.to_string() ),
             },
             Err(errwrap) => match errwrap {
                 CreateOrderUsKsErr::Client(value) => match serde_json::to_string(&value) {
@@ -53,7 +55,7 @@ pub(crate) async fn create_handler(
                            "{\"reason\":\"serialization-faulire\"}".to_string()),
                 },
                 CreateOrderUsKsErr::Server => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
-                           "{\"reason\":\"internal-error\"}".to_string()),
+                           r#"{"reason":"internal-error"}"#.to_string()),
             }
         }
     } else {
@@ -67,10 +69,9 @@ pub(crate) async fn create_handler(
         if let Err(e) = results.2 {
             errmsgs.push(e.to_string());
         }
-        app_log_event!(log_ctx, AppLogLevel::ERROR,
-            "repository init failure, reason: {:?} ", errmsgs);
-        (HttpStatusCode::INTERNAL_SERVER_ERROR,
-             r#"{"reason":"internal-error"}"#.to_string())
+        app_log_event!(log_ctx, AppLogLevel::ERROR, "repository init failure, user:{}, reason: {:?} ",
+                       usr_id, errmsgs);
+        (HttpStatusCode::INTERNAL_SERVER_ERROR, r#"{"reason":"internal-error"}"#.to_string())
     };
     let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
     let mut hdr_map = HttpHeaderMap::new();
@@ -80,14 +81,14 @@ pub(crate) async fn create_handler(
 
 
 #[debug_handler(state=AppSharedState)]
-pub(crate) async fn return_lines_request_handler(
-        ExtractPath(oid): ExtractPath<String>,
-        ExtractState(_app_state): ExtractState<AppSharedState>,
-        ExtractJson(req_body): ExtractJson<Vec<OrderLineReqDto>>,
-    ) -> impl IntoResponse
+pub(super) async fn return_lines_request_handler(
+    ExtractPath(oid): ExtractPath<String>,
+    authed: AppAuthedClaim,
+    ExtractState(_app_state): ExtractState<AppSharedState>,
+    ExtractJson(req_body): ExtractJson<Vec<OrderLineReqDto>> ) -> impl IntoResponse
 {
     let logctx = _app_state.log_context().clone();
-    let usr_prof_id:u32  = 1234; // TODO, use auth token (e.g. JWT)
+    let usr_prof_id = authed.profile;
     let ds = _app_state.datastore();
     let results = (app_repo_order(ds.clone()).await,
                    app_repo_order_return(ds).await );
@@ -107,18 +108,21 @@ pub(crate) async fn return_lines_request_handler(
             },
             Err(e) => {
                 app_log_event!(logctx, AppLogLevel::ERROR,
-                    "internal error from use-case, oid:{}<, reason:{:?}", oid.as_str(), e);
+                    "internal error from use-case, oid:{}, user:{}, reason:{:?}",
+                    oid.as_str(), usr_prof_id, e);
                 (HttpStatusCode::INTERNAL_SERVER_ERROR, r#"{}"#.to_string())
             },
         }
     } else {
         if let Err(e) = results.0.as_ref() {
             app_log_event!(logctx, AppLogLevel::ERROR,
-                "failed to init order repo, oid:{}, reason:{:?}", oid, e);
+                "failed to init order repo, oid:{}, user:{}, reason:{:?}",
+                oid, usr_prof_id, e);
         }
         if let Err(e) = results.1.as_ref() {
             app_log_event!(logctx, AppLogLevel::ERROR,
-                "failed to init order-return repo, oid:{}, reason:{:?}", oid, e);
+                "failed to init order-return repo, oid:{}, user:{}, reason:{:?}",
+                oid, usr_prof_id, e);
         }
         (HttpStatusCode::INTERNAL_SERVER_ERROR, r#"{}"#.to_string())
     };
@@ -130,10 +134,11 @@ pub(crate) async fn return_lines_request_handler(
 
 
 #[debug_handler(state=AppSharedState)]
-pub(crate) async fn edit_billing_shipping_handler (
+pub(super) async fn edit_billing_shipping_handler (
     oid:ExtractPath<String>,
     _billing:Option<ExtractQuery<bool>>,
     _shipping:Option<ExtractQuery<bool>>,
+    _authed: AppAuthedClaim,
     ExtractState(_appstate): ExtractState<AppSharedState>,
     _req_body: ExtractJson<OrderEditReqData>) -> impl IntoResponse
 {

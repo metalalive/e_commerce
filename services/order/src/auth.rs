@@ -9,6 +9,7 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use axum::http::request::Parts;
 use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +26,7 @@ use axum::{Error as AxumError, RequestPartsExt, TypedHeader};
 use axum::headers::Authorization;
 use axum::headers::authorization::Bearer;
 use axum::response::IntoResponse;
+use axum::extract::FromRequestParts;
 
 use jsonwebtoken::{
     decode_header as jwt_decode_header, decode as jwt_decode, DecodingKey,
@@ -32,7 +34,7 @@ use jsonwebtoken::{
 };
 use jsonwebtoken::jwk::{JwkSet, Jwk};
 
-use crate::AppAuthCfg;
+use crate::{AppAuthCfg, AppSharedState};
 use crate::error::{AppError, AppErrorCode};
 use crate::constant::{app_meta, HTTP_CONTENT_TYPE_JSON};
 use crate::logging::{AppLogContext, app_log_event, AppLogLevel};
@@ -93,6 +95,29 @@ pub struct AppAuthedClaim {
     pub perms: Vec<AppAuthClaimPermission>,
     pub quota: Vec<AppAuthClaimQuota>,
 }
+
+fn error_response() -> Response<ApiRespBody>
+{
+    (StatusCode::UNAUTHORIZED, "").into_response()
+}
+
+#[async_trait]
+impl FromRequestParts<AppSharedState> for AppAuthedClaim {
+    type Rejection = Response<ApiRespBody>;
+    
+    async fn from_request_parts(parts:&mut Parts, shr_state: &AppSharedState)
+        -> DefaultResult<Self, Self::Rejection>
+    {
+        if let Some(claim) = parts.extensions.remove::<Self>() {
+            Ok(claim)
+        } else {
+            let logctx = shr_state.log_context().clone();
+            app_log_event!(logctx, AppLogLevel::DEBUG, "not authenticated");
+            Err(error_response())
+        }
+    }
+} // end of impl AppAuthedClaim
+
 
 #[async_trait]
 impl AbstractAuthKeystore for AppAuthKeystore { 
@@ -297,7 +322,7 @@ where REQB: Send + 'static
         let ks = self.keystore.clone();
         let fut = async move {
             let (mut parts, body) = request.into_parts();
-            let mut resp = Self::error_response();
+            let mut resp = error_response();
             match parts.extract::<AuthTokenHdr>().await {
                 Ok(TypedHeader(Authorization(bearer))) =>
                     match Self::validate_token(ks, bearer.token(), _logctx).await {
@@ -324,11 +349,6 @@ where REQB: Send + 'static
 } // end of impl  AppJwtAuthentication
 
 impl  AppJwtAuthentication {
-    fn error_response() -> Response<ApiRespBody>
-    {
-        (StatusCode::UNAUTHORIZED, "").into_response()
-    }
-
     pub fn new(ks:Arc<Box<dyn AbstractAuthKeystore>>,
                logctx:Option<Arc<AppLogContext>>) -> Self
     { Self { keystore: ks, logctx } }

@@ -1,10 +1,12 @@
 use std::result::Result as DefaultResult ;
 use std::sync::Arc;
 
+use chrono::Local;
 use hyper::Body as HyperBody;
 use http::{Request, StatusCode};
 
-use order::{AppRpcClientReqProperty, AppConfig, AppSharedState};
+use order::{AppRpcClientReqProperty, AppConfig, AppSharedState, AppAuthedClaim};
+use order::constant::app_meta;
 use order::error::AppError;
 use order::api::web::dto::{
     OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ProductPolicyDto,
@@ -28,8 +30,25 @@ const FPATH_EDIT_PRODUCTPOLICY_ERR:&'static str = "/tests/integration/examples/p
 const FPATH_RETURN_OLINE_REQ_OK_1:&'static str  = "/tests/integration/examples/oline_return_request_ok_1.json";
 
 
+fn itest_clone_authed_claim(src:&AppAuthedClaim) -> AppAuthedClaim {
+    AppAuthedClaim { profile: src.profile, iat: src.iat, exp: src.exp,
+        aud: src.aud.clone(), perms: vec![], quota: vec![]
+    }
+}
+
+
+fn setup_mock_authed_claim(usr_id:u32) -> AppAuthedClaim
+{
+    let now = Local::now().fixed_offset();
+    let ts = now.timestamp();
+    AppAuthedClaim {
+        profile:usr_id, iat: ts - 54, exp: ts + 150, perms:vec![], quota:vec![],
+        aud: vec![app_meta::LABAL.to_string()]
+    }
+}
+
 async fn setup_product_policy_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-                                 req_fpath:&'static str)
+                                 req_fpath:&'static str, authed_claim:AppAuthedClaim )
     -> DefaultResult<(), AppError>
 { // ---- add product policy ----
     let uri = format!("/{}/policy/products", cfg.api_server.listen.api_version);
@@ -40,8 +59,9 @@ async fn setup_product_policy_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRou
         let rb = serde_json::to_string(&req_body_template).unwrap();
         HyperBody::from(rb)
     };
-    let req = Request::builder().uri(uri.clone()).method("POST")
+    let mut req = Request::builder().uri(uri.clone()).method("POST")
         .header("content-type", "application/json") .body(reqbody) .unwrap();
+    let _ = req.extensions_mut().insert(authed_claim);
     let response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::OK);
     Ok(())
@@ -90,7 +110,7 @@ async fn setup_product_stock_ok(shr_state:AppSharedState)
 }
 
 async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-                            req_fpath:&'static str)
+                            req_fpath:&'static str, authed_claim:AppAuthedClaim )
     -> DefaultResult<String, AppError>
 {
     let listener = &cfg.api_server.listen;
@@ -101,11 +121,12 @@ async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<IT
         HyperBody::from(rb)
     };
     let uri = format!("/{}/order", listener.api_version);
-    let req = Request::builder().uri(uri).method("POST")
+    let mut req = Request::builder().uri(uri).method("POST")
         .header("content-type", "application/json")
         .header("accept", "application/json")
         .body(reqbody)
         .unwrap();
+    let _ = req.extensions_mut().insert(authed_claim);
 
     let mut response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::CREATED);
@@ -117,7 +138,7 @@ async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<IT
 }
 
 async fn return_olines_request_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-                            req_fpath:&'static str, oid:&str)
+                            req_fpath:&'static str, oid:&str, authed_claim:AppAuthedClaim )
     -> DefaultResult<(), AppError>
 {
     let uri = format!("/{}/order/{}/return", cfg.api_server.listen.api_version, oid);
@@ -127,8 +148,9 @@ async fn return_olines_request_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRo
         let rb = serde_json::to_string(&obj).unwrap();
         HyperBody::from(rb)
     };
-    let req = Request::builder().uri(uri).method("PATCH")
+    let mut req = Request::builder().uri(uri).method("PATCH")
         .header("content-type", "application/json").body(req_body).unwrap();
+    let _ = req.extensions_mut().insert(authed_claim);
     let response = TestWebServer::consume(&srv, req).await;
     // let bodydata = response.body_mut().data().await.unwrap().unwrap();
     // println!("reponse serial body : {:?}", bodydata);
@@ -143,14 +165,22 @@ async fn itest_order_entry() -> DefaultResult<(), AppError>
     let shr_state = test_setup_shr_state() ? ;
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
-    setup_product_policy_ok(top_lvl_cfg.clone(), srv.clone(),
-                FPATH_EDIT_PRODUCTPOLICY_OK_2).await ?; 
+    let mock_authed_usr = 185;
+    let authed_claim = setup_mock_authed_claim(mock_authed_usr);
+    setup_product_policy_ok(
+        top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_OK_2,
+        itest_clone_authed_claim(&authed_claim)
+    ).await ?; 
     setup_product_price_ok(shr_state.clone()).await; 
     setup_product_stock_ok(shr_state.clone()).await; 
-    let oid = place_new_order_ok(top_lvl_cfg.clone(), srv.clone(),
-                FPATH_NEW_ORDER_OK_1).await ?;
-    return_olines_request_ok(top_lvl_cfg.clone(), srv.clone(),
-                FPATH_RETURN_OLINE_REQ_OK_1, oid.as_str()).await ?;
+    let oid = place_new_order_ok(
+        top_lvl_cfg.clone(), srv.clone(), FPATH_NEW_ORDER_OK_1,
+        itest_clone_authed_claim(&authed_claim)
+    ).await ?;
+    return_olines_request_ok(
+        top_lvl_cfg.clone(), srv.clone(), FPATH_RETURN_OLINE_REQ_OK_1,
+        oid.as_str(), authed_claim
+    ).await ?;
     Ok(())
 }
 
@@ -160,6 +190,8 @@ async fn place_new_order_contact_error() -> DefaultResult<(), AppError>
     let shr_state = test_setup_shr_state() ? ;
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
+    let mock_authed_usr = 231;
+    let authed_claim = setup_mock_authed_claim(mock_authed_usr);
     let listener = &top_lvl_cfg.api_server.listen;
     let reqbody = {
         let rb = deserialize_json_template::<OrderCreateReqData>
@@ -168,10 +200,10 @@ async fn place_new_order_contact_error() -> DefaultResult<(), AppError>
         HyperBody::from(rb)
     };
     let uri = format!("/{}/order", listener.api_version);
-    let req = Request::builder().uri(uri).method("POST")
+    let mut req = Request::builder().uri(uri).method("POST")
         .header("content-type", "application/json")
-        .header("accept", "application/json")
-        .body(reqbody)  .unwrap();
+        .header("accept", "application/json") .body(reqbody)  .unwrap();
+    let _ = req.extensions_mut().insert(authed_claim);
 
     let mut response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -195,6 +227,8 @@ async fn edit_order_contact_ok() -> DefaultResult<(), AppError>
     let shr_state = test_setup_shr_state() ? ;
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
+    let mock_authed_usr = 219;
+    let authed_claim = setup_mock_authed_claim(mock_authed_usr);
     let reqbody = {
         let mut rb = deserialize_json_template::<OrderEditReqData>
             (&top_lvl_cfg.basepath, FPATH_EDIT_ORDER_OK_1) ? ;
@@ -206,10 +240,9 @@ async fn edit_order_contact_ok() -> DefaultResult<(), AppError>
     };
     let uri = format!("/{ver}/order/{oid}", oid = "r8dj30H",
                       ver = top_lvl_cfg.api_server.listen.api_version);
-    let req = Request::builder().uri(uri).method("PATCH")
-        .header("content-type", "application/json")
-        .body(reqbody)
-        .unwrap();
+    let mut req = Request::builder().uri(uri).method("PATCH")
+        .header("content-type", "application/json") .body(reqbody) .unwrap();
+    let _ = req.extensions_mut().insert(authed_claim);
 
     let response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -222,6 +255,7 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
     let shr_state = test_setup_shr_state() ? ;
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
+    let mock_authed_usr = 1411;
     let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
     let mut req_body_template = deserialize_json_template::<Vec<ProductPolicyDto>>
             (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_OK_1) ? ;
@@ -233,8 +267,9 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
         let rb = serde_json::to_string(&req_body_template).unwrap();
         HyperBody::from(rb)
     };
-    let req = Request::builder().uri(uri.clone()).method("POST")
+    let mut req = Request::builder().uri(uri.clone()).method("POST")
         .header("content-type", "application/json") .body(reqbody) .unwrap();
+    let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
     let response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::OK);
     // ---- subcase 2 ----
@@ -246,8 +281,9 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
         let rb = serde_json::to_string(&req_body_template).unwrap();
         HyperBody::from(rb)
     };
-    let req = Request::builder().uri(uri.clone()).method("POST")
+    let mut req = Request::builder().uri(uri.clone()).method("POST")
         .header("content-type", "application/json") .body(reqbody) .unwrap();
+    let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
     let response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::OK);
     Ok(())
@@ -260,10 +296,12 @@ async fn add_product_policy_error() -> DefaultResult<(), AppError>
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
     let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
+    let mock_authed_usr = 983;
     // ---- subcase 1 ----
     let reqbody = HyperBody::from("[]".to_string());
-    let req = Request::builder().uri(uri.clone()).method("POST")
+    let mut req = Request::builder().uri(uri.clone()).method("POST")
         .header("content-type", "application/json") .body(reqbody) .unwrap();
+    let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
     let response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // ---- subcase 2 ----
@@ -273,8 +311,9 @@ async fn add_product_policy_error() -> DefaultResult<(), AppError>
         let rb = serde_json::to_string(&rb).unwrap();
         HyperBody::from(rb)
     };
-    let req = Request::builder().uri(uri).method("POST")
+    let mut req = Request::builder().uri(uri).method("POST")
         .header("content-type", "application/json") .body(reqbody) .unwrap();
+    let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
     let mut response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     {
