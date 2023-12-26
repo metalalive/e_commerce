@@ -1,12 +1,6 @@
 # Order Processing service
-## Build
-```shell
-cargo build  --bin web
-cargo build  --bin rpc_consumer
-```
 
-## Run
-### Essential Environment Variables
+## Essential Environment Variables
 |variable|description|example|
 |--------|-----------|-------|
 |`SYS_BASE_PATH`| common path of all the services| `${PWD}/..` |
@@ -14,6 +8,40 @@ cargo build  --bin rpc_consumer
 |`CONFIG_FILE_PATH`| path relative to `SERVICE_BASE_PATH` folder, it is JSON configuration file | `settings/development.json` |
 ||||
 
+## Build
+### Pre-requisite
+| type | name | version required |
+|------|------|------------------|
+| SQL Database | MariaDB | `10.3.22` |
+| Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.67.1` |
+| DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
+
+### Commands for build
+For applications
+```shell
+cargo build  --bin web
+cargo build  --bin rpc_consumer
+```
+
+If you configure SQL database as the datastore destination, ensure to synchronize schema migration
+```shell
+> /PATH/TO/liquibase --defaults-file=${SERVICE_BASE_PATH}/liquibase.properties \
+      --changeLogFile=${SERVICE_BASE_PATH}/migration/changelog_order.xml  \
+      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME   --username=$USER  --password=$PASSWORD \
+      --log-level=info   update
+
+> /PATH/TO/liquibase --defaults-file=${SERVICE_BASE_PATH}/liquibase.properties \
+      --changeLogFile=${SERVICE_BASE_PATH}/migration/changelog_order.xml  \
+      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME   --username=$USER  --password=$PASSWORD \
+      --log-level=info   rollback  $VERSION_TAG
+```
+Note : 
+- the parameters above `$HOST`, `$PORT`, `$USER`, `$PASSWORD` should be consistent with database credential set in `${SYS_BASE_PATH}/common/data/secrets.json` , see the structure in [`common/data/secrets_template.json`](../common/data/secrets_template.json)
+- the parameter `$DB_NAME` should be `ecommerce_order` for development server , see [reference](../migrations/init_db.sql)
+- the subcommand `update` upgrades the schema to latest version
+- the subcommand `rollback` rollbacks the schema to specific previous version `$VERSION_TAG` defined in the `migration/changelog_order.xml`
+
+## Run
 ### Development API server
 ```shell=?
 cd ${SERVICE_BASE_PATH}

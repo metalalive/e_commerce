@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.6.xsd
+    http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-4.6.xsd ">
+    <changeSet id="init" author="Haam">
+        <tagDatabase tag="0.0.0" />
+    </changeSet>
+    <changeSet id="add_table__product_policy" author="T.H.">
+        <comment>
+            policy for all products on sale
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `product_policy` (
+                `product_type`     ENUM('item', 'package') NOT NULL, 
+                `product_id`       BIGINT UNSIGNED NOT NULL,
+                `auto_cancel_secs` INT NOT NULL,
+                `warranty_hours`   INT NOT NULL,
+                PRIMARY KEY (`product_type`, `product_id`)
+            )
+        </sql>
+        <rollback>
+            DROP TABLE `product_policy`
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.1" author="T.H.">
+        <tagDatabase tag="0.0.1" />
+    </changeSet>
+</databaseChangeLog>
+
