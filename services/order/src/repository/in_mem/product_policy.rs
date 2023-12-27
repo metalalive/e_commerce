@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::boxed::Box;
 use async_trait::async_trait;
 
-use crate::AppDataStoreContext;
 use crate::constant::ProductType;
 use crate::datastore::AbstInMemoryDStore;
 use crate::model::{ProductPolicyModelSet, ProductPolicyModel};
@@ -30,23 +29,18 @@ pub struct ProductPolicyInMemRepo
     datastore: Arc<Box<dyn AbstInMemoryDStore>>
 }
 
+impl ProductPolicyInMemRepo
+{
+    pub async fn new(m:Arc<Box<dyn AbstInMemoryDStore>>) -> Result<Self, AppError>
+    {
+        m.create_table(TABLE_LABEL).await ? ;
+        Ok(Self{datastore: m})
+    }
+}
+
 #[async_trait]
 impl AbstProductPolicyRepo for ProductPolicyInMemRepo
 {
-    async fn new(ds:Arc<AppDataStoreContext>) -> Result<Box<dyn AbstProductPolicyRepo>, AppError>
-        where Self:Sized
-    {
-        if let Some(m)= &ds.in_mem {
-            m.create_table(TABLE_LABEL).await ? ;
-            let obj = Self{datastore: m.clone()};
-            Ok(Box::new(obj))
-        } else { // TODO, logging more detail ?
-            let obj = AppError { code: AppErrorCode::MissingDataStore,
-                detail: Some(format!("in-memory")) };
-            Err(obj)
-        }
-    }
-
     async fn fetch(&self, ids:Vec<(ProductType, u64)>) -> Result<ProductPolicyModelSet, AppError>
     { // TODO, remove `use_id`, it is no longer necessary
         let info = {

@@ -1,3 +1,4 @@
+#![feature(io_error_more)]
 use std::sync::Arc;
 
 pub mod api;
@@ -40,8 +41,8 @@ type AppLogAlias = Arc<String>;
 
 pub struct AppDataStoreContext {
     pub in_mem: Option<Arc<Box<dyn datastore::AbstInMemoryDStore>>>,
-    pub sql_dbs: Option<Vec<Arc<datastore::AppSqlDbStore>>>
-}
+    pub sql_dbs: Option<Vec<Arc<datastore::AppMariaDbStore>>>
+} // TODO, rename sql_dbs
 
 // global state shared by all threads
 pub struct AppSharedState {
@@ -56,15 +57,17 @@ impl AppSharedState {
     pub fn new(cfg:AppConfig, log:logging::AppLogContext, confidential:Box<dyn AbstractConfidentiality>) -> Self
     {
         let confidential = Arc::new(confidential);
+        let log = Arc::new(log);
         let _rpc_ctx = build_rpc_context(&cfg.api_server.rpc, confidential.clone());
-        let (in_mem, sql_dbs) = datastore::build_context(&cfg.api_server.data_store, confidential);
+        let (in_mem, sql_dbs) = datastore::build_context(log.clone(),
+                                &cfg.api_server.data_store, confidential);
         let in_mem = if let Some(m) = in_mem { Some(Arc::new(m)) } else {None};
         let sql_dbs = if let Some(m) = sql_dbs {
             Some(m.into_iter().map(Arc::new).collect())
         } else {None};
         let ds_ctx = AppDataStoreContext {in_mem, sql_dbs};
         let auth_keys = AppAuthKeystore::new(&cfg.api_server.auth);
-        Self{_cfg:Arc::new(cfg), _log:Arc::new(log), _rpc:Arc::new(_rpc_ctx),
+        Self{_cfg:Arc::new(cfg), _log:log, _rpc:Arc::new(_rpc_ctx),
              dstore: Arc::new(ds_ctx), _auth_keys: Arc::new(Box::new(auth_keys)) }
     } // end of fn new
 

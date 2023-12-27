@@ -93,7 +93,8 @@ impl AbstractConfidentiality for UserSpaceConfidentiality
         let rguard = match self._cached.read() {
             Ok(rg) => rg,
             Err(e) => {
-                return Err(AppError { detail: Some(e.to_string()),
+                let detail = e.to_string() + ", source: UserSpaceConfidentiality";
+                return Err(AppError { detail: Some(detail),
                     code: AppErrorCode::AcquireLockFailure });
             }
         };
@@ -110,7 +111,8 @@ impl AbstractConfidentiality for UserSpaceConfidentiality
                     let _old_data = wguard.insert(id_.to_string(), found.clone());
                 },
                 Err(e) => {
-                    return Err(AppError { detail: Some(e.to_string()),
+                    let detail = e.to_string() + ", source: UserSpaceConfidentiality";
+                    return Err(AppError { detail: Some(detail),
                         code: AppErrorCode::AcquireLockFailure });
                 }
             };

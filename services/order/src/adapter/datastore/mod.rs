@@ -9,14 +9,15 @@ pub use in_mem::{
     AppInMemFetchKeys, AppInMemFetchedData, AppInMemoryDStore, AppInMemDstoreLock,
     AppInMemFetchedSingleTable, AppInMemFetchedSingleRow
 };
-pub use sql_db::AppSqlDbStore;
+pub use sql_db::AppMariaDbStore;
 
 use crate::config::AppDataStoreCfg;
 use crate::confidentiality::AbstractConfidentiality;
+use crate::logging::{AppLogContext, AppLogLevel, app_log_event};
 
-pub(crate) fn build_context(cfg:&Vec<AppDataStoreCfg>,
+pub(crate) fn build_context(logctx:Arc<AppLogContext>, cfg:&Vec<AppDataStoreCfg>,
                             confidential:Arc<Box<dyn AbstractConfidentiality>> )
-    -> (Option<Box<dyn AbstInMemoryDStore>>, Option<Vec<AppSqlDbStore>>)
+    -> (Option<Box<dyn AbstInMemoryDStore>>, Option<Vec<AppMariaDbStore>>)
 {
     let mut inmem = None;
     let mut sqldb = None;
@@ -31,8 +32,14 @@ pub(crate) fn build_context(cfg:&Vec<AppDataStoreCfg>,
                     sqldb = Some(Vec::new());
                 }
                 if let Some(lst) = &mut sqldb {
-                    let item = AppSqlDbStore::new(&d, confidential.clone());
-                    lst.push(item);
+                    match AppMariaDbStore::try_build(&d, confidential.clone())
+                    {
+                        Ok(item) => {lst.push(item);} ,
+                        Err(e) => {
+                            app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+                        }
+                    }
+                    
                 }
             }
         }

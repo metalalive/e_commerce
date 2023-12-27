@@ -63,13 +63,6 @@
     "stack_sz_kb": 128,
     "data_store": [
 	{
-	    "_type": "DbServer",
-	    "alias": "store-persistent-db",
-	    "srv_type": "MariaDB",
-	    "max_conns": 8,
-	    "idle_timeout_secs": 45
-	},
-	{
 	    "_type": "InMemory",
 	    "alias": "store-volatile-mem",
 	    "max_items": 48

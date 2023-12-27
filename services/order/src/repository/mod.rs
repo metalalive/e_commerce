@@ -15,7 +15,7 @@ use crate::api::rpc::dto::{
 };
 use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::constant::ProductType;
-use crate::error::AppError;
+use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity,
     BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel, OrderLineIdentity, OrderReturnModel
@@ -29,15 +29,15 @@ pub use in_mem::oline_return::OrderReturnInMemRepo;
 pub use in_mem::product_policy::ProductPolicyInMemRepo;
 pub use in_mem::product_price::ProductPriceInMemRepo;
 
+mod mariadb;
+use mariadb::product_policy::ProductPolicyMariaDbRepo;
+
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads
 // , it is the reason to add `Send` and `Sync` as super-traits
 #[async_trait]
 pub trait AbstProductPolicyRepo : Sync + Send
 {
-    async fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
-        where Self:Sized ;
-    
     async fn fetch(&self, ids:Vec<(ProductType, u64)>) -> DefaultResult<ProductPolicyModelSet, AppError>;
     
     async fn save(&self, ppset:ProductPolicyModelSet) -> DefaultResult<(), AppError>;
@@ -155,7 +155,16 @@ pub trait AbsOrderReturnRepo : Sync + Send {
 pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
 {
-    ProductPolicyInMemRepo::new(ds).await
+    if let Some(dbs) = ds.sql_dbs.as_ref() {
+        let obj = ProductPolicyMariaDbRepo::new(dbs).await ?;
+        Ok(Box::new(obj))
+    } else if let Some(m)= ds.in_mem.as_ref() {
+        let obj = ProductPolicyInMemRepo::new(m.clone()).await ?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError { code: AppErrorCode::MissingDataStore,
+            detail: Some(format!("unknwon-type")) })
+    }
 }
 pub async fn app_repo_product_price (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>

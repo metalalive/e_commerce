@@ -37,6 +37,8 @@
 	    "_type": "DbServer",
 	    "alias": "storage-big-table",
 	    "srv_type": "PostgreSQL",
+	    "db_name": "ut_ecomm_order",
+	    "confidentiality_path": "backend/db/order",
 	    "max_conns": 10001,
 	    "idle_timeout_secs": 245
 	}

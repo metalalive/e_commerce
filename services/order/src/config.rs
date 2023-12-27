@@ -163,7 +163,9 @@ pub struct AppDbServerCfg {
     pub srv_type:AppDbServerType,
     pub max_conns: u32,
     pub idle_timeout_secs: u16,
-} // TODO, complete implementation
+    pub confidentiality_path: String,
+    pub db_name: String,
+}
 
 #[allow(non_camel_case_types)]
 #[derive(Deserialize)]

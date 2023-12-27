@@ -1,7 +1,5 @@
-use std::sync::Arc;
 use std::boxed::Box;
 
-use order::AppDataStoreContext;
 use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::datastore::{AbstInMemoryDStore, AppInMemoryDStore} ;
@@ -28,24 +26,16 @@ const UTEST_INIT_DATA: [ProductPolicyModel;7] = [
         auto_cancel_secs: 1178, warranty_hours: 11086, is_create: false },
 ]; // end of UTEST_INIT_DATA
 
-#[tokio::test]
-async fn in_mem_create_missing_dstore ()
-{
-    let ds_ctx = Arc::new(AppDataStoreContext{in_mem:None, sql_dbs:None});
-    let result = ProductPolicyInMemRepo::new(ds_ctx).await;
-    assert_eq!(result.is_err(), true);
-    let error = result.err().unwrap();
-    assert_eq!(error.code, AppErrorCode::MissingDataStore);
-    assert_eq!(error.detail, Some("in-memory".to_string()));
-}
 
 async fn in_mem_repo_ds_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
     -> Box<dyn AbstProductPolicyRepo>
 {
     let ds_ctx = in_mem_ds_ctx_setup::<T>(max_items);
-    let result = ProductPolicyInMemRepo::new(ds_ctx).await;
+    let in_mem_ds = ds_ctx.in_mem.as_ref().unwrap().clone();
+    let result = ProductPolicyInMemRepo::new(in_mem_ds).await;
     assert_eq!(result.is_ok(), true);
-    result.unwrap()
+    let repo = result.unwrap();
+    Box::new(repo)
 }
 
 #[tokio::test]
