@@ -12,7 +12,7 @@ use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchKeys, AbsDStoreFilterKeyOp};
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{ProductPriceModelSet, ProductPriceModel};
-use super::AbsProductPriceRepo;
+use super::super::AbsProductPriceRepo;
 
 const TABLE_LABEL: &'static str = "product_price";
 

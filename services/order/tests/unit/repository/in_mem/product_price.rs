@@ -10,7 +10,7 @@ use order::model::{ProductPriceModelSet, ProductPriceModel};
 use order::api::rpc::dto::ProductPriceDeleteDto;
 
 use crate::model::ut_clone_productprice;
-use super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
+use super::super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 
 
 fn pprice_init_data() -> [ProductPriceModel;7] {

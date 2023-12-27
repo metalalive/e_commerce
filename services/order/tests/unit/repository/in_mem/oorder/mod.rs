@@ -9,7 +9,7 @@ use order::model::{
     OrderLineIdentity
 };
 
-use super::in_mem_ds_ctx_setup;
+use super::super::in_mem_ds_ctx_setup;
 
 mod stock;
 mod create;

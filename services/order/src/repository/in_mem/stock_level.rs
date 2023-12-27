@@ -17,7 +17,7 @@ use crate::model::{
     StockLevelModelSet, OrderLineModelSet
 };
 
-use super::{
+use super::super::{
     AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppStockRepoReturnUserFunc
 };
 

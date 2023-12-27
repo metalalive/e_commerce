@@ -1,6 +1,4 @@
-mod product_policy;
-mod product_price;
-mod oorder;
+mod in_mem;
 
 use std::sync::Arc;
 use std::boxed::Box;

@@ -19,10 +19,11 @@ use crate::model::{
     OrderLineModelSet, OrderLineIdentity
 };
 
-use super::{
-    AbsOrderRepo, AbsOrderStockRepo, StockLvlInMemRepo, AppOrderRepoUpdateLinesUserFunc,
+use super::super::{
+    AbsOrderRepo, AbsOrderStockRepo, AppOrderRepoUpdateLinesUserFunc,
     AppOrderFetchRangeCallback
 };
+use super::StockLvlInMemRepo;
 
 mod _contact {
     use super::{HashMap, AppInMemFetchedSingleRow, ContactModel};

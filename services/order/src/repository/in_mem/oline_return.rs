@@ -11,7 +11,7 @@ use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow};
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{OrderLineIdentity, OrderReturnModel};
-use super::AbsOrderReturnRepo;
+use super::super::AbsOrderReturnRepo;
 
 mod _oline_return {
     use crate::datastore::AbsDStoreFilterKeyOp;

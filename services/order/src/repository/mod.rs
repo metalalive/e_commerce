@@ -1,9 +1,3 @@
-mod product_policy;
-mod product_price;
-mod stock_level;
-mod order;
-mod oline_return;
-
 use std::boxed::Box;
 use std::future::Future;
 use std::pin::Pin;
@@ -27,12 +21,13 @@ use crate::model::{
     BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel, OrderLineIdentity, OrderReturnModel
 };
 
+
+mod in_mem;
 // make it visible only for testing purpose
-pub use self::order::OrderInMemRepo;
-pub use self::oline_return::OrderReturnInMemRepo;
-pub use self::product_policy::ProductPolicyInMemRepo;
-pub use self::product_price::ProductPriceInMemRepo;
-use self::stock_level::StockLvlInMemRepo;
+pub use in_mem::order::OrderInMemRepo;
+pub use in_mem::oline_return::OrderReturnInMemRepo;
+pub use in_mem::product_policy::ProductPolicyInMemRepo;
+pub use in_mem::product_price::ProductPriceInMemRepo;
 
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads

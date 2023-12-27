@@ -9,7 +9,7 @@ use crate::constant::ProductType;
 use crate::datastore::AbstInMemoryDStore;
 use crate::model::{ProductPolicyModelSet, ProductPolicyModel};
 use crate::error::{AppError, AppErrorCode};
-use super::AbstProductPolicyRepo;
+use super::super::AbstProductPolicyRepo;
 
 const TABLE_LABEL: &'static str = "product_policy";
 
