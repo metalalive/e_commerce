@@ -69,6 +69,7 @@
 	    "db_name": "ecommerce_order",
 	    "confidentiality_path": "backend_apps/databases/order_service",
 	    "max_conns": 11,
+	    "acquire_timeout_secs": 7,
 	    "idle_timeout_secs": 80
 	},
 	{

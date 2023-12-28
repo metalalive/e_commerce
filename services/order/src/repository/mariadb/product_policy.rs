@@ -38,6 +38,7 @@ impl AbstProductPolicyRepo for ProductPolicyMariaDbRepo
 { 
     async fn fetch(&self, ids:Vec<(ProductType, u64)>) -> DefaultResult<ProductPolicyModelSet, AppError>
     {
+
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
     

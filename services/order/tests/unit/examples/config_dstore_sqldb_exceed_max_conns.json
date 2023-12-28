@@ -40,6 +40,7 @@
 	    "db_name": "ut_ecomm_order",
 	    "confidentiality_path": "backend/db/order",
 	    "max_conns": 10001,
+	    "acquire_timeout_secs": 15,
 	    "idle_timeout_secs": 245
 	}
     ],

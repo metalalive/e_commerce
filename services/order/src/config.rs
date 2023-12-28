@@ -162,6 +162,7 @@ pub struct AppDbServerCfg {
     pub alias: String,
     pub srv_type:AppDbServerType,
     pub max_conns: u32,
+    pub acquire_timeout_secs: u16, // for acquiring connection from pool
     pub idle_timeout_secs: u16,
     pub confidentiality_path: String,
     pub db_name: String,

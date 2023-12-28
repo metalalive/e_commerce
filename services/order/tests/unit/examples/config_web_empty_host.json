@@ -38,6 +38,7 @@
 	    "alias": "storage-big-table",
 	    "srv_type": "PostgreSQL",
 	    "max_conns": 18,
+	    "acquire_timeout_secs": 6,
 	    "idle_timeout_secs": 245
 	}
     ],

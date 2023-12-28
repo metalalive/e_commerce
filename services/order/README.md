@@ -23,7 +23,7 @@ cargo build  --bin web
 cargo build  --bin rpc_consumer
 ```
 
-If you configure SQL database as the datastore destination, ensure to synchronize schema migration
+If you configure SQL database as the datastore destination in the development server or testing server, ensure to synchronize schema migration
 ```shell
 > /PATH/TO/liquibase --defaults-file=${SERVICE_BASE_PATH}/liquibase.properties \
       --changeLogFile=${SERVICE_BASE_PATH}/migration/changelog_order.xml  \
@@ -37,7 +37,7 @@ If you configure SQL database as the datastore destination, ensure to synchroniz
 ```
 Note : 
 - the parameters above `$HOST`, `$PORT`, `$USER`, `$PASSWORD` should be consistent with database credential set in `${SYS_BASE_PATH}/common/data/secrets.json` , see the structure in [`common/data/secrets_template.json`](../common/data/secrets_template.json)
-- the parameter `$DB_NAME` should be `ecommerce_order` for development server , see [reference](../migrations/init_db.sql)
+- the parameter `$DB_NAME` should be `ecommerce_order` for development server, or  `test_ecommerce_order` for testing server, see [reference](../migrations/init_db.sql)
 - the subcommand `update` upgrades the schema to latest version
 - the subcommand `rollback` rollbacks the schema to specific previous version `$VERSION_TAG` defined in the `migration/changelog_order.xml`
 
@@ -86,9 +86,13 @@ For web server
 cd ${SERVICE_BASE_PATH}/tests/integration
 
 SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
-    CONFIG_FILE_PATH="settings/test.json" \
+    CONFIG_FILE_PATH="settings/test-in-mem.json" \
     cargo test --test web
 ```
+
+Note
+- the configuration files in `settings` folder could be `test-in-mem.json` or `test-sql-db.json` for different datastore destinations.
+
 
 For RPC consumer
 ```shell=?
