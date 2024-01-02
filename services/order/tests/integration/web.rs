@@ -26,6 +26,7 @@ const FPATH_NEW_ORDER_CONTACT_ERR:&'static str  = "/tests/integration/examples/o
 const FPATH_EDIT_ORDER_OK_1:&'static str = "/tests/integration/examples/order_edit_ok_1.json";
 const FPATH_EDIT_PRODUCTPOLICY_OK_1:&'static str = "/tests/integration/examples/policy_product_edit_ok_1.json";
 const FPATH_EDIT_PRODUCTPOLICY_OK_2:&'static str = "/tests/integration/examples/policy_product_edit_ok_2.json";
+const FPATH_EDIT_PRODUCTPOLICY_OK_3:&'static str = "/tests/integration/examples/policy_product_edit_ok_3.json";
 const FPATH_EDIT_PRODUCTPOLICY_ERR:&'static str = "/tests/integration/examples/policy_product_edit_exceed_limit.json";
 const FPATH_RETURN_OLINE_REQ_OK_1:&'static str  = "/tests/integration/examples/oline_return_request_ok_1.json";
 
@@ -257,11 +258,11 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
     let top_lvl_cfg = shr_state.config();
     let mock_authed_usr = 1411;
     let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
-    let mut req_body_template = deserialize_json_template::<Vec<ProductPolicyDto>>
-            (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_OK_1) ? ;
-    assert!(req_body_template.len() > 0);
     // ---- subcase 1 ----
     let reqbody = {
+        let mut req_body_template = deserialize_json_template::<Vec<ProductPolicyDto>>
+            (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_OK_1) ? ;
+        assert!(req_body_template.len() > 0);
         let item = req_body_template.get_mut(0).unwrap();
         item.warranty_hours = 2345;
         let rb = serde_json::to_string(&req_body_template).unwrap();
@@ -274,10 +275,8 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
     assert_eq!(response.status(), StatusCode::OK);
     // ---- subcase 2 ----
     let reqbody = {
-        let item = req_body_template.get_mut(0).unwrap();
-        item.auto_cancel_secs = 309;
-        let item = req_body_template.get_mut(1).unwrap();
-        item.product_id = 7788;
+        let req_body_template = deserialize_json_template::<Vec<ProductPolicyDto>>
+            (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_OK_3) ? ;
         let rb = serde_json::to_string(&req_body_template).unwrap();
         HyperBody::from(rb)
     };

@@ -23,40 +23,48 @@ use order::network::{app_web_service, WebServiceRoute};
 use order::api::web::route_table;
 
 pub(crate) type ITestFinalHttpBody = HyperBody;
+struct ITestGlobalState(AppSharedState);
 
-static mut GLOBAL_SHARED_STATE : Option<DefaultResult<AppSharedState, AppError>> = None;
+// Note
+// `static global variable` seems like bad practice, it is better that this app
+// drops all referneces of the shared state, developers might need to write extra script
+// which ensures the internal datastore context are dropped at the end of this
+// integration test, then downgrade the schema  migration for testing database
+static mut GLOBAL_SHARED_STATE : Option<DefaultResult<ITestGlobalState, AppError>> = None;
 static mut SHARED_WEB_SERVER : Option<Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>> = None;
 
 static GLB_STATE_INIT : Once = Once::new();
 static WEB_SRV_INIT : Once = Once::new();
 
+fn _test_setup_shr_state() -> DefaultResult<ITestGlobalState, AppError>
+{
+    let iter = env::vars().filter(
+        |(k, _)| {EXPECTED_ENV_VAR_LABELS.contains(&k.as_str())}
+    );
+    let args: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
+    let top_lvl_cfg = AppConfig::new(args)?;
+    let cfdntl = confidentiality::build_context(&top_lvl_cfg) ?;
+    let log_ctx = AppLogContext::new(&top_lvl_cfg.basepath,
+                        &top_lvl_cfg.api_server.logging );
+    let obj = AppSharedState::new(top_lvl_cfg, log_ctx, cfdntl);
+    Ok(ITestGlobalState(obj))
+}
+
 
 pub fn test_setup_shr_state() -> DefaultResult<AppSharedState, AppError>
 {
     GLB_STATE_INIT.call_once(|| {
-        let iter = env::vars().filter(
-            |(k, _)| {EXPECTED_ENV_VAR_LABELS.contains(&k.as_str())}
-        );
-        let args: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
-        match AppConfig::new(args) {
-            Ok(top_lvl_cfg) => match confidentiality::build_context(&top_lvl_cfg) {
-                Ok(cfdntl) => {
-                    let log_ctx = AppLogContext::new(&top_lvl_cfg.basepath,
-                                        &top_lvl_cfg.api_server.logging );
-                    let obj = AppSharedState::new(top_lvl_cfg, log_ctx, cfdntl);
-                    unsafe { GLOBAL_SHARED_STATE = Some(Ok(obj)); }
-                },
-                Err(e) => unsafe { GLOBAL_SHARED_STATE = Some(Err(e)); }
-            },
+        match _test_setup_shr_state() {
+            Ok(v)  => unsafe { GLOBAL_SHARED_STATE = Some(Ok(v)); },
             Err(e) => unsafe { GLOBAL_SHARED_STATE = Some(Err(e)); }
-        };
+        }
     });
     unsafe {
         match GLOBAL_SHARED_STATE.as_ref() {
             Some(r) => match r {
-                    Ok(state) => Ok(state.clone()),
-                    Err(e) => Err(e.clone())
-                },
+                Ok(ITestGlobalState(state)) => Ok(state.clone()),
+                Err(e) => Err(e.clone())
+            },
             _others => {panic!("[test] shared state failed to create")}
         }
     }

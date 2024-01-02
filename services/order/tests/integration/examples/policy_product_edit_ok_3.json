@@ -1,0 +1,38 @@
+[
+  {
+    "product_type": 1,
+    "product_id": 8514,
+    "auto_cancel_secs": 3660,
+    "warranty_hours": 5145
+  },
+  {
+    "product_type": 1,
+    "product_id": 1015,
+    "auto_cancel_secs": 2400,
+    "warranty_hours": 44178
+  },
+  {
+    "product_type": 2,
+    "product_id": 10093183,
+    "auto_cancel_secs": 1560,
+    "warranty_hours": 44100
+  },
+  {
+    "product_type": 2,
+    "product_id": 10081,
+    "auto_cancel_secs": 4190,
+    "warranty_hours": 2200
+  },
+  {
+    "product_type": 2,
+    "product_id": 10083,
+    "auto_cancel_secs": 4191,
+    "warranty_hours": 2203
+  },
+  {
+    "product_type": 2,
+    "product_id": 10084,
+    "auto_cancel_secs": 4192,
+    "warranty_hours": 2204
+  }
+]
