@@ -16,23 +16,27 @@ Helper functions used in development envisonment.
 
 """
 
-def gen_auth_token(valid_minutes:int, usr_id:int , audiences:list, perm_codes:list, quota:list):
+def gen_auth_token(valid_minutes:int, usr_id:int, audiences:list,
+                   perm_codes:list, quota:list, key_id:str):
     perm_gen_fn  = lambda k: {'app_code':k[0], 'codename':k[1]}
     quota_gen_fn = lambda k: {'app_code':k[0], 'mat_code':k[1], 'maxnum':k[2]}
     keystore = create_keystore_helper(cfg=django_settings.AUTH_KEYSTORE, import_fn=import_string)
     now_time = datetime.utcnow()
     expiry = now_time + timedelta(minutes=valid_minutes)
     token = JWT()
+    token.header['kid'] = key_id
     payload = {'profile' : usr_id, 'aud':audiences,  'iat':now_time,  'exp':expiry,
         'perms': list(map(perm_gen_fn, perm_codes)),  'quota': list(map(quota_gen_fn, quota))
     }
     token.payload.update(payload)
     return token.encode(keystore=keystore)
 
-def gen_auth_header_to_file(filepath:str, valid_minutes:int, usr_id:int , audiences:list, perm_codes:list, quota:list):
+def gen_auth_header_to_file(filepath:str, valid_minutes:int, usr_id:int,
+                            audiences:list, perm_codes:list, quota:list,
+                            key_id:str=''):
     pathdir = pathlib.Path(filepath).parent
     assert pathdir.exists() and pathdir.is_dir(), 'pathdir not exists, %s' % pathdir
-    encoded_token = gen_auth_token(valid_minutes, usr_id , audiences, perm_codes, quota)
+    encoded_token = gen_auth_token(valid_minutes, usr_id , audiences, perm_codes, quota, key_id)
     raw_hdr_str = 'Authorization: Bearer %s' % encoded_token
     with open(filepath, 'w') as f:
         f.write(raw_hdr_str)
