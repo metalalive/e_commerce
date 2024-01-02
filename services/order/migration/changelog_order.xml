@@ -28,5 +28,29 @@
     <changeSet id="tag_version_0.0.1" author="T.H.">
         <tagDatabase tag="0.0.1" />
     </changeSet>
+    <changeSet id="modify_product_type_enum" author="T.H.">
+        <comment>
+            Modify enum members in the column `product_type`,
+            - '1' means 'item'
+            - '2' means 'package'
+            Also `auto_cancel_secs`, `warranty_hours` should be unsigned 32-bit integers.
+            Note currently the table does not have any record yet, it is allowed to modify the
+            schema directly, with records and live production server there should be several
+            steps for the upgrade
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `product_policy` MODIFY `product_type` ENUM('1', '2') NOT NULL;
+            ALTER TABLE `product_policy` MODIFY `auto_cancel_secs` INT UNSIGNED NOT NULL;
+            ALTER TABLE `product_policy` MODIFY `warranty_hours`   INT UNSIGNED NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `product_policy` MODIFY `warranty_hours`   INT NOT NULL;
+            ALTER TABLE `product_policy` MODIFY `auto_cancel_secs` INT NOT NULL;
+            ALTER TABLE `product_policy` MODIFY `product_type` ENUM('item', 'package') NOT NULL;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.2" author="T.H.">
+        <tagDatabase tag="0.0.2" />
+    </changeSet>
 </databaseChangeLog>
 
