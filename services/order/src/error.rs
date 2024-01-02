@@ -28,6 +28,7 @@ pub enum AppErrorCode {
     RpcRemoteInvalidReply,
     NoConfidentialityCfg,
     NoDatabaseCfg,
+    RemoteDbServerFailure,
     ExceedingMaxLimit,
     AcquireLockFailure,
     DataTableNotExist,

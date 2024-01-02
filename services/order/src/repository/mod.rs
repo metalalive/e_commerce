@@ -149,9 +149,6 @@ pub trait AbsOrderReturnRepo : Sync + Send {
     async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
 }
 
-
-// TODO, consider runtime configuration for following repositories
-
 pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
 {
@@ -166,6 +163,9 @@ pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
             detail: Some(format!("unknwon-type")) })
     }
 }
+
+
+// TODO, consider runtime configuration for following repositories
 pub async fn app_repo_product_price (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
 {

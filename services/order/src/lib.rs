@@ -50,12 +50,12 @@ pub struct AppSharedState {
     _log: Arc<logging::AppLogContext>,
     _rpc: Arc<Box<dyn AbstractRpcContext>>,
     dstore: Arc<AppDataStoreContext>,
-    _auth_keys: Arc<Box<dyn AbstractAuthKeystore>>
+    _auth_keys: Arc<Box<dyn AbstractAuthKeystore>>,
 }
 
 impl AppSharedState {
     pub fn new(cfg:AppConfig, log:logging::AppLogContext, confidential:Box<dyn AbstractConfidentiality>) -> Self
-    {
+    { // TODO, confidential argument to arc-box pointer
         let confidential = Arc::new(confidential);
         let log = Arc::new(log);
         let _rpc_ctx = build_rpc_context(&cfg.api_server.rpc, confidential.clone());
@@ -65,10 +65,10 @@ impl AppSharedState {
         let sql_dbs = if let Some(m) = sql_dbs {
             Some(m.into_iter().map(Arc::new).collect())
         } else {None};
-        let ds_ctx = AppDataStoreContext {in_mem, sql_dbs};
+        let ds_ctx = Arc::new(AppDataStoreContext {in_mem, sql_dbs});
         let auth_keys = AppAuthKeystore::new(&cfg.api_server.auth);
         Self{_cfg:Arc::new(cfg), _log:log, _rpc:Arc::new(_rpc_ctx),
-             dstore: Arc::new(ds_ctx), _auth_keys: Arc::new(Box::new(auth_keys)) }
+             dstore: ds_ctx, _auth_keys: Arc::new(Box::new(auth_keys)) }
     } // end of fn new
 
     pub fn config(&self) -> &Arc<AppConfig>

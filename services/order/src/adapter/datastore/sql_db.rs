@@ -1,11 +1,10 @@
-use std::io::ErrorKind;
 use std::result::Result as DefaultResult;
 use std::boxed::Box;
 use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Deserialize;
-use sqlx::{MySql, Pool, Executor};
+use sqlx::{MySql, Pool};
 use sqlx::pool::{PoolOptions, PoolConnection};
 use sqlx::mysql::MySqlConnectOptions;
 
@@ -22,7 +21,8 @@ struct DbSecret {
     PASSWORD: String
 }
 
-pub  struct AppMariaDbStore {
+pub struct AppMariaDbStore {
+    pub alias: String,
     pool: Pool<MySql>,
 }
 
@@ -43,22 +43,29 @@ impl AppMariaDbStore {
             Err(e) => {
                 let detail = e.to_string() + ", secret-parsing-error, source: AppMariaDbStore";
                 return Err(AppError { code: AppErrorCode::InvalidJsonFormat, detail: Some(detail) });
-            }
+            } // TODO, logging error message
         };
         let pol_opts = PoolOptions::<MySql>::new().max_connections(cfg.max_conns)
             .idle_timeout(Some(Duration::new(cfg.idle_timeout_secs as u64, 0)))
-            .acquire_timeout(Duration::new(1u64, 0)).min_connections(0);
+            .acquire_timeout(Duration::new(cfg.acquire_timeout_secs as u64, 0))
+            .min_connections(0);
         let pool = pol_opts.connect_lazy_with(conn_opts);
-        Ok(Self { pool })
+        Ok(Self { pool, alias: cfg.alias.clone() })
     }
 
     pub async fn acquire(&self) -> DefaultResult<PoolConnection<MySql>, AppError>
     {
-        match self.pool.acquire().await {
+        // TODO,
+        // - figure out why `sqlx` requires to get (mutable) reference the pool-connection
+        //   instance in order to get low-level connection for query execution.
+        // - logging error message
+        let pl = &self.pool;
+        match pl.acquire().await {
             Ok(conn) => Ok(conn),
-            Err(e) => Err(AppError { code: AppErrorCode::IOerror(ErrorKind::ResourceBusy),
-                detail: Some(e.to_string()) })
+            Err(e) => {
+                println!("[ERROR] pool stats : {:?}", pl);
+                Err(e.into())
+            }
         }
     }
 } // end of impl AppMariaDbStore
-
