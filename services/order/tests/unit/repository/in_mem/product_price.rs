@@ -10,7 +10,7 @@ use order::model::{ProductPriceModelSet, ProductPriceModel};
 use order::api::rpc::dto::ProductPriceDeleteDto;
 
 use crate::model::ut_clone_productprice;
-use super::super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
+use super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 
 
 fn pprice_init_data() -> [ProductPriceModel;7] {
@@ -43,9 +43,10 @@ async fn in_mem_repo_ds_setup<T: AbstInMemoryDStore + 'static> (max_items:u32)
     -> Box<dyn AbsProductPriceRepo>
 {
     let ds_ctx = in_mem_ds_ctx_setup::<T>(max_items);
-    let result = ProductPriceInMemRepo::new(ds_ctx).await;
+    let inmem = ds_ctx.in_mem.as_ref().unwrap().clone();
+    let result = ProductPriceInMemRepo::new(inmem).await;
     assert_eq!(result.is_ok(), true);
-    result.unwrap()
+    Box::new(result.unwrap())
 }
 
 

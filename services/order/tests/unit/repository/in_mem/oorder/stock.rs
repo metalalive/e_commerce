@@ -15,7 +15,7 @@ use order::repository::{OrderInMemRepo, AbsOrderRepo, AppStockRepoReserveReturn,
 use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
 
 use crate::model::verify_stocklvl_model;
-use crate::repository::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
+use super::super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 
 async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
     nitems:u32, mut curr_time:Option<DateTime<FixedOffset>> ) -> OrderInMemRepo

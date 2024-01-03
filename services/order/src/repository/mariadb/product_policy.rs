@@ -128,10 +128,10 @@ impl ProductPolicyMariaDbRepo
             args.add(prod_id);
         }).count();
         let sql_patt = {
-            let case_op_autocancel = (0..num_batch).into_iter().map(|_| {
+            let case_ops = (0..num_batch).into_iter().map(|_| {
                 "WHEN (`product_type`=? AND `product_id`=?) THEN ? "
             }).collect::<Vec<_>>().join("");
-            let mut out = format!("UPDATE `product_policy` SET `auto_cancel_secs` = CASE {} ELSE `auto_cancel_secs` END,  `warranty_hours` = CASE {} ELSE `warranty_hours` END WHERE ", case_op_autocancel, case_op_autocancel);
+            let mut out = format!("UPDATE `product_policy` SET `auto_cancel_secs` = CASE {} ELSE `auto_cancel_secs` END,  `warranty_hours` = CASE {} ELSE `warranty_hours` END WHERE ", case_ops, case_ops);
             out += "(`product_type`=? AND `product_id`=?)";
             num_batch -= 1;
             (0..num_batch).into_iter().map(|_| {
@@ -222,16 +222,8 @@ impl AbstProductPolicyRepo for ProductPolicyMariaDbRepo
 impl TryFrom<MySqlRow> for ProductPolicyModel {
     type Error = AppError;
     fn try_from(value: MySqlRow) -> DefaultResult<Self, Self::Error> {
-        let product_type = match value.try_get::<&str, usize>(0) {
-            Ok(v) => match v.parse::<u8>() {
-                Ok(typnum) => ProductType::from(typnum),
-                Err(e) => {
-                    return Err(AppError { detail: Some(e.to_string()),
-                        code: AppErrorCode::DataCorruption  });
-                }
-            },
-            Err(e) => { return Err(e.into()); }
-        };
+        let product_type = value.try_get::<&str, usize>(0)?
+            .parse::<ProductType>() ?;
         // note, the code here implicitly converts the error type received `sqlx::Error`
         // into the error type `AppError`, on immediately returning the error
         let product_id = value.try_get::<u64, usize>(1) ? ;

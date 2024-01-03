@@ -1,9 +1,12 @@
 pub(super) mod product_policy;
+pub(super) mod product_price;
 
 use std::io::ErrorKind;
 use sqlx::error::Error;
 
 use crate::error::{AppError, AppErrorCode};
+    
+const DATETIME_FORMAT: &'static str = "%Y-%m-%d %H:%M:%S.%6f";
 
 impl From<Error> for AppError {
     fn from(value: Error) -> Self {

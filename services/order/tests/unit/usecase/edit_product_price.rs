@@ -1,20 +1,19 @@
 use std::vec;
 use std::boxed::Box;
 use std::cell::Cell;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
 use chrono::DateTime;
 
-use order::AppDataStoreContext;
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
 use order::api::rpc::dto::{ProductPriceDto, ProductPriceDeleteDto, ProductPriceEditDto};
 use order::model::{ProductPriceModelSet, ProductPriceModel};
 use order::repository::AbsProductPriceRepo;
 use order::usecase::EditProductPriceUseCase;
-use crate::ut_setup_share_state;
+use crate::{ut_setup_share_state, MockConfidential};
 
 type RepoFetchCallArgType = (u32, Vec<(ProductType,u64)>);
 
@@ -29,10 +28,6 @@ struct MockRepository {
 
 #[async_trait]
 impl AbsProductPriceRepo for MockRepository {
-    async fn new(_dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
-        where Self:Sized
-    { Err(AppError { code:AppErrorCode::NotImplemented, detail:None }) }
-
     async fn delete_all(&self, _store_id:u32) -> DefaultResult<(), AppError>
     { self._mocked_del_all.clone() }
     
@@ -102,7 +97,7 @@ impl MockRepository {
 #[tokio::test]
 async fn create_ok ()
 {
-    let app_state = ut_setup_share_state("config_ok.json");
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet { store_id: mocked_store_id, items:Vec::new() };
@@ -131,7 +126,7 @@ async fn create_ok ()
 #[tokio::test]
 async fn update_ok ()
 {
-    let app_state = ut_setup_share_state("config_ok.json");
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {
@@ -182,7 +177,7 @@ async fn update_ok ()
 #[tokio::test]
 async fn fetch_error ()
 {
-    let app_state = ut_setup_share_state("config_ok.json");
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-1");
     let repo = MockRepository::_new(Ok(()), Ok(()),
@@ -212,7 +207,7 @@ async fn fetch_error ()
 #[tokio::test]
 async fn save_error ()
 {
-    let app_state = ut_setup_share_state("config_ok.json");
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-2");
     let mocked_ppset = ProductPriceModelSet {store_id:mocked_store_id, items:vec![
@@ -249,7 +244,7 @@ async fn save_error ()
 #[tokio::test]
 async fn delete_subset_ok ()
 {
-    let app_state = ut_setup_share_state("config_ok.json");
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {store_id: mocked_store_id, items:Vec::new()};
@@ -266,7 +261,7 @@ async fn delete_subset_ok ()
 #[tokio::test]
 async fn delete_subset_error ()
 {
-    let app_state = ut_setup_share_state("config_ok.json");
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-1");
     let mocked_ppset = ProductPriceModelSet {store_id: mocked_store_id, items:Vec::new()};
@@ -291,7 +286,7 @@ async fn delete_subset_error ()
 #[tokio::test]
 async fn delete_all_ok ()
 {
-    let app_state = ut_setup_share_state("config_ok.json");
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {store_id: mocked_store_id, items:Vec::new()};

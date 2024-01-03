@@ -7,7 +7,7 @@ use order::repository::{ProductPolicyInMemRepo, AbstProductPolicyRepo};
 use order::model::{ProductPolicyModelSet, ProductPolicyModel};
 
 use crate::model::ut_clone_productpolicy;
-use super::super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
+use super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 
 const UTEST_INIT_DATA: [ProductPolicyModel;7] = [
     ProductPolicyModel { product_type:ProductType::Item, product_id: 1556,

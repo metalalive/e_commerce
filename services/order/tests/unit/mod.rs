@@ -19,7 +19,9 @@ use order::error::AppError;
 
 pub(crate) const EXAMPLE_REL_PATH : &'static str = "/tests/unit/examples/";
 
-pub(crate) fn ut_setup_share_state(cfg_fname: &str) -> AppSharedState {
+pub(crate) fn ut_setup_share_state(cfg_fname: &str, cfdntl:Box<dyn AbstractConfidentiality>)
+    -> AppSharedState
+{
     let service_basepath = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
     let sys_basepath = env::var(ENV_VAR_SYS_BASE_PATH).unwrap(); 
     let fullpath = service_basepath.clone() + EXAMPLE_REL_PATH + cfg_fname;
@@ -28,7 +30,6 @@ pub(crate) fn ut_setup_share_state(cfg_fname: &str) -> AppSharedState {
         basepath: AppBasepathCfg { system:sys_basepath , service:service_basepath },
     };
     let logctx = AppLogContext::new(&cfg.basepath, &cfg.api_server.logging);
-    let cfdntl:Box<dyn AbstractConfidentiality> = Box::new(MockConfidential{});
     AppSharedState::new(cfg, logctx, cfdntl)
 }
 

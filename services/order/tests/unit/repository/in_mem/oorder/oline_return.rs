@@ -7,7 +7,7 @@ use order::datastore::AppInMemoryDStore;
 use order::model::{OrderReturnModel, OrderLineIdentity, OrderLinePriceModel};
 use order::repository::{OrderReturnInMemRepo, AbsOrderReturnRepo};
 
-use crate::repository::in_mem_ds_ctx_setup;
+use super::super::in_mem_ds_ctx_setup;
 
 
 async fn in_mem_repo_ds_setup (nitems:u32) -> OrderReturnInMemRepo

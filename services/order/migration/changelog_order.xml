@@ -52,5 +52,29 @@
     <changeSet id="tag_version_0.0.2" author="T.H.">
         <tagDatabase tag="0.0.2" />
     </changeSet>
+    <changeSet id="add_table__product_price" author="T.H.">
+        <comment>
+            price for all products on sale, the columns `start_tz_utc` and `end_tz_utc` indicate the timezone and number of minutes from local time to UTC for `start_after` and `end_before` respectively
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `product_price` (
+                `store_id`         INT UNSIGNED NOT NULL,
+                `product_type`     ENUM('1', '2') NOT NULL, 
+                `product_id`       BIGINT UNSIGNED NOT NULL,
+                `price`         INT UNSIGNED  NOT NULL,
+                `start_after`   DATETIME  NOT NULL,
+                `end_before`    DATETIME  NOT NULL,
+                `start_tz_utc`  SMALLINT  NOT NULL,
+                `end_tz_utc`    SMALLINT  NOT NULL,
+                PRIMARY KEY (`store_id`, `product_type`, `product_id`)
+            )
+        </sql>
+        <rollback>
+            DROP TABLE `product_price`
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.3" author="T.H.">
+        <tagDatabase tag="0.0.3" />
+    </changeSet>
 </databaseChangeLog>
 

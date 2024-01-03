@@ -22,7 +22,7 @@ use order::api::web::ApiRouteTableType;
 use order::constant::ENV_VAR_SERVICE_BASE_PATH;
 use order::logging::{AppLogLevel, app_log_event};
 use order::network::{middleware, app_web_service, net_server_listener};
-use crate::{ut_setup_share_state, EXAMPLE_REL_PATH};
+use crate::{ut_setup_share_state, EXAMPLE_REL_PATH, MockConfidential};
 
 
 
@@ -63,7 +63,7 @@ fn ut_service_req_setup() -> Request<HyperBody>
 #[tokio::test]
 async fn app_web_service_ok() {
     type UTestHttpBody = HyperBody;
-    let shr_state = ut_setup_share_state("config_ok.json");
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let cfg = shr_state.config().clone();
     let rtable:ApiRouteTableType<UTestHttpBody> = HashMap::from([
         ("gram_increment", routing::post(ut_endpoint_handler)),
@@ -123,7 +123,7 @@ fn middleware_cors_error_cfg() {
 #[tokio::test]
 async fn middleware_req_body_limit() {
     type UTestHttpBody = Limited<HyperBody>;
-    let shr_state = ut_setup_share_state("config_ok.json");
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let cfg = shr_state.config().clone();
     let rtable:ApiRouteTableType<UTestHttpBody> = HashMap::from([
         ("gram_increment", routing::post(ut_endpoint_handler)),

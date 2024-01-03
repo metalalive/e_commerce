@@ -35,9 +35,7 @@ use order::repository::{
 };
 use order::usecase::{initiate_rpc_request, rpc_server_process};
 
-use crate::ut_setup_share_state;
-
-
+use crate::{ut_setup_share_state, MockConfidential};
 
 struct MockStockRepo {
     _mocked_save_r:  DefaultResult<(), AppError>,
@@ -569,7 +567,7 @@ async fn server_run_rpc_ok ()
         _ctx.mock_s(Ok(a));
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state("config_ok.json");
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
     assert!(result.is_ok());
     let newtask = result.unwrap();
@@ -591,7 +589,7 @@ async fn server_run_rpc_acquire_error ()
         _ctx.mock_s(Err(e));
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state("config_ok.json");
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
     assert!(result.is_err());
     if let Err(e) = result {
@@ -616,7 +614,7 @@ async fn server_run_rpc_receive_request_error ()
         _ctx.mock_s(Ok(a));
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state("config_ok.json");
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
     assert!(result.is_err());
     if let Err(e) = result {
@@ -643,7 +641,7 @@ async fn server_run_rpc_send_response_error ()
         _ctx.mock_s(Ok(a));
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state("config_ok.json");
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
     assert!(result.is_ok());
     let newtask = result.unwrap();

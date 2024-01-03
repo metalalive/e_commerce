@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use chrono::DateTime;
 
-use crate::AppDataStoreContext;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
 use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchKeys, AbsDStoreFilterKeyOp};
@@ -54,14 +53,6 @@ pub struct ProductPriceInMemRepo {
 
 #[async_trait]
 impl AbsProductPriceRepo for ProductPriceInMemRepo {
-    async fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
-        where Self:Sized
-    {
-        match Self::_new(dstore).await {
-            Ok(rp) => Ok(Box::new(rp)),
-            Err(e) => Err(e)
-        }
-    }
     async fn delete_all(&self, store_id:u32) -> Result<(), AppError>
     {
         let op = InnerDStoreFilterKeyOp::new(store_id);
@@ -170,17 +161,10 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
 } // end of impl ProductPriceInMemRepo
 
 impl ProductPriceInMemRepo {
-    pub async fn _new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Self, AppError>
-        where Self:Sized
+    pub async fn new(m: Arc<Box<dyn AbstInMemoryDStore>>) -> DefaultResult<Self, AppError>
     {
-        if let Some(m) = &dstore.in_mem {
-            m.create_table(TABLE_LABEL).await?;
-            let obj = Self { datastore: m.clone() };
-            Ok(obj)
-        } else {
-            Err(AppError {code:AppErrorCode::MissingDataStore,
-                detail: Some(format!("in-memory"))}  )
-        }
+        m.create_table(TABLE_LABEL).await?;
+        Ok(Self { datastore: m.clone() })
     }
     fn gen_id_keys(&self, store_id:u32, ids:Vec<(ProductType,u64)>) -> Vec<String>
     {

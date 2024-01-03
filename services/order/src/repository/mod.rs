@@ -31,6 +31,7 @@ pub use in_mem::product_price::ProductPriceInMemRepo;
 
 mod mariadb;
 use mariadb::product_policy::ProductPolicyMariaDbRepo;
+pub use mariadb::product_price::ProductPriceMariaDbRepo;
 
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads
@@ -47,13 +48,12 @@ pub trait AbstProductPolicyRepo : Sync + Send
 #[async_trait]
 pub trait AbsProductPriceRepo : Sync + Send
 {
-    async fn new(dstore:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
-        where Self:Sized ;
     async fn delete_all(&self, store_id:u32) -> DefaultResult<(), AppError>;
     async fn delete(&self, store_id:u32, ids:ProductPriceDeleteDto) -> DefaultResult<(), AppError> ;
     async fn fetch(&self, store_id:u32, ids:Vec<(ProductType,u64)>) -> DefaultResult<ProductPriceModelSet, AppError> ;
     // fetch prices of products from different sellers  at a time, the
     // first element of the `ids` tuple should be valid seller ID
+    // TODO, switch argumen type to `crate::model::BaseProductIdentity`
     async fn fetch_many(&self, ids:Vec<(u32,ProductType,u64)>) -> DefaultResult<Vec<ProductPriceModelSet>, AppError> ;
     async fn save(&self, updated:ProductPriceModelSet) -> DefaultResult<(), AppError> ;
 }
@@ -164,16 +164,24 @@ pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
     }
 }
 
-
-// TODO, consider runtime configuration for following repositories
 pub async fn app_repo_product_price (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
 {
-    ProductPriceInMemRepo::new(ds).await
+    if let Some(dbs) = ds.sql_dbs.as_ref() {
+        let obj = ProductPriceMariaDbRepo::new(dbs)?;
+        Ok(Box::new(obj))
+    } else if let Some(m)= ds.in_mem.as_ref() {
+        let obj = ProductPriceInMemRepo::new(m.clone()).await?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError { code: AppErrorCode::MissingDataStore,
+            detail: Some(format!("unknwon-type")) })
+    }
 }
+
 pub async fn app_repo_order (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
-{
+{ // TODO, consider runtime configuration for following repositories
     OrderInMemRepo::new(ds).await
 }
 pub async fn app_repo_order_return (ds:Arc<AppDataStoreContext>)

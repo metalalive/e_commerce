@@ -1,5 +1,8 @@
 use std::hash::Hash;
+use std::str::FromStr;
+
 use crate::WebApiHdlrLabel;
+use crate::error::{AppError, AppErrorCode};
 
 pub mod app_meta {
     pub const LABAL:&'static str = "order";
@@ -74,6 +77,20 @@ impl Clone for ProductType {
             Self::Item => Self::Item,
             Self::Unknown(v) => Self::Unknown(v.clone()),
             Self::Package => Self::Package
+        }
+    }
+}
+impl FromStr for ProductType {
+    type Err = AppError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse::<u8>() {
+            Ok(v) => Ok(Self::from(v)),
+            Err(e) => {
+                let detail = format!("product-type, actual:{}, error:{}",
+                                      s, e);
+                Err(Self::Err {code: AppErrorCode::DataCorruption,
+                    detail:Some(detail) })
+            }
         }
     }
 }
