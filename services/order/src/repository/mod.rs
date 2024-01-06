@@ -30,8 +30,12 @@ pub use in_mem::product_policy::ProductPolicyInMemRepo;
 pub use in_mem::product_price::ProductPriceInMemRepo;
 
 mod mariadb;
+
+#[cfg(feature="mariadb")]
 use mariadb::product_policy::ProductPolicyMariaDbRepo;
-pub use mariadb::product_price::ProductPriceMariaDbRepo;
+
+#[cfg(feature="mariadb")]
+use mariadb::product_price::ProductPriceMariaDbRepo;
 
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads
@@ -152,30 +156,38 @@ pub trait AbsOrderReturnRepo : Sync + Send {
 pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
 {
+    #[cfg(feature="mariadb")]
     if let Some(dbs) = ds.sql_dbs.as_ref() {
         let obj = ProductPolicyMariaDbRepo::new(dbs).await ?;
         Ok(Box::new(obj))
-    } else if let Some(m)= ds.in_mem.as_ref() {
+    } else {
+        Err(AppError { code: AppErrorCode::FeatureDisabled, detail: Some(format!("mariadb")) })
+    }
+    #[cfg(not(feature="mariadb"))]
+    if let Some(m)= ds.in_mem.as_ref() {
         let obj = ProductPolicyInMemRepo::new(m.clone()).await ?;
         Ok(Box::new(obj))
     } else {
-        Err(AppError { code: AppErrorCode::MissingDataStore,
-            detail: Some(format!("unknwon-type")) })
+        Err(AppError { code: AppErrorCode::MissingDataStore, detail: Some(format!("unknwon-type")) })
     }
 }
 
 pub async fn app_repo_product_price (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsProductPriceRepo>, AppError>
 {
+    #[cfg(feature="mariadb")]
     if let Some(dbs) = ds.sql_dbs.as_ref() {
         let obj = ProductPriceMariaDbRepo::new(dbs)?;
         Ok(Box::new(obj))
-    } else if let Some(m)= ds.in_mem.as_ref() {
+    } else {
+        Err(AppError { code: AppErrorCode::FeatureDisabled, detail: Some(format!("mariadb")) })
+    }
+    #[cfg(not(feature="mariadb"))]
+    if let Some(m)= ds.in_mem.as_ref() {
         let obj = ProductPriceInMemRepo::new(m.clone()).await?;
         Ok(Box::new(obj))
     } else {
-        Err(AppError { code: AppErrorCode::MissingDataStore,
-            detail: Some(format!("unknwon-type")) })
+        Err(AppError { code: AppErrorCode::MissingDataStore, detail: Some(format!("unknwon-type")) })
     }
 }
 

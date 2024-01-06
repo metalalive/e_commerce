@@ -16,6 +16,10 @@
 | Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.67.1` |
 | DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
 
+### Optional features
+You can build / test this application with following optional features
+- mariaDB, append `--features mariadb` to Rust `cargo` command 
+
 ### Commands for build
 For applications
 ```shell

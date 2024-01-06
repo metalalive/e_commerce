@@ -3,7 +3,8 @@ use chrono::DateTime;
 use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::model::{ProductPriceModelSet, ProductPriceModel};
-use order::repository::{ProductPriceMariaDbRepo, AbsProductPriceRepo};
+
+use order::repository::{app_repo_product_price, AbsProductPriceRepo};
 
 use crate::model::ut_clone_productprice;
 use super::dstore_ctx_setup;
@@ -44,11 +45,12 @@ fn ut_pprice_data() -> [ProductPriceModel;10] {
     ]
 }
 
+#[cfg(feature="mariadb")]
 #[tokio::test]
 async fn test_save_fetch_ok()
 {
-    let dbs = dstore_ctx_setup();
-    let repo = ProductPriceMariaDbRepo::new(&dbs).unwrap();
+    let ds = dstore_ctx_setup();
+    let repo = app_repo_product_price(ds).await.unwrap();
     let data = ut_pprice_data();
     let store_id = 123;
     let items = data[..4].iter().map(ut_clone_productprice).collect::<Vec<_>>();
@@ -87,11 +89,12 @@ async fn test_save_fetch_ok()
 } // end of fn test_save_fetch_ok
 
 
+#[cfg(feature="mariadb")]
 #[tokio::test]
 async fn test_fetch_empty()
 {
-    let dbs = dstore_ctx_setup();
-    let repo = ProductPriceMariaDbRepo::new(&dbs).unwrap();
+    let ds = dstore_ctx_setup();
+    let repo = app_repo_product_price(ds).await.unwrap();
     let store_id = 123;
     let result = repo.fetch(store_id, vec![(ProductType::Item, 2005),
                                            (ProductType::Package, 2002)]).await;
@@ -101,11 +104,12 @@ async fn test_fetch_empty()
     }
 }
 
+#[cfg(feature="mariadb")]
 #[tokio::test]
 async fn test_save_insert_dup()
 {
-    let dbs = dstore_ctx_setup();
-    let repo = ProductPriceMariaDbRepo::new(&dbs).unwrap();
+    let ds = dstore_ctx_setup();
+    let repo = app_repo_product_price(ds).await.unwrap();
     let data = ut_pprice_data();
     let store_id = 124;
     let items = data[..2].iter().map(ut_clone_productprice).collect::<Vec<_>>();

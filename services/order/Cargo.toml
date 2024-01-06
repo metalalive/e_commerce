@@ -43,7 +43,7 @@ sqlx = {version="^0.6.3", features=["runtime-tokio-native-tls", "mysql", "chrono
 ## sqlx-cli = {version="^0.6.3", features=["native-tls", "mysql"]}
 
 [features]
-mariadb = [] # conditionally enable mariaDB repository
+mariadb = []
 
 [[test]]
 name = "unittest"

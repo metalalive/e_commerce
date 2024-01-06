@@ -17,6 +17,7 @@ pub enum AppErrorCode {
     NoRouteApiServerCfg,
     NoLogHandlerCfg,
     NoLoggerCfg,
+    FeatureDisabled,
     NoHandlerInLoggerCfg,
     InvalidHandlerLoggerCfg,
     EmptyInputData, // for internal server error, do NOT dump detail to http response

@@ -3,13 +3,13 @@ mod product_price;
 use std::env;
 use std::sync::Arc;
 
+use order::AppDataStoreContext;
 use order::constant::ENV_VAR_SYS_BASE_PATH;
-use order::datastore::AppMariaDbStore;
 use order::confidentiality::UserSpaceConfidentiality;
 
 use crate::ut_setup_share_state;
 
-fn dstore_ctx_setup() -> Vec<Arc<AppMariaDbStore>>
+fn dstore_ctx_setup() -> Arc<AppDataStoreContext>
 {
     let cfdntl = {
         let sys_basepath = env::var(ENV_VAR_SYS_BASE_PATH).unwrap(); 
@@ -21,5 +21,5 @@ fn dstore_ctx_setup() -> Vec<Arc<AppMariaDbStore>>
     assert!(dstore.sql_dbs.is_some());
     let db_stores = dstore.sql_dbs.as_ref().unwrap();
     assert!(!db_stores.is_empty());
-    db_stores.clone()
+    dstore
 }
