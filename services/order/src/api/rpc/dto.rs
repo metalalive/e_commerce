@@ -2,7 +2,7 @@ use std::vec::Vec;
 
 use serde::{Deserialize, Serialize};
 use chrono::DateTime;
-use chrono::offset::{Local, FixedOffset};
+use chrono::offset::FixedOffset;
 
 use crate::api::{jsn_validate_product_type, jsn_serialize_product_type };
 use crate::api::dto::{OrderLinePayDto, BillingDto, ShippingDto, PayAmountDto};
@@ -21,8 +21,8 @@ pub struct ProductPriceDeleteDto {
 #[derive(Deserialize)]
 pub struct ProductPriceEditDto {
     pub price: u32,
-    pub start_after: DateTime<Local>,
-    pub end_before: DateTime<Local>,
+    pub start_after: DateTime<FixedOffset>,
+    pub end_before: DateTime<FixedOffset>,
     // Note: This order-processing application doesn't need to know the meaning
     // of the field `product type` from this API endpoint, it is just for identifying
     // specific product in specific storefront. There is no need to convert the value

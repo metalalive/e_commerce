@@ -16,26 +16,26 @@ use super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
 fn pprice_init_data() -> [ProductPriceModel;7] {
     [
         ProductPriceModel {is_create:true, product_type:ProductType::Item, product_id:1001, price:87,
-            start_after:DateTime::parse_from_rfc3339("2023-09-09T09:12:53+08:00").unwrap().into(),
-            end_before:DateTime::parse_from_rfc3339("2023-10-06T09:00:30+08:00").unwrap().into()  },
+            start_after:DateTime::parse_from_rfc3339("2023-09-09T09:12:53+08:00").unwrap(),
+            end_before:DateTime::parse_from_rfc3339("2023-10-06T09:00:30+08:00").unwrap()  },
         ProductPriceModel {is_create:true, product_type:ProductType::Package, product_id:1002, price:94555,
-            start_after:DateTime::parse_from_rfc3339("2023-09-09T09:13:54+07:00").unwrap().into(),
-            end_before:DateTime::parse_from_rfc3339("2023-10-07T09:01:30+06:00").unwrap().into()  },
+            start_after:DateTime::parse_from_rfc3339("2023-09-09T09:13:54+07:00").unwrap(),
+            end_before:DateTime::parse_from_rfc3339("2023-10-07T09:01:30+06:00").unwrap()  },
         ProductPriceModel {is_create:true, product_type:ProductType::Item, product_id:1003, price:28379,
-            start_after:DateTime::parse_from_rfc3339("2023-07-31T10:16:54+05:00").unwrap().into(),
-            end_before:DateTime::parse_from_rfc3339("2023-10-10T09:01:31+02:00").unwrap().into()  },
+            start_after:DateTime::parse_from_rfc3339("2023-07-31T10:16:54+05:00").unwrap(),
+            end_before:DateTime::parse_from_rfc3339("2023-10-10T09:01:31+02:00").unwrap()  },
         ProductPriceModel {is_create:true, product_type:ProductType::Package, product_id:1004, price:3008,
-            start_after:DateTime::parse_from_rfc3339("2022-07-30T11:16:55-01:00").unwrap().into(),
-            end_before:DateTime::parse_from_rfc3339("2023-10-10T09:01:31+03:00").unwrap().into()  },
+            start_after:DateTime::parse_from_rfc3339("2022-07-30T11:16:55-01:00").unwrap(),
+            end_before:DateTime::parse_from_rfc3339("2023-10-10T09:01:31+03:00").unwrap()  },
         ProductPriceModel {is_create:true, product_type:ProductType::Item, product_id:1005, price:1389,
-            start_after:DateTime::parse_from_rfc3339("2023-07-29T10:17:54+05:00").unwrap().into(),
-            end_before:DateTime::parse_from_rfc3339("2023-10-06T09:01:32+07:00").unwrap().into()  },
+            start_after:DateTime::parse_from_rfc3339("2023-07-29T10:17:54+05:00").unwrap(),
+            end_before:DateTime::parse_from_rfc3339("2023-10-06T09:01:32+07:00").unwrap()  },
         ProductPriceModel {is_create:true, product_type:ProductType::Package, product_id:1006, price:183,
-            start_after:DateTime::parse_from_rfc3339("2023-06-29T11:18:54+04:00").unwrap().into(),
-            end_before:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap().into()  },
+            start_after:DateTime::parse_from_rfc3339("2023-06-29T11:18:54+04:00").unwrap(),
+            end_before:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap()  },
         ProductPriceModel {is_create:true, product_type:ProductType::Item, product_id:1007, price:666,
-            start_after:DateTime::parse_from_rfc3339("2022-07-28T12:24:47+08:00").unwrap().into(),
-            end_before:DateTime::parse_from_rfc3339("2023-12-26T16:58:00+09:00").unwrap().into()  },
+            start_after:DateTime::parse_from_rfc3339("2022-07-28T12:24:47+08:00").unwrap(),
+            end_before:DateTime::parse_from_rfc3339("2023-12-26T16:58:00+09:00").unwrap()  },
     ]
 } // end of pprice_init_data
 
@@ -143,8 +143,8 @@ async fn in_mem_save_fetch_ok_2 ()
     // --------
     let new_5th_elm = ProductPriceModel {is_create:false, price:7811,
             product_type: pprice_data[5].product_type.clone(),  product_id: pprice_data[5].product_id,
-            start_after:DateTime::parse_from_rfc3339("2023-09-11T15:33:54-07:00").unwrap().into(),
-            end_before:DateTime::parse_from_rfc3339("2023-10-12T09:02:34+06:00").unwrap().into()  };
+            start_after:DateTime::parse_from_rfc3339("2023-09-11T15:33:54-07:00").unwrap(),
+            end_before:DateTime::parse_from_rfc3339("2023-10-12T09:02:34+06:00").unwrap()  };
     let ppset = {
         let items = vec![ut_clone_productprice(&pprice_data[6]), ut_clone_productprice(&new_5th_elm)]; 
         ProductPriceModelSet { store_id:mocked_store_id, items }

@@ -170,16 +170,20 @@ impl TryFrom<MySqlRow> for ProductPriceModel {
         let end_before  = value.try_get::<NaiveDateTime, usize>(5) ?;
         let start_tz_utc = value.try_get::<i16, usize>(6) ?;
         let end_tz_utc   = value.try_get::<i16, usize>(7) ?;
+        //let start_after_naive = start_after.clone();
         let start_after = {
             let num_secs = (start_tz_utc as i32) * 60;
             let tz = FixedOffset::east_opt(num_secs).unwrap();
-            DateTime::from_naive_utc_and_offset(start_after, tz)
+            start_after.and_local_timezone(tz).unwrap()
         };
         let end_before = {
             let num_secs = (end_tz_utc as i32) * 60;
             let tz = FixedOffset::east_opt(num_secs).unwrap();
-            DateTime::from_naive_utc_and_offset(end_before, tz)
+            // Do NOT use DateTime::from_naive_utc_and_offset()
+            end_before.and_local_timezone(tz).unwrap()
         };
+        //println!("[DEBUG] product-id : {}, start_after naive: {:?}, final:{:?}",
+        //        product_id, start_after_naive, start_after);
         Ok(Self {product_type, product_id, price,
             start_after, end_before, is_create:false})
     } // end of fn try-from

@@ -2,7 +2,7 @@ use std::vec::Vec;
 use std::cmp::{PartialEq, Eq};
 use std::result::Result as DefaultResult;
 use chrono::DateTime;
-use chrono::offset::Local;
+use chrono::offset::FixedOffset;
 
 use crate::api::rpc::dto::ProductPriceEditDto;
 use crate::error::{AppError, AppErrorCode};
@@ -11,8 +11,8 @@ use crate::constant::ProductType;
 #[derive(Debug, Eq)]
 pub struct ProductPriceModel {
     pub price: u32,
-    pub start_after: DateTime<Local>,
-    pub end_before: DateTime<Local>,
+    pub start_after: DateTime<FixedOffset>,
+    pub end_before: DateTime<FixedOffset>,
     pub product_id: u64,
     pub product_type: ProductType,
     pub is_create: bool,

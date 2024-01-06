@@ -191,8 +191,8 @@ impl ProductPriceInMemRepo {
                     .unwrap().parse().unwrap();
                 let start_after = row.get::<usize>(InMemColIdx::StartAfter.into()).unwrap();
                 let end_before  = row.get::<usize>(InMemColIdx::EndBefore.into()).unwrap();
-                let start_after = DateTime::parse_from_rfc3339(start_after).unwrap().into();
-                let end_before  = DateTime::parse_from_rfc3339(end_before).unwrap().into();
+                let start_after = DateTime::parse_from_rfc3339(start_after).unwrap();
+                let end_before  = DateTime::parse_from_rfc3339(end_before).unwrap();
                 let obj = ProductPriceModel {product_type, product_id, price,
                     start_after, end_before, is_create:false};
                 (seller_id, obj)
