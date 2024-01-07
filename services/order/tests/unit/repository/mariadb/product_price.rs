@@ -208,7 +208,7 @@ async fn delete_some_ok()
     if let Ok(ms) = result {
         assert_eq!(ms.items.len(), 7);
     }
-}
+} // end of fn delete_some_ok
 
 #[cfg(feature="mariadb")]
 #[tokio::test]
@@ -253,3 +253,42 @@ async fn delete_all_ok()
         assert_eq!(ms.items.len(), 6);
     }
 }
+
+#[cfg(feature="mariadb")]
+#[tokio::test(flavor ="multi_thread", worker_threads = 1)]
+async fn fetch_many_ok()
+{
+    let ds = dstore_ctx_setup();
+    let repo = app_repo_product_price(ds).await.unwrap();
+    let repo = Arc::new(repo);
+    ut_delete_common_setup(129, repo.clone()).await;
+    ut_delete_common_setup(130, repo.clone()).await;
+    let pids = vec![
+        (129, ProductType::Item, 1005), (130, ProductType::Package, 1004),
+        (129, ProductType::Package, 1002), (130, ProductType::Item, 1007),
+        (129, ProductType::Item, 1003),  (130, ProductType::Package, 1006),
+    ];
+    let result = repo.fetch_many(pids).await;
+    assert!(result.is_ok());
+    if let Ok(msets) = result {
+        assert_eq!(msets.len(), 2);
+        msets.into_iter().map(|mset| {
+            let exists = match &mset.store_id {
+                129 => mset.items.into_iter().map(
+                           |m| match &m.product_id {
+                              1005 | 1003 | 1002 => true,
+                              _others => false,
+                           }
+                       ).all(|b| b),
+                130 => mset.items.into_iter().map(
+                           |m| match &m.product_id {
+                               1004 | 1006 | 1007 => true,
+                              _others => false,
+                           }
+                       ).all(|b| b),
+                _others => false,
+            };
+            assert!(exists);
+        }).count();
+    }
+} // end of fn fetch_many_ok

@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::result::Result as DefaultResult;
 
@@ -11,7 +12,7 @@ use crate::api::rpc::dto::ProductPriceDeleteDto;
 use crate::constant::ProductType;
 use crate::datastore::AppMariaDbStore;
 use crate::error::{AppError, AppErrorCode};
-use crate::model::{ProductPriceModelSet, ProductPriceModel};
+use crate::model::{ProductPriceModelSet, ProductPriceModel, BaseProductIdentity};
 use crate::repository::AbsProductPriceRepo;
 
 use super::DATETIME_FORMAT;
@@ -19,6 +20,7 @@ use super::DATETIME_FORMAT;
 struct InsertArg(u32, Vec<ProductPriceModel>);
 struct UpdateArg(u32, Vec<ProductPriceModel>);
 struct FetchOneArg(u32, Vec<(ProductType,u64)>);
+struct FetchManyArg(Vec<BaseProductIdentity>);
 struct DeleteSomeArg(u32, ProductPriceDeleteDto);
 struct DeleteAllArg(u32);
 
@@ -158,6 +160,35 @@ impl Into<(String, MySqlArguments)> for FetchOneArg {
         (Self::sql_pattern(self.1.len()), self.into_arguments())
     }
 }
+
+impl FetchManyArg {
+    fn sql_pattern(num_batch:usize) -> String {
+        let pid_cmps = (0..num_batch).into_iter().map(
+            |_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)"
+        ).collect::<Vec<_>>().join(" OR ");
+        format!("SELECT `store_id`,`product_type`,`product_id`,`price`,`start_after`,`end_before`,`start_tz_utc`,`end_tz_utc` FROM `product_price` WHERE {}", pid_cmps)
+    }
+}
+impl<'q> IntoArguments<'q, MySql> for FetchManyArg {
+    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+        let mut out = MySqlArguments::default();
+        let pids = self.0;
+        pids.into_iter().map(|id_| {
+            let (store_id, prod_type, prod_id) = (id_.store_id, id_.product_type, id_.product_id);
+            let prod_typ_num:u8 = prod_type.into();
+            out.add(store_id);
+            out.add(prod_typ_num.to_string());
+            out.add(prod_id);
+        }).count();
+        out
+    }
+}
+impl Into<(String, MySqlArguments)> for FetchManyArg {
+    fn into(self) -> (String, MySqlArguments) {
+        (Self::sql_pattern(self.0.len()), self.into_arguments())
+    }
+}
+
 
 impl DeleteSomeArg {
     fn sql_pattern(num_items:usize, num_pkgs:usize) -> String { 
@@ -338,7 +369,6 @@ impl ProductPriceMariaDbRepo {
         } // end of loop
         Ok(())
     } // end of fn _save
-
     async fn _fetch_common(&self, sql_patt:String, args:MySqlArguments)
         -> DefaultResult<Vec<MySqlRow>, AppError>
     {
@@ -349,7 +379,6 @@ impl ProductPriceMariaDbRepo {
         let rows = query.fetch_all(exec).await ?;
         Ok(rows)
     }
-    
     async fn _delete_common(&self, sql_patt:String, args:MySqlArguments)
         -> DefaultResult<(), AppError> 
     {
@@ -387,10 +416,43 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo
         }
         Ok(out)
     }
-    async fn fetch_many(&self, _ids:Vec<(u32,ProductType,u64)>) -> DefaultResult<Vec<ProductPriceModelSet>, AppError>
+    async fn fetch_many(&self, ids:Vec<(u32,ProductType,u64)>) -> DefaultResult<Vec<ProductPriceModelSet>, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
+        let ids = ids.into_iter().map(
+            |(store_id, product_type, product_id)|
+                BaseProductIdentity {store_id, product_type, product_id}
+        ).collect::<Vec<_>>();
+        let (sql_patt, args) = FetchManyArg(ids).into();
+        let rows = self._fetch_common(sql_patt, args).await ?;
+        let mut errors:Vec<AppError> = Vec::new();
+        let mut map: HashMap<u32, ProductPriceModelSet> = HashMap::new();
+        let num_fetched = rows.len();
+        let num_decoded = rows.into_iter().map(|row| {
+            let store_id = row.try_get::<u32, usize>(0)?;
+            let m = ProductPriceModel::try_from(row)?;
+            Ok((store_id, m))
+        }).filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => { errors.push(e); None }
+        }).map(|(store_id, m)| {
+            if let Some(mset) = map.get_mut(&store_id) {
+                mset.items.push(m);
+            } else {
+                let mset = ProductPriceModelSet { store_id, items: vec![m] };
+                let old = map.insert(store_id, mset);
+                assert!(old.is_none());
+            }
+        }).count();
+        if errors.is_empty() {
+            assert_eq!(num_fetched, num_decoded);
+            let out = map.into_values().collect::<Vec<_>>();
+            Ok(out)
+        } else {
+            let detail = errors.into_iter().map(|e| e.to_string())
+                .collect::<Vec<_>>().join(", ");
+            Err(AppError { code: AppErrorCode::DataCorruption, detail: Some(detail) })
+        }
+    } // end of fn fetch_many
     async fn save(&self, mset:ProductPriceModelSet) -> DefaultResult<(), AppError>
     {
         let (store_id, items) = (mset.store_id, mset.items);
