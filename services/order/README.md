@@ -73,9 +73,11 @@ Run the test cases collected under `PROJECT_HOME/order/tests/unit`
 cd ${SERVICE_BASE_PATH}
 
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    cargo test --test unittest -- --nocapture
+    cargo test --test unittest -- --test-threads=1 --nocapture
 ```
-Note the option `--nocapture` allows the program to print all messages to standard output console.
+Note:
+- `--test-threads=1` should be added if the feature `mariadb` is enabled and you cannot change maximum number of connections opening at the database backend, this option means you limit number of threads running all the test cases in parallel.
+- `--nocapture` is optional to allow the program to print all messages to standard output console.
 
 There are private functions in this source-code crate  containing few test cases :
 ```shell

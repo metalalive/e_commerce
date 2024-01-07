@@ -1,9 +1,12 @@
+use std::boxed::Box;
+use std::sync::Arc;
+
 use chrono::DateTime;
 
+use order::api::rpc::dto::ProductPriceDeleteDto;
 use order::constant::ProductType;
 use order::error::AppErrorCode;
 use order::model::{ProductPriceModelSet, ProductPriceModel};
-
 use order::repository::{app_repo_product_price, AbsProductPriceRepo};
 
 use crate::model::ut_clone_productprice;
@@ -46,8 +49,8 @@ fn ut_pprice_data() -> [ProductPriceModel;10] {
 }
 
 #[cfg(feature="mariadb")]
-#[tokio::test]
-async fn test_save_fetch_ok()
+#[tokio::test(flavor ="multi_thread", worker_threads = 1)]
+async fn save_fetch_ok()
 {
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
@@ -95,12 +98,12 @@ async fn test_save_fetch_ok()
             assert_eq!(DateTime::parse_from_rfc3339(expect.2).unwrap(), actual.2);
         }).count();
     }
-} // end of fn test_save_fetch_ok
+} // end of fn save_fetch_ok
 
 
 #[cfg(feature="mariadb")]
 #[tokio::test]
-async fn test_fetch_empty()
+async fn fetch_empty()
 {
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
@@ -114,9 +117,12 @@ async fn test_fetch_empty()
 }
 
 #[cfg(feature="mariadb")]
-#[tokio::test]
-async fn test_save_insert_dup()
+#[tokio::test(flavor ="multi_thread", worker_threads = 1)]
+async fn save_insert_dup()
 {
+    use std::time::Duration;
+    use tokio::time::sleep;
+
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
     let data = ut_pprice_data();
@@ -124,15 +130,126 @@ async fn test_save_insert_dup()
     let items = data[..2].iter().map(ut_clone_productprice).collect::<Vec<_>>();
     let mset = ProductPriceModelSet { store_id, items };
     let result = repo.save(mset).await;
+    if let Err(e) = result.as_ref() {
+        println!("[unit-test] error : {:?}", e);
+    }
     assert!(result.is_ok());
-    let items = data[..2].iter().map(ut_clone_productprice).collect::<Vec<_>>();
-    let mset = ProductPriceModelSet { store_id, items };
+    let mut is_dup_err  = false;
+    for _ in 0..3 {
+        let items = data[..2].iter().map(ut_clone_productprice).collect::<Vec<_>>();
+        let mset = ProductPriceModelSet { store_id, items };
+        let result = repo.save(mset).await;
+        assert!(result.is_err());
+        if let Err(e) = result {
+            println!("[unit-test] error : {:?}", e);
+            let dup_err_code = "1062";
+            assert_eq!(e.code, AppErrorCode::RemoteDbServerFailure);
+            is_dup_err  = e.detail.as_ref().unwrap().contains(dup_err_code);
+            if is_dup_err { break; }
+            else { sleep(Duration::from_secs(1)).await }
+        }
+    }
+    assert!(is_dup_err);
+}
+
+async fn ut_delete_common_setup(store_id:u32, repo:Arc<Box<dyn AbsProductPriceRepo>>)
+{
+    let data = ut_pprice_data();
+    let mset = {
+        let items = data[..7].iter().map(ut_clone_productprice).collect::<Vec<_>>();
+        ProductPriceModelSet { store_id, items }
+    };
     let result = repo.save(mset).await;
+    assert!(result.is_ok());
+    let result = repo.fetch(store_id, vec![
+                    (ProductType::Item, 1005), (ProductType::Package, 1004),
+                    (ProductType::Package, 1002), (ProductType::Item, 1007)
+                 ]).await;
+    assert!(result.is_ok());
+    if let Ok(ms) = result {
+        assert_eq!(ms.items.len(), 4);
+    }
+}
+
+#[cfg(feature="mariadb")]
+#[tokio::test(flavor ="multi_thread", worker_threads = 1)]
+async fn delete_some_ok()
+{
+    let ds = dstore_ctx_setup();
+    let repo = app_repo_product_price(ds).await.unwrap();
+    let repo = Arc::new(repo);
+    ut_delete_common_setup(125, repo.clone()).await;
+    ut_delete_common_setup(126, repo.clone()).await;
+    let pids = ProductPriceDeleteDto {
+        items:Some(vec![1007, 1005]), pkgs:Some(vec![1004,1002]),
+        item_type:ProductType::Item , pkg_type:ProductType::Package
+    };
+    let result = repo.delete(125, pids).await ;
+    assert!(result.is_ok());
+    let pids = vec![
+        (ProductType::Item, 1005), (ProductType::Package, 1004), (ProductType::Package, 1002),
+        (ProductType::Item, 1007), (ProductType::Item, 1003),  (ProductType::Package, 1006),
+        (ProductType::Item, 1001)
+    ];
+    let result = repo.fetch(125, pids.clone()).await;
+    assert!(result.is_ok());
+    if let Ok(ms) = result {
+        assert_eq!(ms.items.len(), 3);
+        ms.items.into_iter().map(|m| {
+            let exists = match &m.product_id {
+                1001 | 1003 | 1006 => true,
+                _others => false,
+            };
+            assert!(exists);
+        }).count();
+    }
+    let result = repo.fetch(126, pids.clone()).await;
+    assert!(result.is_ok());
+    if let Ok(ms) = result {
+        assert_eq!(ms.items.len(), 7);
+    }
+}
+
+#[cfg(feature="mariadb")]
+#[tokio::test]
+async fn delete_some_empty()
+{
+    let ds = dstore_ctx_setup();
+    let repo = app_repo_product_price(ds).await.unwrap();
+    let pids = ProductPriceDeleteDto {
+        items:Some(vec![]), pkgs:None,
+        item_type:ProductType::Item , pkg_type:ProductType::Package
+    };
+    let result = repo.delete(126, pids).await ;
     assert!(result.is_err());
     if let Err(e) = result {
-        // println!("[unit-test] error : {:?}", e);
-        let expect_lowlvl_err_code = "1062";
-        assert_eq!(e.code, AppErrorCode::RemoteDbServerFailure);
-        assert!(e.detail.as_ref().unwrap().contains(expect_lowlvl_err_code));
+        assert_eq!(e.code, AppErrorCode::EmptyInputData);
+    }
+}
+
+#[cfg(feature="mariadb")]
+#[tokio::test(flavor ="multi_thread", worker_threads = 1)]
+async fn delete_all_ok()
+{
+    let ds = dstore_ctx_setup();
+    let repo = app_repo_product_price(ds).await.unwrap();
+    let repo = Arc::new(repo);
+    ut_delete_common_setup(127, repo.clone()).await;
+    ut_delete_common_setup(128, repo.clone()).await;
+    let result = repo.delete_all(128).await ;
+    assert!(result.is_ok());
+    let pids = vec![
+        (ProductType::Item, 1005), (ProductType::Package, 1004), (ProductType::Package, 1002),
+        (ProductType::Item, 1007), (ProductType::Item, 1003),  (ProductType::Package, 1006),
+    ];
+    let result = repo.fetch(128, pids.clone()).await;
+    assert!(result.is_ok());
+    if let Ok(ms) = result {
+        assert!(ms.items.is_empty());
+    }
+    let result = repo.fetch(127, pids).await;
+    assert!(result.is_ok());
+    if let Ok(ms) = result {
+        assert_eq!(ms.items.len(), 6);
     }
 }

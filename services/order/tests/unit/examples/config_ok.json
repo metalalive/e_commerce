@@ -63,9 +63,9 @@
 	    "srv_type": "MariaDB",
 	    "db_name": "test_ecommerce_order",
 	    "confidentiality_path": "backend_apps/databases/order_service",
-	    "max_conns": 2,
-	    "acquire_timeout_secs": 8,
-	    "idle_timeout_secs": 30
+	    "max_conns": 6,
+	    "acquire_timeout_secs": 30,
+	    "idle_timeout_secs": 47
 	}
     ],
     "rpc": {

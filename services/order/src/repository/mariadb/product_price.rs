@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset, NaiveDateTime};
+use chrono::{FixedOffset, NaiveDateTime};
 use sqlx::{Acquire, Transaction, MySql, Executor, Statement, IntoArguments, Arguments, Row};
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 
@@ -19,6 +19,8 @@ use super::DATETIME_FORMAT;
 struct InsertArg(u32, Vec<ProductPriceModel>);
 struct UpdateArg(u32, Vec<ProductPriceModel>);
 struct FetchOneArg(u32, Vec<(ProductType,u64)>);
+struct DeleteSomeArg(u32, ProductPriceDeleteDto);
+struct DeleteAllArg(u32);
 
 impl InsertArg {
     fn sql_pattern(num_batch:usize) -> String {
@@ -154,6 +156,60 @@ impl<'q> IntoArguments<'q, MySql> for FetchOneArg {
 impl Into<(String, MySqlArguments)> for FetchOneArg {
     fn into(self) -> (String, MySqlArguments) {
         (Self::sql_pattern(self.1.len()), self.into_arguments())
+    }
+}
+
+impl DeleteSomeArg {
+    fn sql_pattern(num_items:usize, num_pkgs:usize) -> String { 
+        let items_ph = (0..num_items).into_iter().map(|_| "?")
+            .collect::<Vec<_>>().join(",");
+        let pkgs_ph = (0..num_pkgs).into_iter().map(|_| "?")
+            .collect::<Vec<_>>().join(",");
+        format!("DELETE FROM `product_price` WHERE `store_id`=? AND ((`product_type`=? AND `product_id` IN ({})) OR (`product_type`=? AND `product_id` IN ({}))  )", items_ph, pkgs_ph)
+    }
+}
+impl<'q> IntoArguments<'q, MySql> for DeleteSomeArg {
+    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+        let mut out = MySqlArguments::default();
+        let (store_id, data) = (self.0, self.1);
+        out.add(store_id);
+        let item_typ : u8 = data.item_type.into();
+        out.add(item_typ.to_string());
+        data.items.unwrap().iter().map(|product_id| {
+            out.add(product_id.clone());
+        }).count();
+        let pkg_typ : u8 = data.pkg_type.into();
+        out.add(pkg_typ.to_string());
+        data.pkgs.unwrap().iter().map(|product_id| {
+            out.add(product_id.clone());
+        }).count();
+        out
+    }
+}
+impl TryInto<(String, MySqlArguments)> for DeleteSomeArg {
+    type Error = AppError;
+
+    fn try_into(self) -> DefaultResult<(String, MySqlArguments), Self::Error> {
+        let empty = vec![];
+        let items_r = self.1.items.as_ref().unwrap_or(&empty);
+        let pkgs_r  = self.1.pkgs.as_ref().unwrap_or(&empty);
+        if items_r.is_empty() && pkgs_r.is_empty() {
+            let detail = format!("delete-product-price");
+            Err(AppError { code: AppErrorCode::EmptyInputData, detail: Some(detail) })
+        } else {
+            Ok((Self::sql_pattern(items_r.len(), pkgs_r.len()),
+             self.into_arguments()))
+        }
+    }
+}
+
+impl Into<(String, MySqlArguments)> for DeleteAllArg {
+    fn into(self) -> (String, MySqlArguments) {
+        let sql_patt = format!("DELETE FROM `product_price` WHERE `store_id`=?");
+        let mut args = MySqlArguments::default();
+        let store_id  = self.0;
+        args.add(store_id);
+        (sql_patt, args)
     }
 }
 
@@ -293,18 +349,33 @@ impl ProductPriceMariaDbRepo {
         let rows = query.fetch_all(exec).await ?;
         Ok(rows)
     }
+    
+    async fn _delete_common(&self, sql_patt:String, args:MySqlArguments)
+        -> DefaultResult<(), AppError> 
+    {
+        let mut conn = self.db.acquire().await ?;
+        let stmt = conn.prepare(sql_patt.as_str()).await ?;
+        let query = stmt.query_with(args);
+        let exec = conn.as_mut();
+        let _resultset = query.execute(exec).await ?;
+        Ok(()) // TODO, logging result
+    }
 } // end of impl ProductPriceMariaDbRepo
 
 #[async_trait]
 impl AbsProductPriceRepo for ProductPriceMariaDbRepo
 {
-    async fn delete_all(&self, _store_id:u32) -> DefaultResult<(), AppError>
+    async fn delete_all(&self, store_id:u32) -> DefaultResult<(), AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let (sql_patt, args) = DeleteAllArg(store_id).into();
+        self._delete_common(sql_patt, args).await?;
+        Ok(())
     }
-    async fn delete(&self, _store_id:u32, ids:ProductPriceDeleteDto) -> DefaultResult<(), AppError>
+    async fn delete(&self, store_id:u32, ids:ProductPriceDeleteDto) -> DefaultResult<(), AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let (sql_patt, args) = DeleteSomeArg(store_id, ids).try_into()?;
+        self._delete_common(sql_patt, args).await?;
+        Ok(())
     }
     async fn fetch(&self, store_id:u32, ids:Vec<(ProductType,u64)>) -> DefaultResult<ProductPriceModelSet, AppError>
     {
