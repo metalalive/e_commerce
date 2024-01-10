@@ -1,5 +1,7 @@
 pub(super) mod product_policy;
 pub(super) mod product_price;
+pub(super) mod stock;
+pub(super) mod order;
 
 use std::io::ErrorKind;
 use sqlx::error::Error;

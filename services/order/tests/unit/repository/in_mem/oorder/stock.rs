@@ -24,7 +24,8 @@ async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
         curr_time = Some(Local::now().into());
     }
     let ds = in_mem_ds_ctx_setup::<T>(nitems);
-    let result = OrderInMemRepo::build(ds, curr_time.unwrap()).await;
+    let mem = ds.in_mem.as_ref().unwrap();
+    let result = OrderInMemRepo::new(mem.clone(), curr_time.unwrap()).await;
     assert_eq!(result.is_ok(), true);
     result.unwrap()
 }

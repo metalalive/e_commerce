@@ -86,10 +86,6 @@ impl AbsOrderStockRepo for MockStockRepo {
 
 #[async_trait]
 impl AbsOrderRepo for MockOrderRepo {
-    async fn new(_ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
-        where Self:Sized
-    { Err(AppError {code:AppErrorCode::NotImplemented, detail:None}) }
-    
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>> {
         let mock_return = if let Ok(mut g) = self._mocked_stock_return.lock() {
             let v = g.get_mut();

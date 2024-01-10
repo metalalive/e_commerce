@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 use tokio::sync::Mutex;
 
-use crate::AppDataStoreContext;
 use crate::api::dto::{OrderLinePayDto, PhoneNumberDto, ShippingMethod};
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::constant::ProductType;
@@ -378,16 +377,8 @@ impl Into<ShippingOptionModel> for AppInMemFetchedSingleRow {
 
 
 #[async_trait]
-impl AbsOrderRepo for OrderInMemRepo {
-    async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
-        where Self:Sized
-    {
-        let timenow = LocalTime::now().into();
-        match Self::build(ds, timenow).await {
-            Ok(obj) => Ok(Box::new(obj)),
-            Err(e) => Err(e)
-        }
-    }
+impl AbsOrderRepo for OrderInMemRepo
+{
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>
     { self._stock.clone() }
 
@@ -594,27 +585,22 @@ impl AbsOrderRepo for OrderInMemRepo {
 
 
 impl OrderInMemRepo {
-    pub async fn build(ds:Arc<AppDataStoreContext>, curr_time:DateTime<FixedOffset>)
+    pub async fn new(m: Arc<Box<dyn AbstInMemoryDStore>>, timenow:DateTime<FixedOffset>)
         -> DefaultResult<Self, AppError>
     {
-        if let Some(m) = &ds.in_mem {
-            m.create_table(_contact::TABLE_LABEL).await?;
-            m.create_table(_phy_addr::TABLE_LABEL).await?;
-            m.create_table(_ship_opt::TABLE_LABEL).await?;
-            m.create_table(_orderline::TABLE_LABEL).await?;
-            m.create_table(_order_toplvl_meta::TABLE_LABEL).await?;
-            let stock_repo = StockLvlInMemRepo::build(m.clone(), curr_time).await ?;
-            let job_time = DateTime::parse_from_rfc3339("2019-03-13T12:59:54+08:00").unwrap();
-            let obj = Self {
-                _sched_job_last_launched: Mutex::new(job_time),
-                _stock:Arc::new(Box::new(stock_repo)),
-               datastore:m.clone(),
-            };
-            Ok(obj)
-        } else {
-            Err(AppError {code:AppErrorCode::MissingDataStore,
-                detail: Some(format!("in-memory"))}  )
-        }
+        m.create_table(_contact::TABLE_LABEL).await?;
+        m.create_table(_phy_addr::TABLE_LABEL).await?;
+        m.create_table(_ship_opt::TABLE_LABEL).await?;
+        m.create_table(_orderline::TABLE_LABEL).await?;
+        m.create_table(_order_toplvl_meta::TABLE_LABEL).await?;
+        let stock_repo = StockLvlInMemRepo::build(m.clone(), timenow).await ?;
+        let job_time = DateTime::parse_from_rfc3339("2019-03-13T12:59:54+08:00").unwrap();
+        let obj = Self {
+            _sched_job_last_launched: Mutex::new(job_time),
+            _stock:Arc::new(Box::new(stock_repo)),
+           datastore: m,
+        };
+        Ok(obj)
     }
     async fn fetch_lines_common(&self, keys:Vec<String>)
         -> DefaultResult<Vec<OrderLineModel>, AppError>

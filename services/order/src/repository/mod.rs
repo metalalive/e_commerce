@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::vec::Vec;
 use std::result::Result as DefaultResult;
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, Local as LocalTime};
 
 use crate::AppDataStoreContext;
 use crate::api::dto::OrderLinePayDto;
@@ -37,6 +37,9 @@ use mariadb::product_policy::ProductPolicyMariaDbRepo;
 #[cfg(feature="mariadb")]
 use mariadb::product_price::ProductPriceMariaDbRepo;
 
+#[cfg(feature="mariadb")]
+use mariadb::order::OrderMariaDbRepo;
+
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads
 // , it is the reason to add `Send` and `Sync` as super-traits
@@ -44,7 +47,6 @@ use mariadb::product_price::ProductPriceMariaDbRepo;
 pub trait AbstProductPolicyRepo : Sync + Send
 {
     async fn fetch(&self, ids:Vec<(ProductType, u64)>) -> DefaultResult<ProductPolicyModelSet, AppError>;
-    
     async fn save(&self, ppset:ProductPolicyModelSet) -> DefaultResult<(), AppError>;
     // TODO, delete operation
 }
@@ -64,10 +66,7 @@ pub trait AbsProductPriceRepo : Sync + Send
 
 
 #[async_trait]
-pub trait AbsOrderRepo : Sync + Send {
-    async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
-        where Self:Sized;
-
+pub trait AbsOrderRepo: Sync + Send {
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
     
     async fn create (&self, lines:OrderLineModelSet, bl:BillingModel, sh:ShippingModel)
@@ -191,10 +190,17 @@ pub async fn app_repo_product_price (ds:Arc<AppDataStoreContext>)
     }
 }
 
-pub async fn app_repo_order (ds:Arc<AppDataStoreContext>)
+pub async fn app_repo_order(ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
-{ // TODO, consider runtime configuration for following repositories
-    OrderInMemRepo::new(ds).await
+{
+    let timenow = LocalTime::now().fixed_offset();
+    if let Some(m) = &ds.in_mem {
+        let obj = OrderInMemRepo::new(m.clone(), timenow).await ?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError {code:AppErrorCode::MissingDataStore,
+            detail: Some(format!("unknown-type"))}  )
+    }
 }
 pub async fn app_repo_order_return (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>

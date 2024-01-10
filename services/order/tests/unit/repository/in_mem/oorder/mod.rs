@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+
 use order::api::dto::{PhoneNumberDto, CountryCode, ShippingMethod};
 use order::constant::ProductType;
 use order::datastore::AppInMemoryDStore;
@@ -19,7 +20,9 @@ mod oline_return;
 async fn in_mem_repo_ds_setup (nitems:u32) -> OrderInMemRepo
 {
     let ds = in_mem_ds_ctx_setup::<AppInMemoryDStore>(nitems);
-    let result = OrderInMemRepo::build(ds, Local::now().into()).await;
+    let mem = ds.in_mem.as_ref().unwrap();
+    let timenow = Local::now().fixed_offset();
+    let result = OrderInMemRepo::new(mem.clone(), timenow).await;
     assert_eq!(result.is_ok(), true);
     result.unwrap()
 }
