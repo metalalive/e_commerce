@@ -54,7 +54,9 @@
     </changeSet>
     <changeSet id="add_table__product_price" author="T.H.">
         <comment>
-            price for all products on sale, the columns `start_tz_utc` and `end_tz_utc` indicate the timezone and number of minutes from local time to UTC for `start_after` and `end_before` respectively
+            price for all products on sale,
+            - the columns `start_tz_utc` and `end_tz_utc` indicate the timezone and number of minutes from local time to UTC for `start_after` and `end_before` respectively
+            - In this application, it is unnecessary to specify microsecond precision for product price and stock level check, mariaDB defaults to zero without configuring the precision
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE  `product_price` (
@@ -75,6 +77,34 @@
     </changeSet>
     <changeSet id="tag_version_0.0.3" author="T.H.">
         <tagDatabase tag="0.0.3" />
+    </changeSet>
+    <changeSet id="add_table__stock_level_inventory" author="T.H.">
+        <comment>
+            stock level for all products on sale,
+            - `qty_cancelled` indicates quantity of products has been cancelled by (internal) inventory service, the quantity which is no longer available to customers.
+            - `expiry` always represents some time with UTC, time zone is not essential to save for this application
+            - currently `expiry` is part of natural (primary) key, when the data grows to millions of records, consider to replace `expiry` column with some surrogate key.
+            - mariaDB automatically modifies value of a timestamp column (`expiry` for example) if it is not prsent in a updating row
+              - currently in this application, `expiry` cannot be modified once created (TODO, fix this problem)
+              - by explcitly adding `DEFAULT xxx`, it can avoid MariaDB from appending `ON UPDATE CURRENT_TIMESTAMP` syntax to the timestamp column definition.
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `stock_level_inventory` (
+                `store_id`      INT UNSIGNED NOT NULL,
+                `product_type`  ENUM('1', '2') NOT NULL, 
+                `product_id`    BIGINT UNSIGNED NOT NULL,
+                `expiry`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `qty_total`     INT UNSIGNED NOT NULL,
+                `qty_cancelled` INT UNSIGNED NOT NULL,
+                PRIMARY KEY (`store_id`, `product_type`, `product_id`, `expiry`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `stock_level_inventory`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.4" author="T.H.">
+        <tagDatabase tag="0.0.4" />
     </changeSet>
 </databaseChangeLog>
 

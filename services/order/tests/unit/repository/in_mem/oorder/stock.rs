@@ -89,7 +89,7 @@ const UT_INIT_DATA_STORE: [StoreStockModel; 4] =
 ]; // end of ut_init_data_store
 
 #[tokio::test]
-async fn in_mem_save_fetch_ok ()
+async fn save_fetch_ok()
 { // this test case verifies product stock level, each has different product ID
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(12, None).await;
     let stockrepo = repo.stock();
@@ -128,11 +128,11 @@ async fn in_mem_save_fetch_ok ()
         assert_eq!(actual_rsv_detail.get("BatMan").unwrap().clone(), 1u32);
         assert_eq!(actual_rsv_detail.get("AceMan").unwrap().clone(), 3u32);
     }
-} // end of in_mem_save_fetch_ok
+} // end of  save_fetch_ok
 
 
 #[tokio::test]
-async fn in_mem_update_existing_ok ()
+async fn update_existing_ok()
 {
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(8, None).await;
     let stockrepo = repo.stock();
@@ -190,11 +190,11 @@ async fn in_mem_update_existing_ok ()
         verify_stocklvl_model(&actual, &expect_slset, [0,0], false);
         verify_stocklvl_model(&actual, &expect_slset, [0,1], false);
     }
-} // end of fn in_mem_update_existing_ok
+} // end of fn update_existing_ok
 
 
 #[tokio::test]
-async fn in_mem_same_product_diff_expiry ()
+async fn same_product_diff_expiry ()
 {
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(8, None).await;
     let stockrepo = repo.stock();
@@ -259,11 +259,11 @@ async fn in_mem_same_product_diff_expiry ()
         verify_stocklvl_model(&actual, &expect_slset_ks2, [0,0], true);
         verify_stocklvl_model(&actual, &expect_slset, [0,0], false);
     }
-} // end of fn in_mem_same_product_diff_expiry
+} // end of fn same_product_diff_expiry
 
 
 #[tokio::test]
-async fn in_mem_save_dstore_error ()
+async fn save_dstore_error()
 {
     let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4, None).await;
     let stockrepo = repo.stock();
@@ -281,7 +281,7 @@ async fn in_mem_save_dstore_error ()
 }
 
 #[tokio::test]
-async fn in_mem_fetch_dstore_error ()
+async fn fetch_dstore_error()
 {
     let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4, None).await;
     let stockrepo = repo.stock();
@@ -333,7 +333,7 @@ fn mock_reserve_usr_cb_1 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
 
 
 #[tokio::test]
-async fn in_mem_try_reserve_ok ()
+async fn try_reserve_ok ()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
@@ -410,7 +410,7 @@ async fn in_mem_try_reserve_ok ()
         }
         assert_eq!(total_rsved, (3+2+13));
     }
-} // end of in_mem_try_reserve_ok
+} // end of try_reserve_ok
 
 
 
@@ -452,7 +452,7 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
 } // end of mock_reserve_usr_cb_2
 
 #[tokio::test]
-async fn in_mem_try_reserve_shortage ()
+async fn try_reserve_shortage()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
@@ -518,7 +518,7 @@ fn mock_reserve_usr_cb_3 (_ms:&mut StockLevelModelSet, _req:&OrderLineModelSet)
 }
 
 #[tokio::test]
-async fn in_mem_try_reserve_user_cb_err ()
+async fn try_reserve_user_cb_err()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
@@ -553,7 +553,7 @@ async fn in_mem_try_reserve_user_cb_err ()
             assert_eq!(internal_e.detail.as_ref().unwrap().as_str(), "unit-test");
         }
     }
-} // end of in_mem_try_reserve_user_cb_err
+} // end of try_reserve_user_cb_err
 
 
 fn mock_return_usr_cb_1 (ms:&mut StockLevelModelSet, data:StockLevelReturnDto)
@@ -577,7 +577,7 @@ fn mock_return_usr_cb_1 (ms:&mut StockLevelModelSet, data:StockLevelReturnDto)
 }
 
 #[tokio::test]
-async fn in_mem_try_return_ok()
+async fn try_return_ok()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-11-28T18:46:08.519-08:00").unwrap();
     let mock_rsv_expiry= DateTime::parse_from_rfc3339("2022-11-28T19:15:12.101-08:00").unwrap();
@@ -637,7 +637,7 @@ async fn in_mem_try_return_ok()
             assert_eq!(rsv_table.get("AceMan").unwrap(), &2u32);
         }
     }
-} // end of fn in_mem_try_return_ok
+} // end of fn  try_return_ok
 
 
 fn mock_return_usr_cb_2 (ms:&mut StockLevelModelSet, data:StockLevelReturnDto)
@@ -660,7 +660,7 @@ fn mock_return_usr_cb_2 (ms:&mut StockLevelModelSet, data:StockLevelReturnDto)
 }
 
 #[tokio::test]
-async fn in_mem_try_return_input_err()
+async fn  try_return_input_err()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-11-28T18:46:08.519-08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2022-11-28T17:15:12.101-08:00").unwrap();
@@ -705,4 +705,4 @@ async fn in_mem_try_return_input_err()
             assert_eq!(rsv_table.get("DarkLord").unwrap(), &3u32);
         } // should not be modified
     }
-} // end of fn in_mem_try_return_input_err
+} // end of fn  try_return_input_err
