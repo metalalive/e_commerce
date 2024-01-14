@@ -36,45 +36,45 @@ fn ut_init_data_product() -> [ProductStockModel;10]
     let rsv_detail_2 = vec![("Joker", 2), ("DarkLord", 3)];
     [   // ------ for insertion --------
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap().into(),
            quantity: StockQuantityModel::new(5, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9003, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap().into(),
            quantity: StockQuantityModel::new(11, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap().into(),
            quantity: StockQuantityModel::new(15, 0, Some(rsv_detail))
         },
         ProductStockModel { type_:ProductType::Item, id_:9005, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap().into(),
            quantity: StockQuantityModel::new(8, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap().into(),
            quantity: StockQuantityModel::new(14, 0, None)
         },
         // ---------------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap().into(),
            quantity: StockQuantityModel::new(15, 7, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap().into(),
            quantity: StockQuantityModel::new(18, 1, None)
         },
         // ---------------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.035-01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.035-01:00").unwrap().into(),
            quantity: StockQuantityModel::new(22, 8, Some(rsv_detail_2))
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-11-09T12:30:10.035-01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-11-09T12:30:10.035-01:00").unwrap().into(),
            quantity: StockQuantityModel::new(20, 1, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2020-03-15T12:55:08.035-11:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2020-03-15T12:55:08.035-11:00").unwrap().into(),
            quantity: StockQuantityModel::new(18, 3, None)
         },
     ]

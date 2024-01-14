@@ -116,8 +116,9 @@ impl Into<StockLevelModelSet> for AppInMemFetchedSingleTable {
                     .unwrap().parse().unwrap();
                 let expiry = row.get::<usize>(_stockm::InMemColIdx::Expiry.into()).unwrap();
                 let expiry = DateTime::parse_from_rfc3339(&expiry).unwrap();
-                let m = ProductStockModel {is_create:false, type_:prod_typ, id_:prod_id,
-                    expiry, quantity: StockQuantityModel::new(total, cancelled, rsv_detail)
+                let m = ProductStockModel {
+                    is_create:false, type_:prod_typ, id_:prod_id, expiry: expiry.into(),
+                    quantity: StockQuantityModel::new(total, cancelled, rsv_detail)
                 };
                 store_rd.products.push(m);
             }

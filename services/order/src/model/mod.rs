@@ -45,13 +45,3 @@ impl PartialEq for BaseProductIdentity {
         !self.eq(other)
     }
 }
-
-fn dtime_without_millis(value:&DateTime<FixedOffset>) -> DateTime<FixedOffset>
-{ // ignore detail less than one second.
-    let orig_tz = value.timezone();
-    let ts_secs = value.timestamp(); // erase milliseconds
-    let _dt = DateTime::from_timestamp(ts_secs, 0).unwrap();
-    let out = _dt.with_timezone(&orig_tz);
-    //println!("time1:{}, time2: {}", self.expiry.to_rfc3339(), out.to_rfc3339());
-    out
-}

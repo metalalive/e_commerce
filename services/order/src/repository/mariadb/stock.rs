@@ -45,9 +45,10 @@ impl<'q> IntoArguments<'q, MySql> for InsertQtyArg
     fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
         let mut out = MySqlArguments::default();
         self.0.into_iter().map(|(store_id, p)| {
-            let expiry: DateTime<Utc> = p.expiry_without_millis().into();
-            let (p_typ, prod_id, q_total, q_cancelled) = (
-                p.type_, p.id_,  p.quantity.total, p.quantity.cancelled);
+            let (expiry, p_typ, prod_id, q_total, q_cancelled) = (
+                p.expiry_without_millis(), p.type_, p.id_,
+                p.quantity.total, p.quantity.cancelled
+            );
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -90,7 +91,6 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg
             let (p_typ, prod_id, expiry, q_total) = ( p.type_.clone(), p.id_,
                         p.expiry_without_millis(), p.quantity.total);
             let prod_typ_num:u8 = p_typ.into();
-            let expiry: DateTime<Utc> = expiry.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
             out.add(prod_id);
@@ -101,7 +101,6 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg
             let (p_typ, prod_id, expiry, q_cancelled) = ( p.type_.clone(), p.id_,
                 p.expiry_without_millis(), p.quantity.cancelled);
             let prod_typ_num:u8 = p_typ.into();
-            let expiry: DateTime<Utc> = expiry.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
             out.add(prod_id);
@@ -109,8 +108,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg
             out.add(q_cancelled);
         }).count();
         self.0.into_iter().map(|(store_id, p)| {
-            let expiry: DateTime<Utc> = p.expiry_without_millis().into();
-            let (p_typ, prod_id) = (p.type_, p.id_,);
+            let (expiry, p_typ, prod_id) = (p.expiry_without_millis(), p.type_, p.id_);
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -144,7 +142,6 @@ impl<'q> IntoArguments<'q, MySql> for FetchBaseQtyArg
             let (store_id, p_typ, prod_id, expiry) = (co.store_id, co.product_type,
                                                       co.product_id, co.expiry );
             let prod_typ_num:u8 = p_typ.into();
-            let expiry: DateTime<Utc> = expiry.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
             out.add(prod_id);

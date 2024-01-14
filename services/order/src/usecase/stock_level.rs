@@ -16,7 +16,7 @@ impl StockLevelUseCase {
     {
         let ids = data.iter().map(|d| ProductStockIdentity {
             store_id:d.store_id, product_type: d.product_type.clone(),
-            product_id: d.product_id, expiry:d.expiry }
+            product_id: d.product_id, expiry:d.expiry.into() }
         ).collect();
         let stockrepo = repo.stock();
         let saved = stockrepo.fetch(ids).await?;

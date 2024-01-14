@@ -19,48 +19,48 @@ fn ut_mock_saved_product() -> [ProductStockModel;11]
     let mock_rsv_detail = vec![("ChadBookedThis", 1u32)];
     [
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap().into() ,
            quantity: StockQuantityModel::new(5, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9003, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap().into(),
            quantity: StockQuantityModel::new(11, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9004, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap().into(),
            quantity: StockQuantityModel::new(15, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9005, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap().into(),
            quantity: StockQuantityModel::new(8, 1, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap().into(),
            quantity: StockQuantityModel::new(14, 0, None)
         },
         //--------
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2024-11-20T04:50:18.004+01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2024-11-20T04:50:18.004+01:00").unwrap().into(),
            quantity: StockQuantityModel::new(11, 2, Some(mock_rsv_detail.clone()))
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2024-11-23T05:11:57+01:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2024-11-23T05:11:57+01:00").unwrap().into(),
            quantity: StockQuantityModel::new(13, 1, Some(mock_rsv_detail.clone()))
         },
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-10-21T18:40:30.040+09:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-10-21T18:40:30.040+09:00").unwrap().into(),
            quantity: StockQuantityModel::new(5, 1, Some(mock_rsv_detail.clone()))
         },
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-10-07T08:01:00+09:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-10-07T08:01:00+09:00").unwrap().into(),
            quantity: StockQuantityModel::new(19, 10, Some(mock_rsv_detail.clone()))
         },
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-10-18T07:40:33.040+09:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-10-18T07:40:33.040+09:00").unwrap().into(),
            quantity: StockQuantityModel::new(6, 1, Some(mock_rsv_detail.clone()))
         },
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-10-09T07:58:30.1008+09:00").unwrap(),
+           expiry:DateTime::parse_from_rfc3339("2023-10-09T07:58:30.1008+09:00").unwrap().into(),
            quantity: StockQuantityModel::new(10, 1, Some(mock_rsv_detail.clone()))
         },
     ] // end of array
@@ -79,19 +79,19 @@ fn add_update_mix_ok()
     let newdata = vec![
         InventoryEditStockLevelDto {qty_add: 1, store_id: 1013,
             product_type: saved_products[0].type_.clone(), product_id: saved_products[0].id_,
-            expiry: saved_products[0].expiry.clone()  },
+            expiry: saved_products[0].expiry.fixed_offset()  },
         InventoryEditStockLevelDto {qty_add: 12, store_id: 1013, product_type: ProductType::Item,
-            expiry: saved_products[0].expiry.clone(), product_id: 5501  },
+            expiry: saved_products[0].expiry.fixed_offset(), product_id: 5501  },
         InventoryEditStockLevelDto {qty_add: 19, store_id: 1015, product_type: ProductType::Package,
-            expiry: saved_products[1].expiry.clone(), product_id: 5502  },
+            expiry: saved_products[1].expiry.fixed_offset(), product_id: 5502  },
         // the items below represent the same product with different expiry,
         // in this app, they are considered as separate stock-level model instances
         InventoryEditStockLevelDto {qty_add: -2, store_id: 1014,
             product_type: saved_products[3].type_.clone(), product_id: saved_products[3].id_,
-            expiry: saved_products[3].expiry.clone()  },
+            expiry: saved_products[3].expiry.fixed_offset()  },
         InventoryEditStockLevelDto {qty_add: 23, store_id: 1014,
             product_type: saved_products[3].type_.clone(), product_id: saved_products[3].id_,
-            expiry: dt2.clone() },
+            expiry: dt2.fixed_offset() },
     ];
     let expect_updated = {
         let mut out = mset.clone();
@@ -135,7 +135,7 @@ fn update_cancelled_more_than_total()
     let newdata = vec![
         InventoryEditStockLevelDto {qty_add: -3, store_id: 1013,
             product_type: saved_products[4].type_.clone(), product_id: saved_products[4].id_,
-            expiry: saved_products[4].expiry.clone()  },
+            expiry: saved_products[4].expiry.fixed_offset()  },
     ];
     assert_eq!(mset.stores[0].products[0].quantity.total, 14);
     assert_eq!(mset.stores[0].products[0].quantity.cancelled, 0);
@@ -151,7 +151,7 @@ fn update_cancelled_more_than_total()
     let newdata = vec![
         InventoryEditStockLevelDto {qty_add: -13, store_id: 1013,
             product_type: saved_products[4].type_.clone(), product_id: saved_products[4].id_,
-            expiry: saved_products[4].expiry.clone()  },
+            expiry: saved_products[4].expiry.fixed_offset()  },
     ];
     let result = mset.update(newdata);
     assert!(result.is_ok());
@@ -171,7 +171,7 @@ fn add_instance_error()
     let mset = StockLevelModelSet{ stores: vec![]};
     let newdata = vec![
         InventoryEditStockLevelDto {qty_add: -3, store_id: 1013, product_type: ProductType::Item,
-            product_id: 234, expiry: saved_products[0].expiry.clone() },
+            product_id: 234, expiry: saved_products[0].expiry.fixed_offset() },
     ];
     let result = mset.update(newdata);
     assert!(result.is_err());
@@ -509,9 +509,9 @@ fn return_by_id_ok()
     let data = StockLevelReturnDto {
         order_id:mock_oid.to_string(), items: vec![
         InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
-            product_id:9002, qty_add:2, expiry:mset.stores[1].products[0].expiry.clone() },
+            product_id:9002, qty_add:2, expiry:mset.stores[1].products[0].expiry.fixed_offset() },
         InventoryEditStockLevelDto {store_id:1013, product_type:ProductType::Item,
-            product_id:9006, qty_add:2, expiry:mset.stores[0].products[1].expiry.clone() },
+            product_id:9006, qty_add:2, expiry:mset.stores[0].products[1].expiry.fixed_offset() },
     ]}; // the expiry time has to be exactly the same
     let error = mset.return_by_id(data);
     assert!(error.is_empty());
@@ -537,10 +537,10 @@ fn return_by_id_nonexist()
         order_id:mock_oid.to_string(), items: vec![
         InventoryEditStockLevelDto {
             store_id:1014, product_type:ProductType::Item, product_id:9002, qty_add:1,
-            expiry:mset.stores[1].products[0].expiry + Duration::milliseconds(43) },
+            expiry:mset.stores[1].products[0].expiry.fixed_offset() + Duration::milliseconds(43) },
         InventoryEditStockLevelDto {
             store_id:1013, product_type:ProductType::Item, product_id:9006, qty_add:1,
-            expiry:mset.stores[0].products[1].expiry + Duration::milliseconds(16) },
+            expiry:mset.stores[0].products[1].expiry.fixed_offset() + Duration::milliseconds(16) },
     ]};
     let error = mset.return_by_id(data);
     assert_eq!(error.len(), 2);
@@ -560,9 +560,9 @@ fn return_by_id_invalid_qty()
     let data = StockLevelReturnDto {
         order_id:mock_oid.to_string(), items: vec![
         InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
-            product_id:9002, qty_add:6, expiry:mset.stores[1].products[0].expiry.clone() },
+            product_id:9002, qty_add:6, expiry:mset.stores[1].products[0].expiry.fixed_offset() },
         InventoryEditStockLevelDto {store_id:1013, product_type:ProductType::Item,
-            product_id:9006, qty_add:7, expiry:mset.stores[0].products[1].expiry.clone() },
+            product_id:9006, qty_add:7, expiry:mset.stores[0].products[1].expiry.fixed_offset() },
     ]};
     let error = mset.return_by_id(data);
     assert_eq!(error.len(), 2);

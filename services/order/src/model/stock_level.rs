@@ -4,8 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::RandomState;
 use std::result::Result as DefaultResult;
 
-use chrono::DateTime;
-use chrono::offset::FixedOffset;
+use chrono::{DateTime, Utc};
 
 use crate::api::rpc::dto::{
     InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto, StockReturnErrorDto, StockReturnErrorReason
@@ -14,13 +13,13 @@ use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason, 
 use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 
-use super::{OrderLineModelSet, OrderLineModel, BaseProductIdentity, dtime_without_millis};
+use super::{OrderLineModelSet, OrderLineModel, BaseProductIdentity};
 
 pub struct ProductStockIdentity {
     pub store_id: u32,
     pub product_type: ProductType,
     pub product_id: u64, // TODO, declare type alias
-    pub expiry: DateTime<FixedOffset>,
+    pub expiry: DateTime<Utc>,
 }
 pub type ProductStockIdentity2 = BaseProductIdentity; // TODO, rename
 
@@ -34,7 +33,7 @@ pub struct StockQuantityModel {
 pub struct ProductStockModel {
     pub type_: ProductType,
     pub id_: u64, // TODO, declare type alias
-    pub expiry: DateTime<FixedOffset>,
+    pub expiry: DateTime<Utc>,
     pub quantity: StockQuantityModel,
     pub is_create: bool,
 }
@@ -150,8 +149,15 @@ impl StockQuantityModel {
 } // end of impl StockQuantityModel
 
 impl ProductStockModel {
-    pub fn expiry_without_millis(&self) -> DateTime<FixedOffset>
-    { dtime_without_millis(&self.expiry) }
+    pub fn expiry_without_millis(&self) -> DateTime<Utc>
+    {
+        let orig_tz = self.expiry.timezone();
+        let ts_secs = self.expiry.timestamp(); // erase milliseconds
+        let _dt = DateTime::from_timestamp(ts_secs, 0).unwrap();
+        let out = _dt.with_timezone(&orig_tz);
+        //println!("time1:{}, time2: {}", self.expiry.to_rfc3339(), out.to_rfc3339());
+        out
+    }
 }
 
 impl StoreStockModel {
@@ -243,7 +249,7 @@ impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
             m.products.into_iter().map(move |p| {
                 StockLevelPresentDto {
                     quantity: p.quantity.clone().into(), store_id, product_type: p.type_,
-                    product_id: p.id_,  expiry: p.expiry.clone()
+                    product_id: p.id_,  expiry: p.expiry.fixed_offset()
                 }
             })
         }).collect()
@@ -268,7 +274,7 @@ impl StockLevelModelSet {
                 self.stores.last_mut().unwrap()
             }; // TODO,refactor
             let result = store_found.products.iter_mut().find(|m| {
-                let duration = m.expiry - d.expiry;
+                let duration = m.expiry.fixed_offset() - d.expiry ;
                 m.type_==d.product_type && m.id_==d.product_id && duration.num_seconds() == 0
             });
             if let Some(_product_found) = result {
@@ -285,7 +291,7 @@ impl StockLevelModelSet {
             } else { // insert new instance
                 if d.qty_add >= 0 {
                     let new_prod = ProductStockModel {type_: d.product_type.clone(),
-                        id_: d.product_id, expiry: d.expiry, is_create: true, 
+                        id_: d.product_id, expiry: d.expiry.into() , is_create: true, 
                         quantity: StockQuantityModel::new(d.qty_add as u32, 0, None) 
                     };
                     store_found.products.push(new_prod);
