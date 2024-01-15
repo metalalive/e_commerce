@@ -1,15 +1,16 @@
 use std::cmp::min;
 use std::vec::Vec;
-use std::collections::{HashMap, HashSet};
-use std::collections::hash_map::RandomState;
 use std::result::Result as DefaultResult;
 
 use chrono::{DateTime, Utc};
 
 use crate::api::rpc::dto::{
-    InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto, StockReturnErrorDto, StockReturnErrorReason
+    InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto,
+    StockReturnErrorDto, StockReturnErrorReason
 };
-use crate::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason, OrderLineCreateErrNonExistDto};
+use crate::api::web::dto::{
+    OrderLineCreateErrorDto, OrderLineCreateErrorReason, OrderLineCreateErrNonExistDto
+};
 use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 
@@ -24,10 +25,17 @@ pub struct ProductStockIdentity {
 pub type ProductStockIdentity2 = BaseProductIdentity; // TODO, rename
 
 #[derive(Debug)]
+pub struct StockQtyRsvModel {
+    pub oid: String, // order ID
+    pub reserved: u32,
+}
+#[derive(Debug)]
 pub struct StockQuantityModel {
     pub total: u32,
     pub cancelled: u32,
-    rsv_detail: HashMap<String, u32>, // reserved quantity for specific order ID
+    pub booked: u32, // number of booked in all saved orders
+    // quantities of specific order ID
+    pub rsv_detail: Option<StockQtyRsvModel>,
 }
 #[derive(Debug)]
 pub struct ProductStockModel {
@@ -48,7 +56,7 @@ pub struct StockLevelModelSet {
 impl Into<StockQuantityPresentDto> for StockQuantityModel {
     fn into(self) -> StockQuantityPresentDto {
         StockQuantityPresentDto { total: self.total, cancelled: self.cancelled,
-            booked: self.num_booked() }
+            booked: self.booked }
     }
 }
 
@@ -58,10 +66,15 @@ impl Clone for ProductStockIdentity {
             product_id: self.product_id, expiry: self.expiry.clone() }
     }
 }
+impl Clone for StockQtyRsvModel {
+    fn clone(&self) -> Self {
+        Self { oid: self.oid.clone(), reserved: self.reserved }
+    }
+}
 impl Clone for StockQuantityModel {
     fn clone(&self) -> Self {
         Self {total:self.total, cancelled:self.cancelled,
-            rsv_detail:self.rsv_detail.clone() }
+            booked: self.booked, rsv_detail:self.rsv_detail.clone() }
     }
 }
 impl Clone for ProductStockModel {
@@ -81,13 +94,18 @@ impl Clone for StockLevelModelSet {
     }
 }
 
+impl PartialEq for StockQtyRsvModel {
+    fn eq(&self, other: &Self) -> bool {
+        self.oid == other.oid && self.reserved == other.reserved
+    }
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
+}
 impl PartialEq for StockQuantityModel {
     fn eq(&self, other: &Self) -> bool {
-        let b1:HashSet<(&String,&u32), RandomState>  = HashSet::from_iter(self.rsv_detail.iter());
-        let b2 = HashSet::from_iter(other.rsv_detail.iter());
-        let rsv_any_diff = b2.difference(&b1).any(|(_k, _v)| true);
-        self.total == other.total  && rsv_any_diff == false
-            && self.cancelled == other.cancelled
+        self.total == other.total && self.rsv_detail == other.rsv_detail
+            && self.booked == other.booked && self.cancelled == other.cancelled
     }
     fn ne(&self, other: &Self) -> bool {
         !self.eq(other)
@@ -105,44 +123,41 @@ impl PartialEq for ProductStockModel {
 }
 
 impl StockQuantityModel {
-    pub fn new(total:u32, cancelled:u32, detail:Option<Vec<(&str,u32)>>) -> Self
+    pub fn new(total:u32, cancelled:u32, booked:u32,
+               rsv_detail: Option<StockQtyRsvModel>) -> Self
     {
-        let rsv_detail = if let Some(d) = detail {
-            let data_iter = d.into_iter().map(|(k, v)| (k.to_string(), v));
-            HashMap::from_iter(data_iter)
-        } else { HashMap::new() };
-        Self { total, cancelled, rsv_detail }
-    }
-    pub fn reservation(&self) -> &HashMap<String, u32> {
-        &self.rsv_detail
-    }
-    pub fn num_booked(&self) -> u32 {
-        self.rsv_detail.values().sum()
+        Self { total, cancelled, booked, rsv_detail }
     }
     pub fn num_avail(&self) -> u32 {
-        self.total - self.cancelled - self.num_booked()
+        self.total - self.cancelled - self.booked
     }
     pub fn reserve(&mut self, oid:&str, num_req:u32) -> u32
     {
         let n_avail = self.num_avail();
-        let num_taking = min(n_avail, num_req);
+        let mut num_taking = min(n_avail, num_req);
         if num_taking > 0 {
-            if let Some(entry) = self.rsv_detail.get_mut(oid) {
-                *entry += num_taking;
+            if let Some(r) = self.rsv_detail.as_mut() {
+                if r.oid.as_str() == oid {
+                    r.reserved += num_taking;
+                } else {
+                    num_taking = 0;
+                }
             } else {
-                self.rsv_detail.insert(oid.to_string(), num_taking);
+                self.rsv_detail = Some(StockQtyRsvModel {
+                    oid: oid.to_string(), reserved: num_taking });
             }
+        }
+        if num_taking > 0 {
+            self.booked += num_taking;
         }
         num_taking
     }
-    pub fn try_return(&mut self, oid:&str, num_req:u32) -> u32
+    pub fn try_return(&mut self, num_req:u32) -> u32
     {
-        if let Some(entry) = self.rsv_detail.get_mut(oid) {
-            let n_taking = min(*entry, num_req);
-            *entry -= n_taking;
-            if *entry == 0 {
-                let _ = self.rsv_detail.remove(oid);
-            }
+        if let Some(r) = self.rsv_detail.as_mut() {
+            let n_taking = min(r.reserved, num_req);
+            r.reserved -= n_taking;
+            self.booked -= n_taking;
             n_taking
         } else { 0 }
     }
@@ -189,7 +204,7 @@ impl StoreStockModel {
         }
     }
 
-    pub fn return_across_expiry(&mut self, oid:&str, req:InventoryEditStockLevelDto)
+    pub fn return_across_expiry(&mut self, req:InventoryEditStockLevelDto)
         -> Option<StockReturnErrorReason>
     {
         assert!(req.qty_add > 0);
@@ -197,8 +212,8 @@ impl StoreStockModel {
         let _ = self.products.iter().filter(|p| {
             p.type_ == req.product_type && p.id_ == req.product_id
         }).any(|p| {
-            if let Some(num_rsved) = p.quantity.reservation().get(oid) {
-                let num_return  = min(*num_rsved, num_returning);
+            if let Some(rsv) = p.quantity.rsv_detail.as_ref() {
+                let num_return  = min(rsv.reserved, num_returning);
                 num_returning -= num_return;
             }
             num_returning == 0
@@ -208,7 +223,7 @@ impl StoreStockModel {
             let _ = self.products.iter_mut().filter(|p| {
                 p.type_ == req.product_type && p.id_ == req.product_id
             }).any(|p| {
-                let num_returned  = p.quantity.try_return(oid, num_returning);
+                let num_returned  = p.quantity.try_return(num_returning);
                 num_returning -= num_returned;
                 num_returning == 0
             });
@@ -221,7 +236,7 @@ impl StoreStockModel {
         }
     } // end of fn return_across_expiry
     
-    pub fn return_by_id(&mut self, oid:&str, req:InventoryEditStockLevelDto)
+    pub fn return_by_expiry(&mut self, req:InventoryEditStockLevelDto)
         -> Option<StockReturnErrorReason>
     {
         assert!(req.qty_add > 0);
@@ -229,16 +244,16 @@ impl StoreStockModel {
             p.type_ == req.product_type && p.id_ == req.product_id && p.expiry == req.expiry
         });
         if let Some(p) = result  {
-            if let Some(num_rsved) = p.quantity.reservation().get(oid) {
+            if let Some(rsv) = &p.quantity.rsv_detail {
                 let num_returning = req.qty_add as u32;
-                if *num_rsved >= num_returning {
-                    let num_returned  = p.quantity.try_return(oid, num_returning);
+                if rsv.reserved >= num_returning {
+                    let num_returned  = p.quantity.try_return(num_returning);
                     assert_eq!(num_returning, num_returned);
                     None
                 } else { Some(StockReturnErrorReason::InvalidQuantity) }
             } else { Some(StockReturnErrorReason::InvalidQuantity) }
         } else { Some(StockReturnErrorReason::NotExist) }
-    } // end of fn return_by_id
+    } // end of fn return_by_expiry
 } // end of impl StoreStockModel
 
 impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
@@ -256,7 +271,7 @@ impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
     }
 }
 
-type InnerStoreStockReturnFn = fn(&mut StoreStockModel, &str, InventoryEditStockLevelDto)
+type InnerStoreStockReturnFn = fn(&mut StoreStockModel, InventoryEditStockLevelDto)
     -> Option<StockReturnErrorReason>;
 
 impl StockLevelModelSet {
@@ -292,7 +307,7 @@ impl StockLevelModelSet {
                 if d.qty_add >= 0 {
                     let new_prod = ProductStockModel {type_: d.product_type.clone(),
                         id_: d.product_id, expiry: d.expiry.into() , is_create: true, 
-                        quantity: StockQuantityModel::new(d.qty_add as u32, 0, None) 
+                        quantity: StockQuantityModel::new(d.qty_add as u32, 0, 0, None) 
                     };
                     store_found.products.push(new_prod);
                     false
@@ -347,7 +362,6 @@ impl StockLevelModelSet {
     fn return_common(&mut self, data:StockLevelReturnDto, store_fn: InnerStoreStockReturnFn)
         -> Vec<StockReturnErrorDto>
     {
-        let oid = data.order_id.as_str();
         data.items.into_iter().filter_map(|req| {
             let mut error = StockReturnErrorDto {
                 reason: StockReturnErrorReason::NotExist, product_id: req.product_id,
@@ -355,7 +369,7 @@ impl StockLevelModelSet {
             };
             let found = self.stores.iter_mut().find(|m| {m.store_id == req.store_id});
             let opt_detail = if let Some(store) = found {
-                store_fn(store, oid, req)
+                store_fn(store, req)
             } else { Some(StockReturnErrorReason::NotExist) };
             if let Some(r) = opt_detail {
                 error.reason = r;
@@ -369,9 +383,9 @@ impl StockLevelModelSet {
         self.sort_by_expiry(false);
         self.return_common(data, StoreStockModel::return_across_expiry)
     } 
-    pub fn return_by_id(&mut self, data:StockLevelReturnDto) -> Vec<StockReturnErrorDto>
+    pub fn return_by_expiry(&mut self, data:StockLevelReturnDto) -> Vec<StockReturnErrorDto>
     {
-        self.return_common(data, StoreStockModel::return_by_id)
+        self.return_common(data, StoreStockModel::return_by_expiry)
     }
     
     fn sort_by_expiry(&mut self, ascending:bool) {

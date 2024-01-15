@@ -33,7 +33,7 @@ async fn edit_ok ()
         StoreStockModel {store_id:init_data[2].store_id, products:vec![
             ProductStockModel {type_:init_data[2].product_type.clone(),
                 id_:init_data[2].product_id, is_create:false, expiry: init_data[2].expiry.into() ,
-                quantity: StockQuantityModel::new(2, 0, None)  }
+                quantity: StockQuantityModel::new(2, 0, 0, None)  }
         ]}
     ]}) ; 
     let expect_save_res  = Ok(());
@@ -72,7 +72,7 @@ async fn edit_save_error ()
         StoreStockModel {store_id:init_data[2].store_id, products:vec![
             ProductStockModel {type_:init_data[2].product_type.clone(),
                 id_:init_data[2].product_id, expiry: init_data[2].expiry.into(), is_create:false,
-                quantity: StockQuantityModel::new(2, 0, None) }
+                quantity: StockQuantityModel::new(2, 0, 0, None) }
         ]}
     ]}) ; 
     let expect_save_res = Err(AppError{code:AppErrorCode::DataTableNotExist,

@@ -167,7 +167,7 @@ impl TryFrom <MySqlRow> for ProductStockModel {
         let total     = row.try_get::<u32, usize>(4)?;
         let cancelled = row.try_get::<u32, usize>(5)?;
         // TODO, options for importing reservation records
-        let quantity = StockQuantityModel::new(total, cancelled, None) ;
+        let quantity = StockQuantityModel::new(total, cancelled, 0, None) ;
         Ok(Self { type_: prod_typ, id_: prod_id, expiry, quantity, is_create: false })
     }
 }

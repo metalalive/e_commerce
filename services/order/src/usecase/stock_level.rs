@@ -35,6 +35,6 @@ impl StockLevelUseCase {
     }
     fn read_stocklvl_cb(ms:&mut StockLevelModelSet, data:StockLevelReturnDto)
         -> Vec<StockReturnErrorDto>
-    { ms.return_by_id(data) }
+    { ms.return_by_expiry(data) }
 } // end of impl StockLevelUseCase
 
