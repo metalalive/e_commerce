@@ -14,7 +14,7 @@ use crate::datastore::{
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockModel, StoreStockModel, StockQuantityModel, ProductStockIdentity2,  ProductStockIdentity,
-    StockLevelModelSet, OrderLineModelSet
+    StockLevelModelSet, OrderLineModelSet, StockQtyRsvModel
 };
 
 use super::super::{
@@ -73,15 +73,59 @@ mod _stockm {
     }
 } // end of inner module _stockm
 
-impl Into<StockLevelModelSet> for AppInMemFetchedSingleTable {
+// list of tuple with order-id and number of reserved for each order
+type FetchedRsv    = Vec<(String, u32)>;
+struct FetchedRsvSet(HashMap<String, FetchedRsv>);
+struct FetchArg(AppInMemFetchedSingleTable, Option<String>);
+struct SaveArg(StockLevelModelSet, FetchedRsvSet);
+
+impl FetchArg {
+    fn create_iter_rsv(row:&Vec<String>) -> impl Iterator<Item = (String, u32)> + '_
+    {
+        let rsv_str = row.get::<usize>(_stockm::InMemColIdx::QtyRsvDetail.into()).unwrap() ; 
+        rsv_str.split(" ").into_iter().filter_map(|d| {
+            let mut kv = d.split("/");
+            if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
+                let k = k.to_string();
+                let v = v.parse().unwrap();
+                Some((k, v))
+            } else { None }
+        })
+    }
+    fn to_product_stock(prod_typ:ProductType, prod_id:u64, row:Vec<String>,
+                        maybe_order_id:&Option<String>)
+        -> ProductStockModel
+    {
+        let rsv = Self::create_iter_rsv(&row).collect::<FetchedRsv>();
+        let total = row.get::<usize>(_stockm::InMemColIdx::QtyTotal.into())
+            .unwrap().parse().unwrap();
+        let rsv_detail = if let Some(orderid) = maybe_order_id {
+            let result = rsv.iter().find(|(oid, _num)| oid.as_str() == orderid.as_str());
+            if let Some(d) = result {
+                Some(StockQtyRsvModel { oid:d.0.clone(), reserved: d.1 })
+            } else { None }
+        } else { None };
+        let cancelled = row.get::<usize>(_stockm::InMemColIdx::QtyCancelled.into())
+            .unwrap().parse().unwrap();
+        let booked = rsv.iter().map(|(_oid, num)| num).sum();
+        let expiry = row.get::<usize>(_stockm::InMemColIdx::Expiry.into()).unwrap();
+        let expiry = DateTime::parse_from_rfc3339(&expiry).unwrap();
+        ProductStockModel {
+            is_create:false, type_:prod_typ, id_:prod_id, expiry: expiry.into(),
+            quantity: StockQuantityModel::new(total, cancelled, booked, rsv_detail)
+        }
+    }
+} // end of impl FetchArg
+impl Into<StockLevelModelSet> for FetchArg {
     fn into(self) -> StockLevelModelSet {
+        let (rows, maybe_order_id) = (self.0, self.1);
         let mut out = StockLevelModelSet {stores:vec![]};
-        let _ = self.into_iter().map(|(key, row)| {
+        rows.into_iter().map(|(key, row)| {
             let id_elms = key.split("/").collect::<Vec<&str>>();
             let prod_typ_num:u8 = id_elms[1].parse().unwrap();
             let (store_id, prod_typ, prod_id, exp_from_combo) = (
                 id_elms[0].parse().unwrap(),  ProductType::from(prod_typ_num),
-                id_elms[2].parse().unwrap(),  id_elms[3]    );
+                id_elms[2].parse::<u64>().unwrap(),  id_elms[3]    );
             let result = out.stores.iter_mut().find(|m| m.store_id==store_id);
             let store_rd = if let Some(m) = result {
                 m
@@ -94,48 +138,54 @@ impl Into<StockLevelModelSet> for AppInMemFetchedSingleTable {
                 let exp_fmt_verify = m.expiry.format(_stockm::EXPIRY_KEY_FORMAT).to_string();
                 m.type_==prod_typ && m.id_==prod_id && exp_fmt_verify==exp_from_combo
             });
-            if let Some(_product_rd) = result {
+            if let Some(_product_rd) = result { // TODO, return error instead 
                 let _prod_typ_num:u8 = _product_rd.type_.clone().into();
                 panic!("report error, data corruption, store:{}, product: ({}, {})", 
                        store_rd.store_id, _prod_typ_num, _product_rd.id_);
-                // TODO, return error instead 
             } else {
-                let total = row.get::<usize>(_stockm::InMemColIdx::QtyTotal.into())
-                    .unwrap().parse().unwrap();
-                let rsv_str = row.get::<usize>(_stockm::InMemColIdx::QtyRsvDetail.into()).unwrap() ; 
-                let rsv_detail = if rsv_str.len() > 0 {
-                    let out = rsv_str.split(" ").into_iter().map(|d| {
-                        let mut kv = d.split("/");
-                        let key = kv.next().unwrap();
-                        let value = kv.next().unwrap().parse().unwrap();
-                        (key, value)
-                    }) .collect();
-                    Some(out)
-                } else { None };
-                let cancelled = row.get::<usize>(_stockm::InMemColIdx::QtyCancelled.into())
-                    .unwrap().parse().unwrap();
-                let expiry = row.get::<usize>(_stockm::InMemColIdx::Expiry.into()).unwrap();
-                let expiry = DateTime::parse_from_rfc3339(&expiry).unwrap();
-                let m = ProductStockModel {
-                    is_create:false, type_:prod_typ, id_:prod_id, expiry: expiry.into(),
-                    quantity: StockQuantityModel::new(total, cancelled, rsv_detail)
-                };
+                let m = Self::to_product_stock(prod_typ, prod_id, row, &maybe_order_id);
                 store_rd.products.push(m);
             }
-        }).collect::<Vec<()>>();
+        }).count();
         out
     }
 } // end of impl Into for StockLevelModelSet
 
-impl From<StockLevelModelSet> for AppInMemFetchedSingleTable {
-    fn from(value: StockLevelModelSet) -> Self { 
-        let kv_pairs = value.stores.iter().flat_map(|m1| {
+impl From<&AppInMemFetchedSingleTable> for FetchedRsvSet {
+    fn from(value: &AppInMemFetchedSingleTable) -> Self {
+        let iter = value.iter().map(|(key, row)| {
+            let rsv = FetchArg::create_iter_rsv(row).collect::<FetchedRsv>();
+            (key.clone(), rsv)
+        });
+        let map = HashMap::from_iter(iter);
+        Self(map)
+    }
+}
+
+
+impl From<SaveArg> for AppInMemFetchedSingleTable {
+    fn from(value: SaveArg) -> Self {
+        let (slset, FetchedRsvSet(rsv_set)) = (value.0, value.1);
+        let kv_pairs = slset.stores.iter().flat_map(|m1| {
             m1.products.iter().map(|m2| {
                 let exp_fmt = m2.expiry_without_millis().format(_stockm::EXPIRY_KEY_FORMAT);
                 let prod_typ_num:u8 = m2.type_.clone().into();
                 let pkey = format!("{}/{}/{}/{}", m1.store_id, prod_typ_num, m2.id_, exp_fmt);
-                let rsv_detail_str = m2.quantity.reservation().iter().map(
-                    |(k,v)| format!("{k}/{v}")) .collect::<Vec<String>>() .join(" ");
+                let rsv_prod = if let Some(r) = rsv_set.get(pkey.as_str()) {
+                    r.clone()
+                } else { Vec::new() };
+                let rsv_prod = if let Some(r) = &m2.quantity.rsv_detail {
+                    let mut rsv = rsv_prod.into_iter().filter(|(oid, _)| {
+                        oid.as_str() != r.oid.as_str()
+                    }).collect::<Vec<_>>();
+                    if r.reserved > 0 {
+                        rsv.push((r.oid.clone(), r.reserved));
+                    } // otherwise delete the reservation by excluding it
+                    rsv 
+                } else { rsv_prod };
+                let rsv_detail_str = rsv_prod.into_iter().map(|(oid, n_rsved)| {
+                    format!("{oid}/{n_rsved}")
+                }).collect::<Vec<_>>().join(" ");
                 let mut row = (0 .. _stockm::InMemColIdx::TotNumColumns.into())
                     .map(|_n| {String::new()}).collect::<Vec<String>>();
                 let _ = [
@@ -178,12 +228,25 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
         }).collect();
         let info = HashMap::from([(_stockm::TABLE_LABEL.to_string(), ids)]);
         let resultset = self.datastore.fetch(info).await ?;
-        Self::try_into_modelset(resultset)
+        Self::try_into_modelset(None, resultset)
     } // end of fn fetch
  
     async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>
     {
-        let rows = AppInMemFetchedSingleTable::from(slset);
+        let rsv_set = {
+            let ids = slset.stores.iter().flat_map(|s| {
+                s.products.iter().map(|p| {
+                    let prod_typ_num:u8 = p.type_.clone().into();
+                    let exp_fmt = p.expiry.format(_stockm::EXPIRY_KEY_FORMAT);
+                    format!("{}/{}/{}/{}", s.store_id, prod_typ_num, p.id_, exp_fmt)
+                })
+            }).collect();
+            let info = HashMap::from([(_stockm::TABLE_LABEL.to_string(), ids)]);
+            let results = self.datastore.fetch(info).await ?;
+            let rows = results.into_values().next().unwrap();
+            FetchedRsvSet::from(&rows)
+        };
+        let rows = AppInMemFetchedSingleTable::from(SaveArg(slset, rsv_set));
         let table = (_stockm::TABLE_LABEL.to_string(), rows);
         let data = HashMap::from([table]);
         let _num_saved = self.datastore.save(data).await?;
@@ -197,14 +260,15 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
             ProductStockIdentity2 {product_type:d.id_.product_type.clone(),
                 store_id:d.id_.store_id, product_id:d.id_.product_id}
         ).collect();
-        let (mut stock_mset, d_lock) = match self.fetch_with_lock(
-            pids, Some(self.curr_time.clone())).await
-        {
-            Ok(v) => v,
-            Err(e) => {return Err(Err(e));}
-        };
+        let (mut stock_mset, rsv_set, d_lock) =
+            match self.fetch_with_lock(order_req.order_id.clone(), pids,
+                                       Some(self.curr_time.clone())).await
+            {
+                Ok(v) => v,
+                Err(e) => {return Err(Err(e));}
+            };
         usr_cb(&mut stock_mset, order_req)?;
-        if let Err(e) = self.save_with_lock(stock_mset, d_lock) {
+        if let Err(e) = self.save_with_lock(stock_mset, rsv_set, d_lock) {
             Err(Err(e))
         } else {
             Ok(())
@@ -219,10 +283,11 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
                 store_id: d.store_id, product_id: d.product_id}
         ).collect();
         // omit expiry check in the key filter
-        let (mut mset, d_lock) = self.fetch_with_lock(pids, None).await?;
+        let (mut mset, rsv_set, d_lock) = self.fetch_with_lock(
+            data.order_id.clone(), pids, None).await?;
         let caller_errors = cb(&mut mset, data);
         if caller_errors.is_empty() {
-            self.save_with_lock(mset, d_lock)?;
+            self.save_with_lock(mset, rsv_set, d_lock)?;
         }
         Ok(caller_errors)
     }
@@ -237,32 +302,36 @@ impl StockLvlInMemRepo {
         Ok(out)
     }
 
-    async fn fetch_with_lock(&self, pids:Vec<ProductStockIdentity2>,
+    async fn fetch_with_lock(&self, order_id: String,  pids:Vec<ProductStockIdentity2>,
                              curr_time:Option<DateTime<FixedOffset>> )
-        -> DefaultResult<(StockLevelModelSet, AppInMemDstoreLock), AppError> 
+        -> DefaultResult<(StockLevelModelSet, FetchedRsvSet, AppInMemDstoreLock), AppError> 
     {
         let tbl_label = _stockm::TABLE_LABEL.to_string();
         let op = _stockm::InMemDStoreFiltKeyOp::new(pids, curr_time);
         let stock_ids = self.datastore.filter_keys(tbl_label.clone(), &op).await?;
         let info = HashMap::from([(tbl_label, stock_ids)]);
-        let (tableset, _lock) = self.datastore.fetch_acquire(info).await?;
-        let ms =  Self::try_into_modelset(tableset)?;
-        Ok((ms, _lock))
+        let (tableset, lock) = self.datastore.fetch_acquire(info).await?;
+        let rsv_set = {
+            let rows = tableset.values().next().unwrap();
+            FetchedRsvSet::from(rows)
+        };
+        let ms =  Self::try_into_modelset(Some(order_id), tableset)?;
+        Ok((ms, rsv_set, lock))
     }
-    fn save_with_lock(&self, slset:StockLevelModelSet, lock:AppInMemDstoreLock)
+    fn save_with_lock(&self, slset:StockLevelModelSet, rsv_set:FetchedRsvSet, lock:AppInMemDstoreLock)
         -> DefaultResult<(), AppError>
     {
-        let rows = AppInMemFetchedSingleTable::from(slset);
+        let rows = AppInMemFetchedSingleTable::from(SaveArg(slset, rsv_set));
         let table = (_stockm::TABLE_LABEL.to_string(), rows);
         let data = HashMap::from([table]);
         let _num_saved = self.datastore.save_release(data, lock)?;
         Ok(())
     }
-    fn try_into_modelset (tableset:AppInMemFetchedData)
+    fn try_into_modelset (order_id: Option<String>, tableset:AppInMemFetchedData)
         -> DefaultResult<StockLevelModelSet, AppError>
     {
         if let Some((_label, rows)) = tableset.into_iter().next() {
-            Ok(rows.into())
+            Ok(FetchArg(rows, order_id).into())
         } else {
             Err(AppError { code:AppErrorCode::DataTableNotExist,
                 detail:Some(_stockm::TABLE_LABEL.to_string())  })

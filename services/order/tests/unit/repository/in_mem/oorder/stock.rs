@@ -1,6 +1,6 @@
 use std::ptr;
 use std::sync::Arc;
-use chrono::{DateTime, Local, FixedOffset};
+use chrono::{DateTime, Local, FixedOffset, Duration};
 
 use order::api::rpc::dto::{StockLevelReturnDto, InventoryEditStockLevelDto, StockReturnErrorDto, StockReturnErrorReason};
 use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
@@ -9,7 +9,7 @@ use order::error::{AppErrorCode, AppError};
 use order::model::{
     StockLevelModelSet, StoreStockModel, ProductStockModel, StockQuantityModel, ProductStockIdentity,
     OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel,
-    OrderLineModelSet, OrderLineIdentity
+    OrderLineModelSet, OrderLineIdentity, StockQtyRsvModel
 };
 use order::repository::{OrderInMemRepo, AbsOrderRepo, AppStockRepoReserveReturn, AbsOrderStockRepo};
 use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
@@ -32,50 +32,48 @@ async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
 
 fn ut_init_data_product() -> [ProductStockModel;10]
 {
-    let rsv_detail = vec![("AceMan", 3), ("BatMan", 1), ("SpiderMan", 2)];
-    let rsv_detail_2 = vec![("Joker", 2), ("DarkLord", 3)];
     [   // ------ for insertion --------
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap().into(),
-           quantity: StockQuantityModel::new(5, 0, None)
+           quantity: StockQuantityModel::new(5, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9003, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap().into(),
-           quantity: StockQuantityModel::new(11, 0, None)
+           quantity: StockQuantityModel::new(11, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap().into(),
-           quantity: StockQuantityModel::new(15, 0, Some(rsv_detail))
+           quantity: StockQuantityModel::new(15, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9005, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap().into(),
-           quantity: StockQuantityModel::new(8, 0, None)
+           quantity: StockQuantityModel::new(8, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap().into(),
-           quantity: StockQuantityModel::new(14, 0, None)
+           quantity: StockQuantityModel::new(14, 0, 0, None)
         },
         // ---------------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap().into(),
-           quantity: StockQuantityModel::new(15, 7, None)
+           quantity: StockQuantityModel::new(15, 7, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2024-11-15T09:23:58.098+01:00").unwrap().into(),
-           quantity: StockQuantityModel::new(18, 1, None)
+           quantity: StockQuantityModel::new(18, 1, 0, None)
         },
         // ---------------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.035-01:00").unwrap().into(),
-           quantity: StockQuantityModel::new(22, 8, Some(rsv_detail_2))
+           quantity: StockQuantityModel::new(22, 8, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2023-11-09T12:30:10.035-01:00").unwrap().into(),
-           quantity: StockQuantityModel::new(20, 1, None)
+           quantity: StockQuantityModel::new(20, 1, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
            expiry:DateTime::parse_from_rfc3339("2020-03-15T12:55:08.035-11:00").unwrap().into(),
-           quantity: StockQuantityModel::new(18, 3, None)
+           quantity: StockQuantityModel::new(18, 3, 0, None)
         },
     ]
 } // end of ut_init_data_product
@@ -122,11 +120,7 @@ async fn save_fetch_ok()
         verify_stocklvl_model(&actual, &expect_slset, [0,0], true);
         let result = verify_stocklvl_model(&actual, &expect_slset, [1,0], true);
         let product = result.unwrap();
-        let actual_rsv_detail = product.quantity.reservation();
-        assert_eq!(actual_rsv_detail.len(), 3);
-        assert_eq!(actual_rsv_detail.get("SpiderMan").unwrap().clone(), 2u32);
-        assert_eq!(actual_rsv_detail.get("BatMan").unwrap().clone(), 1u32);
-        assert_eq!(actual_rsv_detail.get("AceMan").unwrap().clone(), 3u32);
+        assert!(product.quantity.rsv_detail.is_none());
     }
 } // end of  save_fetch_ok
 
@@ -267,16 +261,15 @@ async fn save_dstore_error()
 {
     let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(4, None).await;
     let stockrepo = repo.stock();
-    let all_products = ut_init_data_product();
-    let expect_slset = {
-        let mut store = UT_INIT_DATA_STORE[0].clone();
-        store.products.push(all_products[0].clone());
-        StockLevelModelSet {stores:vec![store]}
-    };
-    let result = stockrepo.save(expect_slset).await;
+    let pids = vec![
+        ProductStockIdentity {store_id: 1001, product_id:9001, product_type: ProductType::Item,
+            expiry: DateTime::parse_from_rfc3339("2023-11-09T09:16:01.035-01:00").unwrap().into(),
+        }
+    ];
+    let result = stockrepo.fetch(pids).await;
     assert!(result.is_err());
     let error = result.err().unwrap();
-    assert_eq!(error.code, AppErrorCode::DataTableNotExist);
+    assert_eq!(error.code, AppErrorCode::AcquireLockFailure);
     assert_eq!(error.detail, Some("utest".to_string()));
 }
 
@@ -303,20 +296,56 @@ async fn fetch_dstore_error()
 }
 
 async fn ut_retrieve_stocklvl_qty (stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
-                                   pid:ProductStockIdentity ) -> (u32, u32, u32)
+                                   store_id:u32, product: &ProductStockModel) -> (u32, u32, u32)
 {
+    let pid = ProductStockIdentity { store_id, product_id: product.id_,
+                product_type: product.type_.clone(),  expiry: product.expiry};
     let result = stockrepo.fetch(vec![pid]).await;
     assert!(result.is_ok());
     if let Ok(actual) = result {
         assert_eq!(actual.stores.len(), 1);
         assert_eq!(actual.stores[0].products.len(), 1);
         let product_sold = &actual.stores[0].products[0];
-        (product_sold.quantity.num_booked(), product_sold.quantity.cancelled,
+        (product_sold.quantity.booked, product_sold.quantity.cancelled,
          product_sold.quantity.total)
     } else { (0,0,0) }
 }
 
-fn mock_reserve_usr_cb_1 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
+fn mock_reserve_usr_cb_0(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
+    -> AppStockRepoReserveReturn
+{
+    assert_eq!(ms.stores.len(), 1);
+    assert_eq!(req.lines.len(), 1);
+    let saved_store = &mut ms.stores[0];
+    let id_combo = (
+        req.lines[0].id_.store_id,
+        req.lines[0].id_.product_type.clone(),
+        req.lines[0].id_.product_id,
+    );
+    let product = match id_combo {
+        (1001, ProductType::Package, 9004) | (1001, ProductType::Item, 9005) =>
+        {
+            assert_eq!(saved_store.products.len(), 1);
+            let o = & mut saved_store.products[0];
+            Some(o)
+        },
+        (1003, ProductType::Package, 9004) => {
+            assert!(saved_store.products.len() >= 1);
+            let o = saved_store.products.iter_mut().find(
+                |p| p.quantity.total == 22 && p.quantity.cancelled == 8
+            ).unwrap();
+            Some(o)
+        },
+        _others => None,
+    };
+    let product = product.unwrap();
+    assert!(product.quantity.rsv_detail.is_none());
+    product.quantity.rsv_detail = Some(StockQtyRsvModel { oid: req.order_id.clone(),
+             reserved: req.lines[0].qty.reserved } );
+    Ok(())
+} // end of mock_reserve_usr_cb_0
+
+fn mock_reserve_usr_cb_1(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     -> AppStockRepoReserveReturn
 {
     assert_eq!(ms.stores.len(), 3);
@@ -330,10 +359,31 @@ fn mock_reserve_usr_cb_1 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     }
     Ok(())
 } // end of mock_reserve_usr_cb_1
-
+    
+async fn ut_reserve_init_setup(stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
+                               mock_warranty: DateTime<FixedOffset>,
+                               store_id: u32, product_type: ProductType, product_id: u64,
+                               num_req: u32, order_id:&str )
+{
+    let order_req = vec![
+        OrderLineModel {
+            id_: OrderLineIdentity {store_id, product_id, product_type},
+            qty: OrderLineQuantityModel {reserved: num_req, paid: 0, paid_last_update: None},
+            policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
+                warranty_until: mock_warranty },
+            price: OrderLinePriceModel {unit:4, total: 4 * num_req}
+        },
+    ];
+    let ol_set = OrderLineModelSet {
+        order_id: order_id.to_string(), lines:order_req, owner_id:123,
+        create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap()
+    };
+    let result = stockrepo.try_reserve(mock_reserve_usr_cb_0, &ol_set).await;
+    assert!(result.is_ok());
+}
 
 #[tokio::test]
-async fn try_reserve_ok ()
+async fn try_reserve_ok()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-01-01T18:49:08.035+08:00").unwrap();
     let mock_warranty  = DateTime::parse_from_rfc3339("2024-11-28T18:46:08.519-08:00").unwrap();
@@ -344,42 +394,40 @@ async fn try_reserve_ok ()
         let mut stores = UT_INIT_DATA_STORE[..3].to_vec();
         stores[0].products.extend_from_slice(&all_products[0..3]);
         stores[1].products.extend_from_slice(&all_products[3..5]);
-        stores[2].products.extend_from_slice(&all_products[5..]);
+        // skip product-item-5, expiry time at product idx 5 is the same as idx 7
+        stores[2].products.extend_from_slice(&all_products[6..]);
         StockLevelModelSet {stores}
     };
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 3, "AceMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 1, "BatMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 2, "SpiderMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1003, ProductType::Package, 9004, 2, "Joker").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1003, ProductType::Package, 9004, 3, "DarkLord").await;
     { // before reservation
-        let pid = ProductStockIdentity { store_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_,
-                product_type: all_products[2].type_.clone(),  expiry: all_products[2].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (3+1+2, 0, 15)) ;
-        let pid = ProductStockIdentity { store_id: expect_slset.stores[1].store_id, product_id: all_products[3].id_,
-                product_type: all_products[3].type_.clone(),  expiry: all_products[3].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (0, 0, 8));
-        let pid = ProductStockIdentity { store_id: expect_slset.stores[2].store_id, product_id: all_products[7].id_,
-                product_type: all_products[7].type_.clone(),  expiry: all_products[7].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, ((3+2), 8, 22));
-        let pid = ProductStockIdentity { store_id: expect_slset.stores[2].store_id, product_id: all_products[8].id_,
-                product_type: all_products[8].type_.clone(),  expiry: all_products[8].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (0, 1, 20));
+        assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[2]).await, (3+1+2, 0, 15)) ;
+        assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1002, &all_products[3]).await, (0, 0, 8));
+        assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1003, &all_products[7]).await, ((3+2), 8, 22));
+        assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1003, &all_products[8]).await, (0, 1, 20));
     }
     let order_req = vec![
         OrderLineModel {
-            id_: OrderLineIdentity {store_id: expect_slset.stores[0].store_id,
+            id_: OrderLineIdentity {store_id: 1001,
                 product_id: all_products[2].id_, product_type: all_products[2].type_.clone()},
             qty: OrderLineQuantityModel {reserved: 2, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:3, total:6}
         },
         OrderLineModel {
-            id_: OrderLineIdentity {store_id: expect_slset.stores[1].store_id,
+            id_: OrderLineIdentity {store_id: 1002,
                 product_id: all_products[3].id_, product_type: all_products[3].type_.clone()},
             qty: OrderLineQuantityModel {reserved: 1, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:4, total:4}
         },
         OrderLineModel {
-            id_: OrderLineIdentity {store_id: expect_slset.stores[2].store_id,
+            id_: OrderLineIdentity {store_id: 1003,
                 product_id: all_products[7].id_, product_type: all_products[7].type_.clone()},
             qty: OrderLineQuantityModel {reserved: 13, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
@@ -392,19 +440,11 @@ async fn try_reserve_ok ()
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
     { // after reservation
-        let pid = ProductStockIdentity { store_id: expect_slset.stores[0].store_id, product_id: all_products[2].id_,
-                product_type: all_products[2].type_.clone(),  expiry: all_products[2].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (3+1+2+2, 0, 15));
-        let pid = ProductStockIdentity { store_id: expect_slset.stores[1].store_id, product_id: all_products[3].id_,
-                product_type: all_products[3].type_.clone(),  expiry: all_products[3].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (1, 0, 8));
+        assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[2]).await, (3+1+2+2, 0, 15));
+        assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1002, &all_products[3]).await, (1, 0, 8));
         let mut total_rsved:u32 = 0;
         for idx in [7usize, 8, 9].into_iter() {
-            // expiry time at product idx 5 is the same as idx 7
-            let pid = ProductStockIdentity { store_id: expect_slset.stores[2].store_id,
-                product_id: all_products[idx].id_,  expiry: all_products[idx].expiry,
-                product_type: all_products[idx].type_.clone()} ;
-            let opt = ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await;
+            let opt = ut_retrieve_stocklvl_qty(stockrepo.clone(), 1003, &all_products[idx]).await;
             total_rsved += opt.0;
             // println!("booked, opt : {}", opt.0);
         }
@@ -472,14 +512,14 @@ async fn try_reserve_shortage()
     assert!(result.is_ok());
     let order_req = vec![
         OrderLineModel {
-            id_: OrderLineIdentity {store_id: expect_slset.stores[0].store_id,
+            id_: OrderLineIdentity {store_id: 1001,
                 product_id: all_products[0].id_, product_type: all_products[0].type_.clone()},
             qty: OrderLineQuantityModel {reserved: 3, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
                 warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:4, total:11}
         },
         OrderLineModel {
-            id_: OrderLineIdentity {store_id: expect_slset.stores[0].store_id,
+            id_: OrderLineIdentity {store_id: 1001,
                 product_id: all_products[1].id_, product_type: all_products[1].type_.clone()},
             qty: OrderLineQuantityModel {reserved: 9, paid: 0, paid_last_update: None},
             policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
@@ -499,12 +539,8 @@ async fn try_reserve_shortage()
             assert!(matches!(usr_e[1].reason, OrderLineCreateErrorReason::OutOfStock));
         }
     } { // after reservation, nothing is changed
-        let pid = ProductStockIdentity { store_id: expect_slset.stores[0].store_id, product_id: all_products[0].id_,
-                product_type: all_products[0].type_.clone(),  expiry: all_products[0].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (4, 0, 5));
-        let pid = ProductStockIdentity { store_id: expect_slset.stores[0].store_id, product_id: all_products[1].id_,
-                product_type: all_products[1].type_.clone(),  expiry: all_products[1].expiry} ;
-        assert_eq!(ut_retrieve_stocklvl_qty (stockrepo.clone(), pid).await, (11, 0, 11));
+        assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[0]).await, (4, 0, 5));
+        assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[1]).await, (11, 0, 11));
     }
 } // end of in_mem_try_reserve_shortage
 
@@ -567,11 +603,16 @@ fn mock_return_usr_cb_1 (ms:&mut StockLevelModelSet, data:StockLevelReturnDto)
     });
     assert!(result.is_some());
     if let Some(v) = result {
-        let oid = data.order_id.as_str();
         let num_req = d_item.qty_add as u32;
-        let num_returned = v.quantity.try_return(oid, num_req);
+        let num_returned = v.quantity.try_return(num_req);
         assert!(num_req > 0);
         assert_eq!(num_req, num_returned);
+        let rsv_detail = v.quantity.rsv_detail.as_ref().unwrap();
+        assert_eq!(rsv_detail.oid, data.order_id);
+        let expect = match rsv_detail.oid.as_str() {
+            "AceMan" => (7,3), "BatMan" => (6,0), _others => (9999,9999),
+        };
+        assert_eq!((v.quantity.booked, rsv_detail.reserved), expect);
     }
     vec![]
 }
@@ -581,6 +622,7 @@ async fn try_return_ok()
 {
     let mock_curr_time = DateTime::parse_from_rfc3339("2022-11-28T18:46:08.519-08:00").unwrap();
     let mock_rsv_expiry= DateTime::parse_from_rfc3339("2022-11-28T19:15:12.101-08:00").unwrap();
+    let mock_warranty  = mock_rsv_expiry + Duration::minutes(10);
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_curr_time)).await;
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
@@ -591,18 +633,12 @@ async fn try_return_ok()
     };
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
-    {
-        let rsv_table = expect_slset.stores[0].products[2].quantity.reservation();
-        assert_eq!(rsv_table.get("AceMan").unwrap(), &3u32);
-        assert_eq!(rsv_table.get("BatMan").unwrap(), &1u32);
-        assert_eq!(rsv_table.get("SpiderMan").unwrap(), &2u32);
-    }
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 4, "AceMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 1, "BatMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 3, "SpiderMan").await;
     let data = StockLevelReturnDto {order_id: format!("AceMan"), items:vec![
-        InventoryEditStockLevelDto {qty_add:1, expiry: mock_rsv_expiry,
-            store_id: expect_slset.stores[0].store_id, 
-            product_type: expect_slset.stores[0].products[2].type_.clone() ,
-            product_id:   expect_slset.stores[0].products[2].id_
-        }, // assume the 3rd product was reserved for other orders
+        InventoryEditStockLevelDto {qty_add:1, expiry: mock_rsv_expiry, store_id: 1001, 
+            product_type: ProductType::Package , product_id: 9004 }
     ]};
     let result = stockrepo.try_return(mock_return_usr_cb_1, data).await;
     assert!(result.is_ok());
@@ -610,11 +646,8 @@ async fn try_return_ok()
         assert_eq!(v.len(), 0);
     }
     let data = StockLevelReturnDto {order_id: format!("BatMan"), items:vec![
-        InventoryEditStockLevelDto {qty_add:1, expiry: mock_rsv_expiry,
-            store_id: expect_slset.stores[0].store_id, 
-            product_type: expect_slset.stores[0].products[2].type_.clone() ,
-            product_id:   expect_slset.stores[0].products[2].id_
-        }, // assume the 3rd product was reserved for other orders
+        InventoryEditStockLevelDto {qty_add:1, expiry: mock_rsv_expiry, store_id: 1001, 
+            product_type: ProductType::Package, product_id: 9004 }
     ]};
     let result = stockrepo.try_return(mock_return_usr_cb_1, data).await;
     assert!(result.is_ok());
@@ -623,18 +656,14 @@ async fn try_return_ok()
     }
     { // after stock return
         let pid = ProductStockIdentity {
-            store_id: expect_slset.stores[0].store_id,
+            store_id: 1001, product_type: ProductType::Package, product_id: 9004,
             expiry:   expect_slset.stores[0].products[2].expiry.clone(),
-            product_type: expect_slset.stores[0].products[2].type_.clone() ,
-            product_id:   expect_slset.stores[0].products[2].id_
         };
         let result = stockrepo.fetch(vec![pid]).await;
         assert!(result.is_ok());
         if let Ok(ms) = result {
-            let rsv_table = ms.stores[0].products[0].quantity.reservation();
-            assert!(rsv_table.get("BatMan").is_none());
-            assert_eq!(rsv_table.get("SpiderMan").unwrap(), &2u32);
-            assert_eq!(rsv_table.get("AceMan").unwrap(), &2u32);
+            let actual_booked = ms.stores[0].products[0].quantity.booked;
+            assert_eq!(actual_booked, 6u32);
         }
     }
 } // end of fn  try_return_ok
@@ -668,23 +697,23 @@ async fn  try_return_input_err()
     let stockrepo = repo.stock();
     let all_products = ut_init_data_product();
     let expect_slset = {
-        let mut stores = UT_INIT_DATA_STORE[..2].to_vec();
+        let mut stores = UT_INIT_DATA_STORE[..3].to_vec();
         stores[0].products.extend_from_slice(&all_products[0..4]);
-        stores[1].products.extend_from_slice(&all_products[4..8]);
+        stores[2].products.extend_from_slice(&all_products[4..8]);
         StockLevelModelSet {stores}
     };
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Item, 9005, 2, "AceMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1003, ProductType::Package, 9004, 5, "AceMan").await;
     let data = StockLevelReturnDto {order_id: format!("AceMan"), items:vec![
-        InventoryEditStockLevelDto {qty_add:7, expiry: mock_warranty,
-            store_id: expect_slset.stores[0].store_id, 
+        InventoryEditStockLevelDto {qty_add:7, expiry: mock_warranty, store_id: 1001, 
             product_type: expect_slset.stores[0].products[3].type_.clone() ,
             product_id:   expect_slset.stores[0].products[3].id_
         },
-        InventoryEditStockLevelDto {qty_add:8, expiry: mock_warranty,
-            store_id: expect_slset.stores[1].store_id, 
-            product_type: expect_slset.stores[1].products[3].type_.clone() ,
-            product_id:   expect_slset.stores[1].products[3].id_
+        InventoryEditStockLevelDto {qty_add:8, expiry: mock_warranty, store_id: 1003, 
+            product_type: expect_slset.stores[2].products[3].type_.clone() ,
+            product_id:   expect_slset.stores[2].products[3].id_
         },
     ]};
     let result = stockrepo.try_return(mock_return_usr_cb_2, data).await;
@@ -692,17 +721,14 @@ async fn  try_return_input_err()
     if let Ok(v) = result {
         assert_eq!(v.len(), 2);
         let pid = ProductStockIdentity {
-            store_id: expect_slset.stores[1].store_id,
-            expiry:   expect_slset.stores[1].products[3].expiry.clone(),
-            product_type: expect_slset.stores[1].products[3].type_.clone() ,
-            product_id:   expect_slset.stores[1].products[3].id_
+            store_id: 1003, product_type: ProductType::Package, product_id: 9004,
+            expiry:   expect_slset.stores[2].products[3].expiry.clone(),
         };
         let result = stockrepo.fetch(vec![pid]).await;
         assert!(result.is_ok());
         if let Ok(ms) = result {
-            let rsv_table = ms.stores[0].products[0].quantity.reservation();
-            assert_eq!(rsv_table.get("Joker").unwrap(), &2u32);
-            assert_eq!(rsv_table.get("DarkLord").unwrap(), &3u32);
+            let actual_booked = ms.stores[0].products[0].quantity.booked;
+            assert_eq!(actual_booked, 5);
         } // should not be modified
     }
 } // end of fn  try_return_input_err
