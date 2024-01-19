@@ -106,5 +106,76 @@
     <changeSet id="tag_version_0.0.4" author="T.H.">
         <tagDatabase tag="0.0.4" />
     </changeSet>
+    <changeSet id="add_qty_tot_rsv__stock_inventory" author="T.H.">
+        <comment>
+            store total number of reserved items for specific product, the application
+            should never load all order lines relavant to the stock product
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `stock_level_inventory` ADD COLUMN `qty_tot_rsv` INT UNSIGNED NOT NULL DEFAULT 0 ;
+        </sql>
+        <rollback>
+            ALTER TABLE `stock_level_inventory` DROP COLUMN `qty_tot_rsv`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__order_toplvl_meta" author="T.H.">
+        <comment>
+            - consider most of reads come from specific user, the primary index is constructed
+              with user-id followed by order-id, however it might cause errors when another table
+              attempts to reference this table as foreign key.
+            - `created_time` represents the time in UTC,
+            - `ctime_tz_utc` indicates offset in number of minutes from UTC
+            - TODO, might need secondary index for time range scan
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `order_toplvl_meta` (
+                `o_id`     BINARY(16) NOT NULL,
+                `usr_id`   INT UNSIGNED NOT NULL,
+                `created_time`    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `ctime_tz_utc`    SMALLINT  NOT NULL,
+                PRIMARY KEY (`usr_id`,`o_id`)
+            );
+            INSERT INTO `order_toplvl_meta`(`o_id`, `usr_id`, `created_time`, `ctime_tz_utc`) VALUE
+            ('bibim-bap', 202, '2023-01-24 02:00:38.272', 134),
+            ('haze-mist-watt', 623, '2022-05-30 19:58:00.101', 308),
+            ('meaty-prodject', 623, '2022-02-09 05:31:29.006', 358);
+        </sql>
+        <rollback>
+            DROP TABLE `order_toplvl_meta`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__stock_rsv_detail" author="T.H.">
+        <comment>
+            - the key (index) in this table cannot uniquely identify each row, consider the key size may be
+              very large if it covers order-id , TODO, recheck any drawback on this, and feasible solution
+              e.g. idempotency implementation by sending request key 
+            - if the table grows to large data set, it needs to be partitioned and cannot rely on foreign
+              key constraint for data integrity check, in such case, consider to move the check function
+              to application code
+            - constraint on order-id cannot be applied to the table due to foreign key limit in mariaDB,
+              the application is responsible to delete the records as soon as deleting the relavant order
+              in another table `order_toplvl_meta`
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `stock_rsv_detail` (
+                `store_id`      INT UNSIGNED NOT NULL,
+                `product_type`  ENUM('1', '2') NOT NULL, 
+                `product_id`    BIGINT UNSIGNED NOT NULL,
+                `expiry`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `order_id`      BINARY(16) NOT NULL,
+                `qty_reserved`  INT UNSIGNED NOT NULL,
+                KEY `stk_rsv_idx_0_pid` (`store_id`, `product_type`, `product_id`, `order_id`(2)) ,
+                CONSTRAINT `c_fk_stock_prod_id` FOREIGN KEY (`store_id`, `product_type`, `product_id`, `expiry`)
+                    REFERENCES `stock_level_inventory`(`store_id`, `product_type`, `product_id`, `expiry`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `stock_rsv_detail`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.5" author="T.H.">
+        <tagDatabase tag="0.0.5" />
+    </changeSet>
 </databaseChangeLog>
 
