@@ -3,6 +3,8 @@ pub(super) mod product_price;
 pub(super) mod stock;
 pub(super) mod order;
 
+use std::u8;
+use std::result::Result as DefaultResult;
 use std::io::ErrorKind;
 use sqlx::error::Error;
 
@@ -49,3 +51,26 @@ impl From<Error> for AppError {
     } // end of fn from
 } // end of impl AppError
 
+// currently it is only for order-id type casting
+fn hex_to_bytes(src:&str) -> DefaultResult<Vec<u8>, AppError> {
+    if src.len() % 2 == 0 {
+        let results = (0 .. src.len()).step_by(2).map(|idx| {
+            if let Some(hx) = src.get(idx .. idx+2) {
+                match u8::from_str_radix(hx, 16) {
+                    Ok(num) => Ok(num),
+                    Err(_e) => Err(format!("parse-char-at-idx: {hx} , {idx}"))
+                }
+            } else { Err(format!("no-chars-at-idx: {idx}")) }
+        }).collect::<Vec<_>>();
+        let error = results.iter().find_map(|r| r.as_ref().err());
+        if let Some(d) = error {
+            Err(AppError {code:AppErrorCode::InvalidInput, detail:Some(d.clone()) })
+        } else {
+            let out = results.into_iter().map(|r| r.unwrap()).collect();
+            Ok(out)
+        }
+    } else {
+        let detail = format!("not-hex-string: {src}");
+        Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+    }
+}

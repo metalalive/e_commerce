@@ -135,10 +135,6 @@
                 `ctime_tz_utc`    SMALLINT  NOT NULL,
                 PRIMARY KEY (`usr_id`,`o_id`)
             );
-            INSERT INTO `order_toplvl_meta`(`o_id`, `usr_id`, `created_time`, `ctime_tz_utc`) VALUE
-            ('bibim-bap', 202, '2023-01-24 02:00:38.272', 134),
-            ('haze-mist-watt', 623, '2022-05-30 19:58:00.101', 308),
-            ('meaty-prodject', 623, '2022-02-09 05:31:29.006', 358);
         </sql>
         <rollback>
             DROP TABLE `order_toplvl_meta`;

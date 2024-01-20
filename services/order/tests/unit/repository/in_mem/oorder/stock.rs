@@ -11,7 +11,10 @@ use order::model::{
     OrderLineModel, OrderLinePriceModel, OrderLineAppliedPolicyModel, OrderLineQuantityModel,
     OrderLineModelSet, OrderLineIdentity, StockQtyRsvModel
 };
-use order::repository::{OrderInMemRepo, AbsOrderRepo, AppStockRepoReserveReturn, AbsOrderStockRepo};
+use order::repository::{
+    OrderInMemRepo, AbsOrderRepo, AppStockRepoReserveReturn, AbsOrderStockRepo,
+    AppStockRepoReserveUserFunc
+};
 use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
 
 use crate::model::verify_stocklvl_model;
@@ -295,8 +298,9 @@ async fn fetch_dstore_error()
     assert_eq!(error.detail, Some("utest".to_string()));
 }
 
-async fn ut_retrieve_stocklvl_qty (stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
-                                   store_id:u32, product: &ProductStockModel) -> (u32, u32, u32)
+pub(crate) async fn ut_retrieve_stocklvl_qty (
+    stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
+    store_id:u32, product: &ProductStockModel) -> (u32, u32, u32)
 {
     let pid = ProductStockIdentity { store_id, product_id: product.id_,
                 product_type: product.type_.clone(),  expiry: product.expiry};
@@ -345,10 +349,9 @@ fn mock_reserve_usr_cb_0(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     Ok(())
 } // end of mock_reserve_usr_cb_0
 
-fn mock_reserve_usr_cb_1(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
+pub(crate) fn mock_reserve_usr_cb_1(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     -> AppStockRepoReserveReturn
 {
-    assert_eq!(ms.stores.len(), 3);
     for om in req.lines.iter() {
         let result = ms.stores.iter_mut().find(|m| {om.id_.store_id == m.store_id});
         assert!(result.is_some());
@@ -360,10 +363,12 @@ fn mock_reserve_usr_cb_1(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     Ok(())
 } // end of mock_reserve_usr_cb_1
     
-async fn ut_reserve_init_setup(stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
-                               mock_warranty: DateTime<FixedOffset>,
-                               store_id: u32, product_type: ProductType, product_id: u64,
-                               num_req: u32, order_id:&str )
+pub(crate) async fn ut_reserve_init_setup(
+    stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
+    usr_cb: AppStockRepoReserveUserFunc,
+    mock_warranty: DateTime<FixedOffset>,
+    store_id: u32, product_type: ProductType, product_id: u64,
+    num_req: u32, order_id:&str )
 {
     let order_req = vec![
         OrderLineModel {
@@ -378,7 +383,7 @@ async fn ut_reserve_init_setup(stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
         order_id: order_id.to_string(), lines:order_req, owner_id:123,
         create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap()
     };
-    let result = stockrepo.try_reserve(mock_reserve_usr_cb_0, &ol_set).await;
+    let result = stockrepo.try_reserve(usr_cb, &ol_set).await;
     assert!(result.is_ok());
 }
 
@@ -400,11 +405,11 @@ async fn try_reserve_ok()
     };
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 3, "AceMan").await;
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 1, "BatMan").await;
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 2, "SpiderMan").await;
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1003, ProductType::Package, 9004, 2, "Joker").await;
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1003, ProductType::Package, 9004, 3, "DarkLord").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1001, ProductType::Package, 9004, 3, "AceMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1001, ProductType::Package, 9004, 1, "BatMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1001, ProductType::Package, 9004, 2, "SpiderMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1003, ProductType::Package, 9004, 2, "Joker").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1003, ProductType::Package, 9004, 3, "DarkLord").await;
     { // before reservation
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1001, &all_products[2]).await, (3+1+2, 0, 15)) ;
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1002, &all_products[3]).await, (0, 0, 8));
@@ -633,9 +638,9 @@ async fn try_return_ok()
     };
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 4, "AceMan").await;
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 1, "BatMan").await;
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Package, 9004, 3, "SpiderMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1001, ProductType::Package, 9004, 4, "AceMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1001, ProductType::Package, 9004, 1, "BatMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1001, ProductType::Package, 9004, 3, "SpiderMan").await;
     let data = StockLevelReturnDto {order_id: format!("AceMan"), items:vec![
         InventoryEditStockLevelDto {qty_add:1, expiry: mock_rsv_expiry, store_id: 1001, 
             product_type: ProductType::Package , product_id: 9004 }
@@ -704,8 +709,8 @@ async fn  try_return_input_err()
     };
     let result = stockrepo.save(expect_slset.clone()).await;
     assert!(result.is_ok());
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1001, ProductType::Item, 9005, 2, "AceMan").await;
-    ut_reserve_init_setup(stockrepo.clone(), mock_warranty, 1003, ProductType::Package, 9004, 5, "AceMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1001, ProductType::Item, 9005, 2, "AceMan").await;
+    ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1003, ProductType::Package, 9004, 5, "AceMan").await;
     let data = StockLevelReturnDto {order_id: format!("AceMan"), items:vec![
         InventoryEditStockLevelDto {qty_add:7, expiry: mock_warranty, store_id: 1001, 
             product_type: expect_slset.stores[0].products[3].type_.clone() ,

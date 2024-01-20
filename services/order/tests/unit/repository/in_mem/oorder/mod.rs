@@ -12,7 +12,7 @@ use order::model::{
 
 use super::in_mem_ds_ctx_setup;
 
-mod stock;
+pub(crate) mod stock;
 mod create;
 mod update;
 mod oline_return;

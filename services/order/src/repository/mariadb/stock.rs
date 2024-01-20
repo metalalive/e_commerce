@@ -12,22 +12,27 @@ use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::database::HasArguments;
 
 use crate::api::rpc::dto::{StockLevelReturnDto, StockReturnErrorDto};
+use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::constant::ProductType;
 use crate::datastore::AppMariaDbStore;
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductStockIdentity, StockLevelModelSet, OrderLineModelSet, ProductStockModel,
-    StoreStockModel, StockQuantityModel
+    StoreStockModel, StockQuantityModel, OrderLineModel
 };
 use crate::repository::{
     AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppStockRepoReturnUserFunc
 };
 
+use super::hex_to_bytes;
+
 struct InsertQtyArg(Vec<(u32, ProductStockModel)>);
 struct UpdateQtyArg(Vec<(u32, ProductStockModel)>);
+struct ReserveArg(Vec<(u32, ProductStockModel)>);
 struct FetchBaseQtyArg(Vec<ProductStockIdentity>);
-struct FetchBaseQtyRows(Vec<MySqlRow>);
-// TODO, add FetchReservedArg, ReserveArg and ReturnArg
+struct FetchRsvQtyArg<'a>(&'a Vec<OrderLineModel>);
+struct FetchStkLvlRows(Vec<MySqlRow>);
+// TODO, add ReturnArg
 
 impl InsertQtyArg {
     fn sql_pattern(num_batch : usize) -> String
@@ -60,9 +65,10 @@ impl<'q> IntoArguments<'q, MySql> for InsertQtyArg
         out
     }
 }
-impl Into<(String, MySqlArguments)> for InsertQtyArg {
-    fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.0.len()), self.into_arguments())
+impl Into<Vec<(String, MySqlArguments)>> for InsertQtyArg {
+    fn into(self) -> Vec<(String, MySqlArguments)> {
+        let c = (Self::sql_pattern(self.0.len()), self.into_arguments());
+        vec![c]
     }
 }
 
@@ -118,9 +124,79 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg
         out
     }
 } // end of impl IntoArguments for UpdateQtyArg
-impl Into<(String, MySqlArguments)> for UpdateQtyArg {
-    fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.0.len()), self.into_arguments())
+impl Into<Vec<(String, MySqlArguments)>> for UpdateQtyArg {
+    fn into(self) -> Vec<(String, MySqlArguments)> {
+        let c = (Self::sql_pattern(self.0.len()), self.into_arguments());
+        vec![c]
+    }
+}
+
+impl ReserveArg {
+    fn pattern_update_total_rsv(num_batch:usize) -> String {
+        let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=? AND `expiry`=?)";
+        let case_ops = (0 .. num_batch).into_iter().map(
+            |_| ["WHEN", condition, "THEN", "?"]
+        ).flatten().collect::<Vec<_>>().join(" ");
+        let pid_cmps = (0 .. num_batch).into_iter().map(
+            |_|  condition
+        ).collect::<Vec<_>>().join("OR");
+        format!("UPDATE `stock_level_inventory` SET `qty_tot_rsv` = CASE {case_ops} \
+                ELSE `qty_tot_rsv` END WHERE {pid_cmps}")
+    }
+    fn pattern_add_order_rsv(num_batch:usize) -> String {
+        let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`order_id`,`qty_reserved`";
+        let items = (0 .. num_batch).into_iter().map(
+            |_| "(?,?,?,?,?,?)"
+        ).collect::<Vec<_>>();
+        format!("INSERT INTO `stock_rsv_detail`({col_seq}) VALUES {}", items.join(","))
+    }
+    fn args_update_total_rsv(&self) -> MySqlArguments {
+        let mut out = MySqlArguments::default();
+        self.0.iter().map(|(store_id, p)| {
+            let (p_typ, prod_id, expiry, q_booked) = ( p.type_.clone(), p.id_,
+                        p.expiry_without_millis(), p.quantity.booked);
+            let prod_typ_num:u8 = p_typ.into();
+            out.add(store_id);
+            out.add(prod_typ_num.to_string());
+            out.add(prod_id);
+            out.add(expiry);
+            out.add(q_booked);
+        }).count();
+        self.0.iter().map(|(store_id, p)| {
+            let (expiry, p_typ, prod_id) = (p.expiry_without_millis(), p.type_.clone(), p.id_);
+            let prod_typ_num:u8 = p_typ.into();
+            out.add(store_id);
+            out.add(prod_typ_num.to_string());
+            out.add(prod_id);
+            out.add(expiry);
+        }).count();
+        out
+    }
+    fn args_add_order_rsv(self) -> MySqlArguments {
+        let mut out = MySqlArguments::default();
+        self.0.into_iter().map(|(store_id, p)| {
+            let (expiry, p_typ, prod_id, detail) = (p.expiry_without_millis(), p.type_, p.id_,
+                                                    p.quantity.rsv_detail.unwrap());
+            let prod_typ_num:u8 = p_typ.into();
+            out.add(store_id);
+            out.add(prod_typ_num.to_string());
+            out.add(prod_id);
+            out.add(expiry);
+            let (oid, rsv_per_item) = (detail.oid, detail.reserved);
+            let oid_b = hex_to_bytes(oid.as_str()).unwrap();
+            out.add(oid_b);
+            out.add(rsv_per_item);
+        }).count();
+        out
+    }
+}
+impl Into<Vec<(String, MySqlArguments)>> for ReserveArg {
+    fn into(self) -> Vec<(String, MySqlArguments)> {
+        let num_batch = self.0.len();
+        vec![
+            (Self::pattern_update_total_rsv(num_batch), self.args_update_total_rsv()),
+            (Self::pattern_add_order_rsv(num_batch), self.args_add_order_rsv())
+        ]
     }
 }
 
@@ -130,7 +206,8 @@ impl FetchBaseQtyArg {
         let pid_cmps = (0 .. num_batch).into_iter().map(
             |_|  condition
         ).collect::<Vec<_>>();
-        let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`,`qty_cancelled`"; 
+        let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`, \
+                       `qty_cancelled`,`qty_tot_rsv`"; 
         format!("SELECT {col_seq} FROM `stock_level_inventory` WHERE {}", pid_cmps.join("OR"))
     }
 }
@@ -139,8 +216,9 @@ impl<'q> IntoArguments<'q, MySql> for FetchBaseQtyArg
     fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
         let mut out = MySqlArguments::default();
         self.0.into_iter().map(|co| {
-            let (store_id, p_typ, prod_id, expiry) = (co.store_id, co.product_type,
-                                                      co.product_id, co.expiry );
+            let expiry =  co.expiry_without_millis();
+            let (store_id, p_typ, prod_id) = (co.store_id, co.product_type,
+                                              co.product_id);
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -156,6 +234,39 @@ impl Into<(String, MySqlArguments)> for FetchBaseQtyArg {
     }
 }
 
+impl<'a> FetchRsvQtyArg<'a>
+{ // TODO, consider to merge with `FetchBaseQtyArg`, not much difference with it
+    fn sql_pattern(num_batch : usize) -> String {
+        let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=?)";
+        let pid_cmps = (0 .. num_batch).into_iter().map(
+            |_|  condition
+        ).collect::<Vec<_>>();
+        let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`, \
+                       `qty_cancelled`,`qty_tot_rsv`"; 
+        format!("SELECT {col_seq} FROM `stock_level_inventory` WHERE {}", pid_cmps.join("OR"))
+    }
+}
+impl<'a,'q> IntoArguments<'q, MySql> for FetchRsvQtyArg<'a>
+{
+    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+        let mut out = MySqlArguments::default();
+        self.0.iter().map(|o| {
+            let prod_typ_num:u8 = o.id_.product_type.clone().into();
+            out.add(o.id_.store_id);
+            out.add(prod_typ_num.to_string());
+            out.add(o.id_.product_id);
+        }).count();
+        out
+    }
+}
+impl<'a> Into<(String, MySqlArguments)> for FetchRsvQtyArg<'a>
+{
+    fn into(self) -> (String, MySqlArguments) {
+        (Self::sql_pattern(self.0.len()), self.into_arguments())
+    }
+}
+
+
 impl TryFrom <MySqlRow> for ProductStockModel {
     type Error = AppError;
     fn try_from(row: MySqlRow) -> DefaultResult<Self, Self::Error>
@@ -166,15 +277,16 @@ impl TryFrom <MySqlRow> for ProductStockModel {
         let expiry  = row.try_get::<DateTime<Utc>, usize>(3)? .into();
         let total     = row.try_get::<u32, usize>(4)?;
         let cancelled = row.try_get::<u32, usize>(5)?;
-        // TODO, options for importing reservation records
-        let quantity = StockQuantityModel::new(total, cancelled, 0, None) ;
+        let booked  = row.try_get::<u32, usize>(6) ?;
+        // TODO, options for importing reservation detail of specific order
+        let quantity = StockQuantityModel::new(total, cancelled, booked, None) ;
         Ok(Self { type_: prod_typ, id_: prod_id, expiry, quantity, is_create: false })
     }
 }
-impl TryFrom<FetchBaseQtyRows> for StockLevelModelSet {
+impl TryFrom<FetchStkLvlRows> for StockLevelModelSet {
     type Error = AppError;
 
-    fn try_from(value: FetchBaseQtyRows) -> DefaultResult<Self, Self::Error> {
+    fn try_from(value: FetchStkLvlRows) -> DefaultResult<Self, Self::Error> {
         let mut errors:Vec<AppError> = Vec::new();
         let mut map: HashMap<u32, StoreStockModel> = HashMap::new();
         let num_fetched = value.0.len();
@@ -203,7 +315,7 @@ impl TryFrom<FetchBaseQtyRows> for StockLevelModelSet {
             Err(AppError { code: AppErrorCode::DataCorruption, detail: Some(detail) })
         }
     } // end of fn try_from
-} // end of impl TryFrom<FetchBaseQtyRows> for StockLevelModelSet
+} // end of impl TryFrom<FetchStkLvlRows> for StockLevelModelSet
 
 
 pub(super) struct StockMariaDbRepo
@@ -223,7 +335,7 @@ impl AbsOrderStockRepo for StockMariaDbRepo
         let query = stmt.query_with(args);
         let exec = conn.as_mut();
         let rows = query.fetch_all(exec).await ?;
-        let msets = StockLevelModelSet::try_from(FetchBaseQtyRows(rows))?;
+        let msets = StockLevelModelSet::try_from(FetchStkLvlRows(rows))?;
         Ok(msets)
     }
     async fn save(&self, slset:StockLevelModelSet) -> DefaultResult<(), AppError>
@@ -245,12 +357,17 @@ impl AbsOrderStockRepo for StockMariaDbRepo
         tx.commit().await?;
         Ok(())
     }
-    async fn try_reserve(&self, _cb: AppStockRepoReserveUserFunc,
-                         _order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn
-    { // TODO, figure out how to send `sqlx` transaction object between tasks
-        let e = AppError { code: AppErrorCode::NotImplemented, detail: None };
-        Err(Err(e))
-    }
+
+    async fn try_reserve(&self, cb: AppStockRepoReserveUserFunc,
+                         order_req: &OrderLineModelSet) -> AppStockRepoReserveReturn
+    { // TODO, figure out how to send `sqlx` transaction object between tasks (hard)
+        match self._try_reserve(cb, order_req).await {
+            Ok(c) => if c.is_empty() { Ok(()) }
+                     else { Err(Ok(c)) },
+            Err(e) => Err(Err(e))
+        }
+    } // end of fn try_reserve
+
     async fn try_return(&self,  _cb: AppStockRepoReturnUserFunc,
                         _data: StockLevelReturnDto )
         -> DefaultResult<Vec<StockReturnErrorDto>, AppError>
@@ -274,21 +391,58 @@ impl StockMariaDbRepo {
             let num_batch = min(data.len(), limit);
             let items_processing = data.split_off(data.len() - num_batch);
             assert!(items_processing.len() > 0);
-            let (sql_patt, args) = if cmd == "insert" {
-                InsertQtyArg(items_processing).into()
-            } else { UpdateQtyArg(items_processing).into() };
-            let stmt = tx.prepare(sql_patt.as_str()).await?;
-            let query = stmt.query_with(args);
-            let exec = tx.deref_mut();
-            let resultset = query.execute(exec).await?;
-            let num_affected = resultset.rows_affected() as usize;
-            if num_affected != num_batch {
-                let detail = format!("num_affected, actual:{}, expect:{}",
-                                     num_affected, num_batch );
-                return Err(AppError { code: AppErrorCode::DataCorruption,
-                    detail: Some(detail) });
+            let sqls:Vec<(String, MySqlArguments)> = match cmd {
+                "insert" => InsertQtyArg(items_processing).into(),
+                "update" => UpdateQtyArg(items_processing).into(),
+                "reserve" => ReserveArg(items_processing).into(),
+                _others => { vec![] }
+            };
+            for (sql_patt, args) in sqls {
+                let stmt = tx.prepare(sql_patt.as_str()).await?;
+                let query = stmt.query_with(args);
+                let exec = tx.deref_mut();
+                let resultset = query.execute(exec).await?;
+                let num_affected = resultset.rows_affected() as usize;
+                if num_affected != num_batch {
+                    let detail = format!("cmd:{}, num_affected, actual:{}, expect:{}",
+                                         cmd, num_affected, num_batch );
+                    return Err(AppError { code: AppErrorCode::DataCorruption,
+                        detail: Some(detail) });
+                }
             }
         } // end of loop
         Ok(())
     } // end of fn _save_base_qty
+    
+    async fn _try_reserve(&self, usr_cb: AppStockRepoReserveUserFunc,
+                         order_req: &OrderLineModelSet)
+        -> DefaultResult<Vec<OrderLineCreateErrorDto>, AppError>
+    {
+        let mut conn = self._db.acquire().await?;
+        let mut tx = conn.begin().await?;
+        let mut mset = {
+            let (sql_patt, args) = FetchRsvQtyArg(&order_req.lines).into();
+            let stmt = tx.prepare(sql_patt.as_str()).await?;
+            let query = stmt.query_with(args);
+            let exec = tx.deref_mut();
+            let rows = exec.fetch_all(query).await ?;
+            let ms = StockLevelModelSet::try_from(FetchStkLvlRows(rows)) ?;
+            ms
+        };
+        if let Err(e) = usr_cb(&mut mset, order_req) {
+            e
+        } else {
+            let stk = mset.stores.into_iter().flat_map(|s| {
+                let store_id = s.store_id;
+                s.products.into_iter().filter_map(move |p| {
+                    if p.quantity.rsv_detail.is_some() {
+                        Some((store_id, p))
+                    } else { None }
+                })
+            }).collect();
+            Self::_save_base_qty("reserve", 20, &mut tx, stk).await ?;
+            tx.commit().await ?;
+            Ok(vec![])
+        }
+    }
 } // end of impl StockMariaDbRepo

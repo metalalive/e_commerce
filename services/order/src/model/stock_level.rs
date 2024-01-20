@@ -163,16 +163,22 @@ impl StockQuantityModel {
     }
 } // end of impl StockQuantityModel
 
+fn dtime_without_millis(value:&DateTime<Utc>) -> DateTime<Utc>
+{
+    let orig_tz = value.timezone();
+    let ts_secs = value.timestamp(); // erase milliseconds
+    let _dt = DateTime::from_timestamp(ts_secs, 0).unwrap();
+    let out = _dt.with_timezone(&orig_tz);
+    //println!("time1:{}, time2: {}", self.expiry.to_rfc3339(), out.to_rfc3339());
+    out
+}
+impl ProductStockIdentity {
+    pub fn expiry_without_millis(&self) -> DateTime<Utc>
+    { dtime_without_millis(&self.expiry) }
+}
 impl ProductStockModel {
     pub fn expiry_without_millis(&self) -> DateTime<Utc>
-    {
-        let orig_tz = self.expiry.timezone();
-        let ts_secs = self.expiry.timestamp(); // erase milliseconds
-        let _dt = DateTime::from_timestamp(ts_secs, 0).unwrap();
-        let out = _dt.with_timezone(&orig_tz);
-        //println!("time1:{}, time2: {}", self.expiry.to_rfc3339(), out.to_rfc3339());
-        out
-    }
+    { dtime_without_millis(&self.expiry) }
 }
 
 impl StoreStockModel {
