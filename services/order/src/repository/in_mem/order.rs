@@ -386,12 +386,10 @@ impl AbsOrderRepo for OrderInMemRepo
         -> DefaultResult<Vec<OrderLinePayDto>, AppError> 
     {
         let oid = lineset.order_id.as_str();
-        let mut tabledata:[(String, AppInMemFetchedSingleTable);5] = [
+        let mut tabledata:[(String, AppInMemFetchedSingleTable);3] = [
             (_contact::TABLE_LABEL.to_string(), HashMap::new()),
             (_phy_addr::TABLE_LABEL.to_string(), HashMap::new()),
             (_ship_opt::TABLE_LABEL.to_string(), _ship_opt::to_inmem_tbl(oid, sh.option)),
-            (_orderline::TABLE_LABEL.to_string(), _orderline::to_inmem_tbl(oid, &lineset.lines)),
-            (_order_toplvl_meta::TABLE_LABEL.to_string(), _order_toplvl_meta::to_inmem_tbl(&lineset)),
         ];
         {
             let items = _contact::to_inmem_tbl(oid, _pkey_partial_label::SHIPPING, sh.contact);
@@ -601,6 +599,15 @@ impl OrderInMemRepo {
            datastore: m,
         };
         Ok(obj)
+    }
+    pub(super) fn in_mem_olines(lineset:&OrderLineModelSet)
+        -> Vec<(String,AppInMemFetchedSingleTable)>
+    {
+        let oid = lineset.order_id.as_str();
+        vec![
+            (_orderline::TABLE_LABEL.to_string(), _orderline::to_inmem_tbl(oid, &lineset.lines)),
+            (_order_toplvl_meta::TABLE_LABEL.to_string(), _order_toplvl_meta::to_inmem_tbl(lineset))
+        ]
     }
     async fn fetch_lines_common(&self, keys:Vec<String>)
         -> DefaultResult<Vec<OrderLineModel>, AppError>

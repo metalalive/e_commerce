@@ -1,6 +1,6 @@
 use std::ptr;
 use std::sync::Arc;
-use chrono::{DateTime, Local, FixedOffset, Duration};
+use chrono::{DateTime, FixedOffset, Duration};
 
 use order::api::rpc::dto::{StockLevelReturnDto, InventoryEditStockLevelDto, StockReturnErrorDto, StockReturnErrorReason};
 use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
@@ -12,26 +12,13 @@ use order::model::{
     OrderLineModelSet, OrderLineIdentity, StockQtyRsvModel
 };
 use order::repository::{
-    OrderInMemRepo, AbsOrderRepo, AppStockRepoReserveReturn, AbsOrderStockRepo,
-    AppStockRepoReserveUserFunc
+    AbsOrderRepo, AppStockRepoReserveReturn, AbsOrderStockRepo, AppStockRepoReserveUserFunc
 };
-use order::datastore::{AppInMemoryDStore, AbstInMemoryDStore};
+use order::datastore::AppInMemoryDStore;
 
 use crate::model::verify_stocklvl_model;
-use super::super::{in_mem_ds_ctx_setup, MockInMemDeadDataStore};
-
-async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
-    nitems:u32, mut curr_time:Option<DateTime<FixedOffset>> ) -> OrderInMemRepo
-{
-    if curr_time.is_none() {
-        curr_time = Some(Local::now().into());
-    }
-    let ds = in_mem_ds_ctx_setup::<T>(nitems);
-    let mem = ds.in_mem.as_ref().unwrap();
-    let result = OrderInMemRepo::new(mem.clone(), curr_time.unwrap()).await;
-    assert_eq!(result.is_ok(), true);
-    result.unwrap()
-}
+use super::super::MockInMemDeadDataStore;
+use super::in_mem_repo_ds_setup;
 
 fn ut_init_data_product() -> [ProductStockModel;10]
 {

@@ -1,13 +1,66 @@
-use chrono::DateTime;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use chrono::{DateTime, Local, Duration, FixedOffset};
 use order::api::dto::{CountryCode, ShippingMethod};
 use order::constant::ProductType;
-use order::repository::{AbsOrderRepo, OrderInMemRepo};
+use order::datastore::AppInMemoryDStore;
+use order::repository::{AbsOrderRepo, OrderInMemRepo, AppStockRepoReserveReturn, AbsOrderStockRepo};
 use order::model::{
-    OrderLineModel, OrderLineModelSet, BillingModel, ShippingModel, OrderLineIdentity
+    OrderLineModel, OrderLineModelSet, BillingModel, ShippingModel,
+    OrderLineIdentity, ProductStockModel, StockLevelModelSet, StoreStockModel, StockQuantityModel
 };
-use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_shipping, ut_setup_orderlines};
+use super::{
+    in_mem_repo_ds_setup, ut_setup_billing, ut_setup_shipping, ut_setup_orderlines
+};
 
 const ORDERS_NUM_LINES:[usize;3] = [4,5,2];
+
+fn ut_setup_olines_gen_stock(olines:&Vec<OrderLineModel>, mock_expiry:DateTime<FixedOffset>)
+    -> StockLevelModelSet
+{
+    let mut stores = HashMap::new();
+    assert!(olines.len() > 0);
+    olines.iter().map(|ol| {
+        let store_id = ol.id_.store_id;
+        if stores.get_mut(&store_id).is_none() {
+            let value = StoreStockModel { store_id, products: vec![] };
+            stores.insert(store_id, value);
+        }
+        let store = stores.get_mut(&store_id).unwrap();
+        let value = ProductStockModel {
+            type_: ol.id_.product_type.clone(), id_: ol.id_.product_id, is_create: true,
+            expiry: mock_expiry.into() , quantity: StockQuantityModel {
+                total: ol.qty.reserved, cancelled: 0, booked: 0, rsv_detail: None }
+        };
+        store.products.push(value);
+    }).count() ;
+    let stores = stores.into_values().collect::<Vec<_>>();
+    StockLevelModelSet { stores }
+} // end of fn ut_setup_olines_gen_stock
+
+pub(super) async fn ut_setup_save_stock(
+        stockrepo: Arc<Box<dyn AbsOrderStockRepo>>,
+        mock_repo_time: DateTime<FixedOffset>,
+        orderlines: &Vec<OrderLineModel>
+    )
+{
+    let mock_expiry = mock_repo_time + Duration::minutes(2);
+    let slset = ut_setup_olines_gen_stock(orderlines, mock_expiry);
+    let result = stockrepo.save(slset).await;
+    assert!(result.is_ok());
+}
+
+pub(super) fn ut_setup_stock_rsv_cb(sl_set: &mut StockLevelModelSet, ol_set: &OrderLineModelSet)
+    -> AppStockRepoReserveReturn
+{
+    let errors = sl_set.try_reserve(ol_set);
+    // for e1 in errors.iter() {
+    //     println!("[utest][ERROR] stock reserve {:?}", e1);
+    // }
+    assert!(errors.is_empty());
+    Ok(())
+}
 
 async fn ut_verify_create_order(
     mock_oid:[String;3], mock_usr_ids:[u32;3], mock_create_time:[&str;3],
@@ -15,18 +68,22 @@ async fn ut_verify_create_order(
     mut billings: Vec<BillingModel>, mut shippings: Vec<ShippingModel> )
 {
     assert!(orderlines.len() >= ORDERS_NUM_LINES.iter().sum::<usize>());
+    let stockrepo = o_repo.stock();
     for idx in 0..3 {
-        let ol_set = OrderLineModelSet {order_id:mock_oid[idx].clone(), owner_id:mock_usr_ids[idx],
+        let ol_set = OrderLineModelSet {
+            order_id:mock_oid[idx].clone(), owner_id:mock_usr_ids[idx],
             create_time: DateTime::parse_from_rfc3339(mock_create_time[idx]).unwrap(),
             lines: orderlines.drain(0..ORDERS_NUM_LINES[idx]).collect()
         };
+        let result = stockrepo.try_reserve(ut_setup_stock_rsv_cb, &ol_set).await;
+        assert!(result.is_ok());
         let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
         assert!(result.is_ok());
         if let Ok(dtos) = result {
             assert_eq!(dtos.len(), ORDERS_NUM_LINES[idx]);
         }; 
     }
-}
+} // end of fn ut_verify_create_order
 
 async fn ut_verify_fetch_all_olines(mock_oid:[String;2], mock_seller_ids:[u32;2],
                                o_repo :&OrderInMemRepo)
@@ -201,7 +258,6 @@ async fn ut_verify_fetch_shipping(mock_oid:[String;3], mock_seller_ids:[u32;2],
 #[tokio::test]
 async fn in_mem_create_ok ()
 {
-    let o_repo = in_mem_repo_ds_setup(50).await;
     let (mock_usr_ids, mock_seller_ids) = ([124u32, 421, 124], [17u32,38]);
     let mock_oid = [
         OrderLineModel::generate_order_id(4),
@@ -213,10 +269,13 @@ async fn in_mem_create_ok ()
         "2022-11-08T12:09:33.8101+04:00",
         "2022-11-09T06:07:18.150-01:00",
     ];
+    let mock_repo_time = DateTime::parse_from_rfc3339("2022-11-11T12:30:51.150-02:00").unwrap();
+    let o_repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(50, Some(mock_repo_time)).await;
+    let orderlines = ut_setup_orderlines(&mock_seller_ids);
+    ut_setup_save_stock(o_repo.stock(), mock_repo_time, &orderlines).await;
     ut_verify_create_order(
         mock_oid.clone(), mock_usr_ids.clone(), mock_create_time.clone(),
-        &o_repo, ut_setup_orderlines(&mock_seller_ids), ut_setup_billing(), 
-        ut_setup_shipping(&mock_seller_ids)
+        &o_repo, orderlines, ut_setup_billing(), ut_setup_shipping(&mock_seller_ids)
     ).await ;
     ut_verify_fetch_all_olines([mock_oid[0].clone(), mock_oid[1].clone()],
                                mock_seller_ids.clone(),  &o_repo).await;
@@ -240,7 +299,7 @@ async fn in_mem_create_ok ()
 #[tokio::test]
 async fn in_mem_fetch_all_lines_empty ()
 {
-    let o_repo = in_mem_repo_ds_setup(30).await;
+    let o_repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, None).await;
     let mock_oid = "12345".to_string();
     let result = o_repo.fetch_all_lines(mock_oid).await;
     assert!(result.is_ok());

@@ -1,8 +1,8 @@
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, FixedOffset};
 
 use order::api::dto::{PhoneNumberDto, CountryCode, ShippingMethod};
 use order::constant::ProductType;
-use order::datastore::AppInMemoryDStore;
+use order::datastore::AbstInMemoryDStore;
 use order::repository::OrderInMemRepo;
 use order::model::{
     BillingModel, ContactModel, PhyAddrModel, ShippingModel, ShippingOptionModel,
@@ -17,12 +17,15 @@ mod create;
 mod update;
 mod oline_return;
 
-async fn in_mem_repo_ds_setup (nitems:u32) -> OrderInMemRepo
+async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
+    nitems:u32, mut curr_time:Option<DateTime<FixedOffset>> ) -> OrderInMemRepo
 {
-    let ds = in_mem_ds_ctx_setup::<AppInMemoryDStore>(nitems);
+    if curr_time.is_none() {
+        curr_time = Some(Local::now().into());
+    }
+    let ds = in_mem_ds_ctx_setup::<T>(nitems);
     let mem = ds.in_mem.as_ref().unwrap();
-    let timenow = Local::now().fixed_offset();
-    let result = OrderInMemRepo::new(mem.clone(), timenow).await;
+    let result = OrderInMemRepo::new(mem.clone(), curr_time.unwrap()).await;
     assert_eq!(result.is_ok(), true);
     result.unwrap()
 }

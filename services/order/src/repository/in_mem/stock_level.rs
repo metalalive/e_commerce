@@ -17,6 +17,7 @@ use crate::model::{
     StockLevelModelSet, OrderLineModelSet, StockQtyRsvModel
 };
 
+use super::order::OrderInMemRepo;
 use super::super::{
     AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppStockRepoReturnUserFunc
 };
@@ -268,11 +269,15 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
                 Err(e) => {return Err(Err(e));}
             };
         usr_cb(&mut stock_mset, order_req)?;
-        if let Err(e) = self.save_with_lock(stock_mset, rsv_set, d_lock) {
+        let data = {
+            let mut seq = OrderInMemRepo::in_mem_olines(order_req);
+            let rows = AppInMemFetchedSingleTable::from(SaveArg(stock_mset, rsv_set));
+            seq.insert(0, (_stockm::TABLE_LABEL.to_string(), rows)); 
+            HashMap::from_iter(seq.into_iter())
+        }; 
+        if let Err(e) = self.datastore.save_release(data, d_lock) {
             Err(Err(e))
-        } else {
-            Ok(())
-        }
+        } else { Ok(()) }
     } // end of fn try_reserve
     
     async fn try_return(&self,  cb: AppStockRepoReturnUserFunc, data: StockLevelReturnDto )
@@ -287,7 +292,10 @@ impl AbsOrderStockRepo for StockLvlInMemRepo
             data.order_id.clone(), pids, None).await?;
         let caller_errors = cb(&mut mset, data);
         if caller_errors.is_empty() {
-            self.save_with_lock(mset, rsv_set, d_lock)?;
+            let rows = AppInMemFetchedSingleTable::from(SaveArg(mset, rsv_set));
+            let table = (_stockm::TABLE_LABEL.to_string(), rows);
+            let data = HashMap::from([table]);
+            let _num_saved = self.datastore.save_release(data, d_lock)?;
         }
         Ok(caller_errors)
     }
@@ -317,15 +325,6 @@ impl StockLvlInMemRepo {
         };
         let ms =  Self::try_into_modelset(Some(order_id), tableset)?;
         Ok((ms, rsv_set, lock))
-    }
-    fn save_with_lock(&self, slset:StockLevelModelSet, rsv_set:FetchedRsvSet, lock:AppInMemDstoreLock)
-        -> DefaultResult<(), AppError>
-    {
-        let rows = AppInMemFetchedSingleTable::from(SaveArg(slset, rsv_set));
-        let table = (_stockm::TABLE_LABEL.to_string(), rows);
-        let data = HashMap::from([table]);
-        let _num_saved = self.datastore.save_release(data, lock)?;
-        Ok(())
     }
     fn try_into_modelset (order_id: Option<String>, tableset:AppInMemFetchedData)
         -> DefaultResult<StockLevelModelSet, AppError>
