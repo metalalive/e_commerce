@@ -42,7 +42,7 @@ pub struct CreateOrderUseCase {
 pub struct OrderReplicaPaymentUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
 }
-pub struct OrderReplicaRefundUseCase{
+pub struct OrderReplicaRefundUseCase {
     pub repo: Box<dyn AbsOrderReturnRepo>,
 }
 pub struct OrderReplicaInventoryUseCase {
@@ -68,7 +68,7 @@ impl CreateOrderUseCase {
     pub async fn execute(self, req:OrderCreateReqData)
         -> DefaultResult<OrderCreateRespOkDto, CreateOrderUsKsErr>
     {
-        let  (sh_d, bl_d, ol_d) = (req.shipping, req.billing, req.order_lines);
+        let (sh_d, bl_d, ol_d) = (req.shipping, req.billing, req.order_lines);
         let (o_bl, o_sh) = Self::validate_metadata(sh_d, bl_d)?;
         let (ms_policy, ms_price) = self.load_product_properties(&ol_d).await?;
         let o_items = Self::validate_orderline(ms_policy, ms_price, ol_d)?;
@@ -76,15 +76,19 @@ impl CreateOrderUseCase {
         let machine_code = 1u8;
         let oid = OrderLineModel::generate_order_id(machine_code);
         let timenow = LocalTime::now().fixed_offset();
-        let ol_set = OrderLineModelSet { order_id:oid.clone(), lines:o_items,
+        let ol_set = OrderLineModelSet { order_id:oid, lines:o_items,
                          create_time: timenow.clone(), owner_id:self.usr_id };
+        // repository implementation should treat order-line reservation and
+        // stock-level update as a single atomic operation 
         self.try_reserve_stock(&ol_set).await?;
-        // There might be under-booking issue if power outage happenes at here
-        // before successfully saving the order lines. TODO: Improve the code here
-        match self.repo_order.create(ol_set, o_bl, o_sh).await {
-            Ok(lines) => {
+        // Contact info might be lost after order lines were saved, if power outage happenes
+        // at here. TODO: Improve the code here
+        match self.repo_order.save_contact(ol_set.order_id.as_str(), o_bl, o_sh).await {
+            Ok(_) => {
+                let (oid, lines) = (ol_set.order_id, ol_set.lines);
+                let reserved_lines = lines.into_iter().map(OrderLineModel::into).collect();
                 let obj = OrderCreateRespOkDto { order_id:oid, usr_id: self.usr_id,
-                    time: timenow.timestamp() as u64, reserved_lines: lines };
+                    time: timenow.timestamp() as u64, reserved_lines };
                 Ok(obj)
             },
             Err(e) => {
@@ -117,6 +121,7 @@ impl CreateOrderUseCase {
             .collect::<Vec<(ProductType, u64)>>();
         let req_ids_price = data.iter().map(|d| (d.seller_id, d.product_type.clone(), d.product_id))
             .collect::<Vec<(u32, ProductType, u64)>>();
+        // TODO, limit number of distinct product items to load for each order
         let rs_policy = self.repo_policy.fetch(req_ids_policy.clone()).await;
         let rs_price  = self.repo_price.fetch_many(req_ids_price.clone()).await;
         if rs_policy.is_ok() && rs_price.is_ok() {

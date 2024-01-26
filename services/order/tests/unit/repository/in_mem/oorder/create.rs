@@ -77,11 +77,9 @@ async fn ut_verify_create_order(
         };
         let result = stockrepo.try_reserve(ut_setup_stock_rsv_cb, &ol_set).await;
         assert!(result.is_ok());
-        let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
+        let result = o_repo.save_contact(ol_set.order_id.as_str(),
+                     billings.remove(0), shippings.remove(0)).await;
         assert!(result.is_ok());
-        if let Ok(dtos) = result {
-            assert_eq!(dtos.len(), ORDERS_NUM_LINES[idx]);
-        }; 
     }
 } // end of fn ut_verify_create_order
 

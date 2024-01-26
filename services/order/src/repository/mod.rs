@@ -68,9 +68,9 @@ pub trait AbsProductPriceRepo : Sync + Send
 #[async_trait]
 pub trait AbsOrderRepo: Sync + Send {
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>;
-    
-    async fn create (&self, lines:OrderLineModelSet, bl:BillingModel, sh:ShippingModel)
-        -> DefaultResult<Vec<OrderLinePayDto>, AppError> ;
+
+    async fn save_contact(&self, oid:&str, bl:BillingModel, sh:ShippingModel)
+        -> DefaultResult<(), AppError> ;
 
     async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>;
 

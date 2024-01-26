@@ -35,7 +35,8 @@ async fn ut_setup_saved_order(o_repo:&OrderInMemRepo,
     let stockrepo = o_repo.stock();
     let result = stockrepo.try_reserve(ut_setup_stock_rsv_cb, &ol_set).await;
     assert!(result.is_ok());
-    let result = o_repo.create(ol_set, billings.remove(0), shippings.remove(0)).await;
+    let result = o_repo.save_contact(ol_set.order_id.as_str(),
+                 billings.remove(0), shippings.remove(0)).await;
     assert!(result.is_ok());
 }
 

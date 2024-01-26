@@ -286,7 +286,8 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str,
     };
     let ol_set = OrderLineModelSet {order_id:oid.to_string(), lines,
                  owner_id:usr_id, create_time };
-    let _ = repo.create(ol_set, bl, sh).await?;
+    // TODO, reserve stock for each order
+    let _ = repo.save_contact(oid, bl, sh).await?;
     Ok(())
 } // end of itest_mock_create_order
 

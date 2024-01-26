@@ -103,8 +103,8 @@ impl AbsOrderRepo for MockOrderRepo {
         Arc::new(Box::new(obj))
     }
 
-    async fn create (&self, _lineset:OrderLineModelSet, _bl:BillingModel, _sh:ShippingModel)
-        -> DefaultResult<Vec<OrderLinePayDto>, AppError>
+    async fn save_contact(&self, _oid:&str, _bl:BillingModel, _sh:ShippingModel)
+        -> DefaultResult<(), AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }

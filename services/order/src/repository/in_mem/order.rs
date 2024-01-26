@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 use tokio::sync::Mutex;
 
-use crate::api::dto::{OrderLinePayDto, PhoneNumberDto, ShippingMethod};
+use crate::api::dto::{PhoneNumberDto, ShippingMethod};
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleTable, AppInMemFetchedSingleRow};
@@ -382,10 +382,9 @@ impl AbsOrderRepo for OrderInMemRepo
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>
     { self._stock.clone() }
 
-    async fn create (&self, lineset:OrderLineModelSet, bl:BillingModel, sh:ShippingModel)
-        -> DefaultResult<Vec<OrderLinePayDto>, AppError> 
+    async fn save_contact(&self, oid:&str, bl:BillingModel, sh:ShippingModel)
+        -> DefaultResult<(), AppError> 
     {
-        let oid = lineset.order_id.as_str();
         let mut tabledata:[(String, AppInMemFetchedSingleTable);3] = [
             (_contact::TABLE_LABEL.to_string(), HashMap::new()),
             (_phy_addr::TABLE_LABEL.to_string(), HashMap::new()),
@@ -407,9 +406,8 @@ impl AbsOrderRepo for OrderInMemRepo
         }
         let data = HashMap::from_iter(tabledata.into_iter());
         let _num = self.datastore.save(data).await?;
-        let paylines = lineset.lines.into_iter().map(OrderLineModel::into).collect();
-        Ok(paylines)
-    } // end of fn create
+        Ok(())
+    } // end of fn save_contact
 
     async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
     {

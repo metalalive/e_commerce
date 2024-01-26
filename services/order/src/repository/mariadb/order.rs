@@ -31,8 +31,8 @@ impl AbsOrderRepo for OrderMariaDbRepo
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>
     { self._stock.clone() }
 
-    async fn create (&self, _lines:OrderLineModelSet, _bl:BillingModel, _sh:ShippingModel)
-        -> DefaultResult<Vec<OrderLinePayDto>, AppError> 
+    async fn save_contact (&self, _oid:&str, _bl:BillingModel, _sh:ShippingModel)
+        -> DefaultResult<(), AppError> 
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
@@ -106,4 +106,4 @@ impl OrderMariaDbRepo {
         // TODO, consider to balance loads of order request to different database servers
         // , currently this repo selects only the first db pool
     }
-}
+} // end of impl OrderMariaDbRepo
