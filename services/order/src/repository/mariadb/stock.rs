@@ -24,7 +24,8 @@ use crate::repository::{
     AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppStockRepoReturnUserFunc
 };
 
-use super::hex_to_bytes;
+use super::{hex_to_bytes, run_query_once};
+use super::order::OrderMariaDbRepo;
 
 struct InsertQtyArg(Vec<(u32, ProductStockModel)>);
 struct UpdateQtyArg(Vec<(u32, ProductStockModel)>);
@@ -398,17 +399,7 @@ impl StockMariaDbRepo {
                 _others => { vec![] }
             };
             for (sql_patt, args) in sqls {
-                let stmt = tx.prepare(sql_patt.as_str()).await?;
-                let query = stmt.query_with(args);
-                let exec = tx.deref_mut();
-                let resultset = query.execute(exec).await?;
-                let num_affected = resultset.rows_affected() as usize;
-                if num_affected != num_batch {
-                    let detail = format!("cmd:{}, num_affected, actual:{}, expect:{}",
-                                         cmd, num_affected, num_batch );
-                    return Err(AppError { code: AppErrorCode::DataCorruption,
-                        detail: Some(detail) });
-                }
+                let _rs = run_query_once(tx, sql_patt, args, num_batch).await?;
             }
         } // end of loop
         Ok(())
@@ -440,9 +431,10 @@ impl StockMariaDbRepo {
                     } else { None }
                 })
             }).collect();
-            Self::_save_base_qty("reserve", 20, &mut tx, stk).await ?;
+            Self::_save_base_qty("reserve", 20, &mut tx, stk).await?;
+            OrderMariaDbRepo::create_lines(&mut tx, order_req, 22).await?;
             tx.commit().await ?;
             Ok(vec![])
         }
-    }
+    } // end of fn _try_reserve
 } // end of impl StockMariaDbRepo

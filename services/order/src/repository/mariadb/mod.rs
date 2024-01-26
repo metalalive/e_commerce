@@ -3,10 +3,13 @@ pub(super) mod product_price;
 pub(super) mod stock;
 pub(super) mod order;
 
+use std::ops::DerefMut;
 use std::u8;
 use std::result::Result as DefaultResult;
 use std::io::ErrorKind;
+use sqlx::{Executor, Transaction, MySql, Statement};
 use sqlx::error::Error;
+use sqlx::mysql::{MySqlArguments, MySqlQueryResult};
 
 use crate::error::{AppError, AppErrorCode};
     
@@ -72,5 +75,26 @@ fn hex_to_bytes(src:&str) -> DefaultResult<Vec<u8>, AppError> {
     } else {
         let detail = format!("not-hex-string: {src}");
         Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+    }
+}
+
+async fn run_query_once(tx: &mut Transaction<'_, MySql>,
+                        sql_patt:String,
+                        args:MySqlArguments,
+                        num_batch:usize )
+    -> DefaultResult<MySqlQueryResult, AppError>
+{
+    let stmt = tx.prepare(sql_patt.as_str()).await?;
+    let query = stmt.query_with(args);
+    let exec = tx.deref_mut();
+    let resultset = query.execute(exec).await?;
+    let num_affected = resultset.rows_affected() as usize;
+    if num_affected == num_batch {
+        Ok(resultset)
+    } else { // TODO, logging more detail for debugging
+        let detail = format!("num_affected, actual:{}, expect:{}",
+                             num_affected, num_batch );
+        Err(AppError { code: AppErrorCode::DataCorruption,
+            detail: Some(detail) })
     }
 }

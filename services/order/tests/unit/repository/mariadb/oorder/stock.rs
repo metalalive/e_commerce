@@ -215,7 +215,7 @@ async fn try_reserve_ok()
     ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1013,
         ProductType::Package, 9004, 2, "f1726b0c").await;
     ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1013,
-        ProductType::Item, 9006, 17, "f1726b0c").await;
+        ProductType::Item, 9006, 17, "f1726b0d").await;
     ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1013,
         ProductType::Item, 9006, 7, "17a6b0c3").await;
     ut_reserve_init_setup(stockrepo.clone(), mock_reserve_usr_cb_0, mock_warranty, 1013,
@@ -262,7 +262,7 @@ async fn try_reserve_ok()
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
-    {
+    { // TODO, verify order lines and top-level metadata
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await, ((2+2), 0, 15)) ;
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await, (3, 0, 14));
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await, (17+7+4, 3, 120));
