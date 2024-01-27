@@ -84,6 +84,7 @@
             - `qty_cancelled` indicates quantity of products has been cancelled by (internal) inventory service, the quantity which is no longer available to customers.
             - `expiry` always represents some time with UTC, time zone is not essential to save for this application
             - currently `expiry` is part of natural (primary) key, when the data grows to millions of records, consider to replace `expiry` column with some surrogate key.
+            - TODO, convert `expiry` to `DATETIME` type, save as UTC time
             - mariaDB automatically modifies value of a timestamp column (`expiry` for example) if it is not prsent in a updating row
               - currently in this application, `expiry` cannot be modified once created (TODO, fix this problem)
               - by explcitly adding `DEFAULT xxx`, it can avoid MariaDB from appending `ON UPDATE CURRENT_TIMESTAMP` syntax to the timestamp column definition.
@@ -151,6 +152,7 @@
             - constraint on order-id cannot be applied to the table due to foreign key limit in mariaDB,
               the application is responsible to delete the records as soon as deleting the relavant order
               in another table `order_toplvl_meta`
+            - TODO, convert `expiry` to `DATETIME` type, save as UTC time
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE  `stock_rsv_detail` (
@@ -172,6 +174,48 @@
     </changeSet>
     <changeSet id="tag_version_0.0.5" author="T.H.">
         <tagDatabase tag="0.0.5" />
+    </changeSet>
+    <changeSet id="modify_createtime__order_toplvl_meta" author="T.H.">
+        <comment>
+            - `created_time` should be always converted to UTC timezone before it is saved, `DATETIME` column cannot provide timezone info
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_toplvl_meta` MODIFY `created_time` DATETIME(3) NOT NULL;
+            ALTER TABLE `order_toplvl_meta` DROP `ctime_tz_utc`;
+        </sql>
+        <rollback>
+            ALTER TABLE `order_toplvl_meta` ADD `ctime_tz_utc` SMALLINT  NOT NULL;
+            ALTER TABLE `order_toplvl_meta` MODIFY `created_time` TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__order_line_detail" author="T.H.">
+        <comment>
+            - `rsved_until` and `warranty_until` should be saved as UTC time
+            - TODO, to learn when to set reference constraint on order-id, and when not to do so
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `order_line_detail` (
+                `o_id`   BINARY(16) NOT NULL,
+                `seq`    SMALLINT  NOT NULL,
+                `store_id`      INT UNSIGNED NOT NULL,
+                `product_type`  ENUM('1', '2') NOT NULL, 
+                `product_id`    BIGINT UNSIGNED NOT NULL,
+                `price_unit`    INT UNSIGNED NOT NULL,
+                `price_total`   INT UNSIGNED NOT NULL,
+                `qty_rsved`    INT UNSIGNED NOT NULL,
+                `qty_paid`     INT UNSIGNED NOT NULL DEFAULT 0,
+                `qty_paid_last_update`  DATETIME(2) NULL DEFAULT NULL,
+                `rsved_until`      DATETIME  NOT NULL,
+                `warranty_until`   DATETIME  NOT NULL,
+                PRIMARY KEY (`o_id`, `seq`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `order_line_detail`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.6" author="T.H.">
+        <tagDatabase tag="0.0.6" />
     </changeSet>
 </databaseChangeLog>
 
