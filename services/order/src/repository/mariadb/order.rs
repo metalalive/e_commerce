@@ -100,7 +100,7 @@ impl AbsOrderRepo for OrderMariaDbRepo
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
-    async fn fetch_all_lines(&self, _oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
+    async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }

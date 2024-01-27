@@ -24,7 +24,7 @@ use crate::repository::{
     AbsOrderStockRepo, AppStockRepoReserveUserFunc, AppStockRepoReserveReturn, AppStockRepoReturnUserFunc
 };
 
-use super::{hex_to_bytes, run_query_once};
+use super::{OidBytes, run_query_once};
 use super::order::OrderMariaDbRepo;
 
 struct InsertQtyArg(Vec<(u32, ProductStockModel)>);
@@ -184,8 +184,9 @@ impl ReserveArg {
             out.add(prod_id);
             out.add(expiry);
             let (oid, rsv_per_item) = (detail.oid, detail.reserved);
-            let oid_b = hex_to_bytes(oid.as_str()).unwrap();
-            out.add(oid_b);
+            // TODO, move to beginning of `reserve()`
+            let OidBytes(oid_b) = OidBytes::try_from(oid.as_str()).unwrap();
+            out.add(oid_b.to_vec());
             out.add(rsv_per_item);
         }).count();
         out

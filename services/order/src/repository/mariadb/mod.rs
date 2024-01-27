@@ -3,10 +3,11 @@ pub(super) mod product_price;
 pub(super) mod stock;
 pub(super) mod order;
 
-use std::ops::DerefMut;
 use std::u8;
+use std::ops::DerefMut;
 use std::result::Result as DefaultResult;
 use std::io::ErrorKind;
+use std::vec::IntoIter;
 use sqlx::{Executor, Transaction, MySql, Statement};
 use sqlx::error::Error;
 use sqlx::mysql::{MySqlArguments, MySqlQueryResult};
@@ -14,6 +15,7 @@ use sqlx::mysql::{MySqlArguments, MySqlQueryResult};
 use crate::error::{AppError, AppErrorCode};
     
 const DATETIME_FORMAT: &'static str = "%Y-%m-%d %H:%M:%S.%6f";
+const OID_BYTE_LENGTH: usize = 16;
 
 impl From<Error> for AppError {
     fn from(value: Error) -> Self {
@@ -54,8 +56,37 @@ impl From<Error> for AppError {
     } // end of fn from
 } // end of impl AppError
 
-// currently it is only for order-id type casting
-fn hex_to_bytes(src:&str) -> DefaultResult<Vec<u8>, AppError> {
+
+/*
+ * - size of order-id has to match database schema
+ * - In mariaDB, the BINARY column are right-padded with number of zero octets (0x0)
+     to fill the length og declared binary column, this struct ensures any given hex
+     string can be converted to correct binary format to database server.
+ * */
+struct OidBytes([u8; OID_BYTE_LENGTH]);
+
+impl<'a> TryFrom<&'a str> for OidBytes {
+    type Error = AppError;
+    fn try_from(value: &'a str) -> DefaultResult<Self, Self::Error> {
+        if value.len() <= (OID_BYTE_LENGTH * 2) {
+            let iter = hex_to_octet_iter(value) ?;
+            let mut dst = [0; OID_BYTE_LENGTH];
+            let mut d_iter = dst.iter_mut() ;
+            iter.map(|r| {
+                let addr = d_iter.next().unwrap();
+                let c = r.unwrap();
+                *addr = c;
+            }).count();
+            Ok(OidBytes(dst))
+        } else {
+            let detail = format!("size-not-fit: {value}");
+            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        }
+    }
+}
+
+fn hex_to_octet_iter(src:&str) -> DefaultResult<IntoIter<Result<u8, String>>, AppError>
+{
     if src.len() % 2 == 0 {
         let results = (0 .. src.len()).step_by(2).map(|idx| {
             if let Some(hx) = src.get(idx .. idx+2) {
@@ -69,12 +100,33 @@ fn hex_to_bytes(src:&str) -> DefaultResult<Vec<u8>, AppError> {
         if let Some(d) = error {
             Err(AppError {code:AppErrorCode::InvalidInput, detail:Some(d.clone()) })
         } else {
-            let out = results.into_iter().map(|r| r.unwrap()).collect();
-            Ok(out)
-        }
+            let xx = results.into_iter();
+            Ok(xx )
+        } // cannot convert to u8 array using try-from method,  the size of given
+          // char vector might not be the same as OID_BYTE_LENGTH
     } else {
         let detail = format!("not-hex-string: {src}");
         Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+    }
+} // end of fn hex_to_octet_iter
+
+#[test]
+fn verify_hex_to_oidbytes() {
+    let OidBytes(actual) = OidBytes::try_from("800EFF41").unwrap();
+    let expect = [0x80, 0x0E, 0xFF, 0x41, 0,0,0,0,0,0,0,0,0,0,0,0];
+    assert_eq!(actual, expect);
+    let OidBytes(actual) = OidBytes::try_from("6D1405982C0EF7").unwrap();
+    let expect = [0x6D, 0x14, 0x05, 0x98, 0x2C, 0x0E, 0xF7, 0,
+                  0, 0,0,0,0,0,0,0];
+    assert_eq!(actual, expect);
+    let OidBytes(actual) = OidBytes::try_from("0902900390049005a004a005a006a007").unwrap();
+    let expect = [0x09,0x02,0x90,0x03,0x90,0x04,0x90,0x05,
+                  0xa0,0x04,0xa0,0x05,0xa0,0x06,0xa0,0x07];
+    assert_eq!(actual, expect);
+    let result = OidBytes::try_from("ec0902900390049005a004a005a006a007");
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::InvalidInput);
     }
 }
 
