@@ -5,26 +5,30 @@ use std::vec::Vec;
 use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset};
-use sqlx::{Transaction, MySql, Arguments, IntoArguments};
-use sqlx::mysql::MySqlArguments;
+use chrono::{DateTime, FixedOffset, NaiveDateTime};
+use futures_util::stream::StreamExt;
+use sqlx::{Transaction, MySql, Arguments, IntoArguments, Executor, Statement, Row};
+use sqlx::mysql::{MySqlArguments, MySqlRow};
 
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
-use crate::constant as AppConst;
+use crate::constant::{self as AppConst, ProductType};
 use crate::datastore::AppMariaDbStore;
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
-    BillingModel, ShippingModel, OrderLineModelSet, OrderLineModel, OrderLineIdentity
+    BillingModel, ShippingModel, OrderLineModelSet, OrderLineModel, OrderLineIdentity,
+    OrderLinePriceModel, OrderLineQuantityModel, OrderLineAppliedPolicyModel
 };
 use crate::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback
 };
 
-use super::{run_query_once, hex_to_bytes};
+use super::{run_query_once, OidBytes};
 use super::stock::StockMariaDbRepo;
 
-struct InsertTopMetaArg<'a, 'b>(&'a Vec<u8>, u32, &'b DateTime<FixedOffset>);
-struct InsertOLineArg<'a, 'b>(&'a Vec<u8>, usize, Vec<&'b OrderLineModel>);
+struct InsertTopMetaArg<'a, 'b>(&'a OidBytes, u32, &'b DateTime<FixedOffset>);
+struct InsertOLineArg<'a, 'b>(&'a OidBytes, usize, Vec<&'b OrderLineModel>);
+struct FetchAllLinesArg(OidBytes);
+struct OLineRow(MySqlRow);
 
 impl<'a, 'b> Into<(String, MySqlArguments)> for InsertTopMetaArg<'a, 'b>
 {
@@ -33,8 +37,9 @@ impl<'a, 'b> Into<(String, MySqlArguments)> for InsertTopMetaArg<'a, 'b>
                     `created_time`) VALUES (?,?,?)";
         let ctime_utc = self.2.clone().naive_utc();
         let mut args = MySqlArguments::default();
+        let OidBytes(oid) = self.0;
         args.add(self.1);
-        args.add(self.0);
+        args.add(oid.to_vec());
         args.add(ctime_utc);
         (patt.to_string(), args)
     }
@@ -54,12 +59,12 @@ impl<'a, 'b> InsertOLineArg<'a, 'b>
 impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
     fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
         let mut args = MySqlArguments::default();
-        let (oid, mut seq, lines) = (self.0, self.1, self.2);
+        let (OidBytes(oid), mut seq, lines) = (self.0 , self.1, self.2);
         lines.into_iter().map(|o| {
             let prod_typ_num : u8 = o.id_.product_type.clone().into();
             let rsved_until = o.policy.reserved_until.naive_utc();
             let warranty_until = o.policy.warranty_until.naive_utc();
-            args.add(oid);
+            args.add(oid.to_vec());
             args.add(seq as u16); // match the column type in db table
             seq += 1;
             args.add(o.id_.store_id);
@@ -81,6 +86,45 @@ impl<'a, 'b> Into<(String, MySqlArguments)> for InsertOLineArg<'a, 'b>
         (Self::sql_pattern(num_batch), self.into_arguments())
     }
 }
+impl Into<(String, MySqlArguments)> for FetchAllLinesArg {
+    fn into(self) -> (String, MySqlArguments) {
+        let col_seq = "`store_id`,`product_type`,`product_id`,`price_unit`,\
+                       `price_total`,`qty_rsved`,`qty_paid`,`qty_paid_last_update`,\
+                       `rsved_until`,`warranty_until`";
+        let sql_patt = format!("SELECT {col_seq} FROM `order_line_detail` WHERE `o_id` = ?");
+        let mut args = MySqlArguments::default();
+        let OidBytes(oid) = self.0;
+        args.add(oid.to_vec());
+        (sql_patt, args)
+    }
+}
+
+
+impl TryFrom<OLineRow> for OrderLineModel {
+    type Error = AppError;
+    fn try_from(value: OLineRow) -> DefaultResult<Self, Self::Error> {
+        let row = value.0;
+        let store_id = row.try_get::<u32, usize>(0)?;
+        let product_type = row.try_get::<&str, usize>(1)?.parse::<ProductType>()?;
+        let product_id = row.try_get::<u64, usize>(2)?;
+        let unit = row.try_get::<u32, usize>(3)?;
+        let total = row.try_get::<u32, usize>(4)?;
+        let reserved = row.try_get::<u32, usize>(5)?;
+        let paid = row.try_get::<u32, usize>(6)?;
+        let result = row.try_get::<Option<NaiveDateTime>, usize>(7)?;
+        let paid_last_update = if let Some(t) = result {
+            Some(t.and_utc().into())
+        } else { None };
+        let reserved_until = row.try_get::<NaiveDateTime, usize>(8)?.and_utc().into();
+        let warranty_until = row.try_get::<NaiveDateTime, usize>(9)?.and_utc().into();
+
+        let id_ = OrderLineIdentity {store_id, product_type, product_id};
+        let price = OrderLinePriceModel {unit, total};
+        let qty = OrderLineQuantityModel {reserved, paid, paid_last_update};
+        let policy = OrderLineAppliedPolicyModel {warranty_until, reserved_until};
+        Ok(OrderLineModel { id_, price, qty, policy })
+    }
+} // end of impl OrderLineModel
 
 
 pub(crate) struct OrderMariaDbRepo
@@ -102,7 +146,20 @@ impl AbsOrderRepo for OrderMariaDbRepo
     }
     async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let oid_b = OidBytes::try_from(oid.as_str())?;
+        let mut conn = self._db.acquire().await?;
+        let (sql_patt , args) = FetchAllLinesArg(oid_b).into();
+        let stmt = conn.prepare(sql_patt.as_str()).await?;
+        let query = stmt.query_with(args);
+        let exec = &mut *conn;
+        let mut rs_stream = exec.fetch(query);
+        let mut lines = vec![];
+        while let Some(result) = rs_stream.next().await {
+            let row = result?;
+            let item = OLineRow(row).try_into()?;
+            lines.push(item)
+        } // TODO, consider to return stream, let app caller determine bulk load size
+        Ok(lines)
     }
     async fn fetch_billing(&self, _oid:String) -> DefaultResult<BillingModel, AppError>
     {
@@ -182,7 +239,7 @@ impl OrderMariaDbRepo {
             let e = AppError {code:AppErrorCode::ExceedingMaxLimit, detail:Some(d)};
             return Err(e);
         }
-        let oid = hex_to_bytes(oid)?;
+        let oid = OidBytes::try_from(oid)?;
         let (sql_patt, args) = InsertTopMetaArg(&oid, usr_id, ctime).into();
         let _rs = run_query_once(tx, sql_patt, args, 1).await?;
         

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{Local, DateTime, Duration};
+use chrono::{DateTime, Duration, Local};
 
 use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
 use order::constant::ProductType;
@@ -18,6 +18,7 @@ use super::super::dstore_ctx_setup;
 use super::super::super::in_mem::oorder::stock::{
     ut_reserve_init_setup, ut_retrieve_stocklvl_qty, mock_reserve_usr_cb_1
 };
+use super::create::ut_verify_fetch_all_olines_ok;
 
 fn ut_init_data_product() -> [ProductStockModel; 12]
 {
@@ -198,7 +199,8 @@ fn mock_reserve_usr_cb_0(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
 #[tokio::test]
 async fn try_reserve_ok()
 {
-    let mock_warranty  = Local::now().fixed_offset() + Duration::minutes(3);
+    let mock_warranty  = DateTime::parse_from_rfc3339("3015-11-29T15:02:30.005-03:00").unwrap();
+    let mock_rsved_end = DateTime::parse_from_rfc3339("3014-11-29T15:40:43.005-03:00").unwrap();
     let ds = dstore_ctx_setup();
     let o_repo = app_repo_order(ds).await.unwrap();
     let stockrepo = o_repo.stock();
@@ -235,40 +237,46 @@ async fn try_reserve_ok()
         OrderLineModel {
             id_: OrderLineIdentity {store_id:1013, product_id:9004, product_type: ProductType::Package},
             qty: OrderLineQuantityModel {reserved: 2, paid: 0, paid_last_update: None},
-            policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:3, total:6}
+            policy: OrderLineAppliedPolicyModel { warranty_until: mock_warranty + Duration::minutes(1),
+                reserved_until: mock_rsved_end + Duration::minutes(1) },
+            price: OrderLinePriceModel {unit:3, total:6}
         },
         OrderLineModel {
             id_: OrderLineIdentity {store_id:1013, product_id:9006, product_type: ProductType::Item},
             qty: OrderLineQuantityModel {reserved: 3, paid: 0, paid_last_update: None},
-            policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:4, total:12}
+            policy: OrderLineAppliedPolicyModel { warranty_until: mock_warranty + Duration::minutes(2),
+                reserved_until: mock_rsved_end + Duration::minutes(2) },
+            price: OrderLinePriceModel {unit:4, total:12}
         },
         OrderLineModel {
             id_: OrderLineIdentity {store_id:1014, product_id:9008, product_type: ProductType::Package},
             qty: OrderLineQuantityModel {reserved: 29, paid: 0, paid_last_update: None},
-            policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:20, total:260}
+            policy: OrderLineAppliedPolicyModel { warranty_until: mock_warranty + Duration::minutes(3),
+                reserved_until: mock_rsved_end  + Duration::minutes(3) },
+            price: OrderLinePriceModel {unit:20, total:260}
         },
         OrderLineModel {
             id_: OrderLineIdentity {store_id:1014, product_id:9009, product_type: ProductType::Item},
             qty: OrderLineQuantityModel {reserved: 6, paid: 0, paid_last_update: None},
-            policy: OrderLineAppliedPolicyModel { reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone() }, price: OrderLinePriceModel {unit:15, total:90}
+            policy: OrderLineAppliedPolicyModel { warranty_until: mock_warranty + Duration::minutes(4),
+                reserved_until: mock_rsved_end + Duration::minutes(4) },
+            price: OrderLinePriceModel {unit:15, total:90}
         },
     ];
     let ol_set = OrderLineModelSet {order_id:"800eff40".to_string(), lines:order_req,
-        owner_id:123, create_time: DateTime::parse_from_rfc3339("2022-11-29T06:35:00.519-02:00").unwrap()
+        owner_id:123, create_time: DateTime::parse_from_rfc3339("2022-11-29T07:29:01.027-03:00").unwrap()
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
     assert!(result.is_ok());
-    { // TODO, verify order lines and top-level metadata
+    {
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[2]).await, ((2+2), 0, 15)) ;
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[4]).await, (3, 0, 14));
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1013, &all_products[8]).await, (17+7+4, 3, 120));
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[9]).await, (29, 1, 37));
         assert_eq!(ut_retrieve_stocklvl_qty(stockrepo.clone(), 1014, &all_products[11]).await, ((3+1+6), 1, 46));
     }
+     // verify order lines and top-level metadata
+    ut_verify_fetch_all_olines_ok(&o_repo).await;
 } // end of fn try_reserve_ok
 
 
