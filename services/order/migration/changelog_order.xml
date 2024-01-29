@@ -126,7 +126,6 @@
               attempts to reference this table as foreign key.
             - `created_time` represents the time in UTC,
             - `ctime_tz_utc` indicates offset in number of minutes from UTC
-            - TODO, might need secondary index for time range scan
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE  `order_toplvl_meta` (
@@ -214,8 +213,170 @@
             DROP TABLE `order_line_detail`;
         </rollback>
     </changeSet>
+
     <changeSet id="tag_version_0.0.6" author="T.H.">
         <tagDatabase tag="0.0.6" />
+    </changeSet>
+    <changeSet id="modify_pk__order_toplvl_meta" author="T.H.">
+        <comment>
+            TODO, consider performance improvement if data grows in the table :
+            - need another index that looks up all orders by given user-id
+            - need partial index for create-time range scan, it is useful for replicating recently
+              created orders to other services, but in such case time-series database might be more
+              appropriate approach ?
+            - note the application inserts records to this table once and then never modifies
+              them, users may query their order history several times, in other words the use
+              case here is write-once and read-many-times, more indices in database may cause slow
+              insertion but fast read.
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_toplvl_meta` DROP PRIMARY KEY;
+            ALTER TABLE `order_toplvl_meta` ADD PRIMARY KEY (`o_id`);
+        </sql>
+        <rollback>
+            ALTER TABLE `order_toplvl_meta` DROP PRIMARY KEY;
+            ALTER TABLE `order_toplvl_meta` ADD PRIMARY KEY (`usr_id`,`o_id`);
+        </rollback>
+    </changeSet>
+
+    <changeSet id="add_table__order_contact_meta" author="T.H.">
+        <comment>
+            - note the columns of a foreign referencing key in `bill_contact_meta` should cover all
+              the columns of a referenced key in `order_toplvl_meta`, even the order has to be the same
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `bill_contact_meta` (
+                `o_id`   BINARY(16) NOT NULL PRIMARY KEY,
+                `first_name`  VARCHAR(32) CHARACTER SET utf8 NOT NULL,
+                `last_name`   VARCHAR(32) CHARACTER SET utf8 NOT NULL,
+                CONSTRAINT `c_fk_order_id_0` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+            CREATE TABLE  `ship_contact_meta` (
+                `o_id`   BINARY(16) NOT NULL PRIMARY KEY,
+                `first_name`  VARCHAR(32) CHARACTER SET utf8 NOT NULL,
+                `last_name`   VARCHAR(32) CHARACTER SET utf8 NOT NULL,
+                CONSTRAINT `c_fk_order_id_1` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `ship_contact_meta`;
+            DROP TABLE `bill_contact_meta`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__order_contact_email" author="T.H.">
+        <comment>
+            currently the application does not consider any non-ascii character in a given email
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `bill_contact_email` (
+                `o_id`   BINARY(16) NOT NULL,
+                `seq`    SMALLINT  NOT NULL,
+                `mail`   VARCHAR(128)  CHARACTER SET ascii NOT NULL,
+                PRIMARY KEY (`o_id`, `seq`),
+                CONSTRAINT `c_fk_order_id_2` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+            CREATE TABLE  `ship_contact_email` (
+                `o_id`   BINARY(16) NOT NULL,
+                `seq`    SMALLINT  NOT NULL,
+                `mail`   VARCHAR(128)  CHARACTER SET ascii NOT NULL,
+                PRIMARY KEY (`o_id`, `seq`),
+                CONSTRAINT `c_fk_order_id_3` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `ship_contact_email`;
+            DROP TABLE `bill_contact_email`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__order_contact_phone" author="T.H.">
+        <comment>
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `bill_contact_phone` (
+                `o_id`    BINARY(16) NOT NULL,
+                `seq`     SMALLINT  NOT NULL,
+                `nation`  SMALLINT  NOT NULL,
+                `number`  VARCHAR(16)  CHARACTER SET ascii NOT NULL,
+                PRIMARY KEY (`o_id`, `seq`),
+                CONSTRAINT `c_fk_order_id_4` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+            CREATE TABLE  `ship_contact_phone` (
+                `o_id`    BINARY(16) NOT NULL,
+                `seq`     SMALLINT  NOT NULL,
+                `nation`  SMALLINT  NOT NULL,
+                `number`  VARCHAR(16)  CHARACTER SET ascii NOT NULL,
+                PRIMARY KEY (`o_id`, `seq`),
+                CONSTRAINT `c_fk_order_id_5` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `ship_contact_phone`;
+            DROP TABLE `bill_contact_phone`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__order_phyaddr" author="T.H.">
+        <comment>
+            - in application physical address is optional in billing / shipping info, that is
+              why it is split into 2 tables
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `bill_phyaddr` (
+                `o_id`      BINARY(16) NOT NULL,
+                `country`   ENUM('TW','TH','IN','ID','US') NOT NULL, 
+                `region`    VARCHAR(32)   CHARACTER SET utf8  NOT NULL,
+                `city`      VARCHAR(32)   CHARACTER SET utf8  NOT NULL,
+                `distinct`  VARCHAR(64)   CHARACTER SET utf8  NOT NULL,
+                `street`    VARCHAR(32)   CHARACTER SET utf8  DEFAULT NULL,
+                `detail`    VARCHAR(256)  CHARACTER SET utf8  NOT NULL,
+                PRIMARY KEY (`o_id`),
+                CONSTRAINT `c_fk_order_id_6` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+            CREATE TABLE  `ship_phyaddr` (
+                `o_id`    BINARY(16) NOT NULL,
+                `country`   ENUM('TW','TH','IN','ID','US') NOT NULL, 
+                `region`    VARCHAR(32)   CHARACTER SET utf8  NOT NULL,
+                `city`      VARCHAR(32)   CHARACTER SET utf8  NOT NULL,
+                `distinct`  VARCHAR(64)   CHARACTER SET utf8  NOT NULL,
+                `street`    VARCHAR(32)   CHARACTER SET utf8  DEFAULT NULL,
+                `detail`    VARCHAR(256)  CHARACTER SET utf8  NOT NULL,
+                PRIMARY KEY (`o_id`),
+                CONSTRAINT `c_fk_order_id_7` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `ship_phyaddr`;
+            DROP TABLE `bill_phyaddr`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__order_ship_option" author="T.H.">
+        <comment>
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `ship_option` (
+                `o_id`        BINARY(16) NOT NULL,
+                `seq`         SMALLINT  NOT NULL,
+                `seller_id`   INT UNSIGNED NOT NULL,
+                `method`      ENUM('UPS','FedEx','BlackCatExpress','Unknown') NOT NULL, 
+                PRIMARY KEY (`o_id`, `seq`),
+                CONSTRAINT `c_fk_order_id_8` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
+                    ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `ship_option`;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.1.0" author="T.H.">
+        <tagDatabase tag="0.1.0" />
     </changeSet>
 </databaseChangeLog>
 
