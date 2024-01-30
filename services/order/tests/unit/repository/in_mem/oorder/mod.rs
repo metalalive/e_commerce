@@ -30,7 +30,7 @@ async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
     result.unwrap()
 }
 
-fn ut_setup_billing () -> Vec<BillingModel>
+pub(crate) fn ut_setup_billing () -> Vec<BillingModel>
 {
     let item1 = {
         let (first_name, last_name) = ("Ken".to_string(), "Kabaacis".to_string());
@@ -68,7 +68,7 @@ fn ut_setup_billing () -> Vec<BillingModel>
     vec![item1, item2, item3]
 }
 
-fn ut_setup_shipping (mock_seller_ids:&[u32;2]) -> Vec<ShippingModel>
+pub(crate) fn ut_setup_shipping (mock_seller_ids:&[u32;2]) -> Vec<ShippingModel>
 {
     let item1 = {
         let (first_name, last_name) = ("Pepek".to_string(), "LaughOutLoud".to_string());

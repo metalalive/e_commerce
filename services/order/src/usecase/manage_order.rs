@@ -83,6 +83,7 @@ impl CreateOrderUseCase {
         self.try_reserve_stock(&ol_set).await?;
         // Contact info might be lost after order lines were saved, if power outage happenes
         // at here. TODO: Improve the code here
+        // TODO: restrict number of emails and phones in the request
         match self.repo_order.save_contact(ol_set.order_id.as_str(), o_bl, o_sh).await {
             Ok(_) => {
                 let (oid, lines) = (ol_set.order_id, ol_set.lines);

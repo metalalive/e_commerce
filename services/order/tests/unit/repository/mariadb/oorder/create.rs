@@ -1,9 +1,19 @@
 use std::boxed::Box;
+use std::sync::Arc;
 
 use chrono::DateTime;
 use order::constant::ProductType;
-use order::repository::AbsOrderRepo;
+use order::model::{
+    ProductStockModel, StockQuantityModel, StoreStockModel, StockLevelModelSet, 
+    OrderLineModelSet
+};
+use order::repository::{AbsOrderRepo, app_repo_order, AppStockRepoReserveReturn, AbsOrderStockRepo};
 
+use super::super::super::in_mem::oorder::{ut_setup_billing, ut_setup_shipping};
+use super::super::super::in_mem::oorder::stock::ut_reserve_init_setup;
+use super::super::dstore_ctx_setup;
+
+#[cfg(feature="mariadb")]
 pub(super) async fn ut_verify_fetch_all_olines_ok(
     o_repo: &Box<dyn AbsOrderRepo> )
 {
@@ -28,3 +38,63 @@ pub(super) async fn ut_verify_fetch_all_olines_ok(
         assert_eq!(actual, expect);
     }).count();
 }
+
+async fn ut_setup_stock_product(stockrepo:Arc<Box<dyn AbsOrderStockRepo>>,
+                                mock_oid:&str, mock_store_id:u32)
+{
+    let product = ProductStockModel { type_:ProductType::Item, id_:9003, is_create:true,
+       expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap().into(),
+       quantity: StockQuantityModel::new(15, 0, 0, None)
+    };
+    let store = StoreStockModel {store_id:mock_store_id, products:vec![product]};
+    let slset = StockLevelModelSet { stores: vec![store] };
+    let result = stockrepo.save(slset).await;
+    assert!(result.is_ok());
+}
+
+fn mock_reserve_usr_cb_0(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
+    -> AppStockRepoReserveReturn
+{
+    let errors = ms.try_reserve(req);
+    assert!(errors.is_empty());
+    Ok(())
+}
+
+#[cfg(feature="mariadb")]
+#[tokio::test]
+async fn save_contact_ok()
+{
+    let mock_warranty  = DateTime::parse_from_rfc3339("3015-11-29T15:02:32.056-03:00").unwrap();
+    let ds = dstore_ctx_setup();
+    let o_repo = app_repo_order(ds).await.unwrap();
+    let (mock_oid, mock_store_id) = ("0e927003716a", 1021);
+    ut_setup_stock_product(o_repo.stock(), mock_oid, mock_store_id).await;
+    ut_reserve_init_setup(o_repo.stock(), mock_reserve_usr_cb_0, mock_warranty,
+        mock_store_id, ProductType::Item, 9003, 3, mock_oid).await;
+    let mut billings = ut_setup_billing();
+    let mut shippings = ut_setup_shipping(&[mock_store_id, 12]);
+    let billing = billings.remove(1);
+    let shipping = shippings.remove(2);
+    let result = o_repo.save_contact(mock_oid, billing, shipping).await;
+    assert!(result.is_ok());
+} // end of fn save_contact_ok
+
+#[cfg(feature="mariadb")]
+#[tokio::test]
+async fn save_contact_error()
+{
+    let mock_warranty  = DateTime::parse_from_rfc3339("3015-11-29T15:02:32.056-03:00").unwrap();
+    let ds = dstore_ctx_setup();
+    let o_repo = app_repo_order(ds).await.unwrap();
+    let (mock_oid, mock_store_id) = ("a4190e9b4272", 1022);
+    ut_setup_stock_product(o_repo.stock(), mock_oid, mock_store_id).await;
+    ut_reserve_init_setup(o_repo.stock(), mock_reserve_usr_cb_0, mock_warranty,
+        mock_store_id, ProductType::Item, 9003, 4, mock_oid).await;
+    let mut billings = ut_setup_billing();
+    let mut shippings = ut_setup_shipping(&[mock_store_id, 12]);
+    let billing = billings.remove(2);
+    let shipping = shippings.remove(0);
+    let result = o_repo.save_contact(mock_oid, billing, shipping).await;
+    assert!(result.is_err()); // no shipping option provided
+}
+

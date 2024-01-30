@@ -7,16 +7,18 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use futures_util::stream::StreamExt;
-use sqlx::{Transaction, MySql, Arguments, IntoArguments, Executor, Statement, Row};
+use sqlx::{Transaction, MySql, Arguments, IntoArguments, Executor, Statement, Row, Connection};
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 
+use crate::api::dto::PhoneNumberDto;
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::constant::{self as AppConst, ProductType};
 use crate::datastore::AppMariaDbStore;
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     BillingModel, ShippingModel, OrderLineModelSet, OrderLineModel, OrderLineIdentity,
-    OrderLinePriceModel, OrderLineQuantityModel, OrderLineAppliedPolicyModel
+    OrderLinePriceModel, OrderLineQuantityModel, OrderLineAppliedPolicyModel, ContactModel,
+    PhyAddrModel, ShippingOptionModel
 };
 use crate::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback
@@ -27,6 +29,11 @@ use super::stock::StockMariaDbRepo;
 
 struct InsertTopMetaArg<'a, 'b>(&'a OidBytes, u32, &'b DateTime<FixedOffset>);
 struct InsertOLineArg<'a, 'b>(&'a OidBytes, usize, Vec<&'b OrderLineModel>);
+struct InsertContactMeta<'a, 'b>(&'a str, &'b OidBytes, String, String);
+struct InsertContactEmail<'a, 'b>(&'a str, &'b OidBytes, Vec<String>);
+struct InsertContactPhone<'a, 'b>(&'a str, &'b OidBytes, Vec<PhoneNumberDto>);
+struct InsertPhyAddr<'a, 'b>(&'a str, &'b OidBytes, PhyAddrModel);
+struct InsertShipOption<'a>(&'a OidBytes, Vec<ShippingOptionModel>);
 struct FetchAllLinesArg(OidBytes);
 struct OLineRow(MySqlRow);
 
@@ -86,6 +93,129 @@ impl<'a, 'b> Into<(String, MySqlArguments)> for InsertOLineArg<'a, 'b>
         (Self::sql_pattern(num_batch), self.into_arguments())
     }
 }
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactMeta<'a, 'b>
+{
+    fn into(self) -> (String, MySqlArguments) {
+        let (table_opt, OidBytes(oid), first_name, last_name) = (self.0, self.1, self.2, self.3);
+        let patt = format!("INSERT INTO `{}_contact_meta`(`o_id`,`first_name`,`last_name`) \
+                           VALUES (?,?,?)", table_opt);
+        let mut args = MySqlArguments::default();
+        args.add(oid.to_vec());
+        args.add(first_name);
+        args.add(last_name);
+        (patt, args)
+    }
+}
+impl<'a, 'b> InsertContactEmail<'a, 'b> {
+    fn sql_pattern(&self) -> String {
+        let (table_opt, num_batch) = (self.0, self.2.len());
+        assert!(num_batch > 0);
+        let items = (0..num_batch).into_iter().map(|_num| "(?,?,?)").collect::<Vec<_>>();
+        format!("INSERT INTO `{}_contact_email`(`o_id`,`seq`,`mail`) VALUES {}",
+                table_opt, items.join(","))
+    }
+}
+impl <'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactEmail<'a, 'b>
+{
+    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+        let (OidBytes(oid), mails, mut seq) = (self.1, self.2, 0u16);
+        let oid = oid.to_vec();
+        let mut args = MySqlArguments::default();
+        mails.into_iter().map(|mail| {
+            args.add(&oid);
+            args.add(seq);
+            args.add(mail);
+            seq += 1;
+        }).count();
+        args
+    }
+}
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactEmail<'a, 'b>
+{
+    fn into(self) -> (String, MySqlArguments) {
+        (self.sql_pattern(), self.into_arguments())
+    }
+}
+impl<'a, 'b> InsertContactPhone<'a, 'b> {
+    fn sql_pattern(&self) -> String {
+        let (table_opt, num_batch) = (self.0, self.2.len());
+        assert!(num_batch > 0);
+        let items = (0..num_batch).into_iter().map(|_num| "(?,?,?,?)").collect::<Vec<_>>();
+        format!("INSERT INTO `{}_contact_phone`(`o_id`,`seq`,`nation`,`number`) VALUES {}",
+                table_opt, items.join(","))
+    }
+}
+impl <'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactPhone<'a, 'b>
+{
+    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+        let (OidBytes(oid), phones, mut seq) = (self.1, self.2, 0u16);
+        let oid = oid.to_vec();
+        let mut args = MySqlArguments::default();
+        phones.into_iter().map(|phone| {
+            args.add(&oid);
+            args.add(seq);
+            args.add(phone.nation);
+            args.add(phone.number);
+            seq += 1;
+        }).count();
+        args
+    }
+}
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactPhone<'a, 'b>
+{
+    fn into(self) -> (String, MySqlArguments) {
+        (self.sql_pattern(), self.into_arguments())
+    }
+}
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertPhyAddr<'a, 'b>
+{
+    fn into(self) -> (String, MySqlArguments) {
+        let (table_opt, OidBytes(oid), addr) = (self.0, self.1, self.2);
+        let patt = format!("INSERT INTO `{}_phyaddr`(`o_id`,`country`,`region`,`city`,\
+                   `distinct`,`street`,`detail`) VALUES (?,?,?,?,?,?,?)", table_opt);
+        let country:String = addr.country.into();
+        let mut args = MySqlArguments::default();
+        args.add(oid.to_vec());
+        args.add(country);
+        args.add(addr.region);
+        args.add(addr.city);
+        args.add(addr.distinct);
+        args.add(addr.street_name);
+        args.add(addr.detail);
+        (patt, args)
+    }
+}
+impl<'a> InsertShipOption<'a> {
+    fn sql_pattern(num_batch:usize) -> String {
+        let items = (0..num_batch).into_iter().map(|_num| "(?,?,?)").collect::<Vec<_>>();
+        format!("INSERT INTO `ship_option`(`o_id`,`seller_id`,`method`) VALUES {}",
+                items.join(","))
+    }
+}
+impl <'a, 'q> IntoArguments<'q, MySql> for InsertShipOption<'a>
+{
+    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+        let (OidBytes(oid), options) = (self.0, self.1);
+        let oid = oid.to_vec();
+        let mut args = MySqlArguments::default();
+        options.into_iter().map(|so| {
+            let method:String = so.method.into();
+            args.add(&oid);
+            args.add(so.seller_id);
+            args.add(method);
+        }).count();
+        args
+    }
+}
+impl<'a> Into<(String, MySqlArguments)> for InsertShipOption<'a>
+{
+    fn into(self) -> (String, MySqlArguments) {
+        let num_batch = self.1.len();
+        assert!(num_batch > 0);
+        (Self::sql_pattern(num_batch), self.into_arguments())
+    }
+}
+
 impl Into<(String, MySqlArguments)> for FetchAllLinesArg {
     fn into(self) -> (String, MySqlArguments) {
         let col_seq = "`store_id`,`product_type`,`product_id`,`price_unit`,\
@@ -139,10 +269,25 @@ impl AbsOrderRepo for OrderMariaDbRepo
     fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>
     { self._stock.clone() }
 
-    async fn save_contact (&self, _oid:&str, _bl:BillingModel, _sh:ShippingModel)
+    async fn save_contact (&self, oid:&str, bl:BillingModel, sh:ShippingModel)
         -> DefaultResult<(), AppError> 
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    { // TODO, consider update case
+        let oid_b = OidBytes::try_from(oid)?;
+        let mut conn = self._db.acquire().await?;
+        let mut tx = conn.begin().await?;
+        let (bl_contact, bl_phyaddr) = (bl.contact, bl.address);
+        let (sh_contact, sh_phyaddr, sh_opt) = (sh.contact, sh.address, sh.option);
+        Self::_save_contact(&mut tx, &oid_b, "bill", bl_contact).await?;
+        if let Some(loc) = bl_phyaddr {
+            Self::_save_phyaddr(&mut tx, &oid_b, "bill", loc).await?;
+        }
+        Self::_save_contact(&mut tx, &oid_b, "ship", sh_contact).await?;
+        if let Some(loc) = sh_phyaddr {
+            Self::_save_phyaddr(&mut tx, &oid_b, "ship", loc).await?;
+        }
+        Self::_save_ship_opt(&mut tx, &oid_b, sh_opt).await?;
+        tx.commit().await?;
+        Ok(())
     }
     async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
@@ -256,4 +401,51 @@ impl OrderMariaDbRepo {
         } // end of loop
         Ok(())
     } // end of fn create_lines
+        
+    async fn _save_contact(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
+                           table_opt:&str, data: ContactModel)
+        -> DefaultResult<(), AppError>
+    {
+        if data.emails.is_empty() && data.phones.is_empty() {
+            let d = "save-contact, num-emails:0, num-phones:0".to_string();
+            let e = AppError {code:AppErrorCode::InvalidInput, detail:Some(d)};
+            return Err(e);
+        }
+        let (f_name, l_name, emails, phones) = (data.first_name, data.last_name, data.emails, data.phones);
+        let (num_mails, num_phones) = (emails.len(), phones.len());
+        let (sql_patt, args) = InsertContactMeta(table_opt, oid, f_name, l_name).into();
+        let _rs = run_query_once(tx, sql_patt, args, 1).await?;
+        if num_mails > 0 {
+            let (sql_patt, args) = InsertContactEmail(table_opt, oid, emails).into();
+            let _rs = run_query_once(tx, sql_patt, args, num_mails).await?;
+        }
+        if num_phones > 0 {
+            let (sql_patt, args) = InsertContactPhone(table_opt, oid, phones).into();
+            let _rs = run_query_once(tx, sql_patt, args, num_phones).await?; 
+        }
+        Ok(())
+    }
+    async fn _save_phyaddr(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
+                           table_opt:&str, data: PhyAddrModel)
+        -> DefaultResult<(), AppError>
+    {
+        let (sql_patt, args) = InsertPhyAddr(table_opt, oid, data).into();
+        let _rs = run_query_once(tx, sql_patt, args, 1).await?;
+        Ok(())
+    }
+    async fn _save_ship_opt(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
+                            data:Vec<ShippingOptionModel>)
+        -> DefaultResult<(), AppError>
+    {
+        if data.is_empty() {
+            let d = "save-ship-option, num:0".to_string();
+            let e = AppError {code:AppErrorCode::InvalidInput, detail:Some(d)};
+            return Err(e);
+        }
+        let num_sellers = data.len();
+        let (sql_patt, args) = InsertShipOption(oid, data).into();
+        let _rs = run_query_once(tx, sql_patt, args, num_sellers).await?;
+        Ok(())
+    }
 } // end of impl OrderMariaDbRepo
+
