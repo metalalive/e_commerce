@@ -2,6 +2,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 
 use chrono::DateTime;
+use order::api::dto::CountryCode;
 use order::constant::ProductType;
 use order::model::{
     ProductStockModel, StockQuantityModel, StoreStockModel, StockLevelModelSet, 
@@ -77,6 +78,20 @@ async fn save_contact_ok()
     let shipping = shippings.remove(2);
     let result = o_repo.save_contact(mock_oid, billing, shipping).await;
     assert!(result.is_ok());
+    let result = o_repo.fetch_billing(mock_oid.to_string()).await;
+    assert!(result.is_ok());
+    if let Ok(bl) = result {
+        assert_eq!(bl.contact.first_name.as_str(), "Jordan");
+        assert_eq!(bl.contact.last_name.as_str(), "NormanKabboa");
+        assert_eq!(bl.contact.emails.len(), 2);
+        assert_eq!(bl.contact.emails[0].as_str(), "banker@blueocean.ic");
+        assert_eq!(bl.contact.phones[1].nation, 49u16);
+        assert_eq!(bl.contact.phones[1].number.as_str(), "030001211");
+        let addr = bl.address.unwrap();
+        assert!(matches!(addr.country, CountryCode::US));
+        assert_eq!(addr.city.as_str(), "i9ru24t");
+        assert_eq!(addr.detail.as_str(), "eu ur4 to4o");
+    }
 } // end of fn save_contact_ok
 
 #[cfg(feature="mariadb")]

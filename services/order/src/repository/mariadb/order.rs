@@ -7,10 +7,11 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use futures_util::stream::StreamExt;
+use sqlx::pool::PoolConnection;
 use sqlx::{Transaction, MySql, Arguments, IntoArguments, Executor, Statement, Row, Connection};
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 
-use crate::api::dto::PhoneNumberDto;
+use crate::api::dto::{PhoneNumberDto, CountryCode};
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::constant::{self as AppConst, ProductType};
 use crate::datastore::AppMariaDbStore;
@@ -34,8 +35,13 @@ struct InsertContactEmail<'a, 'b>(&'a str, &'b OidBytes, Vec<String>);
 struct InsertContactPhone<'a, 'b>(&'a str, &'b OidBytes, Vec<PhoneNumberDto>);
 struct InsertPhyAddr<'a, 'b>(&'a str, &'b OidBytes, PhyAddrModel);
 struct InsertShipOption<'a>(&'a OidBytes, Vec<ShippingOptionModel>);
+
 struct FetchAllLinesArg(OidBytes);
 struct OLineRow(MySqlRow);
+struct EmailRow(MySqlRow);
+struct PhoneRow(MySqlRow);
+struct ContactMetaRow(MySqlRow);
+struct PhyAddrrRow(MySqlRow);
 
 impl<'a, 'b> Into<(String, MySqlArguments)> for InsertTopMetaArg<'a, 'b>
 {
@@ -256,6 +262,49 @@ impl TryFrom<OLineRow> for OrderLineModel {
     }
 } // end of impl OrderLineModel
 
+impl TryInto<String> for EmailRow {
+    type Error = AppError;
+    fn try_into(self) -> DefaultResult<String, Self::Error> {
+        let row = self.0;
+        let mail = row.try_get::<String, usize>(0)?;
+        Ok(mail)
+    }
+}
+impl TryInto<PhoneNumberDto> for PhoneRow {
+    type Error = AppError;
+    fn try_into(self) -> DefaultResult<PhoneNumberDto, Self::Error> {
+        let row = self.0;
+        let nation = row.try_get::<u16, usize>(0)?;
+        let number = row.try_get::<String, usize>(1)?;
+        Ok(PhoneNumberDto {nation, number})
+    }
+}
+impl TryInto<ContactModel> for ContactMetaRow {
+    type Error = AppError;
+    fn try_into(self) -> DefaultResult<ContactModel, Self::Error> {
+        let row = self.0;
+        let first_name = row.try_get::<String, usize>(0)?;
+        let last_name  = row.try_get::<String, usize>(1)?;
+        Ok(ContactModel { first_name, last_name, emails: vec![], phones: vec![] })
+    }
+}
+impl TryInto<PhyAddrModel> for PhyAddrrRow {
+    type Error = AppError;
+    fn try_into(self) -> DefaultResult<PhyAddrModel, Self::Error> {
+        let row = self.0;
+        let country = {
+            let c = row.try_get::<String, usize>(0)?;
+            CountryCode::from(c)
+        };
+        let region = row.try_get::<String, usize>(1)?;
+        let city   = row.try_get::<String, usize>(2)?;
+        let distinct = row.try_get::<String, usize>(3)?;
+        let street_name = row.try_get::<Option<String>, usize>(4)?;
+        let detail = row.try_get::<String, usize>(5)?;
+        let out = PhyAddrModel {country, region, city, distinct, street_name, detail};
+        Ok(out)
+    }
+}
 
 pub(crate) struct OrderMariaDbRepo
 {
@@ -306,9 +355,17 @@ impl AbsOrderRepo for OrderMariaDbRepo
         } // TODO, consider to return stream, let app caller determine bulk load size
         Ok(lines)
     }
-    async fn fetch_billing(&self, _oid:String) -> DefaultResult<BillingModel, AppError>
+    async fn fetch_billing(&self, oid:String) -> DefaultResult<BillingModel, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let OidBytes(oid_b) = OidBytes::try_from(oid.as_str())?;
+        let mut conn = self._db.acquire().await?;
+        let emails = Self::_fetch_mails(&mut conn, "bill", &oid_b).await?;
+        let phones = Self::_fetch_phones(&mut conn, "bill", &oid_b).await?;
+        let mut contact = Self::_fetch_contact_meta(&mut conn, "bill", &oid_b).await?;
+        contact.emails = emails;
+        contact.phones = phones;
+        let address = Self::_fetch_phyaddr(&mut conn, "bill", &oid_b).await?;
+        Ok(BillingModel {contact, address})
     }
     async fn fetch_shipping(&self, _oid:String) -> DefaultResult<ShippingModel, AppError>
     {
@@ -446,6 +503,70 @@ impl OrderMariaDbRepo {
         let (sql_patt, args) = InsertShipOption(oid, data).into();
         let _rs = run_query_once(tx, sql_patt, args, num_sellers).await?;
         Ok(())
+    }
+    
+    async fn _fetch_mails(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&[u8])
+        -> DefaultResult<Vec<String>, AppError>
+    {
+        let sql_patt = format!("SELECT `mail` FROM `{}_contact_email` WHERE `o_id`=?", table_opt);
+        let stmt = conn.prepare(sql_patt.as_str()).await?;
+        let query = stmt.query().bind(oid_b.to_vec());
+        let exec = conn.as_mut();
+        let rows = exec.fetch_all(query).await?;
+        let results = rows.into_iter().map(|row| {
+            EmailRow(row).try_into()
+        }).collect::<Vec<DefaultResult<String, AppError>>>();
+        if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
+            Err(e.to_owned())
+        } else {
+            let out = results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>();
+            Ok(out)
+        }
+    }
+    async fn _fetch_phones(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&[u8])
+        -> DefaultResult<Vec<PhoneNumberDto>, AppError>
+    {
+        let sql_patt = format!("SELECT `nation`,`number` FROM `{}_contact_phone`\
+                               WHERE `o_id`=?", table_opt);
+        let stmt = conn.prepare(sql_patt.as_str()).await?;
+        let query = stmt.query().bind(oid_b.to_vec());
+        let exec = conn.as_mut();
+        let rows = exec.fetch_all(query).await?;
+        let results = rows.into_iter().map(|row| {
+            PhoneRow(row).try_into()
+        }).collect::<Vec<DefaultResult<PhoneNumberDto, AppError>>>();
+        if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
+            Err(e.to_owned())
+        } else {
+            let out = results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>();
+            Ok(out)
+        }
+    }
+    async fn _fetch_contact_meta(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&[u8])
+        -> DefaultResult<ContactModel, AppError>
+    {
+        let sql_patt = format!("SELECT `first_name`,`last_name` FROM `{}_contact_meta`\
+                               WHERE `o_id`=?", table_opt);
+        let stmt = conn.prepare(sql_patt.as_str()).await?;
+        let query = stmt.query().bind(oid_b.to_vec());
+        let exec = conn.as_mut();
+        let row  = exec.fetch_one(query).await?;
+        let out = ContactMetaRow(row).try_into()?;
+        Ok(out)
+    }
+    async fn _fetch_phyaddr(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&[u8])
+        -> DefaultResult<Option<PhyAddrModel>, AppError>
+    {
+        let sql_patt = format!("SELECT `country`,`region`,`city`,`distinct`,`street`,\
+                               `detail` FROM `{}_phyaddr` WHERE `o_id`=?", table_opt);
+        let stmt = conn.prepare(sql_patt.as_str()).await?;
+        let query = stmt.query().bind(oid_b.to_vec());
+        let exec = conn.as_mut();
+        let result = exec.fetch_optional(query).await?;
+        if let Some(row) = result {
+            let out = PhyAddrrRow(row).try_into()?;
+            Ok(Some(out))
+        } else { Ok(None) }
     }
 } // end of impl OrderMariaDbRepo
 

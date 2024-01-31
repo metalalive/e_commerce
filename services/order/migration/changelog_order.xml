@@ -299,7 +299,7 @@
             CREATE TABLE  `bill_contact_phone` (
                 `o_id`    BINARY(16) NOT NULL,
                 `seq`     SMALLINT  NOT NULL,
-                `nation`  SMALLINT  NOT NULL,
+                `nation`  SMALLINT  UNSIGNED NOT NULL,
                 `number`  VARCHAR(16)  CHARACTER SET ascii NOT NULL,
                 PRIMARY KEY (`o_id`, `seq`),
                 CONSTRAINT `c_fk_order_id_4` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
@@ -308,7 +308,7 @@
             CREATE TABLE  `ship_contact_phone` (
                 `o_id`    BINARY(16) NOT NULL,
                 `seq`     SMALLINT  NOT NULL,
-                `nation`  SMALLINT  NOT NULL,
+                `nation`  SMALLINT  UNSIGNED NOT NULL,
                 `number`  VARCHAR(16)  CHARACTER SET ascii NOT NULL,
                 PRIMARY KEY (`o_id`, `seq`),
                 CONSTRAINT `c_fk_order_id_5` FOREIGN KEY (`o_id`) REFERENCES `order_toplvl_meta`(`o_id`)
