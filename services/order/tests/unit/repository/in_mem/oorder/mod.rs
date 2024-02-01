@@ -102,7 +102,8 @@ pub(crate) fn ut_setup_shipping (mock_seller_ids:&[u32;2]) -> Vec<ShippingModel>
     };
     let item3 = {
         let (first_name, last_name) = ("Biseakral".to_string(), "Kazzhitsch".to_string());
-        let emails = vec!["low@hunt.io".to_string()];
+        let emails = ["low@hunt.io","axl@rose.com","steven@chou01.hk"].into_iter()
+            .map(|s| s.to_string()).collect::<Vec<_>>();
         let phones = vec![PhoneNumberDto{nation:43, number:"500020812".to_string()},];
         let contact = ContactModel {first_name, last_name, emails, phones};
         let option = vec![

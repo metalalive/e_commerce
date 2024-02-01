@@ -2,7 +2,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 
 use chrono::DateTime;
-use order::api::dto::CountryCode;
+use order::api::dto::{CountryCode, ShippingMethod};
 use order::constant::ProductType;
 use order::model::{
     ProductStockModel, StockQuantityModel, StoreStockModel, StockLevelModelSet, 
@@ -83,14 +83,31 @@ async fn save_contact_ok()
     if let Ok(bl) = result {
         assert_eq!(bl.contact.first_name.as_str(), "Jordan");
         assert_eq!(bl.contact.last_name.as_str(), "NormanKabboa");
-        assert_eq!(bl.contact.emails.len(), 2);
         assert_eq!(bl.contact.emails[0].as_str(), "banker@blueocean.ic");
+        assert_eq!(bl.contact.emails[1].as_str(), "bee@gituye.com");
+        assert_eq!(bl.contact.phones[0].nation, 48u16);
+        assert_eq!(bl.contact.phones[0].number.as_str(), "000208126");
         assert_eq!(bl.contact.phones[1].nation, 49u16);
         assert_eq!(bl.contact.phones[1].number.as_str(), "030001211");
         let addr = bl.address.unwrap();
         assert!(matches!(addr.country, CountryCode::US));
         assert_eq!(addr.city.as_str(), "i9ru24t");
+        assert_eq!(addr.street_name.as_ref().unwrap().as_str(), "du iye j0y");
         assert_eq!(addr.detail.as_str(), "eu ur4 to4o");
+    }
+    let result = o_repo.fetch_shipping(mock_oid.to_string()).await;
+    assert!(result.is_ok());
+    if let Ok(sh) = result {
+        assert_eq!(sh.contact.first_name.as_str(), "Biseakral");
+        assert_eq!(sh.contact.last_name.as_str(), "Kazzhitsch");
+        assert_eq!(sh.contact.emails[0].as_str(), "low@hunt.io");
+        assert_eq!(sh.contact.emails[1].as_str(), "axl@rose.com");
+        assert_eq!(sh.contact.emails[2].as_str(), "steven@chou01.hk");
+        assert_eq!(sh.contact.phones[0].nation, 43u16);
+        assert_eq!(sh.contact.phones[0].number.as_str(), "500020812");
+        assert!(sh.address.is_none());
+        assert_eq!(sh.option[0].seller_id, mock_store_id);
+        assert!(matches!(sh.option[0].method, ShippingMethod::FedEx));
     }
 } // end of fn save_contact_ok
 
