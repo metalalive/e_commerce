@@ -36,7 +36,11 @@ struct InsertContactPhone<'a, 'b>(&'a str, &'b OidBytes, Vec<PhoneNumberDto>);
 struct InsertPhyAddr<'a, 'b>(&'a str, &'b OidBytes, PhyAddrModel);
 struct InsertShipOption<'a>(&'a OidBytes, Vec<ShippingOptionModel>);
 
+struct UpdateOLinePayArg<'a>(&'a OidBytes, Vec<OrderLineModel>);
+
 struct FetchAllLinesArg(OidBytes);
+struct FetchLineByIdArg<'a>(&'a OidBytes, Vec<OrderLineIdentity>);
+
 struct OLineRow(MySqlRow);
 struct EmailRow(MySqlRow);
 struct PhoneRow(MySqlRow);
@@ -223,16 +227,110 @@ impl<'a> Into<(String, MySqlArguments)> for InsertShipOption<'a>
     }
 }
 
+impl<'a> UpdateOLinePayArg<'a>
+{
+    fn sql_pattern(num_batch:usize) -> String {
+        let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=?)";
+        let case_ops = (0..num_batch).into_iter().map(
+            |_| ["WHEN", condition, "THEN", "?"]
+        ).flatten().collect::<Vec<_>>().join(" ");
+        let where_ops = (0..num_batch).into_iter().map(
+            |_| condition
+        ).collect::<Vec<_>>().join("OR") ;
+        let portions = [
+            format!("`qty_paid` = CASE {case_ops} ELSE `qty_paid` END"),
+            format!("`qty_paid_last_update` = CASE {case_ops} ELSE `qty_paid_last_update` END"),
+        ];
+        format!("UPDATE `order_line_detail` SET {}, {} WHERE `o_id`=? AND ({})"
+                , portions[0], portions[1], where_ops)
+    }
+}
+impl<'a,'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a>
+{
+    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments
+    { 
+        let (OidBytes(oid), lines) = (self.0, self.1);
+        let mut args = MySqlArguments::default();
+        lines.iter().map(|line| {
+            let prod_typ_num: u8 = line.id_.product_type.clone().into();
+            args.add(line.id_.store_id);
+            args.add(prod_typ_num.to_string());
+            args.add(line.id_.product_id);
+            args.add(line.qty.paid);
+        }).count();
+        lines.iter().map(|line| {
+            let prod_typ_num: u8 = line.id_.product_type.clone().into();
+            let time = line.qty.paid_last_update.as_ref().unwrap();
+            args.add(line.id_.store_id);
+            args.add(prod_typ_num.to_string());
+            args.add(line.id_.product_id);
+            args.add(time.naive_utc());
+        }).count();
+        args.add(oid.to_vec());
+        lines.into_iter().map(|line| {
+            let id_ = line.id_;
+            let prod_typ_num: u8 = id_.product_type.into();
+            args.add(id_.store_id);
+            args.add(prod_typ_num.to_string());
+            args.add(id_.product_id);
+        }).count();
+        args
+    }
+}
+impl<'a> Into<(String, MySqlArguments)> for UpdateOLinePayArg<'a>
+{
+    fn into(self) -> (String, MySqlArguments) {
+        let num_batch = self.1.len();
+        assert!(num_batch > 0);
+        (Self::sql_pattern(num_batch), self.into_arguments())
+    }
+}
+
+
+const OLINE_SELECT_PREFIX: &'static str = "SELECT `store_id`,`product_type`,`product_id`,\
+    `price_unit`,`price_total`,`qty_rsved`,`qty_paid`,`qty_paid_last_update`,`rsved_until`,\
+    `warranty_until` FROM `order_line_detail`";
+
 impl Into<(String, MySqlArguments)> for FetchAllLinesArg {
     fn into(self) -> (String, MySqlArguments) {
-        let col_seq = "`store_id`,`product_type`,`product_id`,`price_unit`,\
-                       `price_total`,`qty_rsved`,`qty_paid`,`qty_paid_last_update`,\
-                       `rsved_until`,`warranty_until`";
-        let sql_patt = format!("SELECT {col_seq} FROM `order_line_detail` WHERE `o_id` = ?");
+        let sql_patt = format!("{OLINE_SELECT_PREFIX} WHERE `o_id`=?");
         let mut args = MySqlArguments::default();
         let OidBytes(oid) = self.0;
         args.add(oid.to_vec());
         (sql_patt, args)
+    }
+}
+impl<'a> FetchLineByIdArg<'a>
+{
+    fn sql_pattern(num_batch: usize) -> String
+    {
+        let items = (0..num_batch).into_iter().map(
+            |_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)"
+        ).collect::<Vec<_>>();
+        format!("{OLINE_SELECT_PREFIX} WHERE `o_id`=? AND ({})", items.join("OR"))
+    }
+}
+impl<'a,'q> IntoArguments<'q, MySql> for FetchLineByIdArg<'a>
+{
+    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+        let (OidBytes(oid_b), pids) = (self.0, self.1);
+        let mut args = MySqlArguments::default();
+        args.add(oid_b.to_vec());
+        pids.into_iter().map(|id_| {
+            let prod_typ_num: u8 = id_.product_type.into();
+            args.add(id_.store_id);
+            args.add(prod_typ_num.to_string());
+            args.add(id_.product_id);
+        }).count();
+        args
+    }
+}
+impl<'a> Into<(String, MySqlArguments)> for FetchLineByIdArg<'a>
+{
+    fn into(self) -> (String, MySqlArguments) {
+        let num_batch = self.1.len();
+        assert!(num_batch > 0);
+        (Self::sql_pattern(num_batch), self.into_arguments())
     }
 }
 
@@ -391,11 +489,27 @@ impl AbsOrderRepo for OrderMariaDbRepo
         let address = Self::_fetch_phyaddr(&mut conn, "ship", &oid_b).await?;
         Ok(ShippingModel {contact, address, option})
     }
-    async fn update_lines_payment(&self, _data:OrderPaymentUpdateDto,
-                                  _cb:AppOrderRepoUpdateLinesUserFunc)
+    async fn update_lines_payment(&self, data: OrderPaymentUpdateDto,
+                                  cb: AppOrderRepoUpdateLinesUserFunc)
         -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let (oid, d_lines) = (data.oid, data.lines);
+        let oid_b = OidBytes::try_from(oid.as_str())?;
+        let pids = d_lines.iter().map(
+            |d| OrderLineIdentity {store_id:d.seller_id, product_id:d.product_id,
+                    product_type: d.product_type.clone() }
+        ).collect::<Vec<_>>();
+        let mut conn = self._db.acquire().await?;
+        let mut tx = conn.begin().await?;
+        let mut saved_lines = Self::_fetch_lines_by_pid(&mut tx, &oid_b, pids).await?;
+        let errors = cb(&mut saved_lines, d_lines);
+        if errors.is_empty() {
+            let num_affected = saved_lines.len();
+            let (sql_patt, args) = UpdateOLinePayArg(&oid_b, saved_lines).into();
+            let _rs = run_query_once(&mut tx, sql_patt, args, num_affected).await?;
+            tx.commit().await?;
+        }
+        Ok(OrderPaymentUpdateErrorDto { oid, lines: errors })
     }
     async fn fetch_lines_by_rsvtime(&self, _time_start: DateTime<FixedOffset>,
                                   _time_end: DateTime<FixedOffset>,
@@ -404,10 +518,13 @@ impl AbsOrderRepo for OrderMariaDbRepo
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
     }
-    async fn fetch_lines_by_pid(&self, _oid:&str, _pids:Vec<OrderLineIdentity>)
+    async fn fetch_lines_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
         -> DefaultResult<Vec<OrderLineModel>, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let oid_b = OidBytes::try_from(oid)?;
+        let mut conn = self._db.acquire().await?;
+        let mut tx = conn.begin().await?;
+        Self::_fetch_lines_by_pid(&mut tx, &oid_b, pids).await
     }
     async fn fetch_ids_by_created_time(&self,  _start: DateTime<FixedOffset>,
                                        _end: DateTime<FixedOffset>)
@@ -525,6 +642,25 @@ impl OrderMariaDbRepo {
         Ok(())
     }
     
+    async fn _fetch_lines_by_pid(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
+                                 pids: Vec<OrderLineIdentity> )
+        -> DefaultResult<Vec<OrderLineModel>, AppError>
+    {
+        let (sql_patt, args) = FetchLineByIdArg(&oid, pids).into();
+        let stmt = tx.prepare(sql_patt.as_str()).await?;
+        let query = stmt.query_with(args);
+        let exec = &mut *tx;
+        let rows = exec.fetch_all(query).await?;
+        let results = rows.into_iter().map(|row| {
+            OLineRow(row).try_into()
+        }).collect::<Vec<DefaultResult<OrderLineModel, AppError>>>();
+        if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
+            Err(e.to_owned())
+        } else {
+            let out = results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>();
+            Ok(out)
+        }
+    }
     async fn _fetch_mails(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&[u8])
         -> DefaultResult<Vec<String>, AppError>
     {
