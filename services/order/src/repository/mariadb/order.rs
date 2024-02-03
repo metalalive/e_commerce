@@ -25,7 +25,7 @@ use crate::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback
 };
 
-use super::{run_query_once, OidBytes};
+use super::{run_query_once, OidBytes, OID_BYTE_LENGTH};
 use super::stock::StockMariaDbRepo;
 
 struct InsertTopMetaArg<'a, 'b>(&'a OidBytes, u32, &'b DateTime<FixedOffset>);
@@ -41,6 +41,7 @@ struct UpdateOLinePayArg<'a>(&'a OidBytes, Vec<OrderLineModel>);
 struct FetchAllLinesArg(OidBytes);
 struct FetchLineByIdArg<'a>(&'a OidBytes, Vec<OrderLineIdentity>);
 
+struct TopLvlMetaRow(MySqlRow);
 struct OLineRow(MySqlRow);
 struct EmailRow(MySqlRow);
 struct PhoneRow(MySqlRow);
@@ -335,6 +336,24 @@ impl<'a> Into<(String, MySqlArguments)> for FetchLineByIdArg<'a>
 }
 
 
+impl TryInto<OrderLineModelSet> for TopLvlMetaRow {
+    type Error = AppError;
+    fn try_into(self) -> DefaultResult<OrderLineModelSet, Self::Error> {
+        let row = self.0;
+        let order_id  = {
+            let oid_raw = row.try_get::<Vec<u8>, usize>(0)?;
+            if oid_raw.len() != OID_BYTE_LENGTH {
+                let detail = format!("fetched-id-len: {}", oid_raw.len());
+                return Err(AppError { code: AppErrorCode::DataCorruption,  detail: Some(detail) });
+            }
+            oid_raw.into_iter().map(|b| format!("{:02x}",b)).collect()
+        };
+        let owner_id = row.try_get::<u32, usize>(1)?;
+        let create_time = row.try_get::<NaiveDateTime, usize>(2)?
+            .and_utc().into() ;
+        Ok(OrderLineModelSet { order_id, owner_id, create_time, lines:vec![] })
+    }
+}
 impl TryFrom<OLineRow> for OrderLineModel {
     type Error = AppError;
     fn try_from(value: OLineRow) -> DefaultResult<Self, Self::Error> {
@@ -511,13 +530,48 @@ impl AbsOrderRepo for OrderMariaDbRepo
         }
         Ok(OrderPaymentUpdateErrorDto { oid, lines: errors })
     }
-    async fn fetch_lines_by_rsvtime(&self, _time_start: DateTime<FixedOffset>,
-                                  _time_end: DateTime<FixedOffset>,
-                                  _usr_cb: AppOrderFetchRangeCallback )
+    async fn fetch_lines_by_rsvtime(&self, time_start: DateTime<FixedOffset>,
+                                  time_end: DateTime<FixedOffset>,
+                                  usr_cb: AppOrderFetchRangeCallback )
         -> DefaultResult<(), AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
+    { // current approach will lead to full-table scan and requires 2 conncetions,
+      // TODO, improve query time when the table grows to large amount of data
+        let mut conn0 = self._db.acquire().await?;
+        let mut conn1 = self._db.acquire().await?;
+        let (time_start, time_end) = (time_start.naive_utc(), time_end.naive_utc());
+        let sql_patt = "SELECT `a`.`o_id`,`a`.`usr_id`,`a`.`created_time` FROM `order_toplvl_meta` \
+                        AS `a` INNER JOIN `order_line_detail` AS `b` ON `a`.`o_id` = `b`.`o_id` WHERE \
+                        `b`.`rsved_until` < ? AND `b`.`rsved_until` > ? GROUP BY `a`.`o_id`";
+        let stmt = conn0.prepare(sql_patt).await?;
+        let  mut stream = {
+            let query = stmt.query().bind(time_start.clone()).bind(time_end.clone());
+            let exec = &mut *conn0;
+            exec.fetch(query)
+        };
+        while let Some(result) = stream.next().await {
+            let row = result?;
+            let oid_raw = row.try_get::<Vec<u8>, usize>(0)?;
+            let mut ol_set:OrderLineModelSet = TopLvlMetaRow(row).try_into()?;
+            let sql_patt = format!("{OLINE_SELECT_PREFIX} WHERE `o_id`=? AND \
+                                   (? < `rsved_until` AND `rsved_until` < ?)");
+            let stmt = conn1.prepare(sql_patt.as_str()).await?;
+            let query = stmt.query().bind(oid_raw.clone()).bind(time_start.clone())
+                .bind(time_end.clone());
+            let exec = &mut *conn1;
+            let rows = exec.fetch_all(query).await?;
+            let results = rows.into_iter().map(|row| {
+                OLineRow(row).try_into()
+            }).collect::<Vec<DefaultResult<OrderLineModel, AppError>>>();
+            ol_set.lines = if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
+                return Err(e.to_owned());
+            } else {
+                results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>()
+            };
+            usr_cb(self, ol_set).await?;
+        } // end of loop
+        Ok(())
+    } // end of fn fetch_lines_by_rsvtime
+
     async fn fetch_lines_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
         -> DefaultResult<Vec<OrderLineModel>, AppError>
     {

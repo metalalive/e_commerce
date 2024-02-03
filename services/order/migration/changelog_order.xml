@@ -190,7 +190,10 @@
     <changeSet id="add_table__order_line_detail" author="T.H.">
         <comment>
             - `qty_paid_last_update`, `rsved_until` and `warranty_until` should be saved as UTC time
-            - TODO, to learn when to set reference constraint on order-id, and when not to do so
+            TODO,
+            - learn when to set reference constraint on order-id, and when not to do so
+            - build another index for `rsved_until`, in case the application queries the
+              order lines by time range
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE  `order_line_detail` (
