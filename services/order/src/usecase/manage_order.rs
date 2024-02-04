@@ -243,7 +243,7 @@ impl OrderReplicaRefundUseCase {
 impl OrderReplicaInventoryUseCase {
     pub async fn execute(self, req:OrderReplicaInventoryReqDto)
         -> DefaultResult<OrderReplicaInventoryDto, AppError>
-    {
+    { // TODO, avoid loading too many order records, consider pagination
         let (start, end) = (req.start, req.end);
         let order_ids = self.o_repo.fetch_ids_by_created_time(start.clone(), end.clone()).await?;
         let mut reservations = vec![];

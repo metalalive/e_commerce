@@ -336,18 +336,22 @@ impl<'a> Into<(String, MySqlArguments)> for FetchLineByIdArg<'a>
 }
 
 
+fn fetch_convert_oid(row:&MySqlRow, idx:usize) -> DefaultResult<String, AppError>
+{
+    let raw = row.try_get::<Vec<u8>, usize>(idx)?;
+    if raw.len() != OID_BYTE_LENGTH {
+        let detail = format!("fetched-id-len: {}", raw.len());
+        Err(AppError { code: AppErrorCode::DataCorruption,  detail: Some(detail) })
+    } else {
+        let out = raw.into_iter().map(|b| format!("{:02x}",b)).collect();
+        Ok(out)
+    }
+}
 impl TryInto<OrderLineModelSet> for TopLvlMetaRow {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<OrderLineModelSet, Self::Error> {
         let row = self.0;
-        let order_id  = {
-            let oid_raw = row.try_get::<Vec<u8>, usize>(0)?;
-            if oid_raw.len() != OID_BYTE_LENGTH {
-                let detail = format!("fetched-id-len: {}", oid_raw.len());
-                return Err(AppError { code: AppErrorCode::DataCorruption,  detail: Some(detail) });
-            }
-            oid_raw.into_iter().map(|b| format!("{:02x}",b)).collect()
-        };
+        let order_id = fetch_convert_oid(&row, 0)?;
         let owner_id = row.try_get::<u32, usize>(1)?;
         let create_time = row.try_get::<NaiveDateTime, usize>(2)?
             .and_utc().into() ;
@@ -541,7 +545,7 @@ impl AbsOrderRepo for OrderMariaDbRepo
         let (time_start, time_end) = (time_start.naive_utc(), time_end.naive_utc());
         let sql_patt = "SELECT `a`.`o_id`,`a`.`usr_id`,`a`.`created_time` FROM `order_toplvl_meta` \
                         AS `a` INNER JOIN `order_line_detail` AS `b` ON `a`.`o_id` = `b`.`o_id` WHERE \
-                        `b`.`rsved_until` < ? AND `b`.`rsved_until` > ? GROUP BY `a`.`o_id`";
+                        `b`.`rsved_until` > ? AND `b`.`rsved_until` < ? GROUP BY `a`.`o_id`";
         let stmt = conn0.prepare(sql_patt).await?;
         let  mut stream = {
             let query = stmt.query().bind(time_start.clone()).bind(time_end.clone());
@@ -580,19 +584,53 @@ impl AbsOrderRepo for OrderMariaDbRepo
         let mut tx = conn.begin().await?;
         Self::_fetch_lines_by_pid(&mut tx, &oid_b, pids).await
     }
-    async fn fetch_ids_by_created_time(&self,  _start: DateTime<FixedOffset>,
-                                       _end: DateTime<FixedOffset>)
+    // TODO, cache the metadata `owner-id` and `create-time` , these records can be shared
+    // among the functions : `fetch_ids_by_created_time()`, `owner_id()`, `created_time()`
+    async fn fetch_ids_by_created_time(&self,  start: DateTime<FixedOffset>,
+                                       end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<String>, AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+    { // TODO, to enhance performance, build extra index for the column `create-time`
+        let mut conn = self._db.acquire().await?;
+        let sql_patt = "SELECT `o_id` FROM `order_toplvl_meta` WHERE \
+                        `created_time` >= ? AND `created_time` <= ?";
+        let (start, end) = (start.naive_utc(), end.naive_utc());
+        let stmt = conn.prepare(sql_patt).await?;
+        let query = stmt.query().bind(start).bind(end);
+        let exec = conn.as_mut();
+        let rows = exec.fetch_all(query).await?;
+        let results = rows.into_iter().map(
+            |row| fetch_convert_oid(&row, 0)
+        ).collect::<Vec<DefaultResult<String, AppError>>>();
+        let o_meta = if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
+            return Err(e.to_owned());
+        } else {
+            results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>()
+        };
+        Ok(o_meta)
     }
-    async fn owner_id(&self, _order_id:&str) -> DefaultResult<u32, AppError>
+    async fn owner_id(&self, oid:&str) -> DefaultResult<u32, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let OidBytes(oid_b) = OidBytes::try_from(oid)?;
+        let sql_patt = "SELECT `usr_id` FROM `order_toplvl_meta` WHERE `o_id`=?";
+        let mut conn = self._db.acquire().await?;
+        let stmt = conn.prepare(sql_patt).await?;
+        let query = stmt.query().bind(oid_b.to_vec());
+        let exec = conn.as_mut();
+        let row  = exec.fetch_one(query).await?;
+        let owner_id = row.try_get::<u32, usize>(0)?;
+        Ok(owner_id)
     }
-    async fn created_time(&self, _order_id:&str) -> DefaultResult<DateTime<FixedOffset>, AppError>
+    async fn created_time(&self, oid:&str) -> DefaultResult<DateTime<FixedOffset>, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let OidBytes(oid_b) = OidBytes::try_from(oid)?;
+        let sql_patt = "SELECT `created_time` FROM `order_toplvl_meta` WHERE `o_id`=?";
+        let mut conn = self._db.acquire().await?;
+        let stmt = conn.prepare(sql_patt).await?;
+        let query = stmt.query().bind(oid_b.to_vec());
+        let exec = conn.as_mut();
+        let row  = exec.fetch_one(query).await?;
+        let ctime = row.try_get::<NaiveDateTime, usize>(0)?.and_utc().into();
+        Ok(ctime)
     }
 
     // TODO, rename to `cancel_unpaid_last_time()` and `cancel_unpaid_time_update()`

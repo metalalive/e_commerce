@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::result::Result as DefaultResult;
 
-use chrono::{DateTime, Duration, Local};
+use chrono::{DateTime, Duration, Local, SubsecRound};
 use order::api::dto::{CountryCode, ShippingMethod};
 use order::constant::ProductType;
 use order::error::AppError;
@@ -127,12 +127,13 @@ fn ut_fetch_lines_rsvtime_usr_cb(repo:&dyn AbsOrderRepo, mset: OrderLineModelSet
     -> Pin<Box<dyn Future<Output=DefaultResult<(),AppError>> + Send + '_>>
 {
     let fut = async move {
+        //println!("[DEBUG] fetched oids : {}", mset.order_id.as_str());
         let expect = match mset.order_id.as_str() {
-            "0e927d72" => (1usize, vec![(9013u64, 14u32)]),
-            "0e927d73" => (2, vec![(9012,15), (9013,16)]),
-            "0e927d74" => (1, vec![(9012,17)]),
+            "0e927d72000000000000000000000000" => (1usize, vec![(9013u64, 14u32)]),
+            "0e927d73000000000000000000000000" => (2, vec![(9012,15), (9013,16)]),
+            "0e927d74000000000000000000000000" => (1, vec![(9012,17)]),
             _others    => (0, vec![])
-        };
+        }; // remind `BINARY` column is right-padded with zero in MariaDB
         let mut actual_product_ids = mset.lines.iter().map(
             |line| (line.id_.product_id, line.qty.reserved)
         ).collect::<Vec<_>>();
@@ -153,12 +154,10 @@ async fn fetch_lines_by_rsvtime_ok()
     let create_time  =  Local::now().fixed_offset();
     let (mock_seller, mut mock_rsv_qty, mut rsv_time) = (1033, 11u32, create_time.clone());
     let mock_oids = ["0e927d71", "0e927d72", "0e927d73", "0e927d74", "0e927d75"];
-    let create_time = Local::now().fixed_offset();
     ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Package, 9012, 500).await;
     ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Item, 9013, 500).await;
     for mock_oid in mock_oids {
         rsv_time += Duration::days(2);
-        mock_rsv_qty += 2;
         let lines = vec![
             (mock_seller, ProductType::Package, 9012, mock_rsv_qty, 29, rsv_time),
             (mock_seller, ProductType::Item, 9013, mock_rsv_qty + 1, 25, rsv_time + Duration::days(1)),
@@ -166,12 +165,56 @@ async fn fetch_lines_by_rsvtime_ok()
         let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
         let result = o_repo.stock().try_reserve(mock_reserve_usr_cb_0, &ol_set).await;
         assert!(result.is_ok());
+        mock_rsv_qty += 2;
     }
     let (time_start, time_end) = (
-        create_time + Duration::days(2) + Duration::hours(1),
-        create_time + Duration::days(6) + Duration::hours(1)
+        create_time + Duration::days(4) + Duration::hours(1),
+        create_time + Duration::days(8) + Duration::hours(1)
     );
     let result = o_repo.fetch_lines_by_rsvtime(
         time_start, time_end, ut_fetch_lines_rsvtime_usr_cb).await;
     assert!(result.is_ok());
 } // end of fn fetch_lines_by_rsvtime_ok
+
+#[cfg(feature="mariadb")]
+#[tokio::test]
+async fn fetch_toplvl_meta_ok()
+{
+    let ds = dstore_ctx_setup();
+    let o_repo = app_repo_order(ds).await.unwrap();
+    let now =  Local::now().fixed_offset();
+    let mut create_time  = now.clone();
+    let (mock_seller, mut mock_usr_id, mock_rsv_qty) = (1033, 126u32, 1u32);
+    let mock_oids = ["0e927d76", "0e927d77", "0e927d78", "0e927d79", "0e927d8a"];
+    ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Package, 9014, 50).await;
+    for mock_oid in mock_oids {
+        create_time += Duration::minutes(3);
+        let rsv_time = now + Duration::days(1);
+        let lines = vec![
+            (mock_seller, ProductType::Package, 9014, mock_rsv_qty, 29, rsv_time),
+        ];
+        let ol_set = ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines);
+        let result = o_repo.stock().try_reserve(mock_reserve_usr_cb_0, &ol_set).await;
+        assert!(result.is_ok());
+        mock_usr_id += 10;
+    }
+    let (time_start, time_end) = (now + Duration::minutes(4), now + Duration::minutes(10));
+    let result = o_repo.fetch_ids_by_created_time(time_start, time_end).await;
+    assert!(result.is_ok());
+    if let Ok(oids) = result {
+        //println!("[DEBUG] oids : {:?}", oids);
+        assert_eq!(oids.len(), 2);
+        assert!(oids.contains(&"0e927d77000000000000000000000000".to_string()));
+        assert!(oids.contains(&"0e927d78000000000000000000000000".to_string()));
+    }
+    let result = o_repo.owner_id("0e927d8a").await;
+    assert_eq!(result.unwrap(), 166);
+    let result = o_repo.owner_id("0e927d78").await;
+    assert_eq!(result.unwrap(), 146);
+    let result = o_repo.created_time("0e927d78").await;
+    assert_eq!(result.unwrap().round_subsecs(0) , now.round_subsecs(0) + Duration::minutes(9));
+    let result = o_repo.created_time("0e927d76").await;
+    assert_eq!(result.unwrap().round_subsecs(0), now.round_subsecs(0) + Duration::minutes(3));
+    let result = o_repo.created_time("0e927d77").await;
+    assert_eq!(result.unwrap().round_subsecs(0), now.round_subsecs(0) + Duration::minutes(6));
+} // end of fn fetch_toplvl_meta_ok
