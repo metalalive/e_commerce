@@ -185,8 +185,8 @@ impl ReserveArg {
             out.add(expiry);
             let (oid, rsv_per_item) = (detail.oid, detail.reserved);
             // TODO, move to beginning of `reserve()`
-            let OidBytes(oid_b) = OidBytes::try_from(oid.as_str()).unwrap();
-            out.add(oid_b.to_vec());
+            let oid_b = OidBytes::try_from(oid.as_str()).unwrap();
+            out.add(oid_b.as_column());
             out.add(rsv_per_item);
         }).count();
         out

@@ -8,9 +8,9 @@ use std::ops::DerefMut;
 use std::result::Result as DefaultResult;
 use std::io::ErrorKind;
 use std::vec::IntoIter;
-use sqlx::{Executor, Transaction, MySql, Statement};
+use sqlx::{Executor, Transaction, MySql, Statement, Row};
 use sqlx::error::Error;
-use sqlx::mysql::{MySqlArguments, MySqlQueryResult};
+use sqlx::mysql::{MySqlArguments, MySqlQueryResult, MySqlRow};
 
 use crate::error::{AppError, AppErrorCode};
     
@@ -77,10 +77,34 @@ impl<'a> TryFrom<&'a str> for OidBytes {
                 let c = r.unwrap();
                 *addr = c;
             }).count();
+            let num_rotate = OID_BYTE_LENGTH - (value.len() >> 1);
+            dst.rotate_right(num_rotate);
             Ok(OidBytes(dst))
         } else {
             let detail = format!("size-not-fit: {value}");
             Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
+        }
+    }
+}
+impl  OidBytes {
+    fn as_column(&self) -> Vec<u8> { 
+        self.0.to_vec()
+    }
+    fn to_app_oid(row:&MySqlRow, idx:usize) -> DefaultResult<String, AppError>
+    {
+        let raw = row.try_get::<Vec<u8>, usize>(idx)?;
+        if raw.len() != OID_BYTE_LENGTH {
+            let detail = format!("fetched-id-len: {}", raw.len());
+            Err(AppError { code: AppErrorCode::DataCorruption,  detail: Some(detail) })
+        } else {
+            let mut padded = true;
+            let out = raw.into_iter().filter_map(|b| {
+                if b != 0 { padded = false; }
+                if padded {None} else {
+                    Some(format!("{:02x}",b)) 
+                }
+            }).collect();
+            Ok(out)
         }
     }
 }
@@ -100,8 +124,8 @@ fn hex_to_octet_iter(src:&str) -> DefaultResult<IntoIter<Result<u8, String>>, Ap
         if let Some(d) = error {
             Err(AppError {code:AppErrorCode::InvalidInput, detail:Some(d.clone()) })
         } else {
-            let xx = results.into_iter();
-            Ok(xx )
+            let out = results.into_iter();
+            Ok(out)
         } // cannot convert to u8 array using try-from method,  the size of given
           // char vector might not be the same as OID_BYTE_LENGTH
     } else {

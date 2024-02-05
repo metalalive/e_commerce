@@ -127,11 +127,11 @@ fn ut_fetch_lines_rsvtime_usr_cb(repo:&dyn AbsOrderRepo, mset: OrderLineModelSet
     -> Pin<Box<dyn Future<Output=DefaultResult<(),AppError>> + Send + '_>>
 {
     let fut = async move {
-        //println!("[DEBUG] fetched oids : {}", mset.order_id.as_str());
+        println!("[DEBUG] fetched oids : {}", mset.order_id.as_str());
         let expect = match mset.order_id.as_str() {
-            "0e927d72000000000000000000000000" => (1usize, vec![(9013u64, 14u32)]),
-            "0e927d73000000000000000000000000" => (2, vec![(9012,15), (9013,16)]),
-            "0e927d74000000000000000000000000" => (1, vec![(9012,17)]),
+            "0e927d72" => (1usize, vec![(9013u64, 14u32)]),
+            "0e927d73" => (2, vec![(9012,15), (9013,16)]),
+            "0e927d74" => (1, vec![(9012,17)]),
             _others    => (0, vec![])
         }; // remind `BINARY` column is right-padded with zero in MariaDB
         let mut actual_product_ids = mset.lines.iter().map(
@@ -185,7 +185,7 @@ async fn fetch_toplvl_meta_ok()
     let now =  Local::now().fixed_offset();
     let mut create_time  = now.clone();
     let (mock_seller, mut mock_usr_id, mock_rsv_qty) = (1033, 126u32, 1u32);
-    let mock_oids = ["0e927d76", "0e927d77", "0e927d78", "0e927d79", "0e927d8a"];
+    let mock_oids = ["0e927d76", "0e927d00", "0e927d78", "0e927d79", "0e927d8a"];
     ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Package, 9014, 50).await;
     for mock_oid in mock_oids {
         create_time += Duration::minutes(3);
@@ -202,10 +202,10 @@ async fn fetch_toplvl_meta_ok()
     let result = o_repo.fetch_ids_by_created_time(time_start, time_end).await;
     assert!(result.is_ok());
     if let Ok(oids) = result {
-        //println!("[DEBUG] oids : {:?}", oids);
+        println!("[DEBUG] oids : {:?}", oids);
         assert_eq!(oids.len(), 2);
-        assert!(oids.contains(&"0e927d77000000000000000000000000".to_string()));
-        assert!(oids.contains(&"0e927d78000000000000000000000000".to_string()));
+        assert!(oids.contains(&"0e927d00".to_string()));
+        assert!(oids.contains(&"0e927d78".to_string()));
     }
     let result = o_repo.owner_id("0e927d8a").await;
     assert_eq!(result.unwrap(), 166);
@@ -215,6 +215,6 @@ async fn fetch_toplvl_meta_ok()
     assert_eq!(result.unwrap().round_subsecs(0) , now.round_subsecs(0) + Duration::minutes(9));
     let result = o_repo.created_time("0e927d76").await;
     assert_eq!(result.unwrap().round_subsecs(0), now.round_subsecs(0) + Duration::minutes(3));
-    let result = o_repo.created_time("0e927d77").await;
+    let result = o_repo.created_time("0e927d00").await;
     assert_eq!(result.unwrap().round_subsecs(0), now.round_subsecs(0) + Duration::minutes(6));
 } // end of fn fetch_toplvl_meta_ok
