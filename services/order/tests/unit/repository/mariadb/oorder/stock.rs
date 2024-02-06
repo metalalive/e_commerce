@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Duration, Local};
+use chrono::{DateTime, Duration, Local, SubsecRound};
 
+use order::api::rpc::dto::{StockLevelReturnDto, InventoryEditStockLevelDto, StockReturnErrorDto};
 use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
 use order::constant::ProductType;
 use order::repository::{
@@ -327,3 +328,139 @@ async fn try_reserve_shortage()
         assert!(matches!(detail.reason, OrderLineCreateErrorReason::OutOfStock));
     }
 } // end of  fn try_reserve_shortage
+
+
+fn mock_reserve_usr_cb_3(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
+    -> AppStockRepoReserveReturn
+{
+    macro_rules! inner_try_reserve {
+        ($prod_typ:expr, $prod_id:literal, $expect_tot_qty_1:literal,
+         $expect_tot_qty_2:literal, $product_src:expr, $oid:ident,
+         $line_rsv_req:ident ) =>
+        {{
+            let stk_prod = $product_src.iter_mut().find(
+                |p| p.type_==$prod_typ && p.id_==$prod_id && p.quantity.total==$expect_tot_qty_1
+            ).unwrap();
+            assert!(stk_prod.quantity.rsv_detail.is_none());
+            let num_avail = stk_prod.quantity.num_avail();
+            assert!(num_avail < $line_rsv_req);
+            let num = stk_prod.quantity.reserve($oid, num_avail);
+            $line_rsv_req -= num_avail;
+            assert!(stk_prod.quantity.rsv_detail.is_some());
+            let stk_prod = $product_src.iter_mut().find(
+                |p| p.type_==$prod_typ && p.id_==$prod_id && p.quantity.total==$expect_tot_qty_2
+            ).unwrap();
+            assert!(stk_prod.quantity.rsv_detail.is_none());
+            let num_avail = stk_prod.quantity.num_avail();
+            assert!(num_avail > $line_rsv_req);
+            let num = stk_prod.quantity.reserve($oid, $line_rsv_req);
+            assert!(stk_prod.quantity.rsv_detail.is_some());
+        }};
+    }
+    assert_eq!(ms.stores.len(), 1);
+    let store = &mut ms.stores[0];
+    let oid = req.order_id.as_str();
+    req.lines.iter().map(|line| {
+        let mut line_rsv_req = line.qty.reserved;
+        match line.id_.product_id {
+            9006 => inner_try_reserve!(ProductType::Item, 9006, 120, 14, store.products, oid, line_rsv_req),
+            9008 => inner_try_reserve!(ProductType::Package, 9008, 49, 37, store.products, oid, line_rsv_req),
+            _others => { assert!(false); },
+        };
+    }).count();
+    Ok(())
+} // end of mock_reserve_usr_cb_3
+
+fn mock_return_usr_cb_1(ms: &mut StockLevelModelSet, data:StockLevelReturnDto)
+    -> Vec<StockReturnErrorDto>
+{
+    assert_eq!(ms.stores.len(), 1);
+    let store = &mut ms.stores[0];
+    assert_eq!(store.products.len(), 4);
+    assert_eq!(data.items.len(), 3);
+    let oid = data.order_id.as_str();
+    data.items.into_iter().map(|item| {
+        let stk_prod = store.products.iter_mut().find(|p| {
+            let exp_diff = p.expiry.fixed_offset() - item.expiry;
+            p.type_==item.product_type && p.id_==item.product_id &&
+            exp_diff.abs() < Duration::seconds(1)
+        }).unwrap();
+        {
+            let detail = stk_prod.quantity.rsv_detail.as_ref().unwrap();
+            // println!("[DEBUG] prod-typ:{:?}, prod-id:{}, exp:{:?}, \n qty-stats:{:?}",
+            //         stk_prod.type_, stk_prod.id_, stk_prod.expiry, stk_prod.quantity );
+            assert!(detail.reserved > 0);
+        }
+        let line_ret_req = item.qty_add as u32;
+        let num = stk_prod.quantity.try_return(line_ret_req);
+        assert_eq!(num, line_ret_req);
+        {
+            let detail = stk_prod.quantity.rsv_detail.as_ref().unwrap();
+            assert!(detail.reserved >= 0);
+        }
+    }).count();
+    vec![]
+}
+
+#[cfg(feature="mariadb")]
+#[tokio::test]
+async fn try_return_ok()
+{
+    let ds = dstore_ctx_setup();
+    let o_repo = app_repo_order(ds).await.unwrap();
+    let stockrepo = o_repo.stock();
+    let (mock_oid, mock_usr_id, mock_seller) = ("0d14ff5a", 141, 1034);
+    let all_products = ut_init_data_product();
+    {
+        let products = [4,8,9,10].into_iter().map(
+            |idx| all_products[idx].clone()).collect::<Vec<_>>();
+        let store = StoreStockModel {store_id:mock_seller, products};
+        let slset = StockLevelModelSet { stores:vec![store] };
+        let result = stockrepo.save(slset.clone()).await;
+        assert!(result.is_ok());
+    }
+    let ol_set = {
+        let create_time = Local::now().fixed_offset();
+        let mock_warranty  = create_time + Duration::days(7);
+        let lines = vec![
+            (mock_seller, ProductType::Item,    9006, 123,  4, mock_warranty + Duration::hours(1)),
+            (mock_seller, ProductType::Package, 9008, 50,  20, mock_warranty + Duration::hours(10)),
+        ];
+        ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines)
+    };
+    let result = stockrepo.try_reserve(mock_reserve_usr_cb_3, &ol_set).await;
+    assert!(result.is_ok());
+    let data = {
+        let items = [
+            (mock_seller, ProductType::Item, 9006u64, 1i32, all_products[8].expiry.clone()),
+            (mock_seller, ProductType::Package, 9008, 1, all_products[9].expiry.clone()),
+            (mock_seller, ProductType::Package, 9008, 5, all_products[10].expiry.clone()),
+        ].into_iter().map(|d| InventoryEditStockLevelDto { qty_add: d.3, store_id: d.0,
+            product_type: d.1, product_id: d.2, expiry: d.4.into() }).collect() ;
+        StockLevelReturnDto { order_id: mock_oid.to_string(), items }
+    };
+    let result = stockrepo.try_return(mock_return_usr_cb_1, data).await;
+    assert!(result.is_ok());
+
+    let pids = [4,8,9,10].into_iter().map(|idx| {
+        let m = &all_products[idx];
+        ProductStockIdentity { store_id:mock_seller, product_id:m.id_,
+            product_type: m.type_.clone(), expiry:m.expiry_without_millis() }
+    }).collect();
+    let result = stockrepo.fetch(pids).await;
+    assert!(result.is_ok());
+    if let Ok(mut mset) = result {
+        let mut products = mset.stores.remove(0).products;
+        assert_eq!(products.len(), 4);
+        products.sort_by(
+            |a,b| if a.id_ == b.id_ { a.expiry.cmp(&b.expiry) }
+                  else { a.id_.cmp(&b.id_) }
+        );
+        let expect_seq = vec![(9006u64, 6u32), (9006,116), (9008,0), (9008,44)];
+        products.into_iter().zip(expect_seq.into_iter()).map(|(p, expect)| {
+            let actual = (p.id_, p.quantity.booked);
+            assert_eq!(actual, expect);
+        }).count();
+    }
+} // end of fn  try_return_ok
+
