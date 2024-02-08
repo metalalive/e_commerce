@@ -5,7 +5,7 @@ use std::vec::Vec;
 use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset, NaiveDateTime};
+use chrono::{DateTime, Local, FixedOffset, NaiveDateTime};
 use futures_util::stream::StreamExt;
 use sqlx::pool::PoolConnection;
 use sqlx::{Transaction, MySql, Arguments, IntoArguments, Executor, Statement, Row, Connection};
@@ -621,13 +621,30 @@ impl AbsOrderRepo for OrderMariaDbRepo
         Ok(ctime)
     }
 
-    // TODO, rename to `cancel_unpaid_last_time()` and `cancel_unpaid_time_update()`
-    async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
+    async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError>
     {
-        DateTime::parse_from_rfc3339("1991-05-30T15:22:49.001985+09:30").unwrap()
+        let sql_patt = "SELECT `last_update` FROM `schedule_job`";
+        let mut conn = self._db.acquire().await?;
+        let stmt = conn.prepare(sql_patt).await?;
+        let query = stmt.query();
+        let exec = conn.as_mut();
+        let row  = exec.fetch_one(query).await?;
+        let utime = row.try_get::<NaiveDateTime, usize>(0) ?;
+        let t = utime.and_utc().fixed_offset() ;
+        Ok(t)
     }
-    async fn scheduled_job_time_update(&self)
-    { }
+    async fn cancel_unpaid_time_update(&self) -> DefaultResult<(), AppError>
+    {
+        let mut conn = self._db.acquire().await?;
+        let sql_patt = "UPDATE `schedule_job` SET `last_update`=?";
+        let t = Local::now().naive_utc();
+        let stmt = conn.prepare(sql_patt).await?;
+        let query = stmt.query().bind(t);
+        let exec = &mut * conn;
+        let resultset = query.execute(exec).await?;
+        let _num_affected = resultset.rows_affected();
+        Ok(())
+    }
 } // end of trait AbsOrderRepo
 
 

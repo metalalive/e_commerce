@@ -285,7 +285,7 @@ impl OrderDiscardUnpaidItemsUseCase {
 
     pub async fn execute(self) -> DefaultResult<(),AppError>
     {
-        let time_start = self.repo.scheduled_job_last_time().await;
+        let time_start = self.repo.cancel_unpaid_last_time().await?;
         let time_end = LocalTime::now().fixed_offset();
         let result = self.repo.fetch_lines_by_rsvtime( time_start,
                             time_end, Self::read_oline_set_cb ).await;
@@ -293,7 +293,7 @@ impl OrderDiscardUnpaidItemsUseCase {
             let lctx = &self.logctx;
             app_log_event!(lctx, AppLogLevel::ERROR, "error: {:?}", e);
         } else {
-            self.repo.scheduled_job_time_update().await;
+            self.repo.cancel_unpaid_time_update().await?;
         }
         result
     }

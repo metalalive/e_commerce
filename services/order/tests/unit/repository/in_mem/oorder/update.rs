@@ -308,15 +308,15 @@ async fn in_mem_fetch_lines_rsvtime_usrcb_err()
 async fn in_mem_scheduled_job_time_ok()
 {
     let o_repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, None).await;
-    let time0 = o_repo.scheduled_job_last_time().await;
-    let time1 = o_repo.scheduled_job_last_time().await;
+    let time0 = o_repo.cancel_unpaid_last_time().await.unwrap();
+    let time1 = o_repo.cancel_unpaid_last_time().await.unwrap();
     let _ = sleep(TokioDuration::from_secs(1));
-    o_repo.scheduled_job_time_update().await;
-    let time2 = o_repo.scheduled_job_last_time().await;
+    o_repo.cancel_unpaid_time_update().await.unwrap();
+    let time2 = o_repo.cancel_unpaid_last_time().await.unwrap();
     let _ = sleep(TokioDuration::from_secs(1));
-    o_repo.scheduled_job_time_update().await;
-    let time3 = o_repo.scheduled_job_last_time().await;
-    let time4 = o_repo.scheduled_job_last_time().await;
+    o_repo.cancel_unpaid_time_update().await.unwrap();
+    let time3 = o_repo.cancel_unpaid_last_time().await.unwrap();
+    let time4 = o_repo.cancel_unpaid_last_time().await.unwrap();
     assert_eq!(time0, time1);
     assert!(time2 > time1);
     assert!(time3 > time2);

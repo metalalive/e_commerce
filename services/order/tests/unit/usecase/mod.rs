@@ -190,12 +190,13 @@ impl AbsOrderRepo for MockOrderRepo {
             Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(detail) })
         }
     }
-    async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
+    async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError>
     {
-        DateTime::parse_from_rfc3339("1999-07-31T23:59:58+09:00").unwrap()
+        let t = DateTime::parse_from_rfc3339("1999-07-31T23:59:58+09:00").unwrap();
+        Ok(t)
     }
-    async fn scheduled_job_time_update(&self)
-    { }
+    async fn cancel_unpaid_time_update(&self) -> DefaultResult<(), AppError>
+    { Ok(()) }
 } // end of impl MockOrderRepo
 
 impl MockOrderRepo {

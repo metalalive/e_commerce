@@ -1,4 +1,5 @@
 use chrono::{Duration, Local, SubsecRound};
+use tokio::time::{sleep, Duration as TokioDuration};
 
 use order::api::rpc::dto::{OrderPaymentUpdateDto, OrderLinePaidUpdateDto};
 use order::constant::ProductType;
@@ -94,3 +95,24 @@ async fn update_payment_ok()
     }
 } // end of fn update_payment_ok
 
+#[cfg(feature="mariadb")]
+#[tokio::test]
+async fn cancel_unpaid_job_time_ok()
+{
+    let ds = dstore_ctx_setup();
+    let o_repo = app_repo_order(ds).await.unwrap();
+    let time0 = o_repo.cancel_unpaid_last_time().await.unwrap();
+    let time1 = o_repo.cancel_unpaid_last_time().await.unwrap();
+    let _ = sleep(TokioDuration::from_secs(1)).await ;
+    o_repo.cancel_unpaid_time_update().await.unwrap();
+    let time2 = o_repo.cancel_unpaid_last_time().await.unwrap();
+    let _ = sleep(TokioDuration::from_secs(1)).await;
+    o_repo.cancel_unpaid_time_update().await.unwrap();
+    let time3 = o_repo.cancel_unpaid_last_time().await.unwrap();
+    let time4 = o_repo.cancel_unpaid_last_time().await.unwrap();
+    // println!("[debug] time {:?} {:?} ", time2, time3);
+    assert_eq!(time0, time1);
+    assert!(time2 > time1);
+    assert!(time3 > time2);
+    assert_eq!(time3, time4);
+}

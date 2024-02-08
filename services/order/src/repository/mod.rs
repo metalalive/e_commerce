@@ -97,9 +97,8 @@ pub trait AbsOrderRepo: Sync + Send {
     async fn owner_id(&self, order_id:&str) -> DefaultResult<u32, AppError>;
     async fn created_time(&self, order_id:&str) -> DefaultResult<DateTime<FixedOffset>, AppError>;
 
-    // TODO, rename to `cancel_unpaid_last_time()` and `cancel_unpaid_time_update()`
-    async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>;
-    async fn scheduled_job_time_update(&self);
+    async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError>;
+    async fn cancel_unpaid_time_update(&self) -> DefaultResult<(), AppError>;
 } // end of trait AbsOrderRepo
 
 pub type AppOrderRepoUpdateLinesUserFunc = fn(&mut Vec<OrderLineModel>, Vec<OrderLinePaidUpdateDto>)
@@ -194,6 +193,14 @@ pub async fn app_repo_order(ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderRepo>, AppError>
 {
     let timenow = LocalTime::now().fixed_offset();
+    #[cfg(feature="mariadb")]
+    if let Some(dbs) = ds.sql_dbs.as_ref() {
+        let obj = OrderMariaDbRepo::new(dbs.clone(), timenow).await?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError { code: AppErrorCode::FeatureDisabled, detail: Some(format!("mariadb")) })
+    }
+    #[cfg(not(feature="mariadb"))]
     if let Some(m) = &ds.in_mem {
         let obj = OrderInMemRepo::new(m.clone(), timenow).await ?;
         Ok(Box::new(obj))

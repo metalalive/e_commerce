@@ -380,5 +380,25 @@
     <changeSet id="tag_version_0.1.0" author="T.H.">
         <tagDatabase tag="0.1.0" />
     </changeSet>
+    <changeSet id="add_table__schedule_job" author="T.H.">
+        <comment>
+            - the table persists attributes required by job scheduler, the application updates state of 
+              the valid orders at certain interval. Such attributes can also be saved in other
+              non-relational database.
+            - currently only one column records last update time for one backend server, if there are
+              more machines / servers , the table may be expanded with new column for machine identifier
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `schedule_job` (`last_update`  DATETIME NOT NULL);
+            INSERT INTO `schedule_job`(`last_update`) VALUES ('2024-02-07 06:00:00');
+        </sql>
+        <rollback>
+            DROP TABLE `schedule_job`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.1.1" author="T.H.">
+        <tagDatabase tag="0.1.1" />
+    </changeSet>
 </databaseChangeLog>
 

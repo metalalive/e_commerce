@@ -565,17 +565,19 @@ impl AbsOrderRepo for OrderInMemRepo
         Ok(create_time)
     }
 
-    async fn scheduled_job_last_time(&self) -> DateTime<FixedOffset>
+    async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError>
     {
         let guard = self._sched_job_last_launched.lock().await;
-        guard.clone()
+        let t = guard.clone();
+        Ok(t)
     }
 
-    async fn scheduled_job_time_update(&self)
+    async fn cancel_unpaid_time_update(&self) -> DefaultResult<(), AppError>
     {
         let mut guard = self._sched_job_last_launched.lock().await;
-        let t:DateTime<FixedOffset> = LocalTime::now().into();
+        let t = LocalTime::now().fixed_offset();
         *guard = t;
+        Ok(())
     }
 } // end of impl AbsOrderRepo
 
