@@ -24,11 +24,12 @@ macro_rules! common_setup {
             }
         };
         let ds = $shr_state.datastore();
+        let logctx_p = $shr_state.log_context().clone();
         match app_repo_order(ds).await {
-            Ok(repo) => match  $uc_fn(reqbody, repo).await {
+            Ok(repo) => match $uc_fn(reqbody, repo, logctx_p.clone()).await
+            {
                 Ok(r) => serde_json::to_vec(&r).unwrap(),
                 Err(e) => {
-                    let logctx_p = $shr_state.log_context().clone();
                     app_log_event!(logctx_p, AppLogLevel::ERROR, "[fail-edit-stock-level]:{}", e);
                     build_error_response(e).to_string().into_bytes()
                 }

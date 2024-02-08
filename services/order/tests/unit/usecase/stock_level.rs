@@ -9,6 +9,7 @@ use order::model::{
 };
 use order::usecase::StockLevelUseCase;
 
+use crate::{ut_setup_share_state, MockConfidential};
 use super::MockOrderRepo;
 
 fn ut_setup_data() -> Vec<InventoryEditStockLevelDto>
@@ -28,6 +29,7 @@ fn ut_setup_data() -> Vec<InventoryEditStockLevelDto>
 #[tokio::test]
 async fn edit_ok ()
 {
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let init_data = ut_setup_data();
     let expect_fetch_res = Ok(StockLevelModelSet{stores:vec![
         StoreStockModel {store_id:init_data[2].store_id, products:vec![
@@ -39,7 +41,9 @@ async fn edit_ok ()
     let expect_save_res  = Ok(());
     let repo = MockOrderRepo::build( expect_save_res, expect_fetch_res,
                                      vec![], vec![], vec![], vec![], None, None );
-    let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
+    let result = StockLevelUseCase::try_edit(
+        init_data, Box::new(repo),  app_state.log_context().clone()
+    ).await;
     assert!(result.is_ok());
     let _stock_lvl_rd = result.unwrap();
     // TODO, verify present data from model set
@@ -48,13 +52,16 @@ async fn edit_ok ()
 #[tokio::test]
 async fn edit_fetch_error ()
 {
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let init_data = ut_setup_data();
     let expect_fetch_res = Err(AppError{code:AppErrorCode::DataCorruption,
             detail:Some("unit-test".to_string())}); 
     let expect_save_res = Ok(()); 
     let repo = MockOrderRepo::build( expect_save_res, expect_fetch_res,
                                      vec![], vec![], vec![], vec![], None, None );
-    let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
+    let result = StockLevelUseCase::try_edit(
+        init_data, Box::new(repo), app_state.log_context().clone()
+    ).await;
     assert!(result.is_err());
     if let Err(error) = result {
         assert_eq!(error.code, AppErrorCode::DataCorruption);
@@ -67,6 +74,7 @@ async fn edit_fetch_error ()
 #[tokio::test]
 async fn edit_save_error ()
 {
+    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let init_data = ut_setup_data();
     let expect_fetch_res = Ok(StockLevelModelSet{stores:vec![
         StoreStockModel {store_id:init_data[2].store_id, products:vec![
@@ -79,7 +87,9 @@ async fn edit_save_error ()
             detail:Some("unit-test".to_string())});
     let repo = MockOrderRepo::build( expect_save_res, expect_fetch_res,
                                      vec![], vec![], vec![], vec![], None, None );
-    let result = StockLevelUseCase::try_edit(init_data, Box::new(repo)).await;
+    let result = StockLevelUseCase::try_edit(
+        init_data, Box::new(repo), app_state.log_context().clone()
+    ).await;
     assert!(result.is_err());
     if let Err(error) = result {
         assert_eq!(error.code, AppErrorCode::DataTableNotExist);

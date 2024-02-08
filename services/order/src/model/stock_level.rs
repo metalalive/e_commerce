@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::vec::Vec;
 use std::result::Result as DefaultResult;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, SubsecRound};
 
 use crate::api::rpc::dto::{
     InventoryEditStockLevelDto, StockLevelPresentDto, StockQuantityPresentDto, StockLevelReturnDto,
@@ -247,7 +247,8 @@ impl StoreStockModel {
     {
         assert!(req.qty_add > 0);
         let result = self.products.iter_mut().find(|p| {
-            p.type_ == req.product_type && p.id_ == req.product_id && p.expiry == req.expiry
+            p.type_ == req.product_type && p.id_ == req.product_id &&
+                p.expiry.trunc_subsecs(0) == req.expiry.trunc_subsecs(0)
         });
         if let Some(p) = result  {
             if let Some(rsv) = &p.quantity.rsv_detail {

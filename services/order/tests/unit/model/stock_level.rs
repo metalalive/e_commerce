@@ -563,10 +563,14 @@ fn return_by_expiry_ok()
     let mut mset = return_by_expiry_common(mock_oid);
     let data = StockLevelReturnDto {
         order_id:mock_oid.to_string(), items: vec![
-        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
-            product_id:9002, qty_add:2, expiry:mset.stores[1].products[0].expiry.fixed_offset() },
-        InventoryEditStockLevelDto {store_id:1013, product_type:ProductType::Item,
-            product_id:9006, qty_add:2, expiry:mset.stores[0].products[1].expiry.fixed_offset() },
+        InventoryEditStockLevelDto {
+            store_id:1014, product_type:ProductType::Item, product_id:9002, qty_add:2,
+            expiry:mset.stores[1].products[0].expiry.fixed_offset() + Duration::milliseconds(13)
+        },
+        InventoryEditStockLevelDto {
+            store_id:1013, product_type:ProductType::Item, product_id:9006, qty_add:2,
+            expiry:mset.stores[0].products[1].expiry.fixed_offset() + Duration::milliseconds(46)
+        },
     ]}; // the expiry time has to be exactly the same
     let error = mset.return_by_expiry(data);
     assert!(error.is_empty());
@@ -596,10 +600,10 @@ fn return_by_expiry_nonexist()
         order_id:mock_oid.to_string(), items: vec![
         InventoryEditStockLevelDto {
             store_id:1014, product_type:ProductType::Item, product_id:9002, qty_add:1,
-            expiry:mset.stores[1].products[0].expiry.fixed_offset() + Duration::milliseconds(43) },
+            expiry:mset.stores[1].products[0].expiry.fixed_offset() + Duration::seconds(3) },
         InventoryEditStockLevelDto {
             store_id:1013, product_type:ProductType::Item, product_id:9006, qty_add:1,
-            expiry:mset.stores[0].products[1].expiry.fixed_offset() + Duration::milliseconds(16) },
+            expiry:mset.stores[0].products[1].expiry.fixed_offset() + Duration::seconds(1) },
     ]};
     let error = mset.return_by_expiry(data);
     assert_eq!(error.len(), 2);
@@ -618,10 +622,14 @@ fn return_by_expiry_invalid_qty()
     let mut mset = return_by_expiry_common(mock_oid);
     let data = StockLevelReturnDto {
         order_id:mock_oid.to_string(), items: vec![
-        InventoryEditStockLevelDto {store_id:1014, product_type:ProductType::Item,
-            product_id:9002, qty_add:6, expiry:mset.stores[1].products[0].expiry.fixed_offset() },
-        InventoryEditStockLevelDto {store_id:1013, product_type:ProductType::Item,
-            product_id:9006, qty_add:7, expiry:mset.stores[0].products[1].expiry.fixed_offset() },
+        InventoryEditStockLevelDto {
+            store_id:1014, product_type:ProductType::Item, product_id:9002, qty_add:6,
+            expiry:mset.stores[1].products[0].expiry.fixed_offset() + Duration::milliseconds(55)
+        },
+        InventoryEditStockLevelDto {
+            store_id:1013, product_type:ProductType::Item, product_id:9006, qty_add:7,
+            expiry:mset.stores[0].products[1].expiry.fixed_offset() + Duration::milliseconds(45)
+        },
     ]};
     let error = mset.return_by_expiry(data);
     assert_eq!(error.len(), 2);

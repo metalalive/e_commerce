@@ -97,11 +97,11 @@ async fn setup_product_stock_ok(shr_state:AppSharedState)
     let msgbody = br#"
         [
             {"qty_add":22, "store_id":18830, "product_type": 1, "product_id": 270118,
-             "expiry": "2099-12-24T07:11:13.730050+07:00"},
+             "expiry": "2029-12-24T07:11:13.730050+07:00"},
             {"qty_add":38, "store_id":18830, "product_type": 1, "product_id": 270119,
-             "expiry": "2099-12-27T22:19:13.730050+08:00"},
+             "expiry": "2029-12-27T22:19:13.730050+08:00"},
             {"qty_add":50, "store_id":18830, "product_type": 2, "product_id": 270118,
-             "expiry": "2099-12-25T16:27:13.730050+10:00"}
+             "expiry": "2029-12-25T16:27:13.730050+10:00"}
         ]
         "#; // TODO, generate expiry time from chrono::Local::now()
     let req = AppRpcClientReqProperty { retry: 1,  msgbody:msgbody.to_vec(),
@@ -325,4 +325,3 @@ async fn add_product_policy_error() -> DefaultResult<(), AppError>
     }
     Ok(())
 } // end of fn add_product_policy_error
-

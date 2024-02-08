@@ -136,10 +136,13 @@ impl Into<(String, MySqlArguments)> for  UpdateArg {
 
 impl FetchOneArg {
     fn sql_pattern(num_batch:usize) -> String {
+        let col_seq = "`store_id`,`product_type`,`product_id`,`price`,`start_after`,\
+                       `end_before`,`start_tz_utc`,`end_tz_utc`";
         let pid_cmps = (0..num_batch).into_iter().map(
             |_| "(`product_type`=? AND `product_id`=?)"
-        ).collect::<Vec<_>>().join(" OR ");
-        format!("SELECT `store_id`,`product_type`,`product_id`,`price`,`start_after`,`end_before`,`start_tz_utc`,`end_tz_utc` FROM `product_price` WHERE `store_id`=? AND ({}) ", pid_cmps)
+        ).collect::<Vec<_>>().join("OR");
+        format!("SELECT {} FROM `product_price` WHERE `store_id`=? AND ({})",
+                col_seq, pid_cmps)
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchOneArg {
@@ -157,16 +160,20 @@ impl<'q> IntoArguments<'q, MySql> for FetchOneArg {
 }
 impl Into<(String, MySqlArguments)> for FetchOneArg {
     fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.1.len()), self.into_arguments())
+        let num_batch = self.1.len();
+        assert!(num_batch > 0);
+        (Self::sql_pattern(num_batch), self.into_arguments())
     }
 }
 
 impl FetchManyArg {
     fn sql_pattern(num_batch:usize) -> String {
+        let col_seq = "`store_id`,`product_type`,`product_id`,`price`,`start_after`,\
+                       `end_before`,`start_tz_utc`,`end_tz_utc`";
         let pid_cmps = (0..num_batch).into_iter().map(
             |_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)"
         ).collect::<Vec<_>>().join(" OR ");
-        format!("SELECT `store_id`,`product_type`,`product_id`,`price`,`start_after`,`end_before`,`start_tz_utc`,`end_tz_utc` FROM `product_price` WHERE {}", pid_cmps)
+        format!("SELECT {col_seq} FROM `product_price` WHERE {}", pid_cmps)
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchManyArg {
@@ -185,7 +192,9 @@ impl<'q> IntoArguments<'q, MySql> for FetchManyArg {
 }
 impl Into<(String, MySqlArguments)> for FetchManyArg {
     fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.0.len()), self.into_arguments())
+        let num_batch = self.0.len();
+        assert!(num_batch > 0);
+        (Self::sql_pattern(num_batch), self.into_arguments())
     }
 }
 
@@ -408,16 +417,24 @@ impl AbsProductPriceRepo for ProductPriceMariaDbRepo
     }
     async fn fetch(&self, store_id:u32, ids:Vec<(ProductType,u64)>) -> DefaultResult<ProductPriceModelSet, AppError>
     {
-        let (sql_patt, args) = FetchOneArg(store_id, ids).into();
-        let rows = self._fetch_common(sql_patt, args).await?;
-        let mut out = ProductPriceModelSet::try_from(rows) ?;
-        if out.store_id == 0 && out.items.is_empty() {
-            out.store_id = store_id;
-        }
+        let out = if ids.is_empty() {
+            ProductPriceModelSet {store_id, items:vec![] }
+        } else {
+            let (sql_patt, args) = FetchOneArg(store_id, ids).into();
+            let rows = self._fetch_common(sql_patt, args).await?;
+            let mut o = ProductPriceModelSet::try_from(rows) ?;
+            if o.store_id == 0 && o.items.is_empty() {
+                o.store_id = store_id;
+            }
+            o
+        };
         Ok(out)
     }
     async fn fetch_many(&self, ids:Vec<(u32,ProductType,u64)>) -> DefaultResult<Vec<ProductPriceModelSet>, AppError>
     {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
         let ids = ids.into_iter().map(
             |(store_id, product_type, product_id)|
                 BaseProductIdentity {store_id, product_type, product_id}

@@ -108,6 +108,16 @@ async fn fetch_empty()
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
     let store_id = 123;
+    let result = repo.fetch(store_id, vec![]).await;
+    assert!(result.is_ok());
+    if let Ok(ms) = result {
+        assert_eq!(ms.items.len(), 0);
+    }
+    let result = repo.fetch_many(vec![]).await;
+    assert!(result.is_ok());
+    if let Ok(ms) = result {
+        assert_eq!(ms.len(), 0);
+    }
     let result = repo.fetch(store_id, vec![(ProductType::Item, 2005),
                                            (ProductType::Package, 2002)]).await;
     assert!(result.is_ok());

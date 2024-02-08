@@ -1,6 +1,6 @@
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
-use chrono::DateTime;
+use chrono::{DateTime, Duration, Local, FixedOffset};
 use serde_json::Value as JsnVal;
 
 use order::constant::ProductType;
@@ -25,7 +25,7 @@ async fn itest_common_run_rpc_req(shrstate:AppSharedState, route:&str,
     let result = route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
     let respbody = result.unwrap();
-    // println!("raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
+    // println!("[debug][rpc] raw resp body: {:?} \n", String::from_utf8(respbody.clone()).unwrap() );
     let result = serde_json::from_slice(&respbody);
     assert!(result.is_ok());
     result.unwrap()
@@ -84,11 +84,11 @@ async fn itest_inventory_stock_level_init(shrstate:AppSharedState)
     let msgbody = br#"
             [
                 {"qty_add":12, "store_id":1006, "product_type": 1, "product_id": 9200125,
-                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
+                 "expiry": "2029-12-24T07:11:13.730050+07:00"},
                 {"qty_add":18, "store_id":1009, "product_type": 2, "product_id": 7001,
-                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
+                 "expiry": "2029-12-27T22:19:13.730050+08:00"},
                 {"qty_add":50, "store_id":1007, "product_type": 2, "product_id": 20911,
-                 "expiry": "2099-12-25T16:27:13.730050+10:00"}
+                 "expiry": "2029-12-25T16:27:13.730050+10:00"}
             ] "#;
     let value = itest_common_run_rpc_req(shrstate, "stock_level_edit", msgbody.to_vec()).await;
     assert!(value.is_array());
@@ -104,11 +104,11 @@ async fn itest_inventory_stock_level_modify_1(shrstate:AppSharedState)
     let msgbody = br#"
             [
                 {"qty_add":2, "store_id":1006, "product_type": 1, "product_id": 9200125,
-                 "expiry": "2099-12-24T07:11:13.700450+07:00"},
+                 "expiry": "2029-12-24T07:11:13.700450+07:00"},
                 {"qty_add":-2, "store_id":1009, "product_type": 2, "product_id": 7001,
-                 "expiry": "2099-12-27T22:19:13.730050+08:00"},
+                 "expiry": "2029-12-27T22:19:13.730050+08:00"},
                 {"qty_add":19, "store_id":1007, "product_type": 2, "product_id": 20911,
-                 "expiry": "2099-12-25T16:27:14.0060+10:00"}
+                 "expiry": "2029-12-25T16:27:14.0060+10:00"}
             ] "#;
     let value = itest_common_run_rpc_req(
         shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
@@ -125,9 +125,9 @@ async fn itest_inventory_stock_level_modify_2(shrstate:AppSharedState)
     let msgbody = br#"
             [
                 {"qty_add":-1, "store_id":1006, "product_type": 1, "product_id": 9200125,
-                 "expiry": "2099-12-24T07:11:13.700450+07:00"},
+                 "expiry": "2029-12-24T07:11:13.700450+07:00"},
                 {"qty_add":-1, "store_id":1009, "product_type": 2, "product_id": 7001,
-                 "expiry": "2099-12-27T22:19:13.730050+08:00"}
+                 "expiry": "2029-12-27T22:19:13.730050+08:00"}
             ] "#;
     let value = itest_common_run_rpc_req(
         shrstate.clone(), "stock_level_edit", msgbody.to_vec()).await;
@@ -153,7 +153,7 @@ async fn itest_mock_reserve_stock_level(shrstate:AppSharedState)
     let reserved_until = DateTime::parse_from_rfc3339("2022-11-09T09:23:58+02:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2022-12-09T22:59:04+02:00").unwrap();
     let order_req = OrderLineModelSet {
-        order_id: "on1yfa05".to_string(), owner_id: 123,
+        order_id: "06e712fa05".to_string(), owner_id: 123,
         create_time: DateTime::parse_from_rfc3339("2022-09-30T16:34:50.9044+08:00").unwrap(),
         lines: vec![
             OrderLineModel {id_: OrderLineIdentity {store_id: 1006, product_id:9200125,
@@ -174,11 +174,11 @@ async fn itest_mock_reserve_stock_level(shrstate:AppSharedState)
 async fn itest_inventory_stock_level_return_caancelled(shrstate:AppSharedState)
 {
     let msgbody = br#"
-            {"order_id":"on1yfa05", "items":[
+            {"order_id":"06e712fa05", "items":[
                 {"qty_add":2, "store_id":1006, "product_type": 1, "product_id": 9200125,
-                 "expiry": "2099-12-24T07:11:13.730050+07:00"},
+                 "expiry": "2029-12-24T07:11:13.730050+07:00"},
                 {"qty_add":3, "store_id":1009, "product_type": 2, "product_id": 7001,
-                 "expiry": "2099-12-27T22:19:13.730050+08:00"}
+                 "expiry": "2029-12-27T22:19:13.733050+08:00"}
             ]} "#;
     let value = itest_common_run_rpc_req(
         shrstate, "stock_return_cancelled", msgbody.to_vec()).await;
@@ -186,7 +186,7 @@ async fn itest_inventory_stock_level_return_caancelled(shrstate:AppSharedState)
     if let JsnVal::Array(errors) = value {
         assert_eq!(errors.len(), 0);
     }
-} // end of fn inventory_stock_level_return_caancelled_ok
+}
 
 fn verify_reply_stock_level(objs:&Vec<JsnVal>,  expect_product_id:u64,
                             expect_product_type:u8,  expect_qty_total:u32,
@@ -236,19 +236,19 @@ async fn inventory_stock_level_edit_ok() -> DefaultResult<(), AppError>
 } // end of fn inventory_stock_level_edit_ok
 
 
-async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str,
-                                 usr_id:u32, create_time:&str )
-    -> DefaultResult<(), AppError>
-{
+async fn itest_mock_create_order(
+    ds:Arc<AppDataStoreContext>, seller_id:u32, oid:&str,
+    usr_id:u32, create_time:DateTime<FixedOffset>
+) -> DefaultResult<(), AppError>
+{ // assume web server has created the order.
     use order::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
     use order::model::{
         BillingModel, ShippingModel,ContactModel, PhyAddrModel, ShippingOptionModel,
     };
     let repo = app_repo_order(ds).await ?;
-    let seller_id = 543;
-    let create_time    = DateTime::parse_from_rfc3339(create_time).unwrap();
-    let reserved_until = DateTime::parse_from_rfc3339("2023-11-15T09:23:50+02:00").unwrap();
-    let warranty_until = DateTime::parse_from_rfc3339("2023-12-24T13:39:41+02:00").unwrap();
+    let st_repo = repo.stock();
+    let reserved_until = create_time + Duration::hours(10);
+    let warranty_until = create_time + Duration::days(7);
     let lines = vec![
         OrderLineModel {id_: OrderLineIdentity {store_id: seller_id, product_id:94,
             product_type:ProductType::Package}, price: OrderLinePriceModel { unit: 50, total: 200 },
@@ -261,6 +261,10 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str,
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
         }
     ];
+    let ol_set = OrderLineModelSet {order_id:oid.to_string(), lines,
+                 owner_id:usr_id, create_time };
+    if let Err(_e) = st_repo.try_reserve(itest_try_reserve_stock_cb, &ol_set).await
+    { assert!(false) }
     let bl = BillingModel {
         contact: ContactModel { first_name: "Mick".to_string(), last_name: "Alrndre".to_string(),
             phones: vec![PhoneNumberDto{nation:15,number:"55088381".to_string()}],
@@ -284,9 +288,6 @@ async fn itest_mock_create_order(ds:Arc<AppDataStoreContext>, oid:&str,
             ShippingOptionModel {seller_id, method:ShippingMethod::FedEx}
         ]
     };
-    let ol_set = OrderLineModelSet {order_id:oid.to_string(), lines,
-                 owner_id:usr_id, create_time };
-    // TODO, reserve stock for each order
     let _ = repo.save_contact(oid, bl, sh).await?;
     Ok(())
 } // end of itest_mock_create_order
@@ -325,9 +326,22 @@ async fn itest_mock_create_oline_return(ds:Arc<AppDataStoreContext>, oid:&str,
 async fn  replica_orderinfo_payment_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
-    // assume web server has created the order.
-    itest_mock_create_order(shrstate.datastore().clone(), "18f00429638a0b",
-                            2345, "2023-06-01T09:05:30+03:00").await?;
+    let mock_seller_id = 543;
+    let mock_create_time = Local::now().fixed_offset();
+    let msgbody = br#"
+            [   {"qty_add":20, "store_id":543, "product_type": 1, "product_id": 92,
+                 "expiry": "2029-12-26T08:15:58.137110+07:00"},
+                {"qty_add":32, "store_id":543, "product_type": 2, "product_id": 94,
+                 "expiry": "2029-12-27T22:19:13.911935+05:00"}
+            ] "#;
+    let value = itest_common_run_rpc_req(shrstate.clone(),
+                "stock_level_edit", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    if let JsnVal::Array(items) = value {
+        assert_eq!(items.len(), 2);
+    }
+    itest_mock_create_order(shrstate.datastore().clone(), mock_seller_id,
+        "18f00429638a0b",  2345, mock_create_time).await?;
     let msgbody = br#" {"order_id":"18f00429638a0b"} "#;
     let respbody:JsnVal = itest_common_run_rpc_req(
         shrstate, "order_reserved_replica_payment", msgbody.to_vec()).await;
@@ -352,14 +366,24 @@ async fn  replica_orderinfo_payment_ok() -> DefaultResult<(), AppError>
 async fn  replica_orderinfo_refund_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
-    // assume web server has created the order.
-    itest_mock_create_order(shrstate.datastore().clone(), "order000id12345",
-                            3456, "2023-05-20T18:58:04+03:00").await?;
-    itest_mock_create_oline_return(shrstate.datastore().clone(), "order000id12345",
+    let mock_seller_id = 544;
+    let mock_create_time = DateTime::parse_from_rfc3339("2023-05-20T18:58:04+03:00").unwrap();
+    let msgbody = br#"
+            [   {"qty_add":20, "store_id":544, "product_type": 1, "product_id": 92,
+                 "expiry": "2029-12-26T08:15:58.137110+07:00"},
+                {"qty_add":32, "store_id":544, "product_type": 2, "product_id": 94,
+                 "expiry": "2029-12-27T22:19:13.911935+05:00"}
+            ] "#;
+    let value = itest_common_run_rpc_req(shrstate.clone(),
+                "stock_level_edit", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    itest_mock_create_order(shrstate.datastore().clone(), mock_seller_id,
+        "e008d12345", 3456, mock_create_time ).await?;
+    itest_mock_create_oline_return(shrstate.datastore().clone(), "e008d12345",
                                   "2023-05-20T19:05:45+03:00" ).await?;
     let msgbody = br#" {"start":"2023-05-20T17:50:04.001+03:00",
                         "end": "2023-05-20T19:55:00.008+03:00",
-                        "order_id": "order000id12345"}
+                        "order_id": "e008d12345"}
                      "#;
     let respbody = itest_common_run_rpc_req(
         shrstate, "order_returned_replica_refund", msgbody.to_vec()).await;
@@ -374,9 +398,19 @@ async fn  replica_orderinfo_refund_ok() -> DefaultResult<(), AppError>
 async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
-    // assume web server has created the order.
-    itest_mock_create_order(shrstate.datastore().clone(), "18f00429c638a0",
-                            2345, "2023-05-30T18:58:04+03:00").await?;
+    let mock_seller_id = 545;
+    let mock_create_time = DateTime::parse_from_rfc3339("2023-05-30T18:58:04+03:00").unwrap();
+    let msgbody = br#"
+            [   {"qty_add":20, "store_id":545, "product_type": 1, "product_id": 92,
+                 "expiry": "2029-12-26T08:15:58.137110+07:00"},
+                {"qty_add":32, "store_id":545, "product_type": 2, "product_id": 94,
+                 "expiry": "2029-12-27T22:19:13.911935+05:00"}
+            ] "#;
+    let value = itest_common_run_rpc_req(shrstate.clone(),
+                "stock_level_edit", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    itest_mock_create_order(shrstate.datastore().clone(), mock_seller_id,
+        "18f00429c638a0", 2347, mock_create_time ).await?;
     itest_mock_create_oline_return(shrstate.datastore().clone(), "18f00429c638a0",
                                   "2023-05-30T19:05:45+03:00" ).await?;
     let msgbody = br#" {"start":"2023-05-30T17:50:04.001+03:00",
@@ -404,12 +438,22 @@ async fn  replica_orderinfo_inventory_ok() -> DefaultResult<(), AppError>
 async fn  update_order_payment_status_ok() -> DefaultResult<(), AppError>
 {
     let shrstate = test_setup_shr_state()?;
-    // assume web server has created the order.
-    itest_mock_create_order(shrstate.datastore().clone(), "18f00429638a0b",
-                            3456,   "2023-06-01T16:33:40+08:00").await?;
+    let mock_seller_id = 546;
+    let mock_create_time = DateTime::parse_from_rfc3339("2023-09-16T23:30:45.808+04:00").unwrap();
+    let msgbody = br#"
+            [   {"qty_add":20, "store_id":546, "product_type": 1, "product_id": 92,
+                 "expiry": "2029-12-26T08:15:58.137110+07:00"},
+                {"qty_add":32, "store_id":546, "product_type": 2, "product_id": 94,
+                 "expiry": "2029-12-27T22:19:13.911935+05:00"}
+            ] "#;
+    let value = itest_common_run_rpc_req(shrstate.clone(),
+                "stock_level_edit", msgbody.to_vec()).await;
+    assert!(value.is_array());
+    itest_mock_create_order( shrstate.datastore().clone(), mock_seller_id,
+        "18f00429638a0b", 3456,  mock_create_time ).await?;
     let msgbody = br#"
             {"oid":"18f00429638a0b", lines:[
-                {"seller_id": 543, "product_id": 92, "product_type": 1,
+                {"seller_id": 546, "product_id": 92, "product_type": 1,
                  "time": "2023-09-17T06:02:45.008+04:00", "qty": 3}
             ]} 
         "#;

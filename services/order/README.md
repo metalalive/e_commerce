@@ -76,7 +76,10 @@ SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
     cargo test --test unittest -- --test-threads=1 --nocapture
 ```
 Note:
-- `--test-threads=1` should be added if the feature `mariadb` is enabled and you cannot change maximum number of connections opening at the database backend, this option means you limit number of threads running all the test cases in parallel.
+- you can add the option `--features mariadb` along with the command `cargo test` to enable MariaDB database in this service.
+- `--test-threads=1` can be added if the feature `mariadb` is enabled
+  - this option means you limit number of threads running all the test cases in parallel.
+  - this is to reduce number of connections opening for test at the database backend.
 - `--nocapture` is optional to allow the program to print all messages to standard output console.
 
 There are private functions in this source-code crate  containing few test cases :
@@ -89,20 +92,19 @@ SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  repository::m
 ```
 
 ### Integration Test
-For web server
+#### For web server
 ```shell=?
 cd ${SERVICE_BASE_PATH}/tests/integration
 
 SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
-    CONFIG_FILE_PATH="settings/test-in-mem.json" \
+    CONFIG_FILE_PATH="settings/test.json" \
     cargo test --test web
 ```
 
 Note
 - the configuration files in `settings` folder could be `test-in-mem.json` or `test-sql-db.json` for different datastore destinations.
 
-
-For RPC consumer
+#### For RPC consumer
 ```shell=?
 cd ${SERVICE_BASE_PATH}/tests/integration
 

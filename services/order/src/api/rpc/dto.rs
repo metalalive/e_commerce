@@ -186,12 +186,12 @@ pub struct OrderPaymentUpdateErrorDto {
     pub lines: Vec<OrderLinePayUpdateErrorDto>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub enum StockReturnErrorReason {
     NotExist, InvalidQuantity
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct StockReturnErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
