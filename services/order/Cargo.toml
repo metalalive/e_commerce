@@ -40,14 +40,14 @@ futures-util = {version="^0.3.19", features=["std"]}
 # and this happenes occasionally , currently downgrade to 0.6.x, I'll switch to
 # 0.7.x once the issue is resolved.
 # [reference] issues 2567 in sqlx github
-sqlx = {version="^0.6.3", features=["runtime-tokio-native-tls", "mysql", "chrono"]}
+sqlx = {version="^0.6.3", features=["runtime-tokio-native-tls", "chrono"]}
 
 # TODO, due to hardware memory constraint, currently I do not use migrate
 # feature, instead I use external tool `liquibase` for db migration.
 ## sqlx-cli = {version="^0.6.3", features=["native-tls", "mysql"]}
 
 [features]
-mariadb = []
+mariadb = ["sqlx/mysql"]
 
 [[test]]
 name = "unittest"

@@ -23,12 +23,13 @@ use crate::model::{
 
 
 mod in_mem;
-// make it visible only for testing purpose
+// make in-memory repo visible only for testing purpose
 pub use in_mem::order::OrderInMemRepo;
 pub use in_mem::oline_return::OrderReturnInMemRepo;
 pub use in_mem::product_policy::ProductPolicyInMemRepo;
 pub use in_mem::product_price::ProductPriceInMemRepo;
 
+#[cfg(feature="mariadb")]
 mod mariadb;
 
 #[cfg(feature="mariadb")]

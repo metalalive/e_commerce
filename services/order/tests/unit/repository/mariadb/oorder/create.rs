@@ -19,7 +19,6 @@ use super::super::super::in_mem::oorder::stock::ut_reserve_init_setup;
 use super::super::dstore_ctx_setup;
 use super::{ut_setup_stock_product, ut_oline_init_setup};
 
-#[cfg(feature="mariadb")]
 pub(super) async fn ut_verify_fetch_all_olines_ok(
     o_repo: &Box<dyn AbsOrderRepo> )
 {

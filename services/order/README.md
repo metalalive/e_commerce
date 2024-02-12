@@ -26,6 +26,8 @@ For applications
 cargo build  --bin web
 cargo build  --bin rpc_consumer
 ```
+- you can add the option `--features mariadb` along with the command `cargo build` to enable MariaDB database in this service.
+
 
 If you configure SQL database as the datastore destination in the development server or testing server, ensure to synchronize schema migration
 ```shell
@@ -73,10 +75,11 @@ Run the test cases collected under `PROJECT_HOME/order/tests/unit`
 cd ${SERVICE_BASE_PATH}
 
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    cargo test --test unittest -- --test-threads=1 --nocapture
+    cargo test --test unittest --features mariadb  -- \
+    <<OPTIONAL-TEST-ENTRY-MODULE-PATH>> --test-threads=1 --nocapture
 ```
 Note:
-- you can add the option `--features mariadb` along with the command `cargo test` to enable MariaDB database in this service.
+- you can add the option `--features mariadb` along with the command `cargo test` to enable MariaDB database for unit/integration tests.
 - `--test-threads=1` can be added if the feature `mariadb` is enabled
   - this option means you limit number of threads running all the test cases in parallel.
   - this is to reduce number of connections opening for test at the database backend.

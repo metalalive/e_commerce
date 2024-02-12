@@ -4,14 +4,20 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Deserialize;
-use sqlx::{MySql, Pool};
+use sqlx::Pool;
 use sqlx::pool::{PoolOptions, PoolConnection};
+
+#[cfg(feature="mariadb")]
+use sqlx::MySql;
+
+#[cfg(feature="mariadb")]
 use sqlx::mysql::MySqlConnectOptions;
 
 use crate::confidentiality::AbstractConfidentiality;
 use crate::config::{AppDbServerCfg, AppDbServerType};
 use crate::error::{AppError, AppErrorCode};
 
+#[cfg(feature="mariadb")]
 #[allow(non_snake_case)]
 #[derive(Deserialize)]
 struct DbSecret {
@@ -21,11 +27,15 @@ struct DbSecret {
     PASSWORD: String
 }
 
+#[cfg(feature="mariadb")]
 pub struct AppMariaDbStore {
     pub alias: String,
     pool: Pool<MySql>,
 }
+#[cfg(not(feature="mariadb"))]
+pub struct AppMariaDbStore {}
 
+#[cfg(feature="mariadb")]
 impl AppMariaDbStore {
     pub fn try_build(cfg :&AppDbServerCfg, confidential:Arc<Box<dyn AbstractConfidentiality>>)
         -> DefaultResult<Self, AppError>
@@ -67,5 +77,16 @@ impl AppMariaDbStore {
                 Err(e.into())
             }
         }
+    }
+} // end of impl AppMariaDbStore
+
+#[cfg(not(feature="mariadb"))]
+impl AppMariaDbStore {
+    pub fn try_build(cfg :&AppDbServerCfg, _confidential:Arc<Box<dyn AbstractConfidentiality>>)
+        -> DefaultResult<Self, AppError>
+    {
+        let detail = format!("sql-db, type:{:?}, alias:{}",
+                             cfg.srv_type, cfg.alias.as_str());
+        Err(AppError { code: AppErrorCode::FeatureDisabled, detail: Some(detail) })
     }
 } // end of impl AppMariaDbStore
