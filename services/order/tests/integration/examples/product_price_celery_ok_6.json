@@ -1,0 +1,11 @@
+[
+     [],
+     {"s_id": 1009, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+      "updating": [],
+      "creating": [
+	  {"price": 125, "start_after": "2021-08-23T23:30:16+06:35", "product_type": 2,
+	   "end_before": "2021-09-30T17:10:41.910+06:35", "product_id": 7001}
+      ]
+     },
+     {"callbacks": null, "errbacks": null, "chain": null, "chord": null}
+]

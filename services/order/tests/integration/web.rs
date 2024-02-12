@@ -1,16 +1,19 @@
 use std::result::Result as DefaultResult ;
 use std::sync::Arc;
 
-use chrono::Local;
+use chrono::{Local, DateTime, FixedOffset, Duration};
 use hyper::Body as HyperBody;
+use hyper::body::Bytes as HyperBytes;
 use http::{Request, StatusCode};
+use http_body::Body as RawHttpBody;
+use serde_json::Value as JsnVal;
 
 use order::{AppRpcClientReqProperty, AppConfig, AppSharedState, AppAuthedClaim};
 use order::constant::app_meta;
 use order::error::AppError;
 use order::api::web::dto::{
-    OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ProductPolicyDto,
-    OrderCreateRespErrorDto, ContactErrorReason, PhoneNumNationErrorReason, OrderLineReqDto
+    OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, OrderLineReqDto,
+    OrderCreateRespErrorDto, ContactErrorReason, PhoneNumNationErrorReason
 };
 use order::api::rpc;
 use order::network::WebServiceRoute;
@@ -22,12 +25,27 @@ use common::{
 use tokio::sync::Mutex;
 
 const FPATH_NEW_ORDER_OK_1:&'static str  = "/tests/integration/examples/order_new_ok_1.json";
+const FPATH_NEW_ORDER_OK_2:&'static str  = "/tests/integration/examples/order_new_ok_2.json";
+const FPATH_NEW_ORDER_OK_3:&'static str  = "/tests/integration/examples/order_new_ok_3.json";
 const FPATH_NEW_ORDER_CONTACT_ERR:&'static str  = "/tests/integration/examples/order_new_contact_error.json";
 const FPATH_EDIT_ORDER_OK_1:&'static str = "/tests/integration/examples/order_edit_ok_1.json";
 const FPATH_EDIT_PRODUCTPOLICY_OK_1:&'static str = "/tests/integration/examples/policy_product_edit_ok_1.json";
 const FPATH_EDIT_PRODUCTPOLICY_OK_2:&'static str = "/tests/integration/examples/policy_product_edit_ok_2.json";
 const FPATH_EDIT_PRODUCTPOLICY_OK_3:&'static str = "/tests/integration/examples/policy_product_edit_ok_3.json";
+const FPATH_EDIT_PRODUCTPOLICY_OK_4:&'static str = "/tests/integration/examples/policy_product_edit_ok_4.json";
 const FPATH_EDIT_PRODUCTPOLICY_ERR:&'static str = "/tests/integration/examples/policy_product_edit_exceed_limit.json";
+const FPATH_EDIT_PRODUCTPRICE_OK_1:&'static str = "/tests/integration/examples/product_price_celery_ok_1.json";
+const FPATH_EDIT_PRODUCTPRICE_OK_2:&'static str = "/tests/integration/examples/product_price_celery_ok_2.json";
+const FPATH_EDIT_PRODUCTPRICE_OK_3:&'static str = "/tests/integration/examples/product_price_celery_ok_3.json";
+const FPATH_EDIT_PRODUCTPRICE_OK_4:&'static str = "/tests/integration/examples/product_price_celery_ok_4.json";
+const FPATH_EDIT_PRODUCTPRICE_OK_5:&'static str = "/tests/integration/examples/product_price_celery_ok_5.json";
+const FPATH_EDIT_PRODUCTPRICE_OK_6:&'static str = "/tests/integration/examples/product_price_celery_ok_6.json";
+const FPATH_EDIT_PRODUCTPRICE_OK_7:&'static str = "/tests/integration/examples/product_price_celery_ok_7.json";
+const FPATH_EDIT_STOCK_LVL_OK_1:&'static str  = "/tests/integration/examples/stock_level_edit_ok_1.json";
+const FPATH_EDIT_STOCK_LVL_OK_2:&'static str  = "/tests/integration/examples/stock_level_edit_ok_2.json";
+const FPATH_EDIT_STOCK_LVL_OK_3:&'static str  = "/tests/integration/examples/stock_level_edit_ok_3.json";
+const FPATH_EDIT_STOCK_LVL_OK_4:&'static str  = "/tests/integration/examples/stock_level_edit_ok_4.json";
+const FPATH_EDIT_STOCK_LVL_OK_5:&'static str  = "/tests/integration/examples/stock_level_edit_ok_5.json";
 const FPATH_RETURN_OLINE_REQ_OK_1:&'static str  = "/tests/integration/examples/oline_return_request_ok_1.json";
 
 
@@ -36,7 +54,6 @@ fn itest_clone_authed_claim(src:&AppAuthedClaim) -> AppAuthedClaim {
         aud: src.aud.clone(), perms: vec![], quota: vec![]
     }
 }
-
 
 fn setup_mock_authed_claim(usr_id:u32) -> AppAuthedClaim
 {
@@ -48,67 +65,66 @@ fn setup_mock_authed_claim(usr_id:u32) -> AppAuthedClaim
     }
 }
 
-async fn setup_product_policy_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-                                 req_fpath:&'static str, authed_claim:AppAuthedClaim )
-    -> DefaultResult<(), AppError>
-{ // ---- add product policy ----
+async fn itest_setup_product_policy(
+    cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    req_fpath:&'static str, authed_claim:AppAuthedClaim, expect_status:StatusCode
+) -> HyperBytes
+{
     let uri = format!("/{}/policy/products", cfg.api_server.listen.api_version);
     let reqbody = {
-        let  req_body_template = deserialize_json_template::<Vec<ProductPolicyDto>>
-            (&cfg.basepath, req_fpath) ? ;
-        assert!(req_body_template.len() > 0);
+        let result = deserialize_json_template::<JsnVal>(&cfg.basepath, req_fpath);
+        let req_body_template = result.unwrap();
         let rb = serde_json::to_string(&req_body_template).unwrap();
         HyperBody::from(rb)
     };
     let mut req = Request::builder().uri(uri.clone()).method("POST")
         .header("content-type", "application/json") .body(reqbody) .unwrap();
     let _ = req.extensions_mut().insert(authed_claim);
-    let response = TestWebServer::consume(&srv, req).await;
-    assert_eq!(response.status(), StatusCode::OK);
-    Ok(())
+    let mut response = TestWebServer::consume(&srv, req).await;
+    assert_eq!(response.status(), expect_status);
+    // required by UnsyncBoxBody, to access raw data of body
+    let bd = response.body_mut();
+    let result = bd.data().await;
+    if let Some(rb) = result {
+        rb.unwrap()
+    } else { HyperBytes::new() }
 }
 
-async fn setup_product_price_ok(shr_state:AppSharedState)
+fn verify_reply_stock_level(objs:&Vec<JsnVal>,  expect_product_id:u64,
+                            expect_product_type:u8,  expect_qty_total:u32,
+                            expect_qty_cancelled:u32, expect_qty_booked:u32 )
 {
-    let msgbody = br#"
-         [
-             [],
-             {"s_id": 18830, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
-              "updating": [],
-              "creating": [
-                  {"price": 126, "start_after": "2023-09-04T09:11:13+08:00", "product_type": 1,
-                   "end_before": "2023-12-24T07:11:13.730050+08:00", "product_id": 270118},
-                  {"price": 135, "start_after": "2023-09-10T09:11:13+09:00", "product_type": 1,
-                   "end_before": "2023-12-24T07:11:13.730050+09:00", "product_id": 270119},
-                  {"price": 1038, "start_after": "2022-01-20T04:30:58.070020+10:00", "product_type": 2,
-                   "end_before": "2024-02-28T18:11:56.877000+10:00", "product_id": 270118}
-              ]
-             },
-             {"callbacks": null, "errbacks": null, "chain": null, "chord": null}
-        ]
-        "#;
-    let req = AppRpcClientReqProperty { retry: 1,  msgbody:msgbody.to_vec(),
-            route: "update_store_products".to_string()  };
-    let result = rpc::route_to_handler(req, shr_state).await;
-    assert!(result.is_ok());
-}
-async fn setup_product_stock_ok(shr_state:AppSharedState)
-{
-    let msgbody = br#"
-        [
-            {"qty_add":22, "store_id":18830, "product_type": 1, "product_id": 270118,
-             "expiry": "2029-12-24T07:11:13.730050+07:00"},
-            {"qty_add":38, "store_id":18830, "product_type": 1, "product_id": 270119,
-             "expiry": "2029-12-27T22:19:13.730050+08:00"},
-            {"qty_add":50, "store_id":18830, "product_type": 2, "product_id": 270118,
-             "expiry": "2029-12-25T16:27:13.730050+10:00"}
-        ]
-        "#; // TODO, generate expiry time from chrono::Local::now()
-    let req = AppRpcClientReqProperty { retry: 1,  msgbody:msgbody.to_vec(),
-            route: "stock_level_edit".to_string()  };
-    let result = rpc::route_to_handler(req, shr_state.clone()).await;
-    assert!(result.is_ok());
-}
+    let obj = objs.iter().find(|d| {
+        if let JsnVal::Object(item) = d {
+            let prod_id_v = item.get("product_id").unwrap();
+            let prod_typ_v = item.get("product_type").unwrap();
+            let actual_product_id = if let JsnVal::Number(id_) = prod_id_v {
+                id_.as_u64().unwrap()
+            } else { 0 };
+            let actual_product_type = if let JsnVal::Number(typ_) = prod_typ_v {
+                typ_.as_u64().unwrap()
+            } else { 0 };
+            expect_product_id == actual_product_id &&
+                expect_product_type as u64 == actual_product_type
+        } else { false }
+    }).unwrap();
+    let qty_v = obj.get("quantity").unwrap();
+    if let JsnVal::Object(qty) = qty_v {
+        let tot_v = qty.get("total").unwrap();
+        if let JsnVal::Number(total) = tot_v {
+            assert_eq!(total.as_u64().unwrap(), expect_qty_total as u64);
+        }
+        let cancel_v = qty.get("cancelled").unwrap();
+        if let JsnVal::Number(cancel) = cancel_v {
+            assert_eq!(cancel.as_u64().unwrap(), expect_qty_cancelled as u64);
+        }
+        let book_v = qty.get("booked").unwrap();
+        if let JsnVal::Number(book) = book_v {
+            assert_eq!(book.as_u64().unwrap(), expect_qty_booked as u64);
+        }
+    }
+} // end of fn verify_reply_stock_level
+
 
 async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
                             req_fpath:&'static str, authed_claim:AppAuthedClaim )
@@ -130,12 +146,15 @@ async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<IT
     let _ = req.extensions_mut().insert(authed_claim);
 
     let mut response = TestWebServer::consume(&srv, req).await;
+    //let respbody = response.body_mut().data().await.unwrap().unwrap();
+    //let respbody = String::from_utf8(respbody.to_vec()).unwrap();
+    //println!("[debug] place-new-order , resp-body : {:?}", respbody);
     assert_eq!(response.status(), StatusCode::CREATED);
     let actual = TestWebServer::to_custom_type::<OrderCreateRespOkDto>
         (response.body_mut())  .await  ? ;
     assert_eq!(actual.order_id.is_empty() ,  false);
     assert!(actual.reserved_lines.len() > 0);
-    Ok(actual.order_id)
+    Ok(actual.order_id)   //Ok(String::new())
 }
 
 async fn return_olines_request_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
@@ -168,12 +187,22 @@ async fn itest_order_entry() -> DefaultResult<(), AppError>
     let top_lvl_cfg = shr_state.config();
     let mock_authed_usr = 185;
     let authed_claim = setup_mock_authed_claim(mock_authed_usr);
-    setup_product_policy_ok(
+    let _ = itest_setup_product_policy(
         top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_OK_2,
-        itest_clone_authed_claim(&authed_claim)
-    ).await ?; 
-    setup_product_price_ok(shr_state.clone()).await; 
-    setup_product_stock_ok(shr_state.clone()).await; 
+        itest_clone_authed_claim(&authed_claim),  StatusCode::OK
+    ).await ; 
+    {
+        let raw_body = itest_setup_product_price(shr_state.clone(),
+                       FPATH_EDIT_PRODUCTPRICE_OK_4).await;
+        let respbody = String::from_utf8(raw_body).unwrap();
+        assert!(respbody.is_empty()); // task done successfully
+    } {
+        let expiry = Local::now().fixed_offset();
+        let resp_body = itest_setup_stock_level(shr_state.clone(), expiry,
+                   FPATH_EDIT_STOCK_LVL_OK_3).await;
+        let items = resp_body.as_array().unwrap();
+        assert_eq!(items.len(), 3);
+    }
     let oid = place_new_order_ok(
         top_lvl_cfg.clone(), srv.clone(), FPATH_NEW_ORDER_OK_1,
         itest_clone_authed_claim(&authed_claim)
@@ -183,7 +212,137 @@ async fn itest_order_entry() -> DefaultResult<(), AppError>
         oid.as_str(), authed_claim
     ).await ?;
     Ok(())
+} // end of fn itest_order_entry
+
+
+async fn itest_setup_product_price<'a>(
+    shrstate:AppSharedState, body_fpath:&'a str
+) -> Vec<u8>
+{
+    let mock_rpc_topic = "update_store_products";
+    let cfg = shrstate.config().clone();
+    let req = {
+        let result = deserialize_json_template::<JsnVal>(&cfg.basepath, body_fpath);
+        let req_body_template = result.unwrap();
+        let msgbody = req_body_template.to_string().into_bytes();
+        AppRpcClientReqProperty { retry: 1, msgbody, route: mock_rpc_topic.to_string() }
+    };
+    let result = rpc::route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+    result.unwrap()
 }
+
+#[tokio::test]
+async fn  update_product_price_ok() -> DefaultResult<(), AppError>
+{
+    let shrstate = test_setup_shr_state()?;
+    let subcases = [FPATH_EDIT_PRODUCTPRICE_OK_1, FPATH_EDIT_PRODUCTPRICE_OK_2,
+                    FPATH_EDIT_PRODUCTPRICE_OK_3];
+    for path in subcases {
+        let raw_body = itest_setup_product_price(shrstate.clone(), path).await;
+        let respbody = String::from_utf8(raw_body).unwrap();
+        assert!(respbody.is_empty()); // task done successfully
+    }
+    Ok(())
+} // end of fn update_product_price_ok
+
+
+async fn itest_setup_stock_level<'a>(
+    shrstate:AppSharedState, expiry:DateTime<FixedOffset> , body_fpath:&'a str
+) -> JsnVal
+{
+    let mock_rpc_topic = "stock_level_edit";
+    let cfg = shrstate.config().clone();
+    let req = {
+        let result = deserialize_json_template::<JsnVal>(&cfg.basepath, body_fpath);
+        let mut req_body_template = result.unwrap();
+        let items = req_body_template.as_array_mut().unwrap();
+        for item in items {
+            let t_fmt = expiry.to_rfc3339();
+            let map = item.as_object_mut().unwrap();
+            let _old_val = map.insert("expiry".to_string(), JsnVal::String(t_fmt));
+        }
+        let msgbody = req_body_template.to_string().into_bytes();
+        AppRpcClientReqProperty { retry: 1, msgbody, route: mock_rpc_topic.to_string() }
+    };
+    let result = rpc::route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+    let respbody = result.unwrap();
+    let result = serde_json::from_slice(&respbody);
+    assert!(result.is_ok());
+    result.unwrap()
+} // end of async fn itest_setup_stock_level
+
+#[tokio::test]
+async fn  update_stock_level_ok() -> DefaultResult<(), AppError>
+{
+    let shrstate = test_setup_shr_state()?;
+    let srv = TestWebServer::setup(shrstate.clone());
+    let top_lvl_cfg = shrstate.config();
+    let expiry = Local::now().fixed_offset() + Duration::days(1);
+    {
+        let resp_body = itest_setup_stock_level(shrstate.clone(), expiry,
+                   FPATH_EDIT_STOCK_LVL_OK_1).await;
+        let items = resp_body.as_array().unwrap();
+        assert_eq!(items.len(), 3);
+        verify_reply_stock_level(&items, 7001, 2, 18, 0, 0);
+        verify_reply_stock_level(&items, 9200125, 1, 12, 0, 0);
+        verify_reply_stock_level(&items, 20911, 2, 50, 0, 0);
+        let resp_body = itest_setup_stock_level(shrstate.clone(), expiry,
+                   FPATH_EDIT_STOCK_LVL_OK_2).await;
+        let items = resp_body.as_array().unwrap();
+        assert_eq!(items.len(), 3);
+        verify_reply_stock_level(&items, 9200125, 1, 14, 0, 0);
+        verify_reply_stock_level(&items, 7001, 2, 18, 2, 0);
+        verify_reply_stock_level(&items, 20912, 2, 19, 0, 0);
+    }
+    let mock_authed_usr = 186;
+    let authed_claim = setup_mock_authed_claim(mock_authed_usr);
+    let _ = itest_setup_product_policy(
+        top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_OK_4,
+        itest_clone_authed_claim(&authed_claim),  StatusCode::OK
+    ).await ; 
+    let _raw_body = itest_setup_product_price(shrstate.clone(),
+                    FPATH_EDIT_PRODUCTPRICE_OK_5).await;
+    let _raw_body = itest_setup_product_price(shrstate.clone(),
+                    FPATH_EDIT_PRODUCTPRICE_OK_6).await;
+    let _raw_body = itest_setup_product_price(shrstate.clone(),
+                    FPATH_EDIT_PRODUCTPRICE_OK_7).await;
+    let _oid = place_new_order_ok(
+        top_lvl_cfg.clone(), srv.clone(), FPATH_NEW_ORDER_OK_2,
+        itest_clone_authed_claim(&authed_claim)
+    ).await ?;
+    {
+        let resp_body = itest_setup_stock_level(shrstate.clone(), expiry,
+                   FPATH_EDIT_STOCK_LVL_OK_4).await;
+        let items = resp_body.as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        verify_reply_stock_level(&items, 9200125, 1, 44, 0, 3);
+        verify_reply_stock_level(&items, 7001, 2, 28, 2, 5);
+        let resp_body = itest_setup_stock_level(shrstate.clone(), expiry + Duration::minutes(2),
+                   FPATH_EDIT_STOCK_LVL_OK_4).await;
+        let items = resp_body.as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        verify_reply_stock_level(&items, 9200125, 1, 30, 0, 0);
+        verify_reply_stock_level(&items, 7001, 2, 10, 0, 0);
+    }
+    let _oid = place_new_order_ok(
+        top_lvl_cfg.clone(), srv.clone(), FPATH_NEW_ORDER_OK_3,
+        itest_clone_authed_claim(&authed_claim)
+    ).await ?;
+    {
+        let resp_body = itest_setup_stock_level(shrstate.clone(), expiry,
+                   FPATH_EDIT_STOCK_LVL_OK_5).await;
+        let items = resp_body.as_array().unwrap();
+        assert_eq!(items.len(), 4);
+        verify_reply_stock_level(&items, 9200125, 1, 45, 0, 14);
+        verify_reply_stock_level(&items, 7001, 2, 29, 2, 8);
+        verify_reply_stock_level(&items, 20911, 2, 51, 0, 4);
+        verify_reply_stock_level(&items, 20912, 2, 20, 0, 6);
+    }
+    Ok(())
+} // end of fn update_stock_level_ok
+
 
 #[tokio::test]
 async fn place_new_order_contact_error() -> DefaultResult<(), AppError>
@@ -257,34 +416,14 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
     let mock_authed_usr = 1411;
-    let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
-    // ---- subcase 1 ----
-    let reqbody = {
-        let mut req_body_template = deserialize_json_template::<Vec<ProductPolicyDto>>
-            (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_OK_1) ? ;
-        assert!(req_body_template.len() > 0);
-        let item = req_body_template.get_mut(0).unwrap();
-        item.warranty_hours = 2345;
-        let rb = serde_json::to_string(&req_body_template).unwrap();
-        HyperBody::from(rb)
-    };
-    let mut req = Request::builder().uri(uri.clone()).method("POST")
-        .header("content-type", "application/json") .body(reqbody) .unwrap();
-    let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
-    let response = TestWebServer::consume(&srv, req).await;
-    assert_eq!(response.status(), StatusCode::OK);
-    // ---- subcase 2 ----
-    let reqbody = {
-        let req_body_template = deserialize_json_template::<Vec<ProductPolicyDto>>
-            (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_OK_3) ? ;
-        let rb = serde_json::to_string(&req_body_template).unwrap();
-        HyperBody::from(rb)
-    };
-    let mut req = Request::builder().uri(uri.clone()).method("POST")
-        .header("content-type", "application/json") .body(reqbody) .unwrap();
-    let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
-    let response = TestWebServer::consume(&srv, req).await;
-    assert_eq!(response.status(), StatusCode::OK);
+    let _ = itest_setup_product_policy(
+        top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_OK_1,
+        setup_mock_authed_claim(mock_authed_usr),  StatusCode::OK
+    ).await;
+    let _ = itest_setup_product_policy(
+        top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_OK_3,
+        setup_mock_authed_claim(mock_authed_usr),  StatusCode::OK
+    ).await;
     Ok(())
 } // end of fn add_product_policy_ok
 
@@ -294,34 +433,36 @@ async fn add_product_policy_error() -> DefaultResult<(), AppError>
     let shr_state = test_setup_shr_state() ? ;
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
-    let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
     let mock_authed_usr = 983;
-    // ---- subcase 1 ----
-    let reqbody = HyperBody::from("[]".to_string());
-    let mut req = Request::builder().uri(uri.clone()).method("POST")
-        .header("content-type", "application/json") .body(reqbody) .unwrap();
-    let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
-    let response = TestWebServer::consume(&srv, req).await;
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    // ---- subcase 2 ----
-    let reqbody = {
-        let rb = deserialize_json_template::<Vec<ProductPolicyDto>>
-            (&top_lvl_cfg.basepath, FPATH_EDIT_PRODUCTPOLICY_ERR) ? ;
-        let rb = serde_json::to_string(&rb).unwrap();
-        HyperBody::from(rb)
+    { // ---- subcase 1 ----
+        let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
+        let reqbody = HyperBody::from("[]".to_string());
+        let mut req = Request::builder().uri(uri.clone()).method("POST")
+            .header("content-type", "application/json") .body(reqbody) .unwrap();
+        let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
+        let response = TestWebServer::consume(&srv, req).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+    let resp_rawbytes = {// ---- subcase 2 ----
+        let r = itest_setup_product_policy(
+            top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_ERR,
+            setup_mock_authed_claim(mock_authed_usr), StatusCode::BAD_REQUEST
+        ).await;
+        //println!("response body content, first 50 bytes : {:?}", resp_rawbytes.slice(..50) );
+        r.to_vec()
     };
-    let mut req = Request::builder().uri(uri).method("POST")
-        .header("content-type", "application/json") .body(reqbody) .unwrap();
-    let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
-    let mut response = TestWebServer::consume(&srv, req).await;
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    {
-        use http_body::Body as RawHttpBody;
-        // required by UnsyncBoxBody, to access raw data of body
-        let bd = response.body_mut();
-        let result = bd.data().await;
-        let rawbytes = result.unwrap().unwrap();
-        println!("response body content, first 50 bytes : {:?}", rawbytes.slice(..50) );
+    let result = serde_json::from_slice::<JsnVal>(resp_rawbytes.as_slice());
+    assert!(result.is_ok());
+    if let Ok(mut resp) = result {
+        let errors = resp.as_array_mut().unwrap();
+        assert_eq!(errors.len(), 1);
+        let map = errors.remove(0);
+        let prod_typ = map.get("product_type").unwrap().as_u64().unwrap();
+        let prod_id  = map.get("product_id").unwrap().as_u64().unwrap() ;
+        let _err_typ  = map.get("err_type").unwrap().as_str().unwrap() ;
+        let _warranty = map.get("warranty_hours").unwrap().as_object().unwrap();
+        assert_eq!(prod_typ, 1u64);
+        assert_eq!(prod_id , 10093183u64);
     }
     Ok(())
 } // end of fn add_product_policy_error

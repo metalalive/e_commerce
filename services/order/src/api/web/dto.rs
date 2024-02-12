@@ -141,7 +141,7 @@ pub struct OrderEditReqData {
     pub shipping: ShippingReqDto
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 pub struct ProductPolicyDto {
     #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
     pub product_type: ProductType,

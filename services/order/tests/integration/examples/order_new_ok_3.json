@@ -1,0 +1,68 @@
+{
+  "order_lines": [
+    {
+      "seller_id": 1006,
+      "product_type": 1,
+      "product_id": 9200125,
+      "quantity": 11
+    },
+    {
+      "seller_id": 1007,
+      "product_type": 2,
+      "product_id": 20911,
+      "quantity": 4
+    },
+    {
+      "seller_id": 1007,
+      "product_type": 2,
+      "product_id": 20912,
+      "quantity": 6
+    },
+    {
+      "seller_id": 1009,
+      "product_type": 2,
+      "product_id": 7001,
+      "quantity": 3
+    }
+  ],
+  "shipping": {
+    "contact": {
+      "first_name": "Juritu",
+      "last_name": "Khan",
+      "emails": ["todds@frog.cricket.id"],
+      "phones": [
+        {
+          "nation": 91,
+          "number": "83700412"
+        }
+      ]
+    },
+    "option": [
+      {
+        "method": "FedEx",
+        "seller_id": 1007
+      },
+      {
+        "method": "UPS",
+        "seller_id": 1009
+      },
+      {
+        "method": "BlackCatExpress",
+        "seller_id": 1006
+      }
+    ]
+  },
+  "billing": {
+    "contact": {
+      "first_name": "BiliBeely",
+      "last_name": "Ryuiroe",
+      "emails": ["rust@tingnet.io"],
+      "phones": [
+        {
+          "nation": 886,
+          "number": "09138411"
+        }
+      ]
+    }
+  }
+}

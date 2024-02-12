@@ -1,0 +1,75 @@
+{
+  "order_lines": [
+    {
+      "seller_id": 1006,
+      "product_type": 1,
+      "product_id": 9200125,
+      "quantity": 3
+    },
+    {
+      "seller_id": 1009,
+      "product_type": 2,
+      "product_id": 7001,
+      "quantity": 5
+    }
+  ],
+  "shipping": {
+    "contact": {
+      "first_name": "WinnieThePooh",
+      "last_name": "Xi",
+      "emails": [
+        "winnie-the-flu@covid.ccp",
+        "mars.is@part.of.china"
+      ],
+      "phones": [
+        {
+          "nation": 886,
+          "number": "09138411"
+        },
+        {
+          "nation": 91,
+          "number": "0700418821"
+        }
+      ]
+    },
+    "option": [
+      {
+        "method": "FedEx",
+        "seller_id": 1006
+      },
+      {
+        "method": "BlackCatExpress",
+        "seller_id": 1009
+      }
+    ]
+  },
+  "billing": {
+    "address": {
+      "country": "TW",
+      "region": "Main island",
+      "city": "Hualien",
+      "distinct": "seepea",
+      "street_name": "CCP brain-washing st.",
+      "detail": "CCP grave in TienAnMen massacre plaza"
+    },
+    "contact": {
+      "first_name": "Anony",
+      "last_name": "Victim",
+      "emails": [
+        "kotlin@ninjacat.io",
+        "lua@neovim.idv",
+        "screw@nail.bang"
+      ],
+      "phones": [
+        {
+          "nation": 886,
+          "number": "1901311"
+        },
+        {
+          "nation": 886,
+          "number": "09138411"
+        }
+      ]
+    }
+  }
+}
