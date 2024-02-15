@@ -20,7 +20,7 @@ use crate::api::web::dto::{
     PhoneNumberErrorDto, PhoneNumNationErrorReason, OrderLineReqDto, ShippingOptionErrorDto,
     OrderLineReturnErrorDto, OrderLineReturnErrorReason 
 };
-use crate::constant::REGEX_EMAIL_RFC5322;
+use crate::constant::{REGEX_EMAIL_RFC5322, limit};
 use crate::error::{AppError, AppErrorCode};
 
 use super::{ProductPolicyModel, ProductPriceModel, BaseProductIdentity};
@@ -497,7 +497,7 @@ impl OrderReturnModel {
         -> DefaultResult<Vec<OrderReturnModel>, Vec<OrderLineReturnErrorDto>>
     {
         let time_now = LocalTime::now().fixed_offset();
-        let time_now = Self::dtime_round_secs(&time_now, 5i64).unwrap();
+        let time_now = Self::dtime_round_secs(&time_now, limit::MIN_SECS_INTVL_REQ as i64).unwrap();
         let errors = data.iter().filter_map(|d| {
             let result = o_lines.iter().find(|oline| {
                 d.seller_id == oline.id_.store_id && d.product_id == oline.id_.product_id

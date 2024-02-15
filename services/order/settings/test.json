@@ -22,6 +22,9 @@
              "destination": "localfs"}
         ],
         "loggers" : [
+            {"alias": "order::adapter::datastore",
+             "handlers": ["std-output-forall"],
+             "level": "WARNING"},
             {"alias": "order::api::web::order",
              "handlers": ["errlog-file-web-api"],
              "level": "INFO"},

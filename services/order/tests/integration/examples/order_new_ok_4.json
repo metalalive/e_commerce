@@ -1,0 +1,48 @@
+{
+  "order_lines": [
+    {
+      "seller_id": 543,
+      "product_type": 1,
+      "product_id": 20092,
+      "quantity": 13
+    },
+    {
+      "seller_id": 543,
+      "product_type": 2,
+      "product_id": 20094,
+      "quantity": 19
+    }
+  ],
+  "shipping": {
+    "contact": {
+      "first_name": "LisbonArch",
+      "last_name": "BigHive",
+      "emails": ["append-only@presto.it"],
+      "phones": [
+        {
+          "nation": 47,
+          "number": "1101011000"
+        }
+      ]
+    },
+    "option": [
+      {
+        "method": "BlackCatExpress",
+        "seller_id": 543
+      }
+    ]
+  },
+  "billing": {
+    "contact": {
+      "first_name": "ThumbStick",
+      "last_name": "Butcher",
+      "emails": ["lisp@haskell.code"],
+      "phones": [
+        {
+          "nation": 5,
+          "number": "009302931"
+        }
+      ]
+    }
+  }
+}

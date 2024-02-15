@@ -1,0 +1,6 @@
+[
+    {"qty_add":20, "store_id":543, "product_type": 1, "product_id": 20092,
+     "expiry": "2022-12-26T08:15:58.137110+07:00"},
+    {"qty_add":32, "store_id":543, "product_type": 2, "product_id": 20094,
+     "expiry": "2022-12-27T22:19:13.911935+05:00"}
+]

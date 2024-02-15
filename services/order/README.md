@@ -95,7 +95,7 @@ SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  repository::m
 ```
 
 ### Integration Test
-#### For web server
+#### For web server and  RPC consumer
 ```shell=?
 cd ${SERVICE_BASE_PATH}/tests/integration
 
@@ -104,15 +104,7 @@ SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
     cargo test --test web
 ```
 
-Note
-- the configuration files in `settings` folder could be `test-in-mem.json` or `test-sql-db.json` for different datastore destinations.
+Note :
+- remind the option `--features mariadb` can be used for integration test, once added to the command, this option will propagate to `order` crate .
 
-#### For RPC consumer
-```shell=?
-cd ${SERVICE_BASE_PATH}/tests/integration
-
-SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
-    CONFIG_FILE_PATH="settings/test.json" \
-    cargo test --test rpcsub
-```
 

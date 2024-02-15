@@ -1,0 +1,20 @@
+[
+  {
+    "product_type": 1,
+    "product_id": 20095,
+    "auto_cancel_secs": 1742,
+    "warranty_hours": 120
+  },
+  {
+    "product_type": 2,
+    "product_id": 20096,
+    "auto_cancel_secs": 1100,
+    "warranty_hours": 140
+  },
+  {
+    "product_type": 1,
+    "product_id": 20097,
+    "auto_cancel_secs": 680,
+    "warranty_hours": 572
+  }
+]

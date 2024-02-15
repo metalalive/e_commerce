@@ -1,0 +1,54 @@
+{
+  "order_lines": [
+    {
+      "seller_id": 545,
+      "product_type": 2,
+      "product_id": 20099,
+      "quantity": 15
+    },
+    {
+      "seller_id": 545,
+      "product_type": 1,
+      "product_id": 20100,
+      "quantity": 16
+    },
+    {
+      "seller_id": 545,
+      "product_type": 2,
+      "product_id": 20101,
+      "quantity": 17
+    }
+  ],
+  "shipping": {
+    "contact": {
+      "first_name": "Lisa",
+      "last_name": "Inoue",
+      "emails": ["leech@cricket.org"],
+      "phones": [
+        {
+          "nation": 886,
+          "number": "81174015"
+        }
+      ]
+    },
+    "option": [
+      {
+        "method": "UPS",
+        "seller_id": 545
+      }
+    ]
+  },
+  "billing": {
+    "contact": {
+      "first_name": "Jordan",
+      "last_name": "Michiya",
+      "emails": ["curry@steph.wow"],
+      "phones": [
+        {
+          "nation": 91,
+          "number": "0938461846"
+        }
+      ]
+    }
+  }
+}

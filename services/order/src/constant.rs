@@ -23,6 +23,7 @@ pub mod limit {
     pub const MAX_ORDER_LINES_PER_REQUEST: usize = 65535;
     pub const MAX_DB_CONNECTIONS : u32 = 10000u32;
     pub const MAX_SECONDS_DB_IDLE : u16 = 600u16;
+    pub const MIN_SECS_INTVL_REQ: u16 = 3;
 }
 
 pub(crate) const WEBAPI_ADD_PRODUCT_POLICY: WebApiHdlrLabel = "modify_product_policy";

@@ -1,0 +1,14 @@
+[
+    {
+      "seller_id": 545,
+      "product_type": 2,
+      "product_id": 20101,
+      "quantity": 4
+    },
+    {
+      "seller_id": 545,
+      "product_type": 1,
+      "product_id": 20100,
+      "quantity": 6
+    }
+]

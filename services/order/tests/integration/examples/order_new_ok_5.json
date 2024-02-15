@@ -1,0 +1,54 @@
+{
+  "order_lines": [
+    {
+      "seller_id": 543,
+      "product_type": 1,
+      "product_id": 20097,
+      "quantity": 13
+    },
+    {
+      "seller_id": 543,
+      "product_type": 1,
+      "product_id": 20095,
+      "quantity": 16
+    },
+    {
+      "seller_id": 543,
+      "product_type": 2,
+      "product_id": 20096,
+      "quantity": 14
+    }
+  ],
+  "shipping": {
+    "contact": {
+      "first_name": "Jordan",
+      "last_name": "HasNoLife",
+      "emails": ["jordon@nolife.idv"],
+      "phones": [
+        {
+          "nation": 1,
+          "number": "181001000"
+        }
+      ]
+    },
+    "option": [
+      {
+        "method": "FedEx",
+        "seller_id": 543
+      }
+    ]
+  },
+  "billing": {
+    "contact": {
+      "first_name": "Jordan",
+      "last_name": "Michael",
+      "emails": ["curry@steph.wow"],
+      "phones": [
+        {
+          "nation": 7,
+          "number": "0093089371"
+        }
+      ]
+    }
+  }
+}

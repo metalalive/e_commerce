@@ -1,0 +1,15 @@
+[
+     [],
+     {"s_id": 545, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+      "updating": [],
+      "creating": [
+	  {"price": 10, "start_after": "2021-05-31T09:30:35+07:30", "product_type": 2,
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20099},
+	  {"price": 35, "start_after": "2021-05-31T09:30:35+07:30", "product_type": 1,
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20100},
+	  {"price": 20, "start_after": "2021-05-31T09:30:35+07:30", "product_type": 2,
+	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20101}
+      ]
+     },
+     {"callbacks": null, "errbacks": null, "chain": null, "chord": null}
+]
