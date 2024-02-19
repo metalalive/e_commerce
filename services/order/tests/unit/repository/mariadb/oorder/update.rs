@@ -80,7 +80,7 @@ async fn update_payment_ok()
     if let Ok(mut lines) = result {
         assert_eq!(lines.len(), 3);
         lines.sort_by(|a,b| a.id_.product_id.cmp(&b.id_.product_id));
-        let fn1 = |mut line:OrderLineModel, exp_product_id:u64,
+        let fn1 = |line:OrderLineModel, exp_product_id:u64,
                    exp_paid:u32, exp_duration:Duration|
         {
             assert_eq!(line.id_.product_id, exp_product_id);

@@ -176,6 +176,7 @@
     </changeSet>
     <changeSet id="modify_createtime__order_toplvl_meta" author="T.H.">
         <comment>
+            -  `TIMESTAMP` column holds number of seconds until `2038-01-19 03:14:07`, to avoid The 2038 Problem (a.k.a. Y2K38), modify the `expiry` column to `DATETIME` type
             - `created_time` should be always converted to UTC timezone before it is saved, `DATETIME` column cannot provide timezone info
         </comment>
         <sql dbms="mariadb">
@@ -396,9 +397,36 @@
             DROP TABLE `schedule_job`;
         </rollback>
     </changeSet>
-    
+
     <changeSet id="tag_version_0.1.1" author="T.H.">
         <tagDatabase tag="0.1.1" />
+    </changeSet>
+    <changeSet id="modify_expiry_type__stock" author="T.H.">
+        <comment>
+            `TIMESTAMP` column holds number of seconds until `2038-01-19 03:14:07`, to avoid The 2038 Problem (a.k.a. Y2K38), modify the `expiry` column to `DATETIME` type
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `stock_rsv_detail` DROP FOREIGN KEY `c_fk_stock_prod_id`;
+            ALTER TABLE `stock_rsv_detail` MODIFY COLUMN `expiry` DATETIME NOT NULL;
+            ALTER TABLE `stock_level_inventory` MODIFY COLUMN `expiry` DATETIME NOT NULL;
+            ALTER TABLE `stock_rsv_detail` ADD CONSTRAINT `c_fk_stock_prod_id`
+                FOREIGN KEY (`store_id`, `product_type`, `product_id`, `expiry`)
+                REFERENCES `stock_level_inventory`(`store_id`, `product_type`, `product_id`, `expiry`)
+                ON UPDATE CASCADE ON DELETE CASCADE ;
+        </sql>
+        <rollback>
+            ALTER TABLE `stock_rsv_detail` DROP FOREIGN KEY `c_fk_stock_prod_id`;
+            ALTER TABLE `stock_level_inventory` MODIFY COLUMN `expiry`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+            ALTER TABLE `stock_rsv_detail` MODIFY COLUMN `expiry`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+            ALTER TABLE `stock_rsv_detail` ADD CONSTRAINT `c_fk_stock_prod_id`
+                FOREIGN KEY (`store_id`, `product_type`, `product_id`, `expiry`)
+                REFERENCES `stock_level_inventory`(`store_id`, `product_type`, `product_id`, `expiry`)
+                ON UPDATE CASCADE ON DELETE CASCADE ;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.1.2" author="T.H.">
+        <tagDatabase tag="0.1.2" />
     </changeSet>
 </databaseChangeLog>
 

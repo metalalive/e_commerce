@@ -1,18 +1,14 @@
 use std::boxed::Box;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::result::Result as DefaultResult;
 
 use chrono::{DateTime, Duration, Local, SubsecRound};
 use order::api::dto::{CountryCode, ShippingMethod};
 use order::constant::ProductType;
 use order::error::AppError;
-use order::model::{
-    ProductStockModel, StockQuantityModel, StoreStockModel, StockLevelModelSet, 
-    OrderLineModelSet
-};
-use order::repository::{AbsOrderRepo, app_repo_order, AppStockRepoReserveReturn, AbsOrderStockRepo};
+use order::model::{ StockLevelModelSet, OrderLineModelSet };
+use order::repository::{AbsOrderRepo, app_repo_order, AppStockRepoReserveReturn};
 
 use super::super::super::in_mem::oorder::{ut_setup_billing, ut_setup_shipping};
 use super::super::super::in_mem::oorder::stock::ut_reserve_init_setup;
@@ -122,7 +118,7 @@ async fn save_contact_error()
 }
 
 
-fn ut_fetch_lines_rsvtime_usr_cb(repo:&dyn AbsOrderRepo, mset: OrderLineModelSet)
+fn ut_fetch_lines_rsvtime_usr_cb(_repo:&dyn AbsOrderRepo, mset: OrderLineModelSet)
     -> Pin<Box<dyn Future<Output=DefaultResult<(),AppError>> + Send + '_>>
 {
     let fut = async move {

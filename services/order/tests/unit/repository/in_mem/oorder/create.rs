@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::{DateTime, Local, Duration, FixedOffset};
+use chrono::{DateTime, Duration, FixedOffset};
 use order::api::dto::{CountryCode, ShippingMethod};
 use order::constant::ProductType;
 use order::datastore::AppInMemoryDStore;

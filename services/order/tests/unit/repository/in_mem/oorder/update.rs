@@ -3,7 +3,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::result::Result as DefaultResult;
 
-use chrono::{DateTime, FixedOffset, Duration as ChronoDuration, Local};
+use chrono::{DateTime, FixedOffset, Duration as ChronoDuration};
 use order::datastore::AppInMemoryDStore;
 use tokio::time::{sleep, Duration as TokioDuration};
 

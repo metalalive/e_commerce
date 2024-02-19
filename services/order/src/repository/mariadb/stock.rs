@@ -6,7 +6,7 @@ use std::vec::Vec;
 use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use sqlx::{Connection, Transaction, MySql, IntoArguments, Arguments, Executor, Statement, Row};
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::database::HasArguments;
@@ -34,7 +34,7 @@ struct ReserveArg(Vec<(u32, ProductStockModel)>);
 struct ReturnArg(Vec<(u32, ProductStockModel)>);
 
 struct FetchQtyArg(Vec<ProductStockIdentity>);
-struct FetchQtyForRsvArg<'a>(&'a Vec<OrderLineModel>);
+struct FetchQtyForRsvArg<'a>(&'a Vec<OrderLineModel>); // TODO, add current time for expiry filtering
 struct FetchRsvOrderArg<'a>(OidBytes, &'a Vec<InventoryEditStockLevelDto>);
 
 struct StkProdRows(Vec<MySqlRow>);
@@ -59,7 +59,7 @@ impl<'q> IntoArguments<'q, MySql> for InsertQtyArg
         let mut out = MySqlArguments::default();
         self.0.into_iter().map(|(store_id, p)| {
             let (expiry, p_typ, prod_id, q_total, q_cancelled) = (
-                p.expiry_without_millis(), p.type_, p.id_,
+                p.expiry_without_millis().naive_utc() , p.type_, p.id_,
                 p.quantity.total, p.quantity.cancelled
             );
             let prod_typ_num:u8 = p_typ.into();
@@ -103,7 +103,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg
         let mut out = MySqlArguments::default();
         self.0.iter().map(|(store_id, p)| {
             let (p_typ, prod_id, expiry, q_total) = ( p.type_.clone(), p.id_,
-                        p.expiry_without_millis(), p.quantity.total);
+                        p.expiry_without_millis().naive_utc(), p.quantity.total);
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -113,7 +113,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg
         }).count();
         self.0.iter().map(|(store_id, p)| {
             let (p_typ, prod_id, expiry, q_cancelled) = ( p.type_.clone(), p.id_,
-                p.expiry_without_millis(), p.quantity.cancelled);
+                p.expiry_without_millis().naive_utc(), p.quantity.cancelled);
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -122,7 +122,7 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg
             out.add(q_cancelled);
         }).count();
         self.0.into_iter().map(|(store_id, p)| {
-            let (expiry, p_typ, prod_id) = (p.expiry_without_millis(), p.type_, p.id_);
+            let (expiry, p_typ, prod_id) = (p.expiry_without_millis().naive_utc(), p.type_, p.id_);
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -168,7 +168,7 @@ impl ReserveArg {
         let mut out = MySqlArguments::default();
         stores.iter().map(|(store_id, p)| {
             let (p_typ, prod_id, expiry, q_booked) = ( p.type_.clone(), p.id_,
-                        p.expiry_without_millis(), p.quantity.booked);
+                        p.expiry_without_millis().naive_utc(), p.quantity.booked);
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -177,7 +177,8 @@ impl ReserveArg {
             out.add(q_booked);
         }).count();
         stores.iter().map(|(store_id, p)| {
-            let (expiry, p_typ, prod_id) = (p.expiry_without_millis(), p.type_.clone(), p.id_);
+            let (expiry, p_typ, prod_id) = (p.expiry_without_millis().naive_utc(),
+                                            p.type_.clone(), p.id_);
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -189,8 +190,8 @@ impl ReserveArg {
     fn args_add_order_rsv(self) -> MySqlArguments {
         let mut out = MySqlArguments::default();
         self.0.into_iter().map(|(store_id, p)| {
-            let (expiry, p_typ, prod_id, detail) = (p.expiry_without_millis(), p.type_, p.id_,
-                                                    p.quantity.rsv_detail.unwrap());
+            let (expiry, p_typ, prod_id, detail) = (p.expiry_without_millis().naive_utc(), p.type_,
+                                                    p.id_,  p.quantity.rsv_detail.unwrap());
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -228,7 +229,8 @@ impl ReturnArg {
         }; // order-id must not be modified in app callback
         let mut out = MySqlArguments::default();
         self.0.iter().map(|(store_id, p)| {
-            let (expiry, p_typ, prod_id) = (p.expiry_without_millis(), p.type_.clone(), p.id_);
+            let (expiry, p_typ, prod_id) = (p.expiry_without_millis().naive_utc(),
+                                            p.type_.clone(), p.id_);
             let _rsv_detail = p.quantity.rsv_detail.as_ref().unwrap();
             let qty_rsv_o = _rsv_detail.reserved;
             let prod_typ_num:u8 = p_typ.into();
@@ -240,7 +242,8 @@ impl ReturnArg {
         }).count();
         out.add(oid_b.as_column());
         self.0.iter().map(|(store_id, p)| {
-            let (expiry, p_typ, prod_id) = (p.expiry_without_millis(), p.type_.clone(), p.id_);
+            let (expiry, p_typ, prod_id) = (p.expiry_without_millis().naive_utc(),
+                                            p.type_.clone(), p.id_);
             let prod_typ_num:u8 = p_typ.into();
             out.add(store_id);
             out.add(prod_typ_num.to_string());
@@ -278,7 +281,7 @@ impl<'q> IntoArguments<'q, MySql> for FetchQtyArg
     fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
         let mut out = MySqlArguments::default();
         self.0.into_iter().map(|co| {
-            let expiry =  co.expiry_without_millis();
+            let expiry =  co.expiry_without_millis().naive_utc();
             let (store_id, p_typ, prod_id) = (co.store_id, co.product_type,
                                               co.product_id);
             let prod_typ_num:u8 = p_typ.into();
@@ -297,7 +300,7 @@ impl Into<(String, MySqlArguments)> for FetchQtyArg {
 }
 
 impl<'a> FetchQtyForRsvArg<'a>
-{ // TODO, consider to merge with `FetchQtyArg`, not much difference with it
+{
     fn sql_pattern(num_batch : usize) -> String {
         let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=?)";
         let pid_cmps = (0 .. num_batch).into_iter().map(
@@ -409,7 +412,7 @@ impl TryInto<ProductStockModel> for StkProdRow {
         let row = self.0;
         let prod_typ = row.try_get::<&str, usize>(1)? .parse::<ProductType>() ?;
         let prod_id = row.try_get::<u64, usize>(2) ?;
-        let expiry  = row.try_get::<DateTime<Utc>, usize>(3)? .into();
+        let expiry  = row.try_get::<NaiveDateTime, usize>(3)?.and_utc();
         let total     = row.try_get::<u32, usize>(4)?;
         let cancelled = row.try_get::<u32, usize>(5)?;
         let booked  = row.try_get::<u32, usize>(6) ?;
@@ -433,7 +436,7 @@ impl TryInto<ProductStockModel> for StkRsvDetailRow {
         let row = self.0;
         let prod_typ = row.try_get::<&str, usize>(1)?.parse::<ProductType>()?;
         let prod_id = row.try_get::<u64, usize>(2) ?;
-        let expiry  = row.try_get::<DateTime<Utc>, usize>(3)?;
+        let expiry  = row.try_get::<NaiveDateTime, usize>(3)?.and_utc();
         let rsv_detail = {
             let oid = OidBytes::to_app_oid(&row, 4)?;
             let qty_rsv_o = row.try_get::<u32, usize>(5)?;

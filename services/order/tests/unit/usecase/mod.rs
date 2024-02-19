@@ -18,7 +18,7 @@ use order::{
     AppSharedState, AbstractRpcContext, AppRpcCfg, AbstractRpcServer, AbstractRpcClient,
     AbsRpcClientCtx, AbsRpcServerCtx, AppRpcClientReqProperty, AppRpcReply, AppDataStoreContext
 };
-use order::api::dto::{OrderLinePayDto, ShippingMethod};
+use order::api::dto::ShippingMethod;
 use order::api::rpc::dto::{
     OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto
 };

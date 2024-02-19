@@ -13,9 +13,13 @@ impl EditProductPriceUseCase {
     pub async fn execute(repo:Box<dyn AbsProductPriceRepo>, data:ProductPriceDto,
                          logctx:Arc<AppLogContext> ) -> DefaultResult<(), AppError>
     {
-        let result = if data.rm_all {
+        let (num_insert, num_update) = (data.creating.len(), data.updating.len());
+        let rm_all = data.rm_all;
+        let rm_items = data.deleting.items.is_some();
+        let rm_pkgs  = data.deleting.pkgs.is_some();
+        let result = if rm_all {
             repo.delete_all(data.s_id).await
-        } else if data.deleting.items.is_some() || data.deleting.pkgs.is_some() {
+        } else if rm_items || rm_pkgs {
             // currently the storefront service separates delete operation from
             // create and update operations, we can expect there is no product overlapped
             // in the `deleting`, `creating`, and `updating` lists
@@ -33,7 +37,9 @@ impl EditProductPriceUseCase {
             }
         };
         if let Err(e) = &result {
-            app_log_event!(logctx, AppLogLevel::ERROR, "detail:{}", e);    
+            app_log_event!(logctx, AppLogLevel::ERROR, "detail:{}, num_insert:{}, num_update:{},\
+                           rm_all:{}, rm_items:{}, rm_pkgs:{}", e, num_insert, num_update, rm_all,
+                           rm_items, rm_pkgs);    
         }
         result
     } // end of fn execute

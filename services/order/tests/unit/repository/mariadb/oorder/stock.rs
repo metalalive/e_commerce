@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Duration, Local, SubsecRound};
+use chrono::{DateTime, Duration, Local};
 
 use order::api::rpc::dto::{StockLevelReturnDto, InventoryEditStockLevelDto, StockReturnErrorDto};
 use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
@@ -10,8 +10,7 @@ use order::repository::{
 };
 use order::model::{
     StoreStockModel, StockLevelModelSet, ProductStockIdentity, ProductStockModel,
-    StockQuantityModel, StockQtyRsvModel, OrderLineModelSet, OrderLineModel, OrderLineIdentity,
-    OrderLineQuantityModel, OrderLineAppliedPolicyModel, OrderLinePriceModel, 
+    StockQuantityModel, StockQtyRsvModel, OrderLineModelSet 
 };
 
 use crate::model::verify_stocklvl_model;
@@ -26,53 +25,53 @@ fn ut_init_data_product() -> [ProductStockModel; 12]
 {
     [   // ------ for insertion, do not verify reservation --------
         ProductStockModel { type_:ProductType::Item, id_:9002, is_create:true,
-           expiry: DateTime::parse_from_rfc3339("2023-10-05T08:14:05+09:00").unwrap().into(),
+           expiry: DateTime::parse_from_rfc3339("2038-10-05T08:14:05+09:00").unwrap().into(),
            quantity: StockQuantityModel::new(5, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9003, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-11-07T08:12:05.008+02:00").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2039-11-07T08:12:05.008+02:00").unwrap().into(),
            quantity: StockQuantityModel::new(11, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2039-11-09T09:16:01.029-01:00").unwrap().into(),
            quantity: StockQuantityModel::new(15, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9005, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2024-11-11T09:22:01.005+08:00").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2040-11-11T09:22:01.005+08:00").unwrap().into(),
            quantity: StockQuantityModel::new(8, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-11-15T09:23:58.097-09:20").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2040-11-15T09:23:58.097-09:20").unwrap().into(),
            quantity: StockQuantityModel::new(14, 0, 0, None)
         },
         // -------- for mix of update / insertion -------------
         ProductStockModel { type_:ProductType::Package, id_:9004, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-11-09T09:16:01.029-01:00").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2039-11-09T09:16:01.029-01:00").unwrap().into(),
            quantity: StockQuantityModel::new(15, 7, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:false,
-           expiry:DateTime::parse_from_rfc3339("2023-11-15T09:23:58.097-09:20").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2040-11-15T09:23:58.097-09:20").unwrap().into(),
            quantity: StockQuantityModel::new(18, 1, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9007, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-09-21T14:36:55.0015+09:00").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2095-09-21T14:36:55.0015+09:00").unwrap().into(),
            quantity: StockQuantityModel::new(145, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9006, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-11-15T09:51:18.0001-09:20").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2040-11-15T09:51:18.0001-09:20").unwrap().into(),
            quantity: StockQuantityModel::new(120, 3, 0, None)
         }, // the same product ID , different expiries
         // -------- more insertions for reserve / return -------------
         ProductStockModel { type_:ProductType::Package, id_:9008, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-09-11T19:21:52.4015-08:00").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2095-09-11T19:21:52.4015-08:00").unwrap().into(),
            quantity: StockQuantityModel::new(37, 1, 0, None)
         },
         ProductStockModel { type_:ProductType::Package, id_:9008, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-09-12T19:17:36.8492-08:00").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2095-09-12T19:17:36.8492-08:00").unwrap().into(),
            quantity: StockQuantityModel::new(49, 0, 0, None)
         },
         ProductStockModel { type_:ProductType::Item, id_:9009, is_create:true,
-           expiry:DateTime::parse_from_rfc3339("2023-09-22T18:07:00.2015+05:00").unwrap().into(),
+           expiry:DateTime::parse_from_rfc3339("2092-09-22T18:07:00.2015+05:00").unwrap().into(),
            quantity: StockQuantityModel::new(46, 1, 0, None)
         },
     ]
@@ -344,7 +343,7 @@ fn mock_reserve_usr_cb_3(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
             assert!(stk_prod.quantity.rsv_detail.is_none());
             let num_avail = stk_prod.quantity.num_avail();
             assert!(num_avail < $line_rsv_req);
-            let num = stk_prod.quantity.reserve($oid, num_avail);
+            let _num = stk_prod.quantity.reserve($oid, num_avail);
             $line_rsv_req -= num_avail;
             assert!(stk_prod.quantity.rsv_detail.is_some());
             let stk_prod = $product_src.iter_mut().find(
@@ -353,7 +352,7 @@ fn mock_reserve_usr_cb_3(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
             assert!(stk_prod.quantity.rsv_detail.is_none());
             let num_avail = stk_prod.quantity.num_avail();
             assert!(num_avail > $line_rsv_req);
-            let num = stk_prod.quantity.reserve($oid, $line_rsv_req);
+            let _num = stk_prod.quantity.reserve($oid, $line_rsv_req);
             assert!(stk_prod.quantity.rsv_detail.is_some());
         }};
     }
@@ -378,7 +377,6 @@ fn mock_return_usr_cb_1(ms: &mut StockLevelModelSet, data:StockLevelReturnDto)
     let store = &mut ms.stores[0];
     assert_eq!(store.products.len(), 4);
     assert_eq!(data.items.len(), 3);
-    let oid = data.order_id.as_str();
     data.items.into_iter().map(|item| {
         let stk_prod = store.products.iter_mut().find(|p| {
             let exp_diff = p.expiry.fixed_offset() - item.expiry;
@@ -395,8 +393,7 @@ fn mock_return_usr_cb_1(ms: &mut StockLevelModelSet, data:StockLevelReturnDto)
         let num = stk_prod.quantity.try_return(line_ret_req);
         assert_eq!(num, line_ret_req);
         {
-            let detail = stk_prod.quantity.rsv_detail.as_ref().unwrap();
-            assert!(detail.reserved >= 0);
+            let _detail = stk_prod.quantity.rsv_detail.as_ref().unwrap();
         }
     }).count();
     vec![]

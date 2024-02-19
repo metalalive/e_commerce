@@ -47,7 +47,7 @@ impl AbsProductPriceRepo for MockRepository {
         }
     } 
     
-    async fn fetch_many(&self, ids:Vec<(u32,ProductType,u64)>)
+    async fn fetch_many(&self, _ids:Vec<(u32,ProductType,u64)>)
         -> DefaultResult<Vec<ProductPriceModelSet>, AppError>
     {
         Err(AppError { code: AppErrorCode::NotImplemented, detail:None })

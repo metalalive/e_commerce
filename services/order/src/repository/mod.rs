@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 
 use crate::AppDataStoreContext;
-use crate::api::dto::OrderLinePayDto;
 use crate::api::rpc::dto::{
     ProductPriceDeleteDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
     OrderLinePayUpdateErrorDto, OrderLinePaidUpdateDto, StockLevelReturnDto, StockReturnErrorDto
