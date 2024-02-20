@@ -70,7 +70,7 @@ pub struct OrderLineQuantityModel {
     pub reserved: u32,
     pub paid: u32,
     pub paid_last_update: Option<DateTime<FixedOffset>>,
-} // TODO, record number delivered, and cancelled
+} // TODO, record number of items delivered
 
 pub struct OrderLineModel {
     pub id_: OrderLineIdentity,
@@ -79,6 +79,10 @@ pub struct OrderLineModel {
     pub policy: OrderLineAppliedPolicyModel
 }
 
+// TODO, new struct for hash-map value, including :
+// - number of cancelled
+// - expected amount of refund  corresponding to the return
+// - reason
 pub type OrderReturnQuantityModel = HashMap<DateTime<FixedOffset>, (u32, OrderLinePriceModel)>;
 
 pub struct OrderReturnModel {
@@ -544,6 +548,7 @@ impl OrderReturnModel {
             let refund = OrderLinePriceModel { unit: oline.price.unit, total };
             let val = (d.quantity, refund);
             if let Some(r) = result {
+                r.qty.clear(); // no need to output saved requests
                 r.qty.insert(time_now, val);
                 None
             } else {
@@ -552,7 +557,7 @@ impl OrderReturnModel {
                 let qty = HashMap::from([(time_now, val)]);
                 Some(OrderReturnModel {id_, qty})
             }
-        }).collect::<Vec<OrderReturnModel>>();
+        }).collect::<Vec<_>>();
         o_returns.extend(new_returns.into_iter());
         Ok(o_returns)
     } // end of fn filter_requests

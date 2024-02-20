@@ -2,6 +2,7 @@ pub(super) mod product_policy;
 pub(super) mod product_price;
 pub(super) mod stock;
 pub(super) mod order;
+pub(super) mod oline_return;
 
 use std::u8;
 use std::ops::DerefMut;

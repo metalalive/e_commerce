@@ -40,6 +40,9 @@ use mariadb::product_price::ProductPriceMariaDbRepo;
 #[cfg(feature="mariadb")]
 use mariadb::order::OrderMariaDbRepo;
 
+#[cfg(feature="mariadb")]
+use mariadb::oline_return::OrderReturnMariaDbRepo;
+
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads
 // , it is the reason to add `Send` and `Sync` as super-traits
@@ -140,15 +143,13 @@ pub trait AbsOrderStockRepo : Sync + Send {
 
 #[async_trait]
 pub trait AbsOrderReturnRepo : Sync + Send {
-    async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>
-        where Self: Sized;
     async fn fetch_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
         -> DefaultResult<Vec<OrderReturnModel>, AppError>; 
     async fn fetch_by_created_time(&self, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>;
     async fn fetch_by_oid_ctime(&self, oid:&str, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<OrderReturnModel>, AppError>;
-    async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
+    async fn create(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
 }
 
 pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
@@ -212,5 +213,11 @@ pub async fn app_repo_order(ds:Arc<AppDataStoreContext>)
 pub async fn app_repo_order_return (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>
 {
-    OrderReturnInMemRepo::new(ds).await
+    if let Some(m) = &ds.in_mem {
+        let obj = OrderReturnInMemRepo::new(m.clone()).await ?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError {code:AppErrorCode::MissingDataStore,
+            detail: Some(format!("unknown-type"))}  )
+    }
 }

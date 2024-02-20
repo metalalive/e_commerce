@@ -16,7 +16,7 @@ use tokio::sync::Mutex as AsyncMutex;
 
 use order::{
     AppSharedState, AbstractRpcContext, AppRpcCfg, AbstractRpcServer, AbstractRpcClient,
-    AbsRpcClientCtx, AbsRpcServerCtx, AppRpcClientReqProperty, AppRpcReply, AppDataStoreContext
+    AbsRpcClientCtx, AbsRpcServerCtx, AppRpcClientReqProperty, AppRpcReply
 };
 use order::api::dto::ShippingMethod;
 use order::api::rpc::dto::{
@@ -224,11 +224,6 @@ impl MockOrderRepo {
 
 #[async_trait]
 impl AbsOrderReturnRepo for MockOrderReturnRepo {
-    async fn new(_ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>
-        where Self: Sized
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
     async fn fetch_by_pid(&self, _oid:&str, _pids:Vec<OrderLineIdentity>)
         -> DefaultResult<Vec<OrderReturnModel>, AppError>
     {
@@ -256,7 +251,7 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
     { // use the same mock variable internally, TODO, improve the test readability
         self.fetch_by_pid(oid, vec![]).await
     }
-    async fn save(&self, _oid:&str, _reqs:Vec<OrderReturnModel>)
+    async fn create(&self, _oid:&str, _reqs:Vec<OrderReturnModel>)
         -> DefaultResult<usize, AppError>
     {
         let mut g = self._mocked_save_result.lock().await;

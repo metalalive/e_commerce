@@ -13,7 +13,8 @@ use super::super::in_mem_ds_ctx_setup;
 async fn in_mem_repo_ds_setup (nitems:u32) -> OrderReturnInMemRepo
 {
     let ds = in_mem_ds_ctx_setup::<AppInMemoryDStore>(nitems);
-    let result = OrderReturnInMemRepo::build(ds).await;
+    let inmem = ds.in_mem.as_ref().unwrap().clone();
+    let result = OrderReturnInMemRepo::new(inmem).await;
     assert_eq!(result.is_ok(), true);
     result.unwrap()
 }
@@ -53,10 +54,9 @@ async fn in_mem_fetch_by_pid_ok()
     let repo = in_mem_repo_ds_setup(20).await;
     let reqs = ut_setup_ret_models(now);
     let pids = reqs.iter().filter_map(|m| {
-        if m.id_.store_id == 18 { None }
-        else { Some(m.id_.clone()) }
-    }).collect::<Vec<OrderLineIdentity>>();
-    let result = repo.save(oid, reqs).await;
+        if m.id_.store_id == 18 { None } else { Some(m.id_.clone()) }
+    }).collect::<Vec<_>>();
+    let result = repo.create(oid, reqs).await;
     assert!(result.is_ok());
     if let Ok(num_saved) = result {
         assert_eq!(num_saved, 3);
@@ -71,11 +71,43 @@ async fn in_mem_fetch_by_pid_ok()
                 49 => (1, 7, 112),
                 _others => (0usize, 0u32, 0u32),
             };
-            assert_eq!(m.qty.len(), expect.0);
             let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
             let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
-            assert_eq!(total_returned, expect.1);
-            assert_eq!(total_refund  , expect.2);
+            let actual = (m.qty.len(), total_returned, total_refund);
+            assert_eq!(actual, expect);
+        }).count();
+    }
+    // subcase 2
+    let reqs = vec![
+        OrderReturnModel {
+            id_:OrderLineIdentity {store_id:48, product_type:ProductType::Item, product_id:574},
+            qty: HashMap::from([
+                (now + Duration::seconds(18), (1, OrderLinePriceModel {unit:13, total:13})),
+            ])
+        }, 
+        OrderReturnModel {
+            id_:OrderLineIdentity {store_id:49, product_type:ProductType::Package, product_id:195},
+            qty: HashMap::from([
+                (now + Duration::seconds(40), (2, OrderLinePriceModel {unit:16, total:32})),
+            ])
+        }, 
+    ];
+    let pids = reqs.iter().map(|m| m.id_.clone()).collect::<Vec<_>>();
+    let result = repo.create(oid, reqs).await;
+    assert!(result.is_ok());
+    let result = repo.fetch_by_pid(oid, pids).await;
+    assert!(result.is_ok());
+    if let Ok(fetched) = result {
+        fetched.iter().map(|m| {
+            let expect = match m.id_.store_id {
+                48 => (4, 11, 143),
+                49 => (2, 9, 144),
+                _others => (0usize, 0u32, 0u32),
+            };
+            let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
+            let total_refund = m.qty.values().map(|(_, refund)| refund.total).sum::<u32>();
+            let actual = (m.qty.len(), total_returned, total_refund);
+            assert_eq!(actual, expect);
         }).count();
     }
 } // end of in_mem_fetch_by_pid_ok
@@ -89,7 +121,7 @@ async fn in_mem_fetch_by_ctime_ok()
     { // begin setup
         let mut reqs = ut_setup_ret_models(mock_time);
         reqs[1].qty.remove(&(mock_time - Duration::minutes(10)));
-        let result = repo.save("order0019286", reqs).await;
+        let result = repo.create("order0019286", reqs).await;
         assert!(result.is_ok());
     } {
         let mut reqs = ut_setup_ret_models(mock_time.clone());
@@ -97,7 +129,7 @@ async fn in_mem_fetch_by_ctime_ok()
             mock_time + Duration::minutes(5), (1, OrderLinePriceModel {unit:16, total:16}),
         );
         reqs[0].qty.remove(&(mock_time - Duration::minutes(41)));
-        let result = repo.save("order00080273", reqs).await;
+        let result = repo.create("order00080273", reqs).await;
         assert!(result.is_ok());
     } {
         let mut reqs = ut_setup_ret_models(mock_time.clone());
@@ -115,7 +147,7 @@ async fn in_mem_fetch_by_ctime_ok()
         );
         assert!(prev_entry.is_none());
         assert_eq!(ret.qty.len(), 4);
-        let result = repo.save("order10029803", reqs).await;
+        let result = repo.create("order10029803", reqs).await;
         assert!(result.is_ok());
     } // end setup
     in_mem_fetch_by_ctime_common( &repo,

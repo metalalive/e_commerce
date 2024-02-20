@@ -41,9 +41,10 @@ fn ut_saved_orderline_setup (dt_now:DateTime<FixedOffset>, store_id:u32)
 fn ut_saved_oline_return_setup (dt_now:DateTime<FixedOffset>, store_id:u32)
     -> Vec<OrderReturnModel>
 {
+    let interval_secs = limit::MIN_SECS_INTVL_REQ as i64;
     let last_returned = [
-        OrderReturnModel::dtime_round_secs(&(dt_now - Duration::hours(11)), 6).unwrap(),
-        OrderReturnModel::dtime_round_secs(&(dt_now - Duration::hours(5)), 6).unwrap(),
+        OrderReturnModel::dtime_round_secs(&(dt_now - Duration::minutes(11)), interval_secs).unwrap(),
+        OrderReturnModel::dtime_round_secs(&(dt_now - Duration::minutes(5)), interval_secs).unwrap(),
     ];
     vec![
         OrderReturnModel {
@@ -88,23 +89,14 @@ fn filter_request_ok()
         assert_eq!(modified.len(), 3);
         modified.iter().map(|m| {
             let num_returned = m.qty.values().map(|d| {d.0}).sum::<u32>();
-            match m.id_.product_id {
-                890u64 => {
-                    assert_eq!(m.qty.len(), 1);
-                    assert_eq!(num_returned, 4u32);
-                },
-                574 => {
-                    assert_eq!(m.qty.len(), 2);
-                    assert_eq!(num_returned, 2u32);
-                },
-                257 => {
-                    assert_eq!(m.qty.len(), 3);
-                    assert_eq!(num_returned, 6u32);
-                },
-                _others => {
-                    assert!(false);
-                },
-            }
+            let actual = (m.qty.len(), num_returned);
+            let expect = match m.id_.product_id {
+                890u64 => (1usize, 4u32),
+                574 => (1, 1),
+                257 => (1, 3),
+                _others => (0, 0),
+            };
+            assert_eq!(actual, expect);
         }).count();
     }
 } // end of fn filter_request_ok

@@ -6,7 +6,6 @@ use std::result::Result as DefaultResult;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 
-use crate::AppDataStoreContext;
 use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow};
 use crate::error::{AppError, AppErrorCode};
@@ -40,11 +39,16 @@ mod _oline_return {
     pub(super) fn inmem_get_oid(pkey:&str) -> &str {
         pkey.split("-").next().unwrap()
     }
-    pub(super) fn inmem_qty2col(map:OrderReturnQuantityModel) -> String {
-        map.into_iter().map(|(time, (qty, refund))| {
+    pub(super) fn inmem_qty2col(saved:Option<String>, map:OrderReturnQuantityModel) -> String
+    {
+        let orig = if let Some(s) = saved {
+            s + QTY_DELIMITER
+        } else { String::new() };
+        let new = map.into_iter().map(|(time, (qty, refund))| {
             format!("{} {} {} {}", time.format(QTY_KEY_FORMAT).to_string(),
                 qty, refund.unit, refund.total)
-        }).collect::<Vec<String>>().join(QTY_DELIMITER)
+        }).collect::<Vec<_>>().join(QTY_DELIMITER);
+        orig + new.as_str()
     }
     pub(super) fn inmem_col2qty(raw:String) -> OrderReturnQuantityModel {
         let iter = raw.split(QTY_DELIMITER).map(|tkn| {
@@ -92,14 +96,18 @@ mod _oline_return {
     }
 } // end of inner module _oline_return
 
+struct InsertOpArg(OrderReturnModel, Option<String>);
+
 pub struct OrderReturnInMemRepo {
     datastore: Arc<Box<dyn AbstInMemoryDStore>>,
 }
 
-impl From<OrderReturnModel> for AppInMemFetchedSingleRow {
-    fn from(value: OrderReturnModel) -> Self {
-        let (id_, map) = (value.id_ , value.qty);
-        let qty_serial = _oline_return::inmem_qty2col(map);
+impl From<InsertOpArg> for AppInMemFetchedSingleRow {
+    fn from(value: InsertOpArg) -> Self
+    {
+        let (model, serial_saved_qty) = (value.0, value.1);
+        let (id_, map) = (model.id_ , model.qty);
+        let qty_serial = _oline_return::inmem_qty2col(serial_saved_qty, map);
         let mut rows = (0.._oline_return::InMemColIdx::TotNumColumns.into())
             .into_iter().map(|_n| String::new()).collect::<Self>();
         let _ = [
@@ -139,12 +147,6 @@ impl Into<OrderReturnModel> for AppInMemFetchedSingleRow {
 #[async_trait]
 impl AbsOrderReturnRepo for OrderReturnInMemRepo
 {
-    async fn new(ds:Arc<AppDataStoreContext>) -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>
-        where Self: Sized
-    {
-        let obj = Self::build(ds).await ? ;
-        Ok(Box::new(obj))
-    }
     async fn fetch_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
         -> DefaultResult<Vec<OrderReturnModel>, AppError>
     {
@@ -188,30 +190,49 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
         }).collect();
         Ok(out)
     }
-    async fn save(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>
+    async fn create(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>
     {
-        let table_name = _oline_return::TABLE_LABEL.to_string();
-        let info = reqs.into_iter().map(|r| {
-            let pkey = _oline_return::inmem_pkey(oid, r.id_.store_id,
-                            r.id_.product_type.clone(),  r.id_.product_id );
-            (pkey, AppInMemFetchedSingleRow::from(r))
+        let qty_empty = reqs.iter().find_map(|req| {
+            if req.qty.is_empty() {
+                let detail = format!("return-req, in-mem-repo, prod-id: {} {:?} {}",
+                        req.id_.store_id,  req.id_.product_type, req.id_.product_id);
+                Some(detail)
+            } else {None}
         });
-        let rows = HashMap::from_iter(info);
+        if qty_empty.is_some() {
+            return Err(AppError {code:AppErrorCode::EmptyInputData, detail:qty_empty });
+        }
+        let table_name = _oline_return::TABLE_LABEL.to_string();
+        let mut info = vec![];
+        for req in reqs {
+            let pkey = _oline_return::inmem_pkey(oid, req.id_.store_id,
+                            req.id_.product_type.clone(),  req.id_.product_id );
+            // load saved `qty` inner table
+            let _info = HashMap::from([(table_name.clone(), vec![pkey.clone()])]);
+            let mut _data = self.datastore.fetch(_info).await?;
+            let rows = _data.remove(table_name.as_str()).unwrap() ;
+            let rows = rows.into_values().collect::<Vec<_>>() ;
+            assert!([0usize,1].contains(&rows.len()));
+            let serial_saved_qty = if let Some(row) = rows.first() {
+                let v = row.get::<usize>(_oline_return::InMemColIdx::QtyRefund.into())
+                    .unwrap().to_owned();
+                Some(v)
+            } else {None};
+            let m_serial = AppInMemFetchedSingleRow::from(InsertOpArg(req, serial_saved_qty));
+            let item = (pkey, m_serial);
+            info.push(item);
+        } // end of loop
+        let rows = HashMap::from_iter(info.into_iter());
         let data = HashMap::from([(table_name, rows)]);
         let num_saved = self.datastore.save(data).await?;
         Ok(num_saved)
-    }
+    } // end of fn create
 } // end of OrderReturnInMemRepo
 
 impl OrderReturnInMemRepo {
-    pub async fn build(ds:Arc<AppDataStoreContext>) -> DefaultResult<Self, AppError>
+    pub async fn new(m:Arc<Box<dyn AbstInMemoryDStore>>) -> DefaultResult<Self, AppError>
     {
-        if let Some(m) = ds.in_mem.as_ref() {
-            m.create_table(_oline_return::TABLE_LABEL).await?;
-            Ok(Self {datastore:m.clone()}) 
-        } else {
-            Err(AppError {code:AppErrorCode::MissingDataStore,
-                detail: Some(format!("in-memory"))}  )
-        }
+        m.create_table(_oline_return::TABLE_LABEL).await?;
+        Ok(Self {datastore:m.clone()}) 
     }
 }
