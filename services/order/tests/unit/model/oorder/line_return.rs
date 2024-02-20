@@ -199,8 +199,8 @@ fn filter_request_err_duplicate()
     let o_lines = ut_saved_orderline_setup(dt_now.clone(), seller_id);
     let o_returns = {
         let mut objs = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
-        let dly_secs = limit::MIN_SECS_INTVL_REQ as i64 - 1;
-        let key = OrderReturnModel::dtime_round_secs(&dt_now, dly_secs).unwrap();
+        let interval_secs = limit::MIN_SECS_INTVL_REQ as i64;
+        let key = OrderReturnModel::dtime_round_secs(&dt_now, interval_secs).unwrap();
         let value = (2, OrderLinePriceModel {unit:5, total:10});
         objs.last_mut().unwrap().qty.insert(key, value);
         assert_eq!(objs[1].id_.product_id, 574);

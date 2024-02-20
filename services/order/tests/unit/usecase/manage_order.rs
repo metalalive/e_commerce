@@ -1,6 +1,7 @@
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::result::Result as DefaultResult;
+use std::sync::Arc;
 use chrono::{DateTime, Local, Duration, FixedOffset};
 
 use order::api::rpc::dto::{
@@ -9,6 +10,7 @@ use order::api::rpc::dto::{
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
 use order::error::{AppError, AppErrorCode};
+use order::logging::AppLogContext;
 use order::model::{
     ProductPolicyModelSet, ProductPolicyModel, ProductPriceModelSet, ProductPriceModel,
     OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, OrderLineAppliedPolicyModel,
@@ -199,6 +201,13 @@ fn ut_setup_olines_returns () -> Vec<OrderReturnModel>
                 (return_time + Duration::seconds(94), (1, OrderLinePriceModel{unit:11, total: 11}))
             ])
         },
+        OrderReturnModel {
+            id_:OrderLineIdentity {store_id:426, product_id:8964, product_type:ProductType::Item},
+            qty: HashMap::from([
+                (return_time + Duration::seconds(10), (3, OrderLinePriceModel{unit:15, total: 45})),
+                (return_time + Duration::seconds(19), (4, OrderLinePriceModel{unit:15, total: 60}))
+            ])
+        },
     ]
 }
 
@@ -379,6 +388,7 @@ async fn replica_inventory_common(
     order_ctime:Option<DateTime<FixedOffset>>,
     // --- order-return repo
     fetched_oid_returns: DefaultResult<Vec<(String,OrderReturnModel)>, AppError> ,
+    logctx: Arc<AppLogContext>
 ) -> DefaultResult<OrderReplicaInventoryDto, AppError>
 {
     let unknown_err = AppError{detail:None, code:AppErrorCode::Unknown};
@@ -392,26 +402,26 @@ async fn replica_inventory_common(
         start: DateTime::parse_from_rfc3339("2022-11-06T02:33:00.519-09:00").unwrap(),
         end:   DateTime::parse_from_rfc3339("2022-11-07T02:30:00.770-09:00").unwrap(),
     };
-    let uc = OrderReplicaInventoryUseCase {ret_repo, o_repo};
+    let uc = OrderReplicaInventoryUseCase {logctx, ret_repo, o_repo};
     uc.execute(mock_req).await
 }
 
 #[tokio::test]
 async fn replica_inventory_ok()
 {
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
+    let logctx = shr_state.log_context().clone();
     let fetched_olines = ut_setup_orderlines();
     let fetched_oids_ctime = vec!["order739".to_string()];
     let owner_usr_id = 1710u32;
     let order_ctime = Some(Local::now().fixed_offset());
-    let mut oids_ret = vec![
-        "order446".to_string(), "order701".to_string(), "order880".to_string(),
-    ];
-    let fetched_oid_returns = ut_setup_olines_returns().into_iter().map(
-        |m| (oids_ret.remove(0), m)
-    ).collect();
+    let fetched_oid_returns = ["order446","order701","order880","order701"]
+        .into_iter().map(|s| s.to_string())
+        .zip(ut_setup_olines_returns().into_iter())
+        .collect();
     let result = replica_inventory_common(
         fetched_olines, fetched_oids_ctime, owner_usr_id, order_ctime, 
-        Ok(fetched_oid_returns)
+        Ok(fetched_oid_returns), logctx
     ).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
@@ -423,7 +433,7 @@ async fn replica_inventory_ok()
             let actual_num_lines = d.lines.len();
             let actual_num_returns = d.lines.iter().map(|r| {r.qty}).sum::<u32>();
             let (expect_num_lines, expect_num_returns) = match d.oid.as_str() {
-                "order446" => (2, 6),  "order701" => (4, 5),
+                "order446" => (2, 6),  "order701" => (6, 12),
                 "order880" => (3, 6),  _others => (0, 0)
             };
             assert_eq!(actual_num_lines, expect_num_lines);
@@ -435,6 +445,8 @@ async fn replica_inventory_ok()
 #[tokio::test]
 async fn replica_inventory_err()
 {
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
+    let logctx = shr_state.log_context().clone();
     let fetched_olines = ut_setup_orderlines();
     let fetched_oids_ctime = vec!["order739".to_string()];
     let owner_usr_id = 1710u32;
@@ -443,7 +455,7 @@ async fn replica_inventory_err()
             detail: Some(format!("unit-test")) };
     let result = replica_inventory_common(
         fetched_olines, fetched_oids_ctime, owner_usr_id, order_ctime, 
-        Err(fetched_oid_ret_err)
+        Err(fetched_oid_ret_err), logctx
     ).await;
     assert!(result.is_err());
     if let Err(e) = result {

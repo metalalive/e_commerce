@@ -79,7 +79,8 @@ pub(super) async fn read_reserved_inventory (req:AppRpcClientReqProperty,
                         app_repo_order, req.msgbody.as_slice())
     {
         Ok((v, o_repo)) => {
-            let uc = OrderReplicaInventoryUseCase {o_repo, ret_repo};
+            let logctx = shr_state.log_context().clone();
+            let uc = OrderReplicaInventoryUseCase {logctx, o_repo, ret_repo};
             match uc.execute(v).await {
                 Ok(resp) => serde_json::to_vec(&resp).unwrap(),
                 Err(e) => build_error_response(e).to_string().into_bytes()

@@ -1,10 +1,11 @@
 use std::boxed::Box; 
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc; 
 use std::result::Result as DefaultResult ; 
 
-use chrono::Local as LocalTime;
+use chrono::{Local as LocalTime, DateTime, FixedOffset};
 
 use crate::AppSharedState;
 use crate::constant::ProductType;
@@ -16,7 +17,8 @@ use crate::api::web::dto::{
 use crate::api::rpc::dto::{
     OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
     StockLevelReturnDto, StockReturnErrorDto, OrderReplicaInventoryReqDto, OrderReplicaStockReservingDto,
-    OrderReplicaStockReturningDto, OrderLineReplicaRefundDto, OrderReplicaRefundReqDto
+    OrderReplicaStockReturningDto, OrderLineReplicaRefundDto, OrderReplicaRefundReqDto,
+    OrderLineStockReturningDto
 };
 use crate::error::AppError;
 use crate::model::{
@@ -48,6 +50,7 @@ pub struct OrderReplicaRefundUseCase {
 pub struct OrderReplicaInventoryUseCase {
     pub  ret_repo: Box<dyn AbsOrderReturnRepo>,
     pub  o_repo: Box<dyn AbsOrderRepo>,
+    pub logctx: Arc<AppLogContext>
 }
 pub struct OrderPaymentUpdateUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
@@ -241,13 +244,12 @@ impl OrderReplicaRefundUseCase {
     }
 }
 impl OrderReplicaInventoryUseCase {
-    pub async fn execute(self, req:OrderReplicaInventoryReqDto)
-        -> DefaultResult<OrderReplicaInventoryDto, AppError>
-    { // TODO, avoid loading too many order records, consider pagination
-        let (start, end) = (req.start, req.end);
-        let order_ids = self.o_repo.fetch_ids_by_created_time(start.clone(), end.clone()).await?;
-        let mut reservations = vec![];
-        let mut returns = vec![];
+    async fn load_reserving(&self, start:DateTime<FixedOffset>,
+                            end: DateTime<FixedOffset> )
+        -> DefaultResult<Vec<OrderReplicaStockReservingDto>, AppError>
+    {
+        let mut out = vec![];
+        let order_ids = self.o_repo.fetch_ids_by_created_time(start, end).await?;
         for oid in order_ids {
             let olines = self.o_repo.fetch_all_lines(oid.clone()).await ?;
             let usr_id = self.o_repo.owner_id(oid.as_str()).await?;
@@ -257,14 +259,44 @@ impl OrderReplicaInventoryUseCase {
                 oid, usr_id, create_time, shipping:shipping.into(),
                 lines: olines.into_iter().map(OrderLineModel::into).collect()
             };
-            reservations.push(obj);
+            out.push(obj);
         }
+        Ok(out)
+    }
+    async fn load_returning(&self, start:DateTime<FixedOffset>,
+                            end: DateTime<FixedOffset> )
+        -> DefaultResult<Vec<OrderReplicaStockReturningDto>, AppError>
+    {
+        let logctx_p = self.logctx.as_ref();
         let combo = self.ret_repo.fetch_by_created_time(start, end).await?;
+        let mut ret_intermediate = vec![];
         for (oid, ret_m) in combo {
             let usr_id = self.o_repo.owner_id(oid.as_str()).await?;
-            let obj = OrderReplicaStockReturningDto { oid, usr_id, lines:ret_m.into() };
-            returns.push(obj);
+            app_log_event!(logctx_p, AppLogLevel::DEBUG, "oid :{}, usr_id :{}",
+                           oid.as_str(), usr_id);
+            ret_intermediate.push((oid, usr_id, ret_m));
         }
+        let mut ret_map : HashMap<String, OrderReplicaStockReturningDto> = HashMap::new();
+        ret_intermediate.into_iter().map(|(oid, usr_id, ret_m)| {
+            if ! ret_map.contains_key(oid.as_str()) {
+                let n = OrderReplicaStockReturningDto { oid:oid.clone(), usr_id, lines:Vec::new() };
+                let _ = ret_map.insert(oid.clone(), n);
+            }
+            let obj = ret_map.get_mut(oid.as_str()).unwrap();
+            let ret_dtos : Vec<OrderLineStockReturningDto> = ret_m.into();
+            app_log_event!(logctx_p, AppLogLevel::DEBUG, "oid :{}, model-to-dto size :{}",
+                           oid.as_str(), ret_dtos.len());
+            obj.lines.extend(ret_dtos.into_iter());
+        }).count();
+        let out = ret_map.into_values().collect();
+        Ok(out)
+    }
+    pub async fn execute(self, req:OrderReplicaInventoryReqDto)
+        -> DefaultResult<OrderReplicaInventoryDto, AppError>
+    { // TODO, avoid loading too many order records, consider pagination
+        let (start, end) = (req.start, req.end);
+        let reservations = self.load_reserving(start.clone(), end.clone()).await?;
+        let returns = self.load_returning(start, end).await?;
         let resp = OrderReplicaInventoryDto { reservations, returns };
         Ok(resp)
     } // end of fn execute

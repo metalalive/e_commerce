@@ -859,16 +859,16 @@ async fn  replica_order_rsv_inventory() -> DefaultResult<(), AppError>
         shrstate.config().clone(), srv, FPATH_RETURN_OLINE_REQ, oid.as_str(),
         authed_claim,  StatusCode::OK
     ).await ;
-    {
+    { // Note, since all the test cases run asynchronously, the time range might be large
         let resp_body = itest_setup_get_order_inventory( shrstate.clone(),
-            time_now + Duration::seconds(2), time_now + Duration::seconds(4)
+            time_now - Duration::seconds(10), time_now + Duration::seconds(10)
         ).await;
         let toplvl_map = resp_body.as_object().unwrap();
-        let _rsv_all = toplvl_map.get("returns").unwrap().as_array().unwrap();
-        // itest_verify_rsv_inventory(rsv_all, oid.as_str(),
-        //     vec![(mock_seller, ProductType::Package, 20101, 4),
-        //          (mock_seller, ProductType::Item,    20100, 6) ]
-        // ); // TODO, fix the bug in order-return repository
+        let returns = toplvl_map.get("returns").unwrap().as_array().unwrap();
+        itest_verify_rsv_inventory(returns, oid.as_str(),
+            vec![(mock_seller, ProductType::Package, 20101, 4),
+                 (mock_seller, ProductType::Item,    20100, 6) ]
+        );
     }
     Ok(())
 } // end of fn replica_order_rsv_inventory
