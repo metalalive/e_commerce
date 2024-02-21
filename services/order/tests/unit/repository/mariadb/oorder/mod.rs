@@ -13,6 +13,7 @@ use order::repository::AbsOrderStockRepo;
 mod stock;
 mod create;
 mod update;
+mod line_return;
 
 async fn ut_setup_stock_product(
     stockrepo:Arc<Box<dyn AbsOrderStockRepo>>, mock_store_id:u32,

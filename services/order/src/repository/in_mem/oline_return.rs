@@ -203,6 +203,7 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
             return Err(AppError {code:AppErrorCode::EmptyInputData, detail:qty_empty });
         }
         let table_name = _oline_return::TABLE_LABEL.to_string();
+        let num_saved = reqs.iter().map(|r| r.qty.len()).sum();
         let mut info = vec![];
         for req in reqs {
             let pkey = _oline_return::inmem_pkey(oid, req.id_.store_id,
@@ -224,7 +225,7 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo
         } // end of loop
         let rows = HashMap::from_iter(info.into_iter());
         let data = HashMap::from([(table_name, rows)]);
-        let num_saved = self.datastore.save(data).await?;
+        let _num_saved_ds = self.datastore.save(data).await?;
         Ok(num_saved)
     } // end of fn create
 } // end of OrderReturnInMemRepo

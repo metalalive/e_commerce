@@ -19,7 +19,7 @@ async fn in_mem_repo_ds_setup (nitems:u32) -> OrderReturnInMemRepo
     result.unwrap()
 }
 
-fn ut_setup_ret_models(t_base:DateTime<FixedOffset>) -> Vec<OrderReturnModel>
+pub(crate) fn ut_setup_ret_models(t_base:DateTime<FixedOffset>) -> Vec<OrderReturnModel>
 {
     vec![
         OrderReturnModel {
@@ -45,9 +45,26 @@ fn ut_setup_ret_models(t_base:DateTime<FixedOffset>) -> Vec<OrderReturnModel>
         }, 
     ]
 }
+pub(crate) fn ut_setup_ret_models_ks2(t_base:DateTime<FixedOffset>) -> Vec<OrderReturnModel>
+{
+    vec![
+        OrderReturnModel {
+            id_:OrderLineIdentity {store_id:48, product_type:ProductType::Item, product_id:574},
+            qty: HashMap::from([
+                (t_base + Duration::seconds(18), (1, OrderLinePriceModel {unit:13, total:13})),
+            ])
+        }, 
+        OrderReturnModel {
+            id_:OrderLineIdentity {store_id:49, product_type:ProductType::Package, product_id:195},
+            qty: HashMap::from([
+                (t_base + Duration::seconds(40), (2, OrderLinePriceModel {unit:16, total:32})),
+            ])
+        }, 
+    ]
+}
 
 #[tokio::test]
-async fn in_mem_fetch_by_pid_ok()
+async fn fetch_by_pid_ok()
 {
     let oid = "order0019286";
     let now = Local::now().fixed_offset();
@@ -59,7 +76,7 @@ async fn in_mem_fetch_by_pid_ok()
     let result = repo.create(oid, reqs).await;
     assert!(result.is_ok());
     if let Ok(num_saved) = result {
-        assert_eq!(num_saved, 3);
+        assert_eq!(num_saved, 6);
     }
     let result = repo.fetch_by_pid(oid, pids).await;
     assert!(result.is_ok());
@@ -67,8 +84,7 @@ async fn in_mem_fetch_by_pid_ok()
         assert_eq!(fetched.len(), 2);
         fetched.iter().map(|m| {
             let expect = match m.id_.store_id {
-                48 => (3, 10, 130),
-                49 => (1, 7, 112),
+                48 => (3, 10, 130), 49 => (1, 7, 112),
                 _others => (0usize, 0u32, 0u32),
             };
             let total_returned = m.qty.values().map(|(q, _)| q.clone()).sum::<u32>();
@@ -78,23 +94,13 @@ async fn in_mem_fetch_by_pid_ok()
         }).count();
     }
     // subcase 2
-    let reqs = vec![
-        OrderReturnModel {
-            id_:OrderLineIdentity {store_id:48, product_type:ProductType::Item, product_id:574},
-            qty: HashMap::from([
-                (now + Duration::seconds(18), (1, OrderLinePriceModel {unit:13, total:13})),
-            ])
-        }, 
-        OrderReturnModel {
-            id_:OrderLineIdentity {store_id:49, product_type:ProductType::Package, product_id:195},
-            qty: HashMap::from([
-                (now + Duration::seconds(40), (2, OrderLinePriceModel {unit:16, total:32})),
-            ])
-        }, 
-    ];
+    let reqs = ut_setup_ret_models_ks2(now);
     let pids = reqs.iter().map(|m| m.id_.clone()).collect::<Vec<_>>();
     let result = repo.create(oid, reqs).await;
     assert!(result.is_ok());
+    if let Ok(num_saved) = result {
+        assert_eq!(num_saved, 2);
+    }
     let result = repo.fetch_by_pid(oid, pids).await;
     assert!(result.is_ok());
     if let Ok(fetched) = result {
@@ -110,11 +116,11 @@ async fn in_mem_fetch_by_pid_ok()
             assert_eq!(actual, expect);
         }).count();
     }
-} // end of in_mem_fetch_by_pid_ok
+} // end of fetch_by_pid_ok
 
 
 #[tokio::test]
-async fn in_mem_fetch_by_ctime_ok()
+async fn fetch_by_ctime_ok()
 {
     let repo = in_mem_repo_ds_setup(40).await;
     let mock_time = DateTime::parse_from_rfc3339("2023-01-07T19:23:50+02:00").unwrap();
@@ -150,7 +156,7 @@ async fn in_mem_fetch_by_ctime_ok()
         let result = repo.create("order10029803", reqs).await;
         assert!(result.is_ok());
     } // end setup
-    in_mem_fetch_by_ctime_common( &repo,
+    fetch_by_ctime_common( &repo,
         mock_time + Duration::seconds(30),
         mock_time + Duration::minutes(6),
         vec![
@@ -159,7 +165,7 @@ async fn in_mem_fetch_by_ctime_ok()
             (format!("order00080273"), (48, ProductType::Item, 574, mock_time + Duration::minutes(5), 1, 16)),
         ]
     ).await;
-    in_mem_fetch_by_ctime_common( &repo,
+    fetch_by_ctime_common( &repo,
         mock_time - Duration::minutes(42),
         mock_time - Duration::minutes(9),
         vec![
@@ -167,7 +173,7 @@ async fn in_mem_fetch_by_ctime_ok()
             (format!("order00080273"), (48, ProductType::Item, 574, mock_time - Duration::minutes(10), 5, 65)),
         ]
     ).await;
-    in_mem_fetch_by_oid_ctime_common( &repo, "order00080273",
+    fetch_by_oid_ctime_common( &repo, "order00080273",
         mock_time - Duration::seconds(2),
         mock_time + Duration::minutes(6),
         vec![
@@ -175,7 +181,7 @@ async fn in_mem_fetch_by_ctime_ok()
             (18, ProductType::Item, 465, mock_time - Duration::seconds(1), 5, 75),
         ]
     ).await;
-    in_mem_fetch_by_oid_ctime_common( &repo, "order0019286",
+    fetch_by_oid_ctime_common( &repo, "order0019286",
         mock_time - Duration::seconds(70),
         mock_time - Duration::seconds(3),
         vec![
@@ -184,13 +190,13 @@ async fn in_mem_fetch_by_ctime_ok()
             (48, ProductType::Item,    574, mock_time - Duration::seconds(55), 2, 26),
         ]
     ).await;
-} // end of fn in_mem_fetch_by_ctime_ok
+} // end of fn fetch_by_ctime_ok
 
 
 
 type UTflatReturnExpectData = (u32, ProductType, u64, DateTime<FixedOffset>, u32, u32);
 
-async fn in_mem_fetch_by_ctime_common(
+async fn fetch_by_ctime_common(
     repo:&OrderReturnInMemRepo,
     t_start:DateTime<FixedOffset>,
     t_end:DateTime<FixedOffset>,
@@ -216,7 +222,7 @@ async fn in_mem_fetch_by_ctime_common(
         assert_eq!(expect.difference(&actual).count(), 0);
     }
 }
-async fn in_mem_fetch_by_oid_ctime_common(
+async fn fetch_by_oid_ctime_common(
     repo:&OrderReturnInMemRepo, oid:&str,
     t_start:DateTime<FixedOffset>,
     t_end:DateTime<FixedOffset>,

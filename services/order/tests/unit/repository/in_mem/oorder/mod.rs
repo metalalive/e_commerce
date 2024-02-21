@@ -15,7 +15,7 @@ use super::in_mem_ds_ctx_setup;
 pub(crate) mod stock;
 mod create;
 mod update;
-mod oline_return;
+pub(crate) mod oline_return;
 
 async fn in_mem_repo_ds_setup<T:AbstInMemoryDStore + 'static>(
     nitems:u32, mut curr_time:Option<DateTime<FixedOffset>> ) -> OrderInMemRepo

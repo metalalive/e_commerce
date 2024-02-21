@@ -424,9 +424,32 @@
                 ON UPDATE CASCADE ON DELETE CASCADE ;
         </rollback>
     </changeSet>
-    
     <changeSet id="tag_version_0.1.2" author="T.H.">
         <tagDatabase tag="0.1.2" />
+    </changeSet>
+
+    <changeSet id="add__order_line_return_req" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `oline_return_req` (
+                `o_id`   BINARY(16) NOT NULL,
+                `seq`    SMALLINT  NOT NULL,
+                `store_id`      INT UNSIGNED NOT NULL,
+                `product_type`  ENUM('1', '2') NOT NULL, 
+                `product_id`    BIGINT UNSIGNED NOT NULL,
+                `price_unit`    INT UNSIGNED NOT NULL,
+                `price_total`   INT UNSIGNED NOT NULL,
+                `quantity`      INT UNSIGNED NOT NULL,
+                `create_time`   DATETIME  NOT NULL,
+                PRIMARY KEY (`o_id`, `seq`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `oline_return_req`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.1.3" author="T.H.">
+        <tagDatabase tag="0.1.3" />
     </changeSet>
 </databaseChangeLog>
 
