@@ -1,5 +1,6 @@
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use chrono::{Local, Duration, DateTime, FixedOffset};
 use order::constant::ProductType;
@@ -119,28 +120,22 @@ async fn fetch_by_pid_ok()
 } // end of fetch_by_pid_ok
 
 
-#[tokio::test]
-async fn fetch_by_ctime_ok()
+pub(crate) fn ut_setup_fetch_by_ctime(oids:[&str;3], mock_time: DateTime<FixedOffset>)
+    -> Vec<(&str, Vec<OrderReturnModel>)>
 {
-    let repo = in_mem_repo_ds_setup(40).await;
-    let mock_time = DateTime::parse_from_rfc3339("2023-01-07T19:23:50+02:00").unwrap();
-    { // begin setup
-        let mut reqs = ut_setup_ret_models(mock_time);
-        reqs[1].qty.remove(&(mock_time - Duration::minutes(10)));
-        let result = repo.create("order0019286", reqs).await;
-        assert!(result.is_ok());
-    } {
-        let mut reqs = ut_setup_ret_models(mock_time.clone());
-        reqs[1].qty.insert(
-            mock_time + Duration::minutes(5), (1, OrderLinePriceModel {unit:16, total:16}),
-        );
-        reqs[0].qty.remove(&(mock_time - Duration::minutes(41)));
-        let result = repo.create("order00080273", reqs).await;
-        assert!(result.is_ok());
-    } {
-        let mut reqs = ut_setup_ret_models(mock_time.clone());
-        reqs.drain(0..2).count();
-        let ret = reqs.last_mut().unwrap();
+    let mut req_set = [
+        ut_setup_ret_models(mock_time.clone()),
+        ut_setup_ret_models(mock_time.clone()),
+        ut_setup_ret_models(mock_time.clone()),
+    ];
+    req_set[0][1].qty.remove(&(mock_time - Duration::minutes(10)));
+    req_set[1][1].qty.insert(
+        mock_time + Duration::minutes(5), (1, OrderLinePriceModel {unit:16, total:16}),
+    );
+    req_set[1][0].qty.remove(&(mock_time - Duration::minutes(41)));
+    {
+        req_set[2].drain(0..2).count();
+        let ret = req_set[2].last_mut().unwrap();
         let prev_entry = ret.qty.insert(
             mock_time + Duration::seconds(34), (1, OrderLinePriceModel {unit:18, total:18}),
         );
@@ -153,10 +148,27 @@ async fn fetch_by_ctime_ok()
         );
         assert!(prev_entry.is_none());
         assert_eq!(ret.qty.len(), 4);
-        let result = repo.create("order10029803", reqs).await;
-        assert!(result.is_ok());
+    }
+    let out = oids.into_iter().zip(req_set.into_iter())
+        .collect::<Vec<_>>();
+    out
+}
+
+#[tokio::test]
+async fn fetch_by_ctime_ok()
+{
+    let repo = in_mem_repo_ds_setup(40).await;
+    let mock_time = DateTime::parse_from_rfc3339("2023-01-07T19:23:50+02:00").unwrap();
+    { // begin setup
+        let oids = ["order0019286", "order00080273", "order10029803"];
+        let combo = ut_setup_fetch_by_ctime(oids, mock_time.clone());
+        for (oid, req_set) in combo {
+            let result = repo.create(oid, req_set).await;
+            assert!(result.is_ok());
+        }
     } // end setup
-    fetch_by_ctime_common( &repo,
+    let repo: Arc<Box<dyn AbsOrderReturnRepo>> = Arc::new(Box::new(repo));
+    fetch_by_ctime_common( repo.clone(),
         mock_time + Duration::seconds(30),
         mock_time + Duration::minutes(6),
         vec![
@@ -165,7 +177,7 @@ async fn fetch_by_ctime_ok()
             (format!("order00080273"), (48, ProductType::Item, 574, mock_time + Duration::minutes(5), 1, 16)),
         ]
     ).await;
-    fetch_by_ctime_common( &repo,
+    fetch_by_ctime_common( repo.clone(),
         mock_time - Duration::minutes(42),
         mock_time - Duration::minutes(9),
         vec![
@@ -173,7 +185,7 @@ async fn fetch_by_ctime_ok()
             (format!("order00080273"), (48, ProductType::Item, 574, mock_time - Duration::minutes(10), 5, 65)),
         ]
     ).await;
-    fetch_by_oid_ctime_common( &repo, "order00080273",
+    fetch_by_oid_ctime_common( repo.clone(), "order00080273",
         mock_time - Duration::seconds(2),
         mock_time + Duration::minutes(6),
         vec![
@@ -181,7 +193,7 @@ async fn fetch_by_ctime_ok()
             (18, ProductType::Item, 465, mock_time - Duration::seconds(1), 5, 75),
         ]
     ).await;
-    fetch_by_oid_ctime_common( &repo, "order0019286",
+    fetch_by_oid_ctime_common( repo, "order0019286",
         mock_time - Duration::seconds(70),
         mock_time - Duration::seconds(3),
         vec![
@@ -196,8 +208,8 @@ async fn fetch_by_ctime_ok()
 
 type UTflatReturnExpectData = (u32, ProductType, u64, DateTime<FixedOffset>, u32, u32);
 
-async fn fetch_by_ctime_common(
-    repo:&OrderReturnInMemRepo,
+pub(crate) async fn fetch_by_ctime_common(
+    repo: Arc<Box<dyn AbsOrderReturnRepo>>,
     t_start:DateTime<FixedOffset>,
     t_end:DateTime<FixedOffset>,
     expect_data: Vec<(String, UTflatReturnExpectData)>
@@ -222,8 +234,9 @@ async fn fetch_by_ctime_common(
         assert_eq!(expect.difference(&actual).count(), 0);
     }
 }
-async fn fetch_by_oid_ctime_common(
-    repo:&OrderReturnInMemRepo, oid:&str,
+pub(crate) async fn fetch_by_oid_ctime_common(
+    repo: Arc<Box<dyn AbsOrderReturnRepo>>,
+    oid:&str,
     t_start:DateTime<FixedOffset>,
     t_end:DateTime<FixedOffset>,
     expect_data: Vec<UTflatReturnExpectData>

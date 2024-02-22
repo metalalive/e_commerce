@@ -213,6 +213,14 @@ pub async fn app_repo_order(ds:Arc<AppDataStoreContext>)
 pub async fn app_repo_order_return (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsOrderReturnRepo>, AppError>
 {
+    #[cfg(feature="mariadb")]
+    if let Some(dbs) = ds.sql_dbs.as_ref() {
+        let obj = OrderReturnMariaDbRepo::new(dbs.clone()).await?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError { code: AppErrorCode::FeatureDisabled, detail: Some(format!("mariadb")) })
+    }
+    #[cfg(not(feature="mariadb"))]
     if let Some(m) = &ds.in_mem {
         let obj = OrderReturnInMemRepo::new(m.clone()).await ?;
         Ok(Box::new(obj))

@@ -18,8 +18,14 @@ use super::{OidBytes, run_query_once};
 
 struct InsertReqArg(OidBytes, u16, Vec<OrderReturnModel>);
 struct FetchByIdArg(OidBytes, Vec<OrderLineIdentity>);
+struct FetchByTimeArg(DateTime<FixedOffset>, DateTime<FixedOffset>);
+struct FetchByIdAndTimeArg(OidBytes, DateTime<FixedOffset>, DateTime<FixedOffset>);
 
 struct ReturnsPerOrder(Vec<OrderReturnModel>);
+struct ReturnOidMap {
+    rows: Vec<MySqlRow>,
+    _map: HashMap<String, ReturnsPerOrder>
+}
 
 impl InsertReqArg {
     fn sql_pattern(num_batch:usize) -> String {
@@ -66,14 +72,15 @@ impl Into<(String, MySqlArguments)> for InsertReqArg
     }
 }
 
+const COLUMN_SEQ_SELECT:&'static str = "`store_id`,`product_type`,`product_id`,\
+            `create_time`,`quantity`,`price_unit`,`price_total`";
+
 impl FetchByIdArg {
     fn sql_pattern(num_batch:usize) -> String {
-        let col_seq = "`store_id`,`product_type`,`product_id`,\
-            `create_time`,`quantity`,`price_unit`,`price_total`";
         let items = (0..num_batch).into_iter().map(
             |_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)"
         ).collect::<Vec<_>>();
-        format!("SELECT {col_seq} FROM `oline_return_req` WHERE `o_id`=? AND ({})",
+        format!("SELECT {COLUMN_SEQ_SELECT} FROM `oline_return_req` WHERE `o_id`=? AND ({})",
                  items.join("OR"))
     }
 }
@@ -97,6 +104,35 @@ impl Into<(String, MySqlArguments)> for  FetchByIdArg {
     fn into(self) -> (String, MySqlArguments) {
         let num_batch = self.1.len();
         (Self::sql_pattern(num_batch), self.into_arguments())
+    }
+}
+
+impl Into<(String, MySqlArguments)> for FetchByTimeArg {
+    fn into(self) -> (String, MySqlArguments) {
+        let (start, end) = (self.0, self.1);
+        // TODO, improve query time, since the execution plan will not search in
+        // primary index. Possible approach could be time-series database or
+        // secondary index by `create-time`, since the time range argument in the
+        // fetch method is used for querying recently added returns.
+        let sql_patt = format!("SELECT {COLUMN_SEQ_SELECT},`o_id` FROM `oline_return_req` \
+                                WHERE `create_time` > ? AND `create_time` <= ?");
+        let mut args = MySqlArguments::default();
+        args.add(start.naive_utc());
+        args.add(end.naive_utc());
+        (sql_patt, args)
+    }
+}
+
+impl Into<(String, MySqlArguments)> for FetchByIdAndTimeArg {
+    fn into(self) -> (String, MySqlArguments) {
+        let (oid_b, start, end) = (self.0, self.1, self.2);
+        let sql_patt = format!("SELECT {COLUMN_SEQ_SELECT} FROM `oline_return_req` \
+                                WHERE `o_id`=? AND `create_time` > ? AND `create_time` <= ?");
+        let mut args = MySqlArguments::default();
+        args.add(oid_b.as_column());
+        args.add(start.naive_utc());
+        args.add(end.naive_utc());
+        (sql_patt, args) 
     }
 }
 
@@ -130,6 +166,44 @@ impl Into<Vec<OrderReturnModel>> for ReturnsPerOrder
     fn into(self) -> Vec<OrderReturnModel> { self.0 }
 }
 
+impl ReturnOidMap {
+    fn new(rows:Vec<MySqlRow>) -> Self {
+        Self { rows, _map: HashMap::new() }
+    }
+}
+impl TryInto<Vec<(String, OrderReturnModel)>> for ReturnOidMap
+{
+    type Error = AppError;
+    fn try_into(self) -> DefaultResult<Vec<(String, OrderReturnModel)>, Self::Error>
+    {
+        let (mut ret_map, rows) = (self._map, self.rows);
+        let has_error = rows.into_iter().map(|row| {
+            let oid = OidBytes::to_app_oid(&row, 7)?;
+            if !ret_map.contains_key(oid.as_str()) {
+                ret_map.insert(oid.clone(), ReturnsPerOrder::new());
+            }
+            let entry = ret_map.get_mut(oid.as_str()).unwrap();
+            entry.try_merge(row)?;
+            Ok(())
+        }).find_map(|r| match r {
+            Ok(_) => None, Err(e) => Some(e)
+        }) ;
+        if let Some(e) = has_error {
+            return Err(e);
+        }
+        let out = ret_map.into_iter().map(
+            |(oid, inner_rets)| {
+                let o_rets:Vec<OrderReturnModel> = inner_rets.into();
+                (oid, o_rets)
+            }
+        ).flat_map(|(oid, o_rets)|
+            o_rets.into_iter().map(move |ret| (oid.clone(), ret))
+        ).collect::<Vec<_>>();
+        Ok(out)
+    }
+}
+
+
 pub(crate) struct OrderReturnMariaDbRepo {
     _db : Arc<AppMariaDbStore>,
 }
@@ -143,32 +217,27 @@ impl AbsOrderReturnRepo for OrderReturnMariaDbRepo {
             Ok(vec![])
         } else {
             let oid_b = OidBytes::try_from(oid)?;
-            let mut conn = self._db.acquire().await?;
             let (sql_patt, args) = FetchByIdArg(oid_b, pids).into();
-            let stmt = conn.prepare(sql_patt.as_str()).await?;
-            let query = stmt.query_with(args);
-            let exec = conn.as_mut();
-            let rows:Vec<_> = exec.fetch_all(query).await?;
-            let mut rets = ReturnsPerOrder::new();
-            let errors = rows.into_iter().filter_map(|row| {
-                if let Err(e) = rets.try_merge(row) {
-                    Some(e)
-                } else { None }
-            }).collect::<Vec<_>>();
-            if let Some(e) = errors.first() {
-               Err(e.to_owned()) 
-            } else { Ok(rets.into()) }
+            self.fetch_by_oid_common(sql_patt, args).await
         }
     }
     async fn fetch_by_created_time(&self, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let mut conn = self._db.acquire().await?;
+        let (sql_patt, args) = FetchByTimeArg(start, end).into();
+        let stmt = conn.prepare(sql_patt.as_str()).await?;
+        let query = stmt.query_with(args);
+        let exec = &mut *conn;
+        let rows = exec.fetch_all(query).await?;
+        ReturnOidMap::new(rows).try_into()
     }
     async fn fetch_by_oid_ctime(&self, oid:&str, start: DateTime<FixedOffset>, end: DateTime<FixedOffset>)
         -> DefaultResult<Vec<OrderReturnModel>, AppError>
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let oid_b = OidBytes::try_from(oid)?;
+        let (sql_patt, args) = FetchByIdAndTimeArg(oid_b, start, end).into();
+        self.fetch_by_oid_common(sql_patt, args).await
     }
     async fn create(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>
     {
@@ -214,5 +283,23 @@ impl OrderReturnMariaDbRepo {
                 Err(AppError {code:AppErrorCode::ExceedingMaxLimit, detail })
             }
         } else { Ok(0) } 
+    }
+    async fn fetch_by_oid_common(&self, sql_patt:String, args:MySqlArguments)
+        -> DefaultResult<Vec<OrderReturnModel>, AppError>
+    {
+        let mut conn = self._db.acquire().await?;
+        let stmt = conn.prepare(sql_patt.as_str()).await?;
+        let query = stmt.query_with(args);
+        let exec = conn.as_mut();
+        let rows:Vec<_> = exec.fetch_all(query).await?;
+        let mut rets = ReturnsPerOrder::new();
+        let maybe_error = rows.into_iter().map(
+            |row| rets.try_merge(row)
+        ).find_map(|r|
+            if let Err(e) = r { Some(e) }
+            else { None }
+        );
+        if let Some(e) = maybe_error { Err(e) }
+        else { Ok(rets.into()) }
     }
 } // end of impl OrderReturnMariaDbRepo
