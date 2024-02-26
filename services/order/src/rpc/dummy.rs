@@ -1,6 +1,7 @@
 use std::result::Result as DefaultResult;
 use std::boxed::Box;
 use async_trait::async_trait;
+use chrono::DateTime;
 
 use crate::error::AppError;
 use super::{AbsRpcClientCtx, AbstractRpcContext, AbstractRpcClient, AppRpcReply,
@@ -58,6 +59,7 @@ impl AbstractRpcServer for DummyRpcHandler {
     async fn receive_request(&mut self)
         -> DefaultResult<AppRpcClientReqProperty, AppError>
     { Ok(AppRpcClientReqProperty{ retry:0, msgbody:Vec::new(),
+        start_time:DateTime::parse_from_rfc3339("2020-03-06T09:30:55+08:30").unwrap(),
         route:String::new() })
     }
 }

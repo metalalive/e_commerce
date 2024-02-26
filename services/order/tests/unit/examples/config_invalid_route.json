@@ -43,7 +43,28 @@
 	}
     ],
     "rpc": {
-	 "handler_type": "dummy"
+	"handler_type": "AMQP",
+	"bindings": [
+	    {
+                "queue": "rpc_utest_my_queue",
+                "exchange": "rpc-utest-default-exchange",
+                "routing_key": "rpc.order.utest.my_queue",
+                "ensure_declare": true,
+                "durable": true,
+                "reply": {
+		    "side": "server",
+                    "task_handler": "utest_ping_pong",
+                    "ttl_sec": 34
+                }
+	    }
+	],
+	"attributes": {
+	    "vhost":"/unit/test",
+	    "max_channels": 128,
+	    "timeout_secs": 17
+	},
+	"max_connections": 5,
+	"confidential_id": "amqp_broker/2/ty"
     },
     "auth": {
 	"keystore_url": "http://localhost:12345",

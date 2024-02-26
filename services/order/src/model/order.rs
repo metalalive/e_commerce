@@ -3,7 +3,7 @@ use std::vec::Vec;
 use std::result::Result as DefaultResult;
 use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration, DurationRound};
 use regex::Regex;
-use uuid::{Uuid, Builder, Timestamp, NoContext};
+use uuid::Uuid;
 
 use crate::api::dto::{
     ContactDto, PhyAddrDto, ShippingOptionDto, ShippingMethod, CountryCode,
@@ -22,6 +22,7 @@ use crate::api::web::dto::{
 };
 use crate::constant::{REGEX_EMAIL_RFC5322, limit};
 use crate::error::{AppError, AppErrorCode};
+use crate::generate_custom_uid;
 
 use super::{ProductPolicyModel, ProductPriceModel, BaseProductIdentity};
 
@@ -364,18 +365,7 @@ impl  OrderLineModel {
     }
     pub fn generate_order_id (machine_code:u8) -> String
     { // utility for generating top-level identifier to each order
-        // UUIDv7 is for single-node application. This app needs to consider
-        // scalability of multi-node environment, UUIDv8 can be utilized cuz it
-        // allows custom ID layout, so few bits of the ID can be assigned to
-        // represent each machine/node ID,  rest of that should be timestamp with
-        // random byte sequence
-        let ts_ctx = NoContext;
-        let (secs, nano) = Timestamp::now(ts_ctx).to_unix();
-        let millis = (secs * 1000).saturating_add((nano as u64) / 1_000_000);
-        let mut node_id = rand::random::<[u8;10]>();
-        node_id[0] = machine_code;
-        let builder = Builder::from_unix_timestamp_millis(millis, &node_id);
-        let oid = builder.into_uuid();
+        let oid = generate_custom_uid(machine_code);
         Self::hex_str_order_id(oid)
     }
     fn hex_str_order_id(oid:Uuid) -> String

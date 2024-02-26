@@ -445,6 +445,7 @@ async fn client_run_rpc_ok ()
     }; // setup
 
     let prop = AppRpcClientReqProperty {
+        start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
         retry: 4u8, msgbody: Vec::new(), route: "".to_string()
     };
     let actual = initiate_rpc_request(ctx, prop).await;
@@ -467,6 +468,7 @@ async fn client_run_rpc_acquire_handler_failure ()
         Arc::new(Box::new(_ctx))
     }; // setup
     let prop = AppRpcClientReqProperty {
+        start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
         retry: 4u8, msgbody:  Vec::new(), route: "".to_string()
     };
     let actual = initiate_rpc_request(ctx, prop).await;
@@ -496,6 +498,7 @@ async fn client_run_rpc_publish_error ()
     }; // setup
 
     let prop = AppRpcClientReqProperty {
+        start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
         retry: 4u8, msgbody: Vec::new(), route: "".to_string()
     };
     let actual = initiate_rpc_request(ctx, prop).await;
@@ -527,6 +530,7 @@ async fn client_run_rpc_consume_reply_error ()
     }; // setup
 
     let prop = AppRpcClientReqProperty {
+        start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
         retry: 4u8, msgbody: Vec::new(), route: "".to_string()
     };
     let actual = initiate_rpc_request(ctx, prop).await;
@@ -551,8 +555,9 @@ async fn server_run_rpc_ok ()
         let _ctx = MockRpcContext::_build(&cfg);
         let hdlr = {
             let h = MockRpcHandler::default();
-            let m = AppRpcClientReqProperty { retry: 5, route: "app1.func23".to_string(),
-                msgbody: br#"client request"#.to_vec() };
+            let m = AppRpcClientReqProperty {
+                start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
+                retry: 5, route: "app1.func23".to_string(), msgbody: br#"client request"#.to_vec() };
             h.mock_s_sub(Ok(m)).mock_s_reply(Ok(()))
         };
         let a:Box<dyn AbstractRpcServer> = Box::new(hdlr);
@@ -623,8 +628,9 @@ async fn server_run_rpc_send_response_error ()
         let _ctx = MockRpcContext::_build(&cfg);
         let hdlr = {
             let h = MockRpcHandler::default();
-            let m = AppRpcClientReqProperty { retry: 5, route: "app1.func23".to_string(),
-                msgbody: br#"client request"#.to_vec() };
+            let m = AppRpcClientReqProperty {
+                start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
+                retry: 5, route: "app1.func23".to_string(), msgbody: br#"client request"#.to_vec() };
             let e = AppError { code: AppErrorCode::RpcRemoteUnavail,
                   detail:Some("unit-test-fail-send-reply".to_string()) };
             h.mock_s_sub(Ok(m)).mock_s_reply(Err(e))

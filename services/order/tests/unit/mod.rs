@@ -5,6 +5,7 @@ mod logging;
 mod usecase;
 mod adapter;
 mod repository;
+mod rpc;
 pub(crate) mod model;
 mod confidentiality;
 

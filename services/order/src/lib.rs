@@ -1,6 +1,8 @@
 #![feature(io_error_more)]
 use std::sync::Arc;
 
+use uuid::{Uuid, Builder, Timestamp, NoContext};
+
 pub mod api;
 pub mod error;
 pub mod logging;
@@ -25,7 +27,6 @@ pub use auth::{
 };
 
 mod rpc;
-use rpc::build_context as build_rpc_context;
 pub use rpc::{AbstractRpcContext, AbsRpcServerCtx, AbsRpcClientCtx,  AbstractRpcClient,
     AbstractRpcServer, AppRpcReply, AppRpcClientReqProperty
 };
@@ -54,11 +55,16 @@ pub struct AppSharedState {
 }
 
 impl AppSharedState {
-    pub fn new(cfg:AppConfig, log:logging::AppLogContext, confidential:Box<dyn AbstractConfidentiality>) -> Self
-    { // TODO, confidential argument to arc-box pointer
+    pub fn new(cfg:AppConfig, log:logging::AppLogContext,
+               confidential:Box<dyn AbstractConfidentiality>)
+        -> Self
+    { // TODO
+      // - should return error
+      // - confidential argument to arc-box pointer
         let confidential = Arc::new(confidential);
         let log = Arc::new(log);
-        let _rpc_ctx = build_rpc_context(&cfg.api_server.rpc, confidential.clone());
+        let _rpc_ctx = rpc::build_context(&cfg.api_server.rpc,
+                                          confidential.clone()).unwrap();
         let (in_mem, sql_dbs) = datastore::build_context(log.clone(),
                                 &cfg.api_server.data_store, confidential);
         let in_mem = if let Some(m) = in_mem { Some(Arc::new(m)) } else {None};
@@ -95,4 +101,20 @@ impl Clone for AppSharedState {
             _auth_keys: self._auth_keys.clone(),
         }
     }
+}
+
+fn generate_custom_uid(machine_code:u8) -> Uuid
+{
+    // UUIDv7 is for single-node application. This app needs to consider
+    // scalability of multi-node environment, UUIDv8 can be utilized cuz it
+    // allows custom ID layout, so few bits of the ID can be assigned to
+    // represent each machine/node ID,  rest of that should be timestamp with
+    // random byte sequence
+    let ts_ctx = NoContext;
+    let (secs, nano) = Timestamp::now(ts_ctx).to_unix();
+    let millis = (secs * 1000).saturating_add((nano as u64) / 1_000_000);
+    let mut node_id = rand::random::<[u8;10]>();
+    node_id[0] = machine_code;
+    let builder = Builder::from_unix_timestamp_millis(millis, &node_id);
+    builder.into_uuid()
 }

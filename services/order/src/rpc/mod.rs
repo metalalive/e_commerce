@@ -1,4 +1,5 @@
 mod dummy;
+#[cfg(feature="amqprs")]
 mod amqp;
 
 use std::boxed::Box;
@@ -8,19 +9,32 @@ use std::result::Result as DefaultResult;
 use std::marker::{Send, Sync};
 
 use async_trait::async_trait;
+use chrono::{DateTime, FixedOffset};
 
 use crate::AppRpcCfg;
-use crate::error::AppError;
-use crate::rpc::dummy::DummyRpcContext;
-use crate::rpc::amqp::AmqpRpcContext;
+use crate::error::{AppError, AppErrorCode};
 use crate::confidentiality::AbstractConfidentiality;
+use crate::rpc::dummy::DummyRpcContext;
+#[cfg(feature="amqprs")]
+use crate::rpc::amqp::AmqpRpcContext;
 
 pub(crate) fn build_context (cfg: &AppRpcCfg, confidential:Arc<Box<dyn AbstractConfidentiality>>)
-    -> Box<dyn AbstractRpcContext>
+    -> DefaultResult<Box<dyn AbstractRpcContext>, AppError>
 {
     match cfg {
-        AppRpcCfg::dummy => DummyRpcContext::build(),
-        AppRpcCfg::AMQP(detail_cfg) => AmqpRpcContext::build(detail_cfg, confidential),
+        AppRpcCfg::dummy => Ok(DummyRpcContext::build()),
+        AppRpcCfg::AMQP(detail_cfg) => {
+            #[cfg(feature="amqprs")]
+            {
+                AmqpRpcContext::build(detail_cfg, confidential)
+            }
+            #[cfg(not(feature="amqprs"))]
+            {
+                let e = AppError { code: AppErrorCode::FeatureDisabled,
+                            detail: Some(format!("rpc-amqp-build")) };
+                Err(e)
+            }
+        }
     }
 }
 
@@ -74,8 +88,9 @@ pub trait AbstractRpcServer : Send + Sync {
 
 
 pub struct AppRpcClientReqProperty {
-    pub retry:u8,
+    pub retry:u8, // TODO, remove
     pub msgbody:Vec<u8>,
+    pub start_time: DateTime<FixedOffset>, // TODO, handle idempotency on server side
     pub route:String
 }
 

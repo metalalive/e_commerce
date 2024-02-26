@@ -8,7 +8,7 @@ use std::result::Result as DefaultResult ;
 use chrono::{Local as LocalTime, DateTime, FixedOffset};
 
 use crate::AppSharedState;
-use crate::constant::ProductType;
+use crate::constant::{ProductType, app_meta};
 use crate::api::web::dto::{
     OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLineCreateErrorReason, OrderLineCreateErrNonExistDto,
     OrderCreateReqData, ShippingReqDto, BillingReqDto, OrderLineReqDto, OrderLineCreateErrorDto,
@@ -75,9 +75,7 @@ impl CreateOrderUseCase {
         let (o_bl, o_sh) = Self::validate_metadata(sh_d, bl_d)?;
         let (ms_policy, ms_price) = self.load_product_properties(&ol_d).await?;
         let o_items = Self::validate_orderline(ms_policy, ms_price, ol_d)?;
-        // TODO, machine code to UUID generator should be configurable
-        let machine_code = 1u8;
-        let oid = OrderLineModel::generate_order_id(machine_code);
+        let oid = OrderLineModel::generate_order_id(app_meta::MACHINE_CODE);
         let timenow = LocalTime::now().fixed_offset();
         let ol_set = OrderLineModelSet { order_id:oid, lines:o_items,
                          create_time: timenow.clone(), owner_id:self.usr_id };

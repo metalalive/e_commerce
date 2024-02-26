@@ -4,6 +4,7 @@ use std::io::BufReader;
 use std::collections::{HashSet, HashMap};
 use std::collections::hash_map::RandomState;
 use std::string::ToString;
+use std::sync::Arc;
 
 use serde::Deserialize;
 use serde::de::{Error as DeserializeError, Expected};
@@ -80,43 +81,43 @@ pub enum AppAmqpBindingReplyCfg {
         queue: String,
         #[serde(deserialize_with = "jsn_deny_empty_string")]
         correlation_id_prefix: String,
-        ttl_sec: u16,
+        ttl_sec: u16, // TODO, add `max-length`, `durable`
     },
     server {
         #[serde(deserialize_with = "jsn_deny_empty_string")]
         task_handler: String,
-        ttl_sec: u16,
+        ttl_sec: u16, // TODO, add `max-length`
     },
 }
 
 #[derive(Deserialize)]
 pub struct AppAmqpBindingCfg {
     #[serde(deserialize_with = "jsn_deny_empty_string")]
-    queue: String,
+    pub queue: String,
     #[serde(deserialize_with = "jsn_deny_empty_string")]
-    exchange: String,
+    pub exchange: String,
     #[serde(deserialize_with = "jsn_deny_empty_string")]
-    routing_key: String,
-    ensure_declare: bool,
-    durable: bool,
-    reply: AppAmqpBindingReplyCfg,
+    pub routing_key: String,
+    pub ensure_declare: bool,
+    pub durable: bool, // TODO, add `ttl-secs`, `max-length`
+    pub reply: AppAmqpBindingReplyCfg,
 }
 
 #[derive(Deserialize)]
 pub struct AppAmqpAttriCfg {
     #[serde(deserialize_with = "jsn_deny_empty_string")]
-	vhost: String,
-    max_channels: u16,
-    timeout_secs: u16
+	pub vhost: String,
+    pub max_channels: u16,
+    pub timeout_secs: u16
 }
 
 #[derive(Deserialize)]
 pub struct AppRpcAmqpCfg {
-	bindings: Vec<AppAmqpBindingCfg>,
-	attributes: AppAmqpAttriCfg,
+	pub bindings: Arc<Vec<AppAmqpBindingCfg>>,
+	pub attributes: AppAmqpAttriCfg,
 	max_connections: u16,
     #[serde(deserialize_with = "jsn_deny_empty_string")]
-	confidential_id: String
+	pub confidential_id: String // TODO, rename to `confidential_path`
 }
 
 #[allow(non_camel_case_types)]

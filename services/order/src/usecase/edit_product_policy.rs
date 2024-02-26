@@ -5,6 +5,7 @@ use std::result::Result as DefaultResult;
 use std::collections::HashSet;
 use std::collections::hash_map::RandomState;
 
+use chrono::Local;
 use serde::{Serialize, Deserialize};
 use crate::constant::ProductType;
 use crate::model::ProductPolicyModelSet;
@@ -70,9 +71,8 @@ impl EditProductPolicyUseCase {
                             rpc, initiate_rpc_request, usr_prof_id).await;
         if let Err((code, detail)) = result {
             if code == EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply) &&
-                rpctype == "dummy" {
-                // pass, for mocking purpose, TODO: better design
-                app_log_event!(log, AppLogLevel::WARNING, "dummy rpc is applied");
+                rpctype == "dummy" { // pass, for mocking purpose, TODO: better design
+                app_log_event!(log, AppLogLevel::WARNING, "dummy-rpc-applied");
             } else {
                 app_log_event!(log, AppLogLevel::ERROR, "detail:{:?}", detail);
                 return Self::OUTPUT { client_err:None, result:code };
@@ -120,8 +120,8 @@ impl EditProductPolicyUseCase {
             }
         }).collect();
         let msgbody = serde_json::to_string(&msg_req).unwrap().into_bytes();
-        let properties = AppRpcClientReqProperty {
-            retry:3u8, msgbody, route:"product.get_product".to_string()
+        let properties = AppRpcClientReqProperty { retry:3u8, msgbody,
+            start_time:Local::now().fixed_offset(), route:"rpc.product.get_product".to_string()
         };
         match run_rpc_fn(rpc_ctx, properties).await {
             Ok(r) => match String::from_utf8(r.body) {

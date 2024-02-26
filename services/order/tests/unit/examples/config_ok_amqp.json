@@ -1,0 +1,89 @@
+{
+    "pid_file" : {
+        "web_api"     :"tmp/proc/order_itest_app_server.pid",
+        "rpc_consumer":"tmp/proc/order_itest_rpc_consumer.pid"
+    },
+    "access_log": {
+        "path":"tmp/log/test/order_app_server.access.log",
+        "format":"%H %h %l %t \"%r\" %s %b"
+    },
+    "logging" : {
+        "handlers" : [
+            {"alias": "std-output-forall",
+             "min_level": "INFO",
+             "destination": "console"}
+        ],
+        "loggers" : [
+            {"alias": "order::usecase::stock_level",
+             "handlers": ["std-output-forall"],
+             "level": "WARNING"}
+        ]
+    },
+    "listen": {
+        "port": 8013,
+        "host":"localhost",
+        "max_failures": 5,
+        "api_version": "1.0.33",
+        "cors": "order/tests/unit/examples/cors_ok.json",
+	"max_connections": 50,
+        "routes": [
+            {"path":"/gram/increment", "handler":"gram_increment"},
+            {"path":"/policy/products", "handler":"modify_product_policy"}
+        ]
+    },
+    "limit_req_body_in_bytes": 10485760,
+    "num_workers": 1,
+    "stack_sz_kb": 128,
+    "data_store": [
+	{
+	    "_type": "InMemory",
+	    "alias": "keep-123-mem",
+	    "max_items": 99
+	}
+    ],
+    "rpc": {
+	"handler_type": "AMQP",
+	"bindings": [
+	    {
+                "queue": "rpc_orderproc_unittest_001",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.unittest.one",
+                "ensure_declare": true,
+                "durable": false,
+                "reply": {
+		    "side": "server",
+                    "task_handler": "utest_001_msg_hdlr",
+                    "ttl_sec": 12
+                }
+	    },
+	    {
+                "queue": "rpc_orderproc_unittest_002",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.unittest.two",
+                "ensure_declare": true,
+                "durable": false,
+                "reply": {
+		    "side": "client",
+                    "queue": "rpc.reply.order.unittest.002",
+                    "correlation_id_prefix": "rpc.order.ut_002.corr_id",
+                    "ttl_sec": 65
+                }
+	    }
+	],
+	"attributes": {
+	    "vhost":"/integration_test",
+	    "max_channels": 128,
+	    "timeout_secs": 8
+	},
+	"max_connections": 2,
+	"confidential_id": "amqp_broker/1"
+    },
+    "auth": {
+	"keystore_url": "http://localhost:12345",
+	"update_interval_minutes": 15
+    },
+    "confidentiality": {
+	"source": "UserSpace",
+	"sys_path": "common/data/secrets.json"
+    }
+}
