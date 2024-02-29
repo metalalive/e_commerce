@@ -12,16 +12,16 @@ use amqprs::channel::{
 };
 use amqprs::callbacks::{DefaultConnectionCallback, DefaultChannelCallback};
 use amqprs::error::Error as AmqpError;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
-use crate::generate_custom_uid;
+use crate::{generate_custom_uid, AppSharedState};
 use crate::confidentiality::AbstractConfidentiality;
 use crate::config::{AppRpcAmqpCfg, AppAmqpBindingCfg, AppAmqpBindingReplyCfg};
 use crate::constant::{HTTP_CONTENT_TYPE_JSON, app_meta};
 use crate::error::{AppError, AppErrorCode};
 use super::{
     AbsRpcClientCtx, AbstractRpcContext, AbstractRpcClient, AppRpcClientReqProperty,
-    AppRpcReply, AbsRpcServerCtx, AbstractRpcServer
+    AppRpcReply, AbsRpcServerCtx, AppRpcRouteHdlrFn
 };
 
 #[derive(Deserialize)]
@@ -37,17 +37,18 @@ const MAX_NUM_MSGS : i32 = 1300;
 const MSG_TTL_MILLISEC : i32 = 33000;
 
 pub(super) struct AmqpRpcContext {
-    // currently use single connection, will swtich to
-    // existing pool like the crate `deadpool` (TODO)
+    // currently use single connection/channel for all publish/consume
+    // operations, it will swtich to existing pool like the crate
+    // `deadpool` (TODO)
     inner_conn: Mutex<Option<AmqpConnection>>,
+    inner_chn:  RwLock<Option<Channel>>,
     conn_opts: OpenConnectionArguments,
 	bindings: Arc<Vec<AppAmqpBindingCfg>>
 }
-pub(super) struct AmqpRpcHandler {
+struct AmqpRpcClientHandler {
 	bindings: Arc<Vec<AppAmqpBindingCfg>>,
     chosen_bind_idx: Option<usize>,
     channel: Channel,
-    reconnected: bool,
 }
 
 impl From<AmqpError> for AppError {
@@ -74,24 +75,24 @@ impl AbsRpcClientCtx for AmqpRpcContext {
     async fn acquire (&self, num_retry:u8)
         -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     {
-        let mut result = Err(AppError { code: AppErrorCode::Unknown,
-                         detail: Some(format!("AbsRpcClientCtx::acquire, AmqpRpcContext")) });
-        for _ in 0..num_retry {
-            result = self.get_channel().await;
-            if result.is_ok() { break; }
-        }
-        let (channel, reconnected) = result?;
-        let obj = AmqpRpcHandler { channel, reconnected, chosen_bind_idx:None,
+        let (channel, _reconnected) = self.try_acquire_channel(num_retry).await ?;
+        let obj = AmqpRpcClientHandler { channel, chosen_bind_idx:None,
                   bindings:self.bindings.clone() };
         Ok(Box::new(obj))
     }
 }
 #[async_trait]
-impl AbsRpcServerCtx for AmqpRpcContext {
-    async fn acquire (&self, _num_retry:u8)
-        -> DefaultResult<Box<dyn AbstractRpcServer>, AppError>
+impl AbsRpcServerCtx for AmqpRpcContext
+{
+    async fn server_start(
+        &self, shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
+    ) -> DefaultResult<(), AppError> 
     {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+        let (channel, reconnected) = self.try_acquire_channel(2).await ?;
+        if reconnected {
+            InnerServer::init(self.bindings.clone(), &channel).await;
+        }
+        Ok(())
     }
 }
 
@@ -116,8 +117,21 @@ impl AmqpRpcContext {
             }
         };
         let obj = Self { conn_opts, bindings:cfg.bindings.clone(),
-                         inner_conn: Mutex::new(None) };
+                    inner_conn: Mutex::new(None), inner_chn: RwLock::new(None) };
         Ok(Box::new(obj))
+    }
+    
+    async fn try_acquire_channel (&self, num_retry:u8)
+        -> DefaultResult<(Channel, bool), AppError>
+    {
+        let mut result = Err(AppError { code: AppErrorCode::Unknown,
+                         detail: Some(format!("AbsRpcClientCtx::acquire, AmqpRpcContext")) });
+        for _ in 0..num_retry {
+            result = self.ensure_conn_channel().await;
+            if result.is_ok() { break; }
+        }
+        let out = result?;
+        Ok(out)
     }
 
     async fn _create_conn(&self) -> DefaultResult<AmqpConnection, AppError>
@@ -127,34 +141,53 @@ impl AmqpRpcContext {
         assert!(c.is_open());
         Ok(c)
     }
-    async fn _create_channel(conn:&AmqpConnection) -> DefaultResult<Channel, AppError>
+    
+    async fn try_get_channel(&self) -> Option<Channel>
+    {
+        let guard = self.inner_chn.read().await;
+        if let Some(chn) = guard.as_ref() {
+            if chn.is_connection_open() && chn.is_open() {
+                Some(chn.clone())
+            } else { None }
+        } else { None }
+    }
+    async fn ensure_channel(&self, conn:&AmqpConnection)
+        -> DefaultResult<(Channel, bool), AppError>
     { // give null channel-ID, let broker randomly generate channel ID
-        let channel = conn.open_channel(None).await?;
-        channel.register_callback(DefaultChannelCallback).await?;
+        let result = self.try_get_channel().await;
+        let reconnected = !result.is_some();
+        let channel = if let Some(chn) = result {
+            chn
+        } else {
+            let chn = conn.open_channel(None).await?;
+            chn.register_callback(DefaultChannelCallback).await?;
+            let mut guard = self.inner_chn.write().await;
+            *guard = Some(chn.clone());
+            chn
+        };
         assert!(channel.is_connection_open());
         assert!(channel.is_open());
-        Ok(channel)
+        Ok((channel, reconnected))
     }
-    async fn get_channel(&self) -> DefaultResult<(Channel, bool), AppError>
+    async fn ensure_conn_channel(&self) -> DefaultResult<(Channel, bool), AppError>
     {
-        let mut reconnected = false;
         let mut guard = self.inner_conn.lock().await;
         if guard.as_ref().is_none() {
             let c = self._create_conn().await?;
-            (*guard, reconnected) = (Some(c), true);
+            *guard = Some(c);
         }
         if let Some(conn) = guard.as_ref() {
-            match Self::_create_channel(&conn).await {
-                Ok(chn) => Ok((chn, reconnected)),
+            match self.ensure_channel(&conn).await {
+                Ok((chn, reconnected)) => Ok((chn, reconnected)),
                 Err(e) =>
                     if conn.is_open() { Err(e.into()) }
                     else {
                         let conn = guard.take().unwrap();
                         let _result = conn.close().await; // drop and ignore any error
                         let conn = self._create_conn().await?;
-                        (*guard, reconnected) = (Some(conn), true);
+                        *guard = Some(conn);
                         let conn = guard.as_ref().unwrap();
-                        let chn = Self::_create_channel(&conn).await ?;
+                        let (chn, reconnected) = self.ensure_channel(&conn).await ?;
                         Ok((chn, reconnected))
                     }
             }
@@ -162,34 +195,29 @@ impl AmqpRpcContext {
             let d = "amqp-conn-new-fail".to_string();
             Err(AppError { code: AppErrorCode::DataCorruption, detail: Some(d) })
         }
-    } // end of fn get_channel
+    } // end of fn ensure_conn_channel
 } // end of impl AmqpRpcContext
 
 
 #[async_trait]
-impl AbstractRpcClient for AmqpRpcHandler {
+impl AbstractRpcClient for AmqpRpcClientHandler
+{
     async fn send_request(mut self:Box<Self>, req:AppRpcClientReqProperty)
         -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     {
         let (route, content, retry, t_start) = (req.route, req.msgbody,
                                                 req.retry, req.start_time);
-        let (idx, bind_cfg) = self.try_get_binding(route.as_str())?;
-        let (reply_q_name, corr_id_prefix, reply_q_ttl) = if let AppAmqpBindingReplyCfg::client {
+        let (idx, bind_cfg) = try_get_binding(self.bindings.as_ref(), route.as_str())?;
+        let (reply_q_name, corr_id_prefix) = if let AppAmqpBindingReplyCfg::client {
             queue, correlation_id_prefix, ttl_sec } = &bind_cfg.reply
         {
-            (queue.as_str(), correlation_id_prefix.as_str(), ttl_sec.clone())
+            (queue.as_str(), correlation_id_prefix.as_str())
         } else {
             let d = format!("amqp-client-send-req, bind-reply-cfg");
             return Err(AppError { code:AppErrorCode::InvalidInput, detail: Some(d) });
         };
-        if self.reconnected {
-            if bind_cfg.ensure_declare {
-                self.ensure_send_queue(bind_cfg).await?;
-            }
-            self.ensure_reply_queue(reply_q_name, bind_cfg.durable, reply_q_ttl).await?;
-            // only RPC client needs to turn on confirm mode in the broker
-            self.channel.confirm_select(ConfirmSelectArguments::new(false)).await?;
-        }
+        // only RPC client needs to turn on confirm mode in the broker
+        self.channel.confirm_select(ConfirmSelectArguments::new(false)).await?;
         let mut corr_id = generate_custom_uid(app_meta::MACHINE_CODE).into_bytes()
             .into_iter().map(|b| format!("{:02x}",b))
             .collect::<Vec<String>>().join("");
@@ -221,36 +249,48 @@ impl AbstractRpcClient for AmqpRpcHandler {
     }
 } // end of impl AbstractRpcClient for AmqpRpcHandler 
 
-#[async_trait]
-impl AbstractRpcServer for AmqpRpcHandler {
-    async fn send_response(mut self:Box<Self>, _props:AppRpcReply)
-        -> DefaultResult<(), AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
-    }
 
-    async fn receive_request(&mut self)
-        -> DefaultResult<AppRpcClientReqProperty, AppError>
-    {
-        Err(AppError { code: AppErrorCode::NotImplemented, detail: None })
+fn try_get_binding<'a,'b>(src:&'a Vec<AppAmqpBindingCfg>, route_key:&'b str)
+    -> DefaultResult<(usize, &'a AppAmqpBindingCfg), AppError>
+{
+    let result = src.iter().position(
+        |bind_cfg| bind_cfg.routing_key.as_str() == route_key
+    );
+    if let Some(idx) = result {
+        let bind_cfg = src.get(idx).unwrap();
+        Ok((idx, bind_cfg))
+    } else {
+        let d = format!("binding-cfg-not-found, {route_key}");
+        Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(d) })
     }
 }
 
-impl AmqpRpcHandler {
-    fn try_get_binding(&self, route_key:&str) -> DefaultResult<(usize, &AppAmqpBindingCfg), AppError>
+
+struct InnerServer{}
+
+impl InnerServer
+{
+    async fn init(bindings:Arc<Vec<AppAmqpBindingCfg>>, channel:&Channel)
+        -> DefaultResult<(), AppError>
     {
-        let result = self.bindings.iter().position(
-            |bind_cfg| bind_cfg.routing_key.as_str() == route_key
-        );
-        if let Some(idx) = result {
-            let bind_cfg = self.bindings.get(idx).unwrap();
-            Ok((idx, bind_cfg))
-        } else {
-            let d = format!("binding-cfg-not-found, {route_key}");
-            Err(AppError { code: AppErrorCode::InvalidInput, detail: Some(d) })
-        }
+        for bind_cfg in bindings.iter() {
+            if bind_cfg.ensure_declare {
+                Self::ensure_send_queue(channel, bind_cfg).await?;
+            }
+            match &bind_cfg.reply {
+                AppAmqpBindingReplyCfg::client { queue, ttl_sec,
+                    correlation_id_prefix } => {
+                    Self::ensure_reply_queue(&channel, queue.as_str(),
+                        bind_cfg.durable, ttl_sec.clone()).await?;
+                },
+                AppAmqpBindingReplyCfg::server { task_handler, ttl_sec } => {
+                },
+            }
+        } // end of loop
+        Ok(())
     }
-    async fn ensure_send_queue(&self, cfg:&AppAmqpBindingCfg)
+
+    async fn ensure_send_queue(channel:&Channel, cfg:&AppAmqpBindingCfg)
         -> DefaultResult<(), AppError>
     {
         let mut properties = FieldTable::new();
@@ -261,17 +301,18 @@ impl AmqpRpcHandler {
         let args = QueueDeclareArguments::new(cfg.queue.as_str()).durable(cfg.durable)
             .passive(!cfg.ensure_declare).auto_delete(false).no_wait(false)
             .arguments(properties).finish();
-        let result  = self.channel.queue_declare(args).await?;
+        let result = channel.queue_declare(args).await?;
         if let Some((_q_name, _msg_cnt, _consumer_cnt)) = result {
             // TODO, logging debug message
             //println!("[debug] queue-declare-ok: {_q_name}, {_msg_cnt}, {_consumer_cnt}");
         }
         let args = QueueBindArguments::new(cfg.queue.as_str(), cfg.exchange.as_str(),
                    cfg.routing_key.as_str()).no_wait(false).finish() ;
-        self.channel.queue_bind(args).await?;
+        channel.queue_bind(args).await?;
         Ok(())
     }
-    async fn ensure_reply_queue(&self, queue:&str, durable:bool, ttl_sec:u16)
+
+    async fn ensure_reply_queue(channel:&Channel, queue:&str, durable:bool, ttl_sec:u16)
         -> DefaultResult<(), AppError>
     {
         let ttl_millis = ttl_sec as i32  * 1000;
@@ -281,7 +322,8 @@ impl AmqpRpcHandler {
         let args = QueueDeclareArguments::new(queue).durable(durable)
             .passive(false).auto_delete(false).no_wait(false)
             .arguments(properties).finish();
-        let _result  = self.channel.queue_declare(args).await?;
+        let _result = channel.queue_declare(args).await?;
         Ok(())
     }
-} // end of impl AmqpRpcHandler 
+} // end of mod InnerServer
+

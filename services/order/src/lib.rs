@@ -27,8 +27,9 @@ pub use auth::{
 };
 
 mod rpc;
-pub use rpc::{AbstractRpcContext, AbsRpcServerCtx, AbsRpcClientCtx,  AbstractRpcClient,
-    AbstractRpcServer, AppRpcReply, AppRpcClientReqProperty
+pub use rpc::{
+    AbstractRpcContext, AbsRpcServerCtx, AbsRpcClientCtx,  AbstractRpcClient,
+    AppRpcRouteHdlrFn, AppRpcReply, AppRpcClientReqProperty
 };
 
 mod adapter;

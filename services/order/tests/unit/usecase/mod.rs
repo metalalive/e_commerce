@@ -5,18 +5,19 @@ mod manage_order;
 
 use std::vec;
 use std::boxed::Box;
+use std::future::Future;
+use std::pin::Pin;
 use std::cell::{RefCell, Cell};
 use std::sync::{Arc, Mutex};
 use std::result::Result as DefaultResult;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
-use tokio::task;
 use tokio::sync::Mutex as AsyncMutex;
 
 use order::{
-    AppSharedState, AbstractRpcContext, AppRpcCfg, AbstractRpcServer, AbstractRpcClient,
-    AbsRpcClientCtx, AbsRpcServerCtx, AppRpcClientReqProperty, AppRpcReply
+    AppSharedState, AbstractRpcContext, AppRpcCfg, AbstractRpcClient, AppRpcReply,
+    AbsRpcClientCtx, AbsRpcServerCtx, AppRpcClientReqProperty, AppRpcRouteHdlrFn
 };
 use order::api::dto::ShippingMethod;
 use order::api::rpc::dto::{
@@ -33,7 +34,7 @@ use order::repository::{
     AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback, AppStockRepoReturnUserFunc,
     AbsOrderReturnRepo
 };
-use order::usecase::{initiate_rpc_request, rpc_server_process};
+use order::usecase::initiate_rpc_request;
 
 use crate::{ut_setup_share_state, MockConfidential};
 
@@ -282,7 +283,6 @@ impl MockOrderReturnRepo {
 
 type TestAcquireResult<T> = DefaultResult<Box<T>, AppError>;
 type TestAcquireClientResult = TestAcquireResult<dyn AbstractRpcClient>;
-type TestAcquireServerResult = TestAcquireResult<dyn AbstractRpcServer>;
 
 type TestClientPublishResult = TestAcquireClientResult;
 type TestClientReplyResult = DefaultResult<AppRpcReply, AppError>;
@@ -290,26 +290,51 @@ type TestServerSubscribeResult = DefaultResult<AppRpcClientReqProperty, AppError
 type TestServerReplyResult = DefaultResult<(), AppError> ;
 
 struct MockRpcContext {
-    _mock_acquire_s: Mutex<RefCell<Option<TestAcquireServerResult>>>,
+    _mock_srv_recv_req: AsyncMutex<Option<AppRpcClientReqProperty>>,
     _mock_acquire_c: Mutex<RefCell<Option<TestAcquireClientResult>>>,
 }
 struct MockRpcHandler {
     _mock_client_publish: Option<TestClientPublishResult>,
-    _mock_server_subscribe: Option<TestServerSubscribeResult>,
     _mock_client_rreply: Option<TestClientReplyResult>,
-    _mock_server_rreply: Option<TestServerReplyResult>,
 }
 
 #[async_trait]
 impl AbsRpcClientCtx for MockRpcContext
 {
-    async fn acquire (&self, _num_retry:u8) -> TestAcquireClientResult
-    { _do_acquire::<dyn AbstractRpcClient>(&self._mock_acquire_c, _num_retry).await }
+    async fn acquire(&self, _num_retry:u8) -> TestAcquireClientResult
+    {
+        if let Ok(guard) = self._mock_acquire_c.lock() {
+            let mut objref = guard.borrow_mut();
+            if let Some(mocked) = objref.take() {
+                mocked
+            } else {
+                Err(AppError{detail:Some("client-acquire-empty".to_string()),
+                    code:AppErrorCode::Unknown })
+            }
+        } else {
+            let detail = String::from("lock-failure");
+            Err(AppError{detail:Some(detail), code:AppErrorCode::Unknown })
+        }
+    }
 }
+
 #[async_trait]
-impl AbsRpcServerCtx for MockRpcContext {
-    async fn acquire (&self, _num_retry:u8) -> TestAcquireServerResult
-    { _do_acquire::<dyn AbstractRpcServer>(&self._mock_acquire_s, _num_retry).await }
+impl AbsRpcServerCtx for MockRpcContext
+{
+    async fn server_start(
+        &self, shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
+    ) -> DefaultResult<(), AppError>
+    {
+        let mut guard = self._mock_srv_recv_req.lock().await;
+        assert!(guard.is_some());
+        if let Some(req) = guard.take() {
+            let _resp = route_hdlr(req, shr_state).await ?;
+            Ok(())
+        } else {
+            Err(AppError{detail:Some("server-recv-empty-req".to_string()),
+                code:AppErrorCode::Unknown })
+        }
+    }
 }
 
 impl AbstractRpcContext for MockRpcContext
@@ -327,39 +352,24 @@ impl MockRpcContext {
     fn _build(_cfg: &AppRpcCfg) -> Self {
         Self{
             _mock_acquire_c: Mutex::new(RefCell::new(None)),
-            _mock_acquire_s: Mutex::new(RefCell::new(None))
+            _mock_srv_recv_req: AsyncMutex::new(None)
         }
     }
-    fn mock_c (&self, a:TestAcquireClientResult) {
+    fn mock_c(&self, a:TestAcquireClientResult)
+    {
         let guard = self._mock_acquire_c.lock().unwrap();
         let mut objref = guard.borrow_mut();
         *objref = Some(a);
     }
-    fn mock_s (&self, a:TestAcquireServerResult) {
-        let guard = self._mock_acquire_s.lock().unwrap();
-        let mut objref = guard.borrow_mut();
-        *objref = Some(a);
+    async fn mock_recv_req(&self, req: AppRpcClientReqProperty)
+    {
+        let mut guard = self._mock_srv_recv_req.lock().await;
+        *guard = Some(req);
+        drop(guard);
+        let guard = self._mock_srv_recv_req.lock().await;
+        assert!(guard.is_some());
     }
 } // end of impl MockRpcContext
-
-async fn _do_acquire<T:?Sized> (
-    _acquire:&Mutex<RefCell<Option<TestAcquireResult<T>>>>,
-    _num_retry:u8) -> TestAcquireResult<T>
-{
-    if let Ok(guard) = _acquire.lock() {
-        let mut objref = guard.borrow_mut();
-        if let Some(mocked) = objref.take() {
-            let xx = mocked;
-            xx
-        } else {
-            let detail = String::from("no mock object specified");
-            Err(AppError{detail:Some(detail), code:AppErrorCode::Unknown })
-        }
-    } else {
-        let detail = String::from("lock failure on acquiring RPC handler");
-        Err(AppError{detail:Some(detail), code:AppErrorCode::Unknown })
-    }
-}
 
 
 #[async_trait]
@@ -385,32 +395,10 @@ impl AbstractRpcClient for MockRpcHandler {
     }
 } // end of impl AbstractRpcClient
 
-#[async_trait]
-impl AbstractRpcServer for MockRpcHandler {
-    async fn receive_request(&mut self) -> DefaultResult<AppRpcClientReqProperty, AppError>    
-    {
-        if let Some(mocked) = self._mock_server_subscribe.take() {
-            mocked
-        } else {
-            let detail = String::from("no mock object specified");
-            Err(AppError{detail:Some(detail), code:AppErrorCode::Unknown })
-        }
-    }
-    async fn send_response(mut self:Box<Self>, _props:AppRpcReply) -> DefaultResult<(), AppError>
-    {
-        if let Some(mocked) = self._mock_server_rreply.take() {
-            mocked
-        } else {
-            let detail = String::from("no mock object specified");
-            Err(AppError{detail:Some(detail), code:AppErrorCode::Unknown })
-        }
-    }
-}
 
 impl Default for MockRpcHandler {
     fn default() -> Self {
-        Self { _mock_client_publish:None, _mock_client_rreply:None,
-            _mock_server_subscribe:None, _mock_server_rreply:None  }
+        Self { _mock_client_publish:None, _mock_client_rreply:None }
     }
 }
 impl MockRpcHandler {
@@ -418,10 +406,6 @@ impl MockRpcHandler {
     { self._mock_client_publish = Some(m); self }
     fn mock_c_reply(mut self, m:TestClientReplyResult) -> Self
     { self._mock_client_rreply = Some(m); self }
-    fn mock_s_sub(mut self, m:TestServerSubscribeResult) -> Self
-    { self._mock_server_subscribe = Some(m); self }
-    fn mock_s_reply(mut self, m:TestServerReplyResult) -> Self
-    { self._mock_server_rreply = Some(m); self }
 }
 
 
@@ -541,114 +525,73 @@ async fn client_run_rpc_consume_reply_error ()
 }
 
 
-async fn mock_rpc_request_handler (_r:AppRpcClientReqProperty, _ss:AppSharedState )
-    -> AppRpcReply
+async fn mock_route_handler_ok(req:AppRpcClientReqProperty, _ss:AppSharedState )
+    -> DefaultResult<Vec<u8>, AppError>
 { // request and error handling
-    AppRpcReply { body: br#"unit test replied"#.to_vec() }
+    assert_eq!(req.route.as_str(), "app1.func23");
+    Ok(br#"unit test replied"#.to_vec())
 }
-
+fn mock_route_handler_ok_wrapper(req:AppRpcClientReqProperty, shr_state: AppSharedState)
+    -> Pin<Box<dyn Future<Output=DefaultResult<Vec<u8>, AppError>> + Send>> 
+{
+    Box::pin(async move {
+        mock_route_handler_ok(req, shr_state).await
+    })
+}
 #[tokio::test]
 async fn server_run_rpc_ok ()
 {
     let rctx : Arc<Box<dyn AbstractRpcContext>> = {
         let cfg = AppRpcCfg::dummy;
         let _ctx = MockRpcContext::_build(&cfg);
-        let hdlr = {
-            let h = MockRpcHandler::default();
-            let m = AppRpcClientReqProperty {
-                start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
-                retry: 5, route: "app1.func23".to_string(), msgbody: br#"client request"#.to_vec() };
-            h.mock_s_sub(Ok(m)).mock_s_reply(Ok(()))
+        let m = AppRpcClientReqProperty {
+            start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
+            retry: 5, route: "app1.func23".to_string(), msgbody: br#"client request"#.to_vec()
         };
-        let a:Box<dyn AbstractRpcServer> = Box::new(hdlr);
-        _ctx.mock_s(Ok(a));
+        _ctx.mock_recv_req(m).await;
         Arc::new(Box::new(_ctx))
     };
     let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
-    let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
+    let result = rctx.server_start(shr_state, mock_route_handler_ok_wrapper).await;
     assert!(result.is_ok());
-    let newtask = result.unwrap();
-    let joinh = task::spawn(newtask);
-    let result = joinh.await;
-    let result = result.unwrap();
-    assert!(result.is_ok());
-    let _ = result.unwrap();
 } // end of fn server_run_rpc_ok
 
-#[tokio::test]
-async fn server_run_rpc_acquire_error ()
-{
-    let rctx : Arc<Box<dyn AbstractRpcContext>> = {
-        let cfg = AppRpcCfg::dummy;
-        let _ctx = MockRpcContext::_build(&cfg);
-        let e = AppError {code:AppErrorCode::ExceedingMaxLimit,
-            detail:Some("unit-test-fail-acquire".to_string()) };
-        _ctx.mock_s(Err(e));
-        Arc::new(Box::new(_ctx))
-    };
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
-    let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert_eq!(e.code, AppErrorCode::ExceedingMaxLimit);
-        assert_eq!(e.detail.unwrap(), "unit-test-fail-acquire");
-    }
-}
 
+async fn mock_route_handler_fail(req:AppRpcClientReqProperty, _ss:AppSharedState )
+    -> DefaultResult<Vec<u8>, AppError>
+{ // request and error handling
+    assert_eq!(req.route.as_str(), "app2.func56");
+    let e = AppError{
+        code:AppErrorCode::RpcConsumeFailure,
+        detail:Some("unit-test-route-handle-fail".to_string())
+    };
+    Err(e)
+}
+fn mock_route_handler_fail_wrapper(req:AppRpcClientReqProperty, shr_state: AppSharedState)
+    -> Pin<Box<dyn Future<Output=DefaultResult<Vec<u8>, AppError>> + Send>> 
+{
+    Box::pin(async move {
+        mock_route_handler_fail(req, shr_state).await
+    })
+}
 #[tokio::test]
 async fn server_run_rpc_receive_request_error ()
 {
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
     let rctx : Arc<Box<dyn AbstractRpcContext>> = {
         let cfg = AppRpcCfg::dummy;
         let _ctx = MockRpcContext::_build(&cfg);
-        let hdlr = {
-            let h = MockRpcHandler::default();
-            let e = AppError { code:AppErrorCode::RpcConsumeFailure,
-                  detail:Some("unit-test-fail-subscribe".to_string()) };
-            h.mock_s_sub(Err(e))
+        let m = AppRpcClientReqProperty {
+            start_time: DateTime::parse_from_rfc3339("2022-07-24T15:02:58+04:00").unwrap(),
+            retry: 5, route: "app2.func56".to_string(), msgbody: "another request".as_bytes().to_vec()
         };
-        let a:Box<dyn AbstractRpcServer> = Box::new(hdlr);
-        _ctx.mock_s(Ok(a));
+        _ctx.mock_recv_req(m).await;
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
-    let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
+    let result = rctx.server_start(shr_state, mock_route_handler_fail_wrapper).await;
     assert!(result.is_err());
     if let Err(e) = result {
+        assert_eq!(e.detail.as_ref().unwrap(), "unit-test-route-handle-fail");
         assert_eq!(e.code, AppErrorCode::RpcConsumeFailure);
-        assert_eq!(e.detail.unwrap(), "unit-test-fail-subscribe");
     }
 }
-
-#[tokio::test]
-async fn server_run_rpc_send_response_error ()
-{
-    let rctx : Arc<Box<dyn AbstractRpcContext>> = {
-        let cfg = AppRpcCfg::dummy;
-        let _ctx = MockRpcContext::_build(&cfg);
-        let hdlr = {
-            let h = MockRpcHandler::default();
-            let m = AppRpcClientReqProperty {
-                start_time: DateTime::parse_from_rfc3339("2022-08-31T15:02:35+08:00").unwrap(),
-                retry: 5, route: "app1.func23".to_string(), msgbody: br#"client request"#.to_vec() };
-            let e = AppError { code: AppErrorCode::RpcRemoteUnavail,
-                  detail:Some("unit-test-fail-send-reply".to_string()) };
-            h.mock_s_sub(Ok(m)).mock_s_reply(Err(e))
-        };
-        let a:Box<dyn AbstractRpcServer> = Box::new(hdlr);
-        _ctx.mock_s(Ok(a));
-        Arc::new(Box::new(_ctx))
-    };
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
-    let result = rpc_server_process(shr_state, rctx, mock_rpc_request_handler).await;
-    assert!(result.is_ok());
-    let newtask = result.unwrap();
-    let joinh = task::spawn(newtask);
-    let result = joinh.await;
-    let result = result.unwrap();
-    if let Err(e) = result {
-        assert_eq!(e.code, AppErrorCode::RpcRemoteUnavail);
-        assert_eq!(e.detail.unwrap(), "unit-test-fail-send-reply");
-    }
-}
-

@@ -1,11 +1,14 @@
 use std::result::Result as DefaultResult;
 use std::boxed::Box;
+use std::future::Future;
 use async_trait::async_trait;
-use chrono::DateTime;
 
+use crate::AppSharedState;
 use crate::error::AppError;
-use super::{AbsRpcClientCtx, AbstractRpcContext, AbstractRpcClient, AppRpcReply,
-    AppRpcClientReqProperty, AbsRpcServerCtx, AbstractRpcServer};
+use super::{
+    AbsRpcClientCtx, AbstractRpcContext, AbstractRpcClient, AppRpcReply,
+    AppRpcClientReqProperty, AbsRpcServerCtx, AppRpcRouteHdlrFn
+};
 
 pub(super) struct DummyRpcContext {}
 pub(super) struct DummyRpcHandler {}
@@ -21,12 +24,10 @@ impl AbsRpcClientCtx for DummyRpcContext {
 }
 #[async_trait]
 impl AbsRpcServerCtx for DummyRpcContext {
-    async fn acquire(&self, _num_retry:u8)
-        -> DefaultResult<Box<dyn AbstractRpcServer>, AppError>
-    {
-        let hdlr = DummyRpcHandler{};
-        Ok(Box::new(hdlr))
-    }
+    async fn server_start(
+        &self, shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
+    ) -> DefaultResult<(), AppError>
+    { Ok(()) }
 }
 
 impl AbstractRpcContext for DummyRpcContext {
@@ -49,18 +50,3 @@ impl AbstractRpcClient for DummyRpcHandler {
         Ok(AppRpcReply {body: br#"{}"#.to_vec() })
     }
 }
-
-#[async_trait]
-impl AbstractRpcServer for DummyRpcHandler {
-    async fn send_response(mut self:Box<Self>, _props:AppRpcReply)
-        -> DefaultResult<(), AppError>
-    { Ok(()) }
-
-    async fn receive_request(&mut self)
-        -> DefaultResult<AppRpcClientReqProperty, AppError>
-    { Ok(AppRpcClientReqProperty{ retry:0, msgbody:Vec::new(),
-        start_time:DateTime::parse_from_rfc3339("2020-03-06T09:30:55+08:30").unwrap(),
-        route:String::new() })
-    }
-}
-

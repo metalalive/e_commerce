@@ -6,7 +6,7 @@ use order::constant::ProductType;
 use serde_json::from_str as deserialize_json;
 
 use order::{AbstractRpcContext, AppRpcCfg, AbstractRpcClient, AppRpcReply,
-    AppRpcClientReqProperty, AbsRpcClientCtx, AbsRpcServerCtx, AbstractRpcServer
+    AppRpcClientReqProperty, AbsRpcClientCtx, AbsRpcServerCtx, AppSharedState, AppRpcRouteHdlrFn
 };
 use order::error::{AppError, AppErrorCode};
 use order::api::web::dto::ProductPolicyDto;
@@ -16,15 +16,6 @@ const UTEST_USR_PROF_ID: u32 = 99674;
 struct UTestDummyRpcContext {}
 
 #[async_trait]
-impl AbsRpcServerCtx for UTestDummyRpcContext {
-    async fn acquire(&self, _num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcServer>, AppError>
-    {
-        let error = AppError{ code: AppErrorCode::NotImplemented
-                       , detail:None };
-        Err(error)
-    }
-}
-#[async_trait]
 impl AbsRpcClientCtx for UTestDummyRpcContext {
     async fn acquire(&self, _num_retry:u8) -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     {
@@ -32,6 +23,16 @@ impl AbsRpcClientCtx for UTestDummyRpcContext {
         let error = AppError{ code: AppErrorCode::RpcRemoteUnavail
                        , detail:Some(detail) };
         Err(error)
+    }
+}
+#[async_trait]
+impl AbsRpcServerCtx for UTestDummyRpcContext {
+    async fn server_start(
+        &self, shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
+    ) -> DefaultResult<(), AppError>
+    {
+        Err(AppError{ code: AppErrorCode::NotImplemented
+            , detail:None })
     }
 }
 

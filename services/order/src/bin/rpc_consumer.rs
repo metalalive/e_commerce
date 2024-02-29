@@ -1,52 +1,41 @@
 use std::env;
 use std::boxed::Box;
+use std::future::Future;
+use std::pin::Pin;
+use std::result::Result as DefaultResult;
 use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 
 use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::task;
 
-use order::{AppConfig, AppSharedState,  AppRpcClientReqProperty, AppRpcReply};
+use order::{AppConfig, AppSharedState,  AppRpcClientReqProperty};
 use order::confidentiality::{self, AbstractConfidentiality};
 use order::constant::EXPECTED_ENV_VAR_LABELS;
+use order::error::AppError;
 use order::logging::{AppLogContext, AppLogLevel, app_log_event};
-use order::usecase::rpc_server_process;
 use order::api::rpc::{route_to_handler, build_error_response};
 
-async fn app_request_handler(req:AppRpcClientReqProperty, shr_state:AppSharedState )
-    -> AppRpcReply
-{ // handle every single request or error
-    let logctx_p = shr_state.log_context().clone();
-    let route_bak = req.route.clone();
-    let respbody = match route_to_handler(req, shr_state).await
-    {
-        Ok(raw_resp) => raw_resp,
-        Err(e) => {
-            app_log_event!(logctx_p, AppLogLevel::ERROR, "[rpc][consumer] failed to \
-                handle the request, route:{}, detail:{}", route_bak, e);
-            let e = build_error_response(e);
-            e.to_string().into_bytes()
-        },
-    };
-    AppRpcReply { body:respbody }
-} // end of app_request_handler
+
+fn route_handler_wrapper(req:AppRpcClientReqProperty, shr_state: AppSharedState)
+    -> Pin<Box<dyn Future<Output=DefaultResult<Vec<u8>, AppError>> + Send>> 
+{
+    Pin::from(Box::new(
+        async move {
+            route_to_handler(req, shr_state).await
+        }
+    ))
+}
 
 async fn start_rpc_worker(shr_state: AppSharedState)
 {
     let logctx_p = shr_state.log_context().clone();
-    loop {
-        let rctx = shr_state.rpc();
-        let _joinh = match rpc_server_process(shr_state.clone(),
-                     rctx, app_request_handler).await  {
-            Ok(tsk) =>  task::spawn(tsk),
-            Err(e) => {
-                app_log_event!(logctx_p, AppLogLevel::ERROR,
-                        "[rpc][consumer] failed to create task, {}", e);
-                continue;
-            }
-        }; // TODO, keep the join handles, abort them once sigterm received
-        app_log_event!(logctx_p, AppLogLevel::DEBUG, "[rpc][consumer] main loop running");
-    } // TODO, signal handler to break from the loop ..
+    let rctx = shr_state.rpc();
+    let result = rctx.server_start(shr_state, route_handler_wrapper).await;
+    if let Err(e) = result {
+        app_log_event!(logctx_p, AppLogLevel::ERROR, "error: {:?}", e);
+    }
+    //TODO, signal handler to break from the loop ..
 }
 
 
