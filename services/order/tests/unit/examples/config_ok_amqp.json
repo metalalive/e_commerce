@@ -10,13 +10,13 @@
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
-             "min_level": "INFO",
+             "min_level": "DEBUG",
              "destination": "console"}
         ],
         "loggers" : [
-            {"alias": "order::usecase::stock_level",
+            {"alias": "order::rpc::amqp",
              "handlers": ["std-output-forall"],
-             "level": "WARNING"}
+             "level": "INFO"}
         ]
     },
     "listen": {

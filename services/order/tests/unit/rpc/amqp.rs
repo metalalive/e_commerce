@@ -28,7 +28,7 @@ fn ut_appstate_setup() -> AppSharedState
     ut_setup_share_state("config_ok_amqp.json", Box::new(cfdntl))
 }
 
-fn ut_pubsub_msgs() -> [(&'static str, &'static str);5]
+fn ut_client_publish_msgs() -> [(&'static str, &'static str);5]
 {
     let routes = ["rpc.order.unittest.three", "rpc.order.unittest.two"];
     [
@@ -38,6 +38,17 @@ fn ut_pubsub_msgs() -> [(&'static str, &'static str);5]
         (routes[0],  r#"{"light":"shadow"}"#),
         (routes[1],  r#"{"ice":"flame"}"#),
     ]
+}
+fn ut_server_publish_msg(req_content:&str) -> &'static str
+{
+    match req_content {
+        r#"{"me":"je"}"#     => r#"{"devicetree":"ie80211_rx"}"#,
+        r#"{"saya":"ich"}"#  => r#"{"ext4_readdir":"inode"}"#,
+        r#"{"Zeist":"meat"}"#    => r#"{"kmem_cache_init":"sys_signal"}"#,
+        r#"{"light":"shadow"}"#  => r#"{"task_struct":"iirq_flgs"}"#,
+        r#"{"ice":"flame"}"#     => r#"{"vma_area":"do_pagefault"}"#,
+        _others => r#"{"dev_null":"prng"}"#,
+    }
 }
 
 async fn ut_client_send_req<'a>(
@@ -64,9 +75,14 @@ async fn ut_client_send_req<'a>(
 fn mock_route_hdlr_wrapper(req:AppRpcClientReqProperty, shr_state: AppSharedState)
     -> Pin<Box<dyn Future<Output=DefaultResult<Vec<u8>, AppError>> + Send>>
 {
-    let expect_msgs = ut_pubsub_msgs();
+    let expect_msgs = ut_client_publish_msgs();
     let fut = async move {
-        Ok(vec![])
+        let (route, content) = (req.route, String::from_utf8(req.msgbody).unwrap());
+        let actual = (route.as_str(), content.as_str());
+        let exist = expect_msgs.contains(&actual);
+        assert!(exist);
+        let resp_body = ut_server_publish_msg(content.as_str());
+        Ok(resp_body.as_bytes().to_vec())
     };
     Box::pin(fut)
 }
@@ -83,7 +99,7 @@ async fn client_req_to_server_ok()
         assert!(result.is_ok());
     });
     sleep(Duration::from_secs(4)).await; // wait until queues are created
-    let msgs = ut_pubsub_msgs();
+    let msgs = ut_client_publish_msgs();
     for (route, msg) in msgs {
         ut_client_send_req(rpcctx.clone(), route, msg).await;
     }

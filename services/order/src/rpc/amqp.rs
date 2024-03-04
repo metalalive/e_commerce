@@ -1,25 +1,29 @@
 use std::result::Result as DefaultResult;
 use std::boxed::Box;
 use std::sync::Arc;
-use async_trait::async_trait;
 
+use async_trait::async_trait;
+use chrono::{DateTime, Local};
+use chrono::offset::FixedOffset;
 use serde::Deserialize;
-use amqprs::{BasicProperties, FieldTable, FieldValue};
+use tokio::sync::{Mutex, RwLock};
+
+use amqprs::{BasicProperties, Deliver, FieldTable, FieldValue};
 use amqprs::connection::{OpenConnectionArguments, Connection as AmqpConnection};
-use amqprs::consumer::DefaultConsumer;
+use amqprs::consumer::AsyncConsumer;
 use amqprs::channel::{
     Channel, QueueDeclareArguments, QueueBindArguments, ConfirmSelectArguments,
-    BasicPublishArguments
+    BasicPublishArguments, BasicConsumeArguments, BasicAckArguments
 };
 use amqprs::callbacks::{DefaultConnectionCallback, DefaultChannelCallback};
 use amqprs::error::Error as AmqpError;
-use tokio::sync::{Mutex, RwLock};
 
 use crate::{generate_custom_uid, AppSharedState};
 use crate::confidentiality::AbstractConfidentiality;
 use crate::config::{AppRpcAmqpCfg, AppAmqpBindingCfg, AppAmqpBindingReplyCfg};
 use crate::constant::{HTTP_CONTENT_TYPE_JSON, app_meta};
 use crate::error::{AppError, AppErrorCode};
+use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
 use super::{
     AbsRpcClientCtx, AbstractRpcContext, AbstractRpcClient, AppRpcClientReqProperty,
     AppRpcReply, AbsRpcServerCtx, AppRpcRouteHdlrFn
@@ -49,6 +53,12 @@ struct AmqpRpcClientHandler {
 }
 
 struct InnerServer {}
+
+struct InnerConsumer {
+    shr_state: AppSharedState,
+    log_ctx: Arc<AppLogContext>,
+    route_hdlr: AppRpcRouteHdlrFn,
+}
 
 impl From<AmqpError> for AppError {
     fn from(value: AmqpError) -> Self {
@@ -92,7 +102,7 @@ impl AbsRpcServerCtx for AmqpRpcContext
             InnerServer::init(self.bindings.clone(), channel,
                               shr_state, route_hdlr).await ?;
         }
-        // TODO, notufy to return
+        // TODO, notify to return, for graceful terminate
         Ok(())
     }
 }
@@ -270,7 +280,11 @@ impl InnerServer {
         shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
     )  -> DefaultResult<(), AppError>
     {
-        for bind_cfg in bindings.iter() {
+        let log_ctx_p = shr_state.log_context().clone();
+        let thread_id = std::thread::current().id();
+        // TODO, record number of consumers added to the same channel
+        let combo = (0 .. bindings.len()).zip(bindings.iter()) ;
+        for (idx, bind_cfg) in combo {
             if bind_cfg.ensure_declare {
                 Self::ensure_send_queue(&channel, bind_cfg).await?;
             }
@@ -278,10 +292,18 @@ impl InnerServer {
                 Self::ensure_reply_queue(&channel, r_cfg).await?;
             }
             if bind_cfg.subscribe {
+                let c_tag = format!("{:?}-{}", thread_id, idx);
+                let consumer = InnerConsumer::new(shr_state.clone(), route_hdlr);
+                let args = BasicConsumeArguments::default().no_wait(false)
+                    .manual_ack(true).exclusive(false).queue(bind_cfg.queue.clone())
+                    .consumer_tag(c_tag) .finish();
+                let result = channel.basic_consume(consumer, args).await ?;
+                app_log_event!(log_ctx_p, AppLogLevel::DEBUG, "thread:{:?} route:{}, queue:{}",
+                       thread_id, bind_cfg.routing_key.as_str(), bind_cfg.queue.as_str());
             }
         } // end of loop
         Ok(())
-    }
+    } // end of fn init
 
     async fn ensure_send_queue(channel:&Channel, cfg:&AppAmqpBindingCfg)
         -> DefaultResult<(), AppError>
@@ -324,3 +346,87 @@ impl InnerServer {
     }
 } // end of impl InnerServer
 
+
+impl InnerConsumer {
+    fn new(shr_state:AppSharedState, route_hdlr:AppRpcRouteHdlrFn) -> Self
+    {
+        let log_ctx = shr_state.log_context().clone();
+        Self { log_ctx, shr_state, route_hdlr }
+    }
+
+    async fn try_send_response(
+        channel: &Channel, req_props: BasicProperties, t_end:DateTime<FixedOffset>,
+        content: Vec<u8>
+    ) -> DefaultResult<Option<String>, AppError>
+    {
+        let (reply_to, corr_id) = (req_props.reply_to(), req_props.correlation_id());
+        if reply_to.is_none() {
+            return Ok(Some("reply-to".to_string()));
+        } else if corr_id.is_none() {
+            return Ok(Some("correlation-id".to_string()));
+        }
+        let resp_props = BasicProperties::default().with_app_id(app_meta::LABAL)
+            .with_content_type(HTTP_CONTENT_TYPE_JSON).with_content_encoding("utf-8")
+            .with_correlation_id(corr_id.unwrap().as_str())
+            .with_timestamp(t_end.timestamp() as u64)
+            .finish(); // delivery mode can be omitted ?
+        let args = BasicPublishArguments::default() // use default a-non exchange
+            .routing_key(reply_to.unwrap().clone())
+            .mandatory(true).immediate(false).finish();
+        channel.basic_publish(resp_props, content, args).await?;
+        Ok(None)
+    } // end of fn try_send_response
+    
+    async fn _consume(&mut self, channel: &Channel, deliver: Deliver,
+                      req_props: BasicProperties, content: Vec<u8>)
+        -> DefaultResult<Option<String>, AppError>
+    {
+        let local_t0 = Local::now().fixed_offset();
+        let start_time = match req_props.timestamp() {
+            Some(ts) => match ts.try_into() {
+                Ok(ts2) =>  DateTime::from_timestamp(ts2, 0u32)
+                    .unwrap_or(local_t0.into()).fixed_offset() ,
+                Err(e) =>  local_t0
+            },
+            None => local_t0
+        };
+        let req = AppRpcClientReqProperty { retry: 0, msgbody: content,
+                  start_time, route: deliver.routing_key().clone() };
+        let hdlr_fn = self.route_hdlr;
+        let resp_body = hdlr_fn(req, self.shr_state.clone()).await ?;
+        let local_t1 = Local::now().fixed_offset();
+        let missing = Self::try_send_response(channel, req_props,
+                        local_t1, resp_body).await ?;
+        let ack_args = BasicAckArguments::new(deliver.delivery_tag(), false);
+        channel.basic_ack(ack_args).await?;
+        Ok(missing)
+    }
+} // end of impl InnerConsumer
+
+#[async_trait]
+impl AsyncConsumer for InnerConsumer
+{
+    async fn consume(&mut self, channel: &Channel, deliver: Deliver,
+                     basic_properties: BasicProperties, content: Vec<u8>)
+    {
+        let log_ctx_p = self.log_ctx.clone();
+        let route_key_log = deliver.routing_key().clone();
+        let part_content_log = {
+            let sz = std::cmp::min(20, content.len());
+            (&content[..sz]).to_vec()
+        };
+        app_log_event!(log_ctx_p, AppLogLevel::DEBUG, "route:{}, content:{:?}",
+                        route_key_log, part_content_log);
+        let result = self._consume(channel, deliver, basic_properties, content).await;
+        match result {
+            Ok(r) => if let Some(m) = r {
+                app_log_event!(log_ctx_p, AppLogLevel::WARNING, "route:{}, content:{:?}, \
+                               missing:{}", route_key_log, part_content_log, m);
+            },
+            Err(e) => {
+                app_log_event!(log_ctx_p, AppLogLevel::ERROR, "route:{}, content:{:?}, \
+                               error: {:?}", route_key_log, part_content_log, e);
+            }
+        }
+    } // end of fn consume
+} // end of impl InnerConsumer

@@ -50,7 +50,7 @@ fn start_async_runtime (cfg:AppConfig, cfdntl:Box<dyn AbstractConfidentiality>)
         .thread_stack_size(stack_nbytes)
         .thread_name("rpc-api-consumer")
         // manage low-level I/O drivers used by network types
-        .enable_io()
+        .enable_io().enable_time()
         .build();
     match result {
         Ok(rt) => { // new worker threads spawned
