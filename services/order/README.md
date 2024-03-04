@@ -13,6 +13,7 @@
 | type | name | version required |
 |------|------|------------------|
 | SQL Database | MariaDB | `10.3.22` |
+| AMQP broker | RabbitMQ | `3.2.4` |
 | Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.67.1` |
 | DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
 
@@ -26,8 +27,10 @@ For applications
 cargo build  --bin web
 cargo build  --bin rpc_consumer
 ```
-- you can add the option `--features mariadb` along with the command `cargo build` to enable MariaDB database in this service.
-
+- you can add the following options along with the command `cargo build`
+  - `--features mariadb` , to enable MariaDB database in this service.
+  - `--features amqprs` , to enable publish / subscribe operations to AMQP broker in this service.
+  - or enable all options , such as `--features "mariadb amqprs"`
 
 If you configure SQL database as the datastore destination in the development server or testing server, ensure to synchronize schema migration
 ```shell
@@ -54,7 +57,7 @@ cd ${SERVICE_BASE_PATH}
 
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
     CONFIG_FILE_PATH="settings/development.json" \
-    cargo run  --bin web
+    cargo run  --bin web --features "mariadb amqprs"
 ```
 ### Development RPC consumer
 ```shell=?
@@ -62,7 +65,7 @@ cd ${SERVICE_BASE_PATH}
 
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
     CONFIG_FILE_PATH="settings/development.json" \
-    cargo run  --bin rpc_consumer
+    cargo run  --bin rpc_consumer --features "mariadb amqprs"
 ```
 
 ### Development API server with Debugger
@@ -75,11 +78,11 @@ Run the test cases collected under `PROJECT_HOME/order/tests/unit`
 cd ${SERVICE_BASE_PATH}
 
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
-    cargo test --test unittest --features mariadb  -- \
+    cargo test --test unittest --features "mariadb amqprs" -- \
     <<OPTIONAL-TEST-ENTRY-MODULE-PATH>> --test-threads=1 --nocapture
 ```
 Note:
-- you can add the option `--features mariadb` along with the command `cargo test` to enable MariaDB database for unit/integration tests.
+- the feature options `mariadb`, `amqprs` can also be applied along with the command `cargo test`
 - `--test-threads=1` can be added if the feature `mariadb` is enabled
   - this option means you limit number of threads running all the test cases in parallel.
   - this is to reduce number of connections opening for test at the database backend.

@@ -49,24 +49,43 @@
                 "exchange": "rpc-default-allapps",
                 "routing_key": "rpc.order.unittest.one",
                 "ensure_declare": true,
-                "durable": false,
-                "reply": {
-		    "side": "server",
-                    "task_handler": "utest_001_msg_hdlr",
-                    "ttl_sec": 12
-                }
+                "subscribe": false,
+		"ttl_secs": 17,
+		"max_length": 80,
+                "durable": false
 	    },
 	    {
                 "queue": "rpc_orderproc_unittest_002",
                 "exchange": "rpc-default-allapps",
                 "routing_key": "rpc.order.unittest.two",
                 "ensure_declare": true,
+                "subscribe": true,
+		"ttl_secs": 18,
+		"max_length": 83,
                 "durable": false,
                 "reply": {
-		    "side": "client",
                     "queue": "rpc.reply.order.unittest.002",
                     "correlation_id_prefix": "rpc.order.ut_002.corr_id",
-                    "ttl_sec": 65
+                    "durable": true,
+		    "max_length": 2318,
+                    "ttl_secs": 65
+                }
+	    },
+	    {
+                "queue": "rpc_orderproc_unittest_003",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.unittest.three",
+                "ensure_declare": true,
+                "subscribe": true,
+		"ttl_secs": 19,
+		"max_length": 86,
+                "durable": true,
+                "reply": {
+                    "queue": "rpc.reply.order.unittest.003",
+                    "correlation_id_prefix": "rpc.order.ut_003.corr_id",
+                    "durable": false,
+		    "max_length": 1930,
+                    "ttl_secs": 44
                 }
 	    }
 	],

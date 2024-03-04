@@ -50,11 +50,16 @@
                 "exchange": "rpc-utest-default-exchange",
                 "routing_key": "rpc.order.utest.my_queue",
                 "ensure_declare": true,
-                "durable": true,
+                "subscribe": false,
+		"ttl_secs": 21,
+		"max_length": 89,
+                "durable": false,
                 "reply": {
-		    "side": "server",
-                    "task_handler": "utest_ping_pong",
-                    "ttl_sec": 34
+                    "queue": "rpc.reply.order.unittest.my_orig_queue",
+                    "correlation_id_prefix": "rpc.order.ut_00123.corr_id",
+                    "durable": false,
+		    "max_length": 1772,
+                    "ttl_secs": 34
                 }
 	    }
 	],

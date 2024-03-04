@@ -28,6 +28,18 @@ fn ut_appstate_setup() -> AppSharedState
     ut_setup_share_state("config_ok_amqp.json", Box::new(cfdntl))
 }
 
+fn ut_pubsub_msgs() -> [(&'static str, &'static str);5]
+{
+    let routes = ["rpc.order.unittest.three", "rpc.order.unittest.two"];
+    [
+        (routes[0],  r#"{"me":"je"}"# ), 
+        (routes[0],  r#"{"saya":"ich"}"# ),
+        (routes[1],  r#"{"Zeist":"meat"}"#),
+        (routes[0],  r#"{"light":"shadow"}"#),
+        (routes[1],  r#"{"ice":"flame"}"#),
+    ]
+}
+
 async fn ut_client_send_req<'a>(
     rpcctx: Arc<Box<dyn AbstractRpcContext>>, route:&'a str, msg: &'a str
 )
@@ -40,9 +52,9 @@ async fn ut_client_send_req<'a>(
         start_time: Local::now().fixed_offset(), route: route.to_string()
     };
     let result = hdlr.send_request(props).await;
-    // if let Err(e) = result.as_ref() {
-    //     println!("[debug] error: {:?}", e);
-    // }
+    //if let Err(e) = result.as_ref() {
+    //    println!("[debug] error: {:?}", e);
+    //}
     assert!(result.is_ok());
     let _event = result.unwrap();
     sleep(Duration::from_millis(15)).await;
@@ -52,6 +64,7 @@ async fn ut_client_send_req<'a>(
 fn mock_route_hdlr_wrapper(req:AppRpcClientReqProperty, shr_state: AppSharedState)
     -> Pin<Box<dyn Future<Output=DefaultResult<Vec<u8>, AppError>> + Send>>
 {
+    let expect_msgs = ut_pubsub_msgs();
     let fut = async move {
         Ok(vec![])
     };
@@ -70,9 +83,8 @@ async fn client_req_to_server_ok()
         assert!(result.is_ok());
     });
     sleep(Duration::from_secs(4)).await; // wait until queues are created
-    let route =  "rpc.order.unittest.two";
-    let msgs = [r#"{"me":"je"}"#, r#"{"saya":"ich"}"#, r#"{"Zeist":"meat"}"#];
-    for msg in msgs {
+    let msgs = ut_pubsub_msgs();
+    for (route, msg) in msgs {
         ut_client_send_req(rpcctx.clone(), route, msg).await;
     }
     let result = srv_handle.await;

@@ -72,22 +72,15 @@ pub struct WebApiListenCfg {
     pub routes: Vec<WebApiRouteCfg>,
 }
 
-#[allow(non_camel_case_types)]
 #[derive(Deserialize)]
-#[serde(tag="side")]
-pub enum AppAmqpBindingReplyCfg {
-    client {
-        #[serde(deserialize_with = "jsn_deny_empty_string")]
-        queue: String,
-        #[serde(deserialize_with = "jsn_deny_empty_string")]
-        correlation_id_prefix: String,
-        ttl_sec: u16, // TODO, add `max-length`, `durable`
-    },
-    server {
-        #[serde(deserialize_with = "jsn_deny_empty_string")]
-        task_handler: String,
-        ttl_sec: u16, // TODO, add `max-length`
-    },
+pub struct AppAmqpBindingReplyCfg {
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+    pub queue: String,
+    #[serde(deserialize_with = "jsn_deny_empty_string")]
+    pub correlation_id_prefix: String,
+    pub ttl_secs: u16,
+    pub max_length: u32, // max number of messages preserved in the queue
+    pub durable: bool,
 }
 
 #[derive(Deserialize)]
@@ -98,9 +91,12 @@ pub struct AppAmqpBindingCfg {
     pub exchange: String,
     #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub routing_key: String,
+    pub ttl_secs: u16,
+    pub max_length: u32, // max number of messages preserved in the queue
+    pub durable: bool,
     pub ensure_declare: bool,
-    pub durable: bool, // TODO, add `ttl-secs`, `max-length`
-    pub reply: AppAmqpBindingReplyCfg,
+    pub subscribe: bool,
+    pub reply: Option<AppAmqpBindingReplyCfg>,
 }
 
 #[derive(Deserialize)]

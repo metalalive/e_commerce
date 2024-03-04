@@ -92,24 +92,26 @@
                 "exchange": "rpc-default-allapps",
                 "routing_key": "rpc.order.update_store_products",
                 "ensure_declare": true,
+                "subscribe": true,
                 "durable": true,
-                "reply": {
-		    "side": "server",
-                    "task_handler": "sync_storefront_products",
-                    "ttl_sec": 11
-                }
+		"ttl_secs": 18,
+		"max_length": 156
 	    },
 	    {
                 "queue": "rpc_productmgt_get_product",
                 "exchange": "rpc-default-allapps",
                 "routing_key": "rpc.product.get_product",
                 "ensure_declare": false,
+                "subscribe": false,
                 "durable": true,
+		"ttl_secs": 10,
+		"max_length": 1350,
                 "reply": {
-		    "side": "client",
                     "queue": "rpc.reply.order.receive_product_info",
                     "correlation_id_prefix": "rpc.order.get_product_info.corr_id",
-                    "ttl_sec": 15
+                    "durable": true,
+		    "max_length": 2300,
+                    "ttl_secs": 15
                 }
 	    }
 	],

@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use amqprs::{BasicProperties, FieldTable, FieldValue};
 use amqprs::connection::{OpenConnectionArguments, Connection as AmqpConnection};
+use amqprs::consumer::DefaultConsumer;
 use amqprs::channel::{
     Channel, QueueDeclareArguments, QueueBindArguments, ConfirmSelectArguments,
     BasicPublishArguments
@@ -31,10 +32,6 @@ struct BrokerSecret {
     username: String,
     password: String
 }
-        
-// TODO, configurable parameters
-const MAX_NUM_MSGS : i32 = 1300;
-const MSG_TTL_MILLISEC : i32 = 33000;
 
 pub(super) struct AmqpRpcContext {
     // currently use single connection/channel for all publish/consume
@@ -50,6 +47,8 @@ struct AmqpRpcClientHandler {
     chosen_bind_idx: Option<usize>,
     channel: Channel,
 }
+
+struct InnerServer {}
 
 impl From<AmqpError> for AppError {
     fn from(value: AmqpError) -> Self {
@@ -90,8 +89,10 @@ impl AbsRpcServerCtx for AmqpRpcContext
     {
         let (channel, reconnected) = self.try_acquire_channel(2).await ?;
         if reconnected {
-            InnerServer::init(self.bindings.clone(), &channel).await;
+            InnerServer::init(self.bindings.clone(), channel,
+                              shr_state, route_hdlr).await ?;
         }
+        // TODO, notufy to return
         Ok(())
     }
 }
@@ -205,18 +206,15 @@ impl AbstractRpcClient for AmqpRpcClientHandler
     async fn send_request(mut self:Box<Self>, req:AppRpcClientReqProperty)
         -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     {
-        let (route, content, retry, t_start) = (req.route, req.msgbody,
-                                                req.retry, req.start_time);
+        let (route, content, t_start) = (req.route, req.msgbody, req.start_time);
         let (idx, bind_cfg) = try_get_binding(self.bindings.as_ref(), route.as_str())?;
-        let (reply_q_name, corr_id_prefix) = if let AppAmqpBindingReplyCfg::client {
-            queue, correlation_id_prefix, ttl_sec } = &bind_cfg.reply
-        {
-            (queue.as_str(), correlation_id_prefix.as_str())
+        let (reply_q_name, corr_id_prefix) = if let Some(r_cfg) = &bind_cfg.reply {
+            (r_cfg.queue.as_str(), r_cfg.correlation_id_prefix.as_str())
         } else {
-            let d = format!("amqp-client-send-req, bind-reply-cfg");
-            return Err(AppError { code:AppErrorCode::InvalidInput, detail: Some(d) });
-        };
-        // only RPC client needs to turn on confirm mode in the broker
+            let e = AppError { code: AppErrorCode::InvalidInput,
+                    detail: Some("rpc-client-seq, empty-reply-cfg".to_string()) };
+            return Err(e);
+        }; // only RPC client needs to turn on confirm mode in the broker
         self.channel.confirm_select(ConfirmSelectArguments::new(false)).await?;
         let mut corr_id = generate_custom_uid(app_meta::MACHINE_CODE).into_bytes()
             .into_iter().map(|b| format!("{:02x}",b))
@@ -266,25 +264,20 @@ fn try_get_binding<'a,'b>(src:&'a Vec<AppAmqpBindingCfg>, route_key:&'b str)
 }
 
 
-struct InnerServer{}
-
-impl InnerServer
-{
-    async fn init(bindings:Arc<Vec<AppAmqpBindingCfg>>, channel:&Channel)
-        -> DefaultResult<(), AppError>
+impl InnerServer {
+    async fn init(
+        bindings:Arc<Vec<AppAmqpBindingCfg>>, channel:Channel,
+        shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
+    )  -> DefaultResult<(), AppError>
     {
         for bind_cfg in bindings.iter() {
             if bind_cfg.ensure_declare {
-                Self::ensure_send_queue(channel, bind_cfg).await?;
+                Self::ensure_send_queue(&channel, bind_cfg).await?;
             }
-            match &bind_cfg.reply {
-                AppAmqpBindingReplyCfg::client { queue, ttl_sec,
-                    correlation_id_prefix } => {
-                    Self::ensure_reply_queue(&channel, queue.as_str(),
-                        bind_cfg.durable, ttl_sec.clone()).await?;
-                },
-                AppAmqpBindingReplyCfg::server { task_handler, ttl_sec } => {
-                },
+            if let Some(r_cfg) = &bind_cfg.reply {
+                Self::ensure_reply_queue(&channel, r_cfg).await?;
+            }
+            if bind_cfg.subscribe {
             }
         } // end of loop
         Ok(())
@@ -293,9 +286,11 @@ impl InnerServer
     async fn ensure_send_queue(channel:&Channel, cfg:&AppAmqpBindingCfg)
         -> DefaultResult<(), AppError>
     {
+        let ttl_millis = cfg.ttl_secs as i32  * 1000;
+        let max_num_msgs = cfg.max_length as i32;
         let mut properties = FieldTable::new();
-        properties.insert("x-message-ttl".try_into().unwrap(), FieldValue::I(MSG_TTL_MILLISEC));
-        properties.insert("x-max-length".try_into().unwrap(), FieldValue::I(MAX_NUM_MSGS));
+        properties.insert("x-message-ttl".try_into().unwrap(), FieldValue::I(ttl_millis));
+        properties.insert("x-max-length".try_into().unwrap(), FieldValue::I(max_num_msgs));
         // note the flag `passive` only checks whether the queue exists,
         // the broker reports `OK` if exists or ambigious error if not.
         let args = QueueDeclareArguments::new(cfg.queue.as_str()).durable(cfg.durable)
@@ -310,20 +305,22 @@ impl InnerServer
                    cfg.routing_key.as_str()).no_wait(false).finish() ;
         channel.queue_bind(args).await?;
         Ok(())
-    }
+    } // end of fn ensure_send_queue
 
-    async fn ensure_reply_queue(channel:&Channel, queue:&str, durable:bool, ttl_sec:u16)
+    async fn ensure_reply_queue(channel:&Channel, cfg:&AppAmqpBindingReplyCfg)
         -> DefaultResult<(), AppError>
     {
-        let ttl_millis = ttl_sec as i32  * 1000;
+        let (queue, ttl_secs) = (cfg.queue.as_str(), cfg.ttl_secs);
+        let ttl_millis = ttl_secs as i32  * 1000;
+        let max_num_msgs = cfg.max_length as i32;
         let mut properties = FieldTable::new();
         properties.insert("x-message-ttl".try_into().unwrap(), FieldValue::I(ttl_millis));
-        properties.insert("x-max-length".try_into().unwrap(), FieldValue::I(MAX_NUM_MSGS));
-        let args = QueueDeclareArguments::new(queue).durable(durable)
+        properties.insert("x-max-length".try_into().unwrap(), FieldValue::I(max_num_msgs));
+        let args = QueueDeclareArguments::new(queue).durable(cfg.durable)
             .passive(false).auto_delete(false).no_wait(false)
             .arguments(properties).finish();
         let _result = channel.queue_declare(args).await?;
         Ok(())
     }
-} // end of mod InnerServer
+} // end of impl InnerServer
 
