@@ -65,7 +65,7 @@ impl AppSharedState {
         let confidential = Arc::new(confidential);
         let log = Arc::new(log);
         let _rpc_ctx = rpc::build_context(&cfg.api_server.rpc,
-                                          confidential.clone()).unwrap();
+                            log.clone(), confidential.clone()).unwrap();
         let (in_mem, sql_dbs) = datastore::build_context(log.clone(),
                                 &cfg.api_server.data_store, confidential);
         let in_mem = if let Some(m) = in_mem { Some(Arc::new(m)) } else {None};

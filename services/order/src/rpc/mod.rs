@@ -16,19 +16,22 @@ use chrono::{DateTime, FixedOffset};
 use crate::{AppRpcCfg, AppSharedState};
 use crate::error::{AppError, AppErrorCode};
 use crate::confidentiality::AbstractConfidentiality;
+use crate::logging::AppLogContext;
 use crate::rpc::dummy::DummyRpcContext;
 #[cfg(feature="amqprs")]
 use self::amqp::AmqpRpcContext;
 
-pub(crate) fn build_context (cfg: &AppRpcCfg, confidential:Arc<Box<dyn AbstractConfidentiality>>)
-    -> DefaultResult<Box<dyn AbstractRpcContext>, AppError>
+pub(crate) fn build_context (
+    cfg: &AppRpcCfg,  logctx: Arc<AppLogContext>,
+    confidential:Arc<Box<dyn AbstractConfidentiality>>
+) -> DefaultResult<Box<dyn AbstractRpcContext>, AppError>
 {
     match cfg {
         AppRpcCfg::dummy => Ok(DummyRpcContext::build()),
         AppRpcCfg::AMQP(detail_cfg) => {
             #[cfg(feature="amqprs")]
             {
-                AmqpRpcContext::build(detail_cfg, confidential)
+                AmqpRpcContext::build(detail_cfg, logctx, confidential)
             }
             #[cfg(not(feature="amqprs"))]
             {

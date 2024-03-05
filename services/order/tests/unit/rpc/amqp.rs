@@ -6,12 +6,12 @@ use std::sync::Arc;
 use std::result::Result as DefaultResult;
 use std::time::Duration;
 
-use order::error::AppError;
+use order::error::{AppError, AppErrorCode};
 use tokio::task;
 use tokio::time::sleep;
 use chrono::Local;
 
-use order::{AppSharedState, AppRpcClientReqProperty, AbstractRpcContext};
+use order::{AppSharedState, AppRpcClientReqProperty, AbstractRpcContext, AbstractRpcClient};
 use order::constant::ENV_VAR_SYS_BASE_PATH;
 use order::confidentiality::UserSpaceConfidentiality;
 
@@ -63,13 +63,30 @@ async fn ut_client_send_req<'a>(
         start_time: Local::now().fixed_offset(), route: route.to_string()
     };
     let result = hdlr.send_request(props).await;
-    //if let Err(e) = result.as_ref() {
-    //    println!("[debug] error: {:?}", e);
-    //}
+    if let Err(e) = result.as_ref() {
+        println!("[debug] client-send-request, error: {:?}", e);
+    }
     assert!(result.is_ok());
-    let _event = result.unwrap();
-    sleep(Duration::from_millis(15)).await;
-}
+    let mut event = result.unwrap();
+    sleep(Duration::from_millis(40)).await;
+    let mut possible_reply = None;
+    for _ in 0..3 {
+        match event.receive_response().await {
+            Ok(reply) => { possible_reply = Some(reply); break; },
+            Err(e) => {
+                let result = matches!(e.code, AppErrorCode::RpcReplyNotReady);
+                assert!(result);
+                sleep(Duration::from_secs(1)).await;
+            },
+        }
+    }
+    assert!(possible_reply.is_some());
+    let actual_content = possible_reply.unwrap().body;
+    let actual_resp_body = String::from_utf8(actual_content).unwrap();
+    println!("[debug] RPC reply content: {}", actual_resp_body);
+    let expect_resp_body = ut_server_publish_msg(msg);
+    assert_eq!(actual_resp_body.as_str(), expect_resp_body);
+} // end of fn ut_client_send_req
 
 
 fn mock_route_hdlr_wrapper(req:AppRpcClientReqProperty, shr_state: AppSharedState)
@@ -100,8 +117,18 @@ async fn client_req_to_server_ok()
     });
     sleep(Duration::from_secs(4)).await; // wait until queues are created
     let msgs = ut_client_publish_msgs();
+    let mut clients_handle = Vec::new();
     for (route, msg) in msgs {
-        ut_client_send_req(rpcctx.clone(), route, msg).await;
+        let rpc_client = rpcctx.clone();
+        let client_handle = task::spawn(async move {
+            ut_client_send_req(rpc_client, route, msg).await;
+        });
+        clients_handle.insert(0, client_handle);
+        sleep(Duration::from_millis(50)).await;
+    }
+    for client_handle in clients_handle {
+        let result = client_handle.await;
+        assert!(result.is_ok());
     }
     let result = srv_handle.await;
     assert!(result.is_ok());
