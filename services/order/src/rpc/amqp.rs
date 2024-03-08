@@ -510,7 +510,7 @@ impl InnerServerConsumer
             },
             None => local_t0
         };
-        let req = AppRpcClientReqProperty { retry: 0, msgbody: content,
+        let req = AppRpcClientReqProperty { msgbody: content,
                   start_time, route: deliver.routing_key().clone() };
         let hdlr_fn = self.route_hdlr;
         let resp_body = hdlr_fn(req, self.shr_state.clone()).await ?;

@@ -205,13 +205,14 @@ async fn itest_setup_product_price<'a>(
     shrstate:AppSharedState, body_fpath:&'a str
 ) -> Vec<u8>
 {
-    let mock_rpc_topic = "update_store_products";
+    let mock_rpc_topic = "rpc.order.update_store_products";
     let cfg = shrstate.config().clone();
     let req = {
         let result = deserialize_json_template::<JsnVal>(&cfg.basepath, body_fpath);
         let req_body_template = result.unwrap();
         let msgbody = req_body_template.to_string().into_bytes();
-        AppRpcClientReqProperty { retry: 1, msgbody, route: mock_rpc_topic.to_string() }
+        AppRpcClientReqProperty { start_time: Local::now().fixed_offset(),
+            msgbody, route: mock_rpc_topic.to_string() }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
@@ -240,7 +241,7 @@ async fn itest_setup_stock_level<'a>(
     shrstate:AppSharedState, expiry:DateTime<FixedOffset> , body_fpath:&'a str
 ) -> JsnVal
 {
-    let mock_rpc_topic = "stock_level_edit";
+    let mock_rpc_topic = "rpc.order.stock_level_edit";
     let cfg = shrstate.config().clone();
     let req = {
         let result = deserialize_json_template::<JsnVal>(&cfg.basepath, body_fpath);
@@ -252,7 +253,8 @@ async fn itest_setup_stock_level<'a>(
             let _old_val = map.insert("expiry".to_string(), JsnVal::String(t_fmt));
         }
         let msgbody = req_body_template.to_string().into_bytes();
-        AppRpcClientReqProperty { retry: 1, msgbody, route: mock_rpc_topic.to_string() }
+        AppRpcClientReqProperty { start_time: Local::now().fixed_offset(),
+            msgbody, route: mock_rpc_topic.to_string() }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
@@ -505,7 +507,7 @@ async fn itest_setup_create_order(
 async fn itest_setup_get_order_billing(shrstate: AppSharedState, oid:String) -> JsnVal
 {
     const FPATH_REP_PAYMENT_TEMPLATE:&str = "/tests/integration/examples/replica_payment_template.json";
-    let mock_rpc_topic = "order_reserved_replica_payment";
+    let mock_rpc_topic = "rpc.order.order_reserved_replica_payment";
     let cfg = shrstate.config().clone();
     let req = {
         let result = deserialize_json_template::<JsnVal>(
@@ -514,7 +516,8 @@ async fn itest_setup_get_order_billing(shrstate: AppSharedState, oid:String) -> 
         let obj = req_body_template.as_object_mut().unwrap();
         obj.insert("order_id".to_string(), JsnVal::String(oid)) ;
         let msgbody = req_body_template.to_string().into_bytes();
-        AppRpcClientReqProperty { retry: 1, msgbody, route: mock_rpc_topic.to_string() }
+        AppRpcClientReqProperty { start_time: Local::now().fixed_offset(),
+            msgbody, route: mock_rpc_topic.to_string() }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
@@ -571,7 +574,7 @@ async fn itest_update_payment_status( shrstate:AppSharedState, oid:String ,
     last_paid: Vec<(u32, ProductType, u64, u32, DateTime<FixedOffset>)> 
 ) {
     const FPATH_UPDATE_PAYMENT_TEMPLATE:&str = "/tests/integration/examples/update_payment_template.json";
-    let mock_rpc_topic = "order_reserved_update_payment";
+    let mock_rpc_topic = "rpc.order.order_reserved_update_payment";
     assert!(!last_paid.is_empty());
     let cfg = shrstate.config().clone();
     let req = {
@@ -593,7 +596,8 @@ async fn itest_update_payment_status( shrstate:AppSharedState, oid:String ,
             lines.push(JsnVal::Object(info));
         }).count();
         let msgbody = req_body_template.to_string().into_bytes();
-        AppRpcClientReqProperty { retry: 1, msgbody, route: mock_rpc_topic.to_string() }
+        AppRpcClientReqProperty { start_time: Local::now().fixed_offset(),
+            msgbody, route: mock_rpc_topic.to_string() }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
@@ -650,7 +654,7 @@ async fn itest_setup_get_order_refund( shrstate: AppSharedState, oid:String,
 ) -> JsnVal
 {
     const FPATH_REP_REFUND_TEMPLATE:&str = "/tests/integration/examples/replica_refund_template.json";
-    let mock_rpc_topic = "order_returned_replica_refund";
+    let mock_rpc_topic = "rpc.order.order_returned_replica_refund";
     let cfg = shrstate.config().clone();
     let req = {
         let result = deserialize_json_template::<JsnVal>(
@@ -661,7 +665,8 @@ async fn itest_setup_get_order_refund( shrstate: AppSharedState, oid:String,
         obj.insert("start".to_string(), JsnVal::String(t_start.to_rfc3339()));
         obj.insert("end".to_string(),   JsnVal::String(t_end.to_rfc3339()));
         let msgbody = req_body_template.to_string().into_bytes();
-        AppRpcClientReqProperty { retry: 1, msgbody, route: mock_rpc_topic.to_string() }
+        AppRpcClientReqProperty { start_time: Local::now().fixed_offset(),
+            msgbody, route: mock_rpc_topic.to_string() }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());
@@ -767,7 +772,7 @@ async fn itest_setup_get_order_inventory( shrstate: AppSharedState,
 ) -> JsnVal
 {
     const FPATH_REP_INVENTORY_TEMPLATE:&str = "/tests/integration/examples/replica_inventory_template.json";
-    let mock_rpc_topic = "order_reserved_replica_inventory";
+    let mock_rpc_topic = "rpc.order.order_reserved_replica_inventory";
     let cfg = shrstate.config().clone();
     let req = {
         let result = deserialize_json_template::<JsnVal>(
@@ -777,7 +782,8 @@ async fn itest_setup_get_order_inventory( shrstate: AppSharedState,
         obj.insert("start".to_string(), JsnVal::String(t_start.to_rfc3339()));
         obj.insert("end".to_string(),   JsnVal::String(t_end.to_rfc3339()));
         let msgbody = req_body_template.to_string().into_bytes();
-        AppRpcClientReqProperty { retry: 1, msgbody, route: mock_rpc_topic.to_string() }
+        AppRpcClientReqProperty { start_time: Local::now().fixed_offset(),
+            msgbody, route: mock_rpc_topic.to_string() }
     };
     let result = rpc::route_to_handler(req, shrstate).await;
     assert!(result.is_ok());

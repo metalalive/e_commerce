@@ -31,6 +31,9 @@
             {"alias": "order::api::web::product_policy",
              "handlers": ["errlog-file-web-api"],
              "level": "DEBUG"},
+            {"alias": "order::rpc::amqp",
+             "handlers": ["std-output-forall", "errlog-file-rpc-consumer", "errlog-file-web-api"],
+             "level": "INFO"},
             {"alias": "order::usecase::edit_product_policy",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
@@ -94,8 +97,78 @@
                 "ensure_declare": true,
                 "subscribe": true,
                 "durable": true,
-		"ttl_secs": 18,
-		"max_length": 156
+		"ttl_secs": 15,
+		"max_length": 161
+	    },
+	    {
+                "queue": "rpc_orderproc_stock_level_edit",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.stock_level_edit",
+                "ensure_declare": true,
+                "subscribe": true,
+                "durable": true,
+		"ttl_secs": 180,
+		"max_length": 4096
+	    },
+	    {
+                "queue": "rpc_orderproc_stock_returned",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.stock_return_cancelled",
+                "ensure_declare": true,
+                "subscribe": true,
+                "durable": true,
+		"ttl_secs": 180,
+		"max_length": 2100
+	    },
+	    {
+                "queue": "rpc_orderproc_replica_rsv_ret_inventory",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.order_reserved_replica_inventory",
+                "ensure_declare": true,
+                "subscribe": true,
+                "durable": true,
+		"ttl_secs": 880,
+		"max_length": 1400
+	    },
+	    {
+                "queue": "rpc_orderproc_replica_payment",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.order_reserved_replica_payment",
+                "ensure_declare": true,
+                "subscribe": true,
+                "durable": true,
+		"ttl_secs": 60,
+		"max_length": 700
+	    },
+	    {
+                "queue": "rpc_orderproc_replica_refund",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.order_returned_replica_refund",
+                "ensure_declare": true,
+                "subscribe": true,
+                "durable": true,
+		"ttl_secs": 60,
+		"max_length": 455
+	    },
+	    {
+                "queue": "rpc_orderproc_update_payment_status",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.order_reserved_update_payment",
+                "ensure_declare": true,
+                "subscribe": true,
+                "durable": true,
+		"ttl_secs": 48,
+		"max_length": 700
+	    },
+	    {
+                "queue": "rpc_orderproc_discard_unpaid_olines",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.order_reserved_discard_unpaid",
+                "ensure_declare": true,
+                "subscribe": true,
+                "durable": true,
+		"ttl_secs": 20,
+		"max_length": 65
 	    },
 	    {
                 "queue": "rpc_productmgt_get_product",

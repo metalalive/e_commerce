@@ -59,7 +59,7 @@ async fn ut_client_send_req<'a>(
     let result = rpcctx.as_ref().acquire(num_retry).await;
     assert!(result.is_ok());
     let hdlr = result.unwrap();
-    let props = AppRpcClientReqProperty { retry: num_retry, msgbody: msg.as_bytes().to_vec() ,
+    let props = AppRpcClientReqProperty { msgbody: msg.as_bytes().to_vec() ,
         start_time: Local::now().fixed_offset(), route: route.to_string()
     };
     let result = hdlr.send_request(props).await;
@@ -103,6 +103,26 @@ fn mock_route_hdlr_wrapper(req:AppRpcClientReqProperty, shr_state: AppSharedStat
     };
     Box::pin(fut)
 }
+
+/*
+ * TODO
+ * following failure happenes sometimes, find out the root cause 
+    ---- rpc::amqp::client_req_to_server_ok stdout ----
+    [debug] client-send-request, error: AppError { code: Unknown, detail: Some("channel closed, internal-channel") }
+    thread 'rpc::amqp::client_req_to_server_ok' panicked at 'assertion failed: result.is_ok()', tests/unit/rpc/amqp.rs:69:5
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    thread 'rpc::amqp::client_req_to_server_ok' panicked at 'internal error: entered unreachable code:
+        responder must be registered for
+            SelectOk(MethodHeader { class_id: 85, method_id: 11 }, SelectOk)
+        on channel 1 [open] of connection 'AMQPRS000@localhost:5672/my_vhost_name [open]'',
+            /path/to/.cargo/registry/src/github.com-xxxxxxx/amqprs-1.5.3/src/api/channel/dispatcher.rs:490:45
+    [debug] client-send-request, error: AppError { code: Unknown, detail: Some("channel closed, internal-channel") }
+    thread 'rpc::amqp::client_req_to_server_ok' panicked at 'assertion failed: result.is_ok()', tests/unit/rpc/amqp.rs:69:5
+    [debug] client-send-request, error: AppError { code: Unknown, detail: Some("channel closed, internal-channel") }
+    thread 'rpc::amqp::client_req_to_server_ok' panicked at 'assertion failed: result.is_ok()', tests/unit/rpc/amqp.rs:69:5
+    thread 'rpc::amqp::client_req_to_server_ok' panicked at 'assertion failed: result.is_ok()', tests/unit/rpc/amqp.rs:131:9
+
+ * */
 
 #[tokio::test]
 async fn client_req_to_server_ok()

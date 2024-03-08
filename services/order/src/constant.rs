@@ -28,19 +28,82 @@ pub mod limit {
     pub const MIN_SECS_INTVL_REQ: u16 = 3;
 }
 
-pub(crate) const WEBAPI_ADD_PRODUCT_POLICY: WebApiHdlrLabel = "modify_product_policy";
-pub(crate) const WEBAPI_CREATE_NEW_ORDER: WebApiHdlrLabel = "create_new_order";
-pub(crate) const WEBAPI_ACCESS_EXISTING_ORDER: WebApiHdlrLabel = "access_existing_order";
-pub(crate) const WEBAPI_RETURN_OLINES_REQ: WebApiHdlrLabel = "return_lines_request";
+pub(crate) mod api
+{
+    use std::result::Result as DefaultResult;
+    use super::{AppError, AppErrorCode, app_meta, WebApiHdlrLabel};
 
-pub(crate) const RPCAPI_EDIT_PRODUCT_PRICE: WebApiHdlrLabel = "update_store_products";
-pub(crate) const RPCAPI_STOCK_LEVEL_EDIT: WebApiHdlrLabel = "stock_level_edit";
-pub(crate) const RPCAPI_STOCK_RETURN_CANCELLED: WebApiHdlrLabel = "stock_return_cancelled";
-pub(crate) const RPCAPI_ORDER_RSV_READ_INVENTORY: WebApiHdlrLabel = "order_reserved_replica_inventory";
-pub(crate) const RPCAPI_ORDER_RSV_READ_PAYMENT: WebApiHdlrLabel   = "order_reserved_replica_payment";
-pub(crate) const RPCAPI_ORDER_RET_READ_REFUND: WebApiHdlrLabel    = "order_returned_replica_refund";
-pub(crate) const RPCAPI_ORDER_RSV_UPDATE_PAYMENT: WebApiHdlrLabel = "order_reserved_update_payment";
-pub(crate) const RPCAPI_ORDER_RSV_DISCARD_UNPAID: WebApiHdlrLabel = "order_reserved_discard_unpaid";
+    #[allow(non_camel_case_types)]
+    pub(crate) struct web {}
+
+    impl web {
+        pub(crate) const ADD_PRODUCT_POLICY: WebApiHdlrLabel = "modify_product_policy";
+        pub(crate) const CREATE_NEW_ORDER: WebApiHdlrLabel = "create_new_order";
+        pub(crate) const ACCESS_EXISTING_ORDER: WebApiHdlrLabel = "access_existing_order";
+        pub(crate) const RETURN_OLINES_REQ: WebApiHdlrLabel = "return_lines_request";
+    }
+
+    #[allow(non_camel_case_types)]
+    pub(crate) struct rpc {}
+
+    impl rpc {
+        pub(crate) const EDIT_PRODUCT_PRICE: WebApiHdlrLabel = "update_store_products";
+        pub(crate) const STOCK_LEVEL_EDIT: WebApiHdlrLabel = "stock_level_edit";
+        pub(crate) const STOCK_RETURN_CANCELLED: WebApiHdlrLabel = "stock_return_cancelled";
+        pub(crate) const ORDER_RSV_READ_INVENTORY: WebApiHdlrLabel = "order_reserved_replica_inventory";
+        pub(crate) const ORDER_RSV_READ_PAYMENT: WebApiHdlrLabel   = "order_reserved_replica_payment";
+        pub(crate) const ORDER_RET_READ_REFUND: WebApiHdlrLabel    = "order_returned_replica_refund";
+        pub(crate) const ORDER_RSV_UPDATE_PAYMENT: WebApiHdlrLabel = "order_reserved_update_payment";
+        pub(crate) const ORDER_RSV_DISCARD_UNPAID: WebApiHdlrLabel = "order_reserved_discard_unpaid";
+        
+        pub(crate) fn extract_handler_label(path:&str) -> DefaultResult<&str, AppError>
+        {
+            let mut tokens = path.split(".").collect::<Vec<&str>>();
+            if tokens.len() == 3 {
+                Self::check_header_label(tokens.remove(0)) ?;
+                Self::check_service_label(tokens.remove(0)) ?;
+                let out = Self::check_hdlr_label(tokens.remove(0)) ?;
+                Ok(out)
+            } else {
+                let detail = format!("incorrect-format, tokens-length:{}", tokens.len());
+                Err(AppError {code: AppErrorCode::InvalidInput, detail: Some(detail) })
+            }
+        }
+        fn check_header_label(label:&str) -> DefaultResult<(), AppError>
+        {
+            if label == "rpc" {
+                Ok(())
+            } else {
+                let detail = format!("incorrect-header:{label}");
+                Err(AppError {code: AppErrorCode::InvalidInput, detail: Some(detail)})
+            }
+        }
+        fn check_service_label(label:&str) -> DefaultResult<(), AppError>
+        {
+            if label == app_meta::LABAL {
+                Ok(())
+            } else {
+                let detail = format!("incorrect-service:{label}");
+                Err(AppError {code: AppErrorCode::InvalidInput, detail: Some(detail)})
+            }
+        }
+        fn check_hdlr_label(label:&str) -> DefaultResult<&str, AppError>
+        {
+            let valid_labels = [ Self::EDIT_PRODUCT_PRICE,  Self::STOCK_LEVEL_EDIT, 
+                 Self::STOCK_RETURN_CANCELLED,   Self::ORDER_RSV_READ_INVENTORY  , 
+                 Self::ORDER_RSV_READ_PAYMENT,   Self::ORDER_RET_READ_REFUND     ,
+                 Self::ORDER_RSV_UPDATE_PAYMENT, Self::ORDER_RSV_DISCARD_UNPAID  ,
+            ];
+            if valid_labels.contains(&label) {
+                Ok(label)
+            } else {
+                let detail = format!("incorrect-handler:{label}");
+                Err(AppError {code: AppErrorCode::InvalidInput, detail: Some(detail)})
+            }
+        }
+    } // end of inner-struct rpc
+} // end of inner-mod api
+
 
 pub(crate) const HTTP_CONTENT_TYPE_JSON: &str = "application/json";
 

@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use axum::routing::{patch, post, MethodRouter};
 use http_body::Body as HttpBody;
 
-use crate::{AppSharedState, constant as AppConst, WebApiHdlrLabel};
+use crate::{AppSharedState, WebApiHdlrLabel};
+use crate::constant::api::web as WebConst;
 
 mod product_policy;
 mod order;
@@ -20,13 +21,13 @@ pub fn route_table<HB>() -> ApiRouteTableType<HB>
           <HB as HttpBody>::Error: Into<Box<dyn  std::error::Error + Send + Sync>>
 {
     let mut out: ApiRouteTableType<HB> = HashMap::new();
-    out.insert( AppConst::WEBAPI_ADD_PRODUCT_POLICY,
+    out.insert( WebConst::ADD_PRODUCT_POLICY,
                 post(product_policy::post_handler)  );
-    out.insert( AppConst::WEBAPI_CREATE_NEW_ORDER,
+    out.insert( WebConst::CREATE_NEW_ORDER,
                 post(order::create_handler)  );
-    out.insert( AppConst::WEBAPI_ACCESS_EXISTING_ORDER,
+    out.insert( WebConst::ACCESS_EXISTING_ORDER,
                 patch(order::edit_billing_shipping_handler)  );
-    out.insert( AppConst::WEBAPI_RETURN_OLINES_REQ,
+    out.insert( WebConst::RETURN_OLINES_REQ,
                 patch(order::return_lines_request_handler)  );
     out
 }

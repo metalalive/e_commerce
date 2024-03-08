@@ -90,7 +90,6 @@ pub trait AbstractRpcClient : Send + Sync {
 }
 
 pub struct AppRpcClientReqProperty {
-    pub retry:u8, // TODO, remove
     pub msgbody:Vec<u8>,
     pub start_time: DateTime<FixedOffset>, // TODO, handle idempotency on server side
     pub route:String

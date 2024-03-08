@@ -120,8 +120,9 @@ impl EditProductPolicyUseCase {
             }
         }).collect();
         let msgbody = serde_json::to_string(&msg_req).unwrap().into_bytes();
-        let properties = AppRpcClientReqProperty { retry:3u8, msgbody,
-            start_time:Local::now().fixed_offset(), route:"rpc.product.get_product".to_string()
+        let properties = AppRpcClientReqProperty { msgbody,
+            start_time:Local::now().fixed_offset(),
+            route:"rpc.product.get_product".to_string()
         };
         match run_rpc_fn(rpc_ctx, properties).await {
             Ok(r) => match String::from_utf8(r.body) {
