@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::env;
 use std::boxed::Box;
+use std::sync::atomic::Ordering;
 
 use http_body::Limited;
 use hyper::Body as HyperBody;
 use tokio::runtime::Builder as RuntimeBuilder;
+use tokio::signal::unix::{signal, SignalKind};
 use tower::ServiceBuilder;
 use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::cors::CorsLayer;
@@ -23,50 +25,77 @@ async fn start_server (shr_state:AppSharedState)
 {
     let log_ctx_p = shr_state.log_context().clone();
     let cfg = shr_state.config().clone();
+    let shutdown_flag = shr_state.shutdown();
+    let num_reqs_cnt  = shr_state.num_requests();
     let keystore = shr_state.auth_keystore();
     let routes = route_table::<AppFinalHttpBody>();
     let listener = &cfg.api_server.listen;
-    let (service, num_applied) = app_web_service::<AppFinalHttpBody>(listener, routes, shr_state);
+    let (leaf_service, num_applied) = app_web_service::<AppFinalHttpBody>(listener, routes, shr_state);
     if num_applied == 0 {
         app_log_event!(log_ctx_p, AppLogLevel::ERROR,
-                "no route created, web API server failed to start");
+                "API-server-start-failure, no-route-created");
         return;
     }
     let result = net_server_listener(listener.host.clone(), listener.port);
-    match result {
-        Ok(b) => {
-            let ratelm = middleware::rate_limit(listener.max_connections);
-            let reqlm = middleware::req_body_limit(cfg.api_server.limit_req_body_in_bytes);
-            let authm = {
-                let jwtauth = AppJwtAuthentication::new(keystore, Some(log_ctx_p.clone()));
-                AsyncRequireAuthorizationLayer::new(jwtauth)
-            };
-            let cors_cfg_fullpath = cfg.basepath.system.clone() +"/"+ listener.cors.as_str();
-            let co  = match middleware::cors(cors_cfg_fullpath) {
-                Ok(v) => v,
-                Err(e) => {
-                    app_log_event!(log_ctx_p, AppLogLevel::ERROR,
-                                   "cors layer init error, detail: {:?}", e);
-                    CorsLayer::new()
-                }
-            };
-            let middlewares1 = ServiceBuilder::new()
-                .layer(reqlm)
-                .layer(co)
-                .layer(authm);
-            let service = service.layer(middlewares1);
-            let middlewares2 = ServiceBuilder::new()
-                .layer(ratelm) // rate-limit not allowed to clone
-                .service(service.into_make_service());
-            let sr = b.serve(middlewares2);
-            let _ = sr.await;
-            app_log_event!(log_ctx_p, AppLogLevel::WARNING, "API server terminating ");
-        },
+    let server_bound = match result {
+        Ok(b) => b,
+        Err(e) => {
+            app_log_event!(log_ctx_p, AppLogLevel::ERROR, "API-server-start-failure, {e}");
+            return;
+        } 
+    };
+    let sh_detect = middleware::ShutdownDetectionLayer::new(
+        shutdown_flag.clone() , num_reqs_cnt.clone() );
+    let ratelm = middleware::rate_limit(listener.max_connections);
+    let reqlm = middleware::req_body_limit(cfg.api_server.limit_req_body_in_bytes);
+    let authm = {
+        let jwtauth = AppJwtAuthentication::new(keystore, Some(log_ctx_p.clone()));
+        AsyncRequireAuthorizationLayer::new(jwtauth)
+    };
+    let cors_cfg_fullpath = cfg.basepath.system.clone() +"/"+ listener.cors.as_str();
+    let co  = match middleware::cors(cors_cfg_fullpath) {
+        Ok(v) => v,
         Err(e) => {
             app_log_event!(log_ctx_p, AppLogLevel::ERROR,
-                    "API server failed to start, {} ", e);
+                           "cors layer init error, detail: {:?}", e);
+            CorsLayer::new()
         }
-    }
+    };
+    let middlewares_cloneable = ServiceBuilder::new()
+        .layer(sh_detect)
+        .layer(reqlm)
+        .layer(co)
+        .layer(authm);
+    let merged_service = leaf_service.layer(middlewares_cloneable);
+    let final_service = ServiceBuilder::new()
+        // add middlewares which are not allowed to be cloned
+        .layer(ratelm)
+        // TODO, FIXME
+        // Axum Router assigns itself to Response type parameter of a tower service
+        // trait. any custom middleware will hit type-mismatch error [E0271] if :
+        // (1) it modifies the response type
+        // (2) adding itself  to the service builder at here
+        // 
+        // Figure out how this happened, is the error resolved in latest version ?
+        .service(merged_service.into_make_service());
+    let srv = server_bound.serve(final_service);
+    let log_ctx_shutdown = log_ctx_p.clone();
+    let graceful = srv.with_graceful_shutdown(async move {
+        let mut shutdown_signal = signal(SignalKind::terminate()).unwrap();
+        shutdown_signal.recv().await;
+        shutdown_flag.store(true, Ordering::Relaxed);
+        for _ in 0..6 {
+            let num_reqs_rest = num_reqs_cnt.load(Ordering::Relaxed);
+            app_log_event!(log_ctx_shutdown, AppLogLevel::DEBUG,  "num_reqs_rest : {num_reqs_rest}");
+            if num_reqs_rest == 0 { break; }
+            else {
+                let period = std::time::Duration::new(5, 0);
+                tokio::time::sleep(period).await;
+            }
+        } // TODO, improve the code at here
+    });
+    let _ = graceful.await;
+    app_log_event!(log_ctx_p, AppLogLevel::INFO, "API-server-terminating");
 } // end of fn start_server
 
 
@@ -74,6 +103,7 @@ async fn start_jwks_refresh(shr_state:AppSharedState) {
     let log_ctx = shr_state.log_context().clone();
     let keystore = shr_state.auth_keystore();
     let period_secs = keystore.update_period().num_seconds()  as u64;
+    let mut shutdown_signal = signal(SignalKind::terminate()).unwrap();
     loop {
         let period = match keystore.refresh().await {
             Ok(stats) => {
@@ -93,12 +123,16 @@ async fn start_jwks_refresh(shr_state:AppSharedState) {
             },
             Err(e) => {
                 app_log_event!(log_ctx, AppLogLevel::ERROR,
-                    "failed to refrech JWK set, reason: {:?} ", e);
-                std::time::Duration::new(120, 0)
+                    "refresh failure JWK set, reason: {:?} ", e);
+                std::time::Duration::new(300, 0)
             }
         };
-        tokio::time::sleep(period).await;
+        tokio::select! {
+            _ = tokio::time::sleep(period) => { },
+            _ = shutdown_signal.recv()  => { break; },
+        }
     } // end of loop
+    app_log_event!(log_ctx, AppLogLevel::INFO, "JWKS-refresh-terminating");
 } // end of fn start_jwks_refresh
 
 

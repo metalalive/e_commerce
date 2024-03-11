@@ -15,9 +15,10 @@ use crate::api::web::{ApiRouteType, ApiRouteTableType};
 pub type WebServiceRoute<HB> = Router<(), HB>;
 
 // Due to the issues #1110 and discussion #1818 in Axum v0.6.x,
-// the type of final router depends on number of middleware layers
-// which are added to the router and wrap the original http body,
-// the type parameter `B` has to match that at compile time
+// the generic type parameter of final router depends all the middleware
+// layers added to the router, because they wrap the original http request
+// and response body layer by layer, the type parameter `HB` has to match
+// that at compile time
 
 pub fn app_web_service<HB>(cfg: &WebApiListenCfg, rtable: ApiRouteTableType<HB>,
            shr_state:AppSharedState) -> (WebServiceRoute<HB>, u16)
@@ -45,10 +46,12 @@ pub fn app_web_service<HB>(cfg: &WebApiListenCfg, rtable: ApiRouteTableType<HB>,
         let api_ver_path = String::from("/") + &cfg.api_version;
         Router::new().nest(api_ver_path.as_str(), router)
     } else { router };
-    // DO NOT specify state type at here, Axum converts a router to a service
-    // ONLY when the type parameter `S` in `Router` becomes empty tuple `()`,
-    // it is counter-intuitive that the `S` means `state type that is missing
-    // in the router`.
+    // DO NOT specify state type at here, Axum converts a router to a leaf service
+    // ONLY when the type parameter `S` in `Router` becomes empty tuple `()`.
+    // It is counter-intuitive that the `S` means :
+    //
+    //     "state type that is missing in the router".
+    //
     ////let router = router.with_state::<AppSharedState>(shr_state); // will cause error
     let router = router.with_state(shr_state);
     // let service = IntoMakeService{svc:router}; // prohibit
@@ -58,10 +61,15 @@ pub fn app_web_service<HB>(cfg: &WebApiListenCfg, rtable: ApiRouteTableType<HB>,
 
 pub mod middleware {
     use std::fs::File;
+    use std::pin::Pin;
     use std::str::FromStr;
     use std::time::Duration;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
+    use std::task::{Context, Poll};
 
     use serde::Deserialize;
+    use tower::{Service, Layer};
     use tower::limit::RateLimitLayer;
     use tower_http::cors::CorsLayer;
     use tower_http::limit::RequestBodyLimitLayer;
@@ -82,6 +90,18 @@ pub mod middleware {
         ALLOWED_HEADERS: Vec<String>,
         ALLOW_CREDENTIALS: bool,
         PREFLIGHT_MAX_AGE: u64
+    }
+
+    pub struct ShutdownDetection<S, RespBody> {
+        inner: S, // inner middleware service wrapped by this service
+        flag: Arc<AtomicBool>,
+        num_reqs: Arc<AtomicU32>,
+        _ghost: std::marker::PhantomData<RespBody>,
+    }
+    pub struct ShutdownDetectionLayer<RespBody> {
+        flag: Arc<AtomicBool>,
+        num_reqs: Arc<AtomicU32>,
+        _ghost: std::marker::PhantomData<RespBody>,
     }
 
     pub fn rate_limit(max_conn: u32) -> RateLimitLayer {
@@ -137,7 +157,170 @@ pub mod middleware {
         let reqlm = RequestBodyLimitLayer::new(limit);
         reqlm
     }
-} // end of module middleware
+
+    pub enum ShutdownExpRespBody<B> {
+        Normal { inner: B },
+        ShuttingDown { inner: http_body::Full<axum::body::Bytes> },
+    }
+    impl<B> ShutdownExpRespBody<B>
+    {
+        fn normal(inner: B) -> Self
+        { Self::Normal { inner } }
+        
+        fn error() -> Self {
+            let msg = b"server-shutting-down".to_vec();
+            let inner = http_body::Full::from(msg);
+            Self::ShuttingDown { inner }
+        }
+    }
+    impl<B> http_body::Body for ShutdownExpRespBody<B>
+        where B: http_body::Body<Data=axum::body::Bytes> + std::marker::Unpin
+    {
+        type Data = axum::body::Bytes;
+        type Error = B::Error;
+        fn poll_data(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+            ) -> Poll<Option<DefaultResult<Self::Data, Self::Error>>>
+        {
+            unsafe {
+                match self.get_unchecked_mut() {
+                    Self::ShuttingDown { inner } => {
+                        let pinned = Pin::new(inner);
+                        let result = pinned.poll_data(cx).map_err(|err| match err {});
+                        result
+                    },
+                    Self::Normal { inner } => {
+                        let pinned = Pin::new(inner);
+                        pinned.poll_data(cx)
+                    },
+                }
+            } // TODO, improve the code, `Pin::get_unchecked_mut()` is the only function
+              // which requires to run in unsafe block
+        }
+
+        fn poll_trailers(
+                self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+            ) -> Poll<DefaultResult<Option<http::HeaderMap>, Self::Error>> {
+            unsafe {
+                match self.get_unchecked_mut() {
+                    Self::ShuttingDown { inner } => 
+                        Pin::new(inner).poll_trailers(cx).map_err(|err| match err {}) ,
+                    Self::Normal { inner } => 
+                        Pin::new(inner).poll_trailers(cx),
+                }
+            }
+        }
+
+        fn is_end_stream(&self) -> bool {
+            match self {
+                Self::ShuttingDown { inner } => inner.is_end_stream(),
+                Self::Normal { inner } => inner.is_end_stream(),
+            }
+        }
+
+        fn size_hint(&self) -> http_body::SizeHint {
+            match self {
+                Self::ShuttingDown { inner } => inner.size_hint(),
+                Self::Normal { inner } => inner.size_hint(),
+            }
+        }
+    } // end of impl http-body Body for ShutdownExpRespBody
+
+    impl<S, RespBody> ShutdownDetection<S, RespBody> {
+        fn new(flag:Arc<AtomicBool>, num_reqs:Arc<AtomicU32>, inner:S) -> Self
+        {
+            let _ghost = std::marker::PhantomData::default();
+            Self {inner, flag, num_reqs, _ghost}
+        }
+    }
+    impl<S, REQ, RespBody> Service<REQ> for ShutdownDetection<S, RespBody>
+        where S: Service<REQ, Response=http::Response<RespBody>>,
+              RespBody: http_body::Body,
+              <S as Service<REQ>>::Future: std::future::Future + Send + 'static ,
+        // It is tricky to correctly set constraint on error type from inner service :
+        // - it may be converted to box pointer of some trait object, but it would be
+        //   good not to change the error struct.
+        // - it may also be `Infallible`, which means inner service should never reach
+        //   the error condition , in such case I cannot convert  coustom error to
+        //   `Infallible` becuase there is no public API in Rust which allows you to do so.
+        //
+        // [reference]
+        // https://github.com/tower-rs/tower/blob/master/guides/building-a-middleware-from-scratch.md#the-error-type
+              // <S as Service<REQ>>::Error: std::error::Error + Send + Sync + 'static ,
+              // <S as Service<REQ>>::Error: From<AppError> + Send + Sync + 'static ,
+    {
+        type Response = http::Response<ShutdownExpRespBody<RespBody>>;
+        type Error  = S::Error; // tower::BoxError;
+        type Future = Pin<Box<dyn std::future::Future<
+             Output = DefaultResult<Self::Response, Self::Error>
+             > + Send >>;
+
+        fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<DefaultResult<(), Self::Error>>
+        { self.inner.poll_ready(cx) }
+
+        fn call(&mut self, req: REQ) -> Self::Future {
+            let is_shutting_down = self.flag.load(Ordering::Relaxed);
+            if is_shutting_down {
+                Box::pin(async {
+                    let body = ShutdownExpRespBody::error();
+                    let resp = hyper::Response::builder()
+                        .status(http::StatusCode::SERVICE_UNAVAILABLE)
+                        .body(body).unwrap();
+                    Ok(resp)
+                })
+            } else {
+                let num_reqs_cnt = self.num_reqs.clone();
+                let _prev = num_reqs_cnt.fetch_add(1u32, Ordering::Relaxed);
+                let inner_fut = self.inner.call(req);
+                Box::pin(async move {
+                    let orig_resp = inner_fut.await?;
+                    let (parts, rbody) = orig_resp.into_parts();
+                    let cvt_rbody = ShutdownExpRespBody::normal(rbody);
+                    let cvt_resp = http::Response::from_parts(parts, cvt_rbody);
+                    let _prev = num_reqs_cnt.fetch_sub(1u32, Ordering::Relaxed);
+                    Ok(cvt_resp)
+                })
+            }
+        }
+    } // end of impl ShutdownDetection
+    impl<RespBody> ShutdownDetectionLayer<RespBody> {
+        pub fn new(flag:Arc<AtomicBool>, num_reqs:Arc<AtomicU32>) -> Self
+        {
+            let _ghost = std::marker::PhantomData::default();
+            Self { flag, num_reqs, _ghost }
+        }
+        pub fn number_requests(&self) -> Arc<AtomicU32>
+        { self.num_reqs.clone() }
+    }
+    impl<S, RespBody> Layer<S> for ShutdownDetectionLayer<RespBody> {
+        type Service = ShutdownDetection<S, RespBody>;
+
+        fn layer(&self, inner: S) -> Self::Service {
+            Self::Service::new(
+                self.flag.clone(),
+                self.num_reqs.clone(),
+                inner
+            )
+        }
+    }
+
+    impl<RespBody> Clone for ShutdownDetectionLayer<RespBody> {
+        fn clone(&self) -> Self {
+            Self { flag: self.flag.clone(), num_reqs: self.num_reqs.clone(),
+                _ghost: self._ghost.clone() }
+        }
+    }
+    impl<S, RespBody> Clone for ShutdownDetection<S, RespBody>
+        where S: Clone
+    {
+        fn clone(&self) -> Self {
+            Self { inner: self.inner.clone(), flag: self.flag.clone(),
+                num_reqs: self.num_reqs.clone(), _ghost: self._ghost.clone() }
+        }
+    }
+} // end of inner-module middleware
 
 
 pub fn net_server_listener(mut domain_host:String, port:u16)

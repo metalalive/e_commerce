@@ -1,5 +1,6 @@
 #![feature(io_error_more)]
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 
 use uuid::{Uuid, Builder, Timestamp, NoContext};
 
@@ -53,6 +54,8 @@ pub struct AppSharedState {
     _rpc: Arc<Box<dyn AbstractRpcContext>>,
     dstore: Arc<AppDataStoreContext>,
     _auth_keys: Arc<Box<dyn AbstractAuthKeystore>>,
+    _shutdown: Arc<AtomicBool>,
+    _num_reqs_processing : Arc<AtomicU32>,
 }
 
 impl AppSharedState {
@@ -75,7 +78,10 @@ impl AppSharedState {
         let ds_ctx = Arc::new(AppDataStoreContext {in_mem, sql_dbs});
         let auth_keys = AppAuthKeystore::new(&cfg.api_server.auth);
         Self{_cfg:Arc::new(cfg), _log:log, _rpc:Arc::new(_rpc_ctx),
-             dstore: ds_ctx, _auth_keys: Arc::new(Box::new(auth_keys)) }
+             dstore: ds_ctx, _auth_keys: Arc::new(Box::new(auth_keys)),
+             _shutdown: Arc::new(AtomicBool::new(false)),
+             _num_reqs_processing: Arc::new(AtomicU32::new(0))
+        }
     } // end of fn new
 
     pub fn config(&self) -> &Arc<AppConfig>
@@ -92,14 +98,23 @@ impl AppSharedState {
 
     pub fn auth_keystore(&self) -> Arc<Box<dyn AbstractAuthKeystore>>
     { self._auth_keys.clone() }
+
+    pub fn shutdown(&self) -> Arc<AtomicBool>
+    { self._shutdown.clone() }
+    
+    /// return atomic field which represents current number of processing requests
+    pub fn num_requests(&self) -> Arc<AtomicU32>
+    { self._num_reqs_processing.clone() }
 } // end of impl AppSharedState
 
 impl Clone for AppSharedState {
     fn clone(&self) -> Self {
-        Self{
+        Self {
             _cfg: self._cfg.clone(),   _log: self._log.clone(),
             _rpc: self._rpc.clone(),   dstore: self.dstore.clone(),
             _auth_keys: self._auth_keys.clone(),
+            _shutdown: self._shutdown.clone(),
+            _num_reqs_processing: self._num_reqs_processing.clone(),
         }
     }
 }

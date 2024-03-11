@@ -1,6 +1,7 @@
 use std::env;
 use std::collections::HashMap;
 use std::io::ErrorKind;
+use std::sync::atomic::Ordering;
 
 use order::error::AppErrorCode;
 use serde::{Deserialize, Serialize};
@@ -24,8 +25,6 @@ use order::logging::{AppLogLevel, app_log_event};
 use order::network::{middleware, app_web_service, net_server_listener};
 use crate::{ut_setup_share_state, EXAMPLE_REL_PATH, MockConfidential};
 
-
-
 #[derive(Deserialize, Serialize)]
 struct UTendpointData
 {
@@ -47,14 +46,14 @@ async fn ut_endpoint_handler(
 }
 
 
-fn ut_service_req_setup() -> Request<HyperBody>
+fn ut_service_req_setup(method:&str, uri:&str) -> Request<HyperBody>
 {
     let body = {
         let d = UTendpointData { gram: 76};
         let d = serde_json::to_string(&d).unwrap();
         HyperBody::from(d)
     };
-    let req = Request::post("/1.0.33/gram/increment")
+    let req = Request::builder().method(method).uri(uri)
         .header("content-type", "application/json")
         .body(body).unwrap();
     req
@@ -71,7 +70,7 @@ async fn app_web_service_ok() {
     let (mut service, num_routes) = app_web_service::<UTestHttpBody>(
         &cfg.api_server.listen, rtable, shr_state);
     assert_eq!(num_routes, 1);
-    let req = ut_service_req_setup();
+    let req = ut_service_req_setup("POST", "/1.0.33/gram/increment");
     let result = service.call(req).await;
     assert!(result.is_ok());
     if let Ok(mut r) = result {
@@ -131,13 +130,50 @@ async fn middleware_req_body_limit() {
     let (service, num_routes) = app_web_service::<UTestHttpBody>(
         &cfg.api_server.listen, rtable, shr_state);
     assert_eq!(num_routes, 1);
-    let req = ut_service_req_setup();
+    let req = ut_service_req_setup("POST", "/1.0.33/gram/increment");
     let reqlm = middleware::req_body_limit(2);
-    let middlewares1 = ServiceBuilder::new().layer(reqlm);
-    let mut service = service.layer(middlewares1);
+    let middlewares = ServiceBuilder::new().layer(reqlm);
+    let mut service = service.layer(middlewares);
     let result = service.call(req).await;
     assert!(result.is_ok());
     if let Ok(r) = result {
         assert_eq!(r.status(), HttpStatusCode::PAYLOAD_TOO_LARGE);
     }
 }
+
+#[tokio::test]
+async fn middleware_shutdown_detection() {
+    type UTestHttpBody = HyperBody;
+    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential{}));
+    let cfg = shr_state.config().clone();
+    let (mock_flag, mock_num_reqs) = (shr_state.shutdown(), shr_state.num_requests());
+    let rtable:ApiRouteTableType<UTestHttpBody> = HashMap::from([
+        ("modify_product_policy", routing::put(ut_endpoint_handler)),
+    ]);
+    let (leaf_service, num_routes) = app_web_service::<UTestHttpBody>(
+        &cfg.api_server.listen, rtable, shr_state);
+    assert_eq!(num_routes, 1);
+    let sh_detect = middleware::ShutdownDetectionLayer::new(
+                    mock_flag.clone(), mock_num_reqs.clone() );
+    let middlewares = ServiceBuilder::new().layer(sh_detect);
+    let mut final_service = leaf_service.layer(middlewares);
+    // -------------
+    let req = ut_service_req_setup("PUT", "/1.0.33/policy/products");
+    let result = final_service.call(req).await;
+    assert!(result.is_ok());
+    if let Ok(res) = result {
+        assert_eq!(res.status(), HttpStatusCode::OK);
+        let actual_num_reqs = mock_num_reqs.load(Ordering::Relaxed);
+        assert_eq!(actual_num_reqs, 0);
+    }
+    // -------------
+    let _ = mock_flag.store(true, Ordering::Relaxed);
+    let req = ut_service_req_setup("PUT", "/1.0.33/policy/products");
+    let result = final_service.call(req).await;
+    assert!(result.is_ok());
+    if let Ok(res) = result {
+        assert_eq!(res.status(), HttpStatusCode::SERVICE_UNAVAILABLE);
+        let actual_num_reqs = mock_num_reqs.load(Ordering::Relaxed);
+        assert_eq!(actual_num_reqs, 0);
+    }
+} // end of fn middleware_shutdown_detection
