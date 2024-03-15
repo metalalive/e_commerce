@@ -1,5 +1,8 @@
 use std::result::Result as DefaultResult;
 use std::vec::Vec;
+
+use serde::de::DeserializeOwned;
+use serde::{Serialize, Deserialize};
 use serde_json::Value as JsnVal;
 
 use crate::AppSharedState;
@@ -34,7 +37,10 @@ pub async fn route_to_handler(req:AppRpcClientReqProperty, shr_state:AppSharedSt
     }
 }
 
-pub(super) fn py_celery_deserialize(raw:&Vec<u8>) -> DefaultResult<(JsnVal,JsnVal,JsnVal), AppError>
+
+pub(super) fn py_celery_deserialize_req<T, U>(raw:&Vec<u8>)
+     -> DefaultResult<(T,U), AppError>
+     where T: DeserializeOwned, U: DeserializeOwned
 {
     const NUM_TOPLVL_BLK:usize = 3;
     let result = serde_json::from_slice::<JsnVal>(raw);
@@ -42,25 +48,111 @@ pub(super) fn py_celery_deserialize(raw:&Vec<u8>) -> DefaultResult<(JsnVal,JsnVa
         return Err(AppError {detail:Some(e.to_string()), code:AppErrorCode::InvalidJsonFormat});
     }
     let reqbody = result.unwrap();
-    if let JsnVal::Array(mut b) = reqbody {
+    let (pargs, kwargs) = if let JsnVal::Array(mut b) = reqbody {
         if b.len() == NUM_TOPLVL_BLK {
-            let (pargs, kwargs, _metadata) = (b.remove(0), b.remove(0), b.remove(0));
-            if pargs.is_array() && kwargs.is_object() && _metadata.is_object() {
-                Ok((pargs, kwargs, _metadata))
+            let (_pargs, _kwargs, _metadata) = (b.remove(0), b.remove(0), b.remove(0));
+            if _pargs.is_array() && _kwargs.is_object() && _metadata.is_object() {
+                (_pargs, _kwargs)
             } else {
-                Err(AppError {detail:Some("celery-de-arrayitem-mismatch".to_string()),
-                    code:AppErrorCode::InvalidJsonFormat})
+                return Err(AppError {detail:Some("celery-de-arrayitem-mismatch".to_string()),
+                    code:AppErrorCode::InvalidJsonFormat});
             }
         } else {
-            Err(AppError {detail:Some("celery-de-topblk-incomplete".to_string()),
-                code:AppErrorCode::InvalidJsonFormat})
+            return Err(AppError {detail:Some("celery-de-topblk-incomplete".to_string()),
+                code:AppErrorCode::InvalidJsonFormat});
         }
     } else {
-        Err(AppError {detail:Some("celery-de-not-array".to_string()),
-            code:AppErrorCode::InvalidJsonFormat})
-    }
-} // end of fn py_celery_deserialize
+        return Err(AppError {detail:Some("celery-de-not-array".to_string()),
+            code:AppErrorCode::InvalidJsonFormat});
+    };
+    let out0 = match serde_json::from_value(pargs) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(AppError {detail:Some("celery-de-args-fail".to_string()),
+                code:AppErrorCode::InvalidJsonFormat});
+        },
+    };
+    let out1 = match serde_json::from_value(kwargs) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(AppError {detail:Some("celery-de-kwargs-fail".to_string()),
+                code:AppErrorCode::InvalidJsonFormat});
+        },
+    };
+    Ok((out0, out1))
+} // end of fn py_celery_deserialize_req
 
+
+#[derive(Deserialize, Debug)]
+pub(crate) enum PyCeleryRespStatus {
+    STARTED, SUCCESS, ERROR,
+}
+
+#[derive(Deserialize)]
+struct PyCeleryRespPartialPayload {
+    task_id: String,
+    status: PyCeleryRespStatus,
+} // this is only for validating current progress done on Celery consumer side
+
+#[derive(Deserialize)]
+struct PyCeleryRespPayload<T> {
+    task_id: String,
+    status: PyCeleryRespStatus,
+    result: T
+}
+
+pub(crate) fn py_celery_reply_status(raw:&Vec<u8>)
+     -> DefaultResult<PyCeleryRespStatus, AppError>
+{
+    let result = serde_json::from_slice::<PyCeleryRespPartialPayload>(raw);
+    match result {
+        Ok(payld) => Ok(payld.status),
+        Err(e) => Err(AppError {detail:Some(e.to_string()),
+                  code:AppErrorCode::InvalidJsonFormat})
+    }
+}
+
+pub(super) fn py_celery_deserialize_reply<T>(raw:&Vec<u8>)
+     -> DefaultResult<T, AppError>  where T: DeserializeOwned
+{
+    let result = serde_json::from_slice::<PyCeleryRespPayload<T>>(raw);
+    match result {
+        Ok(payld) => Ok(payld.result),
+        Err(e) => Err(AppError {detail:Some(e.to_string()),
+                  code:AppErrorCode::InvalidJsonFormat})
+    }
+}
+
+
+#[derive(Serialize)]
+struct PyCeleryReqMetadata {
+    callbacks: Option<Vec<String>>,
+    errbacks: Option<Vec<String>>,
+    chain: Option<Vec<String>>,
+    chord: Option<String>,
+} // TODO, figure out the detail in `chain` and `chord` field
+
+pub(super) fn py_celery_serialize<T:Serialize>(inner:T)
+    -> DefaultResult<Vec<u8>, AppError>
+{
+    let args = JsnVal::Array(Vec::new());
+    let kwargs = match serde_json::to_value(inner) {
+        Ok(v) => v,
+        Err(e) => {
+            let detail = e.to_string() + ", src: py-celery-serialize";
+            let ae = AppError { detail: Some(detail),
+                code: AppErrorCode::InvalidJsonFormat, };
+            return Err(ae);
+        }
+    };
+    let metadata = {
+        let md = PyCeleryReqMetadata {callbacks:None, errbacks:None,
+                 chain:None, chord:None };
+        serde_json::to_value(md).unwrap()
+    };
+    let top = JsnVal::Array(vec![args, kwargs, metadata]);
+    Ok(top.to_string().into_bytes())
+}
 
 pub fn build_error_response(e:AppError) -> serde_json::Value
 {
@@ -77,34 +169,35 @@ pub fn build_error_response(e:AppError) -> serde_json::Value
 #[test]
 fn test_pycelery_deserialize_ok()
 {
-    let data = br#"[[19, "hay"], {"live":true, "mtk":782}, {"callbacks":[]}]"#.to_vec();
-    let result = py_celery_deserialize(&data);
+    #[derive(Deserialize, Debug)]
+    struct TestData {live:bool, beat:u16}
+    
+    let data = br#"[["stock", "hay"], {"live":true, "beat":782}, {"callbacks":[]}]"#.to_vec();
+    let result = py_celery_deserialize_req::<Vec<String>, TestData>(&data);
     assert!(result.is_ok());
-    let (arg, kwarg, metadata) = result.unwrap();
-    let (arg_p, kwarg_p, metadata_p) = (
-        arg.as_array().unwrap(), kwarg.as_object().unwrap(),
-        metadata.as_object().unwrap());
-    assert_eq!(arg_p.len(), 2);
-    assert!(arg_p[0].is_number());
-    assert!(arg_p[1].is_string());
-    assert!(kwarg_p["live"].is_boolean());
-    assert!(kwarg_p["mtk"].is_number());
-    assert!(metadata_p["callbacks"].is_array());
+    let (arg, kwarg) = result.unwrap();
+    assert_eq!(arg.len(), 2);
+    assert!(arg.contains(&"stock".to_string()));
+    assert!(arg.contains(&"hay".to_string()));
+    assert!(kwarg.live);
+    assert_eq!(kwarg.beat , 782);
 }
 
 #[test]
 fn test_pycelery_deserialize_error()
 {
+    #[derive(Deserialize, Debug)]
+    struct TestData {tone:i8}
+    
     let data = br#"[[], {}]"#.to_vec();
-    let result = py_celery_deserialize(&data);
+    let result = py_celery_deserialize_req::<Vec<i64>, TestData>(&data);
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert_eq!(error.code, AppErrorCode::InvalidJsonFormat);
     assert_eq!(error.detail.unwrap().as_str(), "celery-de-topblk-incomplete");
     let data = br#"[[], {}, 567]"#.to_vec();
-    let result = py_celery_deserialize(&data);
+    let result = py_celery_deserialize_req::<Vec<i64>, TestData>(&data);
     assert!(result.is_err());
     let error = result.unwrap_err();
     assert_eq!(error.detail.unwrap().as_str(), "celery-de-arrayitem-mismatch");
 }
-

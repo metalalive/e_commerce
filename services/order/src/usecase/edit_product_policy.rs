@@ -21,7 +21,7 @@ use super::{initiate_rpc_request, AppUCrunRPCfn, AppUseKsRPCreply};
 
 // the product info types below represent message body to remote product service
 #[derive(Serialize)]
-struct ProductInfoReq {
+pub struct ProductInfoReq {
     item_ids: Vec<u64>,
     pkg_ids: Vec<u64>,
     item_fields : Vec<String>,
@@ -30,13 +30,13 @@ struct ProductInfoReq {
 }
 
 #[derive(Deserialize)]
-struct ProductItemResp { id:u64 }
+pub struct ProductItemResp { id:u64 }
 
 #[derive(Deserialize)]
-struct ProductPkgResp { id:u64 }
+pub struct ProductPkgResp { id:u64 }
 
 #[derive(Deserialize)]
-struct ProductInfoResp {
+pub struct ProductInfoResp {
     item: Vec<ProductItemResp>, 
     pkg: Vec<ProductPkgResp>, 
 }
@@ -46,19 +46,26 @@ pub enum EditProductPolicyResult {
     OK, Other(AppErrorCode),
 }
 
-impl EditProductPolicyUseCase {
+impl EditProductPolicyUseCase
+{
     pub async fn execute(self) -> Self
     {
         match self {
-            Self::INPUT { profile_id, data, app_state } =>
-                Self::_execute(data, app_state, profile_id).await,
+            Self::INPUT {
+                profile_id, data, app_state, rpc_serialize_msg,
+                rpc_deserialize_msg
+            } => Self::_execute(data, app_state, profile_id,
+                        rpc_serialize_msg, rpc_deserialize_msg ).await,
             Self::OUTPUT { result, client_err } =>
                 Self::OUTPUT { result, client_err }
         }
     }
 
-    async fn _execute(data: Vec<ProductPolicyDto>, appstate: AppSharedState,
-                      usr_prof_id : u32) -> Self
+    async fn _execute(
+        data: Vec<ProductPolicyDto>, appstate: AppSharedState,  usr_prof_id : u32,
+        rpc_serialize_msg: fn(ProductInfoReq) -> DefaultResult<Vec<u8>, AppError>,
+        rpc_deserialize_msg: fn(&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>,
+    )  -> Self
     {
         if let Err(ce) = ProductPolicyModelSet::validate(&data) {
             return Self::OUTPUT { client_err: Some(ce),
@@ -67,8 +74,10 @@ impl EditProductPolicyUseCase {
         let log = appstate.log_context();
         let rpc = appstate.rpc();
         let rpctype = rpc.label();
-        let result = Self::check_product_existence(&data,
-                            rpc, initiate_rpc_request, usr_prof_id).await;
+        let result = Self::check_product_existence(
+                &data, usr_prof_id, rpc, initiate_rpc_request,
+                rpc_serialize_msg, rpc_deserialize_msg
+            ).await;
         if let Err((code, detail)) = result {
             if code == EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply) &&
                 rpctype == "dummy" { // pass, for mocking purpose, TODO: better design
@@ -103,43 +112,45 @@ impl EditProductPolicyUseCase {
 
     pub async fn check_product_existence (
         data: &Vec<ProductPolicyDto>,
+        usr_prof_id: u32,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
         run_rpc_fn: AppUCrunRPCfn<impl Future<Output = AppUseKsRPCreply>>,
-        usr_prof_id: u32 )
-        -> DefaultResult<Vec<(ProductType,u64)>, (EditProductPolicyResult, String)>
+        rpc_serialize_msg: fn(ProductInfoReq) -> DefaultResult<Vec<u8>, AppError>,
+        rpc_deserialize_msg: fn(&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>,
+    )  -> DefaultResult<Vec<(ProductType,u64)>, (EditProductPolicyResult, String)>
     {
         let mut msg_req = ProductInfoReq {
-            pkg_ids: Vec::new(), pkg_fields: Vec::new(), profile: usr_prof_id,
+            pkg_ids: Vec::new(), pkg_fields: vec!["id".to_string()], profile: usr_prof_id,
             item_ids: Vec::new(), item_fields : vec!["id".to_string()]
         };
-        let _: Vec<()>  = data.iter().map(|item| {
+        data.iter().map(|item| {
             match &item.product_type {
                 ProductType::Item => {msg_req.item_ids.push(item.product_id);},
                 ProductType::Package => {msg_req.pkg_ids.push(item.product_id);},
                 _others => {}
             }
-        }).collect();
-        let msgbody = serde_json::to_string(&msg_req).unwrap().into_bytes();
+        }).count();
+        let msgbody = match rpc_serialize_msg(msg_req) {
+            Ok(m) => m,
+            Err(e) => {
+                let detail = format!("app-error: {:?}", e);
+                return Err((EditProductPolicyResult::Other(e.code), detail));
+            }
+        };
         let properties = AppRpcClientReqProperty { msgbody,
             start_time:Local::now().fixed_offset(),
             route:"rpc.product.get_product".to_string()
         };
         match run_rpc_fn(rpc_ctx, properties).await {
-            Ok(r) => match String::from_utf8(r.body) {
-                Ok(r) => match serde_json::from_str::<ProductInfoResp>(r.as_str())
-                {
-                    Ok(reply) => Ok(Self::_compare_rpc_reply(reply, data)),
-                    Err(e) => {
-                        let code = EditProductPolicyResult::Other(AppErrorCode::RpcRemoteInvalidReply);
-                        Err((code, e.to_string()))
-                    }
+            Ok(r) => match rpc_deserialize_msg(&r.body) {
+                Ok(reply) => Ok(Self::_compare_rpc_reply(reply, data)),
+                Err(e) => {
+                    let detail = format!("rpc-reply-decode-error: {:?}", e);
+                    Err((EditProductPolicyResult::Other(e.code), detail))
                 },
-                Err(e) => Err((
-                        EditProductPolicyResult::Other(AppErrorCode::DataCorruption),
-                        e.utf8_error().to_string()  )),
             },
             Err(e) => {
-                let detail = e.detail.unwrap_or("RPC undefined error".to_string());
+                let detail = format!("rpc-error: {:?}", e);
                 Err((EditProductPolicyResult::Other(e.code), detail))
             }
         }
@@ -172,11 +183,14 @@ impl EditProductPolicyUseCase {
 } // end of impl EditProductPolicyUseCase
 
 
-pub enum EditProductPolicyUseCase {
+pub enum EditProductPolicyUseCase
+{
     INPUT {
         profile_id : u32,
         data : Vec<ProductPolicyDto>,
-        app_state : AppSharedState
+        app_state : AppSharedState,
+        rpc_serialize_msg: fn(ProductInfoReq) -> DefaultResult<Vec<u8>, AppError> ,
+        rpc_deserialize_msg: fn(&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>,
     },
     OUTPUT {
         result: EditProductPolicyResult,

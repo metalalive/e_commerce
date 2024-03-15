@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::boxed::Box;
 use std::result::Result as DefaultResult;
 
-pub use edit_product_policy::{EditProductPolicyUseCase, EditProductPolicyResult};
+pub use edit_product_policy::{
+    EditProductPolicyUseCase, EditProductPolicyResult, ProductInfoReq, ProductInfoResp
+};
 pub use edit_product_price::EditProductPriceUseCase;
 pub use stock_level::StockLevelUseCase;
 pub use manage_order::{

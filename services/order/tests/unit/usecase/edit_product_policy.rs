@@ -5,12 +5,17 @@ use async_trait::async_trait;
 use order::constant::ProductType;
 use serde_json::from_str as deserialize_json;
 
-use order::{AbstractRpcContext, AppRpcCfg, AbstractRpcClient, AppRpcReply,
-    AppRpcClientReqProperty, AbsRpcClientCtx, AbsRpcServerCtx, AppSharedState, AppRpcRouteHdlrFn
+use order::{
+    AbstractRpcContext, AppRpcCfg, AbstractRpcClient, AppRpcReply,
+    AppRpcClientReqProperty, AbsRpcClientCtx, AbsRpcServerCtx, AppSharedState,
+    AppRpcRouteHdlrFn
 };
 use order::error::{AppError, AppErrorCode};
 use order::api::web::dto::ProductPolicyDto;
-use order::usecase::{EditProductPolicyUseCase, AppUseKsRPCreply, EditProductPolicyResult};
+use order::usecase::{
+    EditProductPolicyUseCase, AppUseKsRPCreply, EditProductPolicyResult,
+    ProductInfoReq, ProductInfoResp
+};
 
 const UTEST_USR_PROF_ID: u32 = 99674;
 struct UTestDummyRpcContext {}
@@ -73,6 +78,22 @@ fn setup_data () -> Vec<ProductPolicyDto>
     deserialize_json(raw).unwrap()
 }
 
+
+fn mock_rpc_serialize_msg(src:ProductInfoReq) -> DefaultResult<Vec<u8>, AppError>
+{
+    let src = serde_json::to_vec(&src).unwrap();
+    Ok(src)
+}
+fn mock_rpc_deserialize_msg(src:&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>
+{
+    match serde_json::from_slice::<ProductInfoResp>(src)
+    {
+        Ok(v) => Ok(v),
+        Err(e) => Err(AppError { code: AppErrorCode::RpcRemoteInvalidReply,
+                  detail: Some("unit-test".to_string())  }),
+    }
+}
+
 async fn mock_run_rpc_ok (_ctx: Arc<Box<dyn AbstractRpcContext>>, _prop: AppRpcClientReqProperty)
     -> AppUseKsRPCreply
 {
@@ -92,7 +113,8 @@ async fn check_product_existence_ok ()
     let data = setup_data();
     let rpc_ctx = UTestDummyRpcContext::test_build();
     let result = EditProductPolicyUseCase::check_product_existence(
-        &data, rpc_ctx, mock_run_rpc_ok, UTEST_USR_PROF_ID
+        &data, UTEST_USR_PROF_ID, rpc_ctx, mock_run_rpc_ok,
+        mock_rpc_serialize_msg, mock_rpc_deserialize_msg,
     ).await;
     assert_eq!(result.is_ok(), true);
     let missing_product_ids = result.unwrap();
@@ -117,12 +139,13 @@ async fn check_product_existence_rpc_error ()
     let data = setup_data();
     let rpc_ctx = UTestDummyRpcContext::test_build();
     let actual = EditProductPolicyUseCase::check_product_existence(
-        &data, rpc_ctx, mock_run_rpc_remote_down, UTEST_USR_PROF_ID
+        &data, UTEST_USR_PROF_ID, rpc_ctx, mock_run_rpc_remote_down,
+        mock_rpc_serialize_msg, mock_rpc_deserialize_msg,
     ).await;
     assert_eq!(actual.is_err(), true);
     let (result, msg) = actual.err().unwrap();
     assert_eq!(result, EditProductPolicyResult::Other(AppErrorCode::RpcRemoteUnavail));
-    assert_eq!(msg, "remote server down");
+    assert!(msg.contains("remote server down"));
 }
 
 
@@ -140,7 +163,8 @@ async fn check_product_existence_rpc_reply_invalid_format ()
     let data = setup_data();
     let rpc_ctx = UTestDummyRpcContext::test_build();
     let actual = EditProductPolicyUseCase::check_product_existence(
-        &data, rpc_ctx, mock_run_rpc_reply_empty, UTEST_USR_PROF_ID
+        &data, UTEST_USR_PROF_ID, rpc_ctx, mock_run_rpc_reply_empty,
+        mock_rpc_serialize_msg, mock_rpc_deserialize_msg,
     ).await;
     assert_eq!(actual.is_err(), true);
     let (result, _) = actual.err().unwrap();
@@ -168,7 +192,8 @@ async fn check_product_existence_found_nonexist_item ()
     let data = setup_data();
     let rpc_ctx = UTestDummyRpcContext::test_build();
     let result = EditProductPolicyUseCase::check_product_existence(
-        &data, rpc_ctx, mock_run_rpc_nonexist_found, UTEST_USR_PROF_ID
+        &data, UTEST_USR_PROF_ID, rpc_ctx, mock_run_rpc_nonexist_found,
+        mock_rpc_serialize_msg, mock_rpc_deserialize_msg,
     ).await;
     assert_eq!(result.is_ok(), true);
     let missing_product_ids = result.unwrap();

@@ -1,3 +1,5 @@
+use std::vec::Vec;
+
 use axum::debug_handler;
 use axum::extract::{Json as ExtractJson, State as ExtractState};
 use axum::response::IntoResponse;
@@ -8,12 +10,16 @@ use axum::http::{
     header as HttpHeader
 };
 
-use crate::error::AppErrorCode;
+use crate::error::{AppErrorCode, AppError};
 use crate::{constant as AppConst, AppSharedState, AppAuthedClaim};
 use crate::api::web::dto::ProductPolicyDto;
-use crate::usecase::{EditProductPolicyUseCase, EditProductPolicyResult};
+use crate::api::rpc::{py_celery_serialize, py_celery_deserialize_reply};
+use crate::usecase::{
+    EditProductPolicyUseCase, EditProductPolicyResult, ProductInfoReq, ProductInfoResp
+};
 
-fn presenter (ucout:EditProductPolicyUseCase) -> impl IntoResponse
+
+fn presenter(ucout:EditProductPolicyUseCase) -> impl IntoResponse
 {
     let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
     let mut hdr_map = HttpHeaderMap::new();
@@ -41,6 +47,7 @@ fn presenter (ucout:EditProductPolicyUseCase) -> impl IntoResponse
     }
 } // end of fn presenter
 
+
 #[debug_handler(state = AppSharedState)]
 pub(super) async fn post_handler(
     // wrap the variables with the macros, to extract the content automatically
@@ -48,9 +55,13 @@ pub(super) async fn post_handler(
     ExtractState(appstate): ExtractState<AppSharedState>,
     ExtractJson(req_body): ExtractJson<Vec<ProductPolicyDto>> ) -> impl IntoResponse
 {
-    let input = EditProductPolicyUseCase::INPUT {
-        data: req_body, app_state: appstate, profile_id : authed.profile
+    let input = EditProductPolicyUseCase::INPUT
+    {
+        data: req_body, app_state: appstate, profile_id : authed.profile,
+        rpc_serialize_msg: py_celery_serialize::<ProductInfoReq>,
+        rpc_deserialize_msg: py_celery_deserialize_reply::<ProductInfoResp>
     };
     let output = input.execute().await ;
     presenter(output)
 } // end of endpoint
+
