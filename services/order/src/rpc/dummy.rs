@@ -1,6 +1,6 @@
 use std::result::Result as DefaultResult;
 use std::boxed::Box;
-use std::future::Future;
+
 use async_trait::async_trait;
 
 use crate::AppSharedState;
@@ -25,7 +25,7 @@ impl AbsRpcClientCtx for DummyRpcContext {
 #[async_trait]
 impl AbsRpcServerCtx for DummyRpcContext {
     async fn server_start(
-        &self, shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
+        &self, _shr_state:AppSharedState, _route_hdlr: AppRpcRouteHdlrFn
     ) -> DefaultResult<(), AppError>
     { Ok(()) }
 }
@@ -40,7 +40,7 @@ impl DummyRpcContext {
 }
 
 #[async_trait]
-impl AbstractRpcClient for DummyRpcHandler {
+impl  AbstractRpcClient for DummyRpcHandler {
     async fn send_request(mut self:Box<Self>, _props:AppRpcClientReqProperty)
         -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     { Ok(self) }

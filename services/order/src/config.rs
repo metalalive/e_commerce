@@ -97,6 +97,7 @@ pub struct AppAmqpBindingCfg {
     pub ensure_declare: bool,
     pub subscribe: bool,
     pub reply: Option<AppAmqpBindingReplyCfg>,
+    pub python_celery_task : Option<String>,
 }
 
 #[derive(Deserialize)]

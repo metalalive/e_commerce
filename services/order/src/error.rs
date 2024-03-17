@@ -57,4 +57,3 @@ impl Display for AppError {
         write!(f, "code:{:?}, detail:{}", self.code, dp)
     }
 }
-

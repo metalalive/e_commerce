@@ -22,6 +22,7 @@ use amqprs::channel::{
 use amqprs::callbacks::{DefaultConnectionCallback, DefaultChannelCallback};
 use amqprs::error::Error as AmqpError;
 
+use crate::api::rpc::{PyCeleryRespStatus, py_celery_reply_status};
 use crate::{generate_custom_uid, AppSharedState};
 use crate::confidentiality::AbstractConfidentiality;
 use crate::config::{AppRpcAmqpCfg, AppAmqpBindingCfg, AppAmqpBindingReplyCfg};
@@ -42,9 +43,10 @@ struct BrokerSecret {
 }
 
 // TODO
-// currently all received replies are kept in in-memory structure, however
-// it might not be enough for user growth or scalability. Consider distributed
-// caching like Redis or (non-relational) database persistence
+// - currently all received replies are kept in in-memory structure, however
+//   it might not be enough for user growth or scalability. Consider distributed
+//   caching like Redis or (non-relational) database persistence
+// - periodically remove old entries by last update
 struct AmqpClientRecvReply( Mutex<HashMap<String, Option<Vec<u8>>>> );
 
 struct AmqpChannelWrapper {
@@ -68,7 +70,13 @@ struct AmqpRpcClientHandler {
 	bindings: Arc<Vec<AppAmqpBindingCfg>>,
     recv_reply: Arc<AmqpClientRecvReply>,
     channel: Channel,
-    reply_evt_id: Option<String>,
+    reply_evt: Option<InnerRecvReplyEvent>,
+}
+struct InnerRecvReplyEvent {
+    corr_id: String,
+    py_celery: bool,
+    retry: usize, // number of retries on waiting for reply
+    intvl: u64 // time interval in milliseconds for refreshing RPC reply data
 }
 
 struct InnerServer {}
@@ -110,12 +118,12 @@ impl AbsRpcClientCtx for AmqpRpcContext {
         -> DefaultResult<Box<dyn AbstractRpcClient>, AppError>
     {
         let channel_wrapper = self.try_acquire_channel(num_retry).await ?;
-        let _done = channel_wrapper.subscribe_reply_queue(self.bindings.clone(),
+        let _done = channel_wrapper.init_client(self.bindings.clone(),
             self.recv_reply.clone(), self.logctx.clone()).await? ;
         let AmqpChannelWrapper {
             chn, subscribe_send_q, subscribe_reply_q
         } = channel_wrapper;
-        let obj = AmqpRpcClientHandler { reply_evt_id:None, bindings:self.bindings.clone(),
+        let obj = AmqpRpcClientHandler { reply_evt:None, bindings:self.bindings.clone(),
                     channel:chn, recv_reply: self.recv_reply.clone() };
         Ok(Box::new(obj))
     }
@@ -128,7 +136,7 @@ impl AbsRpcServerCtx for AmqpRpcContext
     ) -> DefaultResult<(), AppError> 
     {
         let channel_wrapper = self.try_acquire_channel(2).await ?;
-        let _done = channel_wrapper.subscribe_send_queue(
+        let _done = channel_wrapper.init_server(
             self.bindings.clone(),
             shr_state, route_hdlr
         ).await ?;
@@ -260,12 +268,12 @@ impl AmqpChannelWrapper {
         Ok(obj)
     }
 
-    async fn subscribe_send_queue(
+    async fn init_server(
         &self, bindings:Arc<Vec<AppAmqpBindingCfg>>,
         shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
     ) -> DefaultResult<bool, AppError>
     {
-        let already_done = self.subscribe_send_q.load(atomic::Ordering::Acquire);
+        let already_done = self.subscribe_send_q.swap(true, atomic::Ordering::Acquire);
         if already_done {
             return Ok(already_done);
         }
@@ -292,17 +300,24 @@ impl AmqpChannelWrapper {
         } // end of loop
         self.subscribe_send_q.store(true, atomic::Ordering::Release);
         Ok(false)
-    } // end of fn subscribe_send_queue
+    } // end of fn init_server
 
-    async fn subscribe_reply_queue(
+    async fn init_client(
         &self, bindings: Arc<Vec<AppAmqpBindingCfg>>,
         recv_dstore: Arc<AmqpClientRecvReply>,
         logctx: Arc<AppLogContext> 
     ) -> DefaultResult<bool, AppError>
     {
-        let already_done = self.subscribe_reply_q.load(atomic::Ordering::Acquire);
+        let already_done = self.subscribe_reply_q.swap(true, atomic::Ordering::Acquire);
         if already_done {
             return Ok(already_done);
+        } // run this function exactly once
+        if let Err(e) = self.chn.confirm_select(ConfirmSelectArguments::new(false)).await
+        { // only RPC client needs to turn on confirm mode in the broker
+            let mut e:AppError = e.into();
+            let detail = e.detail.as_mut().unwrap();
+            detail.push_str(", confirm_select");
+            return Err(e);
         }
         let combo = (0 .. bindings.len()).zip(bindings.iter()) ;
         for (idx, bind_cfg) in combo {
@@ -325,7 +340,7 @@ impl AmqpChannelWrapper {
         } // end of loop
         self.subscribe_reply_q.store(true, atomic::Ordering::Release);
         Ok(false)
-    } // end of fn init_subscription
+    } // end of fn
 } // end of impl AmqpChannelWrapper
 
 
@@ -343,18 +358,28 @@ impl AbstractRpcClient for AmqpRpcClientHandler
             let e = AppError { code: AppErrorCode::InvalidInput,
                     detail: Some("rpc-client-seq, empty-reply-cfg".to_string()) };
             return Err(e);
-        }; // only RPC client needs to turn on confirm mode in the broker
-        self.channel.confirm_select(ConfirmSelectArguments::new(false)).await?;
+        };
         let mut corr_id = generate_custom_uid(app_meta::MACHINE_CODE).into_bytes()
             .into_iter().map(|b| format!("{:02x}",b))
             .collect::<Vec<String>>().join("");
         corr_id.insert(0, '.');
         corr_id.insert_str(0, corr_id_prefix);
-        let properties = BasicProperties::default().with_app_id(app_meta::LABAL)
+        let mut properties = BasicProperties::default().with_app_id(app_meta::LABAL)
             .with_content_type(HTTP_CONTENT_TYPE_JSON).with_content_encoding("utf-8")
             .with_persistence(bind_cfg.durable).with_reply_to(reply_q_name)
             .with_correlation_id(corr_id.as_str())
             .with_timestamp(t_start.timestamp() as u64).finish();
+        let properties = if let Some(py_tsk_path) = &bind_cfg.python_celery_task {
+            let mut extra_headers = FieldTable::new();
+            extra_headers.insert("id".try_into().unwrap(),
+                    FieldValue::S(corr_id.clone().try_into().unwrap()) );
+            extra_headers.insert("task".try_into().unwrap(),
+                    FieldValue::S(py_tsk_path.clone().try_into().unwrap()) );
+            extra_headers.insert("content_type".try_into().unwrap(),
+                    FieldValue::S(HTTP_CONTENT_TYPE_JSON.clone().try_into().unwrap()) );
+            properties.with_headers(extra_headers).finish()
+        } else { properties };
+        let py_celery = bind_cfg.python_celery_task.is_some();
         let args = BasicPublishArguments::default().exchange(bind_cfg.exchange.clone()) 
             .routing_key(bind_cfg.routing_key.clone()) 
             // To create a responsive application, message broker has to return
@@ -364,33 +389,57 @@ impl AbstractRpcClient for AmqpRpcClientHandler
                               // , the crate `amqp-rs` reserves this flag for backward
                               // compatibility
             .finish();
-        self.channel.basic_publish(properties, content, args).await?;
+        if let Err(e) = self.channel.basic_publish(properties, content, args).await
+        {
+            let mut e:AppError = e.into();
+            if matches!(e.code, AppErrorCode::Unknown) {
+                e.code = AppErrorCode::RpcPublishFailure;
+            }
+            return Err(e);
+        }
         // update at the end , due to borrow / mutability constraint at compile time
         self.recv_reply.claim(corr_id.as_str()).await?;
-        self.as_mut().reply_evt_id = Some(corr_id);
+        self.as_mut().reply_evt = {
+            let evt = InnerRecvReplyEvent {
+                py_celery, corr_id, retry:20usize, intvl: 500u64
+            };
+            Some(evt)
+        };
         Ok(self)
     } // end of fn send_request
 
     async fn receive_response(&mut self) -> DefaultResult<AppRpcReply, AppError>
     {
-        const retry: usize = 3;
-        if let Some(corr_id) = self.reply_evt_id.as_ref() {
-            for _ in 0..retry {
-                match self.recv_reply.fetch_then_discard(corr_id.as_str()).await
+        if let Some(evt) = self.reply_evt.as_ref() {
+            let mut celery_status = PyCeleryRespStatus::ERROR;
+            for _ in 0 .. evt.retry {
+                match self.recv_reply.fetch(evt.corr_id.as_str()).await
                 {
-                    Ok(body) => { return Ok(AppRpcReply { body }); }
+                    Ok(body) => {
+                        let done = if evt.py_celery {
+                            celery_status = py_celery_reply_status(&body)?;
+                            matches!(celery_status, PyCeleryRespStatus::SUCCESS)
+                        } else { true };
+                        if done { return Ok(AppRpcReply { body }); }
+                    }
                     Err(e) => if matches!(e.code, AppErrorCode::RpcReplyNotReady) {
-                        sleep(Duration::from_millis(50)).await;
+                        sleep(Duration::from_millis(evt.intvl)).await;
                     } else { return Err(e); }
                 }
             }
-            let detail = format!("rpc-client, corr-id:{corr_id}");
-            Err(AppError{code:AppErrorCode::RpcReplyNotReady, detail: Some(detail)})
+            if evt.py_celery && !matches!(celery_status, PyCeleryRespStatus::SUCCESS) {
+                let detail = format!("py-celery, status:{:?}, corr-id:{}",
+                                     celery_status, evt.corr_id.as_str());
+                Err(AppError{code:AppErrorCode::RpcConsumeFailure , detail: Some(detail)})
+            } else {
+                let detail = format!("rpc-client, corr-id:{}", evt.corr_id.as_str());
+                Err(AppError{code:AppErrorCode::RpcReplyNotReady, detail: Some(detail)})
+            }
         } else {
             let detail = format!("rpc-client-recv-reply, missing-corr-id");
             Err(AppError{code:AppErrorCode::DataCorruption, detail: Some(detail)})
         }
-    }
+    } // end of fn receive_response    
 } // end of impl AbstractRpcClient for AmqpRpcHandler 
 
 
@@ -630,36 +679,31 @@ impl AmqpClientRecvReply
         }
     } // TODO, discard hash-map entries if nobody fetches them for a long time
 
-    async fn update(&self, key:&str, content:Vec<u8>) -> DefaultResult<(), AppError>
+    async fn update(&self, key:&str, content:Vec<u8>) -> DefaultResult<Option<Vec<u8>>, AppError>
     {
         let mut guard = self.0.lock().await;
         if let Some(entry) = guard.get_mut(key) {
-            if entry.is_some() {
-                let detail = format!("rpc-reply-store, already-update, key:{key}");
-                Err(AppError{code:AppErrorCode::DataCorruption, detail:Some(detail)})
-            } else {
-                *entry = Some(content);
-                Ok(())
-            }
+            let prev = entry.take();
+            *entry = Some(content);
+            Ok(prev)
         } else {
-            let detail = format!("rpc-reply-store, fetch, key:{key}");
+            let detail = format!("rpc-reply-store, fetch-non-exist, key:{key}");
             Err(AppError{code:AppErrorCode::InvalidInput, detail: Some(detail)})
         }
     }
 
-    async fn fetch_then_discard(&self, key:&str) -> DefaultResult<Vec<u8>, AppError>
+    async fn fetch(&self, key:&str) -> DefaultResult<Vec<u8>, AppError>
     {
         let mut guard = self.0.lock().await;
         if let Some(entry) = guard.get(key) {
-            if entry.is_some() {
-                let content = guard.remove(key).unwrap().unwrap();
-                Ok(content)
+            if let Some(content) = entry {
+                Ok(content.clone())
             } else {
                 let detail = format!("rpc-reply-store, in-progress, key:{key}");
                 Err(AppError{code:AppErrorCode::RpcReplyNotReady, detail: Some(detail)})
             }
         } else {
-            let detail = format!("rpc-reply-store, fetch, key:{key}");
+            let detail = format!("rpc-reply-store, fetch-non-exist, key:{key}");
             Err(AppError{code:AppErrorCode::InvalidInput, detail: Some(detail)})
         }
     }
