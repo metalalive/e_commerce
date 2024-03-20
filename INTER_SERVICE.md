@@ -25,16 +25,21 @@ Note logstash TCP input server operates with default port 5959
 
 ### Cron Job Consumer
 ```bash
-cd ./staff_portal
+cd ./services
 
-DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  --concurrency=2 --logfile=./tmp/log/staffsite/common_celery.log  -E  -Q mailing,periodic_default
+DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  --concurrency=2 --logfile=./tmp/log/dev/common_celery.log  -E  -Q mailing,periodic_default
 ```
+
+- celery log file can be placed in `./tmp/log/test` for testing purpose
 
 ### Cron Job scheduler (celery beat)
 collect all periodic tasks to run (gathered from all services)
 ```
-cd ./staff_portal
+cd ./services
 
 celery --app=common.util.python  --config=common.util.python.celerybeatconfig  beat --loglevel=INFO
 ```
+
+### TODO
+- automate the flow which starts the tools
 
