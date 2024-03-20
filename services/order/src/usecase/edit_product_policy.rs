@@ -10,10 +10,10 @@ use serde::{Serialize, Deserialize};
 use crate::constant::ProductType;
 use crate::model::ProductPolicyModelSet;
 use crate::repository::app_repo_product_policy;
-use crate::{AppSharedState, app_log_event, AppDataStoreContext} ;
+use crate::AppDataStoreContext ;
 use crate::error::{AppErrorCode, AppError};
 use crate::rpc::{AbstractRpcContext, AppRpcClientReqProperty};
-use crate::logging::AppLogLevel;
+use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
 
 use crate::api::web::dto::{ProductPolicyDto, ProductPolicyClientErrorDto};
 
@@ -48,34 +48,18 @@ pub enum EditProductPolicyResult {
 
 impl EditProductPolicyUseCase
 {
-    pub async fn execute(self) -> Self
-    {
-        match self {
-            Self::INPUT {
-                profile_id, data, app_state, rpc_serialize_msg,
-                rpc_deserialize_msg
-            } => Self::_execute(data, app_state, profile_id,
-                        rpc_serialize_msg, rpc_deserialize_msg ).await,
-            Self::OUTPUT { result, client_err } =>
-                Self::OUTPUT { result, client_err }
-        }
-    }
-
-    async fn _execute(
-        data: Vec<ProductPolicyDto>, appstate: AppSharedState,  usr_prof_id : u32,
-        rpc_serialize_msg: fn(ProductInfoReq) -> DefaultResult<Vec<u8>, AppError>,
-        rpc_deserialize_msg: fn(&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>,
-    )  -> Self
-    {
+    pub async fn execute(self) -> (
+        EditProductPolicyResult, Option<Vec<ProductPolicyClientErrorDto>>
+    ) {
+        let Self {profile_id, data, log, rpc_ctx, dstore,
+            rpc_serialize_msg, rpc_deserialize_msg } = self; 
         if let Err(ce) = ProductPolicyModelSet::validate(&data) {
-            return Self::OUTPUT { client_err: Some(ce),
-                result: EditProductPolicyResult::Other(AppErrorCode::InvalidInput) };
+            return (EditProductPolicyResult::Other(AppErrorCode::InvalidInput), Some(ce));
         }
-        let log = appstate.log_context();
-        let rpc = appstate.rpc();
-        let rpctype = rpc.label();
+        let usr_prof_id = profile_id;
+        let rpctype = rpc_ctx.label();
         let result = Self::check_product_existence(
-                &data, usr_prof_id, rpc, initiate_rpc_request,
+                &data, usr_prof_id, rpc_ctx, initiate_rpc_request,
                 rpc_serialize_msg, rpc_deserialize_msg
             ).await;
         if let Err((code, detail)) = result {
@@ -84,7 +68,7 @@ impl EditProductPolicyUseCase
                 app_log_event!(log, AppLogLevel::WARNING, "dummy-rpc-applied");
             } else {
                 app_log_event!(log, AppLogLevel::ERROR, "detail:{:?}", detail);
-                return Self::OUTPUT { client_err:None, result:code };
+                return (code, None);
             } 
         } else if let Ok(missing_prod_ids) = result {
             if !missing_prod_ids.is_empty() {
@@ -97,15 +81,15 @@ impl EditProductPolicyUseCase
                             warranty_hours:None, auto_cancel_secs: None }
                     }
                 ).collect();
-                return Self::OUTPUT {result: code, client_err:Some(c_err)};
+                return (code, Some(c_err));
             }
         }
-        if let Err(e) = Self::_save_to_repo(appstate.datastore(), &data).await
+        if let Err(e) = Self::_save_to_repo(dstore, &data).await
         { // no need to pass `usr_prof_id`, the product ownership should be verified by previous RPC
             app_log_event!(log, AppLogLevel::ERROR, "error:{:?}", e);
-            Self::OUTPUT {result:EditProductPolicyResult::Other(e.code), client_err:None}
+            (EditProductPolicyResult::Other(e.code), None)
         } else {
-            Self::OUTPUT {result:EditProductPolicyResult::OK, client_err:None }
+            (EditProductPolicyResult::OK, None)
         }
     } // end of _execute
 
@@ -183,17 +167,13 @@ impl EditProductPolicyUseCase
 } // end of impl EditProductPolicyUseCase
 
 
-pub enum EditProductPolicyUseCase
+pub struct EditProductPolicyUseCase
 {
-    INPUT {
-        profile_id : u32,
-        data : Vec<ProductPolicyDto>,
-        app_state : AppSharedState,
-        rpc_serialize_msg: fn(ProductInfoReq) -> DefaultResult<Vec<u8>, AppError> ,
-        rpc_deserialize_msg: fn(&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>,
-    },
-    OUTPUT {
-        result: EditProductPolicyResult,
-        client_err: Option<Vec<ProductPolicyClientErrorDto>>
-    }
+    pub log: Arc<AppLogContext>,
+    pub rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
+    pub dstore: Arc<AppDataStoreContext>,
+    pub profile_id : u32,
+    pub data : Vec<ProductPolicyDto>,
+    pub rpc_serialize_msg: fn(ProductInfoReq) -> DefaultResult<Vec<u8>, AppError> ,
+    pub rpc_deserialize_msg: fn(&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>,
 }

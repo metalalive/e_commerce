@@ -1,4 +1,5 @@
 use std::vec::Vec;
+use std::result::Result as DefaultResult;
 
 use axum::debug_handler;
 use axum::extract::{Json as ExtractJson, State as ExtractState};
@@ -18,14 +19,18 @@ use crate::usecase::{
     EditProductPolicyUseCase, EditProductPolicyResult, ProductInfoReq, ProductInfoResp
 };
 
+use super::dto::ProductPolicyClientErrorDto;
 
-fn presenter(ucout:EditProductPolicyUseCase) -> impl IntoResponse
+
+fn presenter(
+    result: EditProductPolicyResult,
+    client_err: Option<Vec<ProductPolicyClientErrorDto>>
+) -> impl IntoResponse
 {
     let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
     let mut hdr_map = HttpHeaderMap::new();
     hdr_map.insert(HttpHeader::CONTENT_TYPE, resp_ctype_val);
     let default_body = "{}".to_string();
-    if let EditProductPolicyUseCase::OUTPUT { result, client_err } = ucout
     {
         let status = match result {
             EditProductPolicyResult::OK => HttpStatusCode::OK,
@@ -42,8 +47,6 @@ fn presenter(ucout:EditProductPolicyUseCase) -> impl IntoResponse
             value.to_string()
         } else { default_body.clone() } ;
         (status, hdr_map, serial_resp_body)
-    } else {
-        (HttpStatusCode::INTERNAL_SERVER_ERROR, hdr_map, default_body)
     }
 } // end of fn presenter
 
@@ -55,13 +58,27 @@ pub(super) async fn post_handler(
     ExtractState(appstate): ExtractState<AppSharedState>,
     ExtractJson(req_body): ExtractJson<Vec<ProductPolicyDto>> ) -> impl IntoResponse
 {
-    let input = EditProductPolicyUseCase::INPUT
-    {
-        data: req_body, app_state: appstate, profile_id : authed.profile,
-        rpc_serialize_msg: py_celery_serialize::<ProductInfoReq>,
-        rpc_deserialize_msg: py_celery_deserialize_reply::<ProductInfoResp>
+    let log = appstate.log_context().clone();
+    let dstore = appstate.datastore();
+    let rpc_ctx = appstate.rpc();
+    // if RPC client handler trait adds serialize / deserialize methods with generic
+    // type parameter , it will make the code more complex,
+    // TODO, find better approach to improve code quality
+    let rpc_deserialize_msg = if rpc_ctx.label() == "dummy" {     
+        _rpc_deserialize_dummy
+    } else {
+        py_celery_deserialize_reply::<ProductInfoResp>
     };
-    let output = input.execute().await ;
-    presenter(output)
+    let input = EditProductPolicyUseCase {
+        data: req_body, log, dstore, rpc_ctx, profile_id : authed.profile,
+        rpc_serialize_msg: py_celery_serialize::<ProductInfoReq>,
+        rpc_deserialize_msg 
+    };
+    let (result, client_err) = input.execute().await ;
+    presenter(result, client_err)
 } // end of endpoint
 
+fn  _rpc_deserialize_dummy(_raw:&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>
+{
+    Err(AppError {code:AppErrorCode::RpcRemoteInvalidReply, detail:None})
+}
