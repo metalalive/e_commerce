@@ -45,7 +45,7 @@ impl From<Error> for AppError {
             Error::ColumnIndexOutOfBounds { index, len } =>
                 (AppErrorCode::InvalidInput, format!("req-idx:{}, limit:{}", index, len)),
             Error::PoolTimedOut =>
-                (AppErrorCode::IOerror(ErrorKind::ResourceBusy), format!("no-conn-avail")),
+                (AppErrorCode::DatabaseServerBusy, format!("no-conn-avail")),
             Error::PoolClosed =>
                 (AppErrorCode::Unknown, format!("pool-closed")),
             Error::WorkerCrashed =>

@@ -33,6 +33,7 @@ pub enum AppErrorCode {
     RemoteDbServerFailure,
     ExceedingMaxLimit,
     AcquireLockFailure,
+    DatabaseServerBusy,
     DataTableNotExist,
     DataCorruption,
     ProductNotExist,

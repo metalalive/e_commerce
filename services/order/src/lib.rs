@@ -1,4 +1,3 @@
-#![feature(io_error_more)]
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32};
 

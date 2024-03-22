@@ -12,8 +12,9 @@ use order::model::{
 fn convert_from_req_dto_ok()
 {
     let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
-    let policym = ProductPolicyModel { product_type:product_type.clone(), product_id,
-            is_create: false, auto_cancel_secs: 69, warranty_hours: 23
+    let policym = ProductPolicyModel { product_type:product_type.clone(),
+        product_id, is_create: false, auto_cancel_secs: 69, warranty_hours: 23,
+        max_num_rsv:0, min_num_rsv:0
     };
     let pricem  = ProductPriceModel { product_id, product_type:product_type.clone(),
             price: 1015, is_create: false,

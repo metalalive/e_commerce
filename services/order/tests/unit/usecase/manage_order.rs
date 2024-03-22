@@ -29,12 +29,12 @@ use super::{MockOrderRepo, MockOrderReturnRepo};
 fn ut_setup_prod_policies () -> ProductPolicyModelSet
 {
     ProductPolicyModelSet {policies: vec![
-        ProductPolicyModel {product_type:ProductType::Package, product_id:168,
-            warranty_hours:127, auto_cancel_secs:1008, is_create:false },
-        ProductPolicyModel {product_type:ProductType::Item, product_id:168,
-            warranty_hours:20000, auto_cancel_secs:1250, is_create:false },
-        ProductPolicyModel {product_type:ProductType::Package, product_id:174,
-            warranty_hours:30000, auto_cancel_secs:2255, is_create:false },
+        ProductPolicyModel {product_type:ProductType::Package, product_id:168, min_num_rsv:0,
+            warranty_hours:127, auto_cancel_secs:1008, is_create:false, max_num_rsv:0 },
+        ProductPolicyModel {product_type:ProductType::Item, product_id:168, min_num_rsv:0,
+            warranty_hours:20000, auto_cancel_secs:1250, is_create:false, max_num_rsv:0 },
+        ProductPolicyModel {product_type:ProductType::Package, product_id:174, min_num_rsv:0,
+            warranty_hours:30000, auto_cancel_secs:2255, is_create:false, max_num_rsv:0 },
     ]}
 }
 

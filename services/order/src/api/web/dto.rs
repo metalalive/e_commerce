@@ -148,13 +148,19 @@ pub struct ProductPolicyDto {
     pub product_id: u64,
     pub auto_cancel_secs: u32,
     pub warranty_hours: u32,
+    pub max_num_rsv: Option<u16>,
+    pub min_num_rsv: Option<u16>,
 }
 
 #[derive(Serialize)]
-pub struct ProductPolicyClientLimitDto
-{
+pub struct ProductPolicyClientLimitDto {
     pub given:u32,
     pub limit:u32
+}
+#[derive(Serialize)]
+pub struct ProductPolicyNumRsvLimitDto {
+    pub min_items: u16,
+    pub max_items: u16,
 }
 
 #[derive(Serialize)]
@@ -166,4 +172,5 @@ pub struct ProductPolicyClientErrorDto
     pub err_type: String, // convert from AppError
     pub auto_cancel_secs: Option<ProductPolicyClientLimitDto>,
     pub warranty_hours: Option<ProductPolicyClientLimitDto>,
+    pub num_rsv: Option<ProductPolicyNumRsvLimitDto>,
 }

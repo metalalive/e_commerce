@@ -75,16 +75,16 @@ impl EditProductPolicyUseCase
                 app_log_event!(log, AppLogLevel::ERROR, "missing_prod_ids:{:?}", missing_prod_ids);
                 let code = EditProductPolicyResult::Other(AppErrorCode::InvalidInput);
                 let c_err = missing_prod_ids.into_iter().map(
-                    |(product_type, product_id)| {
+                    |(product_type, product_id)|
                         ProductPolicyClientErrorDto { product_id, product_type,
                             err_type: format!("{:?}", AppErrorCode::ProductNotExist),
-                            warranty_hours:None, auto_cancel_secs: None }
-                    }
+                            warranty_hours:None, auto_cancel_secs: None, num_rsv:None
+                        }
                 ).collect();
                 return (code, Some(c_err));
             }
         }
-        if let Err(e) = Self::_save_to_repo(dstore, &data).await
+        if let Err(e) = Self::_save_to_repo(dstore, data).await
         { // no need to pass `usr_prof_id`, the product ownership should be verified by previous RPC
             app_log_event!(log, AppLogLevel::ERROR, "error:{:?}", e);
             (EditProductPolicyResult::Other(e.code), None)
@@ -154,7 +154,7 @@ impl EditProductPolicyUseCase
                                (typ_.clone(), id_.clone())  ).collect()
     }
 
-    async fn _save_to_repo(ds:Arc<AppDataStoreContext>, data:&Vec<ProductPolicyDto>)
+    async fn _save_to_repo(ds:Arc<AppDataStoreContext>, data:Vec<ProductPolicyDto>)
         -> DefaultResult<(), AppError>
     {
         let repo = app_repo_product_policy(ds).await?;
