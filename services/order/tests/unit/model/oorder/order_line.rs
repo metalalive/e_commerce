@@ -3,13 +3,14 @@ use order::api::dto::OrderLinePayDto;
 use order::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason};
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::ProductType;
+use order::error::AppErrorCode;
 use order::model::{
     OrderLineModel, ProductPolicyModel, ProductPriceModel, OrderLinePriceModel,
     OrderLineAppliedPolicyModel, OrderLineQuantityModel, OrderLineIdentity
 };
 
 #[test]
-fn convert_from_req_dto_ok()
+fn convert_from_req_dto_without_rsv_limit_ok()
 {
     let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
     let policym = ProductPolicyModel { product_type:product_type.clone(),
@@ -22,13 +23,77 @@ fn convert_from_req_dto_ok()
             end_before:DateTime::parse_from_rfc3339("2023-09-10T09:01:31+02:00").unwrap().into()
     };
     let data = OrderLineReqDto { seller_id, product_id, product_type, quantity:26 };
-    let m = OrderLineModel::from(data, &policym, &pricem);
+    let result = OrderLineModel::try_from(data, &policym, &pricem);
+    let m = result.unwrap();
     assert_eq!(m.price.unit, 1015u32);
     assert_eq!(m.price.total, 1015u32 * 26u32);
     assert_eq!(m.qty.reserved, 26);
     let timenow = LocalTime::now().fixed_offset();
     let expect_reserved_time = timenow + Duration::seconds(69i64);
     assert!(m.policy.reserved_until <= expect_reserved_time);
+}
+
+#[test]
+fn convert_from_req_dto_with_rsv_limit_ok()
+{
+    let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
+    let policym = ProductPolicyModel { product_type:product_type.clone(),
+        product_id, is_create: false, auto_cancel_secs: 69, warranty_hours: 23,
+        max_num_rsv:10, min_num_rsv:2
+    };
+    let pricem  = ProductPriceModel { product_id, product_type:product_type.clone(),
+            price: 987, is_create: false,
+            start_after:DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00").unwrap().into(),
+            end_before:DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00").unwrap().into()
+    };
+    let data = OrderLineReqDto { seller_id, product_id, product_type, quantity:9 };
+    let result = OrderLineModel::try_from(data, &policym, &pricem);
+    let m = result.unwrap();
+    assert_eq!(m.price.unit, 987u32);
+    assert_eq!(m.price.total, 987u32 * 9u32);
+    assert_eq!(m.qty.reserved, 9u32);
+}
+
+#[test]
+fn convert_from_req_dto_violate_rsv_limit()
+{
+    let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
+    let policym = ProductPolicyModel { product_type:product_type.clone(),
+        product_id, is_create: false, auto_cancel_secs: 180, warranty_hours: 48,
+        max_num_rsv:10, min_num_rsv:0
+    };
+    let pricem  = ProductPriceModel { product_id, product_type:product_type.clone(),
+            price: 987, is_create: false,
+            start_after:DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00").unwrap().into(),
+            end_before:DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00").unwrap().into()
+    };
+    let data = OrderLineReqDto { seller_id, product_id, product_type, quantity:11 };
+    let result = OrderLineModel::try_from(data, &policym, &pricem);
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::ExceedingMaxLimit);
+    }
+}
+
+#[test]
+fn convert_from_req_dto_product_id_mismatch()
+{
+    let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
+    let policym = ProductPolicyModel { product_type:product_type.clone(),
+        product_id, is_create: false, auto_cancel_secs: 180, warranty_hours: 48,
+        max_num_rsv:10, min_num_rsv:0
+    };
+    let pricem  = ProductPriceModel {
+        product_id:1466, product_type:product_type.clone(), price: 60, is_create: false,
+        start_after:DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00").unwrap().into(),
+        end_before:DateTime::parse_from_rfc3339("2022-10-31T06:11:50+02:00").unwrap().into()
+    };
+    let data = OrderLineReqDto { seller_id, product_id, product_type, quantity:2 };
+    let result = OrderLineModel::try_from(data, &policym, &pricem);
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::DataCorruption);
+    }
 }
 
 #[test]

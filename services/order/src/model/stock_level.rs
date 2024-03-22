@@ -344,9 +344,10 @@ impl StockLevelModelSet {
         self.sort_by_expiry(true);
         let oid = ol_set.order_id.as_str();
         ol_set.lines.iter().filter_map(|req| {
-            let mut error = OrderLineCreateErrorDto {seller_id:req.id_.store_id,
-                product_id:req.id_.product_id, product_type:req.id_.product_type.clone(),
-                reason: OrderLineCreateErrorReason::NotExist,  nonexist:None, shortage:None
+            let mut error = OrderLineCreateErrorDto {
+                seller_id:req.id_.store_id, product_id:req.id_.product_id,
+                product_type:req.id_.product_type.clone(), rsv_limit:None, shortage:None,
+                reason: OrderLineCreateErrorReason::NotExist,  nonexist:None
             };
             let result = self.stores.iter_mut().find(|m| {req.id_.store_id == m.store_id});
             let opt_err = if let Some(store) = result {

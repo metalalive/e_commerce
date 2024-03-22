@@ -273,12 +273,12 @@ fn mock_reserve_usr_cb_2(ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
     let errors = vec![
         OrderLineCreateErrorDto {
             seller_id: req.lines[0].id_.store_id, product_id: req.lines[0].id_.product_id,
-            product_type: req.lines[0].id_.product_type.clone(), nonexist: None,
+            product_type: req.lines[0].id_.product_type.clone(), nonexist: None, rsv_limit:None,
             shortage: Some(2), reason: OrderLineCreateErrorReason::NotEnoughToClaim
         },
         OrderLineCreateErrorDto {
             seller_id: req.lines[1].id_.store_id, product_id: req.lines[1].id_.product_id,
-            product_type: req.lines[1].id_.product_type.clone(), nonexist: None,
+            product_type: req.lines[1].id_.product_type.clone(), nonexist: None, rsv_limit:None,
             shortage: Some(1), reason: OrderLineCreateErrorReason::OutOfStock
         },
     ];

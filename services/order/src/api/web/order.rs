@@ -54,8 +54,12 @@ pub(super) async fn create_handler(
                     Err(_) => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
                            "{\"reason\":\"serialization-faulire\"}".to_string()),
                 },
-                CreateOrderUsKsErr::Server => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
-                           r#"{"reason":"internal-error"}"#.to_string()),
+                CreateOrderUsKsErr::Server(errors) => {
+                    let msg = errors.into_iter().map(|e| format!("{:?}", e))
+                       .collect::<Vec<_>>().join(", ");
+                    app_log_event!(log_ctx, AppLogLevel::ERROR,"{msg}");
+                    (HttpStatusCode::INTERNAL_SERVER_ERROR, r#"{"reason":"internal-error"}"#.to_string())
+                }
             }
         }
     } else {

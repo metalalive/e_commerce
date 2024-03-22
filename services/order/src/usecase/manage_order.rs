@@ -12,7 +12,7 @@ use crate::constant::{ProductType, app_meta};
 use crate::api::web::dto::{
     OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLineCreateErrorReason, OrderLineCreateErrNonExistDto,
     OrderCreateReqData, ShippingReqDto, BillingReqDto, OrderLineReqDto, OrderLineCreateErrorDto,
-    OrderLineReturnErrorDto, 
+    OrderLineReturnErrorDto, OLineCreateErrorRsvLimitDto
 };
 use crate::api::rpc::dto::{
     OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
@@ -20,7 +20,7 @@ use crate::api::rpc::dto::{
     OrderReplicaStockReturningDto, OrderLineReplicaRefundDto, OrderReplicaRefundReqDto,
     OrderLineStockReturningDto
 };
-use crate::error::AppError;
+use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     BillingModel, ShippingModel, OrderLineModel, ProductPriceModelSet, ProductPolicyModelSet,
     StockLevelModelSet, OrderLineModelSet, OrderLineIdentity, OrderReturnModel
@@ -31,7 +31,10 @@ use crate::repository::{
 };
 use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
 
-pub enum CreateOrderUsKsErr {Client(OrderCreateRespErrorDto), Server}
+pub enum CreateOrderUsKsErr {
+    Client(OrderCreateRespErrorDto),
+    Server(Vec<AppError>)
+}
 
 pub struct CreateOrderUseCase {
     pub glb_state:AppSharedState,
@@ -95,8 +98,8 @@ impl CreateOrderUseCase {
             },
             Err(e) => {
                 let logctx_p = self.glb_state.log_context().clone();
-                app_log_event!(logctx_p, AppLogLevel::ERROR, "order repository error, detail:{e}");
-                Err(CreateOrderUsKsErr::Server)
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "repo-fail-save: {e}");
+                Err(CreateOrderUsKsErr::Server(vec![e]))
             }
         }
     } // end of fn execute
@@ -130,25 +133,32 @@ impl CreateOrderUseCase {
             let (ms_policy, ms_price) = (rs_policy.unwrap(), rs_price.unwrap());
             Ok((ms_policy, ms_price))
         } else { // repository error, internal service unavailable
+            let mut errors = Vec::new();
             let logctx_p = self.glb_state.log_context().clone();
-            let err_policy = if let Err(e) = rs_policy { e.to_string() }
-                             else {"none".to_string()};
-            let err_price = if let Err(e) = rs_price { e.to_string() }
-                             else {"none".to_string()};
+            let err_policy = if let Err(e) = rs_policy {
+                let msg = e.to_string();
+                errors.push(e);
+                msg
+            } else {"none".to_string()};
+            let err_price = if let Err(e) = rs_price {
+                let msg = e.to_string();
+                errors.push(e);
+                msg
+            } else {"none".to_string()};
             app_log_event!(logctx_p, AppLogLevel::ERROR,
                     "repository fetch error, policy:{}, price:{}",
                     err_policy, err_price);
-            Err(CreateOrderUsKsErr::Server)
+            Err(CreateOrderUsKsErr::Server(errors))
         }
     } // end of load_product_properties 
     
 
-    pub fn validate_orderline(ms_policy:ProductPolicyModelSet,
-                              ms_price:Vec<ProductPriceModelSet>,
-                              data:Vec<OrderLineReqDto> )
-        -> DefaultResult<Vec<OrderLineModel>, CreateOrderUsKsErr>
+    pub fn validate_orderline(
+        ms_policy:ProductPolicyModelSet, ms_price:Vec<ProductPriceModelSet>,
+        data:Vec<OrderLineReqDto>
+    ) -> DefaultResult<Vec<OrderLineModel>, CreateOrderUsKsErr>
     {
-        let mut missing = vec![];
+        let (mut client_errors, mut server_errors) = (vec![], vec![]);
         let lines = data.into_iter().filter_map(|d| {
             let result1 = ms_policy.policies.iter().find(|m| {
                 m.product_type == d.product_type && m.product_id == d.product_id
@@ -162,23 +172,47 @@ impl CreateOrderUseCase {
             });
             let (plc_nonexist, price_nonexist) = (result1.is_none(), result2.is_none());
             if let (Some(plc), Some(price)) = (result1, result2) {
-                Some(OrderLineModel::from(d, plc, price))
+                let (seller_id, product_id, product_type, req_qty) = (
+                    d.seller_id, d.product_id, d.product_type.clone(), d.quantity
+                );
+                match OrderLineModel::try_from(d, plc, price) {
+                    Ok(o) => Some(o),
+                    Err(e) => {
+                        if e.code == AppErrorCode::ExceedingMaxLimit  {
+                            let rsv_limit = OLineCreateErrorRsvLimitDto { max_: plc.max_num_rsv,
+                                min_: plc.min_num_rsv, given: req_qty } ;
+                            let e = OrderLineCreateErrorDto {
+                                seller_id, product_id, product_type, rsv_limit: Some(rsv_limit),
+                                nonexist:None, shortage:None,
+                                reason: OrderLineCreateErrorReason::RsvLimitViolation
+                            };
+                            client_errors.push(e);
+                        } else {
+                            server_errors.push(e);
+                        }
+                        None
+                    },
+                }
             } else {
-                let e = OrderLineCreateErrorDto { seller_id: d.seller_id, product_id: d.product_id,
+                let nonexist = OrderLineCreateErrNonExistDto {product_price:price_nonexist,
+                        product_policy:plc_nonexist, stock_seller:false };
+                let e = OrderLineCreateErrorDto {
+                    seller_id: d.seller_id, product_id: d.product_id, rsv_limit:None,
                     reason: OrderLineCreateErrorReason::NotExist, product_type: d.product_type,
-                    nonexist:Some(OrderLineCreateErrNonExistDto {product_price:price_nonexist,
-                        product_policy:plc_nonexist, stock_seller:false }), shortage:None
+                    nonexist:Some(nonexist), shortage:None
                 };
-                missing.push(e);
+                client_errors.push(e);
                 None
             }
         }).collect();
-        if missing.is_empty() {
+        if client_errors.is_empty() && server_errors.is_empty() {
             Ok(lines)
+        } else if !server_errors.is_empty() {
+            Err(CreateOrderUsKsErr::Server(server_errors))
         } else {
-            let error = OrderCreateRespErrorDto { billing: None,
-                        shipping: None, order_lines: Some(missing) };
-            Err(CreateOrderUsKsErr::Client(error))
+            let err_dto = OrderCreateRespErrorDto { billing: None,
+                        shipping: None, order_lines: Some(client_errors) };
+            Err(CreateOrderUsKsErr::Client(err_dto))
         }
     } // end of fn validate_orderline
 
@@ -198,7 +232,7 @@ impl CreateOrderUseCase {
                 Err(server_e) => {
                     app_log_event!(logctx_p, AppLogLevel::ERROR,
                                    "stock reserve server error, detail:{server_e}");
-                    Err(CreateOrderUsKsErr::Server)
+                    Err(CreateOrderUsKsErr::Server(vec![server_e]))
                 }
             }
         }

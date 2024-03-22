@@ -15,7 +15,7 @@ pub struct OrderLineReqDto {
 
 #[derive(Deserialize, Serialize)]
 pub enum OrderLineCreateErrorReason {
-    NotExist, OutOfStock, NotEnoughToClaim 
+    NotExist, OutOfStock, NotEnoughToClaim, RsvLimitViolation 
 } // TODO, rename to line-create error reason
 
 #[derive(Serialize)]
@@ -31,6 +31,13 @@ pub struct OrderLineCreateErrNonExistDto {
 }
 
 #[derive(Deserialize, Serialize)]
+pub struct OLineCreateErrorRsvLimitDto {
+    pub max_: u16,
+    pub min_: u16,
+    pub given: u32,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct OrderLineCreateErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
@@ -38,7 +45,8 @@ pub struct OrderLineCreateErrorDto {
     pub product_type: ProductType,
     pub reason: OrderLineCreateErrorReason,
     pub nonexist: Option<OrderLineCreateErrNonExistDto>,
-    pub shortage: Option<u32>
+    pub shortage: Option<u32>,
+    pub rsv_limit: Option<OLineCreateErrorRsvLimitDto>
 }
 
 #[derive(Serialize)]

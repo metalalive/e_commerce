@@ -346,23 +346,59 @@ impl OrderLineQuantityModel {
 }
 
 impl  OrderLineModel {
-    pub fn from(data:OrderLineReqDto, policym:&ProductPolicyModel, pricem:&ProductPriceModel) -> Self
+    fn validate_id_match(
+        data: &OrderLineReqDto, policym: &ProductPolicyModel,
+        pricem: &ProductPriceModel
+    ) -> DefaultResult<(), AppError> {
+        let id_mismatch = if data.product_type != policym.product_type {
+            Some("product-policy, type")
+        } else if data.product_id != policym.product_id {
+            Some("product-policy, id")
+        } else if data.product_type != pricem.product_type {
+            Some("product-price, type")
+        } else if data.product_id != pricem.product_id {
+            Some("product-price, id")
+        } else { None };
+        if let Some(msg) = id_mismatch {
+            Err(AppError { code: AppErrorCode::DataCorruption,
+                detail: Some(msg.to_string()) })
+        } else { Ok(()) }
+    }
+    fn validate_rsv_limit(data: &OrderLineReqDto, policym: &ProductPolicyModel)
+        -> DefaultResult<(), AppError>
     {
-        assert_eq!(data.product_type, policym.product_type);
-        assert_eq!(data.product_id,   policym.product_id);
-        assert_eq!(data.product_type, pricem.product_type);
-        assert_eq!(data.product_id,   pricem.product_id);
+        let max_rsv = policym.max_num_rsv as u32;
+        let min_rsv = policym.min_num_rsv as u32;
+        // note the zero value in max/min rsv means omitting the limit check
+        let cond1 = (max_rsv > 0) && (data.quantity > max_rsv);
+        let cond2 = (min_rsv > 0) && (min_rsv > data.quantity);
+        if cond1 || cond2 {
+            let detail = format!("rsv-limit, max:{max_rsv}, min:{min_rsv}, \
+                                 given:{}", data.quantity);
+            Err(AppError { code: AppErrorCode::ExceedingMaxLimit,
+                detail: Some(detail) })
+        } else { Ok(()) }
+    }
+
+    pub fn try_from(
+        data:OrderLineReqDto, policym:&ProductPolicyModel,
+        pricem:&ProductPriceModel
+    ) -> DefaultResult<Self, AppError>
+    {
+        Self::validate_id_match(&data, policym, pricem)?;
+        Self::validate_rsv_limit(&data, policym)?;
         let timenow = LocalTime::now().fixed_offset();
         let reserved_until = timenow + Duration::seconds(policym.auto_cancel_secs as i64);
         let warranty_until = timenow + Duration::hours(policym.warranty_hours as i64);
         let price_total = pricem.price * data.quantity;
-        Self { id_: OrderLineIdentity{store_id: data.seller_id, product_type: data.product_type,
-                    product_id: data.product_id} ,
+        Ok(Self { id_: OrderLineIdentity{ product_type: data.product_type,
+                    store_id: data.seller_id, product_id: data.product_id } ,
             qty: OrderLineQuantityModel { reserved: data.quantity, paid:0, paid_last_update:None },
             price: OrderLinePriceModel { unit: pricem.price, total: price_total } ,
             policy: OrderLineAppliedPolicyModel { reserved_until, warranty_until }
-        }
-    }
+        })
+    } // end of fn try_from
+
     pub fn generate_order_id (machine_code:u8) -> String
     { // utility for generating top-level identifier to each order
         let oid = generate_custom_uid(machine_code);

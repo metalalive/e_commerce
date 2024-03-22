@@ -35,6 +35,8 @@ fn ut_setup_prod_policies () -> ProductPolicyModelSet
             warranty_hours:20000, auto_cancel_secs:1250, is_create:false, max_num_rsv:0 },
         ProductPolicyModel {product_type:ProductType::Package, product_id:174, min_num_rsv:0,
             warranty_hours:30000, auto_cancel_secs:2255, is_create:false, max_num_rsv:0 },
+        ProductPolicyModel {product_type:ProductType::Item, product_id:169, min_num_rsv:1,
+            warranty_hours:21000, auto_cancel_secs:150, is_create:false, max_num_rsv:5 },
     ]}
 }
 
@@ -50,6 +52,10 @@ fn ut_setup_prod_prices () -> Vec<ProductPriceModelSet>
                 start_after:DateTime::parse_from_rfc3339("2023-07-31T10:16:54+05:00").unwrap().into(),
                 end_before:DateTime::parse_from_rfc3339("2023-10-10T09:01:31+02:00").unwrap().into(),
                 is_create:false, price: 1130  },
+            ProductPriceModel {product_type:ProductType::Item, product_id:169,
+                start_after:DateTime::parse_from_rfc3339("2022-12-02T14:29:54+05:00").unwrap().into(),
+                end_before:DateTime::parse_from_rfc3339("2023-01-15T19:01:31+02:00").unwrap().into(),
+                is_create:false, price: 190  },
         ]},
         ProductPriceModelSet {store_id:52, items:vec![
             ProductPriceModel {product_type:ProductType::Item, product_id:168,
@@ -104,11 +110,13 @@ fn validate_orderline_ok ()
 } // end of fn validate_orderline_ok
 
 #[test]
-fn validate_orderline_missing_properties ()
+fn validate_orderline_client_errors ()
 {
     let ms_policy = ut_setup_prod_policies();
     let ms_price = ut_setup_prod_prices();
     let data = vec![
+        OrderLineReqDto {seller_id:51, product_type:ProductType::Item,
+            product_id:169, quantity:6 },
         OrderLineReqDto {seller_id:52, product_type:ProductType::Package,
             product_id:174, quantity:4 },
         OrderLineReqDto {seller_id:52, product_type:ProductType::Package,
@@ -122,7 +130,7 @@ fn validate_orderline_missing_properties ()
     assert!(result.is_err());
     if let Err(CreateOrderUsKsErr::Client(v)) = result {
         let errs = v.order_lines.unwrap();
-        assert_eq!(errs.len(), 3);
+        assert_eq!(errs.len(), 4);
         let found = errs.iter().find(|e| {
             e.seller_id==52 && e.product_type==ProductType::Package && e.product_id==900
         }).unwrap();
@@ -144,8 +152,15 @@ fn validate_orderline_missing_properties ()
             assert!(!v.product_policy);
             assert!(v.product_price);
         }
+        let found = errs.iter().find(|e| {
+            e.seller_id==51 && e.product_type==ProductType::Item && e.product_id==169
+        }).unwrap();
+        if let Some(v) = found.rsv_limit.as_ref() {
+            assert_eq!(v.max_, 5);
+            assert_eq!(v.given, 6);
+        }
     }
-} // end of validate_orderline_missing_properties
+} // end of validate_orderline_client_errors
 
 
 fn ut_setup_orderlines () -> Vec<OrderLineModel>

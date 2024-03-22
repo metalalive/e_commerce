@@ -463,7 +463,9 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
         assert!(num_avail < req.lines[0].qty.reserved);
         let err = OrderLineCreateErrorDto { seller_id: req.lines[0].id_.store_id,
             product_id: req.lines[0].id_.product_id, product_type: req.lines[0].id_.product_type.clone(),
-            reason: OrderLineCreateErrorReason::NotEnoughToClaim, nonexist:None, shortage:None };
+            reason: OrderLineCreateErrorReason::NotEnoughToClaim, nonexist:None, shortage:None,
+            rsv_limit:None,
+        };
         out.push(err);
     }
     let result = ms.stores[0].products.iter_mut().find(|p| {
@@ -477,7 +479,9 @@ fn mock_reserve_usr_cb_2 (ms:&mut StockLevelModelSet, req:&OrderLineModelSet)
         assert!(num_avail < req.lines[1].qty.reserved);
         let err = OrderLineCreateErrorDto { seller_id: req.lines[1].id_.store_id,
             product_id: req.lines[1].id_.product_id, product_type: req.lines[1].id_.product_type.clone(),
-            reason: OrderLineCreateErrorReason::OutOfStock, nonexist:None, shortage:None  };
+            reason: OrderLineCreateErrorReason::OutOfStock, nonexist:None, shortage:None,
+            rsv_limit:None,
+        };
         out.push(err);
     }
     Err(Ok(out))
