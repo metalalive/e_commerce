@@ -80,21 +80,23 @@ impl ProductPolicyMariaDbRepo
         -> (String, MySqlArguments)
     {
         const SQL_PATTERN_BLOCKS: (&str, &str, &str) = (
-            "INSERT INTO `product_policy`(`product_type`,`product_id`, \
-             `auto_cancel_secs`,`warranty_hours`) VALUES ",
-            "(?,?,?,?)", ","
+            "INSERT INTO `product_policy`(`product_type`,`product_id`,`auto_cancel_secs`,\
+             `warranty_hours`,`max_num_rsv`,`min_num_rsv`) VALUES ",
+            "(?,?,?,?,?,?)", ","
         );
         let mut args = MySqlArguments::default();
         let num_batch = items.into_iter().map(|item| {
-            let (prod_typ, prod_id, auto_cancel, warranty) = (
-                item.product_type, item.product_id,
-                item.auto_cancel_secs, item.warranty_hours
+            let (prod_typ, prod_id, auto_cancel, warranty, max_rsv, min_rsv) = (
+                item.product_type, item.product_id,  item.auto_cancel_secs,
+                item.warranty_hours, item.max_num_rsv, item.min_num_rsv
             );
             let prodtypenum: u8 = prod_typ.into();
             args.add(prodtypenum.to_string());
             args.add(prod_id);
             args.add(auto_cancel);
             args.add(warranty);
+            args.add(max_rsv);
+            args.add(min_rsv);
         }).count();
         let sql_patt = Self::prep_stmt_patt_read(SQL_PATTERN_BLOCKS, num_batch);
         (sql_patt, args)
@@ -105,20 +107,32 @@ impl ProductPolicyMariaDbRepo
     {
         let mut args = MySqlArguments::default();
         let mut num_batch = items.iter().map(|item| {
-            let (prod_typ, prod_id, auto_cancel): (u8, u64, u32) = (
-                item.product_type.clone().into(), item.product_id, item.auto_cancel_secs
-            );
+            let prod_typ: u8 = item.product_type.clone().into();
+            let (prod_id, auto_cancel) = (item.product_id, item.auto_cancel_secs);
             args.add(prod_typ.to_string());
             args.add(prod_id);
             args.add(auto_cancel);
         }).count();
         items.iter().map(|item| {
-            let (prod_typ, prod_id, warranty): (u8, u64, u32) = (
-                item.product_type.clone().into(), item.product_id, item.warranty_hours
-            );
+            let prod_typ: u8 = item.product_type.clone().into();
+            let (prod_id, warranty) = (item.product_id, item.warranty_hours);
             args.add(prod_typ.to_string());
             args.add(prod_id);
             args.add(warranty);
+        }).count();
+        items.iter().map(|item| {
+            let prod_typ: u8 = item.product_type.clone().into();
+            let (prod_id, max_rsv) = (item.product_id, item.max_num_rsv);
+            args.add(prod_typ.to_string());
+            args.add(prod_id);
+            args.add(max_rsv);
+        }).count();
+        items.iter().map(|item| {
+            let prod_typ: u8 = item.product_type.clone().into();
+            let (prod_id, min_rsv) = (item.product_id, item.min_num_rsv);
+            args.add(prod_typ.to_string());
+            args.add(prod_id);
+            args.add(min_rsv);
         }).count();
         items.iter().map(|item| {
             let (prod_typ, prod_id): (u8, u64) = (
@@ -131,7 +145,12 @@ impl ProductPolicyMariaDbRepo
             let case_ops = (0..num_batch).into_iter().map(|_| {
                 "WHEN (`product_type`=? AND `product_id`=?) THEN ? "
             }).collect::<Vec<_>>().join("");
-            let mut out = format!("UPDATE `product_policy` SET `auto_cancel_secs` = CASE {} ELSE `auto_cancel_secs` END,  `warranty_hours` = CASE {} ELSE `warranty_hours` END WHERE ", case_ops, case_ops);
+            let mut out = format!("UPDATE `product_policy` SET \
+                `auto_cancel_secs` = CASE {} ELSE `auto_cancel_secs` END,\
+                `warranty_hours` = CASE {} ELSE `warranty_hours` END, \
+                `max_num_rsv` = CASE {} ELSE `max_num_rsv` END, \
+                `min_num_rsv` = CASE {} ELSE `min_num_rsv` END \
+                WHERE ", case_ops, case_ops, case_ops, case_ops);
             out += "(`product_type`=? AND `product_id`=?)";
             num_batch -= 1;
             (0..num_batch).into_iter().map(|_| {
@@ -149,7 +168,7 @@ impl AbstProductPolicyRepo for ProductPolicyMariaDbRepo
     async fn fetch(&self, ids:Vec<(ProductType, u64)>) -> DefaultResult<ProductPolicyModelSet, AppError>
     {
         const SQL_PATTERN_BLOCKS: (&str, &str, &str) = (
-            "SELECT `product_type`,`product_id`,`auto_cancel_secs`,`warranty_hours` FROM `product_policy` WHERE ",
+            "SELECT `product_type`,`product_id`,`auto_cancel_secs`,`warranty_hours`,`max_num_rsv`,`min_num_rsv` FROM `product_policy` WHERE ",
             "(`product_type`=? AND `product_id`=?)", "OR"
         );
         let (limit, mut num_iter) = (16_usize, 0usize);
@@ -229,7 +248,9 @@ impl TryFrom<MySqlRow> for ProductPolicyModel {
         let product_id = value.try_get::<u64, usize>(1) ? ;
         let auto_cancel_secs = value.try_get::<u32, usize>(2) ? ;
         let warranty_hours   = value.try_get::<u32, usize>(3) ? ;
-        Ok(Self { is_create:false, product_id, product_type,
-            auto_cancel_secs, warranty_hours })
+        let max_num_rsv = value.try_get::<u16, usize>(4)?;
+        let min_num_rsv = value.try_get::<u16, usize>(5)?;
+        Ok(Self { is_create:false, product_id, product_type, auto_cancel_secs,
+            warranty_hours, max_num_rsv, min_num_rsv })
     } // end of fn try_from
 } // end of impl ProductPolicyModel

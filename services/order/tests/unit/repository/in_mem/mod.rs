@@ -1,4 +1,4 @@
-mod product_policy;
+pub(super) mod product_policy;
 mod product_price;
 pub(super) mod oorder;
 

@@ -12,14 +12,16 @@ use super::super::AbstProductPolicyRepo;
 
 const TABLE_LABEL: &'static str = "product_policy";
 
-enum InMemColIdx {AutoCancel, Warranty, TotNumColumns}
+enum InMemColIdx {AutoCancel, Warranty, MaxNumRsv, MinNumRsv, TotNumColumns}
 
 impl Into<usize> for InMemColIdx {
     fn into(self) -> usize {
         match self {
             Self::AutoCancel => 0,
             Self::Warranty => 1,
-            Self::TotNumColumns => 2
+            Self::MaxNumRsv => 2,
+            Self::MinNumRsv => 3,
+            Self::TotNumColumns => 4,
         }
     }
 }
@@ -63,9 +65,13 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
                     .unwrap().parse().unwrap();
                 let warranty_hours = row.get::<usize>(InMemColIdx::Warranty.into())
                     .unwrap().parse().unwrap();
+                let max_num_rsv = row.get::<usize>(InMemColIdx::MaxNumRsv.into())
+                    .unwrap().parse().unwrap();
+                let min_num_rsv = row.get::<usize>(InMemColIdx::MinNumRsv.into())
+                    .unwrap().parse().unwrap();
                 ProductPolicyModel {
                     product_id, product_type,  auto_cancel_secs,  warranty_hours,
-                    is_create:false
+                    max_num_rsv, min_num_rsv, is_create:false
                 }
             }) .collect()
         } else { Vec::new() };
@@ -89,6 +95,8 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo
                     let mut row = (0..InMemColIdx::TotNumColumns.into())
                         .map(|_n| String::new())  .collect::<Vec<String>>();
                     let _ = [ // so the order of columns can be arbitrary
+                        (InMemColIdx::MinNumRsv, m.min_num_rsv.to_string()),
+                        (InMemColIdx::MaxNumRsv, m.max_num_rsv.to_string()),
                         (InMemColIdx::Warranty, m.warranty_hours.to_string()),
                         (InMemColIdx::AutoCancel, m.auto_cancel_secs.to_string()),
                     ].into_iter().map(|(idx, val)| {
