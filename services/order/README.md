@@ -22,7 +22,7 @@ You can build / test this application with following optional features
 - mariaDB, append `--features mariadb` to Rust `cargo` command 
 
 ### Commands for build
-For applications
+#### For applications
 ```shell
 cargo build  --bin web
 cargo build  --bin rpc_consumer
@@ -32,6 +32,7 @@ cargo build  --bin rpc_consumer
   - `--features amqprs` , to enable publish / subscribe operations to AMQP broker in this service.
   - or enable all options , such as `--features "mariadb amqprs"`
 
+#### Database Migration
 If you configure SQL database as the datastore destination in the development server or testing server, ensure to synchronize schema migration
 ```shell
 > /PATH/TO/liquibase --defaults-file=${SERVICE_BASE_PATH}/liquibase.properties \
@@ -49,6 +50,17 @@ Note :
 - the parameter `$DB_NAME` should be `ecommerce_order` for development server, or  `test_ecommerce_order` for testing server, see [reference](../migrations/init_db.sql)
 - the subcommand `update` upgrades the schema to latest version
 - the subcommand `rollback` rollbacks the schema to specific previous version `$VERSION_TAG` defined in the `migration/changelog_order.xml`
+
+
+This order-processing service includes resource quota / permission parameters that should be embedded in client's JWT on calling web API.
+It is necessary to synchronize these parameters to `user-management` service by the upgrading database schema :
+```shell
+/PATH/TO/liquibase --defaults-file=${SERVICE_BASE_PATH}/liquibase.properties \
+      --changeLogFile=${SERVICE_BASE_PATH}/migration/changelog_usermgt.xml  \
+      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME   --username=$USER  --password=$PASSWORD \
+      --log-level=info   update
+```
+
 
 ## Run
 ### Development API server

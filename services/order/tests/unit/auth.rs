@@ -15,7 +15,8 @@ use tower_http::auth::AsyncAuthorizeRequest;
 
 use order::{
     AppAuthKeystore, AppJwtAuthentication, AbstractAuthKeystore, AppAuthCfg,
-    AppKeystoreRefreshResult, AppAuthedClaim, AppAuthClaimQuota, AppAuthClaimPermission
+    AppKeystoreRefreshResult, AppAuthedClaim, AppAuthClaimQuota, AppAuthClaimPermission,
+    AppAuthPermissionCode, AppAuthQuotaMatCode
 };
 use order::error::{AppError, AppErrorCode};
 use order::constant::{app_meta, ENV_VAR_SERVICE_BASE_PATH};
@@ -104,7 +105,8 @@ fn ut_jwt_encode_token(kid:Option<String>, alg:Algorithm,
 }
 
 #[tokio::test]
-async fn jwt_verify_rsa_ok() {
+async fn jwt_verify_rsa_ok()
+{
     let kstore = MockAuthKeystore::build("jwk_rsa_pubkey_valid.json");
     let kid = kstore.key.common.key_id.as_ref().unwrap().clone();
     let mock_ks : Arc<Box<dyn AbstractAuthKeystore>> =  Arc::new(Box::new(kstore));
@@ -112,8 +114,10 @@ async fn jwt_verify_rsa_ok() {
     let mock_req = {
         let timestamp = Local::now().fixed_offset().timestamp();
         let payld = AppAuthedClaim { profile: 247, iat:timestamp - 5, exp:timestamp + 65,
-            perms: vec![AppAuthClaimPermission{app_code: app_meta::CODE, codename: format!("can_create_return")}],
-            quota: vec![AppAuthClaimQuota{app_code: app_meta::CODE, mat_code: 10, maxnum: 61}],
+            perms: vec![AppAuthClaimPermission{app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+                    codename: AppAuthPermissionCode::can_create_return_req }],
+            quota: vec![AppAuthClaimQuota{app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+                    mat_code: AppAuthQuotaMatCode::NumOrderLines, maxnum: 61 }],
             aud: vec![format!("another-service"), app_meta::LABAL.to_string()]
         };
         let encoded = ut_jwt_encode_token(Some(kid), Algorithm::RS256,
@@ -136,11 +140,12 @@ async fn jwt_verify_rsa_ok() {
     assert!(decoded_claim.aud.contains(&app_meta::LABAL.to_string()));
     assert_eq!(decoded_claim.perms.len() , 1);
     assert_eq!(decoded_claim.quota.len() , 1);
-    assert_eq!(decoded_claim.perms[0].app_code , app_meta::CODE);
-    assert_eq!(decoded_claim.quota[0].app_code , app_meta::CODE);
-    assert_eq!(decoded_claim.quota[0].mat_code , 10u8);
+    assert_eq!(decoded_claim.perms[0].app_code, app_meta::RESOURCE_QUOTA_AP_CODE);
+    assert!(matches!(decoded_claim.perms[0].codename, AppAuthPermissionCode::can_create_return_req ));
+    assert_eq!(decoded_claim.quota[0].app_code, app_meta::RESOURCE_QUOTA_AP_CODE);
+    assert!(matches!(decoded_claim.quota[0].mat_code, AppAuthQuotaMatCode::NumOrderLines ));
     assert_eq!(decoded_claim.quota[0].maxnum, 61u32);
-}
+} // end of fn jwt_verify_rsa_ok
 
 #[tokio::test]
 async fn jwt_verify_rsa_invalid_req_header() {

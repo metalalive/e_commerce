@@ -6,9 +6,9 @@ use crate::error::{AppError, AppErrorCode};
 
 pub mod app_meta {
     pub const LABAL:&'static str = "order";
-    pub const CODE:u8 = 4; // TODO, rename to QUOTA_AP_CODE
     pub const MACHINE_CODE:u8 = 1;
     // TODO, machine code to UUID generator should be configurable
+    pub const RESOURCE_QUOTA_AP_CODE: u8 = 4;
 }
 
 pub const ENV_VAR_SYS_BASE_PATH :&'static str = "SYS_BASE_PATH";

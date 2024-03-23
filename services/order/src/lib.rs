@@ -23,7 +23,8 @@ pub use config::{
 mod auth;
 pub use auth::{
     AbstractAuthKeystore, AppAuthKeystore, AppJwtAuthentication, AppKeystoreRefreshResult,
-    AppAuthedClaim, AppAuthClaimQuota, AppAuthClaimPermission
+    AppAuthedClaim, AppAuthClaimQuota, AppAuthClaimPermission, AppAuthQuotaMatCode,
+    AppAuthPermissionCode
 };
 
 mod rpc;

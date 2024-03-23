@@ -12,6 +12,9 @@ use async_trait::async_trait;
 use axum::http::request::Parts;
 use chrono::{DateTime, FixedOffset, Local as LocalTime, Duration};
 use serde::{Deserialize, Serialize};
+use serde::de::{
+    Error as DeserializeError, Expected as DeExpected, Unexpected as DeUnexpected
+};
 
 use http_body::Body as HttpBody;
 use http_body::combinators::UnsyncBoxBody;
@@ -75,15 +78,27 @@ pub struct AppJwtAuthentication {
     keystore: Arc<Box<dyn AbstractAuthKeystore>>
 }
 
+#[allow(non_camel_case_types)]
+#[derive(Deserialize, Serialize)]
+pub enum AppAuthPermissionCode {
+    can_create_return_req,
+    can_create_product_policy,
+}
+#[derive(Clone)]
+pub enum AppAuthQuotaMatCode {
+    NumPhones, NumEmails, NumOrderLines, NumProductPolicies
+}
 #[derive(Deserialize, Serialize)]
 pub struct AppAuthClaimPermission {
+    #[serde(deserialize_with="AppAuthedClaim::jsn_validate_ap_code")]
     pub app_code: u8,
-    pub codename: String
+    pub codename: AppAuthPermissionCode
 }
 #[derive(Deserialize, Serialize)]
 pub struct AppAuthClaimQuota {
+    #[serde(deserialize_with="AppAuthedClaim::jsn_validate_ap_code")]
     pub app_code: u8,
-    pub mat_code: u8,
+    pub mat_code: AppAuthQuotaMatCode, // u8,
     pub maxnum: u32,
 }
 #[derive(Deserialize, Serialize)]
@@ -118,6 +133,82 @@ impl FromRequestParts<AppSharedState> for AppAuthedClaim {
     }
 } // end of impl AppAuthedClaim
 
+impl AppAuthedClaim {
+    fn jsn_validate_ap_code<'de, D>(raw:D) -> DefaultResult<u8, D::Error>
+        where D: serde::Deserializer<'de>
+    {
+        let val = u8::deserialize(raw)?;
+        if val == app_meta::RESOURCE_QUOTA_AP_CODE {
+            Ok(val)
+        } else {
+            let unexp = DeUnexpected::Unsigned(val as u64);
+            let exp = ExpectedApCode(app_meta::RESOURCE_QUOTA_AP_CODE,
+                                     app_meta::LABAL );
+            Err(DeserializeError::invalid_value(unexp, &exp))
+        }
+    }
+} // end of impl AppAuthedClaim
+
+impl TryFrom<u8> for AppAuthQuotaMatCode {
+    type Error = u8;
+    fn try_from(value: u8) -> DefaultResult<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::NumPhones),
+            2 => Ok(Self::NumEmails),
+            3 => Ok(Self::NumOrderLines),
+            4 => Ok(Self::NumProductPolicies),
+            _others => Err(value),
+        }
+    }
+}
+impl Into<u8> for AppAuthQuotaMatCode {
+    fn into(self) -> u8 {
+        match self {
+            Self::NumPhones => 1,
+            Self::NumEmails => 2,
+            Self::NumOrderLines => 3,
+            Self::NumProductPolicies => 4,
+        }
+    }
+}
+impl<'de> Deserialize<'de> for AppAuthQuotaMatCode {
+    fn deserialize<D>(raw: D) -> DefaultResult<Self, D::Error>
+        where D: serde::Deserializer<'de>
+    {
+        let val = u8::deserialize(raw)?;
+        match Self::try_from(val) {
+            Ok(code) => Ok(code),
+            Err(val) => {
+                let unexp = DeUnexpected::Unsigned(val as u64);
+                let exp = ExpectedQuotaMatCode;
+                Err(DeserializeError::invalid_value(unexp, &exp))
+            }
+        }
+    }
+}
+impl Serialize for AppAuthQuotaMatCode {
+    fn serialize<S>(&self, serializer: S) -> DefaultResult<S::Ok, S::Error>
+        where S: serde::Serializer
+    {
+        let raw = self.clone().into();
+        serializer.serialize_u8(raw)
+    }
+}
+
+struct ExpectedApCode<'a>(u8, &'a str);
+struct ExpectedQuotaMatCode;
+
+impl<'a> DeExpected for ExpectedApCode<'a> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
+        let msg = format!("expect ap-code: {}, label:{}", self.0, self.1);
+        formatter.write_str(msg.as_str())
+    }
+}
+impl DeExpected for ExpectedQuotaMatCode {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result
+    { formatter.write_str("range: 1-4") }
+}
 
 #[async_trait]
 impl AbstractAuthKeystore for AppAuthKeystore { 
