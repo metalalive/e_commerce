@@ -23,11 +23,19 @@
     "contact": {
       "first_name": "Jordan",
       "last_name": "HasNoLife",
-      "emails": ["jordon@nolife.idv"],
+      "emails": ["alice@bob.cello"],
       "phones": [
+        {
+          "nation": 18,
+          "number": "93024852"
+        },
         {
           "nation": 1,
           "number": "181001000"
+        },
+        {
+          "nation": 61,
+          "number": "91009209930"
         }
       ]
     },
@@ -42,11 +50,11 @@
     "contact": {
       "first_name": "Jordan",
       "last_name": "Michael",
-      "emails": ["curry@steph.wow"],
+      "emails": ["curry@steph.wow", "gun@bullet.powder",  "poetry@bowshape.piece"],
       "phones": [
         {
-          "nation": 7,
-          "number": "0093089371"
+          "nation": 44,
+          "number": "92030241101"
         }
       ]
     }

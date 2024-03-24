@@ -79,22 +79,22 @@ pub struct AppJwtAuthentication {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, PartialEq)]
 pub enum AppAuthPermissionCode {
     can_create_return_req,
     can_create_product_policy,
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum AppAuthQuotaMatCode {
     NumPhones, NumEmails, NumOrderLines, NumProductPolicies
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct AppAuthClaimPermission {
     #[serde(deserialize_with="AppAuthedClaim::jsn_validate_ap_code")]
     pub app_code: u8,
     pub codename: AppAuthPermissionCode
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct AppAuthClaimQuota {
     #[serde(deserialize_with="AppAuthedClaim::jsn_validate_ap_code")]
     pub app_code: u8,
@@ -146,6 +146,20 @@ impl AppAuthedClaim {
                                      app_meta::LABAL );
             Err(DeserializeError::invalid_value(unexp, &exp))
         }
+    }
+    pub fn contain_permission(&self, code:AppAuthPermissionCode) -> bool {
+        self.perms.iter().any(|p| {
+            p.app_code == app_meta::RESOURCE_QUOTA_AP_CODE && p.codename == code
+        })
+    }
+    pub fn quota_limit(&self, code:AppAuthQuotaMatCode) -> u32
+    {
+        let result = self.quota.iter().find(|q| {
+            q.app_code == app_meta::RESOURCE_QUOTA_AP_CODE &&  q.mat_code == code
+        });
+        if let Some(rule) = result {
+            rule.maxnum
+        } else { 0 }
     }
 } // end of impl AppAuthedClaim
 

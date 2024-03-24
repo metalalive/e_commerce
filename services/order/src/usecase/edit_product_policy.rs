@@ -7,10 +7,11 @@ use std::collections::hash_map::RandomState;
 
 use chrono::Local;
 use serde::{Serialize, Deserialize};
-use crate::constant::ProductType;
+
+use crate::{AppDataStoreContext, AppAuthedClaim, AppAuthPermissionCode, AppAuthQuotaMatCode} ;
+use crate::constant::{ProductType, app_meta};
 use crate::model::ProductPolicyModelSet;
 use crate::repository::app_repo_product_policy;
-use crate::AppDataStoreContext ;
 use crate::error::{AppErrorCode, AppError};
 use crate::rpc::{AbstractRpcContext, AppRpcClientReqProperty};
 use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
@@ -43,20 +44,40 @@ pub struct ProductInfoResp {
 
 #[derive(PartialEq, Debug)]
 pub enum EditProductPolicyResult {
-    OK, Other(AppErrorCode),
+    OK, PermissionDeny,
+    QuotaExceed(usize, usize),
+    Other(AppErrorCode),
 }
 
 impl EditProductPolicyUseCase
 {
+    fn validate_permission_quota(authed_usr:&AppAuthedClaim, num_items:usize)
+        -> DefaultResult<(), EditProductPolicyResult>
+    {
+        let perm_allowed = authed_usr.contain_permission(AppAuthPermissionCode::can_create_product_policy);
+        if perm_allowed {
+            let limit = authed_usr.quota_limit(AppAuthQuotaMatCode::NumProductPolicies) as usize;
+            if limit >= num_items {
+                Ok(())
+            } else {
+                Err(EditProductPolicyResult::QuotaExceed(limit, num_items))
+            }
+        } else {
+            Err(EditProductPolicyResult::PermissionDeny)
+        }
+    }
+
     pub async fn execute(self) -> (
         EditProductPolicyResult, Option<Vec<ProductPolicyClientErrorDto>>
     ) {
-        let Self {profile_id, data, log, rpc_ctx, dstore,
+        if let Err(e) = Self::validate_permission_quota(&self.authed_usr, self.data.len())
+        { return (e, None); }
+        let Self {authed_usr, data, log, rpc_ctx, dstore,
             rpc_serialize_msg, rpc_deserialize_msg } = self; 
         if let Err(ce) = ProductPolicyModelSet::validate(&data) {
             return (EditProductPolicyResult::Other(AppErrorCode::InvalidInput), Some(ce));
         }
-        let usr_prof_id = profile_id;
+        let usr_prof_id = authed_usr.profile;
         let rpctype = rpc_ctx.label();
         let result = Self::check_product_existence(
                 &data, usr_prof_id, rpc_ctx, initiate_rpc_request,
@@ -172,7 +193,7 @@ pub struct EditProductPolicyUseCase
     pub log: Arc<AppLogContext>,
     pub rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
     pub dstore: Arc<AppDataStoreContext>,
-    pub profile_id : u32,
+    pub authed_usr : AppAuthedClaim,
     pub data : Vec<ProductPolicyDto>,
     pub rpc_serialize_msg: fn(ProductInfoReq) -> DefaultResult<Vec<u8>, AppError> ,
     pub rpc_deserialize_msg: fn(&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>,

@@ -33,7 +33,7 @@ impl AbsRpcClientCtx for UTestDummyRpcContext {
 #[async_trait]
 impl AbsRpcServerCtx for UTestDummyRpcContext {
     async fn server_start(
-        &self, shr_state:AppSharedState, route_hdlr: AppRpcRouteHdlrFn
+        &self, _shr_state:AppSharedState, _route_hdlr: AppRpcRouteHdlrFn
     ) -> DefaultResult<(), AppError>
     {
         Err(AppError{ code: AppErrorCode::NotImplemented
@@ -89,7 +89,7 @@ fn mock_rpc_deserialize_msg(src:&Vec<u8>) -> DefaultResult<ProductInfoResp, AppE
     match serde_json::from_slice::<ProductInfoResp>(src)
     {
         Ok(v) => Ok(v),
-        Err(e) => Err(AppError { code: AppErrorCode::RpcRemoteInvalidReply,
+        Err(_e) => Err(AppError { code: AppErrorCode::RpcRemoteInvalidReply,
                   detail: Some("unit-test".to_string())  }),
     }
 }

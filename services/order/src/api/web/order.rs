@@ -41,7 +41,7 @@ pub(super) async fn create_handler(
         Ok(repo_policy)) = results
     {
         let uc = CreateOrderUseCase {glb_state:_appstate, repo_price,
-            repo_policy, repo_order:repo_o, usr_id};
+            repo_policy, repo_order:repo_o, auth_claim:authed };
         match uc.execute(req_body).await {
             Ok(value) => match serde_json::to_string(&value) {
                 Ok(s) => (HttpStatusCode::CREATED, s),
@@ -49,8 +49,13 @@ pub(super) async fn create_handler(
                            r#"{"reason":"serialization-faulire"}"#.to_string() ),
             },
             Err(errwrap) => match errwrap {
-                CreateOrderUsKsErr::Client(value) => match serde_json::to_string(&value) {
+                CreateOrderUsKsErr::ReqContent(value) => match serde_json::to_string(&value) {
                     Ok(s) => (HttpStatusCode::BAD_REQUEST, s),
+                    Err(_) => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
+                           "{\"reason\":\"serialization-faulire\"}".to_string()),
+                },
+                CreateOrderUsKsErr::Quota(value) => match serde_json::to_string(&value) {
+                    Ok(s) => (HttpStatusCode::FORBIDDEN, s),
                     Err(_) => (HttpStatusCode::INTERNAL_SERVER_ERROR, 
                            "{\"reason\":\"serialization-faulire\"}".to_string()),
                 },
@@ -87,12 +92,12 @@ pub(super) async fn create_handler(
 #[debug_handler(state=AppSharedState)]
 pub(super) async fn return_lines_request_handler(
     ExtractPath(oid): ExtractPath<String>,
-    authed: AppAuthedClaim,
+    authed_claim : AppAuthedClaim,
     ExtractState(_app_state): ExtractState<AppSharedState>,
     ExtractJson(req_body): ExtractJson<Vec<OrderLineReqDto>> ) -> impl IntoResponse
 {
     let logctx = _app_state.log_context().clone();
-    let usr_prof_id = authed.profile;
+    let usr_prof_id = authed_claim.profile;
     let ds = _app_state.datastore();
     let results = (app_repo_order(ds.clone()).await,
                    app_repo_order_return(ds).await );
@@ -100,11 +105,13 @@ pub(super) async fn return_lines_request_handler(
     {
         let o_repo = results.0.unwrap();
         let or_repo = results.1.unwrap();
-        let uc = ReturnLinesReqUseCase {usr_prof_id, o_repo, or_repo, logctx:logctx.clone()};
+        let uc = ReturnLinesReqUseCase {authed_claim, o_repo, or_repo,
+                 logctx:logctx.clone()};
         match uc.execute(oid.clone(), req_body).await {
             Ok(output) => match output {
                 ReturnLinesReqUcOutput::Success => (HttpStatusCode::OK, r#"{}"#.to_string()),
-                ReturnLinesReqUcOutput::InvalidOwner => (HttpStatusCode::FORBIDDEN, r#"{}"#.to_string()),
+                ReturnLinesReqUcOutput::InvalidOwner |
+                    ReturnLinesReqUcOutput::PermissionDeny => (HttpStatusCode::FORBIDDEN, r#"{}"#.to_string()),
                 ReturnLinesReqUcOutput::InvalidRequest(errors) => {
                     let serialized = serde_json::to_string(&errors).unwrap();
                     (HttpStatusCode::BAD_REQUEST, serialized)

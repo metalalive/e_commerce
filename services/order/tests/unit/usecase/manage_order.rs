@@ -128,7 +128,7 @@ fn validate_orderline_client_errors ()
     ];
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
     assert!(result.is_err());
-    if let Err(CreateOrderUsKsErr::Client(v)) = result {
+    if let Err(CreateOrderUsKsErr::ReqContent(v)) = result {
         let errs = v.order_lines.unwrap();
         assert_eq!(errs.len(), 4);
         let found = errs.iter().find(|e| {

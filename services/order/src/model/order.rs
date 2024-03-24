@@ -120,8 +120,8 @@ impl TryFrom<ContactDto> for ContactModel {
             let rs2 = Self::check_phones(&value.phones);
             (rs1, rs2, None)
         };
-        let error = Self::Error { first_name: fnam_rs, last_name: lnam_rs,
-                emails: em_rs, phones: ph_rs, nonfield: nonfd_rs };
+        let error = Self::Error { first_name: fnam_rs, last_name: lnam_rs, emails: em_rs,
+                  phones: ph_rs, nonfield: nonfd_rs, quota_email:None, quota_phone:None };
         if error.first_name.is_none() && error.emails.is_none() && error.phones.is_none()
             && error.last_name.is_none() && error.nonfield.is_none()
         {

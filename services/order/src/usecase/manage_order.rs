@@ -7,12 +7,13 @@ use std::result::Result as DefaultResult ;
 
 use chrono::{Local as LocalTime, DateTime, FixedOffset};
 
-use crate::AppSharedState;
+use crate::{AppSharedState, AppAuthedClaim, AppAuthQuotaMatCode, AppAuthPermissionCode};
 use crate::constant::{ProductType, app_meta};
 use crate::api::web::dto::{
     OrderCreateRespOkDto, OrderCreateRespErrorDto, OrderLineCreateErrorReason, OrderLineCreateErrNonExistDto,
     OrderCreateReqData, ShippingReqDto, BillingReqDto, OrderLineReqDto, OrderLineCreateErrorDto,
-    OrderLineReturnErrorDto, OLineCreateErrorRsvLimitDto
+    OrderLineReturnErrorDto, OLineCreateErrorRsvLimitDto, QuotaResourceErrorDto, ShippingErrorDto,
+    ContactErrorDto, ContactNonFieldErrorReason, BillingErrorDto
 };
 use crate::api::rpc::dto::{
     OrderReplicaPaymentDto, OrderReplicaInventoryDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
@@ -32,7 +33,8 @@ use crate::repository::{
 use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
 
 pub enum CreateOrderUsKsErr {
-    Client(OrderCreateRespErrorDto),
+    ReqContent(OrderCreateRespErrorDto),
+    Quota(OrderCreateRespErrorDto),
     Server(Vec<AppError>)
 }
 
@@ -41,7 +43,7 @@ pub struct CreateOrderUseCase {
     pub repo_order: Box<dyn AbsOrderRepo>,
     pub repo_price: Box<dyn AbsProductPriceRepo>,
     pub repo_policy:Box<dyn AbstProductPolicyRepo>,
-    pub usr_id: u32 // TODO, switch to auth token (e.g. JWT), check user quota
+    pub auth_claim: AppAuthedClaim
 }
 
 pub struct OrderReplicaPaymentUseCase {
@@ -63,25 +65,29 @@ pub struct OrderDiscardUnpaidItemsUseCase {
     logctx: Arc<AppLogContext>
 }
 pub struct ReturnLinesReqUseCase {
-    pub usr_prof_id: u32,
+    pub authed_claim: AppAuthedClaim,
     pub o_repo: Box<dyn AbsOrderRepo>,
     pub or_repo: Box<dyn AbsOrderReturnRepo>,
     pub logctx: Arc<AppLogContext>,
 }
 
 impl CreateOrderUseCase {
-    // TODO, Attribute-Based Access Control, and quota check for each product
     pub async fn execute(self, req:OrderCreateReqData)
         -> DefaultResult<OrderCreateRespOkDto, CreateOrderUsKsErr>
     {
         let (sh_d, bl_d, ol_d) = (req.shipping, req.billing, req.order_lines);
+        Self::validate_quota(
+            &self.auth_claim , sh_d.contact.emails.len(), sh_d.contact.phones.len(),
+            bl_d.contact.emails.len(), bl_d.contact.phones.len(), ol_d.len()
+        )? ;
         let (o_bl, o_sh) = Self::validate_metadata(sh_d, bl_d)?;
         let (ms_policy, ms_price) = self.load_product_properties(&ol_d).await?;
         let o_items = Self::validate_orderline(ms_policy, ms_price, ol_d)?;
         let oid = OrderLineModel::generate_order_id(app_meta::MACHINE_CODE);
         let timenow = LocalTime::now().fixed_offset();
+        let usr_id = self.auth_claim.profile;
         let ol_set = OrderLineModelSet { order_id:oid, lines:o_items,
-                         create_time: timenow.clone(), owner_id:self.usr_id };
+                         create_time: timenow.clone(), owner_id: usr_id };
         // repository implementation should treat order-line reservation and
         // stock-level update as a single atomic operation 
         self.try_reserve_stock(&ol_set).await?;
@@ -92,8 +98,8 @@ impl CreateOrderUseCase {
             Ok(_) => {
                 let (oid, lines) = (ol_set.order_id, ol_set.lines);
                 let reserved_lines = lines.into_iter().map(OrderLineModel::into).collect();
-                let obj = OrderCreateRespOkDto { order_id:oid, usr_id: self.usr_id,
-                    time: timenow.timestamp() as u64, reserved_lines };
+                let obj = OrderCreateRespOkDto { order_id:oid, usr_id, reserved_lines,
+                    time: timenow.timestamp() as u64 };
                 Ok(obj)
             },
             Err(e) => {
@@ -104,6 +110,50 @@ impl CreateOrderUseCase {
         }
     } // end of fn execute
 
+    fn validate_quota(
+        auth_claim:&AppAuthedClaim, num_ship_emails:usize, num_ship_phones:usize,
+        num_bill_emails:usize, num_bill_phones:usize, num_olines:usize
+    ) -> DefaultResult<(), CreateOrderUsKsErr>
+    {
+        let mut err_obj = OrderCreateRespErrorDto { order_lines: None,
+            billing:None, shipping: None, quota_olines:None };
+        let mut quota_chk_result = [
+            (AppAuthQuotaMatCode::NumPhones, num_ship_phones),
+            (AppAuthQuotaMatCode::NumEmails, num_ship_emails),
+            (AppAuthQuotaMatCode::NumPhones, num_bill_phones),
+            (AppAuthQuotaMatCode::NumEmails, num_bill_emails),
+            (AppAuthQuotaMatCode::NumOrderLines, num_olines ),
+        ].into_iter().map(|(matcode, given_num)| {
+            let limit = auth_claim.quota_limit(matcode);
+            if (limit as usize) < given_num {
+                Some(QuotaResourceErrorDto {max_:limit, given:given_num})
+            } else { None }
+        }).collect::<Vec<_>>();
+        if quota_chk_result.iter().any(Option::is_some) {
+            let quota_phone = quota_chk_result.remove(0);
+            let quota_email = quota_chk_result.remove(0);
+            if quota_email.is_some() || quota_phone.is_some() {
+                let contact = Some(ContactErrorDto { first_name: None, last_name: None,
+                    emails: None, phones: None, quota_email, quota_phone,
+                    nonfield: Some(ContactNonFieldErrorReason::QuotaExceed) });
+                let err_Ship = ShippingErrorDto { contact, address: None, option: None };
+                err_obj.shipping = Some(err_Ship);
+            }
+            let quota_phone = quota_chk_result.remove(0);
+            let quota_email = quota_chk_result.remove(0);
+            if quota_email.is_some() || quota_phone.is_some() {
+                let contact = Some(ContactErrorDto { first_name: None, last_name: None,
+                    emails: None, phones: None, quota_email, quota_phone,
+                    nonfield: Some(ContactNonFieldErrorReason::QuotaExceed) });
+                let err_bill = BillingErrorDto { contact, address: None };
+                err_obj.billing = Some(err_bill);
+            }
+            let quota_olines = quota_chk_result.remove(0);
+            err_obj.quota_olines = quota_olines;
+            Err(CreateOrderUsKsErr::Quota(err_obj))
+        } else {  Ok(()) }
+    } // end of fn validate_quota
+
     fn validate_metadata(sh_d:ShippingReqDto, bl_d:BillingReqDto)
         -> DefaultResult<(BillingModel,ShippingModel), CreateOrderUsKsErr>
     {
@@ -111,13 +161,13 @@ impl CreateOrderUseCase {
         if let (Ok(billing), Ok(shipping)) = results {
             Ok((billing, shipping))
         } else {
-            let mut obj = OrderCreateRespErrorDto { order_lines: None,
-                billing:None, shipping: None };
-            if let Err(e) = results.0 { obj.billing = Some(e); }
-            if let Err(e) = results.1 { obj.shipping = Some(e); }
-            Err(CreateOrderUsKsErr::Client(obj))
+            let mut err_obj = OrderCreateRespErrorDto { order_lines: None,
+                billing:None, shipping: None, quota_olines:None };
+            if let Err(e) = results.0 { err_obj.billing = Some(e); }
+            if let Err(e) = results.1 { err_obj.shipping = Some(e); }
+            Err(CreateOrderUsKsErr::ReqContent(err_obj))
         }
-    }
+    } // end of fn validate_metadata
 
     async fn load_product_properties (&self, data:&Vec<OrderLineReqDto>)
         -> DefaultResult<(ProductPolicyModelSet, Vec<ProductPriceModelSet>), CreateOrderUsKsErr>
@@ -210,9 +260,9 @@ impl CreateOrderUseCase {
         } else if !server_errors.is_empty() {
             Err(CreateOrderUsKsErr::Server(server_errors))
         } else {
-            let err_dto = OrderCreateRespErrorDto { billing: None,
-                        shipping: None, order_lines: Some(client_errors) };
-            Err(CreateOrderUsKsErr::Client(err_dto))
+            let err_dto = OrderCreateRespErrorDto { billing: None, shipping: None,
+                quota_olines:None, order_lines: Some(client_errors) };
+            Err(CreateOrderUsKsErr::ReqContent(err_dto))
         }
     } // end of fn validate_orderline
 
@@ -226,8 +276,8 @@ impl CreateOrderUseCase {
                 Ok(client_e) => {
                     app_log_event!(logctx_p, AppLogLevel::WARNING, "stock reserve client error");
                     let ec = OrderCreateRespErrorDto {billing:None, shipping: None,
-                                                      order_lines: Some(client_e) };
-                    Err(CreateOrderUsKsErr::Client(ec))
+                                quota_olines:None, order_lines: Some(client_e) };
+                    Err(CreateOrderUsKsErr::ReqContent(ec))
                 },
                 Err(server_e) => {
                     app_log_event!(logctx_p, AppLogLevel::ERROR,
@@ -242,11 +292,8 @@ impl CreateOrderUseCase {
         -> AppStockRepoReserveReturn
     {
         let result = ms.try_reserve(req);
-        if result.is_empty() {
-            Ok(())
-        } else {
-            Err(Ok(result))
-        }
+        if result.is_empty() { Ok(()) }
+        else { Err(Ok(result)) }
     }
 } // end of impl CreateOrderUseCase
 
@@ -390,7 +437,7 @@ impl OrderDiscardUnpaidItemsUseCase {
 } // end of impl OrderDiscardUnpaidItemsUseCase
 
 pub enum ReturnLinesReqUcOutput {
-    Success,  InvalidOwner,
+    Success,  InvalidOwner, PermissionDeny,
     InvalidRequest(Vec<OrderLineReturnErrorDto>),
 }
 
@@ -398,8 +445,12 @@ impl ReturnLinesReqUseCase {
     pub async fn execute(self, oid:String, data:Vec<OrderLineReqDto>)
         -> DefaultResult<ReturnLinesReqUcOutput, AppError>
     {
+        if !self.authed_claim.contain_permission(AppAuthPermissionCode::can_create_return_req)
+        {
+            return Ok(ReturnLinesReqUcOutput::PermissionDeny);
+        }
         let o_usr_id = self.o_repo.owner_id(oid.as_str()).await ?;
-        if o_usr_id != self.usr_prof_id {
+        if o_usr_id != self.authed_claim.profile {
             return Ok(ReturnLinesReqUcOutput::InvalidOwner);
         }
         let pids = data.iter().map(OrderLineIdentity::from).collect::<Vec<OrderLineIdentity>>();
@@ -413,4 +464,4 @@ impl ReturnLinesReqUseCase {
             Err(errors) => Ok(ReturnLinesReqUcOutput::InvalidRequest(errors))
         }
     }
-}
+} // end of impl ReturnLinesReqUseCase

@@ -8,7 +8,10 @@ use http::{Request, StatusCode};
 use http_body::Body as RawHttpBody;
 use serde_json::{Value as JsnVal, Map};
 
-use order::{AppRpcClientReqProperty, AppConfig, AppSharedState, AppAuthedClaim};
+use order::{
+    AppRpcClientReqProperty, AppConfig, AppSharedState, AppAuthedClaim, AppAuthClaimQuota,
+    AppAuthClaimPermission, AppAuthPermissionCode, AppAuthQuotaMatCode
+};
 use order::constant::{app_meta, limit, ProductType};
 use order::error::AppError;
 use order::api::web::dto::{
@@ -26,7 +29,9 @@ use tokio::sync::Mutex;
 
 fn itest_clone_authed_claim(src:&AppAuthedClaim) -> AppAuthedClaim {
     AppAuthedClaim { profile: src.profile, iat: src.iat, exp: src.exp,
-        aud: src.aud.clone(), perms: vec![], quota: vec![]
+        aud: src.aud.clone(),
+        perms: src.perms.iter().map(Clone::clone).collect::<Vec<_>>(),
+        quota: src.quota.iter().map(Clone::clone).collect::<Vec<_>>() 
     }
 }
 
@@ -42,7 +47,7 @@ fn setup_mock_authed_claim(usr_id:u32) -> AppAuthedClaim
 
 async fn itest_setup_product_policy(
     cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-    req_fpath:&'static str, authed_claim:AppAuthedClaim, expect_status:StatusCode
+    req_fpath:&'static str, mut authed_claim:AppAuthedClaim, expect_status:StatusCode
 ) -> HyperBytes
 {
     let uri = format!("/{}/policy/products", cfg.api_server.listen.api_version);
@@ -52,6 +57,14 @@ async fn itest_setup_product_policy(
         let rb = serde_json::to_string(&req_body_template).unwrap();
         HyperBody::from(rb)
     };
+    {
+        let perm = AppAuthClaimPermission {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   codename:AppAuthPermissionCode::can_create_product_policy};
+        let res_limit = AppAuthClaimQuota {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   mat_code:AppAuthQuotaMatCode::NumProductPolicies, maxnum:50};
+        authed_claim.perms.push(perm);
+        authed_claim.quota.push(res_limit);
+    }
     let mut req = Request::builder().uri(uri.clone()).method("POST")
         .header("content-type", "application/json") .body(reqbody) .unwrap();
     let _ = req.extensions_mut().insert(authed_claim);
@@ -63,7 +76,7 @@ async fn itest_setup_product_policy(
     if let Some(rb) = result {
         rb.unwrap()
     } else { HyperBytes::new() }
-}
+} // end of fn itest_setup_product_policy
 
 fn verify_reply_stock_level(objs:&Vec<JsnVal>,  expect_product_id:u64,
                             expect_product_type:u8,  expect_qty_total:u32,
@@ -101,9 +114,10 @@ fn verify_reply_stock_level(objs:&Vec<JsnVal>,  expect_product_id:u64,
 } // end of fn verify_reply_stock_level
 
 
-async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-                            req_fpath:&'static str, authed_claim:AppAuthedClaim )
-    -> DefaultResult<String, AppError>
+async fn place_new_order_ok(
+    cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    req_fpath:&'static str, mut authed_claim:AppAuthedClaim
+) -> DefaultResult<String, AppError>
 {
     let listener = &cfg.api_server.listen;
     let reqbody = {
@@ -112,6 +126,14 @@ async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<IT
         let rb = serde_json::to_string(&rb) .unwrap();
         HyperBody::from(rb)
     };
+    authed_claim.quota = [
+        (AppAuthQuotaMatCode::NumEmails, 51),
+        (AppAuthQuotaMatCode::NumPhones, 52),
+        (AppAuthQuotaMatCode::NumOrderLines, 53),
+    ].into_iter().map(|(mat_code, maxnum)|
+        AppAuthClaimQuota {mat_code, maxnum, app_code:app_meta::RESOURCE_QUOTA_AP_CODE}
+    ).collect::<Vec<_>>();
+
     let uri = format!("/{}/order", listener.api_version);
     let mut req = Request::builder().uri(uri).method("POST")
         .header("content-type", "application/json")
@@ -132,14 +154,19 @@ async fn place_new_order_ok(cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<IT
     assert_eq!(actual.order_id.is_empty() ,  false);
     assert!(actual.reserved_lines.len() > 0);
     Ok(actual.order_id)   //Ok(String::new())
-}
+} // end of fn place_new_order_ok
 
 async fn itest_return_olines_request(
     cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-    req_fpath:&'static str, oid:&str, authed_claim:AppAuthedClaim,
+    req_fpath:&'static str, oid:&str, mut authed_claim:AppAuthedClaim,
     expect_status:StatusCode
 ) -> Vec<u8>
 {
+    {
+        let perm = AppAuthClaimPermission {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   codename:AppAuthPermissionCode::can_create_return_req};
+        authed_claim.perms.push(perm);
+    }
     let uri = format!("/{}/order/{}/return", cfg.api_server.listen.api_version, oid);
     let req_body = {
         let result = deserialize_json_template::<JsnVal>(&cfg.basepath, req_fpath);
@@ -357,7 +384,17 @@ async fn place_new_order_contact_error() -> DefaultResult<(), AppError>
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
     let mock_authed_usr = 231;
-    let authed_claim = setup_mock_authed_claim(mock_authed_usr);
+    let authed_claim = {
+        let mut a = setup_mock_authed_claim(mock_authed_usr);
+        a.quota = [
+            (AppAuthQuotaMatCode::NumEmails, 17),
+            (AppAuthQuotaMatCode::NumPhones, 18),
+            (AppAuthQuotaMatCode::NumOrderLines, 19),
+        ].into_iter().map(|(mat_code, maxnum)|
+            AppAuthClaimQuota {mat_code, maxnum, app_code:app_meta::RESOURCE_QUOTA_AP_CODE}
+        ).collect::<Vec<_>>();
+        a
+    };
     let listener = &top_lvl_cfg.api_server.listen;
     let reqbody = {
         let rb = deserialize_json_template::<OrderCreateReqData>
@@ -385,6 +422,58 @@ async fn place_new_order_contact_error() -> DefaultResult<(), AppError>
     assert!(matches!(ph_err_1.nation.as_ref().unwrap(), PhoneNumNationErrorReason::InvalidCode));
     Ok(())
 } // end of place_new_order_contact_error
+
+
+#[tokio::test]
+async fn place_new_order_quota_violation() -> DefaultResult<(), AppError>
+{
+    const FPATH_NEW_ORDER: &str  = "/tests/integration/examples/order_new_ok_5.json";
+    let shr_state = test_setup_shr_state() ? ;
+    let srv = TestWebServer::setup(shr_state.clone());
+    let top_lvl_cfg = shr_state.config();
+    let mock_authed_usr = 144;
+    let authed_claim = {
+        let mut a = setup_mock_authed_claim(mock_authed_usr);
+        a.quota = [
+            (AppAuthQuotaMatCode::NumEmails, 1),
+            (AppAuthQuotaMatCode::NumPhones, 2),
+            (AppAuthQuotaMatCode::NumOrderLines, 1),
+        ].into_iter().map(|(mat_code, maxnum)|
+            AppAuthClaimQuota {mat_code, maxnum, app_code:app_meta::RESOURCE_QUOTA_AP_CODE}
+        ).collect::<Vec<_>>();
+        a
+    };
+    let listener = &top_lvl_cfg.api_server.listen;
+    let reqbody = {
+        let rb = deserialize_json_template::<OrderCreateReqData>
+            (&top_lvl_cfg.basepath, FPATH_NEW_ORDER) ? ;
+        let rb = serde_json::to_string(&rb) .unwrap();
+        HyperBody::from(rb)
+    };
+    let uri = format!("/{}/order", listener.api_version);
+    let mut req = Request::builder().uri(uri).method("POST")
+        .header("content-type", "application/json")
+        .header("accept", "application/json") .body(reqbody)  .unwrap();
+    let _ = req.extensions_mut().insert(authed_claim);
+
+    let mut response = TestWebServer::consume(&srv, req).await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let actual = TestWebServer::to_custom_type::<OrderCreateRespErrorDto>
+        (response.body_mut())  .await  ? ;
+    let oline_err = actual.quota_olines.unwrap();
+    assert_eq!(oline_err.max_, 1);
+    let contact_errs = (
+        actual.shipping.unwrap().contact.unwrap(),
+        actual.billing.unwrap().contact.unwrap(),
+    );
+    let (email_err, phone_err) = (contact_errs.1.quota_email.unwrap(),
+                                 contact_errs.0.quota_phone.unwrap());
+    assert_eq!(email_err.max_, 1);
+    assert_eq!(phone_err.max_, 2);
+    assert_eq!(email_err.given, 3);
+    assert_eq!(phone_err.given, 3);
+    Ok(())
+} // end of fn place_new_order_quota_violation
 
 
 #[tokio::test]
@@ -437,26 +526,85 @@ async fn add_product_policy_ok() -> DefaultResult<(), AppError>
 } // end of fn add_product_policy_ok
 
 #[tokio::test]
-async fn add_product_policy_error() -> DefaultResult<(), AppError>
+async fn add_product_policy_permission_error() -> DefaultResult<(), AppError>
+{
+    let shr_state = test_setup_shr_state() ? ;
+    let srv = TestWebServer::setup(shr_state.clone());
+    let top_lvl_cfg = shr_state.config();
+    let mock_auth_claim = {
+        let mut a = setup_mock_authed_claim(8964);
+        let res_limit = AppAuthClaimQuota {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   mat_code:AppAuthQuotaMatCode::NumProductPolicies, maxnum:4};
+        a.quota.push(res_limit);
+        a
+    }; // missing permission
+    let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
+    let reqbody = HyperBody::from("[]".to_string());
+    let mut req = Request::builder().uri(uri.clone()).method("POST")
+        .header("content-type", "application/json") .body(reqbody) .unwrap();
+    let _ = req.extensions_mut().insert(mock_auth_claim);
+    let response = TestWebServer::consume(&srv, req).await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    Ok(())
+} // end of fn add_product_policy_permission_error
+
+#[tokio::test]
+async fn add_product_policy_quota_violation() -> DefaultResult<(), AppError>
 {
     const FPATH_EDIT_PRODUCTPOLICY_ERR:&str = "/tests/integration/examples/policy_product_edit_exceed_limit.json";
     let shr_state = test_setup_shr_state() ? ;
     let srv = TestWebServer::setup(shr_state.clone());
     let top_lvl_cfg = shr_state.config();
-    let mock_authed_usr = 983;
+    let mock_auth_claim = {
+        let mut a = setup_mock_authed_claim(8964);
+        let perm = AppAuthClaimPermission {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   codename:AppAuthPermissionCode::can_create_product_policy};
+        let res_limit = AppAuthClaimQuota {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   mat_code:AppAuthQuotaMatCode::NumProductPolicies, maxnum:1};
+        a.perms.push(perm);
+        a.quota.push(res_limit);
+        a
+    };
+    let _resp_rawbytes = {// ---- subcase 2 ----
+        let r = itest_setup_product_policy(
+            top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_ERR,
+            mock_auth_claim, StatusCode::PAYLOAD_TOO_LARGE
+        ).await;
+        r.to_vec()
+    };
+    Ok(())
+} // end of fn add_product_policy_quota_violation
+
+#[tokio::test]
+async fn add_product_policy_request_error() -> DefaultResult<(), AppError>
+{
+    const FPATH_EDIT_PRODUCTPOLICY_ERR:&str = "/tests/integration/examples/policy_product_edit_exceed_limit.json";
+    let shr_state = test_setup_shr_state() ? ;
+    let srv = TestWebServer::setup(shr_state.clone());
+    let top_lvl_cfg = shr_state.config();
+    let mock_auth_claim = {
+        let mut a = setup_mock_authed_claim(8964);
+        let perm = AppAuthClaimPermission {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   codename:AppAuthPermissionCode::can_create_product_policy};
+        let res_limit = AppAuthClaimQuota {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   mat_code:AppAuthQuotaMatCode::NumProductPolicies, maxnum:50};
+        a.perms.push(perm);
+        a.quota.push(res_limit);
+        a
+    };
     { // ---- subcase 1 ----
         let uri = format!("/{}/policy/products", top_lvl_cfg.api_server.listen.api_version);
         let reqbody = HyperBody::from("[]".to_string());
         let mut req = Request::builder().uri(uri.clone()).method("POST")
             .header("content-type", "application/json") .body(reqbody) .unwrap();
-        let _ = req.extensions_mut().insert(setup_mock_authed_claim(mock_authed_usr));
+        let _ = req.extensions_mut().insert(itest_clone_authed_claim(&mock_auth_claim));
         let response = TestWebServer::consume(&srv, req).await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
     let resp_rawbytes = {// ---- subcase 2 ----
         let r = itest_setup_product_policy(
             top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_ERR,
-            setup_mock_authed_claim(mock_authed_usr), StatusCode::BAD_REQUEST
+            mock_auth_claim, StatusCode::BAD_REQUEST
         ).await;
         //println!("response body content, first 50 bytes : {:?}", resp_rawbytes.slice(..50) );
         r.to_vec()
@@ -475,7 +623,7 @@ async fn add_product_policy_error() -> DefaultResult<(), AppError>
         assert_eq!(prod_id , 10093183u64);
     }
     Ok(())
-} // end of fn add_product_policy_error
+} // end of fn add_product_policy_request_error
 
 
 async fn itest_setup_create_order(

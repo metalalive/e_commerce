@@ -38,6 +38,12 @@ pub struct OLineCreateErrorRsvLimitDto {
 }
 
 #[derive(Deserialize, Serialize)]
+pub struct QuotaResourceErrorDto {
+    pub max_: u32,
+    pub given: usize,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct OrderLineCreateErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
@@ -72,12 +78,17 @@ pub struct ContactErrorDto {
     pub last_name: Option<ContactErrorReason>,
     pub emails: Option<Vec<Option<ContactErrorReason>>>,
     pub phones: Option<Vec<Option<PhoneNumberErrorDto>>>,
-    pub nonfield: Option<ContactNonFieldErrorReason>
+    pub nonfield: Option<ContactNonFieldErrorReason>,
+    pub quota_email: Option<QuotaResourceErrorDto>,
+    pub quota_phone: Option<QuotaResourceErrorDto>,
 }
 #[derive(Deserialize, Serialize, Debug)]
 pub enum ContactErrorReason {Empty, InvalidChar}
+
 #[derive(Deserialize, Serialize)]
-pub enum ContactNonFieldErrorReason {EmailMissing, PhoneMissing}
+pub enum ContactNonFieldErrorReason {
+    EmailMissing, PhoneMissing, QuotaExceed
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct PhyAddrErrorDto {
@@ -140,7 +151,8 @@ pub struct OrderCreateRespOkDto {
 pub struct OrderCreateRespErrorDto {
     pub order_lines: Option<Vec<OrderLineCreateErrorDto>>,
     pub billing: Option<BillingErrorDto>,
-    pub shipping: Option<ShippingErrorDto>
+    pub shipping: Option<ShippingErrorDto>,
+    pub quota_olines: Option<QuotaResourceErrorDto>,
 }
 
 #[derive(Deserialize, Serialize)]
