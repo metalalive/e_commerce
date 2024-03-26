@@ -13,6 +13,13 @@ pub struct OrderLineReqDto {
     pub quantity: u32
 }
 
+pub type CartLineDto = OrderLineReqDto;
+
+#[derive(Deserialize, Serialize)]
+pub struct CartDto {
+    pub lines: Vec<CartLineDto>,
+}
+
 #[derive(Deserialize, Serialize)]
 pub enum OrderLineCreateErrorReason {
     NotExist, OutOfStock, NotEnoughToClaim, RsvLimitViolation 

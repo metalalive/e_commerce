@@ -1,0 +1,7 @@
+{
+    "lines": [
+        {"seller_id":59, "product_type":2, "product_id":11081, "quantity":12},
+        {"seller_id":59, "product_type":2, "product_id":924,  "quantity":6},
+        {"seller_id":60, "product_type":2, "product_id":9002, "quantity":7}
+    ]
+}

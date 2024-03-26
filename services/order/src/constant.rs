@@ -41,6 +41,9 @@ pub(crate) mod api
         pub(crate) const CREATE_NEW_ORDER: WebApiHdlrLabel = "create_new_order";
         pub(crate) const ACCESS_EXISTING_ORDER: WebApiHdlrLabel = "access_existing_order";
         pub(crate) const RETURN_OLINES_REQ: WebApiHdlrLabel = "return_lines_request";
+        pub(crate) const RETRIEVE_CART_LINES: WebApiHdlrLabel = "retrieve_cart_lines";
+        pub(crate) const MODIFY_CART_LINES: WebApiHdlrLabel = "modify_cart_lines";
+        pub(crate) const DISCARD_CART: WebApiHdlrLabel = "discard_cart";
     }
 
     #[allow(non_camel_case_types)]

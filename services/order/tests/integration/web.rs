@@ -16,7 +16,7 @@ use order::constant::{app_meta, limit, ProductType};
 use order::error::AppError;
 use order::api::web::dto::{
     OrderCreateReqData, OrderCreateRespOkDto, OrderEditReqData, ContactErrorReason,
-    OrderCreateRespErrorDto, PhoneNumNationErrorReason
+    OrderCreateRespErrorDto, PhoneNumNationErrorReason, CartDto
 };
 use order::api::rpc;
 use order::network::WebServiceRoute;
@@ -1026,3 +1026,131 @@ async fn  replica_order_rsv_inventory() -> DefaultResult<(), AppError>
     }
     Ok(())
 } // end of fn replica_order_rsv_inventory
+
+
+async fn itest_cart_modify_request(
+    cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    req_fpath:&'static str, authed_claim:&AppAuthedClaim, seq_num:u8,
+    expect_status:StatusCode
+) -> HyperBytes
+{
+    let uri = format!("/{}/cart/{}", cfg.api_server.listen.api_version, seq_num);
+    let reqbody = {
+        let result = deserialize_json_template::<JsnVal>(&cfg.basepath, req_fpath);
+        let req_body_template = result.unwrap();
+        let rb = serde_json::to_string(&req_body_template).unwrap();
+        HyperBody::from(rb)
+    };
+    let mut authed_claim_cpy = itest_clone_authed_claim(&authed_claim);
+    {
+        let res_limit = AppAuthClaimQuota {app_code:app_meta::RESOURCE_QUOTA_AP_CODE,
+                   mat_code:AppAuthQuotaMatCode::NumOrderLines, maxnum:14};
+        authed_claim_cpy.quota.push(res_limit);
+    }
+    let mut req = Request::builder().uri(uri.clone()).method("PATCH")
+        .header("content-type", "application/json") .body(reqbody) .unwrap();
+    let _ = req.extensions_mut().insert(authed_claim_cpy);
+    let mut response = TestWebServer::consume(&srv, req).await;
+    assert_eq!(response.status(), expect_status);
+    // required by UnsyncBoxBody, to access raw data of body
+    let bd = response.body_mut();
+    let result = bd.data().await;
+    if let Some(rb) = result {
+        rb.unwrap()
+    } else { HyperBytes::new() }
+} // end of itest_cart_modify_request
+
+async fn itest_cart_discard_request(
+    cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    authed_claim:&AppAuthedClaim, seq_num:u8, expect_status:StatusCode
+) -> HyperBytes
+{
+    let uri = format!("/{}/cart/{}", cfg.api_server.listen.api_version, seq_num);
+    let authed_claim_cpy = itest_clone_authed_claim(&authed_claim);
+    let mut req = Request::builder().uri(uri.clone()).method("DELETE")
+        .body(HyperBody::empty()) .unwrap();
+    let _ = req.extensions_mut().insert(authed_claim_cpy);
+    let mut response = TestWebServer::consume(&srv, req).await;
+    assert_eq!(response.status(), expect_status);
+    // required by UnsyncBoxBody, to access raw data of body
+    let bd = response.body_mut();
+    let result = bd.data().await;
+    if let Some(rb) = result {
+        rb.unwrap()
+    } else { HyperBytes::new() }
+}
+
+async fn itest_cart_retrieve_request(
+    cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
+    authed_claim:&AppAuthedClaim, seq_num:u8, expect_status:StatusCode
+) -> DefaultResult<CartDto, HyperBytes>
+{
+    let uri = format!("/{}/cart/{}", cfg.api_server.listen.api_version, seq_num);
+    let authed_claim_cpy = itest_clone_authed_claim(&authed_claim);
+    let mut req = Request::builder().uri(uri.clone()).method("GET")
+        .header("accept", "application/json") .body(HyperBody::empty()) .unwrap();
+    let _ = req.extensions_mut().insert(authed_claim_cpy);
+    let mut response = TestWebServer::consume(&srv, req).await;
+    assert_eq!(response.status(), expect_status);
+    if response.status() == StatusCode::OK {
+        let actual = TestWebServer::to_custom_type::<CartDto>(response.body_mut())
+                     .await.unwrap() ;
+        Ok(actual)
+    } else {
+        let result = response.body_mut().data().await;
+        let rawbody = if let Some(rb) = result {
+            rb.unwrap()
+        } else { HyperBytes::new() };
+        Err(rawbody)
+    }
+} // end of itest_cart_retrieve_request
+
+#[tokio::test]
+async fn  modify_retrieve_cart_ok() -> DefaultResult<(), AppError>
+{
+    const FPATH_MODIFY_CART : [&str; 4] = [
+         "/tests/integration/examples/cartline_update_0.json",
+         "/tests/integration/examples/cartline_update_1.json",
+         "/tests/integration/examples/cartline_update_2.json",
+         "/tests/integration/examples/cartline_update_3.json",
+    ];
+    let shrstate = test_setup_shr_state()?;
+    let srv = TestWebServer::setup(shrstate.clone());
+    let mock_authed_usr = 121;
+    let authed_claim = setup_mock_authed_claim(mock_authed_usr);
+    let _resp_body = itest_cart_modify_request(
+        shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[0],
+        &authed_claim, 0,  StatusCode::OK
+    ).await ;
+    let resp_body = itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK
+    ).await ; // TODO, verify the content
+    let _resp_body = itest_cart_modify_request(
+        shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[1],
+        &authed_claim, 1,  StatusCode::OK
+    ).await ;
+    let _resp_body = itest_cart_modify_request(
+        shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[2],
+        &authed_claim, 0,  StatusCode::OK
+    ).await ;
+    let resp_body_cart0 = itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK
+    ).await ; // TODO, verify the content
+    let resp_body_cart1 = itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 1, StatusCode::OK
+    ).await ; // TODO, verify the content
+    let _resp_body = itest_cart_discard_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 0,  StatusCode::NO_CONTENT
+    ).await ;
+    let _resp_body = itest_cart_modify_request(
+        shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[3],
+        &authed_claim, 0,  StatusCode::OK
+    ).await ;
+    let resp_body_cart0 = itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK
+    ).await ; // TODO, verify the content
+    let resp_body_cart1 = itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 1, StatusCode::OK
+    ).await ; // TODO, verify the content
+    Ok(())
+} // end of fn modify_retrieve_cart_ok
