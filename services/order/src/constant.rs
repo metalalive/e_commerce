@@ -26,6 +26,7 @@ pub mod limit {
     pub const MAX_DB_CONNECTIONS : u32 = 10000u32;
     pub const MAX_SECONDS_DB_IDLE : u16 = 600u16;
     pub const MIN_SECS_INTVL_REQ: u16 = 3;
+    pub const MAX_NUM_CARTS_PER_USER: u8 = 5; // TODO, configurable in user-mgt app
 }
 
 pub(crate) mod api

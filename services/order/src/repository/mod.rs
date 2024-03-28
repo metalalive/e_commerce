@@ -17,12 +17,14 @@ use crate::constant::ProductType;
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
     ProductPolicyModelSet, ProductPriceModelSet, StockLevelModelSet, ProductStockIdentity,
-    BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel, OrderLineIdentity, OrderReturnModel
+    BillingModel, OrderLineModel, OrderLineModelSet, ShippingModel, OrderLineIdentity,
+    OrderReturnModel, BaseProductIdentity, CartModel
 };
 
 
 mod in_mem;
 // make in-memory repo visible only for testing purpose
+pub use in_mem::cart::CartInMemRepo;
 pub use in_mem::order::OrderInMemRepo;
 pub use in_mem::oline_return::OrderReturnInMemRepo;
 pub use in_mem::product_policy::ProductPolicyInMemRepo;
@@ -152,6 +154,23 @@ pub trait AbsOrderReturnRepo : Sync + Send {
     async fn create(&self, oid:&str, reqs:Vec<OrderReturnModel>) -> DefaultResult<usize, AppError>;
 }
 
+#[async_trait]
+pub trait AbsCartRepo : Sync + Send {
+    async fn update(&self, obj: CartModel) -> DefaultResult<usize, AppError>; 
+    
+    async fn discard(&self, owner: u32, seq:u8) -> DefaultResult<(), AppError>; 
+    
+    async fn num_lines_saved(&self, owner: u32, seq:u8)
+        -> DefaultResult<usize, AppError>; 
+    
+    async fn fetch_cart(&self, owner: u32, seq:u8)
+        -> DefaultResult<CartModel, AppError>; 
+    
+    async fn fetch_lines_by_pid(&self, owner: u32, seq:u8, pids:Vec<BaseProductIdentity>)
+        -> DefaultResult<CartModel, AppError>; 
+}
+
+
 pub async fn app_repo_product_policy (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbstProductPolicyRepo>, AppError>
 {
@@ -223,6 +242,17 @@ pub async fn app_repo_order_return (ds:Arc<AppDataStoreContext>)
     #[cfg(not(feature="mariadb"))]
     if let Some(m) = &ds.in_mem {
         let obj = OrderReturnInMemRepo::new(m.clone()).await ?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError {code:AppErrorCode::MissingDataStore,
+            detail: Some(format!("unknown-type"))}  )
+    }
+}
+pub async fn app_repo_cart (ds:Arc<AppDataStoreContext>)
+    -> DefaultResult<Box<dyn AbsCartRepo>, AppError>
+{
+    if let Some(m) = &ds.in_mem {
+        let obj = CartInMemRepo::new(m.clone());
         Ok(Box::new(obj))
     } else {
         Err(AppError {code:AppErrorCode::MissingDataStore,

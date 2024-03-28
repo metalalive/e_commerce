@@ -2,6 +2,7 @@ mod product_policy;
 mod product_price;
 mod stock_level;
 mod order;
+mod cart;
 
 pub use product_policy::{ProductPolicyModel, ProductPolicyModelSet};
 pub use product_price::{ProductPriceModel, ProductPriceModelSet};
@@ -14,6 +15,8 @@ pub use order::{
     OrderLineAppliedPolicyModel, ShippingOptionModel, OrderLineModel, OrderLineQuantityModel,
     OrderLineModelSet, OrderLineIdentity, OrderReturnModel, OrderReturnQuantityModel
 };
+pub use cart::{CartLineModel, CartModel};
+
 use crate::constant::ProductType;
 use crate::api::web::dto::OrderLineReqDto;
 

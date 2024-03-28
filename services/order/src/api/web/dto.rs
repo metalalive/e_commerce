@@ -17,6 +17,7 @@ pub type CartLineDto = OrderLineReqDto;
 
 #[derive(Deserialize, Serialize)]
 pub struct CartDto {
+    pub title: String,
     pub lines: Vec<CartLineDto>,
 }
 

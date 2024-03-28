@@ -2,6 +2,7 @@ mod edit_product_policy;
 mod edit_product_price;
 mod stock_level;
 mod manage_order;
+mod manage_cart;
 
 use std::sync::Arc;
 use std::boxed::Box;
@@ -16,6 +17,10 @@ pub use manage_order::{
     CreateOrderUseCase, CreateOrderUsKsErr, OrderReplicaInventoryUseCase, OrderReplicaPaymentUseCase,
     OrderPaymentUpdateUseCase, OrderDiscardUnpaidItemsUseCase, ReturnLinesReqUcOutput,
     OrderReplicaRefundUseCase, ReturnLinesReqUseCase
+};
+pub(crate) use manage_cart::{
+    ModifyCartLineUseCase, DiscardCartUseCase, RetrieveCartUseCase, ModifyCartUsKsResult,
+    DiscardCartUsKsResult, RetrieveCartUsKsResult
 };
 
 use crate::AppSharedState;
