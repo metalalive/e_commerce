@@ -1,9 +1,8 @@
 {
-    "title": "black5 shop list",
+    "title": "DIY drone gears",
     "lines": [
-        {"seller_id":58, "product_type":1, "product_id":1948, "quantity":10},
-        {"seller_id":57, "product_type":2, "product_id":1964, "quantity":7},
-        {"seller_id":58, "product_type":2, "product_id":2330, "quantity":5},
-        {"seller_id":58, "product_type":2, "product_id":2303, "quantity":4}
+        {"seller_id":57, "product_type":1, "product_id":1948, "quantity":4},
+        {"seller_id":58, "product_type":1, "product_id":1948, "quantity":8},
+        {"seller_id":57, "product_type":2, "product_id":1964, "quantity":4}
     ]
 }

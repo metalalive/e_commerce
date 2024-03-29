@@ -1080,11 +1080,11 @@ async fn itest_cart_discard_request(
     } else { HyperBytes::new() }
 }
 
-async fn itest_cart_retrieve_request(
+async fn itest_cart_retrieve_request<'a, 'b>(
     cfg:Arc<AppConfig>, srv:Arc<Mutex<WebServiceRoute<ITestFinalHttpBody>>>,
-    authed_claim:&AppAuthedClaim, seq_num:u8, expect_status:StatusCode
-) -> DefaultResult<CartDto, HyperBytes>
-{
+    authed_claim:&'a AppAuthedClaim, seq_num:u8, expect_status:StatusCode,
+    path_expect_fetched :Option<&'b str>
+) {
     let uri = format!("/{}/cart/{}", cfg.api_server.listen.api_version, seq_num);
     let authed_claim_cpy = itest_clone_authed_claim(&authed_claim);
     let mut req = Request::builder().uri(uri.clone()).method("GET")
@@ -1092,27 +1092,56 @@ async fn itest_cart_retrieve_request(
     let _ = req.extensions_mut().insert(authed_claim_cpy);
     let mut response = TestWebServer::consume(&srv, req).await;
     assert_eq!(response.status(), expect_status);
-    if response.status() == StatusCode::OK {
-        let actual = TestWebServer::to_custom_type::<CartDto>(response.body_mut())
-                     .await.unwrap() ;
-        Ok(actual)
-    } else {
-        let result = response.body_mut().data().await;
-        let rawbody = if let Some(rb) = result {
-            rb.unwrap()
-        } else { HyperBytes::new() };
-        Err(rawbody)
+    if let Some(path) = path_expect_fetched {
+        let mut actual_resp_body = TestWebServer::to_custom_type::<JsnVal>(
+            response.body_mut()).await.unwrap() ;
+        let mut expect_resp_body = deserialize_json_template::<JsnVal>(
+            &cfg.basepath, path).unwrap();
+        expect_resp_body.as_object_mut().unwrap()
+            .get_mut("lines").unwrap() .as_array_mut().unwrap()
+            .sort_by(_cart_line_dto_sort_helper);
+        actual_resp_body.as_object_mut().unwrap()
+            .get_mut("lines").unwrap() .as_array_mut().unwrap()
+            .sort_by(_cart_line_dto_sort_helper);
+        assert_eq!(actual_resp_body, expect_resp_body);
     }
 } // end of itest_cart_retrieve_request
+
+fn _cart_line_dto_sort_helper(x:&JsnVal, y:&JsnVal) -> std::cmp::Ordering
+{
+    let map_x = x.as_object().unwrap();
+    let map_y = y.as_object().unwrap();
+    let seller_x = map_x.get("seller_id").unwrap().as_u64().unwrap();
+    let seller_y = map_y.get("seller_id").unwrap().as_u64().unwrap();
+    let mut c = seller_x.cmp(&seller_y);
+    if c == std::cmp::Ordering::Equal {
+        let prod_typ_num_x = map_x.get("product_type").unwrap().as_u64().unwrap();
+        let prod_typ_num_y = map_y.get("product_type").unwrap().as_u64().unwrap();
+        c = prod_typ_num_x.cmp(&prod_typ_num_y);
+    }
+    if c == std::cmp::Ordering::Equal {
+        let prod_id_x = map_x.get("product_id").unwrap().as_u64().unwrap();
+        let prod_id_y = map_y.get("product_id").unwrap().as_u64().unwrap();
+        c = prod_id_x.cmp(&prod_id_y);
+    }
+    c
+}
 
 #[tokio::test]
 async fn  modify_retrieve_cart_ok() -> DefaultResult<(), AppError>
 {
     const FPATH_MODIFY_CART : [&str; 4] = [
-         "/tests/integration/examples/cartline_update_0.json",
-         "/tests/integration/examples/cartline_update_1.json",
-         "/tests/integration/examples/cartline_update_2.json",
-         "/tests/integration/examples/cartline_update_3.json",
+        "/tests/integration/examples/cartline_update_0.json",
+        "/tests/integration/examples/cartline_update_1.json",
+        "/tests/integration/examples/cartline_update_2.json",
+        "/tests/integration/examples/cartline_update_3.json",
+    ];
+    const FPATH_EXPECT_FETCHED_CART : [&str; 5] = [
+        FPATH_MODIFY_CART[0],
+        "/tests/integration/examples/cart_expect_fetched_0.json",
+        FPATH_MODIFY_CART[1],
+        "/tests/integration/examples/cart_expect_fetched_1.json",
+        "/tests/integration/examples/cart_expect_fetched_2.json",
     ];
     let shrstate = test_setup_shr_state()?;
     let srv = TestWebServer::setup(shrstate.clone());
@@ -1122,9 +1151,10 @@ async fn  modify_retrieve_cart_ok() -> DefaultResult<(), AppError>
         shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[0],
         &authed_claim, 0,  StatusCode::OK
     ).await ;
-    let resp_body = itest_cart_retrieve_request(
-        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK
-    ).await ; // TODO, verify the content
+    itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK,
+        Some(FPATH_EXPECT_FETCHED_CART[0])
+    ).await; 
     let _resp_body = itest_cart_modify_request(
         shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[1],
         &authed_claim, 1,  StatusCode::OK
@@ -1133,24 +1163,28 @@ async fn  modify_retrieve_cart_ok() -> DefaultResult<(), AppError>
         shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[2],
         &authed_claim, 0,  StatusCode::OK
     ).await ;
-    let resp_body_cart0 = itest_cart_retrieve_request(
-        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK
-    ).await ; // TODO, verify the content
-    let resp_body_cart1 = itest_cart_retrieve_request(
-        shrstate.config().clone(), srv.clone(), &authed_claim, 1, StatusCode::OK
-    ).await ; // TODO, verify the content
+    itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK,
+        Some(FPATH_EXPECT_FETCHED_CART[1])
+    ).await ;
+    itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 1, StatusCode::OK,
+        Some(FPATH_EXPECT_FETCHED_CART[2])
+    ).await ;
     let _resp_body = itest_cart_discard_request(
         shrstate.config().clone(), srv.clone(), &authed_claim, 0,  StatusCode::NO_CONTENT
     ).await ;
     let _resp_body = itest_cart_modify_request(
         shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[3],
-        &authed_claim, 0,  StatusCode::OK
+        &authed_claim, 1,  StatusCode::OK
     ).await ;
-    let resp_body_cart0 = itest_cart_retrieve_request(
-        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK
-    ).await ; // TODO, verify the content
-    let resp_body_cart1 = itest_cart_retrieve_request(
-        shrstate.config().clone(), srv.clone(), &authed_claim, 1, StatusCode::OK
-    ).await ; // TODO, verify the content
+    itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 0, StatusCode::OK,
+        Some(FPATH_EXPECT_FETCHED_CART[3])
+    ).await ;
+    itest_cart_retrieve_request(
+        shrstate.config().clone(), srv.clone(), &authed_claim, 1, StatusCode::OK,
+        Some(FPATH_EXPECT_FETCHED_CART[4])
+    ).await ;
     Ok(())
 } // end of fn modify_retrieve_cart_ok

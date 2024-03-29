@@ -32,6 +32,7 @@ pub(super) async fn modify_lines(
     let default_body = "{}".to_string();
     
     let logctx = appstate.log_context().clone();
+    app_log_event!(logctx, AppLogLevel::DEBUG,"seq_num:{seq_num}");
     
     let repo = match app_repo_cart(appstate.datastore()).await {
         Ok(v) => v,

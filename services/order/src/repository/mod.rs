@@ -252,7 +252,7 @@ pub async fn app_repo_cart (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsCartRepo>, AppError>
 {
     if let Some(m) = &ds.in_mem {
-        let obj = CartInMemRepo::new(m.clone());
+        let obj = CartInMemRepo::new(m.clone()).await?;
         Ok(Box::new(obj))
     } else {
         Err(AppError {code:AppErrorCode::MissingDataStore,
