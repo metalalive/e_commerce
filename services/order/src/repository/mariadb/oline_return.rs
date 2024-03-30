@@ -247,7 +247,7 @@ impl AbsOrderReturnRepo for OrderReturnMariaDbRepo {
         let mut tx = conn.begin().await?;
         let num_returns = Self::get_num_reqs(&mut tx, &oid_b).await?;
         let (sql_patt, args) = InsertReqArg(oid_b, num_returns, reqs).into();
-        let _rs = run_query_once(&mut tx, sql_patt, args, num_batch).await ?;
+        let _rs = run_query_once(&mut tx, sql_patt, args, Some(num_batch)).await ?;
         tx.commit().await?;
         Ok(num_batch)
     }

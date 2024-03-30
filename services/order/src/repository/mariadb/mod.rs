@@ -1,6 +1,7 @@
 pub(super) mod product_policy;
 pub(super) mod product_price;
 pub(super) mod stock;
+pub(super) mod cart;
 pub(super) mod order;
 pub(super) mod oline_return;
 
@@ -158,20 +159,22 @@ fn verify_hex_to_oidbytes() {
 async fn run_query_once(tx: &mut Transaction<'_, MySql>,
                         sql_patt:String,
                         args:MySqlArguments,
-                        num_batch:usize )
+                        maybe_num_batch:Option<usize> )
     -> DefaultResult<MySqlQueryResult, AppError>
 {
     let stmt = tx.prepare(sql_patt.as_str()).await?;
     let query = stmt.query_with(args);
     let exec = tx.deref_mut();
     let resultset = query.execute(exec).await?;
-    let num_affected = resultset.rows_affected() as usize;
-    if num_affected == num_batch {
-        Ok(resultset)
-    } else { // TODO, logging more detail for debugging
-        let detail = format!("num_affected, actual:{}, expect:{}",
-                             num_affected, num_batch );
-        Err(AppError { code: AppErrorCode::DataCorruption,
-            detail: Some(detail) })
-    }
+    if let Some(num_batch) = maybe_num_batch {
+        let num_affected = resultset.rows_affected() as usize;
+        if num_affected == num_batch {
+            Ok(resultset)
+        } else { // TODO, logging more detail for debugging
+            let detail = format!("num_affected, actual:{}, expect:{}",
+                                 num_affected, num_batch );
+            Err(AppError { code: AppErrorCode::DataCorruption,
+                detail: Some(detail) })
+        }
+    } else { Ok(resultset) }
 }

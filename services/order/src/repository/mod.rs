@@ -45,6 +45,9 @@ use mariadb::order::OrderMariaDbRepo;
 #[cfg(feature="mariadb")]
 use mariadb::oline_return::OrderReturnMariaDbRepo;
 
+#[cfg(feature="mariadb")]
+use mariadb::cart::CartMariaDbRepo;
+
 // the repository instance may be used across an await,
 // the future created by app callers has to be able to pass to different threads
 // , it is the reason to add `Send` and `Sync` as super-traits
@@ -251,6 +254,14 @@ pub async fn app_repo_order_return (ds:Arc<AppDataStoreContext>)
 pub async fn app_repo_cart (ds:Arc<AppDataStoreContext>)
     -> DefaultResult<Box<dyn AbsCartRepo>, AppError>
 {
+    #[cfg(feature="mariadb")]
+    if let Some(dbs) = ds.sql_dbs.as_ref() {
+        let obj = CartMariaDbRepo::new(dbs.clone()).await?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError { code: AppErrorCode::FeatureDisabled, detail: Some(format!("mariadb")) })
+    }
+    #[cfg(not(feature="mariadb"))]
     if let Some(m) = &ds.in_mem {
         let obj = CartInMemRepo::new(m.clone()).await?;
         Ok(Box::new(obj))

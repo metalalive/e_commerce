@@ -450,7 +450,6 @@
     <changeSet id="tag_version_0.1.3" author="T.H.">
         <tagDatabase tag="0.1.3" />
     </changeSet>
-    
     <changeSet id="add__num_items_rsv__product_policy" author="T.H.">
         <comment>
             the columns `max_num_rsv`, `min_num_rsv` indicate maxinum and minimum number of items allowed to reserve per order transaction respectively 
@@ -466,6 +465,37 @@
     </changeSet>
     <changeSet id="tag_version_0.1.4" author="T.H.">
         <tagDatabase tag="0.1.4" />
+    </changeSet>
+    
+    <changeSet id="add__cart_metadata_lines" author="T.H.">
+        <comment>
+            - Add 2 tables for recording user cart , each user can edit several carts as their order draft before checkout
+            - The index of the table `cart_line_detail` does not uniquely identify any single row. To access specific cart, users have to provide their profile ID `usr_id` and cart sequence number `seq` , this application assumes that number of lines in each cart won't be large, so these 2 columns help to narrow down the search efficiently.
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE `cart_toplvl_meta` (
+                `usr_id`   INT UNSIGNED NOT NULL,
+                `seq`      TINYINT UNSIGNED NOT NULL,
+                `title`    VARCHAR(128)  CHARACTER SET utf8  NOT NULL,
+                PRIMARY KEY (`usr_id`, `seq`)
+            );
+            CREATE TABLE `cart_line_detail` (
+                `usr_id`   INT UNSIGNED NOT NULL,
+                `seq`      TINYINT UNSIGNED NOT NULL,
+                `store_id`      INT UNSIGNED NOT NULL,
+                `product_type`  ENUM('1', '2') NOT NULL, 
+                `product_id`    BIGINT UNSIGNED NOT NULL,
+                `quantity`      INT UNSIGNED NOT NULL,
+                KEY `cartline_detail_index_user_id`(`usr_id`, `seq`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `cart_line_detail`;
+            DROP TABLE `cart_toplvl_meta`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.1.5" author="T.H.">
+        <tagDatabase tag="0.1.5" />
     </changeSet>
 </databaseChangeLog>
 

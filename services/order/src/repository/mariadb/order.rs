@@ -517,7 +517,7 @@ impl AbsOrderRepo for OrderMariaDbRepo
         if errors.is_empty() {
             let num_affected = saved_lines.len();
             let (sql_patt, args) = UpdateOLinePayArg(&oid_b, saved_lines).into();
-            let _rs = run_query_once(&mut tx, sql_patt, args, num_affected).await?;
+            let _rs = run_query_once(&mut tx, sql_patt, args, Some(num_affected)).await?;
             tx.commit().await?;
         }
         Ok(OrderPaymentUpdateErrorDto { oid, lines: errors })
@@ -677,7 +677,7 @@ impl OrderMariaDbRepo {
         }
         let oid = OidBytes::try_from(oid)?;
         let (sql_patt, args) = InsertTopMetaArg(&oid, usr_id, ctime).into();
-        let _rs = run_query_once(tx, sql_patt, args, 1).await?;
+        let _rs = run_query_once(tx, sql_patt, args, Some(1)).await?;
         
         let mut num_processed = 0;
         let mut data = olines.iter().collect::<Vec<_>>();
@@ -687,7 +687,7 @@ impl OrderMariaDbRepo {
             assert!(items_processing.len() > 0);
             assert_eq!(items_processing.len(), num_batch);
             let (sql_patt, args) = InsertOLineArg(&oid, num_processed, items_processing).into();
-            let _rs = run_query_once(tx, sql_patt, args, num_batch).await?;
+            let _rs = run_query_once(tx, sql_patt, args, Some(num_batch)).await?;
             num_processed += num_batch;
         } // end of loop
         Ok(())
@@ -705,14 +705,14 @@ impl OrderMariaDbRepo {
         let (f_name, l_name, emails, phones) = (data.first_name, data.last_name, data.emails, data.phones);
         let (num_mails, num_phones) = (emails.len(), phones.len());
         let (sql_patt, args) = InsertContactMeta(table_opt, oid, f_name, l_name).into();
-        let _rs = run_query_once(tx, sql_patt, args, 1).await?;
+        let _rs = run_query_once(tx, sql_patt, args, Some(1)).await?;
         if num_mails > 0 {
             let (sql_patt, args) = InsertContactEmail(table_opt, oid, emails).into();
-            let _rs = run_query_once(tx, sql_patt, args, num_mails).await?;
+            let _rs = run_query_once(tx, sql_patt, args, Some(num_mails)).await?;
         }
         if num_phones > 0 {
             let (sql_patt, args) = InsertContactPhone(table_opt, oid, phones).into();
-            let _rs = run_query_once(tx, sql_patt, args, num_phones).await?; 
+            let _rs = run_query_once(tx, sql_patt, args, Some(num_phones)).await?; 
         }
         Ok(())
     }
@@ -721,7 +721,7 @@ impl OrderMariaDbRepo {
         -> DefaultResult<(), AppError>
     {
         let (sql_patt, args) = InsertPhyAddr(table_opt, oid, data).into();
-        let _rs = run_query_once(tx, sql_patt, args, 1).await?;
+        let _rs = run_query_once(tx, sql_patt, args, Some(1)).await?;
         Ok(())
     }
     async fn _save_ship_opt(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
@@ -735,7 +735,7 @@ impl OrderMariaDbRepo {
         }
         let num_sellers = data.len();
         let (sql_patt, args) = InsertShipOption(oid, data).into();
-        let _rs = run_query_once(tx, sql_patt, args, num_sellers).await?;
+        let _rs = run_query_once(tx, sql_patt, args, Some(num_sellers)).await?;
         Ok(())
     }
     

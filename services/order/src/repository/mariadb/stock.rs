@@ -561,7 +561,7 @@ impl StockMariaDbRepo {
                 _others => { vec![] }
             };
             for (sql_patt, args) in sqls {
-                let _rs = run_query_once(tx, sql_patt, args, num_batch).await?;
+                let _rs = run_query_once(tx, sql_patt, args, Some(num_batch)).await?;
             }
         } // end of loop
         Ok(())
