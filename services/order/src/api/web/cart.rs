@@ -30,9 +30,7 @@ pub(super) async fn modify_lines(
     let mut hdr_map = HeaderMap::new();
     hdr_map.insert(header::CONTENT_TYPE, resp_ctype_val);
     let default_body = "{}".to_string();
-    
     let logctx = appstate.log_context().clone();
-    app_log_event!(logctx, AppLogLevel::DEBUG,"seq_num:{seq_num}");
     
     let repo = match app_repo_cart(appstate.datastore()).await {
         Ok(v) => v,
@@ -41,7 +39,7 @@ pub(super) async fn modify_lines(
             return (StatusCode::INTERNAL_SERVER_ERROR, hdr_map, default_body);
         }
     };
-    let uc =  ModifyCartLineUseCase {repo, authed_usr};
+    let uc =  ModifyCartLineUseCase {repo, authed_usr, log_ctx:logctx.clone()};
     let (status, resp_body) = match uc.execute(seq_num, req_body).await {
         ModifyCartUsKsResult::Success => (StatusCode::OK, default_body),
         ModifyCartUsKsResult::NotFound => (StatusCode::NOT_FOUND, default_body),

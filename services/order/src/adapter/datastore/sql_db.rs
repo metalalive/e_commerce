@@ -1,10 +1,15 @@
 use std::result::Result as DefaultResult;
 use std::boxed::Box;
 use std::sync::Arc;
+
+#[cfg(feature="mariadb")]
 use std::time::Duration;
 
+#[cfg(feature="mariadb")]
 use serde::Deserialize;
+#[cfg(feature="mariadb")]
 use sqlx::Pool;
+#[cfg(feature="mariadb")]
 use sqlx::pool::{PoolOptions, PoolConnection};
 
 #[cfg(feature="mariadb")]
@@ -53,7 +58,7 @@ impl AppMariaDbStore {
             Err(e) => {
                 let detail = e.to_string() + ", secret-parsing-error, source: AppMariaDbStore";
                 return Err(AppError { code: AppErrorCode::InvalidJsonFormat, detail: Some(detail) });
-            } // TODO, logging error message
+            }
         };
         let pol_opts = PoolOptions::<MySql>::new().max_connections(cfg.max_conns)
             .idle_timeout(Some(Duration::new(cfg.idle_timeout_secs as u64, 0)))

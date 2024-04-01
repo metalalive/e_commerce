@@ -84,7 +84,7 @@ mod _oline_return {
         fn filter(&self, key:&String, row:&Vec<String>) -> bool {
             let passed = if let Some(d) = self.oid.as_ref() {
                 let curr_oid = inmem_get_oid(key);
-                d.clone().eq(curr_oid)
+                d.eq(&curr_oid)
             } else {true};
             if passed {
                 let col_idx:usize = InMemColIdx::QtyRefund.into();

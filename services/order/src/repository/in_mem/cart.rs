@@ -9,10 +9,11 @@ use crate::datastore::{
     AbstInMemoryDStore, AppInMemFetchedSingleTable, AppInMemFetchedSingleRow, AbsDStoreFilterKeyOp,
     AppInMemFetchKeys
 };
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{CartModel, CartLineModel, BaseProductIdentity};
 use crate::repository::AbsCartRepo;
 
+#[allow(non_snake_case)]
 mod CartTable {
     use super::{HashMap, CartModel, AppInMemFetchedSingleTable, AppInMemFetchedSingleRow};
     pub(super) const LABEL:&'static str = "cart_metadata";
@@ -36,6 +37,7 @@ mod CartTable {
     }
 } // end of inner-mod CartTable
 
+#[allow(non_snake_case)]
 mod CartLineTable {
     use super::{
         HashMap, BaseProductIdentity, CartModel, AppInMemFetchedSingleTable

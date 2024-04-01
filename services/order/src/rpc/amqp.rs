@@ -121,7 +121,7 @@ impl AbsRpcClientCtx for AmqpRpcContext {
         let _done = channel_wrapper.init_client(self.bindings.clone(),
             self.recv_reply.clone(), self.logctx.clone()).await? ;
         let AmqpChannelWrapper {
-            chn, subscribe_send_q, subscribe_reply_q
+            chn, subscribe_send_q:_ , subscribe_reply_q:_
         } = channel_wrapper;
         let obj = AmqpRpcClientHandler { reply_evt:None, bindings:self.bindings.clone(),
                     channel:chn, recv_reply: self.recv_reply.clone() };
@@ -376,7 +376,7 @@ impl AbstractRpcClient for AmqpRpcClientHandler
             extra_headers.insert("task".try_into().unwrap(),
                     FieldValue::S(py_tsk_path.clone().try_into().unwrap()) );
             extra_headers.insert("content_type".try_into().unwrap(),
-                    FieldValue::S(HTTP_CONTENT_TYPE_JSON.clone().try_into().unwrap()) );
+                    FieldValue::S(HTTP_CONTENT_TYPE_JSON.try_into().unwrap()) );
             properties.with_headers(extra_headers).finish()
         } else { properties };
         let py_celery = bind_cfg.python_celery_task.is_some();
@@ -555,7 +555,7 @@ impl InnerServerConsumer
             Some(ts) => match ts.try_into() {
                 Ok(ts2) =>  DateTime::from_timestamp(ts2, 0u32)
                     .unwrap_or(local_t0.into()).fixed_offset() ,
-                Err(e) =>  local_t0
+                Err(_e) =>  local_t0
             },
             None => local_t0
         };
@@ -694,7 +694,7 @@ impl AmqpClientRecvReply
 
     async fn fetch(&self, key:&str) -> DefaultResult<Vec<u8>, AppError>
     {
-        let mut guard = self.0.lock().await;
+        let guard = self.0.lock().await;
         if let Some(entry) = guard.get(key) {
             if let Some(content) = entry {
                 Ok(content.clone())

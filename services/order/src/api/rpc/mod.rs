@@ -68,14 +68,14 @@ pub(super) fn py_celery_deserialize_req<T, U>(raw:&Vec<u8>)
     let out0 = match serde_json::from_value(pargs) {
         Ok(v) => v,
         Err(e) => {
-            return Err(AppError {detail:Some("celery-de-args-fail".to_string()),
+            return Err(AppError {detail:Some(e.to_string() + ", celery-de-args-fail"),
                 code:AppErrorCode::InvalidJsonFormat});
         },
     };
     let out1 = match serde_json::from_value(kwargs) {
         Ok(v) => v,
         Err(e) => {
-            return Err(AppError {detail:Some("celery-de-kwargs-fail".to_string()),
+            return Err(AppError {detail:Some(e.to_string() + ", celery-de-kwargs-fail"),
                 code:AppErrorCode::InvalidJsonFormat});
         },
     };
@@ -90,13 +90,16 @@ pub(crate) enum PyCeleryRespStatus {
 
 #[derive(Deserialize)]
 struct PyCeleryRespPartialPayload {
-    task_id: String,
+    #[allow(dead_code)]
+    task_id: String, // the field is never read, only for validation purpose
     status: PyCeleryRespStatus,
 } // this is only for validating current progress done on Celery consumer side
 
 #[derive(Deserialize)]
 struct PyCeleryRespPayload<T> {
+    #[allow(dead_code)]
     task_id: String,
+    #[allow(dead_code)]
     status: PyCeleryRespStatus,
     result: T
 }

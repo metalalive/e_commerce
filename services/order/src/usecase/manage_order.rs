@@ -136,8 +136,8 @@ impl CreateOrderUseCase {
                 let contact = Some(ContactErrorDto { first_name: None, last_name: None,
                     emails: None, phones: None, quota_email, quota_phone,
                     nonfield: Some(ContactNonFieldErrorReason::QuotaExceed) });
-                let err_Ship = ShippingErrorDto { contact, address: None, option: None };
-                err_obj.shipping = Some(err_Ship);
+                err_obj.shipping = Some(ShippingErrorDto { contact, address: None,
+                    option: None });
             }
             let quota_phone = quota_chk_result.remove(0);
             let quota_email = quota_chk_result.remove(0);

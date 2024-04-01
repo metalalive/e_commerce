@@ -66,7 +66,6 @@ pub struct WebApiListenCfg {
     #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub host: String,
     pub port: u16,
-    max_failures: u8,
     pub max_connections: u32,
     pub cors: String,
     pub routes: Vec<WebApiRouteCfg>,
@@ -112,7 +111,7 @@ pub struct AppAmqpAttriCfg {
 pub struct AppRpcAmqpCfg {
 	pub bindings: Arc<Vec<AppAmqpBindingCfg>>,
 	pub attributes: AppAmqpAttriCfg,
-	max_connections: u16,
+	// max_connections: u16, // TODO, apply connection pool
     #[serde(deserialize_with = "jsn_deny_empty_string")]
 	pub confidential_id: String // TODO, rename to `confidential_path`
 }

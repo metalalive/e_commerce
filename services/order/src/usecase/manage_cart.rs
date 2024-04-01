@@ -1,15 +1,18 @@
 use std::boxed::Box;
+use std::sync::Arc;
 use std::result::Result as DefaultResult;
 
 use crate::{AppAuthedClaim, AppAuthQuotaMatCode};
 use crate::api::web::dto::{CartDto, QuotaResourceErrorDto};
 use crate::constant::limit;
 use crate::error::AppError;
-use crate::model::{BaseProductIdentity, CartModel};
+use crate::logging::{AppLogContext, app_log_event, AppLogLevel};
+use crate::model::BaseProductIdentity;
 use crate::repository::AbsCartRepo;
 
 pub(crate) struct ModifyCartLineUseCase {
     pub repo: Box<dyn AbsCartRepo>,
+    pub log_ctx: Arc<AppLogContext>,
     pub authed_usr: AppAuthedClaim,
 }
 pub(crate) struct DiscardCartUseCase {
@@ -54,13 +57,16 @@ impl ModifyCartLineUseCase {
             store_id: cl.seller_id, product_type: cl.product_type.clone(),
             product_id: cl.product_id,
         }).collect::<Vec<_>>();
-        let mut saved = self.repo.fetch_lines_by_pid(owner, seq_num, pids).await?;
-        saved.update(data);
+        let mut obj = self.repo.fetch_lines_by_pid(owner, seq_num, pids).await?;
+        obj.update(data);
+        let logctx = &self.log_ctx;
+        app_log_event!(logctx, AppLogLevel::DEBUG,"seq_num:{seq_num}, num-adding:{},\
+                       num-updating:{}", obj.saved_lines.len(), obj.new_lines.len() );
         let num_saved = self.repo.num_lines_saved(owner, seq_num).await?; 
-        let total_num_lines = num_saved + saved.new_lines.len();
+        let total_num_lines = num_saved + obj.new_lines.len();
         let max_limit = self.authed_usr.quota_limit(AppAuthQuotaMatCode::NumOrderLines);
         if total_num_lines < (max_limit as usize) {
-            let _num_updated = self.repo.update(saved).await?;
+            let _num_updated = self.repo.update(obj).await?;
             Ok(None)
         } else {
             let e = QuotaResourceErrorDto {given: total_num_lines, max_: max_limit};

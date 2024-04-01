@@ -4,11 +4,12 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 use chrono::{DateTime, Local, Duration, FixedOffset};
 
+use order::{AppAuthedClaim, AppAuthClaimPermission, AppAuthPermissionCode};
 use order::api::rpc::dto::{
     StockReturnErrorDto, OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, OrderReplicaRefundReqDto
 };
 use order::api::web::dto::OrderLineReqDto;
-use order::constant::ProductType;
+use order::constant::{ProductType, app_meta};
 use order::error::{AppError, AppErrorCode};
 use order::logging::AppLogContext;
 use order::model::{
@@ -339,7 +340,14 @@ async fn request_lines_request_common(
         OrderLineReqDto {seller_id:800, product_type:ProductType::Item,
             product_id:191, quantity:2 }
     ];
-    let uc = ReturnLinesReqUseCase {logctx, usr_prof_id:req_usr_id, o_repo, or_repo };
+    let authed_claim = AppAuthedClaim {
+        profile:req_usr_id, iat:0, exp:0, aud:Vec::new(), quota:vec![],
+        perms:vec![AppAuthClaimPermission { 
+           app_code: app_meta::RESOURCE_QUOTA_AP_CODE ,
+           codename: AppAuthPermissionCode::can_create_return_req,
+        }]
+    };
+    let uc = ReturnLinesReqUseCase {logctx, authed_claim, o_repo, or_repo };
     uc.execute(mock_order_id, mock_return_req).await
 } // end of fnf request_lines_request_common
 

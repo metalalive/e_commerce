@@ -13,6 +13,7 @@ pub struct OrderLineReqDto {
     pub quantity: u32
 }
 
+// TODO , extra field to indicate whether to discard specific line
 pub type CartLineDto = OrderLineReqDto;
 
 #[derive(Deserialize, Serialize)]
