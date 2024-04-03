@@ -1,37 +1,29 @@
 openapi: 3.0.3
 info:
-  title: MyApp Order Processing Service
+  title: Order Processing Service
   description: |-
-    This is API documentation of my order processing server based on the OpenAPI 3.0 specification.
+    This is web API documentation of order processing server of my e-commerce project based on the OpenAPI 3.0 specification.
     termsOfService: http://swagger.io/terms/
   contact:
     email: xyz@my-orderproc-app.io
   license:
-    name: License Not Yet (TODO)
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
-  version: 1.1.0
+    name: MIT
+    url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
+  version: 1.2.0
 
 servers:
-  - url: https://doc.site.not.ready/api/v1.1.0
+  - url: https://order-proc.site.not.ready/api/v1.2.0
 tags:
+  - name: cart
+    description: shopping cart for user collecting items to checkout
   - name: order
-    description: process a new order and monitor the progress
-    externalDocs:
-      description: Detail
-      url: https://doc.site.not.ready/api/order
-  - name: return
-    description: return ordered items
-    externalDocs:
-      description: Detail
-      url: https://doc.site.not.ready/api/return
+    description: place a new order, or send return request
 
 paths:
   /policy/products:
     post:
       summary: Edit policies for products
       description: Create / update policies for existing products during life cycle of an active order
-      tags:
-        - order
       requestBody:
         content:
           application/json:
@@ -41,16 +33,11 @@ paths:
                 type: object
                 properties:
                   product_type:
-                    type: integer
-                    format: uint8
-                    example: 2
+                    $ref: '#/components/schemas/ProductType'
                   product_id:
-                    type: integer
-                    format: uint64
-                    example: 10093183
+                    $ref: '#/components/schemas/ProductId'
                   async_stock_chk:
                     type: boolean
-                    example: true
                   auto_cancel_secs:
                     type: integer
                     format: uint32
@@ -59,6 +46,14 @@ paths:
                     type: integer
                     format: uint32
                     example: 24000
+                  max_num_rsv:
+                    type: integer
+                    format: uint16
+                    example: 1059
+                  min_num_rsv:
+                    type: integer
+                    format: uint16
+                    example: 2
                 required:
                   - product_id
                   - product_type
@@ -79,46 +74,43 @@ paths:
                   type: object
                   properties:
                     product_type:
-                      type: integer
-                      format: uint8
-                      example: 2
+                      $ref: '#/components/schemas/ProductType'
                     product_id:
-                      type: integer
-                      format: uint64
-                      example: 10093183
+                      $ref: '#/components/schemas/ProductId'
                     err_type:
                       type: string
                       enum:
                         - ProductNotExist
+                        - EmptyInputData
                         - ExceedingMaxLimit
                     auto_cancel_secs:
-                      type: object
-                      description: present only when `err_type` is `ExceedingMaxLimit`
-                      properties:
-                        given:
-                          type: integer
-                          format: uint32
-                          example: 72001
-                        limit:
-                          type: integer
-                          format: uint32
-                          example: 72000
+                      $ref: '#/components/schemas/ProductPolicyClientLimitErr'
                     warranty_hours:
+                      $ref: '#/components/schemas/ProductPolicyClientLimitErr'
+                    num_rsv:
                       type: object
-                      description: present only when `err_type` is `ExceedingMaxLimit`
                       properties:
-                        given:
+                        max_items:
                           type: integer
-                          format: uint32
-                          example: 96001
-                        limit:
+                          format: uint16
+                          example: 257
+                        min_items:
                           type: integer
-                          format: uint32
-                          example: 96000
+                          format: uint16
+                          example: 4
                   required:
                     - product_id
                     - product_type
                     - err_type
+        
+        '403':
+          description: Permission denied or quota exceeded, 
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/QuotaResourceError'
+                  - $ref: '#/components/schemas/EmptyObject'
         '503':
           description: Service currently unavailable
       security:
@@ -238,10 +230,10 @@ paths:
       security:
         - BearerAuth: []
   
-  /order/{order-id}/payments:
+  /order/{order-id}/return:
     post:
-      summary: Confirm payments of an order
-      description: Confirm payments for ordered items
+      summary: create return request for ordered lines
+      description: create return request for ordered / reserved (might be paid) lines
       tags:
         - order
       parameters:
@@ -256,138 +248,160 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PaymentConfirmRequest'
+              type: array
+              minItems: 1
+              items:
+                allOf:
+                - $ref: '#/components/schemas/OrderLineObject'
       responses:
-        '201':
-          description: Payments successfully confirmed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentConfirmedObject'
+        '200':
+          description: request accepted
         '400':
           description: Invalid input
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaymentConfirmInvalidResponse'
+                type: array
+                items:
+                  allOf:
+                  - $ref: '#/components/schemas/OrderLineReturnError'
+        '403':
+          description: Permission denied
         '503':
           description: Service unavailable
       security:
         - BearerAuth: []
-    
-  /order/{order-id}/payment/{payment-id}:
+  
+  /cart/{seq-num}:
     get:
-      summary: Retreive order payment
-      description: Retrieve payment within an order
+      summary: Get a specific cart
+      description: Get one of user carts with a sequence number, note currently each cart is supposed to be exclusive to the owner.
       tags:
-        - order
+        - cart
       parameters:
-        - name: order-id
+        - name: seq-num
           in: path
-          description: Identifier for the order
+          description: the sequence number starts from zero, maximum values depends on number of order lines the user can submit per cart / order.
           required: true
           schema:
-            type: string
-        - name: payment-id
-          in: path
-          description: Identifier for the payment
-          required: true
-          schema:
-            type: string
+            type: integer
+            format: uint8
+            example: 3
       responses:
         '200':
-          description: Payment successfully loaded
+          description: return content of the cart
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaymentConfirmedObject'
+                $ref: '#/components/schemas/CartTopLvl'
         '404':
-          description: store not exists within the order
-        '503':
-          description: Service unavailable
-      security:
-        - BearerAuth: []
-          
-  /order/{order-id}/shipment:
-    post:
-      summary: Create a shipment
-      description: Create a new shipment associated with an order
+          description: not found
+        '500':
+          description: internal error
+    patch:
+      summary: Update product lines in a specific cart
+      description: insert new lines, or update existing lines to a specific cart
       tags:
-        - order
+        - cart
       parameters:
-        - name: order-id
+        - name: seq-num
           in: path
-          description: Identifier for the order
           required: true
           schema:
-            type: string
+            type: integer
+            format: uint8
+            example: 2
       requestBody:
-        required: true
+        description: content of the cart
         content:
           application/json:
             schema:
-              type: object
-      responses:
-        '201':
-          description: Shipment successfully created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShipmentObject'
-        '400':
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShipmentInvalidResponse'
-        '503':
-          description: Service unavailable
-      security:
-        - BearerAuth: []
-    
-  /order/{order-id}/shipment/{shipment-id}:
-    get:
-      summary: Retrieve a shipment
-      description: Retrieve an existing shipment associated with an order
-      tags:
-        - order
-      parameters:
-        - name: order-id
-          in: path
-          description: Identifier for the order
-          required: true
-          schema:
-            type: string
-        - name: shipment-id
-          in: path
-          description: Identifier for the shipment
-          required: true
-          schema:
-            type: string
+              $ref: '#/components/schemas/CartTopLvl'
       responses:
         '200':
-          description: Shipment retrieved
+          description: updated successfully
+        '400':
+          description: quota resource error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ShipmentObject'
-        '503':
-          description: Service unavailable
-      security:
-        - BearerAuth: []
+                $ref: '#/components/schemas/QuotaResourceError' 
+        '404':
+          description: not found
+        '500':
+          description: internal error
+    delete:
+      summary: discard / reset a specific cart
+      description: discard / reset a specific cart
+      tags:
+        - cart
+      parameters:
+        - name: seq-num
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint8
+            example: 1
+      responses:
+        '204':
+          description: discarded successfully
+        '410':
+          description: gone
+        '500':
+          description: internal error
+    
 
 components:
   schemas:
+    EmptyObject:
+      type: object
+      
+    ProductType:
+      type: integer
+      format: uint8
+      maximum: 2
+      minimum: 1
+      
+    ProductId:
+      type: integer
+      format: uint64
+      example: 10093183
+      
+    QuotaResourceError:
+      type: object
+      properties:
+        max_:
+          type: integer
+          format: uint32
+          example: 599
+        given:
+          type: integer
+          format: uint64
+          example: 601
+    
+    ProductPolicyClientLimitErr:
+      type: object
+      description: present only when `err_type` is `ExceedingMaxLimit`
+      properties:
+        given:
+          type: integer
+          format: uint32
+          example: 72001
+        limit:
+          type: integer
+          format: uint32
+          example: 72000
+    
     OrderRequestCreate:
       type: object
       properties:
         order_lines:
           type: array
+          minItems: 1
+          uniqueItems: true
           items:
-            anyOf:
-            - $ref: '#/components/schemas/OrderLineObject'
-            - $ref: '#/components/schemas/OrderLineObject'
-            - $ref: '#/components/schemas/OrderLineObject'
+            $ref: '#/components/schemas/OrderLineObject'
         shipping:
           $ref: '#/components/schemas/ShippingValid'
         billing:
@@ -403,13 +417,12 @@ components:
         reserved_lines:
           type: array
           items:
-            anyOf:
+            allOf:
             - $ref: '#/components/schemas/PayOrderLineObject'
         paid_lines:
           type: array
           items:
-            anyOf:
-            - $ref: '#/components/schemas/PayOrderLineObject'
+            allOf:
             - $ref: '#/components/schemas/PayOrderLineObject'
         shipping_lines:
           type: array
@@ -419,11 +432,11 @@ components:
         completed_lines:
           type: array
           items:
-            oneOf:
+            allOf:
             - $ref: '#/components/schemas/OrderLineObject'
           minItems: 0
         shipping:
-          anyOf:
+          allOf:
           - $ref: '#/components/schemas/ShippingValid'
           properties:
             shipments:
@@ -455,13 +468,9 @@ components:
       type: object
       properties:
         product_type:
-          type: integer
-          format: uint8
-          example: 1
+          $ref: '#/components/schemas/ProductType'
         product_id:
-          type: integer
-          format: uint64
-          example: 270118
+          $ref: '#/components/schemas/ProductId'
         quantity:
           type: integer
           format: uint32
@@ -481,7 +490,7 @@ components:
           example: 44
 
     PayOrderLineObject:
-      anyOf:
+      allOf:
         - $ref: '#/components/schemas/BaseOrderLineObject'
       properties:
         seller_id:
@@ -496,21 +505,9 @@ components:
         - product_id
         - quantity
         - amount
-  
-    OrderLineWithoutSellerObject:
-      anyOf:
-        - $ref: '#/components/schemas/BaseOrderLineObject'
-      properties:
-        amount:
-          $ref: '#/components/schemas/PayAmountObject'
-      required:
-        - product_type
-        - product_id
-        - quantity
-        - amount
 
     OrderLineObject:
-      anyOf:
+      allOf:
         - $ref: '#/components/schemas/BaseOrderLineObject'
       properties:
         seller_id:
@@ -531,17 +528,34 @@ components:
           format: uint32
           example: 18830
         product_type:
-          type: integer
-          format: uint8
-          example: 1
+          $ref: '#/components/schemas/ProductType'
         product_id:
-          type: integer
-          format: uint64
-          example: 270118
+          $ref: '#/components/schemas/ProductId'
         reason:
           type: string
-          enum: [not-exist, out-of-stock, not-enough-to-claim]
-          example: out-of-stock
+          enum: [NotExist, OutOfStock, NotEnoughToClaim, RsvLimitViolation]
+          example: OutOfStock
+      required:
+        - seller_id
+        - product_type
+        - product_id
+        - reason
+    
+    OrderLineReturnError:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+          example: 18830
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        product_id:
+          $ref: '#/components/schemas/ProductId'
+        reason:
+          type: string
+          enum: [NotExist, WarrantyExpired, QtyLimitExceed, DuplicateReturn]
+          example: WarrantyExpired
       required:
         - seller_id
         - product_type
@@ -651,6 +665,8 @@ components:
     
     ShippingOptionValid:
       type: array
+      minItems: 1
+      uniqueItems: true
       items:
         type: object
         properties:
@@ -697,17 +713,19 @@ components:
           example: Snow
         emails:
           type: array
+          minItems: 1
+          uniqueItems: true
           items:
             type: string
           example: ['tobi@ninjacat.io', 'mindful@iowalab.idv', 'move@aheadof.light']
-          minItems: 1
         phones:
           type: array
+          minItems: 1
+          uniqueItems: true
           items:
             anyOf:
             - $ref: '#/components/schemas/PhoneNumberValid'
-            - $ref: '#/components/schemas/PhoneNumberValid'
-          minItems: 1
+          example: [{"nation": 44, "number": "0192839741"}, {"nation": 79, "number":"00284018"}]
       required:
         - first_name
         - last_name
@@ -734,9 +752,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PhoneNumberErrDetail'
+        quota_email:
+          $ref: '#/components/schemas/QuotaResourceError'
+        quota_phone:
+          $ref: '#/components/schemas/QuotaResourceError'
         non-field:
             type: string
-            enum: [email-missing, phone-missing]
+            enum: [EmailMissing, PhoneMissing, QuotaExceed]
     
     PhoneNumberValid:
       type: object
@@ -777,25 +799,26 @@ components:
           example: 110827382
         reserved_lines:
           type: array
+          minItems: 1
           items:
-            anyOf:
-            - $ref: '#/components/schemas/PayOrderLineObject'
+            allOf:
             - $ref: '#/components/schemas/PayOrderLineObject'
     
     OrderCreateErrorResponse:
       type: object
+      description: note the field `quota_olines` indicates number of different  lines in the given request exceeds user quota `max-number-order-lines`
       properties:
         order_lines:
           type: array
           items:
             anyOf:
             - $ref: '#/components/schemas/OrderLineCreateError'
-            - $ref: '#/components/schemas/OrderLineCreateError'
-            - $ref: '#/components/schemas/OrderLineCreateError'
         shipping:
           $ref: '#/components/schemas/ShippingErrDetail'
         billing:
           $ref: '#/components/schemas/BillingErrDetail'
+        quota_olines:
+          $ref: '#/components/schemas/QuotaResourceError'
     
     OrderEditErrorResponse:
       type: object
@@ -807,185 +830,22 @@ components:
         non-field:
           type: string
           enum: [billing-locked, shipping-locked, order-archived]
-        
-    PaymentConfirmRequest:
-      type: object
-      properties:
-        sellers:
-          type: array
-          items:
-            type: integer
-          minItems: 1
-          description: ID of the sellers that have reserved the ordered items
-          example: [893012, 019902]
-        return_url:
-          type: string
-          description: This field specifies the URL for returning back to your frontend application if the payment service requests to  redirect to another web page hosted by the card-issuing bank.
-          example: 'https://path/to/your/site'
-        currency:
-          type: string
-          enum: [twd]
-          example: twd
-        method:
-          type: string
-          description: This field labels the user-defined configuration for describing the payment method in the internal payment service. Extra data for different payment methods should be placed in the options field.
-          example: 'my-pre-defined-card'
-        options:
-          type: object
-          properties:
-            cvc:
-              type: string
-              description: For credit-card payment method, the customer must provide the CVC (3-digit code at the back of the card) in this field.
-              example: '094'
-      required:
-        - sellers
-        - return_url
-        - currency
-        - method
     
-    PaymentConfirmedSellerObject:
+    CartTopLvl:
       type: object
       properties:
-        seller:
-          type: integer
-          example: 1703
-        amount:
-          type: object
-          description: amount to pay to the seller
-          properties:
-            confirmed:
-              type: integer
-              example: 93
-            received:
-              type: integer
-              description: amount received in the payment service
-            captured:
-              type: integer
-              description: amount captured by the merchant / seller
-          required:
-            - confirmed
-            - received
-        order_lines:
+        title:
+          type: string
+          default: 'Untitled'
+          example: 'Holiday shop list'
+        lines:
           type: array
           items:
-            anyOf:
-              - $ref: '#/components/schemas/OrderLineWithoutSellerObject'
-              - $ref: '#/components/schemas/OrderLineWithoutSellerObject'
-      required:
-        - seller
-        - amount
-        - order_lines
-        
-    PaymentConfirmedObject:
-      type: object
-      properties:
-        payment_id:
-          type: integer
-          format: string
-          example: G847toHiuytewr
-        currency:
-          type: string
-          enum: [twd]
-        time:
-          type: integer
-          format: uint64
-          description: the time created the payment
-          example: 119230408
-        sellers:
-          type: array
-          minItems: 1
-          items:
-            anyOf:
-            - $ref: '#/components/schemas/PaymentConfirmedSellerObject'
-            - $ref: '#/components/schemas/PaymentConfirmedSellerObject'
-        redirect_to_url:
-          type: string
-          description: URL frontend app has to redirect to, e.g. card-issuing bank asks for 2 factor authentication
-          example: 'https://path.to.card.bank/site?return_url=0913ur2r2yrRugr'
-      required:
-        - payment_id
-        - currency
-        - time
-        - sellers
+            allOf:
+            - $ref: '#/components/schemas/CartLineObject'
     
-    PaymentConfirmInvalidResponse:
-      type: object
-      properties:
-        sellers:
-          type: array
-          items:
-            type: string
-            nullable: true
-            enum: [null, not-exist]
-          example: [null, not-exist]
-        return_url:
-          type: string
-          enum: [empty, invalid-char, invalid-format]
-          example: invalid-format
-        currency:
-          type: string
-          enum: [empty, invalid-char, not-support]
-          example: not-support
-        method:
-          type: string
-          enum: [empty, invalid-char, not-exist]
-          example: not-exist
-        options:
-          type: object
-          properties:
-            cvc:
-              type: string
-              enum: [empty, invalid-char]
-              example: invalid-char
-    
-    ShipmentPackageObject:
-      type: object
-      properties:
-        tracking_number:
-          type: integer
-          format: uint32
-          example: 54321
-        status:
-          type: string
-          enum: [in-transit, pending, out-for-delivery, delivered, returning, returned, cancelled, exception]
-        order_lines:
-          type: array
-          items:
-            anyOf:
-            - $ref: '#/components/schemas/OrderLineObject'
-            - $ref: '#/components/schemas/OrderLineObject'
-    
-    ShipmentObject:
-      type: object
-      description: this object represents a group of packages bound to a single shipment unit, each package is assigned with a single tracking number from shipping carrier. 
-      properties:
-        method:
-          $ref: '#/components/schemas/ShippingMethodObject'
-        shipment_id:
-          type: string
-          example: 'ola01aOlaoLa'
-        create_time:
-          type: integer
-          format: uint64
-          example: 110092042
-        estimated_delivery_date:
-          type: integer
-          format: uint64
-          example: 110582000
-          description: timestamp which represents a date arrival to customer, estimated by shipping carrier
-        documents:
-          type: array
-          items:
-            anyOf:
-            - $ref: '#/components/schemas/ShipmentPackageObject'
-            - $ref: '#/components/schemas/ShipmentPackageObject'
-    
-    ShipmentInvalidResponse:
-      type: object
-      properties:
-        non-field:
-          type: string
-          enum: ['no-item-to-ship', 'seller-error']
+    CartLineObject:
+      $ref: '#/components/schemas/OrderLineObject'
 
   securitySchemes:
     BearerAuth:

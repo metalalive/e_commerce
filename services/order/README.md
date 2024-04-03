@@ -1,4 +1,13 @@
 # Order Processing service
+## Features
+- saleable products policy, e.g. reservation expiry, warranty, max number of items reserved ... etc.
+- stock level sync from inventory service
+- product price sync from store-front service
+- place an order
+- order-line return request
+- order request and return sync between inventory and payment services
+- permission model and quota resource control
+
 
 ## Essential Environment Variables
 |variable|description|example|
@@ -14,7 +23,7 @@
 |------|------|------------------|
 | SQL Database | MariaDB | `10.3.22` |
 | AMQP broker | RabbitMQ | `3.2.4` |
-| Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.67.1` |
+| Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.75.0` |
 | DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
 
 ### Optional features
@@ -122,4 +131,7 @@ SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
 Note :
 - remind the option `--features mariadb` can be used for integration test, once added to the command, this option will propagate to `order` crate .
 
+
+### Reference
+- [API documentation (OpenAPI v3.0 specification)](./doc/api/openapi.yaml)
 
