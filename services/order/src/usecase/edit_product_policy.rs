@@ -16,7 +16,7 @@ use crate::error::{AppErrorCode, AppError};
 use crate::rpc::{AbstractRpcContext, AppRpcClientReqProperty};
 use crate::logging::{app_log_event, AppLogLevel, AppLogContext};
 
-use crate::api::web::dto::{ProductPolicyDto, ProductPolicyClientErrorDto};
+use crate::api::web::dto::{ProductPolicyDto, ProductPolicyClientErrorDto, QuotaResourceErrorDto};
 
 use super::{initiate_rpc_request, AppUCrunRPCfn, AppUseKsRPCreply};
 
@@ -45,7 +45,8 @@ pub struct ProductInfoResp {
 #[derive(PartialEq, Debug)]
 pub enum EditProductPolicyResult {
     OK, PermissionDeny,
-    QuotaExceed(usize, usize),
+    QuotaExceed(QuotaResourceErrorDto),
+    ClientError(Vec<ProductPolicyClientErrorDto>),
     Other(AppErrorCode),
 }
 
@@ -56,26 +57,26 @@ impl EditProductPolicyUseCase
     {
         let perm_allowed = authed_usr.contain_permission(AppAuthPermissionCode::can_create_product_policy);
         if perm_allowed {
-            let limit = authed_usr.quota_limit(AppAuthQuotaMatCode::NumProductPolicies) as usize;
-            if limit >= num_items {
+            let limit = authed_usr.quota_limit(AppAuthQuotaMatCode::NumProductPolicies);
+            if (limit as usize) >= num_items {
                 Ok(())
             } else {
-                Err(EditProductPolicyResult::QuotaExceed(limit, num_items))
+                let err = QuotaResourceErrorDto{max_:limit, given:num_items};
+                Err(EditProductPolicyResult::QuotaExceed(err))
             }
         } else {
             Err(EditProductPolicyResult::PermissionDeny)
         }
     }
 
-    pub async fn execute(self) -> (
-        EditProductPolicyResult, Option<Vec<ProductPolicyClientErrorDto>>
-    ) {
+    pub async fn execute(self) -> EditProductPolicyResult
+    {
         if let Err(e) = Self::validate_permission_quota(&self.authed_usr, self.data.len())
-        { return (e, None); }
+        { return e; }
         let Self {authed_usr, data, log, rpc_ctx, dstore,
             rpc_serialize_msg, rpc_deserialize_msg } = self; 
         if let Err(ce) = ProductPolicyModelSet::validate(&data) {
-            return (EditProductPolicyResult::Other(AppErrorCode::InvalidInput), Some(ce));
+            return EditProductPolicyResult::ClientError(ce);
         }
         let usr_prof_id = authed_usr.profile;
         let rpctype = rpc_ctx.label();
@@ -89,12 +90,11 @@ impl EditProductPolicyUseCase
                 app_log_event!(log, AppLogLevel::WARNING, "dummy-rpc-applied");
             } else {
                 app_log_event!(log, AppLogLevel::ERROR, "detail:{:?}", detail);
-                return (code, None);
-            } 
+                return code;
+            }
         } else if let Ok(missing_prod_ids) = result {
             if !missing_prod_ids.is_empty() {
                 app_log_event!(log, AppLogLevel::ERROR, "missing_prod_ids:{:?}", missing_prod_ids);
-                let code = EditProductPolicyResult::Other(AppErrorCode::InvalidInput);
                 let c_err = missing_prod_ids.into_iter().map(
                     |(product_type, product_id)|
                         ProductPolicyClientErrorDto { product_id, product_type,
@@ -102,18 +102,18 @@ impl EditProductPolicyUseCase
                             warranty_hours:None, auto_cancel_secs: None, num_rsv:None
                         }
                 ).collect();
-                return (code, Some(c_err));
+                return EditProductPolicyResult::ClientError(c_err);
             }
         }
         if let Err(e) = Self::_save_to_repo(dstore, data).await
         { // no need to pass `usr_prof_id`, the product ownership should be verified by previous RPC
             app_log_event!(log, AppLogLevel::ERROR, "error:{:?}", e);
-            (EditProductPolicyResult::Other(e.code), None)
-        } else {
-            (EditProductPolicyResult::OK, None)
-        }
+            EditProductPolicyResult::Other(e.code)
+        } else { EditProductPolicyResult::OK }
     } // end of _execute
 
+    // TODO, check whether the user has permission to edit specific product, this relies
+    // on validation by RPC call to `storefront` service
 
     pub async fn check_product_existence (
         data: &Vec<ProductPolicyDto>,

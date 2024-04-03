@@ -568,7 +568,7 @@ async fn add_product_policy_quota_violation() -> DefaultResult<(), AppError>
     let _resp_rawbytes = {// ---- subcase 2 ----
         let r = itest_setup_product_policy(
             top_lvl_cfg.clone(), srv.clone(), FPATH_EDIT_PRODUCTPOLICY_ERR,
-            mock_auth_claim, StatusCode::PAYLOAD_TOO_LARGE
+            mock_auth_claim, StatusCode::FORBIDDEN
         ).await;
         r.to_vec()
     };

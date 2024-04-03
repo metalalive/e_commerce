@@ -19,34 +19,30 @@ use crate::usecase::{
     EditProductPolicyUseCase, EditProductPolicyResult, ProductInfoReq, ProductInfoResp
 };
 
-use super::dto::ProductPolicyClientErrorDto;
 
-
-fn presenter(
-    result: EditProductPolicyResult,
-    client_err: Option<Vec<ProductPolicyClientErrorDto>>
-) -> impl IntoResponse
+fn presenter(result: EditProductPolicyResult) -> impl IntoResponse
 {
     let resp_ctype_val = HttpHeaderValue::from_str(AppConst::HTTP_CONTENT_TYPE_JSON).unwrap();
     let mut hdr_map = HttpHeaderMap::new();
     hdr_map.insert(HttpHeader::CONTENT_TYPE, resp_ctype_val);
     let default_body = "{}".to_string();
-    let status = match result {
-        EditProductPolicyResult::OK => HttpStatusCode::OK,
-        EditProductPolicyResult::PermissionDeny => HttpStatusCode::FORBIDDEN,
-        EditProductPolicyResult::QuotaExceed(_limit, _given) => HttpStatusCode::PAYLOAD_TOO_LARGE,
-        EditProductPolicyResult::Other(ec) =>
-            match ec {
-                AppErrorCode::InvalidInput => HttpStatusCode::BAD_REQUEST,
+    let (status, serial_resp_body) = match result {
+        EditProductPolicyResult::OK => (HttpStatusCode::OK, default_body),
+        EditProductPolicyResult::PermissionDeny => (HttpStatusCode::FORBIDDEN, default_body),
+        EditProductPolicyResult::QuotaExceed(detail) => 
+             (HttpStatusCode::FORBIDDEN, serde_json::to_string(&detail).unwrap()),
+        EditProductPolicyResult::ClientError(ce) => (
+            HttpStatusCode::BAD_REQUEST, serde_json::to_value(ce).unwrap().to_string()
+        ),
+        EditProductPolicyResult::Other(ec) => {
+            let s = match ec {
                 AppErrorCode::RpcRemoteUnavail => HttpStatusCode::SERVICE_UNAVAILABLE,
                 AppErrorCode::RpcRemoteInvalidReply => HttpStatusCode::NOT_IMPLEMENTED,
                 _others => HttpStatusCode::INTERNAL_SERVER_ERROR,
-            }
-    }; // TODO, refactor error response
-    let serial_resp_body = if let Some(ce) = client_err {
-        let value = serde_json::to_value(ce).unwrap();
-        value.to_string()
-    } else { default_body.clone() } ;
+            };
+            (s, default_body)
+        }
+    };
     (status, hdr_map, serial_resp_body)
 } // end of fn presenter
 
@@ -73,8 +69,8 @@ pub(super) async fn post_handler(
         data: req_body, log, dstore, rpc_ctx, authed_usr, rpc_deserialize_msg ,
         rpc_serialize_msg: py_celery_serialize::<ProductInfoReq>,
     };
-    let (result, client_err) = input.execute().await ;
-    presenter(result, client_err)
+    let result = input.execute().await ;
+    presenter(result)
 } // end of endpoint
 
 fn  _rpc_deserialize_dummy(_raw:&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>

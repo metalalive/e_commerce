@@ -46,7 +46,7 @@ pub struct OLineCreateErrorRsvLimitDto {
     pub given: u32,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct QuotaResourceErrorDto {
     pub max_: u32,
     pub given: usize,
@@ -181,18 +181,18 @@ pub struct ProductPolicyDto {
     pub min_num_rsv: Option<u16>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 pub struct ProductPolicyClientLimitDto {
     pub given:u32,
     pub limit:u32
 }
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 pub struct ProductPolicyNumRsvLimitDto {
     pub min_items: u16,
     pub max_items: u16,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 pub struct ProductPolicyClientErrorDto
 {
     #[serde(serialize_with="jsn_serialize_product_type")]
