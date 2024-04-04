@@ -73,16 +73,8 @@ impl AppSharedState {
             rpc::build_context(&cfg.api_server.rpc, log.clone(), confidential.clone()).unwrap();
         let (in_mem, sql_dbs) =
             datastore::build_context(log.clone(), &cfg.api_server.data_store, confidential);
-        let in_mem = if let Some(m) = in_mem {
-            Some(Arc::new(m))
-        } else {
-            None
-        };
-        let sql_dbs = if let Some(m) = sql_dbs {
-            Some(m.into_iter().map(Arc::new).collect())
-        } else {
-            None
-        };
+        let in_mem = in_mem.map(Arc::new);
+        let sql_dbs = sql_dbs.map(|m| m.into_iter().map(Arc::new).collect());
         let ds_ctx = Arc::new(AppDataStoreContext { in_mem, sql_dbs });
         let auth_keys = AppAuthKeystore::new(&cfg.api_server.auth);
         Self {

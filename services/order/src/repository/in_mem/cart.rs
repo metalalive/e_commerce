@@ -16,24 +16,26 @@ use crate::repository::AbsCartRepo;
 #[allow(non_snake_case)]
 mod CartTable {
     use super::{AppInMemFetchedSingleRow, AppInMemFetchedSingleTable, CartModel, HashMap};
+
+    #[allow(clippy::redundant_static_lifetimes)]
     pub(super) const LABEL: &'static str = "cart_metadata";
+
     pub(super) struct UpdateArg<'a>(pub(super) &'a CartModel);
 
     fn pkey(usr_id: u32, seq: u8) -> String {
         format!("{usr_id}-{seq}")
     }
 
-    impl Into<AppInMemFetchedSingleRow> for UpdateArg<'_> {
-        fn into(self) -> AppInMemFetchedSingleRow {
-            let obj = self.0;
+    impl From<UpdateArg<'_>> for AppInMemFetchedSingleRow {
+        fn from(value: UpdateArg<'_>) -> AppInMemFetchedSingleRow {
+            let obj = value.0;
             vec![obj.title.clone()]
         }
     }
-    impl Into<AppInMemFetchedSingleTable> for UpdateArg<'_> {
-        fn into(self) -> AppInMemFetchedSingleTable {
-            let key = pkey(self.0.owner, self.0.seq_num);
-            let value = self.into();
-            HashMap::from([(key, value)])
+    impl From<UpdateArg<'_>> for AppInMemFetchedSingleTable {
+        fn from(value: UpdateArg<'_>) -> AppInMemFetchedSingleTable {
+            let key = pkey(value.0.owner, value.0.seq_num);
+            HashMap::from([(key, value.into())])
         }
     }
 } // end of inner-mod CartTable
@@ -41,7 +43,10 @@ mod CartTable {
 #[allow(non_snake_case)]
 mod CartLineTable {
     use super::{AppInMemFetchedSingleTable, BaseProductIdentity, CartModel, HashMap};
+
+    #[allow(clippy::redundant_static_lifetimes)]
     pub(super) const LABEL: &'static str = "cart_line";
+
     pub(super) struct UpdateArg(pub(super) CartModel);
 
     fn pkey(usr_id: u32, seq: u8, id_: BaseProductIdentity) -> String {
@@ -52,15 +57,15 @@ mod CartLineTable {
         )
     }
 
-    impl Into<AppInMemFetchedSingleTable> for UpdateArg {
-        fn into(self) -> AppInMemFetchedSingleTable {
+    impl From<UpdateArg> for AppInMemFetchedSingleTable {
+        fn from(value: UpdateArg) -> AppInMemFetchedSingleTable {
             let (usr_id, seq, mut saved_lines, new_lines) = (
-                self.0.owner,
-                self.0.seq_num,
-                self.0.saved_lines,
-                self.0.new_lines,
+                value.0.owner,
+                value.0.seq_num,
+                value.0.saved_lines,
+                value.0.new_lines,
             );
-            saved_lines.extend(new_lines.into_iter());
+            saved_lines.extend(new_lines);
             let iter0 = saved_lines.into_iter().map(|line| {
                 let (id_, qty) = (line.id_, line.qty_req);
                 let key = pkey(usr_id, seq, id_);
@@ -79,7 +84,7 @@ struct InnerFilterKeyOp {
 }
 impl AbsDStoreFilterKeyOp for InnerFilterKeyOp {
     fn filter(&self, k: &String, _v: &Vec<String>) -> bool {
-        let mut tokens = k.split("-");
+        let mut tokens = k.split('-');
         let (curr_usr, curr_seq_num) = (
             tokens.next().unwrap().parse::<u32>().unwrap(),
             tokens.next().unwrap().parse::<u8>().unwrap(),
@@ -107,7 +112,7 @@ impl TryFrom<(String, Vec<String>)> for CartLineModel {
     type Error = AppError;
     fn try_from(value: (String, Vec<String>)) -> DefaultResult<Self, Self::Error> {
         let (key, mut row) = (value.0, value.1);
-        let mut tokens = key.split("-");
+        let mut tokens = key.split('-');
         // skip first two token, user-id and seq-num
         let _usr_id = tokens.next();
         let _seq_num = tokens.next();
@@ -132,7 +137,7 @@ impl TryFrom<(String, Vec<String>)> for CartLineModel {
 impl From<(String, Vec<String>, Vec<CartLineModel>)> for CartModel {
     fn from(value: (String, Vec<String>, Vec<CartLineModel>)) -> Self {
         let (key, mut row, saved_lines) = (value.0, value.1, value.2);
-        let mut tokens = key.split("-");
+        let mut tokens = key.split('-');
         let (owner, seq_num) = (
             tokens.next().unwrap().parse().unwrap(),
             tokens.next().unwrap().parse().unwrap(),

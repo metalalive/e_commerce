@@ -129,9 +129,8 @@ pub mod middleware {
                         })
                         .collect::<Vec<http::Method>>();
                     if val.ALLOWED_METHODS.len() > methods.len() {
-                        let detail = format!("invalid-allowed-method");
                         return Err(AppError {
-                            detail: Some(detail),
+                            detail: Some("invalid-allowed-method".to_string()),
                             code: AppErrorCode::InvalidInput,
                         });
                     }
@@ -147,9 +146,8 @@ pub mod middleware {
                         || !headers.contains(&http::header::CONTENT_TYPE)
                         || !headers.contains(&http::header::ACCEPT)
                     {
-                        let detail = format!("invalid-allowed-header");
                         return Err(AppError {
-                            detail: Some(detail),
+                            detail: Some("invalid-allowed-header".to_string()),
                             code: AppErrorCode::InvalidInput,
                         });
                     }
@@ -179,8 +177,7 @@ pub mod middleware {
     } // end of fn cors_middleware
 
     pub fn req_body_limit(limit: usize) -> RequestBodyLimitLayer {
-        let reqlm = RequestBodyLimitLayer::new(limit);
-        reqlm
+        RequestBodyLimitLayer::new(limit)
     }
 
     pub enum ShutdownExpRespBody<B> {
@@ -216,8 +213,7 @@ pub mod middleware {
                 match self.get_unchecked_mut() {
                     Self::ShuttingDown { inner } => {
                         let pinned = Pin::new(inner);
-                        let result = pinned.poll_data(cx).map_err(|err| match err {});
-                        result
+                        pinned.poll_data(cx).map_err(|err| match err {})
                     }
                     Self::Normal { inner } => {
                         let pinned = Pin::new(inner);
@@ -259,6 +255,7 @@ pub mod middleware {
 
     impl<S, RespBody> ShutdownDetection<S, RespBody> {
         fn new(flag: Arc<AtomicBool>, num_reqs: Arc<AtomicU32>, inner: S) -> Self {
+            #[allow(clippy::default_constructed_unit_structs)]
             let _ghost = std::marker::PhantomData::default();
             Self {
                 inner,
@@ -325,6 +322,7 @@ pub mod middleware {
     } // end of impl ShutdownDetection
     impl<RespBody> ShutdownDetectionLayer<RespBody> {
         pub fn new(flag: Arc<AtomicBool>, num_reqs: Arc<AtomicU32>) -> Self {
+            #[allow(clippy::default_constructed_unit_structs)]
             let _ghost = std::marker::PhantomData::default();
             Self {
                 flag,
@@ -349,7 +347,7 @@ pub mod middleware {
             Self {
                 flag: self.flag.clone(),
                 num_reqs: self.num_reqs.clone(),
-                _ghost: self._ghost.clone(),
+                _ghost: self._ghost,
             }
         }
     }
@@ -362,7 +360,7 @@ pub mod middleware {
                 inner: self.inner.clone(),
                 flag: self.flag.clone(),
                 num_reqs: self.num_reqs.clone(),
-                _ghost: self._ghost.clone(),
+                _ghost: self._ghost,
             }
         }
     }
@@ -372,7 +370,7 @@ pub fn net_server_listener(
     mut domain_host: String,
     port: u16,
 ) -> DefaultResult<HyperSrvBuilder<AddrIncoming>, AppError> {
-    if !domain_host.contains(":") {
+    if !domain_host.contains(':') {
         domain_host += &":0";
     }
     match domain_host.to_socket_addrs() {
@@ -380,9 +378,8 @@ pub fn net_server_listener(
             match iterator.next() {
                 Some(mut addr) => {
                     addr.set_port(port);
-                    match HyperServer::try_bind(&addr) {
-                        Ok(b) => break Ok(b),
-                        Err(_) => {}
+                    if let Ok(b) = HyperServer::try_bind(&addr) {
+                        break Ok(b);
                     }
                 }
                 None => {

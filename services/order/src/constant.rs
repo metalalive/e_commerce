@@ -5,17 +5,17 @@ use crate::error::{AppError, AppErrorCode};
 use crate::WebApiHdlrLabel;
 
 pub mod app_meta {
-    pub const LABAL: &'static str = "order";
+    pub const LABAL: &str = "order";
     pub const MACHINE_CODE: u8 = 1;
     // TODO, machine code to UUID generator should be configurable
     pub const RESOURCE_QUOTA_AP_CODE: u8 = 4;
 }
 
-pub const ENV_VAR_SYS_BASE_PATH: &'static str = "SYS_BASE_PATH";
-pub const ENV_VAR_SERVICE_BASE_PATH: &'static str = "SERVICE_BASE_PATH";
-pub const ENV_VAR_CONFIG_FILE_PATH: &'static str = "CONFIG_FILE_PATH";
+pub const ENV_VAR_SYS_BASE_PATH: &str = "SYS_BASE_PATH";
+pub const ENV_VAR_SERVICE_BASE_PATH: &str = "SERVICE_BASE_PATH";
+pub const ENV_VAR_CONFIG_FILE_PATH: &str = "CONFIG_FILE_PATH";
 
-pub const EXPECTED_ENV_VAR_LABELS: [&'static str; 3] = [
+pub const EXPECTED_ENV_VAR_LABELS: [&str; 3] = [
     ENV_VAR_SYS_BASE_PATH,
     ENV_VAR_SERVICE_BASE_PATH,
     ENV_VAR_CONFIG_FILE_PATH,
@@ -64,7 +64,7 @@ pub(crate) mod api {
             "order_reserved_discard_unpaid";
 
         pub(crate) fn extract_handler_label(path: &str) -> DefaultResult<&str, AppError> {
-            let mut tokens = path.split(".").collect::<Vec<&str>>();
+            let mut tokens = path.split('.').collect::<Vec<&str>>();
             if tokens.len() == 3 {
                 Self::check_header_label(tokens.remove(0))?;
                 Self::check_service_label(tokens.remove(0))?;
@@ -126,7 +126,11 @@ pub(crate) mod api {
 
 pub(crate) const HTTP_CONTENT_TYPE_JSON: &str = "application/json";
 
-#[derive(Debug, Eq, Hash)]
+// standard library hides the default implementation of the trait `PartialEq`
+// somewhere in compiler code, the trait `Hash` seems to prefer the default
+// code working with itself, it is needless to implement trait `PartialEq`
+// for `ProductType` at here.
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub enum ProductType {
     Item,
     Package,
@@ -142,30 +146,20 @@ impl From<u8> for ProductType {
         }
     }
 }
-impl Into<u8> for ProductType {
-    fn into(self) -> u8 {
-        match self {
-            Self::Unknown(v) => v,
-            Self::Item => 1,
-            Self::Package => 2,
+impl From<ProductType> for u8 {
+    fn from(value: ProductType) -> u8 {
+        match value {
+            ProductType::Unknown(v) => v,
+            ProductType::Item => 1,
+            ProductType::Package => 2,
         }
-    }
-}
-impl PartialEq for ProductType {
-    fn eq(&self, other: &Self) -> bool {
-        let a: u8 = self.clone().into();
-        let b: u8 = other.clone().into();
-        a == b
-    }
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
     }
 }
 impl Clone for ProductType {
     fn clone(&self) -> Self {
         match self {
             Self::Item => Self::Item,
-            Self::Unknown(v) => Self::Unknown(v.clone()),
+            Self::Unknown(v) => Self::Unknown(*v),
             Self::Package => Self::Package,
         }
     }
@@ -186,11 +180,12 @@ impl FromStr for ProductType {
     }
 }
 
-pub(crate) const REGEX_EMAIL_RFC5322: &'static str = r#"(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])"#;
+pub(crate) const REGEX_EMAIL_RFC5322: &str = r#"(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])"#;
 
 pub(crate) mod logging {
     use serde::Deserialize;
 
+    #[allow(clippy::upper_case_acronyms)]
     #[derive(Deserialize)]
     pub enum Level {
         TRACE,
@@ -201,6 +196,7 @@ pub(crate) mod logging {
         FATAL,
     }
 
+    #[allow(clippy::upper_case_acronyms)]
     #[derive(Deserialize)]
     #[serde(rename_all = "lowercase")]
     pub enum Destination {

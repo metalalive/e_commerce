@@ -17,6 +17,18 @@
 |`CONFIG_FILE_PATH`| path relative to `SERVICE_BASE_PATH` folder, it is JSON configuration file | `settings/development.json` |
 ||||
 
+## Development
+Be sure to run the 2 commands below before building / running the applications
+### Code formatter
+The command below reformat test / production code which meet the [styling requirement](https://github.com/rust-lang/rust/tree/HEAD/src/doc/style-guide/src)
+```shell
+cargo  fmt
+```
+### Linter
+```shell
+cargo  clippy
+```
+
 ## Build
 ### Pre-requisite
 | type | name | version required |

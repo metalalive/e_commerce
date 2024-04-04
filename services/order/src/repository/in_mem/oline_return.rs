@@ -17,9 +17,11 @@ mod _oline_return {
     use crate::datastore::AbsDStoreFilterKeyOp;
     use crate::model::{OrderLinePriceModel, OrderReturnQuantityModel};
 
+    #[allow(clippy::redundant_static_lifetimes)]
     pub(super) const TABLE_LABEL: &'static str = "order_line_return";
-    pub(super) const QTY_DELIMITER: &'static str = "/";
-    pub(super) const QTY_KEY_FORMAT: &'static str = "%Y%m%d%H%M%S%z";
+    // static lifetime annotated by default
+    pub(super) const QTY_DELIMITER: &str = "/";
+    pub(super) const QTY_KEY_FORMAT: &str = "%Y%m%d%H%M%S%z";
 
     pub(super) enum InMemColIdx {
         SellerID,
@@ -28,14 +30,14 @@ mod _oline_return {
         QtyRefund,
         TotNumColumns,
     }
-    impl Into<usize> for InMemColIdx {
-        fn into(self) -> usize {
-            match self {
-                Self::SellerID => 0,
-                Self::ProductType => 1,
-                Self::ProductId => 2,
-                Self::QtyRefund => 3,
-                Self::TotNumColumns => 4,
+    impl From<InMemColIdx> for usize {
+        fn from(value: InMemColIdx) -> usize {
+            match value {
+                InMemColIdx::SellerID => 0,
+                InMemColIdx::ProductType => 1,
+                InMemColIdx::ProductId => 2,
+                InMemColIdx::QtyRefund => 3,
+                InMemColIdx::TotNumColumns => 4,
             }
         }
     }
@@ -49,7 +51,7 @@ mod _oline_return {
         format!("{oid}-{seller_id}-{prod_typ}-{prod_id}")
     }
     pub(super) fn inmem_get_oid(pkey: &str) -> &str {
-        pkey.split("-").next().unwrap()
+        pkey.split('-').next().unwrap()
     }
     pub(super) fn inmem_qty2col(saved: Option<String>, map: OrderReturnQuantityModel) -> String {
         let orig = if let Some(s) = saved {
@@ -62,7 +64,7 @@ mod _oline_return {
             .map(|(time, (qty, refund))| {
                 format!(
                     "{} {} {} {}",
-                    time.format(QTY_KEY_FORMAT).to_string(),
+                    time.format(QTY_KEY_FORMAT),
                     qty,
                     refund.unit,
                     refund.total
@@ -74,7 +76,7 @@ mod _oline_return {
     }
     pub(super) fn inmem_col2qty(raw: String) -> OrderReturnQuantityModel {
         let iter = raw.split(QTY_DELIMITER).map(|tkn| {
-            let mut tokens = tkn.split(" ");
+            let mut tokens = tkn.split(' ');
             let (time, q, unit, total) = (
                 DateTime::parse_from_str(tokens.next().unwrap(), QTY_KEY_FORMAT).unwrap(),
                 tokens.next().unwrap().parse().unwrap(),
@@ -115,9 +117,7 @@ mod _oline_return {
                 let col_idx: usize = InMemColIdx::QtyRefund.into();
                 let qty_raw = row.get(col_idx).unwrap();
                 let map = inmem_col2qty(qty_raw.clone());
-                map.keys()
-                    .into_iter()
-                    .any(|t| ((&self.t0 <= t) && (t <= &self.t1)))
+                map.keys().any(|t| ((&self.t0 <= t) && (t <= &self.t1)))
             } else {
                 false
             }
@@ -137,7 +137,6 @@ impl From<InsertOpArg> for AppInMemFetchedSingleRow {
         let (id_, map) = (model.id_, model.qty);
         let qty_serial = _oline_return::inmem_qty2col(serial_saved_qty, map);
         let mut rows = (0.._oline_return::InMemColIdx::TotNumColumns.into())
-            .into_iter()
             .map(|_n| String::new())
             .collect::<Self>();
         let _ = [
@@ -165,25 +164,29 @@ impl From<InsertOpArg> for AppInMemFetchedSingleRow {
     }
 } // end of impl AppInMemFetchedSingleRow
 
-impl Into<OrderReturnModel> for AppInMemFetchedSingleRow {
-    fn into(self) -> OrderReturnModel {
+impl From<AppInMemFetchedSingleRow> for OrderReturnModel {
+    fn from(value: AppInMemFetchedSingleRow) -> OrderReturnModel {
         let (store_id, product_id, prod_typ_num, qty_serial) = (
-            self.get::<usize>(_oline_return::InMemColIdx::SellerID.into())
+            value
+                .get::<usize>(_oline_return::InMemColIdx::SellerID.into())
                 .unwrap()
                 .to_owned()
                 .parse()
                 .unwrap(),
-            self.get::<usize>(_oline_return::InMemColIdx::ProductId.into())
+            value
+                .get::<usize>(_oline_return::InMemColIdx::ProductId.into())
                 .unwrap()
                 .to_owned()
                 .parse()
                 .unwrap(),
-            self.get::<usize>(_oline_return::InMemColIdx::ProductType.into())
+            value
+                .get::<usize>(_oline_return::InMemColIdx::ProductType.into())
                 .unwrap()
                 .to_owned()
                 .parse::<u8>()
                 .unwrap(),
-            self.get::<usize>(_oline_return::InMemColIdx::QtyRefund.into())
+            value
+                .get::<usize>(_oline_return::InMemColIdx::QtyRefund.into())
                 .unwrap()
                 .to_owned(),
         );
@@ -324,7 +327,7 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
             let item = (pkey, m_serial);
             info.push(item);
         } // end of loop
-        let rows = HashMap::from_iter(info.into_iter());
+        let rows = HashMap::from_iter(info);
         let data = HashMap::from([(table_name, rows)]);
         let _num_saved_ds = self.datastore.save(data).await?;
         Ok(num_saved)

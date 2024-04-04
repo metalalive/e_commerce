@@ -4,7 +4,7 @@ use std::boxed::Box;
 use std::marker::{Send, Sync};
 use std::result::Result as DefaultResult;
 
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::{AppConfidentialCfg, AppConfig};
 
 pub use userspace::UserSpaceConfidentiality;
@@ -17,10 +17,6 @@ pub fn build_context(cfg: &AppConfig) -> DefaultResult<Box<dyn AbstractConfident
             let obj = UserSpaceConfidentiality::build(fullpath);
             Ok(Box::new(obj))
         }
-        _others => Err(AppError {
-            code: AppErrorCode::NoConfidentialityCfg,
-            detail: None,
-        }),
     }
 }
 

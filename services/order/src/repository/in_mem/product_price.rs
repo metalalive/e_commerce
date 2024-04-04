@@ -13,7 +13,7 @@ use crate::datastore::{AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemFetchKe
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{ProductPriceModel, ProductPriceModelSet};
 
-const TABLE_LABEL: &'static str = "product_price";
+const TABLE_LABEL: &str = "product_price";
 
 enum InMemColIdx {
     Price,
@@ -25,6 +25,7 @@ enum InMemColIdx {
     TotNumColumns,
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<usize> for InMemColIdx {
     fn into(self) -> usize {
         match self {
@@ -82,17 +83,17 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         let _ids = {
             let mut out = vec![];
             if let Some(p) = &ids.pkgs {
-                out.extend(p.iter().map(|id| (ids.pkg_type.clone(), id.clone())));
-            }
+                out.extend(p.iter().map(|id| (ids.pkg_type.clone(), *id)));
+            } // implicitly copy integer `id` by de-referencing the pointer
             if let Some(p) = &ids.items {
-                out.extend(p.iter().map(|id| (ids.item_type.clone(), id.clone())));
+                out.extend(p.iter().map(|id| (ids.item_type.clone(), *id)));
             }
             out
         };
         if _ids.is_empty() {
             Err(AppError {
                 code: AppErrorCode::EmptyInputData,
-                detail: Some(format!("deleting-prodcut-price-id")),
+                detail: Some("deleting-prodcut-price-id".to_string()),
             })
         } else {
             let allkeys = self.gen_id_keys(store_id, _ids);
@@ -159,18 +160,13 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         if ppset.store_id == 0 || ppset.items.is_empty() {
             return Err(AppError {
                 code: AppErrorCode::EmptyInputData,
-                detail: Some(format!("save ProductPriceModel")),
+                detail: Some("save ProductPriceModel".to_string()),
             });
         }
         let kv_pairs = ppset.items.iter().map(|m| {
-            let store_id_str = ppset.store_id.to_string();
+            let (store_id, product_id) = (ppset.store_id, m.product_id);
             let prod_typ_num: u8 = m.product_type.clone().into();
-            let pkey = format!(
-                "{}-{}-{}",
-                store_id_str,
-                prod_typ_num.to_string(),
-                m.product_id.to_string()
-            );
+            let pkey = format!("{store_id}-{prod_typ_num}-{product_id}");
             // manually allocate space in advance, instead of `Vec::with_capacity`
             let mut row = (0..InMemColIdx::TotNumColumns.into())
                 .map(|_n| String::new())
@@ -211,7 +207,7 @@ impl ProductPriceInMemRepo {
         ids.into_iter()
             .map(|(_typ, _id)| {
                 let typnum: u8 = _typ.into();
-                format!("{store_id}-{}-{}", typnum.to_string(), _id.to_string())
+                format!("{store_id}-{typnum}-{_id}")
             })
             .collect()
     }
@@ -223,7 +219,7 @@ impl ProductPriceInMemRepo {
         let result_raw = self.datastore.fetch(ids).await?;
         let out = if let Some(t) = result_raw.get(TABLE_LABEL) {
             // TODO, reliability check
-            t.into_iter()
+            t.iter()
                 .map(|(_key, row)| {
                     let prod_typ_num: u8 = row
                         .get::<usize>(InMemColIdx::ProductType.into())

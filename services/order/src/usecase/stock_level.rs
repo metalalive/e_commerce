@@ -36,7 +36,7 @@ impl StockLevelUseCase {
             saved.stores.len()
         );
         let updated = saved.update(data)?;
-        let _ = stockrepo.save(updated.clone()).await?;
+        stockrepo.save(updated.clone()).await?;
         Ok(updated.into())
     }
 

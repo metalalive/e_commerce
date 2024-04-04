@@ -26,8 +26,8 @@ use super::StockLvlInMemRepo;
 mod _contact {
     use super::{AppInMemFetchedSingleRow, ContactModel, HashMap};
 
-    pub(super) const MULTI_VAL_COLUMN_SEPARATOR: &'static str = " ";
-    pub(super) const TABLE_LABEL: &'static str = "order_contact";
+    pub(super) const MULTI_VAL_COLUMN_SEPARATOR: &str = " ";
+    pub(super) const TABLE_LABEL: &str = "order_contact";
     pub(super) enum InMemColIdx {
         FirstName,
         LastName,
@@ -35,14 +35,14 @@ mod _contact {
         Phones,
         TotNumColumns,
     }
-    impl Into<usize> for InMemColIdx {
-        fn into(self) -> usize {
-            match self {
-                Self::FirstName => 0,
-                Self::LastName => 1,
-                Self::Emails => 2,
-                Self::Phones => 3,
-                Self::TotNumColumns => 4,
+    impl From<InMemColIdx> for usize {
+        fn from(value: InMemColIdx) -> usize {
+            match value {
+                InMemColIdx::FirstName => 0,
+                InMemColIdx::LastName => 1,
+                InMemColIdx::Emails => 2,
+                InMemColIdx::Phones => 3,
+                InMemColIdx::TotNumColumns => 4,
             }
         }
     }
@@ -61,7 +61,7 @@ mod _contact {
 mod _phy_addr {
     use super::{AppInMemFetchedSingleRow, HashMap, PhyAddrModel};
 
-    pub(super) const TABLE_LABEL: &'static str = "order_phyaddr";
+    pub(super) const TABLE_LABEL: &str = "order_phyaddr";
     pub(super) enum InMemColIdx {
         Country,
         Region,
@@ -71,16 +71,16 @@ mod _phy_addr {
         Detail,
         TotNumColumns,
     }
-    impl Into<usize> for InMemColIdx {
-        fn into(self) -> usize {
-            match self {
-                Self::Country => 0,
-                Self::Region => 1,
-                Self::City => 2,
-                Self::Distinct => 3,
-                Self::Street => 4,
-                Self::Detail => 5,
-                Self::TotNumColumns => 6,
+    impl From<InMemColIdx> for usize {
+        fn from(value: InMemColIdx) -> usize {
+            match value {
+                InMemColIdx::Country => 0,
+                InMemColIdx::Region => 1,
+                InMemColIdx::City => 2,
+                InMemColIdx::Distinct => 3,
+                InMemColIdx::Street => 4,
+                InMemColIdx::Detail => 5,
+                InMemColIdx::TotNumColumns => 6,
             }
         }
     }
@@ -103,16 +103,16 @@ mod _ship_opt {
         Method,
         TotNumColumns,
     }
-    impl Into<usize> for InMemColIdx {
-        fn into(self) -> usize {
-            match self {
-                Self::SellerID => 0,
-                Self::Method => 1,
-                Self::TotNumColumns => 2,
+    impl From<InMemColIdx> for usize {
+        fn from(value: InMemColIdx) -> usize {
+            match value {
+                InMemColIdx::SellerID => 0,
+                InMemColIdx::Method => 1,
+                InMemColIdx::TotNumColumns => 2,
             }
         }
     }
-    pub(super) const TABLE_LABEL: &'static str = "order_shipping_option";
+    pub(super) const TABLE_LABEL: &str = "order_shipping_option";
     pub(super) fn to_inmem_tbl(
         oid: &str,
         data: Vec<ShippingOptionModel>,
@@ -129,7 +129,7 @@ mod _orderline {
     use super::{AppInMemFetchedSingleRow, HashMap, ProductType};
     use crate::model::OrderLineModel;
 
-    pub(super) const TABLE_LABEL: &'static str = "order_line_reserved";
+    pub(super) const TABLE_LABEL: &str = "order_line_reserved";
     pub(super) enum InMemColIdx {
         SellerID,
         ProductType,
@@ -143,20 +143,20 @@ mod _orderline {
         QtyPaidLastUpdate,
         TotNumColumns,
     }
-    impl Into<usize> for InMemColIdx {
-        fn into(self) -> usize {
-            match self {
-                Self::SellerID => 0,
-                Self::ProductType => 1,
-                Self::ProductId => 2,
-                Self::QtyReserved => 3,
-                Self::QtyPaid => 4,
-                Self::QtyPaidLastUpdate => 5,
-                Self::PriceUnit => 6,
-                Self::PriceTotal => 7,
-                Self::PolicyReserved => 8,
-                Self::PolicyWarranty => 9,
-                Self::TotNumColumns => 10,
+    impl From<InMemColIdx> for usize {
+        fn from(value: InMemColIdx) -> usize {
+            match value {
+                InMemColIdx::SellerID => 0,
+                InMemColIdx::ProductType => 1,
+                InMemColIdx::ProductId => 2,
+                InMemColIdx::QtyReserved => 3,
+                InMemColIdx::QtyPaid => 4,
+                InMemColIdx::QtyPaidLastUpdate => 5,
+                InMemColIdx::PriceUnit => 6,
+                InMemColIdx::PriceTotal => 7,
+                InMemColIdx::PolicyReserved => 8,
+                InMemColIdx::PolicyWarranty => 9,
+                InMemColIdx::TotNumColumns => 10,
             }
         }
     }
@@ -171,7 +171,7 @@ mod _orderline {
     }
     pub(super) fn to_inmem_tbl(
         oid: &str,
-        data: &Vec<OrderLineModel>,
+        data: &[OrderLineModel],
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
         let kv_iter = data.iter().map(|m| {
             let pkey = inmem_pkey(
@@ -189,7 +189,7 @@ mod _orderline {
         flattened
             .into_iter()
             .map(|key| {
-                let oid = key.split("-").next().unwrap();
+                let oid = key.split('-').next().unwrap();
                 if let Some(v) = out.get_mut(oid) {
                     v.push(key);
                 } else {
@@ -204,16 +204,16 @@ mod _orderline {
 mod _order_toplvl_meta {
     use super::{AppInMemFetchedSingleRow, HashMap, OrderLineModelSet};
 
-    pub(super) const TABLE_LABEL: &'static str = "order_toplvl_meta";
+    pub(super) const TABLE_LABEL: &str = "order_toplvl_meta";
     pub(super) enum InMemColIdx {
         OwnerUsrID,
         CreateTime,
     }
-    impl Into<usize> for InMemColIdx {
-        fn into(self) -> usize {
-            match self {
-                Self::OwnerUsrID => 0,
-                Self::CreateTime => 1,
+    impl From<InMemColIdx> for usize {
+        fn from(value: InMemColIdx) -> usize {
+            match value {
+                InMemColIdx::OwnerUsrID => 0,
+                InMemColIdx::CreateTime => 1,
             }
         }
     }
@@ -230,15 +230,15 @@ mod _pkey_partial_label {
     use super::{DateTime, FixedOffset};
     use crate::datastore::AbsDStoreFilterKeyOp;
 
-    pub(super) const BILLING: &'static str = "billing";
-    pub(super) const SHIPPING: &'static str = "shipping";
+    pub(super) const BILLING: &str = "billing";
+    pub(super) const SHIPPING: &str = "shipping";
     pub(super) struct InMemDStoreFiltKeyOID<'a> {
         pub oid: &'a str,
         pub label: Option<&'a str>,
     }
     impl<'a> AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOID<'a> {
         fn filter(&self, k: &String, _v: &Vec<String>) -> bool {
-            let mut id_elms = k.split("-");
+            let mut id_elms = k.split('-');
             let oid_rd = id_elms.next().unwrap();
             let label_rd = id_elms.next().unwrap();
             let mut cond = self.oid == oid_rd;
@@ -282,7 +282,7 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
         let mut row = (0.._orderline::InMemColIdx::TotNumColumns.into())
             .map(|_num| String::new())
             .collect::<Self>();
-        let _ = [
+        [
             (
                 _orderline::InMemColIdx::QtyReserved,
                 value.qty.reserved.to_string(),
@@ -317,13 +317,13 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
             let idx: usize = idx.into();
             row[idx] = val;
         })
-        .collect::<()>();
+        .count();
         row
     }
 } // end of impl From for OrderLineModel reference
-impl Into<OrderLineModel> for AppInMemFetchedSingleRow {
-    fn into(self) -> OrderLineModel {
-        let row = self;
+impl From<AppInMemFetchedSingleRow> for OrderLineModel {
+    fn from(value: AppInMemFetchedSingleRow) -> OrderLineModel {
+        let row = value;
         let seller_id = row
             .get::<usize>(_orderline::InMemColIdx::SellerID.into())
             .unwrap()
@@ -410,7 +410,7 @@ impl From<ContactModel> for AppInMemFetchedSingleRow {
         let phones_str = value
             .phones
             .iter()
-            .map(|d| format!("{}-{}", d.nation.to_string(), d.number))
+            .map(|d| format!("{}-{}", d.nation, d.number))
             .collect::<Vec<String>>();
         let mut row = (0.._contact::InMemColIdx::TotNumColumns.into())
             .map(|_num| String::new())
@@ -436,32 +436,32 @@ impl From<ContactModel> for AppInMemFetchedSingleRow {
         row
     }
 }
-impl Into<ContactModel> for AppInMemFetchedSingleRow {
-    fn into(self) -> ContactModel {
-        let emails = self
+impl From<AppInMemFetchedSingleRow> for ContactModel {
+    fn from(value: AppInMemFetchedSingleRow) -> ContactModel {
+        let emails = value
             .get::<usize>(_contact::InMemColIdx::Emails.into())
             .unwrap()
             .split(_contact::MULTI_VAL_COLUMN_SEPARATOR)
-            .into_iter()
             .map(|s| s.to_string())
             .collect();
-        let phones = self
+        let phones = value
             .get::<usize>(_contact::InMemColIdx::Phones.into())
             .unwrap()
             .split(_contact::MULTI_VAL_COLUMN_SEPARATOR)
-            .into_iter()
             .map(|s| {
-                let mut s = s.split("-");
+                let mut s = s.split('-');
                 let nation = s.next().unwrap().parse().unwrap();
                 let number = s.next().unwrap().to_string();
                 PhoneNumberDto { nation, number }
             })
             .collect();
         let (first_name, last_name) = (
-            self.get::<usize>(_contact::InMemColIdx::FirstName.into())
+            value
+                .get::<usize>(_contact::InMemColIdx::FirstName.into())
                 .unwrap()
                 .to_owned(),
-            self.get::<usize>(_contact::InMemColIdx::LastName.into())
+            value
+                .get::<usize>(_contact::InMemColIdx::LastName.into())
                 .unwrap()
                 .to_owned(),
         );
@@ -479,7 +479,7 @@ impl From<PhyAddrModel> for AppInMemFetchedSingleRow {
         let mut row = (0.._phy_addr::InMemColIdx::TotNumColumns.into())
             .map(|_num| String::new())
             .collect::<Self>();
-        let _ = [
+        [
             (_phy_addr::InMemColIdx::Detail, value.detail),
             (_phy_addr::InMemColIdx::Distinct, value.distinct),
             (
@@ -495,30 +495,36 @@ impl From<PhyAddrModel> for AppInMemFetchedSingleRow {
             let idx: usize = idx.into();
             row[idx] = val;
         })
-        .collect::<()>();
+        .count();
         row
     }
 }
-impl Into<PhyAddrModel> for AppInMemFetchedSingleRow {
-    fn into(self) -> PhyAddrModel {
+impl From<AppInMemFetchedSingleRow> for PhyAddrModel {
+    fn from(value: AppInMemFetchedSingleRow) -> PhyAddrModel {
         let (country, region, city, distinct, street, detail) = (
-            self.get::<usize>(_phy_addr::InMemColIdx::Country.into())
+            value
+                .get::<usize>(_phy_addr::InMemColIdx::Country.into())
                 .unwrap()
                 .to_owned()
                 .into(),
-            self.get::<usize>(_phy_addr::InMemColIdx::Region.into())
+            value
+                .get::<usize>(_phy_addr::InMemColIdx::Region.into())
                 .unwrap()
                 .to_owned(),
-            self.get::<usize>(_phy_addr::InMemColIdx::City.into())
+            value
+                .get::<usize>(_phy_addr::InMemColIdx::City.into())
                 .unwrap()
                 .to_owned(),
-            self.get::<usize>(_phy_addr::InMemColIdx::Distinct.into())
+            value
+                .get::<usize>(_phy_addr::InMemColIdx::Distinct.into())
                 .unwrap()
                 .to_owned(),
-            self.get::<usize>(_phy_addr::InMemColIdx::Street.into())
+            value
+                .get::<usize>(_phy_addr::InMemColIdx::Street.into())
                 .unwrap()
                 .to_owned(),
-            self.get::<usize>(_phy_addr::InMemColIdx::Detail.into())
+            value
+                .get::<usize>(_phy_addr::InMemColIdx::Detail.into())
                 .unwrap()
                 .to_owned(),
         );
@@ -543,7 +549,7 @@ impl From<ShippingOptionModel> for AppInMemFetchedSingleRow {
         let mut row = (0.._ship_opt::InMemColIdx::TotNumColumns.into())
             .map(|_num| String::new())
             .collect::<Self>();
-        let _ = [
+        [
             (
                 _ship_opt::InMemColIdx::SellerID,
                 value.seller_id.to_string(),
@@ -555,18 +561,20 @@ impl From<ShippingOptionModel> for AppInMemFetchedSingleRow {
             let idx: usize = idx.into();
             row[idx] = val;
         })
-        .collect::<()>();
+        .count();
         row
     }
 }
-impl Into<ShippingOptionModel> for AppInMemFetchedSingleRow {
-    fn into(self) -> ShippingOptionModel {
+impl From<AppInMemFetchedSingleRow> for ShippingOptionModel {
+    fn from(value: AppInMemFetchedSingleRow) -> ShippingOptionModel {
         let (seller_id, method) = (
-            self.get::<usize>(_ship_opt::InMemColIdx::SellerID.into())
+            value
+                .get::<usize>(_ship_opt::InMemColIdx::SellerID.into())
                 .unwrap()
                 .parse()
                 .unwrap(),
-            self.get::<usize>(_ship_opt::InMemColIdx::Method.into())
+            value
+                .get::<usize>(_ship_opt::InMemColIdx::Method.into())
                 .unwrap()
                 .to_owned(),
         );
@@ -631,7 +639,7 @@ impl AbsOrderRepo for OrderInMemRepo {
                 })
                 .count();
         }
-        let data = HashMap::from_iter(tabledata.into_iter());
+        let data = HashMap::from_iter(tabledata);
         let _num = self.datastore.save(data).await?;
         Ok(())
     } // end of fn save_contact
@@ -660,7 +668,7 @@ impl AbsOrderRepo for OrderInMemRepo {
                 .await?;
             info.push((table_name.to_string(), keys));
         }
-        let info = HashMap::from_iter(info.into_iter());
+        let info = HashMap::from_iter(info);
         let mut data = self.datastore.fetch(info).await?;
         let (result1, result2) = (
             data.remove(tbl_labels[0]).unwrap().into_values().next(),
@@ -668,18 +676,12 @@ impl AbsOrderRepo for OrderInMemRepo {
         );
         if let Some(raw_cta) = result1 {
             let contact = raw_cta.into();
-            let address = if let Some(raw_pa) = result2 {
-                Some(raw_pa.into())
-            } else {
-                None
-            };
+            let address = result2.map(|raw_pa| raw_pa.into());
             Ok(BillingModel { contact, address })
         } else {
-            let ioe = std::io::ErrorKind::NotFound;
-            let detail = format!("no-contact-data");
             let e = AppError {
-                code: AppErrorCode::IOerror(ioe),
-                detail: Some(detail),
+                code: AppErrorCode::IOerror(std::io::ErrorKind::NotFound),
+                detail: Some("no-contact-data".to_string()),
             };
             Err(e)
         }
@@ -709,7 +711,7 @@ impl AbsOrderRepo for OrderInMemRepo {
                 .await?;
             info.push((table_name.to_string(), keys));
         }
-        let info = HashMap::from_iter(info.into_iter());
+        let info = HashMap::from_iter(info);
         let mut data = self.datastore.fetch(info).await?;
         let (result1, result2, result3) = (
             data.remove(_contact::TABLE_LABEL)
@@ -724,11 +726,8 @@ impl AbsOrderRepo for OrderInMemRepo {
         );
         if let Some(raw_cta) = result1 {
             let contact = raw_cta.into();
-            let address = if let Some(raw_pa) = result2 {
-                Some(raw_pa.into())
-            } else {
-                None
-            }; // shipping option can be empty
+            let address = result2.map(|raw_pa| raw_pa.into());
+            // shipping option can be empty
             let option = result3.map(AppInMemFetchedSingleRow::into).collect();
             Ok(ShippingModel {
                 contact,
@@ -736,11 +735,9 @@ impl AbsOrderRepo for OrderInMemRepo {
                 option,
             })
         } else {
-            let ioe = std::io::ErrorKind::NotFound;
-            let detail = format!("no-contact-data");
             let e = AppError {
-                code: AppErrorCode::IOerror(ioe),
-                detail: Some(detail),
+                code: AppErrorCode::IOerror(std::io::ErrorKind::NotFound),
+                detail: Some("no-contact-data".to_string()),
             };
             Err(e)
         }
@@ -857,7 +854,7 @@ impl AbsOrderRepo for OrderInMemRepo {
 
     async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError> {
         let guard = self._sched_job_last_launched.lock().await;
-        let t = guard.clone();
+        let t = *guard; // copy by de-ref
         Ok(t)
     }
 

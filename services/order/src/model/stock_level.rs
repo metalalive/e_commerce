@@ -53,12 +53,12 @@ pub struct StockLevelModelSet {
     pub stores: Vec<StoreStockModel>,
 }
 
-impl Into<StockQuantityPresentDto> for StockQuantityModel {
-    fn into(self) -> StockQuantityPresentDto {
+impl From<StockQuantityModel> for StockQuantityPresentDto {
+    fn from(value: StockQuantityModel) -> StockQuantityPresentDto {
         StockQuantityPresentDto {
-            total: self.total,
-            cancelled: self.cancelled,
-            booked: self.booked,
+            total: value.total,
+            cancelled: value.cancelled,
+            booked: value.booked,
         }
     }
 }
@@ -69,7 +69,7 @@ impl Clone for ProductStockIdentity {
             store_id: self.store_id,
             product_type: self.product_type.clone(),
             product_id: self.product_id,
-            expiry: self.expiry.clone(),
+            expiry: self.expiry,
         }
     }
 }
@@ -96,7 +96,7 @@ impl Clone for ProductStockModel {
         Self {
             type_: self.type_.clone(),
             id_: self.id_,
-            expiry: self.expiry.clone(),
+            expiry: self.expiry,
             quantity: self.quantity.clone(),
             is_create: self.is_create,
         }
@@ -122,9 +122,6 @@ impl PartialEq for StockQtyRsvModel {
     fn eq(&self, other: &Self) -> bool {
         self.oid == other.oid && self.reserved == other.reserved
     }
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }
 impl PartialEq for StockQuantityModel {
     fn eq(&self, other: &Self) -> bool {
@@ -133,9 +130,6 @@ impl PartialEq for StockQuantityModel {
             && self.booked == other.booked
             && self.cancelled == other.cancelled
     }
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }
 impl PartialEq for ProductStockModel {
     fn eq(&self, other: &Self) -> bool {
@@ -143,9 +137,6 @@ impl PartialEq for ProductStockModel {
             && self.id_ == other.id_
             && self.quantity == other.quantity
             && self.expiry_without_millis() == other.expiry_without_millis()
-    }
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
     }
 }
 
@@ -204,9 +195,8 @@ fn dtime_without_millis(value: &DateTime<Utc>) -> DateTime<Utc> {
     let orig_tz = value.timezone();
     let ts_secs = value.timestamp(); // erase milliseconds
     let _dt = DateTime::from_timestamp(ts_secs, 0).unwrap();
-    let out = _dt.with_timezone(&orig_tz);
+    _dt.with_timezone(&orig_tz)
     //println!("time1:{}, time2: {}", self.expiry.to_rfc3339(), out.to_rfc3339());
-    out
 }
 impl ProductStockIdentity {
     pub fn expiry_without_millis(&self) -> DateTime<Utc> {
@@ -321,9 +311,10 @@ impl StoreStockModel {
     } // end of fn return_by_expiry
 } // end of impl StoreStockModel
 
-impl Into<Vec<StockLevelPresentDto>> for StockLevelModelSet {
-    fn into(self) -> Vec<StockLevelPresentDto> {
-        self.stores
+impl From<StockLevelModelSet> for Vec<StockLevelPresentDto> {
+    fn from(value: StockLevelModelSet) -> Vec<StockLevelPresentDto> {
+        value
+            .stores
             .into_iter()
             .flat_map(|m| {
                 let store_id = m.store_id;
@@ -370,7 +361,7 @@ impl StockLevelModelSet {
                 } else {
                     let num_avail =
                         _product_found.quantity.total - _product_found.quantity.cancelled;
-                    let num_cancel = num_avail.min(d.qty_add.abs() as u32);
+                    let num_cancel = num_avail.min(d.qty_add.unsigned_abs());
                     _product_found.quantity.cancelled += num_cancel;
                 } // TODO, consider to adjust  `product.quantity.booked` whenever customers :
                   // - reserved stock items but cancel them later without paying them.

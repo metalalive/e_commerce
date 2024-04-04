@@ -10,7 +10,7 @@ use crate::datastore::AbstInMemoryDStore;
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{ProductPolicyModel, ProductPolicyModelSet};
 
-const TABLE_LABEL: &'static str = "product_policy";
+const TABLE_LABEL: &str = "product_policy";
 
 enum InMemColIdx {
     AutoCancel,
@@ -20,14 +20,14 @@ enum InMemColIdx {
     TotNumColumns,
 }
 
-impl Into<usize> for InMemColIdx {
-    fn into(self) -> usize {
-        match self {
-            Self::AutoCancel => 0,
-            Self::Warranty => 1,
-            Self::MaxNumRsv => 2,
-            Self::MinNumRsv => 3,
-            Self::TotNumColumns => 4,
+impl From<InMemColIdx> for usize {
+    fn from(value: InMemColIdx) -> usize {
+        match value {
+            InMemColIdx::AutoCancel => 0,
+            InMemColIdx::Warranty => 1,
+            InMemColIdx::MaxNumRsv => 2,
+            InMemColIdx::MinNumRsv => 3,
+            InMemColIdx::TotNumColumns => 4,
         }
     }
 }
@@ -61,9 +61,9 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo {
         let result_raw = self.datastore.fetch(info).await?;
         let filtered = if let Some(d) = result_raw.get(TABLE_LABEL) {
             // raw strings to model instances
-            d.into_iter()
+            d.iter()
                 .map(|(key, row)| {
-                    let id_elms = key.split("-").collect::<Vec<&str>>();
+                    let id_elms = key.split('-').collect::<Vec<&str>>();
                     let prod_typ: u8 = id_elms[0].parse().unwrap();
                     let product_id = id_elms[1].parse().unwrap();
                     let product_type = ProductType::from(prod_typ);
@@ -108,7 +108,7 @@ impl AbstProductPolicyRepo for ProductPolicyInMemRepo {
         if ppset.policies.is_empty() {
             return Err(AppError {
                 code: AppErrorCode::EmptyInputData,
-                detail: Some(format!("save ProductPolicyModel")),
+                detail: Some("save ProductPolicyModel".to_string()),
             });
         }
         let data = {

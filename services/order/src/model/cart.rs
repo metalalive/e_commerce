@@ -37,22 +37,22 @@ impl From<CartLineDto> for CartLineModel {
     }
 }
 
-impl Into<CartLineDto> for CartLineModel {
-    fn into(self) -> CartLineDto {
+impl From<CartLineModel> for CartLineDto {
+    fn from(value: CartLineModel) -> CartLineDto {
         CartLineDto {
-            product_id: self.id_.product_id,
-            product_type: self.id_.product_type,
-            seller_id: self.id_.store_id,
-            quantity: self.qty_req,
+            product_id: value.id_.product_id,
+            product_type: value.id_.product_type,
+            seller_id: value.id_.store_id,
+            quantity: value.qty_req,
         }
     }
 }
 
-impl Into<CartDto> for CartModel {
-    fn into(self) -> CartDto {
+impl From<CartModel> for CartDto {
+    fn from(value: CartModel) -> CartDto {
         CartDto {
-            title: self.title,
-            lines: self
+            title: value.title,
+            lines: value
                 .saved_lines
                 .into_iter()
                 .map(CartLineModel::into)

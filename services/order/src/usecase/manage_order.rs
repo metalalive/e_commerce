@@ -34,8 +34,10 @@ use crate::repository::{
 use crate::{AppAuthPermissionCode, AppAuthQuotaMatCode, AppAuthedClaim, AppSharedState};
 
 pub enum CreateOrderUsKsErr {
-    ReqContent(OrderCreateRespErrorDto),
-    Quota(OrderCreateRespErrorDto),
+    // use box pointer instead of concrete struct , to avoid large size types
+    // passing between call stack entries
+    ReqContent(Box<OrderCreateRespErrorDto>),
+    Quota(Box<OrderCreateRespErrorDto>),
     Server(Vec<AppError>),
 }
 
@@ -95,7 +97,7 @@ impl CreateOrderUseCase {
         let ol_set = OrderLineModelSet {
             order_id: oid,
             lines: o_items,
-            create_time: timenow.clone(),
+            create_time: timenow, // trait `Copy` implemented, clone implicitly
             owner_id: usr_id,
         };
         // repository implementation should treat order-line reservation and
@@ -201,7 +203,7 @@ impl CreateOrderUseCase {
             }
             let quota_olines = quota_chk_result.remove(0);
             err_obj.quota_olines = quota_olines;
-            Err(CreateOrderUsKsErr::Quota(err_obj))
+            Err(CreateOrderUsKsErr::Quota(Box::new(err_obj)))
         } else {
             Ok(())
         }
@@ -227,13 +229,13 @@ impl CreateOrderUseCase {
             if let Err(e) = results.1 {
                 err_obj.shipping = Some(e);
             }
-            Err(CreateOrderUsKsErr::ReqContent(err_obj))
+            Err(CreateOrderUsKsErr::ReqContent(Box::new(err_obj)))
         }
     } // end of fn validate_metadata
 
     async fn load_product_properties(
         &self,
-        data: &Vec<OrderLineReqDto>,
+        data: &[OrderLineReqDto],
     ) -> DefaultResult<(ProductPolicyModelSet, Vec<ProductPriceModelSet>), CreateOrderUsKsErr> {
         let req_ids_policy = data
             .iter()
@@ -364,7 +366,7 @@ impl CreateOrderUseCase {
                 quota_olines: None,
                 order_lines: Some(client_errors),
             };
-            Err(CreateOrderUsKsErr::ReqContent(err_dto))
+            Err(CreateOrderUsKsErr::ReqContent(Box::new(err_dto)))
         }
     } // end of fn validate_orderline
 
@@ -385,7 +387,7 @@ impl CreateOrderUseCase {
                         quota_olines: None,
                         order_lines: Some(client_e),
                     };
-                    Err(CreateOrderUsKsErr::ReqContent(ec))
+                    Err(CreateOrderUsKsErr::ReqContent(Box::new(ec)))
                 }
                 Err(server_e) => {
                     app_log_event!(
@@ -523,6 +525,7 @@ impl OrderReplicaInventoryUseCase {
     ) -> DefaultResult<OrderReplicaInventoryDto, AppError> {
         // TODO, avoid loading too many order records, consider pagination
         let (start, end) = (req.start, req.end);
+        #[allow(clippy::clone_on_copy)] // for learning purpose
         let reservations = self.load_reserving(start.clone(), end.clone()).await?;
         let returns = self.load_returning(start, end).await?;
         let resp = OrderReplicaInventoryDto {

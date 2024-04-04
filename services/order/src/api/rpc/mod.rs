@@ -53,7 +53,7 @@ pub async fn route_to_handler(
     }
 }
 
-pub(super) fn py_celery_deserialize_req<T, U>(raw: &Vec<u8>) -> DefaultResult<(T, U), AppError>
+pub(super) fn py_celery_deserialize_req<T, U>(raw: &[u8]) -> DefaultResult<(T, U), AppError>
 where
     T: DeserializeOwned,
     U: DeserializeOwned,
@@ -111,6 +111,7 @@ where
     Ok((out0, out1))
 } // end of fn py_celery_deserialize_req
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Deserialize, Debug)]
 pub(crate) enum PyCeleryRespStatus {
     STARTED,
@@ -134,7 +135,7 @@ struct PyCeleryRespPayload<T> {
     result: T,
 }
 
-pub(crate) fn py_celery_reply_status(raw: &Vec<u8>) -> DefaultResult<PyCeleryRespStatus, AppError> {
+pub(crate) fn py_celery_reply_status(raw: &[u8]) -> DefaultResult<PyCeleryRespStatus, AppError> {
     let result = serde_json::from_slice::<PyCeleryRespPartialPayload>(raw);
     match result {
         Ok(payld) => Ok(payld.status),

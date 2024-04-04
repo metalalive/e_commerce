@@ -36,9 +36,6 @@ impl PartialEq for ProductPolicyModel {
             && (self.max_num_rsv == other.max_num_rsv)
             && (self.min_num_rsv == other.min_num_rsv)
     }
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }
 
 const HARD_LIMIT_AUTO_CANCEL_SECS: u32 = 3600 * 24; // one day
@@ -87,8 +84,8 @@ impl ProductPolicyModelSet {
                 let min_num_rsv = item.min_num_rsv.as_ref().unwrap_or(&zero_num_rsv);
                 let num_rsv = if min_num_rsv > max_num_rsv {
                     Some(ProductPolicyNumRsvLimitDto {
-                        min_items: min_num_rsv.clone(),
-                        max_items: max_num_rsv.clone(),
+                        min_items: *min_num_rsv,
+                        max_items: *max_num_rsv,
                     })
                 } else {
                     None
@@ -121,8 +118,8 @@ impl ProductPolicyModelSet {
         let mut _new_objs = newdata
             .into_iter()
             .filter_map(|mut item| {
-                let max_num_rsv = item.max_num_rsv.take().unwrap_or(zero_num_rsv.clone());
-                let min_num_rsv = item.min_num_rsv.take().unwrap_or(zero_num_rsv.clone());
+                let max_num_rsv = item.max_num_rsv.take().unwrap_or(zero_num_rsv);
+                let min_num_rsv = item.min_num_rsv.take().unwrap_or(zero_num_rsv);
                 let result = self.policies.iter_mut().find(|o| {
                     o.product_id == item.product_id && o.product_type == item.product_type
                 });

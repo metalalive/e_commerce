@@ -233,7 +233,7 @@ pub async fn app_repo_product_policy(
     } else {
         Err(AppError {
             code: AppErrorCode::FeatureDisabled,
-            detail: Some(format!("mariadb")),
+            detail: Some("mariadb".to_string()),
         })
     }
     #[cfg(not(feature = "mariadb"))]
@@ -243,7 +243,7 @@ pub async fn app_repo_product_policy(
     } else {
         Err(AppError {
             code: AppErrorCode::MissingDataStore,
-            detail: Some(format!("unknwon-type")),
+            detail: Some("unknwon-type".to_string()),
         })
     }
 }
@@ -258,7 +258,7 @@ pub async fn app_repo_product_price(
     } else {
         Err(AppError {
             code: AppErrorCode::FeatureDisabled,
-            detail: Some(format!("mariadb")),
+            detail: Some("mariadb".to_string()),
         })
     }
     #[cfg(not(feature = "mariadb"))]
@@ -268,7 +268,7 @@ pub async fn app_repo_product_price(
     } else {
         Err(AppError {
             code: AppErrorCode::MissingDataStore,
-            detail: Some(format!("unknwon-type")),
+            detail: Some("unknwon-type".to_string()),
         })
     }
 }
@@ -284,7 +284,7 @@ pub async fn app_repo_order(
     } else {
         Err(AppError {
             code: AppErrorCode::FeatureDisabled,
-            detail: Some(format!("mariadb")),
+            detail: Some("mariadb".to_string()),
         })
     }
     #[cfg(not(feature = "mariadb"))]
@@ -294,7 +294,7 @@ pub async fn app_repo_order(
     } else {
         Err(AppError {
             code: AppErrorCode::MissingDataStore,
-            detail: Some(format!("unknown-type")),
+            detail: Some("unknown-type".to_string()),
         })
     }
 }
@@ -308,7 +308,7 @@ pub async fn app_repo_order_return(
     } else {
         Err(AppError {
             code: AppErrorCode::FeatureDisabled,
-            detail: Some(format!("mariadb")),
+            detail: Some("mariadb".to_string()),
         })
     }
     #[cfg(not(feature = "mariadb"))]
@@ -318,7 +318,7 @@ pub async fn app_repo_order_return(
     } else {
         Err(AppError {
             code: AppErrorCode::MissingDataStore,
-            detail: Some(format!("unknown-type")),
+            detail: Some("unknown-type".to_string()),
         })
     }
 }
@@ -332,7 +332,7 @@ pub async fn app_repo_cart(
     } else {
         Err(AppError {
             code: AppErrorCode::FeatureDisabled,
-            detail: Some(format!("mariadb")),
+            detail: Some("mariadb".to_string()),
         })
     }
     #[cfg(not(feature = "mariadb"))]
@@ -342,7 +342,7 @@ pub async fn app_repo_cart(
     } else {
         Err(AppError {
             code: AppErrorCode::MissingDataStore,
-            detail: Some(format!("unknown-type")),
+            detail: Some("unknown-type".to_string()),
         })
     }
 }

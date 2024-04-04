@@ -26,9 +26,6 @@ impl PartialEq for ProductPriceModel {
             && (self.start_after == other.start_after)
             && (self.end_before == other.end_before)
     }
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }
 
 pub struct ProductPriceModelSet {

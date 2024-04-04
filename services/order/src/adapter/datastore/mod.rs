@@ -28,7 +28,7 @@ pub(crate) fn build_context(
     for c in cfg {
         match c {
             AppDataStoreCfg::InMemory(d) => {
-                let item: Box<dyn AbstInMemoryDStore> = Box::new(AppInMemoryDStore::new(&d));
+                let item: Box<dyn AbstInMemoryDStore> = Box::new(AppInMemoryDStore::new(d));
                 inmem = Some(item);
             }
             AppDataStoreCfg::DbServer(d) => {
@@ -36,7 +36,7 @@ pub(crate) fn build_context(
                     sqldb = Some(Vec::new());
                 }
                 if let Some(lst) = &mut sqldb {
-                    match AppMariaDbStore::try_build(&d, confidential.clone()) {
+                    match AppMariaDbStore::try_build(d, confidential.clone()) {
                         Ok(item) => {
                             lst.push(item);
                         }

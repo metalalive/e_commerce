@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use serde::de::{Error as DeserializeError, Expected};
 use serde::Deserialize;
-use serde_json;
 
 use crate::error::{AppError, AppErrorCode};
 use crate::{constant as AppConst, AppLogAlias, WebApiPath};
@@ -202,7 +201,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn new(mut args: HashMap<String, String, RandomState>) -> DefaultResult<Self, AppError> {
         let sys_basepath = if let Some(s) = args.remove(AppConst::ENV_VAR_SYS_BASE_PATH) {
-            s + &"/"
+            s + "/"
         } else {
             return Err(AppError {
                 detail: None,
@@ -210,7 +209,7 @@ impl AppConfig {
             });
         };
         let app_basepath = if let Some(a) = args.remove(AppConst::ENV_VAR_SERVICE_BASE_PATH) {
-            a + &"/"
+            a + "/"
         } else {
             return Err(AppError {
                 detail: None,
@@ -262,18 +261,18 @@ impl AppConfig {
     }
 
     fn _check_web_listener(obj: &WebApiListenCfg) -> DefaultResult<(), AppError> {
-        let version: Vec<&str> = obj.api_version.split(".").collect();
-        let mut iter = version.iter().filter(|i| !i.parse::<u16>().is_ok());
+        let version: Vec<&str> = obj.api_version.split('.').collect();
+        let mut iter = version.iter().filter(|i| i.parse::<u16>().is_err());
         let mut iter2 = obj
             .routes
             .iter()
             .filter(|i| i.path.is_empty() || i.handler.is_empty());
-        if obj.routes.len() == 0 {
+        if obj.routes.is_empty() {
             Err(AppError {
                 detail: None,
                 code: AppErrorCode::NoRouteApiServerCfg,
             })
-        } else if let Some(_) = iter.next() {
+        } else if iter.next().is_some() {
             let err_msg = Some("version must be numeric".to_string());
             Err(AppError {
                 detail: err_msg,
@@ -314,12 +313,12 @@ impl AppConfig {
         }); // for file-type handler, the field `path` has to be provided
         let mut filtered3 = obj.handlers.iter().filter(|item| item.alias.is_empty());
         let mut filtered4 = obj.loggers.iter().filter(|item| item.alias.is_empty());
-        if obj.handlers.len() == 0 {
+        if obj.handlers.is_empty() {
             Err(AppError {
                 detail: None,
                 code: AppErrorCode::NoLogHandlerCfg,
             })
-        } else if obj.loggers.len() == 0 {
+        } else if obj.loggers.is_empty() {
             Err(AppError {
                 detail: None,
                 code: AppErrorCode::NoLoggerCfg,

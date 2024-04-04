@@ -180,13 +180,13 @@ impl TryFrom<u8> for AppAuthQuotaMatCode {
         }
     }
 }
-impl Into<u8> for AppAuthQuotaMatCode {
-    fn into(self) -> u8 {
-        match self {
-            Self::NumPhones => 1,
-            Self::NumEmails => 2,
-            Self::NumOrderLines => 3,
-            Self::NumProductPolicies => 4,
+impl From<AppAuthQuotaMatCode> for u8 {
+    fn from(value: AppAuthQuotaMatCode) -> u8 {
+        match value {
+            AppAuthQuotaMatCode::NumPhones => 1,
+            AppAuthQuotaMatCode::NumEmails => 2,
+            AppAuthQuotaMatCode::NumOrderLines => 3,
+            AppAuthQuotaMatCode::NumProductPolicies => 4,
         }
     }
 }
@@ -249,7 +249,7 @@ impl AbstractAuthKeystore for AppAuthKeystore {
         }
     }
     fn update_period(&self) -> Duration {
-        self.update_period.clone()
+        self.update_period // copy implicitly
     }
 
     async fn refresh(&self) -> DefaultResult<AppKeystoreRefreshResult, AppError> {
@@ -266,7 +266,7 @@ impl AbstractAuthKeystore for AppAuthKeystore {
             Ok(AppKeystoreRefreshResult {
                 num_discarded,
                 num_added,
-                period_next_op: self.update_period.clone(),
+                period_next_op: self.update_period,
             })
         } else {
             let period_next_op = expect_time - t0;
@@ -294,14 +294,8 @@ impl AbstractAuthKeystore for AppAuthKeystore {
 
 impl AppAuthKeystore {
     pub fn merge(target: &mut JwkSet, new: JwkSet) -> (usize, usize) {
-        let get_kid = |item: &Jwk| -> Option<String> {
-            let result = item.common.key_id.as_ref();
-            if let Some(id) = result {
-                Some(id.to_string())
-            } else {
-                None
-            }
-        }; // in this application, key ID must be present
+        let get_kid =
+            |item: &Jwk| -> Option<String> { item.common.key_id.as_ref().map(|id| id.to_string()) }; // in this application, key ID must be present
         let kids_iter_1 = target.keys.iter().filter_map(get_kid);
         let kids_iter_2 = new.keys.iter().filter_map(get_kid);
         let kidset1: HashSet<String, RandomState> = HashSet::from_iter(kids_iter_1);
@@ -336,7 +330,7 @@ impl AppAuthKeystore {
         let (sender, connector) = self.setup_tcp_keyserver(url).await?;
         // make the low-level connection process inbound / outbound messages
         // in a spawned task, optionally return error
-        let _handle = task::spawn(async move { connector.await });
+        let _handle = task::spawn(connector);
         let resp = self._request_to_key_server(url, sender).await?;
         let keys = self.resp_body_to_keys(resp).await?;
         Ok(keys)

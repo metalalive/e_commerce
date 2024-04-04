@@ -21,6 +21,7 @@ use crate::logging::AppLogContext;
 use crate::rpc::dummy::DummyRpcContext;
 use crate::{AppRpcCfg, AppSharedState};
 
+#[allow(unused_variables)]
 pub(crate) fn build_context(
     cfg: &AppRpcCfg,
     logctx: Arc<AppLogContext>,
@@ -37,7 +38,7 @@ pub(crate) fn build_context(
             {
                 let e = AppError {
                     code: AppErrorCode::FeatureDisabled,
-                    detail: Some(format!("rpc-amqp-build")),
+                    detail: Some("rpc-amqp-build".to_string()),
                 };
                 Err(e)
             }

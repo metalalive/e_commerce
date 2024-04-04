@@ -28,8 +28,8 @@ mod _stockm {
     use crate::datastore::AbsDStoreFilterKeyOp;
     use std::collections::HashSet;
 
-    pub(super) const TABLE_LABEL: &'static str = "order_stock_lvl";
-    pub(super) const EXPIRY_KEY_FORMAT: &'static str = "%Y%m%d%H%M%S%z";
+    pub(super) const TABLE_LABEL: &str = "order_stock_lvl";
+    pub(super) const EXPIRY_KEY_FORMAT: &str = "%Y%m%d%H%M%S%z";
     pub(super) enum InMemColIdx {
         Expiry,
         QtyTotal,
@@ -37,14 +37,14 @@ mod _stockm {
         QtyCancelled,
         TotNumColumns,
     }
-    impl Into<usize> for InMemColIdx {
-        fn into(self) -> usize {
-            match self {
-                Self::Expiry => 0,
-                Self::QtyTotal => 1,
-                Self::QtyRsvDetail => 2,
-                Self::QtyCancelled => 3,
-                Self::TotNumColumns => 4,
+    impl From<InMemColIdx> for usize {
+        fn from(value: InMemColIdx) -> usize {
+            match value {
+                InMemColIdx::Expiry => 0,
+                InMemColIdx::QtyTotal => 1,
+                InMemColIdx::QtyRsvDetail => 2,
+                InMemColIdx::QtyCancelled => 3,
+                InMemColIdx::TotNumColumns => 4,
             }
         }
     }
@@ -55,7 +55,7 @@ mod _stockm {
     }
     impl AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOp {
         fn filter(&self, k: &String, _v: &Vec<String>) -> bool {
-            let id_elms = k.split("/").collect::<Vec<&str>>();
+            let id_elms = k.split('/').collect::<Vec<&str>>();
             let (store_id, prod_typ, prod_id, exp_from_combo) = (
                 id_elms[0].parse().unwrap(),
                 id_elms[1].parse().unwrap(),
@@ -99,12 +99,12 @@ struct FetchArg(AppInMemFetchedSingleTable, Option<String>);
 struct SaveArg(StockLevelModelSet, FetchedRsvSet);
 
 impl FetchArg {
-    fn create_iter_rsv(row: &Vec<String>) -> impl Iterator<Item = (String, u32)> + '_ {
+    fn create_iter_rsv(row: &[String]) -> impl Iterator<Item = (String, u32)> + '_ {
         let rsv_str = row
             .get::<usize>(_stockm::InMemColIdx::QtyRsvDetail.into())
             .unwrap();
-        rsv_str.split(" ").into_iter().filter_map(|d| {
-            let mut kv = d.split("/");
+        rsv_str.split(' ').filter_map(|d| {
+            let mut kv = d.split('/');
             if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
                 let k = k.to_string();
                 let v = v.parse().unwrap();
@@ -127,17 +127,12 @@ impl FetchArg {
             .parse()
             .unwrap();
         let rsv_detail = if let Some(orderid) = maybe_order_id {
-            let result = rsv
-                .iter()
-                .find(|(oid, _num)| oid.as_str() == orderid.as_str());
-            if let Some(d) = result {
-                Some(StockQtyRsvModel {
+            rsv.iter()
+                .find(|(oid, _num)| oid.as_str() == orderid.as_str())
+                .map(|d| StockQtyRsvModel {
                     oid: d.0.clone(),
                     reserved: d.1,
                 })
-            } else {
-                None
-            }
         } else {
             None
         };
@@ -150,7 +145,7 @@ impl FetchArg {
         let expiry = row
             .get::<usize>(_stockm::InMemColIdx::Expiry.into())
             .unwrap();
-        let expiry = DateTime::parse_from_rfc3339(&expiry).unwrap();
+        let expiry = DateTime::parse_from_rfc3339(expiry).unwrap();
         ProductStockModel {
             is_create: false,
             type_: prod_typ,
@@ -160,13 +155,14 @@ impl FetchArg {
         }
     }
 } // end of impl FetchArg
+#[allow(clippy::from_over_into)]
 impl Into<StockLevelModelSet> for FetchArg {
     fn into(self) -> StockLevelModelSet {
         let (rows, maybe_order_id) = (self.0, self.1);
         let mut out = StockLevelModelSet { stores: vec![] };
         rows.into_iter()
             .map(|(key, row)| {
-                let id_elms = key.split("/").collect::<Vec<&str>>();
+                let id_elms = key.split('/').collect::<Vec<&str>>();
                 let prod_typ_num: u8 = id_elms[1].parse().unwrap();
                 let (store_id, prod_typ, prod_id, exp_from_combo) = (
                     id_elms[0].parse().unwrap(),
@@ -350,11 +346,7 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
             })
             .collect();
         let (mut stock_mset, rsv_set, d_lock) = match self
-            .fetch_with_lock(
-                order_req.order_id.clone(),
-                pids,
-                Some(self.curr_time.clone()),
-            )
+            .fetch_with_lock(order_req.order_id.clone(), pids, Some(self.curr_time))
             .await
         {
             Ok(v) => v,
@@ -367,7 +359,7 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
             let mut seq = OrderInMemRepo::in_mem_olines(order_req);
             let rows = AppInMemFetchedSingleTable::from(SaveArg(stock_mset, rsv_set));
             seq.insert(0, (_stockm::TABLE_LABEL.to_string(), rows));
-            HashMap::from_iter(seq.into_iter())
+            HashMap::from_iter(seq)
         };
         if let Err(e) = self.datastore.save_release(data, d_lock) {
             Err(Err(e))

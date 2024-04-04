@@ -150,7 +150,7 @@ impl EditProductPolicyUseCase {
     // on validation by RPC call to `storefront` service
 
     pub async fn check_product_existence(
-        data: &Vec<ProductPolicyDto>,
+        data: &[ProductPolicyDto],
         usr_prof_id: u32,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
         run_rpc_fn: AppUCrunRPCfn<impl Future<Output = AppUseKsRPCreply>>,
@@ -204,7 +204,7 @@ impl EditProductPolicyUseCase {
 
     fn _compare_rpc_reply(
         reply: ProductInfoResp,
-        req: &Vec<ProductPolicyDto>,
+        req: &[ProductPolicyDto],
     ) -> Vec<(ProductType, u64)> {
         let (r_items, r_pkgs) = (reply.item, reply.pkg);
         let iter_item = r_items.into_iter().map(|x| (ProductType::Item, x.id));
@@ -214,7 +214,7 @@ impl EditProductPolicyUseCase {
         c1.extend(iter_pkg);
         let c2 = HashSet::from_iter(iter_req);
         c2.difference(&c1)
-            .map(|(typ_, id_)| (typ_.clone(), id_.clone()))
+            .map(|(typ_, id_)| (typ_.clone(), *id_))
             .collect()
     }
 

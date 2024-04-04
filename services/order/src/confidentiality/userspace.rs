@@ -90,7 +90,7 @@ impl UserSpaceConfidentiality {
                         }
                         None => Some(format!("json-array,id:{}", id_)),
                     },
-                    Err(e) => Some(format!("path-error,id:{},detail:{}", id_, e.to_string())),
+                    Err(e) => Some(format!("path-error,id:{},detail:{}", id_, e)),
                 },
                 _others => Some(format!("json-scalar,id:{}", id_)),
             };

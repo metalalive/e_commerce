@@ -44,11 +44,11 @@ macro_rules! to_3rdparty_level {
     };
 }
 
-fn _gen_localfile_writer(basepath: &String, cfg: &AppLogHandlerCfg) -> (NonBlocking, WorkerGuard) {
+fn _gen_localfile_writer(basepath: &str, cfg: &AppLogHandlerCfg) -> (NonBlocking, WorkerGuard) {
     if let Some(rpath) = cfg.path.as_ref() {
-        let mut fullpath = basepath.clone();
-        if !basepath.ends_with("/") && !rpath.starts_with("/") {
-            fullpath = fullpath + "/";
+        let mut fullpath = basepath.to_string();
+        if !basepath.ends_with('/') && !rpath.starts_with('/') {
+            fullpath += "/";
         }
         fullpath = fullpath + &rpath;
         let p = Path::new(&fullpath);

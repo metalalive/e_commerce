@@ -105,6 +105,7 @@ impl AppInMemoryDStore {
         _info: AppInMemFetchKeys,
     ) -> DefaultResult<AppInMemFetchedData, AppError> {
         let unchecked_labels = _info.keys().collect::<Vec<&InnerTableLabel>>();
+        #[allow(clippy::explicit_auto_deref)]
         Self::_check_table_existence(&*_map, unchecked_labels)?;
         let rs_a = _info
             .iter()
@@ -118,11 +119,11 @@ impl AppInMemoryDStore {
                         (id.clone(), row.clone())
                     })
                     .collect::<Vec<(InnerKey, InnerRow)>>();
-                let rs_t = HashMap::from_iter(rs_t.into_iter());
+                let rs_t = HashMap::from_iter(rs_t);
                 (label.clone(), rs_t)
             })
             .collect::<Vec<(InnerTableLabel, InnerTable)>>();
-        let rs_a = HashMap::from_iter(rs_a.into_iter());
+        let rs_a = HashMap::from_iter(rs_a);
         Ok(rs_a)
     }
     fn save_common(
@@ -131,8 +132,8 @@ impl AppInMemoryDStore {
         _data: AppInMemUpdateData,
     ) -> DefaultResult<usize, AppError> {
         let unchecked_labels = _data.keys().collect::<Vec<&InnerTableLabel>>();
-        Self::_check_table_existence(&*_map, unchecked_labels)?;
-        self._check_capacity(&*_map)?;
+        Self::_check_table_existence(&_map, unchecked_labels)?;
+        self._check_capacity(&_map)?;
         let tot_cnt = _data
             .iter()
             .map(|(label, d_grp)| {
@@ -145,7 +146,7 @@ impl AppInMemoryDStore {
                     .count()
             })
             .sum();
-        self._check_capacity(&*_map)?;
+        self._check_capacity(&_map)?;
         Ok(tot_cnt)
     }
 } // end of impl AppInMemoryDStore
@@ -175,6 +176,7 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         let guard = self.try_get_table().await;
         let mut _map = guard.borrow_mut();
         let unchecked_labels = _info.keys().collect::<Vec<&InnerTableLabel>>();
+        #[allow(clippy::explicit_auto_deref)]
         Self::_check_table_existence(&*_map, unchecked_labels)?;
         let tot_cnt = _info
             .iter()
@@ -224,9 +226,11 @@ impl AbstInMemoryDStore for AppInMemoryDStore {
         op: &dyn AbsDStoreFilterKeyOp,
     ) -> DefaultResult<Vec<InnerKey>, AppError> {
         let guard = self.try_get_table().await;
-        let mut _map = guard.borrow_mut();
+        let _map = guard.borrow();
         let unchecked_labels = vec![&tbl_label];
-        Self::_check_table_existence(&*_map, unchecked_labels)?;
+        // the type `Ref` supports deref coercion , so compiler implicitly adds the dereference
+        // syntax `*` prior to `_map`, in other words `&_map` is automatically translated to `&*_map`
+        Self::_check_table_existence(&_map, unchecked_labels)?;
         let table = _map.get(tbl_label.as_str()).unwrap();
         let out = table
             .iter()

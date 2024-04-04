@@ -27,15 +27,15 @@ pub enum CountryCode {
     US,
     Unknown,
 }
-impl Into<String> for CountryCode {
-    fn into(self) -> String {
-        let out = match self {
-            Self::TW => "TW",
-            Self::TH => "TH",
-            Self::IN => "IN",
-            Self::ID => "ID",
-            Self::US => "US",
-            Self::Unknown => "Unknown",
+impl From<CountryCode> for String {
+    fn from(value: CountryCode) -> String {
+        let out = match value {
+            CountryCode::TW => "TW",
+            CountryCode::TH => "TH",
+            CountryCode::IN => "IN",
+            CountryCode::ID => "ID",
+            CountryCode::US => "US",
+            CountryCode::Unknown => "Unknown",
         };
         out.to_string()
     }
@@ -78,13 +78,13 @@ pub enum ShippingMethod {
     Unknown,
 }
 
-impl Into<String> for ShippingMethod {
-    fn into(self) -> String {
-        let out = match self {
-            Self::UPS => "UPS",
-            Self::FedEx => "FedEx",
-            Self::BlackCatExpress => "BlackCatExpress",
-            Self::Unknown => "Unknown",
+impl From<ShippingMethod> for String {
+    fn from(value: ShippingMethod) -> String {
+        let out = match value {
+            ShippingMethod::UPS => "UPS",
+            ShippingMethod::FedEx => "FedEx",
+            ShippingMethod::BlackCatExpress => "BlackCatExpress",
+            ShippingMethod::Unknown => "Unknown",
         };
         out.to_string()
     }

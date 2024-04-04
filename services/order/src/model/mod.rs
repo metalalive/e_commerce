@@ -50,7 +50,4 @@ impl PartialEq for BaseProductIdentity {
             && self.product_id == other.product_id
             && self.product_type == other.product_type
     }
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }

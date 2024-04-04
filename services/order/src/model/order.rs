@@ -100,13 +100,13 @@ pub struct OrderLineModelSet {
     pub lines: Vec<OrderLineModel>,
 }
 
-impl Into<ContactDto> for ContactModel {
-    fn into(self) -> ContactDto {
+impl From<ContactModel> for ContactDto {
+    fn from(value: ContactModel) -> ContactDto {
         ContactDto {
-            first_name: self.first_name,
-            last_name: self.last_name,
-            emails: self.emails,
-            phones: self.phones,
+            first_name: value.first_name,
+            last_name: value.last_name,
+            emails: value.emails,
+            phones: value.phones,
         }
     }
 }
@@ -161,7 +161,7 @@ impl ContactModel {
             None
         }
     }
-    fn check_emails(value: &Vec<String>) -> Option<Vec<Option<ContactErrorReason>>> {
+    fn check_emails(value: &[String]) -> Option<Vec<Option<ContactErrorReason>>> {
         let mut num_err: usize = 0;
         let re = Regex::new(REGEX_EMAIL_RFC5322).unwrap();
         let out = value
@@ -189,7 +189,7 @@ impl ContactModel {
             Some(out)
         }
     }
-    fn check_phones(value: &Vec<PhoneNumberDto>) -> Option<Vec<Option<PhoneNumberErrorDto>>> {
+    fn check_phones(value: &[PhoneNumberDto]) -> Option<Vec<Option<PhoneNumberErrorDto>>> {
         let mut num_err: usize = 0;
         let out = value
             .iter()
@@ -199,7 +199,7 @@ impl ContactModel {
                 } else {
                     Some(PhoneNumNationErrorReason::InvalidCode)
                 };
-                let all_digits = d.number.chars().all(|c| c.is_digit(10));
+                let all_digits = d.number.chars().all(|c| c.is_ascii_digit());
                 let number_err = if all_digits {
                     None
                 } else {
@@ -224,15 +224,15 @@ impl ContactModel {
     }
 } // end of impl ContactModel
 
-impl Into<PhyAddrDto> for PhyAddrModel {
-    fn into(self) -> PhyAddrDto {
+impl From<PhyAddrModel> for PhyAddrDto {
+    fn from(value: PhyAddrModel) -> PhyAddrDto {
         PhyAddrDto {
-            country: self.country,
-            region: self.region,
-            city: self.city,
-            distinct: self.distinct,
-            street_name: self.street_name,
-            detail: self.detail,
+            country: value.country,
+            region: value.region,
+            city: value.city,
+            distinct: value.distinct,
+            street_name: value.street_name,
+            detail: value.detail,
         }
     }
 }
@@ -310,11 +310,11 @@ impl PhyAddrModel {
     }
 } // end of impl PhyAddrModel
 
-impl Into<ShippingOptionDto> for ShippingOptionModel {
-    fn into(self) -> ShippingOptionDto {
+impl From<ShippingOptionModel> for ShippingOptionDto {
+    fn from(value: ShippingOptionModel) -> ShippingOptionDto {
         ShippingOptionDto {
-            seller_id: self.seller_id,
-            method: self.method,
+            seller_id: value.seller_id,
+            method: value.method,
         }
     }
 }
@@ -372,18 +372,11 @@ impl ShippingOptionModel {
     }
 } // end of impl ShippingOptionModel
 
-impl Into<BillingDto> for BillingModel {
-    fn into(self) -> BillingDto {
-        let (c, pa) = (self.contact.into(), self.address);
-        let a = if let Some(v) = pa {
-            Some(v.into())
-        } else {
-            None
-        };
-        BillingDto {
-            contact: c,
-            address: a,
-        }
+impl From<BillingModel> for BillingDto {
+    fn from(value: BillingModel) -> BillingDto {
+        let (contact, pa) = (value.contact.into(), value.address);
+        let address = pa.map(|v| v.into());
+        BillingDto { contact, address }
     }
 }
 
@@ -416,19 +409,15 @@ impl TryFrom<BillingDto> for BillingModel {
     }
 } // end of impl BillingModel
 
-impl Into<ShippingDto> for ShippingModel {
-    fn into(self) -> ShippingDto {
-        let (c, pa, opt) = (self.contact.into(), self.address, self.option);
-        let a = if let Some(v) = pa {
-            Some(v.into())
-        } else {
-            None
-        };
-        let opt = opt.into_iter().map(ShippingOptionModel::into).collect();
+impl From<ShippingModel> for ShippingDto {
+    fn from(value: ShippingModel) -> ShippingDto {
+        let (contact, pa, opt) = (value.contact.into(), value.address, value.option);
+        let address = pa.map(|v| v.into());
+        let option = opt.into_iter().map(ShippingOptionModel::into).collect();
         ShippingDto {
-            contact: c,
-            address: a,
-            option: opt,
+            contact,
+            address,
+            option,
         }
     }
 }
@@ -627,53 +616,52 @@ impl OrderLineModel {
     }
 } // end of impl OrderLineModel
 
-impl Into<OrderLinePayDto> for OrderLineModel {
-    fn into(self) -> OrderLinePayDto {
+impl From<OrderLineModel> for OrderLinePayDto {
+    fn from(value: OrderLineModel) -> OrderLinePayDto {
         OrderLinePayDto {
-            seller_id: self.id_.store_id,
-            product_id: self.id_.product_id,
-            product_type: self.id_.product_type,
-            quantity: self.qty.reserved,
-            reserved_until: self.policy.reserved_until.to_rfc3339(),
+            seller_id: value.id_.store_id,
+            product_id: value.id_.product_id,
+            product_type: value.id_.product_type,
+            quantity: value.qty.reserved,
+            reserved_until: value.policy.reserved_until.to_rfc3339(),
             amount: PayAmountDto {
-                unit: self.price.unit,
-                total: self.price.total,
+                unit: value.price.unit,
+                total: value.price.total,
             },
         }
     }
 }
 
-impl Into<OrderLineStockReservingDto> for OrderLineModel {
-    fn into(self) -> OrderLineStockReservingDto {
+impl From<OrderLineModel> for OrderLineStockReservingDto {
+    fn from(value: OrderLineModel) -> OrderLineStockReservingDto {
         OrderLineStockReservingDto {
-            seller_id: self.id_.store_id,
-            product_id: self.id_.product_id,
-            product_type: self.id_.product_type,
-            qty: self.qty.reserved,
+            seller_id: value.id_.store_id,
+            product_id: value.id_.product_id,
+            product_type: value.id_.product_type,
+            qty: value.qty.reserved,
         }
     }
 }
 
-impl Into<InventoryEditStockLevelDto> for OrderLineModel {
-    fn into(self) -> InventoryEditStockLevelDto {
-        assert!(self.qty.reserved >= self.qty.paid);
-        let num_returning = self.qty.reserved - self.qty.paid;
-        let num_returning = num_returning as i32;
+impl From<OrderLineModel> for InventoryEditStockLevelDto {
+    fn from(value: OrderLineModel) -> InventoryEditStockLevelDto {
+        assert!(value.qty.reserved >= value.qty.paid);
+        let num_returning = (value.qty.reserved - value.qty.paid) as i32;
         InventoryEditStockLevelDto {
-            store_id: self.id_.store_id,
-            product_id: self.id_.product_id,
+            store_id: value.id_.store_id,
+            product_id: value.id_.product_id,
             qty_add: num_returning,
-            product_type: self.id_.product_type.clone(),
-            expiry: self.policy.reserved_until,
+            product_type: value.id_.product_type.clone(),
+            expiry: value.policy.reserved_until,
         } // NOTE, the field `expiry` should NOT be referenced by the entire application
           // , becuase the editing data, converted from order line, does NOT really reflect
           // the expiry time of the original stock item
     }
 }
 
-impl Into<Vec<OrderLineStockReturningDto>> for OrderReturnModel {
-    fn into(self) -> Vec<OrderLineStockReturningDto> {
-        let (id_, map) = (self.id_, self.qty);
+impl From<OrderReturnModel> for Vec<OrderLineStockReturningDto> {
+    fn from(value: OrderReturnModel) -> Vec<OrderLineStockReturningDto> {
+        let (id_, map) = (value.id_, value.qty);
         map.into_iter()
             .map(|(create_time, (qty, _refund))| OrderLineStockReturningDto {
                 seller_id: id_.store_id,
@@ -685,9 +673,9 @@ impl Into<Vec<OrderLineStockReturningDto>> for OrderReturnModel {
             .collect()
     }
 }
-impl Into<Vec<OrderLineReplicaRefundDto>> for OrderReturnModel {
-    fn into(self) -> Vec<OrderLineReplicaRefundDto> {
-        let (pid, map) = (self.id_, self.qty);
+impl From<OrderReturnModel> for Vec<OrderLineReplicaRefundDto> {
+    fn from(value: OrderReturnModel) -> Vec<OrderLineReplicaRefundDto> {
+        let (pid, map) = (value.id_, value.qty);
         map.into_iter()
             .map(|(ctime, (_q, refund))| OrderLineReplicaRefundDto {
                 seller_id: pid.store_id,
@@ -748,16 +736,14 @@ impl OrderReturnModel {
                         let tot_num_return = num_returned + d.quantity;
                         if tot_num_return > oline.num_reserved(time_now) {
                             Some(OrderLineReturnErrorReason::QtyLimitExceed)
-                        } else {
-                            if let Some(r) = result {
-                                if r.qty.contains_key(&time_now) {
-                                    Some(OrderLineReturnErrorReason::DuplicateReturn)
-                                } else {
-                                    None
-                                }
+                        } else if let Some(r) = result {
+                            if r.qty.contains_key(&time_now) {
+                                Some(OrderLineReturnErrorReason::DuplicateReturn)
                             } else {
                                 None
                             }
+                        } else {
+                            None
                         }
                     } else {
                         Some(OrderLineReturnErrorReason::WarrantyExpired)
@@ -819,7 +805,7 @@ impl OrderReturnModel {
                 }
             })
             .collect::<Vec<_>>();
-        o_returns.extend(new_returns.into_iter());
+        o_returns.extend(new_returns);
         Ok(o_returns)
     } // end of fn filter_requests
 } // end of impl OrderReturnModel
