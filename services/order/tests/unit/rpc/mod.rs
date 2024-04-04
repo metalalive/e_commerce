@@ -1,2 +1,2 @@
-#[cfg(feature="amqprs")]
+#[cfg(feature = "amqprs")]
 mod amqp;

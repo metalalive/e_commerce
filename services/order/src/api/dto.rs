@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::api::{jsn_serialize_product_type, jsn_validate_product_type};
 use crate::constant::ProductType;
-use crate::api::{jsn_validate_product_type, jsn_serialize_product_type};
 
 // TODO, merge the 2 DTO modules in `/web` and `/rpc` package
 
@@ -19,27 +19,39 @@ pub struct ContactDto {
 }
 
 #[derive(Deserialize, Serialize)]
-pub enum CountryCode {TW,TH,IN,ID,US,Unknown}
+pub enum CountryCode {
+    TW,
+    TH,
+    IN,
+    ID,
+    US,
+    Unknown,
+}
 impl Into<String> for CountryCode {
     fn into(self) -> String {
         let out = match self {
-            Self::TW => "TW",  Self::TH => "TH",
-            Self::IN => "IN",  Self::ID => "ID",
-            Self::US => "US",  Self::Unknown => "Unknown",
+            Self::TW => "TW",
+            Self::TH => "TH",
+            Self::IN => "IN",
+            Self::ID => "ID",
+            Self::US => "US",
+            Self::Unknown => "Unknown",
         };
         out.to_string()
     }
-} // implement `Into` trait, not replying on serde 
+} // implement `Into` trait, not replying on serde
 impl From<String> for CountryCode {
     fn from(value: String) -> Self {
         match value.as_str() {
-            "TW" => Self::TW,  "TH" => Self::TH,
-            "IN" => Self::IN,  "ID" => Self::ID,
-            "US" => Self::US,  _others => Self::Unknown,
+            "TW" => Self::TW,
+            "TH" => Self::TH,
+            "IN" => Self::IN,
+            "ID" => Self::ID,
+            "US" => Self::US,
+            _others => Self::Unknown,
         }
     }
 }
-
 
 #[derive(Deserialize, Serialize)]
 pub struct PhyAddrDto {
@@ -48,7 +60,7 @@ pub struct PhyAddrDto {
     pub city: String,
     pub distinct: String,
     pub street_name: Option<String>,
-    pub detail: String
+    pub detail: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -59,22 +71,29 @@ pub struct ShippingOptionDto {
 }
 
 #[derive(Deserialize, Serialize)]
-pub enum ShippingMethod {UPS, FedEx, BlackCatExpress, Unknown}
+pub enum ShippingMethod {
+    UPS,
+    FedEx,
+    BlackCatExpress,
+    Unknown,
+}
 
 impl Into<String> for ShippingMethod {
     fn into(self) -> String {
         let out = match self {
-            Self::UPS => "UPS",  Self::FedEx => "FedEx",
+            Self::UPS => "UPS",
+            Self::FedEx => "FedEx",
             Self::BlackCatExpress => "BlackCatExpress",
             Self::Unknown => "Unknown",
         };
         out.to_string()
     }
-} // implement `Into` trait, not replying on serde 
+} // implement `Into` trait, not replying on serde
 impl From<String> for ShippingMethod {
     fn from(value: String) -> Self {
         match value.as_str() {
-            "UPS" => Self::UPS,  "FedEx" => Self::FedEx,
+            "UPS" => Self::UPS,
+            "FedEx" => Self::FedEx,
             "BlackCatExpress" => Self::BlackCatExpress,
             _others => Self::Unknown,
         }
@@ -97,16 +116,19 @@ pub struct BillingDto {
 #[derive(Deserialize, Serialize)]
 pub struct PayAmountDto {
     pub unit: u32,
-    pub total: u32
+    pub total: u32,
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderLinePayDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    #[serde(
+        deserialize_with = "jsn_validate_product_type",
+        serialize_with = "jsn_serialize_product_type"
+    )]
     pub product_type: ProductType,
     pub reserved_until: String, // date-time formatted in RFC3339 spec
     pub quantity: u32,
-    pub amount: PayAmountDto
+    pub amount: PayAmountDto,
 }

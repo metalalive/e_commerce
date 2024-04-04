@@ -1,14 +1,22 @@
 use order::api::dto::{ContactDto, PhoneNumberDto};
 use order::model::ContactModel;
 
-
 #[test]
-fn convert_dto_ok()
-{
-    let data = ContactDto {first_name:"Hussien".to_string(), last_name:"Flyar".to_string(),
-        phones:vec![PhoneNumberDto {nation:9, number:"1802885".to_string()},
-           PhoneNumberDto {nation:72, number:"00812116".to_string()} ],
-        emails:vec!["ggla@hommy.idv".to_string(), "996icu@txcwok.cc".to_string()]
+fn convert_dto_ok() {
+    let data = ContactDto {
+        first_name: "Hussien".to_string(),
+        last_name: "Flyar".to_string(),
+        phones: vec![
+            PhoneNumberDto {
+                nation: 9,
+                number: "1802885".to_string(),
+            },
+            PhoneNumberDto {
+                nation: 72,
+                number: "00812116".to_string(),
+            },
+        ],
+        emails: vec!["ggla@hommy.idv".to_string(), "996icu@txcwok.cc".to_string()],
     };
     let result = ContactModel::try_from(data);
     assert!(result.is_ok());
@@ -23,13 +31,25 @@ fn convert_dto_ok()
 }
 
 #[test]
-fn convert_dto_error ()
-{
-    let data = ContactDto {first_name:"Hussien".to_string(), last_name:"Flyar".to_string(),
-        phones:vec![PhoneNumberDto {nation:9, number:"1802885".to_string()},
-           PhoneNumberDto {nation:72, number:"008l2116".to_string()} ],
-        emails:vec!["ininder@falung.org".to_string(), "heiz@billykane.io@yt".to_string(),
-            "anu/ser@@i-am-here.bot".to_string()]
+fn convert_dto_error() {
+    let data = ContactDto {
+        first_name: "Hussien".to_string(),
+        last_name: "Flyar".to_string(),
+        phones: vec![
+            PhoneNumberDto {
+                nation: 9,
+                number: "1802885".to_string(),
+            },
+            PhoneNumberDto {
+                nation: 72,
+                number: "008l2116".to_string(),
+            },
+        ],
+        emails: vec![
+            "ininder@falung.org".to_string(),
+            "heiz@billykane.io@yt".to_string(),
+            "anu/ser@@i-am-here.bot".to_string(),
+        ],
     };
     let result = ContactModel::try_from(data);
     assert!(result.is_err());
@@ -47,4 +67,3 @@ fn convert_dto_error ()
         }
     }
 }
-

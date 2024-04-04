@@ -1,17 +1,20 @@
-use std::env;
-use std::fs::{File, remove_file};
 use serde_json::{from_value as json_from_value, json};
+use std::env;
+use std::fs::{remove_file, File};
 
-use order::{AppLoggingCfg, AppBasepathCfg, to_3rdparty_level};
-use order::logging::{AppLogContext, AppLogLevel};
 use order::constant::{ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
+use order::logging::{AppLogContext, AppLogLevel};
+use order::{to_3rdparty_level, AppBasepathCfg, AppLoggingCfg};
 
 #[test]
-fn init_log_context_ok () {
-    let sys_path  = env::var(ENV_VAR_SYS_BASE_PATH).unwrap() ;
-    let app_path = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap() ;
+fn init_log_context_ok() {
+    let sys_path = env::var(ENV_VAR_SYS_BASE_PATH).unwrap();
+    let app_path = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
     // ---- setup
-    let basepath = AppBasepathCfg { system: sys_path.clone(), service: app_path };
+    let basepath = AppBasepathCfg {
+        system: sys_path.clone(),
+        service: app_path,
+    };
     let log_file_path = "tmp/log/test/order_unit_test.log";
     let logger_keys = ["should-be-module-path", "another-module-hier"];
     let cfg = {
@@ -43,7 +46,7 @@ fn init_log_context_ok () {
         });
     }
     {
-        let fullpath = sys_path + "/"  + log_file_path;
+        let fullpath = sys_path + "/" + log_file_path;
         let result = File::open(fullpath.clone());
         assert_eq!(result.is_ok(), true);
         let f = result.unwrap();
@@ -52,4 +55,3 @@ fn init_log_context_ok () {
         assert_eq!(result.is_ok(), true);
     }
 } // end of init_log_context_ok
-

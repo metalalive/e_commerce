@@ -1,16 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+use crate::api::dto::{BillingDto, OrderLinePayDto, ShippingDto};
+use crate::api::{jsn_serialize_product_type, jsn_validate_product_type};
 use crate::constant::ProductType;
-use crate::api::{jsn_validate_product_type, jsn_serialize_product_type};
-use crate::api::dto::{OrderLinePayDto, BillingDto, ShippingDto};
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderLineReqDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    #[serde(
+        deserialize_with = "jsn_validate_product_type",
+        serialize_with = "jsn_serialize_product_type"
+    )]
     pub product_type: ProductType,
-    pub quantity: u32
+    pub quantity: u32,
 }
 
 // TODO , extra field to indicate whether to discard specific line
@@ -24,12 +27,18 @@ pub struct CartDto {
 
 #[derive(Deserialize, Serialize)]
 pub enum OrderLineCreateErrorReason {
-    NotExist, OutOfStock, NotEnoughToClaim, RsvLimitViolation 
+    NotExist,
+    OutOfStock,
+    NotEnoughToClaim,
+    RsvLimitViolation,
 } // TODO, rename to line-create error reason
 
 #[derive(Serialize)]
 pub enum OrderLineReturnErrorReason {
-    NotExist, WarrantyExpired, QtyLimitExceed, DuplicateReturn
+    NotExist,
+    WarrantyExpired,
+    QtyLimitExceed,
+    DuplicateReturn,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -56,21 +65,27 @@ pub struct QuotaResourceErrorDto {
 pub struct OrderLineCreateErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    #[serde(
+        deserialize_with = "jsn_validate_product_type",
+        serialize_with = "jsn_serialize_product_type"
+    )]
     pub product_type: ProductType,
     pub reason: OrderLineCreateErrorReason,
     pub nonexist: Option<OrderLineCreateErrNonExistDto>,
     pub shortage: Option<u32>,
-    pub rsv_limit: Option<OLineCreateErrorRsvLimitDto>
+    pub rsv_limit: Option<OLineCreateErrorRsvLimitDto>,
 }
 
 #[derive(Serialize)]
 pub struct OrderLineReturnErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    #[serde(
+        deserialize_with = "jsn_validate_product_type",
+        serialize_with = "jsn_serialize_product_type"
+    )]
     pub product_type: ProductType,
-    pub reason: OrderLineReturnErrorReason
+    pub reason: OrderLineReturnErrorReason,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -79,7 +94,9 @@ pub struct PhoneNumberErrorDto {
     pub number: Option<ContactErrorReason>,
 }
 #[derive(Deserialize, Serialize, Debug)]
-pub enum PhoneNumNationErrorReason {InvalidCode}
+pub enum PhoneNumNationErrorReason {
+    InvalidCode,
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct ContactErrorDto {
@@ -92,28 +109,43 @@ pub struct ContactErrorDto {
     pub quota_phone: Option<QuotaResourceErrorDto>,
 }
 #[derive(Deserialize, Serialize, Debug)]
-pub enum ContactErrorReason {Empty, InvalidChar}
+pub enum ContactErrorReason {
+    Empty,
+    InvalidChar,
+}
 
 #[derive(Deserialize, Serialize)]
 pub enum ContactNonFieldErrorReason {
-    EmailMissing, PhoneMissing, QuotaExceed
+    EmailMissing,
+    PhoneMissing,
+    QuotaExceed,
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct PhyAddrErrorDto {
     pub country: Option<PhyAddrNationErrorReason>,
     pub region: Option<PhyAddrRegionErrorReason>,
-    pub city:   Option<PhyAddrRegionErrorReason>,
+    pub city: Option<PhyAddrRegionErrorReason>,
     pub distinct: Option<PhyAddrDistinctErrorReason>,
     pub street_name: Option<PhyAddrDistinctErrorReason>,
-    pub detail: Option<PhyAddrDistinctErrorReason>
+    pub detail: Option<PhyAddrDistinctErrorReason>,
 }
 #[derive(Deserialize, Serialize)]
-pub enum PhyAddrNationErrorReason {NotSupport}
+pub enum PhyAddrNationErrorReason {
+    NotSupport,
+}
 #[derive(Deserialize, Serialize)]
-pub enum PhyAddrRegionErrorReason {Empty, InvalidChar, NotExist, NotSupport}
+pub enum PhyAddrRegionErrorReason {
+    Empty,
+    InvalidChar,
+    NotExist,
+    NotSupport,
+}
 #[derive(Deserialize, Serialize)]
-pub enum PhyAddrDistinctErrorReason {Empty, InvalidChar}
+pub enum PhyAddrDistinctErrorReason {
+    Empty,
+    InvalidChar,
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct ShippingOptionErrorDto {
@@ -121,9 +153,16 @@ pub struct ShippingOptionErrorDto {
     pub method: Option<ShipOptionMethodErrorReason>,
 }
 #[derive(Deserialize, Serialize)]
-pub enum ShipOptionSellerErrorReason {Empty, NotExist, NotSupport}
+pub enum ShipOptionSellerErrorReason {
+    Empty,
+    NotExist,
+    NotSupport,
+}
 #[derive(Deserialize, Serialize)]
-pub enum ShipOptionMethodErrorReason {Empty, NotSupport}
+pub enum ShipOptionMethodErrorReason {
+    Empty,
+    NotSupport,
+}
 
 pub type BillingReqDto = BillingDto;
 pub type ShippingReqDto = ShippingDto;
@@ -145,7 +184,7 @@ pub struct ShippingErrorDto {
 pub struct OrderCreateReqData {
     pub order_lines: Vec<OrderLineReqDto>,
     pub billing: BillingReqDto,
-    pub shipping: ShippingReqDto
+    pub shipping: ShippingReqDto,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -167,12 +206,15 @@ pub struct OrderCreateRespErrorDto {
 #[derive(Deserialize, Serialize)]
 pub struct OrderEditReqData {
     pub billing: BillingReqDto,
-    pub shipping: ShippingReqDto
+    pub shipping: ShippingReqDto,
 }
 
 #[derive(Deserialize)]
 pub struct ProductPolicyDto {
-    #[serde(deserialize_with="jsn_validate_product_type", serialize_with="jsn_serialize_product_type")]
+    #[serde(
+        deserialize_with = "jsn_validate_product_type",
+        serialize_with = "jsn_serialize_product_type"
+    )]
     pub product_type: ProductType,
     pub product_id: u64,
     pub auto_cancel_secs: u32,
@@ -183,8 +225,8 @@ pub struct ProductPolicyDto {
 
 #[derive(Serialize, PartialEq, Debug)]
 pub struct ProductPolicyClientLimitDto {
-    pub given:u32,
-    pub limit:u32
+    pub given: u32,
+    pub limit: u32,
 }
 #[derive(Serialize, PartialEq, Debug)]
 pub struct ProductPolicyNumRsvLimitDto {
@@ -193,9 +235,8 @@ pub struct ProductPolicyNumRsvLimitDto {
 }
 
 #[derive(Serialize, PartialEq, Debug)]
-pub struct ProductPolicyClientErrorDto
-{
-    #[serde(serialize_with="jsn_serialize_product_type")]
+pub struct ProductPolicyClientErrorDto {
+    #[serde(serialize_with = "jsn_serialize_product_type")]
     pub product_type: ProductType,
     pub product_id: u64,
     pub err_type: String, // convert from AppError

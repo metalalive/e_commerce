@@ -1,32 +1,32 @@
-use std::cmp::min;
-use std::sync::Arc;
 use std::boxed::Box;
-use std::vec::Vec;
+use std::cmp::min;
 use std::result::Result as DefaultResult;
+use std::sync::Arc;
+use std::vec::Vec;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Local, FixedOffset, NaiveDateTime};
+use chrono::{DateTime, FixedOffset, Local, NaiveDateTime};
 use futures_util::stream::StreamExt;
-use sqlx::pool::PoolConnection;
-use sqlx::{Transaction, MySql, Arguments, IntoArguments, Executor, Statement, Row, Connection};
 use sqlx::mysql::{MySqlArguments, MySqlRow};
+use sqlx::pool::PoolConnection;
+use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
-use crate::api::dto::{PhoneNumberDto, CountryCode, ShippingMethod};
+use crate::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::constant::{self as AppConst, ProductType};
 use crate::datastore::AppMariaDbStore;
 use crate::error::{AppError, AppErrorCode};
 use crate::model::{
-    BillingModel, ShippingModel, OrderLineModelSet, OrderLineModel, OrderLineIdentity,
-    OrderLinePriceModel, OrderLineQuantityModel, OrderLineAppliedPolicyModel, ContactModel,
-    PhyAddrModel, ShippingOptionModel
+    BillingModel, ContactModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
+    OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, PhyAddrModel, ShippingModel,
+    ShippingOptionModel,
 };
 use crate::repository::{
-    AbsOrderRepo, AbsOrderStockRepo, AppOrderRepoUpdateLinesUserFunc, AppOrderFetchRangeCallback
+    AbsOrderRepo, AbsOrderStockRepo, AppOrderFetchRangeCallback, AppOrderRepoUpdateLinesUserFunc,
 };
 
-use super::{run_query_once, OidBytes};
 use super::stock::StockMariaDbRepo;
+use super::{run_query_once, OidBytes};
 
 struct InsertTopMetaArg<'a, 'b>(&'a OidBytes, u32, &'b DateTime<FixedOffset>);
 struct InsertOLineArg<'a, 'b>(&'a OidBytes, usize, Vec<&'b OrderLineModel>);
@@ -49,8 +49,7 @@ struct ContactMetaRow(MySqlRow);
 struct PhyAddrrRow(MySqlRow);
 struct ShipOptionRow(MySqlRow);
 
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertTopMetaArg<'a, 'b>
-{
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertTopMetaArg<'a, 'b> {
     fn into(self) -> (String, MySqlArguments) {
         let patt = "INSERT INTO `order_toplvl_meta`(`usr_id`,`o_id`,\
                     `created_time`) VALUES (?,?,?)";
@@ -62,54 +61,61 @@ impl<'a, 'b> Into<(String, MySqlArguments)> for InsertTopMetaArg<'a, 'b>
         (patt.to_string(), args)
     }
 }
-impl<'a, 'b> InsertOLineArg<'a, 'b>
-{
-    fn sql_pattern(num_batch:usize) -> String {
+impl<'a, 'b> InsertOLineArg<'a, 'b> {
+    fn sql_pattern(num_batch: usize) -> String {
         let col_seq = "`o_id`,`seq`,`store_id`,`product_type`,`product_id`,`price_unit`,\
                        `price_total`,`qty_rsved`,`rsved_until`,`warranty_until`";
-        let items = (0..num_batch).into_iter().map(|_| {
-            "(?,?,?,?,?,?,?,?,?,?)"
-        }).collect::<Vec<_>>();
-        format!("INSERT INTO `order_line_detail`({}) VALUES {}",
-                col_seq, items.join(","))
+        let items = (0..num_batch)
+            .into_iter()
+            .map(|_| "(?,?,?,?,?,?,?,?,?,?)")
+            .collect::<Vec<_>>();
+        format!(
+            "INSERT INTO `order_line_detail`({}) VALUES {}",
+            col_seq,
+            items.join(",")
+        )
     }
 }
 impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
     fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
         let mut args = MySqlArguments::default();
-        let (oid, mut seq, lines) = (self.0 , self.1, self.2);
-        lines.into_iter().map(|o| {
-            let prod_typ_num : u8 = o.id_.product_type.clone().into();
-            let rsved_until = o.policy.reserved_until.naive_utc();
-            let warranty_until = o.policy.warranty_until.naive_utc();
-            args.add(oid.as_column());
-            args.add(seq as u16); // match the column type in db table
-            seq += 1;
-            args.add(o.id_.store_id);
-            args.add(prod_typ_num.to_string());
-            args.add(o.id_.product_id);
-            args.add(o.price.unit);
-            args.add(o.price.total);
-            args.add(o.qty.reserved);
-            args.add(rsved_until);
-            args.add(warranty_until);
-        }).count();
+        let (oid, mut seq, lines) = (self.0, self.1, self.2);
+        lines
+            .into_iter()
+            .map(|o| {
+                let prod_typ_num: u8 = o.id_.product_type.clone().into();
+                let rsved_until = o.policy.reserved_until.naive_utc();
+                let warranty_until = o.policy.warranty_until.naive_utc();
+                args.add(oid.as_column());
+                args.add(seq as u16); // match the column type in db table
+                seq += 1;
+                args.add(o.id_.store_id);
+                args.add(prod_typ_num.to_string());
+                args.add(o.id_.product_id);
+                args.add(o.price.unit);
+                args.add(o.price.total);
+                args.add(o.qty.reserved);
+                args.add(rsved_until);
+                args.add(warranty_until);
+            })
+            .count();
         args
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertOLineArg<'a, 'b>
-{
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertOLineArg<'a, 'b> {
     fn into(self) -> (String, MySqlArguments) {
         let num_batch = self.2.len();
         (Self::sql_pattern(num_batch), self.into_arguments())
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactMeta<'a, 'b>
-{
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactMeta<'a, 'b> {
     fn into(self) -> (String, MySqlArguments) {
         let (table_opt, oid, first_name, last_name) = (self.0, self.1, self.2, self.3);
-        let patt = format!("INSERT INTO `{}_contact_meta`(`o_id`,`first_name`,`last_name`) \
-                           VALUES (?,?,?)", table_opt);
+        let patt = format!(
+            "INSERT INTO `{}_contact_meta`(`o_id`,`first_name`,`last_name`) \
+                           VALUES (?,?,?)",
+            table_opt
+        );
         let mut args = MySqlArguments::default();
         args.add(oid.as_column());
         args.add(first_name);
@@ -121,28 +127,35 @@ impl<'a, 'b> InsertContactEmail<'a, 'b> {
     fn sql_pattern(&self) -> String {
         let (table_opt, num_batch) = (self.0, self.2.len());
         assert!(num_batch > 0);
-        let items = (0..num_batch).into_iter().map(|_num| "(?,?,?)").collect::<Vec<_>>();
-        format!("INSERT INTO `{}_contact_email`(`o_id`,`seq`,`mail`) VALUES {}",
-                table_opt, items.join(","))
+        let items = (0..num_batch)
+            .into_iter()
+            .map(|_num| "(?,?,?)")
+            .collect::<Vec<_>>();
+        format!(
+            "INSERT INTO `{}_contact_email`(`o_id`,`seq`,`mail`) VALUES {}",
+            table_opt,
+            items.join(",")
+        )
     }
 }
-impl <'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactEmail<'a, 'b>
-{
+impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactEmail<'a, 'b> {
     fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
         let (oid, mails, mut seq) = (self.1, self.2, 0u16);
         let oid = oid.as_column();
         let mut args = MySqlArguments::default();
-        mails.into_iter().map(|mail| {
-            args.add(&oid);
-            args.add(seq);
-            args.add(mail);
-            seq += 1;
-        }).count();
+        mails
+            .into_iter()
+            .map(|mail| {
+                args.add(&oid);
+                args.add(seq);
+                args.add(mail);
+                seq += 1;
+            })
+            .count();
         args
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactEmail<'a, 'b>
-{
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactEmail<'a, 'b> {
     fn into(self) -> (String, MySqlArguments) {
         (self.sql_pattern(), self.into_arguments())
     }
@@ -151,40 +164,49 @@ impl<'a, 'b> InsertContactPhone<'a, 'b> {
     fn sql_pattern(&self) -> String {
         let (table_opt, num_batch) = (self.0, self.2.len());
         assert!(num_batch > 0);
-        let items = (0..num_batch).into_iter().map(|_num| "(?,?,?,?)").collect::<Vec<_>>();
-        format!("INSERT INTO `{}_contact_phone`(`o_id`,`seq`,`nation`,`number`) VALUES {}",
-                table_opt, items.join(","))
+        let items = (0..num_batch)
+            .into_iter()
+            .map(|_num| "(?,?,?,?)")
+            .collect::<Vec<_>>();
+        format!(
+            "INSERT INTO `{}_contact_phone`(`o_id`,`seq`,`nation`,`number`) VALUES {}",
+            table_opt,
+            items.join(",")
+        )
     }
 }
-impl <'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactPhone<'a, 'b>
-{
+impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactPhone<'a, 'b> {
     fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
         let (oid, phones, mut seq) = (self.1, self.2, 0u16);
         let oid = oid.as_column();
         let mut args = MySqlArguments::default();
-        phones.into_iter().map(|phone| {
-            args.add(&oid);
-            args.add(seq);
-            args.add(phone.nation);
-            args.add(phone.number);
-            seq += 1;
-        }).count();
+        phones
+            .into_iter()
+            .map(|phone| {
+                args.add(&oid);
+                args.add(seq);
+                args.add(phone.nation);
+                args.add(phone.number);
+                seq += 1;
+            })
+            .count();
         args
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactPhone<'a, 'b>
-{
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactPhone<'a, 'b> {
     fn into(self) -> (String, MySqlArguments) {
         (self.sql_pattern(), self.into_arguments())
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertPhyAddr<'a, 'b>
-{
+impl<'a, 'b> Into<(String, MySqlArguments)> for InsertPhyAddr<'a, 'b> {
     fn into(self) -> (String, MySqlArguments) {
         let (table_opt, oid, addr) = (self.0, self.1, self.2);
-        let patt = format!("INSERT INTO `{}_phyaddr`(`o_id`,`country`,`region`,`city`,\
-                   `distinct`,`street`,`detail`) VALUES (?,?,?,?,?,?,?)", table_opt);
-        let country:String = addr.country.into();
+        let patt = format!(
+            "INSERT INTO `{}_phyaddr`(`o_id`,`country`,`region`,`city`,\
+                   `distinct`,`street`,`detail`) VALUES (?,?,?,?,?,?,?)",
+            table_opt
+        );
+        let country: String = addr.country.into();
         let mut args = MySqlArguments::default();
         args.add(oid.as_column());
         args.add(country);
@@ -197,29 +219,35 @@ impl<'a, 'b> Into<(String, MySqlArguments)> for InsertPhyAddr<'a, 'b>
     }
 }
 impl<'a> InsertShipOption<'a> {
-    fn sql_pattern(num_batch:usize) -> String {
-        let items = (0..num_batch).into_iter().map(|_num| "(?,?,?)").collect::<Vec<_>>();
-        format!("INSERT INTO `ship_option`(`o_id`,`seller_id`,`method`) VALUES {}",
-                items.join(","))
+    fn sql_pattern(num_batch: usize) -> String {
+        let items = (0..num_batch)
+            .into_iter()
+            .map(|_num| "(?,?,?)")
+            .collect::<Vec<_>>();
+        format!(
+            "INSERT INTO `ship_option`(`o_id`,`seller_id`,`method`) VALUES {}",
+            items.join(",")
+        )
     }
 }
-impl <'a, 'q> IntoArguments<'q, MySql> for InsertShipOption<'a>
-{
+impl<'a, 'q> IntoArguments<'q, MySql> for InsertShipOption<'a> {
     fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
         let (oid, options) = (self.0, self.1);
         let oid = oid.as_column();
         let mut args = MySqlArguments::default();
-        options.into_iter().map(|so| {
-            let method:String = so.method.into();
-            args.add(&oid);
-            args.add(so.seller_id);
-            args.add(method);
-        }).count();
+        options
+            .into_iter()
+            .map(|so| {
+                let method: String = so.method.into();
+                args.add(&oid);
+                args.add(so.seller_id);
+                args.add(method);
+            })
+            .count();
         args
     }
 }
-impl<'a> Into<(String, MySqlArguments)> for InsertShipOption<'a>
-{
+impl<'a> Into<(String, MySqlArguments)> for InsertShipOption<'a> {
     fn into(self) -> (String, MySqlArguments) {
         let num_batch = self.1.len();
         assert!(num_batch > 0);
@@ -227,65 +255,76 @@ impl<'a> Into<(String, MySqlArguments)> for InsertShipOption<'a>
     }
 }
 
-impl<'a> UpdateOLinePayArg<'a>
-{
-    fn sql_pattern(num_batch:usize) -> String {
+impl<'a> UpdateOLinePayArg<'a> {
+    fn sql_pattern(num_batch: usize) -> String {
         let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=?)";
-        let case_ops = (0..num_batch).into_iter().map(
-            |_| ["WHEN", condition, "THEN", "?"]
-        ).flatten().collect::<Vec<_>>().join(" ");
-        let where_ops = (0..num_batch).into_iter().map(
-            |_| condition
-        ).collect::<Vec<_>>().join("OR") ;
+        let case_ops = (0..num_batch)
+            .into_iter()
+            .map(|_| ["WHEN", condition, "THEN", "?"])
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let where_ops = (0..num_batch)
+            .into_iter()
+            .map(|_| condition)
+            .collect::<Vec<_>>()
+            .join("OR");
         let portions = [
             format!("`qty_paid` = CASE {case_ops} ELSE `qty_paid` END"),
             format!("`qty_paid_last_update` = CASE {case_ops} ELSE `qty_paid_last_update` END"),
         ];
-        format!("UPDATE `order_line_detail` SET {}, {} WHERE `o_id`=? AND ({})"
-                , portions[0], portions[1], where_ops)
+        format!(
+            "UPDATE `order_line_detail` SET {}, {} WHERE `o_id`=? AND ({})",
+            portions[0], portions[1], where_ops
+        )
     }
 }
-impl<'a,'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a>
-{
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments
-    { 
+impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
+    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
         let (oid, lines) = (self.0, self.1);
         let mut args = MySqlArguments::default();
-        lines.iter().map(|line| {
-            let prod_typ_num: u8 = line.id_.product_type.clone().into();
-            args.add(line.id_.store_id);
-            args.add(prod_typ_num.to_string());
-            args.add(line.id_.product_id);
-            args.add(line.qty.paid);
-        }).count();
-        lines.iter().map(|line| {
-            let prod_typ_num: u8 = line.id_.product_type.clone().into();
-            let time = line.qty.paid_last_update.as_ref().unwrap();
-            args.add(line.id_.store_id);
-            args.add(prod_typ_num.to_string());
-            args.add(line.id_.product_id);
-            args.add(time.naive_utc());
-        }).count();
+        lines
+            .iter()
+            .map(|line| {
+                let prod_typ_num: u8 = line.id_.product_type.clone().into();
+                args.add(line.id_.store_id);
+                args.add(prod_typ_num.to_string());
+                args.add(line.id_.product_id);
+                args.add(line.qty.paid);
+            })
+            .count();
+        lines
+            .iter()
+            .map(|line| {
+                let prod_typ_num: u8 = line.id_.product_type.clone().into();
+                let time = line.qty.paid_last_update.as_ref().unwrap();
+                args.add(line.id_.store_id);
+                args.add(prod_typ_num.to_string());
+                args.add(line.id_.product_id);
+                args.add(time.naive_utc());
+            })
+            .count();
         args.add(oid.as_column());
-        lines.into_iter().map(|line| {
-            let id_ = line.id_;
-            let prod_typ_num: u8 = id_.product_type.into();
-            args.add(id_.store_id);
-            args.add(prod_typ_num.to_string());
-            args.add(id_.product_id);
-        }).count();
+        lines
+            .into_iter()
+            .map(|line| {
+                let id_ = line.id_;
+                let prod_typ_num: u8 = id_.product_type.into();
+                args.add(id_.store_id);
+                args.add(prod_typ_num.to_string());
+                args.add(id_.product_id);
+            })
+            .count();
         args
     }
 }
-impl<'a> Into<(String, MySqlArguments)> for UpdateOLinePayArg<'a>
-{
+impl<'a> Into<(String, MySqlArguments)> for UpdateOLinePayArg<'a> {
     fn into(self) -> (String, MySqlArguments) {
         let num_batch = self.1.len();
         assert!(num_batch > 0);
         (Self::sql_pattern(num_batch), self.into_arguments())
     }
 }
-
 
 const OLINE_SELECT_PREFIX: &'static str = "SELECT `store_id`,`product_type`,`product_id`,\
     `price_unit`,`price_total`,`qty_rsved`,`qty_paid`,`qty_paid_last_update`,`rsved_until`,\
@@ -300,33 +339,35 @@ impl Into<(String, MySqlArguments)> for FetchAllLinesArg {
         (sql_patt, args)
     }
 }
-impl<'a> FetchLineByIdArg<'a>
-{
-    fn sql_pattern(num_batch: usize) -> String
-    {
-        let items = (0..num_batch).into_iter().map(
-            |_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)"
-        ).collect::<Vec<_>>();
-        format!("{OLINE_SELECT_PREFIX} WHERE `o_id`=? AND ({})", items.join("OR"))
+impl<'a> FetchLineByIdArg<'a> {
+    fn sql_pattern(num_batch: usize) -> String {
+        let items = (0..num_batch)
+            .into_iter()
+            .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
+            .collect::<Vec<_>>();
+        format!(
+            "{OLINE_SELECT_PREFIX} WHERE `o_id`=? AND ({})",
+            items.join("OR")
+        )
     }
 }
-impl<'a,'q> IntoArguments<'q, MySql> for FetchLineByIdArg<'a>
-{
+impl<'a, 'q> IntoArguments<'q, MySql> for FetchLineByIdArg<'a> {
     fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
         let (oid_b, pids) = (self.0, self.1);
         let mut args = MySqlArguments::default();
         args.add(oid_b.as_column());
-        pids.into_iter().map(|id_| {
-            let prod_typ_num: u8 = id_.product_type.into();
-            args.add(id_.store_id);
-            args.add(prod_typ_num.to_string());
-            args.add(id_.product_id);
-        }).count();
+        pids.into_iter()
+            .map(|id_| {
+                let prod_typ_num: u8 = id_.product_type.into();
+                args.add(id_.store_id);
+                args.add(prod_typ_num.to_string());
+                args.add(id_.product_id);
+            })
+            .count();
         args
     }
 }
-impl<'a> Into<(String, MySqlArguments)> for FetchLineByIdArg<'a>
-{
+impl<'a> Into<(String, MySqlArguments)> for FetchLineByIdArg<'a> {
     fn into(self) -> (String, MySqlArguments) {
         let num_batch = self.1.len();
         assert!(num_batch > 0);
@@ -334,16 +375,19 @@ impl<'a> Into<(String, MySqlArguments)> for FetchLineByIdArg<'a>
     }
 }
 
-
 impl TryInto<OrderLineModelSet> for TopLvlMetaRow {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<OrderLineModelSet, Self::Error> {
         let row = self.0;
         let order_id = OidBytes::to_app_oid(&row, 0)?;
         let owner_id = row.try_get::<u32, usize>(1)?;
-        let create_time = row.try_get::<NaiveDateTime, usize>(2)?
-            .and_utc().into() ;
-        Ok(OrderLineModelSet { order_id, owner_id, create_time, lines:vec![] })
+        let create_time = row.try_get::<NaiveDateTime, usize>(2)?.and_utc().into();
+        Ok(OrderLineModelSet {
+            order_id,
+            owner_id,
+            create_time,
+            lines: vec![],
+        })
     }
 }
 impl TryFrom<OLineRow> for OrderLineModel {
@@ -360,15 +404,33 @@ impl TryFrom<OLineRow> for OrderLineModel {
         let result = row.try_get::<Option<NaiveDateTime>, usize>(7)?;
         let paid_last_update = if let Some(t) = result {
             Some(t.and_utc().into())
-        } else { None };
+        } else {
+            None
+        };
         let reserved_until = row.try_get::<NaiveDateTime, usize>(8)?.and_utc().into();
         let warranty_until = row.try_get::<NaiveDateTime, usize>(9)?.and_utc().into();
 
-        let id_ = OrderLineIdentity {store_id, product_type, product_id};
-        let price = OrderLinePriceModel {unit, total};
-        let qty = OrderLineQuantityModel {reserved, paid, paid_last_update};
-        let policy = OrderLineAppliedPolicyModel {warranty_until, reserved_until};
-        Ok(OrderLineModel { id_, price, qty, policy })
+        let id_ = OrderLineIdentity {
+            store_id,
+            product_type,
+            product_id,
+        };
+        let price = OrderLinePriceModel { unit, total };
+        let qty = OrderLineQuantityModel {
+            reserved,
+            paid,
+            paid_last_update,
+        };
+        let policy = OrderLineAppliedPolicyModel {
+            warranty_until,
+            reserved_until,
+        };
+        Ok(OrderLineModel {
+            id_,
+            price,
+            qty,
+            policy,
+        })
     }
 } // end of impl OrderLineModel
 
@@ -386,7 +448,7 @@ impl TryInto<PhoneNumberDto> for PhoneRow {
         let row = self.0;
         let nation = row.try_get::<u16, usize>(0)?;
         let number = row.try_get::<String, usize>(1)?;
-        Ok(PhoneNumberDto {nation, number})
+        Ok(PhoneNumberDto { nation, number })
     }
 }
 impl TryInto<ContactModel> for ContactMetaRow {
@@ -394,8 +456,13 @@ impl TryInto<ContactModel> for ContactMetaRow {
     fn try_into(self) -> DefaultResult<ContactModel, Self::Error> {
         let row = self.0;
         let first_name = row.try_get::<String, usize>(0)?;
-        let last_name  = row.try_get::<String, usize>(1)?;
-        Ok(ContactModel { first_name, last_name, emails: vec![], phones: vec![] })
+        let last_name = row.try_get::<String, usize>(1)?;
+        Ok(ContactModel {
+            first_name,
+            last_name,
+            emails: vec![],
+            phones: vec![],
+        })
     }
 }
 impl TryInto<PhyAddrModel> for PhyAddrrRow {
@@ -407,11 +474,18 @@ impl TryInto<PhyAddrModel> for PhyAddrrRow {
             CountryCode::from(c)
         };
         let region = row.try_get::<String, usize>(1)?;
-        let city   = row.try_get::<String, usize>(2)?;
+        let city = row.try_get::<String, usize>(2)?;
         let distinct = row.try_get::<String, usize>(3)?;
         let street_name = row.try_get::<Option<String>, usize>(4)?;
         let detail = row.try_get::<String, usize>(5)?;
-        let out = PhyAddrModel {country, region, city, distinct, street_name, detail};
+        let out = PhyAddrModel {
+            country,
+            region,
+            city,
+            distinct,
+            street_name,
+            detail,
+        };
         Ok(out)
     }
 }
@@ -422,25 +496,28 @@ impl TryInto<ShippingOptionModel> for ShipOptionRow {
         let seller_id = row.try_get::<u32, usize>(0)?;
         let method = row.try_get::<String, usize>(1)?;
         let method = ShippingMethod::from(method);
-        Ok(ShippingOptionModel {seller_id, method})
+        Ok(ShippingOptionModel { seller_id, method })
     }
 }
 
-pub(crate) struct OrderMariaDbRepo
-{
-    _db : Arc<AppMariaDbStore>,
-    _stock : Arc<Box<dyn AbsOrderStockRepo>>,
+pub(crate) struct OrderMariaDbRepo {
+    _db: Arc<AppMariaDbStore>,
+    _stock: Arc<Box<dyn AbsOrderStockRepo>>,
 }
 
 #[async_trait]
-impl AbsOrderRepo for OrderMariaDbRepo
-{
-    fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>>
-    { self._stock.clone() }
+impl AbsOrderRepo for OrderMariaDbRepo {
+    fn stock(&self) -> Arc<Box<dyn AbsOrderStockRepo>> {
+        self._stock.clone()
+    }
 
-    async fn save_contact (&self, oid:&str, bl:BillingModel, sh:ShippingModel)
-        -> DefaultResult<(), AppError> 
-    { // TODO, consider update case
+    async fn save_contact(
+        &self,
+        oid: &str,
+        bl: BillingModel,
+        sh: ShippingModel,
+    ) -> DefaultResult<(), AppError> {
+        // TODO, consider update case
         let oid_b = OidBytes::try_from(oid)?;
         let mut conn = self._db.acquire().await?;
         let mut tx = conn.begin().await?;
@@ -458,11 +535,10 @@ impl AbsOrderRepo for OrderMariaDbRepo
         tx.commit().await?;
         Ok(())
     }
-    async fn fetch_all_lines(&self, oid:String) -> DefaultResult<Vec<OrderLineModel>, AppError>
-    {
+    async fn fetch_all_lines(&self, oid: String) -> DefaultResult<Vec<OrderLineModel>, AppError> {
         let oid_b = OidBytes::try_from(oid.as_str())?;
         let mut conn = self._db.acquire().await?;
-        let (sql_patt , args) = FetchAllLinesArg(oid_b).into();
+        let (sql_patt, args) = FetchAllLinesArg(oid_b).into();
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query_with(args);
         let exec = &mut *conn;
@@ -475,8 +551,7 @@ impl AbsOrderRepo for OrderMariaDbRepo
         } // TODO, consider to return stream, let app caller determine bulk load size
         Ok(lines)
     }
-    async fn fetch_billing(&self, oid:String) -> DefaultResult<BillingModel, AppError>
-    {
+    async fn fetch_billing(&self, oid: String) -> DefaultResult<BillingModel, AppError> {
         let oid_b = OidBytes::try_from(oid.as_str())?;
         let mut conn = self._db.acquire().await?;
         let emails = Self::_fetch_mails(&mut conn, "bill", &oid_b).await?;
@@ -485,10 +560,9 @@ impl AbsOrderRepo for OrderMariaDbRepo
         contact.emails = emails;
         contact.phones = phones;
         let address = Self::_fetch_phyaddr(&mut conn, "bill", &oid_b).await?;
-        Ok(BillingModel {contact, address})
+        Ok(BillingModel { contact, address })
     }
-    async fn fetch_shipping(&self, oid:String) -> DefaultResult<ShippingModel, AppError>
-    {
+    async fn fetch_shipping(&self, oid: String) -> DefaultResult<ShippingModel, AppError> {
         let oid_b = OidBytes::try_from(oid.as_str())?;
         let mut conn = self._db.acquire().await?;
         let emails = Self::_fetch_mails(&mut conn, "ship", &oid_b).await?;
@@ -498,18 +572,27 @@ impl AbsOrderRepo for OrderMariaDbRepo
         contact.phones = phones;
         let option = Self::_fetch_ship_option(&mut conn, &oid_b).await?;
         let address = Self::_fetch_phyaddr(&mut conn, "ship", &oid_b).await?;
-        Ok(ShippingModel {contact, address, option})
+        Ok(ShippingModel {
+            contact,
+            address,
+            option,
+        })
     }
-    async fn update_lines_payment(&self, data: OrderPaymentUpdateDto,
-                                  cb: AppOrderRepoUpdateLinesUserFunc)
-        -> DefaultResult<OrderPaymentUpdateErrorDto, AppError>
-    {
+    async fn update_lines_payment(
+        &self,
+        data: OrderPaymentUpdateDto,
+        cb: AppOrderRepoUpdateLinesUserFunc,
+    ) -> DefaultResult<OrderPaymentUpdateErrorDto, AppError> {
         let (oid, d_lines) = (data.oid, data.lines);
         let oid_b = OidBytes::try_from(oid.as_str())?;
-        let pids = d_lines.iter().map(
-            |d| OrderLineIdentity {store_id:d.seller_id, product_id:d.product_id,
-                    product_type: d.product_type.clone() }
-        ).collect::<Vec<_>>();
+        let pids = d_lines
+            .iter()
+            .map(|d| OrderLineIdentity {
+                store_id: d.seller_id,
+                product_id: d.product_id,
+                product_type: d.product_type.clone(),
+            })
+            .collect::<Vec<_>>();
         let mut conn = self._db.acquire().await?;
         let mut tx = conn.begin().await?;
         let mut saved_lines = Self::_fetch_lines_by_pid(&mut tx, &oid_b, pids).await?;
@@ -522,12 +605,14 @@ impl AbsOrderRepo for OrderMariaDbRepo
         }
         Ok(OrderPaymentUpdateErrorDto { oid, lines: errors })
     }
-    async fn fetch_lines_by_rsvtime(&self, time_start: DateTime<FixedOffset>,
-                                  time_end: DateTime<FixedOffset>,
-                                  usr_cb: AppOrderFetchRangeCallback )
-        -> DefaultResult<(), AppError>
-    { // current approach will lead to full-table scan and requires 2 conncetions,
-      // TODO, improve query time when the table grows to large amount of data
+    async fn fetch_lines_by_rsvtime(
+        &self,
+        time_start: DateTime<FixedOffset>,
+        time_end: DateTime<FixedOffset>,
+        usr_cb: AppOrderFetchRangeCallback,
+    ) -> DefaultResult<(), AppError> {
+        // current approach will lead to full-table scan and requires 2 conncetions,
+        // TODO, improve query time when the table grows to large amount of data
         let mut conn0 = self._db.acquire().await?;
         let mut conn1 = self._db.acquire().await?;
         let (time_start, time_end) = (time_start.naive_utc(), time_end.naive_utc());
@@ -535,7 +620,7 @@ impl AbsOrderRepo for OrderMariaDbRepo
                         AS `a` INNER JOIN `order_line_detail` AS `b` ON `a`.`o_id` = `b`.`o_id` WHERE \
                         `b`.`rsved_until` > ? AND `b`.`rsved_until` < ? GROUP BY `a`.`o_id`";
         let stmt = conn0.prepare(sql_patt).await?;
-        let  mut stream = {
+        let mut stream = {
             let query = stmt.query().bind(time_start.clone()).bind(time_end.clone());
             let exec = &mut *conn0;
             exec.fetch(query)
@@ -543,17 +628,23 @@ impl AbsOrderRepo for OrderMariaDbRepo
         while let Some(result) = stream.next().await {
             let row = result?;
             let oid_raw = row.try_get::<Vec<u8>, usize>(0)?;
-            let mut ol_set:OrderLineModelSet = TopLvlMetaRow(row).try_into()?;
-            let sql_patt = format!("{OLINE_SELECT_PREFIX} WHERE `o_id`=? AND \
-                                   (? < `rsved_until` AND `rsved_until` < ?)");
+            let mut ol_set: OrderLineModelSet = TopLvlMetaRow(row).try_into()?;
+            let sql_patt = format!(
+                "{OLINE_SELECT_PREFIX} WHERE `o_id`=? AND \
+                                   (? < `rsved_until` AND `rsved_until` < ?)"
+            );
             let stmt = conn1.prepare(sql_patt.as_str()).await?;
-            let query = stmt.query().bind(oid_raw.clone()).bind(time_start.clone())
+            let query = stmt
+                .query()
+                .bind(oid_raw.clone())
+                .bind(time_start.clone())
                 .bind(time_end.clone());
             let exec = &mut *conn1;
             let rows = exec.fetch_all(query).await?;
-            let results = rows.into_iter().map(|row| {
-                OLineRow(row).try_into()
-            }).collect::<Vec<DefaultResult<OrderLineModel, AppError>>>();
+            let results = rows
+                .into_iter()
+                .map(|row| OLineRow(row).try_into())
+                .collect::<Vec<DefaultResult<OrderLineModel, AppError>>>();
             ol_set.lines = if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
                 return Err(e.to_owned());
             } else {
@@ -564,9 +655,11 @@ impl AbsOrderRepo for OrderMariaDbRepo
         Ok(())
     } // end of fn fetch_lines_by_rsvtime
 
-    async fn fetch_lines_by_pid(&self, oid:&str, pids:Vec<OrderLineIdentity>)
-        -> DefaultResult<Vec<OrderLineModel>, AppError>
-    {
+    async fn fetch_lines_by_pid(
+        &self,
+        oid: &str,
+        pids: Vec<OrderLineIdentity>,
+    ) -> DefaultResult<Vec<OrderLineModel>, AppError> {
         let oid_b = OidBytes::try_from(oid)?;
         let mut conn = self._db.acquire().await?;
         let mut tx = conn.begin().await?;
@@ -574,10 +667,12 @@ impl AbsOrderRepo for OrderMariaDbRepo
     }
     // TODO, cache the metadata `owner-id` and `create-time` , these records can be shared
     // among the functions : `fetch_ids_by_created_time()`, `owner_id()`, `created_time()`
-    async fn fetch_ids_by_created_time(&self,  start: DateTime<FixedOffset>,
-                                       end: DateTime<FixedOffset>)
-        -> DefaultResult<Vec<String>, AppError>
-    { // TODO, to enhance performance, build extra index for the column `create-time`
+    async fn fetch_ids_by_created_time(
+        &self,
+        start: DateTime<FixedOffset>,
+        end: DateTime<FixedOffset>,
+    ) -> DefaultResult<Vec<String>, AppError> {
+        // TODO, to enhance performance, build extra index for the column `create-time`
         let mut conn = self._db.acquire().await?;
         let sql_patt = "SELECT `o_id` FROM `order_toplvl_meta` WHERE \
                         `created_time` >= ? AND `created_time` <= ?";
@@ -586,9 +681,10 @@ impl AbsOrderRepo for OrderMariaDbRepo
         let query = stmt.query().bind(start).bind(end);
         let exec = conn.as_mut();
         let rows = exec.fetch_all(query).await?;
-        let results = rows.into_iter().map(
-            |row| OidBytes::to_app_oid(&row, 0)
-        ).collect::<Vec<DefaultResult<String, AppError>>>();
+        let results = rows
+            .into_iter()
+            .map(|row| OidBytes::to_app_oid(&row, 0))
+            .collect::<Vec<DefaultResult<String, AppError>>>();
         let o_meta = if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
             return Err(e.to_owned());
         } else {
@@ -596,89 +692,101 @@ impl AbsOrderRepo for OrderMariaDbRepo
         };
         Ok(o_meta)
     }
-    async fn owner_id(&self, oid:&str) -> DefaultResult<u32, AppError>
-    {
+    async fn owner_id(&self, oid: &str) -> DefaultResult<u32, AppError> {
         let OidBytes(oid_b) = OidBytes::try_from(oid)?;
         let sql_patt = "SELECT `usr_id` FROM `order_toplvl_meta` WHERE `o_id`=?";
         let mut conn = self._db.acquire().await?;
         let stmt = conn.prepare(sql_patt).await?;
         let query = stmt.query().bind(oid_b.to_vec());
         let exec = conn.as_mut();
-        let row  = exec.fetch_one(query).await?;
+        let row = exec.fetch_one(query).await?;
         let owner_id = row.try_get::<u32, usize>(0)?;
         Ok(owner_id)
     }
-    async fn created_time(&self, oid:&str) -> DefaultResult<DateTime<FixedOffset>, AppError>
-    {
+    async fn created_time(&self, oid: &str) -> DefaultResult<DateTime<FixedOffset>, AppError> {
         let OidBytes(oid_b) = OidBytes::try_from(oid)?;
         let sql_patt = "SELECT `created_time` FROM `order_toplvl_meta` WHERE `o_id`=?";
         let mut conn = self._db.acquire().await?;
         let stmt = conn.prepare(sql_patt).await?;
         let query = stmt.query().bind(oid_b.to_vec());
         let exec = conn.as_mut();
-        let row  = exec.fetch_one(query).await?;
+        let row = exec.fetch_one(query).await?;
         let ctime = row.try_get::<NaiveDateTime, usize>(0)?.and_utc().into();
         Ok(ctime)
     }
 
-    async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError>
-    {
+    async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError> {
         let sql_patt = "SELECT `last_update` FROM `schedule_job`";
         let mut conn = self._db.acquire().await?;
         let stmt = conn.prepare(sql_patt).await?;
         let query = stmt.query();
         let exec = conn.as_mut();
-        let row  = exec.fetch_one(query).await?;
-        let utime = row.try_get::<NaiveDateTime, usize>(0) ?;
-        let t = utime.and_utc().fixed_offset() ;
+        let row = exec.fetch_one(query).await?;
+        let utime = row.try_get::<NaiveDateTime, usize>(0)?;
+        let t = utime.and_utc().fixed_offset();
         Ok(t)
     }
-    async fn cancel_unpaid_time_update(&self) -> DefaultResult<(), AppError>
-    {
+    async fn cancel_unpaid_time_update(&self) -> DefaultResult<(), AppError> {
         let mut conn = self._db.acquire().await?;
         let sql_patt = "UPDATE `schedule_job` SET `last_update`=?";
         let t = Local::now().naive_utc();
         let stmt = conn.prepare(sql_patt).await?;
         let query = stmt.query().bind(t);
-        let exec = &mut * conn;
+        let exec = &mut *conn;
         let resultset = query.execute(exec).await?;
         let _num_affected = resultset.rows_affected();
         Ok(())
     }
 } // end of trait AbsOrderRepo
 
-
 impl OrderMariaDbRepo {
-    pub(crate) async fn new(dbs:Vec<Arc<AppMariaDbStore>>, timenow:DateTime<FixedOffset>)
-        -> DefaultResult<Self, AppError>
-    {
+    pub(crate) async fn new(
+        dbs: Vec<Arc<AppMariaDbStore>>,
+        timenow: DateTime<FixedOffset>,
+    ) -> DefaultResult<Self, AppError> {
         if dbs.is_empty() {
-            Err(AppError { code: AppErrorCode::MissingDataStore,
-                detail: Some(format!("mariadb"))  })
+            Err(AppError {
+                code: AppErrorCode::MissingDataStore,
+                detail: Some(format!("mariadb")),
+            })
         } else {
             let _db = dbs.first().unwrap().clone();
             let stockrepo = StockMariaDbRepo::new(timenow, _db.clone());
-            Ok(Self { _db, _stock: Arc::new(Box::new(stockrepo)) }) 
+            Ok(Self {
+                _db,
+                _stock: Arc::new(Box::new(stockrepo)),
+            })
         }
         // TODO, consider to balance loads of order request to different database servers
         // , currently this repo selects only the first db pool
     }
     pub(super) async fn create_lines(
-        tx:&mut Transaction<'_, MySql>, ol_set:&OrderLineModelSet,  limit:usize
-        ) -> DefaultResult<(), AppError>
-    {
-        let (oid, usr_id, ctime, olines) = (ol_set.order_id.as_str(), ol_set.owner_id,
-                                            &ol_set.create_time , &ol_set.lines);
+        tx: &mut Transaction<'_, MySql>,
+        ol_set: &OrderLineModelSet,
+        limit: usize,
+    ) -> DefaultResult<(), AppError> {
+        let (oid, usr_id, ctime, olines) = (
+            ol_set.order_id.as_str(),
+            ol_set.owner_id,
+            &ol_set.create_time,
+            &ol_set.lines,
+        );
         if olines.len() > AppConst::limit::MAX_ORDER_LINES_PER_REQUEST {
-            let d = format!("actual: {}, limit:{}", olines.len(),
-                    AppConst::limit::MAX_ORDER_LINES_PER_REQUEST);
-            let e = AppError {code:AppErrorCode::ExceedingMaxLimit, detail:Some(d)};
+            let d = format!(
+                "actual: {}, limit:{}",
+                olines.len(),
+                AppConst::limit::MAX_ORDER_LINES_PER_REQUEST
+            );
+            let e = AppError {
+                code: AppErrorCode::ExceedingMaxLimit,
+                detail: Some(d),
+            };
             return Err(e);
         }
         let oid = OidBytes::try_from(oid)?;
         let (sql_patt, args) = InsertTopMetaArg(&oid, usr_id, ctime).into();
         let _rs = run_query_once(tx, sql_patt, args, Some(1)).await?;
-        
+
         let mut num_processed = 0;
         let mut data = olines.iter().collect::<Vec<_>>();
         while !data.is_empty() {
@@ -692,17 +800,23 @@ impl OrderMariaDbRepo {
         } // end of loop
         Ok(())
     } // end of fn create_lines
-        
-    async fn _save_contact(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
-                           table_opt:&str, data: ContactModel)
-        -> DefaultResult<(), AppError>
-    {
+
+    async fn _save_contact(
+        tx: &mut Transaction<'_, MySql>,
+        oid: &OidBytes,
+        table_opt: &str,
+        data: ContactModel,
+    ) -> DefaultResult<(), AppError> {
         if data.emails.is_empty() && data.phones.is_empty() {
             let d = "save-contact, num-emails:0, num-phones:0".to_string();
-            let e = AppError {code:AppErrorCode::InvalidInput, detail:Some(d)};
+            let e = AppError {
+                code: AppErrorCode::InvalidInput,
+                detail: Some(d),
+            };
             return Err(e);
         }
-        let (f_name, l_name, emails, phones) = (data.first_name, data.last_name, data.emails, data.phones);
+        let (f_name, l_name, emails, phones) =
+            (data.first_name, data.last_name, data.emails, data.phones);
         let (num_mails, num_phones) = (emails.len(), phones.len());
         let (sql_patt, args) = InsertContactMeta(table_opt, oid, f_name, l_name).into();
         let _rs = run_query_once(tx, sql_patt, args, Some(1)).await?;
@@ -712,25 +826,31 @@ impl OrderMariaDbRepo {
         }
         if num_phones > 0 {
             let (sql_patt, args) = InsertContactPhone(table_opt, oid, phones).into();
-            let _rs = run_query_once(tx, sql_patt, args, Some(num_phones)).await?; 
+            let _rs = run_query_once(tx, sql_patt, args, Some(num_phones)).await?;
         }
         Ok(())
     }
-    async fn _save_phyaddr(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
-                           table_opt:&str, data: PhyAddrModel)
-        -> DefaultResult<(), AppError>
-    {
+    async fn _save_phyaddr(
+        tx: &mut Transaction<'_, MySql>,
+        oid: &OidBytes,
+        table_opt: &str,
+        data: PhyAddrModel,
+    ) -> DefaultResult<(), AppError> {
         let (sql_patt, args) = InsertPhyAddr(table_opt, oid, data).into();
         let _rs = run_query_once(tx, sql_patt, args, Some(1)).await?;
         Ok(())
     }
-    async fn _save_ship_opt(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
-                            data:Vec<ShippingOptionModel>)
-        -> DefaultResult<(), AppError>
-    {
+    async fn _save_ship_opt(
+        tx: &mut Transaction<'_, MySql>,
+        oid: &OidBytes,
+        data: Vec<ShippingOptionModel>,
+    ) -> DefaultResult<(), AppError> {
         if data.is_empty() {
             let d = "save-ship-option, num:0".to_string();
-            let e = AppError {code:AppErrorCode::InvalidInput, detail:Some(d)};
+            let e = AppError {
+                code: AppErrorCode::InvalidInput,
+                detail: Some(d),
+            };
             return Err(e);
         }
         let num_sellers = data.len();
@@ -738,19 +858,21 @@ impl OrderMariaDbRepo {
         let _rs = run_query_once(tx, sql_patt, args, Some(num_sellers)).await?;
         Ok(())
     }
-    
-    async fn _fetch_lines_by_pid(tx: &mut Transaction<'_, MySql>, oid:&OidBytes,
-                                 pids: Vec<OrderLineIdentity> )
-        -> DefaultResult<Vec<OrderLineModel>, AppError>
-    {
+
+    async fn _fetch_lines_by_pid(
+        tx: &mut Transaction<'_, MySql>,
+        oid: &OidBytes,
+        pids: Vec<OrderLineIdentity>,
+    ) -> DefaultResult<Vec<OrderLineModel>, AppError> {
         let (sql_patt, args) = FetchLineByIdArg(&oid, pids).into();
         let stmt = tx.prepare(sql_patt.as_str()).await?;
         let query = stmt.query_with(args);
         let exec = &mut *tx;
         let rows = exec.fetch_all(query).await?;
-        let results = rows.into_iter().map(|row| {
-            OLineRow(row).try_into()
-        }).collect::<Vec<DefaultResult<OrderLineModel, AppError>>>();
+        let results = rows
+            .into_iter()
+            .map(|row| OLineRow(row).try_into())
+            .collect::<Vec<DefaultResult<OrderLineModel, AppError>>>();
         if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
             Err(e.to_owned())
         } else {
@@ -758,17 +880,23 @@ impl OrderMariaDbRepo {
             Ok(out)
         }
     }
-    async fn _fetch_mails(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&OidBytes)
-        -> DefaultResult<Vec<String>, AppError>
-    {
-        let sql_patt = format!("SELECT `mail` FROM `{}_contact_email` WHERE `o_id`=?", table_opt);
+    async fn _fetch_mails(
+        conn: &mut PoolConnection<MySql>,
+        table_opt: &str,
+        oid_b: &OidBytes,
+    ) -> DefaultResult<Vec<String>, AppError> {
+        let sql_patt = format!(
+            "SELECT `mail` FROM `{}_contact_email` WHERE `o_id`=?",
+            table_opt
+        );
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query().bind(oid_b.as_column());
         let exec = conn.as_mut();
         let rows = exec.fetch_all(query).await?;
-        let results = rows.into_iter().map(|row| {
-            EmailRow(row).try_into()
-        }).collect::<Vec<DefaultResult<String, AppError>>>();
+        let results = rows
+            .into_iter()
+            .map(|row| EmailRow(row).try_into())
+            .collect::<Vec<DefaultResult<String, AppError>>>();
         if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
             Err(e.to_owned())
         } else {
@@ -776,18 +904,24 @@ impl OrderMariaDbRepo {
             Ok(out)
         }
     }
-    async fn _fetch_phones(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&OidBytes)
-        -> DefaultResult<Vec<PhoneNumberDto>, AppError>
-    {
-        let sql_patt = format!("SELECT `nation`,`number` FROM `{}_contact_phone`\
-                               WHERE `o_id`=?", table_opt);
+    async fn _fetch_phones(
+        conn: &mut PoolConnection<MySql>,
+        table_opt: &str,
+        oid_b: &OidBytes,
+    ) -> DefaultResult<Vec<PhoneNumberDto>, AppError> {
+        let sql_patt = format!(
+            "SELECT `nation`,`number` FROM `{}_contact_phone`\
+                               WHERE `o_id`=?",
+            table_opt
+        );
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query().bind(oid_b.as_column());
         let exec = conn.as_mut();
         let rows = exec.fetch_all(query).await?;
-        let results = rows.into_iter().map(|row| {
-            PhoneRow(row).try_into()
-        }).collect::<Vec<DefaultResult<PhoneNumberDto, AppError>>>();
+        let results = rows
+            .into_iter()
+            .map(|row| PhoneRow(row).try_into())
+            .collect::<Vec<DefaultResult<PhoneNumberDto, AppError>>>();
         if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
             Err(e.to_owned())
         } else {
@@ -795,23 +929,33 @@ impl OrderMariaDbRepo {
             Ok(out)
         }
     }
-    async fn _fetch_contact_meta(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&OidBytes)
-        -> DefaultResult<ContactModel, AppError>
-    {
-        let sql_patt = format!("SELECT `first_name`,`last_name` FROM `{}_contact_meta`\
-                               WHERE `o_id`=?", table_opt);
+    async fn _fetch_contact_meta(
+        conn: &mut PoolConnection<MySql>,
+        table_opt: &str,
+        oid_b: &OidBytes,
+    ) -> DefaultResult<ContactModel, AppError> {
+        let sql_patt = format!(
+            "SELECT `first_name`,`last_name` FROM `{}_contact_meta`\
+                               WHERE `o_id`=?",
+            table_opt
+        );
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query().bind(oid_b.as_column());
         let exec = conn.as_mut();
-        let row  = exec.fetch_one(query).await?;
+        let row = exec.fetch_one(query).await?;
         let out = ContactMetaRow(row).try_into()?;
         Ok(out)
     }
-    async fn _fetch_phyaddr(conn:&mut PoolConnection<MySql>, table_opt:&str, oid_b:&OidBytes)
-        -> DefaultResult<Option<PhyAddrModel>, AppError>
-    {
-        let sql_patt = format!("SELECT `country`,`region`,`city`,`distinct`,`street`,\
-                               `detail` FROM `{}_phyaddr` WHERE `o_id`=?", table_opt);
+    async fn _fetch_phyaddr(
+        conn: &mut PoolConnection<MySql>,
+        table_opt: &str,
+        oid_b: &OidBytes,
+    ) -> DefaultResult<Option<PhyAddrModel>, AppError> {
+        let sql_patt = format!(
+            "SELECT `country`,`region`,`city`,`distinct`,`street`,\
+                               `detail` FROM `{}_phyaddr` WHERE `o_id`=?",
+            table_opt
+        );
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query().bind(oid_b.as_column());
         let exec = conn.as_mut();
@@ -819,19 +963,23 @@ impl OrderMariaDbRepo {
         if let Some(row) = result {
             let out = PhyAddrrRow(row).try_into()?;
             Ok(Some(out))
-        } else { Ok(None) }
+        } else {
+            Ok(None)
+        }
     }
-    async fn _fetch_ship_option(conn:&mut PoolConnection<MySql>, oid_b:&OidBytes)
-        -> DefaultResult<Vec<ShippingOptionModel>, AppError>
-    {
+    async fn _fetch_ship_option(
+        conn: &mut PoolConnection<MySql>,
+        oid_b: &OidBytes,
+    ) -> DefaultResult<Vec<ShippingOptionModel>, AppError> {
         let sql_patt = "SELECT `seller_id`,`method` FROM `ship_option` WHERE `o_id`=?";
         let stmt = conn.prepare(sql_patt).await?;
         let query = stmt.query().bind(oid_b.as_column());
         let exec = conn.as_mut();
         let rows = exec.fetch_all(query).await?;
-        let results = rows.into_iter().map(|row| {
-            ShipOptionRow(row).try_into()
-        }).collect::<Vec<DefaultResult<ShippingOptionModel, AppError>>>();
+        let results = rows
+            .into_iter()
+            .map(|row| ShipOptionRow(row).try_into())
+            .collect::<Vec<DefaultResult<ShippingOptionModel, AppError>>>();
         if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
             Err(e.to_owned())
         } else {
@@ -840,4 +988,3 @@ impl OrderMariaDbRepo {
         }
     }
 } // end of impl OrderMariaDbRepo
-

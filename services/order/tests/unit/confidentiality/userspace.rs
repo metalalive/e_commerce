@@ -1,19 +1,17 @@
 use std::io::ErrorKind;
 
-use order::confidentiality::{UserSpaceConfidentiality, AbstractConfidentiality};
+use order::confidentiality::{AbstractConfidentiality, UserSpaceConfidentiality};
 use order::constant::ENV_VAR_SERVICE_BASE_PATH;
 use order::error::AppErrorCode;
 
-fn ut_setup () -> (String, &'static str)
-{
+fn ut_setup() -> (String, &'static str) {
     let app_base_path = std::env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
     let secret_lpath = "/tests/unit/examples/confidential_demo.json";
     (app_base_path, secret_lpath)
 }
 
 #[test]
-fn access_ok ()
-{
+fn access_ok() {
     let (app_base_path, secret_lpath) = ut_setup();
     let fullpath = app_base_path + secret_lpath;
     let hdlr = UserSpaceConfidentiality::build(fullpath);
@@ -32,7 +30,7 @@ fn access_ok ()
     assert_eq!(port_str, "9202");
     let port_num = port_str.parse::<u16>().unwrap();
     assert_eq!(port_num, 9202u16);
-    let back:serde_json::Value = serde_json::from_str(port_str.as_str()).unwrap() ;
+    let back: serde_json::Value = serde_json::from_str(port_str.as_str()).unwrap();
     assert_eq!(back.is_number(), true);
     // ------------
     let result = hdlr.try_get_payload("amqp_broker/1");
@@ -46,13 +44,12 @@ fn access_ok ()
     // ------------
     let result = hdlr.try_get_payload("backend_apps/databases/abc_service/HOST");
     let cre3 = result.unwrap();
-    let back:serde_json::Value = serde_json::from_str(cre3.as_str()).unwrap() ;
+    let back: serde_json::Value = serde_json::from_str(cre3.as_str()).unwrap();
     assert_eq!(back.is_string(), true);
 }
 
 #[test]
-fn access_missing_content ()
-{
+fn access_missing_content() {
     let (app_base_path, secret_lpath) = ut_setup();
     let fullpath = app_base_path + secret_lpath;
     let hdlr = UserSpaceConfidentiality::build(fullpath);
@@ -76,8 +73,7 @@ fn access_missing_content ()
 }
 
 #[test]
-fn source_not_exist ()
-{
+fn source_not_exist() {
     let (app_base_path, _) = ut_setup();
     let secret_lpath = "/unknown/path/to/source.xxx";
     let fullpath = app_base_path + secret_lpath;
@@ -87,4 +83,3 @@ fn source_not_exist ()
     let err = result.unwrap_err();
     assert_eq!(err.code, AppErrorCode::IOerror(ErrorKind::NotFound));
 }
-
