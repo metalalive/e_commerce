@@ -32,7 +32,6 @@ impl InsertReqArg {
         let col_seq = "`o_id`,`seq`,`store_id`,`product_type`,`product_id`,\
             `create_time`,`quantity`,`price_unit`,`price_total`";
         let items = (0..num_batch)
-            .into_iter()
             .map(|_| "(?,?,?,?,?,?,?,?,?)")
             .collect::<Vec<_>>();
         format!(
@@ -72,20 +71,19 @@ impl<'q> IntoArguments<'q, MySql> for InsertReqArg {
         args
     }
 }
-impl Into<(String, MySqlArguments)> for InsertReqArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.2.iter().map(|r| r.qty.len()).sum();
-        (Self::sql_pattern(num_batch), self.into_arguments())
+impl From<InsertReqArg> for (String, MySqlArguments) {
+    fn from(value: InsertReqArg) -> (String, MySqlArguments) {
+        let num_batch = value.2.iter().map(|r| r.qty.len()).sum();
+        (InsertReqArg::sql_pattern(num_batch), value.into_arguments())
     }
 }
 
-const COLUMN_SEQ_SELECT: &'static str = "`store_id`,`product_type`,`product_id`,\
+const COLUMN_SEQ_SELECT: &str = "`store_id`,`product_type`,`product_id`,\
             `create_time`,`quantity`,`price_unit`,`price_total`";
 
 impl FetchByIdArg {
     fn sql_pattern(num_batch: usize) -> String {
         let items = (0..num_batch)
-            .into_iter()
             .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
             .collect::<Vec<_>>();
         format!(
@@ -112,16 +110,16 @@ impl<'q> IntoArguments<'q, MySql> for FetchByIdArg {
         args
     }
 }
-impl Into<(String, MySqlArguments)> for FetchByIdArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.1.len();
-        (Self::sql_pattern(num_batch), self.into_arguments())
+impl From<FetchByIdArg> for (String, MySqlArguments) {
+    fn from(value: FetchByIdArg) -> (String, MySqlArguments) {
+        let num_batch = value.1.len();
+        (FetchByIdArg::sql_pattern(num_batch), value.into_arguments())
     }
 }
 
-impl Into<(String, MySqlArguments)> for FetchByTimeArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let (start, end) = (self.0, self.1);
+impl From<FetchByTimeArg> for (String, MySqlArguments) {
+    fn from(value: FetchByTimeArg) -> (String, MySqlArguments) {
+        let (start, end) = (value.0, value.1);
         // TODO, improve query time, since the execution plan will not search in
         // primary index. Possible approach could be time-series database or
         // secondary index by `create-time`, since the time range argument in the
@@ -137,9 +135,9 @@ impl Into<(String, MySqlArguments)> for FetchByTimeArg {
     }
 }
 
-impl Into<(String, MySqlArguments)> for FetchByIdAndTimeArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let (oid_b, start, end) = (self.0, self.1, self.2);
+impl From<FetchByIdAndTimeArg> for (String, MySqlArguments) {
+    fn from(value: FetchByIdAndTimeArg) -> (String, MySqlArguments) {
+        let (oid_b, start, end) = (value.0, value.1, value.2);
         let sql_patt = format!(
             "SELECT {COLUMN_SEQ_SELECT} FROM `oline_return_req` \
                                 WHERE `o_id`=? AND `create_time` > ? AND `create_time` <= ?"
@@ -185,9 +183,9 @@ impl ReturnsPerOrder {
         Ok(())
     }
 }
-impl Into<Vec<OrderReturnModel>> for ReturnsPerOrder {
-    fn into(self) -> Vec<OrderReturnModel> {
-        self.0
+impl From<ReturnsPerOrder> for Vec<OrderReturnModel> {
+    fn from(value: ReturnsPerOrder) -> Vec<OrderReturnModel> {
+        value.0
     }
 }
 
@@ -297,7 +295,7 @@ impl OrderReturnMariaDbRepo {
         if dbs.is_empty() {
             Err(AppError {
                 code: AppErrorCode::MissingDataStore,
-                detail: Some(format!("mariadb")),
+                detail: Some("mariadb".to_string()),
             })
         } else {
             let _db = dbs.first().unwrap().clone();

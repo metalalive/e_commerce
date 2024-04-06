@@ -49,14 +49,14 @@ struct ContactMetaRow(MySqlRow);
 struct PhyAddrrRow(MySqlRow);
 struct ShipOptionRow(MySqlRow);
 
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertTopMetaArg<'a, 'b> {
-    fn into(self) -> (String, MySqlArguments) {
+impl<'a, 'b> From<InsertTopMetaArg<'a, 'b>> for (String, MySqlArguments) {
+    fn from(value: InsertTopMetaArg<'a, 'b>) -> (String, MySqlArguments) {
         let patt = "INSERT INTO `order_toplvl_meta`(`usr_id`,`o_id`,\
                     `created_time`) VALUES (?,?,?)";
-        let ctime_utc = self.2.clone().naive_utc();
+        let ctime_utc = value.2.clone().naive_utc();
         let mut args = MySqlArguments::default();
-        args.add(self.1);
-        args.add(self.0.as_column());
+        args.add(value.1);
+        args.add(value.0.as_column());
         args.add(ctime_utc);
         (patt.to_string(), args)
     }
@@ -66,7 +66,6 @@ impl<'a, 'b> InsertOLineArg<'a, 'b> {
         let col_seq = "`o_id`,`seq`,`store_id`,`product_type`,`product_id`,`price_unit`,\
                        `price_total`,`qty_rsved`,`rsved_until`,`warranty_until`";
         let items = (0..num_batch)
-            .into_iter()
             .map(|_| "(?,?,?,?,?,?,?,?,?,?)")
             .collect::<Vec<_>>();
         format!(
@@ -102,15 +101,18 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
         args
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertOLineArg<'a, 'b> {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.2.len();
-        (Self::sql_pattern(num_batch), self.into_arguments())
+impl<'a, 'b> From<InsertOLineArg<'a, 'b>> for (String, MySqlArguments) {
+    fn from(value: InsertOLineArg<'a, 'b>) -> (String, MySqlArguments) {
+        let num_batch = value.2.len();
+        (
+            InsertOLineArg::sql_pattern(num_batch),
+            value.into_arguments(),
+        )
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactMeta<'a, 'b> {
-    fn into(self) -> (String, MySqlArguments) {
-        let (table_opt, oid, first_name, last_name) = (self.0, self.1, self.2, self.3);
+impl<'a, 'b> From<InsertContactMeta<'a, 'b>> for (String, MySqlArguments) {
+    fn from(value: InsertContactMeta<'a, 'b>) -> (String, MySqlArguments) {
+        let (table_opt, oid, first_name, last_name) = (value.0, value.1, value.2, value.3);
         let patt = format!(
             "INSERT INTO `{}_contact_meta`(`o_id`,`first_name`,`last_name`) \
                            VALUES (?,?,?)",
@@ -127,10 +129,7 @@ impl<'a, 'b> InsertContactEmail<'a, 'b> {
     fn sql_pattern(&self) -> String {
         let (table_opt, num_batch) = (self.0, self.2.len());
         assert!(num_batch > 0);
-        let items = (0..num_batch)
-            .into_iter()
-            .map(|_num| "(?,?,?)")
-            .collect::<Vec<_>>();
+        let items = (0..num_batch).map(|_num| "(?,?,?)").collect::<Vec<_>>();
         format!(
             "INSERT INTO `{}_contact_email`(`o_id`,`seq`,`mail`) VALUES {}",
             table_opt,
@@ -155,19 +154,16 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactEmail<'a, 'b> {
         args
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactEmail<'a, 'b> {
-    fn into(self) -> (String, MySqlArguments) {
-        (self.sql_pattern(), self.into_arguments())
+impl<'a, 'b> From<InsertContactEmail<'a, 'b>> for (String, MySqlArguments) {
+    fn from(value: InsertContactEmail<'a, 'b>) -> (String, MySqlArguments) {
+        (value.sql_pattern(), value.into_arguments())
     }
 }
 impl<'a, 'b> InsertContactPhone<'a, 'b> {
     fn sql_pattern(&self) -> String {
         let (table_opt, num_batch) = (self.0, self.2.len());
         assert!(num_batch > 0);
-        let items = (0..num_batch)
-            .into_iter()
-            .map(|_num| "(?,?,?,?)")
-            .collect::<Vec<_>>();
+        let items = (0..num_batch).map(|_num| "(?,?,?,?)").collect::<Vec<_>>();
         format!(
             "INSERT INTO `{}_contact_phone`(`o_id`,`seq`,`nation`,`number`) VALUES {}",
             table_opt,
@@ -193,14 +189,14 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactPhone<'a, 'b> {
         args
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertContactPhone<'a, 'b> {
-    fn into(self) -> (String, MySqlArguments) {
-        (self.sql_pattern(), self.into_arguments())
+impl<'a, 'b> From<InsertContactPhone<'a, 'b>> for (String, MySqlArguments) {
+    fn from(value: InsertContactPhone<'a, 'b>) -> (String, MySqlArguments) {
+        (value.sql_pattern(), value.into_arguments())
     }
 }
-impl<'a, 'b> Into<(String, MySqlArguments)> for InsertPhyAddr<'a, 'b> {
-    fn into(self) -> (String, MySqlArguments) {
-        let (table_opt, oid, addr) = (self.0, self.1, self.2);
+impl<'a, 'b> From<InsertPhyAddr<'a, 'b>> for (String, MySqlArguments) {
+    fn from(value: InsertPhyAddr<'a, 'b>) -> (String, MySqlArguments) {
+        let (table_opt, oid, addr) = (value.0, value.1, value.2);
         let patt = format!(
             "INSERT INTO `{}_phyaddr`(`o_id`,`country`,`region`,`city`,\
                    `distinct`,`street`,`detail`) VALUES (?,?,?,?,?,?,?)",
@@ -220,10 +216,7 @@ impl<'a, 'b> Into<(String, MySqlArguments)> for InsertPhyAddr<'a, 'b> {
 }
 impl<'a> InsertShipOption<'a> {
     fn sql_pattern(num_batch: usize) -> String {
-        let items = (0..num_batch)
-            .into_iter()
-            .map(|_num| "(?,?,?)")
-            .collect::<Vec<_>>();
+        let items = (0..num_batch).map(|_num| "(?,?,?)").collect::<Vec<_>>();
         format!(
             "INSERT INTO `ship_option`(`o_id`,`seller_id`,`method`) VALUES {}",
             items.join(",")
@@ -247,11 +240,14 @@ impl<'a, 'q> IntoArguments<'q, MySql> for InsertShipOption<'a> {
         args
     }
 }
-impl<'a> Into<(String, MySqlArguments)> for InsertShipOption<'a> {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.1.len();
+impl<'a> From<InsertShipOption<'a>> for (String, MySqlArguments) {
+    fn from(value: InsertShipOption<'a>) -> (String, MySqlArguments) {
+        let num_batch = value.1.len();
         assert!(num_batch > 0);
-        (Self::sql_pattern(num_batch), self.into_arguments())
+        (
+            InsertShipOption::sql_pattern(num_batch),
+            value.into_arguments(),
+        )
     }
 }
 
@@ -259,13 +255,10 @@ impl<'a> UpdateOLinePayArg<'a> {
     fn sql_pattern(num_batch: usize) -> String {
         let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=?)";
         let case_ops = (0..num_batch)
-            .into_iter()
-            .map(|_| ["WHEN", condition, "THEN", "?"])
-            .flatten()
+            .flat_map(|_| ["WHEN", condition, "THEN", "?"])
             .collect::<Vec<_>>()
             .join(" ");
         let where_ops = (0..num_batch)
-            .into_iter()
             .map(|_| condition)
             .collect::<Vec<_>>()
             .join("OR");
@@ -318,23 +311,26 @@ impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
         args
     }
 }
-impl<'a> Into<(String, MySqlArguments)> for UpdateOLinePayArg<'a> {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.1.len();
+impl<'a> From<UpdateOLinePayArg<'a>> for (String, MySqlArguments) {
+    fn from(value: UpdateOLinePayArg<'a>) -> (String, MySqlArguments) {
+        let num_batch = value.1.len();
         assert!(num_batch > 0);
-        (Self::sql_pattern(num_batch), self.into_arguments())
+        (
+            UpdateOLinePayArg::sql_pattern(num_batch),
+            value.into_arguments(),
+        )
     }
 }
 
-const OLINE_SELECT_PREFIX: &'static str = "SELECT `store_id`,`product_type`,`product_id`,\
+const OLINE_SELECT_PREFIX: &str = "SELECT `store_id`,`product_type`,`product_id`,\
     `price_unit`,`price_total`,`qty_rsved`,`qty_paid`,`qty_paid_last_update`,`rsved_until`,\
     `warranty_until` FROM `order_line_detail`";
 
-impl Into<(String, MySqlArguments)> for FetchAllLinesArg {
-    fn into(self) -> (String, MySqlArguments) {
+impl From<FetchAllLinesArg> for (String, MySqlArguments) {
+    fn from(value: FetchAllLinesArg) -> (String, MySqlArguments) {
         let sql_patt = format!("{OLINE_SELECT_PREFIX} WHERE `o_id`=?");
         let mut args = MySqlArguments::default();
-        let oid = self.0;
+        let oid = value.0;
         args.add(oid.as_column());
         (sql_patt, args)
     }
@@ -342,7 +338,6 @@ impl Into<(String, MySqlArguments)> for FetchAllLinesArg {
 impl<'a> FetchLineByIdArg<'a> {
     fn sql_pattern(num_batch: usize) -> String {
         let items = (0..num_batch)
-            .into_iter()
             .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
             .collect::<Vec<_>>();
         format!(
@@ -367,11 +362,14 @@ impl<'a, 'q> IntoArguments<'q, MySql> for FetchLineByIdArg<'a> {
         args
     }
 }
-impl<'a> Into<(String, MySqlArguments)> for FetchLineByIdArg<'a> {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.1.len();
+impl<'a> From<FetchLineByIdArg<'a>> for (String, MySqlArguments) {
+    fn from(value: FetchLineByIdArg<'a>) -> (String, MySqlArguments) {
+        let num_batch = value.1.len();
         assert!(num_batch > 0);
-        (Self::sql_pattern(num_batch), self.into_arguments())
+        (
+            FetchLineByIdArg::sql_pattern(num_batch),
+            value.into_arguments(),
+        )
     }
 }
 
@@ -401,11 +399,9 @@ impl TryFrom<OLineRow> for OrderLineModel {
         let total = row.try_get::<u32, usize>(4)?;
         let reserved = row.try_get::<u32, usize>(5)?;
         let paid = row.try_get::<u32, usize>(6)?;
-        let result = row.try_get::<Option<NaiveDateTime>, usize>(7)?;
-        let paid_last_update = if let Some(t) = result {
-            Some(t.and_utc().into())
-        } else {
-            None
+        let paid_last_update = {
+            let r = row.try_get::<Option<NaiveDateTime>, usize>(7)?;
+            r.map(|t| t.and_utc().into())
         };
         let reserved_until = row.try_get::<NaiveDateTime, usize>(8)?.and_utc().into();
         let warranty_until = row.try_get::<NaiveDateTime, usize>(9)?.and_utc().into();
@@ -621,7 +617,7 @@ impl AbsOrderRepo for OrderMariaDbRepo {
                         `b`.`rsved_until` > ? AND `b`.`rsved_until` < ? GROUP BY `a`.`o_id`";
         let stmt = conn0.prepare(sql_patt).await?;
         let mut stream = {
-            let query = stmt.query().bind(time_start.clone()).bind(time_end.clone());
+            let query = stmt.query().bind(time_start).bind(time_end);
             let exec = &mut *conn0;
             exec.fetch(query)
         };
@@ -637,8 +633,8 @@ impl AbsOrderRepo for OrderMariaDbRepo {
             let query = stmt
                 .query()
                 .bind(oid_raw.clone())
-                .bind(time_start.clone())
-                .bind(time_end.clone());
+                .bind(time_start)
+                .bind(time_end);
             let exec = &mut *conn1;
             let rows = exec.fetch_all(query).await?;
             let results = rows
@@ -747,7 +743,7 @@ impl OrderMariaDbRepo {
         if dbs.is_empty() {
             Err(AppError {
                 code: AppErrorCode::MissingDataStore,
-                detail: Some(format!("mariadb")),
+                detail: Some("mariadb".to_string()),
             })
         } else {
             let _db = dbs.first().unwrap().clone();
@@ -792,7 +788,7 @@ impl OrderMariaDbRepo {
         while !data.is_empty() {
             let num_batch = min(data.len(), limit);
             let items_processing = data.split_off(data.len() - num_batch);
-            assert!(items_processing.len() > 0);
+            assert!(!items_processing.is_empty());
             assert_eq!(items_processing.len(), num_batch);
             let (sql_patt, args) = InsertOLineArg(&oid, num_processed, items_processing).into();
             let _rs = run_query_once(tx, sql_patt, args, Some(num_batch)).await?;
@@ -864,7 +860,7 @@ impl OrderMariaDbRepo {
         oid: &OidBytes,
         pids: Vec<OrderLineIdentity>,
     ) -> DefaultResult<Vec<OrderLineModel>, AppError> {
-        let (sql_patt, args) = FetchLineByIdArg(&oid, pids).into();
+        let (sql_patt, args) = FetchLineByIdArg(oid, pids).into();
         let stmt = tx.prepare(sql_patt.as_str()).await?;
         let query = stmt.query_with(args);
         let exec = &mut *tx;

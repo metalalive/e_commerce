@@ -23,15 +23,15 @@ struct FetchTotNumLinesArg(u32, u8);
 struct FetchTopLvlArg(u32, u8);
 struct FetchLinesArg(u32, u8, Option<Vec<BaseProductIdentity>>);
 
-impl<'a> Into<(String, MySqlArguments)> for InsertUpdateTopLvlArg<'a> {
-    fn into(self) -> (String, MySqlArguments) {
+impl<'a> From<InsertUpdateTopLvlArg<'a>> for (String, MySqlArguments) {
+    fn from(value: InsertUpdateTopLvlArg<'a>) -> (String, MySqlArguments) {
         let sql_patt = "INSERT INTO `cart_toplvl_meta`(`usr_id`,`seq`,`title`) VALUES (?,?,?) \
                         ON DUPLICATE KEY UPDATE `title`=?";
         let mut args = MySqlArguments::default();
-        args.add(self.0.owner);
-        args.add(self.0.seq_num);
-        args.add(self.0.title.clone());
-        args.add(self.0.title.clone());
+        args.add(value.0.owner);
+        args.add(value.0.seq_num);
+        args.add(value.0.title.clone());
+        args.add(value.0.title.clone());
         (sql_patt.to_string(), args)
     }
 }
@@ -39,7 +39,6 @@ impl<'a> Into<(String, MySqlArguments)> for InsertUpdateTopLvlArg<'a> {
 impl InsertLineArg {
     fn sql_pattern(num_batch: usize) -> String {
         let col_seq = (0..num_batch)
-            .into_iter()
             .map(|_| "(?,?,?,?,?,?)")
             .collect::<Vec<_>>()
             .join(",");
@@ -74,21 +73,22 @@ impl<'q> IntoArguments<'q, MySql> for InsertLineArg {
         args
     }
 }
-impl Into<(String, MySqlArguments)> for InsertLineArg {
-    fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.2.len()), self.into_arguments())
+impl From<InsertLineArg> for (String, MySqlArguments) {
+    fn from(value: InsertLineArg) -> (String, MySqlArguments) {
+        (
+            InsertLineArg::sql_pattern(value.2.len()),
+            value.into_arguments(),
+        )
     }
 }
 
 impl UpdateLineArg {
     fn sql_pattern(num_batch: usize) -> String {
         let case_op = (0..num_batch)
-            .into_iter()
             .map(|_| "WHEN (`store_id`=? AND `product_type`=? AND `product_id`=?) THEN ? ")
             .collect::<Vec<_>>()
             .join("");
         let where_op = (0..num_batch)
-            .into_iter()
             .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
             .collect::<Vec<_>>()
             .join("OR");
@@ -130,15 +130,18 @@ impl<'a> IntoArguments<'a, MySql> for UpdateLineArg {
         args
     }
 }
-impl Into<(String, MySqlArguments)> for UpdateLineArg {
-    fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.2.len()), self.into_arguments())
+impl From<UpdateLineArg> for (String, MySqlArguments) {
+    fn from(value: UpdateLineArg) -> (String, MySqlArguments) {
+        (
+            UpdateLineArg::sql_pattern(value.2.len()),
+            value.into_arguments(),
+        )
     }
 }
 
-impl Into<(String, MySqlArguments)> for DiscardTopLvlArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let (usr_id, seq_num) = (self.0, self.1);
+impl From<DiscardTopLvlArg> for (String, MySqlArguments) {
+    fn from(value: DiscardTopLvlArg) -> (String, MySqlArguments) {
+        let (usr_id, seq_num) = (value.0, value.1);
         let sql_patt = "DELETE FROM `cart_toplvl_meta` WHERE `usr_id`=? AND `seq`=?";
         let mut args = MySqlArguments::default();
         args.add(usr_id);
@@ -147,9 +150,9 @@ impl Into<(String, MySqlArguments)> for DiscardTopLvlArg {
     }
 }
 
-impl Into<(String, MySqlArguments)> for DiscardLineArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let (usr_id, seq_num) = (self.0, self.1);
+impl From<DiscardLineArg> for (String, MySqlArguments) {
+    fn from(value: DiscardLineArg) -> (String, MySqlArguments) {
+        let (usr_id, seq_num) = (value.0, value.1);
         let sql_patt = "DELETE FROM `cart_line_detail` WHERE `usr_id`=? AND `seq`=?";
         let mut args = MySqlArguments::default();
         args.add(usr_id);
@@ -158,9 +161,9 @@ impl Into<(String, MySqlArguments)> for DiscardLineArg {
     }
 }
 
-impl Into<(String, MySqlArguments)> for FetchTotNumLinesArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let (usr_id, seq_num) = (self.0, self.1);
+impl From<FetchTotNumLinesArg> for (String, MySqlArguments) {
+    fn from(value: FetchTotNumLinesArg) -> (String, MySqlArguments) {
+        let (usr_id, seq_num) = (value.0, value.1);
         let sql_patt = "SELECT COUNT(*) FROM `cart_line_detail` WHERE `usr_id`=? AND `seq`=?";
         let mut args = MySqlArguments::default();
         args.add(usr_id);
@@ -169,9 +172,9 @@ impl Into<(String, MySqlArguments)> for FetchTotNumLinesArg {
     }
 }
 
-impl Into<(String, MySqlArguments)> for FetchTopLvlArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let (usr_id, seq_num) = (self.0, self.1);
+impl From<FetchTopLvlArg> for (String, MySqlArguments) {
+    fn from(value: FetchTopLvlArg) -> (String, MySqlArguments) {
+        let (usr_id, seq_num) = (value.0, value.1);
         let sql_patt = "SELECT `usr_id`,`seq`,`title` FROM `cart_toplvl_meta` \
                         WHERE `usr_id`=? AND `seq`=?";
         let mut args = MySqlArguments::default();
@@ -188,7 +191,6 @@ impl FetchLinesArg {
             .to_string();
         if num_batch > 0 {
             let where_op = (0..num_batch)
-                .into_iter()
                 .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
                 .collect::<Vec<_>>()
                 .join("OR");
@@ -218,14 +220,17 @@ impl<'a> IntoArguments<'a, MySql> for FetchLinesArg {
         args
     }
 }
-impl Into<(String, MySqlArguments)> for FetchLinesArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = if let Some(v) = self.2.as_ref() {
+impl From<FetchLinesArg> for (String, MySqlArguments) {
+    fn from(value: FetchLinesArg) -> (String, MySqlArguments) {
+        let num_batch = if let Some(v) = value.2.as_ref() {
             v.len()
         } else {
             0usize
         };
-        (Self::sql_pattern(num_batch), self.into_arguments())
+        (
+            FetchLinesArg::sql_pattern(num_batch),
+            value.into_arguments(),
+        )
     }
 }
 
@@ -341,7 +346,7 @@ impl CartMariaDbRepo {
         if dbs.is_empty() {
             Err(AppError {
                 code: AppErrorCode::MissingDataStore,
-                detail: Some(format!("mariadb")),
+                detail: Some("mariadb".to_string()),
             })
         } else {
             let _db = dbs.first().unwrap().clone();

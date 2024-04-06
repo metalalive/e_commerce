@@ -17,17 +17,6 @@
 |`CONFIG_FILE_PATH`| path relative to `SERVICE_BASE_PATH` folder, it is JSON configuration file | `settings/development.json` |
 ||||
 
-## Development
-Be sure to run the 2 commands below before building / running the applications
-### Code formatter
-The command below reformat test / production code which meet the [styling requirement](https://github.com/rust-lang/rust/tree/HEAD/src/doc/style-guide/src)
-```shell
-cargo  fmt
-```
-### Linter
-```shell
-cargo  clippy
-```
 
 ## Build
 ### Pre-requisite
@@ -48,7 +37,7 @@ You can build / test this application with following optional features
 cargo build  --bin web
 cargo build  --bin rpc_consumer
 ```
-- you can add the following options along with the command `cargo build`
+- the following options can be applied along with the cargo command
   - `--features mariadb` , to enable MariaDB database in this service.
   - `--features amqprs` , to enable publish / subscribe operations to AMQP broker in this service.
   - or enable all options , such as `--features "mariadb amqprs"`
@@ -103,6 +92,23 @@ SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
 
 ### Development API server with Debugger
 I use the plug-in [vimspector](https://github.com/puremourning/vimspector) with NeoVim, please refer to configuration in `./order/.vimspector` as well as the article [NeoVim IDE setup from scratch](https://hackmd.io/@0V3cv8JJRnuK3jMwbJ-EeA/r1XR_hZL3)
+
+
+## Development
+Be sure to run the 2 commands below before building / running the applications
+
+### Code formatter
+The command below reformat test / production code which meet the [styling requirement](https://github.com/rust-lang/rust/tree/HEAD/src/doc/style-guide/src)
+```shell
+cargo  fmt
+```
+
+### Linter
+```shell
+cargo  clippy
+```
+- the feature options above are also available in the linter
+
 
 ## Test
 ### Unit Test

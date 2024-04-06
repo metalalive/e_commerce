@@ -45,10 +45,7 @@ struct StkRsvDetailRow(MySqlRow);
 impl InsertQtyArg {
     fn sql_pattern(num_batch: usize) -> String {
         let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`,`qty_cancelled`";
-        let items = (0..num_batch)
-            .into_iter()
-            .map(|_| "(?,?,?,?,?,?)")
-            .collect::<Vec<_>>();
+        let items = (0..num_batch).map(|_| "(?,?,?,?,?,?)").collect::<Vec<_>>();
         format!(
             "INSERT INTO `stock_level_inventory`({}) VALUES {}",
             col_seq,
@@ -81,9 +78,12 @@ impl<'q> IntoArguments<'q, MySql> for InsertQtyArg {
         out
     }
 }
-impl Into<Vec<(String, MySqlArguments)>> for InsertQtyArg {
-    fn into(self) -> Vec<(String, MySqlArguments)> {
-        let c = (Self::sql_pattern(self.0.len()), self.into_arguments());
+impl From<InsertQtyArg> for Vec<(String, MySqlArguments)> {
+    fn from(value: InsertQtyArg) -> Vec<(String, MySqlArguments)> {
+        let c = (
+            InsertQtyArg::sql_pattern(value.0.len()),
+            value.into_arguments(),
+        );
         vec![c]
     }
 }
@@ -92,13 +92,10 @@ impl UpdateQtyArg {
     fn sql_pattern(num_batch: usize) -> String {
         let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=? AND `expiry`=?)";
         let case_ops = (0..num_batch)
-            .into_iter()
-            .map(|_| ["WHEN", condition, "THEN", "?"])
-            .flatten()
+            .flat_map(|_| ["WHEN", condition, "THEN", "?"])
             .collect::<Vec<_>>()
             .join(" ");
         let pid_cmps = (0..num_batch)
-            .into_iter()
             .map(|_| condition)
             .collect::<Vec<_>>()
             .join("OR");
@@ -164,9 +161,12 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg {
         out
     }
 } // end of impl IntoArguments for UpdateQtyArg
-impl Into<Vec<(String, MySqlArguments)>> for UpdateQtyArg {
-    fn into(self) -> Vec<(String, MySqlArguments)> {
-        let c = (Self::sql_pattern(self.0.len()), self.into_arguments());
+impl From<UpdateQtyArg> for Vec<(String, MySqlArguments)> {
+    fn from(value: UpdateQtyArg) -> Vec<(String, MySqlArguments)> {
+        let c = (
+            UpdateQtyArg::sql_pattern(value.0.len()),
+            value.into_arguments(),
+        );
         vec![c]
     }
 }
@@ -175,13 +175,10 @@ impl ReserveArg {
     fn pattern_update_block(num_batch: usize) -> (String, String) {
         let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=? AND `expiry`=?)";
         let case_ops = (0..num_batch)
-            .into_iter()
-            .map(|_| ["WHEN", condition, "THEN", "?"])
-            .flatten()
+            .flat_map(|_| ["WHEN", condition, "THEN", "?"])
             .collect::<Vec<_>>()
             .join(" ");
         let pid_cmps = (0..num_batch)
-            .into_iter()
             .map(|_| condition)
             .collect::<Vec<_>>()
             .join("OR");
@@ -196,16 +193,13 @@ impl ReserveArg {
     }
     fn pattern_add_order_rsv(num_batch: usize) -> String {
         let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`order_id`,`qty_reserved`";
-        let items = (0..num_batch)
-            .into_iter()
-            .map(|_| "(?,?,?,?,?,?)")
-            .collect::<Vec<_>>();
+        let items = (0..num_batch).map(|_| "(?,?,?,?,?,?)").collect::<Vec<_>>();
         format!(
             "INSERT INTO `stock_rsv_detail`({col_seq}) VALUES {}",
             items.join(",")
         )
     }
-    fn args_update_total_rsv(stores: &Vec<(u32, ProductStockModel)>) -> MySqlArguments {
+    fn args_update_total_rsv(stores: &[(u32, ProductStockModel)]) -> MySqlArguments {
         let mut out = MySqlArguments::default();
         stores
             .iter()
@@ -267,17 +261,17 @@ impl ReserveArg {
         out
     }
 }
-impl Into<Vec<(String, MySqlArguments)>> for ReserveArg {
-    fn into(self) -> Vec<(String, MySqlArguments)> {
-        let num_batch = self.0.len();
+impl From<ReserveArg> for Vec<(String, MySqlArguments)> {
+    fn from(value: ReserveArg) -> Vec<(String, MySqlArguments)> {
+        let num_batch = value.0.len();
         vec![
             (
-                Self::pattern_update_total_rsv(num_batch),
-                Self::args_update_total_rsv(&self.0),
+                ReserveArg::pattern_update_total_rsv(num_batch),
+                ReserveArg::args_update_total_rsv(&value.0),
             ),
             (
-                Self::pattern_add_order_rsv(num_batch),
-                self.args_add_order_rsv(),
+                ReserveArg::pattern_add_order_rsv(num_batch),
+                value.args_add_order_rsv(),
             ),
         ]
     }
@@ -334,17 +328,17 @@ impl ReturnArg {
         out
     }
 }
-impl Into<Vec<(String, MySqlArguments)>> for ReturnArg {
-    fn into(self) -> Vec<(String, MySqlArguments)> {
-        let num_batch = self.0.len();
+impl From<ReturnArg> for Vec<(String, MySqlArguments)> {
+    fn from(value: ReturnArg) -> Vec<(String, MySqlArguments)> {
+        let num_batch = value.0.len();
         vec![
             (
                 ReserveArg::pattern_update_total_rsv(num_batch),
-                ReserveArg::args_update_total_rsv(&self.0),
+                ReserveArg::args_update_total_rsv(&value.0),
             ),
             (
-                Self::pattern_update_order_rsv(num_batch),
-                self.args_update_order_rsv(),
+                ReturnArg::pattern_update_order_rsv(num_batch),
+                value.args_update_order_rsv(),
             ),
         ]
     }
@@ -353,10 +347,7 @@ impl Into<Vec<(String, MySqlArguments)>> for ReturnArg {
 impl FetchQtyArg {
     fn sql_pattern(num_batch: usize) -> String {
         let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=? AND `expiry`=?)";
-        let pid_cmps = (0..num_batch)
-            .into_iter()
-            .map(|_| condition)
-            .collect::<Vec<_>>();
+        let pid_cmps = (0..num_batch).map(|_| condition).collect::<Vec<_>>();
         let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`, \
                        `qty_cancelled`,`qty_tot_rsv`";
         format!(
@@ -383,19 +374,19 @@ impl<'q> IntoArguments<'q, MySql> for FetchQtyArg {
         out
     }
 }
-impl Into<(String, MySqlArguments)> for FetchQtyArg {
-    fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.0.len()), self.into_arguments())
+impl From<FetchQtyArg> for (String, MySqlArguments) {
+    fn from(value: FetchQtyArg) -> (String, MySqlArguments) {
+        (
+            FetchQtyArg::sql_pattern(value.0.len()),
+            value.into_arguments(),
+        )
     }
 }
 
 impl<'a> FetchQtyForRsvArg<'a> {
     fn sql_pattern(num_batch: usize) -> String {
         let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=?)";
-        let pid_cmps = (0..num_batch)
-            .into_iter()
-            .map(|_| condition)
-            .collect::<Vec<_>>();
+        let pid_cmps = (0..num_batch).map(|_| condition).collect::<Vec<_>>();
         let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`, \
                        `qty_cancelled`,`qty_tot_rsv`";
         format!(
@@ -419,19 +410,19 @@ impl<'a, 'q> IntoArguments<'q, MySql> for FetchQtyForRsvArg<'a> {
         out
     }
 }
-impl<'a> Into<(String, MySqlArguments)> for FetchQtyForRsvArg<'a> {
-    fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.0.len()), self.into_arguments())
+impl<'a> From<FetchQtyForRsvArg<'a>> for (String, MySqlArguments) {
+    fn from(value: FetchQtyForRsvArg<'a>) -> (String, MySqlArguments) {
+        (
+            FetchQtyForRsvArg::sql_pattern(value.0.len()),
+            value.into_arguments(),
+        )
     }
 }
 
 impl<'a> FetchRsvOrderArg<'a> {
     fn sql_pattern(num_batch: usize) -> String {
         let condition = "(`a`.`store_id`=? AND `a`.`product_type`=? AND `a`.`product_id`=?)";
-        let pid_cmps = (0..num_batch)
-            .into_iter()
-            .map(|_| condition)
-            .collect::<Vec<_>>();
+        let pid_cmps = (0..num_batch).map(|_| condition).collect::<Vec<_>>();
         let col_seq = "`a`.`store_id`,`a`.`product_type`,`a`.`product_id`,`a`.`expiry`,\
             `a`.`order_id`,`a`.`qty_reserved`,`b`.`qty_total`,`b`.`qty_cancelled`,\
             `b`.`qty_tot_rsv`";
@@ -461,10 +452,13 @@ impl<'a, 'q> IntoArguments<'q, MySql> for FetchRsvOrderArg<'a> {
         out
     }
 }
-impl<'a> Into<(String, MySqlArguments)> for FetchRsvOrderArg<'a> {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.1.len();
-        (Self::sql_pattern(num_batch), self.into_arguments())
+impl<'a> From<FetchRsvOrderArg<'a>> for (String, MySqlArguments) {
+    fn from(value: FetchRsvOrderArg<'a>) -> (String, MySqlArguments) {
+        let num_batch = value.1.len();
+        (
+            FetchRsvOrderArg::sql_pattern(num_batch),
+            value.into_arguments(),
+        )
     }
 }
 
@@ -665,8 +659,7 @@ impl AbsOrderStockRepo for StockMariaDbRepo {
             let query = stmt.query_with(args);
             let exec = &mut *tx;
             let rows = exec.fetch_all(query).await?;
-            let _ms = StkRsvDetailRows(rows).try_into()?;
-            _ms
+            StkRsvDetailRows(rows).try_into()?
         };
         let errors = cb(&mut mset, data);
         if errors.is_empty() {
@@ -702,7 +695,7 @@ impl StockMariaDbRepo {
         while !data.is_empty() {
             let num_batch = min(data.len(), limit);
             let items_processing = data.split_off(data.len() - num_batch);
-            assert!(items_processing.len() > 0);
+            assert!(!items_processing.is_empty());
             let sqls: Vec<(String, MySqlArguments)> = match cmd {
                 "insert" => InsertQtyArg(items_processing).into(),
                 "update" => UpdateQtyArg(items_processing).into(),
@@ -732,8 +725,7 @@ impl StockMariaDbRepo {
             let query = stmt.query_with(args);
             let exec = tx.deref_mut();
             let rows = exec.fetch_all(query).await?;
-            let ms = StkProdRows(rows).try_into()?;
-            ms
+            StkProdRows(rows).try_into()?
         };
         if let Err(e) = usr_cb(&mut mset, order_req) {
             e

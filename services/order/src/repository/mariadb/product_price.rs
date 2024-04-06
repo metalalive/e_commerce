@@ -28,7 +28,7 @@ impl InsertArg {
     fn sql_pattern(num_batch: usize) -> String {
         const ITEM: &str = "(?,?,?,?,?,?,?,?)";
         const DELIMITER: &str = ",";
-        let items = (0..num_batch).into_iter().map(|_| ITEM).collect::<Vec<_>>();
+        let items = (0..num_batch).map(|_| ITEM).collect::<Vec<_>>();
         format!("INSERT INTO `product_price`(`store_id`,`product_type`,`product_id`,`price`,`start_after`,`end_before`, `start_tz_utc`, `end_tz_utc`) VALUES {}"
                 , items.join(DELIMITER) )
     }
@@ -65,21 +65,22 @@ impl<'q> IntoArguments<'q, MySql> for InsertArg {
         out
     }
 } // impl IntoArguments for InsertArg
-impl Into<(String, MySqlArguments)> for InsertArg {
-    fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.1.len()), self.into_arguments())
+impl From<InsertArg> for (String, MySqlArguments) {
+    fn from(value: InsertArg) -> (String, MySqlArguments) {
+        (
+            InsertArg::sql_pattern(value.1.len()),
+            value.into_arguments(),
+        )
     }
 }
 
 impl UpdateArg {
     fn sql_pattern(num_batch: usize) -> String {
         let case_ops = (0..num_batch)
-            .into_iter()
             .map(|_| "WHEN (`product_type`=? AND `product_id`=?) THEN ? ")
             .collect::<Vec<_>>()
             .join("");
         let pid_cmps = (0..num_batch)
-            .into_iter()
             .map(|_| "(`product_type`=? AND `product_id`=?)")
             .collect::<Vec<_>>()
             .join(" OR ");
@@ -160,9 +161,12 @@ impl<'q> IntoArguments<'q, MySql> for UpdateArg {
         out
     } // end of fn into_arguments
 } // end of impl IntoArguments for UpdateArg
-impl Into<(String, MySqlArguments)> for UpdateArg {
-    fn into(self) -> (String, MySqlArguments) {
-        (Self::sql_pattern(self.1.len()), self.into_arguments())
+impl From<UpdateArg> for (String, MySqlArguments) {
+    fn from(value: UpdateArg) -> (String, MySqlArguments) {
+        (
+            UpdateArg::sql_pattern(value.1.len()),
+            value.into_arguments(),
+        )
     }
 }
 
@@ -171,7 +175,6 @@ impl FetchOneArg {
         let col_seq = "`store_id`,`product_type`,`product_id`,`price`,`start_after`,\
                        `end_before`,`start_tz_utc`,`end_tz_utc`";
         let pid_cmps = (0..num_batch)
-            .into_iter()
             .map(|_| "(`product_type`=? AND `product_id`=?)")
             .collect::<Vec<_>>()
             .join("OR");
@@ -197,11 +200,11 @@ impl<'q> IntoArguments<'q, MySql> for FetchOneArg {
         out
     }
 }
-impl Into<(String, MySqlArguments)> for FetchOneArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.1.len();
+impl From<FetchOneArg> for (String, MySqlArguments) {
+    fn from(value: FetchOneArg) -> (String, MySqlArguments) {
+        let num_batch = value.1.len();
         assert!(num_batch > 0);
-        (Self::sql_pattern(num_batch), self.into_arguments())
+        (FetchOneArg::sql_pattern(num_batch), value.into_arguments())
     }
 }
 
@@ -210,7 +213,6 @@ impl FetchManyArg {
         let col_seq = "`store_id`,`product_type`,`product_id`,`price`,`start_after`,\
                        `end_before`,`start_tz_utc`,`end_tz_utc`";
         let pid_cmps = (0..num_batch)
-            .into_iter()
             .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
             .collect::<Vec<_>>()
             .join(" OR ");
@@ -234,26 +236,18 @@ impl<'q> IntoArguments<'q, MySql> for FetchManyArg {
         out
     }
 }
-impl Into<(String, MySqlArguments)> for FetchManyArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let num_batch = self.0.len();
+impl From<FetchManyArg> for (String, MySqlArguments) {
+    fn from(value: FetchManyArg) -> (String, MySqlArguments) {
+        let num_batch = value.0.len();
         assert!(num_batch > 0);
-        (Self::sql_pattern(num_batch), self.into_arguments())
+        (FetchManyArg::sql_pattern(num_batch), value.into_arguments())
     }
 }
 
 impl DeleteSomeArg {
     fn sql_pattern(num_items: usize, num_pkgs: usize) -> String {
-        let items_ph = (0..num_items)
-            .into_iter()
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
-        let pkgs_ph = (0..num_pkgs)
-            .into_iter()
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
+        let items_ph = (0..num_items).map(|_| "?").collect::<Vec<_>>().join(",");
+        let pkgs_ph = (0..num_pkgs).map(|_| "?").collect::<Vec<_>>().join(",");
         format!("DELETE FROM `product_price` WHERE `store_id`=? AND ((`product_type`=? AND `product_id` IN ({})) OR (`product_type`=? AND `product_id` IN ({}))  )", items_ph, pkgs_ph)
     }
 }
@@ -268,7 +262,7 @@ impl<'q> IntoArguments<'q, MySql> for DeleteSomeArg {
             .unwrap()
             .iter()
             .map(|product_id| {
-                out.add(product_id.clone());
+                out.add(*product_id);
             })
             .count();
         let pkg_typ: u8 = data.pkg_type.into();
@@ -277,7 +271,7 @@ impl<'q> IntoArguments<'q, MySql> for DeleteSomeArg {
             .unwrap()
             .iter()
             .map(|product_id| {
-                out.add(product_id.clone());
+                out.add(*product_id);
             })
             .count();
         out
@@ -291,10 +285,9 @@ impl TryInto<(String, MySqlArguments)> for DeleteSomeArg {
         let items_r = self.1.items.as_ref().unwrap_or(&empty);
         let pkgs_r = self.1.pkgs.as_ref().unwrap_or(&empty);
         if items_r.is_empty() && pkgs_r.is_empty() {
-            let detail = format!("delete-product-price");
             Err(AppError {
                 code: AppErrorCode::EmptyInputData,
-                detail: Some(detail),
+                detail: Some("delete-product-price".to_string()),
             })
         } else {
             Ok((
@@ -305,13 +298,13 @@ impl TryInto<(String, MySqlArguments)> for DeleteSomeArg {
     }
 }
 
-impl Into<(String, MySqlArguments)> for DeleteAllArg {
-    fn into(self) -> (String, MySqlArguments) {
-        let sql_patt = format!("DELETE FROM `product_price` WHERE `store_id`=?");
+impl From<DeleteAllArg> for (String, MySqlArguments) {
+    fn from(value: DeleteAllArg) -> (String, MySqlArguments) {
+        let sql_patt = "DELETE FROM `product_price` WHERE `store_id`=?";
         let mut args = MySqlArguments::default();
-        let store_id = self.0;
+        let store_id = value.0;
         args.add(store_id);
-        (sql_patt, args)
+        (sql_patt.to_string(), args)
     }
 }
 
@@ -416,7 +409,7 @@ impl ProductPriceMariaDbRepo {
         if dbs.is_empty() {
             let e = AppError {
                 code: AppErrorCode::MissingDataStore,
-                detail: Some(format!("mariadb")),
+                detail: Some("mariadb".to_string()),
             };
             Err(e)
         } else {
@@ -438,7 +431,7 @@ impl ProductPriceMariaDbRepo {
             let num_batch = min(prices.len(), limit);
             let expect_num_affected = num_batch;
             let items_processing = prices.split_off(prices.len() - num_batch);
-            assert!(items_processing.len() > 0);
+            assert!(!items_processing.is_empty());
             let (sql_patt, args) = if cmd == "insert" {
                 InsertArg(store_id, items_processing).into()
             } else {

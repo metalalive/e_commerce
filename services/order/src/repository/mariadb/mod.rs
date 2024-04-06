@@ -16,7 +16,7 @@ use std::vec::IntoIter;
 
 use crate::error::{AppError, AppErrorCode};
 
-const DATETIME_FORMAT: &'static str = "%Y-%m-%d %H:%M:%S.%6f";
+const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%6f";
 const OID_BYTE_LENGTH: usize = 16;
 
 impl From<Error> for AppError {
@@ -50,21 +50,24 @@ impl From<Error> for AppError {
             ),
             Error::RowNotFound => (
                 AppErrorCode::IOerror(ErrorKind::NotFound),
-                format!("no-row"),
+                "no-row".to_string(),
             ),
             Error::ColumnIndexOutOfBounds { index, len } => (
                 AppErrorCode::InvalidInput,
                 format!("req-idx:{}, limit:{}", index, len),
             ),
-            Error::PoolTimedOut => (AppErrorCode::DatabaseServerBusy, format!("no-conn-avail")),
-            Error::PoolClosed => (AppErrorCode::Unknown, format!("pool-closed")),
+            Error::PoolTimedOut => (
+                AppErrorCode::DatabaseServerBusy,
+                "no-conn-avail".to_string(),
+            ),
+            Error::PoolClosed => (AppErrorCode::Unknown, "pool-closed".to_string()),
             Error::WorkerCrashed => (
                 AppErrorCode::Unknown,
-                format!("low-level-db-worker-crashed"),
+                "low-level-db-worker-crashed".to_string(),
             ),
             _others => (
                 AppErrorCode::Unknown,
-                format!("internal-implementation-issue"),
+                "internal-implementation-issue".to_string(),
             ),
         };
         Self {

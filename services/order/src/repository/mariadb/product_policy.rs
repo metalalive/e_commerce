@@ -22,7 +22,7 @@ impl ProductPolicyMariaDbRepo {
         if dbs.is_empty() {
             let e = AppError {
                 code: AppErrorCode::MissingDataStore,
-                detail: Some(format!("mariadb")),
+                detail: Some("mariadb".to_string()),
             };
             Err(e)
         } else {
@@ -38,7 +38,6 @@ impl ProductPolicyMariaDbRepo {
         let mut sql = prefix.to_string() + item;
         num_items -= 1;
         let num_done = (0..num_items)
-            .into_iter()
             .map(|_| {
                 sql += delimiter;
                 sql += item;
@@ -60,7 +59,7 @@ impl ProductPolicyMariaDbRepo {
             let num_batch = min(policies.len(), limit);
             let expect_num_affected = num_batch;
             let policies_processing = policies.split_off(policies.len() - num_batch);
-            assert!(policies_processing.len() > 0);
+            assert!(!policies_processing.is_empty());
             let (sql_patt, args) = args_constructor(policies_processing);
             let stmt = tx.prepare_with(sql_patt.as_str(), &params).await?;
             let exec = &mut **tx;
@@ -166,7 +165,6 @@ impl ProductPolicyMariaDbRepo {
             .count();
         let sql_patt = {
             let case_ops = (0..num_batch)
-                .into_iter()
                 .map(|_| "WHEN (`product_type`=? AND `product_id`=?) THEN ? ")
                 .collect::<Vec<_>>()
                 .join("");
@@ -182,7 +180,6 @@ impl ProductPolicyMariaDbRepo {
             out += "(`product_type`=? AND `product_id`=?)";
             num_batch -= 1;
             (0..num_batch)
-                .into_iter()
                 .map(|_| {
                     out += "OR (`product_type`=? AND `product_id`=?)";
                 })
@@ -224,7 +221,6 @@ impl AbstProductPolicyRepo for ProductPolicyMariaDbRepo {
             let stmt = conn.prepare_with(sql.as_str(), &params).await?;
             let mut args = MySqlArguments::default();
             let _ = (0..num_batch)
-                .into_iter()
                 .map(|_| {
                     let (prod_typ, prod_id) = _ids.remove(0);
                     let prodtypenum: u8 = prod_typ.into();

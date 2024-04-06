@@ -105,7 +105,7 @@ impl From<AmqpError> for AppError {
             AmqpError::ChannelUseError(s) => (AppErrorCode::Unknown, s + ", channel-misuse"),
             AmqpError::NetworkError(s) => (AppErrorCode::Unknown, s + ", network-error"),
             AmqpError::InternalChannelError(s) => (AppErrorCode::Unknown, s + ", internal-channel"),
-            _others => (AppErrorCode::Unknown, format!("rpc-amqp-undefined-err")),
+            _others => (AppErrorCode::Unknown, "rpc-amqp-undefined-err".to_string()),
         };
         AppError {
             code,
@@ -203,7 +203,7 @@ impl AmqpRpcContext {
     ) -> DefaultResult<AmqpChannelWrapper, AppError> {
         let mut result = Err(AppError {
             code: AppErrorCode::Unknown,
-            detail: Some(format!("AbsRpcClientCtx::acquire, AmqpRpcContext")),
+            detail: Some("AbsRpcClientCtx::acquire, AmqpRpcContext".to_string()),
         });
         for _ in 0..num_retry {
             result = self.ensure_conn_channel().await;
@@ -254,18 +254,18 @@ impl AmqpRpcContext {
             *guard = Some(c);
         }
         if let Some(conn) = guard.as_ref() {
-            match self.ensure_channel(&conn).await {
+            match self.ensure_channel(conn).await {
                 Ok(chn_wrapper) => Ok(chn_wrapper),
                 Err(e) => {
                     if conn.is_open() {
-                        Err(e.into())
+                        Err(e)
                     } else {
                         let conn = guard.take().unwrap();
                         let _result = conn.close().await; // drop and ignore any error
                         let conn = self._create_conn().await?;
                         *guard = Some(conn);
                         let conn = guard.as_ref().unwrap();
-                        let chn_wrapper = self.ensure_channel(&conn).await?;
+                        let chn_wrapper = self.ensure_channel(conn).await?;
                         Ok(chn_wrapper)
                     }
                 }
@@ -543,7 +543,7 @@ impl AbstractRpcClient for AmqpRpcClientHandler {
                 })
             }
         } else {
-            let detail = format!("rpc-client-recv-reply, missing-corr-id");
+            let detail = "rpc-client-recv-reply, missing-corr-id".to_string();
             Err(AppError {
                 code: AppErrorCode::DataCorruption,
                 detail: Some(detail),
@@ -553,8 +553,9 @@ impl AbstractRpcClient for AmqpRpcClientHandler {
 } // end of impl AbstractRpcClient for AmqpRpcHandler
 
 impl AmqpRpcClientHandler {
+    #[allow(clippy::needless_lifetimes)]
     fn try_get_binding<'a, 'b>(
-        src: &'a Vec<AppAmqpBindingCfg>,
+        src: &'a [AppAmqpBindingCfg],
         route_key: &'b str,
     ) -> DefaultResult<&'a AppAmqpBindingCfg, AppError> {
         let result = src
@@ -738,7 +739,7 @@ impl AsyncConsumer for InnerServerConsumer {
         let route_key_log = deliver.routing_key().clone();
         let part_content_log = {
             let sz = std::cmp::min(20, content.len());
-            (&content[..sz]).to_vec()
+            content[..sz].to_vec()
         };
         app_log_event!(
             log_ctx_p,
