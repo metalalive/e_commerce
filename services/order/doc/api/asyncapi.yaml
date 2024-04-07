@@ -1,0 +1,740 @@
+asyncapi: 3.0.0
+info:
+  title: Order-Processing RPC API
+  version: 1.0.0
+  description: |-
+    RPC API endpoints for order-processing service
+
+  license:
+    name: MIT
+    url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
+
+defaultContentType: application/json
+
+servers:
+  rabbitmq-connections:
+    host: order-proc.site.not.ready:5672 
+    protocol: amqp
+    description: message broker for development and testing
+    security:
+      - $ref: '#/components/securitySchemes/saslScram'
+    tags:
+      - name: env:test
+        description: >-
+          This environment is meant for running internal tests
+      - name: kind:remote
+        description: This server is a remote server. Not exposed by the application
+      - name: visibility:private
+        description: This resource is private and only interacts with our web applications.
+
+channels:
+  update_store_products:
+    address: rpc.order.update_store_products
+    description: Sync product data e.g. price from store-front service.
+    messages:
+      StoreProducts:
+        $ref: '#/components/messages/StoreProducts'
+
+  stock_level_edit:
+    address: rpc.order.stock_level_edit
+    description: Sync stock level of specific product from inventory service.
+    messages:
+      StockLevelReq:
+        $ref: '#/components/messages/InventoryEditStockLevelList'
+      StockLevelReply:
+        $ref: '#/components/messages/StockLevelPresentList'
+
+  stock_return_cancelled:
+    address: rpc.order.stock_return_cancelled
+    description: Sync returned order lines from inventory service, and update its stock level if the returned items are saleable.
+    messages:
+      StockReturnInbound:
+        $ref: '#/components/messages/StockLevelReturnDto'
+      StockReturnSyncErrors:
+        $ref: '#/components/messages/StockReturnErrorList'
+
+  order_reserved_replica_inventory:
+    address: rpc.order.order_reserved_replica_inventory
+    description: replicate order reserved lines / returns to inventory service.
+    messages:
+      ReplicaRequest:
+        contentType: application/json
+        payload:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+      ReplicaResponse:
+        $ref: '#/components/messages/OrderReplicaInventoryDto'
+
+  order_reserved_replica_payment:
+    address: rpc.order.order_reserved_replica_payment
+    description: replicate order reserved lines to payment service.
+    messages:
+      ReplicaRequest:
+        contentType: application/json
+        payload:
+          type: object
+          properties:
+            order_id:
+              type: string
+      ReplicaResponse:
+        $ref: '#/components/messages/OrderReplicaPaymentDto'
+
+  order_returned_replica_refund:
+    address: rpc.order.order_returned_replica_refund
+    description: replicate refund of order returns to payment service.
+    messages:
+      ReplicaRequest:
+        $ref: '#/components/messages/OrderReplicaRefundReqDto'
+      ReplicaResponse:
+        $ref: '#/components/messages/OrderLineReplicaRefundList'
+
+  order_reserved_update_payment:
+    address: rpc.order.order_reserved_update_payment
+    description: sync progress of an order payment from payment service.
+    messages:
+      RsvPayUpdateInbound:
+        $ref: '#/components/messages/OrderPaymentUpdateDto'
+      RsvPayUpdateResult:
+        $ref: '#/components/messages/OrderPaymentUpdateErrorDto'
+
+  order_reserved_discard_unpaid:
+    address: rpc.order.order_reserved_update_payment
+    description: this endpoint is supposed to run as a cron job , to periodically discard the reserved but unpaid products in the recently created orders. there is no inbound and outbound payload in this endpoint.
+
+operations:
+  update-store-product:
+    action: receive
+    channel:
+      $ref: '#/channels/update_store_products'
+    summary: >-
+     N/A
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 15000
+    messages:
+      - $ref: '#/channels/update_store_products/messages/StoreProducts'
+
+  stock-level-edit:
+    action: receive
+    channel:
+      $ref: '#/channels/stock_level_edit'
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 180000
+    messages:
+      - $ref: '#/channels/stock_level_edit/messages/StockLevelReq'
+    reply:
+      address:
+        description: The response destination is dynamically set according to the `replyTo` field in the request header
+        location: "$message.header#/replyTo"
+      messages:
+        - $ref: '#/channels/stock_level_edit/messages/StockLevelReply'
+
+  stock-level-return:
+    action: receive
+    channel:
+      $ref: '#/channels/stock_return_cancelled'
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 180000
+    messages:
+      - $ref: '#/channels/stock_return_cancelled/messages/StockReturnInbound'
+    reply:
+      address:
+        location: "$message.header#/replyTo"
+      messages:
+        - $ref: '#/channels/stock_return_cancelled/messages/StockReturnSyncErrors'
+
+  order-rsv-replica-inventory:
+    action: receive
+    channel:
+      $ref: '#/channels/order_reserved_replica_inventory'
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 880000
+    messages:
+      - $ref: '#/channels/order_reserved_replica_inventory/messages/ReplicaRequest'
+    reply:
+      address:
+        location: "$message.header#/replyTo"
+      messages:
+        - $ref: '#/channels/order_reserved_replica_inventory/messages/ReplicaResponse'
+
+  order-rsv-replica-payment:
+    action: receive
+    channel:
+      $ref: '#/channels/order_reserved_replica_payment'
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 60000
+    messages:
+      - $ref: '#/channels/order_reserved_replica_payment/messages/ReplicaRequest'
+    reply:
+      address:
+        location: "$message.header#/replyTo"
+      messages:
+        - $ref: '#/channels/order_reserved_replica_payment/messages/ReplicaResponse'
+
+  order-returned-replica-refund:
+    action: receive
+    channel:
+      $ref: '#/channels/order_returned_replica_refund'
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 60000
+    messages:
+      - $ref: '#/channels/order_returned_replica_refund/messages/ReplicaRequest'
+    reply:
+      address:
+        location: "$message.header#/replyTo"
+      messages:
+        - $ref: '#/channels/order_returned_replica_refund/messages/ReplicaResponse'
+
+  order-rsv-update-payment:
+    action: receive
+    channel:
+      $ref: '#/channels/order_reserved_update_payment'
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 48000
+    messages:
+      - $ref: '#/channels/order_reserved_update_payment/messages/RsvPayUpdateInbound'
+    reply:
+      address:
+        location: "$message.header#/replyTo"
+      messages:
+        - $ref: '#/channels/order_reserved_update_payment/messages/RsvPayUpdateResult'
+
+  order-rsv-discard-unpaid:
+    action: receive
+    channel:
+      $ref: '#/channels/order_reserved_discard_unpaid'
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 20000
+
+
+components:
+  messages:
+    StoreProducts:
+      name: StoreProducts
+      title: Storefront Products
+      summary: >-
+          Products available in the given storefront, which contain attributes relevant to this order-processing service.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/PyCeleryCommonHeaders'
+      payload:
+        $ref: '#/components/schemas/ProductPriceDto'
+    InventoryEditStockLevelList:
+      title: stock-level items to edit for inventory management
+      contentType: application/json
+      payload:
+        type: array
+        items:
+          $ref: '#/components/schemas/InventoryEditStockLevelDto'
+    StockLevelPresentList:
+      title: current stock level in this order-processing service
+      contentType: application/json
+      payload:
+        type: array
+        items:
+          $ref: '#/components/schemas/StockLevelPresentDto'
+    StockLevelReturnDto:
+      title: stock-level items to edit for order-line returns
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          order_id:
+            type: string
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/InventoryEditStockLevelDto'
+    StockReturnErrorList:
+      title: list of errors related to stock-return sync
+      contentType: application/json
+      payload:
+        type: array
+        items:
+          $ref: '#/components/schemas/StockReturnErrorDto'
+    OrderReplicaInventoryDto:
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          reservations:
+            type: array
+            items:
+              $ref: '#/components/schemas/OrderReplicaStockReservingDto'
+          returns:
+            type: array
+            items:
+              $ref: '#/components/schemas/OrderReplicaStockReturningDto'
+    OrderReplicaPaymentDto:
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          oid:
+            type: string
+          usr_id:
+            type: integer
+            format: int32
+          lines:
+            type: array
+            items:
+              $ref: '#/components/schemas/OrderLinePayDto'
+          billing:
+            $ref: '#/components/schemas/BillingDto'
+    OrderReplicaRefundReqDto:
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          order_id:
+            type: string
+          start:
+            type: string
+            format: date-time
+          end:
+            type: string
+            format: date-time
+    OrderLineReplicaRefundList:
+      contentType: application/json
+      payload:
+        type: array
+        items:
+          $ref: '#/components/schemas/OrderLineReplicaRefundDto'
+    OrderPaymentUpdateDto:
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          oid:
+            type: string
+          lines:
+            type: array
+            items:
+              $ref: '#/components/schemas/OrderLinePaidUpdateDto'
+    OrderPaymentUpdateErrorDto:
+      contentType: application/json
+      payload:
+        type: object
+        properties:
+          oid:
+            type: string
+          lines:
+            type: array
+            items:
+              $ref: '#/components/schemas/OrderLinePayUpdateErrorDto'
+
+  schemas:
+    ProductType:
+      type: integer
+      format: uint8
+      enum: [1, 2]
+      description: 1 indicates product item, 2 indicates product package
+    ProductPriceEditDto:
+      type: object
+      properties:
+        price:
+          type: integer
+          format: uint32
+        start_after:
+          type: string
+          format: date-time
+          description: date time string in RFC3339 format
+        end_before:
+          type: string
+          format: date-time
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        product_id:
+          type: integer
+          format: uint64
+    ProductPriceDeleteDto:
+      type: object
+      properties:
+        items:
+          type: array
+          description: list of IDs that incidate specific product items
+          items:
+            type: integer
+            format: uint64
+        pkgs:
+          type: array
+          description: list of IDs that incidate specific product packages
+          items:
+            type: integer
+            format: uint64
+        item_type:
+          $ref: '#/components/schemas/ProductType'
+        pkg_type:
+          $ref: '#/components/schemas/ProductType'
+    ProductPriceDto:
+      type: object
+      properties:
+        s_id:
+          type: integer
+          format: uint32
+          description: seller ID
+        rm_all:
+          type: boolean
+          description: whether to remove all products in the store.
+        deleting:
+          $ref: '#/components/schemas/ProductPriceDeleteDto'
+        updating:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductPriceEditDto'
+        creating:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductPriceEditDto'
+
+    InventoryEditStockLevelDto:
+      type: object
+      properties:
+        qty_add:
+          type: integer
+          format: int32
+        store_id:
+          type: integer
+          format: uint32
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        product_id:
+          type: integer
+          format: uint64
+        expiry:
+          type: string
+          format: date-time
+          description: date time string in RFC3339 format
+    StockQuantityPresentDto:
+      type: object
+      properties:
+        total:
+          type: integer
+          format: uint32
+        booked:
+          type: integer
+          format: uint32
+        cancelled:
+          type: integer
+          format: uint32
+    StockLevelPresentDto:
+      type: object
+      properties:
+        quantity:
+          $ref: '#/components/schemas/StockQuantityPresentDto'
+        store_id:
+          type: integer
+          format: uint32
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        product_id:
+          type: integer
+          format: uint64
+        expiry:
+          type: string
+          format: date-time
+    
+    StockReturnErrorReason:
+      type: string
+      enum: [NotExist, InvalidQuantity]
+    StockReturnErrorDto:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+        product_id:
+          type: integer
+          format: uint64
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        reason:
+          $ref: '#/components/schemas/StockReturnErrorReason'
+
+    PhoneNumberDto:
+      type: object
+      properties:
+        nation:
+          type: integer
+          format: uint16
+        number:
+          type: string
+    ContactDto:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        emails:
+          type: array
+          items:
+            type: string
+        phones:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhoneNumberDto'
+    CountryCode:
+      type: string
+      enum: [TW, TH, IN, ID, US, Unknown]
+    PhyAddrDto:
+      type: object
+      properties:
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        region:
+          type: string
+        city:
+          type: string
+        distinct:
+          type: string
+        street_name:
+          type: string
+        detail:
+          type: string
+      required:
+        - country
+        - region
+        - city
+        - distinct
+        - detail
+    ShippingOptionDto:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+        method:
+          $ref: '#/components/schemas/ShippingMethod'
+    ShippingMethod:
+      type: string
+      enum: [UPS, FedEx, BlackCatExpress, Unknown]
+    ShippingDto:
+      type: object
+      properties:
+        contact:
+          $ref: '#/components/schemas/ContactDto'
+        address:
+          $ref: '#/components/schemas/PhyAddrDto'
+        option:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShippingOptionDto'
+      required:
+        - contact
+        - option
+    BillingDto:
+      type: object
+      properties:
+        contact:
+          $ref: '#/components/schemas/ContactDto'
+        address:
+          $ref: '#/components/schemas/PhyAddrDto'
+      required:
+        - contact
+    PayAmountDto:
+      type: object
+      properties:
+        unit:
+          type: integer
+          format: uint32
+        total:
+          type: integer
+          format: uint32
+
+    OrderLineStockReservingDto:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+        product_id:
+          type: integer
+          format: uint64
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        qty:
+          type: integer
+          format: uint32
+    OrderLineStockReturningDto:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+        product_id:
+          type: integer
+          format: uint64
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        create_time:
+          type: string
+          format: date-time
+        qty:
+          type: integer
+          format: uint32
+    OrderReplicaStockReservingDto:
+      type: object
+      properties:
+        oid:
+          type: string
+        usr_id:
+          type: integer
+          format: uint32
+        create_time:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLineStockReservingDto'
+        shipping:
+          $ref: '#/components/schemas/ShippingDto'
+    OrderReplicaStockReturningDto:
+      type: object
+      properties:
+        oid:
+          type: string
+        usr_id:
+          type: integer
+          format: uint32
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLineStockReturningDto'
+
+    OrderLinePayDto:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+        product_id:
+          type: integer
+          format: uint64
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        reserved_until:
+          type: string
+          format: date-time
+        quantity:
+          type: integer
+          format: uint32
+        amount:
+          $ref: '#/components/schemas/PayAmountDto'
+
+    OrderLineReplicaRefundDto:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+        product_id:
+          type: integer
+          format: uint64
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        create_time:
+          type: string
+          format: date-time
+        amount:
+          $ref: '#/components/schemas/PayAmountDto'
+
+    OrderLinePaidUpdateDto:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+        product_id:
+          type: integer
+          format: uint64
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        time:
+          type: string
+          format: date-time
+          description: last time the reserved items were paid
+        qty:
+          type: integer
+          format: uint32
+          description: total number of products which has been paid so far, the number has to be less than or equal to total number of specific reserved product items
+
+    OrderLinePayUpdateErrorReason:
+      type: string
+      enum: [NotExist, ReservationExpired, InvalidQuantity, Omitted]
+
+    OrderLinePayUpdateErrorDto:
+      type: object
+      properties:
+        seller_id:
+          type: integer
+          format: uint32
+        product_id:
+          type: integer
+          format: uint64
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        reason:
+          $ref: '#/components/schemas/OrderLinePayUpdateErrorReason'
+
+  securitySchemes:
+    saslScram:
+      type: scramSha256
+      description: Provide your username and password for SASL/SCRAM authentication
+    certs:
+      type: X509
+      description: Download the certificate files from service provider
+
+  messageTraits:
+    PyCeleryCommonHeaders:
+      headers:
+        type: object
+        properties:
+          id:
+            type: string
+            description:  correlation-id, uniquely identify each task
+          task:
+            type: string
+            description:  path to the task handling function in remote service
+          content_type:
+            type: string
+            description:  should match payload type of current setup in Python Celery, that is, `application/json`
+
+  operationTraits:
+    rabbitmq-common:
+      bindings:
+        amqp:
+          deliveryMode: 2
+          timestamp: true
+          ack: true
+
