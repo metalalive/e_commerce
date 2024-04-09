@@ -1,13 +1,14 @@
 # Order Processing service
 ## Features
 - saleable products policy, e.g. reservation expiry, warranty, max number of items reserved ... etc.
-- stock level sync from inventory service
-- product price sync from store-front service
-- place an order
-- order-line return request
-- order request and return sync between inventory and payment services
+- place orders
+- order-line returns
 - permission model and quota resource control
 
+This service interacts with other services to ensure data synchronization :
+- stock level and order reservation, with inventory service
+- product attributes (e.g. price) , with store-front service
+- payment and refund, with payment service
 
 ## Essential Environment Variables
 |variable|description|example|
@@ -151,5 +152,6 @@ Note :
 
 
 ### Reference
-- [API documentation (OpenAPI v3.0 specification)](./doc/api/openapi.yaml)
+- [Web API documentation (OpenAPI v3.0 specification)](./doc/api/openapi.yaml)
+- [Inter-service RPC API documentation (AsyncAPI v3.0 specification)](./doc/api/asyncapi.yaml)
 
