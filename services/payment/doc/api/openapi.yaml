@@ -1,0 +1,290 @@
+openapi: 3.0.3
+info:
+  title: Payment Service
+  description: |-
+    This is API documentation of my payment web service based on the OpenAPI 3.0 specification.
+    termsOfService: http://swagger.io/terms/
+  contact:
+    email: xyz@my-payment-app.io
+  license:
+    name: MIT
+    url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
+  version: 0.0.1
+
+servers:
+  - url: https://doc.site.not.ready/api/v0.0.1
+tags:
+  - name: payin
+    description: pay-in process of a valid order
+  - name: payout
+    description: pay-out process of a valid order
+
+paths:
+  /charge/{charge-id}:
+    post:
+      summary: charge customer for unpaid order products
+      description: |
+        charge customer for unpaid order products:
+        - the charge status in the response depends on the chosen payment method
+        - frontend application may refresh to charge status at a later time if response status is 202
+      tags:
+        - payin
+      parameters:
+        - $ref: '#/components/parameters/ChargeId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargeReqDto'
+      responses:
+        '200':
+          description: |
+            Completed the charge, if the customer does not need to oprovide sensitive data e.g. credit card number to the chosen third-party payment service provider (PSP)
+        '202':
+          description: |
+            Charge session initiated successfully, in this case :
+            - frontend application has to set up final payment page hosted by third-party PSP
+            - customer should approve the payment in limited time period
+            - frontend application has to refresh the status of the charge later, by calling  the same endpoint with `PATCH` method 
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeRespDto'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeRespErrorDto'
+        '409':
+          description: the same `charge-id` exists
+        '503':
+          description: Service currently unavailable
+      security:
+        - BearerAuth: []
+        
+    patch:
+      summary: refresh charge status
+      description: Refresh charge status from the external PSP chosen by the customer, confirm the payment has been made in the PSP.
+      tags:
+        - payin
+      parameters:
+        - $ref: '#/components/parameters/ChargeId'
+      responses:
+        '200':
+          description: status refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeRefreshRespDto'
+        '404':
+          description: No such charge object
+        '503':
+          description: Service unavailable
+      security:
+        - BearerAuth: []
+  
+
+
+components:
+  parameters:
+    ChargeId:
+      name: charge-id
+      in: path
+      description: |
+            this parameter must be formed as user profile ID followed by datetime string `YYYYMMDD-HHMMSS`.
+            
+            Note the last 10 seconds will be truncated to 0, which means each customer allows to create only one new charge object per 10 seconds.
+      required: true
+      schema:
+        type: string
+        example: 188-20230930-115940
+  
+  schemas:
+    SellerId:
+      type: integer
+      format: uint32
+      example: 560
+      
+    ProductType:
+      type: integer
+      enum: [1,2]
+      
+    ProductId:
+      type: integer
+      format: uint64
+      
+    PaymentCurrencyDto:
+      type: string
+      enum: [TWD, USD, THB]
+    
+    OrderErrorReason:
+      type: string
+      enum: [InvalidOrder]
+      
+    PaymentMethodErrorReason:
+      type: string
+      enum: [InvalidUser, OperationRefuse]
+    
+    RangeLimitErrorDto:
+      type: object
+      properties:
+        max_:
+          type: integer
+          format: int32
+        min_:
+          type: integer
+          format: int32
+        given:
+          type: integer
+          format: int32
+      required:
+        - max_
+        - min_
+        - given
+      
+    BaseProductIdCombo:
+      type: object
+      properties:
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        product_id:
+          $ref: '#/components/schemas/ProductId'
+        seller_id:
+          $ref: '#/components/schemas/SellerId'
+    
+    PayAmountDto:
+      type: object
+      properties:
+        unit:
+          type: integer
+          format: uint32
+          example: 9
+        total:
+          type: integer
+          format: uint32
+          description: in case the seller provides product-level discount or couple in the future.
+          example: 44
+      
+    ChargeAmountOlineDto:
+      allOf:
+      - $ref: '#/components/schemas/BaseProductIdCombo'
+      type: object
+      properties:
+        quantity:
+          type: integer
+          format: uint32
+          example: 24
+        amount:
+          $ref: '#/components/schemas/PayAmountDto'
+      required:
+        - product_id
+        - product_type
+        - seller_id
+        - quantity
+        - amount
+        
+    StripeCheckoutSessionReqDto:
+      type: object
+      properties:
+        label:
+          type: string
+          enum: ['Stripe']
+        customer_id:
+          type: string
+          example: 'customer-stripe-id'
+        ui_mode:
+          type: string
+          enum: ['RedirectPage', 'EmbeddedJs']
+      required:
+        - label
+        - customer_id
+                  
+    ChargeReqDto:
+      type: object
+      description: TODO, add amounts for tax and discount
+      properties:
+        order_id:
+          type: string
+        payment_method:
+          oneOf:
+            - $ref: '#/components/schemas/StripeCheckoutSessionReqDto'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChargeAmountOlineDto'
+          minItems: 1
+        currency:
+            $ref: '#/components/schemas/PaymentCurrencyDto'
+    
+    StripeCheckoutSessionRespDto:
+      type: object
+      description: note either of the fields  `redirect_url` or `client_session` is present , depend on the `ui_mode` specified in `StripeCheckoutSessionReqDto`
+      properties:
+        label:
+          type: string
+          enum: [Stripe]
+        redirect_url:
+          type: string
+          example: 'xxx.stripe.com/final-payment-page/1234'
+        client_session:
+          type: string
+          example: 'abcd1234'
+      required:
+        - label
+    
+    ChargeRespDto:
+      type: object
+      properties:
+        method:
+          description: TODO, add other payment methods e.g. Wise, Adyen
+          oneOf:
+            - $ref: '#/components/schemas/StripeCheckoutSessionRespDto'
+        create_time:
+          type: string
+          format: date-time
+      required:
+        - method
+        - create_time
+    
+    ChargeOlineErrorDto:
+      description: At least one of the fields `quantity`,`amount`, and `expired` has to be present
+      allOf:
+      - $ref: '#/components/schemas/BaseProductIdCombo'
+      type: object
+      properties:
+        quantity:
+          $ref: '#/components/schemas/RangeLimitErrorDto'
+        amount:
+          $ref: '#/components/schemas/PayAmountDto'
+        expired:
+          type: boolean
+      required:
+        - seller_id
+        - product_id
+        - product_type
+    
+    ChargeRespErrorDto:
+      type: object
+      properties:
+        order_id:
+          $ref: '#/components/schemas/OrderErrorReason'
+        method:
+          $ref: '#/components/schemas/PaymentMethodErrorReason'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChargeOlineErrorDto'
+    
+    ChargeRefreshRespDto:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [SessionInitialized, PspRefused, PspProcessing, PspTimedOut, SessionExpired, Cancelled, Completed]
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
