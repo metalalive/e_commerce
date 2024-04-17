@@ -1,0 +1,21 @@
+{
+    "order_id": "7931649yryeqgr9824",
+    "method": {
+        "label": "Stripe",
+	"customer_id": "0sji4ut8",
+	"ui_mode": "RedirectPage"
+    },
+    "lines": [
+	{
+	    "seller_id": 983,
+	    "product_id": 204,
+	    "product_type": 1,
+	    "quantity": 5,
+	    "amount": {
+		"unit": 18,
+		"total": 90
+	    }
+	}
+    ],
+    "currency": "TWD"
+}
