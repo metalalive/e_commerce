@@ -25,19 +25,26 @@ Note logstash TCP input server operates with default port 5959
 
 ### Cron Job Consumer
 ```bash
-cd ./services
+cd ./services/common/python
 
-DJANGO_SETTINGS_MODULE='common.util.python.django.internal_settings' celery --app=common.util.python --config=common.util.python.celeryconfig   worker --loglevel=INFO -n common@%h  --concurrency=2 --logfile=./tmp/log/dev/common_celery.log  -E  -Q mailing,periodic_default
+DJANGO_SETTINGS_MODULE="ecommerce_common.util.django.internal_settings" \
+    SERVICE_BASE_PATH="${PWD}/../.."  poetry run  celery --workdir ./src \
+    --app=ecommerce_common.util  --config=ecommerce_common.util.celeryconfig \
+    worker --loglevel=INFO  -n common@%h  --concurrency=2 \
+    --logfile=./tmp/log/dev/common_celery.log   -E \
+    -Q mailing,periodic_default
 ```
 
-- celery log file can be placed in `./tmp/log/test` for testing purpose
+- celery log file can be switched to `./tmp/log/test` for testing purpose
 
 ### Cron Job scheduler (celery beat)
 collect all periodic tasks to run (gathered from all services)
-```
-cd ./services
+```bash
+cd ./services/common/python
 
-celery --app=common.util.python  --config=common.util.python.celerybeatconfig  beat --loglevel=INFO
+SERVICE_BASE_PATH="${PWD}/../.." poetry run celery --workdir ./src \
+    --app=ecommerce_common.util  --config=ecommerce_common.util.celerybeatconfig \
+     beat --loglevel=INFO
 ```
 
 ### TODO
