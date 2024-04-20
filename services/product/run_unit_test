@@ -1,6 +1,0 @@
-python3 ./manage.py test product.tests.tag.models       --settings product.settings.test --keepdb --verbosity=2
-python3 ./manage.py test product.tests.ingredient.models  --settings product.settings.test --keepdb --verbosity=2
-python3 ./manage.py test product.tests.saleitem.models    --settings product.settings.test --keepdb --verbosity=2
-python3 ./manage.py test product.tests.salepkg.models     --settings product.settings.test --keepdb --verbosity=2
-python3 ./manage.py test product.tests.attrtype.models    --settings product.settings.test --keepdb --verbosity=2
-
