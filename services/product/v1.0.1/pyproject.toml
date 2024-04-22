@@ -27,6 +27,9 @@ my-c-extension-lib = {path = "../../common/python/c_exts"}
 ruff = "^0.4.0"
 black = "^24.4.0"
 
+[tool.ruff]
+exclude = ["./src/product/migrations/*.py"]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
