@@ -6,11 +6,11 @@ import shutil
 from django import setup
 from django.core.management import call_command
 
-from migrations.django import auto_deploy
+from ecommerce_common.migrations.django import auto_deploy
 
 
 def init_migration():
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "product.settings.migration")
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.migration")
     setup()
     call_command("makemigrations", "contenttypes")
     call_command("makemigrations", "product")
@@ -31,7 +31,7 @@ def init_migration():
 
 
 def deinit_migration():
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "product.settings.migration")
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.migration")
     setup()
     import product
 
