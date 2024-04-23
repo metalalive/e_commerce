@@ -38,3 +38,9 @@ SERVICE_BASE_PATH="${PWD}/../.." poetry run celery --workdir ./src \
     --app=ecommerce_common.util  --config=ecommerce_common.util.celerybeatconfig \
      beat --loglevel=INFO
 ```
+
+## Development
+### Code Formatter
+```bash
+poetry run black ./src/
+```

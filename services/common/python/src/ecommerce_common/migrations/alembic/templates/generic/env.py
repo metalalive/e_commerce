@@ -7,6 +7,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from common.util.python import import_module_string
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -20,10 +21,13 @@ fileConfig(config.config_file_name)
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 app_metadata_paths = config.get_main_option("app.orm_base")
-app_metadata_paths = app_metadata_paths.split(',')
-app_metadata_paths = filter(lambda path: path!='skip', app_metadata_paths)
-target_metadata = list(map(lambda path:
-    import_module_string(dotted_path=path).metadata , app_metadata_paths))
+app_metadata_paths = app_metadata_paths.split(",")
+app_metadata_paths = filter(lambda path: path != "skip", app_metadata_paths)
+target_metadata = list(
+    map(
+        lambda path: import_module_string(dotted_path=path).metadata, app_metadata_paths
+    )
+)
 if len(target_metadata) == 0:
     target_metadata = None
 
@@ -72,8 +76,9 @@ def run_migrations_online():
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata,
-            version_table=config.get_main_option('version_table'),
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table=config.get_main_option("version_table"),
         )
         with context.begin_transaction():
             context.run_migrations()

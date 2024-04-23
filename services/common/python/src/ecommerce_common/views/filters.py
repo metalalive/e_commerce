@@ -8,8 +8,11 @@ from datetime import datetime, timezone
 from django.core.exceptions import FieldError as DjangoFieldError
 from django.db.models import Q, Prefetch
 from django.db.models.constants import LOOKUP_SEP
-from rest_framework.filters     import BaseFilterBackend, OrderingFilter, SearchFilter
-from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as RestErrorDetail
+from rest_framework.filters import BaseFilterBackend, OrderingFilter, SearchFilter
+from rest_framework.exceptions import (
+    ValidationError as RestValidationError,
+    ErrorDetail as RestErrorDetail,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -33,29 +36,34 @@ class SimpleRangeFilter(BaseFilterBackend):
           e.g.
           ((age > 7) AND (age < 18))
     """
-    search_param = ['range_term',]
-    _inclusive_keywords = ['gt', 'gte', 'lt', 'lte']
+
+    search_param = [
+        "range_term",
+    ]
+    _inclusive_keywords = ["gt", "gte", "lt", "lte"]
 
     def get_search_fields(self, view):
         # search_field_map is required for mapping from query parameter of http request to
         # field name of custom model backend
-        search_field_map = getattr(view, 'search_field_map', None)
-        assert  search_field_map, "search_field_map must be provided to use this filter"
-        return  search_field_map
+        search_field_map = getattr(view, "search_field_map", None)
+        assert search_field_map, "search_field_map must be provided to use this filter"
+        return search_field_map
 
     def get_search_terms(self, request):
         params = []
         log_args = []
         for prefix in self.search_param:
             for surfix in self._inclusive_keywords:
-                param_name = '%s%s%s' % (prefix, LOOKUP_SEP, surfix)
+                param_name = "%s%s%s" % (prefix, LOOKUP_SEP, surfix)
                 param = request.query_params.get(param_name, None)
                 try:
                     if param:
                         param = self.normalize(param)
-                        params.append({'prefix':prefix, 'surfix':surfix, 'value':param})
-                except (ValueError, TypeError) as e: # report then discard
-                    log_args.extend(['error_param', (prefix, surfix, param, e)])
+                        params.append(
+                            {"prefix": prefix, "surfix": surfix, "value": param}
+                        )
+                except (ValueError, TypeError) as e:  # report then discard
+                    log_args.extend(["error_param", (prefix, surfix, param, e)])
         if any(log_args):
             _logger.warning(None, *log_args, request=request)
         return params
@@ -64,33 +72,39 @@ class SimpleRangeFilter(BaseFilterBackend):
         out = {}
         map_keys = field_map.keys()
         for term_set in terms:
-            prefix = term_set['prefix']
+            prefix = term_set["prefix"]
             if not prefix in map_keys:
-                continue # discard the term_set due to mapping failure
+                continue  # discard the term_set due to mapping failure
             if out.get(prefix, None) is None:
-                _operator   = field_map[prefix]['operator']
-                out[prefix] = {'operator': _operator,'list':[]}
-            _mapped_prefix = field_map[prefix]['field_name']
-            lookup_fieldname = '%s%s%s' % (_mapped_prefix, LOOKUP_SEP, term_set['surfix'])
-            condition = {lookup_fieldname: term_set['value']}
-            out[prefix]['list'].append(condition)
+                _operator = field_map[prefix]["operator"]
+                out[prefix] = {"operator": _operator, "list": []}
+            _mapped_prefix = field_map[prefix]["field_name"]
+            lookup_fieldname = "%s%s%s" % (
+                _mapped_prefix,
+                LOOKUP_SEP,
+                term_set["surfix"],
+            )
+            condition = {lookup_fieldname: term_set["value"]}
+            out[prefix]["list"].append(condition)
         return out
 
     def filter_queryset(self, request, queryset, view):
         search_field_map = self.get_search_fields(view)
         search_terms = self.get_search_terms(request)
-        log_args = ['search_field_map', search_field_map, 'search_terms', search_terms]
+        log_args = ["search_field_map", search_field_map, "search_terms", search_terms]
         if not search_field_map or not search_terms:
             _logger.debug(None, *log_args, request=request)
             return queryset
-        orm_lookups = self.construct_search(terms=search_terms , field_map=search_field_map)
+        orm_lookups = self.construct_search(
+            terms=search_terms, field_map=search_field_map
+        )
         base = queryset
         conditions = []
         for lookup in orm_lookups.values():
-            queries = [Q(**cond) for cond in lookup['list']]
-            conditions.append(reduce(lookup['operator'] , queries))
+            queries = [Q(**cond) for cond in lookup["list"]]
+            conditions.append(reduce(lookup["operator"], queries))
         conditions = self.combine_terms_conditions(conditions)
-        log_args.extend(['orm_lookups', orm_lookups, 'conditions', conditions])
+        log_args.extend(["orm_lookups", orm_lookups, "conditions", conditions])
         _logger.debug(None, *log_args, request=request)
         queryset = queryset.filter(conditions)
         return queryset
@@ -106,11 +120,13 @@ class SimpleRangeFilter(BaseFilterBackend):
         """
         return reduce(operator.and_, conditions)
 
+
 #### end of SimpleRangeFilter
 
 
 class DateTimeRangeFilter(SimpleRangeFilter):
-    search_param = ['date']
+    search_param = ["date"]
+
     def normalize(self, param):
         return datetime.fromisoformat(param)
 
@@ -118,31 +134,33 @@ class DateTimeRangeFilter(SimpleRangeFilter):
 class ClosureTableFilter(BaseFilterBackend):
     def filter_queryset(self, request, queryset, view):
         # filter out the instance whose depth = 0 only in read view
-        closure_model_cls = getattr(view, 'closure_model_cls', None)
+        closure_model_cls = getattr(view, "closure_model_cls", None)
         if closure_model_cls is None:
             return queryset
         closure_qset = closure_model_cls.objects.filter(depth__gt=0)
-        field_names  = request.query_params.get('fields', '').split(',')
+        field_names = request.query_params.get("fields", "").split(",")
         prefetch_objs = []
-        if 'ancestors' in field_names :
-            prefetch_objs.append(Prefetch('ancestors',   queryset=closure_qset))
-        if 'descendants' in field_names :
-            prefetch_objs.append(Prefetch('descendants', queryset=closure_qset))
-        queryset = queryset.prefetch_related( *prefetch_objs )
+        if "ancestors" in field_names:
+            prefetch_objs.append(Prefetch("ancestors", queryset=closure_qset))
+        if "descendants" in field_names:
+            prefetch_objs.append(Prefetch("descendants", queryset=closure_qset))
+        queryset = queryset.prefetch_related(*prefetch_objs)
         ####err_args = ["low_level_prefetch_query", queryset.query] # TODO, find better way to log raw SQL
         ####_logger.debug(None, *err_args, request=request)
         return queryset
 
-class  AggregateFieldOrderingFilter(OrderingFilter):
-    _aggregate_fields  = {}
+
+class AggregateFieldOrderingFilter(OrderingFilter):
+    _aggregate_fields = {}
+
     @classmethod
     def mirror(cls):
         # double the key set, use the same corresponding value for ordering rule in Django ORM.
         # e.g. `field_name` defines ascending order , while `-field_name` defines descending order
         ag = cls._aggregate_fields
         negate = {}
-        for k,v in ag.items():
-            newkey = k[1:] if k.startswith('-') else '-%s' % k
+        for k, v in ag.items():
+            newkey = k[1:] if k.startswith("-") else "-%s" % k
             negate[newkey] = v
         ag.update(negate)
 
@@ -151,14 +169,27 @@ class  AggregateFieldOrderingFilter(OrderingFilter):
         # currently the support of multiple aggregate in one queryset is limited
         if ordering:
             aggregate_included = set(ordering) & set(self._aggregate_fields.keys())
-            aggregate_fields  = {k:v[1] for k,v in self._aggregate_fields.items() if k in aggregate_included}
+            aggregate_fields = {
+                k: v[1]
+                for k, v in self._aggregate_fields.items()
+                if k in aggregate_included
+            }
             if aggregate_fields:
-                order_substitute  = {k:v[0] for k,v in self._aggregate_fields.items() if k in aggregate_included}
-                ordering = map(lambda v:order_substitute[v] if v in order_substitute.keys() else v , ordering)
+                order_substitute = {
+                    k: v[0]
+                    for k, v in self._aggregate_fields.items()
+                    if k in aggregate_included
+                }
+                ordering = map(
+                    lambda v: (
+                        order_substitute[v] if v in order_substitute.keys() else v
+                    ),
+                    ordering,
+                )
                 ordering = list(ordering)
-                queryset = queryset.annotate( **aggregate_fields )
-            #import pdb
-            #pdb.set_trace()
+                queryset = queryset.annotate(**aggregate_fields)
+            # import pdb
+            # pdb.set_trace()
             return queryset.order_by(*ordering)
         return queryset
 
@@ -170,24 +201,27 @@ class AbstractAdvancedSearchMixin:
     UNLIMITED_OPERANDS = -1
 
     operator_map = {
-        'boolean': {
-            'and': (operator.and_, UNLIMITED_OPERANDS),
-            'or' : (operator.or_ , UNLIMITED_OPERANDS),
-            'not': (operator.not_, 1)
+        "boolean": {
+            "and": (operator.and_, UNLIMITED_OPERANDS),
+            "or": (operator.or_, UNLIMITED_OPERANDS),
+            "not": (operator.not_, 1),
         },
         #'bitwise': {
         #    '&' :(operator.and_ , 2),
         #    '|' :(operator.or_, 2),
         #    '~' :(operator.inv , 1),
-        #},
-        'comparison':{
-            '==':(operator.eq , 2), # for string / number comparison
-            '!=':(operator.ne , 2), # for string / number comparison
-            'contains':(operator.contains , 2), # for string comparison / list item lookup
-            '<' :(operator.lt , 2),
-            '>' :(operator.gt , 2),
-            '<=':(operator.le , 2),
-            '>=':(operator.ge , 2),
+        # },
+        "comparison": {
+            "==": (operator.eq, 2),  # for string / number comparison
+            "!=": (operator.ne, 2),  # for string / number comparison
+            "contains": (
+                operator.contains,
+                2,
+            ),  # for string comparison / list item lookup
+            "<": (operator.lt, 2),
+            ">": (operator.gt, 2),
+            "<=": (operator.le, 2),
+            ">=": (operator.ge, 2),
         },
     }
 
@@ -213,11 +247,17 @@ class AbstractAdvancedSearchMixin:
         enable = self.is_enabled_adv_search(request=request)
         if enable:
             cond = self.get_adv_condition(request=request)
-            if not isinstance(cond, (dict, list,)):
+            if not isinstance(
+                cond,
+                (
+                    dict,
+                    list,
+                ),
+            ):
                 try:  # de-serialize the seach condition placed in request body
                     cond = json.loads(cond)
                 except json.JSONDecodeError as je:
-                    err_msg = 'JSON decode error, msg:%s, pos:%s' % (je.msg, je.pos)
+                    err_msg = "JSON decode error, msg:%s, pos:%s" % (je.msg, je.pos)
                     raise self.get_exception(err_msg=err_msg)
             return cond
 
@@ -256,26 +296,38 @@ class AbstractAdvancedSearchMixin:
                 ]
             }
         """
-        _operator = condition['operator']
-        assert any(condition['operands']), "empty operands are NOT allowed for the operator `%s`" % _operator
-        chosen_op_type  = None
+        _operator = condition["operator"]
+        assert any(condition["operands"]), (
+            "empty operands are NOT allowed for the operator `%s`" % _operator
+        )
+        chosen_op_type = None
         chosen_operator = None
         for op_type, op_opt in self.operator_map.items():
             op_tuple = op_opt.get(_operator, None)
             if not op_tuple:
                 continue
-            assert op_tuple[1] == len(condition['operands']) or op_tuple[1] == self.UNLIMITED_OPERANDS, \
-                "Fail to parse condition string, due to incorrect number of operands"
+            assert (
+                op_tuple[1] == len(condition["operands"])
+                or op_tuple[1] == self.UNLIMITED_OPERANDS
+            ), "Fail to parse condition string, due to incorrect number of operands"
             chosen_op_type = op_type
             chosen_operator = op_tuple
             break
-        if chosen_op_type == 'boolean':
-            parsed = [self._parse_condition(operand) for operand in condition['operands']]
-            parsed = self._create_nonleaf_node(_operator=chosen_operator, operands=parsed,
-                    metadata=condition.get('metadata', None))
-        elif chosen_op_type == 'comparison':
-            parsed = self._create_leaf_node(_operator=chosen_operator, operands=condition['operands'],
-                    metadata=condition.get('metadata', None))
+        if chosen_op_type == "boolean":
+            parsed = [
+                self._parse_condition(operand) for operand in condition["operands"]
+            ]
+            parsed = self._create_nonleaf_node(
+                _operator=chosen_operator,
+                operands=parsed,
+                metadata=condition.get("metadata", None),
+            )
+        elif chosen_op_type == "comparison":
+            parsed = self._create_leaf_node(
+                _operator=chosen_operator,
+                operands=condition["operands"],
+                metadata=condition.get("metadata", None),
+            )
         else:
             raise TypeError("parsing error, unknow type `%s`" % _operator)
         return parsed
@@ -305,6 +357,8 @@ class AbstractAdvancedSearchMixin:
             }
         """
         raise NotImplementedError
+
+
 ## end of class AbstractAdvancedSearchMixin
 
 
@@ -313,27 +367,28 @@ class AdvancedSearchFilter(SearchFilter, AbstractAdvancedSearchMixin):
     extend original DRF search function (grab keywords only from URL query parameters)
     to perform more advanced search condition placed within inbound request.
     """
+
     _django_q_lookup_map = {
-        operator.eq: 'exact',
-        operator.ne: 'exact',
-        operator.contains: 'contains',
-        operator.lt: 'lt' ,
-        operator.gt: 'gt' ,
-        operator.le: 'lte',
-        operator.ge: 'gte',
+        operator.eq: "exact",
+        operator.ne: "exact",
+        operator.contains: "contains",
+        operator.lt: "lt",
+        operator.gt: "gt",
+        operator.le: "lte",
+        operator.ge: "gte",
     }
 
     def get_exception(self, **kwargs):
-        err_msg = kwargs.pop('err_msg', '')
-        err_detail = {self.enable_advanced_search_param: [RestErrorDetail(err_msg)] }
+        err_msg = kwargs.pop("err_msg", "")
+        err_detail = {self.enable_advanced_search_param: [RestErrorDetail(err_msg)]}
         excpt = RestValidationError(detail=err_detail)
         return excpt
 
     def is_enabled_adv_search(self, request):
-        enable = request.query_params.get(self.enable_advanced_search_param, '')
+        enable = request.query_params.get(self.enable_advanced_search_param, "")
         unprintable_chars = [chr(idx) for idx in range(0x10)]
         for u_char in unprintable_chars:
-            enable = enable.replace(u_char, '')  # strip unprintable characters
+            enable = enable.replace(u_char, "")  # strip unprintable characters
         return enable
 
     def get_adv_condition(self, request):
@@ -344,7 +399,7 @@ class AdvancedSearchFilter(SearchFilter, AbstractAdvancedSearchMixin):
         # to URL-encode the (JSON) serialized advanced condition, then set
         # it as URL query parameter
         if not body:
-            body = request.query_params.get(self.req_advsearch_cond_param, '')
+            body = request.query_params.get(self.req_advsearch_cond_param, "")
             # decode URI parameter
             body = urllib.parse.unquote(body)
         return body
@@ -359,10 +414,13 @@ class AdvancedSearchFilter(SearchFilter, AbstractAdvancedSearchMixin):
         err_msg = "unknown operator `%s` at leaf node"
         assert _operator[0] in self._django_q_lookup_map.keys(), err_msg % _operator[0]
         lookup_cmd = self._django_q_lookup_map[_operator[0]]
-        key = [operands[0] , lookup_cmd,]
+        key = [
+            operands[0],
+            lookup_cmd,
+        ]
         value = operands[1]
         key = LOOKUP_SEP.join(key)
-        out = Q(**{key:value})
+        out = Q(**{key: value})
         if _operator[0] is operator.ne:
             out = ~out
         return out
@@ -376,26 +434,26 @@ class AdvancedSearchFilter(SearchFilter, AbstractAdvancedSearchMixin):
 
     def filter_queryset(self, request, queryset, view):
         err_msg = None
-        queryset = super().filter_queryset(request=request, queryset=queryset, view=view)
+        queryset = super().filter_queryset(
+            request=request, queryset=queryset, view=view
+        )
         advanced_cond = self.get_advanced_search_condition(request=request)
         if advanced_cond:
             try:
                 parsed_cond = self._parse_condition(condition=advanced_cond)
                 queryset = queryset.filter(parsed_cond)
-                queryset = queryset.distinct() # reduce duplicates
+                queryset = queryset.distinct()  # reduce duplicates
             except DjangoFieldError as e:
                 # do not expose valid field names on DjangoFieldError
                 _stop_from = "Choices are"
                 idx = e.args[0].find(_stop_from)
                 err_msg = e.args[0][:idx]
             except Exception as e:
-                err_msg = "%s , %s" % (type(e).__name__ , e)
+                err_msg = "%s , %s" % (type(e).__name__, e)
             else:
-                pass # succeed to perform advanced search
+                pass  # succeed to perform advanced search
             if err_msg:
-                log_args = ['advanced_cond', advanced_cond, 'err_msg', err_msg]
+                log_args = ["advanced_cond", advanced_cond, "err_msg", err_msg]
                 _logger.info(None, *log_args, request=request)
                 raise self.get_exception(err_msg=err_msg)
         return queryset
-
-

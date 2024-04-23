@@ -8,50 +8,54 @@ from importlib import import_module
 from collections.abc import Iterable
 
 
-def get_fixture_pks(filepath:str, pkg_hierarchy:str, fixture_base_path=None):
+def get_fixture_pks(filepath: str, pkg_hierarchy: str, fixture_base_path=None):
     assert pkg_hierarchy, "pkg_hierarchy must be fully-qualified model path"
-    from django.conf  import  settings as django_settings
+    from django.conf import settings as django_settings
     from django.core.exceptions import ImproperlyConfigured
+
     preserved = None
     if not fixture_base_path:
         fixture_base_path = django_settings.FIXTURE_DIRS
     for d in fixture_base_path:
-        fixture_path = '/'.join([d, filepath])
-        with open(fixture_path, 'r') as f:
+        fixture_path = "/".join([d, filepath])
+        with open(fixture_path, "r") as f:
             preserved = json.load(f)
         if preserved:
             break
     if not preserved:
-        raise ImproperlyConfigured("fixture file not found, recheck FIXTURE_DIRS in settings.py")
-    return  [item['pk'] for item in preserved if item['model'] == pkg_hierarchy]
+        raise ImproperlyConfigured(
+            "fixture file not found, recheck FIXTURE_DIRS in settings.py"
+        )
+    return [item["pk"] for item in preserved if item["model"] == pkg_hierarchy]
 
 
-def get_header_name(name:str):
+def get_header_name(name: str):
     """
     translate given key in Django request.META to header name in HTTP form
     """
-    from django.http.request    import HttpHeaders
+    from django.http.request import HttpHeaders
+
     prefix = HttpHeaders.HTTP_PREFIX
-    if name.startswith(prefix): # skip those in HttpHeaders.UNPREFIXED_HEADERS
-        name = name[len(prefix):]
-    out = name.replace('_', '-').lower()
+    if name.startswith(prefix):  # skip those in HttpHeaders.UNPREFIXED_HEADERS
+        name = name[len(prefix) :]
+    out = name.replace("_", "-").lower()
     # print("get_header_name, out : "+ str(out))
     return out
 
 
-def get_request_meta_key(header_name:str):
+def get_request_meta_key(header_name: str):
     """
     translate given header name in HTTP form to accessible key in Django request.META
     """
-    from django.http.request    import HttpHeaders
-    out = header_name.replace('-', '_').upper()
+    from django.http.request import HttpHeaders
+
+    out = header_name.replace("-", "_").upper()
     if out not in HttpHeaders.UNPREFIXED_HEADERS:
-        out = '%s%s' % (HttpHeaders.HTTP_PREFIX, out)
+        out = "%s%s" % (HttpHeaders.HTTP_PREFIX, out)
     return out
 
 
-
-def serial_kvpairs_to_dict(serial_kv:str, delimiter_pair=',', delimiter_kv=':'):
+def serial_kvpairs_to_dict(serial_kv: str, delimiter_pair=",", delimiter_kv=":"):
     outlst = []
     outdict = {}
     kv_pairs = serial_kv.split(delimiter_pair)
@@ -60,7 +64,7 @@ def serial_kvpairs_to_dict(serial_kv:str, delimiter_pair=',', delimiter_kv=':'):
             kv_lst = kv.split(delimiter_kv, 1)
             kv_lst = list(map(str.strip, kv_lst))
             outlst.append(kv_lst)
-    #print('outlst = %s' % outlst)
+    # print('outlst = %s' % outlst)
     for pair in outlst:
         key = pair[0]
         if outdict.get(key, None) is None:
@@ -70,9 +74,9 @@ def serial_kvpairs_to_dict(serial_kv:str, delimiter_pair=',', delimiter_kv=':'):
     return outdict
 
 
-def accept_mimetypes_lookup(http_accept:str, expected_types):
+def accept_mimetypes_lookup(http_accept: str, expected_types):
     # note that this is case-insensitive lookup
-    client_accept = http_accept.split(',')
+    client_accept = http_accept.split(",")
     client_accept = list(map(lambda x: x.strip().lower(), client_accept))
     expected_types = list(map(lambda x: x.strip().lower(), expected_types))
     result = filter(lambda x: x in expected_types, client_accept)
@@ -82,18 +86,21 @@ def accept_mimetypes_lookup(http_accept:str, expected_types):
 def _get_amqp_url(secrets_path, idx=0):
     # use rabbitmqctl to manage accounts
     secrets = None
-    with open(secrets_path, 'r') as f:
+    with open(secrets_path, "r") as f:
         secrets = json.load(f)
-        secrets = secrets['amqp_broker']
-        secrets = secrets[idx] # the default is to select index 0 as guest account (with password)
+        secrets = secrets["amqp_broker"]
+        secrets = secrets[
+            idx
+        ]  # the default is to select index 0 as guest account (with password)
     assert secrets, "failed to load secrets from file"
-    protocol = secrets['protocol']
-    username = secrets['username']
-    passwd = secrets['password']
-    host   = secrets['host']
-    port   = secrets['port']
-    out = '%s://%s:%s@%s:%s' % (protocol, username, passwd, host, port)
+    protocol = secrets["protocol"]
+    username = secrets["username"]
+    passwd = secrets["password"]
+    host = secrets["host"]
+    port = secrets["port"]
+    out = "%s://%s:%s@%s:%s" % (protocol, username, passwd, host, port)
     return out
+
 
 def merge_partial_dup_listitem(list_in, combo_key, merge_keys):
     inter_dict = {}
@@ -117,7 +124,7 @@ def merge_partial_dup_listitem(list_in, combo_key, merge_keys):
         list_in.append(new_item)
 
 
-def string_unprintable_check(value:str, extra_unprintable_set=None):
+def string_unprintable_check(value: str, extra_unprintable_set=None):
     """
     this function returns any unprintable characters in the given
     input string, application callers can optionally add more characters
@@ -132,7 +139,7 @@ def string_unprintable_check(value:str, extra_unprintable_set=None):
 def load_config_to_module(cfg_path, module_path):
     _module = sys.modules[module_path]
     data = None
-    with open(cfg_path, 'r') as f:
+    with open(cfg_path, "r") as f:
         data = json.load(f)
     assert data, "failed to load configuration from file %s" % cfg_path
     for key in _module.__dict__.keys():
@@ -141,13 +148,13 @@ def load_config_to_module(cfg_path, module_path):
         setattr(_module, key, data[key])
 
 
-def import_module_string(dotted_path:str):
+def import_module_string(dotted_path: str):
     """
     Import a dotted module path and return the attribute/class designated by the
     last name in the path. Raise ImportError if the import failed.
     """
     try:
-        module_path, class_name = dotted_path.rsplit('.', 1)
+        module_path, class_name = dotted_path.rsplit(".", 1)
     except ValueError as err:
         raise ImportError("%s doesn't look like a module path" % dotted_path) from err
 
@@ -155,40 +162,41 @@ def import_module_string(dotted_path:str):
     try:
         return getattr(module, class_name)
     except AttributeError as err:
-        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (
-            module_path, class_name)
+        raise ImportError(
+            'Module "%s" does not define a "%s" attribute/class'
+            % (module_path, class_name)
         ) from err
 
 
-def format_sqlalchemy_url(driver:str, db_credential):
-    """ format URL string used in SQLalchemy """
-    url_pattern = '{db_driver}://{username}:{passwd}@{db_host}:{db_port}/{db_name}'
+def format_sqlalchemy_url(driver: str, db_credential):
+    """format URL string used in SQLalchemy"""
+    url_pattern = "{db_driver}://{username}:{passwd}@{db_host}:{db_port}/{db_name}"
     return url_pattern.format(
-            db_driver=driver ,
-            username=db_credential['USER'] ,
-            passwd=db_credential['PASSWORD'] ,
-            db_host=db_credential['HOST'] ,
-            db_port=db_credential['PORT'] ,
-            db_name=db_credential.get('NAME', '')
-        )
+        db_driver=driver,
+        username=db_credential["USER"],
+        passwd=db_credential["PASSWORD"],
+        db_host=db_credential["HOST"],
+        db_port=db_credential["PORT"],
+        db_name=db_credential.get("NAME", ""),
+    )
 
 
-def get_credential_from_secrets(secret_map:dict, base_path:Path, secret_path:str):
-    """ example of a database section within a secret file
-        db_credentials = {
-            'role_dba'           : secrets['backend_apps']['databases']['site_dba'] ,
-            'role_auth_service'  : secrets['backend_apps']['databases']['usermgt_service'] ,
-            'file_upload_service': secrets['backend_apps']['databases']['file_upload_service'] ,
-        }
+def get_credential_from_secrets(secret_map: dict, base_path: Path, secret_path: str):
+    """example of a database section within a secret file
+    db_credentials = {
+        'role_dba'           : secrets['backend_apps']['databases']['site_dba'] ,
+        'role_auth_service'  : secrets['backend_apps']['databases']['usermgt_service'] ,
+        'file_upload_service': secrets['backend_apps']['databases']['file_upload_service'] ,
+    }
     """
     _credentials = {}
     secret_fullpath = base_path.joinpath(secret_path)
     with open(secret_fullpath) as f:
         secrets = json.load(f)
         node = None
-        for k,v in secret_map.items():
+        for k, v in secret_map.items():
             node = secrets
-            hierarchy = v.split('.')
+            hierarchy = v.split(".")
             for v2 in hierarchy:
                 node = node.get(v2, None)
             _credentials[k] = node
@@ -208,7 +216,7 @@ def _sort_nested_object(obj, key_fn_list=None, key_fn_dict=None):
     # key-value pairs, which is essential during sorting operations because `dict`
     # type does not support comparison operators like `>` or `<`
     if isinstance(obj, dict):
-        src = [[k, _sort_nested_object(v)] for k, v in obj.items()] # DO NOT use tuple
+        src = [[k, _sort_nested_object(v)] for k, v in obj.items()]  # DO NOT use tuple
         args = [src]
         if key_fn_dict and callable(key_fn_dict):
             args.append(key_fn_dict)
@@ -225,6 +233,7 @@ def _sort_nested_object(obj, key_fn_list=None, key_fn_dict=None):
     else:
         return obj
 
+
 def _sort_nested_object_post_process(obj):
     if isinstance(obj, list):
         src = [_sort_nested_object_post_process(x) for x in obj]
@@ -234,9 +243,13 @@ def _sort_nested_object_post_process(obj):
     else:
         return obj
 
+
 def sort_nested_object(obj, key_fn_list=None, key_fn_dict=None):
-    sorted_obj = _sort_nested_object(obj=obj, key_fn_list=key_fn_list, key_fn_dict=key_fn_dict)
-    return  _sort_nested_object_post_process(obj=sorted_obj)
+    sorted_obj = _sort_nested_object(
+        obj=obj, key_fn_list=key_fn_list, key_fn_dict=key_fn_dict
+    )
+    return _sort_nested_object_post_process(obj=sorted_obj)
+
 
 class ExtendedList(list):
     def __init__(self, *args, from_dict=False, **kwargs):
@@ -264,12 +277,13 @@ class ExtendedDict(dict):
     def update(self, new_kwargs, overwrite=True):
         if overwrite is False:
             common_keys = set(self.keys()) & set(new_kwargs.keys())
-            new_kwargs = {k:v for k,v in new_kwargs.items() if k not in common_keys}
+            new_kwargs = {k: v for k, v in new_kwargs.items() if k not in common_keys}
         if any(new_kwargs):
             self._modified = True
         return super().update(new_kwargs)
-## end of class ExtendedDict
 
+
+## end of class ExtendedDict
 
 
 # class inheritance doesn't seem to work in metaclass
@@ -280,9 +294,13 @@ class BaseLookupMeta(type):
             _dict = getattr(cls, _dict_name)
             item = _dict[key]
         except (KeyError, AttributeError) as e:
-            err_msg = '[%s] %s when searching in %s, no such key : %s' % \
-                (cls.__name__ , type(e), _dict, key)
-            print(err_msg) # TODO, log to local file system
+            err_msg = "[%s] %s when searching in %s, no such key : %s" % (
+                cls.__name__,
+                type(e),
+                _dict,
+                key,
+            )
+            print(err_msg)  # TODO, log to local file system
         return item
 
 
@@ -290,7 +308,9 @@ class BaseUriLookup(metaclass=BaseLookupMeta):
     _urls = {}
 
     def __getitem__(cls, key):
-        return type(cls).getitem(key, '_urls') # first argument implicitly sent by type(cls)
+        return type(cls).getitem(
+            key, "_urls"
+        )  # first argument implicitly sent by type(cls)
 
     def __iter__(cls):
         cls._iter_api_url = iter(cls._urls)
@@ -303,10 +323,10 @@ class BaseUriLookup(metaclass=BaseLookupMeta):
 
 class BaseTemplateLookup(metaclass=BaseLookupMeta):
     _template_names = {}
-    template_path  = ''
+    template_path = ""
 
     def __getitem__(cls, key):
-        item = BaseLookupMeta.getitem(cls, key, '_template_names')
+        item = BaseLookupMeta.getitem(cls, key, "_template_names")
         if item is not None:
             if isinstance(item, str):
                 item = os.path.join(cls.template_path, item)
@@ -325,17 +345,21 @@ def monkeypatch_typing_specialform():
     library
     """
     import sys
-    if sys.version_info[:2] == (3, 9) and sys.version_info.releaselevel == 'final':
+
+    if sys.version_info[:2] == (3, 9) and sys.version_info.releaselevel == "final":
         # no need to monkey-patch , for release version
         return
     from typing import _SpecialForm
+
     origin_getitem = _SpecialForm.__getitem__
+
     def patch_init(self, name, doc=None):
         if doc is None and callable(name):
-            if hasattr(name, '__doc__'):
+            if hasattr(name, "__doc__"):
                 doc = name.__doc__
         self._name = name
         self._doc = doc
+
     def patch_getitem(self, parameters):
         item = None
         if callable(self._name):
@@ -344,10 +368,9 @@ def monkeypatch_typing_specialform():
             item = origin_getitem(self=self, parameters=parameters)
         return item
 
-    if not hasattr(_SpecialForm.__init__, 'patched'):
+    if not hasattr(_SpecialForm.__init__, "patched"):
         _SpecialForm.__init__ = patch_init
-        setattr(_SpecialForm.__init__, 'patched', True)
-    if not hasattr(_SpecialForm.__getitem__, 'patched'):
+        setattr(_SpecialForm.__init__, "patched", True)
+    if not hasattr(_SpecialForm.__getitem__, "patched"):
         _SpecialForm.__getitem__ = patch_getitem
-        setattr(_SpecialForm.__getitem__, 'patched', True)
-
+        setattr(_SpecialForm.__getitem__, "patched", True)

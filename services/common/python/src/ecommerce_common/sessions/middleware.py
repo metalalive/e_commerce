@@ -1,13 +1,14 @@
 from importlib import import_module
 import logging
 
-from django.conf        import  settings as django_settings
-from django.core.cache  import  caches as DjangoBuiltinCaches
+from django.conf import settings as django_settings
+from django.core.cache import caches as DjangoBuiltinCaches
 from django.contrib.sessions.middleware import SessionMiddleware
 
 from ecommerce_common.models.db import db_middleware_exception_handler
 
 _logger = logging.getLogger(__name__)
+
 
 class OneSessionPerAccountMiddleware:
     """
@@ -19,15 +20,15 @@ class OneSessionPerAccountMiddleware:
       `user` in `request` object is added ONLY after `AuthenticationMiddleware` completes its
       execution.
     """
+
     def __init__(self, get_response):
         self.get_response = get_response
-
 
     @db_middleware_exception_handler
     def __call__(self, request):
         account = request.user
         if account.is_authenticated:
-            cache_user_sess = DjangoBuiltinCaches['user_session']
+            cache_user_sess = DjangoBuiltinCaches["user_session"]
             key = "restrict_account_id_{pk}".format(pk=account.pk)
             value = cache_user_sess.get(key)
             if value is not None and value != request.session.session_key:
@@ -37,19 +38,29 @@ class OneSessionPerAccountMiddleware:
                 # periodically by other async task (e.g. in my case, celery-beat) before current login event.
                 if old_session:
                     msg = "concurrent login detected, deleting old session"
-                    log_args = ['msg', msg, 'cache_sess_key', key, 'cache_sess_value', value,
-                            'account_id', account.pk]
+                    log_args = [
+                        "msg",
+                        msg,
+                        "cache_sess_key",
+                        key,
+                        "cache_sess_value",
+                        value,
+                        "account_id",
+                        account.pk,
+                    ]
                     _logger.warning(None, *log_args)
                     old_session.delete()
             cache_user_sess.set(key, request.session.session_key)
 
         response = self.get_response(request)
         return response
+
+
 ## end of class OneSessionPerAccountMiddleware
 
 
 class ExtendedSessionMiddleware(SessionMiddleware):
-    enable_process_request  = False
+    enable_process_request = False
     enable_process_response = False
 
     def process_request(self, request):
@@ -66,7 +77,6 @@ class ExtendedSessionMiddleware(SessionMiddleware):
 class SessionSetupMiddleware(ExtendedSessionMiddleware):
     enable_process_response = True
 
+
 class SessionVerifyMiddleware(ExtendedSessionMiddleware):
-    enable_process_request  = True
-
-
+    enable_process_request = True

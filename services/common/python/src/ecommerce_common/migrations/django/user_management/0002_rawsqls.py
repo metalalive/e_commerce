@@ -4,38 +4,36 @@ from django.conf import settings as django_settings
 from django.db import migrations, models
 
 proj_path = django_settings.BASE_DIR
-secrets_path = proj_path.joinpath('common/data/secrets.json')
+secrets_path = proj_path.joinpath("common/data/secrets.json")
 secrets = None
 
-with open(secrets_path, 'r') as f:
+with open(secrets_path, "r") as f:
     secrets = json.load(f)
-    secrets = secrets['backend_apps']['databases']['default']
+    secrets = secrets["backend_apps"]["databases"]["default"]
 
 
 def _mariadb_grant_priv(table_name):
-    sql_pattern = 'GRANT SELECT ON `%s`  TO \'%s\'@\'%s\''
-    reverse_sql_pattern ='REVOKE SELECT ON `%s`   FROM \'%s\'@\'%s\''
-    sql = sql_pattern % (table_name, secrets['USER'], secrets['HOST'])
-    reverse_sql = reverse_sql_pattern % (table_name, secrets['USER'], secrets['HOST'])
+    sql_pattern = "GRANT SELECT ON `%s`  TO '%s'@'%s'"
+    reverse_sql_pattern = "REVOKE SELECT ON `%s`   FROM '%s'@'%s'"
+    sql = sql_pattern % (table_name, secrets["USER"], secrets["HOST"])
+    reverse_sql = reverse_sql_pattern % (table_name, secrets["USER"], secrets["HOST"])
     ops = migrations.RunSQL(sql=sql, reverse_sql=reverse_sql)
     return ops
 
 
-
 class Migration(migrations.Migration):
     dependencies = [
-        ('user_management', '0001_initial'),
+        ("user_management", "0001_initial"),
     ]
 
     operations = [
         migrations.RunSQL(
-            sql='CREATE TABLE `unauth_reset_account_request` ( `hashed_token` longblob NOT NULL, `time_created` datetime(6) NOT NULL, `email` int(11) NOT NULL, PRIMARY KEY (`hashed_token`(32)), KEY `account_reset_request_email_6d24344f_fk_email_address_id` (`email`),  CONSTRAINT `account_reset_request_email_6d24344f_fk_email_address_id` FOREIGN KEY (`email`) REFERENCES `email_address` (`id`)  )  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',
-            reverse_sql='DROP TABLE `unauth_reset_account_request`'
+            sql="CREATE TABLE `unauth_reset_account_request` ( `hashed_token` longblob NOT NULL, `time_created` datetime(6) NOT NULL, `email` int(11) NOT NULL, PRIMARY KEY (`hashed_token`(32)), KEY `account_reset_request_email_6d24344f_fk_email_address_id` (`email`),  CONSTRAINT `account_reset_request_email_6d24344f_fk_email_address_id` FOREIGN KEY (`email`) REFERENCES `email_address` (`id`)  )  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+            reverse_sql="DROP TABLE `unauth_reset_account_request`",
         ),
     ]
 
 
-table_names = ('django_migrations', 'django_content_type', 'auth_permission')
+table_names = ("django_migrations", "django_content_type", "auth_permission")
 rawsql_ops = map(_mariadb_grant_priv, table_names)
 Migration.operations.extend([op for op in rawsql_ops])
-

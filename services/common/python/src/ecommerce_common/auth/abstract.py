@@ -1,5 +1,3 @@
-
-
 class BaseGetProfileMixin:
     UNKNOWN_ID = -1
 
@@ -14,4 +12,3 @@ class BaseGetProfileMixin:
 
     def get_profile(self, **kwargs):
         raise NotImplementedError()
-

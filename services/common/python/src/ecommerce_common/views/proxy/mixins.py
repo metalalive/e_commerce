@@ -3,14 +3,16 @@ import requests
 from requests.exceptions import ConnectionError, SSLError, Timeout
 
 from ecommerce_common.auth.abstract import BaseGetProfileMixin
-from ecommerce_common.util  import get_request_meta_key
+from ecommerce_common.util import get_request_meta_key
 from .settings import api_proxy_settings
+
 
 class DjangoProxyRequestMixin:
     """
     a mixin class to collect data to be sent within requests.request()
     this mixin is tied to `Django` and `requests` python packages
     """
+
     settings = api_proxy_settings
     path_pattern = None
     path_handler = None
@@ -31,8 +33,11 @@ class DjangoProxyRequestMixin:
         for key in self.required_query_param_keys:
             if params_client.get(key, None) is None:
                 from django.core.exceptions import SuspiciousOperation
+
                 # then return 400 bad request
-                raise SuspiciousOperation('query parameter %s is required in the URL' % key)
+                raise SuspiciousOperation(
+                    "query parameter %s is required in the URL" % key
+                )
         if any(self.default_query_params):
             params = self.default_query_params.copy()
             params.update(params_client)
@@ -52,24 +57,29 @@ class DjangoProxyRequestMixin:
 
     def _get_auth_headers(self, request, headers):
         # append authorization header if required
-        username = self.settings.AUTH.get('username')
-        password = self.settings.AUTH.get('password')
-        auth_token = self.settings.AUTH.get('token')
+        username = self.settings.AUTH.get("username")
+        password = self.settings.AUTH.get("password")
+        auth_token = self.settings.AUTH.get("token")
         if username and password:
-            credential = '%s:%s' % (username, password)
-            encoded = base64.b64encode(credential.encode('utf-8')).decode()
-            headers['authorization'] = 'basic %s' % encoded
+            credential = "%s:%s" % (username, password)
+            encoded = base64.b64encode(credential.encode("utf-8")).decode()
+            headers["authorization"] = "basic %s" % encoded
         elif auth_token:
-            headers['authorization'] = 'token %s' % auth_token
+            headers["authorization"] = "token %s" % auth_token
         # forward remote user information (the authenticated client), by adding account username to header section
         # so downstream app servers have to check whether the remote user already exists in the database, and
         # whether the forwarding request comes from trusted proxy server (perhaps by examining the domain name)
         # TODO: figure out how downstream app servers handle the authorization from proxy server
         if request.user.is_authenticated:
             from common.auth.backends import FORWARDED_HEADER
+
             uname = request.user.get_username()
-            headers[FORWARDED_HEADER] = 'by=%s;for=%s;host=%s;proto=%s' % \
-                    ('proxy_api_gateway', uname, request.get_host(), request.scheme)
+            headers[FORWARDED_HEADER] = "by=%s;for=%s;host=%s;proto=%s" % (
+                "proxy_api_gateway",
+                uname,
+                request.get_host(),
+                request.scheme,
+            )
 
     def _get_headers(self, request):
         headers = self._get_default_headers(request)
@@ -80,15 +90,15 @@ class DjangoProxyRequestMixin:
         return self.verify_ssl or self.settings.VERIFY_SSL
 
     def get_cookies(self, request):
-        """ subclass this proxy view and override this function """
+        """subclass this proxy view and override this function"""
         pass
 
     def _get_req_body(self, request):
-        """ get raw string of request body """
-        return  request.body
+        """get raw string of request body"""
+        return request.body
 
     def _get_req_files(self, request):
-        return None # TODO, finish implementation
+        return None  # TODO, finish implementation
 
     def _get_req_path(self, request, **kwargs):
         """
@@ -98,23 +108,26 @@ class DjangoProxyRequestMixin:
         out = None
         if self.path_pattern:
             _handler = self.path_handler
-            if _handler and callable(_handler): # require further process on the path pattern
+            if _handler and callable(
+                _handler
+            ):  # require further process on the path pattern
                 fn = lambda x: (x, kwargs[x]) if kwargs.get(x, None) else None
                 filtered_keys = list(filter(fn, self.path_var_keys))
                 key_vars = dict(map(fn, filtered_keys))
-                out = _handler(request=request, key_vars=key_vars) # implicitly pass proxyview=self argument
+                out = _handler(
+                    request=request, key_vars=key_vars
+                )  # implicitly pass proxyview=self argument
             else:
                 out = self.path_pattern
-        else: # pass the path of incoming request
+        else:  # pass the path of incoming request
             out = request.get_full_path()
         return out
-
 
     def _get_req_url(self, request, **kwargs):
         host = self._get_dst_host()
         path = self._get_req_path(request, **kwargs)
         if path:
-            url = '/'.join([host, path])
+            url = "/".join([host, path])
         else:
             url = host
         return url
@@ -130,25 +143,32 @@ class DjangoProxyRequestMixin:
         headers = self._get_headers(request)
         verify_ssl = self._get_verify_ssl()
         cookies = self.get_cookies(request)
-        body   = self._get_req_body(request)
-        files  = self._get_req_files(request)
+        body = self._get_req_body(request)
+        files = self._get_req_files(request)
         url = self._get_req_url(request, **kwargs)
         _send_fn = self._get_send_fn(request)
-        return { 'params':params, 'headers':headers, 'cookies':cookies, 'verify':verify_ssl,
-                 'files':files, 'data':body, 'url':url, 'timeout': self.settings.TIMEOUT,
-                 'send_fn': _send_fn}
-
+        return {
+            "params": params,
+            "headers": headers,
+            "cookies": cookies,
+            "verify": verify_ssl,
+            "files": files,
+            "data": body,
+            "url": url,
+            "timeout": self.settings.TIMEOUT,
+            "send_fn": _send_fn,
+        }
 
     def send(self, **pxy_req_kwargs):
-        error_status_code = pxy_req_kwargs.pop('error_status_code', None)
-        send_fn = pxy_req_kwargs.pop('send_fn', None)
+        error_status_code = pxy_req_kwargs.pop("error_status_code", None)
+        send_fn = pxy_req_kwargs.pop("send_fn", None)
         send_fn = send_fn or requests.request
         try:
-            if pxy_req_kwargs.get('files', None):
-                err_msg = 'file upload through API gateway has not been supported yet'
+            if pxy_req_kwargs.get("files", None):
+                err_msg = "file upload through API gateway has not been supported yet"
                 raise NotImplementedError(err_msg)
-            else: # TODO, (1) streaming request/response (2) non-blocking requests
-                response = send_fn( **pxy_req_kwargs )
+            else:  # TODO, (1) streaming request/response (2) non-blocking requests
+                response = send_fn(**pxy_req_kwargs)
         except (ConnectionError, SSLError, Timeout) as e:
             response = e.response
             if response is None:
@@ -156,20 +176,20 @@ class DjangoProxyRequestMixin:
                 if error_status_code:
                     response.status_code = error_status_code
                 elif isinstance(e, Timeout):
-                    response.status_code = requests.codes['gateway_timeout']
+                    response.status_code = requests.codes["gateway_timeout"]
                 else:
-                    response.status_code = requests.codes['bad_gateway']
+                    response.status_code = requests.codes["bad_gateway"]
         return response
+
+
 ## end of class DjangoProxyRequestMixin
 
 
 # helper functions for proxy view class
-# it can be pointed by DjangoProxyRequestMixin.path_handler 
+# it can be pointed by DjangoProxyRequestMixin.path_handler
 def _render_url_path(proxyview, request, key_vars):
     if any(key_vars):
         out = proxyview.path_pattern.format(**key_vars)
     else:
         out = proxyview.path_pattern
     return out
-
-

@@ -4,42 +4,54 @@ from django.core import signing
 from django.utils.crypto import salted_hmac
 from django.contrib.sessions.backends.file import SessionStore as FileSessionStore
 
+
 def _get_webapp_signkey(secrets_path):
     """
     * in this project, session is used only in web application.
       For (REST) API calls, JWT will be used.
     """
     import json
+
     secrets = None
-    with open(secrets_path, 'r') as f:
+    with open(secrets_path, "r") as f:
         secrets = json.load(f)
-        secrets = secrets['backend_apps']
+        secrets = secrets["backend_apps"]
     assert secrets, "failed to load secrets from file %s" % secrets_path
-    key = secrets['secret_key']['staff']['web']
+    key = secrets["secret_key"]["staff"]["web"]
     return key
 
 
 def _monkey_patch():
     from django.contrib.sessions.backends.base import SessionBase
     from django.contrib.auth.base_user import AbstractBaseUser
-    _sign_key = _get_webapp_signkey(secrets_path='./common/data/secrets.json')
+
+    _sign_key = _get_webapp_signkey(secrets_path="./common/data/secrets.json")
 
     def get_session_auth_hash(self):
         key_salt = "django.contrib.auth.models.AbstractBaseUser.get_session_auth_hash"
-        return salted_hmac(key_salt, self.password, secret=_sign_key, algorithm='sha256').hexdigest()
+        return salted_hmac(
+            key_salt, self.password, secret=_sign_key, algorithm="sha256"
+        ).hexdigest()
 
     AbstractBaseUser.get_session_auth_hash = get_session_auth_hash
 
     def encode_with_webapp_secret(self, session_dict):
         return signing.dumps(
-            session_dict, salt=self.key_salt, serializer=self.serializer,
-            compress=True, key=_sign_key
+            session_dict,
+            salt=self.key_salt,
+            serializer=self.serializer,
+            compress=True,
+            key=_sign_key,
         )
 
     def decode_with_webapp_secret(self, session_data):
         try:
-            return signing.loads(session_data, key=_sign_key, salt=self.key_salt,
-                    serializer=self.serializer)
+            return signing.loads(
+                session_data,
+                key=_sign_key,
+                salt=self.key_salt,
+                serializer=self.serializer,
+            )
         except Exception:
             return self._legacy_decode(session_data)
 
@@ -63,7 +75,7 @@ class SessionStore(FileSessionStore):
     # don't use Django's default implementation
 
     def set_expiry(self, value):
-        """ force int to be convert to timedelta format """
+        """force int to be convert to timedelta format"""
         if value and isinstance(value, int):
             value = timedelta(seconds=value)
         super().set_expiry(value=value)
@@ -80,5 +92,3 @@ class SessionStore(FileSessionStore):
     #     # print("refined file session, _expiry_date , out: "+ str(out))
     #     # print("refined file session, _expiry_date , _last_modification(): "+ str(self._last_modification()))
     #     return out
-
-
