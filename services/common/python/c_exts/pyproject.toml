@@ -1,0 +1,8 @@
+[project]
+name = "my-c-extension-lib"
+version = "0.0.2"
+description = "C extension modules for learning purpose"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

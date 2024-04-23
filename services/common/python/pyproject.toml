@@ -1,23 +1,27 @@
 [tool.poetry]
 name = "ecommerce-common"
-version = "0.1.1"
+version = "0.1.2"
 description = "common python modules shared among applications"
 authors = ["T.H."]
 license = "MIT"
 readme = "README.md"
-packages = [{include="ecommerce_common", from="./src"}, {include="softdelete", from="./src"}]
+packages = [
+    {include="ecommerce_common", from="./src"},
+    {include="softdelete", from="./src"},
+]
 
 [tool.poetry.dependencies]
 python = "^3.12"
-python-logstash-async = "^2.7.2"
+python-logstash-async = "2.5.0"
 elasticsearch = "5.5.3"
 celery = "^5.4.0"
 
 # Django is used ONLY for sending e-mail, 
 # TODO, replace Django with `smtplib` in standard library
-Django = "^3.2.25"
+Django = "^3.1.8"
 
 [tool.poetry.group.dev.dependencies]
+build = "^1.2.1"
 
 [build-system]
 requires = ["poetry-core"]
