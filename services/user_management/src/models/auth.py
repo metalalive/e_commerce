@@ -16,8 +16,8 @@ from rest_framework.settings    import api_settings
 from rest_framework.exceptions  import PermissionDenied
 
 # from project codebase
-from common.models.mixins import MinimumInfoMixin
-from common.models.constants  import  ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from ecommerce_common.models.mixins import MinimumInfoMixin
+from ecommerce_common.models.constants  import  ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from .common import _atomicity_fn
 
 _logger = logging.getLogger(__name__)

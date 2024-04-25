@@ -13,12 +13,14 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 import os
 from pathlib import Path
 from datetime import time
-# set ExtendedLogger as default logger
-from common.logging.logger import ExtendedLogger
 
+# set ExtendedLogger as default logger
+from ecommerce_common.logging.logger import ExtendedLogger
+from ecommerce_common.util.django.setup  import setup_secrets
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
+os.environ["SERVICE_BASE_PATH"] = str(BASE_DIR)
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -41,11 +43,11 @@ INSTALLED_APPS = [
 
 # TODO, apply domain name filter at IP layer, only accept requests from trusted proxy server
 MIDDLEWARE = [
-    'common.cors.middleware.CorsHeaderMiddleware',
+    'ecommerce_common.cors.middleware.CorsHeaderMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'common.csrf.middleware.ExtendedCsrfViewMiddleware',
-    #'django.middleware.clickjacking.XFrameOptionsMiddleware', # TODO, figure out do I really need this ?
+    'ecommerce_common.csrf.middleware.ExtendedCsrfViewMiddleware',
+    #'django.middleware.clickjacking.XFrameOptionsMiddleware', # enable this when frontend webapp needs iframe
 ]
 
 ROOT_URLCONF = 'user_management.urls'
@@ -59,7 +61,7 @@ TEMPLATES = [
 FIXTURE_DIRS = ['migrations/django/user_management',]
 
 # referenced only by development server (`runserver` command)
-WSGI_APPLICATION = 'common.util.python.django.wsgi.application'
+WSGI_APPLICATION = 'ecommerce_common.util.django.wsgi.application'
 
 
 # Database
@@ -85,7 +87,7 @@ DATABASES = { # will be update with secrets at the bottom of file
     },
 } # end of database settings
 
-DATABASE_ROUTERS = ['common.models.db.ServiceModelRouter']
+DATABASE_ROUTERS = ['ecommerce_common.models.db.ServiceModelRouter']
 
 
 # Password validation
@@ -125,15 +127,15 @@ CACHES = {
 }
 
 AUTH_KEYSTORE = {
-    'keystore': 'common.auth.keystore.BaseAuthKeyStore',
+    'keystore': 'ecommerce_common.auth.keystore.BaseAuthKeyStore',
     'persist_secret_handler': {
-        'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+        'module_path': 'ecommerce_common.auth.keystore.JWKSFilePersistHandler',
         'init_kwargs': {
             'name':'secret', 'expired_after_days': 7,
         },
     },
     'persist_pubkey_handler': {
-        'module_path': 'common.auth.keystore.JWKSFilePersistHandler',
+        'module_path': 'ecommerce_common.auth.keystore.JWKSFilePersistHandler',
         'init_kwargs': {
             'name':'pubkey', 'expired_after_days': 21,
         },
@@ -245,71 +247,71 @@ LOGGING = {
             },
         }, # end of handlers section
         'loggers': {
-            'common.views.api': {
+            'ecommerce_common.views.api': {
                 'level': 'INFO',
                 'handlers': ['dbg_views_file', 'dbg_views_logstash'],
             },
-            'common.views.mixins': {
+            'ecommerce_common.views.mixins': {
                 'level': 'INFO',
                 'handlers': ['dbg_views_file', 'dbg_views_logstash'],
             },
-            'common.views.filters': {
+            'ecommerce_common.views.filters': {
                 'level': 'WARNING',
                 'handlers': ['dbg_views_logstash'],
             },
-            'common.serializers': {
+            'ecommerce_common.serializers': {
                 'level': 'INFO',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.serializers.mixins.nested': {
+            'ecommerce_common.serializers.mixins.nested': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.serializers.mixins.quota': {
+            'ecommerce_common.serializers.mixins.quota': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.serializers.mixins.closure_table': {
+            'ecommerce_common.serializers.mixins.closure_table': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.validators': {
+            'ecommerce_common.validators': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.models.closure_table': {
+            'ecommerce_common.models.closure_table': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.models.db': {
+            'ecommerce_common.models.db': {
                 'level': 'INFO',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.models.migrations': {
+            'ecommerce_common.models.migrations': {
                 'level': 'INFO',
                 'handlers': ['default_file', 'dbg_base_logstash'],
             },
-            'common.auth.keystore': {
+            'ecommerce_common.auth.keystore': {
                 'level': 'INFO',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.auth.backends': {
+            'ecommerce_common.auth.backends': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.sessions.middleware': {
+            'ecommerce_common.sessions.middleware': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.sessions.serializers': {
+            'ecommerce_common.sessions.serializers': {
                 'level': 'ERROR',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.util.python.elasticsearch': {
+            'ecommerce_common.util.elasticsearch': {
                 'level': 'WARNING',
                 'handlers': ['dbg_base_logstash'],
             },
-            'common.util.python.async_tasks': {
+            'ecommerce_common.util.async_tasks': {
                 'level': 'INFO',
                 'handlers': ['dbg_base_logstash'],
             },
@@ -392,23 +394,18 @@ def render_logging_handler_localfs(log_dir):
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'EXCEPTION_HANDLER': 'common.views.api.exception_handler',
+    'EXCEPTION_HANDLER': 'ecommerce_common.views.api.exception_handler',
     #'PAGE_SIZE' : 40
 }
-
-
 
 # mailing function setup
 DEFAULT_FROM_EMAIL = 'system@yourproject.io'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_USE_TLS = True
 
-
-
-from common.util.python.django.setup  import setup_secrets
-
 setup_secrets(
-    secrets_path='./common/data/secrets.json', module_path=__name__,
-    portal_type='staff', interface_type='usermgt'
+    secrets_path=os.path.join(BASE_DIR, "common/data/secrets.json"),
+    module_path=__name__,
+    portal_type='staff',
+    interface_type='usermgt'
 )
-

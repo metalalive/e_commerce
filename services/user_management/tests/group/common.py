@@ -11,7 +11,7 @@ from user_management.models.auth import Role
 from user_management.models.base import QuotaMaterial, GenericUserProfile, GenericUserGroup, GenericUserGroupClosure, EmailAddress, PhoneNumber, GeoLocation
 from user_management.serializers import GenericUserGroupSerializer
 
-from tests.python.common import HttpRequestDataGen
+from ecommerce_common.tests.common import HttpRequestDataGen
 from ..common import _fixtures, _curr_timezone, gen_expiry_time, UserNestedFieldSetupMixin, UserNestedFieldVerificationMixin
 
 _nested_field_names = {

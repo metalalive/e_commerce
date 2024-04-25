@@ -1,8 +1,8 @@
 from django.contrib.contenttypes.models  import ContentType
 from rest_framework.serializers import ModelSerializer
 
-from common.serializers.mixins  import  NestedFieldSetupMixin
-from common.models.enums.django import AppCodeOptions
+from ecommerce_common.serializers.mixins  import  NestedFieldSetupMixin
+from ecommerce_common.models.enums.django import AppCodeOptions
 
 from ..models.base import GenericUserGroup, GenericUserProfile, QuotaMaterial
 

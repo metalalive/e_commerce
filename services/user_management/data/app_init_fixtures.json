@@ -21,7 +21,7 @@
     "fields": {
         "profile": 1,
         "username": "defaultsuperuser",
-        "password": "bcrypt_sha256$$2b$12$1EHECVDTD0T4dABVZBxwu.QQW9gYnAOgIBvySJOAt9K9.tcPOXDES",
+        "password": "xxxx",
         "is_superuser": true,
         "is_staff": true,
         "is_active": true,
@@ -36,7 +36,7 @@
     "fields": {
         "profile": 2,
         "username": "defaultstaff",
-        "password": "bcrypt_sha256$$2b$12$2wDUSppwBFfUwNT.9OP/KelVaFb82aQ4lb2boX4kuscStOJ3n5RSG",
+        "password": "xxxx",
         "is_superuser": false,
         "is_staff": true,
         "is_active": true,

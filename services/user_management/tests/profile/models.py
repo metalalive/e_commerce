@@ -7,7 +7,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.models import Permission as ModelLevelPermission
 from django.contrib.contenttypes.models  import ContentType
 
-from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from ecommerce_common.models.constants  import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, GenericUserGroup, GenericUserGroupClosure, GenericUserGroupRelation, GenericUserAppliedRole, QuotaMaterial, UserQuotaRelation
 from user_management.models.auth import LoginAccount, Role

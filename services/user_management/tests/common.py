@@ -7,13 +7,13 @@ from django.middleware.csrf import _get_new_csrf_token
 from django.core.exceptions import  ObjectDoesNotExist
 from django.utils import timezone as django_timezone
 
-from common.cors.middleware import conf as cors_conf
+from ecommerce_common.cors.middleware import conf as cors_conf
 
 from user_management.models.common import AppCodeOptions
 from user_management.models.auth import LoginAccount, Role
 from user_management.models.base import GenericUserProfile, GenericUserGroup, QuotaMaterial, EmailAddress, PhoneNumber, GeoLocation
 
-from tests.python.common import listitem_rand_assigner, KeystoreMixin
+from ecommerce_common.tests.common import listitem_rand_assigner, KeystoreMixin
 
 _curr_timezone = django_timezone.get_current_timezone()
 

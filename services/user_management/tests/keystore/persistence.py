@@ -1,42 +1,30 @@
-import os as builtin_os  # built-in os package
+import os
 import random
 import shutil
 import unittest
 from datetime import date, timedelta
+from pathlib import Path
 
 from ecommerce_common.auth.keystore import JWKSFilePersistHandler
-from ecommerce_common.tests.common import capture_error
+from ecommerce_common.tests.common import capture_error, _setup_keyfile, _teardown_keyfile
 
 
-def _setup_keyfile(filepath):
-    dir_tear_down = False
-    file_tear_down = False
-    dir_path = builtin_os.path.dirname(filepath)
-    if not builtin_os.path.exists(dir_path):
-        dir_tear_down = True
-        builtin_os.makedirs(dir_path, exist_ok=False)
-    if not builtin_os.path.exists(filepath):
-        file_tear_down = True
-        with open(filepath, "wb") as f:
-            empty_json_obj = "%s%s" % (
-                JWKSFilePersistHandler.JSONFILE_START_LINE,
-                JWKSFilePersistHandler.JSONFILE_END_LINE,
-            )
-            f.write(empty_json_obj.encode())
-    return dir_tear_down, file_tear_down
+def _clean_prev_persisted_filedata(**init_kwargs):
+    today = date.today()
+    init_kwargs.update({"flush_threshold": 9999, "auto_flush": True})
+    persist_handler = JWKSFilePersistHandler(**init_kwargs)
+    persist_handler.evict_expired_keys(
+         date_limit = today + timedelta(days = persist_handler.max_expired_after_days
+    ))
+    persist_handler.flush()
+    assert len(persist_handler) ==  0
 
 
-def _teardown_keyfile(filepath, del_dir: bool, del_file: bool):
-    dir_path = builtin_os.path.dirname(filepath)
-    if del_file:
-        builtin_os.remove(filepath)
-    if del_dir:
-        shutil.rmtree(dir_path)
-
+srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
 
 class FilePersistHandlerTestCase(unittest.TestCase):
     _init_kwargs = {
-        "filepath": "./tmp/cache/test/jwks/privkey/current.json",
+        "filepath":  os.path.join(srv_basepath, "./tmp/cache/test/jwks/privkey/current.json"),
         "name": "test_secret_storage",
         "expired_after_days": 11,
         "max_expired_after_days": 90,
@@ -50,6 +38,7 @@ class FilePersistHandlerTestCase(unittest.TestCase):
         )
         self._dir_tear_down = dir_tear_down
         self._file_tear_down = file_tear_down
+        _clean_prev_persisted_filedata(**self._init_kwargs.copy())
 
     def tearDown(self):
         _teardown_keyfile(
@@ -254,11 +243,11 @@ class FilePersistHandlerTestCase(unittest.TestCase):
         self.assertSetEqual(expect_kids, actual_kids)
 
     def test_evict_expired_keys(self):
+        today = date.today()
         init_kwargs = self._init_kwargs.copy()
         init_kwargs.update({"flush_threshold": 10, "auto_flush": True})
         persist_handler = JWKSFilePersistHandler(**init_kwargs)
         max_expired_after_days = persist_handler.max_expired_after_days
-        today = date.today()
         keydata = {
             "crypto-key-id-%s"
             % idx: {

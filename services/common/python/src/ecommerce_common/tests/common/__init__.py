@@ -1,3 +1,4 @@
+import os
 import random
 import json
 import copy
@@ -6,7 +7,7 @@ from datetime import datetime, timedelta
 from functools import partial, reduce
 
 from ecommerce_common.util import ExtendedList, import_module_string
-from ecommerce_common.auth.keystore import create_keystore_helper
+from ecommerce_common.auth.keystore import create_keystore_helper, JWKSFilePersistHandler
 
 
 def rand_gen_request_body(customize_item_fn, data_gen, template=None):
@@ -307,6 +308,32 @@ class TreeNodeMixin:
 ## end of class TreeNodeMixin
 
 
+def _setup_keyfile(filepath):
+    dir_tear_down = False
+    file_tear_down = False
+    dir_path = os.path.dirname(filepath)
+    if not os.path.exists(dir_path):
+        dir_tear_down = True
+        os.makedirs(dir_path, exist_ok=False)
+    if not os.path.exists(filepath):
+        file_tear_down = True
+        with open(filepath, "wb") as f:
+            empty_json_obj = "%s%s" % (
+                JWKSFilePersistHandler.JSONFILE_START_LINE,
+                JWKSFilePersistHandler.JSONFILE_END_LINE,
+            )
+            f.write(empty_json_obj.encode())
+    return dir_tear_down, file_tear_down
+
+
+def _teardown_keyfile(filepath, del_dir: bool, del_file: bool):
+    dir_path = os.path.dirname(filepath)
+    if del_file:
+        os.remove(filepath)
+    if del_dir:
+        shutil.rmtree(dir_path)
+
+
 class KeystoreMixin:
     _keystore_init_config = None
     ## alwasy use `JWKSFilePersistHandler` to run the test cases , for example :
@@ -330,7 +357,6 @@ class KeystoreMixin:
 
     def _setup_keystore(self):
         from ecommerce_common.auth.jwt import JwkRsaKeygenHandler
-        from ecommerce_common.tests.keystore.persistence import _setup_keyfile
 
         persist_labels = ("persist_pubkey_handler", "persist_secret_handler")
         self.tear_down_files = {}
@@ -356,8 +382,6 @@ class KeystoreMixin:
         self._keystore = keystore
 
     def _teardown_keystore(self):
-        from ecommerce_common.tests.keystore.persistence import _teardown_keyfile
-
         for item in self.tear_down_files.values():
             _teardown_keyfile(
                 filepath=item["filepath"],

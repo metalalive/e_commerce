@@ -12,18 +12,18 @@ from rest_framework.settings    import api_settings as drf_settings
 from jwt.exceptions import MissingRequiredClaimError, InvalidAudienceError
 from jwt.api_jwk import PyJWK
 
-from common.auth.jwt import JWT
-from common.cors.middleware import conf as cors_cfg, ACCESS_CONTROL_REQUEST_METHOD, ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN,  ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_MAX_AGE
-from common.util.python import sort_nested_object, import_module_string
-from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from ecommerce_common.auth.jwt import JWT
+from ecommerce_common.cors.middleware import conf as cors_cfg, ACCESS_CONTROL_REQUEST_METHOD, ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_ALLOW_ORIGIN,  ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_MAX_AGE
+from ecommerce_common.util import sort_nested_object, import_module_string
+from ecommerce_common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 
 from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, GenericUserAppliedRole, QuotaMaterial, UserQuotaRelation
 from user_management.models.auth import LoginAccount, Role
 
-from tests.python.common import HttpRequestDataGen, KeystoreMixin
-from tests.python.common.django import _BaseMockTestClientInfoMixin
-from user_management.tests.common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin
+from ecommerce_common.tests.common import HttpRequestDataGen, KeystoreMixin
+from ecommerce_common.tests.common.django import _BaseMockTestClientInfoMixin
+from tests.common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin
 
 
 non_fd_err_key = drf_settings.NON_FIELD_ERRORS_KEY

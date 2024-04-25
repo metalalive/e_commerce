@@ -1,21 +1,24 @@
+import os
 import logging
 from datetime  import datetime, timedelta, date
 from typing    import List
+from pathlib   import Path
 
 from django.utils import timezone as django_timezone
 from django.utils.module_loading import import_string
 from celery.backends.rpc import RPCBackend as CeleryRpcBackend
 
-from common.auth.keystore import create_keystore_helper
-from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
-from common.util.python.celery import app as celery_app
-from common.logging.util  import log_fn_wrapper
+from ecommerce_common.auth.keystore import create_keystore_helper
+from ecommerce_common.util.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME
+from ecommerce_common.util.celery import app as celery_app
+from ecommerce_common.logging.util  import log_fn_wrapper
 
 from .models.base import GenericUserGroup, GenericUserProfile, QuotaMaterial
 from .models.auth import UnauthResetAccountRequest
 
 _logger = logging.getLogger(__name__)
 
+srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
 
 @celery_app.task(bind=True, queue='usermgt_default')
 def update_accounts_privilege(self, affected_groups, deleted=False):
@@ -40,6 +43,12 @@ def clean_expired_reset_requests(days, hours=0, minutes=0):
 
 
 def _rotate_keystores_setup(module_setup):
+    hdlr_args = module_setup["persist_secret_handler"]["init_kwargs"]
+    if hdlr_args.get("filepath"): # TODO, better design approach
+        hdlr_args["filepath"] = os.path.join(srv_basepath, hdlr_args["filepath"])
+    hdlr_args = module_setup["persist_pubkey_handler"]["init_kwargs"]
+    if hdlr_args.get("filepath"):
+        hdlr_args["filepath"] = os.path.join(srv_basepath, hdlr_args["filepath"])
     keystore = create_keystore_helper(cfg=module_setup, import_fn=import_string)
     key_size_in_bits = module_setup['key_size_in_bits']
     num_keys = module_setup.get('num_keys', keystore.DEFAULT_NUM_KEYS)

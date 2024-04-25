@@ -4,8 +4,8 @@ from datetime import datetime, timezone, timedelta
 from django.conf   import  settings as django_settings
 from django.utils.module_loading import import_string
 
-from common.auth.keystore import create_keystore_helper
-from common.auth.jwt      import JWT
+from ecommerce_common.auth.keystore import create_keystore_helper
+from ecommerce_common.auth.jwt      import JWT
 
 """
 Helper functions used in development envisonment.

@@ -49,7 +49,7 @@ class RSAkeygenTestCase(unittest.TestCase):
             testcase=self,
             err_cls=ValueError,
             exe_fn=self._exe_fn,
-            exe_kwargs={"key_size": 1023, "num_primes": 2},
+            exe_kwargs={"key_size": 2047, "num_primes": 2},
         )
         pos = err.args[0].find("number of bits has to range between")
         self.assertGreaterEqual(pos, 0)
@@ -57,13 +57,13 @@ class RSAkeygenTestCase(unittest.TestCase):
             testcase=self,
             err_cls=ValueError,
             exe_fn=self._exe_fn,
-            exe_kwargs={"key_size": 1024, "num_primes": 1},
+            exe_kwargs={"key_size": 2048, "num_primes": 1},
         )
         pos = err.args[0].find("number of primes must be at least 2")
         self.assertGreaterEqual(pos, 0)
 
     def test_ok(self):
-        result = self._exe_fn(key_size=1024, num_primes=2)
+        result = self._exe_fn(key_size=2048, num_primes=2)
         expect_key_types = {
             "public": ["e", "n"],
             "private": ["dq", "e", "qp", "d", "dp", "q", "p", "n"],

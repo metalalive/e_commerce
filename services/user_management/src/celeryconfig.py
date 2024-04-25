@@ -1,4 +1,6 @@
-from common.util.python import _get_amqp_url
+import os
+from pathlib import Path
+from ecommerce_common.util import _get_amqp_url
 
 imports = ['user_management.async_tasks']
 
@@ -9,7 +11,9 @@ result_serializer = 'json'
 
 timezone = "Asia/Taipei"
 
-broker_url = _get_amqp_url(secrets_path="./common/data/secrets.json", idx=0)
+srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+secrets_fullpath = os.path.join(srv_basepath, "./common/data/secrets.json")
+broker_url = _get_amqp_url(secrets_path=secrets_fullpath, idx=0)
 
 
 # TODO: use Redis as result backend
@@ -57,7 +61,7 @@ task_track_started = True
 def init_rpc(app):
     import kombu
     from kombu.pools import set_limit as kombu_pool_set_limit
-    from common.util.python.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME, RPC_EXCHANGE_DEFAULT_TYPE
+    from ecommerce_common.util.messaging.constants import  RPC_EXCHANGE_DEFAULT_NAME, RPC_EXCHANGE_DEFAULT_TYPE
     exchange = kombu.Exchange(name=RPC_EXCHANGE_DEFAULT_NAME , type=RPC_EXCHANGE_DEFAULT_TYPE)
     # determine a list of task queues used at here, you don't need to
     # give option -Q at Celery command line

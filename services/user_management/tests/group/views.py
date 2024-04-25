@@ -12,9 +12,9 @@ from user_management.models.auth import Role, LoginAccount
 from user_management.serializers.nested import RoleAssignValidator
 from user_management.async_tasks import update_accounts_privilege
 
-from common.util.python import sort_nested_object
-from tests.python.common import TreeNodeMixin
-from tests.python.common.django import _BaseMockTestClientInfoMixin
+from ecommerce_common.util import sort_nested_object
+from ecommerce_common.tests.common import TreeNodeMixin
+from ecommerce_common.tests.common.django import _BaseMockTestClientInfoMixin
 
 from ..common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin, UserNestedFieldSetupMixin, gen_expiry_time
 from  .common import _nested_field_names, HttpRequestDataGenGroup, GroupVerificationMixin

@@ -16,7 +16,7 @@ from user_management.models.base import QuotaMaterial, GenericUserProfile, Gener
 from user_management.serializers.nested import GroupAssignValidator
 from user_management.serializers        import LoginAccountExistField
 
-from tests.python.common import listitem_rand_assigner, rand_gen_request_body
+from ecommerce_common.tests.common import listitem_rand_assigner, rand_gen_request_body
 from ..common import  _fixtures, gen_expiry_time, _setup_login_account
 from  .common import  HttpRequestDataGenProfile, ProfileVerificationMixin, _nested_field_names
 

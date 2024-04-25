@@ -21,10 +21,10 @@ from rest_framework.exceptions  import PermissionDenied, ParseError
 from rest_framework.settings    import api_settings as drf_settings
 
 from softdelete.views import RecoveryModelMixin
-from common.auth.jwt import JWT
-from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
-from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
-from common.views.filters  import  ClosureTableFilter
+from ecommerce_common.auth.jwt import JWT
+from ecommerce_common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkUpdateModelMixin
+from ecommerce_common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
+from ecommerce_common.views.filters  import  ClosureTableFilter
 
 from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models.base import GenericUserGroup, GenericUserGroupClosure, GenericUserProfile, UsermgtChangeSet

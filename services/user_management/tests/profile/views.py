@@ -14,8 +14,8 @@ from user_management.models.auth import Role, LoginAccount
 from user_management.async_tasks import update_accounts_privilege
 from user_management.serializers import LoginAccountExistField
 
-from tests.python.common        import  listitem_rand_assigner, rand_gen_request_body
-from tests.python.common.django import _BaseMockTestClientInfoMixin
+from ecommerce_common.tests.common        import  listitem_rand_assigner, rand_gen_request_body
+from ecommerce_common.tests.common.django import _BaseMockTestClientInfoMixin
 
 from ..common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin, UserNestedFieldSetupMixin, gen_expiry_time, _setup_login_account
 from  .common import _nested_field_names, HttpRequestDataGenProfile, ProfileVerificationMixin

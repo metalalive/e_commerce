@@ -14,7 +14,7 @@ from rest_framework.serializers import ModelSerializer, Serializer
 from rest_framework.fields      import CharField
 from rest_framework.exceptions  import ValidationError as RestValidationError, ErrorDetail as DRFErrorDetail
 
-from common.util.python.async_tasks  import sendmail as async_send_mail
+from ecommerce_common.util.async_tasks  import sendmail as async_send_mail
 
 from ..models.base import _atomicity_fn, GenericUserProfile
 from ..models.auth import UnauthResetAccountRequest

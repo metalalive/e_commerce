@@ -8,7 +8,7 @@ from django.utils import timezone as django_timezone
 from django.test import TransactionTestCase
 from rest_framework.exceptions  import PermissionDenied
 
-from common.models.constants     import ROLE_ID_SUPERUSER
+from ecommerce_common.models.constants     import ROLE_ID_SUPERUSER
 from user_management.models.base import EmailAddress, GenericUserProfile
 from user_management.models.auth import Role, LoginAccount, UnauthResetAccountRequest
 from user_management.async_tasks import clean_expired_reset_requests

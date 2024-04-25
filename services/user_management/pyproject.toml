@@ -1,0 +1,31 @@
+[project]
+name = "user-management"
+version = "0.1.1"
+authors = [
+    {name="T.H.", email="xxx@somemail.com"}
+]
+requires-python = ">=3.12"
+dependencies = [
+    "django == 3.1.8",
+    "djangorestframework >= 3.11.2",
+    "ijson >= 3.1.4",
+    "PyJWT == 2.8.0",
+    "bcrypt >= 3.1.7",
+    "cryptography >= 3.4.6",
+    # TODO, upgrade mariaDB
+    "mysqlclient == 1.4.6",
+
+    # `pip` not allow relative path to local dependency
+    #"ecommerce_common @ file:///path/to/project/service"
+
+    # - `setuptools` can be used for those old packages which still rely
+    #   on`distutils`, which is removed since python 3.12
+    "setuptools >= 69.5.1",
+] # end of dependencies
+
+[tool.setuptools.package-dir]
+user_management = "./src"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

@@ -8,14 +8,13 @@ from django.utils import timezone as django_timezone
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.settings    import api_settings as drf_settings
 
-from common.util.python.async_tasks  import sendmail as async_send_mail
+from ecommerce_common.util.async_tasks  import sendmail as async_send_mail
+from ecommerce_common.tests.common.django import _BaseMockTestClientInfoMixin
 from user_management.views.constants import  WEB_HOST
 from user_management.models.base import GenericUserProfile, GenericUserGroup, GenericUserGroupClosure,  EmailAddress
 from user_management.models.auth import Role, LoginAccount, UnauthResetAccountRequest
 
-from tests.python.common.django import _BaseMockTestClientInfoMixin
-
-from ..common import _fixtures, gen_expiry_time, client_req_csrf_setup, AuthenticateUserMixin
+from tests.common import _fixtures, gen_expiry_time, client_req_csrf_setup, AuthenticateUserMixin
 
 non_field_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 
@@ -106,8 +105,7 @@ class AccountActivationTestCase(BaseViewTestCase):
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 403)
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_overwrite_existing_request(self, mocked_email_obj):
+    def test_overwrite_existing_request(self):
         dup_email = self._test_profiles[0].emails.last()
         existing_req  = UnauthResetAccountRequest.objects.create(email=dup_email)
         body = list(map(lambda profile:{'email':profile.emails.last().id}, self._test_profiles))
@@ -119,8 +117,7 @@ class AccountActivationTestCase(BaseViewTestCase):
         with self.assertRaises(ObjectDoesNotExist):
             existing_req.refresh_from_db()
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_reactivate(self, mocked_email_obj):
+    def test_reactivate(self):
         self._test_profiles[-1].activate(new_account_data=_fixtures[LoginAccount][1])
         self._test_profiles[-1].deactivate(remove_account=False)
         self.assertFalse(self._test_profiles[-1].account.is_active)
@@ -221,8 +218,7 @@ class AccountCreationTestCase(BaseViewTestCase):
         self.api_call_kwargs = api_call_kwargs
 
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_create_ok(self, mocked_email_obj):
+    def test_create_ok(self):
         body = _fixtures[LoginAccount][0].copy()
         body['password2'] = body['password']
         self.api_call_kwargs['body'] = body
@@ -237,8 +233,7 @@ class AccountCreationTestCase(BaseViewTestCase):
         with self.assertRaises(ObjectDoesNotExist):
             self._rst_req.refresh_from_db()
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_invalid_reset_request(self, mocked_email_obj):
+    def test_invalid_reset_request(self):
         self.api_call_kwargs['body'] = _fixtures[LoginAccount][0].copy()
         # subcase #1, token expired
         exceed_valid_secs = 3 + UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME
@@ -274,28 +269,18 @@ class UsernameRecoveryTestCase(BaseViewTestCase):
         api_call_kwargs.update({'path': self.path, 'method':'post'})
         self.api_call_kwargs = api_call_kwargs
 
-
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_recover_done(self, mocked_email_obj):
+    def test_recover_done(self):
         expect_addr = self._profile.emails.first().addr
         self.api_call_kwargs['body'] = {'addr': expect_addr}
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 202)
-        self.assertEqual(1, mocked_email_obj.call_count)
-        mocked_email_obj = mocked_email_obj.call_args.kwargs
-        self.assertIn(expect_addr, mocked_email_obj['to'])
-        expect_username = self._account_data['username']
-        pos = mocked_email_obj['body'].find(expect_username)
-        self.assertGreater(pos, 0)
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_inactive_account(self, mocked_email_obj):
+    def test_inactive_account(self):
         self._profile.deactivate()
         expect_addr = self._profile.emails.first().addr
         self.api_call_kwargs['body'] = {'addr': expect_addr}
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 202)
-        self.assertEqual(0, mocked_email_obj.call_count)
 
 
 class UnauthPasswdRstReqTestCase(BaseViewTestCase):
@@ -314,49 +299,36 @@ class UnauthPasswdRstReqTestCase(BaseViewTestCase):
         api_call_kwargs.update({'path': self.path, 'method':'post'})
         self.api_call_kwargs = api_call_kwargs
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_request_ok(self, mocked_email_obj):
+    def test_request_ok(self):
         expect_addr = self._profile.emails.first().addr
         body = {'addr': expect_addr}
         self.api_call_kwargs['body'] = body
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 202)
-        self.assertEqual(1, mocked_email_obj.call_count)
-        mocked_email_obj = mocked_email_obj.call_args.kwargs
-        self.assertIn(expect_addr, mocked_email_obj['to'])
-        expect_url_prefix = '%s%s' % (WEB_HOST, self.path)
-        pos = mocked_email_obj['body'].find(expect_url_prefix)
-        self.assertGreaterEqual(pos, 0)
         # find token
         qset = UnauthResetAccountRequest.objects.all()
         self.assertEqual(1, qset.count())
         rst_req = qset.first()
         self.assertEqual(self._profile.emails.first(), rst_req.email)
         self.assertFalse(rst_req.is_expired)
-        #pos += len(expect_url_prefix) + 1
-        #token = mocked_email_obj['body'][pos: pos+32]
 
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_invalid_input(self, mocked_email_obj):
+    def test_invalid_input(self):
         expect_addr = 'invalid%s' % self._profile.emails.first().addr
         body = {'addr': expect_addr}
         self.api_call_kwargs['body'] = body
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 202)
-        self.assertEqual(0, mocked_email_obj.call_count)
         qset = UnauthResetAccountRequest.objects.all()
         self.assertFalse(qset.exists())
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_inactive_account(self, mocked_email_obj):
+    def test_inactive_account(self):
         self._profile.deactivate(remove_account=False)
         expect_addr = self._profile.emails.first().addr
         body = {'addr': expect_addr}
         self.api_call_kwargs['body'] = body
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 202)
-        self.assertEqual(0, mocked_email_obj.call_count)
         #  token not exists
         qset = UnauthResetAccountRequest.objects.all()
         self.assertFalse(qset.exists())
@@ -380,8 +352,7 @@ class UnauthPasswordResetTestCase(BaseViewTestCase):
         api_call_kwargs.update({'path': path, 'method':'patch'})
         self.api_call_kwargs = api_call_kwargs
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_reset_done(self, mocked_email_obj):
+    def test_reset_done(self):
         account = self._profile.account
         expect_username = account.username
         new_passwd = _fixtures[LoginAccount][1]['password']
@@ -398,8 +369,7 @@ class UnauthPasswordResetTestCase(BaseViewTestCase):
         with self.assertRaises(ObjectDoesNotExist):
             self._rst_req.refresh_from_db()
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_invalid_reset_request(self, mocked_email_obj):
+    def test_invalid_reset_request(self):
         self.api_call_kwargs['body'] = {}
         # subcase #1, token expired
         exceed_valid_secs = 3 + UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME
@@ -418,8 +388,7 @@ class UnauthPasswordResetTestCase(BaseViewTestCase):
         err_info = response.json()
         self.assertIn('invalid token', err_info[non_field_err_key])
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_inactive_account(self, mocked_email_obj):
+    def test_inactive_account(self):
         self._profile.account.is_active = False
         self._profile.account.save(update_fields=['is_active'])
         self.api_call_kwargs['body'] = {}

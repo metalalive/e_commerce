@@ -1,0 +1,21 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+ecommerce-common = {path = "../common/python", editable = false}
+user-management = {path = ".", editable = false}
+
+# it will cause write permission error when building the C extension
+# module, current workaround is to build the wheel at
+# `common/python/c_exts` then install the wheel directly at
+# `common/python/c_exts/dist` using the command
+# `pipenv run pip install /path/to/c-ext/wheel.whl`
+# my-c-extension-lib= {path = "../common/python/c_exts", editable = true}
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"
+python_full_version = "3.12.0"

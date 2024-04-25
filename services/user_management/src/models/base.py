@@ -14,12 +14,12 @@ from django.utils import timezone as django_timezone
 
 from softdelete.models import SoftDeleteObjectMixin
 
-from common.util.python          import merge_partial_dup_listitem
-from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
-from common.models.enums.django  import JsonFileChoicesMeta
-from common.models.mixins        import MinimumInfoMixin
-from common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
-from common.models.fields   import CompoundPrimaryKeyField
+from ecommerce_common.util   import merge_partial_dup_listitem
+from ecommerce_common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from ecommerce_common.models.enums.django  import JsonFileChoicesMeta
+from ecommerce_common.models.mixins        import MinimumInfoMixin
+from ecommerce_common.models.closure_table import ClosureTableModelMixin, get_paths_through_processing_node, filter_closure_nodes_recovery
+from ecommerce_common.models.fields   import CompoundPrimaryKeyField
 
 
 from .common import _atomicity_fn, UsermgtChangeSet, UsermgtSoftDeleteRecord, AppCodeOptions

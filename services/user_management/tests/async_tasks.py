@@ -12,8 +12,8 @@ from django.test     import TransactionTestCase
 from django.contrib.contenttypes.models  import ContentType
 from django.contrib.auth.models import Permission as ModelLevelPermission
 
-from common.models.enums.django import AppCodeOptions
-from common.util.python import flatten_nested_iterable
+from ecommerce_common.models.enums.django import AppCodeOptions
+from ecommerce_common.util import flatten_nested_iterable
 
 from user_management.models.auth import Role, LoginAccount
 from user_management.models.base import QuotaMaterial, GenericUserProfile, GenericUserGroup, GenericUserGroupClosure
@@ -177,9 +177,10 @@ class GetProfileCase(TransactionTestCase, UserNestedFieldSetupMixin, UserNestedF
         eager_result = get_profile.apply_async(kwargs=input_kwargs, headers=headers)
         self.assertEqual(eager_result.state, CeleryStates.FAILURE)
         self.assertTrue(isinstance(eager_result.result, ValueError))
-        expect_err_msg = 'receive invalid app_label %s' % chosen_app_label
         actual_err_msg = eager_result.result.args[0]
-        self.assertEqual(expect_err_msg, actual_err_msg)
+        self.assertGreater(actual_err_msg.find("invalid app_label"), 0)
+        self.assertGreater(actual_err_msg.find("AppCodeOptions"), 0)
+        self.assertGreater(actual_err_msg.find(chosen_app_label), 0)
 
 ## from common.util.python.messaging.rpc import RPCproxy
 ## auth_app_rpc = RPCproxy(dst_app_name='user_management', src_app_name='store')

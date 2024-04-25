@@ -21,15 +21,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions  import PermissionDenied
 from rest_framework.settings    import api_settings as drf_settings
 
-from common.auth.jwt      import JWT, stream_jwks_file
-from common.auth.keystore import create_keystore_helper
-from common.auth.django.login import  jwt_based_login
-from common.auth.django.authentication import RefreshJWTauthentication, IsStaffUser
-from common.cors import config as cors_cfg
-from common.csrf.middleware    import  csrf_protect_m
-from common.util.python.async_tasks  import sendmail as async_send_mail , default_error_handler as async_default_error_handler
-from common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkCreateModelMixin
-from common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
+from ecommerce_common.auth.jwt      import JWT, stream_jwks_file
+from ecommerce_common.auth.keystore import create_keystore_helper
+from ecommerce_common.auth.django.login import  jwt_based_login
+from ecommerce_common.auth.django.authentication import RefreshJWTauthentication, IsStaffUser
+from ecommerce_common.cors import config as cors_cfg
+from ecommerce_common.csrf.middleware    import  csrf_protect_m
+from ecommerce_common.util.async_tasks  import sendmail as async_send_mail , default_error_handler as async_default_error_handler
+from ecommerce_common.views.mixins   import  LimitQuerySetMixin, UserEditViewLogMixin, BulkCreateModelMixin
+from ecommerce_common.views.api      import  AuthCommonAPIView, AuthCommonAPIReadView
 
 from ..apps   import UserManagementConfig as UserMgtCfg
 from ..models.base import QuotaMaterial

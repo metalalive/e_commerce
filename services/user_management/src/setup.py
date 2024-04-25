@@ -1,14 +1,15 @@
 import sys
 import os
-from pathlib import Path
+import json
 import shutil
 import secrets
+from pathlib import Path
 from datetime import datetime
 
 from django import setup
 from django.core.management import call_command
 
-from migrations.django  import auto_deploy, render_fixture
+from ecommerce_common.migrations.django  import auto_deploy
 
 def _render_usermgt_fixture(src):
     from django.contrib.contenttypes.models import ContentType
@@ -40,29 +41,50 @@ def _render_usermgt_fixture(src):
             print(info_msg)
 
 
+def render_fixture(src_path, detail_fn):
+    dst_filename = "renderred_%s" % src_path.name
+    dst_path = src_path.parent.joinpath(dst_filename)
+    with open(src_path, "r") as f:
+        src = json.load(f)
+        dst = open(dst_path, "w")
+        try:
+            detail_fn(src=src)
+            src = json.dumps(src)
+            dst.write(src)
+        finally:
+            dst.close()
+    return dst_path
+
+
 def init_migration():
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'user_management.settings.migration')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings.migration')
     setup()
     call_command('makemigrations', 'contenttypes')
     call_command('makemigrations', 'auth')
     call_command('makemigrations', 'user_management')
     # --- schema migration ---
     import user_management
-    apps = (user_management,) # contenttypes, auth, 
-    auto_deploy(apps)
+    dst_path = os.path.dirname(user_management.__file__)
+    auto_deploy(
+        label = user_management.apps.UserManagementConfig.name,
+        dst_path = dst_path
+    )
     options = {'database':'site_dba',}
     call_command('migrate', 'contenttypes', **options)
     call_command('migrate', 'auth', **options)
     call_command('migrate', 'user_management', '0002', **options)
     # --- data migration ---
-    renderred_fixture_path = render_fixture(src_filepath='user_management/fixtures.json',
-            detail_fn=_render_usermgt_fixture)
+    renderred_fixture_path = render_fixture(
+        src_path = Path(dst_path).parent.joinpath("data/app_init_fixtures.json"),
+        detail_fn = _render_usermgt_fixture
+    )
     options = {'database':'usermgt_service',}
     call_command('loaddata', renderred_fixture_path, **options)
+    os.remove(renderred_fixture_path) # MUST NOT keep the fixture data which contains password 
 
 
 def deinit_migration():
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'user_management.settings.migration')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings.migration')
     setup()
     from django.contrib import auth
     import user_management

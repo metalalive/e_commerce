@@ -1,8 +1,8 @@
 from functools import partial
 from django.db  import models, transaction
 
-from common.models.enums.django import AppCodeOptions
-from common.util.python.django.setup import test_enable as django_test_enable
+from ecommerce_common.models.enums.django import AppCodeOptions
+from ecommerce_common.util.django.setup import test_enable as django_test_enable
 from softdelete.models import ChangeSet, SoftDeleteRecord
 
 DB_ALIAS_APPLIED = 'default' if django_test_enable else 'usermgt_service'

@@ -5,8 +5,8 @@ from django.test import TransactionTestCase
 from django.db.models import Q
 from django.utils  import timezone
 
-from tests.python.common import TreeNodeMixin
-from common.util.python import sort_nested_object
+from ecommerce_common.tests.common import TreeNodeMixin
+from ecommerce_common.util import sort_nested_object
 
 from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, GenericUserGroup, GenericUserGroupClosure,  QuotaMaterial, EmailAddress, PhoneNumber, GeoLocation, UserQuotaRelation, GenericUserAppliedRole

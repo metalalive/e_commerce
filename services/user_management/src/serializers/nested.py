@@ -9,10 +9,10 @@ from django.utils import timezone as django_timezone
 from rest_framework.exceptions  import  ErrorDetail as DRFErrorDetail, ValidationError as RestValidationError
 from rest_framework.fields      import  empty
 
-from common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer
-from common.serializers.mixins  import  BaseQuotaCheckerMixin
-from common.serializers.mixins.internal import AugmentEditFieldsMixin
-from common.validators          import  UniqueListItemsValidator
+from ecommerce_common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer
+from ecommerce_common.serializers.mixins  import  BaseQuotaCheckerMixin
+from ecommerce_common.serializers.mixins.internal import AugmentEditFieldsMixin
+from ecommerce_common.validators          import  UniqueListItemsValidator
 
 from ..models.base import EmailAddress, PhoneNumber, GeoLocation, _atomicity_fn, UserQuotaRelation, GenericUserAppliedRole, GenericUserGroupRelation
 from  .common import ConnectedProfileField, UserSubformSetupMixin

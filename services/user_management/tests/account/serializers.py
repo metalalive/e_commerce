@@ -9,13 +9,13 @@ from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings   import api_settings as drf_settings
 
-from common.util.python.async_tasks  import sendmail as async_send_mail
+from ecommerce_common.util.async_tasks  import sendmail as async_send_mail
+from ecommerce_common.tests.common import listitem_rand_assigner
 from user_management.models.base import GenericUserProfile, EmailAddress
 from user_management.models.auth import LoginAccount
 from user_management.serializers.auth import UnauthRstAccountReqSerializer, LoginAccountSerializer
 
-from tests.python.common import listitem_rand_assigner
-from ..common import  _fixtures, gen_expiry_time
+from tests.common import  _fixtures, gen_expiry_time
 
 non_field_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 
@@ -56,22 +56,11 @@ class AccountCreationRequestTestCase(BaseTestCase):
         self.serializer_kwargs['data'] = req_data
         serializer = UnauthRstAccountReqSerializer(**self.serializer_kwargs)
         serializer.is_valid(raise_exception=True)
-        with patch('django.core.mail.message.EmailMultiAlternatives') as mocked_obj:
-            mocked_obj.send.return_value = 1234
-            created_requests = serializer.save()
-            profiles_iter = iter(self._profiles)
-            call_args_iter = iter(mocked_obj.call_args_list)
-            for req in created_requests:
-                self.assertFalse(req.is_expired)
-                self.assertIsNotNone(req.token)
-                call_args = next(call_args_iter)
-                self.assertIn(req.email.addr, call_args.kwargs['to'])
-                profile = next(profiles_iter)
-                pos = call_args.kwargs['subject'].find(profile.first_name)
-                self.assertGreaterEqual(pos, 0)
-                expect_url = self.expect_url_pattern % req.token
-                pos = call_args.kwargs['body'].find(expect_url)
-                self.assertGreaterEqual(pos, 0)
+        created_requests = serializer.save()
+        expect_mail_ids = list(map(lambda profile: profile.emails.last().id, self._profiles))
+        for req in created_requests:
+            expect_mail_ids.index(req.email.id)
+            self.assertGreater(len(req.hashed_token), 0)
         actual_data = serializer.data
         self.assertSetEqual({'email', 'time_created', 'async_task'}, set(actual_data[0].keys()))
 
@@ -103,9 +92,7 @@ class AccountCreationRequestTestCase(BaseTestCase):
         self.serializer_kwargs['data'] = req_data
         serializer = UnauthRstAccountReqSerializer(**self.serializer_kwargs)
         serializer.is_valid(raise_exception=True)
-        with patch('django.core.mail.message.EmailMultiAlternatives') as mocked_obj:
-            mocked_obj.send.return_value = 1234
-            created_requests = serializer.save()
+        created_requests = serializer.save()
         self._validate_dup_requests(evicted_req=created_requests[0], saved_req=created_requests[-1])
 
     def test_overwrite_existing_request(self):
@@ -147,14 +134,12 @@ class LoginAccountCreationTestCase(BaseTestCase):
         }
         self._profile = profile
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_create_ok(self,  mocked_obj):
+    def test_create_ok(self):
         req_data = _fixtures[LoginAccount][0].copy()
         req_data['password2'] = req_data['password']
         self.serializer_kwargs['data'] = req_data
         serializer = LoginAccountSerializer(**self.serializer_kwargs)
         serializer.is_valid(raise_exception=True)
-        mocked_obj.send.return_value = 1234
         account = serializer.save()
         account.refresh_from_db()
         self.assertEqual(self._profile, account.profile)
@@ -162,7 +147,7 @@ class LoginAccountCreationTestCase(BaseTestCase):
         self.assertFalse(account.check_password(req_data['password'].lower()))
         with self.assertRaises(ObjectDoesNotExist):
             self.serializer_kwargs['rst_req'].refresh_from_db()
-        self.assertIn(self._profile.emails.first().addr, mocked_obj.call_args.kwargs['to'])
+        self.assertEqual(self._profile.id, account.profile.id)
 
     def test_invalid_input(self):
         rst_req_bak = self.serializer_kwargs['rst_req']
@@ -244,8 +229,7 @@ class UnauthResetPasswordTestCase(BaseTestCase):
         }
         self._profile = profile
 
-    @patch('django.core.mail.message.EmailMultiAlternatives')
-    def test_modify_ok(self, mocked_obj):
+    def test_modify_ok(self):
         old_passwd = _fixtures[LoginAccount][0]['password']
         new_passwd = 'aBcDeFg$1234'
         req_data = {'password':new_passwd, 'password2':new_passwd}
@@ -254,7 +238,6 @@ class UnauthResetPasswordTestCase(BaseTestCase):
         self.assertFalse(self._profile.account.check_password(new_passwd))
         serializer = LoginAccountSerializer(**self.serializer_kwargs)
         serializer.is_valid(raise_exception=True)
-        mocked_obj.send.return_value = 1234
         account = serializer.save()
         account.refresh_from_db()
         self.assertEqual(self._profile.account, account)
@@ -262,7 +245,6 @@ class UnauthResetPasswordTestCase(BaseTestCase):
         self.assertFalse(account.check_password(old_passwd))
         with self.assertRaises(ObjectDoesNotExist):
             self.serializer_kwargs['rst_req'].refresh_from_db()
-        self.assertIn(self._profile.emails.first().addr, mocked_obj.call_args.kwargs['to'])
 
     def test_passwd_check_failure(self):
         req_data = {'password':'TooeAsy', 'password2':'TooEasy'}

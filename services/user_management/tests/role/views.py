@@ -8,15 +8,15 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models  import ContentType
 from rest_framework.settings    import api_settings as drf_settings
 
-from common.util.python import sort_nested_object
-from common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from ecommerce_common.util import sort_nested_object
+from ecommerce_common.models.constants     import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from user_management.serializers import PermissionSerializer
 from user_management.models.base import GenericUserProfile, GenericUserAppliedRole
 from user_management.models.auth import LoginAccount, Role
 
-from tests.python.common import HttpRequestDataGen, KeystoreMixin
-from tests.python.common.django import _BaseMockTestClientInfoMixin
-from user_management.tests.common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin
+from ecommerce_common.tests.common import HttpRequestDataGen, KeystoreMixin
+from ecommerce_common.tests.common.django import _BaseMockTestClientInfoMixin
+from tests.common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin
 
 non_fd_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 

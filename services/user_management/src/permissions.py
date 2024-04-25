@@ -10,7 +10,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission as DRFBasePermission, DjangoModelPermissions
 from rest_framework.filters import BaseFilterBackend
 
-from common.auth.jwt import JWTclaimPermissionMixin
+from ecommerce_common.auth.jwt import JWTclaimPermissionMixin
 from .models.base import GenericUserGroup,  GenericUserGroupClosure, GenericUserProfile, GenericUserGroupRelation
 
 _logger = logging.getLogger(__name__)

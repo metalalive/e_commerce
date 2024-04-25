@@ -1,14 +1,13 @@
-
-python3.9 ./manage.py test user_management.tests.login    --settings user_management.settings.test --keepdb  --verbosity=2
-python3.9 ./manage.py test user_management.tests.role.views   --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.group.models --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.group.serializers  --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.group.views  --settings user_management.settings.test --keepdb  --verbosity=2
-python3.9 ./manage.py test user_management.tests.profile.models  --settings user_management.settings.test --keepdb  --verbosity=2
-python3.9 ./manage.py test user_management.tests.profile.serializers   --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.profile.views  --settings user_management.settings.test --keepdb  --verbosity=2
-python3.9 ./manage.py test user_management.tests.account.models --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.account.serializers  --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.account.views  --settings user_management.settings.test --keepdb --verbosity=2
-python3.9 ./manage.py test user_management.tests.async_tasks    --settings user_management.settings.test --keepdb  --verbosity=2
+pipenv run python ./manage.py test tests.login  --settings settings.test  --keepdb --verbosity=2
+pipenv run python ./manage.py test tests.role.views   --settings settings.test --keepdb --verbosity=2
+pipenv run python ./manage.py test tests.group.models --settings settings.test --keepdb --verbosity=2
+pipenv run python ./manage.py test tests.group.serializers  --settings settings.test --keepdb --verbosity=2
+pipenv run python ./manage.py test tests.group.views  --settings settings.test --keepdb  --verbosity=2
+pipenv run python ./manage.py test tests.profile.models  --settings settings.test --keepdb  --verbosity=2
+pipenv run python ./manage.py test tests.profile.serializers   --settings settings.test --keepdb --verbosity=2
+pipenv run python ./manage.py test tests.profile.views  --settings settings.test --keepdb  --verbosity=2
+pipenv run python ./manage.py test tests.account.models --settings settings.test --keepdb --verbosity=2
+pipenv run python ./manage.py test tests.account.serializers  --settings  settings.test --keepdb --verbosity=2
+pipenv run python ./manage.py test tests.account.views  --settings settings.test --keepdb --verbosity=2
+pipenv run python ./manage.py test tests.async_tasks    --settings settings.test --keepdb  --verbosity=2
 

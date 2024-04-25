@@ -11,8 +11,8 @@ from django.utils import timezone as django_timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
-from common.util.python import sort_nested_object
-from tests.python.common import TreeNodeMixin
+from ecommerce_common.util import sort_nested_object
+from ecommerce_common.tests.common import TreeNodeMixin
 from user_management.models.common import AppCodeOptions
 from user_management.models.base import GenericUserProfile, QuotaMaterial
 from user_management.models.auth import LoginAccount, Role
