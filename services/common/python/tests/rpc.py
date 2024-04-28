@@ -1,3 +1,4 @@
+import os
 import socket
 import time
 import unittest
@@ -31,7 +32,7 @@ class RpcProxyTestCase(unittest.TestCase):
     # Note that the patch works ONLY in the function it is imported to,
     # NOT the function where it is originally declared.
     # https://stackoverflow.com/questions/8575713/
-    @patch("common.util.python.messaging.rpc.get_connection")
+    @patch("ecommerce_common.util.messaging.rpc.get_connection")
     @patch.object(KombuConsumerMixin, attribute="consume")
     @patch.object(KombuProducer, attribute="publish")
     @patch.object(KombuQueue, attribute="delete")
@@ -45,7 +46,9 @@ class RpcProxyTestCase(unittest.TestCase):
         ctx_mgr.return_value.__enter__.return_value.default_channel = (
             self.mocked_channel
         )
-        rpc1 = RPCproxy(dst_app_name="remote-site-1", src_app_name="local-app")
+        rpc1 = RPCproxy(dst_app_name="remote-site-1", src_app_name="local-app",
+             srv_basepath = os.environ["SERVICE_BASE_PATH"]
+        )
         # --- start publishing message
         evt = rpc1.drill_holes(num=2, deep_mm=65)
         self.assertEqual(evt.result["status"], RpcReplyEvent.status_opt.INITED)
@@ -90,7 +93,7 @@ class RpcProxyTestCase(unittest.TestCase):
 
     ## end of def test_pubsub_ok
 
-    @patch("common.util.python.messaging.rpc.get_connection")
+    @patch("ecommerce_common.util.messaging.rpc.get_connection")
     @patch.object(KombuProducer, attribute="publish")
     @patch.object(KombuQueue, attribute="delete")
     @patch.object(KombuQueue, attribute="declare")
@@ -102,7 +105,9 @@ class RpcProxyTestCase(unittest.TestCase):
         ctx_mgr.return_value.__enter__.side_effect = KombuOperationalError(
             "Errno 111 Unit Test Connection Error"
         )
-        rpc1 = RPCproxy(dst_app_name="remote-site-1", src_app_name="local-app")
+        rpc1 = RPCproxy(dst_app_name="remote-site-1", src_app_name="local-app",
+             srv_basepath = os.environ["SERVICE_BASE_PATH"]
+        )
         # --- start publishing message
         evt = rpc1.drill_holes(num=2, deep_mm=65)
         self.assertEqual(evt.result["status"], RpcReplyEvent.status_opt.FAIL_CONN)
@@ -111,7 +116,7 @@ class RpcProxyTestCase(unittest.TestCase):
         q_rm.assert_not_called()
         del rpc1
 
-    @patch("common.util.python.messaging.rpc.get_connection")
+    @patch("ecommerce_common.util.messaging.rpc.get_connection")
     @patch.object(KombuProducer, attribute="publish")
     @patch.object(KombuQueue, attribute="delete")
     @patch.object(KombuQueue, attribute="declare")
@@ -126,7 +131,9 @@ class RpcProxyTestCase(unittest.TestCase):
         prod_pub.side_effect = UndeliverableMessage(
             exchange="ut-exchange", routing_key="utest.app.method"
         )
-        rpc1 = RPCproxy(dst_app_name="remote-site-1", src_app_name="local-app")
+        rpc1 = RPCproxy(dst_app_name="remote-site-1", src_app_name="local-app",
+             srv_basepath = os.environ["SERVICE_BASE_PATH"]
+        )
         # --- start publishing message
         evt = rpc1.drill_holes(num=2, deep_mm=65)
         self.assertEqual(evt.result["status"], RpcReplyEvent.status_opt.FAIL_PUBLISH)
@@ -135,7 +142,7 @@ class RpcProxyTestCase(unittest.TestCase):
         q_rm.assert_not_called()
         del rpc1
 
-    @patch("common.util.python.messaging.rpc.get_connection")
+    @patch("ecommerce_common.util.messaging.rpc.get_connection")
     @patch.object(KombuConsumerMixin, attribute="consume")
     @patch.object(KombuProducer, attribute="publish")
     @patch.object(KombuQueue, attribute="delete")
@@ -153,6 +160,7 @@ class RpcProxyTestCase(unittest.TestCase):
         rpc1 = RPCproxy(
             dst_app_name="remote-site-1",
             src_app_name="local-app",
+            srv_basepath = os.environ["SERVICE_BASE_PATH"],
             reply_timeout_sec=reply_wait_max_secs,
         )
         # --- start publishing message
@@ -184,7 +192,7 @@ class RpcProxyTestCase(unittest.TestCase):
         q_rm.assert_not_called()
         del rpc1
 
-    @patch("common.util.python.messaging.rpc.get_connection")
+    @patch("ecommerce_common.util.messaging.rpc.get_connection")
     @patch.object(KombuConsumerMixin, attribute="consume")
     @patch.object(KombuProducer, attribute="publish")
     @patch.object(KombuQueue, attribute="delete")
@@ -200,7 +208,9 @@ class RpcProxyTestCase(unittest.TestCase):
         ctx_mgr.return_value.__enter__.return_value.default_channel = (
             self.mocked_channel
         )
-        rpc1 = RPCproxy(dst_app_name="remote-site-1", src_app_name="local-app")
+        rpc1 = RPCproxy(dst_app_name="remote-site-1", src_app_name="local-app",
+             srv_basepath = os.environ["SERVICE_BASE_PATH"]
+        )
         # --- start publishing message
         evt = rpc1.drill_holes(num=2, deep_mm=65)
         self.assertEqual(evt.result["status"], RpcReplyEvent.status_opt.INITED)

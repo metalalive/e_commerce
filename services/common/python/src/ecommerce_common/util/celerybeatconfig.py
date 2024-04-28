@@ -78,16 +78,4 @@ beat_schedule = {
             ]
         },
     },  ## end of periodic task rotate-auth-keystores
-    "old-log-es-cleanup": {
-        "task": "ecommerce_common.util.periodic_tasks.clean_old_log_elasticsearch",
-        "options": {"queue": "periodic_default"},
-        "schedule": crontab(hour=3, minute=30),  # daily 3:30 am
-        #'schedule':30,
-        "kwargs": {
-            "days": 7,
-            "weeks": 0,
-            "scroll_size": 1200,
-            "requests_per_second": -1,
-        },
-    },
 }  # end of beat_schedule

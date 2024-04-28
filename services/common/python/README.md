@@ -1,7 +1,7 @@
 ## Common modules in this project
 ### Build
 For python modules :
-```shell
+```bash
 poetry build
 ```
 
@@ -29,7 +29,7 @@ DJANGO_SETTINGS_MODULE="ecommerce_common.util.django.internal_settings" \
 
 - celery log file can be switched to `./tmp/log/test` for testing purpose
 
-### Cron Job scheduler (celery beat)
+### Cron Job scheduler
 collect all periodic tasks to run (gathered from all services)
 ```bash
 cd ./services/common/python
@@ -39,8 +39,22 @@ SERVICE_BASE_PATH="${PWD}/../.." poetry run celery --workdir ./src \
      beat --loglevel=INFO
 ```
 
+### Test
+Install the sourece package `./src` by the command :
+```bash
+poetry install
+```
+There will be a package `ecommerce-common` in the virtual environment. You can also uninstall it by :
+```bash
+poetry run pip uninstall ecommerce-common
+```
+Run the test cases by the command :
+```bash
+./run_unit_test
+```
+
 ## Development
 ### Code Formatter
 ```bash
-poetry run black ./src/
+poetry run black ./src/ ./tests/
 ```

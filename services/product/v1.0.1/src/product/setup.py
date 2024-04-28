@@ -16,9 +16,10 @@ def init_migration():
     call_command("makemigrations", "product")
     # --- schema migration ---
     import product
-
-    apps = (product,)
-    auto_deploy(apps)
+    auto_deploy(
+        label = product.apps.ProductConfig.name,
+        dst_path = os.path.dirname(product.__file__)
+    )
     options = {
         "database": "site_dba",
     }

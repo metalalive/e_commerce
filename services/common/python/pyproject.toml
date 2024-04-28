@@ -13,7 +13,6 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.12"
 python-logstash-async = "2.5.0"
-elasticsearch = "5.5.3"
 celery = "^5.4.0"
 
 # Django is used ONLY for sending e-mail, 
@@ -23,6 +22,8 @@ Django = "^3.1.8"
 [tool.poetry.group.dev.dependencies]
 build = "^1.2.1"
 black = "^24.4.0"
+
+[tool.poetry.group.test.dependencies]
 
 [build-system]
 requires = ["poetry-core"]

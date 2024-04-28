@@ -63,9 +63,6 @@ task_routes = {
     "ecommerce_common.util.periodic_tasks.clean_old_log_localhost": {
         "queue": "periodic_default",
     },
-    "ecommerce_common.util.periodic_tasks.clean_old_log_elasticsearch": {
-        "queue": "periodic_default",
-    },
 }  # end of task routes
 
 # set rate limit, at most 10 tasks to process in a single minute.

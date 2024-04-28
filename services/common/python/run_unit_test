@@ -1,0 +1,2 @@
+SERVICE_BASE_PATH="${PWD}/../.."  poetry run python -m unittest  tests.rpc -v
+poetry run python -m unittest  tests.graph -v
