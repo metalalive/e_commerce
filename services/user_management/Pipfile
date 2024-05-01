@@ -15,6 +15,7 @@ user-management = {path = ".", editable = false}
 # my-c-extension-lib= {path = "../common/python/c_exts", editable = true}
 
 [dev-packages]
+black = ">=24.4.*"
 
 [requires]
 python_version = "3.12"

@@ -1,19 +1,20 @@
 import random
 import hashlib
-from datetime import  datetime, timedelta
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone as django_timezone
 from django.test import TransactionTestCase
-from rest_framework.exceptions  import PermissionDenied
+from rest_framework.exceptions import PermissionDenied
 
-from ecommerce_common.models.constants     import ROLE_ID_SUPERUSER
+from ecommerce_common.models.constants import ROLE_ID_SUPERUSER
 from user_management.models.base import EmailAddress, GenericUserProfile
 from user_management.models.auth import Role, LoginAccount, UnauthResetAccountRequest
 from user_management.async_tasks import clean_expired_reset_requests
 
 from ..common import _fixtures
+
 
 class ResetRequestCreationTestCase(TransactionTestCase):
     def setUp(self):
@@ -28,7 +29,9 @@ class ResetRequestCreationTestCase(TransactionTestCase):
         UnauthResetAccountRequest.objects.all().delete()
 
     def test_save_then_read(self):
-        rst_req = UnauthResetAccountRequest.objects.create(email = self._profile.emails.first())
+        rst_req = UnauthResetAccountRequest.objects.create(
+            email=self._profile.emails.first()
+        )
         token = rst_req.token
         self.assertIsNotNone(token)
         self.assertTrue(isinstance(token, str))
@@ -36,18 +39,22 @@ class ResetRequestCreationTestCase(TransactionTestCase):
         rst_req = None
         # -------------------------------------
         hashobj = hashlib.sha256()
-        hashobj.update(token.encode('utf-8'))
+        hashobj.update(token.encode("utf-8"))
         hashed_token_2 = hashobj.digest()
         self.assertEqual(hashed_token_1, hashed_token_2)
         rst_req = UnauthResetAccountRequest.objects.get(hashed_token=hashed_token_2)
         self.assertIsNotNone(rst_req)
-        self.assertFalse( rst_req.is_expired )
+        self.assertFalse(rst_req.is_expired)
         # assume it is expired
-        req_valid_secs = UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(3,15)
+        req_valid_secs = (
+            UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(3, 15)
+        )
         mocked_nowtime = django_timezone.now() + timedelta(seconds=req_valid_secs)
-        with patch('user_management.models.auth.django_timezone.now') as mock_nowtime_fn:
+        with patch(
+            "user_management.models.auth.django_timezone.now"
+        ) as mock_nowtime_fn:
             mock_nowtime_fn.return_value = mocked_nowtime
-            self.assertTrue( rst_req.is_expired )
+            self.assertTrue(rst_req.is_expired)
         rst_req = None
         # -------------------------------------
         rst_req = UnauthResetAccountRequest.get_request(token_urlencoded=token)
@@ -60,18 +67,31 @@ class ResetRequestCreationTestCase(TransactionTestCase):
     def test_duplicate_hashed_token(self):
         emails = self._profile.emails.all()
         rst_reqs = []
-        rst_reqs.append( UnauthResetAccountRequest.objects.create(email=emails[0]) )
+        rst_reqs.append(UnauthResetAccountRequest.objects.create(email=emails[0]))
         dup_hash_token = rst_reqs[-1].hashed_token
-        rst_reqs.append( UnauthResetAccountRequest.objects.create(email=emails[1], hashed_token=dup_hash_token) )
-        rst_reqs.append( UnauthResetAccountRequest.objects.create(email=emails[0], hashed_token=dup_hash_token) )
-        hashed_tokens = list(map(lambda obj:obj.hashed_token, rst_reqs))
+        rst_reqs.append(
+            UnauthResetAccountRequest.objects.create(
+                email=emails[1], hashed_token=dup_hash_token
+            )
+        )
+        rst_reqs.append(
+            UnauthResetAccountRequest.objects.create(
+                email=emails[0], hashed_token=dup_hash_token
+            )
+        )
+        hashed_tokens = list(map(lambda obj: obj.hashed_token, rst_reqs))
         distinct_hashed_tokens = set(hashed_tokens)
         self.assertEqual(len(hashed_tokens), len(distinct_hashed_tokens))
 
 
 class ResetRequestDeletionTestCase(TransactionTestCase):
     def setUp(self):
-        profiles = list(map(lambda d: GenericUserProfile.objects.create(**d) , _fixtures[GenericUserProfile][:2]))
+        profiles = list(
+            map(
+                lambda d: GenericUserProfile.objects.create(**d),
+                _fixtures[GenericUserProfile][:2],
+            )
+        )
         email_data_iter = iter(_fixtures[EmailAddress])
         for profile in profiles:
             for idx in range(4):
@@ -101,32 +121,63 @@ class ResetRequestDeletionTestCase(TransactionTestCase):
             self._profile.emails.last().rst_account_reqs.last(),
             self._profile_2nd.emails.last().rst_account_reqs.first(),
         ]
-        req_valid_secs = UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(5,15)
+        req_valid_secs = (
+            UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME + random.randrange(5, 15)
+        )
         mocked_expired_time = django_timezone.now() - timedelta(seconds=req_valid_secs)
-        with patch('django.utils.timezone.now') as mock_nowtime_fn:
+        with patch("django.utils.timezone.now") as mock_nowtime_fn:
             mock_nowtime_fn.return_value = mocked_expired_time
             for rst_req in expect_expired_reqs:
-                 rst_req.save()
-        deleted_items = clean_expired_reset_requests(days=0, hours=0,
-                minutes=(UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME/60) )
-        expect_value = set(map(lambda obj: (obj.email.user_id, obj.email.addr), expect_expired_reqs))
-        actual_value = set(map(lambda d: (d['email__user_id'], d['email__addr']) , deleted_items))
+                rst_req.save()
+        deleted_items = clean_expired_reset_requests(
+            days=0,
+            hours=0,
+            minutes=(UnauthResetAccountRequest.MAX_TOKEN_VALID_TIME / 60),
+        )
+        expect_value = set(
+            map(lambda obj: (obj.email.user_id, obj.email.addr), expect_expired_reqs)
+        )
+        actual_value = set(
+            map(lambda d: (d["email__user_id"], d["email__addr"]), deleted_items)
+        )
         self.assertSetEqual(expect_value, actual_value)
-        req_hashed_tokens = tuple(map(lambda obj: obj.hashed_token, expect_expired_reqs))
-        qset = UnauthResetAccountRequest.objects.filter(hashed_token__in=req_hashed_tokens)
+        req_hashed_tokens = tuple(
+            map(lambda obj: obj.hashed_token, expect_expired_reqs)
+        )
+        qset = UnauthResetAccountRequest.objects.filter(
+            hashed_token__in=req_hashed_tokens
+        )
         self.assertFalse(qset.exists())
-
 
 
 class LoginAccountDeletionTestCase(TransactionTestCase):
     def setUp(self):
         num_superusers = 3
-        role_data = {'id':ROLE_ID_SUPERUSER, 'name':'my default superuser'}
+        role_data = {"id": ROLE_ID_SUPERUSER, "name": "my default superuser"}
         superuser_role = Role.objects.create(**role_data)
-        profiles = list(map(lambda d: GenericUserProfile.objects.create(**d) , _fixtures[GenericUserProfile][:num_superusers]))
-        tuple(map(lambda profile:profile.roles.create(approved_by=profiles[0], role=superuser_role), profiles))
+        profiles = list(
+            map(
+                lambda d: GenericUserProfile.objects.create(**d),
+                _fixtures[GenericUserProfile][:num_superusers],
+            )
+        )
+        tuple(
+            map(
+                lambda profile: profile.roles.create(
+                    approved_by=profiles[0], role=superuser_role
+                ),
+                profiles,
+            )
+        )
         account_data_iter = iter(_fixtures[LoginAccount])
-        tuple(map(lambda profile: profile.activate(new_account_data=next(account_data_iter)) , profiles))
+        tuple(
+            map(
+                lambda profile: profile.activate(
+                    new_account_data=next(account_data_iter)
+                ),
+                profiles,
+            )
+        )
         self._profiles = profiles
 
     def test_remove_superusers(self):
@@ -151,7 +202,6 @@ class LoginAccountDeletionTestCase(TransactionTestCase):
         self.assertTrue(first_profile.account.is_active)
         self.assertTrue(first_profile.account.is_superuser)
 
-
     def test_deactivate_superusers(self):
         first_profile = self._profiles[0]
         for profile in self._profiles[1:]:
@@ -170,5 +220,3 @@ class LoginAccountDeletionTestCase(TransactionTestCase):
         self.assertFalse(first_profile.is_deleted())
         self.assertTrue(first_profile.account.is_active)
         self.assertTrue(first_profile.account.is_superuser)
-
-

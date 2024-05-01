@@ -104,3 +104,9 @@ Note:
 ```bash
 ./run_integration_test
 ```
+
+## Development
+### Code Formatter
+```bash
+pipenv run black ./src/ ./tests/  ./settings/
+```

@@ -10,12 +10,17 @@ from jwt.api_jwk import PyJWK
 
 from ecommerce_common.auth.keystore import create_keystore_helper
 from ecommerce_common.auth.jwt import JwkRsaKeygenHandler
-from ecommerce_common.util  import import_module_string
+from ecommerce_common.util import import_module_string
 from ecommerce_common.tests.common import capture_error
 
-from .persistence import _setup_keyfile, _teardown_keyfile, _clean_prev_persisted_filedata
+from .persistence import (
+    _setup_keyfile,
+    _teardown_keyfile,
+    _clean_prev_persisted_filedata,
+)
 
 srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+
 
 class JwkKeystoreTestCase(unittest.TestCase):
     _init_config = {
@@ -23,7 +28,9 @@ class JwkKeystoreTestCase(unittest.TestCase):
         "persist_secret_handler": {
             "module_path": "ecommerce_common.auth.keystore.JWKSFilePersistHandler",
             "init_kwargs": {
-                "filepath": os.path.join(srv_basepath, "./tmp/cache/test/jwks/privkey/current.json"),
+                "filepath": os.path.join(
+                    srv_basepath, "./tmp/cache/test/jwks/privkey/current.json"
+                ),
                 "name": "secret",
                 "expired_after_days": 7,
                 "flush_threshold": 4,
@@ -32,7 +39,9 @@ class JwkKeystoreTestCase(unittest.TestCase):
         "persist_pubkey_handler": {
             "module_path": "ecommerce_common.auth.keystore.JWKSFilePersistHandler",
             "init_kwargs": {
-                "filepath": os.path.join(srv_basepath, "./tmp/cache/test/jwks/pubkey/current.json"),
+                "filepath": os.path.join(
+                    srv_basepath, "./tmp/cache/test/jwks/pubkey/current.json"
+                ),
                 "name": "pubkey",
                 "expired_after_days": 11,
                 "flush_threshold": 4,

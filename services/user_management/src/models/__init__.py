@@ -4,4 +4,3 @@
 # (Django cannot recognize that)
 from .auth import LoginAccount
 from .base import GenericUserProfile, GenericUserAppliedRole, EmailAddress
-

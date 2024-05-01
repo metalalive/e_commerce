@@ -6,7 +6,11 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from ecommerce_common.auth.keystore import JWKSFilePersistHandler
-from ecommerce_common.tests.common import capture_error, _setup_keyfile, _teardown_keyfile
+from ecommerce_common.tests.common import (
+    capture_error,
+    _setup_keyfile,
+    _teardown_keyfile,
+)
 
 
 def _clean_prev_persisted_filedata(**init_kwargs):
@@ -14,17 +18,20 @@ def _clean_prev_persisted_filedata(**init_kwargs):
     init_kwargs.update({"flush_threshold": 9999, "auto_flush": True})
     persist_handler = JWKSFilePersistHandler(**init_kwargs)
     persist_handler.evict_expired_keys(
-         date_limit = today + timedelta(days = persist_handler.max_expired_after_days
-    ))
+        date_limit=today + timedelta(days=persist_handler.max_expired_after_days)
+    )
     persist_handler.flush()
-    assert len(persist_handler) ==  0
+    assert len(persist_handler) == 0
 
 
 srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
 
+
 class FilePersistHandlerTestCase(unittest.TestCase):
     _init_kwargs = {
-        "filepath":  os.path.join(srv_basepath, "./tmp/cache/test/jwks/privkey/current.json"),
+        "filepath": os.path.join(
+            srv_basepath, "./tmp/cache/test/jwks/privkey/current.json"
+        ),
         "name": "test_secret_storage",
         "expired_after_days": 11,
         "max_expired_after_days": 90,

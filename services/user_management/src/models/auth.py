@@ -4,7 +4,12 @@ import logging
 from datetime import datetime, timedelta
 
 from django.contrib import auth
-from django.contrib.auth.models import GroupManager, _user_get_permissions, _user_has_perm, _user_has_module_perms
+from django.contrib.auth.models import (
+    GroupManager,
+    _user_get_permissions,
+    _user_has_perm,
+    _user_has_module_perms,
+)
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
@@ -12,34 +17,43 @@ from django.db.models.constants import LOOKUP_SEP
 from django.utils import timezone as django_timezone
 from django.utils.translation import gettext_lazy as _
 
-from rest_framework.settings    import api_settings
-from rest_framework.exceptions  import PermissionDenied
+from rest_framework.settings import api_settings
+from rest_framework.exceptions import PermissionDenied
 
 # from project codebase
 from ecommerce_common.models.mixins import MinimumInfoMixin
-from ecommerce_common.models.constants  import  ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from ecommerce_common.models.constants import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from .common import _atomicity_fn
 
 _logger = logging.getLogger(__name__)
 # note: many of models here are copied from django.contribs.auth , but I remove some fields which are no longer used
 
+
 class RoleQuerySet(models.QuerySet):
     def get_permissions(self, app_labels):
-        ''' retrieve low-level permission instances from role queryset '''
-        always_fetch_roles = (ROLE_ID_SUPERUSER, ROLE_ID_STAFF,)
+        """retrieve low-level permission instances from role queryset"""
+        always_fetch_roles = (
+            ROLE_ID_SUPERUSER,
+            ROLE_ID_STAFF,
+        )
         always_have_role_ids = models.Q(id__in=always_fetch_roles)
-        rel_field = ['permissions', 'content_type', 'app_label', 'in']
-        optional_role_ids = models.Q(**{LOOKUP_SEP.join(rel_field):app_labels})
+        rel_field = ["permissions", "content_type", "app_label", "in"]
+        optional_role_ids = models.Q(**{LOOKUP_SEP.join(rel_field): app_labels})
         final_condition = always_have_role_ids | optional_role_ids
         role_qset = self.filter(final_condition).distinct()
         perm_cls = self.model.permissions.field.related_model
-        perm_ids = role_qset.annotate(num_perms=models.Count('permissions')).filter(
-                num_perms__gt=0).values_list('permissions', flat=True)
+        perm_ids = (
+            role_qset.annotate(num_perms=models.Count("permissions"))
+            .filter(num_perms__gt=0)
+            .values_list("permissions", flat=True)
+        )
         perm_qset = perm_cls.objects.filter(id__in=perm_ids)
         return perm_qset
 
+
 class RoleManager(GroupManager.from_queryset(RoleQuerySet)):
     pass
+
 
 class Role(models.Model, MinimumInfoMixin):
     # Role-Based Access Control is applied to this project, the name field here are
@@ -47,26 +61,32 @@ class Role(models.Model, MinimumInfoMixin):
     # permission . There should be methods which maintain consistency on this name field
     # between authentication server (this user_management app) and all other resource servers
     # (all other apps implemented in different tech stack)
-    name = models.CharField(_('name'), max_length=100, unique=True)
+    name = models.CharField(_("name"), max_length=100, unique=True)
     # all other resource servers (might be implemented in different tech stack) can
     # add custom low-level permissions to Django's auth.Permission on schema migration,
     # so this authentication server has authorization information about all other apps
     # in this project.
-    permissions = models.ManyToManyField('auth.Permission', verbose_name=_('permissions'), blank=False,)
+    permissions = models.ManyToManyField(
+        "auth.Permission",
+        verbose_name=_("permissions"),
+        blank=False,
+    )
 
     objects = RoleManager()
-    min_info_field_names = ['id','name']
+    min_info_field_names = ["id", "name"]
 
     class Meta:
-        db_table = 'usermgt_role'
-        verbose_name = _('role')
-        verbose_name_plural = _('roles')
+        db_table = "usermgt_role"
+        verbose_name = _("role")
+        verbose_name_plural = _("roles")
 
     def __str__(self):
-        return 'Role ID %s, %s' % (self.id, self.name)
+        return "Role ID %s, %s" % (self.id, self.name)
 
     def natural_key(self):
         return (self.name,)
+
+
 # end of class Role
 
 
@@ -78,47 +98,48 @@ class UserManager(BaseUserManager):
         Create and save a user with the given username, and password.
         """
         if not username:
-            raise ValueError('The given username must be set')
+            raise ValueError("The given username must be set")
         username = self.model.normalize_username(username)
-        user = self.model(username=username,  **extra_fields)
+        user = self.model(username=username, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_user(self, username, password=None, **extra_fields):
-        extra_fields.setdefault('is_staff', False)
-        extra_fields.setdefault('is_superuser', False)
+        extra_fields.setdefault("is_staff", False)
+        extra_fields.setdefault("is_superuser", False)
         return self._create_user(username, password, **extra_fields)
 
     def create_superuser(self, username, password=None, **extra_fields):
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
 
-        if extra_fields.get('is_staff') is not True:
-            raise ValueError('Superuser must have is_staff=True.')
-        if extra_fields.get('is_superuser') is not True:
-            raise ValueError('Superuser must have is_superuser=True.')
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
 
         return self._create_user(username, password, **extra_fields)
 
-    def with_perm(self, perm, is_active=True, include_superusers=True, backend=None, obj=None):
+    def with_perm(
+        self, perm, is_active=True, include_superusers=True, backend=None, obj=None
+    ):
         if backend is None:
             backends = auth._get_backends(return_tuples=True)
             if len(backends) == 1:
                 backend, _ = backends[0]
             else:
                 raise ValueError(
-                    'You have multiple authentication backends configured and '
-                    'therefore must provide the `backend` argument.'
+                    "You have multiple authentication backends configured and "
+                    "therefore must provide the `backend` argument."
                 )
         elif not isinstance(backend, str):
             raise TypeError(
-                'backend must be a dotted import path string (got %r).'
-                % backend
+                "backend must be a dotted import path string (got %r)." % backend
             )
         else:
             backend = auth.load_backend(backend)
-        if hasattr(backend, 'with_perm'):
+        if hasattr(backend, "with_perm"):
             return backend.with_perm(
                 perm,
                 is_active=is_active,
@@ -126,6 +147,8 @@ class UserManager(BaseUserManager):
                 obj=obj,
             )
         return self.none()
+
+
 ## end of class UserManager
 
 
@@ -134,12 +157,13 @@ class PermissionsMixin(models.Model):
     Add the fields and methods necessary to support the Role and low-level Permission
     models using the ModelBackend.
     """
+
     is_superuser = models.BooleanField(
-        _('superuser status'),
+        _("superuser status"),
         default=False,
         help_text=_(
-            'Designates that this user has all permissions without '
-            'explicitly assigning them.'
+            "Designates that this user has all permissions without "
+            "explicitly assigning them."
         ),
     )
     # in this mixin class I remove `groups` and `user_permissions` m2m fields because
@@ -156,7 +180,7 @@ class PermissionsMixin(models.Model):
         Query all available auth backends. If an object is passed in,
         return only permissions matching this object.
         """
-        return _user_get_permissions(self, obj, 'user')
+        return _user_get_permissions(self, obj, "user")
 
     def get_group_permissions(self, obj=None):
         """
@@ -164,10 +188,10 @@ class PermissionsMixin(models.Model):
         groups. Query all available auth backends. If an object is passed in,
         return only permissions matching this object.
         """
-        return _user_get_permissions(self, obj, 'group')
+        return _user_get_permissions(self, obj, "group")
 
     def get_all_permissions(self, obj=None):
-        return _user_get_permissions(self, obj, 'all')
+        return _user_get_permissions(self, obj, "all")
 
     def has_perm(self, perm, obj=None):
         """
@@ -199,6 +223,8 @@ class PermissionsMixin(models.Model):
         if self.is_active and self.is_superuser:
             return True
         return _user_has_module_perms(self, app_label)
+
+
 ## end of class PermissionsMixin
 
 
@@ -209,45 +235,50 @@ class AbstractUser(AbstractBaseUser, PermissionsMixin, MinimumInfoMixin):
 
     Username and password are required. Other fields are optional.
     """
+
     username_validator = UnicodeUsernameValidator()
 
     username = models.CharField(
-        _('username'),
+        _("username"),
         max_length=32,
         unique=True,
-        help_text=_('Required. 64 characters or fewer. Letters, digits and @/./+/-/_ only.'),
+        help_text=_(
+            "Required. 64 characters or fewer. Letters, digits and @/./+/-/_ only."
+        ),
         validators=[username_validator],
         error_messages={
-            'unique': _("A user with that username already exists."),
+            "unique": _("A user with that username already exists."),
         },
     )
     # email, first_name, and last_name fields at here are moved
     # to GenericUserProfile and UserEMailAddress model, since users could have
     # more than one emails
     is_staff = models.BooleanField(
-        _('staff status'),
+        _("staff status"),
         default=False,
-        help_text=_('Designates whether the user can log into this admin site.'),
+        help_text=_("Designates whether the user can log into this admin site."),
     )
     is_active = models.BooleanField(
-        _('active'),
+        _("active"),
         default=True,
         help_text=_(
-            'Designates whether this user should be treated as active. '
-            'Unselect this instead of deleting accounts.'
+            "Designates whether this user should be treated as active. "
+            "Unselect this instead of deleting accounts."
         ),
     )
-    date_joined = models.DateTimeField(_('date joined'), default=django_timezone.now)
-    password_last_updated = models.DateTimeField(_('password last updated'), blank=False, null=False)
+    date_joined = models.DateTimeField(_("date joined"), default=django_timezone.now)
+    password_last_updated = models.DateTimeField(
+        _("password last updated"), blank=False, null=False
+    )
 
     objects = UserManager()
-    min_info_field_names = ['id','username']
+    min_info_field_names = ["id", "username"]
 
-    USERNAME_FIELD = 'username'
+    USERNAME_FIELD = "username"
 
     class Meta:
-        verbose_name = _('user')
-        verbose_name_plural = _('users')
+        verbose_name = _("user")
+        verbose_name_plural = _("users")
         abstract = True
 
     def clean(self):
@@ -270,12 +301,18 @@ class AbstractUser(AbstractBaseUser, PermissionsMixin, MinimumInfoMixin):
 
 class LoginAccount(AbstractUser):
     class Meta(AbstractUser.Meta):
-        db_table = 'login_account'
-        swappable = 'AUTH_USER_MODEL'
+        db_table = "login_account"
+        swappable = "AUTH_USER_MODEL"
+
     # not all registered users in GenericUserProfile can login in to system,
     # e.g. ex-employees, offline customers who never use computer,
-    profile = models.OneToOneField('user_management.GenericUserProfile', db_column='profile',
-                on_delete=models.CASCADE, primary_key=True, related_name='account')
+    profile = models.OneToOneField(
+        "user_management.GenericUserProfile",
+        db_column="profile",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="account",
+    )
 
     def delete(self, *args, **kwargs):
         self.check_admin_exist()
@@ -287,16 +324,29 @@ class LoginAccount(AbstractUser):
         # if other words, there must be at least one admin user (superuser = True) ready for the backend site,
         # (this seems difficult to be achieved by CheckConstraint)
         if account.is_superuser:
-            num_superusers = type(account).objects.filter(is_superuser=True, is_active=True).count()
-            log_args = ['account_id', account.pk, 'profile_id', self.profile.pk, 'num_superusers', num_superusers]
+            num_superusers = (
+                type(account).objects.filter(is_superuser=True, is_active=True).count()
+            )
+            log_args = [
+                "account_id",
+                account.pk,
+                "profile_id",
+                self.profile.pk,
+                "num_superusers",
+                num_superusers,
+            ]
             if num_superusers <= 1:
                 errmsg = "Forbidden to delete/deactivate this account"
-                log_args.extend(['errmsg', errmsg])
+                log_args.extend(["errmsg", errmsg])
                 _logger.warning(None, *log_args)
-                detail = {api_settings.NON_FIELD_ERRORS_KEY: [errmsg],}
-                raise PermissionDenied(detail=detail) ##  SuspiciousOperation
+                detail = {
+                    api_settings.NON_FIELD_ERRORS_KEY: [errmsg],
+                }
+                raise PermissionDenied(detail=detail)  ##  SuspiciousOperation
             else:
                 _logger.info(None, *log_args)
+
+
 ## end of class LoginAccount
 
 
@@ -306,17 +356,26 @@ class UnauthResetAccountRequest(models.Model, MinimumInfoMixin):
     entire token string will NOT stored in database table, instead it stores hashed token for more
     secure approach
     """
+
     class Meta:
         managed = False
-        db_table = 'unauth_reset_account_request'
+        db_table = "unauth_reset_account_request"
 
-    TOKEN_DELIMITER = '-'
+    TOKEN_DELIMITER = "-"
     MAX_TOKEN_VALID_TIME = 600
-    min_info_field_names = ['hashed_token']
+    min_info_field_names = ["hashed_token"]
 
-    email = models.ForeignKey('user_management.EmailAddress', db_column='email', on_delete=models.CASCADE,
-            related_name='rst_account_reqs', null=False, blank=False)
-    hashed_token = models.BinaryField(primary_key=True, max_length=32, blank=True) # note: MySQL will refuse to set unique = True
+    email = models.ForeignKey(
+        "user_management.EmailAddress",
+        db_column="email",
+        on_delete=models.CASCADE,
+        related_name="rst_account_reqs",
+        null=False,
+        blank=False,
+    )
+    hashed_token = models.BinaryField(
+        primary_key=True, max_length=32, blank=True
+    )  # note: MySQL will refuse to set unique = True
     time_created = models.DateTimeField(auto_now_add=True)
 
     @property
@@ -325,7 +384,7 @@ class UnauthResetAccountRequest(models.Model, MinimumInfoMixin):
         t0 = self.time_created
         if t0:
             t0 += timedelta(seconds=self.MAX_TOKEN_VALID_TIME)
-            t1  = django_timezone.now()
+            t1 = django_timezone.now()
             if t0 > t1:
                 result = False
         return result
@@ -342,16 +401,15 @@ class UnauthResetAccountRequest(models.Model, MinimumInfoMixin):
                 result = instance
         except cls.DoesNotExist as e:
             result = None
-        log_args = ['hashed_token', hashed_token, 'result', result]
+        log_args = ["hashed_token", hashed_token, "result", result]
         _logger.info(None, *log_args)
         return result
 
     @classmethod
     def _hash_token(cls, token):
         hashobj = hashlib.sha256()
-        hashobj.update(token.encode('utf-8'))
+        hashobj.update(token.encode("utf-8"))
         return hashobj.digest()
-
 
     def _new_token(self):
         while True:
@@ -363,31 +421,46 @@ class UnauthResetAccountRequest(models.Model, MinimumInfoMixin):
             qset = type(self).objects.filter(hashed_token=hashed_token)
             if not qset.exists():
                 break
-        log_args = ['new_token', token, 'new_hashed_token', hashed_token]
+        log_args = ["new_token", token, "new_hashed_token", hashed_token]
         _logger.debug(None, *log_args)
         return token, hashed_token
 
     @_atomicity_fn()
-    def save(self, force_insert=False, force_update=False, using=None, update_fields=None, **kwargs):
-        assert self.email.user_type.model.lower() == 'genericuserprofile', 'it has to be individual user \
-                requesting account reset, not a group or any other class type'
+    def save(
+        self,
+        force_insert=False,
+        force_update=False,
+        using=None,
+        update_fields=None,
+        **kwargs
+    ):
+        assert (
+            self.email.user_type.model.lower() == "genericuserprofile"
+        ), "it has to be individual user \
+                requesting account reset, not a group or any other class type"
         # always avoid caller from setting token that is NOT cryptographically strong enough .
         if not force_update:
             self._token, self.hashed_token = self._new_token()
         type(self).objects.filter(email=self.email).delete()
-        super().save(force_insert=force_insert, force_update=force_update, using=using,
-                update_fields=update_fields, **kwargs)
+        super().save(
+            force_insert=force_insert,
+            force_update=force_update,
+            using=using,
+            update_fields=update_fields,
+            **kwargs
+        )
         ## update_fields = ['hashed_token', 'time_created']
 
     @property
     def token(self):
-        return  getattr(self, '_token', None)
+        return getattr(self, "_token", None)
 
     @property
     def minimum_info(self):
         out = super().minimum_info
-        extra = {'profile': self.email.user_id, 'email': self.email.addr}
+        extra = {"profile": self.email.user_id, "email": self.email.addr}
         out.update(extra)
         return out
-#### end of  UnauthResetAccountRequest
 
+
+#### end of  UnauthResetAccountRequest
