@@ -1,0 +1,30 @@
+[project]
+name = "store-front"
+version = "0.1.1"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi >= 0.101.1",
+    "SQLAlchemy >= 1.4.49",
+    "setuptools >= 69.5.1",
+] # end of dependencies
+
+[tool.setuptools.package-dir]
+store = "./src"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project.scripts]
+app-create-migrate  = "command:create_migration_setup"
+app-clean-migrate   = "command:clean_migration_setup"
+app-migrate-forward = "command:migrate_forward"
+app-migrate-backward = "command:migrate_backward"
+
+# TODO, find alternative / workaround
+# setuptools does NOT seem to support local dependency, that is
+# dependent package located at another path of the same local file system
+
+[options]
+

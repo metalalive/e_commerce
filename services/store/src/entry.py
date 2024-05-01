@@ -1,12 +1,16 @@
+import os
+from importlib import import_module
+
+app_setting_path = os.environ["APP_SETTINGS"]
+settings = import_module(app_setting_path)
+
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from common.util.python import import_module_string
-from common.cors        import config as cors_cfg
-
-from .settings import common as settings
+from ecommerce_common.util import import_module_string
+from ecommerce_common.cors import config as cors_cfg
 
 _logger = logging.getLogger(__name__)
 
@@ -19,7 +23,7 @@ async def toplvl_lifespan_cb(app:FastAPI):
     https://github.com/tiangolo/fastapi/discussions/9664
     https://github.com/tiangolo/fastapi/pull/9630
     https://github.com/encode/starlette/issues/649
-    https://github.com/encode/starlette/pull/1988 
+    https://github.com/encode/starlette/pull/1988
     """
     fn = import_module_string(dotted_path=settings.INIT_SHARED_CONTEXT_FN)
     shr_ctx = await fn(app)

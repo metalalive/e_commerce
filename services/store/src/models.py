@@ -11,10 +11,10 @@ from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER
 
-from common.models.contact.sqlalchemy import EmailMixin, PhoneMixin, LocationMixin
-from common.models.mixins  import IdGapNumberFinder
+from ecommerce_common.models.contact.sqlalchemy import EmailMixin, PhoneMixin, LocationMixin
+from ecommerce_common.models.mixins  import IdGapNumberFinder
 
-from .settings import common as settings
+from settings.common import _MatCodeOptions
 
 Base = declarative_base()
 
@@ -96,7 +96,7 @@ class QuotaStatisticsMixin:
 
 # note that an organization (e.g. a company) can have several stores (either outlet or online)
 class StoreProfile(Base, QuotaStatisticsMixin):
-    quota_material = settings._MatCodeOptions.MAX_NUM_STORES
+    quota_material = _MatCodeOptions.MAX_NUM_STORES
     __tablename__ = 'store_profile'
 
     id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True, autoincrement=False)
@@ -152,7 +152,7 @@ class TimePeriodValidMixin:
 
 
 class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
-    quota_material = settings._MatCodeOptions.MAX_NUM_STAFF
+    quota_material = _MatCodeOptions.MAX_NUM_STAFF
     __tablename__ = 'store_staff'
     store_id  = Column(MYSQL_INTEGER(unsigned=True), ForeignKey('store_profile.id', ondelete='CASCADE'), primary_key=True)
     # come from GenericUserProfile in user_management app
@@ -164,7 +164,7 @@ class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
 
 
 class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
-    quota_material = settings._MatCodeOptions.MAX_NUM_EMAILS
+    quota_material = _MatCodeOptions.MAX_NUM_EMAILS
     __tablename__ = 'store_email'
     store_id  = Column(MYSQL_INTEGER(unsigned=True), ForeignKey('store_profile.id', ondelete='CASCADE'), primary_key=True)
     seq  = Column(SmallInteger, primary_key=True, default=0, autoincrement=False)
@@ -175,7 +175,7 @@ class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
 
 
 class StorePhone(Base, PhoneMixin, QuotaStatisticsMixin):
-    quota_material = settings._MatCodeOptions.MAX_NUM_PHONES
+    quota_material = _MatCodeOptions.MAX_NUM_PHONES
     __tablename__ = 'store_phone'
     store_id  = Column(MYSQL_INTEGER(unsigned=True), ForeignKey('store_profile.id', ondelete='CASCADE'), primary_key=True)
     seq  = Column(SmallInteger, primary_key=True, default=0, autoincrement=False)
@@ -199,7 +199,7 @@ class SaleableTypeEnum(enum.Enum):
 
 
 class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
-    quota_material = settings._MatCodeOptions.MAX_NUM_PRODUCTS
+    quota_material = _MatCodeOptions.MAX_NUM_PRODUCTS
     __tablename__ = 'store_product_available'
     store_id  = Column(MYSQL_INTEGER(unsigned=True), ForeignKey('store_profile.id', ondelete='CASCADE'), primary_key=True)
     # following 2 fields come from product app

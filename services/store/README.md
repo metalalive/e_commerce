@@ -1,8 +1,22 @@
 # Store-Front service
+## Features
+- manage price of available products for sale
+
+## Pre-requisite
+| software | version | installation/setup guide |
+|-----|-----|-----|
+|Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
+|MariaDB| 11.2.3 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/) |
+|RabbitMQ| 3.2.4 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/rabbitmq_setup.md) |
+|pipenv | 2023.12.1 | [see here](https://pip.pypa.io/en/stable/) |
+|pip| 24.0 | [see here](https://pip.pypa.io/en/stable/) |
+|OpenSSL| 3.1.4 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
+
+
 ## Build
 ### Database Migration
 ```bash
-python3.9 -m  store.command  [subcommand] [args]
+pipenv run python -m  store.command  [subcommand] [args]
 ```
 
 Where `subcommand` could be one of followings :
@@ -13,10 +27,11 @@ Where `subcommand` could be one of followings :
 |`migrate_backward`| `[target-rev-id]` | `[target-rev-id]` is an alphanumeric byte sequence representing revision at previous point of the migration history. <br><br> To downgrade back to initial state `[target-rev-id]` can also be `init`, which removes all created schemas and entire migration folder.<br><br> Example : `python3 -m store.command  migrate_backward  00001` |
 ||||
 
+
 ## Run
 ### Development Server
 ```bash
-APP_SETTINGS="store.settings.development" uvicorn  --host 127.0.0.1 \
+APP_SETTINGS="settings.development" pipenv run uvicorn  --host 127.0.0.1 \
     --port 8011 store.entry:app  >& ./tmp/log/dev/store_app.log &
 ```
 
@@ -24,17 +39,12 @@ APP_SETTINGS="store.settings.development" uvicorn  --host 127.0.0.1 \
 (TODO)
 
 ## Test
-### Unit Test
-```bash
-python3 -m unittest tests.python.util.rpc  -v
-```
-
 ### Integration Test
 ```bash
-APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/models.py
-APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/storeprofile/api.py
-APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/staff.py
-APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/business_hours.py
-APP_SETTINGS="store.settings.test" pytest -v -s --keepdb ./store/tests/products.py
+APP_SETTINGS="settings.test" SERVICE_BASE_PATH="${PWD}/.." pipenv run pytest -v -s --keepdb ./tests/storeprofile/models.py
+APP_SETTINGS="settings.test" SERVICE_BASE_PATH="${PWD}/.." pipenv run pytest -v -s --keepdb ./tests/storeprofile/api.py
+APP_SETTINGS="settings.test" pipenv run pytest -v -s --keepdb ./tests/staff.py
+APP_SETTINGS="settings.test" pipenv run pytest -v -s --keepdb ./tests/business_hours.py
+APP_SETTINGS="settings.test" pipenv run pytest -v -s --keepdb ./tests/products.py
 ```
 
