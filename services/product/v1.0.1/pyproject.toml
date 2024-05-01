@@ -12,7 +12,6 @@ celery = "^5.4.0"
 daphne = "3.0.1"
 Django = "3.1.8" # TODO, upgrade to 5.0 , or switch to FastAPI + SQLAlchemy
 djangorestframework = "3.11.2"
-elasticsearch = "5.5.3"
 ijson = "3.1.4"
 mock = "4.0.3"
 mysqlclient = "1.4.6"
