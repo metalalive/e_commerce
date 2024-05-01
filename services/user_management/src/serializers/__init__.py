@@ -19,7 +19,6 @@ from rest_framework.settings    import api_settings
 from ecommerce_common.serializers         import  BulkUpdateListSerializer, ExtendedModelSerializer, DjangoBaseClosureBulkSerializer
 from ecommerce_common.serializers.mixins  import  BaseClosureNodeMixin
 from ecommerce_common.models.enums.base          import  ActivationStatus
-from ecommerce_common.util.async_tasks    import  sendmail as async_send_mail
 
 from ..async_tasks import update_accounts_privilege
 from ..models.common import AppCodeOptions

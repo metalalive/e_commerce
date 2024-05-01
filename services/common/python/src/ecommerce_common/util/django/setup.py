@@ -31,13 +31,6 @@ def setup_secrets(secrets_path, module_path, portal_type, interface_type):
     if getattr(_module, "SECRET_KEY", None) is None:
         key = secrets["secret_key"][portal_type][interface_type]
         setattr(_module, "SECRET_KEY", key)
-    # part of SMTP server setup requires to read from secrets file
-    if getattr(_module, "EMAIL_HOST_PASSWORD", None) is None:
-        if secrets.get("smtp", None):
-            setattr(_module, "EMAIL_HOST", secrets["smtp"]["host"])
-            setattr(_module, "EMAIL_PORT", secrets["smtp"]["port"])
-            setattr(_module, "EMAIL_HOST_USER", secrets["smtp"]["username"])
-            setattr(_module, "EMAIL_HOST_PASSWORD", secrets["smtp"]["password"])
     # database
     for key, setup in _module.DATABASES.items():
         if setup.get("PASSWORD", None):

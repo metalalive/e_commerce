@@ -19,8 +19,7 @@ python -c "from c_exts.util import keygen"
 ```bash
 cd ./services/common/python
 
-DJANGO_SETTINGS_MODULE="ecommerce_common.util.django.internal_settings" \
-    SERVICE_BASE_PATH="${PWD}/../.."  poetry run  celery --workdir ./src \
+SERVICE_BASE_PATH="${PWD}/../.."  poetry run  celery --workdir ./src \
     --app=ecommerce_common.util  --config=ecommerce_common.util.celeryconfig \
     worker --loglevel=INFO  -n common@%h  --concurrency=2 \
     --logfile=./tmp/log/dev/common_celery.log   -E \

@@ -16,6 +16,7 @@ from rest_framework.exceptions  import ValidationError as RestValidationError, E
 
 from ecommerce_common.util.async_tasks  import sendmail as async_send_mail
 
+from ..util import render_mail_content
 from ..models.base import _atomicity_fn, GenericUserProfile
 from ..models.auth import UnauthResetAccountRequest
 
@@ -84,9 +85,16 @@ class UnauthRstAccountReqSerializer(ModelSerializer):
         }
         to_addr = mail_ref.addr
         from_addr = django_settings.DEFAULT_FROM_EMAIL
-        result = async_send_mail.delay(to_addrs=[to_addr], from_addr=from_addr,
-                    subject_template=self._subject_template, subject_data=subject_data,
-                    msg_template_path=self._msg_template_path,  msg_data=msg_data, )
+        content, subject = render_mail_content(
+            msg_template_path = self._msg_template_path,
+            msg_data = msg_data,
+            subject_template_path = self._subject_template,
+            subject_data = subject_data
+        )
+        result = async_send_mail.delay(
+            to_addrs=[to_addr], from_addr=from_addr,
+            subject=subject, content=content
+        )
         if not hasattr(self, '_async_tasks_id'):
             self._async_tasks_id = {}
         self._async_tasks_id[mail_ref.id] = result.task_id
@@ -275,19 +283,23 @@ class  LoginAccountSerializer(Serializer):
     def _mailing(self, profile, mail_ref, username):
         event_time = django_timezone.now()
         masked_username = username[:3]
-        msg_data = {'first_name': profile.first_name, 'last_name': profile.last_name,
+        msg_data = {
+            'first_name': profile.first_name, 'last_name': profile.last_name,
             'event_time': event_time, 'masked_username': masked_username,
         }
         to_addr = mail_ref.addr
         from_addr = django_settings.DEFAULT_FROM_EMAIL
 
-        result = async_send_mail.delay(to_addrs=[to_addr], from_addr=from_addr,
-                    subject_template=self._mail_kwargs['subject_template'],
-                    msg_template_path=self._mail_kwargs['msg_template_path'],
-                    msg_data=msg_data, )
+        content, subject = render_mail_content(
+            msg_template_path = self._mail_kwargs['msg_template_path'],
+            msg_data = msg_data,
+            subject_template_path = self._mail_kwargs['subject_template'],
+        )
+        result = async_send_mail.delay(
+            to_addrs=[to_addr], from_addr=from_addr,
+            subject=subject, content=content,
+        )
         if not hasattr(self, '_async_tasks_id'):
             self._async_tasks_id = {}
         self._async_tasks_id[profile.pk] = result.task_id
 #### end of LoginAccountSerializer
-
-

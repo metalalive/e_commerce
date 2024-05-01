@@ -6,7 +6,7 @@ curr_path = os.path.dirname(os.path.realpath(__file__))
 curr_path = pathlib.Path(curr_path)
 
 
-def _ensure_dst_path(dst_path:str) -> str:
+def _ensure_dst_path(dst_path: str) -> str:
     migration_path = "/".join([dst_path, "migrations"])
     if not os.path.exists(migration_path):
         os.mkdir(migration_path)
@@ -17,7 +17,7 @@ def _ensure_dst_path(dst_path:str) -> str:
     ##    raise FileExistsError(err_msg)
 
 
-def auto_deploy(label:str, dst_path:str):
+def auto_deploy(label: str, dst_path: str):
     dst_path = _ensure_dst_path(dst_path)
     src_path = curr_path.joinpath(label)
     for file_ in src_path.iterdir():

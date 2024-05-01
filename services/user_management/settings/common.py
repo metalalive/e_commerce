@@ -400,8 +400,6 @@ REST_FRAMEWORK = {
 
 # mailing function setup
 DEFAULT_FROM_EMAIL = 'system@yourproject.io'
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_USE_TLS = True
 
 setup_secrets(
     secrets_path=os.path.join(BASE_DIR, "common/data/secrets.json"),

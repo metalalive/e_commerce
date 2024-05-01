@@ -3,7 +3,8 @@ import copy
 from datetime import timedelta
 from unittest.mock import Mock, patch
 
-from django.test import TransactionTestCase
+from django.conf  import settings as django_settings
+from django.test  import TransactionTestCase
 from django.utils import timezone as django_timezone
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -18,6 +19,8 @@ from user_management.serializers.auth import UnauthRstAccountReqSerializer, Logi
 from tests.common import  _fixtures, gen_expiry_time
 
 non_field_err_key = drf_settings.NON_FIELD_ERRORS_KEY
+
+MAIL_DATA_BASEPATH = django_settings.BASE_DIR.joinpath('user_management/data/mail')
 
 class BaseTestCase(TransactionTestCase):
     def setUp(self):
@@ -45,8 +48,8 @@ class AccountCreationRequestTestCase(BaseTestCase):
         url_resource = 'account/create'
         self.expect_url_pattern = '/'.join([url_host, url_resource, '%s'])
         self.serializer_kwargs = {
-            'msg_template_path': 'user_management/data/mail/body/user_activation_link_send.html',
-            'subject_template' : 'user_management/data/mail/subject/user_activation_link_send.txt',
+            'msg_template_path': MAIL_DATA_BASEPATH.joinpath('body/user_activation_link_send.html'),
+            'subject_template' : MAIL_DATA_BASEPATH.joinpath('subject/user_activation_link_send.txt'),
             'url_host': url_host, 'many':True, 'data':None,
             'url_resource': url_resource, # for account activation web page
         }
@@ -126,8 +129,8 @@ class LoginAccountCreationTestCase(BaseTestCase):
         rst_req = UnauthRstAccountReqSerializer.Meta.model.objects.create(email=profile.emails.first())
         self.serializer_kwargs = {
             'mail_kwargs': {
-                'msg_template_path': 'user_management/data/mail/body/user_activated.html',
-                'subject_template' : 'user_management/data/mail/subject/user_activated.txt',
+                'msg_template_path': MAIL_DATA_BASEPATH.joinpath('body/user_activated.html'),
+                'subject_template' : MAIL_DATA_BASEPATH.joinpath('subject/user_activated.txt'),
             },
             'passwd_required':True, 'confirm_passwd': True, 'uname_required': True,
             'account': None, 'rst_req': rst_req, 'many': False,
@@ -221,8 +224,8 @@ class UnauthResetPasswordTestCase(BaseTestCase):
         rst_req = UnauthRstAccountReqSerializer.Meta.model.objects.create(email=profile.emails.first())
         self.serializer_kwargs = {
             'mail_kwargs': {
-                'msg_template_path': 'user_management/data/mail/body/unauth_passwd_reset.html',
-                'subject_template' : 'user_management/data/mail/subject/unauth_passwd_reset.txt',
+                'msg_template_path': MAIL_DATA_BASEPATH.joinpath('body/unauth_passwd_reset.html'),
+                'subject_template' : MAIL_DATA_BASEPATH.joinpath('subject/unauth_passwd_reset.txt'),
             },
             'data': None, 'passwd_required':True, 'confirm_passwd': True,
             'account': profile.account, 'rst_req': rst_req, 'many': False,

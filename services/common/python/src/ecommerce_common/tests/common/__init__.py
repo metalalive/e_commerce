@@ -7,7 +7,10 @@ from datetime import datetime, timedelta
 from functools import partial, reduce
 
 from ecommerce_common.util import ExtendedList, import_module_string
-from ecommerce_common.auth.keystore import create_keystore_helper, JWKSFilePersistHandler
+from ecommerce_common.auth.keystore import (
+    create_keystore_helper,
+    JWKSFilePersistHandler,
+)
 
 
 def rand_gen_request_body(customize_item_fn, data_gen, template=None):

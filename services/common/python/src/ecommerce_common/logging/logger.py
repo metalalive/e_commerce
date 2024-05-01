@@ -1,7 +1,4 @@
-import os
-import logging
-import threading
-from copy import copy, deepcopy
+import os, logging, threading
 
 _lock = threading.RLock()
 

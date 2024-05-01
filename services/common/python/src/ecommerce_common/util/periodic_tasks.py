@@ -31,4 +31,3 @@ def clean_old_log_localhost(max_days_keep=100):
 
 ## TODO, for logging data, replace elasticsearch with one of the alternatives :
 ## OpenSearch, MeiliSerach, Typesense
-

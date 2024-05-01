@@ -1,2 +1,3 @@
 SERVICE_BASE_PATH="${PWD}/../.."  poetry run python -m unittest  tests.rpc -v
+SERVICE_BASE_PATH="${PWD}/../.."   poetry run python -m unittest  tests.mail  -v
 poetry run python -m unittest  tests.graph -v

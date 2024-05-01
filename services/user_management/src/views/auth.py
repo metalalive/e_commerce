@@ -37,11 +37,13 @@ from ..serializers import PermissionSerializer
 from ..serializers.auth import UnauthRstAccountReqSerializer, LoginAccountSerializer
 from ..serializers.common import serialize_profile_quota, serialize_profile_permissions
 from ..permissions import ModelLvlPermsPermissions
+from ..util import render_mail_content
 from .common    import check_auth_req_token, get_profile_by_email
 from .constants import WEB_HOST
 
 _logger = logging.getLogger(__name__)
 
+MAIL_DATA_BASEPATH = django_settings.BASE_DIR.joinpath('user_management/data/mail')
 
 class PermissionView(AuthCommonAPIReadView):
     """
@@ -77,8 +79,8 @@ class LoginAccountCreateView(APIView, UserEditViewLogMixin):
         else:
             serializer_kwargs = {
                 'mail_kwargs': {
-                    'msg_template_path': 'user_management/data/mail/body/user_activated.html',
-                    'subject_template' : 'user_management/data/mail/subject/user_activated.txt',
+                    'msg_template_path': MAIL_DATA_BASEPATH.joinpath('body/user_activated.html'),
+                    'subject_template' : MAIL_DATA_BASEPATH.joinpath('subject/user_activated.txt'),
                 },
                 'data': request.data, 'passwd_required':True, 'confirm_passwd': True, 'uname_required': True,
                 'account': None, 'rst_req': rst_req,  'many': False,
@@ -114,13 +116,14 @@ class UsernameRecoveryRequestView(APIView, UserEditViewLogMixin):
         # so username can be sent directly to user mailbox. TODO: how to handle it if it's PII ?
         msg_data = {'first_name': profile.first_name, 'last_name': profile.last_name,
                 'username': account.username, 'request_time': datetime.now(timezone.utc), }
-        msg_template_path = 'user_management/data/mail/body/username_recovery.html'
-        subject_template  = 'user_management/data/mail/subject/username_recovery.txt'
-        to_addr = email.addr
-        from_addr = django_settings.DEFAULT_FROM_EMAIL
+        content, subject = render_mail_content(
+            msg_template_path = MAIL_DATA_BASEPATH.joinpath('body/username_recovery.html'),
+            subject_template_path = MAIL_DATA_BASEPATH.joinpath('subject/username_recovery.txt'),
+            msg_data = msg_data,
+        )
         task_kwargs = {
-            'to_addrs': [to_addr], 'from_addr':from_addr, 'msg_data':msg_data,
-            'subject_template': subject_template, 'msg_template_path':msg_template_path,
+            'to_addrs': [email.addr], 'from_addr':django_settings.DEFAULT_FROM_EMAIL,
+            'content': content, 'subject': subject,
         }
         # Do not return result backend or task ID to unauthorized frontend user.
         # Log errors raising in async task
@@ -147,8 +150,8 @@ class UnauthPasswordResetRequestView(LimitQuerySetMixin, GenericAPIView, BulkCre
         resource_path = UserMgtCfg.api_url[UnauthPasswordResetView.__name__].split('/')
         resource_path.pop() # last one should be <slug:token>
         serializer_kwargs = {
-            'msg_template_path': 'user_management/data/mail/body/passwd_reset_request.html',
-            'subject_template' : 'user_management/data/mail/subject/passwd_reset_request.txt',
+            'msg_template_path': MAIL_DATA_BASEPATH.joinpath('body/passwd_reset_request.html'),
+            'subject_template' : MAIL_DATA_BASEPATH.joinpath('subject/passwd_reset_request.txt'),
             'url_host': WEB_HOST,  'url_resource':'/'.join(resource_path),
         }
         err_args = ["url_host", serializer_kwargs['url_host']]
@@ -182,8 +185,8 @@ class UnauthPasswordResetView(APIView, UserEditViewLogMixin):
         if account and account.is_active:
             serializer_kwargs = {
                 'mail_kwargs': {
-                    'msg_template_path': 'user_management/data/mail/body/unauth_passwd_reset.html',
-                    'subject_template' : 'user_management/data/mail/subject/unauth_passwd_reset.txt',
+                    'msg_template_path': MAIL_DATA_BASEPATH.joinpath('body/unauth_passwd_reset.html'),
+                    'subject_template' : MAIL_DATA_BASEPATH.joinpath('subject/unauth_passwd_reset.txt'),
                 },
                 'data': request.data, 'passwd_required':True,  'confirm_passwd': True,
                 'account': account, 'rst_req': rst_req,  'many': False,

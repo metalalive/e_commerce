@@ -48,6 +48,8 @@ from .constants import  _PRESERVED_ROLE_IDS, MAX_NUM_FORM, WEB_HOST
 #   after parsing logging configuration at settings.py
 _logger = logging.getLogger(__name__)
 
+MAIL_DATA_BASEPATH = django_settings.BASE_DIR.joinpath('user_management/data/mail')
+
 
 class RoleAPIView(AuthCommonAPIView):
     serializer_class = RoleSerializer
@@ -240,8 +242,8 @@ class AccountActivationView(AuthCommonAPIView):
         kwargs['status_ok'] = RestStatus.HTTP_202_ACCEPTED
         kwargs['pk_src'] =  LimitQuerySetMixin.REQ_SRC_BODY_DATA
         kwargs['serializer_kwargs'] = {
-            'msg_template_path': 'user_management/data/mail/body/user_activation_link_send.html',
-            'subject_template' : 'user_management/data/mail/subject/user_activation_link_send.txt',
+            'msg_template_path': MAIL_DATA_BASEPATH.joinpath('body/user_activation_link_send.html'),
+            'subject_template' : MAIL_DATA_BASEPATH.joinpath('subject/user_activation_link_send.txt'),
             'url_host': WEB_HOST,
             'url_resource':'/'.join(resource_path),
         }

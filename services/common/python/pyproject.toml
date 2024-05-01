@@ -15,10 +15,6 @@ python = "^3.12"
 python-logstash-async = "2.5.0"
 celery = "^5.4.0"
 
-# Django is used ONLY for sending e-mail, 
-# TODO, replace Django with `smtplib` in standard library
-Django = "^3.1.8"
-
 [tool.poetry.group.dev.dependencies]
 build = "^1.2.1"
 black = "^24.4.0"

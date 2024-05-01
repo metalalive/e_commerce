@@ -1,73 +1,84 @@
-import unicodedata
-import logging
-
-from django.core import mail
-from django.template import Template, Context
-from django.utils.html import strip_tags
+import logging, json, os, ssl, smtplib, email
+from typing import List, Dict, Optional
+from pathlib import Path
 
 from .celery import app as celery_app
 from ecommerce_common.logging.util import log_fn_wrapper
 
 _logger = logging.getLogger(__name__)
 
+srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
 
-def remove_control_characters(str_in):
-    return "".join(c for c in str_in if unicodedata.category(c)[0] != "C")
+
+def send_email(
+    secret: Dict[str, str],
+    subject: str,
+    body: str,
+    sender: str,
+    recipients: List[str],
+    attachment_paths: List[str],
+):
+    assert secret.get("password"), "missing password"
+    mml = email.message.EmailMessage()
+    mml.set_content(body)
+    mml["From"] = sender
+    mml["To"] = ", ".join(recipients)
+    mml["Subject"] = subject
+    for att_path in attachment_paths:
+        with open(att_path, "rb") as f:
+            content = f.read()
+            mml.add_attachment(content, maintype="application", subtype="octet-stream")
+    # do not use SMTP_SSL
+    with smtplib.SMTP(host=secret["host"], port=secret["port"]) as hdlr:
+        if secret.get("cert_path"):
+            cert_fullpath = Path(secret["cert_path"]).resolve(strict=True)
+            assert cert_fullpath.exists(), "cert specified not exists"
+            assert cert_fullpath.is_file(), "cert path specified has to be a file"
+            sslctx = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
+            sslctx.verify_mode = ssl.CERT_REQUIRED
+            assert sslctx.verify_mode == ssl.CERT_REQUIRED
+            sslctx.load_verify_locations(cafile=cert_fullpath)
+        else:  # cert should be located in OS default path
+            sslctx = None
+        hdlr.starttls(context=sslctx)
+        hdlr.login(secret["username"], secret["password"])
+        hdlr.sendmail(sender, recipients, mml.as_string())
+    ## the context manager will close the socket automatically on exit
+    ## instead of manually calling `hdlr.sock.close()`
+
+
+# end of send_email
 
 
 @celery_app.task(bind=True, queue="mailing", routing_key="mail.defualt")
 @log_fn_wrapper(logger=_logger, loglevel=logging.INFO)
 def sendmail(
     self,
-    to_addrs,
-    from_addr,
-    msg_template_path,
-    msg_data,
-    subject_template,
-    subject_data=None,
-    attachment_paths=None,
+    to_addrs: List[str],
+    from_addr: str,
+    subject: str,
+    content: str,
+    attachment_paths: Optional[List[str]] = None,
 ):
-    # TODO, replace Django with `smtplib` in standard library
-    assert isinstance(to_addrs, list), "to_addrs %s must be list type" % to_addrs
-    tsk_instance = self
-    msg_html = None
-    subject = None
-    with open(
-        subject_template, "r"
-    ) as f:  # load template files, render with given data
-        subject = f.readline()
-    with open(msg_template_path, "r") as f:
-        msg_html = f.read()
-    assert subject, "Error occured on reading file %s" % subject_template
-    assert msg_html, "Error occured on reading file %s" % msg_template_path
-    subject_data = subject_data or {}
-    subject = remove_control_characters(subject)
-    subject = subject.format(**subject_data)
-    template = Template(msg_html)
-    context = Context(msg_data)
-    msg_html = template.render(context)
-    msg_plaintext = strip_tags(msg_html)
-    mailobj = mail.message.EmailMultiAlternatives(
-        subject=subject,
-        body=msg_plaintext,
-        from_email=from_addr,
-        to=to_addrs,
-    )
-    mailobj.attach_alternative(msg_html, "text/html")
-    if attachment_paths:
-        for path, mimetype in attachment_paths:
-            mailobj.attach_file(path=path, mimetype=mimetype)
+    # TODO, connection pool for SMTP whenever necessary
+    secret = None
+    secrets_path = srv_basepath.joinpath("common/data/secrets.json")
+    with open(secrets_path, "r") as f:
+        d = json.load(f)
+        secret = d["backend_apps"]["smtp"]
+        cert_relative_path = secret.get("cert_path")
+        if cert_relative_path:
+            fullpath = srv_basepath.joinpath(cert_relative_path)
+            secret["cert_path"] = fullpath
+    assert secret, "failed to load SMTP configuration"
 
+    tsk_instance = self
     log_args = [
         "to_addrs",
         to_addrs,
         "from_addr",
         from_addr,
-        "subject_template",
-        subject_template,
-        "msg_template_path",
-        msg_template_path,
-        "renderred_subject",
+        "subject",
         subject,
         "task_req_id",
         tsk_instance.request.id,
@@ -75,9 +86,14 @@ def sendmail(
         tsk_instance.request.expires,
     ]
     _logger.debug(None, *log_args)
-    result = mailobj.send()
-    # TODO, implement error handler for network error, e.g. backup and send at later time ?
-    return result
+    send_email(
+        secret=secret,
+        subject=subject,
+        body=content,
+        sender=from_addr,
+        recipients=to_addrs,
+        attachment_paths=attachment_paths or [],
+    )
 
 
 @celery_app.task
