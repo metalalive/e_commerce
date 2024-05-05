@@ -1,33 +1,35 @@
 import random
 import string
-from datetime import time, datetime, timedelta
+from datetime import time, datetime, timedelta, UTC
 
 import pytest
 from sqlalchemy.orm import Session
 from mariadb.constants.CLIENT import MULTI_STATEMENTS
-
 from fastapi.testclient import TestClient
 
-from common.models.db import sqlalchemy_init_engine
-from common.models.contact.sqlalchemy import CountryCodeEnum
-from common.util.python import import_module_string
+# load the setting module first, to ensure all environment variables
+# are properly set
+from settings import test as ts_settings
 
-from tests.python.common import KeystoreMixin
-from tests.python.common.sqlalchemy import init_test_database, deinit_test_database, clean_test_data
+from ecommerce_common.models.db import sqlalchemy_init_engine
+from ecommerce_common.models.contact.sqlalchemy import CountryCodeEnum
+from ecommerce_common.util import import_module_string
+
+from ecommerce_common.tests.common import KeystoreMixin
+from ecommerce_common.tests.common.sqlalchemy import init_test_database, deinit_test_database, clean_test_data
 
 from store.entry import app
-from store.settings import test as settings
 from store.models import EnumWeekDay, SaleableTypeEnum, AppIdGapNumberFinder
 from store.models import StoreProfile, StoreEmail, StorePhone, OutletLocation, HourOfOperation, StoreStaff, StoreProductAvailable
 
 
-metadata_objs = list(map(lambda path: import_module_string(dotted_path=path).metadata , settings.ORM_BASE_CLASSES))
+metadata_objs = list(map(lambda path: import_module_string(dotted_path=path).metadata , ts_settings.ORM_BASE_CLASSES))
 
 class _Keystore(KeystoreMixin):
     _keystore_init_config = {
-        'keystore': settings.KEYSTORE['keystore'],
-        'persist_secret_handler': settings.KEYSTORE['persist_secret_handler_test'],
-        'persist_pubkey_handler': settings.KEYSTORE['persist_pubkey_handler_test'],
+        'keystore': ts_settings.KEYSTORE['keystore'],
+        'persist_secret_handler': ts_settings.KEYSTORE['persist_secret_handler_test'],
+        'persist_pubkey_handler': ts_settings.KEYSTORE['persist_pubkey_handler_test'],
     }
 
 
@@ -45,14 +47,14 @@ def keystore():
 def db_engine_resource(request):
     # base setup / teardown for creating or deleting database and apply migration
     default_dbs_engine = sqlalchemy_init_engine(
-            secrets_file_path=settings.SECRETS_FILE_PATH, base_folder=settings.SYS_BASE_PATH,
-            secret_map=(settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % settings.DB_USER_ALIAS),
-            driver_label=settings.DRIVER_LABEL
+            secrets_file_path=ts_settings.SECRETS_FILE_PATH, base_folder=ts_settings.SYS_BASE_PATH,
+            secret_map=(ts_settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % ts_settings.DB_USER_ALIAS),
+            driver_label=ts_settings.DRIVER_LABEL
         ) # without specifying database name
     default_db_engine =  sqlalchemy_init_engine(
-            secrets_file_path=settings.SECRETS_FILE_PATH, base_folder=settings.SYS_BASE_PATH,
-            secret_map=(settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % settings.DB_USER_ALIAS),
-            driver_label=settings.DRIVER_LABEL,  db_name=settings.DB_NAME,
+            secrets_file_path=ts_settings.SECRETS_FILE_PATH, base_folder=ts_settings.SYS_BASE_PATH,
+            secret_map=(ts_settings.DB_USER_ALIAS, 'backend_apps.databases.%s' % ts_settings.DB_USER_ALIAS),
+            driver_label=ts_settings.DRIVER_LABEL,  db_name=ts_settings.DB_NAME,
             # TODO, for development and production environment, use configurable parameter
             # to optionally set multi_statement for the API endpoints that require to run
             # multiple SQL statements in one go.
@@ -63,8 +65,8 @@ def db_engine_resource(request):
         'dbs_engine':default_dbs_engine, 'db_engine':default_db_engine,
         'metadata_objs':metadata_objs, 'keepdb':keepdb
     }
-    kwargs['createdb_sql'] = 'CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin' % settings.DB_NAME
-    kwargs['dropdb_sql'] = 'DROP DATABASE IF EXISTS `%s`' % settings.DB_NAME
+    kwargs['createdb_sql'] = 'CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin' % ts_settings.DB_NAME
+    kwargs['dropdb_sql'] = 'DROP DATABASE IF EXISTS `%s`' % ts_settings.DB_NAME
     init_test_database(**kwargs)
     yield default_db_engine
     kwargs.pop('createdb_sql', None)
@@ -190,7 +192,7 @@ def opendays_data():
 def _gen_time_period():
     start_minute = random.randrange(2, 100)
     day_length = random.randrange(365)
-    start_after = datetime.utcnow().replace(microsecond=0)
+    start_after = datetime.now(UTC).replace(microsecond=0)
     start_after += timedelta(minutes=start_minute)
     end_before = start_after + timedelta(days=day_length)
     return start_after.astimezone(), end_before.astimezone()
@@ -235,9 +237,9 @@ def product_avail_data():
 
 @pytest.fixture(scope='session')
 def test_client():
-    # _client = TestClient(app=app, base_url=settings.APP_HOST, raise_server_exceptions=True)
+    # _client = TestClient(app=app, base_url=ts_settings.APP_HOST, raise_server_exceptions=True)
     # yield  _client
-    with TestClient(app=app, base_url=settings.APP_HOST,
+    with TestClient(app=app, base_url=ts_settings.APP_HOST,
             raise_server_exceptions=True) as _client :
         yield  _client
 

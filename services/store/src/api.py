@@ -9,9 +9,9 @@ from pydantic import PositiveInt
 from sqlalchemy import delete as SqlAlDelete, select as SqlAlSelect, or_ as SqlAlOr, and_ as SqlAlAnd
 from sqlalchemy.orm import Session
 
-from common.auth.fastapi import base_authentication, base_permission_check
-from common.models.constants  import ROLE_ID_SUPERUSER
-from common.models.enums.base import AppCodeOptions
+from ecommerce_common.auth.fastapi import base_authentication, base_permission_check
+from ecommerce_common.models.constants  import ROLE_ID_SUPERUSER
+from ecommerce_common.models.enums.base import AppCodeOptions
 
 from .models import StoreProfile, StoreEmail, StorePhone, OutletLocation, StoreStaff, HourOfOperation, SaleableTypeEnum, StoreProductAvailable
 from .shared import shared_ctx
@@ -69,7 +69,7 @@ delete_profile_authorization = Authorization(app_code=app_code, perm_codes=['vie
 edit_products_authorization = Authorization(app_code=app_code, perm_codes=['add_storeproductavailable', 'change_storeproductavailable', 'delete_storeproductavailable'])
 
 
-def _store_existence_validity(session, store_id:PositiveInt):
+def _storefront_existence_validity(session, store_id:PositiveInt):
     query = session.query(StoreProfile).filter(StoreProfile.id == store_id)
     saved_obj = query.first()
     if not saved_obj:
@@ -78,16 +78,16 @@ def _store_existence_validity(session, store_id:PositiveInt):
     return saved_obj
 
 
-def _store_supervisor_validity(session, store_id:PositiveInt, usr_auth:dict):
-    saved_obj = _store_existence_validity(session, store_id)
+def _storefront_supervisor_validity(session, store_id:PositiveInt, usr_auth:dict):
+    saved_obj = _storefront_existence_validity(session, store_id)
     if usr_auth['priv_status'] != ROLE_ID_SUPERUSER and saved_obj.supervisor_id != usr_auth['profile']:
         raise FastApiHTTPException( detail='Not allowed to edit the store profile',  headers={},
                 status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
     return saved_obj
 
 
-def _store_staff_validity(session, store_id:PositiveInt, usr_auth:dict):
-    saved_obj = _store_existence_validity(session, store_id)
+def _storefront_staff_validity(session, store_id:PositiveInt, usr_auth:dict):
+    saved_obj = _storefront_existence_validity(session, store_id)
     valid_staff_ids = list(map(lambda o:o.staff_id, saved_obj.staff))
     valid_staff_ids.append(saved_obj.supervisor_id)
     if usr_auth['profile'] not in valid_staff_ids:
@@ -98,7 +98,7 @@ def _store_staff_validity(session, store_id:PositiveInt, usr_auth:dict):
 
 @router.post('/profiles', status_code=FastApiHTTPstatus.HTTP_201_CREATED, response_model=List[StoreProfileResponseBody])
 def add_profiles(request:NewStoreProfilesReqBody, user:dict=FastapiDepends(add_profile_authorization)):
-    sa_new_stores = request.metadata['sa_new_stores']
+    sa_new_stores = request._storeprofile_quota_check(shared_ctx['db_engine'])
     with shared_ctx['db_engine'].connect() as conn:
         with Session(bind=conn) as session:
             StoreProfile.bulk_insert(objs=sa_new_stores, session=session)
@@ -124,16 +124,16 @@ def edit_profile(store_id:PositiveInt, request:ExistingStoreProfileReqBody, user
         raise FastApiHTTPException( detail={'phones':[err_msg]},  headers={}, status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN )
     # TODO, figure out better way to authorize with database connection
     with Session(bind=shared_ctx['db_engine']) as session:
-        saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
+        saved_obj = _storefront_supervisor_validity(session, store_id, usr_auth=user)
         # perform update
         saved_obj.label  = request.label
         saved_obj.active = request.active
         saved_obj.emails.clear()
         saved_obj.phones.clear()
-        saved_obj.emails.extend( list(map(lambda d:StoreEmail(**d.dict()), request.emails)) )
-        saved_obj.phones.extend( list(map(lambda d:StorePhone(**d.dict()), request.phones)) )
+        saved_obj.emails.extend( list(map(lambda d:StoreEmail(**d.model_dump()), request.emails)) )
+        saved_obj.phones.extend( list(map(lambda d:StorePhone(**d.model_dump()), request.phones)) )
         if request.location:
-            saved_obj.location = OutletLocation(**request.location.dict())
+            saved_obj.location = OutletLocation(**request.location.model_dump())
         else:
             saved_obj.location = None
         session.commit()
@@ -145,7 +145,7 @@ def edit_profile(store_id:PositiveInt, request:ExistingStoreProfileReqBody, user
 def switch_supervisor(store_id:PositiveInt, request:StoreSupervisorReqBody, user:dict=FastapiDepends(switch_supervisor_authorization)):
     db_engine = request.metadata['db_engine']
     with Session(bind=db_engine) as session:
-        saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
+        saved_obj = _storefront_supervisor_validity(session, store_id, usr_auth=user)
         saved_obj.supervisor_id = request.supervisor_id
         session.commit()
     return None
@@ -180,14 +180,14 @@ def edit_staff(store_id:PositiveInt, request:StoreStaffsReqBody, \
         user:dict=FastapiDepends(edit_profile_authorization)):
     request.validate_staff(supervisor_id=user['profile'])
     with Session(bind=shared_ctx['db_engine']) as session:
-        saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
-        staff_ids = list(map(lambda d: d.staff_id, request.__root__))
+        saved_obj = _storefront_supervisor_validity(session, store_id, usr_auth=user)
+        staff_ids = list(map(lambda d: d.staff_id, request.root))
         stmt = SqlAlSelect(StoreStaff).where(StoreStaff.store_id == saved_obj.id) \
                 .where(StoreStaff.staff_id.in_(staff_ids))
         result = session.execute(stmt)
         def _do_update(raw):
             saved_staff = raw[0]
-            newdata = filter(lambda d: d.staff_id == saved_staff.staff_id, request.__root__)
+            newdata = filter(lambda d: d.staff_id == saved_staff.staff_id, request.root)
             newdata = next(newdata)
             assert newdata is not None
             saved_staff.staff_id  = newdata.staff_id
@@ -195,8 +195,8 @@ def edit_staff(store_id:PositiveInt, request:StoreStaffsReqBody, \
             saved_staff.end_before  = newdata.end_before
             return saved_staff.staff_id
         updatelist = tuple(map(_do_update, result))
-        newdata = filter(lambda d: d.staff_id not in updatelist, request.__root__)
-        new_staffs = map(lambda d:StoreStaff(**d.dict()), newdata)
+        newdata = filter(lambda d: d.staff_id not in updatelist, request.root)
+        new_staffs = map(lambda d:StoreStaff(**d.model_dump()), newdata)
         saved_obj.staff.extend(new_staffs)
         try:
             session.commit()
@@ -212,8 +212,8 @@ def edit_staff(store_id:PositiveInt, request:StoreStaffsReqBody, \
 def edit_hours_operation(store_id:PositiveInt, request:BusinessHoursDaysReqBody, \
         user:dict=FastapiDepends(edit_profile_authorization)):
     with Session(bind=shared_ctx['db_engine']) as session:
-        saved_obj = _store_supervisor_validity(session, store_id, usr_auth=user)
-        new_time = list(map(lambda d:HourOfOperation(**d.dict()), request.__root__))
+        saved_obj = _storefront_supervisor_validity(session, store_id, usr_auth=user)
+        new_time = list(map(lambda d:HourOfOperation(**d.model_dump()), request.root))
         saved_obj.open_days.clear()
         saved_obj.open_days.extend(new_time)
         session.commit()
@@ -259,11 +259,11 @@ def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, 
         user:dict=FastapiDepends(edit_products_authorization)):
     request.validate_products(staff_id=user['profile'])
     with Session(bind=shared_ctx['db_engine']) as session:
-        saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
+        saved_obj = _storefront_staff_validity(session, store_id, usr_auth=user)
         product_id_cond = map(lambda d: SqlAlAnd(
             StoreProductAvailable.product_type == d.product_type ,
             StoreProductAvailable.product_id == d.product_id )
-            , request.__root__)
+            , request.root)
         find_product_condition = SqlAlOr(*product_id_cond)
         ## Don't use `saved_obj.products` generated by SQLAlchemy legacy Query API
         ## , instead I use `select` function to query relation fields
@@ -273,7 +273,7 @@ def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, 
         updating_products = list(map(lambda p: p[0], session.execute(stmt))) # tuple
         def _do_update(saved_product):
             newdata = filter(lambda d: d.product_type is saved_product.product_type
-                    and d.product_id == saved_product.product_id, request.__root__)
+                    and d.product_id == saved_product.product_id, request.root)
             newdata = next(newdata)
             assert newdata is not None
             saved_product.price = newdata.price
@@ -281,8 +281,8 @@ def edit_products_available(store_id:PositiveInt, request: EditProductsReqBody, 
             saved_product.end_before = newdata.end_before
             return (newdata.product_type, newdata.product_id)
         updatelist = list(map(_do_update, updating_products))
-        newdata = filter(lambda d: (d.product_type, d.product_id) not in updatelist, request.__root__)
-        new_model_fn = lambda d: StoreProductAvailable(store_id=saved_obj.id, **d.dict())
+        newdata = filter(lambda d: (d.product_type, d.product_id) not in updatelist, request.root)
+        new_model_fn = lambda d: StoreProductAvailable(store_id=saved_obj.id, **d.model_dump())
         new_products = list(map(new_model_fn, newdata))
         session.add_all([*new_products])
         emit_event_edit_products(store_id, rpc_hdlr=shared_ctx['order_app_rpc'],
@@ -309,7 +309,7 @@ def discard_store_products(store_id:PositiveInt, pitems:str, ppkgs:str, \
         raise FastApiHTTPException( detail={'ids':'invalid-id', 'detail':e.args},
                 headers={}, status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST )
     with Session(bind=shared_ctx['db_engine']) as _session:
-        saved_store = _store_staff_validity(_session, store_id, usr_auth=user)
+        saved_store = _storefront_staff_validity(_session, store_id, usr_auth=user)
         _cond_fn = lambda d, t: SqlAlAnd(StoreProductAvailable.product_type == t,
             StoreProductAvailable.product_id == d)
         pitem_cond = map(partial(_cond_fn, t=SaleableTypeEnum.ITEM), pitems)
@@ -335,15 +335,15 @@ def discard_store_products(store_id:PositiveInt, pitems:str, ppkgs:str, \
 def read_profile_products(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
     # TODO, figure out how to handle large dataset, pagination or other techniques
     with Session(bind=shared_ctx['db_engine']) as session:
-        saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
-        response = EditProductsReqBody.from_orm(saved_obj.products)
+        saved_obj = _storefront_staff_validity(session, store_id, usr_auth=user)
+        response = EditProductsReqBody.model_validate(saved_obj.products)
     return response
 
 
 @router.get('/profile/{store_id}', response_model=StoreProfileReadResponseBody)
 def read_profile(store_id:PositiveInt, user:dict=FastapiDepends(common_authentication)):
     with Session(bind=shared_ctx['db_engine']) as session:
-        saved_obj = _store_staff_validity(session, store_id, usr_auth=user)
-        response = StoreProfileReadResponseBody.from_orm(saved_obj)
+        saved_obj = _storefront_staff_validity(session, store_id, usr_auth=user)
+        response = StoreProfileReadResponseBody.model_validate(saved_obj)
     return response
 

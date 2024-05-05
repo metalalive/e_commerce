@@ -8,7 +8,10 @@ ecommerce-common = {path = "../common/python", editable = false}
 store-front = {path = ".", editable = false}
 
 [dev-packages]
+pytest = ">=8.2.*"
+ijson = ">= 3.2.*" # for mocking jwks source in integrartion test
 
 [requires]
 python_version = "3.12"
 python_full_version = "3.12.0"
+

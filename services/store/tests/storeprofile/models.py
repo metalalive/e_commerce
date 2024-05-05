@@ -4,8 +4,11 @@ from datetime import timedelta
 
 import pytest
 
+# load the module `tests.common` first, to ensure all environment variables
+# are properly set
+from tests.common import db_engine_resource, session_for_test, session_for_setup, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
+
 from store.models import StoreProfile, StoreEmail, StorePhone, OutletLocation, HourOfOperation, StoreStaff, StoreProductAvailable
-from store.tests.common import db_engine_resource, session_for_test, session_for_setup, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
 
 # module-level test setup / teardown
 def setup_module(module):
@@ -195,7 +198,4 @@ class TestUpdate:
         assert not any(filtered)
         edited_staff = next(filter(lambda s:s.staff_id == edited_staff_id, obj.staff))
         assert edited_staff.end_before == new_end_datetime
-
-
-
 

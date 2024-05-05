@@ -9,6 +9,7 @@ dependencies = [
     "SQLAlchemy >= 2.0.29",
     "alembic >= 1.13.1",
     "mariadb >= 1.1.10",
+    "cryptography >= 42.0.0",
     "setuptools >= 69.5.1",
 ] # end of dependencies
 

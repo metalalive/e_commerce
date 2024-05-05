@@ -3,12 +3,15 @@ from unittest.mock import patch
 
 import pytest
 
-from common.models.constants  import ROLE_ID_STAFF
-from common.models.enums.base import AppCodeOptions, ActivationStatus
-from common.util.python.messaging.rpc import RpcReplyEvent
+# load the module `tests.common` first, to ensure all environment variables
+# are properly set
+from tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
+
+from ecommerce_common.models.constants  import ROLE_ID_STAFF
+from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
+from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
 from store.models import HourOfOperation
-from store.tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
 
 app_code = AppCodeOptions.store.value[0]
 

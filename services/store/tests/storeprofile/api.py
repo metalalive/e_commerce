@@ -3,12 +3,15 @@ from unittest.mock import patch
 
 import pytest
 
-from common.models.constants  import ROLE_ID_STAFF
-from common.models.enums.base import AppCodeOptions, ActivationStatus
-from common.util.python.messaging.rpc import RpcReplyEvent
+# load the module `tests.common` first, to ensure all environment variables
+# are properly set
+from tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
+
+from ecommerce_common.models.constants  import ROLE_ID_STAFF
+from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
+from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
 from store.models import StoreProfile, StorePhone, StoreEmail
-from store.tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -40,7 +43,7 @@ class TestCreation:
         # skip receiving message from RPC-reply-queue
         pass
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_bulk_ok(self, session_for_test, keystore, test_client, store_data, email_data, phone_data, loc_data):
         num_items = 4
         profile_data = {'id':130, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
@@ -58,7 +61,7 @@ class TestCreation:
                 _loc_data['country'] = _loc_data['country'].value
                 item['location'] = _loc_data
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # skip publishing message to RPC queue
                 reply_event = RpcReplyEvent(listener=self, timeout_s=7)
                 reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
@@ -82,7 +85,7 @@ class TestCreation:
         assert expect_data == actual_data
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_empty_input(self, session_for_test, keystore, test_client):
         profile_data = {'id':58, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
                 'roles':[{'app_code':app_code, 'codename':'view_storeprofile'},
@@ -91,24 +94,24 @@ class TestCreation:
         encoded_token = keystore.gen_access_token(profile=profile_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 body = []
                 response = test_client.post(self.url, headers=headers, json=body)
         assert response.status_code == 422
         result = response.json()
-        assert result['detail'][0]['msg'] == 'Empty request body Not Allowed'
+        assert 'Empty request body Not Allowed' in result['detail'][0]['msg']
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 body = [{}, {}]
                 response = test_client.post(self.url, headers=headers, json=body)
         result = response.json()
         assert response.status_code == 422
         for item in result['detail']:
             assert item['loc'][-1] in ('label', 'supervisor_id')
-            assert item['msg'] == 'field required'
+            assert item['msg'] == 'Field required'
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_auth_app_down(self, session_for_test, keystore, test_client, store_data):
         profile_data = {'id':58, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
                 'roles':[{'app_code':app_code, 'codename':'view_storeprofile'},
@@ -125,7 +128,7 @@ class TestCreation:
         reply_event = RpcReplyEvent(listener=self, timeout_s=7)
         reply_event.resp_body['result'] = []
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 for fail_status in expect_rpc_fail_status:
                     reply_event.resp_body['status'] = fail_status
                     mocked_rpc_proxy_call.return_value = reply_event
@@ -135,7 +138,7 @@ class TestCreation:
                     assert result['detail'] == {'app_code':[AppCodeOptions.user_management.value[0]]}
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_invalid_supervisor_id(self, session_for_test, keystore, test_client, store_data):
         num_items = 4
         profile_data = {'id':99, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
@@ -145,7 +148,7 @@ class TestCreation:
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         body = [next(store_data) for _ in range(num_items)]
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # skip publishing message to RPC queue
                 reply_event = RpcReplyEvent(listener=self, timeout_s=7)
                 reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
@@ -166,7 +169,7 @@ class TestCreation:
             assert expect_value == set(actual_value)
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_invalid_email(self, session_for_test, keystore, test_client, store_data, email_data):
         num_stores = 2
         invalid_emails = ['xyz@ur873', 'alg0exp3rt.\x05O', 'Alg0@expat@AiOoh', None, '', 'xutye']
@@ -180,7 +183,7 @@ class TestCreation:
         body[0]['emails'] = [{'addr':addr} for addr in invalid_emails]
         body[1]['emails'] = [next(email_data) for _ in range(2)]
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # skip publishing message to RPC queue
                 reply_event = RpcReplyEvent(listener=self, timeout_s=7)
                 reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
@@ -198,25 +201,28 @@ class TestCreation:
         for err in result['detail']:
             loc_tail = err['loc'][-4:]
             assert loc_tail[0] == 0 and loc_tail[1] == 'emails' and loc_tail[3] == 'addr'
-            possible_msgs = ['none is not an allowed value', 'value is not a valid email address']
-            assert err['msg'] in possible_msgs
+            assert 'value is not a valid email address' in err['msg'] or \
+                   'Input should be a valid string' in err['msg']
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_invalid_phone(self, session_for_test, keystore, test_client, store_data, phone_data):
         num_stores = 2
         invalid_phones = [(None, 3415), (-4, 392947104824833530), ('6ob', '88934\x014762'), ('', '3-40-019')]
-        profile_data = {'id':71, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
-                'roles':[{'app_code':app_code, 'codename':'view_storeprofile'},
-                    {'app_code':app_code, 'codename':'add_storeprofile'}]
-                }
+        profile_data = {
+            'id':71, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
+            'roles':[
+                {'app_code':app_code, 'codename':'view_storeprofile'},
+                {'app_code':app_code, 'codename':'add_storeprofile'}
+            ]
+        }
         encoded_token = keystore.gen_access_token(profile=profile_data, audience=['store'])
         headers = {'Authorization': 'Bearer %s' % encoded_token}
         body = [next(store_data) for _ in range(num_stores)]
         body[0]['phones'] = [next(phone_data) for _ in range(2)]
         body[1]['phones'] = [{'country_code':phone[0], 'line_number':phone[1]} for phone in invalid_phones]
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # skip publishing message to RPC queue
                 reply_event = RpcReplyEvent(listener=self, timeout_s=7)
                 reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
@@ -232,11 +238,13 @@ class TestCreation:
         assert response.status_code == 422
         result = response.json()
         for err in result['detail']:
-            loc_tail = err['loc'][-4:]
-            assert loc_tail[0] == 1 and loc_tail[1] == 'phones' and loc_tail[3] in ('line_number', 'country_code')
+            assert err['msg'] == 'Input should be a valid string' or \
+                'should match pattern' in err['msg']
+            assert err['loc'][2] == 'phones'
+            assert err['loc'][-1] in ('line_number', 'country_code',)
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_quota_limit_exceeds(self, session_for_test, keystore, test_client, store_data):
         num_stores_saved, num_new_stores, max_num_stores_per_user = 3, 2, 4
         profile_data = {'id':71, 'privilege_status':ROLE_ID_STAFF, 'quotas':[],
@@ -254,7 +262,7 @@ class TestCreation:
                         'maxnum':max_num_stores_per_user}]
         } for item in body]
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # skip publishing message to RPC queue
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.post(self.url, headers=headers, json=body)
@@ -401,7 +409,7 @@ class TestSwitchSupervisor:
         # skip receiving message from RPC-reply-queue
         pass
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_ok(self, session_for_test, keystore, test_client, saved_store_objs):
         obj = next(saved_store_objs)
         old_supervisor_id = obj.supervisor_id
@@ -420,7 +428,7 @@ class TestSwitchSupervisor:
                 'maxnum':random.randrange(3,6)}]
         }]
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # skip publishing message to RPC queue
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
@@ -429,7 +437,7 @@ class TestSwitchSupervisor:
         assert obj.supervisor_id == new_supervisor_id
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_quota_limit_exceeds(self, session_for_test, keystore, test_client, saved_store_objs, store_data):
         max_num_stores = 5
         objs = [next(saved_store_objs) for _ in range(max_num_stores)]
@@ -442,7 +450,7 @@ class TestSwitchSupervisor:
             'quota':[{'app_code':app_code, 'mat_code':StoreProfile.quota_material.value, 'maxnum': (max_num_stores - 1)}]
         }]
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_event
                 for obj in objs:
                     old_supervisor_id = obj.supervisor_id
@@ -461,7 +469,7 @@ class TestSwitchSupervisor:
         assert expect_data == actual_data
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_deactivated_supervisor(self, session_for_test, keystore, test_client, saved_store_objs):
         obj = next(saved_store_objs)
         old_supervisor_id = obj.supervisor_id
@@ -477,7 +485,7 @@ class TestSwitchSupervisor:
         reply_event.resp_body['result'] = [{ 'id':new_supervisor_id, 'quota':[],
             'auth':ActivationStatus.ACCOUNT_DEACTIVATED.value, }]
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # skip publishing message to RPC queue
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
@@ -507,7 +515,7 @@ class TestDeletion:
         uri_renderred = self.url % ','.join(map(str, deleting_ids))
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
             reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # this endpoint will interact with 2 different services, send the
                 # reply events in the order which is acceptable to the backend
                 mocked_rpc_proxy_call.return_value = reply_evt_order

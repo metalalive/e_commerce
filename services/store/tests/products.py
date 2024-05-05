@@ -6,15 +6,18 @@ from unittest.mock import patch
 
 import pytest
 
-from common.models.constants  import ROLE_ID_STAFF
-from common.models.enums.base import AppCodeOptions, ActivationStatus
-from common.util.python.messaging.rpc import RpcReplyEvent
-
-from store.models import SaleableTypeEnum, StoreProductAvailable
-from store.tests.common import \
+# load the module `tests.common` first, to ensure all environment variables
+# are properly set
+from tests.common import \
         db_engine_resource, session_for_test, session_for_setup, keystore, \
         test_client, store_data, email_data, phone_data, loc_data, opendays_data, \
         staff_data, product_avail_data, saved_store_objs, _saved_obj_gen
+
+from ecommerce_common.models.constants  import ROLE_ID_STAFF
+from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
+from ecommerce_common.util.messaging.rpc import RpcReplyEvent
+
+from store.models import SaleableTypeEnum, StoreProductAvailable
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -59,7 +62,7 @@ class TestUpdate:
             body.extend(new_product_d)
         return body
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_ok(self, session_for_test, keystore, test_client, saved_store_objs, product_avail_data):
         obj = next(saved_store_objs)
         num_new, num_unmodified = 2, 2
@@ -75,7 +78,7 @@ class TestUpdate:
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
             reply_evt_product = self._setup_mock_rpc_reply(body)
             reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 # this endpoint will interact with 2 different services, send the
                 # reply events in the order which is acceptable to the backend
                 mocked_rpc_proxy_call.side_effect = [reply_evt_product, reply_evt_order]
@@ -96,7 +99,7 @@ class TestUpdate:
         assert expect_value == actual_value
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_invalid_product_id(self, session_for_test, keystore, test_client, saved_store_objs):
         obj = next(saved_store_objs)
         body = self._setup_base_req_body(obj.products, None)
@@ -108,7 +111,7 @@ class TestUpdate:
         url = self.url.format(store_id=obj.id)
         reply_event = self._setup_mock_rpc_reply(body[1:])
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 400
@@ -121,7 +124,7 @@ class TestUpdate:
         assert expect_value == actual_value
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_invalid_staff_id(self, session_for_test, keystore, test_client, saved_store_objs):
         invalid_staff_id = 9999
         obj = next(saved_store_objs)
@@ -134,11 +137,11 @@ class TestUpdate:
         url = self.url.format(store_id=obj.id)
         reply_event = self._setup_mock_rpc_reply(body[:])
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 403
-    
+
     def test_emit_event_orderapp(self, session_for_test, saved_store_objs, product_avail_data):
         from store.api import emit_event_edit_products
         # subcase 1
@@ -218,7 +221,7 @@ class TestDiscard:
                 ids2=','.join(map(str,deleting_ppkgs)))
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
             reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_evt_order
                 response = test_client.delete(renderred_url, headers=headers)
                 assert response.status_code == 204
@@ -238,7 +241,7 @@ class TestDiscard:
                 expect_remain = [*remaining_ppkgs, *remaining_pitems]
                 assert len(actual_remain) == num_total - 2 * num_deleting
                 assert set(actual_remain) == set(expect_remain)
-    
+
     def test_error_emit_event(self, db_engine_resource, session_for_test, keystore, test_client,
             store_data, product_avail_data, staff_data):
         num_deleting, num_total = 2, 19
@@ -258,7 +261,7 @@ class TestDiscard:
             reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
             reply_evt_order.send(body={'status':RpcReplyEvent.status_opt.FAIL_PUBLISH,
                 'error':'test-mock'})
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_evt_order
                 response = test_client.delete(renderred_url, headers=headers)
                 assert response.status_code == 500
@@ -286,7 +289,7 @@ class TestRead:
         # skip receiving message from RPC-reply-queue
         pass
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_ok(self, session_for_setup, session_for_test, keystore, test_client, saved_store_objs, product_avail_data):
         obj = next(saved_store_objs)
         new_products_avail = [StoreProductAvailable(**next(product_avail_data)) for _ in range(20) ]

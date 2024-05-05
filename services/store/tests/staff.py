@@ -3,12 +3,15 @@ from unittest.mock import patch
 
 import pytest
 
-from common.models.constants  import ROLE_ID_STAFF
-from common.models.enums.base import AppCodeOptions, ActivationStatus
-from common.util.python.messaging.rpc import RpcReplyEvent
+# load the module `tests.common` first, to ensure all environment variables
+# are properly set
+from tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
+
+from ecommerce_common.models.constants  import ROLE_ID_STAFF
+from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
+from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
 from store.models import StoreStaff
-from store.tests.common import db_engine_resource, session_for_test, session_for_setup, keystore, test_client, store_data, email_data, phone_data, loc_data, opendays_data, staff_data, product_avail_data, saved_store_objs
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -26,7 +29,7 @@ class TestUpdate:
         # skip receiving message from RPC-reply-queue
         pass
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_ok(self, session_for_test, keystore, test_client, saved_store_objs, staff_data):
         num_new, num_unmodified = 1, 3
         obj = next(saved_store_objs)
@@ -47,13 +50,13 @@ class TestUpdate:
         reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
         reply_event.resp_body['result'] = list(map(lambda d:d['staff_id'], body))
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 200
         query = session_for_test.query(StoreStaff).filter(StoreStaff.store_id == obj.id)
         query = query.order_by(StoreStaff.staff_id.asc())
-        
+
         extra_expect_items = [{'staff_id': s.staff_id,
             'start_after':s.start_after.astimezone().isoformat(),
             'end_before':s.end_before.astimezone().isoformat()}
@@ -69,7 +72,7 @@ class TestUpdate:
         assert expect_value == actual_value
 
 
-    @patch('common.util.python.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
+    @patch('ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh', _mocked_rpc_reply_refresh)
     def test_invalid_staff_id(self, session_for_test, keystore, test_client, saved_store_objs):
         obj = next(saved_store_objs)
         body = [{'staff_id': s.staff_id, 'start_after':s.start_after.isoformat(), \
@@ -84,7 +87,7 @@ class TestUpdate:
         reply_event.resp_body['status'] = RpcReplyEvent.status_opt.SUCCESS
         reply_event.resp_body['result'] = list(map(lambda d:d['staff_id'], body[2:]))
         with patch('jwt.PyJWKClient.fetch_data', keystore._mocked_get_jwks):
-            with patch('common.util.python.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
+            with patch('ecommerce_common.util.messaging.rpc.MethodProxy._call') as mocked_rpc_proxy_call:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 400

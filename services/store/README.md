@@ -12,8 +12,39 @@
 |pip| 24.0 | [see here](https://pip.pypa.io/en/stable/) |
 |OpenSSL| 3.1.4 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
 
-
 ## Build
+### Virtual Environment
+You can create per-project virtual environment using the command:
+```bash
+PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
+```
+A virtual environment folder `.venv` will be created under the application folder `./store`
+### Common Python modules
+Note in this application the building process on [common python modules](../common/python) is automated , see the `[packages]` section in [`Pipfile`](./Pipfile).
+
+First time to initialize
+```shell
+pipenv install --dev
+```
+If you need to modify the `Pipfile` or `pyproject.toml` , update the virtual environment after you are done editing , by the command
+```shell
+pipenv update
+```
+
+### C extension modules
+Manually install it by following command :
+```bash
+pipenv run pip install ../../common/python/c-ext/ecommerce-common-xxxxx.whl
+```
+
+The package title should be `my-c-extention-lib`. Once you need to remove the extension , run
+```bash
+pipenv run pip uninstall my-c-extention-lib
+```
+
+See [the documentation](../common/python/README.md) for build process.
+
+
 ### Database Migration
 ```bash
 pipenv run python -m  store.command  [subcommand] [args]
@@ -48,10 +79,5 @@ APP_SETTINGS="settings.development" pipenv run uvicorn  --host 127.0.0.1 \
 ## Test
 ### Integration Test
 ```bash
-APP_SETTINGS="settings.test" SERVICE_BASE_PATH="${PWD}/.." pipenv run pytest -v -s --keepdb ./tests/storeprofile/models.py
-APP_SETTINGS="settings.test" SERVICE_BASE_PATH="${PWD}/.." pipenv run pytest -v -s --keepdb ./tests/storeprofile/api.py
-APP_SETTINGS="settings.test" pipenv run pytest -v -s --keepdb ./tests/staff.py
-APP_SETTINGS="settings.test" pipenv run pytest -v -s --keepdb ./tests/business_hours.py
-APP_SETTINGS="settings.test" pipenv run pytest -v -s --keepdb ./tests/products.py
+./run_test
 ```
-
