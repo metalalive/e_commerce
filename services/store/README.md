@@ -23,10 +23,17 @@ Where `subcommand` could be one of followings :
 | `subcommand` | arguments | description |
 |-|-|-|
 |`auth_migrate_forward`| `N/A` | Always upgrade to latest revision provided by the codebase. Do NOT manually modify the default migration script in `/YOUR-PROJECT-HOME/migrations/alembic/store` |
-|`store_migrate_forward`| `[prev-rev-id]  [new-rev-id]  [new-label]` | `[prev-rev-id]` is an alphanumeric byte sequence representing revision of current head in the migration history. <br><br> `[new-rev-id]` has the same format as `[prev-rev-id]` but it labels revision of the new head. <br><br> For initial migration upgrade, `[prev-rev-id]` has to be `init`. <br><br> Example : `python3 -m store.command store_migrate_forward  init  00001  init-app-tables` |
-|`migrate_backward`| `[target-rev-id]` | `[target-rev-id]` is an alphanumeric byte sequence representing revision at previous point of the migration history. <br><br> To downgrade back to initial state `[target-rev-id]` can also be `init`, which removes all created schemas and entire migration folder.<br><br> Example : `python3 -m store.command  migrate_backward  00001` |
+|`store_migrate_forward`| `--prev-rev-id=<APP_REVISION_ID>  --new-rev-id=<APP_REVISION_ID> --new-label=<APP_REVISION_ID>` | `[prev-rev-id]` is an alphanumeric byte sequence representing revision of current head in the migration history. <br><br> `[new-rev-id]` has the same format as `[prev-rev-id]` but it labels revision of the new head. <br><br> For initial migration upgrade, `[prev-rev-id]` has to be `init`. <br><br> Example : `python3 -m store.command store_migrate_forward  init  00001  init-app-tables` |
+|`migrate_backward`| `--prev-rev-id=<APP_REVISION_ID>` | `--prev-rev-id` is an alphanumeric byte sequence representing revision at previous point of the migration history. <br><br> To downgrade back to initial state , `--prev-rev-id` can also be `base`, which removes all created schemas and entire migration folder.<br><br> |
 ||||
 
+Examples:
+```bash
+pipenv run python ./command.py store_migrate_forward --prev-rev-id=init \
+    --new-rev-id=000001  --new-label=create-all-tables
+pipenv run python ./command.py  migrate_backward  --prev-rev-id=base
+
+```
 
 ## Run
 ### Development Server

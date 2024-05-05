@@ -1,5 +1,4 @@
-import os
-import shutil
+import os, shutil
 from pathlib import Path
 from typing import Optional, List
 
@@ -7,7 +6,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.util.exc import CommandError
 
-from common.util.python import format_sqlalchemy_url, get_credential_from_secrets
+from ecommerce_common.util import format_sqlalchemy_url, get_credential_from_secrets
 
 
 class ExtendedConfig(Config):
@@ -53,10 +52,16 @@ DEFAULT_VERSION_TABLE = "alembic_version"
 
 
 def _init_common_params(
-    sys_base_path: Path, app_base_path: Path, secret_path, cfg_filename, db_usr_alias
+    sys_base_path: Path,
+    app_base_path: Path,
+    secret_path: Path,
+    cfg_filename: str,
+    db_usr_alias: str
 ):
     cfg_file_path = app_base_path.joinpath(cfg_filename)
-    template_base_path = app_base_path.parent.joinpath("migrations/alembic/templates")
+    template_base_path = sys_base_path.joinpath(
+        "common/python/src/ecommerce_common/migrations/alembic/templates"
+    )
     cfg = ExtendedConfig(cfg_file_path, template_base_path=template_base_path)
     migration_base_path = cfg.get_main_option("script_location")
     vpath_delimiter = cfg.get_main_option("version_path_separator")
@@ -173,24 +178,27 @@ def _downgrade_app_migration(app_settings, prev_rev_id: str) -> Path:
 
 
 def _downgrade_auth_migration(app_settings, prev_rev_id: str):
-    db_usr_alias = app_settings.DB_USER_ALIAS
-    cfg, db_credentials, _, _ = _init_common_params(
-        secret_path=app_settings.SECRETS_FILE_PATH,
-        app_base_path=app_settings.APP_BASE_PATH,
-        sys_base_path=app_settings.SYS_BASE_PATH,
-        db_usr_alias=db_usr_alias,
-        cfg_filename="alembic_auth.ini",
-    )
-    chosen_db_credential = db_credentials[db_usr_alias]
-    chosen_db_credential["NAME"] = app_settings.AUTH_DB_NAME
-    cfg.set_url(
-        db_credential=chosen_db_credential, driver_label=app_settings.DRIVER_LABEL
-    )
-    cfg.set_main_option(name="version_table", value=app_settings.VERSION_TABLE_AUTH_APP)
-    cfg.set_main_option(name="app.orm_base", value="skip")
-    try:
-        command.downgrade(config=cfg, revision=prev_rev_id)
-    except CommandError as e:
-        pos = e.args[0].lower().find("path doesn't exist")
-        if pos < 0:
-            raise
+    # TODO , improve the design, authorization database server might
+    # be different from the database server for this application
+    pass
+    # db_usr_alias = app_settings.DB_USER_ALIAS
+    # cfg, db_credentials, _, _ = _init_common_params(
+    #     secret_path=app_settings.SECRETS_FILE_PATH,
+    #     app_base_path=app_settings.APP_BASE_PATH,
+    #     sys_base_path=app_settings.SYS_BASE_PATH,
+    #     db_usr_alias=db_usr_alias,
+    #     cfg_filename="alembic_auth.ini",
+    # )
+    # chosen_db_credential = db_credentials[db_usr_alias]
+    # chosen_db_credential["NAME"] = app_settings.AUTH_DB_NAME
+    # cfg.set_url(
+    #     db_credential=chosen_db_credential, driver_label=app_settings.DRIVER_LABEL
+    # )
+    # cfg.set_main_option(name="version_table", value=app_settings.VERSION_TABLE_AUTH_APP)
+    # cfg.set_main_option(name="app.orm_base", value="skip")
+    # try:
+    #     command.downgrade(config=cfg, revision=prev_rev_id)
+    # except CommandError as e:
+    #     pos = e.args[0].lower().find("path doesn't exist")
+    #     if pos < 0:
+    #         raise

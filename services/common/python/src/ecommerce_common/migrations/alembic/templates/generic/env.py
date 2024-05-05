@@ -6,7 +6,7 @@ from sqlalchemy import pool
 # proxied from EnvironmentContext instance
 from alembic import context
 
-from common.util.python import import_module_string
+from ecommerce_common.util import import_module_string
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
