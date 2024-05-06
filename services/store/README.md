@@ -81,3 +81,9 @@ APP_SETTINGS="settings.development" pipenv run uvicorn  --host 127.0.0.1 \
 ```bash
 ./run_test
 ```
+
+## Development
+### Code Formatter
+```bash
+pipenv run black ./src/ ./tests/  ./settings/ ./command.py
+```

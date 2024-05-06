@@ -10,6 +10,7 @@ store-front = {path = ".", editable = false}
 [dev-packages]
 pytest = ">=8.2.*"
 ijson = ">= 3.2.*" # for mocking jwks source in integrartion test
+black = ">=24.4.*"
 
 [requires]
 python_version = "3.12"
