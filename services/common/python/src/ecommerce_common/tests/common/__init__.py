@@ -3,7 +3,7 @@ import random
 import json
 import copy
 import operator
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from functools import partial, reduce
 
 from ecommerce_common.util import ExtendedList, import_module_string
@@ -418,7 +418,7 @@ class KeystoreMixin:
             audience=audience, profile=profile
         )
         keystore = create_keystore_helper(cfg=ks_cfg, import_fn=import_module_string)
-        now_time = datetime.utcnow()
+        now_time = datetime.now(UTC)
         expiry = now_time + timedelta(seconds=access_token_valid_seconds)
         token = JWT()
         payload = {

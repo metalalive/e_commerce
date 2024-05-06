@@ -230,7 +230,7 @@ def stream_jwks_file(filepath):
     import ijson
 
     buff = ['{"keys":[']
-    with open(filepath, mode="r") as f:  # TODO, handle missing file error ?
+    with open(filepath, mode="rb") as f:  # TODO, handle missing file error ?
         iterator = ijson.kvitems(f, prefix="")
         for k, v in iterator:
             v["kid"] = k

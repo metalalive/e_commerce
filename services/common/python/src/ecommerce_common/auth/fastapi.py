@@ -10,7 +10,7 @@ from jwt.exceptions import (
     PyJWKClientConnectionError,
 )
 
-from common.auth.jwt import JWT
+from ecommerce_common.auth.jwt import JWT
 
 
 def base_authentication(token: str, audience, keystore, error_obj=None):

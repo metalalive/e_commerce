@@ -266,7 +266,7 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
         import ijson
 
         self._ijson = ijson
-        self._file = open(filepath, mode="r")
+        self._file = open(filepath, mode="rb")
 
     def __del__(self):
         if hasattr(self, "_file") and self._file and not self._file.closed:

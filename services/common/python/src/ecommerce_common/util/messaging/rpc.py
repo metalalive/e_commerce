@@ -1,7 +1,8 @@
+import os
 import uuid
 import socket
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Dict, Optional
 from amqp.exceptions import ConsumerCancelled, NotFound as AmqpNotFound
 from kombu import Exchange as KombuExchange, Queue as KombuQueue
@@ -203,7 +204,7 @@ class RpcReplyEvent:
     def __init__(self, listener, timeout_s, corr_id: str = ""):
         self._listener = listener
         self._timeout_s = timedelta(seconds=timeout_s)
-        self._time_deadline = datetime.utcnow() + self._timeout_s
+        self._time_deadline = datetime.now(UTC) + self._timeout_s
         self.resp_body = {
             "status": self.status_opt.INITED,
             "result": None,
@@ -271,10 +272,11 @@ class RPCproxy:
     are applied to one single application.
     """
 
-    def __init__(self, dst_app_name: str, src_app_name: str, **options):
-        # TODO, parameterize
+    def __init__(
+        self, dst_app_name: str, src_app_name: str, srv_basepath: str = ".", **options
+    ):
         _default_msg_broker_url = _get_amqp_url(
-            secrets_path="./common/data/secrets.json"
+            secrets_path=os.path.join(srv_basepath, "common/data/secrets.json")
         )
         self._dst_app_name = dst_app_name
         self._src_app_name = src_app_name

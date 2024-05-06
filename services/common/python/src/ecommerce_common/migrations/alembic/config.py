@@ -56,7 +56,7 @@ def _init_common_params(
     app_base_path: Path,
     secret_path: Path,
     cfg_filename: str,
-    db_usr_alias: str
+    db_usr_alias: str,
 ):
     cfg_file_path = app_base_path.joinpath(cfg_filename)
     template_base_path = sys_base_path.joinpath(
