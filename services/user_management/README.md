@@ -22,12 +22,18 @@
 
 
 ## Build
+### Virtual Environment
+You can create per-project virtual environment using the command:
+```bash
+PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
+```
+A virtual environment folder `.venv` will be created under the application folder `./user_management`
 ### Common Python modules
 Note in this application the building process on [common python modules](../common/python) is automated , see the `[packages]` section in [`Pipfile`](./Pipfile).
 
 First time to initialize
 ```shell
-pipenv install
+pipenv install --dev
 ```
 If you need to modify the `Pipfile` or `pyproject.toml` , update the virtual environment after you are done editing , by the command
 ```shell
