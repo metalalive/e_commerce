@@ -1,11 +1,12 @@
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 
+use ecommerce_common::error::AppErrorCode;
+
 use order::datastore::{
     AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemDeleteInfo, AppInMemFetchKeys,
     AppInMemUpdateData, AppInMemoryDStore,
 };
-use order::error::AppErrorCode;
 use order::AppInMemoryDbCfg;
 
 const UT_NUM_TABLES: usize = 3;

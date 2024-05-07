@@ -15,9 +15,11 @@ use serde::Deserialize;
 use tokio::sync::Mutex;
 use tower::Service;
 
+use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::web::route_table;
-use order::constant::EXPECTED_ENV_VAR_LABELS;
-use order::error::{AppError, AppErrorCode};
+use order::error::AppError;
 use order::logging::AppLogContext;
 use order::network::{app_web_service, WebServiceRoute};
 use order::{confidentiality, AppBasepathCfg, AppConfig, AppSharedState};
@@ -37,7 +39,7 @@ static GLB_STATE_INIT: Once = Once::new();
 static WEB_SRV_INIT: Once = Once::new();
 
 fn _test_setup_shr_state() -> DefaultResult<ITestGlobalState, AppError> {
-    let iter = env::vars().filter(|(k, _)| EXPECTED_ENV_VAR_LABELS.contains(&k.as_str()));
+    let iter = env::vars().filter(|(k, _)| EXPECTED_LABELS.contains(&k.as_str()));
     let args: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
     let top_lvl_cfg = AppConfig::new(args)?;
     let cfdntl = confidentiality::build_context(&top_lvl_cfg)?;

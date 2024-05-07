@@ -14,8 +14,10 @@ use tracing_subscriber::fmt::{
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::{self, Registry};
 
-use crate::constant::logging::{Destination as DstOption, Level as AppLogLevelInner};
-use crate::{AppBasepathCfg, AppLogAlias, AppLogHandlerCfg, AppLoggerCfg, AppLoggingCfg};
+use ecommerce_common::constant::logging::{Destination as DstOption, Level as AppLogLevelInner};
+use ecommerce_common::AppLogAlias;
+
+use crate::{AppBasepathCfg, AppLogHandlerCfg, AppLoggerCfg, AppLoggingCfg};
 
 pub type AppLogLevel = AppLogLevelInner;
 type AppLogHandler = (WithMaxLevel<NonBlocking>, WorkerGuard);

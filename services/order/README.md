@@ -23,7 +23,7 @@ This service interacts with other services to ensure data synchronization :
 ### Pre-requisite
 | type | name | version required |
 |------|------|------------------|
-| SQL Database | MariaDB | `10.3.22` |
+| SQL Database | MariaDB | `11.2.3` |
 | AMQP broker | RabbitMQ | `3.2.4` |
 | Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.75.0` |
 | DB migration | [liquibase](https://github.com/liquibase/liquibase) | `>= 4.6.2` |
@@ -144,7 +144,7 @@ cd ${SERVICE_BASE_PATH}/tests/integration
 
 SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
     CONFIG_FILE_PATH="settings/test.json" \
-    cargo test --test web
+    cargo test --test web --  --test-threads=1
 ```
 
 Note :

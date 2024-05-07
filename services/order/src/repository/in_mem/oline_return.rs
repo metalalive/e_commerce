@@ -6,10 +6,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use super::super::AbsOrderReturnRepo;
-use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow};
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{OrderLineIdentity, OrderReturnModel};
 
 mod _oline_return {

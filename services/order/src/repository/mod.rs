@@ -7,13 +7,15 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 use std::vec::Vec;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::rpc::dto::{
     OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto,
     OrderPaymentUpdateErrorDto, ProductPriceDeleteDto, StockLevelReturnDto, StockReturnErrorDto,
 };
 use crate::api::web::dto::OrderLineCreateErrorDto;
-use crate::constant::ProductType;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{
     BaseProductIdentity, BillingModel, CartModel, OrderLineIdentity, OrderLineModel,
     OrderLineModelSet, OrderReturnModel, ProductPolicyModelSet, ProductPriceModelSet,

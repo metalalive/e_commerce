@@ -9,9 +9,11 @@ use axum::http::{
 };
 use axum::response::IntoResponse;
 
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::rpc::{py_celery_deserialize_reply, py_celery_serialize};
 use crate::api::web::dto::ProductPolicyDto;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::usecase::{
     EditProductPolicyResult, EditProductPolicyUseCase, ProductInfoReq, ProductInfoResp,
 };

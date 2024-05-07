@@ -15,11 +15,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 use tokio::sync::Mutex as AsyncMutex;
 
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::dto::ShippingMethod;
 use order::api::rpc::dto::{
     OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto,
 };
-use order::error::{AppError, AppErrorCode};
+use order::error::AppError;
 use order::model::{
     BillingModel, ContactModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
     OrderReturnModel, ProductStockIdentity, ShippingModel, ShippingOptionModel, StockLevelModelSet,

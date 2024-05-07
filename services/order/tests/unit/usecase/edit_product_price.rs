@@ -7,10 +7,12 @@ use std::vec;
 use async_trait::async_trait;
 use chrono::DateTime;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::{ut_setup_share_state, MockConfidential};
 use order::api::rpc::dto::{ProductPriceDeleteDto, ProductPriceDto, ProductPriceEditDto};
-use order::constant::ProductType;
-use order::error::{AppError, AppErrorCode};
+use order::error::AppError;
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 use order::repository::AbsProductPriceRepo;
 use order::usecase::EditProductPriceUseCase;

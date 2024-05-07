@@ -1,11 +1,11 @@
 use std::io::ErrorKind;
 
+use ecommerce_common::constant::env_vars::SERVICE_BASEPATH;
+use ecommerce_common::error::AppErrorCode;
 use order::confidentiality::{AbstractConfidentiality, UserSpaceConfidentiality};
-use order::constant::ENV_VAR_SERVICE_BASE_PATH;
-use order::error::AppErrorCode;
 
 fn ut_setup() -> (String, &'static str) {
-    let app_base_path = std::env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
+    let app_base_path = std::env::var(SERVICE_BASEPATH).unwrap();
     let secret_lpath = "/tests/unit/examples/confidential_demo.json";
     (app_base_path, secret_lpath)
 }

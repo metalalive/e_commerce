@@ -2,12 +2,14 @@ use std::cmp::PartialEq;
 use std::result::Result as DefaultResult;
 use std::vec::Vec;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::web::dto::{
     ProductPolicyClientErrorDto, ProductPolicyClientLimitDto, ProductPolicyDto,
     ProductPolicyNumRsvLimitDto,
 };
-use crate::constant::ProductType;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 
 #[derive(Debug)]
 pub struct ProductPolicyModel {

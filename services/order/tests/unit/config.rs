@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use order::constant::{ENV_VAR_CONFIG_FILE_PATH, ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
-use order::error::{AppError, AppErrorCode};
+use ecommerce_common::constant::env_vars::{CFG_FILEPATH, SERVICE_BASEPATH, SYS_BASEPATH};
+use ecommerce_common::error::AppErrorCode;
+
+use order::error::AppError;
 use order::AppConfig;
 
 use crate::EXAMPLE_REL_PATH;
@@ -10,14 +12,11 @@ use crate::EXAMPLE_REL_PATH;
 fn cfg_extract_arg_ok() {
     let args = [
         (
-            ENV_VAR_CONFIG_FILE_PATH.to_string(),
+            CFG_FILEPATH.to_string(),
             "relative/to/mycfg.json".to_string(),
         ),
-        (ENV_VAR_SYS_BASE_PATH.to_string(), "/path/sys".to_string()),
-        (
-            ENV_VAR_SERVICE_BASE_PATH.to_string(),
-            "/path/service".to_string(),
-        ),
+        (SYS_BASEPATH.to_string(), "/path/sys".to_string()),
+        (SERVICE_BASEPATH.to_string(), "/path/service".to_string()),
     ];
     let args = HashMap::from(args);
     let result = AppConfig::new(args);
@@ -42,7 +41,7 @@ fn cfg_extract_arg_missing_sys_path() {
 
 #[test]
 fn cfg_extract_arg_missing_service_path() {
-    let args = [(ENV_VAR_SYS_BASE_PATH.to_string(), "/path/sys".to_string())];
+    let args = [(SYS_BASEPATH.to_string(), "/path/sys".to_string())];
     let args = HashMap::from(args);
     let result = AppConfig::new(args);
     assert_eq!(result.is_err(), true);
@@ -52,7 +51,7 @@ fn cfg_extract_arg_missing_service_path() {
 
 #[test]
 fn parse_ext_cfg_file_ok() {
-    let service_basepath = std::env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
+    let service_basepath = std::env::var(SERVICE_BASEPATH).unwrap();
     const CFG_FILEPATH: &str = "config_ok.json";
     let fullpath = service_basepath + EXAMPLE_REL_PATH + CFG_FILEPATH;
     let result = AppConfig::parse_from_file(fullpath);
@@ -79,7 +78,7 @@ fn parse_ext_cfg_file_ok() {
 }
 
 fn _parse_ext_cfg_file_error_common(cfg_filepath: &str, expect_err: AppErrorCode) -> AppError {
-    let service_basepath = std::env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
+    let service_basepath = std::env::var(SERVICE_BASEPATH).unwrap();
     let fullpath = service_basepath + EXAMPLE_REL_PATH + cfg_filepath;
     let result = AppConfig::parse_from_file(fullpath);
     assert_eq!(result.is_err(), true);

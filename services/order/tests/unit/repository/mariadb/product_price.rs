@@ -3,9 +3,10 @@ use std::sync::Arc;
 
 use chrono::DateTime;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::rpc::dto::ProductPriceDeleteDto;
-use order::constant::ProductType;
-use order::error::AppErrorCode;
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 use order::repository::{app_repo_product_price, AbsProductPriceRepo};
 

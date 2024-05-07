@@ -1,8 +1,9 @@
 use std::boxed::Box;
 
-use order::constant::ProductType;
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::datastore::{AbstInMemoryDStore, AppInMemoryDStore};
-use order::error::AppErrorCode;
 use order::model::{ProductPolicyModel, ProductPolicyModelSet};
 use order::repository::{AbstProductPolicyRepo, ProductPolicyInMemRepo};
 

@@ -9,13 +9,17 @@ use std::sync::Arc;
 use serde::de::{Error as DeserializeError, Expected};
 use serde::Deserialize;
 
-use crate::error::{AppError, AppErrorCode};
-use crate::{constant as AppConst, AppLogAlias, WebApiPath};
+use ecommerce_common::constant::{env_vars, logging as const_log};
+use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::{AppLogAlias, WebApiPath};
+
+use crate::constant::hard_limit;
+use crate::error::AppError;
 
 #[derive(Deserialize)]
 pub struct AppLogHandlerCfg {
-    pub min_level: AppConst::logging::Level,
-    pub destination: AppConst::logging::Destination,
+    pub min_level: const_log::Level,
+    pub destination: const_log::Destination,
     pub alias: AppLogAlias,
     pub path: Option<String>,
 }
@@ -24,7 +28,7 @@ pub struct AppLogHandlerCfg {
 pub struct AppLoggerCfg {
     pub alias: AppLogAlias,
     pub handlers: Vec<String>,
-    pub level: Option<AppConst::logging::Level>,
+    pub level: Option<const_log::Level>,
 }
 
 #[derive(Deserialize)]
@@ -200,7 +204,7 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn new(mut args: HashMap<String, String, RandomState>) -> DefaultResult<Self, AppError> {
-        let sys_basepath = if let Some(s) = args.remove(AppConst::ENV_VAR_SYS_BASE_PATH) {
+        let sys_basepath = if let Some(s) = args.remove(env_vars::SYS_BASEPATH) {
             s + "/"
         } else {
             return Err(AppError {
@@ -208,7 +212,7 @@ impl AppConfig {
                 code: AppErrorCode::MissingSysBasePath,
             });
         };
-        let app_basepath = if let Some(a) = args.remove(AppConst::ENV_VAR_SERVICE_BASE_PATH) {
+        let app_basepath = if let Some(a) = args.remove(env_vars::SERVICE_BASEPATH) {
             a + "/"
         } else {
             return Err(AppError {
@@ -216,7 +220,7 @@ impl AppConfig {
                 code: AppErrorCode::MissingAppBasePath,
             });
         };
-        let api_srv_cfg = if let Some(cfg_path) = args.remove(AppConst::ENV_VAR_CONFIG_FILE_PATH) {
+        let api_srv_cfg = if let Some(cfg_path) = args.remove(env_vars::CFG_FILEPATH) {
             let fullpath = app_basepath.clone() + &cfg_path;
             Self::parse_from_file(fullpath)?
         } else {
@@ -308,7 +312,7 @@ impl AppConfig {
     fn _check_logging(obj: &AppLoggingCfg) -> DefaultResult<(), AppError> {
         let mut filtered = obj.loggers.iter().filter(|item| item.handlers.is_empty());
         let mut filtered2 = obj.handlers.iter().filter(|item| match &item.destination {
-            AppConst::logging::Destination::LOCALFS => item.path.is_none(),
+            const_log::Destination::LOCALFS => item.path.is_none(),
             _other => false,
         }); // for file-type handler, the field `path` has to be provided
         let mut filtered3 = obj.handlers.iter().filter(|item| item.alias.is_empty());
@@ -380,7 +384,7 @@ impl AppConfig {
         for item in obj {
             match item {
                 AppDataStoreCfg::InMemory(c) => {
-                    let lmt = AppConst::limit::MAX_ITEMS_STORED_PER_MODEL;
+                    let lmt = hard_limit::MAX_ITEMS_STORED_PER_MODEL;
                     if c.max_items > lmt {
                         let e = AppError {
                             detail: Some(format!("limit:{}", lmt)),
@@ -390,8 +394,8 @@ impl AppConfig {
                     }
                 }
                 AppDataStoreCfg::DbServer(c) => {
-                    let lmt_conn = AppConst::limit::MAX_DB_CONNECTIONS;
-                    let lmt_idle = AppConst::limit::MAX_SECONDS_DB_IDLE;
+                    let lmt_conn = hard_limit::MAX_DB_CONNECTIONS;
+                    let lmt_idle = hard_limit::MAX_SECONDS_DB_IDLE;
                     if c.max_conns > lmt_conn {
                         let e = AppError {
                             detail: Some(format!("limit-conn:{}", lmt_conn)),

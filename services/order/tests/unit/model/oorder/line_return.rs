@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
+use ecommerce_common::constant::ProductType;
+
 use order::api::web::dto::{OrderLineReqDto, OrderLineReturnErrorReason};
-use order::constant::{limit, ProductType};
+use order::constant::hard_limit;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLinePriceModel,
     OrderLineQuantityModel, OrderReturnModel,
@@ -94,7 +96,7 @@ fn ut_saved_oline_return_setup(
     dt_now: DateTime<FixedOffset>,
     store_id: u32,
 ) -> Vec<OrderReturnModel> {
-    let interval_secs = limit::MIN_SECS_INTVL_REQ as i64;
+    let interval_secs = hard_limit::MIN_SECS_INTVL_REQ as i64;
     let last_returned = [
         OrderReturnModel::dtime_round_secs(&(dt_now - Duration::minutes(11)), interval_secs)
             .unwrap(),
@@ -337,7 +339,7 @@ fn filter_request_err_duplicate() {
     let o_lines = ut_saved_orderline_setup(dt_now.clone(), seller_id);
     let o_returns = {
         let mut objs = ut_saved_oline_return_setup(dt_now.clone(), seller_id);
-        let interval_secs = limit::MIN_SECS_INTVL_REQ as i64;
+        let interval_secs = hard_limit::MIN_SECS_INTVL_REQ as i64;
         let key = OrderReturnModel::dtime_round_secs(&dt_now, interval_secs).unwrap();
         let value = (2, OrderLinePriceModel { unit: 5, total: 10 });
         objs.last_mut().unwrap().qty.insert(key, value);

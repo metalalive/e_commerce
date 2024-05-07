@@ -1,6 +1,8 @@
 use std::vec::Vec;
 
-use crate::error::{AppError, AppErrorCode};
+use ecommerce_common::error::AppErrorCode;
+
+use crate::error::AppError;
 use crate::logging::{app_log_event, AppLogLevel};
 use crate::repository::app_repo_order;
 use crate::rpc::AppRpcClientReqProperty;

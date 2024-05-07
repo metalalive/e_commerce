@@ -8,8 +8,10 @@ use hyper::server::conn::AddrIncoming;
 use hyper::server::Builder as HyperSrvBuilder;
 use hyper::server::Server as HyperServer;
 
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::web::{ApiRouteTableType, ApiRouteType};
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::{AppSharedState, WebApiListenCfg, WebApiRouteCfg};
 
 pub type WebServiceRoute<HB> = Router<(), HB>;

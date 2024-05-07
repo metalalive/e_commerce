@@ -6,11 +6,11 @@ use std::future::Future;
 use std::pin::Pin;
 use std::result::Result as DefaultResult;
 
+use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use tokio::runtime::Builder as RuntimeBuilder;
 
 use order::api::rpc::route_to_handler;
 use order::confidentiality::{self, AbstractConfidentiality};
-use order::constant::EXPECTED_ENV_VAR_LABELS;
 use order::error::AppError;
 use order::logging::{app_log_event, AppLogContext, AppLogLevel};
 use order::{AppConfig, AppRpcClientReqProperty, AppSharedState};
@@ -67,7 +67,7 @@ fn start_async_runtime(cfg: AppConfig, cfdntl: Box<dyn AbstractConfidentiality>)
 } // end of start_async_runtime
 
 fn main() {
-    let iter = env::vars().filter(|(k, _v)| EXPECTED_ENV_VAR_LABELS.contains(&k.as_str()));
+    let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
     let arg_map: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
     match AppConfig::new(arg_map) {
         Ok(cfg) => match confidentiality::build_context(&cfg) {

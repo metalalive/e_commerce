@@ -1,9 +1,11 @@
 use chrono::DateTime;
 use std::vec::Vec;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::rpc::dto::InventoryEditStockLevelDto;
-use order::constant::ProductType;
-use order::error::{AppError, AppErrorCode};
+use order::error::AppError;
 use order::model::{ProductStockModel, StockLevelModelSet, StockQuantityModel, StoreStockModel};
 use order::usecase::StockLevelUseCase;
 

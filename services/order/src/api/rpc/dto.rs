@@ -2,11 +2,11 @@ use std::vec::Vec;
 
 use chrono::offset::FixedOffset;
 use chrono::DateTime;
+use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
 use crate::api::dto::{BillingDto, OrderLinePayDto, PayAmountDto, ShippingDto};
 use crate::api::{jsn_serialize_product_type, jsn_validate_product_type};
-use crate::constant::ProductType;
 
 #[derive(Deserialize)]
 pub struct ProductPriceDeleteDto {

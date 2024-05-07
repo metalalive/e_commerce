@@ -1,7 +1,7 @@
+use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
 use crate::api::{jsn_serialize_product_type, jsn_validate_product_type};
-use crate::constant::ProductType;
 
 // TODO, merge the 2 DTO modules in `/web` and `/rpc` package
 

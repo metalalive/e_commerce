@@ -11,11 +11,13 @@ use sqlx::database::HasArguments;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelReturnDto, StockReturnErrorDto};
 use crate::api::web::dto::OrderLineCreateErrorDto;
-use crate::constant::ProductType;
 use crate::datastore::AppMariaDbStore;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{
     OrderLineModel, OrderLineModelSet, ProductStockIdentity, ProductStockModel, StockLevelModelSet,
     StockQtyRsvModel, StockQuantityModel, StoreStockModel,

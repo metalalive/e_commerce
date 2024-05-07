@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_orderlines, ut_setup_shipping};
 use chrono::{DateTime, Duration, FixedOffset};
+use ecommerce_common::constant::ProductType;
 use order::api::dto::{CountryCode, ShippingMethod};
-use order::constant::ProductType;
 use order::datastore::AppInMemoryDStore;
 use order::model::{
     BillingModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, ProductStockModel,

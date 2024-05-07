@@ -12,8 +12,9 @@ mod usecase;
 use std::env;
 use std::result::Result as DefaultResult;
 
+use ecommerce_common::constant::env_vars::{SERVICE_BASEPATH, SYS_BASEPATH};
+
 use order::confidentiality::AbstractConfidentiality;
-use order::constant::{ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
 use order::error::AppError;
 use order::logging::AppLogContext;
 use order::{AppBasepathCfg, AppConfig, AppSharedState};
@@ -24,8 +25,8 @@ pub(crate) fn ut_setup_share_state(
     cfg_fname: &str,
     cfdntl: Box<dyn AbstractConfidentiality>,
 ) -> AppSharedState {
-    let service_basepath = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
-    let sys_basepath = env::var(ENV_VAR_SYS_BASE_PATH).unwrap();
+    let service_basepath = env::var(SERVICE_BASEPATH).unwrap();
+    let sys_basepath = env::var(SYS_BASEPATH).unwrap();
     let fullpath = service_basepath.clone() + EXAMPLE_REL_PATH + cfg_fname;
     let cfg = AppConfig {
         api_server: AppConfig::parse_from_file(fullpath).unwrap(),

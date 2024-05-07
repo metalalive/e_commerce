@@ -5,7 +5,7 @@ pub mod web;
 use serde::de::{Error as DeserializeError, Expected, Unexpected};
 use serde::Deserialize;
 
-use crate::constant::ProductType;
+use ecommerce_common::constant::ProductType;
 
 struct ExpectProdTyp {
     numbers: Vec<u8>,

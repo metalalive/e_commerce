@@ -2,9 +2,10 @@ use chrono::DateTime;
 use std::vec;
 use std::vec::Vec;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::rpc::dto::ProductPriceEditDto;
-use order::constant::ProductType;
-use order::error::AppErrorCode;
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 
 fn setup_mocked_saved_items() -> Vec<ProductPriceModel> {

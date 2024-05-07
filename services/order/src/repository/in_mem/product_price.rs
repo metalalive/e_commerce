@@ -6,11 +6,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::DateTime;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use super::super::AbsProductPriceRepo;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
-use crate::constant::ProductType;
 use crate::datastore::{AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemFetchKeys};
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{ProductPriceModel, ProductPriceModelSet};
 
 const TABLE_LABEL: &str = "product_price";

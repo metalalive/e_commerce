@@ -1,8 +1,8 @@
 use chrono::{Duration, Local, SubsecRound};
 use tokio::time::{sleep, Duration as TokioDuration};
 
+use ecommerce_common::constant::ProductType;
 use order::api::rpc::dto::{OrderLinePaidUpdateDto, OrderPaymentUpdateDto};
-use order::constant::ProductType;
 use order::model::{OrderLineIdentity, OrderLineModel, OrderLineModelSet, StockLevelModelSet};
 use order::repository::{app_repo_order, AppStockRepoReserveReturn};
 

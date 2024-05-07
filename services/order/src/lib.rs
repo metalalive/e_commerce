@@ -38,9 +38,7 @@ pub use adapter::datastore;
 
 use confidentiality::AbstractConfidentiality;
 
-type WebApiPath = String;
 type WebApiHdlrLabel = &'static str;
-type AppLogAlias = Arc<String>;
 
 pub struct AppDataStoreContext {
     pub in_mem: Option<Arc<Box<dyn datastore::AbstInMemoryDStore>>>,

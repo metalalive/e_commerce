@@ -2,7 +2,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, FixedOffset};
-use order::constant::ProductType;
+use ecommerce_common::constant::ProductType;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
     OrderLinePriceModel, OrderLineQuantityModel, ProductStockModel, StockLevelModelSet,

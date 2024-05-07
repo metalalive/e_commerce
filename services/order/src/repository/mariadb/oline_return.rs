@@ -8,9 +8,12 @@ use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
-use crate::constant::{limit, ProductType};
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
+use crate::constant::hard_limit;
 use crate::datastore::AppMariaDbStore;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{OrderLineIdentity, OrderLinePriceModel, OrderReturnModel};
 use crate::repository::AbsOrderReturnRepo;
 
@@ -313,7 +316,7 @@ impl OrderReturnMariaDbRepo {
         let result = exec.fetch_optional(query).await?;
         if let Some(row) = result {
             let num_returns = row.try_get::<i64, usize>(0)?;
-            let req_limit = limit::MAX_ORDER_LINES_PER_REQUEST.try_into().unwrap();
+            let req_limit = hard_limit::MAX_ORDER_LINES_PER_REQUEST.try_into().unwrap();
             if num_returns < req_limit {
                 Ok(num_returns as u16)
             } else {

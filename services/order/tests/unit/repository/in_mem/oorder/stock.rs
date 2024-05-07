@@ -2,13 +2,15 @@ use chrono::{DateTime, Duration, FixedOffset};
 use std::ptr;
 use std::sync::Arc;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::rpc::dto::{
     InventoryEditStockLevelDto, StockLevelReturnDto, StockReturnErrorDto, StockReturnErrorReason,
 };
 use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
-use order::constant::ProductType;
 use order::datastore::AppInMemoryDStore;
-use order::error::{AppError, AppErrorCode};
+use order::error::AppError;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
     OrderLinePriceModel, OrderLineQuantityModel, ProductStockIdentity, ProductStockModel,

@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Local};
+use ecommerce_common::constant::ProductType;
 
 use order::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelReturnDto, StockReturnErrorDto};
 use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
-use order::constant::ProductType;
 use order::model::{
     OrderLineModelSet, ProductStockIdentity, ProductStockModel, StockLevelModelSet,
     StockQtyRsvModel, StockQuantityModel, StoreStockModel,

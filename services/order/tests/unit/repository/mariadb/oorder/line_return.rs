@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration};
-use order::constant::ProductType;
+use ecommerce_common::constant::ProductType;
 use order::model::OrderLineIdentity;
 use order::repository::app_repo_order_return;
 

@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use tokio::sync::{Mutex, MutexGuard};
 
 use crate::config::AppInMemoryDbCfg;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
+use ecommerce_common::error::AppErrorCode;
 
 // simple implementation of in-memory data storage
 

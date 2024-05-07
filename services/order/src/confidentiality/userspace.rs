@@ -7,8 +7,10 @@ use std::sync::RwLock;
 
 use serde_json::Value as JsnVal;
 
+use ecommerce_common::error::AppErrorCode;
+
 use super::AbstractConfidentiality;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 
 const SOURCE_SIZE_LIMIT_NBYTES: u64 = 8196;
 

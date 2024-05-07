@@ -1,6 +1,6 @@
 use super::ut_clone_productpolicy;
+use ecommerce_common::constant::ProductType;
 use order::api::web::dto::ProductPolicyDto;
-use order::constant::ProductType;
 use order::model::{ProductPolicyModel, ProductPolicyModelSet};
 
 #[test]

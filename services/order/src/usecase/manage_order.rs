@@ -20,8 +20,12 @@ use crate::api::web::dto::{
     OrderLineReqDto, OrderLineReturnErrorDto, QuotaResourceErrorDto, ShippingErrorDto,
     ShippingReqDto,
 };
-use crate::constant::{app_meta, ProductType};
-use crate::error::{AppError, AppErrorCode};
+
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
+use crate::constant::app_meta;
+use crate::error::AppError;
 use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::model::{
     BillingModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel,

@@ -13,7 +13,9 @@ http-body = "^0.4.6"
 axum-core = "^0.3.4"
 hyper = {version="^0.14", features=["client", "runtime", "tcp", "http1"]}
 chrono  = {version="0.4.31", features=["std", "alloc", "serde"]}
+
 order = {path="../..", default-features=false}
+ecommerce-common = {version="^0.1.0", path="../../../common/rust"}
 
 [features]
 mariadb = ["order/mariadb"]

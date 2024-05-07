@@ -6,15 +6,15 @@ mod product_price;
 use std::env;
 use std::sync::Arc;
 
+use ecommerce_common::constant::env_vars::SYS_BASEPATH;
 use order::confidentiality::UserSpaceConfidentiality;
-use order::constant::ENV_VAR_SYS_BASE_PATH;
 use order::AppDataStoreContext;
 
 use crate::ut_setup_share_state;
 
 fn dstore_ctx_setup() -> Arc<AppDataStoreContext> {
     let cfdntl = {
-        let sys_basepath = env::var(ENV_VAR_SYS_BASE_PATH).unwrap();
+        let sys_basepath = env::var(SYS_BASEPATH).unwrap();
         let path = sys_basepath.clone() + "/common/data/secrets.json";
         UserSpaceConfidentiality::build(path)
     };

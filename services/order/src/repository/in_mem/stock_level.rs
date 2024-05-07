@@ -6,12 +6,14 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::rpc::dto::{StockLevelReturnDto, StockReturnErrorDto};
-use crate::constant::ProductType;
 use crate::datastore::{
     AbstInMemoryDStore, AppInMemDstoreLock, AppInMemFetchedData, AppInMemFetchedSingleTable,
 };
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{
     OrderLineModelSet, ProductStockIdentity, ProductStockIdentity2, ProductStockModel,
     StockLevelModelSet, StockQtyRsvModel, StockQuantityModel, StoreStockModel,

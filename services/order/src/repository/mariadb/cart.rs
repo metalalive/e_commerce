@@ -5,9 +5,11 @@ use async_trait::async_trait;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement};
 
-use crate::constant::ProductType;
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::datastore::AppMariaDbStore;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{BaseProductIdentity, CartLineModel, CartModel};
 use crate::repository::AbsCartRepo;
 

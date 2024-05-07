@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::Ordering;
 
+use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use http_body::Limited;
 use hyper::Body as HyperBody;
 use tokio::runtime::Builder as RuntimeBuilder;
@@ -14,7 +15,6 @@ use tower_http::cors::CorsLayer;
 
 use order::api::web::route_table;
 use order::confidentiality::{self, AbstractConfidentiality};
-use order::constant::EXPECTED_ENV_VAR_LABELS;
 use order::logging::{app_log_event, AppLogContext, AppLogLevel};
 use order::network::{app_web_service, middleware, net_server_listener};
 use order::{AppConfig, AppJwtAuthentication, AppSharedState};
@@ -215,7 +215,7 @@ fn start_async_runtime(cfg: AppConfig, confidential: Box<dyn AbstractConfidentia
 } // end of start_async_runtime
 
 fn main() {
-    let iter = env::vars().filter(|(k, _v)| EXPECTED_ENV_VAR_LABELS.contains(&k.as_str()));
+    let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
     let arg_map: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
     match AppConfig::new(arg_map) {
         Ok(cfg) => match confidentiality::build_context(&cfg) {

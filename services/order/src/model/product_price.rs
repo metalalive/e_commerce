@@ -4,9 +4,11 @@ use std::cmp::{Eq, PartialEq};
 use std::result::Result as DefaultResult;
 use std::vec::Vec;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::rpc::dto::ProductPriceEditDto;
-use crate::constant::ProductType;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 
 #[derive(Debug, Eq)]
 pub struct ProductPriceModel {

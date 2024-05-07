@@ -4,6 +4,9 @@ use std::vec::Vec;
 
 use chrono::{DateTime, SubsecRound, Utc};
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::rpc::dto::{
     InventoryEditStockLevelDto, StockLevelPresentDto, StockLevelReturnDto, StockQuantityPresentDto,
     StockReturnErrorDto, StockReturnErrorReason,
@@ -11,8 +14,7 @@ use crate::api::rpc::dto::{
 use crate::api::web::dto::{
     OrderLineCreateErrNonExistDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason,
 };
-use crate::constant::ProductType;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 
 use super::{BaseProductIdentity, OrderLineModel, OrderLineModelSet};
 

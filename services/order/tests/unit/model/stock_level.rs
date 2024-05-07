@@ -1,12 +1,13 @@
 use chrono::{DateTime, Duration};
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::rpc::dto::{
     InventoryEditStockLevelDto, StockLevelPresentDto, StockLevelReturnDto, StockQuantityPresentDto,
     StockReturnErrorReason,
 };
 use order::api::web::dto::OrderLineCreateErrorReason;
-use order::constant::ProductType;
-use order::error::AppErrorCode;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
     OrderLinePriceModel, OrderLineQuantityModel, ProductStockModel, StockLevelModelSet,

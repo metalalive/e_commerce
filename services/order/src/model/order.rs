@@ -5,6 +5,8 @@ use std::result::Result as DefaultResult;
 use std::vec::Vec;
 use uuid::Uuid;
 
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::dto::{
     BillingDto, ContactDto, CountryCode, OrderLinePayDto, PayAmountDto, PhoneNumberDto, PhyAddrDto,
     ShippingDto, ShippingMethod, ShippingOptionDto,
@@ -21,8 +23,8 @@ use crate::api::web::dto::{
     PhyAddrRegionErrorReason, ShipOptionSellerErrorReason, ShippingErrorDto,
     ShippingOptionErrorDto,
 };
-use crate::constant::{limit, REGEX_EMAIL_RFC5322};
-use crate::error::{AppError, AppErrorCode};
+use crate::constant::{hard_limit, REGEX_EMAIL_RFC5322};
+use crate::error::AppError;
 use crate::generate_custom_uid;
 
 use super::{BaseProductIdentity, ProductPolicyModel, ProductPriceModel};
@@ -586,7 +588,7 @@ impl OrderLineModel {
                             }
                         } else {
                             Some(OrderLinePayUpdateErrorReason::InvalidQuantity)
-                        }
+                        } // TODO, remove the quantity check, for payment failure rollback
                     } else {
                         Some(OrderLinePayUpdateErrorReason::ReservationExpired)
                     }
@@ -716,7 +718,8 @@ impl OrderReturnModel {
         mut o_returns: Vec<OrderReturnModel>,
     ) -> DefaultResult<Vec<OrderReturnModel>, Vec<OrderLineReturnErrorDto>> {
         let time_now = LocalTime::now().fixed_offset();
-        let time_now = Self::dtime_round_secs(&time_now, limit::MIN_SECS_INTVL_REQ as i64).unwrap();
+        let time_now =
+            Self::dtime_round_secs(&time_now, hard_limit::MIN_SECS_INTVL_REQ as i64).unwrap();
         let errors = data
             .iter()
             .filter_map(|d| {

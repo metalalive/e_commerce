@@ -3,7 +3,7 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
 use crate::api::web::dto::{CartDto, QuotaResourceErrorDto};
-use crate::constant::limit;
+use crate::constant::hard_limit;
 use crate::error::AppError;
 use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::model::BaseProductIdentity;
@@ -43,7 +43,7 @@ pub(crate) enum RetrieveCartUsKsResult {
 
 impl ModifyCartLineUseCase {
     pub(crate) async fn execute(self, seq_num: u8, data: CartDto) -> ModifyCartUsKsResult {
-        if seq_num >= limit::MAX_NUM_CARTS_PER_USER {
+        if seq_num >= hard_limit::MAX_NUM_CARTS_PER_USER {
             return ModifyCartUsKsResult::NotFound;
         }
         match self.validate_update(seq_num, data).await {
@@ -101,7 +101,7 @@ impl ModifyCartLineUseCase {
 
 impl DiscardCartUseCase {
     pub(crate) async fn execute(self, seq_num: u8) -> DiscardCartUsKsResult {
-        if seq_num < limit::MAX_NUM_CARTS_PER_USER {
+        if seq_num < hard_limit::MAX_NUM_CARTS_PER_USER {
             let owner = self.authed_usr.profile;
             match self.repo.discard(owner, seq_num).await {
                 Ok(_v) => DiscardCartUsKsResult::Success,
@@ -115,7 +115,7 @@ impl DiscardCartUseCase {
 
 impl RetrieveCartUseCase {
     pub(crate) async fn execute(self, seq_num: u8) -> RetrieveCartUsKsResult {
-        if seq_num < limit::MAX_NUM_CARTS_PER_USER {
+        if seq_num < hard_limit::MAX_NUM_CARTS_PER_USER {
             let owner = self.authed_usr.profile;
             match self.repo.fetch_cart(owner, seq_num).await {
                 Ok(m) => RetrieveCartUsKsResult::Success(m.into()),

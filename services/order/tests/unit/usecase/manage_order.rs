@@ -4,13 +4,16 @@ use std::collections::{HashMap, HashSet};
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::rpc::dto::{
     OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, OrderReplicaRefundReqDto,
     StockReturnErrorDto,
 };
 use order::api::web::dto::OrderLineReqDto;
-use order::constant::{app_meta, ProductType};
-use order::error::{AppError, AppErrorCode};
+use order::constant::app_meta;
+use order::error::AppError;
 use order::logging::AppLogContext;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,

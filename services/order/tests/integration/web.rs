@@ -8,12 +8,14 @@ use hyper::body::Bytes as HyperBytes;
 use hyper::Body as HyperBody;
 use serde_json::{Map, Value as JsnVal};
 
+use ecommerce_common::constant::ProductType;
+
 use order::api::rpc;
 use order::api::web::dto::{
     ContactErrorReason, OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
     OrderEditReqData, PhoneNumNationErrorReason,
 };
-use order::constant::{app_meta, limit, ProductType};
+use order::constant::{app_meta, hard_limit};
 use order::error::AppError;
 use order::network::WebServiceRoute;
 use order::{
@@ -1185,7 +1187,7 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
         ],
     );
     sleep(std::time::Duration::from_secs(
-        1 + limit::MIN_SECS_INTVL_REQ as u64,
+        1 + hard_limit::MIN_SECS_INTVL_REQ as u64,
     ))
     .await;
     let _resp_body = itest_return_olines_request(
@@ -1201,7 +1203,7 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
         shrstate,
         oid,
         time_now + Duration::seconds(3),
-        time_now + Duration::seconds(3i64 + 1 + limit::MIN_SECS_INTVL_REQ as i64),
+        time_now + Duration::seconds(3i64 + 1 + hard_limit::MIN_SECS_INTVL_REQ as i64),
     )
     .await;
     itest_verify_order_refund(

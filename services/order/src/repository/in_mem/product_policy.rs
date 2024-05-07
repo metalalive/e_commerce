@@ -4,10 +4,12 @@ use std::collections::HashMap;
 use std::convert::Into;
 use std::sync::Arc;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use super::super::AbstProductPolicyRepo;
-use crate::constant::ProductType;
 use crate::datastore::AbstInMemoryDStore;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{ProductPolicyModel, ProductPolicyModelSet};
 
 const TABLE_LABEL: &str = "product_policy";

@@ -8,10 +8,12 @@ use chrono::{FixedOffset, NaiveDateTime};
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::rpc::dto::ProductPriceDeleteDto;
-use crate::constant::ProductType;
 use crate::datastore::AppMariaDbStore;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{BaseProductIdentity, ProductPriceModel, ProductPriceModelSet};
 use crate::repository::AbsProductPriceRepo;
 

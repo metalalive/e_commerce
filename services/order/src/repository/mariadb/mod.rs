@@ -14,7 +14,8 @@ use std::result::Result as DefaultResult;
 use std::u8;
 use std::vec::IntoIter;
 
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
+use ecommerce_common::error::AppErrorCode;
 
 const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%6f";
 const OID_BYTE_LENGTH: usize = 16;

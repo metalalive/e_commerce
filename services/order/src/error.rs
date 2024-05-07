@@ -1,44 +1,5 @@
+use ecommerce_common::error::{AppErrorCode, ProductTypeParseError};
 use std::fmt::{Debug, Display};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AppErrorCode {
-    Unknown,
-    NotImplemented,
-    MissingSysBasePath,
-    MissingAppBasePath,
-    MissingSecretPath,
-    MissingConfigPath,
-    MissingDataStore,
-    InvalidJsonFormat,
-    InvalidVersion,
-    InvalidRouteConfig,
-    MissingAliasLogHdlerCfg,
-    MissingAliasLoggerCfg,
-    NoRouteApiServerCfg,
-    NoLogHandlerCfg,
-    NoLoggerCfg,
-    FeatureDisabled,
-    NoHandlerInLoggerCfg,
-    InvalidHandlerLoggerCfg,
-    EmptyInputData, // for internal server error, do NOT dump detail to http response
-    InvalidInput,   // for frontend client error
-    CryptoFailure,
-    RpcRemoteUnavail,
-    RpcPublishFailure,
-    RpcConsumeFailure,
-    RpcRemoteInvalidReply,
-    RpcReplyNotReady,
-    NoConfidentialityCfg,
-    NoDatabaseCfg,
-    RemoteDbServerFailure,
-    ExceedingMaxLimit,
-    AcquireLockFailure,
-    DatabaseServerBusy,
-    DataTableNotExist,
-    DataCorruption,
-    ProductNotExist,
-    IOerror(std::io::ErrorKind),
-} // end of AppErrorCode
 
 #[derive(Debug, Clone)]
 pub struct AppError {
@@ -55,5 +16,15 @@ impl Display for AppError {
             default_detail
         };
         write!(f, "code:{:?}, detail:{}", self.code, dp)
+    }
+}
+
+impl From<ProductTypeParseError> for AppError {
+    fn from(value: ProductTypeParseError) -> Self {
+        let detail = format!("product-type, error:{}", value.0);
+        AppError {
+            code: AppErrorCode::DataCorruption,
+            detail: Some(detail),
+        }
     }
 }

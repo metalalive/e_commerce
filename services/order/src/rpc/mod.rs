@@ -12,11 +12,12 @@ use std::vec::Vec;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
+use ecommerce_common::error::AppErrorCode;
 
 #[cfg(feature = "amqprs")]
 use self::amqp::AmqpRpcContext;
 use crate::confidentiality::AbstractConfidentiality;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::logging::AppLogContext;
 use crate::rpc::dummy::DummyRpcContext;
 use crate::{AppRpcCfg, AppSharedState};

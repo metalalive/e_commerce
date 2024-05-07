@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
-use order::constant::ProductType;
+use ecommerce_common::constant::ProductType;
 use order::datastore::AppInMemoryDStore;
 use order::model::{OrderLineIdentity, OrderLinePriceModel, OrderReturnModel};
 use order::repository::{AbsOrderReturnRepo, OrderReturnInMemRepo};

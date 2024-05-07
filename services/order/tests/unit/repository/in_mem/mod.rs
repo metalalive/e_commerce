@@ -6,11 +6,13 @@ use async_trait::async_trait;
 use std::boxed::Box;
 use std::sync::Arc;
 
+use ecommerce_common::error::AppErrorCode;
+
 use order::datastore::{
     AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemDeleteInfo, AppInMemDstoreLock,
     AppInMemFetchKeys, AppInMemFetchedData, AppInMemUpdateData,
 };
-use order::error::{AppError, AppErrorCode};
+use order::error::AppError;
 use order::{AppDataStoreContext, AppInMemoryDbCfg};
 
 fn in_mem_ds_ctx_setup<T: AbstInMemoryDStore + 'static>(

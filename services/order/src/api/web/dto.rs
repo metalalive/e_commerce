@@ -1,8 +1,8 @@
+use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
 use crate::api::dto::{BillingDto, OrderLinePayDto, ShippingDto};
 use crate::api::{jsn_serialize_product_type, jsn_validate_product_type};
-use crate::constant::ProductType;
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderLineReqDto {
@@ -53,7 +53,7 @@ pub struct OLineCreateErrorRsvLimitDto {
     pub max_: u16,
     pub min_: u16,
     pub given: u32,
-}
+} // TODO, rename to GenericRangeErrorDto
 
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct QuotaResourceErrorDto {

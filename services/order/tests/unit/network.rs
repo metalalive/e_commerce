@@ -12,13 +12,14 @@ use axum::response::IntoResponse;
 use axum::routing;
 use http_body::{Body, Limited};
 use hyper::{Body as HyperBody, Request};
-use order::error::AppErrorCode;
 use serde::{Deserialize, Serialize};
 use tower::{Service, ServiceBuilder};
 
+use ecommerce_common::constant::env_vars::SERVICE_BASEPATH;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::{ut_setup_share_state, MockConfidential, EXAMPLE_REL_PATH};
 use order::api::web::ApiRouteTableType;
-use order::constant::ENV_VAR_SERVICE_BASE_PATH;
 use order::logging::{app_log_event, AppLogLevel};
 use order::network::{app_web_service, middleware, net_server_listener};
 use order::AppSharedState;
@@ -99,7 +100,7 @@ async fn net_server_listener_ok() {
 
 #[test]
 fn middleware_cors_ok() {
-    let service_basepath = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
+    let service_basepath = env::var(SERVICE_BASEPATH).unwrap();
     let cfg_path = service_basepath + EXAMPLE_REL_PATH + "cors_ok.json";
     let result = middleware::cors(cfg_path);
     assert!(result.is_ok());
@@ -107,7 +108,7 @@ fn middleware_cors_ok() {
 
 #[test]
 fn middleware_cors_error_cfg() {
-    let service_basepath = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
+    let service_basepath = env::var(SERVICE_BASEPATH).unwrap();
     let cfg_path = service_basepath + EXAMPLE_REL_PATH + "cors_invalid_header.json";
     let result = middleware::cors(cfg_path);
     assert!(result.is_err());

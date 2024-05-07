@@ -1,12 +1,14 @@
 use async_trait::async_trait;
-use order::constant::ProductType;
 use serde_json::from_str as deserialize_json;
 use std::boxed::Box;
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::web::dto::ProductPolicyDto;
-use order::error::{AppError, AppErrorCode};
+use order::error::AppError;
 use order::usecase::{
     AppUseKsRPCreply, EditProductPolicyResult, EditProductPolicyUseCase, ProductInfoReq,
     ProductInfoResp,

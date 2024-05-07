@@ -13,8 +13,11 @@ use jsonwebtoken::jwk::{Jwk, JwkSet};
 use jsonwebtoken::{encode as jwt_encode, Algorithm, EncodingKey};
 use tower_http::auth::AsyncAuthorizeRequest;
 
-use order::constant::{app_meta, ENV_VAR_SERVICE_BASE_PATH};
-use order::error::{AppError, AppErrorCode};
+use ecommerce_common::constant::env_vars::SERVICE_BASEPATH;
+use ecommerce_common::error::AppErrorCode;
+
+use order::constant::app_meta;
+use order::error::AppError;
 use order::{
     AbstractAuthKeystore, AppAuthCfg, AppAuthClaimPermission, AppAuthClaimQuota, AppAuthKeystore,
     AppAuthPermissionCode, AppAuthQuotaMatCode, AppAuthedClaim, AppJwtAuthentication,
@@ -60,7 +63,7 @@ impl MockAuthKeystore {
         Self { key }
     }
     fn ut_load_jwk_file(filename: &str) -> serde_json::Value {
-        let basepath = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
+        let basepath = env::var(SERVICE_BASEPATH).unwrap();
         let fullpath = basepath + EXAMPLE_REL_PATH + filename;
         let f = File::open(fullpath).unwrap();
         let result = serde_json::from_reader::<File, serde_json::Value>(f);
@@ -109,7 +112,7 @@ fn ut_jwt_encode_token(
         x5t: None,
         x5t_s256: None,
     };
-    let basepath = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
+    let basepath = env::var(SERVICE_BASEPATH).unwrap();
     let fullpath = basepath + EXAMPLE_REL_PATH + privkey_filename;
     let mut f = File::open(fullpath).unwrap();
     let mut raw_content = String::new();

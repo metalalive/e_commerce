@@ -5,8 +5,10 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsnVal;
 
+use ecommerce_common::error::AppErrorCode;
+
 use crate::constant::api::rpc as RpcConst;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::rpc::AppRpcClientReqProperty;
 use crate::AppSharedState;
 

@@ -2,14 +2,14 @@ use serde_json::{from_value as json_from_value, json};
 use std::env;
 use std::fs::{remove_file, File};
 
-use order::constant::{ENV_VAR_SERVICE_BASE_PATH, ENV_VAR_SYS_BASE_PATH};
+use ecommerce_common::constant::env_vars::{SERVICE_BASEPATH, SYS_BASEPATH};
 use order::logging::{AppLogContext, AppLogLevel};
 use order::{to_3rdparty_level, AppBasepathCfg, AppLoggingCfg};
 
 #[test]
 fn init_log_context_ok() {
-    let sys_path = env::var(ENV_VAR_SYS_BASE_PATH).unwrap();
-    let app_path = env::var(ENV_VAR_SERVICE_BASE_PATH).unwrap();
+    let sys_path = env::var(SYS_BASEPATH).unwrap();
+    let app_path = env::var(SERVICE_BASEPATH).unwrap();
     // ---- setup
     let basepath = AppBasepathCfg {
         system: sys_path.clone(),

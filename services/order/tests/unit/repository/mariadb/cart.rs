@@ -1,4 +1,4 @@
-use order::constant::ProductType;
+use ecommerce_common::constant::ProductType;
 use order::model::{BaseProductIdentity, CartLineModel, CartModel};
 use order::repository::app_repo_cart;
 

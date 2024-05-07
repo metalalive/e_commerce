@@ -7,19 +7,21 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Local;
-use order::error::{AppError, AppErrorCode};
 use tokio::task;
 use tokio::time::sleep;
 
+use ecommerce_common::constant::env_vars::SYS_BASEPATH;
+use ecommerce_common::error::AppErrorCode;
+
 use order::confidentiality::UserSpaceConfidentiality;
-use order::constant::ENV_VAR_SYS_BASE_PATH;
+use order::error::AppError;
 use order::{AbstractRpcContext, AppRpcClientReqProperty, AppSharedState};
 
 use crate::ut_setup_share_state;
 
 fn ut_appstate_setup() -> AppSharedState {
     let cfdntl = {
-        let sys_basepath = env::var(ENV_VAR_SYS_BASE_PATH).unwrap();
+        let sys_basepath = env::var(SYS_BASEPATH).unwrap();
         let path = sys_basepath.clone() + "/common/data/secrets.json";
         UserSpaceConfidentiality::build(path)
     };

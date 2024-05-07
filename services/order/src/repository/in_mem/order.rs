@@ -7,11 +7,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 use tokio::sync::Mutex;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::dto::{PhoneNumberDto, ShippingMethod};
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
-use crate::constant::ProductType;
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow, AppInMemFetchedSingleTable};
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{
     BillingModel, ContactModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
     OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, PhyAddrModel, ShippingModel,

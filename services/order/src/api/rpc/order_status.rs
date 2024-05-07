@@ -1,7 +1,9 @@
 use serde_json::Value as JsnVal;
 use std::vec::Vec;
 
-use crate::error::{AppError, AppErrorCode};
+use ecommerce_common::error::AppErrorCode;
+
+use crate::error::AppError;
 use crate::repository::{app_repo_order, app_repo_order_return};
 use crate::rpc::AppRpcClientReqProperty;
 use crate::usecase::{

@@ -1,7 +1,7 @@
 use chrono::{DateTime, FixedOffset, Local};
+use ecommerce_common::constant::ProductType;
 
 use order::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
-use order::constant::ProductType;
 use order::datastore::AbstInMemoryDStore;
 use order::model::{
     BillingModel, ContactModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,

@@ -35,8 +35,10 @@ use jsonwebtoken::{
     Validation as JwtValidation,
 };
 
+use ecommerce_common::error::AppErrorCode;
+
 use crate::constant::{app_meta, HTTP_CONTENT_TYPE_JSON};
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::{AppAuthCfg, AppSharedState};
 
@@ -354,7 +356,7 @@ impl AppAuthKeystore {
                 Ok(m) => Ok(m),
                 Err(net_e) => Err(AppError {
                     detail: Some(net_e.to_string()),
-                    code: AppErrorCode::from(&net_e),
+                    code: err_code_hyper2app(&net_e),
                 }),
             },
             Err(net_e) => Err(AppError {
@@ -391,7 +393,7 @@ impl AppAuthKeystore {
                 }
                 Err(net_e) => Err(AppError {
                     detail: Some(net_e.to_string()),
-                    code: AppErrorCode::from(&net_e),
+                    code: err_code_hyper2app(&net_e),
                 }),
             },
             Err(net_e) => Err(AppError {
@@ -426,7 +428,7 @@ impl AppAuthKeystore {
                 }
                 Err(net_e) => Some(Err(AppError {
                     detail: Some(net_e.to_string()),
-                    code: AppErrorCode::from(&net_e),
+                    code: err_code_hyper2app(&net_e),
                 })),
             };
             if let Some(v) = result {
@@ -440,23 +442,21 @@ impl AppAuthKeystore {
     } // end of resp_body_to_keys
 } // end of fn AppAuthKeystore
 
-impl From<&hyper::Error> for AppErrorCode {
-    fn from(value: &hyper::Error) -> Self {
-        if value.is_connect() {
-            Self::IOerror(ErrorKind::NotConnected)
-        } else if value.is_parse() || value.is_incomplete_message() {
-            Self::DataCorruption
-        } else if value.is_parse_too_large() {
-            Self::ExceedingMaxLimit
-        } else if value.is_user() {
-            Self::IOerror(ErrorKind::InvalidInput)
-        } else if value.is_timeout() {
-            Self::IOerror(ErrorKind::TimedOut)
-        } else if value.is_canceled() {
-            Self::IOerror(ErrorKind::Interrupted)
-        } else {
-            Self::IOerror(ErrorKind::Other)
-        }
+fn err_code_hyper2app(value: &hyper::Error) -> AppErrorCode {
+    if value.is_connect() {
+        AppErrorCode::IOerror(ErrorKind::NotConnected)
+    } else if value.is_parse() || value.is_incomplete_message() {
+        AppErrorCode::DataCorruption
+    } else if value.is_parse_too_large() {
+        AppErrorCode::ExceedingMaxLimit
+    } else if value.is_user() {
+        AppErrorCode::IOerror(ErrorKind::InvalidInput)
+    } else if value.is_timeout() {
+        AppErrorCode::IOerror(ErrorKind::TimedOut)
+    } else if value.is_canceled() {
+        AppErrorCode::IOerror(ErrorKind::Interrupted)
+    } else {
+        AppErrorCode::IOerror(ErrorKind::Other)
     }
 }
 

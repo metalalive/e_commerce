@@ -7,9 +7,11 @@ use async_trait::async_trait;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, MySql, Row, Statement, Transaction};
 
-use crate::constant::ProductType;
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::datastore::AppMariaDbStore;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{ProductPolicyModel, ProductPolicyModelSet};
 use crate::repository::AbstProductPolicyRepo;
 

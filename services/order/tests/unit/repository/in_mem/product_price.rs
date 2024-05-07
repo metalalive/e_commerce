@@ -2,10 +2,11 @@ use chrono::DateTime;
 use std::boxed::Box;
 use std::vec;
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::api::rpc::dto::ProductPriceDeleteDto;
-use order::constant::ProductType;
 use order::datastore::{AbstInMemoryDStore, AppInMemoryDStore};
-use order::error::AppErrorCode;
 use order::model::{ProductPriceModel, ProductPriceModelSet};
 use order::repository::{AbsProductPriceRepo, ProductPriceInMemRepo};
 

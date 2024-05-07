@@ -11,11 +11,14 @@ use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::pool::PoolConnection;
 use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use crate::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
-use crate::constant::{self as AppConst, ProductType};
+use crate::constant::hard_limit;
 use crate::datastore::AppMariaDbStore;
-use crate::error::{AppError, AppErrorCode};
+use crate::error::AppError;
 use crate::model::{
     BillingModel, ContactModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
     OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, PhyAddrModel, ShippingModel,
@@ -767,11 +770,11 @@ impl OrderMariaDbRepo {
             &ol_set.create_time,
             &ol_set.lines,
         );
-        if olines.len() > AppConst::limit::MAX_ORDER_LINES_PER_REQUEST {
+        if olines.len() > hard_limit::MAX_ORDER_LINES_PER_REQUEST {
             let d = format!(
                 "actual: {}, limit:{}",
                 olines.len(),
-                AppConst::limit::MAX_ORDER_LINES_PER_REQUEST
+                hard_limit::MAX_ORDER_LINES_PER_REQUEST
             );
             let e = AppError {
                 code: AppErrorCode::ExceedingMaxLimit,

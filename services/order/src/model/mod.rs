@@ -18,7 +18,7 @@ pub use stock_level::{
 };
 
 use crate::api::web::dto::OrderLineReqDto;
-use crate::constant::ProductType;
+use ecommerce_common::constant::ProductType;
 
 #[derive(Eq)]
 pub struct BaseProductIdentity {
