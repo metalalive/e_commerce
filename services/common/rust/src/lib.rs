@@ -1,5 +1,6 @@
-pub mod error;
+pub mod config;
 pub mod constant;
+pub mod error;
 
 use std::sync::Arc;
 

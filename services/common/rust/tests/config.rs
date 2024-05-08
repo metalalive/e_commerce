@@ -1,15 +1,22 @@
+mod ut_common;
 use std::collections::HashMap;
 
+use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
 use ecommerce_common::constant::env_vars::{CFG_FILEPATH, SERVICE_BASEPATH, SYS_BASEPATH};
-use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::error::{AppCfgError, AppErrorCode};
 
-use order::error::AppError;
-use order::AppConfig;
+use ut_common::EXAMPLE_REL_PATH;
 
-use crate::EXAMPLE_REL_PATH;
+fn ut_mock_limit() -> AppCfgHardLimit {
+    AppCfgHardLimit {
+        nitems_per_inmem_table: 2200,
+        num_db_conns: 10000,
+        seconds_db_idle: 600,
+    }
+}
 
 #[test]
-fn cfg_extract_arg_ok() {
+fn cfg_extract_arg_nonexist_sys_path() {
     let args = [
         (
             CFG_FILEPATH.to_string(),
@@ -18,7 +25,10 @@ fn cfg_extract_arg_ok() {
         (SYS_BASEPATH.to_string(), "/path/sys".to_string()),
         (SERVICE_BASEPATH.to_string(), "/path/service".to_string()),
     ];
-    let args = HashMap::from(args);
+    let args = AppCfgInitArgs {
+        limit: ut_mock_limit(),
+        env_var_map: HashMap::from(args),
+    };
     let result = AppConfig::new(args);
     assert_eq!(result.is_err(), true);
     let err = result.err().unwrap();
@@ -31,8 +41,10 @@ fn cfg_extract_arg_ok() {
 
 #[test]
 fn cfg_extract_arg_missing_sys_path() {
-    let args = [];
-    let args = HashMap::from(args);
+    let args = AppCfgInitArgs {
+        limit: ut_mock_limit(),
+        env_var_map: HashMap::new(),
+    };
     let result = AppConfig::new(args);
     assert_eq!(result.is_err(), true);
     let err = result.err().unwrap();
@@ -42,7 +54,10 @@ fn cfg_extract_arg_missing_sys_path() {
 #[test]
 fn cfg_extract_arg_missing_service_path() {
     let args = [(SYS_BASEPATH.to_string(), "/path/sys".to_string())];
-    let args = HashMap::from(args);
+    let args = AppCfgInitArgs {
+        limit: ut_mock_limit(),
+        env_var_map: HashMap::from(args),
+    };
     let result = AppConfig::new(args);
     assert_eq!(result.is_err(), true);
     let err = result.err().unwrap();
@@ -54,7 +69,7 @@ fn parse_ext_cfg_file_ok() {
     let service_basepath = std::env::var(SERVICE_BASEPATH).unwrap();
     const CFG_FILEPATH: &str = "config_ok.json";
     let fullpath = service_basepath + EXAMPLE_REL_PATH + CFG_FILEPATH;
-    let result = AppConfig::parse_from_file(fullpath);
+    let result = AppConfig::parse_from_file(fullpath, ut_mock_limit());
     assert_eq!(result.is_ok(), true);
     let actual = result.unwrap();
     assert_eq!(actual.listen.api_version.is_empty(), false);
@@ -77,10 +92,10 @@ fn parse_ext_cfg_file_ok() {
     }
 }
 
-fn _parse_ext_cfg_file_error_common(cfg_filepath: &str, expect_err: AppErrorCode) -> AppError {
+fn _parse_ext_cfg_file_error_common(cfg_filepath: &str, expect_err: AppErrorCode) -> AppCfgError {
     let service_basepath = std::env::var(SERVICE_BASEPATH).unwrap();
     let fullpath = service_basepath + EXAMPLE_REL_PATH + cfg_filepath;
-    let result = AppConfig::parse_from_file(fullpath);
+    let result = AppConfig::parse_from_file(fullpath, ut_mock_limit());
     assert_eq!(result.is_err(), true);
     let err = result.err().unwrap();
     assert_eq!(err.code, expect_err);

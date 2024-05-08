@@ -9,12 +9,9 @@ use std::sync::Arc;
 use serde::de::{Error as DeserializeError, Expected};
 use serde::Deserialize;
 
-use ecommerce_common::constant::{env_vars, logging as const_log};
-use ecommerce_common::error::AppErrorCode;
-use ecommerce_common::{AppLogAlias, WebApiPath};
-
-use crate::constant::hard_limit;
-use crate::error::AppError;
+use crate::constant::{env_vars, logging as const_log};
+use crate::error::{AppCfgError, AppErrorCode};
+use crate::{AppLogAlias, WebApiPath};
 
 #[derive(Deserialize)]
 pub struct AppLogHandlerCfg {
@@ -202,29 +199,40 @@ pub struct AppConfig {
     pub api_server: ApiServerCfg,
 }
 
+pub struct AppCfgHardLimit {
+    pub nitems_per_inmem_table: u32,
+    pub num_db_conns: u32,
+    pub seconds_db_idle: u16,
+}
+pub struct AppCfgInitArgs {
+    pub env_var_map: HashMap<String, String, RandomState>,
+    pub limit: AppCfgHardLimit,
+}
+
 impl AppConfig {
-    pub fn new(mut args: HashMap<String, String, RandomState>) -> DefaultResult<Self, AppError> {
-        let sys_basepath = if let Some(s) = args.remove(env_vars::SYS_BASEPATH) {
+    pub fn new(args: AppCfgInitArgs) -> DefaultResult<Self, AppCfgError> {
+        let (mut env_var_map, limit) = (args.env_var_map, args.limit);
+        let sys_basepath = if let Some(s) = env_var_map.remove(env_vars::SYS_BASEPATH) {
             s + "/"
         } else {
-            return Err(AppError {
+            return Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::MissingSysBasePath,
             });
         };
-        let app_basepath = if let Some(a) = args.remove(env_vars::SERVICE_BASEPATH) {
+        let app_basepath = if let Some(a) = env_var_map.remove(env_vars::SERVICE_BASEPATH) {
             a + "/"
         } else {
-            return Err(AppError {
+            return Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::MissingAppBasePath,
             });
         };
-        let api_srv_cfg = if let Some(cfg_path) = args.remove(env_vars::CFG_FILEPATH) {
+        let api_srv_cfg = if let Some(cfg_path) = env_var_map.remove(env_vars::CFG_FILEPATH) {
             let fullpath = app_basepath.clone() + &cfg_path;
-            Self::parse_from_file(fullpath)?
+            Self::parse_from_file(fullpath, limit)?
         } else {
-            return Err(AppError {
+            return Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::MissingConfigPath,
             });
@@ -238,7 +246,10 @@ impl AppConfig {
         })
     } // end of new
 
-    pub fn parse_from_file(filepath: String) -> DefaultResult<ApiServerCfg, AppError> {
+    pub fn parse_from_file(
+        filepath: String,
+        limit: AppCfgHardLimit,
+    ) -> DefaultResult<ApiServerCfg, AppCfgError> {
         // load and parse a config file with given path
         match File::open(filepath) {
             Ok(fileobj) => {
@@ -248,23 +259,23 @@ impl AppConfig {
                         Self::_check_web_listener(&jsnobj.listen)?;
                         Self::_check_rpc(&jsnobj.rpc)?;
                         Self::_check_logging(&jsnobj.logging)?;
-                        Self::_check_datastore(&jsnobj.data_store)?;
+                        Self::_check_datastore(&jsnobj.data_store, limit)?;
                         Ok(jsnobj)
                     }
-                    Err(e) => Err(AppError {
+                    Err(e) => Err(AppCfgError {
                         detail: Some(e.to_string()),
                         code: AppErrorCode::InvalidJsonFormat,
                     }),
                 }
             }
-            Err(e) => Err(AppError {
+            Err(e) => Err(AppCfgError {
                 detail: Some(e.to_string()),
                 code: AppErrorCode::IOerror(e.kind()),
             }),
         }
     }
 
-    fn _check_web_listener(obj: &WebApiListenCfg) -> DefaultResult<(), AppError> {
+    fn _check_web_listener(obj: &WebApiListenCfg) -> DefaultResult<(), AppCfgError> {
         let version: Vec<&str> = obj.api_version.split('.').collect();
         let mut iter = version.iter().filter(|i| i.parse::<u16>().is_err());
         let mut iter2 = obj
@@ -272,19 +283,19 @@ impl AppConfig {
             .iter()
             .filter(|i| i.path.is_empty() || i.handler.is_empty());
         if obj.routes.is_empty() {
-            Err(AppError {
+            Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::NoRouteApiServerCfg,
             })
         } else if iter.next().is_some() {
             let err_msg = Some("version must be numeric".to_string());
-            Err(AppError {
+            Err(AppCfgError {
                 detail: err_msg,
                 code: AppErrorCode::InvalidVersion,
             })
         } else if let Some(badroute) = iter2.next() {
             let err_msg = Some(badroute.to_string());
-            Err(AppError {
+            Err(AppCfgError {
                 detail: err_msg,
                 code: AppErrorCode::InvalidRouteConfig,
             })
@@ -293,12 +304,12 @@ impl AppConfig {
         }
     } // end of _check_web_listener
 
-    fn _check_rpc(obj: &AppRpcCfg) -> DefaultResult<(), AppError> {
+    fn _check_rpc(obj: &AppRpcCfg) -> DefaultResult<(), AppCfgError> {
         match obj {
             AppRpcCfg::dummy => Ok(()),
             AppRpcCfg::AMQP(c) => {
                 if c.bindings.is_empty() {
-                    Err(AppError {
+                    Err(AppCfgError {
                         detail: Some("rpc".to_string()),
                         code: AppErrorCode::NoRouteApiServerCfg,
                     })
@@ -309,7 +320,7 @@ impl AppConfig {
         }
     } // end of _check_rpc
 
-    fn _check_logging(obj: &AppLoggingCfg) -> DefaultResult<(), AppError> {
+    fn _check_logging(obj: &AppLoggingCfg) -> DefaultResult<(), AppCfgError> {
         let mut filtered = obj.loggers.iter().filter(|item| item.handlers.is_empty());
         let mut filtered2 = obj.handlers.iter().filter(|item| match &item.destination {
             const_log::Destination::LOCALFS => item.path.is_none(),
@@ -318,34 +329,34 @@ impl AppConfig {
         let mut filtered3 = obj.handlers.iter().filter(|item| item.alias.is_empty());
         let mut filtered4 = obj.loggers.iter().filter(|item| item.alias.is_empty());
         if obj.handlers.is_empty() {
-            Err(AppError {
+            Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::NoLogHandlerCfg,
             })
         } else if obj.loggers.is_empty() {
-            Err(AppError {
+            Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::NoLoggerCfg,
             })
         } else if let Some(alogger) = filtered.next() {
             let msg = format!("the logger does not have handler: {}", alogger.alias);
-            Err(AppError {
+            Err(AppCfgError {
                 detail: Some(msg),
                 code: AppErrorCode::NoHandlerInLoggerCfg,
             })
         } else if let Some(_hdlr) = filtered3.next() {
-            Err(AppError {
+            Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::MissingAliasLogHdlerCfg,
             })
         } else if let Some(_logger) = filtered4.next() {
-            Err(AppError {
+            Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::MissingAliasLoggerCfg,
             })
         } else if let Some(alogger) = filtered2.next() {
             let msg = format!("file-type handler does not contain path: {}", alogger.alias);
-            Err(AppError {
+            Err(AppCfgError {
                 detail: Some(msg),
                 code: AppErrorCode::InvalidHandlerLoggerCfg,
             })
@@ -364,7 +375,7 @@ impl AppConfig {
                     "the logger contains invalid handler alias: {}",
                     alogger.alias
                 );
-                Err(AppError {
+                Err(AppCfgError {
                     detail: Some(msg),
                     code: AppErrorCode::InvalidHandlerLoggerCfg,
                 })
@@ -374,9 +385,12 @@ impl AppConfig {
         }
     } // end of _check_logging
 
-    fn _check_datastore(obj: &Vec<AppDataStoreCfg>) -> DefaultResult<(), AppError> {
+    fn _check_datastore(
+        obj: &Vec<AppDataStoreCfg>,
+        limit: AppCfgHardLimit,
+    ) -> DefaultResult<(), AppCfgError> {
         if obj.is_empty() {
-            return Err(AppError {
+            return Err(AppCfgError {
                 detail: None,
                 code: AppErrorCode::NoDatabaseCfg,
             });
@@ -384,9 +398,9 @@ impl AppConfig {
         for item in obj {
             match item {
                 AppDataStoreCfg::InMemory(c) => {
-                    let lmt = hard_limit::MAX_ITEMS_STORED_PER_MODEL;
+                    let lmt = limit.nitems_per_inmem_table;
                     if c.max_items > lmt {
-                        let e = AppError {
+                        let e = AppCfgError {
                             detail: Some(format!("limit:{}", lmt)),
                             code: AppErrorCode::ExceedingMaxLimit,
                         };
@@ -394,16 +408,16 @@ impl AppConfig {
                     }
                 }
                 AppDataStoreCfg::DbServer(c) => {
-                    let lmt_conn = hard_limit::MAX_DB_CONNECTIONS;
-                    let lmt_idle = hard_limit::MAX_SECONDS_DB_IDLE;
+                    let lmt_conn = limit.num_db_conns;
+                    let lmt_idle = limit.seconds_db_idle;
                     if c.max_conns > lmt_conn {
-                        let e = AppError {
+                        let e = AppCfgError {
                             detail: Some(format!("limit-conn:{}", lmt_conn)),
                             code: AppErrorCode::ExceedingMaxLimit,
                         };
                         return Err(e);
                     } else if c.idle_timeout_secs > lmt_idle {
-                        let e = AppError {
+                        let e = AppCfgError {
                             detail: Some(format!("limit-idle-time:{}", lmt_idle)),
                             code: AppErrorCode::ExceedingMaxLimit,
                         };

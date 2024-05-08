@@ -13,11 +13,10 @@ pub mod network;
 pub mod repository;
 pub mod usecase;
 
-mod config;
-pub use config::{
-    ApiServerCfg, AppAuthCfg, AppBasepathCfg, AppConfidentialCfg, AppConfig, AppInMemoryDbCfg,
-    AppLogHandlerCfg, AppLoggerCfg, AppLoggingCfg, AppRpcAmqpCfg, AppRpcCfg, WebApiListenCfg,
-    WebApiRouteCfg,
+pub use ecommerce_common::config::{
+    ApiServerCfg, AppAuthCfg, AppBasepathCfg, AppCfgHardLimit, AppCfgInitArgs, AppConfidentialCfg,
+    AppConfig, AppInMemoryDbCfg, AppLogHandlerCfg, AppLoggerCfg, AppLoggingCfg, AppRpcAmqpCfg,
+    AppRpcCfg, WebApiListenCfg, WebApiRouteCfg,
 };
 
 mod auth;

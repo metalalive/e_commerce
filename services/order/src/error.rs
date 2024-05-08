@@ -1,4 +1,4 @@
-use ecommerce_common::error::{AppErrorCode, ProductTypeParseError};
+use ecommerce_common::error::{AppCfgError, AppErrorCode, ProductTypeParseError};
 use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
@@ -25,6 +25,14 @@ impl From<ProductTypeParseError> for AppError {
         AppError {
             code: AppErrorCode::DataCorruption,
             detail: Some(detail),
+        }
+    }
+}
+impl From<AppCfgError> for AppError {
+    fn from(value: AppCfgError) -> Self {
+        AppError {
+            code: value.code,
+            detail: value.detail,
         }
     }
 }

@@ -1,5 +1,4 @@
 use std::boxed::Box;
-use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use std::env;
 use std::future::Future;
@@ -11,9 +10,10 @@ use tokio::runtime::Builder as RuntimeBuilder;
 
 use order::api::rpc::route_to_handler;
 use order::confidentiality::{self, AbstractConfidentiality};
+use order::constant::hard_limit;
 use order::error::AppError;
 use order::logging::{app_log_event, AppLogContext, AppLogLevel};
-use order::{AppConfig, AppRpcClientReqProperty, AppSharedState};
+use order::{AppCfgHardLimit, AppCfgInitArgs, AppConfig, AppRpcClientReqProperty, AppSharedState};
 
 fn route_handler_wrapper(
     req: AppRpcClientReqProperty,
@@ -68,8 +68,15 @@ fn start_async_runtime(cfg: AppConfig, cfdntl: Box<dyn AbstractConfidentiality>)
 
 fn main() {
     let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
-    let arg_map: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
-    match AppConfig::new(arg_map) {
+    let args = AppCfgInitArgs {
+        limit: AppCfgHardLimit {
+            nitems_per_inmem_table: hard_limit::MAX_ITEMS_STORED_PER_MODEL,
+            num_db_conns: hard_limit::MAX_DB_CONNECTIONS,
+            seconds_db_idle: hard_limit::MAX_SECONDS_DB_IDLE,
+        },
+        env_var_map: HashMap::from_iter(iter),
+    };
+    match AppConfig::new(args) {
         Ok(cfg) => match confidentiality::build_context(&cfg) {
             Ok(cfdntl) => {
                 start_async_runtime(cfg, cfdntl);
@@ -82,7 +89,10 @@ fn main() {
             }
         },
         Err(e) => {
-            println!("app failed to configure, error code: {} ", e);
+            println!(
+                "app failed to configure, error code: {} ",
+                AppError::from(e)
+            );
         }
     };
 } // end of main

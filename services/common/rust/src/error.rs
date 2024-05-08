@@ -44,3 +44,8 @@ pub enum AppErrorCode {
 #[derive(Debug)]
 pub struct ProductTypeParseError(pub ParseIntError);
 
+#[derive(Debug, Clone)]
+pub struct AppCfgError {
+    pub code: AppErrorCode,
+    pub detail: Option<String>,
+}

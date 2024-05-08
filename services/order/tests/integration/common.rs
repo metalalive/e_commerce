@@ -1,5 +1,4 @@
 use std::borrow::BorrowMut;
-use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
@@ -17,12 +16,13 @@ use tower::Service;
 
 use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::config::{AppBasepathCfg, AppConfig, AppCfgHardLimit, AppCfgInitArgs};
 
 use order::api::web::route_table;
 use order::error::AppError;
 use order::logging::AppLogContext;
 use order::network::{app_web_service, WebServiceRoute};
-use order::{confidentiality, AppBasepathCfg, AppConfig, AppSharedState};
+use order::{confidentiality, AppSharedState};
 
 pub(crate) type ITestFinalHttpBody = HyperBody;
 struct ITestGlobalState(AppSharedState);
@@ -40,7 +40,14 @@ static WEB_SRV_INIT: Once = Once::new();
 
 fn _test_setup_shr_state() -> DefaultResult<ITestGlobalState, AppError> {
     let iter = env::vars().filter(|(k, _)| EXPECTED_LABELS.contains(&k.as_str()));
-    let args: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
+    let args = AppCfgInitArgs {
+        env_var_map: HashMap::from_iter(iter),
+        limit: AppCfgHardLimit {
+            nitems_per_inmem_table: 1200,
+            num_db_conns: 1000,
+            seconds_db_idle: 130
+        }
+    };
     let top_lvl_cfg = AppConfig::new(args)?;
     let cfdntl = confidentiality::build_context(&top_lvl_cfg)?;
     let log_ctx = AppLogContext::new(&top_lvl_cfg.basepath, &top_lvl_cfg.api_server.logging);

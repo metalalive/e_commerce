@@ -1,5 +1,4 @@
 use std::boxed::Box;
-use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::Ordering;
@@ -13,11 +12,15 @@ use tower::ServiceBuilder;
 use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::cors::CorsLayer;
 
+use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
+
 use order::api::web::route_table;
 use order::confidentiality::{self, AbstractConfidentiality};
+use order::constant::hard_limit;
+use order::error::AppError;
 use order::logging::{app_log_event, AppLogContext, AppLogLevel};
 use order::network::{app_web_service, middleware, net_server_listener};
-use order::{AppConfig, AppJwtAuthentication, AppSharedState};
+use order::{AppJwtAuthentication, AppSharedState};
 
 type AppFinalHttpBody = Limited<HyperBody>; // HyperBody;
 
@@ -216,8 +219,15 @@ fn start_async_runtime(cfg: AppConfig, confidential: Box<dyn AbstractConfidentia
 
 fn main() {
     let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
-    let arg_map: HashMap<String, String, RandomState> = HashMap::from_iter(iter);
-    match AppConfig::new(arg_map) {
+    let args = AppCfgInitArgs {
+        limit: AppCfgHardLimit {
+            nitems_per_inmem_table: hard_limit::MAX_ITEMS_STORED_PER_MODEL,
+            num_db_conns: hard_limit::MAX_DB_CONNECTIONS,
+            seconds_db_idle: hard_limit::MAX_SECONDS_DB_IDLE,
+        },
+        env_var_map: HashMap::from_iter(iter),
+    };
+    match AppConfig::new(args) {
         Ok(cfg) => match confidentiality::build_context(&cfg) {
             Ok(confidential) => start_async_runtime(cfg, confidential),
             Err(e) => {
@@ -228,7 +238,10 @@ fn main() {
             }
         },
         Err(e) => {
-            println!("app failed to configure, error code: {} ", e);
+            println!(
+                "app failed to configure, error code: {} ",
+                AppError::from(e)
+            );
         }
     };
 } // end of main

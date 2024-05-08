@@ -8,11 +8,7 @@ pub mod env_vars {
     pub const SERVICE_BASEPATH: &str = "SERVICE_BASE_PATH";
     // relative path starting from app / service home folder
     pub const CFG_FILEPATH: &str = "CONFIG_FILE_PATH";
-    pub const EXPECTED_LABELS: [&str; 3] = [
-        SYS_BASEPATH,
-        SERVICE_BASEPATH,
-        CFG_FILEPATH,
-    ];
+    pub const EXPECTED_LABELS: [&str; 3] = [SYS_BASEPATH, SERVICE_BASEPATH, CFG_FILEPATH];
 }
 
 // standard library hides the default implementation of the trait `PartialEq`
@@ -58,7 +54,7 @@ impl FromStr for ProductType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse::<u8>() {
             Ok(v) => Ok(Self::from(v)),
-            Err(e) => Err(ProductTypeParseError(e))
+            Err(e) => Err(ProductTypeParseError(e)),
         }
     }
 }

@@ -4,6 +4,8 @@ mod sql_db;
 use std::boxed::Box;
 use std::sync::Arc;
 
+use ecommerce_common::config::AppDataStoreCfg;
+
 pub use in_mem::{
     AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemDeleteInfo, AppInMemDstoreLock,
     AppInMemFetchKeys, AppInMemFetchedData, AppInMemFetchedSingleRow, AppInMemFetchedSingleTable,
@@ -12,7 +14,6 @@ pub use in_mem::{
 pub use sql_db::AppMariaDbStore;
 
 use crate::confidentiality::AbstractConfidentiality;
-use crate::config::AppDataStoreCfg;
 use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 pub(crate) fn build_context(

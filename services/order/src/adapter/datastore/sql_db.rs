@@ -18,10 +18,11 @@ use sqlx::MySql;
 #[cfg(feature = "mariadb")]
 use sqlx::mysql::MySqlConnectOptions;
 
-use crate::confidentiality::AbstractConfidentiality;
-use crate::config::{AppDbServerCfg, AppDbServerType};
-use crate::error::AppError;
+use ecommerce_common::config::{AppDbServerCfg, AppDbServerType};
 use ecommerce_common::error::AppErrorCode;
+
+use crate::confidentiality::AbstractConfidentiality;
+use crate::error::AppError;
 
 #[cfg(feature = "mariadb")]
 #[allow(non_snake_case)]

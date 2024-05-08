@@ -22,18 +22,19 @@ use amqprs::consumer::AsyncConsumer;
 use amqprs::error::Error as AmqpError;
 use amqprs::{BasicProperties, Deliver, FieldTable, FieldValue};
 
+use ecommerce_common::config::{AppAmqpBindingCfg, AppAmqpBindingReplyCfg, AppRpcAmqpCfg};
+use ecommerce_common::error::AppErrorCode;
+
 use super::{
     AbsRpcClientCtx, AbsRpcServerCtx, AbstractRpcClient, AbstractRpcContext,
     AppRpcClientReqProperty, AppRpcReply, AppRpcRouteHdlrFn,
 };
 use crate::api::rpc::{py_celery_reply_status, PyCeleryRespStatus};
 use crate::confidentiality::AbstractConfidentiality;
-use crate::config::{AppAmqpBindingCfg, AppAmqpBindingReplyCfg, AppRpcAmqpCfg};
 use crate::constant::{app_meta, HTTP_CONTENT_TYPE_JSON};
 use crate::error::AppError;
 use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::{generate_custom_uid, AppSharedState};
-use ecommerce_common::error::AppErrorCode;
 
 #[derive(Deserialize)]
 struct BrokerSecret {
