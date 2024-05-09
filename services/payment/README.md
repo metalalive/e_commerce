@@ -3,6 +3,10 @@
 ## Essential Environment Variables
 ## Build
 ### Pre-requisite
+| type | name | version required |
+|------|------|------------------|
+| Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.75.0` |
+
 ### Optional features
 ### Commands for build
 ## Run
@@ -27,7 +31,7 @@ cargo clippy
 ### Unit Test
 ### Integration Test
 ```bash
-SYS_BASE_PATH="${PWD}/../"  SERVICE_BASE_PATH="${PWD}" \
+SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
     CONFIG_FILE_PATH="settings/test.json" cargo test --test integration \
     -- <specific-test-case-path>  --test-threads=1
 ```

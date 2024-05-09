@@ -5,10 +5,11 @@ use chrono::DateTime;
 use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
-use ecommerce_common::api::dto::PayAmountDto;
+use ecommerce_common::api::dto::{
+    jsn_serialize_product_type, jsn_validate_product_type, PayAmountDto,
+};
 
 use crate::api::dto::{BillingDto, OrderLinePayDto, ShippingDto};
-use crate::api::{jsn_serialize_product_type, jsn_validate_product_type};
 
 #[derive(Deserialize)]
 pub struct ProductPriceDeleteDto {

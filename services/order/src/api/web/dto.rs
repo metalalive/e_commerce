@@ -1,9 +1,10 @@
-use ecommerce_common::api::dto::GenericRangeErrorDto;
+use ecommerce_common::api::dto::{
+    jsn_serialize_product_type, jsn_validate_product_type, GenericRangeErrorDto,
+};
 use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
 use crate::api::dto::{BillingDto, OrderLinePayDto, ShippingDto};
-use crate::api::{jsn_serialize_product_type, jsn_validate_product_type};
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderLineReqDto {
