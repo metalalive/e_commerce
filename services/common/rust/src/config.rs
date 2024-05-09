@@ -46,7 +46,7 @@ struct AccessLogCfg {
     format: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct WebApiRouteCfg {
     pub path: WebApiPath,
     #[serde(deserialize_with = "jsn_deny_empty_string")]

@@ -1,25 +1,36 @@
 use actix_web::rt;
+use std::collections::HashMap;
+use std::env;
+
+use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
+use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 
 use payment::api::web::AppRouteTable;
+use payment::hard_limit;
 use payment::network::{app_web_service, net_server_listener};
 
-struct MockAppConfig {
-    host: String,
-    port: u16,
-}
-
 fn main() {
-    let cfg = MockAppConfig {
-        host: "localhost".to_string(),
-        port: 8015,
+    let cfg = {
+        let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
+        let env_var_map = HashMap::from_iter(iter);
+        let limit = AppCfgHardLimit {
+            nitems_per_inmem_table: 0,
+            num_db_conns: hard_limit::MAX_DB_CONNECTIONS,
+            seconds_db_idle: hard_limit::MAX_SECONDS_DB_IDLE,
+        };
+        let args = AppCfgInitArgs { env_var_map, limit };
+        match AppConfig::new(args) {
+            Ok(c) => c,
+            Err(e) => {
+                println!(
+                    "[ERROR] config failure, code:{:?}, detail:{:?}",
+                    e.code, e.detail
+                );
+                return;
+            }
+        }
     };
-    let cfg_routes = [
-        ("/charge/{charge_id}", "create_new_charge"),
-        ("/charge/{charge_id}", "refresh_charge_status"),
-    ]
-    .into_iter()
-    .map(|(path, inner_label)| (path.to_string(), inner_label.to_string()))
-    .collect::<Vec<_>>();
+    let cfgroutes = cfg.api_server.listen.routes.clone();
     /*
      * `App` instance is created on each server worker thread (per HTTP reuqest ?)
      * To share the same data between all `App` instances, initialize the data outside
@@ -32,14 +43,18 @@ fn main() {
      * */
     let app_init = move || {
         let route_table = AppRouteTable::default();
-        let (app, num_applied) = app_web_service(route_table, cfg_routes.clone());
+        let (app, num_applied) = app_web_service(route_table, cfgroutes.clone());
         if num_applied == 0 {
             // TODO, logging error, actix-web does not consider to handle error
             // returned from this callback
         }
         app
     };
-    let ht_srv = net_server_listener(app_init, cfg.host.as_str(), cfg.port);
+    let ht_srv = net_server_listener(
+        app_init,
+        cfg.api_server.listen.host.as_str(),
+        cfg.api_server.listen.port,
+    );
     let runner = rt::System::new();
     let _result = runner.block_on(ht_srv.run());
-}
+} // end of fn main

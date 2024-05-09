@@ -1,24 +1,16 @@
-use actix_web::http::header::ContentType;
-use actix_web::test::{call_service, init_service, TestRequest};
-use serde_json::Value as JsnVal;
+mod common;
+
 use std::fs::File;
 
-use payment::api::web::AppRouteTable;
-use payment::network::app_web_service;
+use actix_web::http::header::ContentType;
+use actix_web::test::{call_service, TestRequest};
+use serde_json::Value as JsnVal;
+
+use common::itest_setup_app_server;
 
 #[actix_web::test]
 async fn charge_ok() {
-    let cfg_routes = [
-        ("/charge/{charge_id}", "create_new_charge"),
-        ("/charge/{charge_id}", "refresh_charge_status"),
-    ]
-    .into_iter()
-    .map(|(path, inner_label)| (path.to_string(), inner_label.to_string()))
-    .collect::<Vec<_>>();
-    let route_table = AppRouteTable::default();
-    let (app, num_applied) = app_web_service(route_table, cfg_routes);
-    assert_eq!(num_applied, 2);
-    let mock_app = init_service(app).await;
+    let mock_app = itest_setup_app_server().await;
 
     const CASE_FILE: &str = "./tests/integration/examples/create_charge_stripe_ok.json";
     let req = {

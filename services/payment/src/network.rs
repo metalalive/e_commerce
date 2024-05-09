@@ -5,6 +5,8 @@ use actix_web::dev::{AppConfig, Response, ServiceFactory, ServiceRequest, Servic
 use actix_web::web;
 use actix_web::{App, HttpServer};
 
+use ecommerce_common::config::WebApiRouteCfg;
+
 use crate::api::web::AppRouteTable;
 
 /*
@@ -22,7 +24,7 @@ use crate::api::web::AppRouteTable;
  * */
 pub fn app_web_service(
     mut route_table: AppRouteTable,
-    cfg: Vec<(String, String)>,
+    cfg: Vec<WebApiRouteCfg>,
 ) -> (
     App<
         impl ServiceFactory<
@@ -40,7 +42,8 @@ pub fn app_web_service(
     let cfg_fn = move |c: &mut web::ServiceConfig| {
         *num_applied_p = cfg
             .into_iter()
-            .filter_map(|(path, inner_label)| {
+            .filter_map(|c| {
+                let (path, inner_label) = (c.path, c.handler);
                 route_table
                     .entries
                     .remove(inner_label.as_str())
