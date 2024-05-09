@@ -63,7 +63,7 @@
         "port": 8013,
         "host":"localhost",
         "max_failures": 5,
-        "api_version": "1.0.0",
+        "api_version": "1.2.0",
         "cors": "common/data/cors.json",
 	"max_connections": 50,
         "routes": [

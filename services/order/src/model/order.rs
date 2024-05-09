@@ -5,10 +5,11 @@ use std::result::Result as DefaultResult;
 use std::vec::Vec;
 use uuid::Uuid;
 
+use ecommerce_common::api::dto::PayAmountDto;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::api::dto::{
-    BillingDto, ContactDto, CountryCode, OrderLinePayDto, PayAmountDto, PhoneNumberDto, PhyAddrDto,
+    BillingDto, ContactDto, CountryCode, OrderLinePayDto, PhoneNumberDto, PhyAddrDto,
     ShippingDto, ShippingMethod, ShippingOptionDto,
 };
 use crate::api::rpc::dto::{

@@ -1,3 +1,4 @@
+use ecommerce_common::api::dto::GenericRangeErrorDto;
 use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
@@ -48,13 +49,6 @@ pub struct OrderLineCreateErrNonExistDto {
     pub stock_seller: bool,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct OLineCreateErrorRsvLimitDto {
-    pub max_: u16,
-    pub min_: u16,
-    pub given: u32,
-} // TODO, rename to GenericRangeErrorDto
-
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct QuotaResourceErrorDto {
     pub max_: u32,
@@ -73,7 +67,7 @@ pub struct OrderLineCreateErrorDto {
     pub reason: OrderLineCreateErrorReason,
     pub nonexist: Option<OrderLineCreateErrNonExistDto>,
     pub shortage: Option<u32>,
-    pub rsv_limit: Option<OLineCreateErrorRsvLimitDto>,
+    pub rsv_limit: Option<GenericRangeErrorDto>,
 }
 
 #[derive(Serialize)]

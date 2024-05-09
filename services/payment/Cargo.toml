@@ -14,6 +14,8 @@ actix-http = "^3.6"
 actix-service = "^2"
 actix-web = {version="^4.5.1", features=["macros"]}
 
+ecommerce-common = {version="^0.1.0", path="../common/rust"}
+
 [[test]]
 name = "integration"
 path = "./tests/integration/mod.rs"

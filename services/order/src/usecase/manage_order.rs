@@ -6,6 +6,7 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
+use ecommerce_common::api::dto::GenericRangeErrorDto;
 
 use crate::api::rpc::dto::{
     OrderLineReplicaRefundDto, OrderLineStockReturningDto, OrderPaymentUpdateDto,
@@ -15,7 +16,7 @@ use crate::api::rpc::dto::{
 };
 use crate::api::web::dto::{
     BillingErrorDto, BillingReqDto, ContactErrorDto, ContactNonFieldErrorReason,
-    OLineCreateErrorRsvLimitDto, OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
+    OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
     OrderLineCreateErrNonExistDto, OrderLineCreateErrorDto, OrderLineCreateErrorReason,
     OrderLineReqDto, OrderLineReturnErrorDto, QuotaResourceErrorDto, ShippingErrorDto,
     ShippingReqDto,
@@ -318,7 +319,7 @@ impl CreateOrderUseCase {
                         Ok(o) => Some(o),
                         Err(e) => {
                             if e.code == AppErrorCode::ExceedingMaxLimit {
-                                let rsv_limit = OLineCreateErrorRsvLimitDto {
+                                let rsv_limit = GenericRangeErrorDto {
                                     max_: plc.max_num_rsv,
                                     min_: plc.min_num_rsv,
                                     given: req_qty,

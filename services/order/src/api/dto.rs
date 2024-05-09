@@ -1,6 +1,8 @@
 use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
+use ecommerce_common::api::dto::PayAmountDto;
+
 use crate::api::{jsn_serialize_product_type, jsn_validate_product_type};
 
 // TODO, merge the 2 DTO modules in `/web` and `/rpc` package
@@ -111,12 +113,6 @@ pub struct ShippingDto {
 pub struct BillingDto {
     pub contact: ContactDto,
     pub address: Option<PhyAddrDto>,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct PayAmountDto {
-    pub unit: u32,
-    pub total: u32,
 }
 
 #[derive(Deserialize, Serialize)]
