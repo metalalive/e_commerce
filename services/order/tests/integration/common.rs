@@ -17,10 +17,10 @@ use tower::Service;
 use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::config::{AppBasepathCfg, AppConfig, AppCfgHardLimit, AppCfgInitArgs};
+use ecommerce_common::logging::AppLogContext;
 
 use order::api::web::route_table;
 use order::error::AppError;
-use order::logging::AppLogContext;
 use order::network::{app_web_service, WebServiceRoute};
 use order::{confidentiality, AppSharedState};
 

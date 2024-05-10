@@ -1,7 +1,6 @@
 mod adapter;
 mod auth;
 mod confidentiality;
-mod logging;
 pub(crate) mod model;
 mod network;
 mod repository;
@@ -12,11 +11,11 @@ use std::env;
 use std::result::Result as DefaultResult;
 
 use ecommerce_common::constant::env_vars::{SERVICE_BASEPATH, SYS_BASEPATH};
+use ecommerce_common::logging::AppLogContext;
 
 use order::confidentiality::AbstractConfidentiality;
 use order::constant::hard_limit;
 use order::error::AppError;
-use order::logging::AppLogContext;
 use order::{AppBasepathCfg, AppCfgHardLimit, AppConfig, AppSharedState};
 
 pub(crate) const EXAMPLE_REL_PATH: &'static str = "/tests/unit/examples/";

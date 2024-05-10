@@ -24,10 +24,10 @@ use crate::api::web::dto::{
 
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use crate::constant::app_meta;
 use crate::error::AppError;
-use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::model::{
     BillingModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel,
     ProductPolicyModelSet, ProductPriceModelSet, ShippingModel, StockLevelModelSet,

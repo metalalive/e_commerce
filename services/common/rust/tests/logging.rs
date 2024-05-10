@@ -2,9 +2,10 @@ use serde_json::{from_value as json_from_value, json};
 use std::env;
 use std::fs::{remove_file, File};
 
+use ecommerce_common::config::{AppBasepathCfg, AppLoggingCfg};
 use ecommerce_common::constant::env_vars::{SERVICE_BASEPATH, SYS_BASEPATH};
-use order::logging::{AppLogContext, AppLogLevel};
-use order::{to_3rdparty_level, AppBasepathCfg, AppLoggingCfg};
+use ecommerce_common::logging::{AppLogContext, AppLogLevel};
+use ecommerce_common::to_3rdparty_level;
 
 #[test]
 fn init_log_context_ok() {

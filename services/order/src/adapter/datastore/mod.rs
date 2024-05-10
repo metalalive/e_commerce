@@ -5,6 +5,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 
 use ecommerce_common::config::AppDataStoreCfg;
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 pub use in_mem::{
     AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemDeleteInfo, AppInMemDstoreLock,
@@ -14,7 +15,6 @@ pub use in_mem::{
 pub use sql_db::AppMariaDbStore;
 
 use crate::confidentiality::AbstractConfidentiality;
-use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 pub(crate) fn build_context(
     logctx: Arc<AppLogContext>,

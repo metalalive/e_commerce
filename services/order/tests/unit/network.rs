@@ -17,10 +17,10 @@ use tower::{Service, ServiceBuilder};
 
 use ecommerce_common::constant::env_vars::SERVICE_BASEPATH;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use crate::{ut_setup_share_state, MockConfidential, EXAMPLE_REL_PATH};
 use order::api::web::ApiRouteTableType;
-use order::logging::{app_log_event, AppLogLevel};
 use order::network::{app_web_service, middleware, net_server_listener};
 use order::AppSharedState;
 

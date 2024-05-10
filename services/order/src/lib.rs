@@ -7,7 +7,6 @@ pub mod api;
 pub mod confidentiality;
 pub mod constant;
 pub mod error;
-pub mod logging;
 pub mod model;
 pub mod network;
 pub mod repository;
@@ -18,6 +17,7 @@ pub use ecommerce_common::config::{
     AppConfig, AppInMemoryDbCfg, AppLogHandlerCfg, AppLoggerCfg, AppLoggingCfg, AppRpcAmqpCfg,
     AppRpcCfg, WebApiListenCfg, WebApiRouteCfg,
 };
+use ecommerce_common::logging::AppLogContext;
 
 mod auth;
 pub use auth::{
@@ -47,7 +47,7 @@ pub struct AppDataStoreContext {
 // global state shared by all threads
 pub struct AppSharedState {
     _cfg: Arc<AppConfig>,
-    _log: Arc<logging::AppLogContext>,
+    _log: Arc<AppLogContext>,
     _rpc: Arc<Box<dyn AbstractRpcContext>>,
     dstore: Arc<AppDataStoreContext>,
     _auth_keys: Arc<Box<dyn AbstractAuthKeystore>>,
@@ -58,7 +58,7 @@ pub struct AppSharedState {
 impl AppSharedState {
     pub fn new(
         cfg: AppConfig,
-        log: logging::AppLogContext,
+        log: AppLogContext,
         confidential: Box<dyn AbstractConfidentiality>,
     ) -> Self {
         // TODO
@@ -89,7 +89,7 @@ impl AppSharedState {
         &self._cfg
     }
 
-    pub fn log_context(&self) -> &Arc<logging::AppLogContext> {
+    pub fn log_context(&self) -> &Arc<AppLogContext> {
         &self._log
     }
 

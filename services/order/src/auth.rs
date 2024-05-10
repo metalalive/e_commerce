@@ -36,10 +36,10 @@ use jsonwebtoken::{
 };
 
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use crate::constant::{app_meta, HTTP_CONTENT_TYPE_JSON};
 use crate::error::AppError;
-use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::{AppAuthCfg, AppSharedState};
 
 const MAX_NBYTES_LOADED_RESPONSE_KEYSTORE: usize = 102400;

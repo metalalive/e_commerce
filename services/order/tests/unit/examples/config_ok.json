@@ -10,10 +10,10 @@
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
-             "min_level": "INFO",
+             "min_level": "WARNING",
              "destination": "console"},
             {"alias": "errlog-file-web-api",
-             "min_level": "DEBUG",
+             "min_level": "WARNING",
              "path": "tmp/log/test/order_app_server.err",
              "destination": "localfs"}
         ],

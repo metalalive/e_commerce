@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use crate::error::AppError;
-use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::model::ProductPolicyModelSet;
 use crate::repository::app_repo_product_policy;
 use crate::rpc::{AbstractRpcContext, AppRpcClientReqProperty};

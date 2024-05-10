@@ -1,9 +1,9 @@
 use std::vec::Vec;
 
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use crate::error::AppError;
-use crate::logging::{app_log_event, AppLogLevel};
 use crate::repository::app_repo_order;
 use crate::rpc::AppRpcClientReqProperty;
 use crate::usecase::StockLevelUseCase;

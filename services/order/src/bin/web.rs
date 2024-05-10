@@ -13,12 +13,12 @@ use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::cors::CorsLayer;
 
 use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use order::api::web::route_table;
 use order::confidentiality::{self, AbstractConfidentiality};
 use order::constant::hard_limit;
 use order::error::AppError;
-use order::logging::{app_log_event, AppLogContext, AppLogLevel};
 use order::network::{app_web_service, middleware, net_server_listener};
 use order::{AppJwtAuthentication, AppSharedState};
 

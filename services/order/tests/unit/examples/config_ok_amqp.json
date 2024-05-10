@@ -10,13 +10,13 @@
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
-             "min_level": "DEBUG",
+             "min_level": "WARNING",
              "destination": "console"}
         ],
         "loggers" : [
             {"alias": "order::rpc::amqp",
              "handlers": ["std-output-forall"],
-             "level": "INFO"}
+             "level": "DEBUG"}
         ]
     },
     "listen": {

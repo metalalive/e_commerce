@@ -2,11 +2,12 @@ use std::boxed::Box;
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
+
 use crate::api::rpc::dto::{
     InventoryEditStockLevelDto, StockLevelPresentDto, StockLevelReturnDto, StockReturnErrorDto,
 };
 use crate::error::AppError;
-use crate::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::model::{ProductStockIdentity, StockLevelModelSet};
 use crate::repository::AbsOrderRepo;
 

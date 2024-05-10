@@ -10,14 +10,14 @@
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
-             "min_level": "WARNING",
+             "min_level": "ERROR",
              "destination": "console"},
             {"alias": "errlog-file-web-api",
-             "min_level": "DEBUG",
+             "min_level": "WARNING",
              "path": "tmp/log/dev/order_app_server.err",
              "destination": "localfs"},
             {"alias": "errlog-file-rpc-consumer",
-             "min_level": "DEBUG",
+             "min_level": "INFO",
              "path": "tmp/log/dev/order_rpc_consumer.err",
              "destination": "localfs"}
         ],

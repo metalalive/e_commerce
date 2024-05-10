@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::AppLogContext;
 
 use order::api::rpc::dto::{
     OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, OrderReplicaRefundReqDto,
@@ -14,7 +15,6 @@ use order::api::rpc::dto::{
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::app_meta;
 use order::error::AppError;
-use order::logging::AppLogContext;
 use order::model::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
     OrderLinePriceModel, OrderLineQuantityModel, OrderReturnModel, ProductPolicyModel,

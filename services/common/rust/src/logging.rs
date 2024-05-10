@@ -6,25 +6,24 @@ use std::path::Path;
 use tracing::dispatcher::Dispatch;
 use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::fmt::{
-    writer::{MakeWriterExt, WithMaxLevel}, // BoxMakeWriter is for type-erasion of low-level writer, it does not support clone
-    // ArcWriter implementation is NOT completed, would be removed in future version.
-    Layer as TraceLayer,
-};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::fmt::Layer as TraceLayer;
+// BoxMakeWriter is for type-erasion of low-level writer, it does not support clone
+// ArcWriter implementation is NOT completed, would be removed in future version.
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-use tracing_subscriber::{self, Registry};
+use tracing_subscriber::{self, Layer as LayerIntf, Registry};
 
-use ecommerce_common::constant::logging::{Destination as DstOption, Level as AppLogLevelInner};
-use ecommerce_common::AppLogAlias;
+use crate::constant::logging::{Destination as DstOption, Level as AppLogLevelInner};
+use crate::AppLogAlias;
 
-use crate::{AppBasepathCfg, AppLogHandlerCfg, AppLoggerCfg, AppLoggingCfg};
+use crate::config::{AppBasepathCfg, AppLogHandlerCfg, AppLoggerCfg, AppLoggingCfg};
 
 pub type AppLogLevel = AppLogLevelInner;
-type AppLogHandler = (WithMaxLevel<NonBlocking>, WorkerGuard);
+type DefaultHandler = (NonBlocking, tracing::Level, WorkerGuard);
 type AppLogger = Dispatch;
 
 pub struct AppLogContext {
-    handlers: HashMap<AppLogAlias, AppLogHandler>,
+    _io_guards: Vec<WorkerGuard>,
     loggers: HashMap<AppLogAlias, AppLogger, RandomState>,
 }
 
@@ -72,26 +71,34 @@ fn _gen_console_writer(_: &AppLogHandlerCfg) -> (NonBlocking, WorkerGuard) {
 } // Note tracing spawns new thread dedicating to each non-blocking writer,
   // the context-switching rule depends on underlying OS platform.
 
-fn _init_handler(basepath: &AppBasepathCfg, cfg: &AppLogHandlerCfg) -> AppLogHandler {
+fn _init_handler(basepath: &AppBasepathCfg, cfg: &AppLogHandlerCfg) -> DefaultHandler {
     let lvl = to_3rdparty_level!(&cfg.min_level);
     let (io_wr, guard) = match &cfg.destination {
         DstOption::CONSOLE => _gen_console_writer(cfg),
         DstOption::LOCALFS => _gen_localfile_writer(&basepath.system, cfg),
     }; // callers MUST always keep the guard along with writer, for successfully flushing
        // log messages to I/O
-    let io_wr = io_wr.with_max_level(lvl);
-    (io_wr, guard)
+    (io_wr, lvl, guard)
 }
 
-fn _init_logger(cfg: &AppLoggerCfg, hdlrs: &HashMap<AppLogAlias, AppLogHandler>) -> AppLogger {
-    let iter = cfg.handlers.iter().map(|alias| {
-        let (io_writer, _) = hdlrs.get(alias).unwrap();
-        TraceLayer::new()
-            .with_writer(io_writer.clone())
-            .with_file(false) // to prevent full path exposed
-            .with_line_number(true)
-            .with_thread_ids(true)
-            .with_level(true)
+fn _init_logger(cfg: &AppLoggerCfg, hdlrs: &HashMap<AppLogAlias, DefaultHandler>) -> AppLogger {
+    let iter = cfg.handlers.iter().filter_map(|alias| {
+        hdlrs.get(alias).map(|(wr_ptr, default_lvl, _guard)| {
+            let io_writer = wr_ptr.clone();
+            let lvl = if let Some(l) = cfg.level.as_ref() {
+                to_3rdparty_level!(l)
+            } else {
+                *default_lvl
+            };
+            let filter = LevelFilter::from_level(lvl);
+            TraceLayer::new()
+                .with_writer(io_writer)
+                .with_file(false) // to prevent full path exposed
+                .with_line_number(true)
+                .with_thread_ids(true)
+                .with_level(true)
+                .with_filter(filter)
+        })
     });
     let layers = Vec::from_iter(iter);
     let subscriber = Registry::default().with(layers);
@@ -112,9 +119,9 @@ impl AppLogContext {
             .map(|item| (item.alias.clone(), _init_logger(item, &hdlrs)));
         let logger_map: HashMap<AppLogAlias, Dispatch, RandomState> = HashMap::from_iter(iter2);
         Self {
-            handlers: hdlrs,
             loggers: logger_map,
-        }
+            _io_guards: hdlrs.into_values().map(|(_, _, g)| g).collect(),
+        } // keep guards of the IO writers during the lifetime
     }
 
     pub fn get_assigner(&self, key: &str) -> Option<&Dispatch> {

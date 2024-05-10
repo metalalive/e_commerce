@@ -9,9 +9,10 @@ use axum::http::{
 use axum::response::IntoResponse;
 use serde_json;
 
+use ecommerce_common::logging::{app_log_event, AppLogLevel};
+
 use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData, OrderLineReqDto};
 use crate::constant as AppConst;
-use crate::logging::{app_log_event, AppLogLevel};
 use crate::repository::{
     app_repo_order, app_repo_order_return, app_repo_product_policy, app_repo_product_price,
 };
