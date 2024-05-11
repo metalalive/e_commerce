@@ -17,7 +17,7 @@ async fn charge_ok() {
         let rdr = File::open(CASE_FILE).unwrap();
         let req_body = serde_json::from_reader::<File, JsnVal>(rdr).unwrap();
         TestRequest::post()
-            .uri("/v0.0.1/charge/127-203948892-2903")
+            .uri("/v0.0.2/charge")
             .append_header(ContentType::json())
             .set_json(req_body)
             .to_request()
@@ -27,7 +27,7 @@ async fn charge_ok() {
 
     let req = {
         TestRequest::patch()
-            .uri("/v0.0.1/charge/127-203948892-2903")
+            .uri("/v0.0.2/charge/127-203948892-2903")
             .append_header(ContentType::json())
             .to_request()
     };

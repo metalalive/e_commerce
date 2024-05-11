@@ -32,11 +32,11 @@
         "port": 8015,
         "host":"localhost",
         "max_failures": 3,
-        "api_version": "0.0.1",
+        "api_version": "0.0.2",
 	"max_connections": 127,
         "cors": "common/data/cors.json",
         "routes": [
-            {"path":"/charge/{charge_id}", "handler":"create_new_charge"},
+            {"path":"/charge", "handler":"create_new_charge"},
             {"path":"/charge/{charge_id}", "handler":"refresh_charge_status"}
         ]
     },

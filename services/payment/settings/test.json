@@ -13,30 +13,28 @@
              "min_level": "WARNING",
              "destination": "console"},
             {"alias": "errlog-file-web-api",
-             "min_level": "DEBUG",
+             "min_level": "INFO",
              "path": "tmp/log/test/payment_app_server.err",
              "destination": "localfs"}
         ],
         "loggers" : [
             {"alias": "payment::network",
              "handlers": ["std-output-forall", "errlog-file-web-api"],
-             "level": "DEBUG"},
-            {"alias": "payment::api::web::charge",
-             "handlers": ["errlog-file-web-api"],
              "level": "INFO"},
-            {"alias": "web",
-             "handlers": ["errlog-file-web-api", "std-output-forall"]}
+            {"alias": "payment::api::web::charge",
+             "handlers": ["std-output-forall"],
+             "level": "DEBUG"}
         ]
     },
     "listen": {
         "port": 8016,
         "host":"localhost",
         "max_failures": 3,
-        "api_version": "0.0.1",
+        "api_version": "0.0.2",
 	"max_connections": 129,
         "cors": "common/data/cors.json",
         "routes": [
-            {"path":"/charge/{charge_id}", "handler":"create_new_charge"},
+            {"path":"/charge", "handler":"create_new_charge"},
             {"path":"/charge/{charge_id}", "handler":"refresh_charge_status"}
         ]
     },

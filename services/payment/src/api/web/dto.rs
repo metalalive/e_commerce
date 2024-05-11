@@ -2,7 +2,7 @@ use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
-    GenericRangeErrorDto, PayAmountDto, jsn_serialize_product_type, jsn_validate_product_type
+    jsn_serialize_product_type, jsn_validate_product_type, GenericRangeErrorDto, PayAmountDto,
 };
 use ecommerce_common::constant::ProductType;
 
@@ -33,9 +33,7 @@ pub enum PaymentCurrencyDto {
 pub struct ChargeAmountOlineDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(
-        deserialize_with = "jsn_validate_product_type"
-    )]
+    #[serde(deserialize_with = "jsn_validate_product_type")]
     pub product_type: ProductType,
     pub quantity: u32,
     pub amount: PayAmountDto,
@@ -80,9 +78,7 @@ pub enum PaymentMethodErrorReason {
 pub struct ChargeOlineErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(
-        serialize_with = "jsn_serialize_product_type"
-    )]
+    #[serde(serialize_with = "jsn_serialize_product_type")]
     pub product_type: ProductType,
     pub quantity: Option<GenericRangeErrorDto>,
     // to indicate mismatch,  this backend app returns the estimated amount

@@ -9,10 +9,10 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 0.0.1
+  version: 0.0.2
 
 servers:
-  - url: https://doc.site.not.ready/api/v0.0.1
+  - url: https://doc.site.not.ready/api/v0.0.2
 tags:
   - name: payin
     description: pay-in process of a valid order
@@ -20,7 +20,7 @@ tags:
     description: pay-out process of a valid order
 
 paths:
-  /charge/{charge-id}:
+  /charge:
     post:
       summary: charge customer for unpaid order products
       description: |
@@ -29,8 +29,6 @@ paths:
         - frontend application may refresh to charge status at a later time if response status is 202
       tags:
         - payin
-      parameters:
-        - $ref: '#/components/parameters/ChargeId'
       requestBody:
         content:
           application/json:
