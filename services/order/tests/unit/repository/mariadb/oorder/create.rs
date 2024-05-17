@@ -4,8 +4,10 @@ use std::pin::Pin;
 use std::result::Result as DefaultResult;
 
 use chrono::{DateTime, Duration, Local, SubsecRound};
+use ecommerce_common::api::dto::CountryCode;
 use ecommerce_common::constant::ProductType;
-use order::api::dto::{CountryCode, ShippingMethod};
+
+use order::api::dto::ShippingMethod;
 use order::error::AppError;
 use order::model::{OrderLineModelSet, StockLevelModelSet};
 use order::repository::{app_repo_order, AbsOrderRepo, AppStockRepoReserveReturn};

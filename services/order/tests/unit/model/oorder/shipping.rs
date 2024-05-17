@@ -1,9 +1,9 @@
-use order::api::dto::{
-    ContactDto, CountryCode, PhoneNumberDto, PhyAddrDto, ShippingDto, ShippingMethod,
-    ShippingOptionDto,
-};
-use order::api::web::dto::{PhyAddrDistinctErrorReason, PhyAddrRegionErrorReason};
-use order::model::{PhyAddrModel, ShippingModel};
+use ecommerce_common::api::dto::{ContactDto, CountryCode, PhoneNumberDto, PhyAddrDto};
+use ecommerce_common::api::web::dto::{PhyAddrDistinctErrorReason, PhyAddrRegionErrorReason};
+use ecommerce_common::model::order::PhyAddrModel;
+
+use order::api::dto::{ShippingDto, ShippingMethod, ShippingOptionDto};
+use order::model::ShippingModel;
 
 #[test]
 fn addr_convert_dto_ok() {

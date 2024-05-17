@@ -9,11 +9,12 @@ use hyper::Body as HyperBody;
 use serde_json::{Map, Value as JsnVal};
 
 use ecommerce_common::constant::ProductType;
+use ecommerce_common::api::web::dto::{ContactErrorReason, PhoneNumNationErrorReason};
 
 use order::api::rpc;
 use order::api::web::dto::{
-    ContactErrorReason, OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
-    OrderEditReqData, PhoneNumNationErrorReason,
+    OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
+    OrderEditReqData,
 };
 use order::constant::{app_meta, hard_limit};
 use order::error::AppError;

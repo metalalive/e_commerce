@@ -1,9 +1,9 @@
 use chrono::{DateTime, Duration, Local as LocalTime};
 
+use ecommerce_common::api::dto::OrderLinePayDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
-use order::api::dto::OrderLinePayDto;
 use order::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason};
 use order::api::web::dto::OrderLineReqDto;
 use order::model::{

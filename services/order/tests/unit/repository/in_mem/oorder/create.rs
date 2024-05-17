@@ -1,18 +1,22 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_orderlines, ut_setup_shipping};
 use chrono::{DateTime, Duration, FixedOffset};
+use ecommerce_common::api::dto::CountryCode;
 use ecommerce_common::constant::ProductType;
-use order::api::dto::{CountryCode, ShippingMethod};
+use ecommerce_common::model::order::BillingModel;
+
+use order::api::dto::ShippingMethod;
 use order::datastore::AppInMemoryDStore;
 use order::model::{
-    BillingModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, ProductStockModel,
-    ShippingModel, StockLevelModelSet, StockQuantityModel, StoreStockModel,
+    OrderLineIdentity, OrderLineModel, OrderLineModelSet, ProductStockModel, ShippingModel,
+    StockLevelModelSet, StockQuantityModel, StoreStockModel,
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveReturn, OrderInMemRepo,
 };
+
+use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_orderlines, ut_setup_shipping};
 
 const ORDERS_NUM_LINES: [usize; 3] = [4, 5, 2];
 

@@ -11,18 +11,19 @@ use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::pool::PoolConnection;
 use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
+use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
-use crate::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
+use crate::api::dto::ShippingMethod;
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::constant::hard_limit;
 use crate::datastore::AppMariaDbStore;
 use crate::error::AppError;
 use crate::model::{
-    BillingModel, ContactModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
-    OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, PhyAddrModel, ShippingModel,
-    ShippingOptionModel,
+    OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
+    OrderLinePriceModel, OrderLineQuantityModel, ShippingModel, ShippingOptionModel,
 };
 use crate::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppOrderFetchRangeCallback, AppOrderRepoUpdateLinesUserFunc,

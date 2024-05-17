@@ -1,10 +1,15 @@
-use ecommerce_common::api::dto::{
-    jsn_serialize_product_type, jsn_validate_product_type, GenericRangeErrorDto,
-};
-use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
-use crate::api::dto::{BillingDto, OrderLinePayDto, ShippingDto};
+use ecommerce_common::api::dto::{
+    jsn_serialize_product_type, jsn_validate_product_type, BillingDto, GenericRangeErrorDto,
+    OrderLinePayDto,
+};
+use ecommerce_common::api::web::dto::{
+    BillingErrorDto, ContactErrorDto, PhyAddrErrorDto, QuotaResourceErrorDto,
+};
+use ecommerce_common::constant::ProductType;
+
+use crate::api::dto::ShippingDto;
 
 #[derive(Deserialize, Serialize)]
 pub struct OrderLineReqDto {
@@ -50,12 +55,6 @@ pub struct OrderLineCreateErrNonExistDto {
     pub stock_seller: bool,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
-pub struct QuotaResourceErrorDto {
-    pub max_: u32,
-    pub given: usize,
-}
-
 #[derive(Deserialize, Serialize)]
 pub struct OrderLineCreateErrorDto {
     pub seller_id: u32,
@@ -84,65 +83,6 @@ pub struct OrderLineReturnErrorDto {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct PhoneNumberErrorDto {
-    pub nation: Option<PhoneNumNationErrorReason>,
-    pub number: Option<ContactErrorReason>,
-}
-#[derive(Deserialize, Serialize, Debug)]
-pub enum PhoneNumNationErrorReason {
-    InvalidCode,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct ContactErrorDto {
-    pub first_name: Option<ContactErrorReason>,
-    pub last_name: Option<ContactErrorReason>,
-    pub emails: Option<Vec<Option<ContactErrorReason>>>,
-    pub phones: Option<Vec<Option<PhoneNumberErrorDto>>>,
-    pub nonfield: Option<ContactNonFieldErrorReason>,
-    pub quota_email: Option<QuotaResourceErrorDto>,
-    pub quota_phone: Option<QuotaResourceErrorDto>,
-}
-#[derive(Deserialize, Serialize, Debug)]
-pub enum ContactErrorReason {
-    Empty,
-    InvalidChar,
-}
-
-#[derive(Deserialize, Serialize)]
-pub enum ContactNonFieldErrorReason {
-    EmailMissing,
-    PhoneMissing,
-    QuotaExceed,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct PhyAddrErrorDto {
-    pub country: Option<PhyAddrNationErrorReason>,
-    pub region: Option<PhyAddrRegionErrorReason>,
-    pub city: Option<PhyAddrRegionErrorReason>,
-    pub distinct: Option<PhyAddrDistinctErrorReason>,
-    pub street_name: Option<PhyAddrDistinctErrorReason>,
-    pub detail: Option<PhyAddrDistinctErrorReason>,
-}
-#[derive(Deserialize, Serialize)]
-pub enum PhyAddrNationErrorReason {
-    NotSupport,
-}
-#[derive(Deserialize, Serialize)]
-pub enum PhyAddrRegionErrorReason {
-    Empty,
-    InvalidChar,
-    NotExist,
-    NotSupport,
-}
-#[derive(Deserialize, Serialize)]
-pub enum PhyAddrDistinctErrorReason {
-    Empty,
-    InvalidChar,
-}
-
-#[derive(Deserialize, Serialize)]
 pub struct ShippingOptionErrorDto {
     pub seller_id: Option<ShipOptionSellerErrorReason>,
     pub method: Option<ShipOptionMethodErrorReason>,
@@ -161,12 +101,6 @@ pub enum ShipOptionMethodErrorReason {
 
 pub type BillingReqDto = BillingDto;
 pub type ShippingReqDto = ShippingDto;
-
-#[derive(Deserialize, Serialize)]
-pub struct BillingErrorDto {
-    pub contact: Option<ContactErrorDto>,
-    pub address: Option<PhyAddrErrorDto>,
-}
 
 #[derive(Deserialize, Serialize)]
 pub struct ShippingErrorDto {

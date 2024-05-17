@@ -5,12 +5,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use ecommerce_common::model::BaseProductIdentity;
+
 use crate::datastore::{
     AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemFetchKeys, AppInMemFetchedSingleRow,
     AppInMemFetchedSingleTable,
 };
 use crate::error::AppError;
-use crate::model::{BaseProductIdentity, CartLineModel, CartModel};
+use crate::model::{CartLineModel, CartModel};
 use crate::repository::AbsCartRepo;
 
 #[allow(non_snake_case)]

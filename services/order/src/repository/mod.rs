@@ -9,6 +9,8 @@ use std::vec::Vec;
 
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::model::order::BillingModel;
+use ecommerce_common::model::BaseProductIdentity;
 
 use crate::api::rpc::dto::{
     OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto,
@@ -17,9 +19,9 @@ use crate::api::rpc::dto::{
 use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::error::AppError;
 use crate::model::{
-    BaseProductIdentity, BillingModel, CartModel, OrderLineIdentity, OrderLineModel,
-    OrderLineModelSet, OrderReturnModel, ProductPolicyModelSet, ProductPriceModelSet,
-    ProductStockIdentity, ShippingModel, StockLevelModelSet,
+    CartModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel,
+    ProductPolicyModelSet, ProductPriceModelSet, ProductStockIdentity, ShippingModel,
+    StockLevelModelSet,
 };
 use crate::AppDataStoreContext;
 

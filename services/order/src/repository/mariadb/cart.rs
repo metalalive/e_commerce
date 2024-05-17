@@ -7,10 +7,11 @@ use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement};
 
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::model::BaseProductIdentity;
 
 use crate::datastore::AppMariaDbStore;
 use crate::error::AppError;
-use crate::model::{BaseProductIdentity, CartLineModel, CartModel};
+use crate::model::{CartLineModel, CartModel};
 use crate::repository::AbsCartRepo;
 
 use super::run_query_once;

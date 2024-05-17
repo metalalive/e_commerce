@@ -2,14 +2,14 @@ use std::vec::Vec;
 
 use chrono::offset::FixedOffset;
 use chrono::DateTime;
-use ecommerce_common::constant::ProductType;
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
     jsn_serialize_product_type, jsn_validate_product_type, PayAmountDto,
 };
+use ecommerce_common::constant::ProductType;
 
-use crate::api::dto::{BillingDto, OrderLinePayDto, ShippingDto};
+use crate::api::dto::ShippingDto;
 
 #[derive(Deserialize)]
 pub struct ProductPriceDeleteDto {
@@ -78,18 +78,6 @@ pub struct StockLevelPresentDto {
 pub struct StockLevelReturnDto {
     pub order_id: String,
     pub items: Vec<InventoryEditStockLevelDto>,
-}
-
-#[derive(Deserialize)]
-pub struct OrderReplicaPaymentReqDto {
-    pub order_id: String,
-}
-#[derive(Serialize)]
-pub struct OrderReplicaPaymentDto {
-    pub oid: String,
-    pub usr_id: u32,
-    pub lines: Vec<OrderLinePayDto>,
-    pub billing: BillingDto,
 }
 
 #[derive(Deserialize)]

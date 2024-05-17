@@ -1,5 +1,7 @@
 use ecommerce_common::constant::ProductType;
-use order::model::{BaseProductIdentity, CartLineModel, CartModel};
+use ecommerce_common::model::BaseProductIdentity;
+
+use order::model::{CartLineModel, CartModel};
 use order::repository::app_repo_cart;
 
 use super::dstore_ctx_setup;

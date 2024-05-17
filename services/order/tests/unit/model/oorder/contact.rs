@@ -1,5 +1,5 @@
-use order::api::dto::{ContactDto, PhoneNumberDto};
-use order::model::ContactModel;
+use ecommerce_common::api::dto::{ContactDto, PhoneNumberDto};
+use ecommerce_common::model::order::ContactModel;
 
 #[test]
 fn convert_dto_ok() {

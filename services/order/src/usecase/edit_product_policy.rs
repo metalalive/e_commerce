@@ -8,6 +8,7 @@ use std::vec::Vec;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 
+use ecommerce_common::api::web::dto::QuotaResourceErrorDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
@@ -18,7 +19,7 @@ use crate::repository::app_repo_product_policy;
 use crate::rpc::{AbstractRpcContext, AppRpcClientReqProperty};
 use crate::{AppAuthPermissionCode, AppAuthQuotaMatCode, AppAuthedClaim, AppDataStoreContext};
 
-use crate::api::web::dto::{ProductPolicyClientErrorDto, ProductPolicyDto, QuotaResourceErrorDto};
+use crate::api::web::dto::{ProductPolicyClientErrorDto, ProductPolicyDto};
 
 use super::{initiate_rpc_request, AppUCrunRPCfn, AppUseKsRPCreply};
 

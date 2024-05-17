@@ -1,11 +1,13 @@
 use chrono::{DateTime, FixedOffset, Local};
+use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
 use ecommerce_common::constant::ProductType;
+use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
-use order::api::dto::{CountryCode, PhoneNumberDto, ShippingMethod};
+use order::api::dto::ShippingMethod;
 use order::datastore::AbstInMemoryDStore;
 use order::model::{
-    BillingModel, ContactModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
-    OrderLinePriceModel, OrderLineQuantityModel, PhyAddrModel, ShippingModel, ShippingOptionModel,
+    OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLinePriceModel,
+    OrderLineQuantityModel, ShippingModel, ShippingOptionModel,
 };
 use order::repository::OrderInMemRepo;
 

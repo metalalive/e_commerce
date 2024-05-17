@@ -7,17 +7,18 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 use tokio::sync::Mutex;
 
+use ecommerce_common::api::dto::PhoneNumberDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
-use crate::api::dto::{PhoneNumberDto, ShippingMethod};
+use crate::api::dto::ShippingMethod;
 use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow, AppInMemFetchedSingleTable};
 use crate::error::AppError;
 use crate::model::{
-    BillingModel, ContactModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
-    OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, PhyAddrModel, ShippingModel,
-    ShippingOptionModel,
+    OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
+    OrderLinePriceModel, OrderLineQuantityModel, ShippingModel, ShippingOptionModel,
 };
 
 use super::super::{
@@ -25,8 +26,11 @@ use super::super::{
 };
 use super::StockLvlInMemRepo;
 
+struct ContactModelWrapper(ContactModel);
+struct PhyAddrModelWrapper(PhyAddrModel);
+
 mod _contact {
-    use super::{AppInMemFetchedSingleRow, ContactModel, HashMap};
+    use super::{AppInMemFetchedSingleRow, ContactModel, ContactModelWrapper, HashMap};
 
     pub(super) const MULTI_VAL_COLUMN_SEPARATOR: &str = " ";
     pub(super) const TABLE_LABEL: &str = "order_contact";
@@ -54,14 +58,14 @@ mod _contact {
         data: ContactModel,
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
         // each item in emails / phones array must NOT contain space character
-        let row = AppInMemFetchedSingleRow::from(data);
+        let row = AppInMemFetchedSingleRow::from(ContactModelWrapper(data));
         let pkey = format!("{}-{}", oid, pk_label);
         HashMap::from([(pkey, row)])
     }
 } // end of inner module _contact
 
 mod _phy_addr {
-    use super::{AppInMemFetchedSingleRow, HashMap, PhyAddrModel};
+    use super::{AppInMemFetchedSingleRow, HashMap, PhyAddrModel, PhyAddrModelWrapper};
 
     pub(super) const TABLE_LABEL: &str = "order_phyaddr";
     pub(super) enum InMemColIdx {
@@ -91,7 +95,7 @@ mod _phy_addr {
         pk_label: &str,
         data: PhyAddrModel,
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
-        let row = data.into();
+        let row = PhyAddrModelWrapper(data).into();
         let pkey = format!("{}-{}", oid, pk_label);
         HashMap::from([(pkey, row)])
     }
@@ -407,8 +411,9 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
     }
 } // end of impl into OrderLineModel
 
-impl From<ContactModel> for AppInMemFetchedSingleRow {
-    fn from(value: ContactModel) -> Self {
+impl From<ContactModelWrapper> for AppInMemFetchedSingleRow {
+    fn from(value: ContactModelWrapper) -> Self {
+        let value = value.0;
         let phones_str = value
             .phones
             .iter()
@@ -438,8 +443,8 @@ impl From<ContactModel> for AppInMemFetchedSingleRow {
         row
     }
 }
-impl From<AppInMemFetchedSingleRow> for ContactModel {
-    fn from(value: AppInMemFetchedSingleRow) -> ContactModel {
+impl From<AppInMemFetchedSingleRow> for ContactModelWrapper {
+    fn from(value: AppInMemFetchedSingleRow) -> ContactModelWrapper {
         let emails = value
             .get::<usize>(_contact::InMemColIdx::Emails.into())
             .unwrap()
@@ -467,17 +472,18 @@ impl From<AppInMemFetchedSingleRow> for ContactModel {
                 .unwrap()
                 .to_owned(),
         );
-        ContactModel {
+        ContactModelWrapper(ContactModel {
             first_name,
             last_name,
             emails,
             phones,
-        }
+        })
     }
 }
 
-impl From<PhyAddrModel> for AppInMemFetchedSingleRow {
-    fn from(value: PhyAddrModel) -> Self {
+impl From<PhyAddrModelWrapper> for AppInMemFetchedSingleRow {
+    fn from(value: PhyAddrModelWrapper) -> Self {
+        let value = value.0;
         let mut row = (0.._phy_addr::InMemColIdx::TotNumColumns.into())
             .map(|_num| String::new())
             .collect::<Self>();
@@ -499,10 +505,10 @@ impl From<PhyAddrModel> for AppInMemFetchedSingleRow {
         })
         .count();
         row
-    }
+    } // end of fn from
 }
-impl From<AppInMemFetchedSingleRow> for PhyAddrModel {
-    fn from(value: AppInMemFetchedSingleRow) -> PhyAddrModel {
+impl From<AppInMemFetchedSingleRow> for PhyAddrModelWrapper {
+    fn from(value: AppInMemFetchedSingleRow) -> PhyAddrModelWrapper {
         let (country, region, city, distinct, street, detail) = (
             value
                 .get::<usize>(_phy_addr::InMemColIdx::Country.into())
@@ -535,15 +541,15 @@ impl From<AppInMemFetchedSingleRow> for PhyAddrModel {
         } else {
             Some(street)
         };
-        PhyAddrModel {
+        PhyAddrModelWrapper(PhyAddrModel {
             country,
             region,
             city,
             distinct,
             street_name,
             detail,
-        }
-    }
+        })
+    } // end of fn from
 }
 
 impl From<ShippingOptionModel> for AppInMemFetchedSingleRow {
@@ -677,9 +683,12 @@ impl AbsOrderRepo for OrderInMemRepo {
             data.remove(tbl_labels[1]).unwrap().into_values().next(),
         );
         if let Some(raw_cta) = result1 {
-            let contact = raw_cta.into();
-            let address = result2.map(|raw_pa| raw_pa.into());
-            Ok(BillingModel { contact, address })
+            let contact: ContactModelWrapper = raw_cta.into();
+            let address: Option<PhyAddrModelWrapper> = result2.map(|raw_pa| raw_pa.into());
+            Ok(BillingModel {
+                contact: contact.0,
+                address: address.map(|a| a.0),
+            })
         } else {
             let e = AppError {
                 code: AppErrorCode::IOerror(std::io::ErrorKind::NotFound),
@@ -727,13 +736,13 @@ impl AbsOrderRepo for OrderInMemRepo {
             data.remove(_ship_opt::TABLE_LABEL).unwrap().into_values(),
         );
         if let Some(raw_cta) = result1 {
-            let contact = raw_cta.into();
-            let address = result2.map(|raw_pa| raw_pa.into());
+            let contact = ContactModelWrapper::from(raw_cta).0;
+            let address: Option<PhyAddrModelWrapper> = result2.map(|raw_pa| raw_pa.into());
             // shipping option can be empty
             let option = result3.map(AppInMemFetchedSingleRow::into).collect();
             Ok(ShippingModel {
                 contact,
-                address,
+                address: address.map(|a| a.0),
                 option,
             })
         } else {

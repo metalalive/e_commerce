@@ -16,6 +16,7 @@ use chrono::{DateTime, FixedOffset};
 use tokio::sync::Mutex as AsyncMutex;
 
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::model::order::{BillingModel, ContactModel};
 
 use order::api::dto::ShippingMethod;
 use order::api::rpc::dto::{
@@ -23,8 +24,8 @@ use order::api::rpc::dto::{
 };
 use order::error::AppError;
 use order::model::{
-    BillingModel, ContactModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
-    OrderReturnModel, ProductStockIdentity, ShippingModel, ShippingOptionModel, StockLevelModelSet,
+    OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel, ProductStockIdentity,
+    ShippingModel, ShippingOptionModel, StockLevelModelSet,
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderReturnRepo, AbsOrderStockRepo, AppOrderFetchRangeCallback,

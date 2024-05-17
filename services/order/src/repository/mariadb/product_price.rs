@@ -10,11 +10,12 @@ use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement, T
 
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::model::BaseProductIdentity;
 
 use crate::api::rpc::dto::ProductPriceDeleteDto;
 use crate::datastore::AppMariaDbStore;
 use crate::error::AppError;
-use crate::model::{BaseProductIdentity, ProductPriceModel, ProductPriceModelSet};
+use crate::model::{ProductPriceModel, ProductPriceModelSet};
 use crate::repository::AbsProductPriceRepo;
 
 use super::DATETIME_FORMAT;
