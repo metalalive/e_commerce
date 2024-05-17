@@ -1,5 +1,5 @@
 mod charge;
-mod dto;
+pub mod dto;
 
 use actix_http::Method;
 use actix_web::Route;

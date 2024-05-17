@@ -28,7 +28,7 @@ pub enum PaymentCurrencyDto {
     TWD,
     USD,
     THB,
-}
+} // TODO, move to `ecommerce-common` crate
 #[derive(Deserialize)]
 pub struct ChargeAmountOlineDto {
     pub seller_id: u32,
@@ -61,6 +61,7 @@ pub enum PaymentMethodRespDto {
 }
 #[derive(Serialize)]
 pub struct ChargeRespDto {
+    pub id: String,
     pub method: PaymentMethodRespDto,
     pub create_time: DateTime<FixedOffset>,
 }
@@ -73,6 +74,7 @@ pub enum OrderErrorReason {
 pub enum PaymentMethodErrorReason {
     InvalidUser,
     OperationRefuse,
+    ProcessorFailure,
 }
 #[derive(Serialize)]
 pub struct ChargeOlineErrorDto {

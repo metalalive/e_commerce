@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod datastore;
 pub mod processor;
 pub mod repository;
