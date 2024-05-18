@@ -29,6 +29,10 @@ cargo clippy
 ```
 ## Test
 ### Unit Test
+```bash
+SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
+    cargo test --test unit -- <specific-test-case-path>  --test-threads=1
+```
 ### Integration Test
 ```bash
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
