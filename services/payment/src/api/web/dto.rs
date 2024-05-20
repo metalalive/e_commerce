@@ -86,6 +86,7 @@ pub struct ChargeOlineErrorDto {
     // to indicate mismatch,  this backend app returns the estimated amount
     pub amount: Option<PayAmountDto>,
     pub expired: Option<bool>,
+    pub not_exist: bool,
 }
 
 #[derive(Serialize)]

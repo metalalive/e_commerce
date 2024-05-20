@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::constant::ProductType;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct PayAmountDto {
     pub unit: u32,
     pub total: u32,
@@ -133,6 +133,7 @@ pub struct OrderLinePayDto {
     )]
     pub product_type: ProductType,
     pub reserved_until: String, // date-time formatted in RFC3339 spec
+    // TODO, add warranty time
     pub quantity: u32,
     pub amount: PayAmountDto,
 }
