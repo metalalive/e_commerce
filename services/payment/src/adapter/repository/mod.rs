@@ -7,17 +7,19 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ecommerce_common::model::order::BillingModel;
 
-use crate::model::{ChargeLineModelSet, OrderLineModelSet};
+use crate::model::{ChargeBuyerModel, OrderLineModelSet};
 
 use self::mariadb::MariadbChargeRepo;
 use super::datastore::AppDataStoreContext;
 
+#[derive(Debug)]
 pub enum AppRepoErrorFnLabel {
     GetUnpaidOlines,
     CreateOrder,
     CreateCharge,
 }
 
+#[derive(Debug)]
 pub struct AppRepoError {
     pub fn_label: AppRepoErrorFnLabel,
 }
@@ -39,7 +41,7 @@ pub trait AbstractChargeRepo: Sync + Send {
         billing: &BillingModel,
     ) -> Result<(), AppRepoError>;
 
-    async fn create_charge(&self, cline_set: &ChargeLineModelSet) -> Result<(), AppRepoError>;
+    async fn create_charge(&self, cline_set: ChargeBuyerModel) -> Result<(), AppRepoError>;
     // TODO, extra trait methods only for test data injection
 }
 

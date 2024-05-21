@@ -220,7 +220,7 @@ impl ChargeBuyerModel {
             .unwrap()
             .to_rfc3339();
         let mut hasher = Sha256::new();
-        hasher.update(&rn);
+        hasher.update(rn);
         hasher.update(t0.as_bytes());
         let result = hasher.finalize(); // generic-array crate
         result.to_vec()

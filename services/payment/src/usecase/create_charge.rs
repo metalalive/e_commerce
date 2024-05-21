@@ -6,15 +6,13 @@ use ecommerce_common::api::web::dto::BillingErrorDto;
 use ecommerce_common::model::order::BillingModel;
 
 use crate::adapter::cache::{AbstractOrderSyncLockCache, OrderSyncLockError};
-use crate::adapter::processor::{
-    AbstractPaymentProcessor, AppProcessorError, AppProcessorPayInResult,
-};
+use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::adapter::repository::{AbstractChargeRepo, AppRepoError};
 use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxError};
 use crate::api::web::dto::{
-    ChargeAmountOlineDto, ChargeReqDto, ChargeRespDto, ChargeRespErrorDto, PaymentMethodErrorReason,
+    ChargeReqDto, ChargeRespDto, ChargeRespErrorDto, PaymentMethodErrorReason,
 };
-use crate::model::{ChargeLineModelSet, OLineModelError, OrderLineModelSet};
+use crate::model::{ChargeBuyerModel, OLineModelError, OrderLineModelSet};
 
 // TODO, switch to enum type then add memberis `SessionCreated`,
 // `PayInDone` when the charge can be done in one single API call
@@ -89,40 +87,18 @@ impl ChargeCreateUseCase {
         req_body: ChargeReqDto,
     ) -> Result<ChargeCreateUcResult, ChargeCreateUcError> {
         let oid = req_body.order_id.as_str();
-        let result = self.try_load_order(usr_id, oid, &req_body.lines).await?;
+        let result = self.repo.get_unpaid_olines(usr_id, oid).await?;
         let validated_order = if let Some(v) = result {
             v
         } else {
             let d = self.rpc_sync_order(usr_id, oid).await?;
-            self.try_save_order(usr_id, oid, d, &req_body.lines).await?
+            self.try_save_order(usr_id, oid, d).await?
         };
-        let (cline_set, payin_result) = self
+        let resp = self
             .try_execute_processor(validated_order, req_body)
             .await?;
-        if payin_result.completed {
-            // TODO, if the pay-in process is complete, invoke RPC to order service
-            // for payment status update
-        }
-        let resp = ChargeRespDto::from(cline_set);
         Ok(ChargeCreateUcResult(resp))
     } // end of fn execute
-
-    async fn try_load_order(
-        &self,
-        usr_id_uncheck: u32,
-        oid_uncheck: &str,
-        lines_uncheck: &[ChargeAmountOlineDto],
-    ) -> Result<Option<OrderLineModelSet>, ChargeCreateUcError> {
-        let result = self
-            .repo
-            .get_unpaid_olines(usr_id_uncheck, oid_uncheck)
-            .await?;
-        if let Some(saved) = result.as_ref() {
-            // TODO, internal data store error, should log message
-            ChargeLineModelSet::validate(saved, lines_uncheck)?;
-        }
-        Ok(result)
-    }
 
     async fn rpc_sync_order(
         &self,
@@ -161,7 +137,6 @@ impl ChargeCreateUseCase {
         usr_id_uncheck: u32,
         oid_uncheck: &str,
         rpc_data: OrderReplicaPaymentDto,
-        lines_uncheck: &[ChargeAmountOlineDto],
     ) -> Result<OrderLineModelSet, ChargeCreateUcError> {
         let OrderReplicaPaymentDto {
             oid,
@@ -176,7 +151,6 @@ impl ChargeCreateUseCase {
         if mismatch {
             Err(ChargeCreateUcError::OrderOwnerMismatch)
         } else {
-            ChargeLineModelSet::validate(&olines, lines_uncheck)?;
             Ok(olines)
         }
     }
@@ -185,10 +159,15 @@ impl ChargeCreateUseCase {
         &self,
         order: OrderLineModelSet,
         reqbody: ChargeReqDto,
-    ) -> Result<(ChargeLineModelSet, AppProcessorPayInResult), ChargeCreateUcError> {
-        let cline_set = ChargeLineModelSet::from((order, reqbody));
+    ) -> Result<ChargeRespDto, ChargeCreateUcError> {
+        let cline_set = ChargeBuyerModel::try_from((order, reqbody))?;
         let result = self.processors.pay_in_start(&cline_set).await?;
-        self.repo.create_charge(&cline_set).await?;
-        Ok((cline_set, result))
+        self.repo.create_charge(cline_set).await?;
+        if result.completed {
+            // TODO, if the pay-in process is complete, invoke RPC to order service
+            // for payment status update
+        }
+        let resp = ChargeRespDto::from(result);
+        Ok(resp)
     }
 } // end of impl ChargeCreateUseCase

@@ -17,7 +17,7 @@ use payment::adapter::rpc::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
     AppRpcClientRequest, AppRpcCtxError, AppRpcReply,
 };
-use payment::model::{ChargeLineModelSet, OrderLineModelSet};
+use payment::model::{ChargeBuyerModel, OrderLineModelSet};
 
 struct MockChargeRepo {
     _expect_unpaid_olines: Mutex<Option<Result<Option<OrderLineModelSet>, AppRepoError>>>,
@@ -45,7 +45,7 @@ impl AbstractChargeRepo for MockChargeRepo {
         let out = g.take().unwrap();
         out
     }
-    async fn create_charge(&self, _cline_set: &ChargeLineModelSet) -> Result<(), AppRepoError> {
+    async fn create_charge(&self, _cline_set: ChargeBuyerModel) -> Result<(), AppRepoError> {
         let mut g = self._create_charge_result.lock().unwrap();
         let out = g.take().unwrap();
         out
@@ -120,10 +120,13 @@ struct MockPaymentProcessor {
 impl AbstractPaymentProcessor for MockPaymentProcessor {
     async fn pay_in_start(
         &self,
-        _cline_set: &ChargeLineModelSet,
+        cline_set: &ChargeBuyerModel,
     ) -> Result<AppProcessorPayInResult, AppProcessorError> {
         let mut g = self._payin_start_result.lock().unwrap();
-        let out = g.take().unwrap();
+        let mut out = g.take().unwrap();
+        if let Ok(v) = out.as_mut() {
+            v.charge_id = cline_set.token.clone();
+        }
         out
     }
 }

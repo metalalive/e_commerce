@@ -4,16 +4,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use chrono::Local;
 use ecommerce_common::logging::AppLogContext;
 
-use crate::api::web::dto::PaymentMethodErrorReason;
-use crate::model::ChargeLineModelSet;
+use crate::api::web::dto::{ChargeRespDto, PaymentMethodErrorReason, PaymentMethodRespDto};
+use crate::model::{BuyerPayInState, ChargeBuyerModel};
 
 #[async_trait]
 pub trait AbstractPaymentProcessor: Send + Sync {
     async fn pay_in_start(
         &self,
-        cline_set: &ChargeLineModelSet,
+        cline_set: &ChargeBuyerModel,
     ) -> Result<AppProcessorPayInResult, AppProcessorError>;
 }
 
@@ -24,7 +25,24 @@ pub struct AppProcessorError {
 }
 
 pub struct AppProcessorPayInResult {
+    pub charge_id: Vec<u8>,
+    pub method: PaymentMethodRespDto,
+    pub state: BuyerPayInState,
     pub completed: bool,
+}
+
+impl From<AppProcessorPayInResult> for ChargeRespDto {
+    fn from(value: AppProcessorPayInResult) -> Self {
+        let ctime = value
+            .state
+            .create_time()
+            .unwrap_or(Local::now().fixed_offset());
+        Self {
+            id: value.charge_id,
+            method: value.method,
+            create_time: ctime,
+        }
+    }
 }
 
 impl AppProcessorContext {
@@ -37,7 +55,7 @@ impl AppProcessorContext {
 impl AbstractPaymentProcessor for AppProcessorContext {
     async fn pay_in_start(
         &self,
-        _cline_set: &ChargeLineModelSet,
+        _cline_set: &ChargeBuyerModel,
     ) -> Result<AppProcessorPayInResult, AppProcessorError> {
         let reason = PaymentMethodErrorReason::ProcessorFailure;
         Err(AppProcessorError { reason })

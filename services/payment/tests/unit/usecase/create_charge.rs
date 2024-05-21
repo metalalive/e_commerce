@@ -8,21 +8,46 @@ use ecommerce_common::api::dto::{
 use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
 use ecommerce_common::constant::ProductType;
 
+use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::cache::OrderSyncLockError;
 use payment::adapter::processor::{AppProcessorError, AppProcessorPayInResult};
 use payment::adapter::repository::{AppRepoError, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcReply};
 use payment::api::web::dto::{
     ChargeAmountOlineDto, ChargeReqDto, PaymentCurrencyDto, PaymentMethodErrorReason,
-    PaymentMethodReqDto, StripeCheckoutSessionReqDto, StripeCheckoutUImodeDto,
+    PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto,
+    StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
 };
-use payment::model::OrderLineModelSet;
+use payment::model::{BuyerPayInState, OrderLineModel, OrderLineModelSet, PayLineAmountModel};
 use payment::usecase::{ChargeCreateUcError, ChargeCreateUseCase};
 
 use super::{
     MockChargeRepo, MockOrderSyncLockCache, MockPaymentProcessor, MockRpcClient, MockRpcContext,
     MockRpcPublishEvent,
 };
+
+fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModelSet {
+    let reserved_until = (Local::now() + Duration::minutes(2i64)).fixed_offset();
+    let line = OrderLineModel {
+        pid: BaseProductIdentity {
+            store_id: 379,
+            product_type: ProductType::Item,
+            product_id: 6741,
+        },
+        rsv_total: PayLineAmountModel {
+            unit: 3,
+            total: 18,
+            qty: 6,
+        },
+        paid_total: PayLineAmountModel::default(),
+        reserved_until,
+    };
+    OrderLineModelSet {
+        id: mock_order_id,
+        owner: mock_usr_id,
+        lines: vec![line],
+    }
+}
 
 fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
     ChargeReqDto {
@@ -73,15 +98,24 @@ fn ut_orderpay_replica(mock_usr_id: u32, mock_order_id: String) -> Vec<u8> {
     serde_json::to_vec(&replica).unwrap()
 }
 
+fn ut_processor_pay_in_result() -> AppProcessorPayInResult {
+    let detail = StripeCheckoutSessionRespDto {
+        redirect_url: Some(String::new()),
+        client_session: Some(String::new()),
+    };
+    AppProcessorPayInResult {
+        charge_id: Vec::new(),
+        method: PaymentMethodRespDto::Stripe(detail),
+        state: BuyerPayInState::Initialized,
+        completed: false,
+    }
+}
+
 #[actix_web::test]
 async fn ok_with_existing_order_replica() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_oline_set = OrderLineModelSet {
-        id: mock_order_id.clone(),
-        owner: mock_usr_id,
-        lines: Vec::new(),
-    };
+    let mock_oline_set = ut_saved_oline_set(mock_order_id.clone(), mock_usr_id);
     let mock_repo = MockChargeRepo {
         _expect_unpaid_olines: Mutex::new(Some(Ok(Some(mock_oline_set)))),
         _create_order_result: Mutex::new(None),
@@ -94,7 +128,7 @@ async fn ok_with_existing_order_replica() {
     let mock_rpc_ctx = MockRpcContext {
         _acquire_result: Mutex::new(None),
     };
-    let mock_payin_result = AppProcessorPayInResult { completed: false };
+    let mock_payin_result = ut_processor_pay_in_result();
     let mock_processor = MockPaymentProcessor {
         _payin_start_result: Mutex::new(Some(Ok(mock_payin_result))),
     };
@@ -137,7 +171,7 @@ async fn ok_with_rpc_replica_order() {
     let mock_rpc_ctx = MockRpcContext {
         _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
     };
-    let mock_payin_result = AppProcessorPayInResult { completed: false };
+    let mock_payin_result = ut_processor_pay_in_result();
     let mock_processor = MockPaymentProcessor {
         _payin_start_result: Mutex::new(Some(Ok(mock_payin_result))),
     };
@@ -533,7 +567,7 @@ async fn save_new_chargeline_failure() {
     let mock_rpc_ctx = MockRpcContext {
         _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
     };
-    let mock_payin_result = AppProcessorPayInResult { completed: false };
+    let mock_payin_result = ut_processor_pay_in_result();
     let mock_processor = MockPaymentProcessor {
         _payin_start_result: Mutex::new(Some(Ok(mock_payin_result))),
     };

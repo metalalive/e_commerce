@@ -6,7 +6,7 @@ use ecommerce_common::model::order::BillingModel;
 
 use super::{AbstractChargeRepo, AppRepoError, AppRepoErrorFnLabel};
 use crate::adapter::datastore::AppDataStoreContext;
-use crate::model::{ChargeLineModelSet, OrderLineModelSet};
+use crate::model::{ChargeBuyerModel, OrderLineModelSet};
 
 pub(super) struct MariadbChargeRepo {}
 
@@ -36,7 +36,7 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         Err(AppRepoError { fn_label })
     }
 
-    async fn create_charge(&self, _cline_set: &ChargeLineModelSet) -> Result<(), AppRepoError> {
+    async fn create_charge(&self, _cline_set: ChargeBuyerModel) -> Result<(), AppRepoError> {
         let fn_label = AppRepoErrorFnLabel::CreateCharge;
         Err(AppRepoError { fn_label })
     }
