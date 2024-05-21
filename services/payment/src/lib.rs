@@ -21,6 +21,7 @@ pub mod hard_limit {
     pub const MAX_DB_CONNECTIONS: u32 = 1800u32;
     pub const MAX_SECONDS_DB_IDLE: u16 = 360u16;
     pub const SECONDS_ORDERLINE_DISCARD_MARGIN: u16 = 22u16;
+    pub const CREATE_CHARGE_SECONDS_INTERVAL: u16 = 5u16;
 }
 
 pub struct AppSharedState {

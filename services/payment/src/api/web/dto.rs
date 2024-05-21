@@ -61,7 +61,7 @@ pub enum PaymentMethodRespDto {
 }
 #[derive(Serialize)]
 pub struct ChargeRespDto {
-    pub id: String,
+    pub id: Vec<u8>,
     pub method: PaymentMethodRespDto,
     pub create_time: DateTime<FixedOffset>,
 }

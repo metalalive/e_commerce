@@ -1,6 +1,8 @@
 use std::result::Result;
 
-use chrono::{DateTime, Duration, FixedOffset, Local};
+use chrono::{DateTime, Duration, DurationRound, FixedOffset, Local, TimeDelta};
+use sha2::{Digest, Sha256};
+
 use ecommerce_common::api::dto::{GenericRangeErrorDto, OrderLinePayDto, PayAmountDto};
 use ecommerce_common::model::BaseProductIdentity;
 
@@ -8,7 +10,7 @@ use crate::api::web::dto::{
     ChargeAmountOlineDto, ChargeOlineErrorDto, ChargeReqDto, ChargeRespErrorDto, OrderErrorReason,
     PaymentMethodReqDto,
 };
-use crate::hard_limit::SECONDS_ORDERLINE_DISCARD_MARGIN;
+use crate::hard_limit::{CREATE_CHARGE_SECONDS_INTERVAL, SECONDS_ORDERLINE_DISCARD_MARGIN};
 
 #[derive(Debug)]
 pub enum OLineModelError {
@@ -57,8 +59,8 @@ pub struct ChargeLineBuyerModel {
 }
 pub struct ChargeBuyerModel {
     pub owner: u32,
-    pub token: String, // idenpotency token
-    pub oid: String,   // referenced order id
+    pub token: Vec<u8>, // idenpotency token
+    pub oid: String,    // referenced order id
     pub lines: Vec<ChargeLineBuyerModel>,
     pub state: BuyerPayInState,
     pub method: PaymentMethodModel,
@@ -191,7 +193,7 @@ impl TryFrom<(OrderLineModelSet, ChargeReqDto)> for ChargeBuyerModel {
 
         if err_lines.is_empty() {
             Ok(Self {
-                token: String::new(),
+                token: Self::generate_token(owner),
                 oid,
                 owner,
                 method,
@@ -207,6 +209,23 @@ impl TryFrom<(OrderLineModelSet, ChargeReqDto)> for ChargeBuyerModel {
         }
     } // end of fn try-from
 } // end of impl TryFrom for ChargeBuyerModel
+
+impl ChargeBuyerModel {
+    fn generate_token(owner: u32) -> Vec<u8> {
+        let rn = owner.to_ne_bytes();
+        let td = TimeDelta::seconds(CREATE_CHARGE_SECONDS_INTERVAL as i64);
+        let t0 = Local::now()
+            .fixed_offset()
+            .duration_round(td)
+            .unwrap()
+            .to_rfc3339();
+        let mut hasher = Sha256::new();
+        hasher.update(&rn);
+        hasher.update(t0.as_bytes());
+        let result = hasher.finalize(); // generic-array crate
+        result.to_vec()
+    }
+} // end of impl ChargeBuyerModel
 
 impl
     TryFrom<(

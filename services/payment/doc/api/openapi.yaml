@@ -61,6 +61,7 @@ paths:
       security:
         - BearerAuth: []
         
+  /charge/{charge-id}:
     patch:
       summary: refresh charge status
       description: Refresh charge status from the external PSP chosen by the customer, confirm the payment has been made in the PSP.
@@ -234,6 +235,12 @@ components:
     ChargeRespDto:
       type: object
       properties:
+        id:
+          type: array
+          minItems: 8
+          items:
+            type: integer
+            example: 42
         method:
           description: TODO, add other payment methods e.g. Wise, Adyen
           oneOf:

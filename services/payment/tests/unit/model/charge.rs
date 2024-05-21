@@ -266,6 +266,8 @@ async fn charge_buyer_convert_ok_1() {
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
     assert!(result.is_ok());
     if let Ok(v) = result {
+        // println!("token generated , {:?}", &v.token);
+        assert!(v.token.len() > 8);
         assert_eq!(v.oid, mock_oid);
         assert_eq!(v.owner, mock_usr_id);
         assert!(matches!(v.state, BuyerPayInState::Initialized));
