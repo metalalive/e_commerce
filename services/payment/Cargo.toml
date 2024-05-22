@@ -16,7 +16,37 @@ async-trait = "^0.1.80"
 actix-http = "^3.6"
 actix-service = "^2"
 actix-web = {version="^4.5.1", features=["macros"]}
+
+# for creating charge ID
 sha2 = {version="^0.10", default-features=true}
+
+jsonwebtoken = "^9.3"
+
+# [Important Design Note]
+#
+# For client which runs operation to remote servers e.g. 3rd-party payment processor
+# , user-management app server, I don't use crate `awc` (actix-web-client) in this
+# payment application.
+#
+# The reason is that its internal contains non-Send data structure, such as `std::rc::Rc`
+# in `awc::Client`, this makes sense ONLY if your program always sticks to actix's
+# default single-thread runtime (originated from tokio crate). In such case, most of
+# struct types in this application have to implement `!Send` , also all traits defined in
+# this app have to ignore `Send` check by specifying the macro `#[async_trait(?Send)]`
+#
+# However if you'd like to swtich back to multi-threaded tokio runtime, you need to
+# ensure all necessary types / traits implement `Send`
+#
+# For simplicitly, I use `hyper` with only `client` feature enabled.
+# TODO, enable `http2` feature
+hyper = {version="^1.3.0", features=["client", "http1"]}
+hyper-util = {version="^0.1.3", features=["tokio"]}
+
+# for empty body type
+http-body-util = "^0.1"
+
+# required for RwLock with Send, Sync trait
+tokio = {version="^1.23.1", features=["sync"]}
 
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
 
