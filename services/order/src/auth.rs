@@ -11,7 +11,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use axum::http::request::Parts;
 use chrono::{DateTime, Duration, FixedOffset, Local as LocalTime};
-use serde::de::{Error as DeserializeError, Expected as DeExpected, Unexpected as DeUnexpected};
 use serde::{Deserialize, Serialize};
 
 use axum::extract::FromRequestParts;
@@ -35,6 +34,7 @@ use jsonwebtoken::{
     Validation as JwtValidation,
 };
 
+use ecommerce_common::auth::{jsn_validate_ap_code, quota_matcode_deserialize_error};
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
@@ -86,6 +86,7 @@ pub enum AppAuthPermissionCode {
     can_create_return_req,
     can_create_product_policy,
 }
+
 #[derive(Clone, PartialEq)]
 pub enum AppAuthQuotaMatCode {
     NumPhones,
@@ -93,19 +94,22 @@ pub enum AppAuthQuotaMatCode {
     NumOrderLines,
     NumProductPolicies,
 }
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct AppAuthClaimPermission {
-    #[serde(deserialize_with = "AppAuthedClaim::jsn_validate_ap_code")]
+    #[serde(deserialize_with = "AppAuthedClaim::_jsn_validate_ap_code")]
     pub app_code: u8,
     pub codename: AppAuthPermissionCode,
 }
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct AppAuthClaimQuota {
-    #[serde(deserialize_with = "AppAuthedClaim::jsn_validate_ap_code")]
+    #[serde(deserialize_with = "AppAuthedClaim::_jsn_validate_ap_code")]
     pub app_code: u8,
     pub mat_code: AppAuthQuotaMatCode, // u8,
     pub maxnum: u32,
 }
+
 #[derive(Deserialize, Serialize)]
 pub struct AppAuthedClaim {
     pub profile: u32,
@@ -139,18 +143,14 @@ impl FromRequestParts<AppSharedState> for AppAuthedClaim {
 } // end of impl AppAuthedClaim
 
 impl AppAuthedClaim {
-    fn jsn_validate_ap_code<'de, D>(raw: D) -> DefaultResult<u8, D::Error>
+    fn _jsn_validate_ap_code<'de, D>(raw: D) -> DefaultResult<u8, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let val = u8::deserialize(raw)?;
-        if val == app_meta::RESOURCE_QUOTA_AP_CODE {
-            Ok(val)
-        } else {
-            let unexp = DeUnexpected::Unsigned(val as u64);
-            let exp = ExpectedApCode(app_meta::RESOURCE_QUOTA_AP_CODE, app_meta::LABAL);
-            Err(DeserializeError::invalid_value(unexp, &exp))
-        }
+        jsn_validate_ap_code(
+            raw, app_meta::RESOURCE_QUOTA_AP_CODE,
+            app_meta::LABAL
+        )
     }
     pub fn contain_permission(&self, code: AppAuthPermissionCode) -> bool {
         self.perms
@@ -200,11 +200,11 @@ impl<'de> Deserialize<'de> for AppAuthQuotaMatCode {
         let val = u8::deserialize(raw)?;
         match Self::try_from(val) {
             Ok(code) => Ok(code),
-            Err(val) => {
-                let unexp = DeUnexpected::Unsigned(val as u64);
-                let exp = ExpectedQuotaMatCode;
-                Err(DeserializeError::invalid_value(unexp, &exp))
-            }
+            Err(val) => Err(
+                quota_matcode_deserialize_error::<D>(
+                  val, (1,4) 
+                )
+            )
         }
     }
 }
@@ -215,21 +215,6 @@ impl Serialize for AppAuthQuotaMatCode {
     {
         let raw = self.clone().into();
         serializer.serialize_u8(raw)
-    }
-}
-
-struct ExpectedApCode<'a>(u8, &'a str);
-struct ExpectedQuotaMatCode;
-
-impl<'a> DeExpected for ExpectedApCode<'a> {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let msg = format!("expect ap-code: {}, label:{}", self.0, self.1);
-        formatter.write_str(msg.as_str())
-    }
-}
-impl DeExpected for ExpectedQuotaMatCode {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("range: 1-4")
     }
 }
 
