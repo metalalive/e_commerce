@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.6.xsd
+    http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-4.6.xsd ">
+
+    <changeSet id="init" author="T.H. Wu">
+        <tagDatabase tag="0.0.0" />
+    </changeSet>
+    <changeSet id="add_tables__order_replica_toplvl_meta" author="T.H.">
+        <comment>
+            - TODO, new column for number of refunds
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `order_toplvl_meta` (
+                `usr_id`   INT UNSIGNED NOT NULL,
+                `o_id`     BINARY(16) NOT NULL,
+                `create_time`   DATETIME  NOT NULL,
+                `num_charges`   INT UNSIGNED NOT NULL DEFAULT 0,
+                PRIMARY KEY (`usr_id`,`o_id`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `order_toplvl_meta`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_tables__orderbill_replica_contact" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `orderbill_contact` (
+                `o_id`   BINARY(16) NOT NULL PRIMARY KEY,
+                `first_name`  VARCHAR(32) CHARACTER SET utf8 NOT NULL,
+                `last_name`   VARCHAR(32) CHARACTER SET utf8 NOT NULL,
+                `emails`   TEXT  CHARACTER SET utf8 NOT NULL,
+                `phones`   TEXT  CHARACTER SET utf8 NOT NULL
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `orderbill_contact`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_tables__orderbill_replica_phyaddr" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `orderbill_phyaddr` (
+                `o_id`   BINARY(16) NOT NULL PRIMARY KEY,
+                `country`   ENUM('TW','TH','IN','ID','US') NOT NULL, 
+                `region`    VARCHAR(32)   CHARACTER SET utf8  NOT NULL,
+                `city`      VARCHAR(32)   CHARACTER SET utf8  NOT NULL,
+                `distinct`  VARCHAR(64)   CHARACTER SET utf8  NOT NULL,
+                `street`    VARCHAR(32)   CHARACTER SET utf8  DEFAULT NULL,
+                `detail`    VARCHAR(256)  CHARACTER SET utf8  NOT NULL
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `orderbill_phyaddr`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_tables__orderline_replica_detail" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `order_line_detail` (
+                `o_id`   BINARY(16) NOT NULL,
+                `store_id`      INT UNSIGNED NOT NULL,
+                `product_type`  ENUM('1', '2') NOT NULL, 
+                `product_id`    BIGINT UNSIGNED NOT NULL,
+                `price_unit`    INT UNSIGNED NOT NULL,
+                `price_total_rsved`  INT UNSIGNED NOT NULL,
+                `price_total_paid`   INT UNSIGNED NOT NULL,
+                `qty_rsved`    INT UNSIGNED NOT NULL,
+                `qty_paid`     INT UNSIGNED NOT NULL,
+                `rsved_until`  DATETIME  NOT NULL,
+                PRIMARY KEY (`o_id`, `store_id`, `product_type`, `product_id`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `order_line_detail`;
+        </rollback>
+    </changeSet>
+    <changeSet id="tag_version_0.0.1" author="T.H.">
+        <tagDatabase tag="0.0.1" />
+    </changeSet>
+
+    <changeSet id="add_tables__charge_buyer_toplvl" author="T.H.">
+        <comment>
+           TODO
+           - add fields / separate tables for specific payment method
+           - more enum members as this service supports new payment methods
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `charge_buyer_toplvl` (
+                `usr_id`        INT UNSIGNED NOT NULL,
+                `create_time`   DATETIME  NOT NULL,
+                `order_id`      BINARY(16) NOT NULL,
+                `state`    ENUM('ProcessorAccepted', 'ProcessorCompleted',
+                               'OrderAppSynced', 'OrderAppExpired') NOT NULL,
+                `processor_accepted_time`    DATETIME(3)  NULL,
+                `processor_completed_time`   DATETIME(3)  NULL,
+                `orderapp_synced_time`   DATETIME(3)  NULL,
+                `pay_method`    ENUM('Stripe') NOT NULL,
+                PRIMARY KEY (`usr_id`,`create_time`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `charge_buyer_toplvl`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_tables__charge_line" author="T.H.">
+        <comment>
+           - in this service, buyer and seller share the same charge instance
+           TODO
+           - add currency and exchange rate on creating the order line
+           - add fields for seller and pay-out
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `charge_line` (
+                `buyer_id`        INT UNSIGNED NOT NULL,
+                `create_time`   DATETIME  NOT NULL,
+                `store_id`      INT UNSIGNED NOT NULL,
+                `product_type`  ENUM('1', '2') NOT NULL, 
+                `product_id`    BIGINT UNSIGNED NOT NULL,
+                `price_unit`    INT UNSIGNED NOT NULL,
+                `price_total`   INT UNSIGNED NOT NULL,
+                `qty`           INT UNSIGNED NOT NULL,
+                PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_type`,`product_id`),
+                CONSTRAINT `c_fk_charge_buyer_toplvl_id_0` FOREIGN KEY (`buyer_id`, `create_time`)
+                    REFERENCES `charge_buyer_toplvl`(`usr_id`,`create_time`) ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `charge_line`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.2" author="T.H.">
+        <tagDatabase tag="0.0.2" />
+    </changeSet>
+</databaseChangeLog>
