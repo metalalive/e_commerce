@@ -16,6 +16,7 @@ async-trait = "^0.1.80"
 actix-http = "^3.6"
 actix-service = "^2"
 actix-web = {version="^4.5.1", features=["macros"]}
+actix-web-httpauth = "^0.8"
 
 # for creating charge ID
 sha2 = {version="^0.10", default-features=true}

@@ -5,17 +5,34 @@ use std::io::Error as IoError;
 use std::result::Result;
 
 use actix_http::uri::{InvalidUri, Uri};
+use actix_web::rt::net::TcpStream;
 use actix_web::web::Bytes;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, FixedOffset, Local};
 use http_body_util::{BodyExt, Empty};
 use hyper::body::Frame;
+use hyper::client::conn as HyperConn;
+use hyper_util::rt::TokioIo;
 use jsonwebtoken::jwk::{Jwk, JwkSet};
 use tokio::sync::RwLock;
 
 use ecommerce_common::config::AppAuthCfg;
 
-use super::AppAuthError;
+#[derive(Debug)]
+pub enum AuthKeystoreError {
+    ParseUri(String),
+    RemoteKeyServer(u16),
+    HttpInvalidSetup(String),
+    HttpParse(String),
+    HttpTimeout(String),
+    HttpAbort(String),
+    HttpDataCorruption(String),
+    HttpOther(hyper::Error),
+    NetworkIO(IoError),
+    ParseSerialJwk(String),
+    MissingKey,
+    NotSupport,
+}
 
 // Note, the macro `async_trait(?Send)` is applied ONLY if you are pretty sure
 // the interface is accessed ONLY in single-thread runtime, so you can ignore
@@ -48,17 +65,17 @@ pub struct AppKeystoreRefreshResult {
     pub num_added: usize,
 }
 
-impl From<InvalidUri> for AppAuthError {
+impl From<InvalidUri> for AuthKeystoreError {
     fn from(value: InvalidUri) -> Self {
-        Self::KeyStoreUri(value.to_string())
+        Self::ParseUri(value.to_string())
     }
 }
-impl From<IoError> for AppAuthError {
+impl From<IoError> for AuthKeystoreError {
     fn from(value: IoError) -> Self {
         Self::NetworkIO(value)
     }
 }
-impl From<hyper::Error> for AppAuthError {
+impl From<hyper::Error> for AuthKeystoreError {
     fn from(value: hyper::Error) -> Self {
         let detail = value.to_string();
         if value.is_user() {
@@ -76,28 +93,28 @@ impl From<hyper::Error> for AppAuthError {
         }
     }
 }
-impl From<hyper::http::Error> for AppAuthError {
+impl From<hyper::http::Error> for AuthKeystoreError {
     fn from(value: hyper::http::Error) -> Self {
         let detail = value.to_string();
         Self::HttpInvalidSetup(detail)
     }
 }
-impl From<Frame<Bytes>> for AppAuthError {
+impl From<Frame<Bytes>> for AuthKeystoreError {
     fn from(value: Frame<Bytes>) -> Self {
         let detail = format!("{:?}", value);
         Self::HttpDataCorruption(detail)
     }
 }
-impl From<serde_json::Error> for AppAuthError {
+impl From<serde_json::Error> for AuthKeystoreError {
     fn from(value: serde_json::Error) -> Self {
         let detail = value.to_string();
-        Self::AppParse(detail)
+        Self::ParseSerialJwk(detail)
     }
 }
 
 #[async_trait]
 impl AbstractAuthKeystore for AppAuthKeystore {
-    type Error = AppAuthError;
+    type Error = AuthKeystoreError;
 
     fn update_period(&self) -> Duration {
         self.update_period
@@ -122,19 +139,30 @@ impl AbstractAuthKeystore for AppAuthKeystore {
         })
     }
 
-    async fn find(&self, _kid: &str) -> Result<Jwk, Self::Error> {
-        Err(AppAuthError::NotSupport)
+    async fn find(&self, kid: &str) -> Result<Jwk, Self::Error> {
+        let guard = self.inner.read().await;
+        let result = guard.keyset.keys.iter().find(|item| {
+            item.common
+                .key_id
+                .as_ref()
+                .map_or(false, |v| v.as_str() == kid)
+        });
+        if let Some(item) = result {
+            Ok(item.clone())
+        } else {
+            Err(AuthKeystoreError::MissingKey)
+        }
     }
 } // end of impl AppAuthKeystore
 
 impl AppAuthKeystore {
-    pub(crate) fn try_create(cfg: &AppAuthCfg) -> Result<Self, AppAuthError> {
+    pub(crate) fn try_create(cfg: &AppAuthCfg) -> Result<Self, AuthKeystoreError> {
         let update_period = Duration::minutes(cfg.update_interval_minutes as i64);
         let last_update = Local::now().fixed_offset() - update_period - Duration::seconds(5);
         let url = cfg.keystore_url.parse::<Uri>()?;
         if url.host().is_none() || url.port_u16().is_none() {
             let msg = format!("host-or-port-missing, {}", cfg.keystore_url);
-            return Err(AppAuthError::KeyStoreUri(msg));
+            return Err(AuthKeystoreError::ParseUri(msg));
         }
         let inner = {
             let jwks = InnerKeystoreContext {
@@ -150,11 +178,11 @@ impl AppAuthKeystore {
         })
     }
 
-    async fn request_new_keys(&self) -> Result<JwkSet, AppAuthError> {
+    async fn request_new_keys(&self) -> Result<JwkSet, AuthKeystoreError> {
         let addr = (self.url.host().unwrap(), self.url.port_u16().unwrap());
-        let stream = actix_web::rt::net::TcpStream::connect(addr).await?;
-        let io_adapter = hyper_util::rt::TokioIo::new(stream);
-        let (mut sender, connector) = hyper::client::conn::http1::handshake(io_adapter).await?;
+        let stream = TcpStream::connect(addr).await?;
+        let io_adapter = TokioIo::new(stream);
+        let (mut sender, connector) = HyperConn::http1::handshake(io_adapter).await?;
         let _handle = actix_web::rt::spawn(connector);
         let body = Empty::<Bytes>::default();
         let req = hyper::Request::get(self.url.path())
@@ -163,7 +191,7 @@ impl AppAuthKeystore {
         let mut resp = sender.send_request(req).await?;
         if resp.status() != hyper::StatusCode::OK {
             let code = resp.status().as_u16();
-            return Err(AppAuthError::KeyStoreServer(code));
+            return Err(AuthKeystoreError::RemoteKeyServer(code));
         }
         let mut raw_collected = Vec::<u8>::new();
         while let Some(nxt) = resp.frame().await {

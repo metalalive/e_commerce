@@ -4,5 +4,6 @@
     "media"  : [3, "media"],
     "order"  : [4, "purchase/sale order"],
     "store"  : [5, "front store"],
+    "payment"   : [7, "payment"],
     "inventory" : [6, "inventory"]
 }

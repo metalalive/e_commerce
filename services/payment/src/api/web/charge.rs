@@ -7,10 +7,11 @@ use ecommerce_common::logging::{app_log_event, AppLogLevel};
 use super::dto::ChargeReqDto;
 use crate::adapter::repository::app_repo_charge;
 use crate::usecase::ChargeCreateUseCase;
-use crate::AppSharedState;
+use crate::{AppAuthedClaim, AppSharedState};
 
 pub(super) async fn create_charge(
     req_body: ExtJson<ChargeReqDto>,
+    authed_claim: AppAuthedClaim,
     shr_state: WebData<AppSharedState>,
 ) -> ActixResult<HttpResponse> {
     let logctx = shr_state.log_context();

@@ -8,12 +8,13 @@ use actix_web::error::Error as WebError;
 use actix_web::test::init_service;
 use actix_web::web::Data as WebData;
 
+use chrono::Local;
 use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
 use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 
 use payment::api::web::AppRouteTable;
 use payment::network::app_web_service;
-use payment::AppSharedState;
+use payment::{AppSharedState, AppAuthedClaim, app_meta};
 
 fn setup_config() -> AppConfig {
     let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
@@ -40,4 +41,16 @@ pub(crate) async fn itest_setup_app_server(
     let shr_state = AppSharedState::new(cfg).unwrap();
     let app = app.app_data(WebData::new(shr_state));
     init_service(app).await
+}
+
+pub(crate) fn itest_setup_auth_claim() -> AppAuthedClaim {
+    let now = Local::now().fixed_offset().timestamp();
+    AppAuthedClaim {
+        profile: 2234,
+        iat: now,
+        exp: now + 60,
+        aud: vec![app_meta::LABAL.to_string()],
+        perms: Vec::new(),
+        quota: Vec::new()
+    }
 }

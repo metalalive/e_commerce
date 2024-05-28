@@ -3,6 +3,7 @@ use std::env;
 
 use actix_web::rt;
 use actix_web::web::Data as WebData;
+use actix_web_httpauth::middleware::HttpAuthentication;
 
 use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
 use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
@@ -10,7 +11,7 @@ use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use payment::api::web::AppRouteTable;
 use payment::network::{app_web_service, net_server_listener};
-use payment::{hard_limit, AppSharedState};
+use payment::{hard_limit, validate_jwt, AppSharedState};
 
 fn init_config() -> Result<AppConfig, ()> {
     let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
@@ -71,7 +72,10 @@ fn main() -> Result<(), ()> {
             let logctx_p = logctx.as_ref();
             app_log_event!(logctx_p, AppLogLevel::ERROR, "no-route-in-app-router");
         } // log error, actix-web doesn't consider to handle errors from this callback
-        app.app_data(WebData::new(_state))
+        let auth_middleware = HttpAuthentication::bearer(validate_jwt);
+        app.wrap(auth_middleware)
+            .app_data(WebData::new(_state.auth_keystore()))
+            .app_data(WebData::new(_state))
     };
     let ht_srv = net_server_listener(app_init, server.0.as_str(), server.1);
     let runner = rt::System::new();

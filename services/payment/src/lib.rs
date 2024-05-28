@@ -17,8 +17,16 @@ use crate::adapter::processor::{
     app_processor_context, AbstractPaymentProcessor, AppProcessorError,
 };
 use crate::adapter::rpc;
-pub use crate::auth::{AbstractAuthKeystore, AppAuthError, AppAuthKeystore};
+pub use crate::auth::{
+    validate_jwt, AbstractAuthKeystore, AppAuthClaimPermission, AppAuthClaimQuota, AppAuthKeystore,
+    AppAuthPermissionCode, AppAuthQuotaMatCode, AppAuthedClaim, AppKeystoreRefreshResult,
+    AuthJwtError, AuthKeystoreError,
+};
 
+pub mod app_meta {
+    pub const LABAL: &str = "payment";
+    pub const RESOURCE_QUOTA_AP_CODE: u8 = 7;
+}
 pub mod hard_limit {
     pub const MAX_DB_CONNECTIONS: u32 = 1800u32;
     pub const MAX_SECONDS_DB_IDLE: u16 = 360u16;
@@ -33,7 +41,7 @@ pub struct AppSharedState {
     _processors: Arc<Box<dyn AbstractPaymentProcessor>>,
     _rpc_ctx: Arc<Box<dyn rpc::AbstractRpcContext>>,
     _ordersync_lockset: Arc<Box<dyn AbstractOrderSyncLockCache>>,
-    _auth_keys: Arc<Box<dyn AbstractAuthKeystore<Error = AppAuthError>>>,
+    _auth_keys: Arc<Box<dyn AbstractAuthKeystore<Error = AuthKeystoreError>>>,
 }
 
 #[derive(Debug)]
@@ -41,7 +49,7 @@ pub enum ShrStateInitProgress {
     DataStore,
     RpcContext,
     ExternalProcessor,
-    AuthKeyStore(AppAuthError),
+    AuthKeyStore(AuthKeystoreError),
 }
 
 // TODO,
@@ -71,8 +79,8 @@ impl From<AppProcessorError> for ShrStateInitError {
         }
     }
 }
-impl From<AppAuthError> for ShrStateInitError {
-    fn from(detail: AppAuthError) -> Self {
+impl From<AuthKeystoreError> for ShrStateInitError {
+    fn from(detail: AuthKeystoreError) -> Self {
         Self {
             progress: ShrStateInitProgress::AuthKeyStore(detail),
         }
@@ -119,7 +127,7 @@ impl AppSharedState {
     pub fn config(&self) -> Arc<AppConfig> {
         self._config.clone()
     }
-    pub fn auth_keystore(&self) -> Arc<Box<dyn AbstractAuthKeystore<Error = AppAuthError>>> {
+    pub fn auth_keystore(&self) -> Arc<Box<dyn AbstractAuthKeystore<Error = AuthKeystoreError>>> {
         self._auth_keys.clone()
     }
 } // end of impl AppSharedState
