@@ -45,6 +45,7 @@ fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModel
     OrderLineModelSet {
         id: mock_order_id,
         owner: mock_usr_id,
+        num_charges: 0,
         lines: vec![line],
     }
 }

@@ -23,7 +23,8 @@ async fn charge_ok() {
             .append_header(ContentType::json())
             .set_json(req_body)
             .to_request();
-        let _empty = r.extensions_mut()
+        let _empty = r
+            .extensions_mut()
             .insert::<AppAuthedClaim>(itest_setup_auth_claim());
         r
     };
@@ -35,7 +36,8 @@ async fn charge_ok() {
             .uri("/v0.0.2/charge/127-203948892-2903")
             .append_header(ContentType::json())
             .to_request();
-        let _empty = r.extensions_mut()
+        let _empty = r
+            .extensions_mut()
             .insert::<AppAuthedClaim>(itest_setup_auth_claim());
         r
     };

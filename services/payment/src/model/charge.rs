@@ -1,7 +1,8 @@
 use std::result::Result;
 
-use chrono::{DateTime, Duration, DurationRound, FixedOffset, Local, TimeDelta};
-use sha2::{Digest, Sha256};
+use chrono::{
+    DateTime, Datelike, Duration, DurationRound, FixedOffset, Local, TimeDelta, Timelike, Utc,
+};
 
 use ecommerce_common::api::dto::{GenericRangeErrorDto, OrderLinePayDto, PayAmountDto};
 use ecommerce_common::model::BaseProductIdentity;
@@ -39,12 +40,16 @@ pub struct OrderLineModelSet {
     pub id: String,
     pub owner: u32,
     pub lines: Vec<OrderLineModel>,
+    pub num_charges: u32,
     // TODO, add following fields
-    // - currency rate on initiating the charge
-    // - payment-method
+    // - currency rate on customer side when creating the order
 }
 
 pub type PaymentMethodModel = PaymentMethodReqDto;
+
+const CHARGE_TOKEN_NBYTES: usize = 9;
+
+pub struct ChargeToken(pub [u8; CHARGE_TOKEN_NBYTES]);
 
 pub enum BuyerPayInState {
     Initialized,
@@ -53,14 +58,17 @@ pub enum BuyerPayInState {
     OrderAppSynced(DateTime<FixedOffset>),
     OrderAppExpired, // in such case, the charge should be converted to refund (TODO)
 }
+
 pub struct ChargeLineBuyerModel {
     pub pid: BaseProductIdentity, // product ID
     pub amount: PayLineAmountModel,
 }
 pub struct ChargeBuyerModel {
     pub owner: u32,
-    pub token: Vec<u8>, // idenpotency token
-    pub oid: String,    // referenced order id
+    pub create_time: DateTime<FixedOffset>,
+    // idenpotency token, derived by owner (user profile ID) and create time
+    pub token: ChargeToken,
+    pub oid: String, // referenced order id
     pub lines: Vec<ChargeLineBuyerModel>,
     pub state: BuyerPayInState,
     pub method: PaymentMethodModel,
@@ -144,6 +152,7 @@ impl TryFrom<(String, u32, Vec<OrderLinePayDto>)> for OrderLineModelSet {
                 id: oid,
                 owner,
                 lines,
+                num_charges: 0,
             })
         } else {
             Err(errors)
@@ -192,9 +201,11 @@ impl TryFrom<(OrderLineModelSet, ChargeReqDto)> for ChargeBuyerModel {
             .collect::<Vec<_>>();
 
         if err_lines.is_empty() {
+            let now = Local::now();
             Ok(Self {
-                token: Self::generate_token(owner),
                 oid,
+                create_time: now.fixed_offset(),
+                token: ChargeToken::encode(owner, now.to_utc()),
                 owner,
                 method,
                 lines,
@@ -210,22 +221,68 @@ impl TryFrom<(OrderLineModelSet, ChargeReqDto)> for ChargeBuyerModel {
     } // end of fn try-from
 } // end of impl TryFrom for ChargeBuyerModel
 
-impl ChargeBuyerModel {
-    fn generate_token(owner: u32) -> Vec<u8> {
-        let rn = owner.to_ne_bytes();
+impl ChargeToken {
+    pub fn encode(owner: u32, now: DateTime<Utc>) -> Self {
         let td = TimeDelta::seconds(CREATE_CHARGE_SECONDS_INTERVAL as i64);
-        let t0 = Local::now()
-            .fixed_offset()
-            .duration_round(td)
-            .unwrap()
-            .to_rfc3339();
-        let mut hasher = Sha256::new();
-        hasher.update(rn);
-        hasher.update(t0.as_bytes());
-        let result = hasher.finalize(); // generic-array crate
-        result.to_vec()
+        let now = now.duration_round(td).unwrap();
+        let given = [
+            (owner, 32u8),
+            (now.year_ce().1, 14),
+            (now.month(), 4),
+            (now.day(), 5),
+            (now.hour(), 5),
+            (now.minute(), 6),
+            (now.second(), 6),
+        ];
+        let inner = Self::compact_bitvec(given);
+        Self(inner.try_into().unwrap())
     }
-} // end of impl ChargeBuyerModel
+    fn compact_bitvec(data: [(u32, u8); 7]) -> Vec<u8> {
+        let nbits_req = data.iter().map(|(_, sz)| *sz as usize).sum::<usize>();
+        let nbits_limit = CHARGE_TOKEN_NBYTES << 3;
+        assert!(nbits_limit >= nbits_req);
+        let mut out: Vec<u8> = Vec::new();
+        let mut nbit_avail_last = 0u8; // range 0 to 7
+        data.into_iter()
+            .map(|(mut v, mut sz)| {
+                assert!(32u8 >= sz);
+                assert!(8 > nbit_avail_last);
+                v <<= 32u8.saturating_sub(sz);
+                // println!("[compact-bitvec] v:{v:#x}, sz:{sz}, \
+                //          nbit_avail_last:{nbit_avail_last}");
+                if nbit_avail_last > 0 {
+                    let nbit_shift = nbit_avail_last.min(sz);
+                    let nbit_rsv_last = 32u8.saturating_sub(nbit_avail_last);
+                    let v0 = (v >> nbit_rsv_last) as u8;
+                    v <<= nbit_shift;
+                    let mut last = out.pop().unwrap();
+                    last = (last & Self::bitmask_msb8(nbit_avail_last)) | v0;
+                    out.push(last);
+                    sz = if nbit_shift == sz {
+                        nbit_avail_last = nbit_avail_last.saturating_sub(sz);
+                        0
+                    } else {
+                        sz.saturating_sub(nbit_avail_last)
+                    };
+                }
+                let lastbyte_incomplete = (sz & 0x7u8) != 0;
+                let nbytes_add = (sz >> 3) + (lastbyte_incomplete as u8);
+                let v_bytes = v.to_be_bytes(); // always convert to big-endian value
+                                               // println!("[compact-bitvec] v_bytes :{:?}", v_bytes);
+                let (adding, _discarding) = v_bytes.split_at(nbytes_add as usize);
+                out.extend(adding);
+                if sz > 0 {
+                    nbit_avail_last = ((lastbyte_incomplete as u8) << 3).saturating_sub(sz & 0x7u8);
+                }
+            })
+            .count();
+        out
+    } // end of fn compact_bitvec
+
+    fn bitmask_msb8(n: u8) -> u8 {
+        0xffu8 << n
+    }
+} // end of impl ChargeToken
 
 impl
     TryFrom<(

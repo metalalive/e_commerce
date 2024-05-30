@@ -1,6 +1,6 @@
 mod charge;
 
 pub use charge::{
-    BuyerPayInState, ChargeBuyerModel, OLineModelError, OrderLineModel, OrderLineModelSet,
-    PayLineAmountModel,
+    BuyerPayInState, ChargeBuyerModel, ChargeToken, OLineModelError, OrderLineModel,
+    OrderLineModelSet, PayLineAmountModel,
 };

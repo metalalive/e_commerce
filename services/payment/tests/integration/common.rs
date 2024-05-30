@@ -14,7 +14,7 @@ use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 
 use payment::api::web::AppRouteTable;
 use payment::network::app_web_service;
-use payment::{AppSharedState, AppAuthedClaim, app_meta};
+use payment::{app_meta, AppAuthedClaim, AppSharedState};
 
 fn setup_config() -> AppConfig {
     let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
@@ -51,6 +51,6 @@ pub(crate) fn itest_setup_auth_claim() -> AppAuthedClaim {
         exp: now + 60,
         aud: vec![app_meta::LABAL.to_string()],
         perms: Vec::new(),
-        quota: Vec::new()
+        quota: Vec::new(),
     }
 }

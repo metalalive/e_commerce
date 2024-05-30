@@ -125,7 +125,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         let mut g = self._payin_start_result.lock().unwrap();
         let mut out = g.take().unwrap();
         if let Ok(v) = out.as_mut() {
-            v.charge_id = cline_set.token.clone();
+            v.charge_id = cline_set.token.0.to_vec();
         }
         out
     }

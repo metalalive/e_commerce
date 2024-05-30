@@ -8,7 +8,8 @@ use payment::api::web::dto::{
     StripeCheckoutSessionReqDto, StripeCheckoutUImodeDto,
 };
 use payment::model::{
-    BuyerPayInState, ChargeBuyerModel, OLineModelError, OrderLineModelSet, PayLineAmountModel,
+    BuyerPayInState, ChargeBuyerModel, ChargeToken, OLineModelError, OrderLineModelSet,
+    PayLineAmountModel,
 };
 
 fn ut_setup_order_replica(
@@ -267,7 +268,6 @@ async fn charge_buyer_convert_ok_1() {
     assert!(result.is_ok());
     if let Ok(v) = result {
         // println!("token generated , {:?}", &v.token);
-        assert!(v.token.len() > 8);
         assert_eq!(v.oid, mock_oid);
         assert_eq!(v.owner, mock_usr_id);
         assert!(matches!(v.state, BuyerPayInState::Initialized));
@@ -601,3 +601,61 @@ async fn charge_buyer_convert_amount_mismatch_2() {
         }
     }
 } // end of fn charge_buyer_convert_amount_mismatch_2
+
+#[test]
+fn charge_token_encode_ok() {
+    [
+        (
+            8374u32,
+            "1998-10-31T18:38:25+00:00",
+            [
+                0x0u8,
+                0x0,
+                0x20,
+                0xb6,
+                0x1f,
+                0x38 | 0x2,
+                0x80 | 0x3e | 0x1,
+                0x20 | 0x9,
+                0x80 | 0x19,
+            ],
+        ),
+        (
+            8010095,
+            "2012-04-24T23:01:30+00:00",
+            [
+                0x0,
+                0x7a,
+                0x39,
+                0x6f,
+                0x1f,
+                0x70 | 0x1,
+                0x0 | 0x30 | 0x01,
+                0x70 | 0x0,
+                0x40 | 0x1e,
+            ],
+        ),
+        (
+            100290278,
+            "2019-01-17T00:59:35+00:00",
+            [
+                0x05,
+                0xfa,
+                0x4e,
+                0xe6,
+                0x1f,
+                0x8c | 0x0,
+                0x40 | 0x22 | 0x0,
+                0x0 | 0xe,
+                0xc0 | 0x23,
+            ],
+        ),
+    ]
+    .into_iter()
+    .map(|(mock_usr_id, time_serial, expect_encoded)| {
+        let mock_ctime = DateTime::parse_from_rfc3339(time_serial).unwrap().to_utc();
+        let actual = ChargeToken::encode(mock_usr_id, mock_ctime);
+        assert_eq!(actual.0, expect_encoded);
+    })
+    .count();
+}
