@@ -1,4 +1,6 @@
-use ecommerce_common::error::{AppCfgError, AppErrorCode, ProductTypeParseError};
+use ecommerce_common::error::{
+    AppCfgError, AppConfidentialityError, AppErrorCode, ProductTypeParseError,
+};
 use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone)]
@@ -33,6 +35,14 @@ impl From<AppCfgError> for AppError {
         AppError {
             code: value.code,
             detail: value.detail,
+        }
+    }
+}
+impl From<AppConfidentialityError> for AppError {
+    fn from(value: AppConfidentialityError) -> Self {
+        AppError {
+            code: value.code,
+            detail: Some(value.detail),
         }
     }
 }

@@ -1,5 +1,6 @@
 pub mod api;
 pub mod auth;
+pub mod confidentiality;
 pub mod config;
 pub mod constant;
 pub mod error;

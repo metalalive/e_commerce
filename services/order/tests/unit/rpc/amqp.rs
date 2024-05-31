@@ -10,10 +10,10 @@ use chrono::Local;
 use tokio::task;
 use tokio::time::sleep;
 
+use ecommerce_common::confidentiality::UserSpaceConfidentiality;
 use ecommerce_common::constant::env_vars::SYS_BASEPATH;
 use ecommerce_common::error::AppErrorCode;
 
-use order::confidentiality::UserSpaceConfidentiality;
 use order::error::AppError;
 use order::{AbstractRpcContext, AppRpcClientReqProperty, AppSharedState};
 

@@ -49,3 +49,9 @@ pub struct AppCfgError {
     pub code: AppErrorCode,
     pub detail: Option<String>,
 }
+
+#[derive(Debug)]
+pub struct AppConfidentialityError {
+    pub code: AppErrorCode,
+    pub detail: String,
+}

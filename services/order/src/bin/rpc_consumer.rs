@@ -5,12 +5,12 @@ use std::future::Future;
 use std::pin::Pin;
 use std::result::Result as DefaultResult;
 
+use ecommerce_common::confidentiality::{self, AbstractConfidentiality};
 use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use tokio::runtime::Builder as RuntimeBuilder;
 
 use order::api::rpc::route_to_handler;
-use order::confidentiality::{self, AbstractConfidentiality};
 use order::constant::hard_limit;
 use order::error::AppError;
 use order::{AppCfgHardLimit, AppCfgInitArgs, AppConfig, AppRpcClientReqProperty, AppSharedState};
@@ -83,7 +83,7 @@ fn main() {
             }
             Err(e) => {
                 println!(
-                    "app failed to init confidentiality handler, error code: {} ",
+                    "app failed to init confidentiality handler, error code: {:?}",
                     e
                 );
             }

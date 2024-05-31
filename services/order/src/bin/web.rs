@@ -12,11 +12,11 @@ use tower::ServiceBuilder;
 use tower_http::auth::AsyncRequireAuthorizationLayer;
 use tower_http::cors::CorsLayer;
 
+use ecommerce_common::confidentiality::{self, AbstractConfidentiality};
 use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use order::api::web::route_table;
-use order::confidentiality::{self, AbstractConfidentiality};
 use order::constant::hard_limit;
 use order::error::AppError;
 use order::network::{app_web_service, middleware, net_server_listener};
@@ -232,7 +232,7 @@ fn main() {
             Ok(confidential) => start_async_runtime(cfg, confidential),
             Err(e) => {
                 println!(
-                    "app failed to init confidentiality handler, error code: {} ",
+                    "app failed to init confidentiality handler, error code: {:?} ",
                     e
                 );
             }

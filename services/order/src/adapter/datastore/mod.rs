@@ -4,6 +4,7 @@ mod sql_db;
 use std::boxed::Box;
 use std::sync::Arc;
 
+use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::AppDataStoreCfg;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
@@ -14,7 +15,6 @@ pub use in_mem::{
 };
 pub use sql_db::AppMariaDbStore;
 
-use crate::confidentiality::AbstractConfidentiality;
 
 pub(crate) fn build_context(
     logctx: Arc<AppLogContext>,

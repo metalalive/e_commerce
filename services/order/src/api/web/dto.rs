@@ -112,6 +112,7 @@ pub struct ShippingErrorDto {
 #[derive(Deserialize, Serialize)]
 pub struct OrderCreateReqData {
     pub order_lines: Vec<OrderLineReqDto>,
+    // TODO, add target currency, and its rate on creating the order
     pub billing: BillingReqDto,
     pub shipping: ShippingReqDto,
 }

@@ -1,17 +1,17 @@
 use std::io::ErrorKind;
 
+use ecommerce_common::confidentiality::{AbstractConfidentiality, UserSpaceConfidentiality};
 use ecommerce_common::constant::env_vars::SERVICE_BASEPATH;
 use ecommerce_common::error::AppErrorCode;
-use order::confidentiality::{AbstractConfidentiality, UserSpaceConfidentiality};
 
 fn ut_setup() -> (String, &'static str) {
     let app_base_path = std::env::var(SERVICE_BASEPATH).unwrap();
-    let secret_lpath = "/tests/unit/examples/confidential_demo.json";
+    let secret_lpath = "/tests/examples/confidential_demo.json";
     (app_base_path, secret_lpath)
 }
 
 #[test]
-fn access_ok() {
+fn userspace_access_ok() {
     let (app_base_path, secret_lpath) = ut_setup();
     let fullpath = app_base_path + secret_lpath;
     let hdlr = UserSpaceConfidentiality::build(fullpath);
@@ -49,7 +49,7 @@ fn access_ok() {
 }
 
 #[test]
-fn access_missing_content() {
+fn userspace_access_missing_content() {
     let (app_base_path, secret_lpath) = ut_setup();
     let fullpath = app_base_path + secret_lpath;
     let hdlr = UserSpaceConfidentiality::build(fullpath);
@@ -57,23 +57,23 @@ fn access_missing_content() {
     assert_eq!(result.is_err(), true);
     let err = result.unwrap_err();
     assert_eq!(err.code, AppErrorCode::NoConfidentialityCfg);
-    assert!(err.detail.unwrap().contains("object"));
+    assert!(err.detail.contains("object"));
     // ------------
     let result = hdlr.try_get_payload("amqp_broker/999");
     assert_eq!(result.is_err(), true);
     let err = result.unwrap_err();
     assert_eq!(err.code, AppErrorCode::NoConfidentialityCfg);
-    assert!(err.detail.unwrap().contains("array"));
+    assert!(err.detail.contains("array"));
     // ------------
     let result = hdlr.try_get_payload("amqp_broker/55s");
     assert_eq!(result.is_err(), true);
     let err = result.unwrap_err();
     assert_eq!(err.code, AppErrorCode::NoConfidentialityCfg);
-    assert!(err.detail.unwrap().contains("path-error"));
+    assert!(err.detail.contains("path-error"));
 }
 
 #[test]
-fn source_not_exist() {
+fn userspace_source_not_exist() {
     let (app_base_path, _) = ut_setup();
     let secret_lpath = "/unknown/path/to/source.xxx";
     let fullpath = app_base_path + secret_lpath;

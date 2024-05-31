@@ -22,6 +22,7 @@ use amqprs::consumer::AsyncConsumer;
 use amqprs::error::Error as AmqpError;
 use amqprs::{BasicProperties, Deliver, FieldTable, FieldValue};
 
+use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::{AppAmqpBindingCfg, AppAmqpBindingReplyCfg, AppRpcAmqpCfg};
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
@@ -31,7 +32,6 @@ use super::{
     AppRpcClientReqProperty, AppRpcReply, AppRpcRouteHdlrFn,
 };
 use crate::api::rpc::{py_celery_reply_status, PyCeleryRespStatus};
-use crate::confidentiality::AbstractConfidentiality;
 use crate::constant::{app_meta, HTTP_CONTENT_TYPE_JSON};
 use crate::error::AppError;
 use crate::{generate_custom_uid, AppSharedState};

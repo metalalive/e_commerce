@@ -4,12 +4,14 @@ use std::boxed::Box;
 use std::marker::{Send, Sync};
 use std::result::Result as DefaultResult;
 
-use crate::error::AppError;
-use crate::{AppConfidentialCfg, AppConfig};
+use crate::config::{AppConfidentialCfg, AppConfig};
+use crate::error::AppConfidentialityError;
 
 pub use userspace::UserSpaceConfidentiality;
 
-pub fn build_context(cfg: &AppConfig) -> DefaultResult<Box<dyn AbstractConfidentiality>, AppError> {
+pub fn build_context(
+    cfg: &AppConfig,
+) -> DefaultResult<Box<dyn AbstractConfidentiality>, AppConfidentialityError> {
     let confidential = &cfg.api_server.confidentiality;
     match confidential {
         AppConfidentialCfg::UserSpace { sys_path } => {
@@ -22,5 +24,5 @@ pub fn build_context(cfg: &AppConfig) -> DefaultResult<Box<dyn AbstractConfident
 
 pub trait AbstractConfidentiality: Send + Sync {
     // read-only interface to fetch user-defined private data
-    fn try_get_payload(&self, id_: &str) -> DefaultResult<String, AppError>;
+    fn try_get_payload(&self, id_: &str) -> DefaultResult<String, AppConfidentialityError>;
 }

@@ -154,7 +154,7 @@ pub struct OrderLinePaidUpdateDto {
     pub product_id: u64,
     #[serde(deserialize_with = "jsn_validate_product_type")]
     pub product_type: ProductType,
-    pub time: DateTime<FixedOffset>,
+    pub time: DateTime<FixedOffset>, // TODO, move to `OrderPaymentUpdateDto`
     pub qty: u32,
 }
 

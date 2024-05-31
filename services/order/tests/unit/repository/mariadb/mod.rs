@@ -6,8 +6,8 @@ mod product_price;
 use std::env;
 use std::sync::Arc;
 
+use ecommerce_common::confidentiality::UserSpaceConfidentiality;
 use ecommerce_common::constant::env_vars::SYS_BASEPATH;
-use order::confidentiality::UserSpaceConfidentiality;
 use order::AppDataStoreContext;
 
 use crate::ut_setup_share_state;

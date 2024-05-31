@@ -7,10 +7,8 @@ use std::sync::RwLock;
 
 use serde_json::Value as JsnVal;
 
-use ecommerce_common::error::AppErrorCode;
-
 use super::AbstractConfidentiality;
-use crate::error::AppError;
+use crate::error::{AppConfidentialityError, AppErrorCode};
 
 const SOURCE_SIZE_LIMIT_NBYTES: u64 = 8196;
 
@@ -32,7 +30,7 @@ impl UserSpaceConfidentiality {
         }
     }
 
-    fn rawdata_from_source(&self) -> DefaultResult<(usize, Vec<u8>), AppError> {
+    fn rawdata_from_source(&self) -> DefaultResult<(usize, Vec<u8>), AppConfidentialityError> {
         let srcpath = self._src_fullpath.as_str();
         let mut rawbuf = Vec::new(); // the source file should NOT be large
         match File::open(srcpath) {
@@ -41,31 +39,31 @@ impl UserSpaceConfidentiality {
                 if actual_f_sz < SOURCE_SIZE_LIMIT_NBYTES {
                     match file.read_to_end(&mut rawbuf) {
                         Ok(sz) => Ok((sz, rawbuf)),
-                        Err(e) => Err(AppError {
-                            detail: Some(e.to_string()),
+                        Err(e) => Err(AppConfidentialityError {
+                            detail: e.to_string(),
                             code: AppErrorCode::IOerror(e.kind()),
                         }),
                     }
                 } else {
-                    Err(AppError {
+                    Err(AppConfidentialityError {
                         code: AppErrorCode::ExceedingMaxLimit,
-                        detail: Some("source-file".to_string()),
+                        detail: "source-file".to_string(),
                     })
                 }
             }
-            Err(e) => Err(AppError {
+            Err(e) => Err(AppConfidentialityError {
                 code: AppErrorCode::IOerror(e.kind()),
-                detail: Some(e.to_string()),
+                detail: e.to_string(),
             }),
         }
     } // end of rawdata_from_source
 
-    fn to_json(&self, raw: Vec<u8>) -> DefaultResult<JsnVal, AppError> {
+    fn to_json(&self, raw: Vec<u8>) -> DefaultResult<JsnVal, AppConfidentialityError> {
         match serde_json::from_slice::<JsnVal>(&raw) {
             Ok(obj) => Ok(obj),
-            Err(e) => Err(AppError {
+            Err(e) => Err(AppConfidentialityError {
                 code: AppErrorCode::InvalidJsonFormat,
-                detail: Some(e.to_string()),
+                detail: e.to_string(),
             }),
         }
     } // end of to_json
@@ -73,7 +71,7 @@ impl UserSpaceConfidentiality {
         &self,
         toplvl: &'a JsnVal,
         id_: &str,
-    ) -> DefaultResult<&'a JsnVal, AppError> {
+    ) -> DefaultResult<&'a JsnVal, AppConfidentialityError> {
         let mut curr_lvl = toplvl;
         for tok in id_.split('/') {
             let err_detail = match curr_lvl {
@@ -97,8 +95,8 @@ impl UserSpaceConfidentiality {
                 _others => Some(format!("json-scalar,id:{}", id_)),
             };
             if let Some(msg) = err_detail {
-                return Err(AppError {
-                    detail: Some(msg),
+                return Err(AppConfidentialityError {
+                    detail: msg,
                     code: AppErrorCode::NoConfidentialityCfg,
                 });
             }
@@ -108,13 +106,12 @@ impl UserSpaceConfidentiality {
 } // end of fn UserSpaceConfidentiality
 
 impl AbstractConfidentiality for UserSpaceConfidentiality {
-    fn try_get_payload(&self, id_: &str) -> DefaultResult<String, AppError> {
+    fn try_get_payload(&self, id_: &str) -> DefaultResult<String, AppConfidentialityError> {
         let rguard = match self._cached.read() {
             Ok(rg) => rg,
             Err(e) => {
-                let detail = e.to_string() + ", source: UserSpaceConfidentiality";
-                return Err(AppError {
-                    detail: Some(detail),
+                return Err(AppConfidentialityError {
+                    detail: e.to_string() + ", source: user-space",
                     code: AppErrorCode::AcquireLockFailure,
                 });
             }
@@ -132,9 +129,8 @@ impl AbstractConfidentiality for UserSpaceConfidentiality {
                     let _old_data = wguard.insert(id_.to_string(), found.clone());
                 }
                 Err(e) => {
-                    let detail = e.to_string() + ", source: UserSpaceConfidentiality";
-                    return Err(AppError {
-                        detail: Some(detail),
+                    return Err(AppConfidentialityError {
+                        detail: e.to_string() + ", source: user-space",
                         code: AppErrorCode::AcquireLockFailure,
                     });
                 }

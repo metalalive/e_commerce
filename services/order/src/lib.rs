@@ -4,7 +4,6 @@ use std::sync::Arc;
 use uuid::{Builder, NoContext, Timestamp, Uuid};
 
 pub mod api;
-pub mod confidentiality;
 pub mod constant;
 pub mod error;
 pub mod model;
@@ -12,6 +11,7 @@ pub mod network;
 pub mod repository;
 pub mod usecase;
 
+use ecommerce_common::confidentiality::AbstractConfidentiality;
 pub use ecommerce_common::config::{
     ApiServerCfg, AppAuthCfg, AppBasepathCfg, AppCfgHardLimit, AppCfgInitArgs, AppConfidentialCfg,
     AppConfig, AppInMemoryDbCfg, AppLogHandlerCfg, AppLoggerCfg, AppLoggingCfg, AppRpcAmqpCfg,
@@ -34,8 +34,6 @@ pub use rpc::{
 
 mod adapter;
 pub use adapter::datastore;
-
-use confidentiality::AbstractConfidentiality;
 
 type WebApiHdlrLabel = &'static str;
 

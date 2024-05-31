@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
-use crate::api::dto::{OrderLinePayDto, BillingDto};
+use crate::api::dto::{BillingDto, OrderLinePayDto};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct OrderReplicaPaymentReqDto {

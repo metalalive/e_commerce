@@ -58,7 +58,6 @@ where
     ser.serialize_u8(v)
 }
 
-
 #[derive(Deserialize, Serialize)]
 pub struct PhoneNumberDto {
     pub nation: u16,
