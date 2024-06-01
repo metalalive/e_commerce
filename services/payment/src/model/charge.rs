@@ -33,13 +33,14 @@ pub struct OrderLineModel {
     pub pid: BaseProductIdentity, // product ID
     pub rsv_total: PayLineAmountModel,
     pub paid_total: PayLineAmountModel,
-    pub reserved_until: DateTime<FixedOffset>,
+    pub reserved_until: DateTime<FixedOffset>, // TODO, switch to UTC timezone
 }
 
 pub struct OrderLineModelSet {
     pub id: String,
     pub owner: u32,
     pub lines: Vec<OrderLineModel>,
+    pub create_time: DateTime<Utc>,
     pub num_charges: u32,
     // TODO, add following fields
     // - currency rate on customer side when creating the order
@@ -152,6 +153,7 @@ impl TryFrom<(String, u32, Vec<OrderLinePayDto>)> for OrderLineModelSet {
                 id: oid,
                 owner,
                 lines,
+                create_time: Local::now().to_utc(),
                 num_charges: 0,
             })
         } else {

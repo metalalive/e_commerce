@@ -8,7 +8,9 @@ pub mod usecase;
 use std::result::Result;
 use std::sync::Arc;
 
+use ecommerce_common::confidentiality::{self, AbstractConfidentiality};
 use ecommerce_common::config::AppConfig;
+use ecommerce_common::error::{AppConfidentialityError, AppErrorCode};
 use ecommerce_common::logging::AppLogContext;
 
 use crate::adapter::cache::{app_cache_order_sync_lock, AbstractOrderSyncLockCache};
@@ -46,6 +48,7 @@ pub struct AppSharedState {
 
 #[derive(Debug)]
 pub enum ShrStateInitProgress {
+    Confidentiality(AppErrorCode, String),
     DataStore,
     RpcContext,
     ExternalProcessor,
@@ -86,6 +89,13 @@ impl From<AuthKeystoreError> for ShrStateInitError {
         }
     }
 }
+impl From<AppConfidentialityError> for ShrStateInitError {
+    fn from(value: AppConfidentialityError) -> Self {
+        Self {
+            progress: ShrStateInitProgress::Confidentiality(value.code, value.detail),
+        }
+    }
+}
 
 impl AppSharedState {
     pub fn new(cfg: AppConfig) -> Result<Self, ShrStateInitError> {
@@ -93,8 +103,12 @@ impl AppSharedState {
             let lc = AppLogContext::new(&cfg.basepath, &cfg.api_server.logging);
             Arc::new(lc)
         };
+        let cfdntl: Arc<Box<dyn AbstractConfidentiality>> = {
+            let c = confidentiality::build_context(&cfg)?;
+            Arc::new(c)
+        };
         let rpc_ctx = rpc::build_context(&cfg.api_server.rpc, logctx.clone())?;
-        let dstore = AppDataStoreContext::new(&cfg.api_server.data_store, logctx.clone())?;
+        let dstore = AppDataStoreContext::new(&cfg.api_server.data_store, cfdntl, logctx.clone())?;
         let _processors = app_processor_context(logctx.clone())?;
         let ordersync_lockset = app_cache_order_sync_lock();
         let auth_keys = AppAuthKeystore::try_create(&cfg.api_server.auth)?;

@@ -8,10 +8,11 @@ use ecommerce_common::api::dto::{
 use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
 use ecommerce_common::constant::ProductType;
 
+use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::cache::OrderSyncLockError;
 use payment::adapter::processor::{AppProcessorError, AppProcessorPayInResult};
-use payment::adapter::repository::{AppRepoError, AppRepoErrorFnLabel};
+use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcReply};
 use payment::api::web::dto::{
     ChargeAmountOlineDto, ChargeReqDto, PaymentCurrencyDto, PaymentMethodErrorReason,
@@ -27,7 +28,8 @@ use super::{
 };
 
 fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModelSet {
-    let reserved_until = (Local::now() + Duration::minutes(2i64)).fixed_offset();
+    let now = Local::now();
+    let reserved_until = (now + Duration::minutes(2i64)).fixed_offset();
     let line = OrderLineModel {
         pid: BaseProductIdentity {
             store_id: 379,
@@ -46,6 +48,7 @@ fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModel
         id: mock_order_id,
         owner: mock_usr_id,
         num_charges: 0,
+        create_time: now.to_utc(),
         lines: vec![line],
     }
 }
@@ -196,6 +199,8 @@ async fn load_unpaid_order_failure() {
     let mock_order_id = "ut-origin-order-id".to_string();
     let repo_expect_error = AppRepoError {
         fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
+        code: AppErrorCode::Unknown,
+        detail: AppRepoErrorDetail::Unknown,
     };
     let mock_repo = MockChargeRepo {
         _expect_unpaid_olines: Mutex::new(Some(Err(repo_expect_error))),
@@ -446,6 +451,8 @@ async fn save_replica_order_failure() {
     let mock_order_id = "ut-origin-order-id".to_string();
     let repo_expect_error = AppRepoError {
         fn_label: AppRepoErrorFnLabel::CreateOrder,
+        code: AppErrorCode::DataTableNotExist,
+        detail: AppRepoErrorDetail::DatabaseExec("unit-test".to_string()),
     };
     let mock_repo = MockChargeRepo {
         _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
@@ -546,6 +553,8 @@ async fn save_new_chargeline_failure() {
     let mock_order_id = "ut-origin-order-id".to_string();
     let repo_expect_error = AppRepoError {
         fn_label: AppRepoErrorFnLabel::CreateCharge,
+        code: AppErrorCode::DataCorruption,
+        detail: AppRepoErrorDetail::DatabaseTxCommit("unit-test".to_string()),
     };
     let mock_repo = MockChargeRepo {
         _expect_unpaid_olines: Mutex::new(Some(Ok(None))),

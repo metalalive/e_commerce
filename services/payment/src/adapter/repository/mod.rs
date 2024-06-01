@@ -5,23 +5,37 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
 use crate::model::{ChargeBuyerModel, OrderLineModelSet};
 
-use self::mariadb::MariadbChargeRepo;
-use super::datastore::AppDataStoreContext;
+use self::mariadb::charge::MariadbChargeRepo;
+use super::datastore::{AppDStoreError, AppDataStoreContext};
 
 #[derive(Debug)]
 pub enum AppRepoErrorFnLabel {
+    InitRepo,
     GetUnpaidOlines,
     CreateOrder,
     CreateCharge,
+}
+#[derive(Debug)]
+pub enum AppRepoErrorDetail {
+    OrderIDparse(String),
+    OrderContactInfo(String),
+    DataStore(AppDStoreError),
+    DatabaseTxStart(String),
+    DatabaseTxCommit(String),
+    DatabaseExec(String),
+    Unknown,
 }
 
 #[derive(Debug)]
 pub struct AppRepoError {
     pub fn_label: AppRepoErrorFnLabel,
+    pub code: AppErrorCode,
+    pub detail: AppRepoErrorDetail,
 }
 
 #[async_trait]
