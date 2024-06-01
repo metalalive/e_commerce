@@ -1,11 +1,11 @@
-use std::result::Result as DefaultResult;
 use regex::Regex;
+use std::result::Result as DefaultResult;
 
-use crate::api::dto::{CountryCode, PhoneNumberDto, ContactDto, PhyAddrDto, BillingDto};
+use crate::api::dto::{BillingDto, ContactDto, CountryCode, PhoneNumberDto, PhyAddrDto};
 use crate::api::web::dto::{
-    ContactErrorDto, PhyAddrErrorDto, PhyAddrDistinctErrorReason, PhoneNumberErrorDto,
-    ContactErrorReason, BillingErrorDto, PhoneNumNationErrorReason, PhyAddrRegionErrorReason,
-    ContactNonFieldErrorReason,
+    BillingErrorDto, ContactErrorDto, ContactErrorReason, ContactNonFieldErrorReason,
+    PhoneNumNationErrorReason, PhoneNumberErrorDto, PhyAddrDistinctErrorReason, PhyAddrErrorDto,
+    PhyAddrRegionErrorReason,
 };
 use crate::constant::REGEX_EMAIL_RFC5322;
 

@@ -147,10 +147,7 @@ impl AppAuthedClaim {
     where
         D: serde::Deserializer<'de>,
     {
-        jsn_validate_ap_code(
-            raw, app_meta::RESOURCE_QUOTA_AP_CODE,
-            app_meta::LABAL
-        )
+        jsn_validate_ap_code(raw, app_meta::RESOURCE_QUOTA_AP_CODE, app_meta::LABAL)
     }
     pub fn contain_permission(&self, code: AppAuthPermissionCode) -> bool {
         self.perms
@@ -200,11 +197,7 @@ impl<'de> Deserialize<'de> for AppAuthQuotaMatCode {
         let val = u8::deserialize(raw)?;
         match Self::try_from(val) {
             Ok(code) => Ok(code),
-            Err(val) => Err(
-                quota_matcode_deserialize_error::<D>(
-                  val, (1,4) 
-                )
-            )
+            Err(val) => Err(quota_matcode_deserialize_error::<D>(val, (1, 4))),
         }
     }
 }

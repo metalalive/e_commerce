@@ -1,5 +1,5 @@
-use std::result::Result;
 use serde::Deserialize;
+use std::result::Result;
 
 struct ExpectedApCode<'a>(u8, &'a str);
 
@@ -10,8 +10,11 @@ impl<'a> serde::de::Expected for ExpectedApCode<'a> {
     }
 }
 
-pub fn jsn_validate_ap_code<'de, D>(raw: D, quota_ap_code: u8, app_label: &str)
-    -> Result<u8, D::Error>
+pub fn jsn_validate_ap_code<'de, D>(
+    raw: D,
+    quota_ap_code: u8,
+    app_label: &str,
+) -> Result<u8, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -26,8 +29,8 @@ where
 }
 
 struct ExpectedQuotaMatCode {
-   max_: u8,
-   min_: u8,
+    max_: u8,
+    min_: u8,
 }
 
 impl serde::de::Expected for ExpectedQuotaMatCode {
@@ -37,11 +40,9 @@ impl serde::de::Expected for ExpectedQuotaMatCode {
     }
 }
 
-pub fn quota_matcode_deserialize_error<'de, D>(
-    given: u8, valid:(u8,u8)
-) -> D::Error
-    where 
-        D: serde::Deserializer<'de>,
+pub fn quota_matcode_deserialize_error<'de, D>(given: u8, valid: (u8, u8)) -> D::Error
+where
+    D: serde::Deserializer<'de>,
 {
     let unexp = serde::de::Unexpected::Unsigned(given as u64);
     let exp = ExpectedQuotaMatCode {

@@ -15,7 +15,6 @@ pub use in_mem::{
 };
 pub use sql_db::AppMariaDbStore;
 
-
 pub(crate) fn build_context(
     logctx: Arc<AppLogContext>,
     cfg: &Vec<AppDataStoreCfg>,
