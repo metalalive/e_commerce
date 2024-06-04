@@ -8,6 +8,7 @@ use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
+use ecommerce_common::adapter::repository::OidBytes;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -17,7 +18,7 @@ use crate::error::AppError;
 use crate::model::{OrderLineIdentity, OrderLinePriceModel, OrderReturnModel};
 use crate::repository::AbsOrderReturnRepo;
 
-use super::{run_query_once, OidBytes};
+use super::{run_query_once, to_app_oid};
 
 struct InsertReqArg(OidBytes, u16, Vec<OrderReturnModel>);
 struct FetchByIdArg(OidBytes, Vec<OrderLineIdentity>);
@@ -207,7 +208,7 @@ impl TryInto<Vec<(String, OrderReturnModel)>> for ReturnOidMap {
         let has_error = rows
             .into_iter()
             .map(|row| {
-                let oid = OidBytes::to_app_oid(&row, 7)?;
+                let oid = to_app_oid(&row, 7)?;
                 if !ret_map.contains_key(oid.as_str()) {
                     ret_map.insert(oid.clone(), ReturnsPerOrder::new());
                 }

@@ -46,3 +46,11 @@ impl From<AppConfidentialityError> for AppError {
         }
     }
 }
+impl From<(AppErrorCode, String)> for AppError {
+    fn from(value: (AppErrorCode, String)) -> Self {
+        AppError {
+            code: value.0,
+            detail: Some(value.1),
+        }
+    }
+}

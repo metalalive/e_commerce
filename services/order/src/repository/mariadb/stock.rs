@@ -11,6 +11,7 @@ use sqlx::database::HasArguments;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
+use ecommerce_common::adapter::repository::OidBytes;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -28,7 +29,7 @@ use crate::repository::{
 };
 
 use super::order::OrderMariaDbRepo;
-use super::{run_query_once, OidBytes};
+use super::{run_query_once, to_app_oid};
 
 struct InsertQtyArg(Vec<(u32, ProductStockModel)>);
 struct UpdateQtyArg(Vec<(u32, ProductStockModel)>);
@@ -549,7 +550,7 @@ impl TryInto<ProductStockModel> for StkRsvDetailRow {
         let prod_id = row.try_get::<u64, usize>(2)?;
         let expiry = row.try_get::<NaiveDateTime, usize>(3)?.and_utc();
         let rsv_detail = {
-            let oid = OidBytes::to_app_oid(&row, 4)?;
+            let oid = to_app_oid(&row, 4)?;
             let qty_rsv_o = row.try_get::<u32, usize>(5)?;
             StockQtyRsvModel {
                 oid,

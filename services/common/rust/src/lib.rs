@@ -1,3 +1,4 @@
+pub mod adapter;
 pub mod api;
 pub mod auth;
 pub mod confidentiality;

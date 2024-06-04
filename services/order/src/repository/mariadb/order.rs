@@ -11,6 +11,7 @@ use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::pool::PoolConnection;
 use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
+use ecommerce_common::adapter::repository::OidBytes;
 use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
@@ -30,7 +31,7 @@ use crate::repository::{
 };
 
 use super::stock::StockMariaDbRepo;
-use super::{run_query_once, OidBytes};
+use super::{run_query_once, to_app_oid};
 
 struct InsertTopMetaArg<'a, 'b>(&'a OidBytes, u32, &'b DateTime<FixedOffset>);
 struct InsertOLineArg<'a, 'b>(&'a OidBytes, usize, Vec<&'b OrderLineModel>);
@@ -381,7 +382,7 @@ impl TryInto<OrderLineModelSet> for TopLvlMetaRow {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<OrderLineModelSet, Self::Error> {
         let row = self.0;
-        let order_id = OidBytes::to_app_oid(&row, 0)?;
+        let order_id = to_app_oid(&row, 0)?;
         let owner_id = row.try_get::<u32, usize>(1)?;
         let create_time = row.try_get::<NaiveDateTime, usize>(2)?.and_utc().into();
         Ok(OrderLineModelSet {
@@ -683,7 +684,7 @@ impl AbsOrderRepo for OrderMariaDbRepo {
         let rows = exec.fetch_all(query).await?;
         let results = rows
             .into_iter()
-            .map(|row| OidBytes::to_app_oid(&row, 0))
+            .map(|row| to_app_oid(&row, 0))
             .collect::<Vec<DefaultResult<String, AppError>>>();
         let o_meta = if let Some(Err(e)) = results.iter().find(|r| r.is_err()) {
             return Err(e.to_owned());

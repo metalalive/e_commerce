@@ -134,7 +134,6 @@ cd ${SERVICE_BASE_PATH}
 
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  api::rpc::test_pycelery_deserialize_error
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  api::rpc::test_pycelery_deserialize_ok
-SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}"  cargo test  repository::mariadb::verify_hex_to_oidbytes
 ```
 
 ### Integration Test

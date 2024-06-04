@@ -71,7 +71,7 @@ pub struct ContactDto {
     pub phones: Vec<PhoneNumberDto>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub enum CountryCode {
     TW,
     TH,
