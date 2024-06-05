@@ -5,7 +5,6 @@ mod usecase;
 
 use std::collections::HashMap;
 use std::env;
-use std::sync::OnceLock;
 
 use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
 use ecommerce_common::constant::env_vars::{CFG_FILEPATH, EXPECTED_LABELS};
@@ -29,10 +28,8 @@ fn ut_setup_config(cfg_filename: &str) -> AppConfig {
     AppConfig::new(args).unwrap()
 }
 
-fn ut_setup_sharestate(cfg_filename: &str) -> &'static AppSharedState {
-    static GUARD_SHR_STATE: OnceLock<AppSharedState> = OnceLock::new();
-    GUARD_SHR_STATE.get_or_init(|| {
-        let cfg = ut_setup_config(cfg_filename);
-        AppSharedState::new(cfg).unwrap()
-    })
+
+fn ut_setup_sharestate() -> AppSharedState {
+    let cfg = ut_setup_config("config_ok.json");
+    AppSharedState::new(cfg).unwrap()
 }

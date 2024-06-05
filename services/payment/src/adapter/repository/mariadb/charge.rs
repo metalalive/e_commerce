@@ -2,21 +2,30 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures_util::StreamExt;
+use mysql_async::prelude::{Queryable, Query, WithParams};
+use mysql_async::{IsolationLevel, Params, TxOpts, Conn};
+
 use ecommerce_common::adapter::repository::OidBytes;
+use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::model::BaseProductIdentity;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
-use mysql_async::prelude::Queryable;
-use mysql_async::{IsolationLevel, Params, TxOpts};
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
+use super::raw_column_to_datetime;
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
-use crate::model::{ChargeBuyerModel, OrderLineModelSet};
+use crate::model::{ChargeBuyerModel, OrderLineModelSet, OrderLineModel, PayLineAmountModel};
 
 struct InsertOrderTopLvlArgs(String, Params);
 struct InsertOrderLineArgs(String, Vec<Params>);
 struct InsertBillContactArgs(String, Params);
 struct InsertBillPhyAddrArgs(String, Params);
 struct InsertOrderReplicaArgs(Vec<(String, Vec<Params>)>);
+struct FetchUnpaidOlineArgs([(String, Params); 2]);
+
+const DATETIME_FMT_P0F:&'static str = "%Y-%m-%d %H:%M:%S";
+type OrderlineRowType = (u32,String,u64,u32,u32,u32,u32,u32,mysql_async::Value);
 
 impl<'a, 'b> From<(&'a OrderLineModelSet, &'b OidBytes)> for InsertOrderTopLvlArgs {
     fn from(value: (&'a OrderLineModelSet, &'b OidBytes)) -> Self {
@@ -26,7 +35,7 @@ impl<'a, 'b> From<(&'a OrderLineModelSet, &'b OidBytes)> for InsertOrderTopLvlAr
             oid_b.as_column().into(),
             ol_set
                 .create_time
-                .format("%Y-%m-%d %H:%M:%S")
+                .format(DATETIME_FMT_P0F)
                 .to_string()
                 .into(),
             ol_set.num_charges.into(),
@@ -56,7 +65,8 @@ impl<'a, 'b> From<(&'a OrderLineModelSet, &'b OidBytes)> for InsertOrderLineArgs
                     line.rsv_total.qty.into(),
                     line.paid_total.qty.into(),
                     line.reserved_until
-                        .format("%Y-%m-%d %H:%M:%S")
+                        .to_utc()
+                        .format(DATETIME_FMT_P0F)
                         .to_string()
                         .into(),
                 ];
@@ -80,7 +90,7 @@ impl<'a, 'b> TryFrom<(&'a ContactModel, &'b OidBytes)> for InsertBillContactArgs
         let serial_phones =
             serde_json::to_string(&contact.phones).map_err(Self::map_contact_error)?;
         let arg = vec![
-            oid_b.as_column().into(),
+            oid_b.0.into(),
             contact.first_name.as_str().into(),
             contact.last_name.as_str().into(),
             serial_mails.into(),
@@ -146,6 +156,64 @@ impl<'a, 'b> TryFrom<(&'a OrderLineModelSet, &'b BillingModel)> for InsertOrderR
     }
 } // end of impl InsertOrderReplicaArgs
 
+impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
+    type Error = AppRepoError;
+    fn try_from(value: (u32, &'a str)) -> Result<Self, Self::Error> {
+        let (usr_id, oid_hex) = value;
+        let oid_b = OidBytes::try_from(oid_hex).map_err(|(code, msg)| 
+            AppRepoError {
+                code, fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
+                detail: AppRepoErrorDetail::OrderIDparse(msg),
+            }
+        )?;
+        let params = [
+            vec![usr_id.into(), oid_b.as_column().into()],
+            vec![oid_b.0.into()]
+        ].into_iter().map(Params::Positional).collect::<Vec<_>>();
+        let stmts = [
+            "SELECT `create_time`,`num_charges` FROM `order_toplvl_meta` \
+             WHERE `usr_id`=? AND `o_id`=?",
+            "SELECT `store_id`,`product_type`,`product_id`,`price_unit`,`price_total_rsved`,\
+             `price_total_paid`,`qty_rsved`,`qty_paid`,`rsved_until` FROM \
+             `order_line_detail` WHERE `o_id`=?  AND `qty_rsved` > `qty_paid`",
+        ].into_iter().map(ToString::to_string).collect::<Vec<_>>();
+        let zipped = stmts.into_iter().zip(params).collect::<Vec<_>>();
+        let inner = zipped.try_into().unwrap();
+        Ok(Self(inner))
+    }
+} // end of impl FetchUnpaidOlineArgs
+
+impl<'a> TryFrom<(u32, &'a str, mysql_async::Value, u32)> for OrderLineModelSet {
+    type Error = AppRepoError;
+    fn try_from(value: (u32, &'a str, mysql_async::Value, u32)) -> Result<Self, Self::Error> {
+        let (usr_id, oid, ctime, num_charges) = value;
+        let create_time = raw_column_to_datetime(ctime, 0)?;
+        Ok(OrderLineModelSet {owner:usr_id, id:oid.to_string(),
+             create_time, lines:vec![], num_charges})
+    }
+} // end of impl OrderLineModelSet
+
+impl TryFrom<OrderlineRowType> for OrderLineModel {
+    type Error = AppRepoError;
+    fn try_from(value: OrderlineRowType) -> Result<Self, Self::Error> {
+        let (store_id, prod_typ_str, product_id, price_unit, price_total_rsved,
+             price_total_paid, qty_rsved, qty_paid, rsved_until ) = value;
+        let product_type = prod_typ_str.parse::<ProductType>().map_err(
+            |e| AppRepoError {
+                fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
+                code: AppErrorCode::DataCorruption,
+                detail: AppRepoErrorDetail::DataRowParse(e.0.to_string()),
+            }
+        )?;
+        let reserved_until = raw_column_to_datetime(rsved_until, 0)?.into();
+        let rsv_total = PayLineAmountModel { unit: price_unit, total: price_total_rsved, qty: qty_rsved};
+        let paid_total = PayLineAmountModel { unit: price_unit, total: price_total_paid, qty: qty_paid };
+        let pid = BaseProductIdentity { store_id, product_type, product_id };
+        Ok(Self { pid, rsv_total, paid_total, reserved_until })
+    } // end of fn try-from
+} // end of impl OrderLineModel
+
+
 pub(crate) struct MariadbChargeRepo {
     _dstore: Arc<AppDStoreMariaDB>,
 }
@@ -166,16 +234,48 @@ impl MariadbChargeRepo {
 impl AbstractChargeRepo for MariadbChargeRepo {
     async fn get_unpaid_olines(
         &self,
-        _usr_id: u32,
-        _oid: &str,
+        usr_id: u32,
+        oid: &str,
     ) -> Result<Option<OrderLineModelSet>, AppRepoError> {
-        let fn_label = AppRepoErrorFnLabel::GetUnpaidOlines;
-        Err(AppRepoError {
-            fn_label,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let mut args_iter = FetchUnpaidOlineArgs::try_from((usr_id, oid))?.0.into_iter();
+        let mut conn = self
+            ._dstore
+            .acquire()
+            .await
+            .map_err(|e| Self::_map_err_get_unpaid_olines(AppRepoErrorDetail::DataStore(e)))?;
+        let exec = &mut conn;
+        let (stmt, param) = args_iter.next().unwrap();
+        let result = stmt.with(param)
+            .first::<(mysql_async::Value, u32), &mut Conn>(exec)
+            .await
+            .map_err(|e| Self::_map_err_get_unpaid_olines(
+                AppRepoErrorDetail::DatabaseQuery(e.to_string()))
+            )?
+            .map(|(str_time, num_charges)| {
+                OrderLineModelSet::try_from((usr_id, oid, str_time, num_charges))
+            });
+        let mut toplvl_result = if let Some(v) = result {
+            let inner = v?;
+            Some(inner)
+        } else { None };
+        if let Some(v) = &mut toplvl_result {
+            let (stmt, param) = args_iter.next().unwrap();
+            let mut line_stream = stmt.with(param) 
+                .stream::<OrderlineRowType, &mut Conn>(exec)
+                .await
+                .map_err(|e| Self::_map_err_get_unpaid_olines(
+                    AppRepoErrorDetail::DatabaseQuery(e.to_string()))
+                )?;
+            while let Some(result) = line_stream.next().await {
+                let row = result.map_err(|e| Self::_map_err_get_unpaid_olines(
+                        AppRepoErrorDetail::DatabaseQuery(e.to_string()))
+                    )?;
+                let oline = OrderLineModel::try_from(row)?;
+                v.lines.push(oline);
+            }
+        }
+        Ok(toplvl_result)
+    } // end of fn get-unpaid-olines
 
     async fn create_order(
         &self,
@@ -217,6 +317,13 @@ impl MariadbChargeRepo {
     fn _map_err_create_order(detail: AppRepoErrorDetail) -> AppRepoError {
         AppRepoError {
             fn_label: AppRepoErrorFnLabel::CreateOrder,
+            code: AppErrorCode::Unknown,
+            detail,
+        }
+    }
+    fn _map_err_get_unpaid_olines(detail: AppRepoErrorDetail) -> AppRepoError {
+        AppRepoError {
+            fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
             code: AppErrorCode::Unknown,
             detail,
         }

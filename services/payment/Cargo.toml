@@ -47,6 +47,8 @@ http-body-util = "^0.1"
 tokio = {version="^1.23.1", features=["sync"]}
 
 mysql_async = {version="^0.34", features=["minimal"]}
+# required by the result set stream in `Query::stream()` in `mysql-async`
+futures-util = {version="^0.3.30", features=["std"]}
 
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
 

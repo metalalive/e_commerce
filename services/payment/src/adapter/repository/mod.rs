@@ -28,6 +28,8 @@ pub enum AppRepoErrorDetail {
     DatabaseTxStart(String),
     DatabaseTxCommit(String),
     DatabaseExec(String),
+    DatabaseQuery(String),
+    DataRowParse(String),
     Unknown,
 }
 

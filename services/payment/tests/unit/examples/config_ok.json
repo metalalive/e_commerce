@@ -43,7 +43,7 @@
 	    "srv_type": "MariaDB",
 	    "db_name": "test_ecommerce_payment",
 	    "confidentiality_path": "backend_apps/databases/payment_service",
-	    "max_conns": 4,
+	    "max_conns": 1,
 	    "acquire_timeout_secs": 17,
 	    "idle_timeout_secs": 35
 	}

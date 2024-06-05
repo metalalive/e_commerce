@@ -1,6 +1,6 @@
 mod mariadb;
 
-use chrono::{Duration, Local};
+use chrono::{Duration, DateTime, FixedOffset};
 
 use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
 use ecommerce_common::constant::ProductType;
@@ -12,9 +12,9 @@ fn ut_setup_orderline_set(
     owner: u32,
     order_id_hex: &str,
     num_charges: u32,
+    create_time: DateTime<FixedOffset>,
     d_lines: Vec<(u32, ProductType, u64, [u32; 5], Duration)>,
 ) -> OrderLineModelSet {
-    let now = Local::now().fixed_offset();
     let lines = d_lines
         .into_iter()
         .map(|d| {
@@ -24,7 +24,7 @@ fn ut_setup_orderline_set(
                 product_type,
                 product_id,
             };
-            let reserved_until = now + rsv_time_delta;
+            let reserved_until = create_time + rsv_time_delta;
             let rsv_total = PayLineAmountModel {
                 unit: charge_stats[0],
                 total: charge_stats[1],
@@ -47,7 +47,7 @@ fn ut_setup_orderline_set(
         id: order_id_hex.to_string(),
         owner,
         lines,
-        create_time: now.to_utc(),
+        create_time: create_time.to_utc(),
         num_charges,
     }
 }
