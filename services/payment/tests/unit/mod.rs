@@ -28,7 +28,6 @@ fn ut_setup_config(cfg_filename: &str) -> AppConfig {
     AppConfig::new(args).unwrap()
 }
 
-
 fn ut_setup_sharestate() -> AppSharedState {
     let cfg = ut_setup_config("config_ok.json");
     AppSharedState::new(cfg).unwrap()

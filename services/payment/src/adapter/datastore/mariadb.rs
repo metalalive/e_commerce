@@ -60,7 +60,7 @@ impl From<MysqlError> for AppDStoreError {
 pub(crate) struct AppDStoreMariaDB {
     pool: Pool,
     _alias: String,
-    logctx: Arc<AppLogContext>,
+    _logctx: Arc<AppLogContext>,
 }
 
 impl AppDStoreMariaDB {
@@ -90,7 +90,7 @@ impl AppDStoreMariaDB {
             Opts::from(builder)
         };
         Ok(Self {
-            logctx,
+            _logctx: logctx,
             _alias: cfg.alias.clone(),
             pool: Pool::new(opts),
         })
@@ -98,6 +98,10 @@ impl AppDStoreMariaDB {
 
     pub(super) fn alias(&self) -> &str {
         self._alias.as_str()
+    }
+
+    pub(crate) fn log_context(&self) -> Arc<AppLogContext> {
+        self._logctx.clone()
     }
 
     pub(crate) async fn acquire(&self) -> Result<Conn, AppDStoreError> {

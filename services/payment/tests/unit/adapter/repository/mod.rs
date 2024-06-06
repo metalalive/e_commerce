@@ -1,6 +1,6 @@
 mod mariadb;
 
-use chrono::{Duration, DateTime, FixedOffset};
+use chrono::{DateTime, Duration, FixedOffset};
 
 use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
 use ecommerce_common::constant::ProductType;
