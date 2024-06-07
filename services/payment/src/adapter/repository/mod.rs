@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
-use crate::model::{ChargeBuyerModel, OrderLineModelSet};
+use crate::model::{BuyerPayInState, ChargeBuyerModel, OrderLineModelSet};
 
 use self::mariadb::charge::MariadbChargeRepo;
 use super::datastore::{AppDStoreError, AppDataStoreContext};
@@ -24,6 +24,8 @@ pub enum AppRepoErrorFnLabel {
 pub enum AppRepoErrorDetail {
     OrderIDparse(String),
     OrderContactInfo(String),
+    ChargeStatus(BuyerPayInState),
+    PayMethodUnsupport(String),
     DataStore(AppDStoreError),
     DatabaseTxStart(String),
     DatabaseTxCommit(String),

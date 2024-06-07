@@ -52,11 +52,12 @@ const CHARGE_TOKEN_NBYTES: usize = 9;
 
 pub struct ChargeToken(pub [u8; CHARGE_TOKEN_NBYTES]);
 
+#[derive(Debug)]
 pub enum BuyerPayInState {
     Initialized,
-    ProcessorAccepted(DateTime<FixedOffset>),
-    ProcessorCompleted(DateTime<FixedOffset>),
-    OrderAppSynced(DateTime<FixedOffset>),
+    ProcessorAccepted(DateTime<Utc>),
+    ProcessorCompleted(DateTime<Utc>),
+    OrderAppSynced(DateTime<Utc>),
     OrderAppExpired, // in such case, the charge should be converted to refund (TODO)
 }
 
@@ -66,7 +67,7 @@ pub struct ChargeLineBuyerModel {
 }
 pub struct ChargeBuyerModel {
     pub owner: u32,
-    pub create_time: DateTime<FixedOffset>,
+    pub create_time: DateTime<Utc>,
     // idenpotency token, derived by owner (user profile ID) and create time
     pub token: ChargeToken,
     pub oid: String, // referenced order id
@@ -79,9 +80,9 @@ impl BuyerPayInState {
     pub fn create_time(&self) -> Option<DateTime<FixedOffset>> {
         match self {
             Self::Initialized | Self::OrderAppExpired => None,
-            Self::ProcessorAccepted(t) => Some(*t), // implicit copy
-            Self::ProcessorCompleted(t) => Some(*t),
-            Self::OrderAppSynced(t) => Some(*t),
+            Self::ProcessorAccepted(t) => Some((*t).into()), // implicit copy
+            Self::ProcessorCompleted(t) => Some((*t).into()),
+            Self::OrderAppSynced(t) => Some((*t).into()),
         }
     }
 }
@@ -203,11 +204,11 @@ impl TryFrom<(OrderLineModelSet, ChargeReqDto)> for ChargeBuyerModel {
             .collect::<Vec<_>>();
 
         if err_lines.is_empty() {
-            let now = Local::now();
+            let now = Local::now().to_utc();
             Ok(Self {
                 oid,
-                create_time: now.fixed_offset(),
-                token: ChargeToken::encode(owner, now.to_utc()),
+                create_time: now,
+                token: ChargeToken::encode(owner, now),
                 owner,
                 method,
                 lines,

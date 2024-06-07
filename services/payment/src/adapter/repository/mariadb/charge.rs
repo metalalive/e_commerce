@@ -11,7 +11,9 @@ use ecommerce_common::logging::{app_log_event, AppLogLevel};
 use ecommerce_common::model::order::BillingModel;
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::order::{FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderlineRowType};
+use super::charge_converter::{
+    FetchUnpaidOlineArgs, InsertChargeArgs, InsertOrderReplicaArgs, OrderlineRowType,
+};
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
 use crate::model::{ChargeBuyerModel, OrderLineModel, OrderLineModelSet};
 
@@ -42,6 +44,16 @@ impl MariadbChargeRepo {
     fn _map_err_get_unpaid_olines(&self, detail: AppRepoErrorDetail) -> AppRepoError {
         let e = AppRepoError {
             fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
+            code: AppErrorCode::Unknown,
+            detail,
+        };
+        let logctx = self._dstore.log_context();
+        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+        e
+    }
+    fn _map_err_create_charge(&self, detail: AppRepoErrorDetail) -> AppRepoError {
+        let e = AppRepoError {
+            fn_label: AppRepoErrorFnLabel::CreateCharge,
             code: AppErrorCode::Unknown,
             detail,
         };
@@ -132,12 +144,25 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         Ok(toplvl_result)
     } // end of fn get-unpaid-olines
 
-    async fn create_charge(&self, _cline_set: ChargeBuyerModel) -> Result<(), AppRepoError> {
-        let fn_label = AppRepoErrorFnLabel::CreateCharge;
-        Err(AppRepoError {
-            fn_label,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
+    async fn create_charge(&self, cline_set: ChargeBuyerModel) -> Result<(), AppRepoError> {
+        let args = InsertChargeArgs::try_from(cline_set)?;
+        let mut conn = self
+            ._dstore
+            .acquire()
+            .await
+            .map_err(|e| self._map_err_create_charge(AppRepoErrorDetail::DataStore(e)))?;
+        let mut options = TxOpts::new();
+        options.with_isolation_level(IsolationLevel::RepeatableRead);
+        let mut tx = conn.start_transaction(options).await.map_err(|e| {
+            self._map_err_create_charge(AppRepoErrorDetail::DatabaseTxStart(e.to_string()))
+        })?;
+        for (stmt, params_iter) in args.0 {
+            tx.exec_batch(stmt, params_iter).await.map_err(|e| {
+                self._map_err_create_charge(AppRepoErrorDetail::DatabaseExec(e.to_string()))
+            })?;
+        }
+        tx.commit().await.map_err(|e| {
+            self._map_err_create_order(AppRepoErrorDetail::DatabaseTxCommit(e.to_string()))
         })
     }
 } // end of impl MariadbChargeRepo

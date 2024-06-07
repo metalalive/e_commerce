@@ -4,12 +4,18 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Duration, FixedOffset, Local, SubsecRound};
 use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
-use payment::adapter::repository::{app_repo_charge, AbstractChargeRepo};
-use payment::model::{OrderLineModel, OrderLineModelSet};
+use payment::adapter::repository::{app_repo_charge, AbstractChargeRepo, AppRepoErrorDetail};
+use payment::api::web::dto::{
+    PaymentMethodReqDto, StripeCheckoutSessionReqDto, StripeCheckoutUImodeDto,
+};
+use payment::model::{BuyerPayInState, ChargeBuyerModel, OrderLineModel, OrderLineModelSet};
 use payment::AppSharedState;
 
-use crate::adapter::repository::{ut_setup_order_bill, ut_setup_orderline_set};
+use crate::adapter::repository::{
+    ut_setup_buyer_charge, ut_setup_order_bill, ut_setup_orderline_set,
+};
 use crate::ut_setup_sharestate;
 
 async fn ut_setup_db_repo(shr_state: AppSharedState) -> Arc<Box<dyn AbstractChargeRepo>> {
@@ -209,3 +215,57 @@ async fn read_order_replica_nonexist() {
         assert!(v.is_none());
     }
 } // end of fn read_order_replica_nonexist
+
+fn _ut_setup_buyer_charge() -> ChargeBuyerModel {
+    let mock_owner = 126;
+    let mock_create_time = Local::now().fixed_offset().to_utc() - Duration::minutes(4);
+    let mock_oid = "dee50de6".to_string();
+    let mock_state = BuyerPayInState::ProcessorAccepted(mock_create_time + Duration::seconds(95));
+    let mock_method = {
+        let sess = StripeCheckoutSessionReqDto {
+            customer_id: String::new(),
+            ui_mode: StripeCheckoutUImodeDto::EmbeddedJs,
+        };
+        PaymentMethodReqDto::Stripe(sess)
+    };
+    let mock_data_lines = vec![
+        (3034, ProductType::Package, 602, 90, 360, 4),
+        (8299, ProductType::Item, 351, 55, 110, 2),
+    ];
+    ut_setup_buyer_charge(
+        mock_owner,
+        mock_create_time,
+        mock_oid,
+        mock_state,
+        mock_method,
+        mock_data_lines,
+    )
+}
+
+#[actix_web::test]
+async fn buyer_create_stripe_charge_ok() {
+    let shr_state = ut_setup_sharestate();
+    let repo = ut_setup_db_repo(shr_state).await;
+    let cline_set = _ut_setup_buyer_charge();
+    let result = repo.create_charge(cline_set).await;
+    assert!(result.is_ok());
+}
+
+#[actix_web::test]
+async fn buyer_create_charge_invalid_state() {
+    let shr_state = ut_setup_sharestate();
+    let repo = ut_setup_db_repo(shr_state).await;
+    let mut cline_set = _ut_setup_buyer_charge();
+    cline_set.state = BuyerPayInState::Initialized;
+    let result = repo.create_charge(cline_set).await;
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::InvalidInput);
+        if let AppRepoErrorDetail::ChargeStatus(s) = e.detail {
+            let cond = matches!(s, BuyerPayInState::Initialized);
+            assert!(cond);
+        } else {
+            assert!(false);
+        }
+    }
+}
