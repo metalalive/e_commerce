@@ -49,7 +49,33 @@
 	}
     ],
     "rpc": {
-	"handler_type": "dummy"
+	"handler_type": "AMQP",
+	"bindings": [
+	    {
+                "queue": "rpc_payment_unittest_one",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.payment.unittest.one",
+                "ensure_declare": true,
+                "subscribe": false,
+                "durable": true,
+		"ttl_secs": 24,
+		"max_length": 100,
+		"reply": {
+                    "queue": "rpc.reply.payment.unittest_one",
+                    "correlation_id_prefix": "rpc.payment.unittest.one.corr_id",
+                    "durable": true,
+		    "max_length": 90,
+                    "ttl_secs": 11
+                }
+	    }
+	],
+	"attributes": {
+	    "vhost":"/integration_test",
+	    "max_channels": 128,
+	    "timeout_secs": 14
+	},
+	"max_connections": 2,
+	"confidential_id": "amqp_broker/1"
     },
     "auth": {
 	"keystore_url": "http://localhost:8008/jwks",

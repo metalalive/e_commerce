@@ -7,18 +7,27 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::AppRpcCfg;
 use ecommerce_common::logging::AppLogContext;
 
 use amqp::AppAmqpRpcContext;
 
 pub enum AppRpcErrorFnLabel {
+    InitCtx,
     AcquireClientConn,
     ClientSendReq,
     ClientRecvResp,
 }
+pub enum AppRpcErrorReason {
+    NotSupport,
+    InvalidCredential,
+    CorruptedCredential,
+    LowLevelConn(String),
+}
 pub struct AppRpcCtxError {
     pub fn_label: AppRpcErrorFnLabel,
+    pub reason: AppRpcErrorReason,
 }
 
 // Note:
@@ -55,9 +64,17 @@ pub struct AppRpcReply {
 }
 
 pub(crate) fn build_context(
-    _cfg: &AppRpcCfg,
-    _logctx: Arc<AppLogContext>,
+    cfg: &AppRpcCfg,
+    cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
+    logctx: Arc<AppLogContext>,
 ) -> Result<Box<dyn AbstractRpcContext>, AppRpcCtxError> {
-    let obj = AppAmqpRpcContext;
-    Ok(Box::new(obj))
+    if let AppRpcCfg::AMQP(c) = cfg {
+        let obj = AppAmqpRpcContext::try_build(c, cfdntl, logctx)?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppRpcCtxError {
+            fn_label: AppRpcErrorFnLabel::InitCtx,
+            reason: AppRpcErrorReason::NotSupport,
+        })
+    }
 }

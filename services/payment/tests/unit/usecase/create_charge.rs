@@ -13,7 +13,7 @@ use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::cache::OrderSyncLockError;
 use payment::adapter::processor::{AppProcessorError, AppProcessorPayInResult};
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcReply};
+use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
 use payment::api::web::dto::{
     ChargeAmountOlineDto, ChargeReqDto, PaymentCurrencyDto, PaymentMethodErrorReason,
     PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto,
@@ -328,6 +328,7 @@ async fn rpc_acquire_conn_error() {
     };
     let rpc_expect_error = AppRpcCtxError {
         fn_label: AppRpcErrorFnLabel::AcquireClientConn,
+        reason: AppRpcErrorReason::CorruptedCredential,
     };
     let mock_rpc_ctx = MockRpcContext {
         _acquire_result: Mutex::new(Some(Err(rpc_expect_error))),
@@ -347,6 +348,8 @@ async fn rpc_acquire_conn_error() {
     if let Err(e) = result {
         if let ChargeCreateUcError::LoadOrderInternalError(actual_error) = e {
             let cond = matches!(actual_error.fn_label, AppRpcErrorFnLabel::AcquireClientConn);
+            assert!(cond);
+            let cond = matches!(actual_error.reason, AppRpcErrorReason::CorruptedCredential);
             assert!(cond);
         } else {
             assert!(false);
@@ -369,6 +372,7 @@ async fn rpc_publish_error_replica_order() {
     };
     let rpc_expect_error = AppRpcCtxError {
         fn_label: AppRpcErrorFnLabel::ClientSendReq,
+        reason: AppRpcErrorReason::LowLevelConn("unit-test".to_string()),
     };
     let mock_rpc_client = MockRpcClient {
         _send_req_result: Mutex::new(Some(Err(rpc_expect_error))),
@@ -392,6 +396,8 @@ async fn rpc_publish_error_replica_order() {
         if let ChargeCreateUcError::LoadOrderInternalError(actual_error) = e {
             let cond = matches!(actual_error.fn_label, AppRpcErrorFnLabel::ClientSendReq);
             assert!(cond);
+            let cond = matches!(actual_error.reason, AppRpcErrorReason::LowLevelConn(_));
+            assert!(cond);
         } else {
             assert!(false);
         }
@@ -413,6 +419,7 @@ async fn rpc_reply_error_replica_order() {
     };
     let rpc_expect_error = AppRpcCtxError {
         fn_label: AppRpcErrorFnLabel::ClientRecvResp,
+        reason: AppRpcErrorReason::NotSupport,
     };
     let rpc_pub_evt = MockRpcPublishEvent {
         _recv_resp_result: Mutex::new(Some(Err(rpc_expect_error))),
@@ -438,6 +445,8 @@ async fn rpc_reply_error_replica_order() {
     if let Err(e) = result {
         if let ChargeCreateUcError::LoadOrderInternalError(actual_error) = e {
             let cond = matches!(actual_error.fn_label, AppRpcErrorFnLabel::ClientRecvResp);
+            assert!(cond);
+            let cond = matches!(actual_error.reason, AppRpcErrorReason::NotSupport);
             assert!(cond);
         } else {
             assert!(false);

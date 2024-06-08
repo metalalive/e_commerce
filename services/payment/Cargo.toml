@@ -16,7 +16,7 @@ async-trait = "^0.1.80"
 actix-http = "^3.6"
 actix-service = "^2"
 actix-web = {version="^4.5.1", features=["macros"]}
-actix-web-httpauth = "^0.8"
+actix-web-httpauth = {version="^0.8"}
 
 jsonwebtoken = "^9.3"
 
@@ -50,7 +50,13 @@ mysql_async = {version="^0.34", features=["minimal"]}
 # required by the result set stream in `Query::stream()` in `mysql-async`
 futures-util = {version="^0.3.30", features=["std"]}
 
+# AMQP / RabbitMQ
+lapin = {version="^2.3.4", default-features=false}
+deadpool-lapin = {version="^0.12", features=["rt_tokio_1"]}
+
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
+
+[features]
 
 [[test]]
 name = "integration"

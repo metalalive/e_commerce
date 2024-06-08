@@ -57,7 +57,33 @@
 	}
     ],
     "rpc": {
-	"handler_type": "dummy"
+	"handler_type": "AMQP",
+	"bindings": [
+	    {
+                "queue": "rpc_orderproc_replica_payment",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.order_reserved_replica_payment",
+                "ensure_declare": false,
+                "subscribe": false,
+                "durable": true,
+		"ttl_secs": 60,
+		"max_length": 700,
+		"reply": {
+                    "queue": "rpc.reply.payment.order_replica",
+                    "correlation_id_prefix": "rpc.payment.get_order_info.corr_id",
+                    "durable": true,
+		    "max_length": 2090,
+                    "ttl_secs": 16
+                }
+	    }
+	],
+	"attributes": {
+	    "vhost":"/",
+	    "max_channels": 128,
+	    "timeout_secs": 15
+	},
+	"max_connections": 3,
+	"confidential_id": "amqp_broker/0"
     },
     "auth": {
 	"keystore_url": "http://localhost:8008/jwks",

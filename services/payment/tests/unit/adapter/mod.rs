@@ -1,1 +1,2 @@
 mod repository;
+mod rpc;

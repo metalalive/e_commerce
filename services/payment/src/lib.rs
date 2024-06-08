@@ -70,6 +70,7 @@ impl From<AppDStoreError> for ShrStateInitError {
 }
 impl From<rpc::AppRpcCtxError> for ShrStateInitError {
     fn from(_value: rpc::AppRpcCtxError) -> Self {
+        //println!("[ERROR] share-state, init rpc context : {:?}", _value);
         Self {
             progress: ShrStateInitProgress::RpcContext,
         }
@@ -107,7 +108,7 @@ impl AppSharedState {
             let c = confidentiality::build_context(&cfg)?;
             Arc::new(c)
         };
-        let rpc_ctx = rpc::build_context(&cfg.api_server.rpc, logctx.clone())?;
+        let rpc_ctx = rpc::build_context(&cfg.api_server.rpc, cfdntl.clone(), logctx.clone())?;
         let dstore = AppDataStoreContext::new(&cfg.api_server.data_store, cfdntl, logctx.clone())?;
         let _processors = app_processor_context(logctx.clone())?;
         let ordersync_lockset = app_cache_order_sync_lock();
