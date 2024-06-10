@@ -16,10 +16,13 @@
         "loggers" : [
             {"alias": "payment::adapter::repository",
              "handlers": ["std-output-forall"],
-             "level": "DEBUG"},
+             "level": "WARNING"},
             {"alias": "payment::adapter::datastore",
              "handlers": ["std-output-forall"],
-             "level": "INFO"}
+             "level": "INFO"},
+            {"alias": "payment::adapter::rpc::amqp",
+             "handlers": ["std-output-forall"],
+             "level": "DEBUG"}
         ]
     },
     "listen": {
@@ -55,17 +58,17 @@
                 "queue": "rpc_payment_unittest_one",
                 "exchange": "rpc-default-allapps",
                 "routing_key": "rpc.payment.unittest.one",
-                "ensure_declare": true,
+                "ensure_declare": false,
                 "subscribe": false,
                 "durable": true,
-		"ttl_secs": 24,
+		"ttl_secs": 65,
 		"max_length": 100,
 		"reply": {
                     "queue": "rpc.reply.payment.unittest_one",
                     "correlation_id_prefix": "rpc.payment.unittest.one.corr_id",
                     "durable": true,
 		    "max_length": 90,
-                    "ttl_secs": 11
+                    "ttl_secs": 31
                 }
 	    }
 	],

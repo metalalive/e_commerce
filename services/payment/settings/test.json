@@ -21,6 +21,9 @@
             {"alias": "payment::network",
              "handlers": ["std-output-forall", "errlog-file-web-api"],
              "level": "INFO"},
+            {"alias": "payment::adapter::rpc::amqp",
+             "handlers": ["errlog-file-web-api"],
+             "level": "WARNING"},
             {"alias": "payment::api::web::charge",
              "handlers": ["std-output-forall"],
              "level": "DEBUG"}

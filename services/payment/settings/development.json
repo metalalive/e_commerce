@@ -20,10 +20,13 @@
         "loggers" : [
             {"alias": "payment::network",
              "handlers": ["std-output-forall", "errlog-file-web-api"],
-             "level": "DEBUG"},
+             "level": "WARNING"},
             {"alias": "payment::api::web::charge",
              "handlers": ["errlog-file-web-api"],
              "level": "INFO"},
+            {"alias": "payment::adapter::rpc::amqp",
+             "handlers": ["errlog-file-web-api"],
+             "level": "WARNING"},
             {"alias": "web",
 	     "level": "DEBUG",
              "handlers": ["errlog-file-web-api", "std-output-forall"]}

@@ -1,6 +1,7 @@
 use std::boxed::Box;
 use std::sync::Arc;
 
+use chrono::{DurationRound, Local, TimeDelta};
 use ecommerce_common::api::rpc::dto::{OrderReplicaPaymentDto, OrderReplicaPaymentReqDto};
 use ecommerce_common::api::web::dto::BillingErrorDto;
 use ecommerce_common::model::order::BillingModel;
@@ -107,7 +108,7 @@ impl ChargeCreateUseCase {
     ) -> Result<OrderReplicaPaymentDto, ChargeCreateUcError> {
         let success = self.ordersync_lockset.acquire(usr_id, oid).await?;
         if success {
-            let out = self._rpc_sync_order(oid).await;
+            let out = self._rpc_sync_order(oid, usr_id).await;
             self.ordersync_lockset.release(usr_id, oid).await?;
             out
         } else {
@@ -117,12 +118,20 @@ impl ChargeCreateUseCase {
     async fn _rpc_sync_order(
         &self,
         oid: &str,
+        usr_id: u32,
     ) -> Result<OrderReplicaPaymentDto, ChargeCreateUcError> {
         let client = self.rpc_ctx.acquire().await?;
         let payld = OrderReplicaPaymentReqDto {
             order_id: oid.to_string(),
         };
+        let now = Local::now()
+            .to_utc()
+            .duration_trunc(TimeDelta::seconds(6))
+            .unwrap()
+            .format("%Y%m%d.%H%M%S")
+            .to_string();
         let props = AppRpcClientRequest {
+            id: format!("{usr_id}.{now}"),
             message: serde_json::to_vec(&payld).unwrap(),
             route: "rpc.order.order_reserved_replica_payment".to_string(),
         };

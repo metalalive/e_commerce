@@ -23,7 +23,12 @@ pub enum AppRpcErrorReason {
     NotSupport,
     InvalidCredential,
     CorruptedCredential,
+    SysIo(std::io::ErrorKind, String),
     LowLevelConn(String),
+    InvalidRoute(String),
+    InternalConfig(String),
+    CorruptedPayload(String),
+    RequestConfirm(String),
 }
 pub struct AppRpcCtxError {
     pub fn_label: AppRpcErrorFnLabel,
@@ -55,6 +60,7 @@ pub trait AbstractRpcPublishEvent: Sync + Send {
 }
 
 pub struct AppRpcClientRequest {
+    pub id: String, // will be postfix of correlation-id in basic property
     pub message: Vec<u8>,
     pub route: String,
 }

@@ -4,13 +4,19 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use chrono::{DateTime, FixedOffset, Local};
 use deadpool_lapin::{Config as DeadpConfig, Pool, PoolConfig, Runtime, Timeouts as DeadpTimeouts};
-use lapin::ConnectionProperties;
+use lapin::options::{BasicPublishOptions, ConfirmSelectOptions};
+use lapin::protocol::basic::AMQPProperties;
+use lapin::publisher_confirm::Confirmation;
+use lapin::{Channel, ConnectionProperties, Error as LapinError};
 use serde::Deserialize;
 
 use ecommerce_common::confidentiality::AbstractConfidentiality;
-use ecommerce_common::config::AppRpcAmqpCfg;
-use ecommerce_common::logging::AppLogContext;
+use ecommerce_common::config::{AppAmqpBindingCfg, AppRpcAmqpCfg};
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
+
+use crate::app_meta;
 
 use super::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
@@ -29,23 +35,70 @@ struct SECRET {
 pub(super) struct AppAmqpRpcContext {
     _logctx: Arc<AppLogContext>,
     _pool: Pool,
+    _binding_cfg: Arc<Vec<AppAmqpBindingCfg>>,
+    // TODO, hash map for keeping rpc reply
 }
-struct AppAmqpRpcClient;
+struct AppAmqpRpcClient {
+    _logctx: Arc<AppLogContext>,
+    _binding_cfg: Arc<Vec<AppAmqpBindingCfg>>,
+    _chn: Channel,
+}
+struct AppAmqpRpcPublishEvent {
+    _binding_cfg: Arc<Vec<AppAmqpBindingCfg>>,
+    _chn: Channel,
+    _time: DateTime<FixedOffset>,
+}
 
-struct AppAmqpRpcPublishEvent;
+impl From<LapinError> for AppRpcErrorReason {
+    fn from(value: LapinError) -> Self {
+        match value {
+            LapinError::IOError(ioe) => Self::SysIo(ioe.kind(), ioe.to_string()),
+            LapinError::ParsingError(e) => Self::CorruptedPayload(e.to_string()),
+            LapinError::SerialisationError(e) => Self::CorruptedPayload(e.to_string()),
+            LapinError::ChannelsLimitReached => Self::InternalConfig("channel-limit".to_string()),
+            LapinError::InvalidChannel(num) => {
+                Self::InternalConfig(format!("invalid-channel: {num}"))
+            }
+            LapinError::InvalidConnectionState(state) => {
+                Self::LowLevelConn(format!("conn-state: {:?}", state))
+            }
+            LapinError::InvalidChannelState(state) => {
+                Self::LowLevelConn(format!("channel-state: {:?}", state))
+            }
+            LapinError::ProtocolError(e) => Self::LowLevelConn(e.to_string()),
+            LapinError::MissingHeartbeatError => {
+                Self::LowLevelConn("amqp-no-heartbeat".to_string())
+            }
+            LapinError::InvalidProtocolVersion(ver) => {
+                Self::LowLevelConn(format!("amqp-version: {ver}"))
+            }
+            _ => Self::NotSupport,
+        }
+    }
+} // end of AppRpcErrorReason
 
 #[async_trait]
 impl AbsRpcClientContext for AppAmqpRpcContext {
     async fn acquire(&self) -> Result<Box<dyn AbstractRpcClient>, AppRpcCtxError> {
-        let conn = self._pool.get().await.unwrap();
-        let _chn = conn.create_channel().await.unwrap();
-        // TODO, finish implementation
-        let obj = AppAmqpRpcClient;
+        let conn =
+            self._pool.get().await.map_err(|e| {
+                Self::_map_err_acquire(AppRpcErrorReason::LowLevelConn(e.to_string()))
+            })?;
+        let _chn = conn
+            .create_channel()
+            .await
+            .map_err(|e| Self::_map_err_acquire(e.into()))?;
+        _chn.confirm_select(ConfirmSelectOptions { nowait: false })
+            .await
+            .map_err(|e| Self::_map_err_acquire(e.into()))?; // TODO, configure exactly once for new connection
+        let _binding_cfg = self._binding_cfg.clone();
+        let _logctx = self._logctx.clone();
+        let obj = AppAmqpRpcClient {
+            _logctx,
+            _chn,
+            _binding_cfg,
+        };
         Ok(Box::new(obj))
-        // Err(AppRpcCtxError {
-        //     fn_label: AppRpcErrorFnLabel::AcquireClientConn,
-        //     reason: AppRpcErrorReason::NotSupport
-        // })
     }
 }
 
@@ -62,7 +115,12 @@ impl AppAmqpRpcContext {
         let _pool = cfg
             .create_pool(Some(Runtime::Tokio1))
             .map_err(|e| Self::_map_err_init(AppRpcErrorReason::LowLevelConn(e.to_string())))?;
-        Ok(Self { _logctx, _pool })
+        let _binding_cfg = app_cfg.bindings.clone();
+        Ok(Self {
+            _logctx,
+            _pool,
+            _binding_cfg,
+        })
     }
 
     /// Note, `deadpool-lapin` does not apply `lapin::uri::AMQPUri` re-exported
@@ -113,22 +171,115 @@ impl AppAmqpRpcContext {
             reason,
         }
     }
+    fn _map_err_acquire(reason: AppRpcErrorReason) -> AppRpcCtxError {
+        AppRpcCtxError {
+            fn_label: AppRpcErrorFnLabel::AcquireClientConn,
+            reason,
+        }
+    }
 } // end of impl AppAmqpRpcContext
 
 #[async_trait]
 impl AbstractRpcClient for AppAmqpRpcClient {
     async fn send_request(
         mut self: Box<Self>,
-        _props: AppRpcClientRequest,
+        props: AppRpcClientRequest,
     ) -> Result<Box<dyn AbstractRpcPublishEvent>, AppRpcCtxError> {
-        //let evt = AppAmqpRpcPublishEvent;
-        //Ok(Box::new(evt))
-        Err(AppRpcCtxError {
-            fn_label: AppRpcErrorFnLabel::ClientSendReq,
-            reason: AppRpcErrorReason::NotSupport,
-        })
+        let AppRpcClientRequest {
+            mut id,
+            message,
+            route,
+        } = props;
+        let AppAmqpRpcClient {
+            _logctx,
+            _binding_cfg,
+            _chn,
+        } = *self;
+        let bind_cfg = Self::try_get_binding(_binding_cfg.as_ref(), route.as_str())?;
+        let reply_cfg = bind_cfg.reply.as_ref().ok_or(Self::_map_err_sendreq(
+            AppRpcErrorReason::InternalConfig("amqp-reply-cfg-missing".to_string()),
+        ))?;
+        let now = Local::now().fixed_offset();
+        let corr_id_prefix = reply_cfg.correlation_id_prefix.as_str();
+        id.insert(0, '.');
+        id.insert_str(0, corr_id_prefix);
+        // To create a responsive application, message broker has to return
+        // unroutable message whenever the given routing key goes wrong.
+        let options = BasicPublishOptions {
+            mandatory: true,
+            immediate: false,
+        };
+        let properties = AMQPProperties::default()
+            .with_correlation_id(id.into())
+            .with_app_id(app_meta::LABAL.into())
+            .with_reply_to(reply_cfg.queue.as_str().into())
+            .with_content_encoding("utf-8".into())
+            .with_content_type("application/json".into())
+            .with_delivery_mode(if bind_cfg.durable { 2 } else { 1 })
+            .with_timestamp(now.timestamp() as u64);
+        let confirm = _chn
+            .basic_publish(
+                bind_cfg.exchange.as_str(),
+                bind_cfg.routing_key.as_str(),
+                options,
+                &message,
+                properties,
+            )
+            .await
+            .map_err(|e| Self::_map_err_sendreq(e.into()))?
+            .await
+            .map_err(|e| Self::_map_err_sendreq(e.into()))?;
+        app_log_event!(
+            _logctx,
+            AppLogLevel::DEBUG,
+            "publish-confirm: {:?}",
+            confirm
+        );
+        Self::convert_confirm_to_error(confirm).map_err(Self::_map_err_sendreq)?;
+        let evt = AppAmqpRpcPublishEvent {
+            _binding_cfg,
+            _chn,
+            _time: now,
+        };
+        Ok(Box::new(evt))
+    } // end of fn send_request
+} // end of impl AppAmqpRpcClient
+
+impl AppAmqpRpcClient {
+    #[allow(clippy::needless_lifetimes)]
+    fn try_get_binding<'a, 'b>(
+        src: &'a [AppAmqpBindingCfg],
+        given_route: &'b str,
+    ) -> Result<&'a AppAmqpBindingCfg, AppRpcCtxError> {
+        src.iter()
+            .find(|c| c.routing_key.as_str() == given_route)
+            .ok_or(Self::_map_err_sendreq(AppRpcErrorReason::InvalidRoute(
+                given_route.to_string(),
+            )))
     }
-}
+    fn convert_confirm_to_error(value: Confirmation) -> Result<(), AppRpcErrorReason> {
+        let detail = match value {
+            Confirmation::NotRequested => {
+                // implicitly mean `confirm-select` does not take effect
+                Some("amqp-confirm-failure".to_string())
+            }
+            Confirmation::Nack(_msg) => Some("amqp-unexpected-nack".to_string()),
+            Confirmation::Ack(msg) => msg.map(|r| {
+                format!(
+                    "acker: {:?}, reply-code: {:?}, reply-detail: {:?}",
+                    r.acker, r.reply_code, r.reply_text
+                )
+            }),
+        };
+        detail.map_or_else(|| Ok(()), |d| Err(AppRpcErrorReason::RequestConfirm(d)))
+    }
+    fn _map_err_sendreq(reason: AppRpcErrorReason) -> AppRpcCtxError {
+        AppRpcCtxError {
+            fn_label: AppRpcErrorFnLabel::ClientSendReq,
+            reason,
+        }
+    }
+} // end of impl AppAmqpRpcClient
 
 #[async_trait]
 impl AbstractRpcPublishEvent for AppAmqpRpcPublishEvent {
