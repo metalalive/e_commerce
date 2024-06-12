@@ -6,10 +6,15 @@ use async_trait::async_trait;
 
 use chrono::{DateTime, FixedOffset, Local};
 use deadpool_lapin::{Config as DeadpConfig, Pool, PoolConfig, Runtime, Timeouts as DeadpTimeouts};
-use lapin::options::{BasicPublishOptions, ConfirmSelectOptions};
+use futures_util::StreamExt;
+use lapin::options::{
+    BasicConsumeOptions, BasicPublishOptions, ConfirmSelectOptions, QueueDeclareOptions,
+};
 use lapin::protocol::basic::AMQPProperties;
 use lapin::publisher_confirm::Confirmation;
-use lapin::{Channel, ConnectionProperties, Error as LapinError};
+use lapin::topology::TopologyDefinition;
+use lapin::types::FieldTable;
+use lapin::{Channel, ConnectionProperties, Consumer, Error as LapinError};
 use serde::Deserialize;
 
 use ecommerce_common::confidentiality::AbstractConfidentiality;
@@ -49,6 +54,12 @@ struct AppAmqpRpcPublishEvent {
     _time: DateTime<FixedOffset>,
 }
 
+struct InnerClientConsumer {
+    consumer: Consumer,
+    logctx: Arc<AppLogContext>,
+    // TODO, hash map for sending rpc reply to published events
+}
+
 impl From<LapinError> for AppRpcErrorReason {
     fn from(value: LapinError) -> Self {
         match value {
@@ -77,6 +88,15 @@ impl From<LapinError> for AppRpcErrorReason {
     }
 } // end of AppRpcErrorReason
 
+fn generate_consumer_tag(label: &str) -> String {
+    let thread_id = std::thread::current().id();
+    let (timefmt, nsecs) = {
+        let now = Local::now().fixed_offset();
+        (now.to_rfc3339(), now.timestamp_subsec_nanos())
+    };
+    format!("{}-{:?}-{}-{}", label, thread_id, timefmt, nsecs)
+}
+
 #[async_trait]
 impl AbsRpcClientContext for AppAmqpRpcContext {
     async fn acquire(&self) -> Result<Box<dyn AbstractRpcClient>, AppRpcCtxError> {
@@ -89,18 +109,21 @@ impl AbsRpcClientContext for AppAmqpRpcContext {
             .await
             .map_err(|e| Self::_map_err_acquire(e.into()))?;
         _chn.confirm_select(ConfirmSelectOptions { nowait: false })
-            .await
-            .map_err(|e| Self::_map_err_acquire(e.into()))?; // TODO, configure exactly once for new connection
-        let _binding_cfg = self._binding_cfg.clone();
-        let _logctx = self._logctx.clone();
+            .await // do confirm every time when channel is open
+            .map_err(|e| Self::_map_err_acquire(e.into()))?;
+        let declare_history = conn.topology();
+        let declared = self.ensure_replyq(&declare_history, _chn.clone()).await?;
+        if declared {
+            self.start_consume_replyq(_chn.clone()).await?;
+        }
         let obj = AppAmqpRpcClient {
-            _logctx,
+            _logctx: self._logctx.clone(),
+            _binding_cfg: self._binding_cfg.clone(),
             _chn,
-            _binding_cfg,
         };
         Ok(Box::new(obj))
     }
-}
+} // end of impl AppAmqpRpcContext
 
 impl AbstractRpcContext for AppAmqpRpcContext {}
 
@@ -164,6 +187,85 @@ impl AppAmqpRpcContext {
             pool: Some(poolcfg),
         }
     }
+
+    /// the return boolean indicates whether the call to this function
+    /// actually declares the queues (true), or it is just skipped (false)
+    async fn ensure_replyq(
+        &self,
+        declare_history: &TopologyDefinition,
+        chn: Channel,
+    ) -> Result<bool, AppRpcCtxError> {
+        let undeclared = self
+            ._binding_cfg
+            .iter()
+            .filter_map(|cfg| cfg.reply.as_ref())
+            .filter(|cfg| {
+                !declare_history
+                    .queues
+                    .iter()
+                    .any(|q| q.name.as_str() == cfg.queue.as_str())
+            })
+            .collect::<Vec<_>>();
+        let declared = !undeclared.is_empty();
+        if declared {
+            let logctx = self._logctx.as_ref();
+            app_log_event!(
+                logctx,
+                AppLogLevel::DEBUG,
+                "num-q-to-declare: {}",
+                undeclared.len()
+            );
+        }
+        for cfg in undeclared {
+            let options = QueueDeclareOptions {
+                passive: false,
+                durable: cfg.durable,
+                exclusive: false,
+                auto_delete: false,
+                nowait: false,
+            };
+            let ttl_millis = cfg.ttl_secs as i32 * 1000;
+            let mut args = FieldTable::default();
+            args.insert("x-message-ttl".into(), ttl_millis.into());
+            args.insert("x-max-length".into(), (cfg.max_length as i32).into());
+            let _q = chn
+                .queue_declare(cfg.queue.as_str(), options, args)
+                .await
+                .map_err(|e| Self::_map_err_acquire(e.into()))?;
+        } // end of loop
+        Ok(declared)
+    } // end of fn ensure_replyq
+
+    async fn start_consume_replyq(&self, chn: Channel) -> Result<(), AppRpcCtxError> {
+        let cfg_iter = self
+            ._binding_cfg
+            .iter()
+            .filter_map(|cfg| cfg.reply.as_ref());
+        for cfg in cfg_iter {
+            let qname = cfg.queue.as_str();
+            let options = BasicConsumeOptions {
+                no_local: false,
+                no_ack: true,
+                exclusive: false,
+                nowait: false,
+            };
+            let consumer = chn
+                .basic_consume(
+                    qname,
+                    generate_consumer_tag(qname).as_str(),
+                    options,
+                    FieldTable::default(),
+                )
+                .await
+                .map_err(|e| Self::_map_err_acquire(e.into()))?;
+            let wrapper = InnerClientConsumer {
+                consumer,
+                logctx: self._logctx.clone(),
+            };
+            let _handle = tokio::task::spawn(wrapper.start_consume());
+        } // end of loop
+        Ok(())
+    } // end of fn start_consume_replyq
 
     fn _map_err_init(reason: AppRpcErrorReason) -> AppRpcCtxError {
         AppRpcCtxError {
@@ -280,6 +382,47 @@ impl AppAmqpRpcClient {
         }
     }
 } // end of impl AppAmqpRpcClient
+
+impl InnerClientConsumer {
+    async fn start_consume(self) {
+        let Self {
+            mut consumer,
+            logctx,
+        } = self;
+        let tag = consumer.tag();
+        while let Some(v) = consumer.next().await {
+            let _de = match v {
+                Ok(d) => d,
+                Err(e) => {
+                    Self::report_error(tag.as_str(), e, logctx.clone());
+                    break;
+                }
+            };
+            // TODO, pass received messages to publiched events
+        } // end of loop
+        app_log_event!(logctx, AppLogLevel::DEBUG, "end-of-consumer-task: {tag}");
+    } // end of fn start_consume
+
+    fn report_error(tag: &str, e: LapinError, logctx: Arc<AppLogContext>) {
+        let cond = matches!(e, LapinError::InvalidChannelState(_))
+            || matches!(e, LapinError::InvalidConnectionState(_));
+        if cond {
+            app_log_event!(
+                logctx,
+                AppLogLevel::WARNING,
+                "consumer-task: {tag}, connection issue: {:?}",
+                e
+            );
+        } else {
+            app_log_event!(
+                logctx,
+                AppLogLevel::ERROR,
+                "consumer-task: {tag}, error: {:?}",
+                e
+            );
+        }
+    }
+} // end of impl InnerClientConsumer
 
 #[async_trait]
 impl AbstractRpcPublishEvent for AppAmqpRpcPublishEvent {
