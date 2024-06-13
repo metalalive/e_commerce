@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use actix_web::rt;
 use futures_util::StreamExt;
-use lapin::options::BasicConsumeOptions;
+use lapin::options::{BasicConsumeOptions, BasicPublishOptions};
+use lapin::protocol::basic::AMQPProperties;
 use lapin::types::FieldTable;
 use lapin::uri::{AMQPAuthority, AMQPQueryString, AMQPScheme, AMQPUri, AMQPUserInfo};
-use lapin::{Connection, ConnectionProperties, Consumer};
+use lapin::{Channel, Connection, ConnectionProperties, Consumer};
 use serde::Deserialize;
 
 use ecommerce_common::confidentiality::{self, AbstractConfidentiality};
@@ -37,6 +38,17 @@ fn ut_client_publish_msgs() -> [(&'static str, &'static str, &'static str); 5] {
     ]
 }
 
+fn ut_server_publish_msg(req_content: &str) -> &'static str {
+    match req_content {
+        r#"{"me":"je"}"# => r#"{"devicetree":"ie80211_rx"}"#,
+        r#"{"saya":"ich"}"# => r#"{"ext4_readdir":"inode"}"#,
+        r#"{"Zeist":"meat"}"# => r#"{"kmem_cache_init":"sys_signal"}"#,
+        r#"{"light":"shadow"}"# => r#"{"task_struct":"iirq_flgs"}"#,
+        r#"{"ice":"flame"}"# => r#"{"vma_area":"do_pagefault"}"#,
+        _others => r#"{"dev_null":"prng"}"#,
+    }
+}
+
 async fn ut_client_send_req<'a>(
     rpcctx: Arc<Box<dyn AbstractRpcContext>>,
     req_id: &'a str,
@@ -56,10 +68,13 @@ async fn ut_client_send_req<'a>(
     //     println!("[debug] client-send-request, error: {:?}", e);
     // }
     assert!(result.is_ok());
-    let _evt = result?;
-    // TODO, waiting for reply
+    let mut evt = result?;
+    let expect_reply_msgs = ut_server_publish_msg(msg).to_string().into_bytes();
+    let actual_reply_msgs = evt.receive_response().await?.message;
+    assert_eq!(actual_reply_msgs, expect_reply_msgs);
+    // assert!(false);
     Ok(())
-}
+} // end of fn ut_client_send_req
 
 async fn ut_setup_mockserver_conn(
     cfdntl: Box<dyn AbstractConfidentiality>,
@@ -88,14 +103,16 @@ async fn ut_setup_mockserver_conn(
 } // end of fn ut_setup_mockserver_conn
 
 async fn ut_server_start_consume(
+    channel: Channel,
     mut consumer: Consumer,
     bindcfg: AppAmqpBindingCfg,
     expect_nummsgs_recv: usize,
 ) -> Result<(), String> {
-    let publisher_msgs = ut_client_publish_msgs();
+    let orig_publisher_msgs = ut_client_publish_msgs();
     let expect_routekey = bindcfg.routing_key.as_str();
     let mut actual_nummsgs_recv = 0usize;
     for _ in 0..expect_nummsgs_recv {
+        // ---------------------
         let r = if let Some(r2) = consumer.next().await {
             r2
         } else {
@@ -105,11 +122,44 @@ async fn ut_server_start_consume(
         actual_nummsgs_recv += 1;
         let actual_routekey = deliver.routing_key.as_str();
         assert_eq!(actual_routekey, expect_routekey);
-        let actual_msg = deliver.data;
-        let result = publisher_msgs
+        let (actual_msg, props) = (deliver.data, deliver.properties);
+        let result = orig_publisher_msgs
             .iter()
             .find(|v| v.1 == actual_routekey && v.2.to_string().into_bytes() == actual_msg);
         assert!(result.is_some());
+        // ---------------------
+        let expect_reply_msgs = ut_server_publish_msg(result.unwrap().2)
+            .to_string()
+            .into_bytes();
+        let reply_to = props
+            .reply_to()
+            .as_ref()
+            .ok_or("utest-missing-reply-to".to_string())?;
+        let corr_id = props
+            .correlation_id()
+            .as_ref()
+            .ok_or("utest-missing-corr-id".to_string())?;
+        // println!("[debug] server-recv-request, reply-to: {:?}", reply_to);
+        let properties = AMQPProperties::default()
+            .with_correlation_id(corr_id.as_str().into())
+            .with_content_encoding("utf-8".into())
+            .with_content_type("application/json".into())
+            .with_delivery_mode(if bindcfg.durable { 2 } else { 1 });
+        let _confirm = channel
+            .basic_publish(
+                "", // implicitly apply anonymous exchange
+                reply_to.as_str(),
+                BasicPublishOptions {
+                    mandatory: true,
+                    immediate: false,
+                },
+                &expect_reply_msgs,
+                properties,
+            )
+            .await
+            .unwrap()
+            .await
+            .unwrap();
     } // end of loop
     assert_eq!(expect_nummsgs_recv, actual_nummsgs_recv);
     Ok(())
@@ -143,7 +193,12 @@ async fn ut_mock_server_start(app_cfg: Arc<AppConfig>) -> Result<(), String> {
             )
             .await
             .map_err(|e| e.to_string())?;
-        let c_fut = ut_server_start_consume(consumer, ut_clone_amqp_binding_cfg(bindcfg), 5usize);
+        let c_fut = ut_server_start_consume(
+            chn.clone(),
+            consumer,
+            ut_clone_amqp_binding_cfg(bindcfg),
+            5usize,
+        );
         let handle = rt::spawn(c_fut);
         handles.push(handle);
     } // end of loop

@@ -29,6 +29,7 @@ pub enum AppRpcErrorReason {
     InternalConfig(String),
     CorruptedPayload(String),
     RequestConfirm(String),
+    ReplyFailure(String),
 }
 pub struct AppRpcCtxError {
     pub fn_label: AppRpcErrorFnLabel,

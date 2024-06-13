@@ -1,4 +1,5 @@
 use std::boxed::Box;
+use std::collections::HashMap;
 use std::result::Result;
 use std::sync::Arc;
 
@@ -7,6 +8,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local};
 use deadpool_lapin::{Config as DeadpConfig, Pool, PoolConfig, Runtime, Timeouts as DeadpTimeouts};
 use futures_util::StreamExt;
+use lapin::message::Delivery;
 use lapin::options::{
     BasicConsumeOptions, BasicPublishOptions, ConfirmSelectOptions, QueueDeclareOptions,
 };
@@ -16,12 +18,14 @@ use lapin::topology::TopologyDefinition;
 use lapin::types::FieldTable;
 use lapin::{Channel, ConnectionProperties, Consumer, Error as LapinError};
 use serde::Deserialize;
+use tokio::sync::{oneshot, Mutex};
+use tokio::time::sleep;
 
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::{AppAmqpBindingCfg, AppRpcAmqpCfg};
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
-use crate::app_meta;
+use crate::{app_meta, hard_limit};
 
 use super::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
@@ -37,27 +41,31 @@ struct SECRET {
     password: String,
 }
 
+struct InnerClientReplySend(Mutex<HashMap<String, oneshot::Sender<Vec<u8>>>>);
+
 pub(super) struct AppAmqpRpcContext {
     _logctx: Arc<AppLogContext>,
     _pool: Pool,
     _binding_cfg: Arc<Vec<AppAmqpBindingCfg>>,
-    // TODO, hash map for keeping rpc reply
+    _reply_sender: Arc<InnerClientReplySend>,
 }
 struct AppAmqpRpcClient {
     _logctx: Arc<AppLogContext>,
     _binding_cfg: Arc<Vec<AppAmqpBindingCfg>>,
     _chn: Channel,
+    _reply_sender: Arc<InnerClientReplySend>,
 }
 struct AppAmqpRpcPublishEvent {
     _binding_cfg: Arc<Vec<AppAmqpBindingCfg>>,
     _chn: Channel,
     _time: DateTime<FixedOffset>,
+    _reply_recv: Option<oneshot::Receiver<Vec<u8>>>,
 }
 
 struct InnerClientConsumer {
     consumer: Consumer,
     logctx: Arc<AppLogContext>,
-    // TODO, hash map for sending rpc reply to published events
+    _reply_sender: Arc<InnerClientReplySend>,
 }
 
 impl From<LapinError> for AppRpcErrorReason {
@@ -119,6 +127,7 @@ impl AbsRpcClientContext for AppAmqpRpcContext {
         let obj = AppAmqpRpcClient {
             _logctx: self._logctx.clone(),
             _binding_cfg: self._binding_cfg.clone(),
+            _reply_sender: self._reply_sender.clone(),
             _chn,
         };
         Ok(Box::new(obj))
@@ -138,11 +147,11 @@ impl AppAmqpRpcContext {
         let _pool = cfg
             .create_pool(Some(Runtime::Tokio1))
             .map_err(|e| Self::_map_err_init(AppRpcErrorReason::LowLevelConn(e.to_string())))?;
-        let _binding_cfg = app_cfg.bindings.clone();
         Ok(Self {
             _logctx,
             _pool,
-            _binding_cfg,
+            _binding_cfg: app_cfg.bindings.clone(),
+            _reply_sender: Arc::new(InnerClientReplySend(Mutex::new(HashMap::new()))),
         })
     }
 
@@ -260,6 +269,7 @@ impl AppAmqpRpcContext {
                 .map_err(|e| Self::_map_err_acquire(e.into()))?;
             let wrapper = InnerClientConsumer {
                 consumer,
+                _reply_sender: self._reply_sender.clone(),
                 logctx: self._logctx.clone(),
             };
             let _handle = tokio::task::spawn(wrapper.start_consume());
@@ -296,6 +306,7 @@ impl AbstractRpcClient for AppAmqpRpcClient {
             _logctx,
             _binding_cfg,
             _chn,
+            _reply_sender,
         } = *self;
         let bind_cfg = Self::try_get_binding(_binding_cfg.as_ref(), route.as_str())?;
         let reply_cfg = bind_cfg.reply.as_ref().ok_or(Self::_map_err_sendreq(
@@ -312,7 +323,7 @@ impl AbstractRpcClient for AppAmqpRpcClient {
             immediate: false,
         };
         let properties = AMQPProperties::default()
-            .with_correlation_id(id.into())
+            .with_correlation_id(id.as_str().into())
             .with_app_id(app_meta::LABAL.into())
             .with_reply_to(reply_cfg.queue.as_str().into())
             .with_content_encoding("utf-8".into())
@@ -338,8 +349,11 @@ impl AbstractRpcClient for AppAmqpRpcClient {
             confirm
         );
         Self::convert_confirm_to_error(confirm).map_err(Self::_map_err_sendreq)?;
+        let (sender, recv) = oneshot::channel();
+        _reply_sender.insert(id, sender).await;
         let evt = AppAmqpRpcPublishEvent {
             _binding_cfg,
+            _reply_recv: Some(recv),
             _chn,
             _time: now,
         };
@@ -388,17 +402,25 @@ impl InnerClientConsumer {
         let Self {
             mut consumer,
             logctx,
+            _reply_sender,
         } = self;
         let tag = consumer.tag();
         while let Some(v) = consumer.next().await {
-            let _de = match v {
+            let delivered = match v {
                 Ok(d) => d,
                 Err(e) => {
                     Self::report_error(tag.as_str(), e, logctx.clone());
                     break;
                 }
-            };
-            // TODO, pass received messages to publiched events
+            }; // TODO, figure out whether lapin returns error for connection lost
+            if let Err(e) = _reply_sender.try_send(delivered).await {
+                app_log_event!(
+                    logctx,
+                    AppLogLevel::WARNING,
+                    "consumer-task: {tag}, reason:{:?}",
+                    e
+                );
+            }
         } // end of loop
         app_log_event!(logctx, AppLogLevel::DEBUG, "end-of-consumer-task: {tag}");
     } // end of fn start_consume
@@ -424,13 +446,50 @@ impl InnerClientConsumer {
     }
 } // end of impl InnerClientConsumer
 
+impl InnerClientReplySend {
+    async fn insert(&self, key: String, value: oneshot::Sender<Vec<u8>>) {
+        let mut guard = self.0.lock().await;
+        let _discarded = guard.insert(key, value);
+    }
+
+    async fn try_send(&self, delivered: Delivery) -> Result<(), String> {
+        let (props, msg) = (delivered.properties, delivered.data);
+        let key = props
+            .correlation_id()
+            .as_ref()
+            .ok_or("missing-corr-id".to_string())?;
+        let mut guard = self.0.lock().await;
+        let sender = guard
+            .remove(key.as_str())
+            .ok_or(format!("invalid-corr-id: {}", key))?;
+        sender
+            .send(msg)
+            .map_err(|_d| format!("fail-pass-msg: {}", key))?;
+        Ok(())
+    }
+} // end of impl InnerClientReplySend
+
 #[async_trait]
 impl AbstractRpcPublishEvent for AppAmqpRpcPublishEvent {
     async fn receive_response(&mut self) -> Result<AppRpcReply, AppRpcCtxError> {
-        // Ok(AppRpcReply { message: Vec::new() })
-        Err(AppRpcCtxError {
+        let recv = self
+            ._reply_recv
+            .take()
+            .ok_or(Self::_map_err_recv_resp("already-received"))?;
+        let max_time = std::time::Duration::from_secs(hard_limit::RPC_WAIT_FOR_REPLY as u64);
+        let message = tokio::select! {
+            r = recv => r.map_err(Self::_map_err_recv_resp),
+            _ = sleep(max_time) => Err(Self::_map_err_recv_resp("timeout")),
+        }?;
+        Ok(AppRpcReply { message })
+    }
+}
+
+impl AppAmqpRpcPublishEvent {
+    fn _map_err_recv_resp(detail: impl ToString) -> AppRpcCtxError {
+        AppRpcCtxError {
             fn_label: AppRpcErrorFnLabel::ClientRecvResp,
-            reason: AppRpcErrorReason::NotSupport,
-        })
+            reason: AppRpcErrorReason::ReplyFailure(detail.to_string()),
+        }
     }
 }
