@@ -111,9 +111,14 @@ pub struct AppAmqpAttriCfg {
 pub struct AppRpcAmqpCfg {
     pub bindings: Arc<Vec<AppAmqpBindingCfg>>,
     pub attributes: AppAmqpAttriCfg,
-    // max_connections: u16, // TODO, apply connection pool
+    pub max_connections: u16, // apply connection pool
     #[serde(deserialize_with = "jsn_deny_empty_string")]
     pub confidential_id: String, // TODO, rename to `confidential_path`
+}
+
+#[derive(Deserialize)]
+pub struct AppRpcMockCfg {
+    pub test_data: String,
 }
 
 #[allow(non_camel_case_types)]
@@ -122,6 +127,7 @@ pub struct AppRpcAmqpCfg {
 pub enum AppRpcCfg {
     dummy,
     AMQP(AppRpcAmqpCfg),
+    Mock(AppRpcMockCfg),
 }
 
 #[derive(Deserialize)]
@@ -282,41 +288,33 @@ impl AppConfig {
             .routes
             .iter()
             .filter(|i| i.path.is_empty() || i.handler.is_empty());
-        if obj.routes.is_empty() {
-            Err(AppCfgError {
-                detail: None,
-                code: AppErrorCode::NoRouteApiServerCfg,
-            })
+        let result = if obj.routes.is_empty() {
+            Err((None, AppErrorCode::NoRouteApiServerCfg))
         } else if iter.next().is_some() {
             let err_msg = Some("version must be numeric".to_string());
-            Err(AppCfgError {
-                detail: err_msg,
-                code: AppErrorCode::InvalidVersion,
-            })
+            Err((err_msg, AppErrorCode::InvalidVersion))
         } else if let Some(badroute) = iter2.next() {
             let err_msg = Some(badroute.to_string());
-            Err(AppCfgError {
-                detail: err_msg,
-                code: AppErrorCode::InvalidRouteConfig,
-            })
+            Err((err_msg, AppErrorCode::InvalidRouteConfig))
         } else {
             Ok(())
-        }
+        };
+        result.map_err(|(detail, code)| AppCfgError { detail, code })
     } // end of _check_web_listener
 
     fn _check_rpc(obj: &AppRpcCfg) -> DefaultResult<(), AppCfgError> {
-        match obj {
-            AppRpcCfg::dummy => Ok(()),
-            AppRpcCfg::AMQP(c) => {
-                if c.bindings.is_empty() {
-                    Err(AppCfgError {
-                        detail: Some("rpc".to_string()),
-                        code: AppErrorCode::NoRouteApiServerCfg,
-                    })
-                } else {
-                    Ok(())
-                }
-            }
+        let (empty, err_detail) = match obj {
+            AppRpcCfg::dummy => (false, "rpc-dummy"),
+            AppRpcCfg::AMQP(c) => (c.bindings.is_empty(), "rpc-amqp"),
+            AppRpcCfg::Mock(c) => (c.test_data.is_empty(), "rpc-mock-test"),
+        };
+        if empty {
+            Err(AppCfgError {
+                detail: Some(err_detail.to_string()),
+                code: AppErrorCode::NoRouteApiServerCfg,
+            })
+        } else {
+            Ok(())
         }
     } // end of _check_rpc
 
@@ -328,38 +326,20 @@ impl AppConfig {
         }); // for file-type handler, the field `path` has to be provided
         let mut filtered3 = obj.handlers.iter().filter(|item| item.alias.is_empty());
         let mut filtered4 = obj.loggers.iter().filter(|item| item.alias.is_empty());
-        if obj.handlers.is_empty() {
-            Err(AppCfgError {
-                detail: None,
-                code: AppErrorCode::NoLogHandlerCfg,
-            })
+        let result = if obj.handlers.is_empty() {
+            Err((None, AppErrorCode::NoLogHandlerCfg))
         } else if obj.loggers.is_empty() {
-            Err(AppCfgError {
-                detail: None,
-                code: AppErrorCode::NoLoggerCfg,
-            })
+            Err((None, AppErrorCode::NoLoggerCfg))
         } else if let Some(alogger) = filtered.next() {
             let msg = format!("the logger does not have handler: {}", alogger.alias);
-            Err(AppCfgError {
-                detail: Some(msg),
-                code: AppErrorCode::NoHandlerInLoggerCfg,
-            })
+            Err((Some(msg), AppErrorCode::NoHandlerInLoggerCfg))
         } else if let Some(_hdlr) = filtered3.next() {
-            Err(AppCfgError {
-                detail: None,
-                code: AppErrorCode::MissingAliasLogHdlerCfg,
-            })
+            Err((None, AppErrorCode::MissingAliasLogHdlerCfg))
         } else if let Some(_logger) = filtered4.next() {
-            Err(AppCfgError {
-                detail: None,
-                code: AppErrorCode::MissingAliasLoggerCfg,
-            })
+            Err((None, AppErrorCode::MissingAliasLoggerCfg))
         } else if let Some(alogger) = filtered2.next() {
             let msg = format!("file-type handler does not contain path: {}", alogger.alias);
-            Err(AppCfgError {
-                detail: Some(msg),
-                code: AppErrorCode::InvalidHandlerLoggerCfg,
-            })
+            Err((Some(msg), AppErrorCode::InvalidHandlerLoggerCfg))
         } else {
             let iter = obj.handlers.iter().map(|i| i.alias.as_str());
             let hdlr_alias_map: HashSet<&str> = HashSet::from_iter(iter);
@@ -375,14 +355,12 @@ impl AppConfig {
                     "the logger contains invalid handler alias: {}",
                     alogger.alias
                 );
-                Err(AppCfgError {
-                    detail: Some(msg),
-                    code: AppErrorCode::InvalidHandlerLoggerCfg,
-                })
+                Err((Some(msg), AppErrorCode::InvalidHandlerLoggerCfg))
             } else {
                 Ok(())
             }
-        }
+        };
+        result.map_err(|(detail, code)| AppCfgError { detail, code })
     } // end of _check_logging
 
     fn _check_datastore(
