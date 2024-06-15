@@ -135,3 +135,5 @@ async fn start_refresh_jwks(shr_state: AppSharedState) {
         rt::time::sleep(period).await;
     } // end of loop
 } // end of fn start_refresh_jwks
+
+// TODO, register signal, disconnect database connections during graceful shutdown

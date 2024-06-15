@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use actix_web::rt;
+use chrono::Local;
 use futures_util::StreamExt;
 use lapin::options::{BasicConsumeOptions, BasicPublishOptions};
 use lapin::protocol::basic::AMQPProperties;
@@ -27,14 +28,14 @@ struct SECRET {
     password: String,
 }
 
-fn ut_client_publish_msgs() -> [(&'static str, &'static str, &'static str); 5] {
+fn ut_client_publish_msgs() -> [(u32, &'static str, &'static str); 5] {
     let routes = ["rpc.payment.unittest.one"];
     [
-        ("uzbek", routes[0], r#"{"me":"je"}"#),
-        ("nippon", routes[0], r#"{"saya":"ich"}"#),
-        ("jawa", routes[0], r#"{"Zeist":"meat"}"#),
-        ("azajt", routes[0], r#"{"light":"shadow"}"#),
-        ("cayman", routes[0], r#"{"ice":"flame"}"#),
+        (194, routes[0], r#"{"me":"je"}"#),
+        (92, routes[0], r#"{"saya":"ich"}"#),
+        (78, routes[0], r#"{"Zeist":"meat"}"#),
+        (615, routes[0], r#"{"light":"shadow"}"#),
+        (182, routes[0], r#"{"ice":"flame"}"#),
     ]
 }
 
@@ -51,7 +52,7 @@ fn ut_server_publish_msg(req_content: &str) -> &'static str {
 
 async fn ut_client_send_req<'a>(
     rpcctx: Arc<Box<dyn AbstractRpcContext>>,
-    req_id: &'a str,
+    usr_id: u32,
     route: &'a str,
     msg: &'a str,
 ) -> Result<(), AppRpcCtxError> {
@@ -59,7 +60,8 @@ async fn ut_client_send_req<'a>(
     assert!(result.is_ok());
     let hdlr = result?;
     let props = AppRpcClientRequest {
-        id: req_id.to_string(),
+        usr_id,
+        time: Local::now().to_utc(),
         message: msg.as_bytes().to_vec(),
         route: route.to_string(),
     };

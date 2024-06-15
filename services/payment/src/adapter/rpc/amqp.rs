@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use chrono::{DateTime, FixedOffset, Local};
+use chrono::{DateTime, Local, Utc};
 use deadpool_lapin::{Config as DeadpConfig, Pool, PoolConfig, Runtime, Timeouts as DeadpTimeouts};
 use futures_util::StreamExt;
 use lapin::message::Delivery;
@@ -58,7 +58,7 @@ struct AppAmqpRpcClient {
 struct AppAmqpRpcPublishEvent {
     _binding_cfg: Arc<Vec<AppAmqpBindingCfg>>,
     _chn: Channel,
-    _time: DateTime<FixedOffset>,
+    _time: DateTime<Utc>,
     _reply_recv: Option<oneshot::Receiver<Vec<u8>>>,
 }
 
@@ -298,7 +298,8 @@ impl AbstractRpcClient for AppAmqpRpcClient {
         props: AppRpcClientRequest,
     ) -> Result<Box<dyn AbstractRpcPublishEvent>, AppRpcCtxError> {
         let AppRpcClientRequest {
-            mut id,
+            usr_id,
+            time,
             message,
             route,
         } = props;
@@ -312,15 +313,14 @@ impl AbstractRpcClient for AppAmqpRpcClient {
         let reply_cfg = bind_cfg.reply.as_ref().ok_or(Self::_map_err_sendreq(
             AppRpcErrorReason::InternalConfig("amqp-reply-cfg-missing".to_string()),
         ))?;
-        let now = Local::now().fixed_offset();
-        let corr_id_prefix = reply_cfg.correlation_id_prefix.as_str();
-        id.insert(0, '.');
-        id.insert_str(0, corr_id_prefix);
-        // To create a responsive application, message broker has to return
-        // unroutable message whenever the given routing key goes wrong.
-        let options = BasicPublishOptions {
-            mandatory: true,
-            immediate: false,
+        let id = {
+            let corr_id_prefix = reply_cfg.correlation_id_prefix.as_str();
+            let mut t = time.format("%Y%m%d.%H%M%S").to_string();
+            t.insert(0, '.');
+            t.insert_str(0, usr_id.to_string().as_str());
+            t.insert(0, '.');
+            t.insert_str(0, corr_id_prefix);
+            t
         };
         let properties = AMQPProperties::default()
             .with_correlation_id(id.as_str().into())
@@ -329,12 +329,17 @@ impl AbstractRpcClient for AppAmqpRpcClient {
             .with_content_encoding("utf-8".into())
             .with_content_type("application/json".into())
             .with_delivery_mode(if bind_cfg.durable { 2 } else { 1 })
-            .with_timestamp(now.timestamp() as u64);
+            .with_timestamp(time.timestamp() as u64);
+        // To create a responsive application, message broker has to return
+        // unroutable message whenever the given routing key goes wrong.
         let confirm = _chn
             .basic_publish(
                 bind_cfg.exchange.as_str(),
                 bind_cfg.routing_key.as_str(),
-                options,
+                BasicPublishOptions {
+                    mandatory: true,
+                    immediate: false,
+                },
                 &message,
                 properties,
             )
@@ -355,7 +360,7 @@ impl AbstractRpcClient for AppAmqpRpcClient {
             _binding_cfg,
             _reply_recv: Some(recv),
             _chn,
-            _time: now,
+            _time: time,
         };
         Ok(Box::new(evt))
     } // end of fn send_request

@@ -124,14 +124,12 @@ impl ChargeCreateUseCase {
         let payld = OrderReplicaPaymentReqDto {
             order_id: oid.to_string(),
         };
-        let now = Local::now()
-            .to_utc()
-            .duration_trunc(TimeDelta::seconds(6))
-            .unwrap()
-            .format("%Y%m%d.%H%M%S")
-            .to_string();
         let props = AppRpcClientRequest {
-            id: format!("{usr_id}.{now}"),
+            usr_id,
+            time: Local::now()
+                .to_utc()
+                .duration_trunc(TimeDelta::seconds(6))
+                .unwrap(),
             message: serde_json::to_vec(&payld).unwrap(),
             route: "rpc.order.order_reserved_replica_payment".to_string(),
         };

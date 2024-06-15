@@ -6,6 +6,7 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::AppRpcCfg;
@@ -61,7 +62,8 @@ pub trait AbstractRpcPublishEvent: Sync + Send {
 }
 
 pub struct AppRpcClientRequest {
-    pub id: String, // will be postfix of correlation-id in basic property
+    pub usr_id: u32,
+    pub time: DateTime<Utc>,
     pub message: Vec<u8>,
     pub route: String,
 }
