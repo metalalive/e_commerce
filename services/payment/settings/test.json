@@ -24,6 +24,9 @@
             {"alias": "payment::adapter::rpc::amqp",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
+            {"alias": "payment::adapter::processor",
+             "handlers": ["std-output-forall"],
+             "level": "WARNING"},
             {"alias": "payment::api::web::charge",
              "handlers": ["std-output-forall"],
              "level": "DEBUG"}
@@ -57,7 +60,8 @@
 	}
     ],
     "rpc": {
-	"handler_type": "dummy"
+	"handler_type": "Mock",
+	"test_data": "tests/integration/examples/rpc_test_data.json"
     },
     "auth": {
 	"keystore_url": "http://localhost:8008/jwks",

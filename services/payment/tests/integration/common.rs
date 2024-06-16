@@ -43,10 +43,10 @@ pub(crate) async fn itest_setup_app_server(
     init_service(app).await
 }
 
-pub(crate) fn itest_setup_auth_claim() -> AppAuthedClaim {
+pub(crate) fn itest_setup_auth_claim(profile: u32) -> AppAuthedClaim {
     let now = Local::now().fixed_offset().timestamp();
     AppAuthedClaim {
-        profile: 2234,
+        profile,
         iat: now,
         exp: now + 60,
         aud: vec![app_meta::LABAL.to_string()],

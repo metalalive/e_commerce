@@ -27,6 +27,9 @@
             {"alias": "payment::adapter::rpc::amqp",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
+            {"alias": "payment::adapter::processor",
+             "handlers": ["errlog-file-web-api"],
+             "level": "WARNING"},
             {"alias": "web",
 	     "level": "DEBUG",
              "handlers": ["errlog-file-web-api", "std-output-forall"]}

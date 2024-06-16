@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use chrono::Local;
-use ecommerce_common::logging::AppLogContext;
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use crate::api::web::dto::{ChargeRespDto, PaymentMethodErrorReason, PaymentMethodRespDto};
 use crate::model::{BuyerPayInState, ChargeBuyerModel};
@@ -18,7 +18,9 @@ pub trait AbstractPaymentProcessor: Send + Sync {
     ) -> Result<AppProcessorPayInResult, AppProcessorError>;
 }
 
-struct AppProcessorContext;
+struct AppProcessorContext {
+    _logctx: Arc<AppLogContext>,
+}
 
 pub struct AppProcessorError {
     pub reason: PaymentMethodErrorReason,
@@ -47,7 +49,7 @@ impl From<AppProcessorPayInResult> for ChargeRespDto {
 
 impl AppProcessorContext {
     pub fn new(_logctx: Arc<AppLogContext>) -> Result<Self, AppProcessorError> {
-        Ok(Self)
+        Ok(Self { _logctx })
     }
 }
 
@@ -57,6 +59,8 @@ impl AbstractPaymentProcessor for AppProcessorContext {
         &self,
         _cline_set: &ChargeBuyerModel,
     ) -> Result<AppProcessorPayInResult, AppProcessorError> {
+        let logctx_p = &self._logctx;
+        app_log_event!(logctx_p, AppLogLevel::ERROR, "not-implemented-yet");
         let reason = PaymentMethodErrorReason::ProcessorFailure;
         Err(AppProcessorError { reason })
     }

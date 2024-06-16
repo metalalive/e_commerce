@@ -34,14 +34,19 @@ pub(super) async fn create_charge(
         ordersync_lockset: shr_state.ordersync_lockset(),
         rpc_ctx: shr_state.rpc_context(),
     };
-    let usr_id = 123;
     let req_body = req_body.into_inner();
-    let result = uc.execute(usr_id, req_body).await;
-    let resp = HttpResponse::Accepted()
-        .append_header(ContentType::json())
-        .body("{}");
+    let resp = match uc.execute(authed_claim.profile, req_body).await {
+        // TODO, return session detail from chosen 3rd-party processor
+        Ok(_v) => HttpResponse::Accepted()
+            .append_header(ContentType::json())
+            .body("{}"),
+        Err(_e) => {
+            // TODO, analyze error type, give different error response
+            HttpResponse::InternalServerError().finish()
+        }
+    };
     Ok(resp)
-}
+} // end of fn create_charge
 
 pub(super) async fn refresh_charge_status(
     _path: ExtPath<String>,

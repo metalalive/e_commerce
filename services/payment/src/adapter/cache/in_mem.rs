@@ -13,7 +13,7 @@ impl Default for InMemOrderSyncLockCache {
 #[async_trait]
 impl AbstractOrderSyncLockCache for InMemOrderSyncLockCache {
     async fn acquire(&self, _usr_id: u32, _oid: &str) -> Result<bool, OrderSyncLockError> {
-        Ok(false)
+        Ok(true) // TODO, finish implementation
     }
 
     async fn release(&self, _usr_id: u32, _oid: &str) -> Result<(), OrderSyncLockError> {

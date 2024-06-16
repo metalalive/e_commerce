@@ -1,4 +1,5 @@
 mod amqp;
+mod mock;
 
 use std::boxed::Box;
 use std::marker::{Send, Sync};
@@ -9,10 +10,11 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
 use ecommerce_common::confidentiality::AbstractConfidentiality;
-use ecommerce_common::config::AppRpcCfg;
+use ecommerce_common::config::{AppBasepathCfg, AppRpcCfg};
 use ecommerce_common::logging::AppLogContext;
 
 use amqp::AppAmqpRpcContext;
+use mock::AppMockRpcContext;
 
 pub enum AppRpcErrorFnLabel {
     InitCtx,
@@ -73,12 +75,16 @@ pub struct AppRpcReply {
 }
 
 pub(crate) fn build_context(
+    basepath: &AppBasepathCfg,
     cfg: &AppRpcCfg,
     cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
     logctx: Arc<AppLogContext>,
 ) -> Result<Box<dyn AbstractRpcContext>, AppRpcCtxError> {
     if let AppRpcCfg::AMQP(c) = cfg {
         let obj = AppAmqpRpcContext::try_build(c, cfdntl, logctx)?;
+        Ok(Box::new(obj))
+    } else if let AppRpcCfg::Mock(c) = cfg {
+        let obj = AppMockRpcContext::try_build(basepath, c, logctx)?;
         Ok(Box::new(obj))
     } else {
         Err(AppRpcCtxError {

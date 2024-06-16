@@ -13,7 +13,7 @@ use common::{itest_setup_app_server, itest_setup_auth_claim};
 #[actix_web::test]
 async fn charge_ok() {
     let mock_app = itest_setup_app_server().await;
-
+    let mock_usr_id = 2234u32;
     const CASE_FILE: &str = "./tests/integration/examples/create_charge_stripe_ok.json";
     let req = {
         let rdr = File::open(CASE_FILE).unwrap();
@@ -25,7 +25,7 @@ async fn charge_ok() {
             .to_request();
         let _empty = r
             .extensions_mut()
-            .insert::<AppAuthedClaim>(itest_setup_auth_claim());
+            .insert::<AppAuthedClaim>(itest_setup_auth_claim(mock_usr_id));
         r
     };
     let resp = call_service(&mock_app, req).await;
@@ -38,7 +38,7 @@ async fn charge_ok() {
             .to_request();
         let _empty = r
             .extensions_mut()
-            .insert::<AppAuthedClaim>(itest_setup_auth_claim());
+            .insert::<AppAuthedClaim>(itest_setup_auth_claim(mock_usr_id));
         r
     };
     let resp = call_service(&mock_app, req).await;
