@@ -113,7 +113,7 @@ pub struct AppRpcAmqpCfg {
     pub attributes: AppAmqpAttriCfg,
     pub max_connections: u16, // apply connection pool
     #[serde(deserialize_with = "jsn_deny_empty_string")]
-    pub confidential_id: String, // TODO, rename to `confidential_path`
+    pub confidential_id: String, // TODO, rename to `confidentiality_path`
 }
 
 #[derive(Deserialize)]
@@ -144,6 +144,14 @@ pub enum AppConfidentialCfg {
         sys_path: String,
     }, // TODO, support kernel key management utility,
        // or hardware-specific approach e.g. ARM TrustZone
+}
+
+#[derive(Deserialize)]
+pub struct App3rdPartyCfg {
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    pub confidentiality_path: String,
 }
 
 #[allow(non_camel_case_types)]
@@ -193,6 +201,7 @@ pub struct ApiServerCfg {
     pub rpc: AppRpcCfg,
     pub auth: AppAuthCfg,
     pub confidentiality: AppConfidentialCfg,
+    pub third_parties : Option<Vec<Arc<App3rdPartyCfg>>>,
 }
 
 pub struct AppBasepathCfg {

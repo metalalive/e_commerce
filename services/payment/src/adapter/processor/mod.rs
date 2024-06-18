@@ -60,6 +60,7 @@ impl AbstractPaymentProcessor for AppProcessorContext {
         _cline_set: &ChargeBuyerModel,
     ) -> Result<AppProcessorPayInResult, AppProcessorError> {
         let logctx_p = &self._logctx;
+
         app_log_event!(logctx_p, AppLogLevel::ERROR, "not-implemented-yet");
         let reason = PaymentMethodErrorReason::ProcessorFailure;
         Err(AppProcessorError { reason })

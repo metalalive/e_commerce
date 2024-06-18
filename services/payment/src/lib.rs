@@ -115,8 +115,10 @@ impl AppSharedState {
             cfdntl.clone(),
             logctx.clone(),
         )?;
-        let dstore = AppDataStoreContext::new(&cfg.api_server.data_store, cfdntl, logctx.clone())?;
-        let _processors = app_processor_context(logctx.clone())?;
+        let dstore =
+            AppDataStoreContext::new(&cfg.api_server.data_store, cfdntl.clone(), logctx.clone())?;
+        let _processors =
+            app_processor_context(&cfg.api_server.third_parties, cfdntl, logctx.clone())?;
         let ordersync_lockset = app_cache_order_sync_lock();
         let auth_keys = AppAuthKeystore::try_create(&cfg.api_server.auth)?;
         Ok(Self {

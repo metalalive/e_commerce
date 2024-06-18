@@ -95,6 +95,14 @@
 	"keystore_url": "http://localhost:8008/jwks",
 	"update_interval_minutes": 55
     },
+    "third_parties": [
+        {
+            "name": "Stripe",
+            "host": "api.stripe.com",
+            "port": 443,
+	        "confidentiality_path": "backend_apps/secret_key/staff/Stripe"
+        }
+    ],
     "confidentiality": {
 	"source": "UserSpace",
 	"sys_path": "common/data/secrets.json"
