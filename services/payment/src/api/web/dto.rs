@@ -13,8 +13,12 @@ pub enum StripeCheckoutUImodeDto {
 }
 #[derive(Deserialize)]
 pub struct StripeCheckoutSessionReqDto {
-    pub customer_id: String,
+    pub customer_id: Option<String>,
+    pub cancel_url: Option<String>,
+    pub success_url: Option<String>, // only for redirect-page UI-mode
+    pub return_url: Option<String>,  // for return / refund, TODO, verify
     pub ui_mode: StripeCheckoutUImodeDto,
+    pub livemode: bool,
 }
 
 #[derive(Deserialize)]
@@ -23,11 +27,13 @@ pub enum PaymentMethodReqDto {
     Stripe(StripeCheckoutSessionReqDto),
 }
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub enum PaymentCurrencyDto {
+    INR,
+    IDR,
+    THB,
     TWD,
     USD,
-    THB,
 } // TODO, move to `ecommerce-common` crate
 #[derive(Deserialize)]
 pub struct ChargeAmountOlineDto {
@@ -44,7 +50,10 @@ pub struct ChargeReqDto {
     pub order_id: String,
     pub method: PaymentMethodReqDto,
     pub lines: Vec<ChargeAmountOlineDto>,
-    // TODO, tax and discount
+    // TODO,
+    // - tax and discount
+    // - currency and exchange rate should be determined on creating
+    //   a new order, not payment
     pub currency: PaymentCurrencyDto,
 }
 

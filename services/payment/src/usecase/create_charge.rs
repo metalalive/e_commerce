@@ -50,7 +50,7 @@ impl From<AppRepoError> for ChargeCreateUcError {
 }
 impl From<AppProcessorError> for ChargeCreateUcError {
     fn from(value: AppProcessorError) -> Self {
-        Self::ExternalProcessorError(value.reason)
+        Self::ExternalProcessorError(value.reason.into())
     }
 }
 impl From<serde_json::Error> for ChargeCreateUcError {

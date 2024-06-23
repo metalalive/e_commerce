@@ -1,13 +1,21 @@
+mod base_client;
+mod stripe;
+
 use std::marker::{Send, Sync};
 use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-
 use chrono::Local;
-use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
+use ecommerce_common::confidentiality::AbstractConfidentiality;
+use ecommerce_common::config::App3rdPartyCfg;
+use ecommerce_common::logging::AppLogContext;
 
-use crate::api::web::dto::{ChargeRespDto, PaymentMethodErrorReason, PaymentMethodRespDto};
+pub use self::base_client::{BaseClientError, BaseClientErrorReason};
+use self::stripe::AppProcessorStripeCtx;
+use crate::api::web::dto::{
+    ChargeRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
+};
 use crate::model::{BuyerPayInState, ChargeBuyerModel};
 
 #[async_trait]
@@ -19,11 +27,22 @@ pub trait AbstractPaymentProcessor: Send + Sync {
 }
 
 struct AppProcessorContext {
+    _stripe: AppProcessorStripeCtx,
     _logctx: Arc<AppLogContext>,
 }
 
+pub enum AppProcessorErrorReason {
+    InvalidConfig,
+    MissingCredential,
+    CredentialCorrupted,
+    NotSupport,
+    NotImplemented,
+    LoeLvlNet(BaseClientError),
+    InvalidMethod(String),
+}
+
 pub struct AppProcessorError {
-    pub reason: PaymentMethodErrorReason,
+    pub reason: AppProcessorErrorReason,
 }
 
 pub struct AppProcessorPayInResult {
@@ -46,10 +65,26 @@ impl From<AppProcessorPayInResult> for ChargeRespDto {
         }
     }
 }
+impl From<AppProcessorErrorReason> for PaymentMethodErrorReason {
+    fn from(_value: AppProcessorErrorReason) -> Self {
+        Self::ProcessorFailure
+    } // TODO, finish implementation
+}
 
 impl AppProcessorContext {
-    pub fn new(_logctx: Arc<AppLogContext>) -> Result<Self, AppProcessorError> {
-        Ok(Self { _logctx })
+    fn new(
+        cfgs: Vec<Arc<App3rdPartyCfg>>,
+        cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
+        _logctx: Arc<AppLogContext>,
+    ) -> Result<Self, AppProcessorError> {
+        let _stripe = cfgs
+            .into_iter()
+            .find(|c| c.name.as_str().to_lowercase() == "stripe")
+            .map(|c| AppProcessorStripeCtx::try_build(c, cfdntl, _logctx.clone()))
+            .ok_or(AppProcessorError {
+                reason: AppProcessorErrorReason::InvalidConfig,
+            })??;
+        Ok(Self { _logctx, _stripe })
     }
 }
 
@@ -57,19 +92,23 @@ impl AppProcessorContext {
 impl AbstractPaymentProcessor for AppProcessorContext {
     async fn pay_in_start(
         &self,
-        _cline_set: &ChargeBuyerModel,
+        cline_set: &ChargeBuyerModel,
     ) -> Result<AppProcessorPayInResult, AppProcessorError> {
-        let logctx_p = &self._logctx;
-
-        app_log_event!(logctx_p, AppLogLevel::ERROR, "not-implemented-yet");
-        let reason = PaymentMethodErrorReason::ProcessorFailure;
-        Err(AppProcessorError { reason })
+        let out = match &cline_set.method {
+            PaymentMethodReqDto::Stripe(c) => self._stripe.pay_in_start(c, cline_set).await?,
+        };
+        Ok(out)
     }
 }
 
 pub(crate) fn app_processor_context(
+    cfgs: &Option<Vec<Arc<App3rdPartyCfg>>>,
+    cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
     logctx: Arc<AppLogContext>,
 ) -> Result<Box<dyn AbstractPaymentProcessor>, AppProcessorError> {
-    let proc = AppProcessorContext::new(logctx)?;
+    let _cfgs = cfgs.as_ref().map(|v| v.clone()).ok_or(AppProcessorError {
+        reason: AppProcessorErrorReason::InvalidConfig,
+    })?;
+    let proc = AppProcessorContext::new(_cfgs, cfdntl, logctx)?;
     Ok(Box::new(proc))
 }
