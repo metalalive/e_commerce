@@ -30,6 +30,12 @@ pub(super) struct CreateCheckoutSessionPaymentIntentData {
 }
 
 #[derive(Serialize)]
+pub(super) struct CreateCheckoutSessionLineItems {
+    pub price: String, // identifier of existing price object
+    pub quantity: u32,
+}
+
+#[derive(Serialize)]
 pub(super) struct CreateCheckoutSession {
     pub client_reference_id: String, // usr-profile-id followed by order-id
     pub currency: PaymentCurrencyDto,
@@ -38,10 +44,9 @@ pub(super) struct CreateCheckoutSession {
     pub cancel_url: Option<String>,
     pub success_url: Option<String>,
     pub return_url: Option<String>, // for return / refund, TODO, verify
-    pub livemode: bool,             // false means test mode
     // TODO, implement Price / Product objects, it is useless for this e-commerce
     // project but essential for Stripe platform
-    pub line_items: Vec<u32>,
+    pub line_items: Vec<CreateCheckoutSessionLineItems>,
     pub payment_intent_data: CreateCheckoutSessionPaymentIntentData,
     pub mode: CheckoutSessionMode,
     pub ui_mode: CheckoutSessionUiMode,

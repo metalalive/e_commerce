@@ -30,6 +30,12 @@
             {"alias": "payment::adapter::processor",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
+            {"alias": "payment::adapter::processor::base_client",
+             "handlers": ["std-output-forall","errlog-file-web-api"],
+             "level": "WARNING"},
+            {"alias": "payment::adapter::processor::stripe",
+             "handlers": ["errlog-file-web-api"],
+             "level": "INFO"},
             {"alias": "web",
 	     "level": "DEBUG",
              "handlers": ["errlog-file-web-api", "std-output-forall"]}

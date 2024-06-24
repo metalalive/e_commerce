@@ -31,16 +31,18 @@ struct AppProcessorContext {
     _logctx: Arc<AppLogContext>,
 }
 
+#[derive(Debug)]
 pub enum AppProcessorErrorReason {
     InvalidConfig,
     MissingCredential,
     CredentialCorrupted,
     NotSupport,
     NotImplemented,
-    LoeLvlNet(BaseClientError),
+    LowLvlNet(BaseClientError),
     InvalidMethod(String),
 }
 
+#[derive(Debug)]
 pub struct AppProcessorError {
     pub reason: AppProcessorErrorReason,
 }
@@ -63,6 +65,12 @@ impl From<AppProcessorPayInResult> for ChargeRespDto {
             method: value.method,
             create_time: ctime,
         }
+    }
+}
+
+impl From<BaseClientError> for AppProcessorErrorReason {
+    fn from(value: BaseClientError) -> Self {
+        Self::LowLvlNet(value)
     }
 }
 impl From<AppProcessorErrorReason> for PaymentMethodErrorReason {
@@ -106,7 +114,7 @@ pub(crate) fn app_processor_context(
     cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
     logctx: Arc<AppLogContext>,
 ) -> Result<Box<dyn AbstractPaymentProcessor>, AppProcessorError> {
-    let _cfgs = cfgs.as_ref().map(|v| v.clone()).ok_or(AppProcessorError {
+    let _cfgs = cfgs.as_ref().cloned().ok_or(AppProcessorError {
         reason: AppProcessorErrorReason::InvalidConfig,
     })?;
     let proc = AppProcessorContext::new(_cfgs, cfdntl, logctx)?;

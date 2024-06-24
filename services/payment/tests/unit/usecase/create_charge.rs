@@ -11,7 +11,9 @@ use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::cache::OrderSyncLockError;
-use payment::adapter::processor::{AppProcessorError, AppProcessorPayInResult};
+use payment::adapter::processor::{
+    AppProcessorError, AppProcessorErrorReason, AppProcessorPayInResult,
+};
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
 use payment::api::web::dto::{
@@ -54,10 +56,14 @@ fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModel
 }
 
 fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
+    let mock_finish_url = "https://mysite.io/products".to_string();
     ChargeReqDto {
         order_id: mock_order_id,
         method: PaymentMethodReqDto::Stripe(StripeCheckoutSessionReqDto {
-            customer_id: "ut-stripe-mock-id".to_string(),
+            customer_id: Some("ut-stripe-mock-id".to_string()),
+            success_url: Some(mock_finish_url.clone()),
+            return_url: Some(mock_finish_url.clone()),
+            cancel_url: None,
             ui_mode: StripeCheckoutUImodeDto::RedirectPage,
         }),
         lines: vec![ChargeAmountOlineDto {
@@ -532,7 +538,7 @@ async fn processor_start_payin_failure() {
         _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
     };
     let expect_proc_error = AppProcessorError {
-        reason: PaymentMethodErrorReason::OperationRefuse,
+        reason: AppProcessorErrorReason::CredentialCorrupted,
     };
     let mock_processor = MockPaymentProcessor {
         _payin_start_result: Mutex::new(Some(Err(expect_proc_error))),
@@ -548,7 +554,7 @@ async fn processor_start_payin_failure() {
     assert!(result.is_err());
     if let Err(e) = result {
         if let ChargeCreateUcError::ExternalProcessorError(actual_error) = e {
-            let cond = matches!(actual_error, PaymentMethodErrorReason::OperationRefuse);
+            let cond = matches!(actual_error, PaymentMethodErrorReason::ProcessorFailure);
             assert!(cond);
         } else {
             assert!(false);

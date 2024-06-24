@@ -75,7 +75,10 @@ fn ut_setup_order_replica(
 
 fn ut_setup_payment_method_stripe() -> PaymentMethodReqDto {
     PaymentMethodReqDto::Stripe(StripeCheckoutSessionReqDto {
-        customer_id: String::new(),
+        customer_id: Some("ut-stripe-customer-id".to_string()),
+        success_url: Some("https://3aw.au".to_string()),
+        return_url: Some("https://4ec.au".to_string()),
+        cancel_url: None,
         ui_mode: StripeCheckoutUImodeDto::RedirectPage,
     })
 }

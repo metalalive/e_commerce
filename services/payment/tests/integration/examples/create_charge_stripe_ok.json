@@ -3,6 +3,8 @@
     "method": {
         "label": "Stripe",
 	"customer_id": "0sji4ut8",
+        "success_url": "https://docs.rs/tokio",
+        "cancel_url": "https://resources.nvidia.com/en-us-grace-cpu",
 	"ui_mode": "RedirectPage"
     },
     "lines": [

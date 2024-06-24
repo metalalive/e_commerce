@@ -18,7 +18,6 @@ pub struct StripeCheckoutSessionReqDto {
     pub success_url: Option<String>, // only for redirect-page UI-mode
     pub return_url: Option<String>,  // for return / refund, TODO, verify
     pub ui_mode: StripeCheckoutUImodeDto,
-    pub livemode: bool,
 }
 
 #[derive(Deserialize)]

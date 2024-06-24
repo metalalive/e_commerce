@@ -8,14 +8,15 @@ edition = "2021"
 [dependencies]
 serde = {version="^1.0" , features=["derive"]}
 serde_json = {version="^1.0" , features=["std"]}
+serde_qs = {version="^0.13", default-features=false, features=[]} # applied in Stripe API server
 chrono  = {version="^0.4.38", features=["std", "serde"]}
 
 tracing = {version="^0.1", default-features=false}
 
 async-trait = "^0.1.80"
-actix-http = "^3.6"
+actix-http = {version="^3.6", default-features=false, features=[]}
 actix-service = "^2"
-actix-web = {version="^4.5.1", features=["macros"]}
+actix-web = {version="^4.5.1", default-features=false, features=["macros"]}
 actix-web-httpauth = {version="^0.8"}
 
 jsonwebtoken = "^9.3"
@@ -40,19 +41,27 @@ jsonwebtoken = "^9.3"
 hyper = {version="^1.3.0", features=["client", "http1"]}
 hyper-util = {version="^0.1.3", features=["tokio"]}
 
+# secure connections for interaction with 3rd party services
+# e.g. payment processors, or external database server not in private network area
+tokio-native-tls = "^0.3"
+
 # for empty body type
 http-body-util = "^0.1"
 
 # required for RwLock, Mutex, and `select` macro, with Send, Sync trait
 tokio = {version="^1.23.1", features=["sync","macros"]}
 
-mysql_async = {version="^0.34", features=["minimal"]}
+mysql_async = {version="^0.34", default-features=false, features=["minimal", "native-tls-tls"]}
 # required by the result set stream in `Query::stream()` in `mysql-async`
 futures-util = {version="^0.3.30", features=["std"]}
 
 # AMQP / RabbitMQ
 lapin = {version="^2.3.4", default-features=false}
-deadpool-lapin = {version="^0.12", features=["rt_tokio_1"]}
+deadpool-lapin = {version="^0.12", default-features=false, features=["rt_tokio_1"]}
+
+# Note 3rd party payment processors
+# this application does not use `async-stripe` , it uses about 2.5GB memory during complie time
+# , also contains many of types not used in this application
 
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
 

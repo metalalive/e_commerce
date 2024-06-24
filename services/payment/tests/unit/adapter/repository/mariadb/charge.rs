@@ -223,7 +223,10 @@ fn _ut_setup_buyer_charge() -> ChargeBuyerModel {
     let mock_state = BuyerPayInState::ProcessorAccepted(mock_create_time + Duration::seconds(95));
     let mock_method = {
         let sess = StripeCheckoutSessionReqDto {
-            customer_id: String::new(),
+            customer_id: None,
+            return_url: None,
+            success_url: None,
+            cancel_url: None,
             ui_mode: StripeCheckoutUImodeDto::EmbeddedJs,
         };
         PaymentMethodReqDto::Stripe(sess)

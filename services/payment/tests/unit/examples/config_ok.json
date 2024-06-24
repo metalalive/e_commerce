@@ -20,6 +20,12 @@
             {"alias": "payment::adapter::datastore",
              "handlers": ["std-output-forall"],
              "level": "INFO"},
+            {"alias": "payment::adapter::processor::base_client",
+             "handlers": ["std-output-forall"],
+             "level": "DEBUG"},
+            {"alias": "payment::adapter::processor::stripe",
+             "handlers": ["std-output-forall"],
+             "level": "DEBUG"},
             {"alias": "payment::adapter::rpc::amqp",
              "handlers": ["std-output-forall"],
              "level": "DEBUG"}
@@ -84,6 +90,14 @@
 	"keystore_url": "http://localhost:8008/jwks",
 	"update_interval_minutes": 60
     },
+    "third_parties": [
+        {
+            "name": "Stripe",
+            "host": "api.stripe.com",
+            "port": 443,
+	        "confidentiality_path": "backend_apps/secret_key/staff/Stripe"
+        }
+    ],
     "confidentiality": {
 	"source": "UserSpace",
 	"sys_path": "common/data/secrets.json"

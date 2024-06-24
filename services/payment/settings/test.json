@@ -27,6 +27,12 @@
             {"alias": "payment::adapter::processor",
              "handlers": ["std-output-forall"],
              "level": "WARNING"},
+            {"alias": "payment::adapter::processor::base_client",
+             "handlers": ["std-output-forall"],
+             "level": "INFO"},
+            {"alias": "payment::adapter::processor::stripe",
+             "handlers": ["errlog-file-web-api"],
+             "level": "INFO"},
             {"alias": "payment::api::web::charge",
              "handlers": ["std-output-forall"],
              "level": "DEBUG"}
@@ -63,6 +69,14 @@
 	"handler_type": "Mock",
 	"test_data": "tests/integration/examples/rpc_test_data.json"
     },
+    "third_parties": [
+        {
+            "name": "Stripe",
+            "host": "api.stripe.com",
+            "port": 443,
+	        "confidentiality_path": "backend_apps/secret_key/staff/Stripe"
+        }
+    ],
     "auth": {
 	"keystore_url": "http://localhost:8008/jwks",
 	"update_interval_minutes": 60
