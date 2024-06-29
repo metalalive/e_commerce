@@ -74,8 +74,13 @@ impl From<BaseClientError> for AppProcessorErrorReason {
     }
 }
 impl From<AppProcessorErrorReason> for PaymentMethodErrorReason {
-    fn from(_value: AppProcessorErrorReason) -> Self {
-        Self::ProcessorFailure
+    fn from(value: AppProcessorErrorReason) -> Self {
+        match value {
+            AppProcessorErrorReason::NotSupport | AppProcessorErrorReason::NotImplemented => {
+                Self::OperationRefuse
+            }
+            _others => Self::ProcessorFailure,
+        }
     } // TODO, finish implementation
 }
 

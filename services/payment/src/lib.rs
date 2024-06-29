@@ -26,13 +26,17 @@ pub use crate::auth::{
 };
 
 pub mod app_meta {
+    use crate::api::web::dto::PaymentCurrencyDto;
+
     pub const LABAL: &str = "payment";
     pub const RESOURCE_QUOTA_AP_CODE: u8 = 7;
+    // TODO, make it configurable parameter
+    pub const PLATFORM_FEE_AMOUNT: (u32, PaymentCurrencyDto) = (12, PaymentCurrencyDto::TWD);
 }
 pub mod hard_limit {
     pub const MAX_DB_CONNECTIONS: u32 = 1800u32;
     pub const MAX_SECONDS_DB_IDLE: u16 = 360u16;
-    pub const SECONDS_ORDERLINE_DISCARD_MARGIN: u16 = 22u16;
+    pub const SECONDS_ORDERLINE_DISCARD_MARGIN: u16 = 55u16;
     pub const CREATE_CHARGE_SECONDS_INTERVAL: u16 = 5u16;
     pub const RPC_WAIT_FOR_REPLY: u16 = 5u16;
 }

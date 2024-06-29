@@ -110,6 +110,7 @@ fn ut_orderpay_replica(mock_usr_id: u32, mock_order_id: String) -> Vec<u8> {
 
 fn ut_processor_pay_in_result() -> AppProcessorPayInResult {
     let detail = StripeCheckoutSessionRespDto {
+        id: String::new(),
         redirect_url: Some(String::new()),
         client_session: Some(String::new()),
     };

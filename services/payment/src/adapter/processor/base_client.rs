@@ -7,13 +7,11 @@ use std::sync::Arc;
 use http_body_util::BodyExt;
 use http_body_util::Full;
 use hyper::body::Bytes;
-use hyper::{Error as HyperError, Method, Request};
+use hyper::{Error as HyperError, Method, Request, StatusCode};
 // TODO, switch to http2
 use hyper::client::conn::http1::{handshake, SendRequest};
 use hyper::header::{HeaderName, HeaderValue, HOST};
 use hyper_util::rt::TokioIo;
-use serde::de::DeserializeOwned;
-use serde::ser::Serialize;
 use tokio::net::TcpStream;
 use tokio_native_tls::{native_tls, TlsConnector};
 
@@ -77,7 +75,6 @@ pub struct BaseClientError {
 
 pub(super) struct BaseClient<B> {
     req_sender: SendRequest<B>,
-    _connector: TlsConnector,
     logctx: Arc<AppLogContext>,
     host: String,
     port: u16,
@@ -132,7 +129,6 @@ where
         Ok(Self {
             // TODO, keep `io-adapter` instead of app-level request sender
             req_sender,
-            _connector: secure_connector.clone(),
             logctx,
             host,
             port,
@@ -140,10 +136,10 @@ where
         })
     } // end of fn try-build
 
-    async fn _execute<T: DeserializeOwned + Send + 'static>(
+    async fn _execute(
         &mut self,
         req: Request<B>,
-    ) -> Result<T, BaseClientError> {
+    ) -> Result<(Vec<u8>, StatusCode), BaseClientError> {
         let logctx_p = &self.logctx;
         let uri_log = req.uri().to_string();
 
@@ -197,43 +193,18 @@ where
                 uri_log
             );
         }
-        let out = serde_json::from_slice::<T>(raw_collected.as_slice()).map_err(|_e| {
-            let reason = match String::from_utf8(raw_collected) {
-                Ok(v) => BaseClientErrorReason::DeserialiseFailure(v, status_code.as_u16()),
-                Err(_e) => BaseClientErrorReason::Http {
-                    sender_closed: false,
-                    parse_error: true,
-                    req_cancelled: false,
-                    timeout: false,
-                    messasge_corrupted: true,
-                    detail: "resp-body-complete-corrupt".to_string(),
-                },
-            };
-            BaseClientError { reason }
-        })?; //TODO, deserialise in specific 3rd-party client, different processors
-             // applies different deserialisation format
-        Ok(out)
+        Ok((raw_collected, status_code))
     } // end of fn execute
 } // end of impl BaseClient
 
 impl BaseClient<Full<Bytes>> {
-    pub(super) async fn execute_form<D, S>(
+    pub(super) async fn execute_form(
         &mut self,
         path: &str,
         method: Method,
-        body_obj: &S,
+        body: Full<Bytes>,
         headers: Vec<(HeaderName, HeaderValue)>,
-    ) -> Result<D, BaseClientError>
-    where
-        D: DeserializeOwned + Send + 'static,
-        S: Serialize + Send + 'static,
-    {
-        let body = serde_qs::to_string(body_obj)
-            .map(|v| Bytes::copy_from_slice(v.as_bytes()))
-            .map(Full::new)
-            .map_err(|e| BaseClientError {
-                reason: BaseClientErrorReason::SerialiseFailure(e.to_string()),
-            })?;
+    ) -> Result<(Vec<u8>, StatusCode), BaseClientError> {
         let mut req = Request::builder()
             .method(method)
             .uri(path)
@@ -248,9 +219,9 @@ impl BaseClient<Full<Bytes>> {
                 let _old = hdr_map.insert(k, v);
             })
             .count();
-        let _discarded = hdr_map.insert(HOST, HeaderValue::from_str(self.host.as_str()).unwrap()); // required in case the 3rd-party remote server sits behind reverse proxy
-                                                                                                   // server (e.g. CDN)
-        let resp = self._execute::<D>(req).await?;
-        Ok(resp)
+        // required in case the 3rd-party remote server sits behind reverse proxy
+        // server (e.g. CDN)
+        let _discarded = hdr_map.insert(HOST, HeaderValue::from_str(self.host.as_str()).unwrap());
+        self._execute(req).await
     }
 } // end of impl BaseClient

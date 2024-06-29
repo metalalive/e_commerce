@@ -58,6 +58,7 @@ pub struct ChargeReqDto {
 
 #[derive(Serialize)]
 pub struct StripeCheckoutSessionRespDto {
+    pub id: String,
     pub redirect_url: Option<String>, // redirect to Stripe-hosted payment page
     pub client_session: Option<String>, // for Stripe.js embedded checkout
 }

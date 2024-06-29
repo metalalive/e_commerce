@@ -18,7 +18,7 @@ use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use self::client::AppStripeClient;
 use self::resources::{
-    CheckoutSession, CheckoutSessionMode, CreateCheckoutSession,
+    CheckoutSession, CheckoutSessionMode, CreateCheckoutSession, CreateCheckoutSessionLineItem,
     CreateCheckoutSessionPaymentIntentData,
 };
 use super::{AppProcessorError, AppProcessorErrorReason, AppProcessorPayInResult, BaseClientError};
@@ -29,12 +29,12 @@ use crate::api::web::dto::{
 use crate::model::{BuyerPayInState, ChargeBuyerModel};
 
 const HEADER_NAME_IDEMPOTENCY: &str = "Idempotency-Key";
+const CHECKOUT_SESSION_MIN_SECONDS: i64 = 1800;
 
 pub(super) struct AppProcessorStripeCtx {
     cfg: Arc<App3rdPartyCfg>,
     secure_connector: TlsConnectorWrapper,
     api_key: String,
-    app_fee_amount: i64,
     logctx: Arc<AppLogContext>,
 }
 
@@ -68,7 +68,6 @@ impl AppProcessorStripeCtx {
             secure_connector,
             api_key,
             logctx,
-            app_fee_amount: 12, // TODO, parameterize
         })
     } // end of fn try-build
 
@@ -120,18 +119,16 @@ impl AppProcessorStripeCtx {
             client_reference_id: format!("{}-{}", meta.owner, meta.oid),
             currency: PaymentCurrencyDto::TWD, // TODO, finish implementation
             customer: req.customer_id.clone(),
-            expires_at: meta.create_time.timestamp(),
+            expires_at: meta.create_time.timestamp() + CHECKOUT_SESSION_MIN_SECONDS,
             cancel_url: req.cancel_url.clone(),
             success_url: req.success_url.clone(),
             return_url: req.return_url.clone(),
-            line_items: vec![
-                //CreateCheckoutSessionLineItems {
-                //    price: "price_1PVbLrK1DDCwdgSi36RFYb1C".to_string(),
-                //    quantity: 3
-                //}
-            ], // TODO, finish implementation
+            line_items: meta
+                .lines
+                .iter()
+                .map(CreateCheckoutSessionLineItem::from)
+                .collect(),
             payment_intent_data: CreateCheckoutSessionPaymentIntentData {
-                application_fee_amount: self.app_fee_amount,
                 transfer_group: Some(charge_token_serial.clone()),
             },
             mode: CheckoutSessionMode::Payment,
@@ -152,7 +149,7 @@ impl AppProcessorStripeCtx {
             HeaderName::from_bytes(HEADER_NAME_IDEMPOTENCY.as_bytes()).unwrap(),
             HeaderValue::from_str(charge_token_serial.as_str()).unwrap(),
         )];
-        let _resp = _client
+        let resp = _client
             .execute_form::<CheckoutSession, CreateCheckoutSession>(
                 "/checkout/sessions",
                 Method::POST,
@@ -163,12 +160,11 @@ impl AppProcessorStripeCtx {
             .map_err(|e| AppProcessorError { reason: e.into() })?;
         let out = AppProcessorPayInResult {
             charge_id: meta.token.0.to_vec(),
-            method: PaymentMethodRespDto::Stripe(
-                StripeCheckoutSessionRespDto {
-                    redirect_url: None,
-                    client_session: None,
-                }, // TODO, finish implementation
-            ),
+            method: PaymentMethodRespDto::Stripe(StripeCheckoutSessionRespDto {
+                id: resp.id,
+                redirect_url: resp.url,
+                client_session: resp.client_secret,
+            }),
             state: BuyerPayInState::ProcessorAccepted(Utc::now()),
             completed: false,
         };
