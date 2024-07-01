@@ -27,6 +27,7 @@ from .models import (
     StoreEmail,
     StorePhone,
     OutletLocation,
+    StoreCurrency,
     StoreProfile,
     StoreStaff,
     HourOfOperation,
@@ -72,6 +73,7 @@ class OutletLocationBody(PydanticBaseModel):
 class NewStoreProfileReqBody(PydanticBaseModel):
     label: str
     supervisor_id: PositiveInt
+    currency: StoreCurrency
     active: Optional[bool] = False
     emails: Optional[List[StoreEmailBody]] = []
     phones: Optional[List[StorePhoneBody]] = []
@@ -225,6 +227,7 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
 class ExistingStoreProfileReqBody(PydanticBaseModel):
     label: str
     active: bool
+    currency: StoreCurrency
     emails: Optional[List[StoreEmailBody]] = []
     phones: Optional[List[StorePhoneBody]] = []
     location: Optional[OutletLocationBody] = None

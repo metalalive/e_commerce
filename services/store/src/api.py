@@ -349,6 +349,7 @@ def emit_event_edit_products(
     _store_id: int,
     rpc_hdlr,
     remove_all: bool = False,
+    s_currency: Optional[str] = None,
     updating: Optional[List[StoreProductAvailable]] = None,
     creating: Optional[List[StoreProductAvailable]] = None,
     deleting: Optional[dict] = None,
@@ -373,6 +374,7 @@ def emit_event_edit_products(
     )
     kwargs = {
         "s_id": _store_id,
+        "currency": s_currency,
         "rm_all": remove_all,
         "deleting": _deleting,
         "updating": [*_updating],
@@ -459,6 +461,7 @@ def edit_products_available(
         session.add_all([*new_products])
         emit_event_edit_products(
             store_id,
+            s_currency=saved_obj.currency.value,
             rpc_hdlr=shared_ctx["order_app_rpc"],
             updating=updating_products,
             creating=new_products,
@@ -516,6 +519,7 @@ def discard_store_products(
         result = _session.execute(stmt)
         emit_event_edit_products(
             store_id,
+            s_currency=saved_store.currency.value,
             rpc_hdlr=shared_ctx["order_app_rpc"],
             deleting={"items": pitems, "pkgs": ppkgs},
         )

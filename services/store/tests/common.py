@@ -23,15 +23,18 @@ from ecommerce_common.tests.common.sqlalchemy import (
 )
 
 from store.entry import app
-from store.models import EnumWeekDay, SaleableTypeEnum, AppIdGapNumberFinder
 from store.models import (
     StoreProfile,
     StoreEmail,
     StorePhone,
     OutletLocation,
     HourOfOperation,
+    StoreCurrency,
     StoreStaff,
     StoreProductAvailable,
+    EnumWeekDay,
+    SaleableTypeEnum,
+    AppIdGapNumberFinder,
 )
 
 
@@ -145,11 +148,13 @@ def session_for_setup(db_engine_resource):
 
 def _store_data_gen():
     idx = 2
+    currency_data = [c.value for c in StoreCurrency]
     while True:
         new_data = {
             "active": random.choice([True, False]),
             "label": "".join(random.choices(string.ascii_letters, k=16)),
             "supervisor_id": idx,
+            "currency": random.choice(currency_data),
             "id": None,
         }
         yield new_data

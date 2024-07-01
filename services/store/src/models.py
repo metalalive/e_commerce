@@ -122,6 +122,14 @@ class QuotaStatisticsMixin:
         return result
 
 
+class StoreCurrency(enum.Enum):
+    TWD = "TWD"
+    INR = "INR"
+    IDR = "IDR"
+    THB = "THB"
+    USD = "USD"
+
+
 # note that an organization (e.g. a company) can have several stores (either outlet or online)
 class StoreProfile(Base, QuotaStatisticsMixin):
     quota_material = _MatCodeOptions.MAX_NUM_STORES
@@ -132,6 +140,7 @@ class StoreProfile(Base, QuotaStatisticsMixin):
     # come from GenericUserProfile in user_management app
     supervisor_id = Column(MYSQL_INTEGER(unsigned=True), autoincrement=False)
     active = Column(Boolean)
+    currency = Column(sqlalchemy_enum(StoreCurrency), nullable=False)
     # bidirectional relationship has to be declared on both sides of the models
     emails = relationship(
         "StoreEmail",

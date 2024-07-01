@@ -25,7 +25,7 @@ from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
-from store.models import StoreProfile, StorePhone, StoreEmail
+from store.models import StoreProfile, StorePhone, StoreEmail, StoreCurrency
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -185,7 +185,7 @@ class TestCreation:
         result = response.json()
         assert response.status_code == 422
         for item in result["detail"]:
-            assert item["loc"][-1] in ("label", "supervisor_id")
+            assert item["loc"][-1] in ("label", "supervisor_id", "currency")
             assert item["msg"] == "Field required"
 
     @patch(
@@ -513,7 +513,11 @@ class TestUpdateContact:
         loc_data,
     ):
         obj = next(saved_store_objs)
-        body = {"label": "edited_label", "active": not obj.active}
+        body = {
+            "label": "edited_label",
+            "active": not obj.active,
+            "currency": StoreCurrency.TWD.value,
+        }
         body["emails"] = list(map(lambda e: {"addr": e.addr}, obj.emails[1:]))
         body["phones"] = list(
             map(
@@ -579,7 +583,11 @@ class TestUpdateContact:
         max_num_emails = 4
         max_num_phones = 5
         obj = next(saved_store_objs)
-        body = {"label": "edited_label", "active": not obj.active}
+        body = {
+            "label": "edited_label",
+            "active": not obj.active,
+            "currency": StoreCurrency.INR.value,
+        }
         body["emails"] = [next(email_data) for _ in range(max_num_emails + 1)]
         body["phones"] = [next(phone_data) for _ in range(max_num_phones + 1)]
         auth_data = self._auth_data_pattern
@@ -613,7 +621,11 @@ class TestUpdateContact:
 
     def test_invalid_id(self, session_for_test, keystore, test_client):
         invalid_supervisor_id = -9876
-        body = {"label": "edited label", "active": True}
+        body = {
+            "label": "edited label",
+            "active": True,
+            "currency": StoreCurrency.THB.value,
+        }
         auth_data = self._auth_data_pattern
         auth_data["id"] = invalid_supervisor_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
@@ -640,7 +652,11 @@ class TestUpdateContact:
     ):
         obj = next(saved_store_objs)
         invalid_supervisor_id = obj.supervisor_id + 9999
-        body = {"label": "edited label", "active": not obj.active}
+        body = {
+            "label": "edited label",
+            "active": not obj.active,
+            "currency": StoreCurrency.IDR.value,
+        }
         auth_data = self._auth_data_pattern
         auth_data["id"] = invalid_supervisor_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
