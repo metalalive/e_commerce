@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime, date
+from datetime import timedelta, datetime, date, UTC
 from types import GeneratorType
 import os
 import random
@@ -286,18 +286,21 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
             # telling position tell() on read file is disabled when iterating
             # each line in the file object
             for rawline in self._file:
-                if rawline == self.JSONFILE_START_LINE:
-                    prev_wr_rawline = rawline
+                # TODO / FIXME, figure out why file object returns string line even I
+                # explicitly set it to read-byte mode
+                rline = str(rawline, encoding="utf-8") if isinstance(rawline, bytes) else rawline
+                if rline == self.JSONFILE_START_LINE:
+                    prev_wr_rawline = rline
                     prev_wr_file_pos = tmp_wr_file.tell()
-                    tmp_wr_file.write(rawline)
-                elif rawline == self.JSONFILE_END_LINE:  # adjust comma in last object
+                    tmp_wr_file.write(rline)
+                elif rline == self.JSONFILE_END_LINE:  # adjust comma in last object
                     self._adjust_comma_on_flush_deletion(
                         wr_file=tmp_wr_file,
                         prev_wr_file_pos=prev_wr_file_pos,
                         prev_wr_rawline=prev_wr_rawline,
                     )
                 else:
-                    rawkey = rawline.split(":")[0]
+                    rawkey = rline.split(":")[0]
                     # assert len(rawkey) >= 2 , "the key-value pair has to be stored in one line"
                     rawkey = rawkey.strip()
                     left_quote_pos = rawkey.find(
@@ -308,11 +311,11 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
                     if key_id in self._uncommitted_delete:
                         pass  # delete the object by NOT writing the line to new file
                     else:
-                        prev_wr_rawline = rawline
+                        prev_wr_rawline = rline
                         prev_wr_file_pos = (
                             tmp_wr_file.tell()
                         )  # record current position before writing this line
-                        tmp_wr_file.write(rawline)
+                        tmp_wr_file.write(rline)
             self._add_items_on_flush(wr_file=tmp_wr_file)  # add new objects
             tmp_wr_file.write(self.JSONFILE_END_LINE)
         self._switch_files_on_flush(wr_file_path=tmp_wr_file_name)
@@ -357,7 +360,7 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
         then the whole system will use rotated crypto-key set after this
         function completes its task.
         """
-        nowtime = datetime.utcnow().isoformat()
+        nowtime = datetime.now(UTC).isoformat()
         rd_file_path = self._file.name
         rd_file_dir = os.path.dirname(rd_file_path)
         rd_file_name = os.path.basename(rd_file_path)
