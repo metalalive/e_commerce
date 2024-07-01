@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use chrono::{Duration, Local};
 use ecommerce_common::api::dto::{
-    BillingDto, ContactDto, OrderLinePayDto, PayAmountDto, PhoneNumberDto,
+    BillingDto, ContactDto, OrderLinePayDto, PayAmountDto, CurrencyDto,
+    PhoneNumberDto,
 };
 use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
 use ecommerce_common::constant::ProductType;
@@ -17,7 +18,7 @@ use payment::adapter::processor::{
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
 use payment::api::web::dto::{
-    ChargeAmountOlineDto, ChargeReqDto, PaymentCurrencyDto, PaymentMethodErrorReason,
+    ChargeAmountOlineDto, ChargeReqDto, PaymentMethodErrorReason,
     PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto,
     StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
 };
@@ -73,7 +74,7 @@ fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
             quantity: 6,
             amount: PayAmountDto { unit: 3, total: 18 },
         }],
-        currency: PaymentCurrencyDto::TWD,
+        currency: CurrencyDto::TWD,
     }
 }
 

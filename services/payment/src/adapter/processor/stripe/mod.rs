@@ -12,6 +12,7 @@ use hyper::header::{HeaderName, HeaderValue};
 use hyper::Method;
 use tokio_native_tls::{native_tls, TlsConnector as TlsConnectorWrapper};
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::App3rdPartyCfg;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
@@ -23,8 +24,7 @@ use self::resources::{
 };
 use super::{AppProcessorError, AppProcessorErrorReason, AppProcessorPayInResult, BaseClientError};
 use crate::api::web::dto::{
-    PaymentCurrencyDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto,
-    StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
+    PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
 };
 use crate::model::{BuyerPayInState, ChargeBuyerModel};
 
@@ -117,7 +117,7 @@ impl AppProcessorStripeCtx {
 
         let body_obj = CreateCheckoutSession {
             client_reference_id: format!("{}-{}", meta.owner, meta.oid),
-            currency: PaymentCurrencyDto::TWD, // TODO, finish implementation
+            currency: CurrencyDto::TWD, // TODO, finish implementation
             customer: req.customer_id.clone(),
             expires_at: meta.create_time.timestamp() + CHECKOUT_SESSION_MIN_SECONDS,
             cancel_url: req.cancel_url.clone(),

@@ -106,6 +106,44 @@ impl From<String> for CountryCode {
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Deserialize, Serialize, Clone)]
+pub enum CurrencyDto {
+    INR,
+    IDR,
+    THB,
+    TWD,
+    USD,
+    Unknown,
+}
+
+impl ToString for CurrencyDto {
+    fn to_string(&self) -> String {
+        let o = match self {
+            Self::INR => "INR",
+            Self::IDR => "IDR",
+            Self::THB => "THB",
+            Self::TWD => "TWD",
+            Self::USD => "USD",
+            Self::Unknown => "Unknown",
+        };
+        o.to_string()
+    }
+}
+
+impl From<&String> for CurrencyDto {
+    fn from(value: &String) -> Self {
+        match value.as_str() {
+            "INR" => Self::INR,
+            "IDR" => Self::IDR,
+            "THB" => Self::THB,
+            "TWD" => Self::TWD,
+            "USD" => Self::USD,
+            _others => Self::Unknown,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct PhyAddrDto {
     pub country: CountryCode,

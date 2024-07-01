@@ -26,12 +26,12 @@ pub use crate::auth::{
 };
 
 pub mod app_meta {
-    use crate::api::web::dto::PaymentCurrencyDto;
+    use ecommerce_common::api::dto::CurrencyDto;
 
     pub const LABAL: &str = "payment";
     pub const RESOURCE_QUOTA_AP_CODE: u8 = 7;
     // TODO, make it configurable parameter
-    pub const PLATFORM_FEE_AMOUNT: (u32, PaymentCurrencyDto) = (12, PaymentCurrencyDto::TWD);
+    pub const PLATFORM_FEE_AMOUNT: (u32, CurrencyDto) = (12, CurrencyDto::TWD);
 }
 pub mod hard_limit {
     pub const MAX_DB_CONNECTIONS: u32 = 1800u32;

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
     jsn_serialize_product_type, jsn_validate_product_type, GenericRangeErrorDto, PayAmountDto,
+    CurrencyDto,
 };
 use ecommerce_common::constant::ProductType;
 
@@ -25,15 +26,6 @@ pub struct StripeCheckoutSessionReqDto {
 pub enum PaymentMethodReqDto {
     Stripe(StripeCheckoutSessionReqDto),
 }
-#[allow(clippy::upper_case_acronyms)]
-#[derive(Deserialize, Serialize)]
-pub enum PaymentCurrencyDto {
-    INR,
-    IDR,
-    THB,
-    TWD,
-    USD,
-} // TODO, move to `ecommerce-common` crate
 #[derive(Deserialize)]
 pub struct ChargeAmountOlineDto {
     pub seller_id: u32,
@@ -53,7 +45,7 @@ pub struct ChargeReqDto {
     // - tax and discount
     // - currency and exchange rate should be determined on creating
     //   a new order, not payment
-    pub currency: PaymentCurrencyDto,
+    pub currency: CurrencyDto,
 }
 
 #[derive(Serialize)]

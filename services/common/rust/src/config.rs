@@ -201,7 +201,7 @@ pub struct ApiServerCfg {
     pub rpc: AppRpcCfg,
     pub auth: AppAuthCfg,
     pub confidentiality: AppConfidentialCfg,
-    pub third_parties : Option<Vec<Arc<App3rdPartyCfg>>>,
+    pub third_parties: Option<Vec<Arc<App3rdPartyCfg>>>,
 }
 
 pub struct AppBasepathCfg {

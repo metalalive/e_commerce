@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::api::web::dto::{PaymentCurrencyDto, StripeCheckoutUImodeDto};
+use ecommerce_common::api::dto::CurrencyDto;
+use crate::api::web::dto::StripeCheckoutUImodeDto;
 use crate::model::ChargeLineBuyerModel;
 
 #[derive(Deserialize)]
@@ -41,7 +42,7 @@ pub(super) struct CreateCheckoutSessionProductData {
 #[derive(Serialize)]
 pub(super) struct CreateCheckoutSessionPriceData {
     pub product_data: CreateCheckoutSessionProductData,
-    pub currency: PaymentCurrencyDto,
+    pub currency: CurrencyDto,
     pub unit_amount: u32,
 }
 
@@ -54,7 +55,7 @@ pub(super) struct CreateCheckoutSessionLineItem {
 #[derive(Serialize)]
 pub(super) struct CreateCheckoutSession {
     pub client_reference_id: String, // usr-profile-id followed by order-id
-    pub currency: PaymentCurrencyDto,
+    pub currency: CurrencyDto,
     pub customer: Option<String>, // customer-id only, expandable object not supported
     pub expires_at: i64,          // epoch time in seconds at which the checkout will expire
     pub cancel_url: Option<String>,
@@ -83,7 +84,7 @@ impl From<&ChargeLineBuyerModel> for CreateCheckoutSessionLineItem {
                 product_data: CreateCheckoutSessionProductData {
                     name: format!("{:?}", value.pid),
                 }, // TODO, load product name, save the product ID in metadata
-                currency: PaymentCurrencyDto::TWD, // TODO, should be a field from `value.amount`
+                currency: CurrencyDto::TWD, // TODO, should be a field from `value.amount`
                 unit_amount: value.amount.unit * 100, // TODO, add field for smallest unit of specific
                                                       // currency
             },
