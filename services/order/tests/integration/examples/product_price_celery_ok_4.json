@@ -1,6 +1,7 @@
 [
      [],
      {"s_id": 18830, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+      "currency": "TWD",
       "updating": [],
       "creating": [
 	  {"price": 126, "start_after": "2023-09-04T09:11:13+08:00", "product_type": 1,

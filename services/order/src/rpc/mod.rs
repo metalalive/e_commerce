@@ -44,8 +44,15 @@ pub(crate) fn build_context(
                 Err(e)
             }
         }
+        AppRpcCfg::Mock(_c) => {
+            let e = AppError {
+                code: AppErrorCode::NotImplemented,
+                detail: Some("rpc-mock-build".to_string()),
+            };
+            Err(e)
+        }
     }
-}
+} // end of fn build-context
 
 pub type AppRpcRouteHdlrFn =
     fn(

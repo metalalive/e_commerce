@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::AppLogContext;
@@ -78,6 +79,7 @@ fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
     vec![
         ProductPriceModelSet {
             store_id: 51,
+            currency: CurrencyDto::THB,
             items: vec![
                 ProductPriceModel {
                     product_type: ProductType::Item,
@@ -119,6 +121,7 @@ fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
         },
         ProductPriceModelSet {
             store_id: 52,
+            currency: CurrencyDto::TWD,
             items: vec![
                 ProductPriceModel {
                     product_type: ProductType::Item,

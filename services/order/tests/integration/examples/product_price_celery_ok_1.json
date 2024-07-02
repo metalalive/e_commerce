@@ -1,6 +1,7 @@
 [
     [],
     {"s_id": 1178913994, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+     "currency": "IDR",
      "updating": [],
      "creating": [
          {"price": 109, "start_after": "2021-09-01T06:53:40+05:20", "product_type": 2,

@@ -2,6 +2,7 @@ use chrono::DateTime;
 use std::vec;
 use std::vec::Vec;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -122,9 +123,10 @@ fn setup_expect_updated_items() -> Vec<ProductPriceModel> {
 
 #[test]
 fn update_instance_ok() {
-    let (store_id, saved) = (1234, setup_mocked_saved_items());
+    let (store_id, currency, saved) = (1234, CurrencyDto::USD, setup_mocked_saved_items());
     let ms = ProductPriceModelSet {
         store_id,
+        currency,
         items: saved,
     };
     let data_update = vec![
@@ -175,10 +177,11 @@ fn update_instance_ok() {
                 .into(),
         },
     ];
-    let result = ms.update(data_update, data_create);
+    let result = ms.update(data_update, data_create, CurrencyDto::TWD);
     assert_eq!(result.is_ok(), true);
     let actual_ms = result.unwrap();
     assert_eq!(actual_ms.items.len(), 6);
+    assert!(matches!(actual_ms.currency, CurrencyDto::TWD));
     let expect_ms = setup_expect_updated_items();
     // it might not be worthy implementing all traits required by HashSet just for test,
     // in this test, check equality by the nested loop
@@ -199,9 +202,10 @@ fn update_instance_ok() {
 
 #[test]
 fn update_instance_error() {
-    let (store_id, saved) = (1234, setup_mocked_saved_items());
+    let (store_id, currency, saved) = (1234, CurrencyDto::IDR, setup_mocked_saved_items());
     let ms = ProductPriceModelSet {
         store_id,
+        currency,
         items: saved,
     };
     let data_update = vec![
@@ -229,7 +233,7 @@ fn update_instance_error() {
         }, // this will cause error
     ];
     let data_create = vec![];
-    let result = ms.update(data_update, data_create);
+    let result = ms.update(data_update, data_create, CurrencyDto::IDR);
     assert_eq!(result.is_err(), true);
     if let Err(e) = result {
         assert_eq!(e.code, AppErrorCode::InvalidInput);

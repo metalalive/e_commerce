@@ -2,6 +2,7 @@ use chrono::DateTime;
 use std::boxed::Box;
 use std::vec;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -93,6 +94,7 @@ async fn in_mem_save_fetch_ok_1() {
         let items = pprice_data[..3].iter().map(ut_clone_productprice).collect();
         ProductPriceModelSet {
             store_id: mocked_store_id,
+            currency: CurrencyDto::TWD,
             items,
         }
     };
@@ -135,6 +137,7 @@ async fn in_mem_save_fetch_ok_1() {
         let items = pprice_data[3..].iter().map(ut_clone_productprice).collect();
         ProductPriceModelSet {
             store_id: mocked_store_id,
+            currency: CurrencyDto::TWD,
             items,
         }
     };
@@ -183,6 +186,7 @@ async fn in_mem_save_fetch_ok_2() {
             .collect();
         ProductPriceModelSet {
             store_id: mocked_store_id,
+            currency: CurrencyDto::USD,
             items,
         }
     };
@@ -208,6 +212,7 @@ async fn in_mem_save_fetch_ok_2() {
             }
         });
         assert_eq!(exists.unwrap(), &pprice_data[4]);
+        assert!(matches!(fetched.currency, CurrencyDto::USD));
     }
     // --------
     let new_5th_elm = ProductPriceModel {
@@ -225,6 +230,7 @@ async fn in_mem_save_fetch_ok_2() {
         ];
         ProductPriceModelSet {
             store_id: mocked_store_id,
+            currency: CurrencyDto::USD,
             items,
         }
     };
@@ -243,6 +249,7 @@ async fn in_mem_save_fetch_ok_2() {
         let actual = exists.unwrap();
         assert_eq!(actual, &new_5th_elm);
         assert_ne!(actual, &pprice_data[5]);
+        assert!(matches!(fetched.currency, CurrencyDto::USD));
     }
 } // end of fn in_mem_save_fetch_ok_2
 
@@ -258,6 +265,7 @@ async fn in_mem_save_fetch_ok_3() {
                 .map(ut_clone_productprice)
                 .collect();
             ProductPriceModelSet {
+                currency: CurrencyDto::TWD,
                 store_id: mocked_store_ids[0],
                 items,
             }
@@ -270,6 +278,7 @@ async fn in_mem_save_fetch_ok_3() {
                 .map(ut_clone_productprice)
                 .collect();
             ProductPriceModelSet {
+                currency: CurrencyDto::IDR,
                 store_id: mocked_store_ids[1],
                 items,
             }
@@ -296,6 +305,7 @@ async fn in_mem_save_fetch_ok_3() {
         let result = fetched.iter().find(|d| d.store_id == mocked_store_ids[0]);
         assert!(result.is_some());
         if let Some(ppset) = result {
+            assert!(matches!(ppset.currency, CurrencyDto::TWD));
             assert_eq!(ppset.items.len(), 2);
             let pp = ppset
                 .items
@@ -306,6 +316,7 @@ async fn in_mem_save_fetch_ok_3() {
         let result = fetched.iter().find(|d| d.store_id == mocked_store_ids[1]);
         assert!(result.is_some());
         if let Some(ppset) = result {
+            assert!(matches!(ppset.currency, CurrencyDto::IDR));
             assert_eq!(ppset.items.len(), 3);
         }
     }
@@ -316,6 +327,7 @@ async fn in_mem_save_empty_input() {
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(4).await;
     let ppset = ProductPriceModelSet {
         store_id: 1234,
+        currency: CurrencyDto::IDR,
         items: Vec::new(),
     };
     let result = repo.save(ppset).await;
@@ -332,6 +344,7 @@ async fn in_mem_save_dstore_error() {
         let item = ut_clone_productprice(&pprice_data[0]);
         ProductPriceModelSet {
             store_id: mocked_store_id,
+            currency: CurrencyDto::THB,
             items: vec![item],
         }
     };
@@ -361,6 +374,7 @@ async fn in_mem_delete_subset_ok() {
         let items = pprice_data.iter().map(ut_clone_productprice).collect();
         ProductPriceModelSet {
             store_id: mocked_store_id,
+            currency: CurrencyDto::INR,
             items,
         }
     };
@@ -383,6 +397,7 @@ async fn in_mem_delete_subset_ok() {
     let result = repo.fetch(mocked_store_id, fetching_ids).await;
     assert!(result.is_ok());
     if let Ok(fetched) = result {
+        assert!(matches!(fetched.currency, CurrencyDto::INR));
         assert_eq!(fetched.items.len(), 0);
     }
     let fetching_ids = vec![
@@ -395,6 +410,7 @@ async fn in_mem_delete_subset_ok() {
     let result = repo.fetch(mocked_store_id, fetching_ids).await;
     assert!(result.is_ok());
     if let Ok(fetched) = result {
+        assert!(matches!(fetched.currency, CurrencyDto::INR));
         assert_eq!(fetched.items.len(), 5);
     }
 } // end of fn in_mem_delete_subset_ok
@@ -421,12 +437,14 @@ async fn in_mem_delete_all_ok() {
     let repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(15).await;
     let ppset = ProductPriceModelSet {
         store_id: mocked_store_ids[0],
+        currency: CurrencyDto::USD,
         items: pprice_data[..4].iter().map(ut_clone_productprice).collect(),
     };
     let result = repo.save(ppset).await;
     assert!(result.is_ok());
     let ppset = ProductPriceModelSet {
         store_id: mocked_store_ids[1],
+        currency: CurrencyDto::TWD,
         items: pprice_data[4..].iter().map(ut_clone_productprice).collect(),
     };
     let result = repo.save(ppset).await;
@@ -446,9 +464,10 @@ async fn in_mem_delete_all_ok() {
     let result = repo.delete_all(deleting_id).await;
     assert!(result.is_ok());
     let result = repo.fetch(deleting_id, fetching_ids).await;
-    assert!(result.is_ok());
-    if let Ok(fetched) = result {
-        assert_eq!(fetched.items.len(), 0);
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::ProductNotExist);
+        assert_eq!(e.detail.unwrap().as_str(), "missing-store");
     }
     let fetching_ids = vec![
         (ProductType::Item, 1005),
@@ -458,6 +477,7 @@ async fn in_mem_delete_all_ok() {
     let result = repo.fetch(mocked_store_ids[1], fetching_ids).await;
     assert!(result.is_ok());
     if let Ok(fetched) = result {
+        assert!(matches!(fetched.currency, CurrencyDto::TWD));
         assert_eq!(fetched.items.len(), 3);
     }
 } // end of fn in_mem_delete_all_ok

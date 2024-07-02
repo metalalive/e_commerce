@@ -1,6 +1,7 @@
 [
      [],
      {"s_id": 1009, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+      "currency": "TWD",
       "updating": [],
       "creating": [
 	  {"price": 125, "start_after": "2021-08-23T23:30:16+06:35", "product_type": 2,

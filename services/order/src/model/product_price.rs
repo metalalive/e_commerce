@@ -4,6 +4,7 @@ use std::cmp::{Eq, PartialEq};
 use std::result::Result as DefaultResult;
 use std::vec::Vec;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -32,6 +33,7 @@ impl PartialEq for ProductPriceModel {
 
 pub struct ProductPriceModelSet {
     pub store_id: u32,
+    pub currency: CurrencyDto,
     pub items: Vec<ProductPriceModel>,
 }
 
@@ -40,6 +42,7 @@ impl ProductPriceModelSet {
         mut self,
         updating: Vec<ProductPriceEditDto>,
         creating: Vec<ProductPriceEditDto>,
+        new_currency: CurrencyDto,
     ) -> DefaultResult<Self, AppError> {
         let num_updated = updating
             .iter()
@@ -76,6 +79,7 @@ impl ProductPriceModelSet {
             })
             .collect();
         self.items.append(&mut new_items);
+        self.currency = new_currency;
         Ok(self)
     } // end of fn update
 } // end of impl ProductPriceModelSet

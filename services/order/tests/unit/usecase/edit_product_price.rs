@@ -7,6 +7,7 @@ use std::vec;
 use async_trait::async_trait;
 use chrono::DateTime;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -53,6 +54,7 @@ impl AbsProductPriceRepo for MockRepository {
         match &self._mocked_fetch {
             Ok(m) => Ok(ProductPriceModelSet {
                 store_id: m.store_id,
+                currency: m.currency.clone(),
                 items: self._clone_fetched_items(&m.items),
             }),
             Err(e) => Err(e.clone()),
@@ -123,9 +125,10 @@ impl MockRepository {
 async fn create_ok() {
     let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
-    let mocked_store_id = 12345;
+    let (mocked_store_id, mocked_currency) = (12345, CurrencyDto::TWD);
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
+        currency: mocked_currency.clone(),
         items: Vec::new(),
     };
     let mut repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
@@ -156,6 +159,7 @@ async fn create_ok() {
     let data = ProductPriceDto {
         s_id: mocked_store_id,
         rm_all: false,
+        currency: Some(mocked_currency),
         deleting: ProductPriceDeleteDto {
             items: None,
             pkgs: None,
@@ -174,9 +178,10 @@ async fn create_ok() {
 async fn update_ok() {
     let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
-    let mocked_store_id = 12345;
+    let (mocked_store_id, mocked_currency) = (12345, CurrencyDto::USD);
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
+        currency: mocked_currency.clone(),
         items: vec![
             ProductPriceModel {
                 price: 1009,
@@ -256,6 +261,7 @@ async fn update_ok() {
     let data = ProductPriceDto {
         s_id: mocked_store_id,
         rm_all: false,
+        currency: Some(mocked_currency),
         deleting: ProductPriceDeleteDto {
             items: None,
             pkgs: None,
@@ -278,6 +284,7 @@ async fn fetch_error() {
     let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-1");
+    let mocked_currency = CurrencyDto::THB;
     let repo = MockRepository::_new(
         Ok(()),
         Ok(()),
@@ -301,6 +308,7 @@ async fn fetch_error() {
     let data = ProductPriceDto {
         s_id: mocked_store_id,
         rm_all: false,
+        currency: Some(mocked_currency),
         deleting: ProductPriceDeleteDto {
             items: None,
             pkgs: None,
@@ -324,8 +332,10 @@ async fn save_error() {
     let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-2");
+    let mocked_currency = CurrencyDto::TWD;
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
+        currency: mocked_currency.clone(),
         items: vec![ProductPriceModel {
             is_create: false,
             price: 4810,
@@ -362,6 +372,7 @@ async fn save_error() {
     let data = ProductPriceDto {
         s_id: mocked_store_id,
         rm_all: false,
+        currency: Some(mocked_currency),
         deleting: ProductPriceDeleteDto {
             items: None,
             pkgs: None,
@@ -388,12 +399,14 @@ async fn delete_subset_ok() {
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
+        currency: CurrencyDto::IDR,
         items: Vec::new(),
     };
     let repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
     let data = ProductPriceDto {
         s_id: mocked_store_id,
         rm_all: false,
+        currency: None,
         deleting: ProductPriceDeleteDto {
             item_type: ProductType::Item,
             pkg_type: ProductType::Package,
@@ -414,6 +427,7 @@ async fn delete_subset_error() {
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-1");
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
+        currency: CurrencyDto::INR,
         items: Vec::new(),
     };
     let repo = MockRepository::_new(
@@ -427,6 +441,7 @@ async fn delete_subset_error() {
     );
     let data = ProductPriceDto {
         s_id: mocked_store_id,
+        currency: None,
         rm_all: false,
         deleting: ProductPriceDeleteDto {
             item_type: ProductType::Item,
@@ -453,12 +468,14 @@ async fn delete_all_ok() {
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {
         store_id: mocked_store_id,
+        currency: CurrencyDto::USD,
         items: Vec::new(),
     };
     let repo = MockRepository::_new(Ok(()), Ok(()), Ok(mocked_ppset), Ok(()));
     let data = ProductPriceDto {
         s_id: mocked_store_id,
         rm_all: true,
+        currency: None,
         deleting: ProductPriceDeleteDto {
             items: None,
             pkgs: None,

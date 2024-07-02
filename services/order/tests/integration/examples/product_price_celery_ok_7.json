@@ -1,6 +1,7 @@
 [
      [],
      {"s_id": 1007, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+      "currency": "USD",
       "updating": [],
       "creating": [
 	  {"price": 89, "start_after": "2021-05-31T09:30:35+07:30", "product_type": 2,

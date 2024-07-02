@@ -5,7 +5,7 @@ use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
-    jsn_serialize_product_type, jsn_validate_product_type, PayAmountDto,
+    jsn_serialize_product_type, jsn_validate_product_type, CurrencyDto, PayAmountDto,
 };
 use ecommerce_common::constant::ProductType;
 
@@ -39,6 +39,7 @@ pub struct ProductPriceEditDto {
 pub struct ProductPriceDto {
     pub s_id: u32, // store ID
     pub rm_all: bool,
+    pub currency: Option<CurrencyDto>,
     pub deleting: ProductPriceDeleteDto,
     pub updating: Vec<ProductPriceEditDto>,
     pub creating: Vec<ProductPriceEditDto>,
@@ -154,7 +155,7 @@ pub struct OrderLinePaidUpdateDto {
     pub product_id: u64,
     #[serde(deserialize_with = "jsn_validate_product_type")]
     pub product_type: ProductType,
-    pub time: DateTime<FixedOffset>, // TODO, move to `OrderPaymentUpdateDto`
+    pub time: DateTime<FixedOffset>, // TODO, (1) change to UTC time zone, (2) move to `OrderPaymentUpdateDto`
     pub qty: u32,
 }
 

@@ -1,4 +1,5 @@
 use std::boxed::Box;
+use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
@@ -6,16 +7,19 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::DateTime;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use super::super::AbsProductPriceRepo;
 use crate::api::rpc::dto::ProductPriceDeleteDto;
-use crate::datastore::{AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemFetchKeys};
+use crate::datastore::{
+    AbsDStoreFilterKeyOp, AbstInMemoryDStore, AppInMemFetchKeys, AppInMemFetchedSingleTable,
+};
 use crate::error::AppError;
 use crate::model::{ProductPriceModel, ProductPriceModelSet};
 
-const TABLE_LABEL: &str = "product_price";
+const TABLE_LABELS: [&str; 2] = ["store_meta", "product_price"];
 
 enum InMemColIdx {
     Price,
@@ -64,6 +68,52 @@ impl InnerDStoreFilterKeyOp {
     }
 }
 
+struct UpdateMetaArgs(AppInMemFetchedSingleTable);
+struct UpdateProductItemArgs(AppInMemFetchedSingleTable);
+
+impl From<(u32, CurrencyDto)> for UpdateMetaArgs {
+    fn from(value: (u32, CurrencyDto)) -> Self {
+        let (store_id, currency) = value;
+        let key = store_id.to_string();
+        let row = vec![currency.to_string()];
+        let inner = HashMap::from([(key, row)]);
+        Self(inner)
+    }
+}
+
+impl From<(u32, Vec<ProductPriceModel>)> for UpdateProductItemArgs {
+    fn from(value: (u32, Vec<ProductPriceModel>)) -> Self {
+        let (store_id, items) = value;
+        let kv_pairs = items.iter().map(|m| {
+            let (store_id, product_id) = (store_id, m.product_id);
+            let prod_typ_num: u8 = m.product_type.clone().into();
+            let pkey = format!("{store_id}-{prod_typ_num}-{product_id}");
+            // manually allocate space in advance, instead of `Vec::with_capacity`
+            let mut row = (0..InMemColIdx::TotNumColumns.into())
+                .map(|_n| String::new())
+                .collect::<Vec<String>>();
+            let _ = [
+                // so the order of columns can be arbitrary
+                (InMemColIdx::SellerId, store_id.to_string()),
+                (InMemColIdx::Price, m.price.to_string()),
+                (InMemColIdx::ProductType, prod_typ_num.to_string()),
+                (InMemColIdx::ProductId, m.product_id.to_string()),
+                (InMemColIdx::StartAfter, m.start_after.to_rfc3339()),
+                (InMemColIdx::EndBefore, m.end_before.to_rfc3339()),
+            ]
+            .into_iter()
+            .map(|(idx, val)| {
+                let idx: usize = idx.into();
+                row[idx] = val;
+            })
+            .collect::<Vec<()>>();
+            (pkey, row)
+        });
+        let inner = HashMap::from_iter(kv_pairs);
+        Self(inner)
+    }
+} // end of impl UpdateProductItemArgs
+
 pub struct ProductPriceInMemRepo {
     datastore: Arc<Box<dyn AbstInMemoryDStore>>,
 }
@@ -74,10 +124,11 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         let op = InnerDStoreFilterKeyOp::new(store_id);
         let filtered = self
             .datastore
-            .filter_keys(TABLE_LABEL.to_string(), &op)
+            .filter_keys(TABLE_LABELS[1].to_string(), &op)
             .await?;
         let mut allkeys = HashMap::new();
-        allkeys.insert(TABLE_LABEL.to_string(), filtered);
+        allkeys.insert(TABLE_LABELS[1].to_string(), filtered);
+        allkeys.insert(TABLE_LABELS[0].to_string(), vec![store_id.to_string()]);
         self._delete_common(allkeys).await
     }
 
@@ -100,7 +151,7 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         } else {
             let allkeys = self.gen_id_keys(store_id, _ids);
             let mut h = HashMap::new();
-            h.insert(TABLE_LABEL.to_string(), allkeys);
+            h.insert(TABLE_LABELS[1].to_string(), allkeys);
             self._delete_common(h).await
         }
     }
@@ -112,10 +163,19 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
     ) -> Result<ProductPriceModelSet, AppError> {
         let allkeys = self.gen_id_keys(store_id, ids);
         let mut info = HashMap::new();
-        info.insert(TABLE_LABEL.to_string(), allkeys);
-        let items = self._fetch(info).await?;
+        info.insert(TABLE_LABELS[0].to_string(), vec![store_id.to_string()]);
+        info.insert(TABLE_LABELS[1].to_string(), allkeys);
+        let (meta, items) = self._fetch(info).await?;
+        let currency = meta.get(&store_id).map(|d| d.0.clone()).ok_or(AppError {
+            code: AppErrorCode::ProductNotExist,
+            detail: Some("missing-store".to_string()),
+        })?;
         let items = items.into_iter().map(|(_seller_id, obj)| obj).collect();
-        let obj = ProductPriceModelSet { items, store_id };
+        let obj = ProductPriceModelSet {
+            items,
+            store_id,
+            currency,
+        };
         Ok(obj)
     } // end of fn fetch
 
@@ -124,7 +184,8 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
         ids: Vec<(u32, ProductType, u64)>,
     ) -> DefaultResult<Vec<ProductPriceModelSet>, AppError> {
         let info = {
-            let allkeys = ids
+            let allkeys4meta = ids.iter().map(|id| id.0.to_string()).collect();
+            let allkeys4item = ids
                 .into_iter()
                 .map(|id| {
                     let mut r = self.gen_id_keys(id.0, vec![(id.1, id.2)]);
@@ -133,10 +194,11 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
                 })
                 .collect();
             let mut a = HashMap::new();
-            a.insert(TABLE_LABEL.to_string(), allkeys);
+            a.insert(TABLE_LABELS[0].to_string(), allkeys4meta);
+            a.insert(TABLE_LABELS[1].to_string(), allkeys4item);
             a
         };
-        let items = self._fetch(info).await?;
+        let (meta, items) = self._fetch(info).await?;
         let mut modelmap = HashMap::new();
         let _ = items
             .into_iter()
@@ -144,8 +206,10 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
                 let mset = if let Some(m) = modelmap.get_mut(&seller_id) {
                     m
                 } else {
+                    let meta_item = meta.get(&seller_id).unwrap();
                     let m = ProductPriceModelSet {
                         store_id: seller_id,
+                        currency: meta_item.0.clone(),
                         items: vec![],
                     };
                     modelmap.insert(seller_id, m);
@@ -153,7 +217,7 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
                 };
                 mset.items.push(model)
             })
-            .collect::<Vec<()>>();
+            .collect::<Vec<_>>();
         let out = modelmap.into_values().collect();
         Ok(out)
     } // end of fn fetch_many
@@ -165,34 +229,16 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
                 detail: Some("save ProductPriceModel".to_string()),
             });
         }
-        let kv_pairs = ppset.items.iter().map(|m| {
-            let (store_id, product_id) = (ppset.store_id, m.product_id);
-            let prod_typ_num: u8 = m.product_type.clone().into();
-            let pkey = format!("{store_id}-{prod_typ_num}-{product_id}");
-            // manually allocate space in advance, instead of `Vec::with_capacity`
-            let mut row = (0..InMemColIdx::TotNumColumns.into())
-                .map(|_n| String::new())
-                .collect::<Vec<String>>();
-            let _ = [
-                // so the order of columns can be arbitrary
-                (InMemColIdx::SellerId, ppset.store_id.to_string()),
-                (InMemColIdx::Price, m.price.to_string()),
-                (InMemColIdx::ProductType, prod_typ_num.to_string()),
-                (InMemColIdx::ProductId, m.product_id.to_string()),
-                (InMemColIdx::StartAfter, m.start_after.to_rfc3339()),
-                (InMemColIdx::EndBefore, m.end_before.to_rfc3339()),
-            ]
-            .into_iter()
-            .map(|(idx, val)| {
-                let idx: usize = idx.into();
-                row[idx] = val;
-            })
-            .collect::<Vec<()>>();
-            (pkey, row)
-        });
-        let rows = HashMap::from_iter(kv_pairs);
+        let ProductPriceModelSet {
+            store_id,
+            currency,
+            items,
+        } = ppset;
         let mut data = HashMap::new();
-        data.insert(TABLE_LABEL.to_string(), rows);
+        let rows = UpdateProductItemArgs::from((store_id, items)).0;
+        data.insert(TABLE_LABELS[1].to_string(), rows);
+        let rows = UpdateMetaArgs::from((store_id, currency)).0;
+        data.insert(TABLE_LABELS[0].to_string(), rows);
         let _num = self.datastore.save(data).await?;
         Ok(())
     } // end of fn save
@@ -200,7 +246,9 @@ impl AbsProductPriceRepo for ProductPriceInMemRepo {
 
 impl ProductPriceInMemRepo {
     pub async fn new(m: Arc<Box<dyn AbstInMemoryDStore>>) -> DefaultResult<Self, AppError> {
-        m.create_table(TABLE_LABEL).await?;
+        for label in TABLE_LABELS {
+            m.create_table(label).await?;
+        }
         Ok(Self {
             datastore: m.clone(),
         })
@@ -217,9 +265,26 @@ impl ProductPriceInMemRepo {
     async fn _fetch(
         &self,
         ids: HashMap<String, Vec<String>>,
-    ) -> Result<Vec<(u32, ProductPriceModel)>, AppError> {
-        let result_raw = self.datastore.fetch(ids).await?;
-        let out = if let Some(t) = result_raw.get(TABLE_LABEL) {
+    ) -> Result<
+        (
+            HashMap<u32, (CurrencyDto,), RandomState>,
+            Vec<(u32, ProductPriceModel)>,
+        ),
+        AppError,
+    > {
+        let mut result_raw = self.datastore.fetch(ids).await?;
+        let meta_raw = result_raw.remove(TABLE_LABELS[0]).ok_or(AppError {
+            code: AppErrorCode::DataTableNotExist,
+            detail: Some(TABLE_LABELS[0].to_string()),
+        })?;
+        let meta_iter = meta_raw.into_iter().map(|(key, row)| {
+            let seller_id = key.parse::<u32>().unwrap();
+            let currency_raw = row.get(0usize).unwrap();
+            let currency = CurrencyDto::from(currency_raw);
+            (seller_id, (currency,))
+        });
+        let meta = HashMap::from_iter(meta_iter);
+        let pitems = if let Some(t) = result_raw.remove(TABLE_LABELS[1]) {
             // TODO, reliability check
             t.iter()
                 .map(|(_key, row)| {
@@ -262,7 +327,7 @@ impl ProductPriceInMemRepo {
         } else {
             Vec::new()
         };
-        Ok(out)
+        Ok((meta, pitems))
     } // end of fn _fetch
 
     async fn _delete_common(&self, keys: AppInMemFetchKeys) -> Result<(), AppError> {

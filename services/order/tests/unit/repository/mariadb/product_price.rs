@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use chrono::DateTime;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -102,6 +103,8 @@ fn ut_pprice_data() -> [ProductPriceModel; 10] {
 #[cfg(feature = "mariadb")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn save_fetch_ok() {
+    use ecommerce_common::api::dto::CurrencyDto;
+
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
     let data = ut_pprice_data();
@@ -110,7 +113,11 @@ async fn save_fetch_ok() {
         .iter()
         .map(ut_clone_productprice)
         .collect::<Vec<_>>();
-    let mset = ProductPriceModelSet { store_id, items };
+    let mset = ProductPriceModelSet {
+        store_id,
+        items,
+        currency: CurrencyDto::TWD,
+    }; // TODO
     let result = repo.save(mset).await;
     assert!(result.is_ok());
     let result = repo
@@ -153,7 +160,11 @@ async fn save_fetch_ok() {
         .iter()
         .map(ut_clone_productprice)
         .collect::<Vec<_>>();
-    let mset = ProductPriceModelSet { store_id, items };
+    let mset = ProductPriceModelSet {
+        store_id,
+        items,
+        currency: CurrencyDto::TWD,
+    }; // TODO
     let result = repo.save(mset).await;
     assert!(result.is_ok());
     let result = repo
@@ -236,7 +247,11 @@ async fn save_insert_dup() {
         .iter()
         .map(ut_clone_productprice)
         .collect::<Vec<_>>();
-    let mset = ProductPriceModelSet { store_id, items };
+    let mset = ProductPriceModelSet {
+        store_id,
+        items,
+        currency: CurrencyDto::TWD,
+    };
     let result = repo.save(mset).await;
     if let Err(e) = result.as_ref() {
         println!("[unit-test] error : {:?}", e);
@@ -248,7 +263,11 @@ async fn save_insert_dup() {
             .iter()
             .map(ut_clone_productprice)
             .collect::<Vec<_>>();
-        let mset = ProductPriceModelSet { store_id, items };
+        let mset = ProductPriceModelSet {
+            store_id,
+            items,
+            currency: CurrencyDto::TWD,
+        };
         let result = repo.save(mset).await;
         assert!(result.is_err());
         if let Err(e) = result {
@@ -273,7 +292,11 @@ async fn ut_delete_common_setup(store_id: u32, repo: Arc<Box<dyn AbsProductPrice
             .iter()
             .map(ut_clone_productprice)
             .collect::<Vec<_>>();
-        ProductPriceModelSet { store_id, items }
+        ProductPriceModelSet {
+            store_id,
+            items,
+            currency: CurrencyDto::TWD,
+        } // TODO
     };
     let result = repo.save(mset).await;
     assert!(result.is_ok());

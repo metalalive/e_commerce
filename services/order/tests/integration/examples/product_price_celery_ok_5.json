@@ -1,6 +1,7 @@
 [
      [],
      {"s_id": 1006, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+      "currency": "THB",
       "updating": [],
       "creating": [
 	  {"price": 115, "start_after": "2021-05-31T09:30:35+07:30", "product_type": 1,
