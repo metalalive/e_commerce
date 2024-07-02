@@ -279,15 +279,15 @@ impl ProductPriceInMemRepo {
         })?;
         let meta_iter = meta_raw.into_iter().map(|(key, row)| {
             let seller_id = key.parse::<u32>().unwrap();
-            let currency_raw = row.get(0usize).unwrap();
+            let currency_raw = row.first().unwrap();
             let currency = CurrencyDto::from(currency_raw);
             (seller_id, (currency,))
         });
         let meta = HashMap::from_iter(meta_iter);
         let pitems = if let Some(t) = result_raw.remove(TABLE_LABELS[1]) {
             // TODO, reliability check
-            t.iter()
-                .map(|(_key, row)| {
+            t.values()
+                .map(|row| {
                     let prod_typ_num: u8 = row
                         .get::<usize>(InMemColIdx::ProductType.into())
                         .unwrap()

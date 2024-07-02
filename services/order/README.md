@@ -106,7 +106,7 @@ cargo  fmt
 
 ### Linter
 ```shell
-cargo  clippy
+cargo  clippy  --features "mariadb amqprs"
 ```
 - the feature options above are also available in the linter
 

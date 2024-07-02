@@ -212,14 +212,14 @@ async fn fetch_empty() {
     let repo = app_repo_product_price(ds).await.unwrap();
     let store_id = 123;
     let result = repo.fetch(store_id, vec![]).await;
-    assert!(result.is_ok());
-    if let Ok(ms) = result {
-        assert_eq!(ms.items.len(), 0);
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::ProductNotExist);
     }
     let result = repo.fetch_many(vec![]).await;
-    assert!(result.is_ok());
-    if let Ok(ms) = result {
-        assert_eq!(ms.len(), 0);
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::ProductNotExist);
     }
     let result = repo
         .fetch(
@@ -227,9 +227,9 @@ async fn fetch_empty() {
             vec![(ProductType::Item, 2005), (ProductType::Package, 2002)],
         )
         .await;
-    assert!(result.is_ok());
-    if let Ok(ms) = result {
-        assert_eq!(ms.items.len(), 0);
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::ProductNotExist);
     }
 }
 
@@ -285,7 +285,12 @@ async fn save_insert_dup() {
     assert!(is_dup_err);
 }
 
-async fn ut_delete_common_setup(store_id: u32, repo: Arc<Box<dyn AbsProductPriceRepo>>) {
+#[cfg(feature = "mariadb")]
+async fn ut_delete_common_setup(
+    store_id: u32,
+    currency: CurrencyDto,
+    repo: Arc<Box<dyn AbsProductPriceRepo>>,
+) {
     let data = ut_pprice_data();
     let mset = {
         let items = data[..7]
@@ -295,8 +300,8 @@ async fn ut_delete_common_setup(store_id: u32, repo: Arc<Box<dyn AbsProductPrice
         ProductPriceModelSet {
             store_id,
             items,
-            currency: CurrencyDto::TWD,
-        } // TODO
+            currency,
+        }
     };
     let result = repo.save(mset).await;
     assert!(result.is_ok());
@@ -323,8 +328,8 @@ async fn delete_some_ok() {
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
     let repo = Arc::new(repo);
-    ut_delete_common_setup(125, repo.clone()).await;
-    ut_delete_common_setup(126, repo.clone()).await;
+    ut_delete_common_setup(125, CurrencyDto::TWD, repo.clone()).await;
+    ut_delete_common_setup(126, CurrencyDto::IDR, repo.clone()).await;
     let pids = ProductPriceDeleteDto {
         items: Some(vec![1007, 1005]),
         pkgs: Some(vec![1004, 1002]),
@@ -388,8 +393,8 @@ async fn delete_all_ok() {
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
     let repo = Arc::new(repo);
-    ut_delete_common_setup(127, repo.clone()).await;
-    ut_delete_common_setup(128, repo.clone()).await;
+    ut_delete_common_setup(127, CurrencyDto::USD, repo.clone()).await;
+    ut_delete_common_setup(128, CurrencyDto::INR, repo.clone()).await;
     let result = repo.delete_all(128).await;
     assert!(result.is_ok());
     let pids = vec![
@@ -401,9 +406,9 @@ async fn delete_all_ok() {
         (ProductType::Package, 1006),
     ];
     let result = repo.fetch(128, pids.clone()).await;
-    assert!(result.is_ok());
-    if let Ok(ms) = result {
-        assert!(ms.items.is_empty());
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert_eq!(e.code, AppErrorCode::ProductNotExist);
     }
     let result = repo.fetch(127, pids).await;
     assert!(result.is_ok());
@@ -418,8 +423,8 @@ async fn fetch_many_ok() {
     let ds = dstore_ctx_setup();
     let repo = app_repo_product_price(ds).await.unwrap();
     let repo = Arc::new(repo);
-    ut_delete_common_setup(129, repo.clone()).await;
-    ut_delete_common_setup(130, repo.clone()).await;
+    ut_delete_common_setup(129, CurrencyDto::THB, repo.clone()).await;
+    ut_delete_common_setup(130, CurrencyDto::TWD, repo.clone()).await;
     let pids = vec![
         (129, ProductType::Item, 1005),
         (130, ProductType::Package, 1004),

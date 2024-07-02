@@ -497,5 +497,22 @@
     <changeSet id="tag_version_0.1.5" author="T.H.">
         <tagDatabase tag="0.1.5" />
     </changeSet>
+    <changeSet id="add__seller_price_meta" author="T.H.">
+        <comment>
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `seller_price_meta` (
+                `id`         INT UNSIGNED NOT NULL PRIMARY KEY,
+                `currency`   ENUM('IDR', 'INR', 'TWD', 'THB', 'USD') NOT NULL 
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `seller_price_meta`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.1.6" author="T.H.">
+        <tagDatabase tag="0.1.6" />
+    </changeSet>
 </databaseChangeLog>
 
