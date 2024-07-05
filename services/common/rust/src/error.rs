@@ -38,6 +38,7 @@ pub enum AppErrorCode {
     DatabaseServerBusy,
     DataTableNotExist,
     DataCorruption,
+    HttpHandshakeFailure,
     ProductNotExist,
     IOerror(std::io::ErrorKind),
 } // end of AppErrorCode

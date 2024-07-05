@@ -46,6 +46,10 @@ sqlx = {version="^0.6.3", features=["runtime-tokio-native-tls", "chrono"]}
 # feature, instead I use external tool `liquibase` for db migration.
 ## sqlx-cli = {version="^0.6.3", features=["native-tls", "mysql"]}
 
+# secure connections for interaction with 3rd party services
+# e.g. currency exchange-rate service
+tokio-native-tls = "^0.3"
+
 amqprs = {version="^1.5", optional=true, features=[]}
 
 [features]

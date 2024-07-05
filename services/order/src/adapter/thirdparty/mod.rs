@@ -1,3 +1,4 @@
+mod base_client;
 mod currency_exchange;
 
 use std::boxed::Box;
