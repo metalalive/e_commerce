@@ -8,15 +8,15 @@ use std::time::Duration;
 #[cfg(feature = "mariadb")]
 use serde::Deserialize;
 #[cfg(feature = "mariadb")]
+use sqlx::mysql::MySqlConnectOptions;
+#[cfg(feature = "mariadb")]
 use sqlx::pool::{PoolConnection, PoolOptions};
+#[cfg(feature = "mariadb")]
+use sqlx::MySql;
 #[cfg(feature = "mariadb")]
 use sqlx::Pool;
 
-#[cfg(feature = "mariadb")]
-use sqlx::MySql;
-
-#[cfg(feature = "mariadb")]
-use sqlx::mysql::MySqlConnectOptions;
+use tokio::sync::OnceCell;
 
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::{AppDbServerCfg, AppDbServerType};
@@ -37,7 +37,11 @@ struct DbSecret {
 #[cfg(feature = "mariadb")]
 pub struct AppMariaDbStore {
     pub alias: String,
-    pool: Pool<MySql>,
+    max_conns: u32,
+    acquire_timeout_secs: u16,
+    idle_timeout_secs: u16,
+    conn_opts: MySqlConnectOptions,
+    pool: OnceCell<Pool<MySql>>,
 }
 #[cfg(not(feature = "mariadb"))]
 pub struct AppMariaDbStore {}
@@ -71,31 +75,39 @@ impl AppMariaDbStore {
                 });
             }
         };
-        let pol_opts = PoolOptions::<MySql>::new()
-            .max_connections(cfg.max_conns)
-            .idle_timeout(Some(Duration::new(cfg.idle_timeout_secs as u64, 0)))
-            .acquire_timeout(Duration::new(cfg.acquire_timeout_secs as u64, 0))
-            .min_connections(0);
-        let pool = pol_opts.connect_lazy_with(conn_opts);
         Ok(Self {
-            pool,
+            conn_opts,
+            max_conns: cfg.max_conns,
+            idle_timeout_secs: cfg.idle_timeout_secs,
+            acquire_timeout_secs: cfg.acquire_timeout_secs,
+            pool: OnceCell::new(),
             alias: cfg.alias.clone(),
         })
-    }
+    } // end of fn try-build
 
     pub async fn acquire(&self) -> DefaultResult<PoolConnection<MySql>, AppError> {
         // TODO,
         // - figure out why `sqlx` requires to get (mutable) reference the pool-connection
         //   instance in order to get low-level connection for query execution.
         // - logging error message
-        let pl = &self.pool;
-        match pl.acquire().await {
-            Ok(conn) => Ok(conn),
-            Err(e) => {
-                println!("[ERROR] pool stats : {:?}", pl);
-                Err(e.into())
-            }
-        }
+        let pl = self
+            .pool
+            .get_or_init(|| async {
+                let pol_opts = PoolOptions::<MySql>::new()
+                    .max_connections(self.max_conns)
+                    .idle_timeout(Some(Duration::new(self.idle_timeout_secs as u64, 0)))
+                    .acquire_timeout(Duration::new(self.acquire_timeout_secs as u64, 0))
+                    .min_connections(0);
+                let _conn_opts = self.conn_opts.clone();
+                // the following connect method will spawn new task for maintain connection lifetime
+                // , this part of code has to run after tokio runtime executor is ready
+                pol_opts.connect_lazy_with(_conn_opts)
+            })
+            .await;
+        pl.acquire().await.map_err(|e| {
+            println!("[ERROR] pool stats : {:?}", pl);
+            e.into()
+        })
     }
 } // end of impl AppMariaDbStore
 

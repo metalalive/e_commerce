@@ -9,6 +9,7 @@ use ecommerce_common::confidentiality::{self, AbstractConfidentiality};
 use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use tokio::runtime::Builder as RuntimeBuilder;
+use tokio::signal::unix::{signal, SignalKind};
 
 use order::api::rpc::route_to_handler;
 use order::constant::hard_limit;
@@ -27,11 +28,14 @@ fn route_handler_wrapper(
 async fn start_rpc_worker(shr_state: AppSharedState) {
     let logctx_p = shr_state.log_context().clone();
     let rctx = shr_state.rpc();
-    let result = rctx.server_start(shr_state, route_handler_wrapper).await;
-    if let Err(e) = result {
-        app_log_event!(logctx_p, AppLogLevel::ERROR, "error: {:?}", e);
+    let rpc_result = rctx.server_start(shr_state, route_handler_wrapper).await;
+    if let Err(e) = rpc_result {
+        app_log_event!(logctx_p, AppLogLevel::ERROR, "{:?}", e);
     }
-    //TODO, signal handler to break from the loop ..
+    // signal to terminate the consumers, TODO, gracefully cancel the subscription
+    let mut shutdown_signal = signal(SignalKind::terminate()).unwrap();
+    let _result = shutdown_signal.recv().await;
+    app_log_event!(logctx_p, AppLogLevel::DEBUG, "end-of-rpc-worker");
 }
 
 fn start_async_runtime(cfg: AppConfig, cfdntl: Box<dyn AbstractConfidentiality>) {
