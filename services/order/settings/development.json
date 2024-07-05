@@ -213,6 +213,14 @@
 	"keystore_url": "http://localhost:8008/jwks",
 	"update_interval_minutes": 60
     },
+    "third_parties": [
+        {
+            "name": "OpenExchangeRates",
+            "host": "openexchangerates.org",
+            "port": 443,
+	        "confidentiality_path": "backend_apps/secret_key/staff/OpenExchangeRates"
+        }
+    ],
     "confidentiality": {
 	"source": "UserSpace",
 	"sys_path": "common/data/secrets.json"

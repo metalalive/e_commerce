@@ -34,6 +34,7 @@ pub use rpc::{
 
 mod adapter;
 pub use adapter::datastore;
+use adapter::thirdparty::{app_currency_context, AbstractCurrencyExchange};
 
 type WebApiHdlrLabel = &'static str;
 
@@ -49,6 +50,7 @@ pub struct AppSharedState {
     _rpc: Arc<Box<dyn AbstractRpcContext>>,
     dstore: Arc<AppDataStoreContext>,
     _auth_keys: Arc<Box<dyn AbstractAuthKeystore>>,
+    _currency_ex: Arc<Box<dyn AbstractCurrencyExchange>>,
     _shutdown: Arc<AtomicBool>,
     _num_reqs_processing: Arc<AtomicU32>,
 }
@@ -66,18 +68,24 @@ impl AppSharedState {
         let log = Arc::new(log);
         let _rpc_ctx =
             rpc::build_context(&cfg.api_server.rpc, log.clone(), confidential.clone()).unwrap();
-        let (in_mem, sql_dbs) =
-            datastore::build_context(log.clone(), &cfg.api_server.data_store, confidential);
+        let (in_mem, sql_dbs) = datastore::build_context(
+            log.clone(),
+            &cfg.api_server.data_store,
+            confidential.clone(),
+        );
         let in_mem = in_mem.map(Arc::new);
         let sql_dbs = sql_dbs.map(|m| m.into_iter().map(Arc::new).collect());
         let ds_ctx = Arc::new(AppDataStoreContext { in_mem, sql_dbs });
         let auth_keys = AppAuthKeystore::new(&cfg.api_server.auth);
+        let currency_ex =
+            app_currency_context(&cfg.api_server.third_parties, confidential, log.clone()).unwrap();
         Self {
             _cfg: Arc::new(cfg),
             _log: log,
             _rpc: Arc::new(_rpc_ctx),
             dstore: ds_ctx,
             _auth_keys: Arc::new(Box::new(auth_keys)),
+            _currency_ex: Arc::new(currency_ex),
             _shutdown: Arc::new(AtomicBool::new(false)),
             _num_reqs_processing: Arc::new(AtomicU32::new(0)),
         }
@@ -103,6 +111,10 @@ impl AppSharedState {
         self._auth_keys.clone()
     }
 
+    pub fn currency(&self) -> Arc<Box<dyn AbstractCurrencyExchange>> {
+        self._currency_ex.clone()
+    }
+
     pub fn shutdown(&self) -> Arc<AtomicBool> {
         self._shutdown.clone()
     }
@@ -121,6 +133,7 @@ impl Clone for AppSharedState {
             _rpc: self._rpc.clone(),
             dstore: self.dstore.clone(),
             _auth_keys: self._auth_keys.clone(),
+            _currency_ex: self._currency_ex.clone(),
             _shutdown: self._shutdown.clone(),
             _num_reqs_processing: self._num_reqs_processing.clone(),
         }

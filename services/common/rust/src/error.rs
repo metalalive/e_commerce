@@ -10,6 +10,7 @@ pub enum AppErrorCode {
     MissingSecretPath,
     MissingConfigPath,
     MissingDataStore,
+    MissingConfig,
     InvalidJsonFormat,
     InvalidVersion,
     InvalidRouteConfig,

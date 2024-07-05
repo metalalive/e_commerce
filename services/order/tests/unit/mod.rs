@@ -44,7 +44,11 @@ pub(crate) fn ut_setup_share_state(
 
 struct MockConfidential {}
 impl AbstractConfidentiality for MockConfidential {
-    fn try_get_payload(&self, _id: &str) -> DefaultResult<String, AppConfidentialityError> {
-        Ok("unit-test".to_string())
+    fn try_get_payload(&self, path: &str) -> DefaultResult<String, AppConfidentialityError> {
+        let d = match path {
+            "backend_apps/secret_key/staff/OpenExchangeRates" => "\"unit-test\"",
+            _others => "unit-test",
+        };
+        Ok(d.to_string())
     }
 }
