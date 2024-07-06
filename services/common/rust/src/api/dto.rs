@@ -107,7 +107,7 @@ impl From<String> for CountryCode {
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Hash, Eq, PartialEq)]
 pub enum CurrencyDto {
     INR,
     IDR,

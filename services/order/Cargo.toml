@@ -37,10 +37,11 @@ futures-util = {version="^0.3.19", features=["std"]}
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
 
 # TODO, In sqlx v0.7.x pool may fail to recycle connections dropped by app callers
-# and this happenes occasionally , currently downgrade to 0.6.x, I'll switch to
-# 0.7.x once the issue is resolved.
-# [reference] issues 2567 in sqlx github
-sqlx = {version="^0.6.3", features=["runtime-tokio-native-tls", "chrono"]}
+#   and this happenes occasionally , currently downgrade to 0.6.x, I'll switch to
+#   0.7.x once the issue is resolved.
+#   [reference] issues 2567 in sqlx github
+# Note, feature `decimal` reuses dependency crate `rust_decimal`
+sqlx = {version="^0.6.3", features=["runtime-tokio-native-tls", "chrono", "decimal"]}
 
 # TODO, due to hardware memory constraint, currently I do not use migrate
 # feature, instead I use external tool `liquibase` for db migration.
@@ -49,6 +50,10 @@ sqlx = {version="^0.6.3", features=["runtime-tokio-native-tls", "chrono"]}
 # secure connections for interaction with 3rd party services
 # e.g. currency exchange-rate service
 tokio-native-tls = "^0.3"
+
+# currency, amount of order lines, exchange rate, will be saved and
+# represented in the `Decimal` type in this project
+rust_decimal = {version="^1.35", default-features=false, features=[]}
 
 amqprs = {version="^1.5", optional=true, features=[]}
 

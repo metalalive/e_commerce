@@ -1,10 +1,12 @@
 mod cart;
+mod currency;
 mod order;
 mod product_policy;
 mod product_price;
 mod stock_level;
 
 pub use cart::{CartLineModel, CartModel};
+pub use currency::{CurrencyModel, CurrencyModelSet};
 pub use order::{
     OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
     OrderLinePriceModel, OrderLineQuantityModel, OrderReturnModel, OrderReturnQuantityModel,
