@@ -7,6 +7,7 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 use std::vec::Vec;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
@@ -19,15 +20,16 @@ use crate::api::rpc::dto::{
 use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::error::AppError;
 use crate::model::{
-    CartModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel,
-    ProductPolicyModelSet, ProductPriceModelSet, ProductStockIdentity, ShippingModel,
-    StockLevelModelSet,
+    CartModel, CurrencyModelSet, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
+    OrderReturnModel, ProductPolicyModelSet, ProductPriceModelSet, ProductStockIdentity,
+    ShippingModel, StockLevelModelSet,
 };
 use crate::AppDataStoreContext;
 
 mod in_mem;
 // make in-memory repo visible only for testing purpose
 pub use in_mem::cart::CartInMemRepo;
+pub use in_mem::currency::CurrencyInMemRepo;
 pub use in_mem::oline_return::OrderReturnInMemRepo;
 pub use in_mem::order::OrderInMemRepo;
 pub use in_mem::product_policy::ProductPolicyInMemRepo;
@@ -85,6 +87,18 @@ pub trait AbsProductPriceRepo: Sync + Send {
         ids: Vec<(u32, ProductType, u64)>,
     ) -> DefaultResult<Vec<ProductPriceModelSet>, AppError>;
     async fn save(&self, updated: ProductPriceModelSet) -> DefaultResult<(), AppError>;
+}
+
+/// Note:
+/// in this project the base currency is always USD due to the constraint of 3rd party exchange
+/// rate service I apply, it is free plan and not allow to change base currency, this should not
+/// be huge problem since the application can convert the rate between different specific
+/// currencies.
+#[async_trait]
+pub trait AbsCurrencyRepo: Sync + Send {
+    async fn fetch(&self, chosen: Vec<CurrencyDto>) -> DefaultResult<CurrencyModelSet, AppError>;
+
+    async fn save(&self, ms: CurrencyModelSet) -> DefaultResult<(), AppError>;
 }
 
 #[async_trait]
@@ -276,6 +290,28 @@ pub async fn app_repo_product_price(
         })
     }
 }
+
+pub async fn app_repo_currency(
+    ds: Arc<AppDataStoreContext>,
+) -> DefaultResult<Box<dyn AbsCurrencyRepo>, AppError> {
+    #[cfg(feature = "mariadb")]
+    {
+        Err(AppError {
+            code: AppErrorCode::FeatureDisabled,
+            detail: Some("mariadb".to_string()),
+        })
+    }
+    #[cfg(not(feature = "mariadb"))]
+    if let Some(m) = ds.in_mem.as_ref() {
+        let obj = CurrencyInMemRepo::new(m.clone()).await?;
+        Ok(Box::new(obj))
+    } else {
+        Err(AppError {
+            code: AppErrorCode::MissingDataStore,
+            detail: Some("unknwon-type".to_string()),
+        })
+    }
+} // end of fn app_repo_currency
 
 pub async fn app_repo_order(
     ds: Arc<AppDataStoreContext>,
