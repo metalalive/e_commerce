@@ -1,4 +1,4 @@
-mod currency;
+pub(super) mod currency;
 pub(super) mod oorder;
 pub(super) mod product_policy;
 mod product_price;

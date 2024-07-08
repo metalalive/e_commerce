@@ -510,9 +510,27 @@
             DROP TABLE `seller_price_meta`;
         </rollback>
     </changeSet>
-    
     <changeSet id="tag_version_0.1.6" author="T.H.">
         <tagDatabase tag="0.1.6" />
+    </changeSet>
+    <changeSet id="add__currency_exchange" author="T.H.">
+        <comment>
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `currency_exchange` (
+                `name`  ENUM('USD','TWD','INR','IDR','THB') NOT NULL  PRIMARY KEY,
+                `rate`  DECIMAL(12, 4) SIGNED NOT NULL
+            );
+            INSERT INTO `currency_exchange`(`name`,`rate`) VALUES
+                ('USD', 0.0), ('THB', 0.0), ('IDR', 0.0), ('INR', 0.0), ('TWD', 0.0);
+        </sql>
+        <rollback>
+            DROP TABLE `currency_exchange`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.1.7" author="T.H.">
+        <tagDatabase tag="0.1.7" />
     </changeSet>
 </databaseChangeLog>
 

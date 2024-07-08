@@ -45,6 +45,9 @@ use mariadb::product_policy::ProductPolicyMariaDbRepo;
 use mariadb::product_price::ProductPriceMariaDbRepo;
 
 #[cfg(feature = "mariadb")]
+use mariadb::currency::CurrencyMariaDbRepo;
+
+#[cfg(feature = "mariadb")]
 use mariadb::order::OrderMariaDbRepo;
 
 #[cfg(feature = "mariadb")]
@@ -295,7 +298,10 @@ pub async fn app_repo_currency(
     ds: Arc<AppDataStoreContext>,
 ) -> DefaultResult<Box<dyn AbsCurrencyRepo>, AppError> {
     #[cfg(feature = "mariadb")]
-    {
+    if let Some(dbs) = ds.sql_dbs.as_ref() {
+        let obj = CurrencyMariaDbRepo::try_build(dbs)?;
+        Ok(Box::new(obj))
+    } else {
         Err(AppError {
             code: AppErrorCode::FeatureDisabled,
             detail: Some("mariadb".to_string()),

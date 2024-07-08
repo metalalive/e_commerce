@@ -15,7 +15,7 @@ async fn in_mem_repo_ds_setup(max_items: u32) -> CurrencyInMemRepo {
     result.unwrap()
 }
 
-fn ut_setup_currency_ms(data: Vec<(CurrencyDto, i64, u32)>) -> CurrencyModelSet {
+pub(crate) fn ut_setup_currency_ms(data: Vec<(CurrencyDto, i64, u32)>) -> CurrencyModelSet {
     let exchange_rates = data
         .into_iter()
         .map(|(name, num, radix)| {

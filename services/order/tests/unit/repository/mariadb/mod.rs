@@ -1,4 +1,5 @@
 mod cart;
+mod currency;
 mod oorder;
 mod product_policy;
 mod product_price;

@@ -1,4 +1,5 @@
 pub(super) mod cart;
+pub(super) mod currency;
 pub(super) mod oline_return;
 pub(super) mod order;
 pub(super) mod product_policy;
