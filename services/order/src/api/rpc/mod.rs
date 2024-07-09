@@ -13,9 +13,9 @@ use crate::rpc::AppRpcClientReqProperty;
 use crate::AppSharedState;
 
 pub mod dto;
+mod misc;
 mod order_status;
 mod stock_level;
-mod store_products;
 
 pub async fn route_to_handler(
     req: AppRpcClientReqProperty,
@@ -25,8 +25,9 @@ pub async fn route_to_handler(
     // grows over time
     let hdlr_label = RpcConst::extract_handler_label(req.route.as_str())?;
     match hdlr_label {
-        RpcConst::EDIT_PRODUCT_PRICE => Ok(store_products::process(req, shr_state).await),
+        RpcConst::EDIT_PRODUCT_PRICE => Ok(misc::store_products(req, shr_state).await),
         RpcConst::STOCK_LEVEL_EDIT => Ok(stock_level::inventory_edit(req, shr_state).await),
+        RpcConst::CURRENCY_RATE_REFRESH => Ok(misc::currency_refresh(req, shr_state).await),
         RpcConst::STOCK_RETURN_CANCELLED => {
             Ok(stock_level::inventory_return_cancelled(req, shr_state).await)
         }
@@ -53,7 +54,7 @@ pub async fn route_to_handler(
             Err(err)
         }
     }
-}
+} // end of fn route_to_handler
 
 pub(super) fn py_celery_deserialize_req<T, U>(raw: &[u8]) -> DefaultResult<(T, U), AppError>
 where

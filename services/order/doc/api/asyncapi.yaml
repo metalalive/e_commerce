@@ -104,8 +104,13 @@ channels:
         $ref: '#/components/messages/OrderPaymentUpdateErrorDto'
 
   order_reserved_discard_unpaid:
-    address: rpc.order.order_reserved_update_payment
+    address: rpc.order.order_reserved_discard_unpaid
     description: this endpoint is supposed to run as a cron job , to periodically discard the reserved but unpaid products in the recently created orders. there is no inbound and outbound payload in this endpoint.
+
+  currency_exchange_rate_refresh:
+    address: rpc.order.currency_exrate_refresh
+    description: this endpoint is supposed to run as a cron job , to periodically refresh currency exchange rates from external 3rd-party service (currently I use Open Exchange Rates dot IO). there is no inbound and outbound payload in this endpoint.
+
 
 operations:
   update-store-product:
@@ -234,6 +239,16 @@ operations:
       - bindings:
           amqp:
             expiration: 20000
+  
+  currency-exchange-rate-refresh:
+    action: receive
+    channel:
+      $ref: '#/channels/currency_exchange_rate_refresh'
+    traits:
+      - $ref: '#/components/operationTraits/rabbitmq-common'
+      - bindings:
+          amqp:
+            expiration: 240000
 
 
 components:

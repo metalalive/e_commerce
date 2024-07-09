@@ -1,3 +1,4 @@
+mod currency;
 mod edit_product_policy;
 mod edit_product_price;
 mod manage_cart;
@@ -8,6 +9,7 @@ use std::boxed::Box;
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
+pub use currency::CurrencyRateRefreshUseCase;
 pub use edit_product_policy::{
     EditProductPolicyResult, EditProductPolicyUseCase, ProductInfoReq, ProductInfoResp,
 };

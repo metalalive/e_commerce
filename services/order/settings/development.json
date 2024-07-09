@@ -43,6 +43,9 @@
             {"alias": "order::rpc::amqp",
              "handlers": ["std-output-forall", "errlog-file-rpc-consumer", "errlog-file-web-api"],
              "level": "INFO"},
+            {"alias": "order::usecase::currency",
+             "handlers": ["std-output-forall", "errlog-file-web-api"],
+             "level": "ERROR"},
             {"alias": "order::usecase::edit_product_policy",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
@@ -184,6 +187,16 @@
                 "durable": true,
 		"ttl_secs": 20,
 		"max_length": 65
+	    },
+	    {
+                "queue": "rpc_orderproc_currency_rate_refresh",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.currency_exrate_refresh",
+                "ensure_declare": true,
+                "subscribe": true,
+                "durable": true,
+		"ttl_secs": 240,
+		"max_length": 10
 	    },
 	    {
                 "queue": "rpc_productmgt_get_product",

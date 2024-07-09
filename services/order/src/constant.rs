@@ -39,6 +39,7 @@ pub(crate) mod api {
 
     impl rpc {
         pub(crate) const EDIT_PRODUCT_PRICE: WebApiHdlrLabel = "update_store_products";
+        pub(crate) const CURRENCY_RATE_REFRESH: WebApiHdlrLabel = "currency_exrate_refresh";
         pub(crate) const STOCK_LEVEL_EDIT: WebApiHdlrLabel = "stock_level_edit";
         pub(crate) const STOCK_RETURN_CANCELLED: WebApiHdlrLabel = "stock_return_cancelled";
         pub(crate) const ORDER_RSV_READ_INVENTORY: WebApiHdlrLabel =
@@ -58,7 +59,7 @@ pub(crate) mod api {
                 let out = Self::check_hdlr_label(tokens.remove(0))?;
                 Ok(out)
             } else {
-                let detail = format!("incorrect-format, tokens-length:{}", tokens.len());
+                let detail = format!("incorrect-rpc-route, tokens:{:?}", tokens);
                 Err(AppError {
                     code: AppErrorCode::InvalidInput,
                     detail: Some(detail),
@@ -90,6 +91,7 @@ pub(crate) mod api {
         fn check_hdlr_label(label: &str) -> DefaultResult<&str, AppError> {
             let valid_labels = [
                 Self::EDIT_PRODUCT_PRICE,
+                Self::CURRENCY_RATE_REFRESH,
                 Self::STOCK_LEVEL_EDIT,
                 Self::STOCK_RETURN_CANCELLED,
                 Self::ORDER_RSV_READ_INVENTORY,
@@ -101,7 +103,7 @@ pub(crate) mod api {
             if valid_labels.contains(&label) {
                 Ok(label)
             } else {
-                let detail = format!("incorrect-handler:{label}");
+                let detail = format!("unrecognised-rpc-handler:{label}");
                 Err(AppError {
                     code: AppErrorCode::InvalidInput,
                     detail: Some(detail),
