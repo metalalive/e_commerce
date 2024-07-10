@@ -24,10 +24,11 @@ impl CurrencyRateRefreshUseCase {
             CurrencyDto::TWD,
             CurrencyDto::THB,
         ];
-        let ms = exrate_ctx.refresh(chosen).await.map_err(|e| {
+        let mut ms = exrate_ctx.refresh(chosen).await.map_err(|e| {
             app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
             e
         })?;
+        ms.trunc_rate_fraction();
         repo.save(ms).await.map_err(|e| {
             app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
             e

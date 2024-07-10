@@ -722,8 +722,6 @@ impl InnerServerConsumer {
         let resp_body = hdlr_fn(req, self.shr_state.clone()).await?;
         let local_t1 = Local::now().fixed_offset();
         let missing = Self::try_send_response(channel, req_props, local_t1, resp_body).await?;
-        let ack_args = BasicAckArguments::new(deliver.delivery_tag(), false);
-        channel.basic_ack(ack_args).await?;
         Ok(missing)
     }
 } // end of impl InnerServerConsumer
@@ -750,6 +748,7 @@ impl AsyncConsumer for InnerServerConsumer {
             route_key_log,
             part_content_log
         );
+        let delivery_tag = deliver.delivery_tag();
         let result = self
             ._consume(channel, deliver, basic_properties, content)
             .await;
@@ -778,6 +777,17 @@ impl AsyncConsumer for InnerServerConsumer {
                     e
                 );
             }
+        }
+        let ack_args = BasicAckArguments::new(delivery_tag, false);
+        let result = channel.basic_ack(ack_args).await;
+        if let Err(e) = result {
+            app_log_event!(
+                log_ctx_p,
+                AppLogLevel::ERROR,
+                "route:{}, error: {:?}",
+                route_key_log,
+                e
+            );
         }
     } // end of fn consume
 } // end of impl InnerServerConsumer
