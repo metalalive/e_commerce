@@ -1,4 +1,4 @@
-use crate::api::dto::{BillingDto, OrderLinePayDto};
+use crate::api::dto::{BillingDto, OrderLinePayDto, OrderCurrencySnapshotDto};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -11,8 +11,6 @@ pub struct OrderReplicaPaymentDto {
     pub oid: String,
     pub usr_id: u32,
     pub lines: Vec<OrderLinePayDto>,
-    // TODO, add the fields
-    // - target currency
-    // - the currency rate on creating the order
+    pub currency: OrderCurrencySnapshotDto,
     pub billing: BillingDto,
 }

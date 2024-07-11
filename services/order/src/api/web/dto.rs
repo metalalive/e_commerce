@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
-    jsn_serialize_product_type, jsn_validate_product_type, BillingDto, GenericRangeErrorDto,
-    OrderLinePayDto,
+    jsn_serialize_product_type, jsn_validate_product_type, BillingDto, CurrencyDto,
+    GenericRangeErrorDto, OrderCurrencySnapshotDto, OrderLinePayDto,
 };
 use ecommerce_common::api::web::dto::{
     BillingErrorDto, ContactErrorDto, PhyAddrErrorDto, QuotaResourceErrorDto,
@@ -112,7 +112,10 @@ pub struct ShippingErrorDto {
 #[derive(Deserialize, Serialize)]
 pub struct OrderCreateReqData {
     pub order_lines: Vec<OrderLineReqDto>,
-    // TODO, add target currency, and its rate on creating the order
+    pub currency: CurrencyDto, // currency in buyer's local region
+    // Note the rate is determined at the time of placing an order, in this
+    // project this API endpoint does not allow front-end clients to insert
+    // exchange rate
     pub billing: BillingReqDto,
     pub shipping: ShippingReqDto,
 }
@@ -122,10 +125,11 @@ pub struct OrderCreateRespOkDto {
     pub order_id: String,
     pub usr_id: u32,
     pub time: u64,
+    pub currency: OrderCurrencySnapshotDto,
     pub reserved_lines: Vec<OrderLinePayDto>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Default)]
 pub struct OrderCreateRespErrorDto {
     pub order_lines: Option<Vec<OrderLineCreateErrorDto>>,
     pub billing: Option<BillingErrorDto>,

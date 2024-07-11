@@ -5,8 +5,17 @@ use crate::constant::ProductType;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct PayAmountDto {
-    pub unit: u32,
-    pub total: u32,
+    // represented as string , can converted to decimal type in front-end app
+    pub unit: String,
+    pub total: String,
+}
+impl PayAmountDto {
+    pub fn fraction_scale() -> u32 {
+        // at most 8 digits to reserve for fraction of a amount 
+        // , note the amount should be originally decimal type converting
+        // to string for serialisation
+        8
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -107,7 +116,7 @@ impl From<String> for CountryCode {
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Deserialize, Serialize, Clone, Hash, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Hash, Eq, PartialEq)]
 pub enum CurrencyDto {
     INR,
     IDR,
@@ -173,4 +182,23 @@ pub struct OrderLinePayDto {
     // TODO, add warranty time
     pub quantity: u32,
     pub amount: PayAmountDto,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct CurrencySnapshotDto {
+    pub name: CurrencyDto,
+    pub rate: String,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct OrderSellerCurrencyDto {
+    pub currency: CurrencyDto,
+    pub seller_id: u32,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct OrderCurrencySnapshotDto {
+    pub snapshot: Vec<CurrencySnapshotDto>,
+    pub sellers: Vec<OrderSellerCurrencyDto>,
+    pub buyer: CurrencyDto,
 }
