@@ -8,9 +8,9 @@ mod stock_level;
 pub use cart::{CartLineModel, CartModel};
 pub use currency::{CurrencyModel, CurrencyModelSet};
 pub use order::{
-    OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
-    OrderLinePriceModel, OrderLineQuantityModel, OrderReturnModel, OrderReturnQuantityModel,
-    ShippingModel, ShippingOptionModel,
+    OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
+    OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, OrderReturnModel,
+    OrderReturnQuantityModel, ShippingModel, ShippingOptionModel,
 };
 pub use product_policy::{ProductPolicyModel, ProductPolicyModelSet};
 pub use product_price::{ProductPriceModel, ProductPriceModelSet};

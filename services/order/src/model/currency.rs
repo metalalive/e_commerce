@@ -1,6 +1,6 @@
 use rust_decimal::Decimal;
 
-use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::api::dto::{CurrencyDto, CurrencySnapshotDto};
 use ecommerce_common::error::AppErrorCode;
 
 use crate::error::AppError;
@@ -9,6 +9,7 @@ use crate::error::AppError;
 const PRECISION_WHOLE_NUMBER: u32 = 8;
 const PRECISION_FRACTIONAL: u32 = 4;
 
+#[derive(Clone)]
 pub struct CurrencyModel {
     pub name: CurrencyDto,
     pub rate: Decimal,
@@ -18,8 +19,17 @@ pub struct CurrencyModelSet {
     pub exchange_rates: Vec<CurrencyModel>,
 }
 
+impl From<&CurrencyModel> for CurrencySnapshotDto {
+    fn from(value: &CurrencyModel) -> Self {
+        Self {
+            name: value.name.clone(),
+            rate: value.rate.to_string(),
+        }
+    }
+}
+
 impl CurrencyModel {
-    fn trunc_rate_fraction(&mut self, scale: u32) {
+    pub(crate) fn trunc_rate_fraction(&mut self, scale: u32) {
         let new_rate = self.rate.trunc_with_scale(scale);
         self.rate = new_rate;
     }
@@ -70,4 +80,14 @@ impl CurrencyModelSet {
             Err(e)
         }
     } // end of  fn check_rate_range
+
+    pub(super) fn find(&self, given: &CurrencyDto) -> Result<&CurrencyModel, AppError> {
+        self.exchange_rates
+            .iter()
+            .find(|m| &m.name == given)
+            .ok_or(AppError {
+                code: AppErrorCode::InvalidInput,
+                detail: Some(format!("fail-load-ex-rate, given:{}", given.to_string())),
+            })
+    }
 } // end of impl CurrencyModelSet

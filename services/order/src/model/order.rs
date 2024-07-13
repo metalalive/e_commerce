@@ -1,12 +1,18 @@
-use chrono::{DateTime, Duration, DurationRound, FixedOffset, Local as LocalTime};
 use std::collections::HashMap;
 use std::result::Result as DefaultResult;
 use std::vec::Vec;
+
+use chrono::{DateTime, Duration, DurationRound, FixedOffset, Local as LocalTime};
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use ecommerce_common::api::dto::{OrderLinePayDto, PayAmountDto};
+use ecommerce_common::api::dto::{
+    CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto, OrderLinePayDto,
+    OrderSellerCurrencyDto, PayAmountDto,
+};
+use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
 use ecommerce_common::error::AppErrorCode;
-use ecommerce_common::model::order::{ContactModel, PhyAddrModel};
+use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
 use crate::api::dto::{ShippingDto, ShippingMethod, ShippingOptionDto};
 use crate::api::rpc::dto::{
@@ -15,14 +21,16 @@ use crate::api::rpc::dto::{
     OrderLineStockReturningDto,
 };
 use crate::api::web::dto::{
-    OrderLineReqDto, OrderLineReturnErrorDto, OrderLineReturnErrorReason,
+    OrderCreateRespOkDto, OrderLineReqDto, OrderLineReturnErrorDto, OrderLineReturnErrorReason,
     ShipOptionSellerErrorReason, ShippingErrorDto, ShippingOptionErrorDto,
 };
 use crate::constant::hard_limit;
 use crate::error::AppError;
 use crate::generate_custom_uid;
 
-use super::{BaseProductIdentity, ProductPolicyModel, ProductPriceModel};
+use super::{
+    BaseProductIdentity, CurrencyModel, CurrencyModelSet, ProductPolicyModel, ProductPriceModel,
+};
 
 pub struct ShippingOptionModel {
     pub seller_id: u32,
@@ -42,6 +50,9 @@ pub struct OrderLineAppliedPolicyModel {
 }
 
 pub struct OrderLinePriceModel {
+    // the price values here are smallest unit in seller's currency.
+    // In this order-processing service the price amount in this struct
+    // is NOT converted with buyer's currency exchange rate
     pub unit: u32,
     pub total: u32,
 } // TODO, advanced pricing model
@@ -71,12 +82,19 @@ pub struct OrderReturnModel {
 } // TODO, declare new struct which collects the hash entry
   // , add different shipping address for each return
 
+pub struct OrderCurrencyModel {
+    // save locked rate for both parties of buyer and sellers
+    // Note in this project the base currency is always USD
+    pub buyer: CurrencyModel,
+    pub sellers: HashMap<u32, CurrencyModel>,
+}
+
 pub struct OrderLineModelSet {
     pub order_id: String,
     pub owner_id: u32,
     pub create_time: DateTime<FixedOffset>,
+    pub currency: OrderCurrencyModel,
     pub lines: Vec<OrderLineModel>,
-    // TODO, add currency field
 }
 
 impl From<ShippingOptionModel> for ShippingOptionDto {
@@ -192,6 +210,21 @@ impl TryFrom<ShippingDto> for ShippingModel {
 impl OrderLineQuantityModel {
     pub fn has_unpaid(&self) -> bool {
         self.reserved > self.paid
+    }
+}
+
+impl OrderLinePriceModel {
+    fn into_paym_dto(self, mut curr_ex: CurrencyModel) -> PayAmountDto {
+        let fraction_limit = PayAmountDto::fraction_scale();
+        curr_ex.trunc_rate_fraction(fraction_limit);
+        let p_unit_seller = Decimal::new(self.unit as i64, 0u32);
+        let p_total_seller = Decimal::new(self.total as i64, 0u32);
+        let p_unit_buyer = p_unit_seller * curr_ex.rate;
+        let p_total_buyer = p_total_seller * curr_ex.rate;
+        PayAmountDto {
+            unit: p_unit_buyer.trunc_with_scale(fraction_limit).to_string(),
+            total: p_total_buyer.trunc_with_scale(fraction_limit).to_string(),
+        }
     }
 }
 
@@ -346,23 +379,24 @@ impl OrderLineModel {
             self.qty.paid
         }
     }
-} // end of impl OrderLineModel
 
-impl From<OrderLineModel> for OrderLinePayDto {
-    fn from(value: OrderLineModel) -> OrderLinePayDto {
+    fn into_paym_dto(self, curr_m: CurrencyModel) -> OrderLinePayDto {
+        let OrderLineModel {
+            id_,
+            price,
+            policy,
+            qty,
+        } = self;
         OrderLinePayDto {
-            seller_id: value.id_.store_id,
-            product_id: value.id_.product_id,
-            product_type: value.id_.product_type,
-            quantity: value.qty.reserved,
-            reserved_until: value.policy.reserved_until.to_rfc3339(),
-            amount: PayAmountDto {
-                unit: value.price.unit,
-                total: value.price.total,
-            },
+            seller_id: id_.store_id,
+            product_id: id_.product_id,
+            product_type: id_.product_type,
+            quantity: qty.reserved,
+            reserved_until: policy.reserved_until.to_rfc3339(),
+            amount: price.into_paym_dto(curr_m),
         }
     }
-}
+} // end of impl OrderLineModel
 
 impl From<OrderLineModel> for OrderLineStockReservingDto {
     fn from(value: OrderLineModel) -> OrderLineStockReservingDto {
@@ -391,6 +425,154 @@ impl From<OrderLineModel> for InventoryEditStockLevelDto {
     }
 }
 
+impl TryFrom<(CurrencyModelSet, CurrencyDto, Vec<(u32, CurrencyDto)>)> for OrderCurrencyModel {
+    type Error = Vec<AppError>;
+    fn try_from(
+        value: (CurrencyModelSet, CurrencyDto, Vec<(u32, CurrencyDto)>),
+    ) -> DefaultResult<Self, Self::Error> {
+        let (exrate_avail, label_buyer, label_sellers) = value;
+        let buyer = exrate_avail
+            .find(&label_buyer)
+            .map(|v| v.clone())
+            .map_err(|mut e| {
+                if let Some(msg) = &mut e.detail {
+                    *msg += ", buyer";
+                }
+                vec![e]
+            })?;
+        let mut errors = Vec::new();
+        let seller_iter = label_sellers.into_iter().filter_map(|(seller_id, label)| {
+            exrate_avail
+                .find(&label)
+                .map(|v| (seller_id, v.clone()))
+                .map_err(|mut e| {
+                    if let Some(msg) = &mut e.detail {
+                        *msg += ", seller:";
+                        *msg += seller_id.to_string().as_str();
+                    }
+                    errors.push(e);
+                })
+                .ok()
+        });
+        let sellers = HashMap::from_iter(seller_iter);
+        if errors.is_empty() {
+            Ok(Self { buyer, sellers })
+        } else {
+            Err(errors)
+        }
+    } // end of fn try-from
+} // end of impl OrderCurrencyModel
+
+impl From<OrderCurrencyModel> for OrderCurrencySnapshotDto {
+    fn from(value: OrderCurrencyModel) -> Self {
+        let OrderCurrencyModel { buyer, sellers } = value;
+        let mut snapshot = sellers
+            .values()
+            .map(CurrencySnapshotDto::from)
+            .collect::<Vec<_>>();
+        let exist = sellers.values().any(|v| v.name == buyer.name);
+        if !exist {
+            let item = CurrencySnapshotDto::from(&buyer);
+            snapshot.push(item);
+        }
+        let sellers = sellers
+            .into_iter()
+            .map(|(seller_id, v)| OrderSellerCurrencyDto {
+                seller_id,
+                currency: v.name,
+            })
+            .collect::<Vec<_>>();
+        Self {
+            snapshot,
+            sellers,
+            buyer: buyer.name,
+        }
+    } // end of fn from
+} // end of impl OrderCurrencySnapshotDto
+
+impl OrderCurrencyModel {
+    pub(crate) fn to_buyer_rate(&self, seller_id: u32) -> DefaultResult<CurrencyModel, AppError> {
+        let c0 = &self.buyer;
+        let c1 = self.sellers.get(&seller_id).ok_or(AppError {
+            code: AppErrorCode::InvalidInput,
+            detail: Some("rate-not-found".to_string()),
+        })?;
+        let newrate = c0.rate / c1.rate;
+        Ok(CurrencyModel {
+            name: self.buyer.name.clone(),
+            rate: newrate,
+        })
+    }
+}
+
+impl TryFrom<OrderLineModelSet> for OrderCreateRespOkDto {
+    type Error = Vec<AppError>;
+    fn try_from(value: OrderLineModelSet) -> Result<Self, Self::Error> {
+        let OrderLineModelSet {
+            order_id,
+            owner_id,
+            create_time,
+            currency,
+            lines,
+        } = value;
+        let mut errors = Vec::new();
+        let reserved_lines = lines
+            .into_iter()
+            .filter_map(|line| {
+                currency
+                    .to_buyer_rate(line.id_.store_id)
+                    .map_err(|e| errors.push(e))
+                    .ok()
+                    .map(|rate| line.into_paym_dto(rate))
+            })
+            .collect::<Vec<_>>();
+        if errors.is_empty() {
+            Ok(Self {
+                order_id,
+                usr_id: owner_id,
+                currency: currency.into(),
+                reserved_lines,
+                time: create_time.timestamp() as u64,
+            })
+        } else {
+            Err(errors)
+        }
+    } // end of fn try-from
+} // end of impl OrderLineModelSet
+
+impl OrderLineModelSet {
+    pub(crate) fn replica_paym_dto(
+        oid: String,
+        usr_id: u32,
+        olines: Vec<OrderLineModel>,
+        currency_m: OrderCurrencyModel,
+        billing: BillingModel,
+    ) -> DefaultResult<OrderReplicaPaymentDto, AppError> {
+        let mut errors = Vec::new();
+        let lines = olines
+            .into_iter()
+            .filter_map(|line| {
+                currency_m
+                    .to_buyer_rate(line.id_.store_id)
+                    .map_err(|e| errors.push(e))
+                    .ok()
+                    .map(|rate| line.into_paym_dto(rate))
+            })
+            .collect::<Vec<_>>();
+        if errors.is_empty() {
+            Ok(OrderReplicaPaymentDto {
+                oid,
+                usr_id,
+                lines,
+                billing: billing.into(),
+                currency: currency_m.into(),
+            })
+        } else {
+            Err(errors.remove(0))
+        }
+    }
+} // end of impl OrderLineModelSet
+
 impl From<OrderReturnModel> for Vec<OrderLineStockReturningDto> {
     fn from(value: OrderReturnModel) -> Vec<OrderLineStockReturningDto> {
         let (id_, map) = (value.id_, value.qty);
@@ -401,23 +583,6 @@ impl From<OrderReturnModel> for Vec<OrderLineStockReturningDto> {
                 create_time,
                 qty,
                 product_type: id_.product_type.clone(),
-            })
-            .collect()
-    }
-}
-impl From<OrderReturnModel> for Vec<OrderLineReplicaRefundDto> {
-    fn from(value: OrderReturnModel) -> Vec<OrderLineReplicaRefundDto> {
-        let (pid, map) = (value.id_, value.qty);
-        map.into_iter()
-            .map(|(ctime, (_q, refund))| OrderLineReplicaRefundDto {
-                seller_id: pid.store_id,
-                product_id: pid.product_id,
-                product_type: pid.product_type.clone(),
-                create_time: ctime,
-                amount: PayAmountDto {
-                    unit: refund.unit,
-                    total: refund.total,
-                },
             })
             .collect()
     }
@@ -541,4 +706,44 @@ impl OrderReturnModel {
         o_returns.extend(new_returns);
         Ok(o_returns)
     } // end of fn filter_requests
+
+    fn _to_replica_refund_dto(
+        self,
+        currency_m: &OrderCurrencyModel,
+    ) -> DefaultResult<Vec<OrderLineReplicaRefundDto>, AppError> {
+        let (pid, map) = (self.id_, self.qty);
+        let curr_ex = currency_m.to_buyer_rate(pid.store_id)?;
+        let out = map
+            .into_iter()
+            .map(|(ctime, (_q, refund))| OrderLineReplicaRefundDto {
+                seller_id: pid.store_id,
+                product_id: pid.product_id,
+                product_type: pid.product_type.clone(),
+                create_time: ctime,
+                amount: refund.into_paym_dto(curr_ex.clone()),
+            })
+            .collect();
+        Ok(out)
+    }
+
+    pub(crate) fn to_replica_refund_dto(
+        o_rets: Vec<Self>,
+        currency_m: OrderCurrencyModel,
+    ) -> DefaultResult<Vec<OrderLineReplicaRefundDto>, Vec<AppError>> {
+        let mut errors = Vec::new();
+        let resp = o_rets
+            .into_iter()
+            .filter_map(|v| {
+                v._to_replica_refund_dto(&currency_m)
+                    .map_err(|e| errors.push(e))
+                    .ok()
+            })
+            .flatten()
+            .collect();
+        if errors.is_empty() {
+            Ok(resp)
+        } else {
+            Err(errors)
+        }
+    }
 } // end of impl OrderReturnModel
