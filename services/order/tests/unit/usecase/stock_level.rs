@@ -71,6 +71,7 @@ async fn edit_ok() {
         vec![],
         None,
         None,
+        None, // this use case does not require to examine currency rate
     );
     let result =
         StockLevelUseCase::try_edit(init_data, Box::new(repo), app_state.log_context().clone())
@@ -98,6 +99,7 @@ async fn edit_fetch_error() {
         vec![],
         None,
         None,
+        None, // this use case does not require to examine currency rate
     );
     let result =
         StockLevelUseCase::try_edit(init_data, Box::new(repo), app_state.log_context().clone())
@@ -140,6 +142,7 @@ async fn edit_save_error() {
         vec![],
         None,
         None,
+        None, // this use case does not require to examine currency rate
     );
     let result =
         StockLevelUseCase::try_edit(init_data, Box::new(repo), app_state.log_context().clone())

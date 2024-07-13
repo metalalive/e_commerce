@@ -60,14 +60,20 @@ pub(super) async fn read_cancelled_refund(
     req: AppRpcClientReqProperty,
     shr_state: AppSharedState,
 ) -> Vec<u8> {
+    let o_repo = match app_repo_order(shr_state.datastore()).await {
+        Ok(v) => v,
+        Err(e) => {
+            return build_error_response(e).to_string().into_bytes();
+        }
+    };
     match common_setup!(
         OrderReplicaRefundReqDto,
         shr_state,
         app_repo_order_return,
         req.msgbody.as_slice()
     ) {
-        Ok((v, repo)) => {
-            let uc = OrderReplicaRefundUseCase { repo };
+        Ok((v, ret_repo)) => {
+            let uc = OrderReplicaRefundUseCase { ret_repo, o_repo };
             match uc.execute(v).await {
                 Ok(resp) => serde_json::to_vec(&resp).unwrap(),
                 Err(e) => build_error_response(e).to_string().into_bytes(),

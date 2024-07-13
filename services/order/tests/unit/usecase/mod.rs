@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 use tokio::sync::Mutex as AsyncMutex;
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel};
 
@@ -24,13 +25,13 @@ use order::api::rpc::dto::{
 };
 use order::error::AppError;
 use order::model::{
-    OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel, ProductStockIdentity,
-    ShippingModel, ShippingOptionModel, StockLevelModelSet,
+    CurrencyModelSet, OrderCurrencyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
+    OrderReturnModel, ProductStockIdentity, ShippingModel, ShippingOptionModel, StockLevelModelSet,
 };
 use order::repository::{
-    AbsOrderRepo, AbsOrderReturnRepo, AbsOrderStockRepo, AppOrderFetchRangeCallback,
-    AppOrderRepoUpdateLinesUserFunc, AppStockRepoReserveReturn, AppStockRepoReserveUserFunc,
-    AppStockRepoReturnUserFunc,
+    AbsCurrencyRepo, AbsOrderRepo, AbsOrderReturnRepo, AbsOrderStockRepo,
+    AppOrderFetchRangeCallback, AppOrderRepoUpdateLinesUserFunc, AppStockRepoReserveReturn,
+    AppStockRepoReserveUserFunc, AppStockRepoReturnUserFunc,
 };
 use order::usecase::initiate_rpc_request;
 use order::{
@@ -39,6 +40,10 @@ use order::{
 };
 
 use crate::{ut_setup_share_state, MockConfidential};
+
+struct MockCurrencyRepo {
+    _mocked_rate_mset: AsyncMutex<Option<CurrencyModelSet>>,
+}
 
 struct MockStockRepo {
     _mocked_save_r: DefaultResult<(), AppError>,
@@ -51,6 +56,7 @@ struct MockOrderRepo {
     _mocked_stock_return: Mutex<Cell<Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>>>,
     _mocked_ol_sets: AsyncMutex<Cell<Vec<OrderLineModelSet>>>,
     _mocked_olines: AsyncMutex<Vec<OrderLineModel>>,
+    _mocked_currency_exrate: AsyncMutex<Option<OrderCurrencyModel>>,
     _mock_oids_ctime: AsyncMutex<Vec<String>>,
     _mock_usr_id: Option<u32>,
     _mock_ctime: Option<DateTime<FixedOffset>>,
@@ -60,6 +66,29 @@ struct MockOrderReturnRepo {
     _mocked_fetched_oid_returns:
         AsyncMutex<Option<DefaultResult<Vec<(String, OrderReturnModel)>, AppError>>>,
     _mocked_save_result: AsyncMutex<Option<DefaultResult<usize, AppError>>>,
+}
+
+#[async_trait]
+impl AbsCurrencyRepo for MockCurrencyRepo {
+    async fn fetch(&self, _chosen: Vec<CurrencyDto>) -> DefaultResult<CurrencyModelSet, AppError> {
+        let mut guard = self._mocked_rate_mset.lock().await;
+        guard.take().ok_or(AppError {
+            code: AppErrorCode::InvalidInput,
+            detail: Some("MockCurrencyRepo::fetch".to_string()),
+        })
+    }
+
+    #[cfg_attr(rustfmt, rustfmt_skip)]
+    async fn save(&self, _ms: CurrencyModelSet) -> DefaultResult<(), AppError> {
+        Err(AppError {code: AppErrorCode::NotImplemented, detail: None})
+    }
+}
+impl MockCurrencyRepo {
+    fn build(mock_curr_mset: Option<CurrencyModelSet>) -> Self {
+        Self {
+            _mocked_rate_mset: AsyncMutex::new(mock_curr_mset),
+        }
+    }
 }
 
 #[async_trait]
@@ -130,11 +159,10 @@ impl AbsOrderRepo for MockOrderRepo {
         _bl: BillingModel,
         _sh: ShippingModel,
     ) -> DefaultResult<(), AppError> {
-        Err(AppError {
-            code: AppErrorCode::NotImplemented,
-            detail: None,
-        })
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        Err(AppError {code: AppErrorCode::NotImplemented, detail: None})
     }
+
     async fn fetch_all_lines(&self, _oid: String) -> DefaultResult<Vec<OrderLineModel>, AppError> {
         let mut g = self._mocked_olines.lock().await;
         if g.is_empty() {
@@ -171,16 +199,16 @@ impl AbsOrderRepo for MockOrderRepo {
         };
         Ok(obj)
     }
+
     async fn update_lines_payment(
         &self,
         _data: OrderPaymentUpdateDto,
         _cb: AppOrderRepoUpdateLinesUserFunc,
     ) -> DefaultResult<OrderPaymentUpdateErrorDto, AppError> {
-        Err(AppError {
-            code: AppErrorCode::NotImplemented,
-            detail: None,
-        })
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        Err(AppError {code: AppErrorCode::NotImplemented, detail: None})
     }
+
     async fn fetch_lines_by_rsvtime(
         &self,
         _time_start: DateTime<FixedOffset>,
@@ -252,6 +280,15 @@ impl AbsOrderRepo for MockOrderRepo {
             })
         }
     }
+
+    async fn currency_exrates(&self, _oid: &str) -> DefaultResult<OrderCurrencyModel, AppError> {
+        let mut guard = self._mocked_currency_exrate.lock().await;
+        guard.take().ok_or(AppError {
+            code: AppErrorCode::InvalidInput,
+            detail: Some("MockOrderRepo::currency_exrates".to_string()),
+        })
+    }
+
     async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError> {
         let t = DateTime::parse_from_rfc3339("1999-07-31T23:59:58+09:00").unwrap();
         Ok(t)
@@ -271,6 +308,7 @@ impl MockOrderRepo {
         oids_ctime: Vec<String>,
         usr_id: Option<u32>,
         create_time: Option<DateTime<FixedOffset>>,
+        exchange_rate: Option<OrderCurrencyModel>,
     ) -> Self {
         Self {
             _mocked_stock_save: stk_save_r,
@@ -281,6 +319,7 @@ impl MockOrderRepo {
             _mock_oids_ctime: AsyncMutex::new(oids_ctime),
             _mock_ctime: create_time,
             _mock_usr_id: usr_id,
+            _mocked_currency_exrate: AsyncMutex::new(exchange_rate),
         }
     }
 }
@@ -296,7 +335,7 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
         if let Some(v) = g.take() {
             v
         } else {
-            let detail = format!("MockOrderRepo::fetch_by_pid");
+            let detail = format!("MockOrderiReturnRepo::fetch_by_pid");
             Err(AppError {
                 code: AppErrorCode::InvalidInput,
                 detail: Some(detail),
@@ -312,7 +351,7 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
         if let Some(v) = g.take() {
             v
         } else {
-            let detail = format!("MockOrderRepo::fetch_by_created_time");
+            let detail = format!("MockOrderReturnRepo::fetch_by_created_time");
             Err(AppError {
                 code: AppErrorCode::InvalidInput,
                 detail: Some(detail),
@@ -337,7 +376,7 @@ impl AbsOrderReturnRepo for MockOrderReturnRepo {
         if let Some(v) = g.take() {
             v
         } else {
-            let detail = format!("MockOrderRepo::fetch_by_pid");
+            let detail = format!("MockOrderReturnRepo::fetch_by_pid");
             Err(AppError {
                 code: AppErrorCode::InvalidInput,
                 detail: Some(detail),

@@ -6,7 +6,7 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
-use ecommerce_common::api::dto::GenericRangeErrorDto;
+use ecommerce_common::api::dto::{CurrencyDto, GenericRangeErrorDto};
 use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
 use ecommerce_common::api::web::dto::{
     BillingErrorDto, ContactErrorDto, ContactNonFieldErrorReason, QuotaResourceErrorDto,
@@ -32,11 +32,11 @@ use ecommerce_common::model::order::BillingModel;
 use crate::constant::app_meta;
 use crate::error::AppError;
 use crate::model::{
-    OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel, ProductPolicyModelSet,
-    ProductPriceModelSet, ShippingModel, StockLevelModelSet,
+    OrderCurrencyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet, OrderReturnModel,
+    ProductPolicyModelSet, ProductPriceModelSet, ShippingModel, StockLevelModelSet,
 };
 use crate::repository::{
-    AbsOrderRepo, AbsOrderReturnRepo, AbsProductPriceRepo, AbstProductPolicyRepo,
+    AbsCurrencyRepo, AbsOrderRepo, AbsOrderReturnRepo, AbsProductPriceRepo, AbstProductPolicyRepo,
     AppStockRepoReserveReturn,
 };
 use crate::{AppAuthPermissionCode, AppAuthQuotaMatCode, AppAuthedClaim, AppSharedState};
@@ -51,6 +51,7 @@ pub enum CreateOrderUsKsErr {
 
 pub struct CreateOrderUseCase {
     pub glb_state: AppSharedState,
+    pub repo_currex: Box<dyn AbsCurrencyRepo>,
     pub repo_order: Box<dyn AbsOrderRepo>,
     pub repo_price: Box<dyn AbsProductPriceRepo>,
     pub repo_policy: Box<dyn AbstProductPolicyRepo>,
@@ -61,7 +62,8 @@ pub struct OrderReplicaPaymentUseCase {
     pub repo: Box<dyn AbsOrderRepo>,
 }
 pub struct OrderReplicaRefundUseCase {
-    pub repo: Box<dyn AbsOrderReturnRepo>,
+    pub o_repo: Box<dyn AbsOrderRepo>,
+    pub ret_repo: Box<dyn AbsOrderReturnRepo>,
 }
 pub struct OrderReplicaInventoryUseCase {
     pub ret_repo: Box<dyn AbsOrderReturnRepo>,
@@ -87,7 +89,12 @@ impl CreateOrderUseCase {
         self,
         req: OrderCreateReqData,
     ) -> DefaultResult<OrderCreateRespOkDto, CreateOrderUsKsErr> {
-        let (sh_d, bl_d, ol_d) = (req.shipping, req.billing, req.order_lines);
+        let OrderCreateReqData {
+            billing: bl_d,
+            shipping: sh_d,
+            order_lines: ol_d,
+            currency: currency_buyer,
+        } = req;
         Self::validate_quota(
             &self.auth_claim,
             sh_d.contact.emails.len(),
@@ -98,6 +105,8 @@ impl CreateOrderUseCase {
         )?;
         let (o_bl, o_sh) = Self::validate_metadata(sh_d, bl_d)?;
         let (ms_policy, ms_price) = self.load_product_properties(&ol_d).await?;
+        let o_currency =
+            Self::snapshot_currencies(self.repo_currex.as_ref(), currency_buyer, &ms_price).await?;
         let o_items = Self::validate_orderline(ms_policy, ms_price, ol_d)?;
         let oid = OrderLineModel::generate_order_id(app_meta::MACHINE_CODE);
         let timenow = LocalTime::now().fixed_offset();
@@ -105,37 +114,26 @@ impl CreateOrderUseCase {
         let ol_set = OrderLineModelSet {
             order_id: oid,
             lines: o_items,
+            currency: o_currency,
             create_time: timenow, // trait `Copy` implemented, clone implicitly
             owner_id: usr_id,
         };
         // repository implementation should treat order-line reservation and
         // stock-level update as a single atomic operation
         self.try_reserve_stock(&ol_set).await?;
+
         // Contact info might be lost after order lines were saved, if power outage happenes
         // at here. TODO: Improve the code here
-        // TODO: restrict number of emails and phones in the request
-        match self
-            .repo_order
+        self.repo_order
             .save_contact(ol_set.order_id.as_str(), o_bl, o_sh)
             .await
-        {
-            Ok(_) => {
-                let (oid, lines) = (ol_set.order_id, ol_set.lines);
-                let reserved_lines = lines.into_iter().map(OrderLineModel::into).collect();
-                let obj = OrderCreateRespOkDto {
-                    order_id: oid,
-                    usr_id,
-                    reserved_lines,
-                    time: timenow.timestamp() as u64,
-                };
-                Ok(obj)
-            }
-            Err(e) => {
+            .map_err(|e| {
                 let logctx_p = self.glb_state.log_context().clone();
                 app_log_event!(logctx_p, AppLogLevel::ERROR, "repo-fail-save: {e}");
-                Err(CreateOrderUsKsErr::Server(vec![e]))
-            }
-        }
+                CreateOrderUsKsErr::Server(vec![e])
+            })?;
+        let resp = OrderCreateRespOkDto::try_from(ol_set).map_err(CreateOrderUsKsErr::Server)?;
+        Ok(resp)
     } // end of fn execute
 
     fn validate_quota(
@@ -146,12 +144,7 @@ impl CreateOrderUseCase {
         num_bill_phones: usize,
         num_olines: usize,
     ) -> DefaultResult<(), CreateOrderUsKsErr> {
-        let mut err_obj = OrderCreateRespErrorDto {
-            order_lines: None,
-            billing: None,
-            shipping: None,
-            quota_olines: None,
-        };
+        let mut err_obj = OrderCreateRespErrorDto::default();
         let mut quota_chk_result = [
             (AppAuthQuotaMatCode::NumPhones, num_ship_phones),
             (AppAuthQuotaMatCode::NumEmails, num_ship_emails),
@@ -225,12 +218,7 @@ impl CreateOrderUseCase {
         if let (Ok(billing), Ok(shipping)) = results {
             Ok((billing, shipping))
         } else {
-            let mut err_obj = OrderCreateRespErrorDto {
-                order_lines: None,
-                billing: None,
-                shipping: None,
-                quota_olines: None,
-            };
+            let mut err_obj = OrderCreateRespErrorDto::default();
             if let Err(e) = results.0 {
                 err_obj.billing = Some(e);
             }
@@ -280,13 +268,36 @@ impl CreateOrderUseCase {
             app_log_event!(
                 logctx_p,
                 AppLogLevel::ERROR,
-                "repository fetch error, policy:{}, price:{}",
+                "policy:{}, price:{}",
                 err_policy,
                 err_price
             );
             Err(CreateOrderUsKsErr::Server(errors))
         }
     } // end of load_product_properties
+
+    pub async fn snapshot_currencies(
+        repo_currex_p: &dyn AbsCurrencyRepo,
+        label_buyer: CurrencyDto,
+        seller_mset_price: &[ProductPriceModelSet],
+    ) -> DefaultResult<OrderCurrencyModel, CreateOrderUsKsErr> {
+        let mut labels = seller_mset_price
+            .iter()
+            .map(|ms| ms.currency.clone())
+            .collect::<Vec<_>>();
+        labels.push(label_buyer.clone());
+        let exrate_avail = repo_currex_p
+            .fetch(labels)
+            .await
+            .map_err(|e| CreateOrderUsKsErr::Server(vec![e]))?;
+        let label_sellers = seller_mset_price
+            .iter()
+            .map(|ms| (ms.store_id, ms.currency.clone()))
+            .collect::<Vec<_>>();
+        let args = (exrate_avail, label_buyer, label_sellers);
+        let out = OrderCurrencyModel::try_from(args).map_err(CreateOrderUsKsErr::Server)?;
+        Ok(out)
+    } // end of fn snapshot_currencies
 
     pub fn validate_orderline(
         ms_policy: ProductPolicyModelSet,
@@ -318,9 +329,8 @@ impl CreateOrderUseCase {
                         d.product_type.clone(),
                         d.quantity,
                     );
-                    match OrderLineModel::try_from(d, plc, price) {
-                        Ok(o) => Some(o),
-                        Err(e) => {
+                    OrderLineModel::try_from(d, plc, price)
+                        .map_err(|e| {
                             if e.code == AppErrorCode::ExceedingMaxLimit {
                                 let rsv_limit = GenericRangeErrorDto {
                                     max_: plc.max_num_rsv,
@@ -340,9 +350,8 @@ impl CreateOrderUseCase {
                             } else {
                                 server_errors.push(e);
                             }
-                            None
-                        }
-                    }
+                        })
+                        .ok()
                 } else {
                     let nonexist = OrderLineCreateErrNonExistDto {
                         product_price: price_nonexist,
@@ -369,10 +378,8 @@ impl CreateOrderUseCase {
             Err(CreateOrderUsKsErr::Server(server_errors))
         } else {
             let err_dto = OrderCreateRespErrorDto {
-                billing: None,
-                shipping: None,
-                quota_olines: None,
                 order_lines: Some(client_errors),
+                ..Default::default()
             };
             Err(CreateOrderUsKsErr::ReqContent(Box::new(err_dto)))
         }
@@ -384,29 +391,23 @@ impl CreateOrderUseCase {
     ) -> DefaultResult<(), CreateOrderUsKsErr> {
         let logctx_p = self.glb_state.log_context().clone();
         let repo_st = self.repo_order.stock();
-        match repo_st.try_reserve(Self::try_reserve_stock_cb, req).await {
-            Ok(()) => Ok(()),
-            Err(e) => match e {
+        repo_st
+            .try_reserve(Self::try_reserve_stock_cb, req)
+            .await
+            .map_err(|e| match e {
                 Ok(client_e) => {
                     app_log_event!(logctx_p, AppLogLevel::WARNING, "stock reserve client error");
                     let ec = OrderCreateRespErrorDto {
-                        billing: None,
-                        shipping: None,
-                        quota_olines: None,
                         order_lines: Some(client_e),
+                        ..Default::default()
                     };
-                    Err(CreateOrderUsKsErr::ReqContent(Box::new(ec)))
+                    CreateOrderUsKsErr::ReqContent(Box::new(ec))
                 }
                 Err(server_e) => {
-                    app_log_event!(
-                        logctx_p,
-                        AppLogLevel::ERROR,
-                        "stock reserve server error, detail:{server_e}"
-                    );
-                    Err(CreateOrderUsKsErr::Server(vec![server_e]))
+                    app_log_event!(logctx_p, AppLogLevel::ERROR, "detail:{server_e}");
+                    CreateOrderUsKsErr::Server(vec![server_e])
                 }
-            },
-        }
+            })
     } // end of fn try_reserve_stock
 
     fn try_reserve_stock_cb(
@@ -428,33 +429,26 @@ impl OrderReplicaPaymentUseCase {
         oid: String,
     ) -> DefaultResult<OrderReplicaPaymentDto, AppError> {
         let olines = self.repo.fetch_all_lines(oid.clone()).await?;
+        let currency_m = self.repo.currency_exrates(oid.as_str()).await?;
         // TODO, lock billing instance so customers are no longer able to update
         let usr_id = self.repo.owner_id(oid.as_str()).await?;
         let billing = self.repo.fetch_billing(oid.clone()).await?;
-        let resp = OrderReplicaPaymentDto {
-            oid,
-            usr_id,
-            billing: billing.into(),
-            lines: olines.into_iter().map(OrderLineModel::into).collect(),
-        };
-        Ok(resp)
+        OrderLineModelSet::replica_paym_dto(oid, usr_id, olines, currency_m, billing)
     }
-}
+} // end of impl OrderReplicaPaymentUseCase
+
 impl OrderReplicaRefundUseCase {
     pub async fn execute(
         self,
         req: OrderReplicaRefundReqDto,
     ) -> DefaultResult<Vec<OrderLineReplicaRefundDto>, AppError> {
         let (oid, start, end) = (req.order_id, req.start, req.end);
+        let currency_m = self.o_repo.currency_exrates(oid.as_str()).await?;
         let ret_ms = self
-            .repo
+            .ret_repo
             .fetch_by_oid_ctime(oid.as_str(), start, end)
             .await?;
-        let resp = ret_ms
-            .into_iter()
-            .flat_map::<Vec<OrderLineReplicaRefundDto>, _>(OrderReturnModel::into)
-            .collect();
-        Ok(resp)
+        OrderReturnModel::to_replica_refund_dto(ret_ms, currency_m).map_err(|mut es| es.remove(0))
     }
 }
 impl OrderReplicaInventoryUseCase {

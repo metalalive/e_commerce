@@ -14,7 +14,8 @@ use ecommerce_common::logging::{app_log_event, AppLogLevel};
 use crate::api::web::dto::{OrderCreateReqData, OrderEditReqData, OrderLineReqDto};
 use crate::constant as AppConst;
 use crate::repository::{
-    app_repo_order, app_repo_order_return, app_repo_product_policy, app_repo_product_price,
+    app_repo_currency, app_repo_order, app_repo_order_return, app_repo_product_policy,
+    app_repo_product_price,
 };
 use crate::usecase::{
     CreateOrderUsKsErr, CreateOrderUseCase, ReturnLinesReqUcOutput, ReturnLinesReqUseCase,
@@ -33,16 +34,18 @@ pub(super) async fn create_handler(
     let log_ctx = _appstate.log_context().clone();
     let ds = _appstate.datastore();
     let results = (
+        app_repo_currency(ds.clone()).await,
         app_repo_order(ds.clone()).await,
         app_repo_product_price(ds.clone()).await,
         app_repo_product_policy(ds).await,
     );
     let (resp_status_code, serial_resp_body) =
-        if let (Ok(repo_o), Ok(repo_price), Ok(repo_policy)) = results {
+        if let (Ok(repo_currex), Ok(repo_o), Ok(repo_price), Ok(repo_policy)) = results {
             let uc = CreateOrderUseCase {
                 glb_state: _appstate,
                 repo_price,
                 repo_policy,
+                repo_currex,
                 repo_order: repo_o,
                 auth_claim: authed,
             };
