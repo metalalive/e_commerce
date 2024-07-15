@@ -1,5 +1,9 @@
-use chrono::{DateTime, Duration};
+use std::collections::HashMap;
 
+use chrono::{DateTime, Duration};
+use rust_decimal::Decimal;
+
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -9,9 +13,9 @@ use order::api::rpc::dto::{
 };
 use order::api::web::dto::OrderLineCreateErrorReason;
 use order::model::{
-    OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
-    OrderLinePriceModel, OrderLineQuantityModel, ProductStockModel, StockLevelModelSet,
-    StockQtyRsvModel, StockQuantityModel, StoreStockModel,
+    CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
+    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
+    ProductStockModel, StockLevelModelSet, StockQtyRsvModel, StockQuantityModel, StoreStockModel,
 };
 
 use crate::model::verify_stocklvl_model;
@@ -347,6 +351,24 @@ fn present_instance_ok() {
     }
 } // end of present_instance_ok
 
+fn ut_setup_order_currency(seller_ids: Vec<u32>) -> OrderCurrencyModel {
+    let buyer = CurrencyModel {
+        name: CurrencyDto::USD,
+        rate: Decimal::new(100, 2),
+    };
+    let seller_c = CurrencyModel {
+        name: CurrencyDto::THB,
+        rate: Decimal::new(365417, 4),
+    };
+    let kv_pairs = seller_ids
+        .into_iter()
+        .map(|seller_id| (seller_id, seller_c.clone()));
+    OrderCurrencyModel {
+        buyer,
+        sellers: HashMap::from_iter(kv_pairs),
+    }
+}
+
 fn ut_get_curr_qty(store: &StoreStockModel, req: &OrderLineModel) -> Vec<StockQuantityModel> {
     store
         .products
@@ -437,6 +459,7 @@ fn reserve_ok_1() {
         lines: reqs,
         create_time: create_time.clone(),
         owner_id: 123,
+        currency: ut_setup_order_currency(vec![1013, 1014]),
     };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
@@ -557,6 +580,7 @@ fn reserve_ok_2() {
         lines: reqs,
         create_time,
         owner_id: 321,
+        currency: ut_setup_order_currency(vec![1013, 1014]),
     };
     let error = mset.try_reserve(&ol_set);
     assert!(error.is_empty());
@@ -667,6 +691,7 @@ fn reserve_shortage() {
         lines: reqs,
         owner_id: 123,
         create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
+        currency: ut_setup_order_currency(vec![1013, 1014]),
     };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 2);
@@ -742,6 +767,7 @@ fn reserve_seller_nonexist() {
         lines: reqs,
         owner_id: 321,
         create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
+        currency: ut_setup_order_currency(vec![1013, 1099]),
     };
     let error = mset.try_reserve(&ol_set);
     assert_eq!(error.len(), 1);

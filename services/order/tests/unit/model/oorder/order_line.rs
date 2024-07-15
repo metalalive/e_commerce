@@ -1,15 +1,47 @@
-use chrono::{DateTime, Duration, Local as LocalTime};
+use chrono::{DateTime, Duration, FixedOffset, Local as LocalTime};
+use rust_decimal::Decimal;
 
-use ecommerce_common::api::dto::OrderLinePayDto;
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use order::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason};
 use order::api::web::dto::OrderLineReqDto;
 use order::model::{
-    OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLinePriceModel,
-    OrderLineQuantityModel, ProductPolicyModel, ProductPriceModel,
+    CurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
+    OrderLinePriceModel, OrderLineQuantityModel, ProductPolicyModel, ProductPriceModel,
 };
+
+#[cfg_attr(rustfmt, rustfmt_skip)]
+pub(super) fn ut_setup_order_lines(
+    data : Vec<(
+        u32, u64, ProductType,
+        u32, u32, u32, u32,
+        Option<DateTime<FixedOffset>>,
+        DateTime<FixedOffset>,
+        DateTime<FixedOffset>
+    )>
+) -> Vec<OrderLineModel> {
+    data.into_iter()
+        .map(|d| OrderLineModel {
+            id_: OrderLineIdentity {
+                store_id: d.0,
+                product_id: d.1,
+                product_type: d.2,
+            },
+            price: OrderLinePriceModel {unit: d.3, total: d.4},
+            qty: OrderLineQuantityModel {
+                reserved: d.5,
+                paid: d.6,
+                paid_last_update: d.7,
+            },
+            policy: OrderLineAppliedPolicyModel {
+                reserved_until: d.8,
+                warranty_until: d.9,
+            },
+        })
+        .collect::<Vec<_>>()
+} // end of fn ut_setup_order_lines
 
 #[test]
 fn convert_from_req_dto_without_rsv_limit_ok() {
@@ -162,38 +194,29 @@ fn convert_from_req_dto_product_id_mismatch() {
     }
 }
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 #[test]
 fn convert_to_pay_dto_ok() {
     let reserved_until = DateTime::parse_from_rfc3339("2023-01-15T09:23:50+08:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-04-24T13:39:41+08:00").unwrap();
-    let m = OrderLineModel {
-        id_: OrderLineIdentity {
-            store_id: 123,
-            product_id: 124,
-            product_type: ProductType::Package,
-        },
-        price: OrderLinePriceModel {
-            unit: 7,
-            total: 173,
-        },
-        qty: OrderLineQuantityModel {
-            reserved: 25,
-            paid: 4,
-            paid_last_update: Some(reserved_until.clone()),
-        },
-        policy: OrderLineAppliedPolicyModel {
-            reserved_until,
-            warranty_until,
-        },
-    };
-    let payline: OrderLinePayDto = m.into();
+    let mocked_data = vec![
+        (123u32, 124u64, ProductType::Package, 7u32, 173u32,
+         25u32, 4u32, Some(reserved_until.clone()),
+         reserved_until, warranty_until,)
+    ];
+    let oline_m = ut_setup_order_lines(mocked_data).remove(0);
+    let ex_rate = CurrencyModel {
+        name: CurrencyDto::TWD,
+        rate: Decimal::new(4601809, 5),
+    }; // this test case assumes seller labels prices in different currency
+    let payline = oline_m.into_paym_dto(ex_rate);
     assert_eq!(payline.seller_id, 123);
     assert_eq!(payline.product_type, ProductType::Package);
     assert_eq!(payline.product_id, 124);
     assert_eq!(payline.quantity, 25);
-    assert_eq!(payline.amount.unit, 7);
-    assert_eq!(payline.amount.total, 173);
-}
+    assert_eq!(payline.amount.unit.as_str(), "322.12663000");
+    assert_eq!(payline.amount.total.as_str(), "7961.12957000");
+} // end of fn convert_to_pay_dto_ok
 
 #[test]
 fn gen_order_id_seq() {
@@ -217,45 +240,14 @@ fn update_payments_ok() {
     let warranty_until = dt_now + Duration::days(1);
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    let mut models = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 812,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel { unit: 7, total: 69 },
-            qty: OrderLineQuantityModel {
-                reserved: 10,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 890,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 10,
-                total: 90,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 9,
-                paid: 1,
-                paid_last_update: Some(paid_last_update),
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
+    #[cfg_attr(rustfmt, rustfmt_skip)]
+    let mocked_data = vec![
+        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
+         10u32, 0u32, None, reserved_until, warranty_until),
+        (seller_id, 890, ProductType::Item, 10, 90,
+         9, 1, Some(paid_last_update), reserved_until, warranty_until,)
     ];
+    let mut models = ut_setup_order_lines(mocked_data);
     let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
     let data = vec![
         OrderLinePaidUpdateDto {
@@ -297,45 +289,14 @@ fn update_payments_nonexist() {
     let warranty_until = dt_now + Duration::days(1);
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    let mut models = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 812,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel { unit: 7, total: 69 },
-            qty: OrderLineQuantityModel {
-                reserved: 10,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 890,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 10,
-                total: 90,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 9,
-                paid: 1,
-                paid_last_update: Some(paid_last_update),
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
+    #[cfg_attr(rustfmt, rustfmt_skip)]
+    let mocked_data = vec![
+        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
+         10u32, 0u32, None, reserved_until, warranty_until),
+        (seller_id, 890, ProductType::Item, 10, 90,
+         9, 1, Some(paid_last_update), reserved_until, warranty_until,)
     ];
+    let mut models = ut_setup_order_lines(mocked_data);
     let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
     let data = vec![
         OrderLinePaidUpdateDto {
@@ -371,45 +332,16 @@ fn update_payments_rsv_expired() {
     let warranty_until = dt_now + Duration::days(1);
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    let mut models = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 812,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel { unit: 7, total: 69 },
-            qty: OrderLineQuantityModel {
-                reserved: 10,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: dt_now + Duration::minutes(2),
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 890,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 10,
-                total: 90,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 9,
-                paid: 1,
-                paid_last_update: Some(paid_last_update),
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: dt_now - Duration::seconds(30),
-                warranty_until,
-            },
-        },
+    #[cfg_attr(rustfmt, rustfmt_skip)]
+    let mocked_data = vec![
+        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
+         10u32, 0u32, None,
+         dt_now + Duration::minutes(2), warranty_until),
+        (seller_id, 890, ProductType::Item, 10, 90,
+         9, 1, Some(paid_last_update),
+         dt_now - Duration::seconds(30), warranty_until),
     ];
+    let mut models = ut_setup_order_lines(mocked_data);
     let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
     let data = vec![
         OrderLinePaidUpdateDto {
@@ -457,45 +389,14 @@ fn update_payments_invalid_quantity() {
     let warranty_until = dt_now + Duration::days(1);
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    let mut models = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 812,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel { unit: 7, total: 69 },
-            qty: OrderLineQuantityModel {
-                reserved: 10,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 890,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 10,
-                total: 90,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 9,
-                paid: 1,
-                paid_last_update: Some(paid_last_update),
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
+    #[cfg_attr(rustfmt, rustfmt_skip)]
+    let mocked_data = vec![
+        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
+         10u32, 0u32, None, reserved_until, warranty_until),
+        (seller_id, 890, ProductType::Item, 10, 90,
+         9, 1, Some(paid_last_update), reserved_until, warranty_until,)
     ];
+    let mut models = ut_setup_order_lines(mocked_data);
     let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
     let data = vec![
         OrderLinePaidUpdateDto {
@@ -538,45 +439,14 @@ fn update_payments_old_record_omitted() {
     let warranty_until = dt_now + Duration::days(1);
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    let mut models = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 812,
-                product_type: ProductType::Package,
-            },
-            price: OrderLinePriceModel { unit: 7, total: 69 },
-            qty: OrderLineQuantityModel {
-                reserved: 10,
-                paid: 0,
-                paid_last_update: None,
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: seller_id,
-                product_id: 890,
-                product_type: ProductType::Item,
-            },
-            price: OrderLinePriceModel {
-                unit: 10,
-                total: 90,
-            },
-            qty: OrderLineQuantityModel {
-                reserved: 9,
-                paid: 1,
-                paid_last_update: Some(paid_last_update),
-            },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until,
-                warranty_until,
-            },
-        },
+    #[cfg_attr(rustfmt, rustfmt_skip)]
+    let mocked_data = vec![
+        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
+         10u32, 0u32, None, reserved_until, warranty_until),
+        (seller_id, 890, ProductType::Item, 10, 90,
+         9, 1, Some(paid_last_update), reserved_until, warranty_until,)
     ];
+    let mut models = ut_setup_order_lines(mocked_data);
     let last_updates = [
         dt_now - Duration::minutes(1),
         paid_last_update - Duration::seconds(15),

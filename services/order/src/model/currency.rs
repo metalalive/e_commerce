@@ -1,6 +1,11 @@
+use std::collections::HashMap;
+use std::result::Result;
+
 use rust_decimal::Decimal;
 
-use ecommerce_common::api::dto::{CurrencyDto, CurrencySnapshotDto};
+use ecommerce_common::api::dto::{
+    CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto, OrderSellerCurrencyDto,
+};
 use ecommerce_common::error::AppErrorCode;
 
 use crate::error::AppError;
@@ -17,6 +22,13 @@ pub struct CurrencyModel {
 pub struct CurrencyModelSet {
     pub base: CurrencyDto,
     pub exchange_rates: Vec<CurrencyModel>,
+}
+
+pub struct OrderCurrencyModel {
+    // save locked rate for both parties of buyer and sellers
+    // Note in this project the base currency is always USD
+    pub buyer: CurrencyModel,
+    pub sellers: HashMap<u32, CurrencyModel>,
 }
 
 impl From<&CurrencyModel> for CurrencySnapshotDto {
@@ -91,3 +103,83 @@ impl CurrencyModelSet {
             })
     }
 } // end of impl CurrencyModelSet
+
+impl TryFrom<(CurrencyModelSet, CurrencyDto, Vec<(u32, CurrencyDto)>)> for OrderCurrencyModel {
+    type Error = Vec<AppError>;
+    fn try_from(
+        value: (CurrencyModelSet, CurrencyDto, Vec<(u32, CurrencyDto)>),
+    ) -> Result<Self, Self::Error> {
+        let (exrate_avail, label_buyer, label_sellers) = value;
+        let buyer = exrate_avail
+            .find(&label_buyer)
+            .map(|v| v.clone())
+            .map_err(|mut e| {
+                if let Some(msg) = &mut e.detail {
+                    *msg += ", buyer";
+                }
+                vec![e]
+            })?;
+        let mut errors = Vec::new();
+        let seller_iter = label_sellers.into_iter().filter_map(|(seller_id, label)| {
+            exrate_avail
+                .find(&label)
+                .map(|v| (seller_id, v.clone()))
+                .map_err(|mut e| {
+                    if let Some(msg) = &mut e.detail {
+                        *msg += ", seller:";
+                        *msg += seller_id.to_string().as_str();
+                    }
+                    errors.push(e);
+                })
+                .ok()
+        });
+        let sellers = HashMap::from_iter(seller_iter);
+        if errors.is_empty() {
+            Ok(Self { buyer, sellers })
+        } else {
+            Err(errors)
+        }
+    } // end of fn try-from
+} // end of impl OrderCurrencyModel
+
+impl From<OrderCurrencyModel> for OrderCurrencySnapshotDto {
+    fn from(value: OrderCurrencyModel) -> Self {
+        let OrderCurrencyModel { buyer, sellers } = value;
+        let mut snapshot = sellers
+            .values()
+            .map(CurrencySnapshotDto::from)
+            .collect::<Vec<_>>();
+        let exist = sellers.values().any(|v| v.name == buyer.name);
+        if !exist {
+            let item = CurrencySnapshotDto::from(&buyer);
+            snapshot.push(item);
+        }
+        let sellers = sellers
+            .into_iter()
+            .map(|(seller_id, v)| OrderSellerCurrencyDto {
+                seller_id,
+                currency: v.name,
+            })
+            .collect::<Vec<_>>();
+        Self {
+            snapshot,
+            sellers,
+            buyer: buyer.name,
+        }
+    } // end of fn from
+} // end of impl OrderCurrencySnapshotDto
+
+impl OrderCurrencyModel {
+    pub fn to_buyer_rate(&self, seller_id: u32) -> Result<CurrencyModel, AppError> {
+        let c0 = &self.buyer;
+        let c1 = self.sellers.get(&seller_id).ok_or(AppError {
+            code: AppErrorCode::InvalidInput,
+            detail: Some("rate-not-found".to_string()),
+        })?;
+        let newrate = c0.rate / c1.rate;
+        Ok(CurrencyModel {
+            name: self.buyer.name.clone(),
+            rate: newrate,
+        })
+    }
+}

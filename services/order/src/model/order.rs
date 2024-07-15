@@ -6,10 +6,7 @@ use chrono::{DateTime, Duration, DurationRound, FixedOffset, Local as LocalTime}
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use ecommerce_common::api::dto::{
-    CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto, OrderLinePayDto,
-    OrderSellerCurrencyDto, PayAmountDto,
-};
+use ecommerce_common::api::dto::{OrderLinePayDto, PayAmountDto};
 use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
@@ -29,7 +26,7 @@ use crate::error::AppError;
 use crate::generate_custom_uid;
 
 use super::{
-    BaseProductIdentity, CurrencyModel, CurrencyModelSet, ProductPolicyModel, ProductPriceModel,
+    BaseProductIdentity, CurrencyModel, OrderCurrencyModel, ProductPolicyModel, ProductPriceModel,
 };
 
 pub struct ShippingOptionModel {
@@ -81,13 +78,6 @@ pub struct OrderReturnModel {
     pub qty: OrderReturnQuantityModel,
 } // TODO, declare new struct which collects the hash entry
   // , add different shipping address for each return
-
-pub struct OrderCurrencyModel {
-    // save locked rate for both parties of buyer and sellers
-    // Note in this project the base currency is always USD
-    pub buyer: CurrencyModel,
-    pub sellers: HashMap<u32, CurrencyModel>,
-}
 
 pub struct OrderLineModelSet {
     pub order_id: String,
@@ -380,7 +370,7 @@ impl OrderLineModel {
         }
     }
 
-    fn into_paym_dto(self, curr_m: CurrencyModel) -> OrderLinePayDto {
+    pub fn into_paym_dto(self, curr_m: CurrencyModel) -> OrderLinePayDto {
         let OrderLineModel {
             id_,
             price,
@@ -422,86 +412,6 @@ impl From<OrderLineModel> for InventoryEditStockLevelDto {
         } // NOTE, the field `expiry` should NOT be referenced by the entire application
           // , becuase the editing data, converted from order line, does NOT really reflect
           // the expiry time of the original stock item
-    }
-}
-
-impl TryFrom<(CurrencyModelSet, CurrencyDto, Vec<(u32, CurrencyDto)>)> for OrderCurrencyModel {
-    type Error = Vec<AppError>;
-    fn try_from(
-        value: (CurrencyModelSet, CurrencyDto, Vec<(u32, CurrencyDto)>),
-    ) -> DefaultResult<Self, Self::Error> {
-        let (exrate_avail, label_buyer, label_sellers) = value;
-        let buyer = exrate_avail
-            .find(&label_buyer)
-            .map(|v| v.clone())
-            .map_err(|mut e| {
-                if let Some(msg) = &mut e.detail {
-                    *msg += ", buyer";
-                }
-                vec![e]
-            })?;
-        let mut errors = Vec::new();
-        let seller_iter = label_sellers.into_iter().filter_map(|(seller_id, label)| {
-            exrate_avail
-                .find(&label)
-                .map(|v| (seller_id, v.clone()))
-                .map_err(|mut e| {
-                    if let Some(msg) = &mut e.detail {
-                        *msg += ", seller:";
-                        *msg += seller_id.to_string().as_str();
-                    }
-                    errors.push(e);
-                })
-                .ok()
-        });
-        let sellers = HashMap::from_iter(seller_iter);
-        if errors.is_empty() {
-            Ok(Self { buyer, sellers })
-        } else {
-            Err(errors)
-        }
-    } // end of fn try-from
-} // end of impl OrderCurrencyModel
-
-impl From<OrderCurrencyModel> for OrderCurrencySnapshotDto {
-    fn from(value: OrderCurrencyModel) -> Self {
-        let OrderCurrencyModel { buyer, sellers } = value;
-        let mut snapshot = sellers
-            .values()
-            .map(CurrencySnapshotDto::from)
-            .collect::<Vec<_>>();
-        let exist = sellers.values().any(|v| v.name == buyer.name);
-        if !exist {
-            let item = CurrencySnapshotDto::from(&buyer);
-            snapshot.push(item);
-        }
-        let sellers = sellers
-            .into_iter()
-            .map(|(seller_id, v)| OrderSellerCurrencyDto {
-                seller_id,
-                currency: v.name,
-            })
-            .collect::<Vec<_>>();
-        Self {
-            snapshot,
-            sellers,
-            buyer: buyer.name,
-        }
-    } // end of fn from
-} // end of impl OrderCurrencySnapshotDto
-
-impl OrderCurrencyModel {
-    pub(crate) fn to_buyer_rate(&self, seller_id: u32) -> DefaultResult<CurrencyModel, AppError> {
-        let c0 = &self.buyer;
-        let c1 = self.sellers.get(&seller_id).ok_or(AppError {
-            code: AppErrorCode::InvalidInput,
-            detail: Some("rate-not-found".to_string()),
-        })?;
-        let newrate = c0.rate / c1.rate;
-        Ok(CurrencyModel {
-            name: self.buyer.name.clone(),
-            rate: newrate,
-        })
     }
 }
 
