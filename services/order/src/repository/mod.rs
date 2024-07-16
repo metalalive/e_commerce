@@ -20,9 +20,9 @@ use crate::api::rpc::dto::{
 use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::error::AppError;
 use crate::model::{
-    CartModel, CurrencyModelSet, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
-    OrderReturnModel, ProductPolicyModelSet, ProductPriceModelSet, ProductStockIdentity,
-    ShippingModel, StockLevelModelSet,
+    CartModel, CurrencyModelSet, OrderCurrencyModel, OrderLineIdentity, OrderLineModel,
+    OrderLineModelSet, OrderReturnModel, ProductPolicyModelSet, ProductPriceModelSet,
+    ProductStockIdentity, ShippingModel, StockLevelModelSet,
 };
 use crate::AppDataStoreContext;
 
@@ -149,6 +149,8 @@ pub trait AbsOrderRepo: Sync + Send {
     async fn owner_id(&self, order_id: &str) -> DefaultResult<u32, AppError>;
     async fn created_time(&self, order_id: &str) -> DefaultResult<DateTime<FixedOffset>, AppError>;
 
+    async fn currency_exrates(&self, oid: &str) -> DefaultResult<OrderCurrencyModel, AppError>;
+
     async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError>;
     async fn cancel_unpaid_time_update(&self) -> DefaultResult<(), AppError>;
 } // end of trait AbsOrderRepo
@@ -168,7 +170,7 @@ pub type AppOrderRepoUpdateLinesUserFunc =
 pub type AppOrderFetchRangeCallback =
     fn(
         &dyn AbsOrderRepo,
-        OrderLineModelSet,
+        OrderLineModelSet, // TODO, replace it with order-id and all the lines
     ) -> Pin<Box<dyn Future<Output = DefaultResult<(), AppError>> + Send + '_>>;
 
 pub type AppStockRepoReserveReturn =

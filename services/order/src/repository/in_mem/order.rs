@@ -1,13 +1,15 @@
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::result::Result as DefaultResult;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
+use rust_decimal::Decimal;
 use tokio::sync::Mutex;
 
-use ecommerce_common::api::dto::PhoneNumberDto;
+use ecommerce_common::api::dto::{CurrencyDto, PhoneNumberDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
@@ -17,8 +19,9 @@ use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow, AppInMemFetchedSingleTable};
 use crate::error::AppError;
 use crate::model::{
-    OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
-    OrderLinePriceModel, OrderLineQuantityModel, ShippingModel, ShippingOptionModel,
+    CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
+    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel, ShippingModel,
+    ShippingOptionModel,
 };
 
 use super::super::{
@@ -26,21 +29,18 @@ use super::super::{
 };
 use super::StockLvlInMemRepo;
 
+struct InnerTopLvlWrapper(u32, DateTime<FixedOffset>, CurrencyDto, Decimal);
 struct ContactModelWrapper(ContactModel);
 struct PhyAddrModelWrapper(PhyAddrModel);
+struct SellerCurrencyWrapper(HashMap<u32, CurrencyModel>);
 
 mod _contact {
     use super::{AppInMemFetchedSingleRow, ContactModel, ContactModelWrapper, HashMap};
 
     pub(super) const MULTI_VAL_COLUMN_SEPARATOR: &str = " ";
     pub(super) const TABLE_LABEL: &str = "order_contact";
-    pub(super) enum InMemColIdx {
-        FirstName,
-        LastName,
-        Emails,
-        Phones,
-        TotNumColumns,
-    }
+    #[rustfmt::skip]
+    pub(super) enum InMemColIdx {FirstName, LastName, Emails, Phones, TotNumColumns}
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
             match value {
@@ -68,14 +68,10 @@ mod _phy_addr {
     use super::{AppInMemFetchedSingleRow, HashMap, PhyAddrModel, PhyAddrModelWrapper};
 
     pub(super) const TABLE_LABEL: &str = "order_phyaddr";
+    #[rustfmt::skip]
     pub(super) enum InMemColIdx {
-        Country,
-        Region,
-        City,
-        Distinct,
-        Street,
-        Detail,
-        TotNumColumns,
+        Country, Region, City, Distinct,
+        Street, Detail, TotNumColumns,
     }
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
@@ -104,11 +100,8 @@ mod _phy_addr {
 mod _ship_opt {
     use super::{HashMap, ShippingOptionModel};
 
-    pub(super) enum InMemColIdx {
-        SellerID,
-        Method,
-        TotNumColumns,
-    }
+    #[rustfmt::skip]
+    pub(super) enum InMemColIdx {SellerID, Method, TotNumColumns}
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
             match value {
@@ -136,18 +129,11 @@ mod _orderline {
     use crate::model::OrderLineModel;
 
     pub(super) const TABLE_LABEL: &str = "order_line_reserved";
+    #[rustfmt::skip]
     pub(super) enum InMemColIdx {
-        SellerID,
-        ProductType,
-        ProductId,
-        QtyReserved,
-        PriceUnit,
-        PriceTotal,
-        PolicyReserved,
-        PolicyWarranty,
-        QtyPaid,
-        QtyPaidLastUpdate,
-        TotNumColumns,
+        SellerID, ProductType, ProductId, QtyReserved,
+        PriceUnit, PriceTotal, PolicyReserved, PolicyWarranty,
+        QtyPaid, QtyPaidLastUpdate, TotNumColumns,
     }
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
@@ -207,19 +193,54 @@ mod _orderline {
     }
 } // end of inner module _orderline
 
+mod _seller_currencies {
+    use super::{AppInMemFetchedSingleRow, CurrencyModel, HashMap};
+
+    pub(super) const TABLE_LABEL: &str = "order_seller_currency";
+    #[rustfmt::skip]
+    pub(super) enum InMemColIdx {SellerID, CurrencyLabel, ExchangeRate}
+    impl From<InMemColIdx> for usize {
+        fn from(value: InMemColIdx) -> usize {
+            match value {
+                InMemColIdx::SellerID => 0,
+                InMemColIdx::CurrencyLabel => 1,
+                InMemColIdx::ExchangeRate => 2,
+            }
+        }
+    }
+    pub(super) fn to_inmem_tbl(
+        oid: &str,
+        data: &HashMap<u32, CurrencyModel>,
+    ) -> HashMap<String, AppInMemFetchedSingleRow> {
+        let iter = data.iter().map(|(seller_id, curr_m)| {
+            let key = format!("{oid}-{seller_id}");
+            let row = vec![
+                seller_id.to_string(),
+                curr_m.name.to_string(),
+                curr_m.rate.to_string(),
+            ];
+            (key, row)
+        });
+        HashMap::from_iter(iter)
+    }
+} // end of mode _seller_currencies
+
 mod _order_toplvl_meta {
     use super::{AppInMemFetchedSingleRow, HashMap, OrderLineModelSet};
 
     pub(super) const TABLE_LABEL: &str = "order_toplvl_meta";
+    #[rustfmt::skip]
     pub(super) enum InMemColIdx {
-        OwnerUsrID,
-        CreateTime,
+        OwnerUsrID, CreateTime, BuyerCurrencyLabel,
+        BuyerExchangeRate,
     }
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
             match value {
                 InMemColIdx::OwnerUsrID => 0,
                 InMemColIdx::CreateTime => 1,
+                InMemColIdx::BuyerCurrencyLabel => 2,
+                InMemColIdx::BuyerExchangeRate => 3,
             }
         }
     }
@@ -227,7 +248,12 @@ mod _order_toplvl_meta {
         data: &OrderLineModelSet,
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
         let pkey = data.order_id.clone();
-        let value = vec![data.owner_id.to_string(), data.create_time.to_rfc3339()];
+        let value = vec![
+            data.owner_id.to_string(),
+            data.create_time.to_rfc3339(),
+            data.currency.buyer.name.to_string(),
+            data.currency.buyer.rate.to_string(),
+        ];
         HashMap::from([(pkey, value)])
     } // end of fn to_inmem_tbl
 } // end of inner module _order_toplvl_meta
@@ -328,55 +354,38 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
     }
 } // end of impl From for OrderLineModel reference
 impl From<AppInMemFetchedSingleRow> for OrderLineModel {
+    #[rustfmt::skip]
     fn from(value: AppInMemFetchedSingleRow) -> OrderLineModel {
         let row = value;
         let seller_id = row
             .get::<usize>(_orderline::InMemColIdx::SellerID.into())
-            .unwrap()
-            .parse()
-            .unwrap();
+            .unwrap().parse().unwrap();
         let prod_typ = row
             .get::<usize>(_orderline::InMemColIdx::ProductType.into())
-            .unwrap()
-            .parse::<u8>()
-            .unwrap();
+            .unwrap().parse::<u8>().unwrap();
         let product_id = row
             .get::<usize>(_orderline::InMemColIdx::ProductId.into())
-            .unwrap()
-            .parse()
-            .unwrap();
+            .unwrap().parse().unwrap();
         let price = OrderLinePriceModel {
             unit: row
                 .get::<usize>(_orderline::InMemColIdx::PriceUnit.into())
-                .unwrap()
-                .parse()
-                .unwrap(),
+                .unwrap().parse().unwrap(),
             total: row
                 .get::<usize>(_orderline::InMemColIdx::PriceTotal.into())
-                .unwrap()
-                .parse()
-                .unwrap(),
+                .unwrap().parse().unwrap(),
         };
         let qty_paid_last_update = {
             let p = row.get::<usize>(_orderline::InMemColIdx::QtyPaidLastUpdate.into());
             let p = p.unwrap().as_str();
-            if let Ok(v) = DateTime::parse_from_rfc3339(p) {
-                Some(v)
-            } else {
-                None
-            }
+            DateTime::parse_from_rfc3339(p).ok()
         };
         let qty = OrderLineQuantityModel {
             reserved: row
                 .get::<usize>(_orderline::InMemColIdx::QtyReserved.into())
-                .unwrap()
-                .parse()
-                .unwrap(),
+                .unwrap().parse().unwrap(),
             paid: row
                 .get::<usize>(_orderline::InMemColIdx::QtyPaid.into())
-                .unwrap()
-                .parse()
-                .unwrap(),
+                .unwrap().parse().unwrap(),
             paid_last_update: qty_paid_last_update,
         };
         if qty.paid_last_update.is_none() {
@@ -394,19 +403,14 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
                 .unwrap();
             DateTime::parse_from_rfc3339(s.as_str()).unwrap()
         };
-        let policy = OrderLineAppliedPolicyModel {
-            reserved_until,
-            warranty_until,
-        };
+        let policy = OrderLineAppliedPolicyModel {reserved_until, warranty_until};
         OrderLineModel {
             id_: OrderLineIdentity {
                 store_id: seller_id,
                 product_id,
                 product_type: ProductType::from(prod_typ),
             },
-            price,
-            policy,
-            qty,
+            price, policy, qty,
         }
     }
 } // end of impl into OrderLineModel
@@ -508,33 +512,27 @@ impl From<PhyAddrModelWrapper> for AppInMemFetchedSingleRow {
     } // end of fn from
 }
 impl From<AppInMemFetchedSingleRow> for PhyAddrModelWrapper {
+    #[rustfmt::skip]
     fn from(value: AppInMemFetchedSingleRow) -> PhyAddrModelWrapper {
         let (country, region, city, distinct, street, detail) = (
             value
                 .get::<usize>(_phy_addr::InMemColIdx::Country.into())
-                .unwrap()
-                .to_owned()
-                .into(),
+                .unwrap().to_owned().into(),
             value
                 .get::<usize>(_phy_addr::InMemColIdx::Region.into())
-                .unwrap()
-                .to_owned(),
+                .unwrap().to_owned(),
             value
                 .get::<usize>(_phy_addr::InMemColIdx::City.into())
-                .unwrap()
-                .to_owned(),
+                .unwrap().to_owned(),
             value
                 .get::<usize>(_phy_addr::InMemColIdx::Distinct.into())
-                .unwrap()
-                .to_owned(),
+                .unwrap().to_owned(),
             value
                 .get::<usize>(_phy_addr::InMemColIdx::Street.into())
-                .unwrap()
-                .to_owned(),
+                .unwrap().to_owned(),
             value
                 .get::<usize>(_phy_addr::InMemColIdx::Detail.into())
-                .unwrap()
-                .to_owned(),
+                .unwrap().to_owned(),
         );
         let street_name = if street.is_empty() {
             None
@@ -542,12 +540,8 @@ impl From<AppInMemFetchedSingleRow> for PhyAddrModelWrapper {
             Some(street)
         };
         PhyAddrModelWrapper(PhyAddrModel {
-            country,
-            region,
-            city,
-            distinct,
-            street_name,
-            detail,
+            country, region, city,
+            distinct, street_name, detail,
         })
     } // end of fn from
 }
@@ -574,24 +568,67 @@ impl From<ShippingOptionModel> for AppInMemFetchedSingleRow {
     }
 }
 impl From<AppInMemFetchedSingleRow> for ShippingOptionModel {
+    #[rustfmt::skip]
     fn from(value: AppInMemFetchedSingleRow) -> ShippingOptionModel {
         let (seller_id, method) = (
             value
                 .get::<usize>(_ship_opt::InMemColIdx::SellerID.into())
-                .unwrap()
-                .parse()
-                .unwrap(),
+                .unwrap().parse().unwrap(),
             value
                 .get::<usize>(_ship_opt::InMemColIdx::Method.into())
-                .unwrap()
-                .to_owned(),
+                .unwrap().to_owned(),
         );
         ShippingOptionModel {
-            seller_id,
-            method: ShippingMethod::from(method),
+            seller_id, method: ShippingMethod::from(method),
         }
     }
 }
+
+impl From<AppInMemFetchedSingleRow> for InnerTopLvlWrapper {
+    fn from(value: AppInMemFetchedSingleRow) -> Self {
+        let usr_id = value
+            .get::<usize>(_order_toplvl_meta::InMemColIdx::OwnerUsrID.into())
+            .unwrap()
+            .parse()
+            .unwrap();
+        let idx: usize = _order_toplvl_meta::InMemColIdx::CreateTime.into();
+        let create_time = DateTime::parse_from_rfc3339(value[idx].as_str()).unwrap();
+        let buyer_currency = value
+            .get::<usize>(_order_toplvl_meta::InMemColIdx::BuyerCurrencyLabel.into())
+            .unwrap()
+            .into();
+        let buyer_exrate = value
+            .get::<usize>(_order_toplvl_meta::InMemColIdx::BuyerExchangeRate.into())
+            .map(|v| Decimal::from_str(v.as_str()))
+            .unwrap()
+            .unwrap();
+        Self(usr_id, create_time, buyer_currency, buyer_exrate)
+    }
+}
+
+impl From<AppInMemFetchedSingleTable> for SellerCurrencyWrapper {
+    #[rustfmt::skip]
+    fn from(value : AppInMemFetchedSingleTable) -> Self {
+        let iter = value.into_values()
+            .map(|row| {
+                let seller_id = row
+                    .get::<usize>(_seller_currencies::InMemColIdx::SellerID.into())
+                    .unwrap().parse().unwrap();
+                let cname_raw = row
+                    .get::<usize>(_seller_currencies::InMemColIdx::CurrencyLabel.into())
+                    .unwrap();
+                let rate_raw = row
+                    .get::<usize>(_seller_currencies::InMemColIdx::ExchangeRate.into())
+                    .unwrap().as_str();
+                let m = CurrencyModel {
+                    name: CurrencyDto::from(cname_raw),
+                    rate: Decimal::from_str(rate_raw).unwrap()
+                };
+                (seller_id, m)
+            });
+        Self(HashMap::from_iter(iter))
+    }
+} // end of impl SellerCurrencyWrapper
 
 #[async_trait]
 impl AbsOrderRepo for OrderInMemRepo {
@@ -811,13 +848,21 @@ impl AbsOrderRepo for OrderInMemRepo {
             .await?;
         let key_grps = _orderline::pk_group_by_oid(keys_flattened);
         for (oid, keys) in key_grps.into_iter() {
-            let (owner_id, create_time) = self.fetch_toplvl_meta(oid.as_str()).await?;
+            let InnerTopLvlWrapper(owner_id, create_time, buyer_currency, buyer_exrate) =
+                self.fetch_toplvl_meta(oid.as_str()).await?;
             let ms = self.fetch_lines_common(keys).await?;
             let mset = OrderLineModelSet {
                 order_id: oid,
                 owner_id,
                 create_time,
                 lines: ms,
+                currency: OrderCurrencyModel {
+                    buyer: CurrencyModel {
+                        name: buyer_currency,
+                        rate: buyer_exrate,
+                    },
+                    sellers: std::collections::HashMap::new(),
+                }, // TODO, will be deleted once refactored
             };
             usr_cb(self, mset).await?;
         }
@@ -855,13 +900,37 @@ impl AbsOrderRepo for OrderInMemRepo {
     }
 
     async fn owner_id(&self, order_id: &str) -> DefaultResult<u32, AppError> {
-        let (usr_id, _create_time) = self.fetch_toplvl_meta(order_id).await?;
-        Ok(usr_id)
+        let inner = self.fetch_toplvl_meta(order_id).await?;
+        Ok(inner.0)
     }
     async fn created_time(&self, order_id: &str) -> DefaultResult<DateTime<FixedOffset>, AppError> {
-        let (_usr_id, create_time) = self.fetch_toplvl_meta(order_id).await?;
-        Ok(create_time)
+        let inner = self.fetch_toplvl_meta(order_id).await?;
+        Ok(inner.1)
     }
+
+    async fn currency_exrates(&self, oid: &str) -> DefaultResult<OrderCurrencyModel, AppError> {
+        let toplvl_m = self.fetch_toplvl_meta(oid).await?;
+        let op = _pkey_partial_label::InMemDStoreFiltKeyOID { oid, label: None };
+        let tbl_label = _seller_currencies::TABLE_LABEL;
+        let keys = self
+            .datastore
+            .filter_keys(tbl_label.to_string(), &op)
+            .await?;
+        let info = HashMap::from([(tbl_label.to_string(), keys)]);
+        let mut resultset = self.datastore.fetch(info).await?;
+        let data = resultset.remove(tbl_label).ok_or(AppError {
+            code: AppErrorCode::DataTableNotExist,
+            detail: Some(tbl_label.to_string()),
+        })?;
+        let sellers_c = SellerCurrencyWrapper::from(data);
+        Ok(OrderCurrencyModel {
+            buyer: CurrencyModel {
+                name: toplvl_m.2,
+                rate: toplvl_m.3,
+            },
+            sellers: sellers_c.0,
+        })
+    } // end of fn currency_exrates
 
     async fn cancel_unpaid_last_time(&self) -> DefaultResult<DateTime<FixedOffset>, AppError> {
         let guard = self._sched_job_last_launched.lock().await;
@@ -886,6 +955,7 @@ impl OrderInMemRepo {
         m.create_table(_phy_addr::TABLE_LABEL).await?;
         m.create_table(_ship_opt::TABLE_LABEL).await?;
         m.create_table(_orderline::TABLE_LABEL).await?;
+        m.create_table(_seller_currencies::TABLE_LABEL).await?;
         m.create_table(_order_toplvl_meta::TABLE_LABEL).await?;
         let stock_repo = StockLvlInMemRepo::build(m.clone(), timenow).await?;
         let job_time = DateTime::parse_from_rfc3339("2019-03-13T12:59:54+08:00").unwrap();
@@ -896,7 +966,7 @@ impl OrderInMemRepo {
         };
         Ok(obj)
     }
-    pub(super) fn in_mem_olines(
+    pub(super) fn gen_lowlvl_tablerows(
         lineset: &OrderLineModelSet,
     ) -> Vec<(String, AppInMemFetchedSingleTable)> {
         let oid = lineset.order_id.as_str();
@@ -906,10 +976,14 @@ impl OrderInMemRepo {
                 _orderline::to_inmem_tbl(oid, &lineset.lines),
             ),
             (
+                _seller_currencies::TABLE_LABEL.to_string(),
+                _seller_currencies::to_inmem_tbl(oid, &lineset.currency.sellers),
+            ),
+            (
                 _order_toplvl_meta::TABLE_LABEL.to_string(),
                 _order_toplvl_meta::to_inmem_tbl(lineset),
             ),
-        ]
+        ] // TODO, add seller-currency table
     }
     async fn fetch_lines_common(
         &self,
@@ -928,18 +1002,14 @@ impl OrderInMemRepo {
     async fn fetch_toplvl_meta(
         &self,
         order_id: &str,
-    ) -> DefaultResult<(u32, DateTime<FixedOffset>), AppError> {
+    ) -> DefaultResult<InnerTopLvlWrapper, AppError> {
         let tbl_label = _order_toplvl_meta::TABLE_LABEL;
         let keys = vec![order_id.to_string()];
         let info = HashMap::from([(tbl_label.to_string(), keys)]);
         let mut data = self.datastore.fetch(info).await?;
         let result = data.remove(tbl_label).unwrap().into_values().next();
         if let Some(row) = result {
-            let idx: usize = _order_toplvl_meta::InMemColIdx::OwnerUsrID.into();
-            let usr_id = row[idx].parse().unwrap();
-            let idx: usize = _order_toplvl_meta::InMemColIdx::CreateTime.into();
-            let create_time = DateTime::parse_from_rfc3339(row[idx].as_str()).unwrap();
-            Ok((usr_id, create_time))
+            Ok(InnerTopLvlWrapper::from(row))
         } else {
             let detail = order_id.to_string();
             Err(AppError {

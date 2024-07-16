@@ -358,7 +358,7 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
         };
         usr_cb(&mut stock_mset, order_req)?;
         let data = {
-            let mut seq = OrderInMemRepo::in_mem_olines(order_req);
+            let mut seq = OrderInMemRepo::gen_lowlvl_tablerows(order_req);
             let rows = AppInMemFetchedSingleTable::from(SaveArg(stock_mset, rsv_set));
             seq.insert(0, (_stockm::TABLE_LABEL.to_string(), rows));
             HashMap::from_iter(seq)

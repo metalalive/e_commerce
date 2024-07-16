@@ -2,15 +2,17 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, FixedOffset};
-use ecommerce_common::api::dto::CountryCode;
+use rust_decimal::Decimal;
+
+use ecommerce_common::api::dto::{CountryCode, CurrencyDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::order::BillingModel;
 
 use order::api::dto::ShippingMethod;
 use order::datastore::AppInMemoryDStore;
 use order::model::{
-    OrderLineIdentity, OrderLineModel, OrderLineModelSet, ProductStockModel, ShippingModel,
-    StockLevelModelSet, StockQuantityModel, StoreStockModel,
+    CurrencyModel, OrderCurrencyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
+    ProductStockModel, ShippingModel, StockLevelModelSet, StockQuantityModel, StoreStockModel,
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveReturn, OrderInMemRepo,
@@ -82,9 +84,10 @@ pub(super) fn ut_setup_stock_rsv_cb(
 
 async fn ut_verify_create_order(
     mock_oid: [String; 3],
-    mock_usr_ids: [u32; 3],
+    mut mock_buyer_meta: Vec<(u32, CurrencyDto, Decimal)>,
     mock_create_time: [&str; 3],
     o_repo: &OrderInMemRepo,
+    mut seller_currency_data: Vec<Vec<(u32, CurrencyDto, Decimal)>>,
     mut orderlines: Vec<OrderLineModel>,
     mut billings: Vec<BillingModel>,
     mut shippings: Vec<ShippingModel>,
@@ -92,11 +95,34 @@ async fn ut_verify_create_order(
     assert!(orderlines.len() >= ORDERS_NUM_LINES.iter().sum::<usize>());
     let stockrepo = o_repo.stock();
     for idx in 0..3 {
+        let lines = orderlines
+            .drain(0..ORDERS_NUM_LINES[idx])
+            .collect::<Vec<_>>();
+        let seller_currencies = {
+            let scdata = seller_currency_data.remove(0);
+            let iter = scdata.into_iter().map(|v| {
+                let m = CurrencyModel {
+                    name: v.1,
+                    rate: v.2,
+                };
+                (v.0, m)
+            });
+            HashMap::from_iter(iter)
+        };
+        let bcdata = mock_buyer_meta.remove(0);
+        let currency = OrderCurrencyModel {
+            buyer: CurrencyModel {
+                name: bcdata.1,
+                rate: bcdata.2,
+            },
+            sellers: seller_currencies,
+        };
         let ol_set = OrderLineModelSet {
             order_id: mock_oid[idx].clone(),
-            owner_id: mock_usr_ids[idx],
+            owner_id: bcdata.0,
             create_time: DateTime::parse_from_rfc3339(mock_create_time[idx]).unwrap(),
-            lines: orderlines.drain(0..ORDERS_NUM_LINES[idx]).collect(),
+            lines,
+            currency,
         };
         let result = stockrepo.try_reserve(ut_setup_stock_rsv_cb, &ol_set).await;
         assert!(result.is_ok());
@@ -108,7 +134,7 @@ async fn ut_verify_create_order(
             )
             .await;
         assert!(result.is_ok());
-    }
+    } // end of loop
 } // end of fn ut_verify_create_order
 
 async fn ut_verify_fetch_all_olines(
@@ -339,9 +365,55 @@ async fn ut_verify_fetch_shipping(
     }
 }
 
+async fn ut_verify_seller_currencies(
+    mock_oids: [String; 3],
+    mut mock_buyer_data: Vec<(u32, CurrencyDto, Decimal)>,
+    mut mock_seller_data: Vec<Vec<(u32, CurrencyDto, Decimal)>>,
+    o_repo: &OrderInMemRepo,
+) {
+    for oid in mock_oids {
+        let result = o_repo.currency_exrates(oid.as_str()).await;
+        assert!(result.is_ok());
+        let actual = result.unwrap();
+        let expect_buyer = mock_buyer_data.remove(0);
+        let expect_sellers = mock_seller_data.remove(0);
+        assert_eq!(actual.buyer.name, expect_buyer.1);
+        assert_eq!(actual.buyer.rate, expect_buyer.2);
+        expect_sellers
+            .into_iter()
+            .map(|(seller_id, curr_label, ex_rate)| {
+                let seller_exist = actual.sellers.get(&seller_id).unwrap();
+                assert_eq!(seller_exist.name, curr_label);
+                assert_eq!(seller_exist.rate, ex_rate);
+            })
+            .count();
+    }
+}
+
+#[cfg_attr(rustfmt, rustfmt_skip)]
 #[tokio::test]
 async fn in_mem_create_ok() {
-    let (mock_usr_ids, mock_seller_ids) = ([124u32, 421, 124], [17u32, 38]);
+    let mock_buyer_ids = [124u32, 421, 124];
+    let mock_buyer_meta = vec![
+        (mock_buyer_ids[0], CurrencyDto::IDR, Decimal::new(163217709, 4)),
+        (mock_buyer_ids[1], CurrencyDto::TWD, Decimal::new(3201, 2)),
+        (mock_buyer_ids[2], CurrencyDto::INR, Decimal::new(843029, 4)),
+    ];
+    let mock_seller_ids = [17u32, 38];
+    let mock_seller_currency = vec![
+        vec![
+            (mock_seller_ids[0], CurrencyDto::TWD, Decimal::new(320256, 4)),
+            (mock_seller_ids[1], CurrencyDto::USD, Decimal::new(10, 1)),
+        ],
+        vec![
+            (mock_seller_ids[0], CurrencyDto::THB, Decimal::new(3874, 2)),
+            (mock_seller_ids[1], CurrencyDto::IDR, Decimal::new(1590293, 2)),
+        ],
+        vec![
+            (mock_seller_ids[0], CurrencyDto::IDR, Decimal::new(158930029, 4)),
+            (mock_seller_ids[1], CurrencyDto::TWD, Decimal::new(3196, 2)),
+        ],
+    ];
     let mock_oid = [
         OrderLineModel::generate_order_id(4),
         OrderLineModel::generate_order_id(2),
@@ -358,9 +430,10 @@ async fn in_mem_create_ok() {
     ut_setup_save_stock(o_repo.stock(), mock_repo_time, &orderlines).await;
     ut_verify_create_order(
         mock_oid.clone(),
-        mock_usr_ids.clone(),
+        mock_buyer_meta.clone(),
         mock_create_time.clone(),
         &o_repo,
+        mock_seller_currency.clone(),
         orderlines,
         ut_setup_billing(),
         ut_setup_shipping(&mock_seller_ids),
@@ -378,7 +451,7 @@ async fn in_mem_create_ok() {
         &o_repo,
     )
     .await;
-    ut_verify_fetch_owner_id(mock_oid.clone(), mock_usr_ids, &o_repo).await;
+    ut_verify_fetch_owner_id(mock_oid.clone(), mock_buyer_ids, &o_repo).await;
     ut_verify_fetch_create_time(mock_oid.clone(), mock_create_time, &o_repo).await;
     ut_verify_fetch_ids_by_ctime(
         [
@@ -401,6 +474,12 @@ async fn in_mem_create_ok() {
         &o_repo,
     )
     .await;
+    ut_verify_seller_currencies(
+        mock_oid.clone(),
+        mock_buyer_meta,
+        mock_seller_currency,
+        &o_repo
+    ).await;
     ut_verify_fetch_billing(mock_oid.clone(), &o_repo).await;
     ut_verify_fetch_shipping(mock_oid, mock_seller_ids, &o_repo).await;
 } // end of in_mem_create_ok

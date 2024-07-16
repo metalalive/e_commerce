@@ -1,7 +1,11 @@
-use chrono::{DateTime, Duration, FixedOffset};
+use std::collections::HashMap;
 use std::ptr;
 use std::sync::Arc;
 
+use chrono::{DateTime, Duration, FixedOffset};
+use rust_decimal::Decimal;
+
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -12,9 +16,10 @@ use order::api::web::dto::{OrderLineCreateErrorDto, OrderLineCreateErrorReason};
 use order::datastore::AppInMemoryDStore;
 use order::error::AppError;
 use order::model::{
-    OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,
-    OrderLinePriceModel, OrderLineQuantityModel, ProductStockIdentity, ProductStockModel,
-    StockLevelModelSet, StockQtyRsvModel, StockQuantityModel, StoreStockModel,
+    CurrencyModel, OrderCurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity,
+    OrderLineModel, OrderLineModelSet, OrderLinePriceModel, OrderLineQuantityModel,
+    ProductStockIdentity, ProductStockModel, StockLevelModelSet, StockQtyRsvModel,
+    StockQuantityModel, StoreStockModel,
 };
 use order::repository::{
     AbsOrderRepo, AbsOrderStockRepo, AppStockRepoReserveReturn, AppStockRepoReserveUserFunc,
@@ -444,6 +449,21 @@ pub(crate) fn mock_reserve_usr_cb_1(
     Ok(())
 } // end of mock_reserve_usr_cb_1
 
+fn ut_setup_order_currency(seller_ids: Vec<u32>) -> OrderCurrencyModel {
+    let buyer = CurrencyModel {
+        name: CurrencyDto::TWD,
+        rate: Decimal::new(32041, 3),
+    };
+    let seller_c = buyer.clone();
+    let kv_pairs = seller_ids
+        .into_iter()
+        .map(|seller_id| (seller_id, seller_c.clone()));
+    OrderCurrencyModel {
+        buyer,
+        sellers: HashMap::from_iter(kv_pairs),
+    }
+}
+
 pub(crate) async fn ut_reserve_init_setup(
     stockrepo: Arc<Box<dyn AbsOrderStockRepo>>,
     usr_cb: AppStockRepoReserveUserFunc,
@@ -478,11 +498,12 @@ pub(crate) async fn ut_reserve_init_setup(
         order_id: order_id.to_string(),
         lines: order_req,
         owner_id: 123,
+        currency: ut_setup_order_currency(vec![store_id]),
         create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
     };
     let result = stockrepo.try_reserve(usr_cb, &ol_set).await;
     assert!(result.is_ok());
-}
+} // end of fn ut_reserve_init_setup
 
 #[tokio::test]
 async fn try_reserve_ok() {
@@ -635,6 +656,7 @@ async fn try_reserve_ok() {
         order_id: "AnotherMan".to_string(),
         lines: order_req,
         owner_id: 123,
+        currency: ut_setup_order_currency(vec![1001, 1002, 1003]),
         create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_1, &ol_set).await;
@@ -772,6 +794,7 @@ async fn try_reserve_shortage() {
         order_id: "xx1".to_string(),
         lines: order_req,
         owner_id: 123,
+        currency: ut_setup_order_currency(vec![1001]),
         create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_2, &ol_set).await;
@@ -853,6 +876,7 @@ async fn try_reserve_user_cb_err() {
         order_id: "xx1".to_string(),
         lines: order_req,
         owner_id: 321,
+        currency: ut_setup_order_currency(vec![expect_slset.stores[0].store_id]),
         create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
     };
     let result = stockrepo.try_reserve(mock_reserve_usr_cb_3, &ol_set).await;

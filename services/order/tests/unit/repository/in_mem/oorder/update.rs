@@ -1,11 +1,13 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::result::Result as DefaultResult;
 
 use chrono::{DateTime, Duration as ChronoDuration, FixedOffset};
+use rust_decimal::Decimal;
 use tokio::time::{sleep, Duration as TokioDuration};
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
@@ -15,11 +17,29 @@ use order::api::rpc::dto::{
 };
 use order::datastore::AppInMemoryDStore;
 use order::error::AppError;
-use order::model::{OrderLineModel, OrderLineModelSet};
+use order::model::{CurrencyModel, OrderCurrencyModel, OrderLineModel, OrderLineModelSet};
 use order::repository::{AbsOrderRepo, OrderInMemRepo};
 
 use super::create::{ut_setup_save_stock, ut_setup_stock_rsv_cb};
 use super::{in_mem_repo_ds_setup, ut_setup_billing, ut_setup_orderlines, ut_setup_shipping};
+
+fn ut_setup_order_currency(mock_seller_ids: [u32; 2]) -> OrderCurrencyModel {
+    let buyer = CurrencyModel {
+        name: CurrencyDto::TWD,
+        rate: Decimal::new(32118, 3),
+    };
+    let seller_c = CurrencyModel {
+        name: CurrencyDto::IDR,
+        rate: Decimal::new(139040043, 4),
+    };
+    let iter = mock_seller_ids
+        .into_iter()
+        .map(|seller_id| (seller_id, seller_c.clone()));
+    OrderCurrencyModel {
+        buyer,
+        sellers: HashMap::from_iter(iter),
+    }
+}
 
 async fn ut_setup_saved_order(
     o_repo: &OrderInMemRepo,
@@ -37,6 +57,7 @@ async fn ut_setup_saved_order(
         order_id: mock_oid,
         lines,
         owner_id: mock_usr_id,
+        currency: ut_setup_order_currency(mock_seller_ids),
         create_time: DateTime::parse_from_rfc3339("2022-11-07T04:00:00.519-01:00").unwrap(),
     };
     let stockrepo = o_repo.stock();
@@ -50,7 +71,7 @@ async fn ut_setup_saved_order(
         )
         .await;
     assert!(result.is_ok());
-}
+} // end of fn ut_setup_saved_order
 
 fn ut_setup_oline_new_payment(sellers_id: [u32; 2]) -> Vec<OrderLinePaidUpdateDto> {
     let paid_time = [
