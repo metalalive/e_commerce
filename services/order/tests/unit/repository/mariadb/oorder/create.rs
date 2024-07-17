@@ -4,12 +4,14 @@ use std::pin::Pin;
 use std::result::Result as DefaultResult;
 
 use chrono::{DateTime, Duration, Local, SubsecRound};
-use ecommerce_common::api::dto::CountryCode;
+use rust_decimal::Decimal;
+
+use ecommerce_common::api::dto::{CountryCode, CurrencyDto};
 use ecommerce_common::constant::ProductType;
 
 use order::api::dto::ShippingMethod;
 use order::error::AppError;
-use order::model::{OrderLineModelSet, StockLevelModelSet};
+use order::model::{OrderCurrencyModel, OrderLineModelSet, StockLevelModelSet};
 use order::repository::{app_repo_order, AbsOrderRepo, AppStockRepoReserveReturn};
 
 use super::super::super::in_mem::oorder::stock::ut_reserve_init_setup;
@@ -17,6 +19,7 @@ use super::super::super::in_mem::oorder::{ut_setup_billing, ut_setup_shipping};
 use super::super::dstore_ctx_setup;
 use super::{ut_oline_init_setup, ut_setup_stock_product};
 
+#[rustfmt::skip]
 pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>) {
     let oid = "800eff40".to_string();
     let result = o_repo.fetch_all_lines(oid).await;
@@ -30,53 +33,29 @@ pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>
             let combo = (id_.store_id, id_.product_type, id_.product_id);
             let expect = match combo {
                 (1013, ProductType::Package, 9004) => (
-                    2,
-                    0,
-                    3,
-                    6,
-                    true,
+                    2, 0, 3, 6, true,
                     DateTime::parse_from_rfc3339("3015-11-29T15:07:30-03:00").unwrap(),
                 ),
                 (1013, ProductType::Item, 9006) => (
-                    3,
-                    0,
-                    4,
-                    12,
-                    true,
+                    3, 0, 4, 12, true,
                     DateTime::parse_from_rfc3339("3014-11-29T15:46:43-03:00").unwrap(),
                 ),
                 (1014, ProductType::Package, 9008) => (
-                    29,
-                    0,
-                    20,
-                    580,
-                    true,
+                    29, 0, 20, 580, true,
                     DateTime::parse_from_rfc3339("3015-11-29T15:09:30-03:00").unwrap(),
                 ),
                 (1014, ProductType::Item, 9009) => (
-                    6,
-                    0,
-                    15,
-                    90,
-                    true,
+                    6, 0, 15, 90, true,
                     DateTime::parse_from_rfc3339("3014-11-29T15:48:43-03:00").unwrap(),
                 ),
                 _others => (
-                    0,
-                    0,
-                    0,
-                    0,
-                    true,
+                    0, 0, 0, 0, true,
                     DateTime::parse_from_rfc3339("1989-05-30T23:57:59+00:00").unwrap(),
                 ),
             };
             let actual = (
-                qty.reserved,
-                qty.paid,
-                price.unit,
-                price.total,
-                qty.paid_last_update.is_none(),
-                policy.warranty_until,
+                qty.reserved, qty.paid, price.unit, price.total,
+                qty.paid_last_update.is_none(), policy.warranty_until,
             );
             assert_eq!(actual, expect);
         })
@@ -177,17 +156,19 @@ async fn save_contact_error() {
     assert!(result.is_err()); // no shipping option provided
 }
 
+#[rustfmt::skip]
 fn ut_fetch_lines_rsvtime_usr_cb(
     _repo: &dyn AbsOrderRepo,
     mset: OrderLineModelSet,
 ) -> Pin<Box<dyn Future<Output = DefaultResult<(), AppError>> + Send + '_>> {
     let fut = async move {
+        let mock_seller = 1033u32;
         println!("[DEBUG] fetched oids : {}", mset.order_id.as_str());
         let expect = match mset.order_id.as_str() {
-            "0e927d72" => (1usize, vec![(9013u64, 14u32)]),
-            "0e927d73" => (2, vec![(9012, 15), (9013, 16)]),
-            "0e927d74" => (1, vec![(9012, 17)]),
-            _others => (0, vec![]),
+            "0e927d72" => (1usize, vec![(9013u64, 14u32)], CurrencyDto::INR, "79.0045"),
+            "0e927d73" => (2, vec![(9012, 15), (9013, 16)], CurrencyDto::IDR, "16298.0110"),
+            "0e927d74" => (1, vec![(9012, 17)], CurrencyDto::THB, "38.7160"),
+            _others => (0, vec![], CurrencyDto::Unknown, "-0.00"),
         }; // remind `BINARY` column is right-padded with zero in MariaDB
         let mut actual_product_ids = mset
             .lines
@@ -195,51 +176,55 @@ fn ut_fetch_lines_rsvtime_usr_cb(
             .map(|line| (line.id_.product_id, line.qty.reserved))
             .collect::<Vec<_>>();
         actual_product_ids.sort_by(|a, b| a.0.cmp(&b.0));
-        let actual = (mset.lines.len(), actual_product_ids);
-        assert_eq!(actual, expect);
+        assert_eq!(mset.lines.len(), expect.0);
+        assert_eq!(actual_product_ids, expect.1);
+        let result = mset.currency.sellers.get(&mock_seller)
+            .map(|v| {
+                assert_eq!(v.name, expect.2);
+                assert_eq!(v.rate.to_string().as_str(), expect.3);
+            });
+        assert!(result.is_some());
         Ok(())
     };
     Box::pin(fut)
-}
+} // end of fn ut_fetch_lines_rsvtime_usr_cb
 
 #[cfg(feature = "mariadb")]
+#[rustfmt::skip]
 #[tokio::test]
 async fn fetch_lines_by_rsvtime_ok() {
     let ds = dstore_ctx_setup();
     let o_repo = app_repo_order(ds).await.unwrap();
     let create_time = Local::now().fixed_offset();
     let (mock_seller, mut mock_rsv_qty, mut rsv_time) = (1033, 11u32, create_time.clone());
-    let mock_oids = ["0e927d71", "0e927d72", "0e927d73", "0e927d74", "0e927d75"];
+    let mock_misc = [
+        ("0e927d71", CurrencyDto::THB, Decimal::new(3845, 2)),
+        ("0e927d72", CurrencyDto::INR, Decimal::new(790045, 4)),
+        ("0e927d73", CurrencyDto::IDR, Decimal::new(162980110, 4)),
+        ("0e927d74", CurrencyDto::THB, Decimal::new(38716, 3)),
+        ("0e927d75", CurrencyDto::INR, Decimal::new(8011, 2)),
+    ];
     ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Package, 9012, 500).await;
     ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Item, 9013, 500).await;
-    for mock_oid in mock_oids {
+    for (mock_oid, mock_currency_label, mock_currency_rate) in mock_misc {
         rsv_time += Duration::days(2);
         let lines = vec![
-            (
-                mock_seller,
-                ProductType::Package,
-                9012,
-                mock_rsv_qty,
-                29,
-                rsv_time,
-            ),
-            (
-                mock_seller,
-                ProductType::Item,
-                9013,
-                mock_rsv_qty + 1,
-                25,
-                rsv_time + Duration::days(1),
-            ),
+            (mock_seller, ProductType::Package, 9012, mock_rsv_qty, 29, rsv_time),
+            (mock_seller, ProductType::Item, 9013, mock_rsv_qty + 1, 25, rsv_time + Duration::days(1)),
         ];
-        let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
+        let mut ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
+        ol_set.currency.sellers.get_mut(&mock_seller)
+            .map(|v| {
+                v.name = mock_currency_label;
+                v.rate = mock_currency_rate;
+            });
         let result = o_repo
             .stock()
             .try_reserve(mock_reserve_usr_cb_0, &ol_set)
             .await;
         assert!(result.is_ok());
         mock_rsv_qty += 2;
-    }
+    } // end of loop
     let (time_start, time_end) = (
         create_time + Duration::days(4) + Duration::hours(1),
         create_time + Duration::days(8) + Duration::hours(1),
@@ -251,6 +236,7 @@ async fn fetch_lines_by_rsvtime_ok() {
 } // end of fn fetch_lines_by_rsvtime_ok
 
 #[cfg(feature = "mariadb")]
+#[rustfmt::skip]
 #[tokio::test]
 async fn fetch_toplvl_meta_ok() {
     let ds = dstore_ctx_setup();
@@ -264,18 +250,10 @@ async fn fetch_toplvl_meta_ok() {
         create_time += Duration::minutes(3);
         let rsv_time = now + Duration::days(1);
         let lines = vec![(
-            mock_seller,
-            ProductType::Package,
-            9014,
-            mock_rsv_qty,
-            29,
-            rsv_time,
+            mock_seller, ProductType::Package, 9014, mock_rsv_qty, 29, rsv_time,
         )];
         let ol_set = ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines);
-        let result = o_repo
-            .stock()
-            .try_reserve(mock_reserve_usr_cb_0, &ol_set)
-            .await;
+        let result = o_repo.stock().try_reserve(mock_reserve_usr_cb_0, &ol_set).await;
         assert!(result.is_ok());
         mock_usr_id += 10;
     }
@@ -308,3 +286,59 @@ async fn fetch_toplvl_meta_ok() {
         now.round_subsecs(0) + Duration::minutes(6)
     );
 } // end of fn fetch_toplvl_meta_ok
+
+#[cfg(feature = "mariadb")]
+#[rustfmt::skip]
+#[tokio::test]
+async fn fetch_seller_currency_ok() {
+    let ds = dstore_ctx_setup();
+    let o_repo = app_repo_order(ds).await.unwrap();
+    let create_time = Local::now().fixed_offset();
+    let rsv_time = create_time + Duration::hours(1);
+    let mock_sellers = [1036u32, 1037, 1038];
+    let mock_buyer_id = 126u32;
+    let mock_item_price = 100u32; // price in seller's currency
+    let mock_oid = "0e927d8c";
+    ut_setup_stock_product(o_repo.stock(), mock_sellers[0], ProductType::Package, 1405, 14).await;
+    ut_setup_stock_product(o_repo.stock(), mock_sellers[1], ProductType::Item,  554, 10).await;
+    ut_setup_stock_product(o_repo.stock(), mock_sellers[2], ProductType::Package, 1492, 15).await;
+    let lines = vec![
+        (mock_sellers[0], ProductType::Package, 1405, 8, mock_item_price, rsv_time),
+        (mock_sellers[1], ProductType::Item, 554, 9, mock_item_price, rsv_time),
+        (mock_sellers[2], ProductType::Package, 1492, 8, mock_item_price, rsv_time),
+    ];
+    let mut ol_set = ut_oline_init_setup(mock_oid, mock_buyer_id, create_time, lines);
+    {
+        ol_set.currency.buyer.rate = Decimal::new(2909, 2);
+        ol_set.currency.sellers.get_mut(&mock_sellers[0]).map(|v| {
+            v.name = CurrencyDto::IDR;
+            v.rate = Decimal::new(102030405, 4);
+        });
+        ol_set.currency.sellers.get_mut(&mock_sellers[2]).map(|v| {
+            v.name = CurrencyDto::USD;
+            v.rate = Decimal::new(1, 0);
+        });
+    }
+    let result = o_repo
+        .stock()
+        .try_reserve(mock_reserve_usr_cb_0, &ol_set)
+        .await;
+    assert!(result.is_ok());
+    let result = o_repo.currency_exrates(mock_oid).await;
+    assert!(result.is_ok());
+    if let Ok(v) = result {
+        let OrderCurrencyModel { buyer, sellers } = v;
+        assert_eq!(buyer.name, CurrencyDto::TWD);
+        assert_eq!(buyer.rate.to_string().as_str(), "29.0900");
+        sellers.into_iter().map(|(seller_id, actual)| {
+            let expect = match seller_id {
+                1036 => (CurrencyDto::IDR, "10203.0405"),
+                1037 => (CurrencyDto::TWD, "32.0410"),
+                1038 => (CurrencyDto::USD, "1.0000"),
+                _others => (CurrencyDto::Unknown, "-0.00"),
+            };
+            assert_eq!(actual.name, expect.0);
+            assert_eq!(actual.rate.to_string().as_str(), expect.1);
+        }).count();
+    }
+} // end of fn fetch_seller_currency_ok

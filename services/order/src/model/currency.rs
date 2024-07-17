@@ -45,21 +45,15 @@ impl CurrencyModel {
         let new_rate = self.rate.trunc_with_scale(scale);
         self.rate = new_rate;
     }
-}
-
-impl CurrencyModelSet {
-    pub(crate) fn trunc_rate_fraction(&mut self) {
-        self.exchange_rates
-            .iter_mut()
-            .map(|v| v.trunc_rate_fraction(PRECISION_FRACTIONAL))
-            .count();
-    }
-
+    #[rustfmt::skip]
     pub(crate) fn check_rate_range(&self) -> Result<(), AppError> {
+        let ms = vec![self];
+        Self::check_rate_range_multi(ms)
+    }
+    pub(crate) fn check_rate_range_multi(ms: Vec<&Self>) -> Result<(), AppError> {
         let wholenum_limit = 10i128.pow(PRECISION_WHOLE_NUMBER);
-        let msgs = self
-            .exchange_rates
-            .iter()
+        let msgs = ms
+            .into_iter()
             .filter_map(|m| {
                 let fractional = m.rate.scale();
                 if fractional > PRECISION_FRACTIONAL {
@@ -85,13 +79,26 @@ impl CurrencyModelSet {
         if msgs.is_empty() {
             Ok(())
         } else {
-            let e = AppError {
+            Err(AppError {
                 code: AppErrorCode::ExceedingMaxLimit,
                 detail: Some(msgs.join(", ")),
-            };
-            Err(e)
+            })
         }
-    } // end of  fn check_rate_range
+    }
+} // end of impl CurrencyModel
+
+impl CurrencyModelSet {
+    pub(crate) fn trunc_rate_fraction(&mut self) {
+        self.exchange_rates
+            .iter_mut()
+            .map(|v| v.trunc_rate_fraction(PRECISION_FRACTIONAL))
+            .count();
+    }
+
+    pub(crate) fn check_rate_range(&self) -> Result<(), AppError> {
+        let ms = self.exchange_rates.iter().collect::<Vec<_>>();
+        CurrencyModel::check_rate_range_multi(ms)
+    }
 
     pub(super) fn find(&self, given: &CurrencyDto) -> Result<&CurrencyModel, AppError> {
         self.exchange_rates

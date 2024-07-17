@@ -170,7 +170,7 @@ pub type AppOrderRepoUpdateLinesUserFunc =
 pub type AppOrderFetchRangeCallback =
     fn(
         &dyn AbsOrderRepo,
-        OrderLineModelSet, // TODO, replace it with order-id and all the lines
+        OrderLineModelSet,
     ) -> Pin<Box<dyn Future<Output = DefaultResult<(), AppError>> + Send + '_>>;
 
 pub type AppStockRepoReserveReturn =

@@ -191,10 +191,14 @@
     <changeSet id="add_table__order_line_detail" author="T.H.">
         <comment>
             - `qty_paid_last_update`, `rsved_until` and `warranty_until` should be saved as UTC time
+            - `price_unit` and `price_total` indicate smallest unit of seller's currency to pay for
+               a single item or whole items of the order line . This is current implementation of
+               multi-currency support.
             TODO,
             - learn when to set reference constraint on order-id, and when not to do so
             - build another index for `rsved_until`, in case the application queries the
               order lines by time range
+            - better design option for multi-currency support
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE  `order_line_detail` (
@@ -528,9 +532,41 @@
             DROP TABLE `currency_exchange`;
         </rollback>
     </changeSet>
-    
     <changeSet id="tag_version_0.1.7" author="T.H.">
         <tagDatabase tag="0.1.7" />
     </changeSet>
+    <changeSet id="add_buyer_currency__order_toplvl_meta" author="T.H.">
+        <comment>
+            snapshot currency exchange rate on buyer's side when creating new order
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_toplvl_meta` ADD `buyer_currency`  ENUM('USD','TWD','INR','IDR','THB')  NOT NULL;
+            ALTER TABLE `order_toplvl_meta` ADD `buyer_ex_rate`  DECIMAL(12, 4) SIGNED  NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `order_toplvl_meta` DROP `buyer_currency`;
+            ALTER TABLE `order_toplvl_meta` DROP `buyer_ex_rate`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__oseller_currency_snapshot" author="T.H.">
+        <comment>
+            snapshot currency exchange rates on sellers' side when creating new order
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `oseller_currency_snapshot` (
+                `o_id`       BINARY(16) NOT NULL,
+                `seller_id`  INT UNSIGNED NOT NULL,
+                `label`    ENUM('USD','TWD','INR','IDR','THB') NOT NULL,
+                `ex_rate`  DECIMAL(12, 4) SIGNED NOT NULL,
+                PRIMARY KEY (`o_id`, `seller_id`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE  `oseller_currency_snapshot`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.1.8" author="T.H.">
+        <tagDatabase tag="0.1.8" />
+    </changeSet>
 </databaseChangeLog>
-
