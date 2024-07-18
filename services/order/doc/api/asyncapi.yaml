@@ -1,7 +1,7 @@
 asyncapi: 3.0.0
 info:
   title: Order-Processing RPC API
-  version: 1.0.0
+  version: 1.1.0
   description: |-
     RPC API endpoints for order-processing service
 
@@ -323,6 +323,8 @@ components:
             type: array
             items:
               $ref: '#/components/schemas/OrderLinePayDto'
+          currency:
+            $ref: '#/components/schemas/OrderCurrencySnapshotDto'
           billing:
             $ref: '#/components/schemas/BillingDto'
     OrderReplicaRefundReqDto:
@@ -373,6 +375,12 @@ components:
       format: uint8
       enum: [1, 2]
       description: 1 indicates product item, 2 indicates product package
+
+    SellerId:
+      type: integer
+      format: uint32
+      example: 18830
+
     ProductPriceEditDto:
       type: object
       properties:
@@ -485,8 +493,7 @@ components:
       type: object
       properties:
         seller_id:
-          type: integer
-          format: uint32
+          $ref: '#/components/schemas/SellerId'
         product_id:
           type: integer
           format: uint64
@@ -521,6 +528,11 @@ components:
     CountryCode:
       type: string
       enum: [TW, TH, IN, ID, US, Unknown]
+
+    CurrencyLabel:
+      type: string
+      enum: [TWD, THB, INR, IDR, USD, Unknown]
+
     PhyAddrDto:
       type: object
       properties:
@@ -546,8 +558,7 @@ components:
       type: object
       properties:
         seller_id:
-          type: integer
-          format: uint32
+          $ref: '#/components/schemas/SellerId'
         method:
           $ref: '#/components/schemas/ShippingMethod'
     ShippingMethod:
@@ -590,8 +601,7 @@ components:
       type: object
       properties:
         seller_id:
-          type: integer
-          format: uint32
+          $ref: '#/components/schemas/SellerId'
         product_id:
           type: integer
           format: uint64
@@ -604,8 +614,7 @@ components:
       type: object
       properties:
         seller_id:
-          type: integer
-          format: uint32
+          $ref: '#/components/schemas/SellerId'
         product_id:
           type: integer
           format: uint64
@@ -646,13 +655,41 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderLineStockReturningDto'
+   
+    CurrencySnapshotDto:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/CurrencyLabel'
+        rate:
+          type: string
+          example: '31.1449'
+    OrderSellerCurrencyDto:
+      type: object
+      properties:
+        currency:
+          $ref: '#/components/schemas/CurrencyLabel'
+        seller_id:
+          $ref: '#/components/schemas/SellerId'
+    OrderCurrencySnapshotDto:
+      type: object
+      properties:
+        snapshot:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurrencySnapshotDto'
+        sellers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderSellerCurrencyDto'
+        buyer:
+          $ref: '#/components/schemas/CurrencyLabel'
 
     OrderLinePayDto:
       type: object
       properties:
         seller_id:
-          type: integer
-          format: uint32
+          $ref: '#/components/schemas/SellerId'
         product_id:
           type: integer
           format: uint64
@@ -671,8 +708,7 @@ components:
       type: object
       properties:
         seller_id:
-          type: integer
-          format: uint32
+          $ref: '#/components/schemas/SellerId'
         product_id:
           type: integer
           format: uint64
@@ -688,8 +724,7 @@ components:
       type: object
       properties:
         seller_id:
-          type: integer
-          format: uint32
+          $ref: '#/components/schemas/SellerId'
         product_id:
           type: integer
           format: uint64
@@ -712,8 +747,7 @@ components:
       type: object
       properties:
         seller_id:
-          type: integer
-          format: uint32
+          $ref: '#/components/schemas/SellerId'
         product_id:
           type: integer
           format: uint64
