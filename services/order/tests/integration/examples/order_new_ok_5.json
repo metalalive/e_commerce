@@ -19,6 +19,7 @@
       "quantity": 14
     }
   ],
+  "currency": "THB",
   "shipping": {
     "contact": {
       "first_name": "Jordan",

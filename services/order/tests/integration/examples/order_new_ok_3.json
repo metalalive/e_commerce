@@ -25,6 +25,7 @@
       "quantity": 3
     }
   ],
+  "currency": "USD",
   "shipping": {
     "contact": {
       "first_name": "Juritu",

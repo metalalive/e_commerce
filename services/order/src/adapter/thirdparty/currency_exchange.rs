@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs::File;
 use std::marker::{Send, Sync};
 use std::result::Result;
 use std::str::FromStr;
@@ -11,11 +12,12 @@ use hyper::Method;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::Number as JsnNum;
+use tokio::sync::Mutex;
 use tokio_native_tls::{native_tls, TlsConnector};
 
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::confidentiality::AbstractConfidentiality;
-use ecommerce_common::config::App3rdPartyCfg;
+use ecommerce_common::config::AppBasepathCfg;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
@@ -43,6 +45,12 @@ pub(super) struct AppCurrencyExchange {
 struct ExRateIntermediate {
     base: CurrencyDto,
     rates: HashMap<CurrencyDto, JsnNum>,
+}
+
+type MockDataSource = HashMap<CurrencyDto, Vec<String>>;
+
+pub(super) struct MockCurrencyExchange {
+    _data: Mutex<MockDataSource>,
 }
 
 impl TryFrom<ExRateIntermediate> for CurrencyModelSet {
@@ -124,20 +132,14 @@ impl AbstractCurrencyExchange for AppCurrencyExchange {
 
 impl AppCurrencyExchange {
     pub(super) fn try_build(
-        cfgs: Vec<Arc<App3rdPartyCfg>>,
+        host: String,
+        port: u16,
+        credential_path: String,
         cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
         _logctx: Arc<AppLogContext>,
     ) -> Result<Self, AppError> {
-        let cfg_found = cfgs
-            .into_iter()
-            .find(|c| c.name.to_lowercase().as_str() == "openexchangerates")
-            .ok_or(AppError {
-                code: AppErrorCode::MissingConfig,
-                detail: Some("currency-exchange".to_string()),
-            })?;
-        let credential_path = cfg_found.confidentiality_path.as_str();
         let serial = cfdntl
-            .try_get_payload(credential_path)
+            .try_get_payload(credential_path.as_str())
             .map_err(|e| AppError {
                 code: e.code,
                 detail: Some(e.detail),
@@ -156,8 +158,8 @@ impl AppCurrencyExchange {
             sc.into()
         };
         Ok(Self {
-            _host: cfg_found.host.clone(),
-            _port: cfg_found.port,
+            _host: host,
+            _port: port,
             _secure_connector,
             _app_id,
             _logctx,
@@ -181,3 +183,55 @@ impl AppCurrencyExchange {
         Ok(obj)
     }
 } // end of impl AppCurrencyExchange
+
+impl MockCurrencyExchange {
+    pub(super) fn try_build(
+        cfg_basepath: &AppBasepathCfg,
+        mut data_src_path: String,
+    ) -> Result<Self, AppError> {
+        data_src_path.insert(0, '/');
+        data_src_path.insert_str(0, &cfg_basepath.service);
+        let src_f = File::open(data_src_path.as_str()).map_err(|e| AppError {
+            code: AppErrorCode::IOerror(e.kind()),
+            detail: Some(data_src_path),
+        })?;
+        let data_src =
+            serde_json::from_reader::<File, MockDataSource>(src_f).map_err(|e| AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(e.to_string()),
+            })?;
+        Ok(Self {
+            _data: Mutex::new(data_src),
+        })
+    }
+}
+
+#[async_trait]
+impl AbstractCurrencyExchange for MockCurrencyExchange {
+    async fn refresh(&self, chosen: Vec<CurrencyDto>) -> Result<CurrencyModelSet, AppError> {
+        let mut guard = self._data.lock().await;
+        let exchange_rates = chosen
+            .into_iter()
+            .filter_map(|k| {
+                guard
+                    .get_mut(&k)
+                    .map(|src| {
+                        if src.is_empty() {
+                            "0".to_string()
+                        } else {
+                            src.remove(0)
+                        }
+                    })
+                    .map(|v| CurrencyModel {
+                        name: k,
+                        rate: Decimal::from_str(v.as_str()).unwrap_or(Decimal::new(0, 0)),
+                    })
+            })
+            .filter(|m| m.rate.mantissa() != 0i128)
+            .collect::<Vec<_>>();
+        Ok(CurrencyModelSet {
+            base: CurrencyDto::USD,
+            exchange_rates,
+        })
+    }
+} // end of impl MockCurrencyExchange

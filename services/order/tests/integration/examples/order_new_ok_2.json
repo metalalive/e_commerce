@@ -13,6 +13,7 @@
       "quantity": 5
     }
   ],
+  "currency": "IDR",
   "shipping": {
     "contact": {
       "first_name": "WinnieThePooh",

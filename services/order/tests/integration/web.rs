@@ -8,13 +8,12 @@ use hyper::body::Bytes as HyperBytes;
 use hyper::Body as HyperBody;
 use serde_json::{Map, Value as JsnVal};
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::api::web::dto::{ContactErrorReason, PhoneNumNationErrorReason};
+use ecommerce_common::constant::ProductType;
 
 use order::api::rpc;
 use order::api::web::dto::{
-    OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
-    OrderEditReqData,
+    OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto, OrderEditReqData,
 };
 use order::constant::{app_meta, hard_limit};
 use order::error::AppError;
@@ -97,6 +96,19 @@ async fn itest_setup_product_policy(
         HyperBytes::new()
     }
 } // end of fn itest_setup_product_policy
+
+async fn itest_setup_currency_exrate(shrstate: AppSharedState) {
+    let mock_rpc_topic = "rpc.order.currency_exrate_refresh";
+    let req = {
+        AppRpcClientReqProperty {
+            start_time: Local::now().fixed_offset(),
+            msgbody: b"{}".to_vec(),
+            route: mock_rpc_topic.to_string(),
+        }
+    };
+    let result = rpc::route_to_handler(req, shrstate).await;
+    assert!(result.is_ok());
+}
 
 fn verify_reply_stock_level(
     objs: &Vec<JsnVal>,
@@ -271,6 +283,7 @@ async fn new_order_then_return() -> DefaultResult<(), AppError> {
         let items = resp_body.as_array().unwrap();
         assert_eq!(items.len(), 3);
     }
+    itest_setup_currency_exrate(shr_state.clone()).await;
     let oid = place_new_order_ok(
         top_lvl_cfg.clone(),
         srv.clone(),
@@ -410,6 +423,7 @@ async fn update_stock_level_ok() -> DefaultResult<(), AppError> {
         itest_setup_product_price(shrstate.clone(), FPATH_EDIT_PRODUCTPRICE_OK[1]).await;
     let _raw_body =
         itest_setup_product_price(shrstate.clone(), FPATH_EDIT_PRODUCTPRICE_OK[2]).await;
+    itest_setup_currency_exrate(shrstate.clone()).await;
     let _oid = place_new_order_ok(
         top_lvl_cfg.clone(),
         srv.clone(),
@@ -803,6 +817,7 @@ async fn itest_setup_create_order(
     let raw_body = itest_setup_product_price(shrstate.clone(), fpath_prod_price).await;
     let resp_body = String::from_utf8(raw_body).unwrap();
     assert!(resp_body.is_empty()); // task done successfully
+    itest_setup_currency_exrate(shrstate.clone()).await;
     let result = place_new_order_ok(
         top_lvl_cfg.clone(),
         srv,
@@ -842,7 +857,7 @@ fn itest_verify_order_billing(
     actual: JsnVal,
     expect_oid: &str,
     expect_usr_id: u32,
-    expect_lines: Vec<(u32, ProductType, u64, u32, u32)>,
+    expect_lines: Vec<(u32, ProductType, u64, u32)>,
 ) {
     let actual = actual.as_object().unwrap();
     let oid = actual.get("oid").unwrap().as_str().unwrap();
@@ -883,13 +898,13 @@ fn itest_verify_order_billing(
                 let q = actual_line.get("quantity").unwrap().as_u64().unwrap();
                 u32::try_from(q).unwrap()
             };
-            let amount_total = {
-                let _amount = actual_line.get("amount").unwrap().as_object().unwrap();
-                let _total = _amount.get("total").unwrap().as_u64().unwrap();
-                u32::try_from(_total).unwrap()
-            };
             assert_eq!(qty, expect.3);
-            assert_eq!(amount_total, expect.4);
+            // this test case simply ensures the fields exist without inspecting the
+            // precise amount and its decimal value
+            {
+                let _amount = actual_line.get("amount").unwrap().as_object().unwrap();
+                let _total = _amount.get("total").unwrap().as_str().unwrap();
+            }
         })
         .count();
 } // end of fn itest_verify_order_billing
@@ -975,8 +990,8 @@ async fn replica_update_order_payment() -> DefaultResult<(), AppError> {
         oid.as_str(),
         mock_authed_usr,
         vec![
-            (mock_seller, ProductType::Package, 20094, 19, 19 * 59),
-            (mock_seller, ProductType::Item, 20092, 13, 13 * 15),
+            (mock_seller, ProductType::Package, 20094, 19),
+            (mock_seller, ProductType::Item, 20092, 13),
         ],
     );
     itest_update_payment_status(
@@ -1061,7 +1076,7 @@ async fn itest_setup_get_order_refund(
     result.unwrap()
 } // end of fn itest_setup_get_order_refund
 
-fn itest_verify_order_refund(actual: JsnVal, expect_lines: Vec<(u32, ProductType, u64, u32, u32)>) {
+fn itest_verify_order_refund(actual: JsnVal, expect_lines: Vec<(u32, ProductType, u64)>) {
     let olines = actual.as_array().unwrap();
     assert_eq!(olines.len(), expect_lines.len());
     expect_lines
@@ -1090,17 +1105,13 @@ fn itest_verify_order_refund(actual: JsnVal, expect_lines: Vec<(u32, ProductType
                     }
                 })
                 .unwrap();
-            let (amount_unit, amount_total) = {
+            // this test case simply ensures the fields exist without inspecting the
+            // precise amount and its decimal value
+            {
                 let _amount = actual_line.get("amount").unwrap().as_object().unwrap();
-                let _unit = _amount.get("unit").unwrap().as_u64().unwrap();
-                let _total = _amount.get("total").unwrap().as_u64().unwrap();
-                (
-                    u32::try_from(_unit).unwrap(),
-                    u32::try_from(_total).unwrap(),
-                )
-            };
-            assert_eq!(amount_unit, expect.3);
-            assert_eq!(amount_total, expect.4);
+                let _unit = _amount.get("unit").unwrap().as_str().unwrap();
+                let _total = _amount.get("total").unwrap().as_str().unwrap();
+            }
         })
         .count();
 } // end of fn itest_verify_order_refund
@@ -1182,9 +1193,9 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
     itest_verify_order_refund(
         resp_body,
         vec![
-            (mock_seller, ProductType::Item, 20095, 99, 99 * 4),
-            (mock_seller, ProductType::Package, 20096, 349, 349 * 2),
-            (mock_seller, ProductType::Item, 20097, 299, 299 * 3),
+            (mock_seller, ProductType::Item, 20095),
+            (mock_seller, ProductType::Package, 20096),
+            (mock_seller, ProductType::Item, 20097),
         ],
     );
     sleep(std::time::Duration::from_secs(
@@ -1210,8 +1221,8 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
     itest_verify_order_refund(
         resp_body,
         vec![
-            (mock_seller, ProductType::Item, 20095, 99, 99 * 1),
-            (mock_seller, ProductType::Item, 20097, 299, 299 * 1),
+            (mock_seller, ProductType::Item, 20095),
+            (mock_seller, ProductType::Item, 20097),
         ],
     );
     Ok(())

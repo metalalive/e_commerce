@@ -19,6 +19,7 @@
       "quantity": 17
     }
   ],
+  "currency": "TWD",
   "shipping": {
     "contact": {
       "first_name": "Lisa",

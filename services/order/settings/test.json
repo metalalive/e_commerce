@@ -3,10 +3,6 @@
         "web_api"     :"tmp/proc/order_itest_app_server.pid",
         "rpc_consumer":"tmp/proc/order_itest_rpc_consumer.pid"
     },
-    "access_log": {
-        "path":"tmp/log/test/order_app_server.access.log",
-        "format":"%H %h %l %t \"%r\" %s %b"
-    },
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
@@ -40,6 +36,9 @@
             {"alias": "order::api::rpc::stock_level",
              "handlers": ["std-output-forall"],
              "level": "INFO"},
+            {"alias": "order::usecase::currency",
+             "handlers": ["std-output-forall", "errlog-file-web-api"],
+             "level": "ERROR"},
             {"alias": "order::usecase::edit_product_policy",
              "handlers": ["errlog-file-web-api", "std-output-forall"],
              "level": "WARNING"},
@@ -102,6 +101,13 @@
     "rpc": {
 	 "handler_type": "dummy"
     },
+    "third_parties": [
+        {
+            "mode": "test",
+            "name": "OpenExchangeRates",
+            "data_src": "tests/integration/examples/3rd-party-mock-data-currency-rate.json"
+        }
+    ],
     "auth": {
 	"keystore_url": "http://localhost:8008/jwks",
 	"update_interval_minutes": 360

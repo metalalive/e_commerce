@@ -14,10 +14,10 @@ use serde::Deserialize;
 use tokio::sync::Mutex;
 use tower::Service;
 
-use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use ecommerce_common::confidentiality;
+use ecommerce_common::config::{AppBasepathCfg, AppCfgHardLimit, AppCfgInitArgs, AppConfig};
+use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use ecommerce_common::error::AppErrorCode;
-use ecommerce_common::config::{AppBasepathCfg, AppConfig, AppCfgHardLimit, AppCfgInitArgs};
 use ecommerce_common::logging::AppLogContext;
 
 use order::api::web::route_table;
@@ -46,8 +46,8 @@ fn _test_setup_shr_state() -> DefaultResult<ITestGlobalState, AppError> {
         limit: AppCfgHardLimit {
             nitems_per_inmem_table: 1200,
             num_db_conns: 1000,
-            seconds_db_idle: 130
-        }
+            seconds_db_idle: 130,
+        },
     };
     let top_lvl_cfg = AppConfig::new(args)?;
     let cfdntl = confidentiality::build_context(&top_lvl_cfg)?;

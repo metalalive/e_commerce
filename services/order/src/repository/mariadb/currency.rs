@@ -148,12 +148,18 @@ impl AbsCurrencyRepo for CurrencyMariaDbRepo {
                 detail: Some("invalid-base-currency".to_string()),
             });
         }
+        let expect_num_updated = ms.exchange_rates.len();
+        if expect_num_updated == 0 {
+            return Err(AppError {
+                code: AppErrorCode::EmptyInputData,
+                detail: Some("currency-ex-rate".to_string()),
+            });
+        }
         ms.check_rate_range()?;
-        let num_updated = ms.exchange_rates.len();
         let (sql_patt, args) = UpdateArgs(ms).into();
         let mut conn = self._db.acquire().await?;
         let mut tx = conn.begin().await?;
-        let _rs = run_query_once(&mut tx, sql_patt, args, Some(num_updated)).await?;
+        let _rs = run_query_once(&mut tx, sql_patt, args, Some(expect_num_updated)).await?;
         tx.commit().await?;
         Ok(())
     } // end of fn save

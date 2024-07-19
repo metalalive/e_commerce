@@ -13,6 +13,7 @@
       "quantity": 15
     }
   ],
+  "currency": "THB",
   "shipping": {
     "address": {
       "country": "TW",

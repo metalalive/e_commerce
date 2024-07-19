@@ -3,10 +3,6 @@
         "web_api"     :"tmp/proc/order_itest_app_server.pid",
         "rpc_consumer":"tmp/proc/order_itest_rpc_consumer.pid"
     },
-    "access_log": {
-        "path":"tmp/log/test/order_app_server.access.log",
-        "format":"%H %h %l %t \"%r\" %s %b"
-    },
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
@@ -106,6 +102,7 @@
             "name": "OpenExchangeRates",
             "host": "openexchangerates.org",
             "port": 443,
+            "mode": "dev",
 	        "confidentiality_path": "backend_apps/secret_key/staff/OpenExchangeRates"
         }
     ],

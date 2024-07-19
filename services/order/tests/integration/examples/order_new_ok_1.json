@@ -19,6 +19,7 @@
       "quantity": 7
     }
   ],
+  "currency": "TWD",
   "shipping": {
     "address": {
       "country": "TW",

@@ -77,8 +77,13 @@ impl AppSharedState {
         let sql_dbs = sql_dbs.map(|m| m.into_iter().map(Arc::new).collect());
         let ds_ctx = Arc::new(AppDataStoreContext { in_mem, sql_dbs });
         let auth_keys = AppAuthKeystore::new(&cfg.api_server.auth);
-        let currency_ex =
-            app_currency_context(&cfg.api_server.third_parties, confidential, log.clone()).unwrap();
+        let currency_ex = app_currency_context(
+            &cfg.basepath,
+            &cfg.api_server.third_parties,
+            confidential,
+            log.clone(),
+        )
+        .unwrap();
         Self {
             _cfg: Arc::new(cfg),
             _log: log,

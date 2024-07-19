@@ -13,6 +13,7 @@
       "quantity": 19
     }
   ],
+  "currency": "INR",
   "shipping": {
     "contact": {
       "first_name": "LisbonArch",
