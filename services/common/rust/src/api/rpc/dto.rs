@@ -1,4 +1,4 @@
-use crate::api::dto::{BillingDto, OrderLinePayDto, OrderCurrencySnapshotDto};
+use crate::api::dto::{BillingDto, OrderCurrencySnapshotDto, OrderLinePayDto};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]

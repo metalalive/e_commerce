@@ -11,7 +11,7 @@ pub struct PayAmountDto {
 }
 impl PayAmountDto {
     pub fn fraction_scale() -> u32 {
-        // at most 8 digits to reserve for fraction of a amount 
+        // at most 8 digits to reserve for fraction of a amount
         // , note the amount should be originally decimal type converting
         // to string for serialisation
         8

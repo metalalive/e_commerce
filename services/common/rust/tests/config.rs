@@ -1,7 +1,7 @@
 mod ut_common;
 use std::collections::HashMap;
 
-use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
+use ecommerce_common::config::{App3rdPartyCfg, AppCfgHardLimit, AppCfgInitArgs, AppConfig};
 use ecommerce_common::constant::env_vars::{CFG_FILEPATH, SERVICE_BASEPATH, SYS_BASEPATH};
 use ecommerce_common::error::{AppCfgError, AppErrorCode};
 
@@ -30,7 +30,7 @@ fn cfg_extract_arg_nonexist_sys_path() {
         env_var_map: HashMap::from(args),
     };
     let result = AppConfig::new(args);
-    assert_eq!(result.is_err(), true);
+    assert!(result.is_err());
     let err = result.err().unwrap();
     // it is normal to get File Not Found error, I don't really assign valid file paths.
     assert_eq!(
@@ -46,7 +46,7 @@ fn cfg_extract_arg_missing_sys_path() {
         env_var_map: HashMap::new(),
     };
     let result = AppConfig::new(args);
-    assert_eq!(result.is_err(), true);
+    assert!(result.is_err());
     let err = result.err().unwrap();
     assert_eq!(err.code, AppErrorCode::MissingSysBasePath);
 }
@@ -59,7 +59,7 @@ fn cfg_extract_arg_missing_service_path() {
         env_var_map: HashMap::from(args),
     };
     let result = AppConfig::new(args);
-    assert_eq!(result.is_err(), true);
+    assert!(result.is_err());
     let err = result.err().unwrap();
     assert_eq!(err.code, AppErrorCode::MissingAppBasePath);
 }
@@ -70,14 +70,14 @@ fn parse_ext_cfg_file_ok() {
     const CFG_FILEPATH: &str = "config_ok.json";
     let fullpath = service_basepath + EXAMPLE_REL_PATH + CFG_FILEPATH;
     let result = AppConfig::parse_from_file(fullpath, ut_mock_limit());
-    assert_eq!(result.is_ok(), true);
+    assert!(result.is_ok());
     let actual = result.unwrap();
-    assert_eq!(actual.listen.api_version.is_empty(), false);
-    assert_eq!(actual.listen.host.is_empty(), false);
+    assert!(!actual.listen.api_version.is_empty());
+    assert!(!actual.listen.host.is_empty());
     assert!(actual.listen.port > 0);
-    assert_eq!(actual.listen.routes.is_empty(), false);
-    assert_eq!(actual.logging.handlers.is_empty(), false);
-    assert_eq!(actual.logging.loggers.is_empty(), false);
+    assert!(!actual.listen.routes.is_empty());
+    assert!(!actual.logging.handlers.is_empty());
+    assert!(!actual.logging.loggers.is_empty());
     assert!(actual.stack_sz_kb > 0);
     for route in actual.listen.routes.iter() {
         assert_eq!(route.path.is_empty(), false);
@@ -90,13 +90,34 @@ fn parse_ext_cfg_file_ok() {
         assert_eq!(logger.alias.is_empty(), false);
         assert_eq!(logger.handlers.is_empty(), false);
     }
-}
+    assert!(actual.third_parties.is_some());
+    if let Some(t) = &actual.third_parties {
+        assert_eq!(t.len(), 2);
+        t.iter()
+            .map(|v| match v.as_ref() {
+                App3rdPartyCfg::dev {
+                    name,
+                    host,
+                    port: _,
+                    confidentiality_path: _,
+                } => {
+                    assert_eq!(name.as_str(), "external-service-01");
+                    assert_eq!(host.as_str(), "api.ext.service01.com");
+                }
+                App3rdPartyCfg::test { name, data_src } => {
+                    assert_eq!(name.as_str(), "external-service-02");
+                    assert_eq!(data_src.as_str(), "/path/to/test-data");
+                }
+            })
+            .count();
+    }
+} // end of fn parse_ext_cfg_file_ok
 
 fn _parse_ext_cfg_file_error_common(cfg_filepath: &str, expect_err: AppErrorCode) -> AppCfgError {
     let service_basepath = std::env::var(SERVICE_BASEPATH).unwrap();
     let fullpath = service_basepath + EXAMPLE_REL_PATH + cfg_filepath;
     let result = AppConfig::parse_from_file(fullpath, ut_mock_limit());
-    assert_eq!(result.is_err(), true);
+    assert!(result.is_err());
     let err = result.err().unwrap();
     assert_eq!(err.code, expect_err);
     err

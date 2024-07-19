@@ -3,10 +3,6 @@
         "web_api"     :"tmp/proc/order_itest_app_server.pid",
         "rpc_consumer":"tmp/proc/order_itest_rpc_consumer.pid"
     },
-    "access_log": {
-        "path":"tmp/log/test/order_app_server.access.log",
-        "format":"%H %h %l %t \"%r\" %s %b"
-    },
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
@@ -74,6 +70,20 @@
     "rpc": {
 	 "handler_type": "dummy"
     },
+    "third_parties": [
+        {
+            "mode": "dev",
+            "name": "external-service-01",
+            "host": "api.ext.service01.com",
+            "port": 443,
+            "confidentiality_path": "/path/to/inner/credential"
+        },
+        {
+            "mode": "test",
+            "name": "external-service-02",
+            "data_src": "/path/to/test-data"
+        }
+    ],
     "auth": {
 	"keystore_url": "http://localhost:12345",
 	"update_interval_minutes": 15

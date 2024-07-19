@@ -40,12 +40,6 @@ struct PIDfileCfg {
     rpc_consumer: String,
 }
 
-#[derive(Deserialize)]
-struct AccessLogCfg {
-    path: String,
-    format: String,
-}
-
 #[derive(Deserialize, Clone)]
 pub struct WebApiRouteCfg {
     pub path: WebApiPath,
@@ -146,12 +140,20 @@ pub enum AppConfidentialCfg {
        // or hardware-specific approach e.g. ARM TrustZone
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Deserialize)]
-pub struct App3rdPartyCfg {
-    pub name: String,
-    pub host: String,
-    pub port: u16,
-    pub confidentiality_path: String,
+#[serde(tag = "mode")]
+pub enum App3rdPartyCfg {
+    dev {
+        name: String,
+        host: String,
+        port: u16,
+        confidentiality_path: String,
+    },
+    test {
+        name: String,
+        data_src: String,
+    },
 }
 
 #[allow(non_camel_case_types)]
@@ -192,7 +194,6 @@ pub enum AppDataStoreCfg {
 pub struct ApiServerCfg {
     pid_file: PIDfileCfg,
     pub logging: AppLoggingCfg,
-    access_log: AccessLogCfg,
     pub listen: WebApiListenCfg,
     pub limit_req_body_in_bytes: usize,
     pub num_workers: u8,
