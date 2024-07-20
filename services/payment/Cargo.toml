@@ -51,7 +51,8 @@ http-body-util = "^0.1"
 # required for RwLock, Mutex, and `select` macro, with Send, Sync trait
 tokio = {version="^1.23.1", features=["sync","macros"]}
 
-mysql_async = {version="^0.34", default-features=false, features=["minimal", "native-tls-tls"]}
+mysql_async = {version="^0.34", default-features=false, features=["minimal", "native-tls-tls", "rust_decimal"]}
+
 # required by the result set stream in `Query::stream()` in `mysql-async`
 futures-util = {version="^0.3.30", features=["std"]}
 
@@ -62,6 +63,10 @@ deadpool-lapin = {version="^0.12", default-features=false, features=["rt_tokio_1
 # Note 3rd party payment processors
 # this application does not use `async-stripe` , it uses about 2.5GB memory during complie time
 # , also contains many of types not used in this application
+
+# currency, amount of order lines, exchange rate, will be saved and
+# represented in the `Decimal` type in this project
+rust_decimal = {version="^1.35", default-features=false, features=[]}
 
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
 

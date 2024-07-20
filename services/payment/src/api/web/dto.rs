@@ -2,8 +2,8 @@ use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
-    jsn_serialize_product_type, jsn_validate_product_type, GenericRangeErrorDto, PayAmountDto,
-    CurrencyDto,
+    jsn_serialize_product_type, jsn_validate_product_type, CurrencyDto, GenericRangeErrorDto,
+    PayAmountDto,
 };
 use ecommerce_common::constant::ProductType;
 
@@ -41,11 +41,11 @@ pub struct ChargeReqDto {
     pub order_id: String,
     pub method: PaymentMethodReqDto,
     pub lines: Vec<ChargeAmountOlineDto>,
+    // currency and exchange rate should be determined on creating
+    // a new order, not on charging
+    pub currency: CurrencyDto,
     // TODO,
     // - tax and discount
-    // - currency and exchange rate should be determined on creating
-    //   a new order, not payment
-    pub currency: CurrencyDto,
 }
 
 #[derive(Serialize)]
@@ -90,11 +90,12 @@ pub struct ChargeOlineErrorDto {
     pub not_exist: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct ChargeRespErrorDto {
     pub order_id: Option<OrderErrorReason>,
     pub method: Option<PaymentMethodErrorReason>,
     pub lines: Option<Vec<ChargeOlineErrorDto>>,
+    pub currency: Option<CurrencyDto>,
 }
 
 #[derive(Serialize)]

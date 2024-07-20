@@ -13,7 +13,7 @@ use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxErro
 use crate::api::web::dto::{
     ChargeReqDto, ChargeRespDto, ChargeRespErrorDto, PaymentMethodErrorReason,
 };
-use crate::model::{ChargeBuyerModel, OLineModelError, OrderLineModelSet};
+use crate::model::{ChargeBuyerModel, OrderLineModelSet, OrderModelError};
 
 // TODO, switch to enum type then add memberis `SessionCreated`,
 // `PayInDone` when the charge can be done in one single API call
@@ -28,7 +28,7 @@ pub enum ChargeCreateUcError {
     LoadOrderInternalError(AppRpcCtxError),
     LoadOrderByteCorruption(String),
     RpcBillingParseError(BillingErrorDto),
-    RpcOlineParseError(Vec<OLineModelError>),
+    RpcOlineParseError(Vec<OrderModelError>),
     ExternalProcessorError(PaymentMethodErrorReason),
     DataStoreError(AppRepoError),
 }
@@ -63,8 +63,8 @@ impl From<BillingErrorDto> for ChargeCreateUcError {
         Self::RpcBillingParseError(value)
     }
 }
-impl From<Vec<OLineModelError>> for ChargeCreateUcError {
-    fn from(value: Vec<OLineModelError>) -> Self {
+impl From<Vec<OrderModelError>> for ChargeCreateUcError {
+    fn from(value: Vec<OrderModelError>) -> Self {
         Self::RpcOlineParseError(value)
     }
 }
@@ -150,11 +150,12 @@ impl ChargeCreateUseCase {
             usr_id,
             lines,
             billing,
+            currency,
         } = rpc_data;
         let billing = BillingModel::try_from(billing)?;
-        let olines = OrderLineModelSet::try_from((oid, usr_id, lines))?;
+        let olines = OrderLineModelSet::try_from((oid, usr_id, lines, currency))?;
         self.repo.create_order(&olines, &billing).await?;
-        let mismatch = (olines.id.as_str() != oid_uncheck) || (olines.owner != usr_id_uncheck);
+        let mismatch = (olines.id.as_str() != oid_uncheck) || (olines.buyer_id != usr_id_uncheck);
         if mismatch {
             Err(ChargeCreateUcError::OrderOwnerMismatch)
         } else {

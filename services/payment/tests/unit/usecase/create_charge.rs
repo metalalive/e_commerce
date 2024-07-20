@@ -1,10 +1,11 @@
 use std::boxed::Box;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use chrono::{Duration, Local};
 use ecommerce_common::api::dto::{
-    BillingDto, ContactDto, OrderLinePayDto, PayAmountDto, CurrencyDto,
-    PhoneNumberDto,
+    BillingDto, ContactDto, CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto,
+    OrderLinePayDto, OrderSellerCurrencyDto, PayAmountDto, PhoneNumberDto,
 };
 use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
 use ecommerce_common::constant::ProductType;
@@ -18,12 +19,15 @@ use payment::adapter::processor::{
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
 use payment::api::web::dto::{
-    ChargeAmountOlineDto, ChargeReqDto, PaymentMethodErrorReason,
-    PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto,
-    StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
+    ChargeAmountOlineDto, ChargeReqDto, PaymentMethodErrorReason, PaymentMethodReqDto,
+    PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto,
+    StripeCheckoutUImodeDto,
 };
-use payment::model::{BuyerPayInState, OrderLineModel, OrderLineModelSet, PayLineAmountModel};
+use payment::model::{
+    BuyerPayInState, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayLineAmountModel,
+};
 use payment::usecase::{ChargeCreateUcError, ChargeCreateUseCase};
+use rust_decimal::Decimal;
 
 use super::{
     MockChargeRepo, MockOrderSyncLockCache, MockPaymentProcessor, MockRpcClient, MockRpcContext,
@@ -31,30 +35,51 @@ use super::{
 };
 
 fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModelSet {
+    let mock_seller_id = 379u32;
     let now = Local::now();
-    let reserved_until = (now + Duration::minutes(2i64)).fixed_offset();
+    let reserved_until = (now + Duration::minutes(2i64)).to_utc();
     let line = OrderLineModel {
         pid: BaseProductIdentity {
-            store_id: 379,
+            store_id: mock_seller_id,
             product_type: ProductType::Item,
             product_id: 6741,
         },
         rsv_total: PayLineAmountModel {
-            unit: 3,
-            total: 18,
+            unit: Decimal::new(30001, 2),
+            total: Decimal::new(180006, 2),
             qty: 6,
         },
         paid_total: PayLineAmountModel::default(),
         reserved_until,
     };
+    let currency_snapshot = {
+        let s = [
+            (
+                mock_usr_id,
+                OrderCurrencySnapshot {
+                    label: CurrencyDto::TWD,
+                    rate: Decimal::new(321, 1),
+                },
+            ),
+            (
+                mock_seller_id,
+                OrderCurrencySnapshot {
+                    label: CurrencyDto::IDR,
+                    rate: Decimal::new(16208, 0),
+                },
+            ),
+        ];
+        HashMap::from(s)
+    };
     OrderLineModelSet {
         id: mock_order_id,
-        owner: mock_usr_id,
+        buyer_id: mock_usr_id,
+        currency_snapshot,
         num_charges: 0,
         create_time: now.to_utc(),
         lines: vec![line],
     }
-}
+} // end of fn ut_saved_oline_set
 
 fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
     let mock_finish_url = "https://mysite.io/products".to_string();
@@ -72,13 +97,17 @@ fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
             product_id: 6741,
             product_type: ProductType::Item,
             quantity: 6,
-            amount: PayAmountDto { unit: 3, total: 18 },
+            amount: PayAmountDto {
+                unit: "300.01".to_string(),
+                total: "1800.06".to_string(),
+            },
         }],
         currency: CurrencyDto::TWD,
     }
 }
 
 fn ut_orderpay_replica(mock_usr_id: u32, mock_order_id: String) -> Vec<u8> {
+    let mock_seller_id = 379u32;
     let reserved_until = (Local::now() + Duration::minutes(2i64))
         .fixed_offset()
         .to_rfc3339();
@@ -86,13 +115,33 @@ fn ut_orderpay_replica(mock_usr_id: u32, mock_order_id: String) -> Vec<u8> {
         usr_id: mock_usr_id,
         oid: mock_order_id,
         lines: vec![OrderLinePayDto {
-            seller_id: 379,
+            seller_id: mock_seller_id,
             product_id: 6741,
             product_type: ProductType::Item,
             reserved_until,
             quantity: 6,
-            amount: PayAmountDto { unit: 3, total: 18 },
+            amount: PayAmountDto {
+                unit: "300.01".to_string(),
+                total: "1800.06".to_string(),
+            },
         }],
+        currency: OrderCurrencySnapshotDto {
+            snapshot: vec![
+                CurrencySnapshotDto {
+                    name: CurrencyDto::TWD,
+                    rate: "31.8042".to_string(),
+                },
+                CurrencySnapshotDto {
+                    name: CurrencyDto::IDR,
+                    rate: "16250.91".to_string(),
+                },
+            ],
+            sellers: vec![OrderSellerCurrencyDto {
+                seller_id: mock_seller_id,
+                currency: CurrencyDto::IDR,
+            }],
+            buyer: CurrencyDto::TWD,
+        },
         billing: BillingDto {
             contact: ContactDto {
                 first_name: "Zim".to_string(),
@@ -107,7 +156,7 @@ fn ut_orderpay_replica(mock_usr_id: u32, mock_order_id: String) -> Vec<u8> {
         },
     };
     serde_json::to_vec(&replica).unwrap()
-}
+} // end of fn ut_orderpay_replica
 
 fn ut_processor_pay_in_result() -> AppProcessorPayInResult {
     let detail = StripeCheckoutSessionRespDto {

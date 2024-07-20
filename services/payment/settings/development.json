@@ -3,10 +3,6 @@
         "web_api"     :"tmp/proc/payment_app_server.pid",
         "rpc_consumer":"tmp/proc/payment_rpc_consumer.pid"
     },
-    "access_log": {
-        "path":"tmp/log/dev/payment_app_server.access.log",
-        "format":"%H %h %l %t \"%r\" %s %b"
-    },
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
@@ -103,6 +99,7 @@
     },
     "third_parties": [
         {
+            "mode": "dev",
             "name": "Stripe",
             "host": "api.stripe.com",
             "port": 443,
