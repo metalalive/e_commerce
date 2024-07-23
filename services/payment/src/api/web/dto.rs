@@ -95,7 +95,7 @@ pub struct ChargeRespErrorDto {
     pub order_id: Option<OrderErrorReason>,
     pub method: Option<PaymentMethodErrorReason>,
     pub lines: Option<Vec<ChargeOlineErrorDto>>,
-    pub currency: Option<CurrencyDto>,
+    pub currency: Option<CurrencyDto>, // the currency chosen by buyer on creating the order
 }
 
 #[derive(Serialize)]

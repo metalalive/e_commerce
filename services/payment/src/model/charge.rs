@@ -1,10 +1,17 @@
+use std::collections::hash_map::RandomState;
+use std::collections::{HashMap, HashSet};
 use std::result::Result;
+use std::str::FromStr;
 
 use chrono::{
     DateTime, Datelike, Duration, DurationRound, FixedOffset, Local, TimeDelta, Timelike, Utc,
 };
+use rust_decimal::Decimal;
 
-use ecommerce_common::api::dto::{GenericRangeErrorDto, OrderLinePayDto, PayAmountDto};
+use ecommerce_common::api::dto::{
+    CurrencyDto, CurrencySnapshotDto, GenericRangeErrorDto, OrderCurrencySnapshotDto,
+    OrderLinePayDto, OrderSellerCurrencyDto, PayAmountDto,
+};
 use ecommerce_common::model::BaseProductIdentity;
 
 use crate::api::web::dto::{
@@ -14,18 +21,33 @@ use crate::api::web::dto::{
 use crate::hard_limit::{CREATE_CHARGE_SECONDS_INTERVAL, SECONDS_ORDERLINE_DISCARD_MARGIN};
 
 #[derive(Debug)]
-pub enum OLineModelError {
+pub enum PayLineAmountError {
+    // the first argument indicates stringified `amount per unit`
+    Overflow(String, u32),
+    Mismatch(PayAmountDto, u32),
+    // the 2 fields indicate `stringified value` and `detail reason`
+    ParseUnit(String, String),
+    ParseTotal(String, String),
+}
+
+#[derive(Debug)]
+pub enum OrderModelError {
     EmptyLine,
     ZeroQuantity(BaseProductIdentity),
     RsvExpired(BaseProductIdentity),
     RsvError(BaseProductIdentity, String),
-    AmountMismatch(BaseProductIdentity, PayAmountDto, u32),
+    InvalidAmount(BaseProductIdentity, PayLineAmountError),
+    MissingActorsCurrency(Vec<u32>),
+    MissingExRate(CurrencyDto),
+    CorruptedExRate(CurrencyDto, String),
 }
 
+/// this type does not contain the currency of the amount,
+/// such currency is defined by upper structure
 #[derive(Default)]
 pub struct PayLineAmountModel {
-    pub unit: u32,
-    pub total: u32,
+    pub unit: Decimal,
+    pub total: Decimal,
     pub qty: u32,
 }
 
@@ -33,17 +55,25 @@ pub struct OrderLineModel {
     pub pid: BaseProductIdentity, // product ID
     pub rsv_total: PayLineAmountModel,
     pub paid_total: PayLineAmountModel,
-    pub reserved_until: DateTime<FixedOffset>, // TODO, switch to UTC timezone
+    pub reserved_until: DateTime<Utc>,
+}
+
+#[derive(Clone)]
+pub struct OrderCurrencySnapshot {
+    pub label: CurrencyDto,
+    pub rate: Decimal,
 }
 
 pub struct OrderLineModelSet {
     pub id: String,
-    pub owner: u32,
+    pub buyer_id: u32, // buyer's profile ID in user-management service
     pub lines: Vec<OrderLineModel>,
     pub create_time: DateTime<Utc>,
     pub num_charges: u32,
-    // TODO, add following fields
-    // - currency rate on customer side when creating the order
+    // - the map indicates currencies and locked exchange rate applied
+    //   in buyer or sellers business.
+    // - note current base currency in this project defaults to USD
+    pub currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
 }
 
 pub type PaymentMethodModel = PaymentMethodReqDto;
@@ -63,6 +93,8 @@ pub enum BuyerPayInState {
 
 pub struct ChargeLineBuyerModel {
     pub pid: BaseProductIdentity, // product ID
+    // currenctly this field specifies the amount to charge in buyer's currency,
+    // TODO, another column for the same purpose in seller's preferred currency
     pub amount: PayLineAmountModel,
 }
 pub struct ChargeBuyerModel {
@@ -71,6 +103,7 @@ pub struct ChargeBuyerModel {
     // idenpotency token, derived by owner (user profile ID) and create time
     pub token: ChargeToken,
     pub oid: String, // referenced order id
+    pub currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
     pub lines: Vec<ChargeLineBuyerModel>,
     pub state: BuyerPayInState,
     pub method: PaymentMethodModel,
@@ -87,80 +120,173 @@ impl BuyerPayInState {
     }
 }
 
-impl TryFrom<OrderLinePayDto> for OrderLineModel {
-    type Error = OLineModelError;
-    fn try_from(value: OrderLinePayDto) -> Result<Self, Self::Error> {
-        let OrderLinePayDto {
-            seller_id,
-            product_id,
-            product_type,
-            reserved_until,
-            quantity,
-            amount,
-        } = value;
-        let pid = BaseProductIdentity {
-            store_id: seller_id,
-            product_type,
-            product_id,
-        };
-        let rsv_parse_result = DateTime::parse_from_rfc3339(reserved_until.as_str());
-        let now = Local::now().fixed_offset();
-        if quantity == 0 {
-            Err(OLineModelError::ZeroQuantity(pid))
-        } else if let Err(e) = rsv_parse_result.as_ref() {
-            Err(OLineModelError::RsvError(pid, e.to_string()))
-        } else if &now >= rsv_parse_result.as_ref().unwrap() {
-            Err(OLineModelError::RsvExpired(pid))
-        } else if (amount.unit * quantity) != amount.total {
-            Err(OLineModelError::AmountMismatch(pid, amount, quantity))
+impl TryFrom<(u32, PayAmountDto)> for PayLineAmountModel {
+    type Error = PayLineAmountError;
+    fn try_from(value: (u32, PayAmountDto)) -> Result<Self, Self::Error> {
+        let (quantity, amount_dto) = value;
+        let result_amount_unit = Decimal::from_str(amount_dto.unit.as_str());
+        let result_amount_total = Decimal::from_str(amount_dto.total.as_str());
+        if let Err(e) = &result_amount_unit {
+            let amt = amount_dto.unit;
+            let detail = e.to_string();
+            Err(Self::Error::ParseUnit(amt, detail))
+        } else if let Err(e) = &result_amount_total {
+            let amt = amount_dto.total;
+            let detail = e.to_string();
+            Err(Self::Error::ParseTotal(amt, detail))
         } else {
-            let reserved_until = rsv_parse_result.unwrap();
-            let rsv_total = PayLineAmountModel {
+            let m = Self {
                 qty: quantity,
-                unit: amount.unit,
-                total: amount.total,
+                unit: result_amount_unit.unwrap(),
+                total: result_amount_total.unwrap(),
             };
-            let paid_total = PayLineAmountModel::default();
-            Ok(Self {
-                pid,
-                paid_total,
-                rsv_total,
-                reserved_until,
-            })
+            if m.total_amount_eq()? {
+                Ok(m)
+            } else {
+                Err(Self::Error::Mismatch(amount_dto, quantity))
+            }
         }
     }
-}
+} // end of impl TryFrom for PayLineAmountModel
 
-impl TryFrom<(String, u32, Vec<OrderLinePayDto>)> for OrderLineModelSet {
-    type Error = Vec<OLineModelError>;
-    fn try_from(value: (String, u32, Vec<OrderLinePayDto>)) -> Result<Self, Self::Error> {
-        let (oid, owner, lines_dto) = value;
+impl PayLineAmountModel {
+    fn total_amount_eq(&self) -> Result<bool, PayLineAmountError> {
+        let qty_d = Decimal::new(self.qty as i64, 0);
+        let tot_actual =
+            qty_d
+                .checked_mul(self.unit.clone())
+                .ok_or(PayLineAmountError::Overflow(
+                    self.unit.to_string(),
+                    self.qty,
+                ))?;
+        Ok(tot_actual == self.total)
+    }
+} // end of impl TryFrom for PayLineAmountModel
+
+#[rustfmt::skip]
+impl TryFrom<OrderLinePayDto> for OrderLineModel {
+    type Error = OrderModelError;
+    fn try_from(value: OrderLinePayDto) -> Result<Self, Self::Error> {
+        let OrderLinePayDto {
+            seller_id, product_id, product_type,
+            reserved_until, quantity, amount: amount_dto,
+        } = value;
+        let pid = BaseProductIdentity {store_id: seller_id, product_type, product_id};
+        let rsv_parse_result = DateTime::parse_from_rfc3339(reserved_until.as_str());
+        let now = Local::now().fixed_offset();
+
+        if quantity == 0 {
+            Err(Self::Error::ZeroQuantity(pid))
+        } else if let Err(e) = rsv_parse_result.as_ref() {
+            Err(Self::Error::RsvError(pid, e.to_string()))
+        } else if &now >= rsv_parse_result.as_ref().unwrap() {
+            Err(Self::Error::RsvExpired(pid))
+        } else {
+            let reserved_until = rsv_parse_result.unwrap().to_utc();
+            let rsv_total = PayLineAmountModel::try_from((quantity, amount_dto))
+                .map_err(|e| Self::Error::InvalidAmount(pid.clone(), e)) ?;
+            let paid_total = PayLineAmountModel::default();
+            Ok(Self {pid, paid_total, rsv_total, reserved_until})
+        }
+    } // end of fn try-from
+} // end of impl TryFrom for OrderLineModel
+
+impl TryFrom<(CurrencyDto, &Vec<CurrencySnapshotDto>)> for OrderCurrencySnapshot {
+    type Error = OrderModelError;
+    fn try_from(value: (CurrencyDto, &Vec<CurrencySnapshotDto>)) -> Result<Self, Self::Error> {
+        let (label, search_src) = value;
+        let raw_rate = search_src
+            .iter()
+            .find(|s| s.name == label)
+            .map(|s| s.rate.to_string())
+            .ok_or(OrderModelError::MissingExRate(label.clone()))?;
+        let rate = Decimal::from_str(raw_rate.as_str())
+            .map_err(|_e| OrderModelError::CorruptedExRate(label.clone(), raw_rate.to_string()))?;
+        Ok(Self { label, rate })
+    }
+} // end of impl OrderCurrencySnapshot
+
+impl OrderLineModelSet {
+    fn verify_seller_currency_integrity(
+        required: &Vec<OrderLinePayDto>,
+        provided: &Vec<OrderSellerCurrencyDto>,
+    ) -> Result<(), OrderModelError> {
+        let iter0 = required.iter().map(|v| v.seller_id);
+        let iter1 = provided.iter().map(|v| v.seller_id);
+        let required_ids: HashSet<u32, RandomState> = HashSet::from_iter(iter0);
+        let provided_ids = HashSet::from_iter(iter1);
+        let uncovered = &required_ids - &provided_ids;
+        if uncovered.is_empty() {
+            Ok(())
+        } else {
+            let ids = uncovered.into_iter().collect::<Vec<_>>();
+            Err(OrderModelError::MissingActorsCurrency(ids))
+        }
+    }
+    fn try_build_currency_snapshot(
+        buyer_id: u32,
+        data: OrderCurrencySnapshotDto,
+    ) -> Result<HashMap<u32, OrderCurrencySnapshot>, Vec<OrderModelError>> {
+        let OrderCurrencySnapshotDto {
+            snapshot,
+            sellers: sellers_label,
+            buyer: buyer_label,
+        } = data;
+        let mut errors = Vec::new();
+        let map_iter = sellers_label.into_iter().filter_map(|d| {
+            let OrderSellerCurrencyDto {
+                currency: s_label,
+                seller_id,
+            } = d;
+            OrderCurrencySnapshot::try_from((s_label, &snapshot))
+                .map(|m| (seller_id, m))
+                .map_err(|e| errors.push(e))
+                .ok()
+        });
+        let mut map = HashMap::from_iter(map_iter);
+        if errors.is_empty() {
+            let m =
+                OrderCurrencySnapshot::try_from((buyer_label, &snapshot)).map_err(|e| vec![e])?;
+            map.insert(buyer_id, m);
+            Ok(map)
+        } else {
+            Err(errors)
+        }
+    } // end of fn try_build_currency_snapshot
+} // end of impl OrderLineModelSet
+
+impl TryFrom<(String, u32, Vec<OrderLinePayDto>, OrderCurrencySnapshotDto)> for OrderLineModelSet {
+    type Error = Vec<OrderModelError>;
+
+    fn try_from(
+        value: (String, u32, Vec<OrderLinePayDto>, OrderCurrencySnapshotDto),
+    ) -> Result<Self, Self::Error> {
+        let (oid, buyer_id, lines_dto, currency_d) = value;
         let mut errors = vec![];
         if lines_dto.is_empty() {
-            errors.push(OLineModelError::EmptyLine);
+            errors.push(OrderModelError::EmptyLine);
         }
+        let _ = Self::verify_seller_currency_integrity(&lines_dto, &currency_d.sellers)
+            .map_err(|e| errors.push(e));
+        let currency_m =
+            Self::try_build_currency_snapshot(buyer_id, currency_d).map_err(|e| errors.extend(e));
         let lines = lines_dto
             .into_iter()
-            .filter_map(|d| match OrderLineModel::try_from(d) {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    errors.push(e);
-                    None
-                }
-            })
+            .filter_map(|d| OrderLineModel::try_from(d).map_err(|e| errors.push(e)).ok())
             .collect();
         if errors.is_empty() {
             Ok(Self {
                 id: oid,
-                owner,
+                buyer_id,
                 lines,
                 create_time: Local::now().to_utc(),
                 num_charges: 0,
+                currency_snapshot: currency_m.unwrap(),
             })
         } else {
             Err(errors)
         }
-    }
+    } // end of fn try-from
 } // end of impl try-from for OrderLineModelSet
 
 impl TryFrom<(OrderLineModelSet, ChargeReqDto)> for ChargeBuyerModel {
@@ -168,38 +294,49 @@ impl TryFrom<(OrderLineModelSet, ChargeReqDto)> for ChargeBuyerModel {
 
     fn try_from(value: (OrderLineModelSet, ChargeReqDto)) -> Result<Self, Self::Error> {
         let (ms, req) = value;
-        let (method, reqlines) = (req.method, req.lines);
-        let (oid, owner, orig_olines) = (ms.id, ms.owner, ms.lines);
-        let now = Local::now().fixed_offset();
-        if oid.as_str() != req.order_id.as_str() {
+        let ChargeReqDto {
+            method,
+            currency: req_currency,
+            lines: reqlines,
+            order_id: req_oid,
+        } = req;
+        let OrderLineModelSet {
+            id: oid,
+            buyer_id,
+            lines: valid_olines,
+            create_time: _,
+            num_charges: _,
+            currency_snapshot,
+        } = ms;
+        let now = Local::now().to_utc();
+        if oid.as_str() != req_oid.as_str() {
             return Err(ChargeRespErrorDto {
-                lines: None,
-                method: None,
                 order_id: Some(OrderErrorReason::InvalidOrder),
+                ..Default::default()
             });
         }
-
-        let num_orig_olines = orig_olines.len();
-        let valid_olines = orig_olines
-            .into_iter()
-            .filter(|v| {
-                (v.rsv_total.qty >= v.paid_total.qty)
-                    && ((v.rsv_total.qty * v.rsv_total.unit) == v.rsv_total.total)
-                    && ((v.paid_total.qty * v.paid_total.unit) == v.paid_total.total)
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(valid_olines.len(), num_orig_olines);
+        let buyer_currency = {
+            let s = currency_snapshot.get(&buyer_id).ok_or(ChargeRespErrorDto {
+                currency: Some(CurrencyDto::Unknown),
+                ..Default::default()
+            })?;
+            if s.label == req_currency {
+                s.label.clone()
+            } else {
+                return Err(ChargeRespErrorDto {
+                    currency: Some(s.label.clone()),
+                    ..Default::default()
+                });
+            }
+        };
 
         let mut err_lines = Vec::new();
         let lines = reqlines
             .into_iter()
-            .map(|r| ChargeLineBuyerModel::try_from((&valid_olines, r, now)))
-            .filter_map(|r| match r {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    err_lines.push(e);
-                    None
-                }
+            .filter_map(|r| {
+                ChargeLineBuyerModel::try_from((&valid_olines, r, now))
+                    .map_err(|e| err_lines.push(e))
+                    .ok()
             })
             .collect::<Vec<_>>();
 
@@ -208,21 +345,28 @@ impl TryFrom<(OrderLineModelSet, ChargeReqDto)> for ChargeBuyerModel {
             Ok(Self {
                 oid,
                 create_time: now,
-                token: ChargeToken::encode(owner, now),
-                owner,
+                token: ChargeToken::encode(buyer_id, now),
+                owner: buyer_id,
+                currency_snapshot,
                 method,
                 lines,
                 state: BuyerPayInState::Initialized,
             })
         } else {
             Err(ChargeRespErrorDto {
-                order_id: None,
-                method: None,
                 lines: Some(err_lines),
+                currency: Some(buyer_currency),
+                ..Default::default()
             })
         }
     } // end of fn try-from
 } // end of impl TryFrom for ChargeBuyerModel
+
+impl ChargeBuyerModel {
+    pub(crate) fn get_buyer_currency(&self) -> Option<OrderCurrencySnapshot> {
+        self.currency_snapshot.get(&self.owner).map(|v| v.clone())
+    }
+}
 
 impl ChargeToken {
     pub fn encode(owner: u32, now: DateTime<Utc>) -> Self {
@@ -287,46 +431,47 @@ impl ChargeToken {
     }
 } // end of impl ChargeToken
 
-impl
-    TryFrom<(
-        &Vec<OrderLineModel>,
-        ChargeAmountOlineDto,
-        DateTime<FixedOffset>,
-    )> for ChargeLineBuyerModel
-{
+impl TryFrom<(&Vec<OrderLineModel>, ChargeAmountOlineDto, DateTime<Utc>)> for ChargeLineBuyerModel {
     type Error = ChargeOlineErrorDto;
 
+    #[rustfmt::skip]
     fn try_from(
         value: (
             &Vec<OrderLineModel>,
             ChargeAmountOlineDto,
-            DateTime<FixedOffset>,
+            DateTime<Utc>,
         ),
     ) -> Result<Self, Self::Error> {
-        let (valid_olines, r, now) = value;
+        let (valid_olines, rl, now) = value;
+        let ChargeAmountOlineDto {
+            seller_id, product_id, product_type,
+            quantity: qty_req, amount: amount_dto,
+        } = rl;
         let mut e = ChargeOlineErrorDto {
-            seller_id: r.seller_id,
-            product_id: r.product_id,
-            product_type: r.product_type.clone(),
+            seller_id,
+            product_id,
+            product_type: product_type.clone(),
             quantity: None,
             amount: None,
             expired: None,
             not_exist: false,
         };
-        if (r.quantity * r.amount.unit) != r.amount.total {
-            let expect_qty = u16::try_from(r.amount.total / r.amount.unit).unwrap_or(u16::MAX);
-            e.amount = Some(r.amount);
-            e.quantity = Some(GenericRangeErrorDto {
-                max_: expect_qty,
-                min_: 1,
-                given: r.quantity,
-            });
-            return Err(e);
-        }
+        let amount_dto_bak = amount_dto.clone();
+        let amount_m = match PayLineAmountModel::try_from((qty_req, amount_dto))
+        {
+            Ok(v) => v,
+            Err(_e) => {
+                e.amount = Some(amount_dto_bak);
+                e.quantity = Some(GenericRangeErrorDto {
+                    max_: u16::try_from(qty_req).unwrap_or(u16::MAX),
+                    given: qty_req,
+                    min_: 1,
+                });
+                return Err(e);
+            }, // TODO, improve error detail
+        };
         let pid_req = BaseProductIdentity {
-            store_id: r.seller_id,
-            product_type: r.product_type.clone(),
-            product_id: r.product_id,
+            store_id: seller_id,  product_id, product_type
         };
         let result = valid_olines.iter().find(|v| v.pid == pid_req);
         if let Some(v) = result {
@@ -335,25 +480,18 @@ impl
             {
                 e.expired = Some(true);
                 Err(e)
-            } else if r.amount.unit != v.rsv_total.unit {
-                e.amount = Some(r.amount);
+            } else if amount_m.unit != v.rsv_total.unit {
+                e.amount = Some(amount_dto_bak);
                 Err(e)
-            } else if qty_avail < r.quantity {
+            } else if qty_avail < qty_req {
                 e.quantity = Some(GenericRangeErrorDto {
                     max_: u16::try_from(qty_avail).unwrap_or(u16::MAX),
-                    given: r.quantity,
+                    given: qty_req,
                     min_: 1,
                 });
                 Err(e)
             } else {
-                Ok(Self {
-                    pid: pid_req,
-                    amount: PayLineAmountModel {
-                        unit: r.amount.unit,
-                        total: r.amount.total,
-                        qty: r.quantity,
-                    },
-                })
+                Ok(Self {pid: pid_req, amount: amount_m})
             }
         } else {
             e.not_exist = true;
