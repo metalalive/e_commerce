@@ -5,6 +5,7 @@ use std::boxed::Box;
 use std::result::Result;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use chrono::Utc;
 use http_body_util::Full;
 use hyper::body::Bytes;
@@ -12,9 +13,7 @@ use hyper::header::{HeaderName, HeaderValue};
 use hyper::Method;
 use tokio_native_tls::{native_tls, TlsConnector as TlsConnectorWrapper};
 
-use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::confidentiality::AbstractConfidentiality;
-use ecommerce_common::config::App3rdPartyCfg;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use self::client::AppStripeClient;
@@ -24,15 +23,26 @@ use self::resources::{
 };
 use super::{AppProcessorError, AppProcessorErrorReason, AppProcessorPayInResult, BaseClientError};
 use crate::api::web::dto::{
-    PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
+    PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto,
+    StripeCheckoutUImodeDto,
 };
 use crate::model::{BuyerPayInState, ChargeBuyerModel};
 
 const HEADER_NAME_IDEMPOTENCY: &str = "Idempotency-Key";
 const CHECKOUT_SESSION_MIN_SECONDS: i64 = 1800;
 
+#[async_trait]
+pub(super) trait AbstStripeContext: Send + Sync {
+    async fn pay_in_start(
+        &self,
+        req: &StripeCheckoutSessionReqDto,
+        meta: &ChargeBuyerModel,
+    ) -> Result<AppProcessorPayInResult, AppProcessorError>;
+}
+
 pub(super) struct AppProcessorStripeCtx {
-    cfg: Arc<App3rdPartyCfg>,
+    host: String,
+    port: u16,
     secure_connector: TlsConnectorWrapper,
     api_key: String,
     logctx: Arc<AppLogContext>,
@@ -40,11 +50,12 @@ pub(super) struct AppProcessorStripeCtx {
 
 impl AppProcessorStripeCtx {
     pub(super) fn try_build(
-        cfg: Arc<App3rdPartyCfg>,
+        host: &str,
+        port: u16,
+        confidential_path: &str,
         cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
         logctx: Arc<AppLogContext>,
-    ) -> Result<Self, AppProcessorError> {
-        let confidential_path = cfg.confidentiality_path.as_str();
+    ) -> Result<Box<dyn AbstStripeContext>, AppProcessorError> {
         let serial = cfdntl
             .try_get_payload(confidential_path)
             .map_err(|_e| AppProcessorError {
@@ -63,15 +74,20 @@ impl AppProcessorStripeCtx {
                 .map_err(|e| AppProcessorError { reason: e.into() })?;
             c.into()
         };
-        Ok(Self {
-            cfg,
+        let m = Self {
+            host: host.to_string(),
+            port,
             secure_connector,
             api_key,
             logctx,
-        })
+        };
+        Ok(Box::new(m))
     } // end of fn try-build
+} // end of impl AppProcessorStripeCtx
 
-    pub(super) async fn pay_in_start(
+#[async_trait]
+impl AbstStripeContext for AppProcessorStripeCtx {
+    async fn pay_in_start(
         &self,
         req: &StripeCheckoutSessionReqDto,
         meta: &ChargeBuyerModel,
@@ -102,6 +118,10 @@ impl AppProcessorStripeCtx {
                 ),
             });
         }
+        let buyer_currency = meta.get_buyer_currency().ok_or(AppProcessorError {
+            reason: AppProcessorErrorReason::MissingCurrency(meta.owner),
+        })?;
+
         let charge_token_serial = meta.token.0.iter().fold(String::new(), |mut dst, num| {
             let hex = format!("{:02x}", num);
             dst += hex.as_str();
@@ -117,7 +137,7 @@ impl AppProcessorStripeCtx {
 
         let body_obj = CreateCheckoutSession {
             client_reference_id: format!("{}-{}", meta.owner, meta.oid),
-            currency: CurrencyDto::TWD, // TODO, finish implementation
+            currency: buyer_currency.label.clone(),
             customer: req.customer_id.clone(),
             expires_at: meta.create_time.timestamp() + CHECKOUT_SESSION_MIN_SECONDS,
             cancel_url: req.cancel_url.clone(),
@@ -126,7 +146,7 @@ impl AppProcessorStripeCtx {
             line_items: meta
                 .lines
                 .iter()
-                .map(CreateCheckoutSessionLineItem::from)
+                .map(|v| CreateCheckoutSessionLineItem::from((buyer_currency.label.clone(), v)))
                 .collect(),
             payment_intent_data: CreateCheckoutSessionPaymentIntentData {
                 transfer_group: Some(charge_token_serial.clone()),
@@ -137,8 +157,8 @@ impl AppProcessorStripeCtx {
         let mut _client = AppStripeClient::<Full<Bytes>>::try_build(
             self.logctx.clone(),
             &self.secure_connector,
-            self.cfg.host.clone(),
-            self.cfg.port,
+            self.host.clone(),
+            self.port,
             self.api_key.clone(),
         )
         .await

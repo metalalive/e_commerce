@@ -1,8 +1,9 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use ecommerce_common::api::dto::CurrencyDto;
 use crate::api::web::dto::StripeCheckoutUImodeDto;
 use crate::model::ChargeLineBuyerModel;
+use ecommerce_common::api::dto::CurrencyDto;
 
 #[derive(Deserialize)]
 pub(super) struct CheckoutSession {
@@ -43,7 +44,7 @@ pub(super) struct CreateCheckoutSessionProductData {
 pub(super) struct CreateCheckoutSessionPriceData {
     pub product_data: CreateCheckoutSessionProductData,
     pub currency: CurrencyDto,
-    pub unit_amount: u32,
+    pub unit_amount_decimal: String,
 }
 
 #[derive(Serialize)]
@@ -77,18 +78,48 @@ impl From<&StripeCheckoutUImodeDto> for CheckoutSessionUiMode {
         }
     }
 }
-impl From<&ChargeLineBuyerModel> for CreateCheckoutSessionLineItem {
-    fn from(value: &ChargeLineBuyerModel) -> Self {
+
+impl CreateCheckoutSessionPriceData {
+    fn new(cline: &ChargeLineBuyerModel, currency_label: CurrencyDto) -> Self {
+        let m = Self::subunit_multiplier(currency_label.clone());
+        let m = Decimal::new(m, 0);
+        // TODO, overflow error handling
+        let amt_unit_represent = cline.amount.unit * m;
+        CreateCheckoutSessionPriceData {
+            product_data: CreateCheckoutSessionProductData {
+                name: format!("{:?}", cline.pid),
+            }, // TODO, load product name, save the product ID in metadata
+            currency: currency_label,
+            // the unit-amount field has to contain smallest unit
+            // of specific currency
+            unit_amount_decimal: amt_unit_represent.to_string(),
+        }
+    }
+    fn subunit_multiplier(given: CurrencyDto) -> i64 {
+        // [reference]
+        // check `number to basic` column in the table listing currency
+        // subunit (minor unit) below
+        // https://en.wikipedia.org/wiki/List_of_circulating_currencies#T
+        // https://en.wikipedia.org/wiki/New_Taiwan_dollar
+        match given {
+            CurrencyDto::INR
+            | CurrencyDto::IDR
+            | CurrencyDto::TWD
+            | CurrencyDto::THB
+            | CurrencyDto::USD => 100,
+            CurrencyDto::Unknown => 1,
+        }
+    }
+} // end of impl CreateCheckoutSessionPriceData
+
+impl From<(CurrencyDto, &ChargeLineBuyerModel)> for CreateCheckoutSessionLineItem {
+    fn from(value: (CurrencyDto, &ChargeLineBuyerModel)) -> Self {
+        let (currency_label, cline) = value;
+        let quantity = cline.amount.qty;
+        let price_data = CreateCheckoutSessionPriceData::new(cline, currency_label);
         Self {
-            price_data: CreateCheckoutSessionPriceData {
-                product_data: CreateCheckoutSessionProductData {
-                    name: format!("{:?}", value.pid),
-                }, // TODO, load product name, save the product ID in metadata
-                currency: CurrencyDto::TWD, // TODO, should be a field from `value.amount`
-                unit_amount: value.amount.unit * 100, // TODO, add field for smallest unit of specific
-                                                      // currency
-            },
-            quantity: value.amount.qty,
+            price_data,
+            quantity,
         }
     }
 }

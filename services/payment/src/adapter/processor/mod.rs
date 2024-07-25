@@ -1,6 +1,7 @@
 mod base_client;
 mod stripe;
 
+use std::boxed::Box;
 use std::marker::{Send, Sync};
 use std::result::Result;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use ecommerce_common::config::App3rdPartyCfg;
 use ecommerce_common::logging::AppLogContext;
 
 pub use self::base_client::{BaseClientError, BaseClientErrorReason};
-use self::stripe::AppProcessorStripeCtx;
+use self::stripe::{AbstStripeContext, AppProcessorStripeCtx};
 use crate::api::web::dto::{
     ChargeRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
 };
@@ -27,7 +28,7 @@ pub trait AbstractPaymentProcessor: Send + Sync {
 }
 
 struct AppProcessorContext {
-    _stripe: AppProcessorStripeCtx,
+    _stripe: Box<dyn AbstStripeContext>,
     _logctx: Arc<AppLogContext>,
 }
 
@@ -35,6 +36,7 @@ struct AppProcessorContext {
 pub enum AppProcessorErrorReason {
     InvalidConfig,
     MissingCredential,
+    MissingCurrency(u32), // keep user ID that misses the currency snapshot
     CredentialCorrupted,
     NotSupport,
     NotImplemented,
@@ -90,16 +92,51 @@ impl AppProcessorContext {
         cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
         _logctx: Arc<AppLogContext>,
     ) -> Result<Self, AppProcessorError> {
-        let _stripe = cfgs
-            .into_iter()
-            .find(|c| c.name.as_str().to_lowercase() == "stripe")
-            .map(|c| AppProcessorStripeCtx::try_build(c, cfdntl, _logctx.clone()))
-            .ok_or(AppProcessorError {
-                reason: AppProcessorErrorReason::InvalidConfig,
-            })??;
-        Ok(Self { _logctx, _stripe })
-    }
-}
+        let mut errors = Vec::new();
+        let mut result_stripe = None;
+        cfgs.into_iter()
+            .map(|c| {
+                match c.as_ref() {
+                    App3rdPartyCfg::dev {
+                        name,
+                        host,
+                        port,
+                        confidentiality_path,
+                    } => {
+                        if result_stripe.is_none() && name.as_str().to_lowercase() == "stripe" {
+                            result_stripe = AppProcessorStripeCtx::try_build(
+                                host.as_str(),
+                                *port,
+                                confidentiality_path.as_str(),
+                                cfdntl.clone(),
+                                _logctx.clone(),
+                            )
+                            .map_err(|e| errors.push(e))
+                            .ok();
+                        }
+                    }
+                    App3rdPartyCfg::test {
+                        name: _,
+                        data_src: _,
+                    } => {
+                        // TODO, mock Stripe response
+                    }
+                }
+            })
+            .count();
+        if errors.is_empty() {
+            if let Some(_stripe) = result_stripe {
+                Ok(Self { _logctx, _stripe })
+            } else {
+                Err(AppProcessorError {
+                    reason: AppProcessorErrorReason::InvalidConfig,
+                })
+            }
+        } else {
+            Err(errors.remove(0))
+        }
+    } // end of fn new
+} // end of impl AppProcessorContext
 
 #[async_trait]
 impl AbstractPaymentProcessor for AppProcessorContext {
