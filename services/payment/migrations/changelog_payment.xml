@@ -11,7 +11,8 @@
     </changeSet>
     <changeSet id="add_tables__order_replica_toplvl_meta" author="T.H.">
         <comment>
-            - TODO, new column for number of refunds
+            TODO
+            - consider new column for number of refunds
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE  `order_toplvl_meta` (
@@ -86,8 +87,9 @@
     <changeSet id="add_tables__charge_buyer_toplvl" author="T.H.">
         <comment>
            TODO
-           - add fields / separate tables for specific payment method
-           - more enum members as this service supports new payment methods
+           - consider separate fields or tables for saving response from specific 3rd-party
+             payment processor, based on each specific payment method.
+           - more enum members as this service supports new payment methods.
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE  `charge_buyer_toplvl` (
@@ -136,5 +138,126 @@
     
     <changeSet id="tag_version_0.0.2" author="T.H.">
         <tagDatabase tag="0.0.2" />
+    </changeSet>
+    <changeSet id="modify_pk__order_replica_toplvl_meta" author="T.H.">
+        <comment>
+            remove `usr_id` from primary key of order replica top-level metadata, there are use cases
+            where sellers need to query specific order metadata without knowing buyers' ID.
+
+            TODO,
+            - consider the scenario when a seller needs to query specific order
+            - consider performance improvement if data grows in the table, this application
+              might need another index that looks up all orders by given user (buyer) id
+            - note the application inserts records to this table once and then never modifies
+              them, users may query their order history several times, such use case is
+              write-once and read-many-times, more indices in database may cause slow
+              insertion but fast read
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_toplvl_meta` DROP PRIMARY KEY;
+            ALTER TABLE `order_toplvl_meta` ADD PRIMARY KEY (`o_id`);
+        </sql>
+        <rollback>
+            ALTER TABLE `order_toplvl_meta` DROP PRIMARY KEY;
+            ALTER TABLE `order_toplvl_meta` ADD PRIMARY KEY (`usr_id`,`o_id`);
+        </rollback>
+    </changeSet>
+    <changeSet id="rename_usr_id__order_replica_toplvl_meta" author="T.H.">
+        <comment>
+            rename `usr_id` to `buyer_id`
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_toplvl_meta` RENAME COLUMN `usr_id` TO `buyer_id`;
+        </sql>
+        <rollback>
+            ALTER TABLE `order_toplvl_meta` RENAME COLUMN `buyer_id` TO `usr_id`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.3" author="T.H.">
+        <tagDatabase tag="0.0.3" />
+    </changeSet>
+    <changeSet id="modify_price_type__orderline_replica_detail" author="T.H.">
+        <comment>
+            - 2 digits are saved as fractional part of decimal value, this is due to the limit
+              of the amount represented in each currency supported in this application. Check
+              `CurrencyDto::amount_fraction_scale()` in `services/common/rust/src/api/dto.rs`
+            - Note the amount seen in both of frontend and backend application has to consistent.
+            - it should be safe to directly change the column from integer to decimal type,
+              mariaDB automatically converts the price amount of existing rows to decimal value
+              with 0 digit after the decimal point.
+            - this migration operation should never be rolled back , because converting back to
+              integer column will lose fractional part of decimal value, that might lead to serious
+              problems in business domain.
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_line_detail` MODIFY   `price_unit`  DECIMAL(16,2) UNSIGNED NOT NULL;
+            ALTER TABLE `order_line_detail` MODIFY   `price_total_rsved`  DECIMAL(16,2) UNSIGNED NOT NULL;
+            ALTER TABLE `order_line_detail` MODIFY   `price_total_paid`   DECIMAL(16,2) UNSIGNED NOT NULL;
+        </sql>
+        <rollback />
+    </changeSet>
+    <changeSet id="rename_price_columns__orderline_replica_detail" author="T.H.">
+        <comment>
+            rename the amount columns `price_xxx` to `amt_xxx`
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_line_detail` RENAME COLUMN `price_unit` TO `amt_unit`;
+            ALTER TABLE `order_line_detail` RENAME COLUMN `price_total_rsved` TO `amt_total_rsved`;
+            ALTER TABLE `order_line_detail` RENAME COLUMN `price_total_paid`  TO `amt_total_paid`;
+        </sql>
+        <rollback>
+            ALTER TABLE `order_line_detail` RENAME COLUMN `amt_unit` TO `price_unit`;
+            ALTER TABLE `order_line_detail` RENAME COLUMN `amt_total_rsved` TO `price_total_rsved`;
+            ALTER TABLE `order_line_detail` RENAME COLUMN `amt_total_paid`  TO `price_total_paid`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.4" author="T.H.">
+        <tagDatabase tag="0.0.4" />
+    </changeSet>
+    <changeSet id="modify_price_type__charge_line" author="T.H.">
+        <comment/>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_line` MODIFY  `price_unit`  DECIMAL(16,2) UNSIGNED NOT NULL;
+            ALTER TABLE `charge_line` MODIFY  `price_total` DECIMAL(16,2) UNSIGNED NOT NULL;
+        </sql>
+        <rollback/>
+    </changeSet>
+    <changeSet id="rename_price_columns__charge_line" author="T.H.">
+        <comment/>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_line` RENAME COLUMN `price_unit` TO `amt_unit`;
+            ALTER TABLE `charge_line` RENAME COLUMN `price_total` TO `amt_total`;
+        </sql>
+        <rollback>
+            ALTER TABLE `charge_line` RENAME COLUMN `amt_unit` TO `price_unit`;
+            ALTER TABLE `charge_line` RENAME COLUMN `amt_total` TO `price_total`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.5" author="T.H.">
+        <tagDatabase tag="0.0.5" />
+    </changeSet>
+    <changeSet id="add_table__order_currency_snapshot" author="T.H.">
+        <comment>
+            `usr-id` can be either buyer or seller
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE  `order_currency_snapshot` (
+                `o_id`     BINARY(16) NOT NULL,
+                `usr_id`   INT UNSIGNED NOT NULL,
+                `label`    ENUM('USD','TWD','INR','IDR','THB') NOT NULL,
+                `ex_rate`  DECIMAL(12, 4) SIGNED NOT NULL,
+                PRIMARY KEY (`o_id`,`usr_id`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `order_currency_snapshot`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.6" author="T.H.">
+        <tagDatabase tag="0.0.6" />
     </changeSet>
 </databaseChangeLog>
