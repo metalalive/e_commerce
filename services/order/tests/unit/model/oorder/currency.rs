@@ -170,19 +170,26 @@ fn order_to_web_resp_dto_ok() {
                 let key = (item.seller_id, &item.product_type, item.product_id);
                 #[cfg_attr(rustfmt, rustfmt_skip)]
                 let expect = match key {
-                    (9982, ProductType::Item, 66049) => (CurrencyDto::INR, "13.44744870", "53.78979480"),
-                    (8964, ProductType::Package, 1082) => (CurrencyDto::IDR, "112.05231000", "224.10462000"),
-                    (2379, ProductType::Item, 1617) => (CurrencyDto::TWD, "215.00000000", "1075.00000000"),
-                    (9982, ProductType::Package, 50129) => (CurrencyDto::INR, "163.67466132", "1020.46924992"),
+                    // expected amount with more decimal places,
+                    // "13.44744870", "53.78979480"
+                    (9982, ProductType::Item, 66049) => (CurrencyDto::INR, "13.44", "53.78"),
+                    // "112.05231000", "224.10462000"
+                    (8964, ProductType::Package, 1082) => (CurrencyDto::IDR, "112.05", "224.10"),
+                    // "215.00000000", "1075.00000000"
+                    (2379, ProductType::Item, 1617) => (CurrencyDto::TWD, "215.00", "1075.00"),
+                    // "163.67466132", "1020.46924992"
+                    (9982, ProductType::Package, 50129) => (CurrencyDto::INR, "163.67", "1020.46"),
                     _others => (CurrencyDto::Unknown, "-0.00", "-0.00"),
                 };
-                let actual_currency = exrate_applied.sellers.iter()
+                let actual_currency = exrate_applied
+                    .sellers
+                    .iter()
                     .find(|r| r.seller_id == item.seller_id)
                     .map(|r| r.currency.clone())
                     .unwrap();
                 assert_eq!(actual_currency, expect.0);
-                assert_eq!(item.amount.unit.as_str() , expect.1);
-                assert_eq!(item.amount.total.as_str() , expect.2);
+                assert_eq!(item.amount.unit.as_str(), expect.1);
+                assert_eq!(item.amount.total.as_str(), expect.2);
             })
             .count();
     }

@@ -204,9 +204,8 @@ impl OrderLineQuantityModel {
 }
 
 impl OrderLinePriceModel {
-    fn into_paym_dto(self, mut curr_ex: CurrencyModel) -> PayAmountDto {
-        let fraction_limit = PayAmountDto::fraction_scale();
-        curr_ex.trunc_rate_fraction(fraction_limit);
+    fn into_paym_dto(self, curr_ex: CurrencyModel) -> PayAmountDto {
+        let fraction_limit = curr_ex.name.amount_fraction_scale();
         let p_unit_seller = Decimal::new(self.unit as i64, 0u32);
         let p_total_seller = Decimal::new(self.total as i64, 0u32);
         let p_unit_buyer = p_unit_seller * curr_ex.rate;

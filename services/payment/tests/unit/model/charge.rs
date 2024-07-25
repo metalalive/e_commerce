@@ -41,7 +41,7 @@ fn ut_setup_order_replica(
     reserved_until: DateTime<FixedOffset>,
 ) -> OrderLineModelSet {
     let mock_lines = [
-        (140, ProductType::Item, 1005, 20, "17.015", "340.3", Duration::minutes(6)),
+        (140, ProductType::Item, 1005, 20, "17.15", "343", Duration::minutes(6)),
         (141, ProductType::Package, 1006, 11, "21.0", "231.0", Duration::minutes(4)),
         (142, ProductType::Item, 1007, 25, "22.09", "552.25", Duration::minutes(10)),
         (143, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
@@ -308,6 +308,7 @@ async fn order_replica_convert_invalid_amount() {
         (141, ProductType::Package, 1006, 11, "24", "261"),
         (142, ProductType::Item, 1007, 10, "23", "230s"),
         (143, ProductType::Package, 1011, u32::MAX, "1230045600789001230045600", "2900"),
+        (144, ProductType::Item, 1027, 4, "200.013", "800.052"),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
@@ -316,12 +317,12 @@ async fn order_replica_convert_invalid_amount() {
         amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
     })
     .collect::<Vec<_>>();
-    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140, 141, 142, 143]);
+    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140, 141, 142, 143, 144]);
     let result =
         OrderLineModelSet::try_from((mock_oid, mock_usr_id, mock_lines, mock_currency_snapshot));
     assert!(result.is_err());
     if let Err(es) = result {
-        assert_eq!(es.len(), 4);
+        assert_eq!(es.len(), 5);
         es.into_iter().map(|e| match e {
             OrderModelError::InvalidAmount(pid, pe) => {
                 let BaseProductIdentity { store_id, product_type, product_id } = pid;
@@ -345,6 +346,11 @@ async fn order_replica_convert_invalid_amount() {
                             assert_eq!(qty, u32::MAX);
                             assert_eq!(amt_unit.as_str(), "1230045600789001230045600");
                         } else { assert!(false); },
+                    (144, ProductType::Item, 1027) =>
+                        if let PayLineAmountError::PrecisionUnit(amt_unit, scale) = pe {
+                            assert_eq!(amt_unit.as_str(), "200.013");
+                            assert_eq!(scale, (2, 3));
+                        } else { assert!(false); },
                     _others => { assert!(false); },
                 }
             },
@@ -359,7 +365,7 @@ async fn charge_buyer_convert_ok_1() {
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
     let mock_lines = [
-        (140, ProductType::Item, 1005, 6, "17.015", "102.09"),
+        (140, ProductType::Item, 1005, 6, "17.15", "102.9"),
         (141, ProductType::Package, 1006, 1, "21", "21"),
         (143, ProductType::Package, 1008, 4, "10", "40"),
     ]
@@ -399,7 +405,7 @@ async fn charge_buyer_convert_ok_1() {
                 } = actual_pid;
                 let PayLineAmountModel { unit, total, qty } = actual_amount;
                 let expect = match (store_id, product_type, product_id) {
-                    (140, ProductType::Item, 1005) => (6u32, (17015i64, 3u32), (10209i64, 2u32)),
+                    (140, ProductType::Item, 1005) => (6u32, (1715i64, 2u32), (1029i64, 1u32)),
                     (141, ProductType::Package, 1006) => (1, (21, 0), (21, 0)),
                     (143, ProductType::Package, 1008) => (4, (10, 0), (40, 0)),
                     _others => (0, (0, 0), (0, 0)),
@@ -430,7 +436,7 @@ async fn charge_buyer_convert_ok_2() {
         })
         .count();
     let mock_lines = [
-        (140, ProductType::Item, 1005, 9, "17.015", "153.135"),
+        (140, ProductType::Item, 1005, 9, "17.15", "154.35"),
         (142, ProductType::Item, 1007, 14, "22.09", "309.26"),
         (143, ProductType::Package, 1008, 7, "10", "70"),
     ]
@@ -468,7 +474,7 @@ async fn charge_buyer_convert_ok_2() {
                 } = actual_pid;
                 let PayLineAmountModel { unit, total, qty } = actual_amount;
                 let expect = match (store_id, product_type, product_id) {
-                    (140, ProductType::Item, 1005) => (9u32, 17015i64, 153135i64),
+                    (140, ProductType::Item, 1005) => (9u32, 17150i64, 154350i64),
                     (142, ProductType::Item, 1007) => (14, 22090, 309260),
                     (143, ProductType::Package, 1008) => (7, 10000, 70000),
                     _others => (0, 0, 0),
@@ -540,7 +546,7 @@ async fn charge_buyer_convert_expired() {
         })
         .count(); // assume expiry time reached
     let mock_lines = [
-        (140, ProductType::Item, 1005, 1, "17.015", "17.015"),
+        (140, ProductType::Item, 1005, 1, "17.15", "17.15"),
         (141, ProductType::Package, 1006, 1, "21", "21"),
         (142, ProductType::Item, 1007, 1, "22.09", "22.09"),
         (143, ProductType::Package, 1008, 1, "10", "10"),
@@ -600,7 +606,7 @@ async fn charge_buyer_convert_qty_exceed_limit() {
         })
         .count();
     let mock_lines = [
-        (140, ProductType::Item, 1005, 8, "17.015", "136.12"),
+        (140, ProductType::Item, 1005, 8, "17.15", "137.2"),
         (141, ProductType::Package, 1006, 2, "21", "42"),
         (142, ProductType::Item, 1007, 15, "22.09", "331.35"),
         (143, ProductType::Package, 1008, 7, "10", "70"),

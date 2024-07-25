@@ -6,7 +6,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Duration, FixedOffset, Local};
 use rust_decimal::Decimal;
 
-use ecommerce_common::api::dto::{CurrencyDto, PayAmountDto};
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::AppLogContext;
@@ -782,7 +782,7 @@ async fn replica_refund_ok() {
     let expect_refunds: HashSet<(u32, u64, DateTime<FixedOffset>, String), RandomState> = {
         let iter = fetched_returns.iter().flat_map(|ret| {
             ret.qty.iter().map(|(t, (_q, refund))| {
-                let scale_limit = PayAmountDto::fraction_scale();
+                let scale_limit = mocked_currency_rate.buyer.name.amount_fraction_scale();
                 let mantissa = (refund.total as i64) * 10i64.pow(scale_limit);
                 (
                     ret.id_.store_id,

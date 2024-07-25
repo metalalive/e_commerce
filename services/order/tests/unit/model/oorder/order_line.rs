@@ -12,7 +12,7 @@ use order::model::{
     OrderLinePriceModel, OrderLineQuantityModel, ProductPolicyModel, ProductPriceModel,
 };
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 pub(super) fn ut_setup_order_lines(
     data : Vec<(
         u32, u64, ProductType,
@@ -194,7 +194,7 @@ fn convert_from_req_dto_product_id_mismatch() {
     }
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 #[test]
 fn convert_to_pay_dto_ok() {
     let reserved_until = DateTime::parse_from_rfc3339("2023-01-15T09:23:50+08:00").unwrap();
@@ -214,8 +214,8 @@ fn convert_to_pay_dto_ok() {
     assert_eq!(payline.product_type, ProductType::Package);
     assert_eq!(payline.product_id, 124);
     assert_eq!(payline.quantity, 25);
-    assert_eq!(payline.amount.unit.as_str(), "322.12663000");
-    assert_eq!(payline.amount.total.as_str(), "7961.12957000");
+    assert_eq!(payline.amount.unit.as_str(), "322.12"); // "322.12663000"
+    assert_eq!(payline.amount.total.as_str(), "7961.12"); // "7961.12957000"
 } // end of fn convert_to_pay_dto_ok
 
 #[test]

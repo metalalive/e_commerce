@@ -3,19 +3,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::constant::ProductType;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct PayAmountDto {
-    // represented as string , can converted to decimal type in front-end app
+    // represented as string , can be converted from decimal type
     pub unit: String,
     pub total: String,
-}
-impl PayAmountDto {
-    pub fn fraction_scale() -> u32 {
-        // at most 8 digits to reserve for fraction of a amount
-        // , note the amount should be originally decimal type converting
-        // to string for serialisation
-        8
-    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -80,15 +72,10 @@ pub struct ContactDto {
     pub phones: Vec<PhoneNumberDto>,
 }
 
+#[rustfmt::skip]
 #[derive(Deserialize, Serialize, Clone)]
-pub enum CountryCode {
-    TW,
-    TH,
-    IN,
-    ID,
-    US,
-    Unknown,
-}
+pub enum CountryCode { TW, TH, IN, ID, US, Unknown }
+
 impl From<CountryCode> for String {
     fn from(value: CountryCode) -> String {
         let out = match value {
@@ -115,16 +102,10 @@ impl From<String> for CountryCode {
     }
 }
 
+#[rustfmt::skip]
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Deserialize, Serialize, Debug, Clone, Hash, Eq, PartialEq)]
-pub enum CurrencyDto {
-    INR,
-    IDR,
-    THB,
-    TWD,
-    USD,
-    Unknown,
-}
+pub enum CurrencyDto { INR, IDR, THB, TWD, USD, Unknown }
 
 impl ToString for CurrencyDto {
     fn to_string(&self) -> String {
@@ -149,6 +130,20 @@ impl From<&String> for CurrencyDto {
             "TWD" => Self::TWD,
             "USD" => Self::USD,
             _others => Self::Unknown,
+        }
+    }
+}
+
+impl CurrencyDto {
+    /// Number of digits in fraction part of a decimal value allowed 
+    /// in a given amount value. Note the decimal places should depends
+    /// on the currency applied, due to the limit specified in 3rd-party
+    /// payment processors such as Stripe
+    pub fn amount_fraction_scale(&self) -> u32 {
+        match self {
+            Self::INR | Self::IDR | Self::THB | Self::TWD
+                | Self::USD => 2,
+            Self::Unknown => 0,
         }
     }
 }
