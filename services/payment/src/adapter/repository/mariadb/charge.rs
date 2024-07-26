@@ -1,21 +1,25 @@
+use std::collections::HashMap;
 use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use mysql_async::prelude::{Query, Queryable, WithParams};
-use mysql_async::{Conn, IsolationLevel, TxOpts};
+use mysql_async::{Conn, IsolationLevel, Params, TxOpts};
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
 use ecommerce_common::model::order::BillingModel;
 
-use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::charge_converter::{
-    FetchUnpaidOlineArgs, InsertChargeArgs, InsertOrderReplicaArgs, OrderlineRowType,
-};
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
-use crate::model::{ChargeBuyerModel, OrderLineModel, OrderLineModelSet};
+use crate::model::{ChargeBuyerModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet};
+
+use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
+use super::charge_converter::InsertChargeArgs;
+use super::order_replica::{
+    FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType, OrderlineRowType,
+};
 
 pub(crate) struct MariadbChargeRepo {
     _dstore: Arc<AppDStoreMariaDB>,
@@ -31,6 +35,25 @@ impl MariadbChargeRepo {
                 detail: AppRepoErrorDetail::Unknown,
             })
     }
+
+    async fn try_build_currency_snapshot(
+        exec: &mut Conn,
+        stmt: String,
+        params: Params,
+    ) -> Result<HashMap<u32, OrderCurrencySnapshot>, AppRepoErrorDetail> {
+        let rows = stmt
+            .with(params)
+            .fetch::<OrderCurrencyRowType, &mut Conn>(exec)
+            .await
+            .map_err(|e| AppRepoErrorDetail::DatabaseQuery(e.to_string()))?;
+        let iter = rows.into_iter().map(|(usr_id, label_raw, rate)| {
+            let label = CurrencyDto::from(&label_raw);
+            let v = OrderCurrencySnapshot { label, rate };
+            (usr_id, v)
+        });
+        Ok(HashMap::from_iter(iter))
+    }
+
     fn _map_err_create_order(&self, detail: AppRepoErrorDetail) -> AppRepoError {
         let e = AppRepoError {
             fn_label: AppRepoErrorFnLabel::CreateOrder,
@@ -104,23 +127,33 @@ impl AbstractChargeRepo for MariadbChargeRepo {
             .map_err(|e| self._map_err_get_unpaid_olines(AppRepoErrorDetail::DataStore(e)))?;
         let exec = &mut conn;
         let (stmt, param) = args_iter.next().unwrap();
-        let result = stmt
-            .with(param)
-            .first::<(mysql_async::Value, u32), &mut Conn>(exec)
+        let currency_snapshot = Self::try_build_currency_snapshot(exec, stmt, param)
             .await
-            .map_err(|e| {
-                self._map_err_get_unpaid_olines(AppRepoErrorDetail::DatabaseQuery(e.to_string()))
-            })?
-            .map(|(str_time, num_charges)| {
-                OrderLineModelSet::try_from((usr_id, oid, str_time, num_charges))
-            });
-        let mut toplvl_result = if let Some(v) = result {
-            let inner = v?;
-            Some(inner)
-        } else {
-            None
+            .map_err(|de| self._map_err_get_unpaid_olines(de))?;
+        let mut toplvl_result = {
+            let (stmt, param) = args_iter.next().unwrap();
+            let result = stmt
+                .with(param)
+                .first::<(mysql_async::Value, u32), &mut Conn>(exec)
+                .await
+                .map_err(|e| {
+                    self._map_err_get_unpaid_olines(AppRepoErrorDetail::DatabaseQuery(
+                        e.to_string(),
+                    ))
+                })?
+                .map(|(str_time, num_charges)| {
+                    let arg = (usr_id, oid, str_time, num_charges, currency_snapshot);
+                    OrderLineModelSet::try_from(arg)
+                });
+            if let Some(v) = result {
+                let inner = v?;
+                Some(inner)
+            } else {
+                None
+            }
         };
         if let Some(v) = &mut toplvl_result {
+            // --- order lines ---
             let (stmt, param) = args_iter.next().unwrap();
             let mut line_stream = stmt
                 .with(param)

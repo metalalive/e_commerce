@@ -1,5 +1,6 @@
 pub(super) mod charge;
 mod charge_converter;
+mod order_replica;
 
 use std::result::Result;
 
@@ -13,6 +14,7 @@ fn raw_column_to_datetime(
     val: mysql_async::Value,
     subsec_precision: u16,
 ) -> Result<DateTime<Utc>, AppRepoError> {
+    // TODO, refactor, change error type to `AppRepoErrorDetail`
     if let mysql_async::Value::Date(Y, M, D, h, m, s, us) = val {
         let d =
             NaiveDate::from_ymd_opt(Y as i32, M as u32, D as u32).ok_or_else(|| AppRepoError {

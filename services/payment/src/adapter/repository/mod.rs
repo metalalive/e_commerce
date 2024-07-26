@@ -32,6 +32,7 @@ pub enum AppRepoErrorDetail {
     DatabaseExec(String),
     DatabaseQuery(String),
     DataRowParse(String),
+    CurrencyPrecision(u32, String, String, u32, u32),
     Unknown,
 }
 
