@@ -47,7 +47,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChargeRespDto'
+                $ref: '#/components/schemas/ChargeCreateRespDto'
         '400':
           description: Invalid input
           content:
@@ -232,15 +232,13 @@ components:
       required:
         - label
     
-    ChargeRespDto:
+    ChargeCreateRespDto:
       type: object
       properties:
         id:
-          type: array
-          minItems: 8
-          items:
-            type: integer
-            example: 42
+          type: string
+          description: ID to specific order payment / charge activity
+          example: '71e4010024d6'
         method:
           description: TODO, add other payment methods e.g. Wise, Adyen
           oneOf:

@@ -12,8 +12,8 @@
 			"reserved_until": "2038-12-25T22:59:38.008+02:00",
 			"quantity": 15,
 			"amount": {
-                            "unit": 18,
-			    "total": 270
+                            "unit": "18.1",
+			    "total": "271.5"
 			}
 		    },
 		    {
@@ -23,11 +23,16 @@
 			"reserved_until": "2047-12-25T03:19:02.008+05:00",
 			"quantity": 9,
 			"amount": {
-                            "unit": 8,
-			    "total": 72
+                            "unit": "8.0",
+			    "total": "72.0"
 			}
 		    }
 		],
+		"currency": {
+			"snapshot": [{"name":"USD", "rate":"1.00"}, {"name":"THB", "rate":"37.502"}],
+			"sellers": [{"currency":"THB", "seller_id":983}],
+			"buyer": "USD"
+		},
 		"billing": {
 		    "contact": {
 		        "first_name": "Vonjutstes",

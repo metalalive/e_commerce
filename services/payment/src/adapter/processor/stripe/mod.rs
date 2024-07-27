@@ -191,3 +191,39 @@ impl AbstStripeContext for AppProcessorStripeCtx {
         Ok(out)
     } // end of fn create_checkout_session
 } // end of impl AppProcessorStripeCtx
+
+pub(super) struct MockProcessorStripeCtx;
+
+impl MockProcessorStripeCtx {
+    pub(super) fn build() -> Box<dyn AbstStripeContext> {
+        Box::new(Self)
+    }
+}
+
+#[async_trait]
+impl AbstStripeContext for MockProcessorStripeCtx {
+    async fn pay_in_start(
+        &self,
+        req: &StripeCheckoutSessionReqDto,
+        meta: &ChargeBuyerModel,
+    ) -> Result<AppProcessorPayInResult, AppProcessorError> {
+        let (redirect_url, client_session) = match req.ui_mode {
+            StripeCheckoutUImodeDto::RedirectPage => (Some("https://abc.new.au".to_string()), None),
+            StripeCheckoutUImodeDto::EmbeddedJs => {
+                (None, Some("mock-client-session-seq".to_string()))
+            }
+        };
+        let mthd_detail = StripeCheckoutSessionRespDto {
+            id: "mock-stripe-checkout-session-id".to_string(),
+            redirect_url,
+            client_session,
+        };
+        let out = AppProcessorPayInResult {
+            charge_id: meta.token.0.to_vec(),
+            method: PaymentMethodRespDto::Stripe(mthd_detail),
+            state: BuyerPayInState::ProcessorAccepted(meta.create_time.clone()),
+            completed: false,
+        };
+        Ok(out)
+    }
+}

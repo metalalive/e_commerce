@@ -85,7 +85,7 @@ const CHARGE_TOKEN_NBYTES: usize = 9;
 
 pub struct ChargeToken(pub [u8; CHARGE_TOKEN_NBYTES]);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BuyerPayInState {
     Initialized,
     ProcessorAccepted(DateTime<Utc>),
@@ -109,6 +109,8 @@ pub struct ChargeBuyerModel {
     pub currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
     pub lines: Vec<ChargeLineBuyerModel>,
     pub state: BuyerPayInState,
+    // TODO, replace data type below, with deserialisable string which shows
+    // 3rd-party processor-specific detail about payment method
     pub method: PaymentMethodModel,
 }
 

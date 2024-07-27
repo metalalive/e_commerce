@@ -11,14 +11,11 @@ use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::adapter::repository::{AbstractChargeRepo, AppRepoError};
 use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxError};
 use crate::api::web::dto::{
-    ChargeReqDto, ChargeRespDto, ChargeRespErrorDto, PaymentMethodErrorReason,
+    ChargeCreateRespDto, ChargeReqDto, ChargeRespErrorDto, PaymentMethodErrorReason,
 };
 use crate::model::{ChargeBuyerModel, OrderLineModelSet, OrderModelError};
 
-// TODO, switch to enum type then add memberis `SessionCreated`,
-// `PayInDone` when the charge can be done in one single API call
-pub struct ChargeCreateUcResult(ChargeRespDto);
-
+// TODO, consider to add debug function for logging purpose
 pub enum ChargeCreateUcError {
     OrderOwnerMismatch,                   // client error, e.g. status code 403
     ClientBadRequest(ChargeRespErrorDto), // status code 400
@@ -86,7 +83,7 @@ impl ChargeCreateUseCase {
         &self,
         usr_id: u32,
         req_body: ChargeReqDto,
-    ) -> Result<ChargeCreateUcResult, ChargeCreateUcError> {
+    ) -> Result<ChargeCreateRespDto, ChargeCreateUcError> {
         let oid = req_body.order_id.as_str();
         let result = self.repo.get_unpaid_olines(usr_id, oid).await?;
         let validated_order = if let Some(v) = result {
@@ -98,7 +95,7 @@ impl ChargeCreateUseCase {
         let resp = self
             .try_execute_processor(validated_order, req_body)
             .await?;
-        Ok(ChargeCreateUcResult(resp))
+        Ok(resp)
     } // end of fn execute
 
     async fn rpc_sync_order(
@@ -167,15 +164,16 @@ impl ChargeCreateUseCase {
         &self,
         order: OrderLineModelSet,
         reqbody: ChargeReqDto,
-    ) -> Result<ChargeRespDto, ChargeCreateUcError> {
-        let cline_set = ChargeBuyerModel::try_from((order, reqbody))?;
-        let result = self.processors.pay_in_start(&cline_set).await?;
-        self.repo.create_charge(cline_set).await?;
+    ) -> Result<ChargeCreateRespDto, ChargeCreateUcError> {
+        let mut charge_buyer = ChargeBuyerModel::try_from((order, reqbody))?;
+        let result = self.processors.pay_in_start(&charge_buyer).await?;
+        charge_buyer.state = result.state.clone();
+        self.repo.create_charge(charge_buyer).await?;
         if result.completed {
             // TODO, if the pay-in process is complete, invoke RPC to order service
             // for payment status update
         }
-        let resp = ChargeRespDto::from(result);
+        let resp = ChargeCreateRespDto::from(result);
         Ok(resp)
     }
 } // end of impl ChargeCreateUseCase

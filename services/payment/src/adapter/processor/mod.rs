@@ -13,9 +13,9 @@ use ecommerce_common::config::App3rdPartyCfg;
 use ecommerce_common::logging::AppLogContext;
 
 pub use self::base_client::{BaseClientError, BaseClientErrorReason};
-use self::stripe::{AbstStripeContext, AppProcessorStripeCtx};
+use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripeCtx};
 use crate::api::web::dto::{
-    ChargeRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
+    ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
 };
 use crate::model::{BuyerPayInState, ChargeBuyerModel};
 
@@ -56,14 +56,20 @@ pub struct AppProcessorPayInResult {
     pub completed: bool,
 }
 
-impl From<AppProcessorPayInResult> for ChargeRespDto {
+impl From<AppProcessorPayInResult> for ChargeCreateRespDto {
     fn from(value: AppProcessorPayInResult) -> Self {
+        let id = value
+            .charge_id
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join("");
         let ctime = value
             .state
             .create_time()
             .unwrap_or(Local::now().fixed_offset());
         Self {
-            id: value.charge_id,
+            id,
             method: value.method,
             create_time: ctime,
         }
@@ -88,38 +94,36 @@ impl From<AppProcessorErrorReason> for PaymentMethodErrorReason {
 
 impl AppProcessorContext {
     fn new(
-        cfgs: Vec<Arc<App3rdPartyCfg>>,
+        cfgs3pt: Vec<Arc<App3rdPartyCfg>>,
         cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
         _logctx: Arc<AppLogContext>,
     ) -> Result<Self, AppProcessorError> {
         let mut errors = Vec::new();
         let mut result_stripe = None;
-        cfgs.into_iter()
-            .map(|c| {
-                match c.as_ref() {
-                    App3rdPartyCfg::dev {
-                        name,
-                        host,
-                        port,
-                        confidentiality_path,
-                    } => {
-                        if result_stripe.is_none() && name.as_str().to_lowercase() == "stripe" {
-                            result_stripe = AppProcessorStripeCtx::try_build(
-                                host.as_str(),
-                                *port,
-                                confidentiality_path.as_str(),
-                                cfdntl.clone(),
-                                _logctx.clone(),
-                            )
-                            .map_err(|e| errors.push(e))
-                            .ok();
-                        }
+        cfgs3pt
+            .into_iter()
+            .map(|c| match c.as_ref() {
+                App3rdPartyCfg::dev {
+                    name,
+                    host,
+                    port,
+                    confidentiality_path,
+                } => {
+                    if result_stripe.is_none() && name.as_str().to_lowercase() == "stripe" {
+                        result_stripe = AppProcessorStripeCtx::try_build(
+                            host.as_str(),
+                            *port,
+                            confidentiality_path.as_str(),
+                            cfdntl.clone(),
+                            _logctx.clone(),
+                        )
+                        .map_err(|e| errors.push(e))
+                        .ok();
                     }
-                    App3rdPartyCfg::test {
-                        name: _,
-                        data_src: _,
-                    } => {
-                        // TODO, mock Stripe response
+                }
+                App3rdPartyCfg::test { name, data_src: _ } => {
+                    if result_stripe.is_none() && name.as_str().to_lowercase() == "stripe" {
+                        result_stripe = Some(MockProcessorStripeCtx::build());
                     }
                 }
             })
@@ -152,13 +156,13 @@ impl AbstractPaymentProcessor for AppProcessorContext {
 }
 
 pub(crate) fn app_processor_context(
-    cfgs: &Option<Vec<Arc<App3rdPartyCfg>>>,
+    cfg_3pt: &Option<Vec<Arc<App3rdPartyCfg>>>,
     cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
     logctx: Arc<AppLogContext>,
 ) -> Result<Box<dyn AbstractPaymentProcessor>, AppProcessorError> {
-    let _cfgs = cfgs.as_ref().cloned().ok_or(AppProcessorError {
+    let _cfg_3pt = cfg_3pt.as_ref().cloned().ok_or(AppProcessorError {
         reason: AppProcessorErrorReason::InvalidConfig,
     })?;
-    let proc = AppProcessorContext::new(_cfgs, cfdntl, logctx)?;
+    let proc = AppProcessorContext::new(_cfg_3pt, cfdntl, logctx)?;
     Ok(Box::new(proc))
 }

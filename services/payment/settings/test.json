@@ -3,10 +3,6 @@
         "web_api"     :"tmp/proc/payment_app_server.pid",
         "rpc_consumer":"tmp/proc/payment_rpc_consumer.pid"
     },
-    "access_log": {
-        "path":"tmp/log/test/payment_app_server.access.log",
-        "format":"%H %h %l %t \"%r\" %s %b"
-    },
     "logging" : {
         "handlers" : [
             {"alias": "std-output-forall",
@@ -24,6 +20,9 @@
             {"alias": "payment::adapter::rpc::amqp",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
+            {"alias": "payment::adapter::repository::mariadb::charge",
+             "handlers": ["std-output-forall","errlog-file-web-api"],
+             "level": "INFO"},
             {"alias": "payment::adapter::processor",
              "handlers": ["std-output-forall"],
              "level": "WARNING"},
@@ -35,7 +34,7 @@
              "level": "INFO"},
             {"alias": "payment::api::web::charge",
              "handlers": ["std-output-forall"],
-             "level": "DEBUG"}
+             "level": "WARNING"}
         ]
     },
     "listen": {
@@ -71,10 +70,9 @@
     },
     "third_parties": [
         {
+            "mode": "test",
             "name": "Stripe",
-            "host": "api.stripe.com",
-            "port": 443,
-	        "confidentiality_path": "backend_apps/secret_key/staff/Stripe"
+	        "data_src": "tests/integration/examples/no-mock-data.json"
         }
     ],
     "auth": {

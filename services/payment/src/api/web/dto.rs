@@ -61,8 +61,8 @@ pub enum PaymentMethodRespDto {
     // TODO, integrate with Wise (TransferWise) wallet
 }
 #[derive(Serialize)]
-pub struct ChargeRespDto {
-    pub id: Vec<u8>,
+pub struct ChargeCreateRespDto {
+    pub id: String,
     pub method: PaymentMethodRespDto,
     pub create_time: DateTime<FixedOffset>,
 }
@@ -71,7 +71,7 @@ pub struct ChargeRespDto {
 pub enum OrderErrorReason {
     InvalidOrder,
 }
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub enum PaymentMethodErrorReason {
     InvalidUser,
     OperationRefuse,

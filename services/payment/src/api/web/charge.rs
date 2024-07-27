@@ -6,7 +6,7 @@ use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use super::dto::ChargeReqDto;
 use crate::adapter::repository::app_repo_charge;
-use crate::usecase::ChargeCreateUseCase;
+use crate::usecase::{ChargeCreateUcError, ChargeCreateUseCase};
 use crate::{AppAuthedClaim, AppSharedState};
 
 pub(super) async fn create_charge(
@@ -37,14 +37,41 @@ pub(super) async fn create_charge(
     let req_body = req_body.into_inner();
     let resp = match uc.execute(authed_claim.profile, req_body).await {
         // TODO, return session detail from chosen 3rd-party processor
-        Ok(_v) => HttpResponse::Accepted()
-            .append_header(ContentType::json())
-            .body("{}"),
-        Err(_e) => {
-            // TODO, analyze error type, give different error response
-            HttpResponse::InternalServerError().finish()
+        Ok(v) => {
+            let body_serial = serde_json::to_vec(&v).unwrap();
+            HttpResponse::Accepted()
+                .append_header(ContentType::json())
+                .body(body_serial)
         }
-    };
+        Err(uce) => match uce {
+            ChargeCreateUcError::ClientBadRequest(e) => {
+                let body = serde_json::to_vec(&e).unwrap();
+                HttpResponse::BadRequest()
+                    .append_header(ContentType::json())
+                    .body(body)
+            }
+            ChargeCreateUcError::RpcOlineParseError(es) => {
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "{:?}", es);
+                HttpResponse::UnprocessableEntity().finish()
+            }
+            ChargeCreateUcError::ExternalProcessorError(e) => {
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "{:?}", e);
+                HttpResponse::InternalServerError().finish()
+            }
+            ChargeCreateUcError::DataStoreError(e) => {
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "{:?}", e);
+                HttpResponse::InternalServerError().finish()
+            }
+            ChargeCreateUcError::LoadOrderInternalError(_) => {
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "order-rpc-failure");
+                HttpResponse::InternalServerError().finish()
+            }
+            _others => {
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "unclassified-error");
+                HttpResponse::InternalServerError().finish()
+            }
+        }, // analyze error type, give different error response
+    }; // end of use-case execution
     Ok(resp)
 } // end of fn create_charge
 
@@ -55,6 +82,7 @@ pub(super) async fn refresh_charge_status(
     let logctx = shr_state.log_context();
     let logctx_p = &logctx;
     app_log_event!(logctx_p, AppLogLevel::DEBUG, "refresh-charge-status");
+
     let resp = HttpResponse::Ok()
         .append_header((CONTENT_TYPE.as_str(), "application/json"))
         .body("{}");
