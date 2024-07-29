@@ -36,16 +36,27 @@ pub struct ChargeAmountOlineDto {
     pub amount: PayAmountDto,
     // TODO, tax and discount
 }
+
 #[derive(Deserialize)]
-pub struct ChargeReqDto {
-    pub order_id: String,
-    pub method: PaymentMethodReqDto,
+pub struct ChargeReqOrderDto {
+    pub id: String,
     pub lines: Vec<ChargeAmountOlineDto>,
     // currency and exchange rate should be determined on creating
     // a new order, not on charging
     pub currency: CurrencyDto,
     // TODO,
     // - tax and discount
+}
+#[derive(Deserialize)]
+pub struct ChargeReqDto {
+    pub order: ChargeReqOrderDto,
+    pub method: PaymentMethodReqDto,
+}
+impl ChargeReqDto {
+    pub(crate) fn into_parts(self) -> (ChargeReqOrderDto, PaymentMethodReqDto) {
+        let Self { order, method } = self;
+        (order, method)
+    }
 }
 
 #[derive(Serialize)]

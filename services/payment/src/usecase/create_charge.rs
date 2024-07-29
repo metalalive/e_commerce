@@ -84,7 +84,7 @@ impl ChargeCreateUseCase {
         usr_id: u32,
         req_body: ChargeReqDto,
     ) -> Result<ChargeCreateRespDto, ChargeCreateUcError> {
-        let oid = req_body.order_id.as_str();
+        let oid = req_body.order.id.as_str();
         let result = self.repo.get_unpaid_olines(usr_id, oid).await?;
         let validated_order = if let Some(v) = result {
             v
@@ -162,12 +162,16 @@ impl ChargeCreateUseCase {
 
     async fn try_execute_processor(
         &self,
-        order: OrderLineModelSet,
+        saved_order: OrderLineModelSet,
         reqbody: ChargeReqDto,
     ) -> Result<ChargeCreateRespDto, ChargeCreateUcError> {
-        let mut charge_buyer = ChargeBuyerModel::try_from((order, reqbody))?;
-        let result = self.processors.pay_in_start(&charge_buyer).await?;
-        charge_buyer.state = result.state.clone();
+        let (req_order, req_mthd) = reqbody.into_parts();
+        let mut charge_buyer = ChargeBuyerModel::try_from((saved_order, req_order))?;
+        let (result, method_m) = self
+            .processors
+            .pay_in_start(&charge_buyer, req_mthd)
+            .await?;
+        charge_buyer.update_progress(&result.state, method_m);
         self.repo.create_charge(charge_buyer).await?;
         if result.completed {
             // TODO, if the pay-in process is complete, invoke RPC to order service

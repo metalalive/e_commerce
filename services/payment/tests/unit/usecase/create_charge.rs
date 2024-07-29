@@ -19,9 +19,9 @@ use payment::adapter::processor::{
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
 use payment::api::web::dto::{
-    ChargeAmountOlineDto, ChargeReqDto, PaymentMethodErrorReason, PaymentMethodReqDto,
-    PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto,
-    StripeCheckoutUImodeDto,
+    ChargeAmountOlineDto, ChargeReqDto, ChargeReqOrderDto, PaymentMethodErrorReason,
+    PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto,
+    StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
 };
 use payment::model::{
     BuyerPayInState, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayLineAmountModel,
@@ -33,6 +33,7 @@ use super::{
     MockChargeRepo, MockOrderSyncLockCache, MockPaymentProcessor, MockRpcClient, MockRpcContext,
     MockRpcPublishEvent,
 };
+use crate::model::ut_default_charge_method_stripe;
 
 fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModelSet {
     let mock_seller_id = 379u32;
@@ -84,7 +85,20 @@ fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModel
 fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
     let mock_finish_url = "https://mysite.io/products".to_string();
     ChargeReqDto {
-        order_id: mock_order_id,
+        order: ChargeReqOrderDto {
+            id: mock_order_id,
+            lines: vec![ChargeAmountOlineDto {
+                seller_id: 379,
+                product_id: 6741,
+                product_type: ProductType::Item,
+                quantity: 6,
+                amount: PayAmountDto {
+                    unit: "300.01".to_string(),
+                    total: "1800.06".to_string(),
+                },
+            }],
+            currency: CurrencyDto::TWD,
+        },
         method: PaymentMethodReqDto::Stripe(StripeCheckoutSessionReqDto {
             customer_id: Some("ut-stripe-mock-id".to_string()),
             success_url: Some(mock_finish_url.clone()),
@@ -92,17 +106,6 @@ fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
             cancel_url: None,
             ui_mode: StripeCheckoutUImodeDto::RedirectPage,
         }),
-        lines: vec![ChargeAmountOlineDto {
-            seller_id: 379,
-            product_id: 6741,
-            product_type: ProductType::Item,
-            quantity: 6,
-            amount: PayAmountDto {
-                unit: "300.01".to_string(),
-                total: "1800.06".to_string(),
-            },
-        }],
-        currency: CurrencyDto::TWD,
     }
 }
 
@@ -190,8 +193,9 @@ async fn ok_with_existing_order_replica() {
         _acquire_result: Mutex::new(None),
     };
     let mock_payin_result = ut_processor_pay_in_result();
+    let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
     let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(Some(Ok(mock_payin_result))),
+        _payin_start_result: Mutex::new(Some(Ok((mock_payin_result, mock_payin_mthd_m)))),
     };
     let uc = ChargeCreateUseCase {
         processors: Arc::new(Box::new(mock_processor)),
@@ -233,8 +237,9 @@ async fn ok_with_rpc_replica_order() {
         _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
     };
     let mock_payin_result = ut_processor_pay_in_result();
+    let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
     let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(Some(Ok(mock_payin_result))),
+        _payin_start_result: Mutex::new(Some(Ok((mock_payin_result, mock_payin_mthd_m)))),
     };
     let uc = ChargeCreateUseCase {
         processors: Arc::new(Box::new(mock_processor)),
@@ -644,8 +649,9 @@ async fn save_new_chargeline_failure() {
         _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
     };
     let mock_payin_result = ut_processor_pay_in_result();
+    let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
     let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(Some(Ok(mock_payin_result))),
+        _payin_start_result: Mutex::new(Some(Ok((mock_payin_result, mock_payin_mthd_m)))),
     };
     let uc = ChargeCreateUseCase {
         processors: Arc::new(Box::new(mock_processor)),

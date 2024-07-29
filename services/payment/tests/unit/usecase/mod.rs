@@ -17,7 +17,8 @@ use payment::adapter::rpc::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
     AppRpcClientRequest, AppRpcCtxError, AppRpcReply,
 };
-use payment::model::{ChargeBuyerModel, OrderLineModelSet};
+use payment::api::web::dto::PaymentMethodReqDto;
+use payment::model::{ChargeBuyerModel, ChargeMethodModel, OrderLineModelSet};
 
 struct MockChargeRepo {
     _expect_unpaid_olines: Mutex<Option<Result<Option<OrderLineModelSet>, AppRepoError>>>,
@@ -113,19 +114,21 @@ impl AbstractRpcPublishEvent for MockRpcPublishEvent {
 }
 
 struct MockPaymentProcessor {
-    _payin_start_result: Mutex<Option<Result<AppProcessorPayInResult, AppProcessorError>>>,
+    _payin_start_result:
+        Mutex<Option<Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError>>>,
 }
 
 #[async_trait]
 impl AbstractPaymentProcessor for MockPaymentProcessor {
     async fn pay_in_start(
         &self,
-        cline_set: &ChargeBuyerModel,
-    ) -> Result<AppProcessorPayInResult, AppProcessorError> {
+        charge_buyer: &ChargeBuyerModel,
+        _req_mthd: PaymentMethodReqDto,
+    ) -> Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError> {
         let mut g = self._payin_start_result.lock().unwrap();
         let mut out = g.take().unwrap();
         if let Ok(v) = out.as_mut() {
-            v.charge_id = cline_set.token.0.to_vec();
+            v.0.charge_id = charge_buyer.token.0.to_vec();
         }
         out
     }

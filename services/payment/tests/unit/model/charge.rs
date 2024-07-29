@@ -8,10 +8,7 @@ use ecommerce_common::api::dto::{
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
 
-use payment::api::web::dto::{
-    ChargeAmountOlineDto, ChargeReqDto, OrderErrorReason, PaymentMethodReqDto,
-    StripeCheckoutSessionReqDto, StripeCheckoutUImodeDto,
-};
+use payment::api::web::dto::{ChargeAmountOlineDto, ChargeReqOrderDto, OrderErrorReason};
 use payment::model::{
     BuyerPayInState, ChargeBuyerModel, ChargeToken, OrderLineModelSet, OrderModelError,
     PayLineAmountError, PayLineAmountModel,
@@ -85,16 +82,6 @@ fn ut_setup_order_replica(
     }
     result.unwrap()
 } // end of fn ut_setup_order_replica
-
-fn ut_setup_payment_method_stripe() -> PaymentMethodReqDto {
-    PaymentMethodReqDto::Stripe(StripeCheckoutSessionReqDto {
-        customer_id: Some("ut-stripe-customer-id".to_string()),
-        success_url: Some("https://3aw.au".to_string()),
-        return_url: Some("https://4ec.au".to_string()),
-        cancel_url: None,
-        ui_mode: StripeCheckoutUImodeDto::RedirectPage,
-    })
-}
 
 #[actix_web::test]
 async fn order_replica_convert_ok() {
@@ -381,10 +368,9 @@ async fn charge_buyer_convert_ok_1() {
         },
     })
     .collect();
-    let mock_new_req = ChargeReqDto {
-        order_id: mock_oid.clone(),
+    let mock_new_req = ChargeReqOrderDto {
+        id: mock_oid.clone(),
         lines: mock_lines,
-        method: ut_setup_payment_method_stripe(),
         currency: CurrencyDto::TWD,
     };
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
@@ -452,10 +438,9 @@ async fn charge_buyer_convert_ok_2() {
         },
     })
     .collect();
-    let mock_new_req = ChargeReqDto {
-        order_id: mock_oid.clone(),
+    let mock_new_req = ChargeReqOrderDto {
+        id: mock_oid.clone(),
         lines: mock_lines,
-        method: ut_setup_payment_method_stripe(),
         currency: CurrencyDto::TWD,
     };
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
@@ -495,10 +480,9 @@ async fn charge_buyer_convert_oid_mismatch() {
     let mock_usr_id = 585;
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, "lemon".to_string(), reserved_until);
-    let mock_new_req = ChargeReqDto {
-        order_id: "lime".to_string(),
+    let mock_new_req = ChargeReqOrderDto {
+        id: "lime".to_string(),
         lines: Vec::new(),
-        method: ut_setup_payment_method_stripe(),
         currency: CurrencyDto::TWD,
     };
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
@@ -517,10 +501,9 @@ async fn charge_buyer_convert_currency_mismatch() {
     let mock_usr_id = 585;
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, "lemon".to_string(), reserved_until);
-    let mock_new_req = ChargeReqDto {
-        order_id: "lemon".to_string(),
+    let mock_new_req = ChargeReqOrderDto {
+        id: "lemon".to_string(),
         lines: Vec::new(),
-        method: ut_setup_payment_method_stripe(),
         currency: CurrencyDto::USD, // buyer currency should be TWD
     };
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
@@ -563,10 +546,9 @@ async fn charge_buyer_convert_expired() {
         },
     })
     .collect();
-    let mock_new_req = ChargeReqDto {
-        order_id: mock_oid.clone(),
+    let mock_new_req = ChargeReqOrderDto {
+        id: mock_oid.clone(),
         lines: mock_lines,
-        method: ut_setup_payment_method_stripe(),
         currency: CurrencyDto::TWD,
     };
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
@@ -623,10 +605,9 @@ async fn charge_buyer_convert_qty_exceed_limit() {
         },
     })
     .collect();
-    let mock_new_req = ChargeReqDto {
-        order_id: mock_oid.clone(),
+    let mock_new_req = ChargeReqOrderDto {
+        id: mock_oid.clone(),
         lines: mock_lines,
-        method: ut_setup_payment_method_stripe(),
         currency: CurrencyDto::TWD,
     };
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
@@ -677,10 +658,9 @@ async fn charge_buyer_convert_amount_mismatch_1() {
         },
     })
     .collect();
-    let mock_new_req = ChargeReqDto {
-        order_id: mock_oid.clone(),
+    let mock_new_req = ChargeReqOrderDto {
+        id: mock_oid.clone(),
         lines: mock_lines,
-        method: ut_setup_payment_method_stripe(),
         currency: CurrencyDto::TWD,
     };
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
@@ -729,10 +709,9 @@ async fn charge_buyer_convert_amount_mismatch_2() {
         },
     })
     .collect();
-    let mock_new_req = ChargeReqDto {
-        order_id: mock_oid.clone(),
+    let mock_new_req = ChargeReqOrderDto {
+        id: mock_oid.clone(),
         lines: mock_lines,
-        method: ut_setup_payment_method_stripe(),
         currency: CurrencyDto::TWD,
     };
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
