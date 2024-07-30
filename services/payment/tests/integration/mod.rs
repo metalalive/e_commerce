@@ -21,7 +21,7 @@ async fn charge_stripe_ok() {
         let rdr = File::open(CASE_FILE).unwrap();
         let req_body = serde_json::from_reader::<File, JsnVal>(rdr).unwrap();
         let r = TestRequest::post()
-            .uri("/v0.0.2/charge")
+            .uri("/v0.0.4/charge")
             .append_header(ContentType::json())
             .set_json(req_body)
             .to_request();
@@ -62,7 +62,7 @@ async fn charge_stripe_ok() {
     assert!(!actual_charge_id.is_empty());
 
     let req = {
-        let url = "/v0.0.2/charge/".to_string() + actual_charge_id.as_str();
+        let url = "/v0.0.4/charge/".to_string() + actual_charge_id.as_str();
         let r = TestRequest::patch()
             .uri(url.as_str())
             .append_header(ContentType::json())

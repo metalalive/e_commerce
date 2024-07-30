@@ -17,14 +17,15 @@ use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripe
 use crate::api::web::dto::{
     ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
 };
-use crate::model::{BuyerPayInState, ChargeBuyerModel};
+use crate::model::{BuyerPayInState, ChargeBuyerModel, ChargeMethodModel};
 
 #[async_trait]
 pub trait AbstractPaymentProcessor: Send + Sync {
     async fn pay_in_start(
         &self,
-        cline_set: &ChargeBuyerModel,
-    ) -> Result<AppProcessorPayInResult, AppProcessorError>;
+        charge_m: &ChargeBuyerModel,
+        req_mthd: PaymentMethodReqDto,
+    ) -> Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError>;
 }
 
 struct AppProcessorContext {
@@ -146,10 +147,11 @@ impl AppProcessorContext {
 impl AbstractPaymentProcessor for AppProcessorContext {
     async fn pay_in_start(
         &self,
-        cline_set: &ChargeBuyerModel,
-    ) -> Result<AppProcessorPayInResult, AppProcessorError> {
-        let out = match &cline_set.method {
-            PaymentMethodReqDto::Stripe(c) => self._stripe.pay_in_start(c, cline_set).await?,
+        charge_m: &ChargeBuyerModel,
+        req_mthd: PaymentMethodReqDto,
+    ) -> Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError> {
+        let out = match req_mthd {
+            PaymentMethodReqDto::Stripe(c) => self._stripe.pay_in_start(&c, charge_m).await?,
         };
         Ok(out)
     }

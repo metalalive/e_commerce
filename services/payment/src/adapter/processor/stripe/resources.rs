@@ -2,7 +2,9 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::api::web::dto::StripeCheckoutUImodeDto;
-use crate::model::ChargeLineBuyerModel;
+use crate::model::{
+    ChargeLineBuyerModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+};
 use ecommerce_common::api::dto::CurrencyDto;
 
 #[derive(Deserialize)]
@@ -10,7 +12,11 @@ pub(super) struct CheckoutSession {
     pub id: String,
     pub client_secret: Option<String>,
     pub url: Option<String>,
-    // TODO, finish implementation
+    pub status: StripeSessionStatusModel,
+    pub payment_status: StripeCheckoutPaymentStatusModel,
+    pub payment_intent: String,
+    pub expires_at: i64,
+    // TODO, record more fields for payout at later time
 }
 
 #[derive(Serialize)]

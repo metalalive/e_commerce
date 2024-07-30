@@ -7,7 +7,8 @@ use payment::api::web::dto::{
     PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutUImodeDto,
 };
 use payment::model::{
-    BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, ChargeToken, PayLineAmountModel,
+    BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, ChargeMethodModel, ChargeToken,
+    PayLineAmountModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 use crate::model::ut_default_currency_snapshot;
@@ -23,13 +24,6 @@ fn ut_setup_chargebuyer_stripe(
     let mut usr_ids = mock_lines.iter().map(|dl| dl.0).collect::<Vec<_>>();
     usr_ids.push(owner);
     let currency_snapshot = ut_default_currency_snapshot(usr_ids);
-    let method_inner = StripeCheckoutSessionReqDto {
-        customer_id: None,
-        return_url: None,
-        success_url: Some("https://docs.rs/tokio".to_string()),
-        cancel_url: Some("https://resources.nvidia.com/en-us-grace-cpu".to_string()),
-        ui_mode: StripeCheckoutUImodeDto::RedirectPage,
-    };
     let lines = mock_lines
         .into_iter()
         .map(|d| ChargeLineBuyerModel {
@@ -53,9 +47,20 @@ fn ut_setup_chargebuyer_stripe(
         lines,
         currency_snapshot,
         state: BuyerPayInState::Initialized,
-        method: PaymentMethodReqDto::Stripe(method_inner),
+        method: ChargeMethodModel::Unknown,
     }
 } // end of fn ut_setup_chargebuyer_stripe
+
+fn ut_default_method_stripe_request() -> PaymentMethodReqDto {
+    let inner = StripeCheckoutSessionReqDto {
+        customer_id: None,
+        return_url: None,
+        success_url: Some("https://docs.rs/tokio".to_string()),
+        cancel_url: Some("https://resources.nvidia.com/en-us-grace-cpu".to_string()),
+        ui_mode: StripeCheckoutUImodeDto::RedirectPage,
+    };
+    PaymentMethodReqDto::Stripe(inner)
+}
 
 #[actix_web::test]
 async fn pay_in_ok() {
@@ -81,20 +86,33 @@ async fn pay_in_ok() {
             9,
         ),
     ];
-    let cline_set = ut_setup_chargebuyer_stripe(mock_usr_id, mock_order_id, mock_lines);
-    let result = proc_ctx.pay_in_start(&cline_set).await;
+    let pay_mthd_req = ut_default_method_stripe_request();
+    let charge_buyer = ut_setup_chargebuyer_stripe(mock_usr_id, mock_order_id, mock_lines);
+    let result = proc_ctx.pay_in_start(&charge_buyer, pay_mthd_req).await;
     if let Err(e) = &result {
         println!("unit test error : {:?}", e)
     }
     assert!(result.is_ok());
-    if let Ok(pay_in_res) = result {
-        let cond = matches!(pay_in_res.state, BuyerPayInState::ProcessorAccepted(_));
-        assert!(cond);
-        match &pay_in_res.method {
-            PaymentMethodRespDto::Stripe(s) => {
-                assert!(s.redirect_url.is_some());
-                assert!(s.client_session.is_none());
-            }
+    let (pay_in_res, charge_mthd_m) = result.unwrap();
+    let cond = matches!(pay_in_res.state, BuyerPayInState::ProcessorAccepted(_));
+    assert!(cond);
+    match &pay_in_res.method {
+        PaymentMethodRespDto::Stripe(s) => {
+            assert!(s.redirect_url.is_some());
+            assert!(s.client_session.is_none());
+        }
+    }
+    match &charge_mthd_m {
+        ChargeMethodModel::Stripe(m) => {
+            assert!(!m.checkout_session_id.is_empty());
+            assert!(!m.payment_intent_id.is_empty());
+            let cond = matches!(m.session_state, StripeSessionStatusModel::open);
+            assert!(cond);
+            let cond = matches!(m.payment_state, StripeCheckoutPaymentStatusModel::unpaid);
+            assert!(cond);
+        }
+        ChargeMethodModel::Unknown => {
+            assert!(false);
         }
     }
     // TODO, automatically fill form on Stripe-hosted page using web scraping tools

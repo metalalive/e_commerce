@@ -44,7 +44,7 @@
         "port": 8015,
         "host":"localhost",
         "max_failures": 3,
-        "api_version": "0.0.2",
+        "api_version": "0.0.4",
 	"max_connections": 127,
         "cors": "common/data/cors.json",
         "routes": [
