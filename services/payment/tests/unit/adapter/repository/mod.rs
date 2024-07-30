@@ -9,10 +9,9 @@ use ecommerce_common::api::dto::{CountryCode, PhoneNumberDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 use ecommerce_common::model::BaseProductIdentity;
-use payment::api::web::dto::PaymentMethodReqDto;
 use payment::model::{
-    BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, ChargeToken, OrderCurrencySnapshot,
-    OrderLineModel, OrderLineModelSet, PayLineAmountModel,
+    BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, ChargeMethodModel, ChargeToken,
+    OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayLineAmountModel,
 };
 
 #[rustfmt::skip]
@@ -85,12 +84,13 @@ fn ut_setup_order_bill() -> BillingModel {
     }
 }
 
+#[rustfmt::skip]
 fn ut_setup_buyer_charge(
     owner: u32,
     create_time: DateTime<Utc>,
     oid: String,
     state: BuyerPayInState,
-    method: PaymentMethodReqDto,
+    method: ChargeMethodModel,
     d_lines: Vec<(u32, ProductType, u64, Decimal, Decimal, u32)>,
     currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
 ) -> ChargeBuyerModel {
@@ -99,25 +99,15 @@ fn ut_setup_buyer_charge(
         .into_iter()
         .map(|dl| ChargeLineBuyerModel {
             pid: BaseProductIdentity {
-                store_id: dl.0,
-                product_type: dl.1,
-                product_id: dl.2,
+                store_id: dl.0, product_type: dl.1, product_id: dl.2,
             },
             amount: PayLineAmountModel {
-                unit: dl.3,
-                total: dl.4,
-                qty: dl.5,
+                unit: dl.3, total: dl.4, qty: dl.5,
             },
         })
         .collect();
     ChargeBuyerModel {
-        owner,
-        create_time,
-        token,
-        oid,
-        lines,
-        currency_snapshot,
-        state,
-        method,
+        owner, create_time, token, oid, lines,
+        currency_snapshot, state, method,
     }
 }

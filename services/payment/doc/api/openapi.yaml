@@ -9,10 +9,10 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 0.0.2
+  version: 0.0.4
 
 servers:
-  - url: https://doc.site.not.ready/api/v0.0.2
+  - url: https://doc.site.not.ready/api/v0.0.4
 tags:
   - name: payin
     description: pay-in process of a valid order
@@ -195,26 +195,39 @@ components:
         ui_mode:
           type: string
           enum: ['RedirectPage', 'EmbeddedJs']
+        success_url:
+          type: string
+          example: 'https://myapp.project.org/success-page'
+        cancel_url:
+          type: string
+          example: 'https://myapp.project.org/cancel-page'
       required:
         - label
         - customer_id
+        - ui_mode
                   
-    ChargeReqDto:
+    ChargeReqOrderDto:
       type: object
-      description: TODO, add amounts for tax and discount
       properties:
-        order_id:
+        id:
           type: string
-        payment_method:
-          oneOf:
-            - $ref: '#/components/schemas/StripeCheckoutSessionReqDto'
         lines:
           type: array
           items:
             $ref: '#/components/schemas/ChargeAmountOlineDto'
           minItems: 1
         currency:
-            $ref: '#/components/schemas/PaymentCurrencyDto'
+          $ref: '#/components/schemas/PaymentCurrencyDto'
+
+    ChargeReqDto:
+      type: object
+      description: TODO, add amounts for tax and discount
+      properties:
+        order:
+          $ref: '#/components/schemas/ChargeReqOrderDto'
+        method:
+          oneOf:
+            - $ref: '#/components/schemas/StripeCheckoutSessionReqDto'
     
     StripeCheckoutSessionRespDto:
       type: object

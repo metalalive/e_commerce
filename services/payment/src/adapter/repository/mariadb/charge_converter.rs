@@ -7,8 +7,9 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::super::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use crate::api::web::dto::PaymentMethodReqDto;
-use crate::model::{BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, PayLineAmountModel};
+use crate::model::{
+    BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, ChargeMethodModel, PayLineAmountModel,
+};
 
 const DATETIME_FMT_P0F: &str = "%Y-%m-%d %H:%M:%S";
 const DATETIME_FMT_P3F: &str = "%Y-%m-%d %H:%M:%S%.3f";
@@ -65,14 +66,15 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
             token: _,
             oid,
             lines: _,
-            currency_snapshot: _,
+            currency_snapshot: _, // at this point the currency snapshot is already saved with
+            // order replica, no need to insert again
             state,
             method,
         } = value;
         let oid_b = OidBytes::try_from(oid.as_str()).map_err(|(code, msg)| AppRepoError {
             fn_label: AppRepoErrorFnLabel::CreateCharge,
-            code,
             detail: AppRepoErrorDetail::OrderIDparse(msg),
+            code,
         })?;
         let InsertChargeStatusArgs {
             curr_state,
@@ -80,10 +82,25 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
             t_completed,
             t_order_app_synced,
         } = InsertChargeStatusArgs::try_from(state)?;
-        let pay_mthd = match method {
-            PaymentMethodReqDto::Stripe(_d) => "Stripe",
-        }
-        .to_string();
+        #[rustfmt::skip]
+        let (pay_mthd, detail_3pty) = match method {
+            ChargeMethodModel::Stripe(m) => {
+                let label = "Stripe".to_string();
+                serde_json::to_string(&m)
+                    .map(|detail| (label.clone(), detail))
+                    .map_err(|e| AppRepoError {
+                        code: AppErrorCode::DataCorruption,
+                        fn_label: AppRepoErrorFnLabel::CreateOrder,
+                        detail: AppRepoErrorDetail::PayDetail(label, e.to_string()),
+                    })
+            },
+            ChargeMethodModel::Unknown =>
+                Err(AppRepoError {
+                    code: AppErrorCode::InvalidInput,
+                    fn_label: AppRepoErrorFnLabel::CreateOrder,
+                    detail: AppRepoErrorDetail::PayMethodUnsupport("unknown".to_string()),
+                }),
+        }?;
         let arg = vec![
             owner.into(),
             create_time.format(DATETIME_FMT_P0F).to_string().into(),
@@ -93,11 +110,13 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
             t_completed.into(),
             t_order_app_synced.into(),
             pay_mthd.into(),
+            detail_3pty.into(),
         ];
         let params = Params::Positional(arg);
         let stmt = "INSERT INTO `charge_buyer_toplvl`(`usr_id`,`create_time`,`order_id`,\
                     `state`,`processor_accepted_time`,`processor_completed_time`,\
-                    `orderapp_synced_time`,`pay_method`) VALUES (?,?,?,?,?,?,?,?)";
+                    `orderapp_synced_time`,`pay_method`,`detail_3rdparty`) VALUES \
+                    (?,?,?,?,?,?,?,?,?)";
         Ok(Self(stmt.to_string(), params))
     }
 } // end of impl InsertChargeTopLvlArgs

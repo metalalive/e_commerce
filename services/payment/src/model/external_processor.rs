@@ -1,21 +1,21 @@
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[allow(non_camel_case_types)]
 #[rustfmt::skip]
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub enum StripeSessionStatusModel {
     complete, expired, open,
 }
 
 #[allow(non_camel_case_types)]
 #[rustfmt::skip]
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub enum StripeCheckoutPaymentStatusModel {
     no_payment_required, paid, unpaid,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ChargeMethodStripeModel {
     pub checkout_session_id: String,
     pub session_state: StripeSessionStatusModel,

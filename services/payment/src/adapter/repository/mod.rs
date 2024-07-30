@@ -26,6 +26,7 @@ pub enum AppRepoErrorDetail {
     OrderContactInfo(String),
     ChargeStatus(BuyerPayInState),
     PayMethodUnsupport(String),
+    PayDetail(String, String), // pair of strings : 3rd-party name, error detail
     DataStore(AppDStoreError),
     DatabaseTxStart(String),
     DatabaseTxCommit(String),

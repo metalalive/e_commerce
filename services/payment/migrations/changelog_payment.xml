@@ -260,4 +260,25 @@
     <changeSet id="tag_version_0.0.6" author="T.H.">
         <tagDatabase tag="0.0.6" />
     </changeSet>
+    <changeSet id="add_method_detail__charge_buyer_toplvl" author="T.H.">
+        <comment>
+            - Different 3rd-party processors have defined different objects / entities for pay-in flow,
+              which have different structure.
+            - In this application, my current approach is to simply serialise whatever response detail
+              from external 3rd-party processors to a table column `method_detail`
+            - This application does not query any field in the response detail, it should be sufficient
+              to save that detail to a single column, rather than create dedicate table for each specific
+              3rd-party processor
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_buyer_toplvl` ADD COLUMN `detail_3rdparty`  TEXT  CHARACTER SET utf8 NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `charge_buyer_toplvl` DROP COLUMN `detail_3rdparty`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.7" author="T.H.">
+        <tagDatabase tag="0.0.7" />
+    </changeSet>
 </databaseChangeLog>
