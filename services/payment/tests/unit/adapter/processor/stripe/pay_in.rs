@@ -7,8 +7,9 @@ use payment::api::web::dto::{
     PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutUImodeDto,
 };
 use payment::model::{
-    BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, ChargeMethodModel, ChargeToken,
-    PayLineAmountModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
+    ChargeMethodModel, PayLineAmountModel, StripeCheckoutPaymentStatusModel,
+    StripeSessionStatusModel,
 };
 
 use crate::model::ut_default_currency_snapshot;
@@ -20,7 +21,6 @@ fn ut_setup_chargebuyer_stripe(
     mock_lines: Vec<(u32, ProductType, u64, Decimal, Decimal, u32)>,
 ) -> ChargeBuyerModel {
     let ctime = Utc::now();
-    let token = ChargeToken::encode(owner, ctime.clone());
     let mut usr_ids = mock_lines.iter().map(|dl| dl.0).collect::<Vec<_>>();
     usr_ids.push(owner);
     let currency_snapshot = ut_default_currency_snapshot(usr_ids);
@@ -39,15 +39,17 @@ fn ut_setup_chargebuyer_stripe(
             },
         })
         .collect();
-    ChargeBuyerModel {
+    let meta = ChargeBuyerMetaModel {
         owner,
-        token,
         create_time: ctime,
         oid: order_id.to_string(),
-        lines,
-        currency_snapshot,
         state: BuyerPayInState::Initialized,
         method: ChargeMethodModel::Unknown,
+    };
+    ChargeBuyerModel {
+        lines,
+        meta,
+        currency_snapshot,
     }
 } // end of fn ut_setup_chargebuyer_stripe
 

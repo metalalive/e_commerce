@@ -8,7 +8,8 @@ use std::str::FromStr;
 use ecommerce_common::api::dto::{CurrencyDto, PayAmountDto};
 
 pub use self::charge::{
-    BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, ChargeMethodModel, ChargeToken,
+    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
+    ChargeMethodModel, ChargeToken,
 };
 pub use self::external_processor::{
     ChargeMethodStripeModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,

@@ -275,7 +275,7 @@ async fn buyer_create_charge_invalid_state() {
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_repo(shr_state).await;
     let mut cline_set = _ut_setup_buyer_charge();
-    cline_set.state = BuyerPayInState::Initialized;
+    cline_set.meta.state = BuyerPayInState::Initialized;
     let result = repo.create_charge(cline_set).await;
     assert!(result.is_err());
     if let Err(e) = result {

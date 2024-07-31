@@ -93,7 +93,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
     async fn pay_in_start(
         &self,
         req: &StripeCheckoutSessionReqDto,
-        meta: &ChargeBuyerModel,
+        charge_buyer: &ChargeBuyerModel,
     ) -> Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError> {
         let _logctx = &self.logctx;
         let is_embed_ui = matches!(req.ui_mode, StripeCheckoutUImodeDto::EmbeddedJs);
@@ -121,15 +121,21 @@ impl AbstStripeContext for AppProcessorStripeCtx {
                 ),
             });
         }
-        let buyer_currency = meta.get_buyer_currency().ok_or(AppProcessorError {
-            reason: AppProcessorErrorReason::MissingCurrency(meta.owner),
+        let buyer_currency = charge_buyer.get_buyer_currency().ok_or(AppProcessorError {
+            reason: AppProcessorErrorReason::MissingCurrency(charge_buyer.meta.owner),
         })?;
 
-        let charge_token_serial = meta.token.0.iter().fold(String::new(), |mut dst, num| {
-            let hex = format!("{:02x}", num);
-            dst += hex.as_str();
-            dst
-        });
+        let charge_token_serial =
+            charge_buyer
+                .meta
+                .token()
+                .0
+                .iter()
+                .fold(String::new(), |mut dst, num| {
+                    let hex = format!("{:02x}", num);
+                    dst += hex.as_str();
+                    dst
+                });
 
         app_log_event!(
             _logctx,
@@ -139,14 +145,14 @@ impl AbstStripeContext for AppProcessorStripeCtx {
         );
 
         let body_obj = CreateCheckoutSession {
-            client_reference_id: format!("{}-{}", meta.owner, meta.oid),
+            client_reference_id: format!("{}-{}", charge_buyer.meta.owner, charge_buyer.meta.oid),
             currency: buyer_currency.label.clone(),
             customer: req.customer_id.clone(),
-            expires_at: meta.create_time.timestamp() + CHECKOUT_SESSION_MIN_SECONDS,
+            expires_at: charge_buyer.meta.create_time.timestamp() + CHECKOUT_SESSION_MIN_SECONDS,
             cancel_url: req.cancel_url.clone(),
             success_url: req.success_url.clone(),
             return_url: req.return_url.clone(),
-            line_items: meta
+            line_items: charge_buyer
                 .lines
                 .iter()
                 .map(|v| CreateCheckoutSessionLineItem::from((buyer_currency.label.clone(), v)))
@@ -183,7 +189,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             .map_err(|e| AppProcessorError { reason: e.into() })?;
         let time_now = Utc::now();
         let result = AppProcessorPayInResult {
-            charge_id: meta.token.0.to_vec(),
+            charge_id: charge_buyer.meta.token().0.to_vec(),
             method: PaymentMethodRespDto::Stripe(StripeCheckoutSessionRespDto {
                 id: resp.id.clone(),
                 redirect_url: resp.url,
@@ -217,7 +223,7 @@ impl AbstStripeContext for MockProcessorStripeCtx {
     async fn pay_in_start(
         &self,
         req: &StripeCheckoutSessionReqDto,
-        meta: &ChargeBuyerModel,
+        charge_buyer: &ChargeBuyerModel,
     ) -> Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError> {
         let (redirect_url, client_session) = match req.ui_mode {
             StripeCheckoutUImodeDto::RedirectPage => (Some("https://abc.new.au".to_string()), None),
@@ -232,9 +238,9 @@ impl AbstStripeContext for MockProcessorStripeCtx {
             client_session,
         };
         let result = AppProcessorPayInResult {
-            charge_id: meta.token.0.to_vec(),
+            charge_id: charge_buyer.meta.token().0.to_vec(),
             method: PaymentMethodRespDto::Stripe(mthd_detail),
-            state: BuyerPayInState::ProcessorAccepted(meta.create_time),
+            state: BuyerPayInState::ProcessorAccepted(charge_buyer.meta.create_time),
             completed: false,
         };
         let stripe_m = ChargeMethodStripeModel {
@@ -242,7 +248,7 @@ impl AbstStripeContext for MockProcessorStripeCtx {
             payment_intent_id: "mock-stripe-payment-intent-id".to_string(),
             session_state: StripeSessionStatusModel::open,
             payment_state: StripeCheckoutPaymentStatusModel::unpaid,
-            expiry: meta.create_time + Duration::seconds(35),
+            expiry: charge_buyer.meta.create_time + Duration::seconds(35),
         };
         let mthd_m = ChargeMethodModel::Stripe(stripe_m);
         Ok((result, mthd_m))

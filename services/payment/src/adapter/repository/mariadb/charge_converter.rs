@@ -8,7 +8,8 @@ use ecommerce_common::model::BaseProductIdentity;
 
 use super::super::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use crate::model::{
-    BuyerPayInState, ChargeBuyerModel, ChargeLineBuyerModel, ChargeMethodModel, PayLineAmountModel,
+    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
+    ChargeMethodModel, PayLineAmountModel,
 };
 
 const DATETIME_FMT_P0F: &str = "%Y-%m-%d %H:%M:%S";
@@ -60,17 +61,15 @@ impl TryFrom<BuyerPayInState> for InsertChargeStatusArgs {
 impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
     type Error = AppRepoError;
     fn try_from(value: ChargeBuyerModel) -> Result<Self, Self::Error> {
-        let ChargeBuyerModel {
+        // at this point the currency snapshot and charge lines should be handled
+        // elsewhere, no need to insert again
+        let ChargeBuyerMetaModel {
             owner,
             create_time,
-            token: _,
             oid,
-            lines: _,
-            currency_snapshot: _, // at this point the currency snapshot is already saved with
-            // order replica, no need to insert again
             state,
             method,
-        } = value;
+        } = value.meta;
         let oid_b = OidBytes::try_from(oid.as_str()).map_err(|(code, msg)| AppRepoError {
             fn_label: AppRepoErrorFnLabel::CreateCharge,
             detail: AppRepoErrorDetail::OrderIDparse(msg),
@@ -161,8 +160,8 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeArgs {
         // TODO, modify order-line replica if input charge state is already
         // in `completed` state
         let (buyer_id, ctime) = (
-            value.owner,
-            value.create_time.format(DATETIME_FMT_P0F).to_string(),
+            value.meta.owner,
+            value.meta.create_time.format(DATETIME_FMT_P0F).to_string(),
         );
         let c_lines = value.lines.split_off(0);
         assert!(value.lines.is_empty());

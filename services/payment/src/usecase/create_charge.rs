@@ -171,7 +171,7 @@ impl ChargeCreateUseCase {
             .processors
             .pay_in_start(&charge_buyer, req_mthd)
             .await?;
-        charge_buyer.update_progress(&result.state, method_m);
+        charge_buyer.meta.update_progress(&result.state, method_m);
         self.repo.create_charge(charge_buyer).await?;
         if result.completed {
             // TODO, if the pay-in process is complete, invoke RPC to order service

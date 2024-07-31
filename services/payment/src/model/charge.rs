@@ -42,16 +42,17 @@ pub struct ChargeLineBuyerModel {
     // TODO, another column for the same purpose in seller's preferred currency
     pub amount: PayLineAmountModel,
 }
-pub struct ChargeBuyerModel {
+pub struct ChargeBuyerMetaModel {
     pub owner: u32,
     pub create_time: DateTime<Utc>,
-    // idenpotency token, derived by owner (user profile ID) and create time
-    pub token: ChargeToken,
     pub oid: String, // referenced order id
-    pub currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
-    pub lines: Vec<ChargeLineBuyerModel>,
     pub state: BuyerPayInState,
     pub method: ChargeMethodModel,
+}
+pub struct ChargeBuyerModel {
+    pub meta: ChargeBuyerMetaModel,
+    pub currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
+    pub lines: Vec<ChargeLineBuyerModel>,
 }
 
 impl BuyerPayInState {
@@ -62,6 +63,34 @@ impl BuyerPayInState {
             Self::ProcessorCompleted(t) => Some((*t).into()),
             Self::OrderAppSynced(t) => Some((*t).into()),
         }
+    }
+}
+
+impl From<(String, u32)> for ChargeBuyerMetaModel {
+    fn from(value: (String, u32)) -> Self {
+        let now = Local::now().to_utc();
+        Self {
+            owner: value.1,
+            create_time: now,
+            oid: value.0,
+            method: ChargeMethodModel::Unknown,
+            state: BuyerPayInState::Initialized,
+        }
+    }
+}
+impl ChargeBuyerMetaModel {
+    pub(crate) fn update_progress(
+        &mut self,
+        new_state: &BuyerPayInState,
+        new_method: ChargeMethodModel,
+    ) {
+        self.state = new_state.clone();
+        self.method = new_method;
+    }
+
+    pub(crate) fn token(&self) -> ChargeToken {
+        // idenpotency token, derived by owner (user profile ID) and create time
+        ChargeToken::encode(self.owner, self.create_time)
     }
 }
 
@@ -117,16 +146,10 @@ impl TryFrom<(OrderLineModelSet, ChargeReqOrderDto)> for ChargeBuyerModel {
             .collect::<Vec<_>>();
 
         if err_lines.is_empty() {
-            let now = Local::now().to_utc();
             Ok(Self {
-                oid,
-                create_time: now,
-                token: ChargeToken::encode(buyer_id, now),
-                owner: buyer_id,
+                meta: ChargeBuyerMetaModel::from((oid, buyer_id)),
                 currency_snapshot,
-                method: ChargeMethodModel::Unknown,
                 lines,
-                state: BuyerPayInState::Initialized,
             })
         } else {
             Err(ChargeRespErrorDto {
@@ -140,16 +163,7 @@ impl TryFrom<(OrderLineModelSet, ChargeReqOrderDto)> for ChargeBuyerModel {
 
 impl ChargeBuyerModel {
     pub(crate) fn get_buyer_currency(&self) -> Option<OrderCurrencySnapshot> {
-        self.currency_snapshot.get(&self.owner).cloned()
-    }
-
-    pub(crate) fn update_progress(
-        &mut self,
-        new_state: &BuyerPayInState,
-        new_method: ChargeMethodModel,
-    ) {
-        self.state = new_state.clone();
-        self.method = new_method;
+        self.currency_snapshot.get(&self.meta.owner).cloned()
     }
 }
 

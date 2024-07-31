@@ -122,14 +122,11 @@ struct MockPaymentProcessor {
 impl AbstractPaymentProcessor for MockPaymentProcessor {
     async fn pay_in_start(
         &self,
-        charge_buyer: &ChargeBuyerModel,
+        _charge_buyer: &ChargeBuyerModel,
         _req_mthd: PaymentMethodReqDto,
     ) -> Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError> {
         let mut g = self._payin_start_result.lock().unwrap();
-        let mut out = g.take().unwrap();
-        if let Ok(v) = out.as_mut() {
-            v.0.charge_id = charge_buyer.token.0.to_vec();
-        }
+        let out = g.take().unwrap();
         out
     }
 }

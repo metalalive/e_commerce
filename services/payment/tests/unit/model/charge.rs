@@ -377,9 +377,9 @@ async fn charge_buyer_convert_ok_1() {
     assert!(result.is_ok());
     if let Ok(v) = result {
         // println!("token generated , {:?}", &v.token);
-        assert_eq!(v.oid, mock_oid);
-        assert_eq!(v.owner, mock_usr_id);
-        assert!(matches!(v.state, BuyerPayInState::Initialized));
+        assert_eq!(v.meta.oid, mock_oid);
+        assert_eq!(v.meta.owner, mock_usr_id);
+        assert!(matches!(v.meta.state, BuyerPayInState::Initialized));
         v.lines
             .into_iter()
             .map(|l| {
@@ -446,8 +446,8 @@ async fn charge_buyer_convert_ok_2() {
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
     assert!(result.is_ok());
     if let Ok(v) = result {
-        assert_eq!(v.oid, mock_oid);
-        assert_eq!(v.owner, mock_usr_id);
+        assert_eq!(v.meta.oid, mock_oid);
+        assert_eq!(v.meta.owner, mock_usr_id);
         v.lines
             .into_iter()
             .map(|l| {
