@@ -298,6 +298,13 @@ components:
         status:
           type: string
           enum: [SessionInitialized, PspRefused, PspProcessing, PspTimedOut, SessionExpired, Cancelled, Completed]
+        order_id:
+          type: string
+          description: order ID associated with the charge operation
+          example: '2099381e101b1'
+        create_time:
+          type: string
+          format: date-time
 
   securitySchemes:
     BearerAuth:

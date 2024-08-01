@@ -1,4 +1,4 @@
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
@@ -135,4 +135,6 @@ pub enum ChargeStatusDto {
 #[derive(Serialize)]
 pub struct ChargeRefreshRespDto {
     pub status: ChargeStatusDto,
+    pub order_id: String,
+    pub create_time: DateTime<Utc>,
 }

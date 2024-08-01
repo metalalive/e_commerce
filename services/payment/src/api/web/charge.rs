@@ -1,13 +1,48 @@
+use std::boxed::Box;
+use std::sync::Arc;
+
+use actix_web::body::BoxBody;
+use actix_web::error::{Error as ActixError, ResponseError};
 use actix_web::http::header::{ContentType, CONTENT_TYPE};
+use actix_web::http::StatusCode;
 use actix_web::web::{Data as WebData, Json as ExtJson, Path as ExtPath};
 use actix_web::{HttpResponse, Result as ActixResult};
 
-use ecommerce_common::logging::{app_log_event, AppLogLevel};
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use super::dto::ChargeReqDto;
-use crate::adapter::repository::app_repo_charge;
-use crate::usecase::{ChargeCreateUcError, ChargeCreateUseCase};
+use crate::adapter::datastore::AppDataStoreContext;
+use crate::adapter::repository::{app_repo_charge, AbstractChargeRepo};
+use crate::usecase::{ChargeCreateUcError, ChargeCreateUseCase, ChargeStatusRefreshUseCase};
 use crate::{AppAuthedClaim, AppSharedState};
+
+#[derive(Debug)]
+struct RepoInitFailure;
+
+impl std::fmt::Display for RepoInitFailure {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
+impl ResponseError for RepoInitFailure {
+    fn status_code(&self) -> StatusCode {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
+    fn error_response(&self) -> HttpResponse<BoxBody> {
+        HttpResponse::ServiceUnavailable()
+            .append_header(ContentType::plaintext())
+            .body("")
+    }
+}
+async fn try_creating_charge_repo(
+    dstore: Arc<AppDataStoreContext>,
+    logctx: Arc<AppLogContext>,
+) -> ActixResult<Box<dyn AbstractChargeRepo>> {
+    app_repo_charge(dstore).await.map_err(|e_repo| {
+        app_log_event!(logctx, AppLogLevel::ERROR, "repo-init-error {:?}", e_repo);
+        ActixError::from(RepoInitFailure)
+    })
+}
 
 pub(super) async fn create_charge(
     req_body: ExtJson<ChargeReqDto>,
@@ -18,16 +53,7 @@ pub(super) async fn create_charge(
     let logctx_p = &logctx;
     app_log_event!(logctx_p, AppLogLevel::DEBUG, "create-charge-api");
 
-    let repo = match app_repo_charge(shr_state.datastore()).await {
-        Ok(v) => v,
-        Err(e) => {
-            app_log_event!(logctx_p, AppLogLevel::ERROR, "repo-init-error {:?}", e);
-            let resp = HttpResponse::InternalServerError()
-                .append_header(ContentType::plaintext())
-                .body("");
-            return Ok(resp);
-        }
-    };
+    let repo = try_creating_charge_repo(shr_state.datastore(), logctx.clone()).await?;
     let uc = ChargeCreateUseCase {
         repo,
         processors: shr_state.processor_context(),
@@ -76,13 +102,27 @@ pub(super) async fn create_charge(
 } // end of fn create_charge
 
 pub(super) async fn refresh_charge_status(
-    _path: ExtPath<String>,
+    path_segms: ExtPath<(String,)>,
+    authed_claim: AppAuthedClaim,
     shr_state: WebData<AppSharedState>,
 ) -> ActixResult<HttpResponse> {
+    let charge_id_serial = path_segms.into_inner().0;
     let logctx = shr_state.log_context();
-    let logctx_p = &logctx;
-    app_log_event!(logctx_p, AppLogLevel::DEBUG, "refresh-charge-status");
+    app_log_event!(
+        logctx,
+        AppLogLevel::DEBUG,
+        "charge-id-captured: {}",
+        charge_id_serial
+    );
 
+    let repo = try_creating_charge_repo(shr_state.datastore(), logctx.clone()).await?;
+    let uc = ChargeStatusRefreshUseCase {
+        repo,
+        processors: shr_state.processor_context(),
+        rpc_ctx: shr_state.rpc_context(),
+    };
+    let _result = uc.execute(authed_claim.profile, charge_id_serial).await;
+    // TODO, analyze errors
     let resp = HttpResponse::Ok()
         .append_header((CONTENT_TYPE.as_str(), "application/json"))
         .body("{}");
