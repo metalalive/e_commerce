@@ -7,16 +7,18 @@ use std::sync::Arc;
 
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 use ecommerce_common::api::dto::{CurrencyDto, GenericRangeErrorDto};
-use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
+use ecommerce_common::api::rpc::dto::{
+    OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
+    OrderReplicaPaymentDto,
+};
 use ecommerce_common::api::web::dto::{
     BillingErrorDto, ContactErrorDto, ContactNonFieldErrorReason, QuotaResourceErrorDto,
 };
 
 use crate::api::rpc::dto::{
-    OrderLineReplicaRefundDto, OrderLineStockReturningDto, OrderPaymentUpdateDto,
-    OrderPaymentUpdateErrorDto, OrderReplicaInventoryDto, OrderReplicaInventoryReqDto,
-    OrderReplicaRefundReqDto, OrderReplicaStockReservingDto, OrderReplicaStockReturningDto,
-    StockLevelReturnDto, StockReturnErrorDto,
+    OrderLineReplicaRefundDto, OrderLineStockReturningDto, OrderReplicaInventoryDto,
+    OrderReplicaInventoryReqDto, OrderReplicaRefundReqDto, OrderReplicaStockReservingDto,
+    OrderReplicaStockReturningDto, StockLevelReturnDto, StockReturnErrorDto,
 };
 use crate::api::web::dto::{
     BillingReqDto, OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
@@ -543,9 +545,32 @@ impl OrderPaymentUpdateUseCase {
         self,
         data: OrderPaymentUpdateDto,
     ) -> DefaultResult<OrderPaymentUpdateErrorDto, AppError> {
-        self.repo
-            .update_lines_payment(data, OrderLineModel::update_payments)
-            .await
+        let result = DateTime::parse_from_rfc3339(data.charge_time.as_str());
+        if let Err(e) = result {
+            let client_e = OrderPaymentUpdateErrorDto {
+                oid: data.oid,
+                charge_time: Some(e.to_string()),
+                lines: Vec::new(),
+            };
+            Ok(client_e)
+        } else {
+            self.repo
+                .update_lines_payment(data, Self::_update_payment)
+                .await
+        }
+    }
+
+    fn _update_payment(
+        saved_lines: &mut Vec<OrderLineModel>,
+        data: OrderPaymentUpdateDto,
+    ) -> Vec<OrderLinePayUpdateErrorDto> {
+        let OrderPaymentUpdateDto {
+            oid: _,
+            lines,
+            charge_time,
+        } = data;
+        let ctime = DateTime::parse_from_rfc3339(charge_time.as_str()).unwrap();
+        OrderLineModel::update_payments(saved_lines, lines, ctime)
     }
 }
 

@@ -912,7 +912,8 @@ fn itest_verify_order_billing(
 async fn itest_update_payment_status(
     shrstate: AppSharedState,
     oid: String,
-    last_paid: Vec<(u32, ProductType, u64, u32, DateTime<FixedOffset>)>,
+    charge_time: DateTime<FixedOffset>,
+    last_paid: Vec<(u32, ProductType, u64, u32)>,
 ) {
     const FPATH_UPDATE_PAYMENT_TEMPLATE: &str =
         "/tests/integration/examples/update_payment_template.json";
@@ -925,6 +926,10 @@ async fn itest_update_payment_status(
         let mut req_body_template = result.unwrap();
         let obj = req_body_template.as_object_mut().unwrap();
         obj.insert("oid".to_string(), JsnVal::String(oid));
+        obj.insert(
+            "charge_time".to_string(),
+            JsnVal::String(charge_time.to_rfc3339()),
+        );
         let lines = obj.get_mut("lines").unwrap().as_array_mut().unwrap();
         lines.clear();
         last_paid
@@ -936,7 +941,6 @@ async fn itest_update_payment_status(
                 info.insert("product_type".to_string(), JsnVal::Number(prod_typ.into()));
                 info.insert("product_id".to_string(), JsnVal::Number(item.2.into()));
                 info.insert("qty".to_string(), JsnVal::Number(item.3.into()));
-                info.insert("time".to_string(), JsnVal::String(item.4.to_rfc3339()));
                 lines.push(JsnVal::Object(info));
             })
             .count();
@@ -997,46 +1001,25 @@ async fn replica_update_order_payment() -> DefaultResult<(), AppError> {
     itest_update_payment_status(
         shrstate.clone(),
         oid.clone(),
+        time_now + Duration::seconds(5),
         vec![
-            (
-                mock_seller,
-                ProductType::Package,
-                20094,
-                1,
-                time_now + Duration::seconds(5),
-            ),
-            (
-                mock_seller,
-                ProductType::Item,
-                20092,
-                1,
-                time_now + Duration::seconds(9),
-            ),
+            (mock_seller, ProductType::Package, 20094, 1),
+            (mock_seller, ProductType::Item, 20092, 1),
         ],
     )
     .await;
     itest_update_payment_status(
         shrstate.clone(),
         oid.clone(),
-        vec![(
-            mock_seller,
-            ProductType::Item,
-            20092,
-            7,
-            time_now + Duration::seconds(11),
-        )],
+        time_now + Duration::seconds(11),
+        vec![(mock_seller, ProductType::Item, 20092, 7)],
     )
     .await;
     itest_update_payment_status(
         shrstate,
         oid,
-        vec![(
-            mock_seller,
-            ProductType::Package,
-            20094,
-            5,
-            time_now + Duration::seconds(12),
-        )],
+        time_now + Duration::seconds(12),
+        vec![(mock_seller, ProductType::Package, 20094, 5)],
     )
     .await;
     Ok(())
@@ -1148,28 +1131,11 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
     itest_update_payment_status(
         shrstate.clone(),
         oid.clone(),
+        time_now + Duration::seconds(2),
         vec![
-            (
-                mock_seller,
-                ProductType::Item,
-                20097,
-                11,
-                time_now + Duration::seconds(2),
-            ),
-            (
-                mock_seller,
-                ProductType::Item,
-                20095,
-                16,
-                time_now + Duration::seconds(2),
-            ),
-            (
-                mock_seller,
-                ProductType::Package,
-                20096,
-                14,
-                time_now + Duration::seconds(2),
-            ),
+            (mock_seller, ProductType::Item, 20097, 11),
+            (mock_seller, ProductType::Item, 20095, 16),
+            (mock_seller, ProductType::Package, 20096, 14),
         ],
     )
     .await;
@@ -1528,6 +1494,7 @@ fn _cart_line_dto_sort_helper(x: &JsnVal, y: &JsnVal) -> std::cmp::Ordering {
     c
 }
 
+#[rustfmt::skip]
 #[tokio::test]
 async fn modify_retrieve_cart_ok() -> DefaultResult<(), AppError> {
     const FPATH_MODIFY_CART: [&str; 4] = [
@@ -1548,93 +1515,48 @@ async fn modify_retrieve_cart_ok() -> DefaultResult<(), AppError> {
     let mock_authed_usr = 121;
     let authed_claim = setup_mock_authed_claim(mock_authed_usr);
     let _resp_body = itest_cart_modify_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        FPATH_MODIFY_CART[0],
-        &authed_claim,
-        0,
-        StatusCode::OK,
+        shrstate.config().clone(), srv.clone(),
+        FPATH_MODIFY_CART[0], &authed_claim,
+        0, StatusCode::OK,
     )
     .await;
     itest_cart_retrieve_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        &authed_claim,
-        0,
-        StatusCode::OK,
+        shrstate.config().clone(), srv.clone(),
+        &authed_claim, 0, StatusCode::OK,
         Some(FPATH_EXPECT_FETCHED_CART[0]),
     )
     .await;
     let _resp_body = itest_cart_modify_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        FPATH_MODIFY_CART[1],
-        &authed_claim,
-        1,
-        StatusCode::OK,
-    )
-    .await;
+        shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[1],
+        &authed_claim, 1, StatusCode::OK,
+    ).await;
     let _resp_body = itest_cart_modify_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        FPATH_MODIFY_CART[2],
-        &authed_claim,
-        0,
-        StatusCode::OK,
-    )
-    .await;
+        shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[2],
+        &authed_claim, 0, StatusCode::OK,
+    ).await;
     itest_cart_retrieve_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        &authed_claim,
-        0,
-        StatusCode::OK,
-        Some(FPATH_EXPECT_FETCHED_CART[1]),
-    )
-    .await;
+        shrstate.config().clone(), srv.clone(), &authed_claim,
+        0, StatusCode::OK, Some(FPATH_EXPECT_FETCHED_CART[1]),
+    ).await;
     itest_cart_retrieve_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        &authed_claim,
-        1,
-        StatusCode::OK,
-        Some(FPATH_EXPECT_FETCHED_CART[2]),
-    )
-    .await;
+        shrstate.config().clone(), srv.clone(), &authed_claim,
+        1, StatusCode::OK, Some(FPATH_EXPECT_FETCHED_CART[2]),
+    ).await;
     let _resp_body = itest_cart_discard_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        &authed_claim,
-        0,
-        StatusCode::NO_CONTENT,
-    )
-    .await;
+        shrstate.config().clone(), srv.clone(), &authed_claim,
+        0, StatusCode::NO_CONTENT,
+    ).await;
     let _resp_body = itest_cart_modify_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        FPATH_MODIFY_CART[3],
-        &authed_claim,
-        1,
-        StatusCode::OK,
-    )
-    .await;
+        shrstate.config().clone(), srv.clone(), FPATH_MODIFY_CART[3],
+        &authed_claim, 1, StatusCode::OK,
+    ).await;
     itest_cart_retrieve_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        &authed_claim,
-        0,
-        StatusCode::OK,
-        Some(FPATH_EXPECT_FETCHED_CART[3]),
-    )
-    .await;
+        shrstate.config().clone(), srv.clone(), &authed_claim,
+        0, StatusCode::OK, Some(FPATH_EXPECT_FETCHED_CART[3]),
+    ).await;
     itest_cart_retrieve_request(
-        shrstate.config().clone(),
-        srv.clone(),
-        &authed_claim,
-        1,
-        StatusCode::OK,
-        Some(FPATH_EXPECT_FETCHED_CART[4]),
-    )
-    .await;
+        shrstate.config().clone(), srv.clone(), &authed_claim,
+        1, StatusCode::OK, Some(FPATH_EXPECT_FETCHED_CART[4]),
+    ).await;
     Ok(())
 } // end of fn modify_retrieve_cart_ok

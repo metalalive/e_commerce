@@ -149,45 +149,6 @@ pub struct OrderReplicaInventoryDto {
     pub returns: Vec<OrderReplicaStockReturningDto>,
 }
 
-#[derive(Deserialize)]
-pub struct OrderLinePaidUpdateDto {
-    pub seller_id: u32,
-    pub product_id: u64,
-    #[serde(deserialize_with = "jsn_validate_product_type")]
-    pub product_type: ProductType,
-    pub time: DateTime<FixedOffset>, // TODO, (1) change to UTC time zone, (2) move to `OrderPaymentUpdateDto`
-    pub qty: u32,
-}
-
-#[derive(Deserialize)]
-pub struct OrderPaymentUpdateDto {
-    pub oid: String,
-    pub lines: Vec<OrderLinePaidUpdateDto>,
-}
-
-#[derive(Serialize)]
-pub enum OrderLinePayUpdateErrorReason {
-    NotExist,
-    ReservationExpired,
-    InvalidQuantity,
-    Omitted,
-}
-
-#[derive(Serialize)]
-pub struct OrderLinePayUpdateErrorDto {
-    pub seller_id: u32,
-    pub product_id: u64,
-    #[serde(serialize_with = "jsn_serialize_product_type")]
-    pub product_type: ProductType,
-    pub reason: OrderLinePayUpdateErrorReason,
-}
-
-#[derive(Serialize)]
-pub struct OrderPaymentUpdateErrorDto {
-    pub oid: String,
-    pub lines: Vec<OrderLinePayUpdateErrorDto>,
-}
-
 #[derive(Serialize, Debug)]
 pub enum StockReturnErrorReason {
     NotExist,

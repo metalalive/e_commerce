@@ -135,14 +135,13 @@ impl From<&String> for CurrencyDto {
 }
 
 impl CurrencyDto {
-    /// Number of digits in fraction part of a decimal value allowed 
+    /// Number of digits in fraction part of a decimal value allowed
     /// in a given amount value. Note the decimal places should depends
     /// on the currency applied, due to the limit specified in 3rd-party
     /// payment processors such as Stripe
     pub fn amount_fraction_scale(&self) -> u32 {
         match self {
-            Self::INR | Self::IDR | Self::THB | Self::TWD
-                | Self::USD => 2,
+            Self::INR | Self::IDR | Self::THB | Self::TWD | Self::USD => 2,
             Self::Unknown => 0,
         }
     }

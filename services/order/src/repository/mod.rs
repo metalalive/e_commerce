@@ -8,15 +8,15 @@ use std::sync::Arc;
 use std::vec::Vec;
 
 use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::api::rpc::dto::{
+    OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
+};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 use ecommerce_common::model::BaseProductIdentity;
 
-use crate::api::rpc::dto::{
-    OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto,
-    OrderPaymentUpdateErrorDto, ProductPriceDeleteDto, StockLevelReturnDto, StockReturnErrorDto,
-};
+use crate::api::rpc::dto::{ProductPriceDeleteDto, StockLevelReturnDto, StockReturnErrorDto};
 use crate::api::web::dto::OrderLineCreateErrorDto;
 use crate::error::AppError;
 use crate::model::{
@@ -156,7 +156,7 @@ pub trait AbsOrderRepo: Sync + Send {
 } // end of trait AbsOrderRepo
 
 pub type AppOrderRepoUpdateLinesUserFunc =
-    fn(&mut Vec<OrderLineModel>, Vec<OrderLinePaidUpdateDto>) -> Vec<OrderLinePayUpdateErrorDto>;
+    fn(&mut Vec<OrderLineModel>, OrderPaymentUpdateDto) -> Vec<OrderLinePayUpdateErrorDto>;
 
 // declare a callback function type which can easily be passed,
 // - I made the return type to be `Future` trait object wrapped in `Pin` type

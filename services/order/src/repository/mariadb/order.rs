@@ -16,12 +16,12 @@ use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement
 
 use ecommerce_common::adapter::repository::OidBytes;
 use ecommerce_common::api::dto::{CountryCode, CurrencyDto, PhoneNumberDto};
+use ecommerce_common::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
 use crate::api::dto::ShippingMethod;
-use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::constant::hard_limit;
 use crate::datastore::AppMariaDbStore;
 use crate::error::AppError;
@@ -647,9 +647,10 @@ impl AbsOrderRepo for OrderMariaDbRepo {
         data: OrderPaymentUpdateDto,
         cb: AppOrderRepoUpdateLinesUserFunc,
     ) -> DefaultResult<OrderPaymentUpdateErrorDto, AppError> {
-        let (oid, d_lines) = (data.oid, data.lines);
+        let oid = data.oid.clone();
         let oid_b = OidBytes::try_from(oid.as_str())?;
-        let pids = d_lines
+        let pids = data
+            .lines
             .iter()
             .map(|d| OrderLineIdentity {
                 store_id: d.seller_id,
@@ -660,14 +661,18 @@ impl AbsOrderRepo for OrderMariaDbRepo {
         let mut conn = self._db.acquire().await?;
         let mut tx = conn.begin().await?;
         let mut saved_lines = Self::_fetch_lines_by_pid(&mut tx, &oid_b, pids).await?;
-        let errors = cb(&mut saved_lines, d_lines);
+        let errors = cb(&mut saved_lines, data);
         if errors.is_empty() {
             let num_affected = saved_lines.len();
             let (sql_patt, args) = UpdateOLinePayArg(&oid_b, saved_lines).into();
             let _rs = run_query_once(&mut tx, sql_patt, args, Some(num_affected)).await?;
             tx.commit().await?;
         }
-        Ok(OrderPaymentUpdateErrorDto { oid, lines: errors })
+        Ok(OrderPaymentUpdateErrorDto {
+            oid,
+            charge_time: None,
+            lines: errors,
+        })
     }
     async fn fetch_lines_by_rsvtime(
         &self,

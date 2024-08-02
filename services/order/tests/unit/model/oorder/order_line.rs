@@ -2,10 +2,10 @@ use chrono::{DateTime, Duration, FixedOffset, Local as LocalTime};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
-use order::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason};
 use order::api::web::dto::OrderLineReqDto;
 use order::model::{
     CurrencyModel, OrderLineAppliedPolicyModel, OrderLineIdentity, OrderLineModel,
@@ -233,6 +233,7 @@ fn gen_order_id_seq() {
     assert_eq!(hs.len(), num_ids);
 }
 
+#[rustfmt::skip]
 #[test]
 fn update_payments_ok() {
     let dt_now = LocalTime::now().fixed_offset();
@@ -240,48 +241,35 @@ fn update_payments_ok() {
     let warranty_until = dt_now + Duration::days(1);
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    #[cfg_attr(rustfmt, rustfmt_skip)]
     let mocked_data = vec![
         (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
          10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, ProductType::Item, 10, 90,
-         9, 1, Some(paid_last_update), reserved_until, warranty_until,)
+        (seller_id, 890, ProductType::Item, 10, 90, 9, 1,
+         Some(paid_last_update), reserved_until, warranty_until,)
     ];
     let mut models = ut_setup_order_lines(mocked_data);
-    let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
-    let data = vec![
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 890,
-            product_type: ProductType::Item,
-            time: last_updates[1],
-            qty: 7,
-        },
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 812,
-            product_type: ProductType::Package,
-            time: last_updates[0],
-            qty: 4,
-        },
-    ];
-    let errors = OrderLineModel::update_payments(&mut models, data);
+    let d_lines = [
+            (seller_id, 890u64, ProductType::Item, 7u32),
+            (seller_id, 812, ProductType::Package, 4),
+        ].into_iter()
+        .map(|d| OrderLinePaidUpdateDto {
+            seller_id: d.0, product_id:  d.1,
+            product_type:  d.2, qty: d.3,
+        })
+        .collect::<Vec<_>>();
+    let d_charge_time = paid_last_update + Duration::minutes(5);
+    let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time);
     assert_eq!(errors.len(), 0);
     assert_eq!(models[0].id_.product_id, 812);
     assert_eq!(models[0].qty.paid, 4);
     assert!(models[0].qty.paid_last_update.is_some());
-    assert_eq!(
-        models[0].qty.paid_last_update.as_ref().unwrap(),
-        &last_updates[0]
-    );
+    assert_eq!(models[0].qty.paid_last_update.as_ref().unwrap(), &d_charge_time);
     assert_eq!(models[1].id_.product_id, 890);
     assert_eq!(models[1].qty.paid, 7);
-    assert_eq!(
-        models[1].qty.paid_last_update.as_ref().unwrap(),
-        &last_updates[1]
-    );
+    assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &d_charge_time);
 } // end of fn update_payments_ok
 
+#[rustfmt::skip]
 #[test]
 fn update_payments_nonexist() {
     let dt_now = LocalTime::now().fixed_offset();
@@ -289,99 +277,33 @@ fn update_payments_nonexist() {
     let warranty_until = dt_now + Duration::days(1);
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    #[cfg_attr(rustfmt, rustfmt_skip)]
     let mocked_data = vec![
         (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
          10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, ProductType::Item, 10, 90,
-         9, 1, Some(paid_last_update), reserved_until, warranty_until,)
+        (seller_id, 890, ProductType::Item, 10, 90, 9, 1,
+         Some(paid_last_update), reserved_until, warranty_until,)
     ];
     let mut models = ut_setup_order_lines(mocked_data);
-    let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
-    let data = vec![
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 889,
-            product_type: ProductType::Item,
-            time: last_updates[1],
-            qty: 7,
-        },
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 812,
-            product_type: ProductType::Package,
-            time: last_updates[0],
-            qty: 4,
-        },
-    ];
-    let errors = OrderLineModel::update_payments(&mut models, data);
+    let d_lines = [
+            (seller_id, 889u64, ProductType::Item, 7u32),
+            (seller_id, 812, ProductType::Package, 4),
+        ].into_iter()
+        .map(|d| OrderLinePaidUpdateDto {
+            seller_id: d.0, product_id:  d.1,
+            product_type:  d.2, qty: d.3,
+        })
+        .collect::<Vec<_>>();
+    let d_charge_time = paid_last_update + Duration::minutes(5);
+    let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time);
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].product_id, 889);
-    assert!(matches!(
-        errors[0].reason,
-        OrderLinePayUpdateErrorReason::NotExist
-    ));
+    assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::NotExist));
     assert_eq!(models[0].id_.product_id, 812);
     assert_eq!(models[0].qty.paid, 4);
     assert!(models[0].qty.paid_last_update.is_some());
 } // end of fn update_payments_nonexist
 
-#[test]
-fn update_payments_rsv_expired() {
-    let dt_now = LocalTime::now().fixed_offset();
-    let warranty_until = dt_now + Duration::days(1);
-    let paid_last_update = dt_now - Duration::minutes(10);
-    let seller_id = 123;
-    #[cfg_attr(rustfmt, rustfmt_skip)]
-    let mocked_data = vec![
-        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
-         10u32, 0u32, None,
-         dt_now + Duration::minutes(2), warranty_until),
-        (seller_id, 890, ProductType::Item, 10, 90,
-         9, 1, Some(paid_last_update),
-         dt_now - Duration::seconds(30), warranty_until),
-    ];
-    let mut models = ut_setup_order_lines(mocked_data);
-    let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
-    let data = vec![
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 890,
-            product_type: ProductType::Item,
-            time: last_updates[1],
-            qty: 7,
-        },
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 812,
-            product_type: ProductType::Package,
-            time: last_updates[0],
-            qty: 4,
-        },
-    ];
-    let errors = OrderLineModel::update_payments(&mut models, data);
-    assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].product_id, 890);
-    assert!(matches!(
-        errors[0].reason,
-        OrderLinePayUpdateErrorReason::ReservationExpired
-    ));
-    assert_eq!(models[0].id_.product_id, 812);
-    assert_eq!(models[0].qty.paid, 4);
-    assert!(models[0].qty.paid_last_update.is_some());
-    assert_eq!(
-        models[0].qty.paid_last_update.as_ref().unwrap(),
-        &last_updates[0]
-    );
-    assert_eq!(models[1].id_.product_id, 890);
-    assert_eq!(models[1].qty.reserved, 9);
-    assert_eq!(models[1].qty.paid, 1); // not modified
-    assert_eq!(
-        models[1].qty.paid_last_update.as_ref().unwrap(),
-        &paid_last_update
-    );
-} // end of fn update_payments_rsv_expired
-
+#[rustfmt::skip]
 #[test]
 fn update_payments_invalid_quantity() {
     let dt_now = LocalTime::now().fixed_offset();
@@ -389,47 +311,37 @@ fn update_payments_invalid_quantity() {
     let warranty_until = dt_now + Duration::days(1);
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    #[cfg_attr(rustfmt, rustfmt_skip)]
     let mocked_data = vec![
-        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
-         10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, ProductType::Item, 10, 90,
-         9, 1, Some(paid_last_update), reserved_until, warranty_until,)
+        (
+            seller_id, 812u64, ProductType::Package, 7u32, 69u32, 10u32, 0u32,
+            None, reserved_until, warranty_until,
+        ),
+        (
+            seller_id, 890, ProductType::Item, 10, 90, 9, 1,
+            Some(paid_last_update), reserved_until, warranty_until,
+        ),
     ];
     let mut models = ut_setup_order_lines(mocked_data);
-    let last_updates = [dt_now - Duration::minutes(3), dt_now - Duration::minutes(5)];
-    let data = vec![
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 890,
-            product_type: ProductType::Item,
-            time: last_updates[1],
-            qty: 8,
-        },
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 812,
-            product_type: ProductType::Package,
-            time: last_updates[0],
-            qty: models[0].qty.reserved + 1,
-        },
-    ];
-    let errors = OrderLineModel::update_payments(&mut models, data);
+    let d_lines = [
+            (seller_id, 890u64, ProductType::Item, 8u32),
+            (seller_id, 812, ProductType::Package, models[0].qty.reserved + 1),
+        ].into_iter()
+        .map(|d| OrderLinePaidUpdateDto {
+            seller_id: d.0, product_id:  d.1,
+            product_type:  d.2, qty: d.3,
+        })
+        .collect::<Vec<_>>();
+    let d_charge_time = paid_last_update + Duration::minutes(2);
+    let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time);
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].product_id, 812);
-    assert!(matches!(
-        errors[0].reason,
-        OrderLinePayUpdateErrorReason::InvalidQuantity
-    ));
+    assert!(matches!(errors[0].reason, OrderLinePayUpdateErrorReason::InvalidQuantity));
     assert_eq!(models[0].id_.product_id, 812);
     assert_eq!(models[0].qty.paid, 0); // not modified
     assert!(models[0].qty.paid_last_update.is_none());
     assert_eq!(models[1].id_.product_id, 890);
     assert_eq!(models[1].qty.paid, 8);
-    assert_eq!(
-        models[1].qty.paid_last_update.as_ref().unwrap(),
-        &last_updates[1]
-    );
+    assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &d_charge_time);
 } // end of fn update_payments_invalid_quantity
 
 #[test]
@@ -437,37 +349,33 @@ fn update_payments_old_record_omitted() {
     let dt_now = LocalTime::now().fixed_offset();
     let reserved_until = dt_now + Duration::hours(1);
     let warranty_until = dt_now + Duration::days(1);
-    let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     let mocked_data = vec![
-        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
-         10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, ProductType::Item, 10, 90,
-         9, 1, Some(paid_last_update), reserved_until, warranty_until,)
+        (
+            seller_id, 812u64, ProductType::Package, 7u32, 69u32, 10u32, 0u32,
+            Some(dt_now + Duration::minutes(8)), reserved_until, warranty_until,
+        ),
+        (
+            seller_id, 890, ProductType::Item, 10, 90, 9, 1,
+            Some(dt_now + Duration::minutes(10)), reserved_until, warranty_until,
+        ),
     ];
     let mut models = ut_setup_order_lines(mocked_data);
-    let last_updates = [
-        dt_now - Duration::minutes(1),
-        paid_last_update - Duration::seconds(15),
-    ];
-    let data = vec![
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 890,
-            product_type: ProductType::Item,
-            time: last_updates[1],
-            qty: 7,
-        },
-        OrderLinePaidUpdateDto {
-            seller_id,
-            product_id: 812,
-            product_type: ProductType::Package,
-            time: last_updates[0],
-            qty: 4,
-        },
-    ];
-    let errors = OrderLineModel::update_payments(&mut models, data);
+    let d_lines = [
+        (seller_id, 890u64, ProductType::Item, 7u32),
+        (seller_id, 812, ProductType::Package, 4),
+    ]
+    .into_iter()
+    .map(|d| OrderLinePaidUpdateDto {
+        seller_id: d.0,
+        product_id: d.1,
+        product_type: d.2,
+        qty: d.3,
+    })
+    .collect::<Vec<_>>();
+    let d_charge_time = dt_now + Duration::minutes(9);
+    let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time);
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].product_id, 890);
     assert!(matches!(
@@ -479,12 +387,12 @@ fn update_payments_old_record_omitted() {
     assert!(models[0].qty.paid_last_update.is_some());
     assert_eq!(
         models[0].qty.paid_last_update.as_ref().unwrap(),
-        &last_updates[0]
+        &d_charge_time
     );
     assert_eq!(models[1].id_.product_id, 890);
     assert_eq!(models[1].qty.paid, 1); // not modified
     assert_eq!(
         models[1].qty.paid_last_update.as_ref().unwrap(),
-        &paid_last_update
+        &(dt_now + Duration::minutes(10))
     );
 } // end of fn update_payments_old_record_omitted

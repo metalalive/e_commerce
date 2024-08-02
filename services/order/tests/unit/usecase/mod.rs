@@ -16,13 +16,12 @@ use chrono::{DateTime, FixedOffset};
 use tokio::sync::Mutex as AsyncMutex;
 
 use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel};
 
 use order::api::dto::ShippingMethod;
-use order::api::rpc::dto::{
-    OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto, StockLevelReturnDto, StockReturnErrorDto,
-};
+use order::api::rpc::dto::{StockLevelReturnDto, StockReturnErrorDto};
 use order::error::AppError;
 use order::model::{
     CurrencyModelSet, OrderCurrencyModel, OrderLineIdentity, OrderLineModel, OrderLineModelSet,

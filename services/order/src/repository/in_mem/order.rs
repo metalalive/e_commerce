@@ -10,12 +10,12 @@ use rust_decimal::Decimal;
 use tokio::sync::Mutex;
 
 use ecommerce_common::api::dto::{CurrencyDto, PhoneNumberDto};
+use ecommerce_common::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
 use crate::api::dto::ShippingMethod;
-use crate::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
 use crate::datastore::{AbstInMemoryDStore, AppInMemFetchedSingleRow, AppInMemFetchedSingleTable};
 use crate::error::AppError;
 use crate::model::{
@@ -797,10 +797,11 @@ impl AbsOrderRepo for OrderInMemRepo {
         usr_cb: AppOrderRepoUpdateLinesUserFunc,
     ) -> DefaultResult<OrderPaymentUpdateErrorDto, AppError> {
         let table_name = _orderline::TABLE_LABEL;
-        let (oid, d_lines) = (data.oid, data.lines);
-        let num_data_items = d_lines.len();
+        let oid = data.oid.clone();
+        let num_data_items = data.lines.len();
         let (mut models, g_lock) = {
-            let pids = d_lines
+            let pids = data
+                .lines
                 .iter()
                 .map(|d| {
                     _orderline::inmem_pkey(
@@ -820,13 +821,17 @@ impl AbsOrderRepo for OrderInMemRepo {
                 .collect();
             (ms, lock)
         };
-        let errors = usr_cb(&mut models, d_lines);
+        let errors = usr_cb(&mut models, data);
         if errors.len() < num_data_items {
             let rows = _orderline::to_inmem_tbl(oid.as_str(), &models);
             let info = HashMap::from([(table_name.to_string(), rows)]);
             let _num = self.datastore.save_release(info, g_lock)?;
         } // no need to save if all data items cause errors
-        Ok(OrderPaymentUpdateErrorDto { oid, lines: errors })
+        Ok(OrderPaymentUpdateErrorDto {
+            oid,
+            charge_time: None,
+            lines: errors,
+        })
     } // end of fn update_lines_payment
 
     async fn fetch_lines_by_rsvtime(

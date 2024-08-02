@@ -7,14 +7,16 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use ecommerce_common::api::dto::{OrderLinePayDto, PayAmountDto};
-use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
+use ecommerce_common::api::rpc::dto::{
+    OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderLinePayUpdateErrorReason,
+    OrderReplicaPaymentDto,
+};
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
 use crate::api::dto::{ShippingDto, ShippingMethod, ShippingOptionDto};
 use crate::api::rpc::dto::{
-    InventoryEditStockLevelDto, OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto,
-    OrderLinePayUpdateErrorReason, OrderLineReplicaRefundDto, OrderLineStockReservingDto,
+    InventoryEditStockLevelDto, OrderLineReplicaRefundDto, OrderLineStockReservingDto,
     OrderLineStockReturningDto,
 };
 use crate::api::web::dto::{
@@ -315,8 +317,8 @@ impl OrderLineModel {
     pub fn update_payments(
         models: &mut Vec<OrderLineModel>,
         data: Vec<OrderLinePaidUpdateDto>,
+        charge_time: DateTime<FixedOffset>,
     ) -> Vec<OrderLinePayUpdateErrorDto> {
-        let dt_now = LocalTime::now();
         data.into_iter()
             .filter_map(|d| {
                 let result = models.iter_mut().find(|m| {
@@ -325,24 +327,20 @@ impl OrderLineModel {
                         && (m.id_.product_type == d.product_type)
                 });
                 let possible_error = if let Some(m) = result {
-                    if dt_now < m.policy.reserved_until {
-                        if m.qty.reserved >= d.qty {
-                            if let Some(old_dt) = m.qty.paid_last_update.as_ref() {
-                                if old_dt < &d.time {
-                                    (m.qty.paid, m.qty.paid_last_update) = (d.qty, Some(d.time));
-                                    None
-                                } else {
-                                    Some(OrderLinePayUpdateErrorReason::Omitted)
-                                }
-                            } else {
-                                (m.qty.paid, m.qty.paid_last_update) = (d.qty, Some(d.time));
+                    if m.qty.reserved >= d.qty {
+                        if let Some(old_dt) = m.qty.paid_last_update.as_ref() {
+                            if old_dt < &charge_time {
+                                (m.qty.paid, m.qty.paid_last_update) = (d.qty, Some(charge_time));
                                 None
+                            } else {
+                                Some(OrderLinePayUpdateErrorReason::Omitted)
                             }
                         } else {
-                            Some(OrderLinePayUpdateErrorReason::InvalidQuantity)
-                        } // TODO, remove the quantity check, for payment failure rollback
+                            (m.qty.paid, m.qty.paid_last_update) = (d.qty, Some(charge_time));
+                            None
+                        }
                     } else {
-                        Some(OrderLinePayUpdateErrorReason::ReservationExpired)
+                        Some(OrderLinePayUpdateErrorReason::InvalidQuantity)
                     }
                 } else {
                     Some(OrderLinePayUpdateErrorReason::NotExist)

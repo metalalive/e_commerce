@@ -1,8 +1,10 @@
-use chrono::{Duration, Local, SubsecRound};
+use chrono::{DateTime, Duration, Local, SubsecRound};
 use tokio::time::{sleep, Duration as TokioDuration};
 
+use ecommerce_common::api::rpc::dto::{
+    OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto,
+};
 use ecommerce_common::constant::ProductType;
-use order::api::rpc::dto::{OrderLinePaidUpdateDto, OrderPaymentUpdateDto};
 use order::model::{OrderLineIdentity, OrderLineModel, OrderLineModelSet, StockLevelModelSet};
 use order::repository::{app_repo_order, AppStockRepoReserveReturn};
 
@@ -16,6 +18,19 @@ fn mock_reserve_usr_cb_0(
     let errors = ms.try_reserve(req);
     assert!(errors.is_empty());
     Ok(())
+}
+
+fn ut_update_payment_repo_cb(
+    saved_lines: &mut Vec<OrderLineModel>,
+    data: OrderPaymentUpdateDto,
+) -> Vec<OrderLinePayUpdateErrorDto> {
+    let OrderPaymentUpdateDto {
+        oid: _,
+        lines,
+        charge_time,
+    } = data;
+    let ctime = DateTime::parse_from_rfc3339(charge_time.as_str()).unwrap();
+    OrderLineModel::update_payments(saved_lines, lines, ctime)
 }
 
 #[cfg(feature = "mariadb")]
@@ -56,23 +71,22 @@ async fn update_payment_ok() {
                 product_id: 9003,
                 qty: 4,
                 product_type: ProductType::Item,
-                time: create_time + Duration::seconds(5),
             },
             OrderLinePaidUpdateDto {
                 seller_id: 1032,
                 product_id: 9010,
                 qty: 1,
                 product_type: ProductType::Package,
-                time: create_time + Duration::seconds(6),
             },
         ];
         OrderPaymentUpdateDto {
             oid: mock_oid.to_string(),
+            charge_time: (create_time + Duration::seconds(6)).to_rfc3339(),
             lines,
         }
     };
     let result = o_repo
-        .update_lines_payment(data, OrderLineModel::update_payments)
+        .update_lines_payment(data, ut_update_payment_repo_cb)
         .await;
     assert!(result.is_ok());
     if let Ok(usr_err) = result {
@@ -85,23 +99,22 @@ async fn update_payment_ok() {
                 product_id: 9010,
                 qty: 3,
                 product_type: ProductType::Package,
-                time: create_time + Duration::seconds(7),
             },
             OrderLinePaidUpdateDto {
                 seller_id: 1032,
                 product_id: 9011,
                 qty: 5,
                 product_type: ProductType::Item,
-                time: create_time + Duration::seconds(10),
             },
         ];
         OrderPaymentUpdateDto {
             oid: mock_oid.to_string(),
+            charge_time: (create_time + Duration::seconds(10)).to_rfc3339(),
             lines,
         }
     };
     let result = o_repo
-        .update_lines_payment(data, OrderLineModel::update_payments)
+        .update_lines_payment(data, ut_update_payment_repo_cb)
         .await;
     assert!(result.is_ok());
     if let Ok(usr_err) = result {
@@ -138,8 +151,8 @@ async fn update_payment_ok() {
                 let actual = line.qty.paid_last_update.unwrap().round_subsecs(1);
                 assert_eq!(actual, expect);
             };
-        fn1(lines.remove(0), 9003, 4, Duration::seconds(5));
-        fn1(lines.remove(0), 9010, 3, Duration::seconds(7));
+        fn1(lines.remove(0), 9003, 4, Duration::seconds(6));
+        fn1(lines.remove(0), 9010, 3, Duration::seconds(10));
         fn1(lines.remove(0), 9011, 5, Duration::seconds(10));
     }
 } // end of fn update_payment_ok

@@ -3,18 +3,18 @@ use std::future::Future;
 use std::pin::Pin;
 use std::result::Result as DefaultResult;
 
-use chrono::{DateTime, Duration as ChronoDuration, FixedOffset};
+use chrono::{DateTime, Duration as ChronoDuration};
 use rust_decimal::Decimal;
 use tokio::time::{sleep, Duration as TokioDuration};
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
-use ecommerce_common::error::AppErrorCode;
-
-use order::api::rpc::dto::{
+use ecommerce_common::api::rpc::dto::{
     OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderLinePayUpdateErrorReason,
     OrderPaymentUpdateDto,
 };
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
+
 use order::datastore::AppInMemoryDStore;
 use order::error::AppError;
 use order::model::{CurrencyModel, OrderCurrencyModel, OrderLineModel, OrderLineModelSet};
@@ -74,46 +74,42 @@ async fn ut_setup_saved_order(
 } // end of fn ut_setup_saved_order
 
 fn ut_setup_oline_new_payment(sellers_id: [u32; 2]) -> Vec<OrderLinePaidUpdateDto> {
-    let paid_time = [
-        "2023-11-17T09:23:50+05:00",
-        "2023-11-16T11:49:00+05:00",
-        "2023-11-16T18:09:51+08:00",
-    ]
-    .into_iter()
-    .map(|s| DateTime::parse_from_rfc3339(s).unwrap())
-    .collect::<Vec<DateTime<FixedOffset>>>();
     vec![
         OrderLinePaidUpdateDto {
             seller_id: sellers_id[1],
             product_type: ProductType::Item,
             product_id: 192,
             qty: 1,
-            time: paid_time[0],
         },
         OrderLinePaidUpdateDto {
             seller_id: sellers_id[0],
             product_type: ProductType::Item,
             product_id: 193,
             qty: 1,
-            time: paid_time[1],
         },
         OrderLinePaidUpdateDto {
             seller_id: sellers_id[0],
             product_type: ProductType::Package,
             product_id: 190,
             qty: 2,
-            time: paid_time[2],
         },
     ]
 }
 
 fn ut_usr_cb_ok_1(
     models: &mut Vec<OrderLineModel>,
-    data: Vec<OrderLinePaidUpdateDto>,
+    data: OrderPaymentUpdateDto,
 ) -> Vec<OrderLinePayUpdateErrorDto> {
     assert_eq!(models.len(), 3);
-    assert_eq!(data.len(), 3);
-    data.into_iter()
+    assert_eq!(data.lines.len(), 3);
+    let OrderPaymentUpdateDto {
+        oid: _,
+        lines,
+        charge_time,
+    } = data;
+    let dt_charge_time = DateTime::parse_from_rfc3339(charge_time.as_str()).unwrap();
+    lines
+        .into_iter()
         .map(|d| {
             let result = models.iter_mut().find(|m| {
                 m.id_.store_id == d.seller_id
@@ -125,17 +121,24 @@ fn ut_usr_cb_ok_1(
             assert_eq!(saved.qty.paid, 0);
             assert!(saved.qty.paid_last_update.is_none());
             saved.qty.paid = d.qty;
-            saved.qty.paid_last_update = Some(d.time);
+            saved.qty.paid_last_update = Some(dt_charge_time);
         })
         .count();
     vec![]
 }
 fn ut_usr_cb_ok_2(
     models: &mut Vec<OrderLineModel>,
-    data: Vec<OrderLinePaidUpdateDto>,
+    data: OrderPaymentUpdateDto,
 ) -> Vec<OrderLinePayUpdateErrorDto> {
     assert_eq!(models.len(), 3);
-    data.into_iter()
+    let OrderPaymentUpdateDto {
+        oid: _,
+        lines,
+        charge_time,
+    } = data;
+    let dt_charge_time = DateTime::parse_from_rfc3339(charge_time.as_str()).unwrap();
+    lines
+        .into_iter()
         .map(|d| {
             let result = models.iter().find(|m| {
                 m.id_.store_id == d.seller_id
@@ -147,7 +150,7 @@ fn ut_usr_cb_ok_2(
             assert_eq!(saved.qty.paid, d.qty);
             assert!(saved.qty.paid_last_update.is_some());
             if let Some(t) = saved.qty.paid_last_update.as_ref() {
-                assert_eq!(t, &d.time);
+                assert_eq!(t, &dt_charge_time);
             }
         })
         .count();
@@ -159,12 +162,14 @@ async fn in_mem_update_lines_payment_ok() {
     let mock_seller_ids = [19u32, 43];
     let oid = OrderLineModel::generate_order_id(7);
     let mock_repo_time = DateTime::parse_from_rfc3339("2023-12-24T14:30:41+02:00").unwrap();
+    let mock_charge_time = "2023-12-24T15:57:41+02:00".to_string();
     let o_repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(60, Some(mock_repo_time)).await;
     let lines = ut_setup_orderlines(&mock_seller_ids);
     ut_setup_save_stock(o_repo.stock(), mock_repo_time, &lines).await;
     ut_setup_saved_order(&o_repo, oid.clone(), 124, lines, mock_seller_ids).await;
     let data = OrderPaymentUpdateDto {
         oid: oid.clone(),
+        charge_time: mock_charge_time.clone(),
         lines: ut_setup_oline_new_payment(mock_seller_ids),
     };
     let result = o_repo.update_lines_payment(data, ut_usr_cb_ok_1).await;
@@ -177,6 +182,7 @@ async fn in_mem_update_lines_payment_ok() {
         // examine saved order lines
         let data = OrderPaymentUpdateDto {
             oid: oid.clone(),
+            charge_time: mock_charge_time.clone(),
             lines: ut_setup_oline_new_payment(mock_seller_ids),
         };
         let result = o_repo.update_lines_payment(data, ut_usr_cb_ok_2).await;
@@ -186,12 +192,13 @@ async fn in_mem_update_lines_payment_ok() {
 
 fn ut_usr_cb_err_1(
     models: &mut Vec<OrderLineModel>,
-    data: Vec<OrderLinePaidUpdateDto>,
+    data: OrderPaymentUpdateDto,
 ) -> Vec<OrderLinePayUpdateErrorDto> {
     assert_eq!(models.len(), 3);
-    assert_eq!(data.len(), 3);
+    assert_eq!(data.lines.len(), 3);
+    let dt_charge_time = DateTime::parse_from_rfc3339(data.charge_time.as_str()).unwrap();
     let mut err_reasons = vec![
-        OrderLinePayUpdateErrorReason::ReservationExpired,
+        OrderLinePayUpdateErrorReason::InvalidQuantity,
         OrderLinePayUpdateErrorReason::InvalidQuantity,
         OrderLinePayUpdateErrorReason::Omitted,
     ];
@@ -200,12 +207,13 @@ fn ut_usr_cb_err_1(
         .map(|m| {
             assert_eq!(m.qty.paid, 0);
             assert!(m.qty.paid_last_update.is_none());
-            let d = data.get(0).unwrap();
+            let d = data.lines.get(0).unwrap();
             m.qty.paid += d.qty;
-            m.qty.paid_last_update = Some(d.time.clone());
+            m.qty.paid_last_update = Some(dt_charge_time);
         })
         .count();
-    data.into_iter()
+    data.lines
+        .into_iter()
         .map(|d| OrderLinePayUpdateErrorDto {
             seller_id: d.seller_id,
             product_type: d.product_type,
@@ -217,10 +225,11 @@ fn ut_usr_cb_err_1(
 
 fn ut_usr_cb_err_2(
     models: &mut Vec<OrderLineModel>,
-    data: Vec<OrderLinePaidUpdateDto>,
+    data: OrderPaymentUpdateDto,
 ) -> Vec<OrderLinePayUpdateErrorDto> {
     assert_eq!(models.len(), 3);
-    data.into_iter()
+    data.lines
+        .into_iter()
         .map(|d| {
             let result = models.iter().find(|m| {
                 m.id_.store_id == d.seller_id
@@ -246,10 +255,11 @@ async fn in_mem_update_lines_payment_usr_cb_err() {
     ut_setup_save_stock(o_repo.stock(), mock_repo_time, &lines).await;
     ut_setup_saved_order(&o_repo, oid.clone(), 124, lines, mock_seller_ids).await;
     let mut lines = ut_setup_oline_new_payment(mock_seller_ids);
+    lines[0].qty = 9998;
     lines[1].qty = 9999;
-    lines[2].time = DateTime::parse_from_rfc3339("1999-07-31T23:59:59+09:00").unwrap();
     let data = OrderPaymentUpdateDto {
         oid: oid.clone(),
+        charge_time: "1999-07-31T23:59:59+09:00".to_string(),
         lines,
     };
     let result = o_repo.update_lines_payment(data, ut_usr_cb_err_1).await;
@@ -260,6 +270,7 @@ async fn in_mem_update_lines_payment_usr_cb_err() {
     } // examine the order lines, payment status should not be modified
     let data = OrderPaymentUpdateDto {
         oid,
+        charge_time: "1999-07-31T23:59:59+09:00".to_string(),
         lines: ut_setup_oline_new_payment(mock_seller_ids),
     };
     let result = o_repo.update_lines_payment(data, ut_usr_cb_err_2).await;
