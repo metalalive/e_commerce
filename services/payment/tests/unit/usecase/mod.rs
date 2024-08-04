@@ -5,20 +5,27 @@ use std::result::Result;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 
+use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
 use payment::adapter::cache::{AbstractOrderSyncLockCache, OrderSyncLockError};
 use payment::adapter::processor::{
-    AbstractPaymentProcessor, AppProcessorError, AppProcessorPayInResult,
+    AbstractPaymentProcessor, AppProcessorError, AppProcessorErrorReason, AppProcessorPayInResult,
 };
-use payment::adapter::repository::{AbstractChargeRepo, AppRepoError};
+use payment::adapter::repository::{
+    AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel,
+};
 use payment::adapter::rpc::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
     AppRpcClientRequest, AppRpcCtxError, AppRpcReply,
 };
 use payment::api::web::dto::PaymentMethodReqDto;
-use payment::model::{ChargeBuyerModel, ChargeMethodModel, OrderLineModelSet};
+use payment::model::{
+    ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, ChargeMethodModel,
+    OrderLineModelSet,
+};
 
 struct MockChargeRepo {
     _expect_unpaid_olines: Mutex<Option<Result<Option<OrderLineModelSet>, AppRepoError>>>,
@@ -50,6 +57,38 @@ impl AbstractChargeRepo for MockChargeRepo {
         let mut g = self._create_charge_result.lock().unwrap();
         let out = g.take().unwrap();
         out
+    }
+    async fn fetch_charge_meta(
+        &self,
+        _usr_id: u32,
+        _create_time: DateTime<Utc>,
+    ) -> Result<Option<ChargeBuyerMetaModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchChargeMeta,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+    async fn fetch_all_charge_lines(
+        &self,
+        _usr_id: u32,
+        _create_time: DateTime<Utc>,
+    ) -> Result<Vec<ChargeLineBuyerModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchAllChargeLines,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+    async fn update_charge_progress(
+        &self,
+        _meta: ChargeBuyerMetaModel,
+    ) -> Result<(), AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::UpdateChargeProgress,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
     }
 } // end of impl MockChargeRepo
 
@@ -128,5 +167,14 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         let mut g = self._payin_start_result.lock().unwrap();
         let out = g.take().unwrap();
         out
+    }
+
+    async fn pay_in_progress(
+        &self,
+        _meta: &ChargeBuyerMetaModel,
+    ) -> Result<ChargeMethodModel, AppProcessorError> {
+        Err(AppProcessorError {
+            reason: AppProcessorErrorReason::NotImplemented,
+        })
     }
 }

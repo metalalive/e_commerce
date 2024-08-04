@@ -6,6 +6,8 @@ use chrono::{
 };
 
 use ecommerce_common::api::dto::{CurrencyDto, GenericRangeErrorDto};
+use ecommerce_common::api::rpc::dto::{OrderLinePaidUpdateDto, OrderPaymentUpdateDto};
+use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::{
@@ -13,8 +15,8 @@ use super::{
     PayLineAmountModel,
 };
 use crate::api::web::dto::{
-    ChargeAmountOlineDto, ChargeOlineErrorDto, ChargeReqOrderDto, ChargeRespErrorDto,
-    OrderErrorReason,
+    ChargeAmountOlineDto, ChargeOlineErrorDto, ChargeRefreshRespDto, ChargeReqOrderDto,
+    ChargeRespErrorDto, ChargeStatusDto, OrderErrorReason,
 };
 use crate::hard_limit::{CREATE_CHARGE_SECONDS_INTERVAL, SECONDS_ORDERLINE_DISCARD_MARGIN};
 
@@ -33,7 +35,12 @@ pub enum BuyerPayInState {
     ProcessorAccepted(DateTime<Utc>),
     ProcessorCompleted(DateTime<Utc>),
     OrderAppSynced(DateTime<Utc>),
-    OrderAppExpired, // in such case, the charge should be converted to refund (TODO)
+    // TODO, consider to discard the state below, this should never happen.
+    // This model should report error when
+    // - attempting to convert `charge request DTO` to `ChargeBuyerMetaModel`
+    // - reservation time of an unpaid order line expires
+    #[warn(deprecated_in_future)]
+    OrderAppExpired,
 }
 
 pub struct ChargeLineBuyerModel {
@@ -64,6 +71,26 @@ impl BuyerPayInState {
             Self::OrderAppSynced(t) => Some((*t).into()),
         }
     }
+    pub(crate) fn completed(&self) -> bool {
+        matches!(self, Self::OrderAppSynced(_))
+    }
+}
+
+impl ChargeMethodModel {
+    pub(crate) fn pay_in_completed(&self) -> bool {
+        true // TODO, finish implementation
+    }
+}
+
+impl From<&ChargeBuyerMetaModel> for ChargeRefreshRespDto {
+    fn from(value: &ChargeBuyerMetaModel) -> Self {
+        Self {
+            order_id: value.oid.clone(),
+            create_time: value.create_time,
+            // TODO, convert from BuyerPayInState and ChargeMethodModel
+            status: ChargeStatusDto::PspProcessing,
+        }
+    }
 }
 
 impl From<(String, u32)> for ChargeBuyerMetaModel {
@@ -78,19 +105,40 @@ impl From<(String, u32)> for ChargeBuyerMetaModel {
         }
     }
 }
-impl ChargeBuyerMetaModel {
-    pub(crate) fn update_progress(
-        &mut self,
-        new_state: &BuyerPayInState,
-        new_method: ChargeMethodModel,
-    ) {
-        self.state = new_state.clone();
-        self.method = new_method;
-    }
 
+impl ChargeBuyerMetaModel {
+    pub(crate) fn update_progress(&mut self, new_state: &BuyerPayInState) {
+        let final_reached = matches!(self.state, BuyerPayInState::OrderAppSynced(_));
+        if !final_reached {
+            self.state = new_state.clone();
+        }
+    }
     pub(crate) fn token(&self) -> ChargeToken {
         // idenpotency token, derived by owner (user profile ID) and create time
         ChargeToken::encode(self.owner, self.create_time)
+    }
+    pub(crate) fn pay_update_dto(
+        &self,
+        chg_lines: Vec<ChargeLineBuyerModel>,
+    ) -> OrderPaymentUpdateDto {
+        let lines = chg_lines
+            .into_iter()
+            .map(OrderLinePaidUpdateDto::from)
+            .collect::<Vec<_>>();
+        OrderPaymentUpdateDto {
+            oid: self.oid.clone(),
+            charge_time: self.create_time.to_rfc3339(),
+            lines,
+        }
+    }
+}
+
+impl From<ChargeLineBuyerModel> for OrderLinePaidUpdateDto {
+    #[rustfmt::skip]
+    fn from(value: ChargeLineBuyerModel) -> Self {
+        let ChargeLineBuyerModel { pid, amount } = value;
+        let BaseProductIdentity { store_id, product_type, product_id } = pid;
+        Self { seller_id: store_id, product_id, product_type, qty: amount.qty }
     }
 }
 
@@ -167,6 +215,18 @@ impl ChargeBuyerModel {
     }
 }
 
+impl TryFrom<Vec<u8>> for ChargeToken {
+    type Error = (AppErrorCode, String);
+    fn try_from(_value: Vec<u8>) -> Result<Self, Self::Error> {
+        Err((AppErrorCode::NotImplemented, "todo".to_string()))
+    }
+}
+impl TryInto<(u32, DateTime<Utc>)> for ChargeToken {
+    type Error = (AppErrorCode, String);
+    fn try_into(self) -> Result<(u32, DateTime<Utc>), Self::Error> {
+        Err((AppErrorCode::NotImplemented, "todo".to_string()))
+    }
+}
 impl ChargeToken {
     pub fn encode(owner: u32, now: DateTime<Utc>) -> Self {
         let td = TimeDelta::seconds(CREATE_CHARGE_SECONDS_INTERVAL as i64);

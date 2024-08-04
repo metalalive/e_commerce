@@ -5,10 +5,14 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
-use crate::model::{BuyerPayInState, ChargeBuyerModel, OrderLineModelSet};
+use crate::model::{
+    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
+    OrderLineModelSet,
+};
 
 use self::mariadb::charge::MariadbChargeRepo;
 use super::datastore::{AppDStoreError, AppDataStoreContext};
@@ -19,6 +23,9 @@ pub enum AppRepoErrorFnLabel {
     GetUnpaidOlines,
     CreateOrder,
     CreateCharge,
+    FetchChargeMeta,
+    FetchAllChargeLines,
+    UpdateChargeProgress,
 }
 #[derive(Debug)]
 pub enum AppRepoErrorDetail {
@@ -62,8 +69,21 @@ pub trait AbstractChargeRepo: Sync + Send {
     ) -> Result<(), AppRepoError>;
 
     async fn create_charge(&self, cline_set: ChargeBuyerModel) -> Result<(), AppRepoError>;
-    // TODO, extra trait methods only for test data injection
-}
+
+    async fn fetch_charge_meta(
+        &self,
+        usr_id: u32,
+        create_time: DateTime<Utc>,
+    ) -> Result<Option<ChargeBuyerMetaModel>, AppRepoError>;
+
+    async fn fetch_all_charge_lines(
+        &self,
+        usr_id: u32,
+        create_time: DateTime<Utc>,
+    ) -> Result<Vec<ChargeLineBuyerModel>, AppRepoError>;
+
+    async fn update_charge_progress(&self, meta: ChargeBuyerMetaModel) -> Result<(), AppRepoError>;
+} // end of trait AbstractChargeRepo
 
 pub async fn app_repo_charge(
     dstore: Arc<AppDataStoreContext>,

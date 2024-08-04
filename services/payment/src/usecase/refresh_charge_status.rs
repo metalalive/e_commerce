@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Local, Utc};
 
+use ecommerce_common::api::rpc::dto::OrderPaymentUpdateErrorDto;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::util::hex_to_octet;
 
@@ -18,8 +19,10 @@ pub enum ChargeRefreshUcError {
     ChargeNotExist,
     DataStore(AppRepoError),
     RpcContext(AppRpcCtxError),
+    RpcContentSerialisation(String),
     ExternalProcessor(AppProcessorError),
     ChargeIdDecode(AppErrorCode, String),
+    RpcUpdateOrder(OrderPaymentUpdateErrorDto),
 }
 
 pub struct ChargeStatusRefreshUseCase {
@@ -118,18 +121,28 @@ impl ChargeStatusRefreshUseCase {
             .receive_response()
             .await
             .map_err(ChargeRefreshUcError::RpcContext)?;
-        // TODO
-        // - switch the rpc response to `OrderPaymentUpdateErrorDto`
-        // - inspect the rpc error
-        let _error = serde_json::from_slice::<serde_json::Value>(&reply.message);
-        Ok(())
-    } //
+        let resp_detail = serde_json::from_slice::<OrderPaymentUpdateErrorDto>(&reply.message)
+            .map_err(|e| ChargeRefreshUcError::RpcContentSerialisation(e.to_string()))?;
+        let has_err = resp_detail.charge_time.is_some() | !resp_detail.lines.is_empty();
+        if has_err {
+            Err(ChargeRefreshUcError::RpcUpdateOrder(resp_detail))
+        } else {
+            Ok(())
+        }
+    } // end of fn sync_order_app
 
     async fn rpc_build_charge_lines(
         &self,
-        _meta: &ChargeBuyerMetaModel,
+        meta: &ChargeBuyerMetaModel,
     ) -> Result<Vec<u8>, ChargeRefreshUcError> {
-        //TODO, load charged lines and serialise
-        Ok(Vec::new())
+        let chg_lines = self
+            .repo
+            .fetch_all_charge_lines(meta.owner, meta.create_time)
+            .await
+            .map_err(ChargeRefreshUcError::DataStore)?;
+        let update_dto = meta.pay_update_dto(chg_lines);
+        let serialised = serde_json::to_vec(&update_dto)
+            .map_err(|e| ChargeRefreshUcError::RpcContentSerialisation(e.to_string()))?;
+        Ok(serialised)
     }
 } // end of impl ChargeStatusRefreshUseCase

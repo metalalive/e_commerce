@@ -3,6 +3,7 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use mysql_async::prelude::{Query, Queryable, WithParams};
 use mysql_async::{Conn, IsolationLevel, Params, TxOpts};
@@ -13,7 +14,10 @@ use ecommerce_common::logging::{app_log_event, AppLogLevel};
 use ecommerce_common::model::order::BillingModel;
 
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
-use crate::model::{ChargeBuyerModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet};
+use crate::model::{
+    ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot,
+    OrderLineModel, OrderLineModelSet,
+};
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use super::charge_converter::InsertChargeArgs;
@@ -196,6 +200,41 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         }
         tx.commit().await.map_err(|e| {
             self._map_err_create_order(AppRepoErrorDetail::DatabaseTxCommit(e.to_string()))
+        })
+    }
+
+    async fn fetch_charge_meta(
+        &self,
+        _usr_id: u32,
+        _create_time: DateTime<Utc>,
+    ) -> Result<Option<ChargeBuyerMetaModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchChargeMeta,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
+    async fn fetch_all_charge_lines(
+        &self,
+        _usr_id: u32,
+        _create_time: DateTime<Utc>,
+    ) -> Result<Vec<ChargeLineBuyerModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchAllChargeLines,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
+    async fn update_charge_progress(
+        &self,
+        _meta: ChargeBuyerMetaModel,
+    ) -> Result<(), AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::UpdateChargeProgress,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
         })
     }
 } // end of impl MariadbChargeRepo

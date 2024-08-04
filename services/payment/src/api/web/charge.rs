@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use actix_web::body::BoxBody;
 use actix_web::error::{Error as ActixError, ResponseError};
-use actix_web::http::header::{ContentType, CONTENT_TYPE};
+use actix_web::http::header::{ContentType, TryIntoHeaderValue, CONTENT_TYPE};
 use actix_web::http::StatusCode;
 use actix_web::web::{Data as WebData, Json as ExtJson, Path as ExtPath};
 use actix_web::{HttpResponse, Result as ActixResult};
@@ -13,7 +13,9 @@ use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use super::dto::ChargeReqDto;
 use crate::adapter::datastore::AppDataStoreContext;
 use crate::adapter::repository::{app_repo_charge, AbstractChargeRepo};
-use crate::usecase::{ChargeCreateUcError, ChargeCreateUseCase, ChargeStatusRefreshUseCase};
+use crate::usecase::{
+    ChargeCreateUcError, ChargeCreateUseCase, ChargeRefreshUcError, ChargeStatusRefreshUseCase,
+};
 use crate::{AppAuthedClaim, AppSharedState};
 
 #[derive(Debug)]
@@ -108,12 +110,7 @@ pub(super) async fn refresh_charge_status(
 ) -> ActixResult<HttpResponse> {
     let charge_id_serial = path_segms.into_inner().0;
     let logctx = shr_state.log_context();
-    app_log_event!(
-        logctx,
-        AppLogLevel::DEBUG,
-        "charge-id-captured: {}",
-        charge_id_serial
-    );
+    app_log_event!(logctx, AppLogLevel::DEBUG, "charge-id: {charge_id_serial}");
 
     let repo = try_creating_charge_repo(shr_state.datastore(), logctx.clone()).await?;
     let uc = ChargeStatusRefreshUseCase {
@@ -121,10 +118,55 @@ pub(super) async fn refresh_charge_status(
         processors: shr_state.processor_context(),
         rpc_ctx: shr_state.rpc_context(),
     };
-    let _result = uc.execute(authed_claim.profile, charge_id_serial).await;
-    // TODO, analyze errors
-    let resp = HttpResponse::Ok()
-        .append_header((CONTENT_TYPE.as_str(), "application/json"))
-        .body("{}");
+    let result = uc.execute(authed_claim.profile, charge_id_serial).await;
+    let (http_status, body) = match result {
+        Ok(v) => {
+            let b = serde_json::to_vec(&v).unwrap();
+            (StatusCode::OK, b)
+        }
+        Err(e) => {
+            let s = match e {
+                ChargeRefreshUcError::OwnerMismatch => StatusCode::FORBIDDEN,
+                ChargeRefreshUcError::ChargeNotExist => StatusCode::NOT_FOUND,
+                ChargeRefreshUcError::RpcContext(_e) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "low-lvl-rpc-ctx");
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+                ChargeRefreshUcError::DataStore(e) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+                ChargeRefreshUcError::ChargeIdDecode(ecode, detail) => {
+                    app_log_event!(
+                        logctx,
+                        AppLogLevel::WARNING,
+                        "code:{:?}, detail:{}",
+                        ecode,
+                        detail
+                    );
+                    StatusCode::BAD_REQUEST
+                }
+                ChargeRefreshUcError::RpcContentSerialisation(detail) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "detail:{detail}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+                ChargeRefreshUcError::ExternalProcessor(e) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+                ChargeRefreshUcError::RpcUpdateOrder(e) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+            };
+            (s, b"{}".to_vec())
+        }
+    };
+    let resp = {
+        let mut r = HttpResponse::new(http_status);
+        let ctype = ContentType::json().try_into_value().unwrap();
+        r.headers_mut().insert(CONTENT_TYPE, ctype);
+        r.set_body(BoxBody::new(body))
+    };
     Ok(resp)
 }

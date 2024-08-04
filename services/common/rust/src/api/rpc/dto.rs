@@ -19,16 +19,16 @@ pub struct OrderReplicaPaymentDto {
     pub billing: BillingDto,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct OrderLinePaidUpdateDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(deserialize_with = "jsn_validate_product_type")]
+    #[serde(serialize_with = "jsn_serialize_product_type", deserialize_with = "jsn_validate_product_type")]
     pub product_type: ProductType,
     pub qty: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct OrderPaymentUpdateDto {
     pub oid: String,
     // stringified date time with UTC time zone
@@ -36,22 +36,22 @@ pub struct OrderPaymentUpdateDto {
     pub lines: Vec<OrderLinePaidUpdateDto>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum OrderLinePayUpdateErrorReason {
     NotExist,
     InvalidQuantity,
     Omitted,
 }
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct OrderLinePayUpdateErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(serialize_with = "jsn_serialize_product_type")]
+    #[serde(serialize_with = "jsn_serialize_product_type", deserialize_with = "jsn_validate_product_type")]
     pub product_type: ProductType,
     pub reason: OrderLinePayUpdateErrorReason,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct OrderPaymentUpdateErrorDto {
     pub oid: String,
     pub charge_time: Option<String>,

@@ -17,7 +17,7 @@ use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripe
 use crate::api::web::dto::{
     ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
 };
-use crate::model::{BuyerPayInState, ChargeBuyerModel, ChargeMethodModel};
+use crate::model::{BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeMethodModel};
 
 #[async_trait]
 pub trait AbstractPaymentProcessor: Send + Sync {
@@ -26,6 +26,11 @@ pub trait AbstractPaymentProcessor: Send + Sync {
         charge_m: &ChargeBuyerModel,
         req_mthd: PaymentMethodReqDto,
     ) -> Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError>;
+
+    async fn pay_in_progress(
+        &self,
+        meta: &ChargeBuyerMetaModel,
+    ) -> Result<ChargeMethodModel, AppProcessorError>;
 }
 
 struct AppProcessorContext {
@@ -154,6 +159,15 @@ impl AbstractPaymentProcessor for AppProcessorContext {
             PaymentMethodReqDto::Stripe(c) => self._stripe.pay_in_start(&c, charge_m).await?,
         };
         Ok(out)
+    }
+
+    async fn pay_in_progress(
+        &self,
+        _meta: &ChargeBuyerMetaModel,
+    ) -> Result<ChargeMethodModel, AppProcessorError> {
+        Err(AppProcessorError {
+            reason: AppProcessorErrorReason::NotImplemented,
+        })
     }
 }
 
