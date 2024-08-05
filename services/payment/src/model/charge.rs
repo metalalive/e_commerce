@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::result::Result;
 
+use chrono::offset::LocalResult;
 use chrono::{
-    DateTime, Datelike, Duration, DurationRound, FixedOffset, Local, TimeDelta, Timelike, Utc,
+    DateTime, Datelike, Duration, DurationRound, FixedOffset, Local, TimeDelta, TimeZone, Timelike,
+    Utc,
 };
 
 use ecommerce_common::api::dto::{CurrencyDto, GenericRangeErrorDto};
@@ -21,13 +23,26 @@ use crate::api::web::dto::{
 use crate::hard_limit::{CREATE_CHARGE_SECONDS_INTERVAL, SECONDS_ORDERLINE_DISCARD_MARGIN};
 
 pub enum ChargeMethodModel {
+    // TODO, rename to Charge3partyModel
     Unknown,
     Stripe(ChargeMethodStripeModel),
 }
 
-const CHARGE_TOKEN_NBYTES: usize = 9;
+mod token_inner {
+    pub const NBYTES: usize = 9;
+    pub(super) mod encoding {
+        // bit length for each goven token
+        pub const USR_ID: u8 = 32;
+        pub const T_YEAR: u8 = 14;
+        pub const T_MONTH: u8 = 4;
+        pub const T_DAY: u8 = 5;
+        pub const T_HOUR: u8 = 5;
+        pub const T_MINUTE: u8 = 6;
+        pub const T_SECOND: u8 = 6;
+    }
+}
 
-pub struct ChargeToken(pub [u8; CHARGE_TOKEN_NBYTES]);
+pub struct ChargeToken(pub [u8; token_inner::NBYTES]);
 
 #[derive(Debug, Clone)]
 pub enum BuyerPayInState {
@@ -39,7 +54,7 @@ pub enum BuyerPayInState {
     // This model should report error when
     // - attempting to convert `charge request DTO` to `ChargeBuyerMetaModel`
     // - reservation time of an unpaid order line expires
-    #[warn(deprecated_in_future)]
+    #[warn(useless_deprecated)]
     OrderAppExpired,
 }
 
@@ -65,30 +80,69 @@ pub struct ChargeBuyerModel {
 impl BuyerPayInState {
     pub fn create_time(&self) -> Option<DateTime<FixedOffset>> {
         match self {
-            Self::Initialized | Self::OrderAppExpired => None,
+            Self::Initialized => None,
             Self::ProcessorAccepted(t) => Some((*t).into()), // implicit copy
             Self::ProcessorCompleted(t) => Some((*t).into()),
             Self::OrderAppSynced(t) => Some((*t).into()),
+            _others => {
+                panic!("");
+            }
         }
     }
+    // the method `completed` indicates whether the customer has done all
+    // necessary steps in the pay-in operation, including interaction with
+    // 3rd-party processor and sync with internal order app
     pub(crate) fn completed(&self) -> bool {
         matches!(self, Self::OrderAppSynced(_))
+    }
+    fn status_dto(&self, mthd: &ChargeMethodModel) -> (ChargeStatusDto, DateTime<Utc>) {
+        let now = Local::now().to_utc();
+        match self {
+            Self::OrderAppSynced(t) => (ChargeStatusDto::Completed, *t),
+            // FIXME, it is possible that buy-in state is `completed` but the state
+            // from 3rd party processor is `processing`
+            Self::ProcessorCompleted(t) => (mthd.status_dto(), *t),
+            Self::ProcessorAccepted(_t) => (mthd.status_dto(), now),
+            Self::Initialized => (ChargeStatusDto::Initialized, now),
+            _others => {
+                panic!("");
+            }
+        }
     }
 }
 
 impl ChargeMethodModel {
-    pub(crate) fn pay_in_completed(&self) -> bool {
-        true // TODO, finish implementation
+    // The method `pay_in_completed` indicates whether 3rd-party processor has
+    // done and confirmed with the charge initiated by a client during the
+    // entire pay-in flow.
+    //
+    // the return value could be `None` if 3rd party has not completed,
+    // or `Some()` with boolean which means whether the charge has been confirmed
+    // successfully by a client
+    //
+    // Note 3rd party might complete without confirmation, in such case the charge
+    // model should be no longer valid and discarded (TODO)
+    pub fn pay_in_comfirmed(&self) -> Option<bool> {
+        match self {
+            Self::Unknown => Some(false),
+            Self::Stripe(m) => m.pay_in_comfirmed(),
+        }
+    }
+    fn status_dto(&self) -> ChargeStatusDto {
+        match self {
+            Self::Unknown => ChargeStatusDto::UnknownPsp,
+            Self::Stripe(m) => m.status_dto(),
+        }
     }
 }
 
 impl From<&ChargeBuyerMetaModel> for ChargeRefreshRespDto {
     fn from(value: &ChargeBuyerMetaModel) -> Self {
+        let arg = value.state.status_dto(&value.method);
         Self {
             order_id: value.oid.clone(),
-            create_time: value.create_time,
-            // TODO, convert from BuyerPayInState and ChargeMethodModel
-            status: ChargeStatusDto::PspProcessing,
+            create_time: arg.1,
+            status: arg.0,
         }
     }
 }
@@ -108,8 +162,7 @@ impl From<(String, u32)> for ChargeBuyerMetaModel {
 
 impl ChargeBuyerMetaModel {
     pub(crate) fn update_progress(&mut self, new_state: &BuyerPayInState) {
-        let final_reached = matches!(self.state, BuyerPayInState::OrderAppSynced(_));
-        if !final_reached {
+        if !self.state.completed() {
             self.state = new_state.clone();
         }
     }
@@ -217,14 +270,18 @@ impl ChargeBuyerModel {
 
 impl TryFrom<Vec<u8>> for ChargeToken {
     type Error = (AppErrorCode, String);
-    fn try_from(_value: Vec<u8>) -> Result<Self, Self::Error> {
-        Err((AppErrorCode::NotImplemented, "todo".to_string()))
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let v = value
+            .try_into()
+            .map_err(|orig| (AppErrorCode::DataCorruption, format!("{:?}", orig)))?;
+        Ok(Self(v))
     }
 }
 impl TryInto<(u32, DateTime<Utc>)> for ChargeToken {
     type Error = (AppErrorCode, String);
     fn try_into(self) -> Result<(u32, DateTime<Utc>), Self::Error> {
-        Err((AppErrorCode::NotImplemented, "todo".to_string()))
+        self.decode()
+            .map_err(|detail| (AppErrorCode::DataCorruption, detail))
     }
 }
 impl ChargeToken {
@@ -232,20 +289,20 @@ impl ChargeToken {
         let td = TimeDelta::seconds(CREATE_CHARGE_SECONDS_INTERVAL as i64);
         let now = now.duration_round(td).unwrap();
         let given = [
-            (owner, 32u8),
-            (now.year_ce().1, 14),
-            (now.month(), 4),
-            (now.day(), 5),
-            (now.hour(), 5),
-            (now.minute(), 6),
-            (now.second(), 6),
+            (owner, token_inner::encoding::USR_ID),
+            (now.year_ce().1, token_inner::encoding::T_YEAR),
+            (now.month(), token_inner::encoding::T_MONTH),
+            (now.day(), token_inner::encoding::T_DAY),
+            (now.hour(), token_inner::encoding::T_HOUR),
+            (now.minute(), token_inner::encoding::T_MINUTE),
+            (now.second(), token_inner::encoding::T_SECOND),
         ];
         let inner = Self::compact_bitvec(given);
         Self(inner.try_into().unwrap())
     }
     fn compact_bitvec(data: [(u32, u8); 7]) -> Vec<u8> {
         let nbits_req = data.iter().map(|(_, sz)| *sz as usize).sum::<usize>();
-        let nbits_limit = CHARGE_TOKEN_NBYTES << 3;
+        let nbits_limit = token_inner::NBYTES << 3;
         assert!(nbits_limit >= nbits_req);
         let mut out: Vec<u8> = Vec::new();
         let mut nbit_avail_last = 0u8; // range 0 to 7
@@ -287,6 +344,49 @@ impl ChargeToken {
 
     fn bitmask_msb8(n: u8) -> u8 {
         0xffu8 << n
+    }
+
+    fn decode(self) -> Result<(u32, DateTime<Utc>), String> {
+        let fields_len = [
+            token_inner::encoding::USR_ID,
+            token_inner::encoding::T_YEAR,
+            token_inner::encoding::T_MONTH,
+            token_inner::encoding::T_DAY,
+            token_inner::encoding::T_HOUR,
+            token_inner::encoding::T_MINUTE,
+            token_inner::encoding::T_SECOND,
+        ];
+        let elms = Self::extract_bitvec(self.0, fields_len);
+        let usr_id = elms[0];
+        let result =
+            Utc.with_ymd_and_hms(elms[1] as i32, elms[2], elms[3], elms[4], elms[5], elms[6]);
+        match result {
+            LocalResult::Single(t) => Ok((usr_id, t)),
+            LocalResult::Ambiguous(_t0, _t1) => Err("ambiguous-time".to_string()),
+            LocalResult::None => Err("invalid-time-serial".to_string()),
+        }
+    }
+
+    fn extract_bitvec(given: [u8; token_inner::NBYTES], fields_len: [u8; 7]) -> [u32; 7] {
+        let mut out = [0u32; 7];
+        let mut bit_idx = 0usize;
+        for (i, len) in fields_len.into_iter().enumerate() {
+            let mut value = 0u32;
+            let mut nbits_remaining = len as usize;
+            while nbits_remaining > 0 {
+                let octet_idx = bit_idx >> 3;
+                let bit_offset = bit_idx & 0x7;
+                let bits_in_current_octet = std::cmp::min(nbits_remaining, 8 - bit_offset);
+                let mask = ((1 << bits_in_current_octet) - 1) as u8;
+                let extracted_bits =
+                    (given[octet_idx] >> (8 - bit_offset - bits_in_current_octet)) & mask;
+                value = (value << bits_in_current_octet) | extracted_bits as u32;
+                nbits_remaining -= bits_in_current_octet;
+                bit_idx += bits_in_current_octet;
+            }
+            out[i] = value;
+        }
+        out
     }
 } // end of impl ChargeToken
 

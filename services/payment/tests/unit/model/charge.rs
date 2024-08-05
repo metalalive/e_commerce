@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, FixedOffset, Local};
+use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{
@@ -6,12 +6,17 @@ use ecommerce_common::api::dto::{
     OrderSellerCurrencyDto, PayAmountDto,
 };
 use ecommerce_common::constant::ProductType;
+use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
-use payment::api::web::dto::{ChargeAmountOlineDto, ChargeReqOrderDto, OrderErrorReason};
+use payment::api::web::dto::{
+    ChargeAmountOlineDto, ChargeRefreshRespDto, ChargeReqOrderDto, ChargeStatusDto,
+    OrderErrorReason,
+};
 use payment::model::{
-    BuyerPayInState, ChargeBuyerModel, ChargeToken, OrderLineModelSet, OrderModelError,
-    PayLineAmountError, PayLineAmountModel,
+    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeMethodModel,
+    ChargeMethodStripeModel, ChargeToken, OrderLineModelSet, OrderModelError, PayLineAmountError,
+    PayLineAmountModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 fn ut_default_currency_snapshot_dto(seller_ids: Vec<u32>) -> OrderCurrencySnapshotDto {
@@ -347,7 +352,7 @@ async fn order_replica_convert_invalid_amount() {
 } // end of fn order_replica_convert_invalid_amount
 
 #[actix_web::test]
-async fn charge_buyer_convert_ok_1() {
+async fn buyer_convert_ok_1() {
     let (mock_usr_id, mock_oid) = (582, "phidix".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -405,10 +410,10 @@ async fn charge_buyer_convert_ok_1() {
             })
             .count();
     }
-} // end of fn charge_buyer_convert_ok_1
+} // end of fn buyer_convert_ok_1
 
 #[actix_web::test]
-async fn charge_buyer_convert_ok_2() {
+async fn buyer_convert_ok_2() {
     let (mock_usr_id, mock_oid) = (584, "NikuSan".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mut mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -473,10 +478,10 @@ async fn charge_buyer_convert_ok_2() {
             })
             .count();
     }
-} // end of fn charge_buyer_convert_ok_2
+} // end of fn buyer_convert_ok_2
 
 #[actix_web::test]
-async fn charge_buyer_convert_oid_mismatch() {
+async fn buyer_convert_oid_mismatch() {
     let mock_usr_id = 585;
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, "lemon".to_string(), reserved_until);
@@ -494,10 +499,10 @@ async fn charge_buyer_convert_oid_mismatch() {
             assert!(false);
         }
     }
-} // end of fn charge_buyer_convert_oid_mismatch
+} // end of fn buyer_convert_oid_mismatch
 
 #[actix_web::test]
-async fn charge_buyer_convert_currency_mismatch() {
+async fn buyer_convert_currency_mismatch() {
     let mock_usr_id = 585;
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, "lemon".to_string(), reserved_until);
@@ -514,10 +519,10 @@ async fn charge_buyer_convert_currency_mismatch() {
             assert_eq!(detail, CurrencyDto::TWD);
         }
     }
-} // end of fn charge_buyer_convert_currency_mismatch
+} // end of fn buyer_convert_currency_mismatch
 
 #[actix_web::test]
-async fn charge_buyer_convert_expired() {
+async fn buyer_convert_expired() {
     let (mock_usr_id, mock_oid) = (586, "UncleRoger".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(1);
     let mut mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -571,10 +576,10 @@ async fn charge_buyer_convert_expired() {
             assert!(false);
         }
     }
-} // end of fn charge_buyer_convert_expired
+} // end of fn buyer_convert_expired
 
 #[actix_web::test]
-async fn charge_buyer_convert_qty_exceed_limit() {
+async fn buyer_convert_qty_exceed_limit() {
     let (mock_usr_id, mock_oid) = (587, "hijurie3k7".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mut mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -633,10 +638,10 @@ async fn charge_buyer_convert_qty_exceed_limit() {
             assert!(false);
         }
     }
-} // end of  fn charge_buyer_convert_qty_exceed_limit
+} // end of  fn buyer_convert_qty_exceed_limit
 
 #[actix_web::test]
-async fn charge_buyer_convert_amount_mismatch_1() {
+async fn buyer_convert_amount_mismatch_1() {
     let (mock_usr_id, mock_oid) = (589, "nova".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -685,10 +690,10 @@ async fn charge_buyer_convert_amount_mismatch_1() {
                 .count();
         }
     }
-} // end of fn charge_buyer_convert_amount_mismatch_1
+} // end of fn buyer_convert_amount_mismatch_1
 
 #[actix_web::test]
-async fn charge_buyer_convert_amount_mismatch_2() {
+async fn buyer_convert_amount_mismatch_2() {
     let (mock_usr_id, mock_oid) = (587, "hijurie3k7".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -736,12 +741,155 @@ async fn charge_buyer_convert_amount_mismatch_2() {
                 .count();
         }
     }
-} // end of fn charge_buyer_convert_amount_mismatch_2
+} // end of fn buyer_convert_amount_mismatch_2
+
+fn ut_default_charge_3pty_stripe(
+    session_state: StripeSessionStatusModel,
+    payment_state: StripeCheckoutPaymentStatusModel,
+) -> ChargeMethodModel {
+    let s = ChargeMethodStripeModel {
+        checkout_session_id: "mock-unit-test".to_string(),
+        session_state,
+        payment_state,
+        payment_intent_id: "mock-unit-test".to_string(),
+        expiry: Local::now().to_utc() + Duration::minutes(10),
+    };
+    ChargeMethodModel::Stripe(s)
+}
 
 #[test]
-fn charge_token_encode_ok() {
-    #[rustfmt::skip]
+fn buyer_meta_to_resp_dto_ok() {
+    let mock_owner = 1717u32;
+    let mock_now_time = Local::now().to_utc();
+    let mock_oid = "b90b273c72".to_string();
     [
+        (
+            BuyerPayInState::Initialized,
+            StripeSessionStatusModel::open,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            ChargeStatusDto::Initialized,
+        ),
+        (
+            BuyerPayInState::ProcessorAccepted(mock_now_time + Duration::minutes(1)),
+            StripeSessionStatusModel::open,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            ChargeStatusDto::PspProcessing,
+        ),
+        (
+            BuyerPayInState::ProcessorAccepted(mock_now_time + Duration::minutes(1)),
+            StripeSessionStatusModel::complete,
+            StripeCheckoutPaymentStatusModel::paid,
+            ChargeStatusDto::InternalSyncing,
+        ),
+        (
+            BuyerPayInState::ProcessorAccepted(mock_now_time + Duration::minutes(1)),
+            StripeSessionStatusModel::complete,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            ChargeStatusDto::PspRefused,
+        ),
+        (
+            BuyerPayInState::ProcessorAccepted(mock_now_time + Duration::minutes(1)),
+            StripeSessionStatusModel::expired,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            ChargeStatusDto::SessionExpired,
+        ),
+        (
+            BuyerPayInState::ProcessorCompleted(mock_now_time + Duration::minutes(2)),
+            StripeSessionStatusModel::open,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            ChargeStatusDto::PspProcessing,
+        ),
+        (
+            BuyerPayInState::ProcessorCompleted(mock_now_time + Duration::minutes(2)),
+            StripeSessionStatusModel::complete,
+            StripeCheckoutPaymentStatusModel::paid,
+            ChargeStatusDto::InternalSyncing,
+        ),
+        (
+            BuyerPayInState::ProcessorCompleted(mock_now_time + Duration::minutes(2)),
+            StripeSessionStatusModel::complete,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            ChargeStatusDto::PspRefused,
+        ),
+        (
+            BuyerPayInState::ProcessorCompleted(mock_now_time + Duration::minutes(2)),
+            StripeSessionStatusModel::expired,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            ChargeStatusDto::SessionExpired,
+        ),
+        (
+            BuyerPayInState::OrderAppSynced(mock_now_time + Duration::minutes(3)),
+            StripeSessionStatusModel::complete,
+            StripeCheckoutPaymentStatusModel::paid,
+            ChargeStatusDto::Completed,
+        ),
+    ]
+    .into_iter()
+    .map(|(payin_state, session_3pty, payment_3pty, _expect_dto)| {
+        // FIXME, linter false alarm, `_expect_dto` is actually used
+        let mock_method = ut_default_charge_3pty_stripe(session_3pty, payment_3pty);
+        let meta = ChargeBuyerMetaModel {
+            owner: mock_owner,
+            create_time: mock_now_time,
+            oid: mock_oid.clone(),
+            state: payin_state,
+            method: mock_method,
+        };
+        let resp = ChargeRefreshRespDto::from(&meta);
+        let cond = matches!(resp.status, _expect_dto);
+        assert!(cond);
+        assert_eq!(resp.order_id, mock_oid.clone());
+    })
+    .count();
+} // end of fn buyer_meta_to_resp_dto_ok
+
+#[test]
+fn buyer_3pty_pay_in_confirm() {
+    [
+        (
+            StripeSessionStatusModel::open,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            None,
+        ),
+        (
+            StripeSessionStatusModel::open,
+            StripeCheckoutPaymentStatusModel::paid,
+            None,
+        ),
+        (
+            StripeSessionStatusModel::complete,
+            StripeCheckoutPaymentStatusModel::paid,
+            Some(true),
+        ),
+        (
+            StripeSessionStatusModel::complete,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            Some(false),
+        ),
+        (
+            StripeSessionStatusModel::expired,
+            StripeCheckoutPaymentStatusModel::unpaid,
+            Some(false),
+        ),
+        (
+            StripeSessionStatusModel::expired,
+            StripeCheckoutPaymentStatusModel::paid,
+            Some(false),
+        ),
+    ]
+    .into_iter()
+    .map(|(session_3pty, payment_3pty, expect)| {
+        let mock_3pty = ut_default_charge_3pty_stripe(session_3pty, payment_3pty);
+        let actual = mock_3pty.pay_in_comfirmed();
+        assert_eq!(actual, expect);
+    })
+    .count();
+} // end of fn buyer_3pty_pay_in_confirm
+
+#[rustfmt::skip]
+#[test]
+fn charge_token_encode_ok() {
+    let given_data = [
         (
             8374u32,
             "1998-10-31T18:38:25+00:00",
@@ -757,12 +905,47 @@ fn charge_token_encode_ok() {
             "2019-01-17T00:59:35+00:00",
             [0x05, 0xfa, 0x4e, 0xe6, 0x1f, 0x8c | 0x0, 0x40 | 0x22 | 0x0, 0x0 | 0xe, 0xc0 | 0x23],
         ),
-    ]
-    .into_iter()
-    .map(|(mock_usr_id, time_serial, expect_encoded)| {
-        let mock_ctime = DateTime::parse_from_rfc3339(time_serial).unwrap().to_utc();
-        let actual = ChargeToken::encode(mock_usr_id, mock_ctime);
-        assert_eq!(actual.0, expect_encoded);
-    })
-    .count();
-}
+        (
+            305419896,
+            "2015-12-07T13:47:05+00:00",
+            [0x12, 0x34, 0x56, 0x78, 0x1f, 0x7F, 0x0E, 0xdb, 0xc5],
+        ),
+        (
+            1122867,
+            "2007-02-28T06:25:40+00:00",
+            [0x00, 0x11, 0x22, 0x33, 0x1f, 0x5c, 0xb8, 0x66, 0x68],
+        ),
+    ];
+    given_data
+        .clone()
+        .into_iter()
+        .map(|(mock_usr_id, time_serial, expect_encoded)| {
+            let mock_ctime = DateTime::parse_from_rfc3339(time_serial).unwrap().to_utc();
+            let actual = ChargeToken::encode(mock_usr_id, mock_ctime);
+            assert_eq!(actual.0, expect_encoded);
+        })
+        .count();
+    given_data
+        .into_iter()
+        .map(|(expect_usr_id, time_serial, tok_encoded)| {
+            let expect_time = DateTime::parse_from_rfc3339(time_serial).unwrap();
+            let tok = ChargeToken::try_from(tok_encoded.to_vec()).unwrap();
+            let actual: (u32, DateTime<Utc>) = tok.try_into().unwrap();
+            assert_eq!(actual.0, expect_usr_id);
+            assert_eq!(actual.1, expect_time);
+        })
+        .count();
+} // end of fn charge_token_encode_ok
+
+#[rustfmt::skip]
+#[test]
+fn charge_token_decode_err() {
+    // year of the time is zero
+    let data = [0x00, 0x11, 0x22, 0x33, 0x1f, 0x50, 0x00, 0x66, 0x68];
+    let tok = ChargeToken::try_from(data.to_vec()).unwrap();
+    let result: Result<(u32, DateTime<Utc>), (AppErrorCode, String)> = tok.try_into();
+    assert!(result.is_err());
+    if let Err((code, _detail)) = result {
+        assert_eq!(code, AppErrorCode::DataCorruption);
+    }
+} // end of fn charge_token_decode_err

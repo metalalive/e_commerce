@@ -49,15 +49,16 @@ impl ChargeStatusRefreshUseCase {
             .await
             .map_err(ChargeRefreshUcError::DataStore)?
             .ok_or(ChargeRefreshUcError::ChargeNotExist)?;
-        let proceed_allowed = if saved_meta.method.pay_in_completed() {
-            true
-        } else {
-            self.refresh_3pty_processor(&mut saved_meta).await?
+        let proceed_allowed = match saved_meta.method.pay_in_comfirmed() {
+            Some(confirmed) => confirmed,
+            None => self.refresh_3pty_processor(&mut saved_meta).await?,
         };
         if proceed_allowed && !saved_meta.state.completed() {
             self.sync_order_app(&mut saved_meta).await?;
         }
         let resp = ChargeRefreshRespDto::from(&saved_meta);
+        // TODO, logging dto if buy-in state is `completed` but the state
+        // from 3rd party processor is `processing`
         self.repo
             .update_charge_progress(saved_meta)
             .await
@@ -84,14 +85,19 @@ impl ChargeStatusRefreshUseCase {
             .pay_in_progress(meta)
             .await
             .map_err(ChargeRefreshUcError::ExternalProcessor)?;
-        let is_completed = mthd_3pty.pay_in_completed();
-        if is_completed {
-            let now = Local::now().to_utc();
-            let new_state = BuyerPayInState::ProcessorCompleted(now);
-            meta.update_progress(&new_state);
-            meta.method = mthd_3pty;
-        }
-        Ok(is_completed)
+        let proceed_allowed = mthd_3pty
+            .pay_in_comfirmed()
+            .map(|confirmed| {
+                if confirmed {
+                    let now = Local::now().to_utc();
+                    let new_state = BuyerPayInState::ProcessorCompleted(now);
+                    meta.update_progress(&new_state);
+                    meta.method = mthd_3pty;
+                }
+                confirmed
+            })
+            .unwrap_or(false);
+        Ok(proceed_allowed)
     }
 
     async fn sync_order_app(

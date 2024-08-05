@@ -112,24 +112,28 @@ pub struct ChargeRespErrorDto {
 #[derive(Serialize)]
 pub enum ChargeStatusDto {
     // --- retryable ---
-    // session initialized, customer hasn't approved the final payment yet
-    SessionInitialized,
-    // payment refused at 3rd-party provider (PSP) for some reasons
-    // e.g. 3D secure validation failure
-    PspRefused,
+    Initialized,
     // is it possible the PSP is still processing on refreshing
     // this charge status
     PspProcessing,
     // network error to PSP
     PspTimedOut,
+    // happened after 3rd party processor is done before remote order
+    // app is synced with the charge update
+    InternalSyncing,
     // --- non-retryable ---
+    // when front-end clients receive following status, they don't need to refresh
+    // charge status again because backend will not change anything
+    // -----
+    // payment refused at 3rd-party provider (PSP) for some reasons
+    // e.g. 3D secure validation failure
+    PspRefused,
     // charge session has expired, the expiry time specified by 3rd-party PSP
     SessionExpired,
-    // happened when customer decided to cancel the charge at PSP host payment page
-    Cancelled,
     // customer completed the charge, now issuing bank may authorise the transfer
     // then merchant can capture the fund
     Completed,
+    UnknownPsp,
 }
 
 #[derive(Serialize)]
