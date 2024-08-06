@@ -18,8 +18,7 @@ pub enum StripeCheckoutPaymentStatusModel {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ChargeMethodStripeModel {
-    // TODO, rename to Charge3partyStripeModel
+pub struct Charge3partyStripeModel {
     pub checkout_session_id: String,
     pub session_state: StripeSessionStatusModel,
     pub payment_state: StripeCheckoutPaymentStatusModel,
@@ -53,7 +52,7 @@ impl StripeSessionStatusModel {
         matches!(self, Self::expired)
     }
 }
-impl ChargeMethodStripeModel {
+impl Charge3partyStripeModel {
     pub(super) fn status_dto(&self) -> ChargeStatusDto {
         self.session_state.status_dto(&self.payment_state)
     }

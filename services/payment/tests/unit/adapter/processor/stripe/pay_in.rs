@@ -7,8 +7,8 @@ use payment::api::web::dto::{
     PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutUImodeDto,
 };
 use payment::model::{
-    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    ChargeMethodModel, PayLineAmountModel, StripeCheckoutPaymentStatusModel,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
+    ChargeLineBuyerModel, PayLineAmountModel, StripeCheckoutPaymentStatusModel,
     StripeSessionStatusModel,
 };
 
@@ -44,7 +44,7 @@ fn ut_setup_chargebuyer_stripe(
         create_time: ctime,
         oid: order_id.to_string(),
         state: BuyerPayInState::Initialized,
-        method: ChargeMethodModel::Unknown,
+        method: Charge3partyModel::Unknown,
     };
     ChargeBuyerModel {
         lines,
@@ -105,7 +105,7 @@ async fn pay_in_ok() {
         }
     }
     match &charge_mthd_m {
-        ChargeMethodModel::Stripe(m) => {
+        Charge3partyModel::Stripe(m) => {
             assert!(!m.checkout_session_id.is_empty());
             assert!(!m.payment_intent_id.is_empty());
             let cond = matches!(m.session_state, StripeSessionStatusModel::open);
@@ -113,7 +113,7 @@ async fn pay_in_ok() {
             let cond = matches!(m.payment_state, StripeCheckoutPaymentStatusModel::unpaid);
             assert!(cond);
         }
-        ChargeMethodModel::Unknown => {
+        Charge3partyModel::Unknown => {
             assert!(false);
         }
     }

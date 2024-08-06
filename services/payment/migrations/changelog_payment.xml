@@ -87,8 +87,6 @@
     <changeSet id="add_tables__charge_buyer_toplvl" author="T.H.">
         <comment>
            TODO
-           - consider separate fields or tables for saving response from specific 3rd-party
-             payment processor, based on each specific payment method.
            - more enum members as this service supports new payment methods.
         </comment>
         <sql dbms="mariadb">
@@ -280,5 +278,25 @@
     
     <changeSet id="tag_version_0.0.7" author="T.H.">
         <tagDatabase tag="0.0.7" />
+    </changeSet>
+    <changeSet id="remove_orderappexpired_state__charge_buyer_toplvl" author="T.H.">
+        <comment>
+            remove enum variant `OrderAppExpired` in `state`, it is no longer needed in the
+            backend application code.
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE  `charge_buyer_toplvl` MODIFY COLUMN `state`
+                ENUM('ProcessorAccepted', 'ProcessorCompleted', 'OrderAppSynced')
+                NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE  `charge_buyer_toplvl` MODIFY COLUMN `state`
+                ENUM('ProcessorAccepted', 'ProcessorCompleted', 'OrderAppSynced', 'OrderAppExpired')
+                NOT NULL;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.8" author="T.H.">
+        <tagDatabase tag="0.0.8" />
     </changeSet>
 </databaseChangeLog>

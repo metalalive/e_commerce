@@ -1,10 +1,7 @@
-use chrono::{DateTime, Duration, FixedOffset, Local, Utc};
+use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
 
-use ecommerce_common::api::dto::{
-    CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto, OrderLinePayDto,
-    OrderSellerCurrencyDto, PayAmountDto,
-};
+use ecommerce_common::api::dto::{CurrencyDto, PayAmountDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
@@ -14,345 +11,15 @@ use payment::api::web::dto::{
     OrderErrorReason,
 };
 use payment::model::{
-    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeMethodModel,
-    ChargeMethodStripeModel, ChargeToken, OrderLineModelSet, OrderModelError, PayLineAmountError,
-    PayLineAmountModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
+    ChargeBuyerModel, ChargeToken, PayLineAmountModel, StripeCheckoutPaymentStatusModel,
+    StripeSessionStatusModel,
 };
 
-fn ut_default_currency_snapshot_dto(seller_ids: Vec<u32>) -> OrderCurrencySnapshotDto {
-    OrderCurrencySnapshotDto {
-        snapshot: vec![CurrencySnapshotDto {
-            name: CurrencyDto::TWD,
-            rate: "32.060".to_string(),
-        }],
-        sellers: seller_ids
-            .into_iter()
-            .map(|seller_id| OrderSellerCurrencyDto {
-                seller_id,
-                currency: CurrencyDto::TWD,
-            })
-            .collect::<Vec<_>>(),
-        buyer: CurrencyDto::TWD,
-    }
-}
+use super::order_replica::ut_setup_order_replica;
 
-#[rustfmt::skip]
-fn ut_setup_order_replica(
-    mock_buyer_id: u32,
-    mock_oid: String,
-    reserved_until: DateTime<FixedOffset>,
-) -> OrderLineModelSet {
-    let mock_lines = [
-        (140, ProductType::Item, 1005, 20, "17.15", "343", Duration::minutes(6)),
-        (141, ProductType::Package, 1006, 11, "21.0", "231.0", Duration::minutes(4)),
-        (142, ProductType::Item, 1007, 25, "22.09", "552.25", Duration::minutes(10)),
-        (143, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
-    ]
-    .into_iter()
-    .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: (reserved_until + d.6).to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
-    })
-    .collect::<Vec<_>>();
-    let mock_currency_snapshot = {
-        let mut cs = ut_default_currency_snapshot_dto(vec![143,140,141,142]);
-        let second_currency = CurrencySnapshotDto {
-            name: CurrencyDto::THB, rate: "37.012".to_string()
-        };
-        let _cnt = cs.sellers.iter_mut()
-            .filter(|v| [140,143].contains(&v.seller_id))
-            .map(|v| { v.currency = second_currency.name.clone(); })
-            .count();
-        cs.snapshot.push(second_currency);
-        cs
-    };
-    let result = OrderLineModelSet::try_from(
-        (mock_oid, mock_buyer_id, mock_lines, mock_currency_snapshot)
-    );
-    assert!(result.is_ok());
-    if let Ok(v) = &result {
-        v.currency_snapshot.iter().map(|(usr_id, cm)| {
-            let expect = if usr_id == &mock_buyer_id {
-                (CurrencyDto::TWD, Decimal::new(3206, 2))
-            } else {
-                match usr_id {
-                    140 | 143 => (CurrencyDto::THB, Decimal::new(37012, 3)),
-                    141 | 142 => (CurrencyDto::TWD, Decimal::new(3206, 2)),
-                    _others => (CurrencyDto::Unknown, Decimal::new(0, 0)),
-                }
-            };
-            assert_eq!((cm.label.clone(), cm.rate.clone()), expect);
-        }).count();
-    }
-    result.unwrap()
-} // end of fn ut_setup_order_replica
-
-#[actix_web::test]
-async fn order_replica_convert_ok() {
-    let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
-    let reserved_until = Local::now().fixed_offset() + Duration::minutes(3);
-    let out = ut_setup_order_replica(mock_usr_id, mock_oid, reserved_until);
-    assert_eq!(out.lines.len(), 4);
-}
-
-#[actix_web::test]
-async fn order_replica_convert_empty_line() {
-    let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
-    let mock_lines = Vec::new();
-    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![]);
-    let result =
-        OrderLineModelSet::try_from((mock_oid, mock_usr_id, mock_lines, mock_currency_snapshot));
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert_eq!(e.len(), 1);
-        let cond = matches!(e[0], OrderModelError::EmptyLine);
-        assert!(cond);
-    }
-}
-
-#[actix_web::test]
-async fn order_replica_convert_qty_zero() {
-    let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
-    let reserved_until = Local::now().fixed_offset() + Duration::minutes(3);
-    let mock_lines = [
-        (140, ProductType::Item, 1005, 0, 17, 85),
-        (141, ProductType::Package, 1006, 11, 21, 231),
-        (142, ProductType::Item, 1007, 10, 23, 230),
-    ]
-    .into_iter()
-    .map(|d| OrderLinePayDto {
-        seller_id: d.0,
-        product_id: d.2,
-        product_type: d.1,
-        reserved_until: reserved_until.to_rfc3339(),
-        quantity: d.3,
-        amount: PayAmountDto {
-            unit: d.4.to_string(),
-            total: d.5.to_string(),
-        },
-    })
-    .collect::<Vec<_>>();
-    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140, 141, 142]);
-    let result =
-        OrderLineModelSet::try_from((mock_oid, mock_usr_id, mock_lines, mock_currency_snapshot));
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert_eq!(e.len(), 1);
-        if let OrderModelError::ZeroQuantity(pid) = &e[0] {
-            assert_eq!(pid.store_id, 140);
-            assert_eq!(pid.product_type, ProductType::Item);
-            assert_eq!(pid.product_id, 1005);
-        } else {
-            assert!(false);
-        }
-    }
-} // end of fn order_replica_convert_qty_zero
-
-#[rustfmt::skip]
-#[actix_web::test]
-async fn order_replica_convert_line_expired() {
-    let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
-    let now = Local::now().fixed_offset();
-    let mock_lines = [
-        (140, ProductType::Item, 1005, 5, 17, 85, Duration::minutes(3)),
-        (141, ProductType::Package, 1006, 11, 21, 231, Duration::seconds(19)),
-        (142, ProductType::Item, 1007, 10, 23, 230, Duration::seconds(-2)),
-    ]
-    .into_iter()
-    .map(|d| OrderLinePayDto {
-        seller_id: d.0,  product_id: d.2,  product_type: d.1,
-        reserved_until: (now + d.6).to_rfc3339(),  quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
-    })
-    .collect::<Vec<_>>();
-    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140,141,142]);
-    let result = OrderLineModelSet::try_from(
-        (mock_oid, mock_usr_id, mock_lines, mock_currency_snapshot)
-    );
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert_eq!(e.len(), 1);
-        if let Some(OrderModelError::RsvExpired(pid)) = e.first() {
-            assert_eq!(pid.store_id, 142);
-            assert_eq!(pid.product_type, ProductType::Item);
-            assert_eq!(pid.product_id, 1007);
-        } else {
-            assert!(false);
-        }
-    }
-} // end of fn order_replica_convert_line_expired
-
-#[rustfmt::skip]
-#[actix_web::test]
-async fn order_replica_convert_missing_currency_1() {
-    let (mock_buyer_id, mock_oid) = (149, "9a800f71b".to_string());
-    let now = Local::now().fixed_offset();
-    let mock_lines = [
-        (141, ProductType::Package, 1006, 11, "21.0", "231.0", Duration::minutes(4)),
-        (142, ProductType::Item, 1007, 25, "22.0", "550.0", Duration::minutes(10)),
-        (143, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
-    ]
-    .into_iter()
-    .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: (now + d.6).to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
-    })
-    .collect::<Vec<_>>();
-    let mock_currency_snapshot = {
-        let mut cs = ut_default_currency_snapshot_dto(vec![143,141,142]);
-        let _ = cs.sellers.iter_mut()
-            .find(|v| 142 == v.seller_id)
-            .map(|v| { v.currency = CurrencyDto::USD; });
-        cs
-    };
-    let result = OrderLineModelSet::try_from(
-        (mock_oid, mock_buyer_id, mock_lines, mock_currency_snapshot)
-    );
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert_eq!(e.len(), 1);
-        if let Some(OrderModelError::MissingExRate(c)) = e.first() {
-            assert_eq!(c, &CurrencyDto::USD);
-        } else {
-            assert!(false);
-        }
-    }
-} // end of fn order_replica_convert_missing_currency_1
-
-#[rustfmt::skip]
-#[actix_web::test]
-async fn order_replica_convert_missing_currency_2() {
-    let (mock_buyer_id, mock_oid) = (158, "9a800f71b".to_string());
-    let now = Local::now().fixed_offset();
-    let mock_lines = [
-        (143, ProductType::Package, 1006, 11, "21.0", "231.0", Duration::minutes(4)),
-        (144, ProductType::Item, 1007, 25, "22.0", "550.0", Duration::minutes(10)),
-        (145, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
-    ]
-    .into_iter()
-    .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: (now + d.6).to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
-    })
-    .collect::<Vec<_>>();
-    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![143,145]);
-    let result = OrderLineModelSet::try_from(
-        (mock_oid, mock_buyer_id, mock_lines, mock_currency_snapshot)
-    );
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert_eq!(e.len(), 1);
-        if let Some(OrderModelError::MissingActorsCurrency(c)) = e.first() {
-            assert_eq!(c.len(), 1);
-            assert_eq!(c[0], 144);
-        } else {
-            assert!(false);
-        }
-    }
-} // end of fn  fn order_replica_convert_missing_currency_2()
-
-#[rustfmt::skip]
-#[actix_web::test]
-async fn order_replica_convert_corrupted_currency_rate() {
-    let (mock_buyer_id, mock_oid) = (558, "9a800f71b".to_string());
-    let now = Local::now().fixed_offset();
-    let mock_lines = [
-        (146, ProductType::Item, 1007, 25, "22.0", "550.0", Duration::minutes(10)),
-        (147, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
-    ]
-    .into_iter()
-    .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: (now + d.6).to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
-    })
-    .collect::<Vec<_>>();
-    let mock_currency_snapshot = {
-        let mut cs = ut_default_currency_snapshot_dto(vec![146,147]);
-        let _ = cs.snapshot.first_mut()
-            .map(|v| { v.rate = "32.ky8".to_string(); });
-        cs
-    };
-    let result = OrderLineModelSet::try_from(
-        (mock_oid, mock_buyer_id, mock_lines, mock_currency_snapshot)
-    );
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert_eq!(e.len(), 2);
-        if let Some(OrderModelError::CorruptedExRate(c, _reason)) = e.first() {
-            assert_eq!(c, &CurrencyDto::TWD);
-        } else {
-            assert!(false);
-        }
-    }
-} // end of fn order_replica_convert_corrupted_currency_rate
-
-#[rustfmt::skip]
-#[actix_web::test]
-async fn order_replica_convert_invalid_amount() {
-    let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
-    let reserved_until = Local::now().fixed_offset() + Duration::minutes(3);
-    let mock_lines = [
-        (140, ProductType::Item, 1005, 5, "L7", "85"),
-        (141, ProductType::Package, 1006, 11, "24", "261"),
-        (142, ProductType::Item, 1007, 10, "23", "230s"),
-        (143, ProductType::Package, 1011, u32::MAX, "1230045600789001230045600", "2900"),
-        (144, ProductType::Item, 1027, 4, "200.013", "800.052"),
-    ]
-    .into_iter()
-    .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: reserved_until.to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
-    })
-    .collect::<Vec<_>>();
-    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140, 141, 142, 143, 144]);
-    let result =
-        OrderLineModelSet::try_from((mock_oid, mock_usr_id, mock_lines, mock_currency_snapshot));
-    assert!(result.is_err());
-    if let Err(es) = result {
-        assert_eq!(es.len(), 5);
-        es.into_iter().map(|e| match e {
-            OrderModelError::InvalidAmount(pid, pe) => {
-                let BaseProductIdentity { store_id, product_type, product_id } = pid;
-                match (store_id, product_type, product_id) {
-                    (141, ProductType::Package, 1006) =>
-                        if let PayLineAmountError::Mismatch(amount, qty) = pe {
-                            assert_eq!(amount.unit.as_str(), "24");
-                            assert_eq!(amount.total.as_str(), "261");
-                            assert_eq!(qty, 11u32);
-                        } else { assert!(false); },
-                    (140, ProductType::Item, 1005) =>
-                        if let PayLineAmountError::ParseUnit(value, _reason) = pe {
-                            assert_eq!(value.as_str(), "L7");
-                        } else { assert!(false); },
-                    (142, ProductType::Item, 1007) =>
-                        if let PayLineAmountError::ParseTotal(value, _reason) = pe {
-                            assert_eq!(value.as_str(), "230s");
-                        } else { assert!(false); },
-                    (143, ProductType::Package, 1011) =>
-                        if let PayLineAmountError::Overflow(amt_unit, qty) = pe {
-                            assert_eq!(qty, u32::MAX);
-                            assert_eq!(amt_unit.as_str(), "1230045600789001230045600");
-                        } else { assert!(false); },
-                    (144, ProductType::Item, 1027) =>
-                        if let PayLineAmountError::PrecisionUnit(amt_unit, scale) = pe {
-                            assert_eq!(amt_unit.as_str(), "200.013");
-                            assert_eq!(scale, (2, 3));
-                        } else { assert!(false); },
-                    _others => { assert!(false); },
-                }
-            },
-            _others => { assert!(false); },
-        }).count();
-    }
-} // end of fn order_replica_convert_invalid_amount
-
-#[actix_web::test]
-async fn buyer_convert_ok_1() {
+#[test]
+fn buyer_convert_ok_1() {
     let (mock_usr_id, mock_oid) = (582, "phidix".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -412,8 +79,8 @@ async fn buyer_convert_ok_1() {
     }
 } // end of fn buyer_convert_ok_1
 
-#[actix_web::test]
-async fn buyer_convert_ok_2() {
+#[test]
+fn buyer_convert_ok_2() {
     let (mock_usr_id, mock_oid) = (584, "NikuSan".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mut mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -480,8 +147,8 @@ async fn buyer_convert_ok_2() {
     }
 } // end of fn buyer_convert_ok_2
 
-#[actix_web::test]
-async fn buyer_convert_oid_mismatch() {
+#[test]
+fn buyer_convert_oid_mismatch() {
     let mock_usr_id = 585;
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, "lemon".to_string(), reserved_until);
@@ -501,8 +168,8 @@ async fn buyer_convert_oid_mismatch() {
     }
 } // end of fn buyer_convert_oid_mismatch
 
-#[actix_web::test]
-async fn buyer_convert_currency_mismatch() {
+#[test]
+fn buyer_convert_currency_mismatch() {
     let mock_usr_id = 585;
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, "lemon".to_string(), reserved_until);
@@ -521,8 +188,8 @@ async fn buyer_convert_currency_mismatch() {
     }
 } // end of fn buyer_convert_currency_mismatch
 
-#[actix_web::test]
-async fn buyer_convert_expired() {
+#[test]
+fn buyer_convert_expired() {
     let (mock_usr_id, mock_oid) = (586, "UncleRoger".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(1);
     let mut mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -578,8 +245,8 @@ async fn buyer_convert_expired() {
     }
 } // end of fn buyer_convert_expired
 
-#[actix_web::test]
-async fn buyer_convert_qty_exceed_limit() {
+#[test]
+fn buyer_convert_qty_exceed_limit() {
     let (mock_usr_id, mock_oid) = (587, "hijurie3k7".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mut mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -640,8 +307,8 @@ async fn buyer_convert_qty_exceed_limit() {
     }
 } // end of  fn buyer_convert_qty_exceed_limit
 
-#[actix_web::test]
-async fn buyer_convert_amount_mismatch_1() {
+#[test]
+fn buyer_convert_amount_mismatch_1() {
     let (mock_usr_id, mock_oid) = (589, "nova".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -692,8 +359,8 @@ async fn buyer_convert_amount_mismatch_1() {
     }
 } // end of fn buyer_convert_amount_mismatch_1
 
-#[actix_web::test]
-async fn buyer_convert_amount_mismatch_2() {
+#[test]
+fn buyer_convert_amount_mismatch_2() {
     let (mock_usr_id, mock_oid) = (587, "hijurie3k7".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
@@ -746,15 +413,15 @@ async fn buyer_convert_amount_mismatch_2() {
 fn ut_default_charge_3pty_stripe(
     session_state: StripeSessionStatusModel,
     payment_state: StripeCheckoutPaymentStatusModel,
-) -> ChargeMethodModel {
-    let s = ChargeMethodStripeModel {
+) -> Charge3partyModel {
+    let s = Charge3partyStripeModel {
         checkout_session_id: "mock-unit-test".to_string(),
         session_state,
         payment_state,
         payment_intent_id: "mock-unit-test".to_string(),
         expiry: Local::now().to_utc() + Duration::minutes(10),
     };
-    ChargeMethodModel::Stripe(s)
+    Charge3partyModel::Stripe(s)
 }
 
 #[test]

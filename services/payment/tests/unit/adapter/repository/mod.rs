@@ -10,8 +10,8 @@ use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 use ecommerce_common::model::BaseProductIdentity;
 use payment::model::{
-    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    ChargeMethodModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
+    ChargeLineBuyerModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
     PayLineAmountModel,
 };
 
@@ -91,7 +91,7 @@ fn ut_setup_buyer_charge(
     create_time: DateTime<Utc>,
     oid: String,
     state: BuyerPayInState,
-    method: ChargeMethodModel,
+    method: Charge3partyModel,
     d_lines: Vec<(u32, ProductType, u64, Decimal, Decimal, u32)>,
     currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
 ) -> ChargeBuyerModel {

@@ -8,8 +8,8 @@ use ecommerce_common::model::BaseProductIdentity;
 
 use super::super::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use crate::model::{
-    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    ChargeMethodModel, PayLineAmountModel,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
+    ChargeLineBuyerModel, PayLineAmountModel,
 };
 
 const DATETIME_FMT_P0F: &str = "%Y-%m-%d %H:%M:%S";
@@ -31,7 +31,6 @@ impl TryFrom<BuyerPayInState> for InsertChargeStatusArgs {
     fn try_from(value: BuyerPayInState) -> Result<Self, Self::Error> {
         let (curr_state, times) = match value {
             BuyerPayInState::Initialized => Err(AppErrorCode::InvalidInput),
-            BuyerPayInState::OrderAppExpired => Ok(("OrderAppExpired", 0usize, None)),
             BuyerPayInState::ProcessorAccepted(t) => Ok(("ProcessorAccepted", 0, Some(t))),
             BuyerPayInState::ProcessorCompleted(t) => Ok(("ProcessorCompleted", 1, Some(t))),
             BuyerPayInState::OrderAppSynced(t) => Ok(("OrderAppSynced", 2, Some(t))),
@@ -83,7 +82,7 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
         } = InsertChargeStatusArgs::try_from(state)?;
         #[rustfmt::skip]
         let (pay_mthd, detail_3pty) = match method {
-            ChargeMethodModel::Stripe(m) => {
+            Charge3partyModel::Stripe(m) => {
                 let label = "Stripe".to_string();
                 serde_json::to_string(&m)
                     .map(|detail| (label.clone(), detail))
@@ -93,7 +92,7 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
                         detail: AppRepoErrorDetail::PayDetail(label, e.to_string()),
                     })
             },
-            ChargeMethodModel::Unknown =>
+            Charge3partyModel::Unknown =>
                 Err(AppRepoError {
                     code: AppErrorCode::InvalidInput,
                     fn_label: AppRepoErrorFnLabel::CreateOrder,

@@ -13,7 +13,7 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::{
-    ChargeMethodStripeModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
+    Charge3partyStripeModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
     PayLineAmountModel,
 };
 use crate::api::web::dto::{
@@ -22,10 +22,9 @@ use crate::api::web::dto::{
 };
 use crate::hard_limit::{CREATE_CHARGE_SECONDS_INTERVAL, SECONDS_ORDERLINE_DISCARD_MARGIN};
 
-pub enum ChargeMethodModel {
-    // TODO, rename to Charge3partyModel
+pub enum Charge3partyModel {
     Unknown,
-    Stripe(ChargeMethodStripeModel),
+    Stripe(Charge3partyStripeModel),
 }
 
 mod token_inner {
@@ -50,12 +49,9 @@ pub enum BuyerPayInState {
     ProcessorAccepted(DateTime<Utc>),
     ProcessorCompleted(DateTime<Utc>),
     OrderAppSynced(DateTime<Utc>),
-    // TODO, consider to discard the state below, this should never happen.
     // This model should report error when
     // - attempting to convert `charge request DTO` to `ChargeBuyerMetaModel`
     // - reservation time of an unpaid order line expires
-    #[warn(useless_deprecated)]
-    OrderAppExpired,
 }
 
 pub struct ChargeLineBuyerModel {
@@ -69,7 +65,7 @@ pub struct ChargeBuyerMetaModel {
     pub create_time: DateTime<Utc>,
     pub oid: String, // referenced order id
     pub state: BuyerPayInState,
-    pub method: ChargeMethodModel,
+    pub method: Charge3partyModel,
 }
 pub struct ChargeBuyerModel {
     pub meta: ChargeBuyerMetaModel,
@@ -84,9 +80,6 @@ impl BuyerPayInState {
             Self::ProcessorAccepted(t) => Some((*t).into()), // implicit copy
             Self::ProcessorCompleted(t) => Some((*t).into()),
             Self::OrderAppSynced(t) => Some((*t).into()),
-            _others => {
-                panic!("");
-            }
         }
     }
     // the method `completed` indicates whether the customer has done all
@@ -95,7 +88,7 @@ impl BuyerPayInState {
     pub(crate) fn completed(&self) -> bool {
         matches!(self, Self::OrderAppSynced(_))
     }
-    fn status_dto(&self, mthd: &ChargeMethodModel) -> (ChargeStatusDto, DateTime<Utc>) {
+    fn status_dto(&self, mthd: &Charge3partyModel) -> (ChargeStatusDto, DateTime<Utc>) {
         let now = Local::now().to_utc();
         match self {
             Self::OrderAppSynced(t) => (ChargeStatusDto::Completed, *t),
@@ -104,14 +97,11 @@ impl BuyerPayInState {
             Self::ProcessorCompleted(t) => (mthd.status_dto(), *t),
             Self::ProcessorAccepted(_t) => (mthd.status_dto(), now),
             Self::Initialized => (ChargeStatusDto::Initialized, now),
-            _others => {
-                panic!("");
-            }
         }
     }
 }
 
-impl ChargeMethodModel {
+impl Charge3partyModel {
     // The method `pay_in_completed` indicates whether 3rd-party processor has
     // done and confirmed with the charge initiated by a client during the
     // entire pay-in flow.
@@ -154,7 +144,7 @@ impl From<(String, u32)> for ChargeBuyerMetaModel {
             owner: value.1,
             create_time: now,
             oid: value.0,
-            method: ChargeMethodModel::Unknown,
+            method: Charge3partyModel::Unknown,
             state: BuyerPayInState::Initialized,
         }
     }

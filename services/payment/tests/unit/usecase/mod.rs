@@ -23,7 +23,7 @@ use payment::adapter::rpc::{
 };
 use payment::api::web::dto::PaymentMethodReqDto;
 use payment::model::{
-    ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, ChargeMethodModel,
+    Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
     OrderLineModelSet,
 };
 
@@ -154,7 +154,7 @@ impl AbstractRpcPublishEvent for MockRpcPublishEvent {
 
 struct MockPaymentProcessor {
     _payin_start_result:
-        Mutex<Option<Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError>>>,
+        Mutex<Option<Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError>>>,
 }
 
 #[async_trait]
@@ -163,7 +163,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         &self,
         _charge_buyer: &ChargeBuyerModel,
         _req_mthd: PaymentMethodReqDto,
-    ) -> Result<(AppProcessorPayInResult, ChargeMethodModel), AppProcessorError> {
+    ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError> {
         let mut g = self._payin_start_result.lock().unwrap();
         let out = g.take().unwrap();
         out
@@ -172,7 +172,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
     async fn pay_in_progress(
         &self,
         _meta: &ChargeBuyerMetaModel,
-    ) -> Result<ChargeMethodModel, AppProcessorError> {
+    ) -> Result<Charge3partyModel, AppProcessorError> {
         Err(AppProcessorError {
             reason: AppProcessorErrorReason::NotImplemented,
         })

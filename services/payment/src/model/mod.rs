@@ -8,11 +8,11 @@ use std::str::FromStr;
 use ecommerce_common::api::dto::{CurrencyDto, PayAmountDto};
 
 pub use self::charge::{
-    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    ChargeMethodModel, ChargeToken,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
+    ChargeLineBuyerModel, ChargeToken,
 };
 pub use self::external_processor::{
-    ChargeMethodStripeModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    Charge3partyStripeModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 pub use self::order_replica::{
     OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
