@@ -180,28 +180,28 @@ async fn ok_with_existing_order_replica() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
     let mock_oline_set = ut_saved_oline_set(mock_order_id.clone(), mock_usr_id);
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(Some(mock_oline_set)))),
-        _create_order_result: Mutex::new(None),
-        _create_charge_result: Mutex::new(Some(Ok(()))),
-    };
+    let mock_repo = MockChargeRepo::build(
+        Some(Ok(Some(mock_oline_set))),
+        None,
+        Some(Ok(())),
+        None,
+        None,
+        None,
+    );
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(None),
         _release_result: Mutex::new(None),
     };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(None),
-    };
+    let mock_rpc_ctx = MockRpcContext::build(None);
     let mock_payin_result = ut_processor_pay_in_result();
     let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(Some(Ok((mock_payin_result, mock_payin_mthd_m)))),
-    };
+    let mock_processor =
+        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -215,11 +215,8 @@ async fn ok_with_existing_order_replica() {
 async fn ok_with_rpc_replica_order() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(Some(Ok(()))),
-        _create_charge_result: Mutex::new(Some(Ok(()))),
-    };
+    let mock_repo =
+        MockChargeRepo::build(Some(Ok(None)), Some(Ok(())), Some(Ok(())), None, None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -227,25 +224,18 @@ async fn ok_with_rpc_replica_order() {
     let mock_reply = AppRpcReply {
         message: ut_orderpay_replica(mock_usr_id, mock_order_id.clone()),
     };
-    let rpc_pub_evt = MockRpcPublishEvent {
-        _recv_resp_result: Mutex::new(Some(Ok(mock_reply))),
-    };
-    let mock_rpc_client = MockRpcClient {
-        _send_req_result: Mutex::new(Some(Ok(Box::new(rpc_pub_evt)))),
-    };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
-    };
+    let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
+    let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
+    let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
     let mock_payin_result = ut_processor_pay_in_result();
     let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(Some(Ok((mock_payin_result, mock_payin_mthd_m)))),
-    };
+    let mock_processor =
+        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -264,26 +254,19 @@ async fn load_unpaid_order_failure() {
         code: AppErrorCode::Unknown,
         detail: AppRepoErrorDetail::Unknown,
     };
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Err(repo_expect_error))),
-        _create_order_result: Mutex::new(None),
-        _create_charge_result: Mutex::new(None),
-    };
+    let mock_repo =
+        MockChargeRepo::build(Some(Err(repo_expect_error)), None, None, None, None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(None),
         _release_result: Mutex::new(None),
     };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(None),
-    };
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(None),
-    };
+    let mock_rpc_ctx = MockRpcContext::build(None);
+    let mock_processor = MockPaymentProcessor::build(None, None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -302,26 +285,18 @@ async fn load_unpaid_order_failure() {
 async fn sync_order_get_lock_failure() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(None),
-        _create_charge_result: Mutex::new(None),
-    };
+    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(false))),
         _release_result: Mutex::new(None),
     };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(None),
-    };
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(None),
-    };
+    let mock_rpc_ctx = MockRpcContext::build(None);
+    let mock_processor = MockPaymentProcessor::build(None, None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -336,11 +311,7 @@ async fn sync_order_get_lock_failure() {
 async fn sync_order_release_lock_failure() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(None),
-        _create_charge_result: Mutex::new(None),
-    };
+    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Err(OrderSyncLockError))),
@@ -348,23 +319,15 @@ async fn sync_order_release_lock_failure() {
     let mock_reply = AppRpcReply {
         message: ut_orderpay_replica(mock_usr_id, mock_order_id.clone()),
     };
-    let rpc_pub_evt = MockRpcPublishEvent {
-        _recv_resp_result: Mutex::new(Some(Ok(mock_reply))),
-    };
-    let mock_rpc_client = MockRpcClient {
-        _send_req_result: Mutex::new(Some(Ok(Box::new(rpc_pub_evt)))),
-    };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
-    };
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(None),
-    };
+    let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
+    let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
+    let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
+    let mock_processor = MockPaymentProcessor::build(None, None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -379,11 +342,7 @@ async fn sync_order_release_lock_failure() {
 async fn rpc_acquire_conn_error() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(None),
-        _create_charge_result: Mutex::new(None),
-    };
+    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -392,17 +351,13 @@ async fn rpc_acquire_conn_error() {
         fn_label: AppRpcErrorFnLabel::AcquireClientConn,
         reason: AppRpcErrorReason::CorruptedCredential,
     };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(Some(Err(rpc_expect_error))),
-    };
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(None),
-    };
+    let mock_rpc_ctx = MockRpcContext::build(Some(Err(rpc_expect_error)));
+    let mock_processor = MockPaymentProcessor::build(None, None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -423,11 +378,7 @@ async fn rpc_acquire_conn_error() {
 async fn rpc_publish_error_replica_order() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(None),
-        _create_charge_result: Mutex::new(None),
-    };
+    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -436,20 +387,14 @@ async fn rpc_publish_error_replica_order() {
         fn_label: AppRpcErrorFnLabel::ClientSendReq,
         reason: AppRpcErrorReason::LowLevelConn("unit-test".to_string()),
     };
-    let mock_rpc_client = MockRpcClient {
-        _send_req_result: Mutex::new(Some(Err(rpc_expect_error))),
-    };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
-    };
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(None),
-    };
+    let mock_rpc_client = MockRpcClient::build(Some(Err(rpc_expect_error)));
+    let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
+    let mock_processor = MockPaymentProcessor::build(None, None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -470,11 +415,7 @@ async fn rpc_publish_error_replica_order() {
 async fn rpc_reply_error_replica_order() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(None),
-        _create_charge_result: Mutex::new(None),
-    };
+    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -483,23 +424,15 @@ async fn rpc_reply_error_replica_order() {
         fn_label: AppRpcErrorFnLabel::ClientRecvResp,
         reason: AppRpcErrorReason::NotSupport,
     };
-    let rpc_pub_evt = MockRpcPublishEvent {
-        _recv_resp_result: Mutex::new(Some(Err(rpc_expect_error))),
-    };
-    let mock_rpc_client = MockRpcClient {
-        _send_req_result: Mutex::new(Some(Ok(Box::new(rpc_pub_evt)))),
-    };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
-    };
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(None),
-    };
+    let rpc_pub_evt = MockRpcPublishEvent::build(Some(Err(rpc_expect_error)));
+    let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
+    let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
+    let mock_processor = MockPaymentProcessor::build(None, None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -525,11 +458,14 @@ async fn save_replica_order_failure() {
         code: AppErrorCode::DataTableNotExist,
         detail: AppRepoErrorDetail::DatabaseExec("unit-test".to_string()),
     };
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(Some(Err(repo_expect_error))),
-        _create_charge_result: Mutex::new(None),
-    };
+    let mock_repo = MockChargeRepo::build(
+        Some(Ok(None)),
+        Some(Err(repo_expect_error)),
+        None,
+        None,
+        None,
+        None,
+    );
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -537,23 +473,15 @@ async fn save_replica_order_failure() {
     let mock_reply = AppRpcReply {
         message: ut_orderpay_replica(mock_usr_id, mock_order_id.clone()),
     };
-    let rpc_pub_evt = MockRpcPublishEvent {
-        _recv_resp_result: Mutex::new(Some(Ok(mock_reply))),
-    };
-    let mock_rpc_client = MockRpcClient {
-        _send_req_result: Mutex::new(Some(Ok(Box::new(rpc_pub_evt)))),
-    };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
-    };
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(None),
-    };
+    let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
+    let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
+    let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
+    let mock_processor = MockPaymentProcessor::build(None, None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -572,11 +500,8 @@ async fn save_replica_order_failure() {
 async fn processor_start_payin_failure() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(Some(Ok(()))),
-        _create_charge_result: Mutex::new(Some(Ok(()))),
-    };
+    let mock_repo =
+        MockChargeRepo::build(Some(Ok(None)), Some(Ok(())), Some(Ok(())), None, None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -584,26 +509,18 @@ async fn processor_start_payin_failure() {
     let mock_reply = AppRpcReply {
         message: ut_orderpay_replica(mock_usr_id, mock_order_id.clone()),
     };
-    let rpc_pub_evt = MockRpcPublishEvent {
-        _recv_resp_result: Mutex::new(Some(Ok(mock_reply))),
-    };
-    let mock_rpc_client = MockRpcClient {
-        _send_req_result: Mutex::new(Some(Ok(Box::new(rpc_pub_evt)))),
-    };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
-    };
+    let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
+    let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
+    let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
     let expect_proc_error = AppProcessorError {
         reason: AppProcessorErrorReason::CredentialCorrupted,
     };
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(Some(Err(expect_proc_error))),
-    };
+    let mock_processor = MockPaymentProcessor::build(Some(Err(expect_proc_error)), None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
@@ -627,11 +544,14 @@ async fn save_new_chargeline_failure() {
         code: AppErrorCode::DataCorruption,
         detail: AppRepoErrorDetail::DatabaseTxCommit("unit-test".to_string()),
     };
-    let mock_repo = MockChargeRepo {
-        _expect_unpaid_olines: Mutex::new(Some(Ok(None))),
-        _create_order_result: Mutex::new(Some(Ok(()))),
-        _create_charge_result: Mutex::new(Some(Err(repo_expect_error))),
-    };
+    let mock_repo = MockChargeRepo::build(
+        Some(Ok(None)),
+        Some(Ok(())),
+        Some(Err(repo_expect_error)),
+        None,
+        None,
+        None,
+    );
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -639,25 +559,18 @@ async fn save_new_chargeline_failure() {
     let mock_reply = AppRpcReply {
         message: ut_orderpay_replica(mock_usr_id, mock_order_id.clone()),
     };
-    let rpc_pub_evt = MockRpcPublishEvent {
-        _recv_resp_result: Mutex::new(Some(Ok(mock_reply))),
-    };
-    let mock_rpc_client = MockRpcClient {
-        _send_req_result: Mutex::new(Some(Ok(Box::new(rpc_pub_evt)))),
-    };
-    let mock_rpc_ctx = MockRpcContext {
-        _acquire_result: Mutex::new(Some(Ok(Box::new(mock_rpc_client)))),
-    };
+    let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
+    let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
+    let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
     let mock_payin_result = ut_processor_pay_in_result();
     let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
-    let mock_processor = MockPaymentProcessor {
-        _payin_start_result: Mutex::new(Some(Ok((mock_payin_result, mock_payin_mthd_m)))),
-    };
+    let mock_processor =
+        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None);
     let uc = ChargeCreateUseCase {
-        processors: Arc::new(Box::new(mock_processor)),
-        rpc_ctx: Arc::new(Box::new(mock_rpc_ctx)),
+        processors: Arc::new(mock_processor),
+        rpc_ctx: Arc::new(mock_rpc_ctx),
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
-        repo: Box::new(mock_repo),
+        repo: mock_repo,
     };
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;

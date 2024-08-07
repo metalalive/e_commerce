@@ -15,10 +15,10 @@ use payment::model::{
 };
 use payment::AppSharedState;
 
-use crate::adapter::repository::{
-    ut_setup_buyer_charge, ut_setup_order_bill, ut_setup_orderline_set,
+use crate::adapter::repository::{ut_setup_order_bill, ut_setup_orderline_set};
+use crate::model::{
+    ut_default_charge_method_stripe, ut_default_currency_snapshot, ut_setup_buyer_charge,
 };
-use crate::model::{ut_default_charge_method_stripe, ut_default_currency_snapshot};
 use crate::ut_setup_sharestate;
 
 async fn ut_setup_db_repo(shr_state: AppSharedState) -> Arc<Box<dyn AbstractChargeRepo>> {
@@ -246,8 +246,8 @@ fn _ut_setup_buyer_charge() -> ChargeBuyerModel {
     let mock_state = BuyerPayInState::ProcessorAccepted(mock_create_time + Duration::seconds(95));
     let mock_method = ut_default_charge_method_stripe(&mock_create_time);
     let mock_data_lines = vec![
-        (3034, ProductType::Package, 602, Decimal::new(9028,2), Decimal::new(36112,2), 4),
-        (8299, ProductType::Item, 351, Decimal::new(551,1), Decimal::new(1102,1), 2),
+        (3034, ProductType::Package, 602, (9028,2), (36112,2), 4),
+        (8299, ProductType::Item, 351, (551,1), (1102,1), 2),
     ];
     let mock_currency_map = ut_setup_currency_snapshot(vec![126, 8299, 3034]);
     ut_setup_buyer_charge(

@@ -6,8 +6,11 @@ use rust_decimal::Decimal;
 use std::collections::HashMap;
 
 use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::constant::ProductType;
+use ecommerce_common::model::BaseProductIdentity;
 use payment::model::{
-    Charge3partyModel, Charge3partyStripeModel, OrderCurrencySnapshot,
+    BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
+    ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot, PayLineAmountModel,
     StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
@@ -35,4 +38,40 @@ pub(crate) fn ut_default_charge_method_stripe(t0: &DateTime<Utc>) -> Charge3part
         expiry: *t0 + Duration::minutes(5),
     };
     Charge3partyModel::Stripe(sess)
+}
+
+#[rustfmt::skip]
+pub(crate) fn ut_setup_buyer_charge(
+    owner: u32,
+    create_time: DateTime<Utc>,
+    oid: String,
+    state: BuyerPayInState,
+    method: Charge3partyModel,
+    d_lines: Vec<(u32, ProductType, u64, (i64, u32), (i64, u32), u32)>,
+    currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
+) -> ChargeBuyerModel {
+    let lines = ut_setup_buyer_charge_lines(d_lines);
+    let meta = ChargeBuyerMetaModel {
+        owner, create_time, oid, state, method,
+    };
+    ChargeBuyerModel {meta, lines, currency_snapshot}
+}
+
+#[rustfmt::skip]
+pub(crate) fn ut_setup_buyer_charge_lines(
+    d_lines: Vec<(u32, ProductType, u64, (i64, u32), (i64, u32), u32)>,
+) -> Vec<ChargeLineBuyerModel> {
+    d_lines
+        .into_iter()
+        .map(|dl| ChargeLineBuyerModel {
+            pid: BaseProductIdentity {
+                store_id: dl.0, product_type: dl.1, product_id: dl.2,
+            },
+            amount: PayLineAmountModel {
+                unit: Decimal::new(dl.3.0, dl.3.1),
+                total: Decimal::new(dl.4.0, dl.4.1),
+                qty: dl.5,
+            },
+        })
+        .collect()
 }

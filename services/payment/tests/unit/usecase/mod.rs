@@ -1,4 +1,5 @@
 mod create_charge;
+mod refresh_charge_status;
 
 use std::boxed::Box;
 use std::result::Result;
@@ -7,16 +8,13 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
-use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
 use payment::adapter::cache::{AbstractOrderSyncLockCache, OrderSyncLockError};
 use payment::adapter::processor::{
-    AbstractPaymentProcessor, AppProcessorError, AppProcessorErrorReason, AppProcessorPayInResult,
+    AbstractPaymentProcessor, AppProcessorError, AppProcessorPayInResult,
 };
-use payment::adapter::repository::{
-    AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel,
-};
+use payment::adapter::repository::{AbstractChargeRepo, AppRepoError};
 use payment::adapter::rpc::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
     AppRpcClientRequest, AppRpcCtxError, AppRpcReply,
@@ -31,7 +29,30 @@ struct MockChargeRepo {
     _expect_unpaid_olines: Mutex<Option<Result<Option<OrderLineModelSet>, AppRepoError>>>,
     _create_order_result: Mutex<Option<Result<(), AppRepoError>>>,
     _create_charge_result: Mutex<Option<Result<(), AppRepoError>>>,
+    _read_charge_meta: Mutex<Option<Result<Option<ChargeBuyerMetaModel>, AppRepoError>>>,
+    _read_all_charge_lines: Mutex<Option<Result<Vec<ChargeLineBuyerModel>, AppRepoError>>>,
+    _update_chargemeta_result: Mutex<Option<Result<(), AppRepoError>>>,
 }
+
+impl MockChargeRepo {
+    fn build(
+        unpaid_olines: Option<Result<Option<OrderLineModelSet>, AppRepoError>>,
+        create_order_res: Option<Result<(), AppRepoError>>,
+        create_charge_res: Option<Result<(), AppRepoError>>,
+        chargemeta: Option<Result<Option<ChargeBuyerMetaModel>, AppRepoError>>,
+        all_chargelines: Option<Result<Vec<ChargeLineBuyerModel>, AppRepoError>>,
+        update_meta_res: Option<Result<(), AppRepoError>>,
+    ) -> Box<dyn AbstractChargeRepo> {
+        Box::new(Self {
+            _expect_unpaid_olines: Mutex::new(unpaid_olines),
+            _create_order_result: Mutex::new(create_order_res),
+            _create_charge_result: Mutex::new(create_charge_res),
+            _read_charge_meta: Mutex::new(chargemeta),
+            _read_all_charge_lines: Mutex::new(all_chargelines),
+            _update_chargemeta_result: Mutex::new(update_meta_res),
+        })
+    }
+} // end of impl MockChargeRepo
 
 #[async_trait]
 impl AbstractChargeRepo for MockChargeRepo {
@@ -63,32 +84,26 @@ impl AbstractChargeRepo for MockChargeRepo {
         _usr_id: u32,
         _create_time: DateTime<Utc>,
     ) -> Result<Option<ChargeBuyerMetaModel>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchChargeMeta,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
+        let mut g = self._read_charge_meta.lock().unwrap();
+        let out = g.take().unwrap();
+        out
     }
     async fn fetch_all_charge_lines(
         &self,
         _usr_id: u32,
         _create_time: DateTime<Utc>,
     ) -> Result<Vec<ChargeLineBuyerModel>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchAllChargeLines,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
+        let mut g = self._read_all_charge_lines.lock().unwrap();
+        let out = g.take().unwrap();
+        out
     }
     async fn update_charge_progress(
         &self,
         _meta: ChargeBuyerMetaModel,
     ) -> Result<(), AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::UpdateChargeProgress,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
+        let mut g = self._update_chargemeta_result.lock().unwrap();
+        let out = g.take().unwrap();
+        out
     }
 } // end of impl MockChargeRepo
 
@@ -131,6 +146,15 @@ impl AbsRpcClientContext for MockRpcContext {
         out
     }
 }
+impl MockRpcContext {
+    fn build(
+        acquire_res: Option<Result<Box<dyn AbstractRpcClient>, AppRpcCtxError>>,
+    ) -> Box<dyn AbstractRpcContext> {
+        Box::new(Self {
+            _acquire_result: Mutex::new(acquire_res),
+        })
+    }
+}
 
 #[async_trait]
 impl AbstractRpcClient for MockRpcClient {
@@ -143,6 +167,16 @@ impl AbstractRpcClient for MockRpcClient {
         evt
     }
 }
+impl MockRpcClient {
+    fn build(
+        send_req_res: Option<Result<Box<dyn AbstractRpcPublishEvent>, AppRpcCtxError>>,
+    ) -> Box<dyn AbstractRpcClient> {
+        Box::new(Self {
+            _send_req_result: Mutex::new(send_req_res),
+        })
+    }
+}
+
 #[async_trait]
 impl AbstractRpcPublishEvent for MockRpcPublishEvent {
     async fn receive_response(&mut self) -> Result<AppRpcReply, AppRpcCtxError> {
@@ -151,10 +185,34 @@ impl AbstractRpcPublishEvent for MockRpcPublishEvent {
         mock_result
     }
 }
+impl MockRpcPublishEvent {
+    fn build(
+        recv_resp: Option<Result<AppRpcReply, AppRpcCtxError>>,
+    ) -> Box<dyn AbstractRpcPublishEvent> {
+        Box::new(Self {
+            _recv_resp_result: Mutex::new(recv_resp),
+        })
+    }
+}
 
 struct MockPaymentProcessor {
     _payin_start_result:
         Mutex<Option<Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError>>>,
+    _payin_progress_result: Mutex<Option<Result<Charge3partyModel, AppProcessorError>>>,
+}
+
+impl MockPaymentProcessor {
+    fn build(
+        payin_start: Option<
+            Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError>,
+        >,
+        payin_progress: Option<Result<Charge3partyModel, AppProcessorError>>,
+    ) -> Box<dyn AbstractPaymentProcessor> {
+        Box::new(Self {
+            _payin_start_result: Mutex::new(payin_start),
+            _payin_progress_result: Mutex::new(payin_progress),
+        })
+    }
 }
 
 #[async_trait]
@@ -173,8 +231,8 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         &self,
         _meta: &ChargeBuyerMetaModel,
     ) -> Result<Charge3partyModel, AppProcessorError> {
-        Err(AppProcessorError {
-            reason: AppProcessorErrorReason::NotImplemented,
-        })
+        let mut g = self._payin_progress_result.lock().unwrap();
+        let out = g.take().unwrap();
+        out
     }
 }

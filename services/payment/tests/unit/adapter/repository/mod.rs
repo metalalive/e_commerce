@@ -10,9 +10,7 @@ use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 use ecommerce_common::model::BaseProductIdentity;
 use payment::model::{
-    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
-    ChargeLineBuyerModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
-    PayLineAmountModel,
+    OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayLineAmountModel,
 };
 
 #[rustfmt::skip]
@@ -83,31 +81,4 @@ fn ut_setup_order_bill() -> BillingModel {
         contact,
         address: Some(address),
     }
-}
-
-#[rustfmt::skip]
-fn ut_setup_buyer_charge(
-    owner: u32,
-    create_time: DateTime<Utc>,
-    oid: String,
-    state: BuyerPayInState,
-    method: Charge3partyModel,
-    d_lines: Vec<(u32, ProductType, u64, Decimal, Decimal, u32)>,
-    currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
-) -> ChargeBuyerModel {
-    let lines = d_lines
-        .into_iter()
-        .map(|dl| ChargeLineBuyerModel {
-            pid: BaseProductIdentity {
-                store_id: dl.0, product_type: dl.1, product_id: dl.2,
-            },
-            amount: PayLineAmountModel {
-                unit: dl.3, total: dl.4, qty: dl.5,
-            },
-        })
-        .collect();
-    let meta = ChargeBuyerMetaModel {
-        owner, create_time, oid, state, method,
-    };
-    ChargeBuyerModel {meta, lines, currency_snapshot}
 }

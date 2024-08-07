@@ -53,16 +53,23 @@ impl ChargeStatusRefreshUseCase {
             Some(confirmed) => confirmed,
             None => self.refresh_3pty_processor(&mut saved_meta).await?,
         };
-        if proceed_allowed && !saved_meta.state.completed() {
-            self.sync_order_app(&mut saved_meta).await?;
-        }
+        let result_rpc = if proceed_allowed && !saved_meta.state.completed() {
+            self.sync_order_app(&mut saved_meta).await
+            // postpone the error return, always write charge status to database
+            // repository if necessary
+        } else {
+            Ok(())
+        };
         let resp = ChargeRefreshRespDto::from(&saved_meta);
-        // TODO, logging dto if buy-in state is `completed` but the state
-        // from 3rd party processor is `processing`
+        // TODO,
+        // - logging dto if buy-in state is `completed` but the state from 3rd party
+        //   processor is `processing`
+        // - clever way of detecting the state of charge meta model has been modified.
         self.repo
             .update_charge_progress(saved_meta)
             .await
             .map_err(ChargeRefreshUcError::DataStore)?;
+        result_rpc?;
         Ok(resp)
     } // end of fn execute()
 
@@ -88,12 +95,11 @@ impl ChargeStatusRefreshUseCase {
         let proceed_allowed = mthd_3pty
             .pay_in_comfirmed()
             .map(|confirmed| {
-                if confirmed {
-                    let now = Local::now().to_utc();
-                    let new_state = BuyerPayInState::ProcessorCompleted(now);
-                    meta.update_progress(&new_state);
-                    meta.method = mthd_3pty;
-                }
+                // always update state regardless of success signal from 3rd party
+                let now = Local::now().to_utc();
+                let new_state = BuyerPayInState::ProcessorCompleted(now);
+                meta.update_progress(&new_state);
+                meta.method = mthd_3pty;
                 confirmed
             })
             .unwrap_or(false);
@@ -133,6 +139,9 @@ impl ChargeStatusRefreshUseCase {
         if has_err {
             Err(ChargeRefreshUcError::RpcUpdateOrder(resp_detail))
         } else {
+            let now = Local::now().to_utc();
+            let new_state = BuyerPayInState::OrderAppSynced(now);
+            meta.update_progress(&new_state);
             Ok(())
         }
     } // end of fn sync_order_app
