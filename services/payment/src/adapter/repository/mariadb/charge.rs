@@ -3,7 +3,7 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SubsecRound, Utc};
 use futures_util::StreamExt;
 use mysql_async::prelude::{Query, Queryable, WithParams};
 use mysql_async::{Conn, IsolationLevel, Params, TxOpts};
@@ -20,7 +20,7 @@ use crate::model::{
 };
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::charge_converter::InsertChargeArgs;
+use super::charge_converter::{ChargeMetaRowType, FetchChargeMetaArgs, InsertChargeArgs};
 use super::order_replica::{
     FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType, OrderlineRowType,
 };
@@ -82,6 +82,20 @@ impl MariadbChargeRepo {
         let e = AppRepoError {
             fn_label: AppRepoErrorFnLabel::CreateCharge,
             code: AppErrorCode::Unknown,
+            detail,
+        };
+        let logctx = self._dstore.log_context();
+        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+        e
+    }
+    fn _map_err_get_charge_meta(
+        &self,
+        code: AppErrorCode,
+        detail: AppRepoErrorDetail,
+    ) -> AppRepoError {
+        let e = AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchChargeMeta,
+            code,
             detail,
         };
         let logctx = self._dstore.log_context();
@@ -205,15 +219,34 @@ impl AbstractChargeRepo for MariadbChargeRepo {
 
     async fn fetch_charge_meta(
         &self,
-        _usr_id: u32,
-        _create_time: DateTime<Utc>,
+        usr_id: u32,
+        create_time: DateTime<Utc>,
     ) -> Result<Option<ChargeBuyerMetaModel>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchChargeMeta,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            let code = AppErrorCode::DatabaseServerBusy;
+            let detail = AppRepoErrorDetail::DataStore(e);
+            self._map_err_get_charge_meta(code, detail)
+        })?;
+        let create_time = create_time.trunc_subsecs(0);
+        let (stmt, params) = FetchChargeMetaArgs::from((usr_id, create_time)).into_parts();
+        let exec = &mut conn;
+        let raw = stmt
+            .with(params)
+            .first::<ChargeMetaRowType, &mut Conn>(exec)
+            .await
+            .map_err(|e| {
+                let code = AppErrorCode::Unknown;
+                let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
+                self._map_err_get_charge_meta(code, detail)
+            })?;
+        if let Some(v) = raw {
+            let obj = ChargeBuyerMetaModel::try_from((usr_id, create_time, v))
+                .map_err(|(code, detail)| self._map_err_get_charge_meta(code, detail))?;
+            Ok(Some(obj))
+        } else {
+            Ok(None)
+        }
+    } // end of fn fetch_charge_meta
 
     async fn fetch_all_charge_lines(
         &self,

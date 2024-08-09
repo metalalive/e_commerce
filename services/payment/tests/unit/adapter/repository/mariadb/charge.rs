@@ -11,7 +11,8 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::repository::{app_repo_charge, AbstractChargeRepo, AppRepoErrorDetail};
 use payment::model::{
-    BuyerPayInState, ChargeBuyerModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerModel, OrderCurrencySnapshot, OrderLineModel,
+    OrderLineModelSet, StripeSessionStatusModel, StripeCheckoutPaymentStatusModel,
 };
 use payment::AppSharedState;
 
@@ -239,42 +240,76 @@ async fn read_order_replica_nonexist() {
 } // end of fn read_order_replica_nonexist
 
 #[rustfmt::skip]
-fn _ut_setup_buyer_charge() -> ChargeBuyerModel {
-    let mock_owner = 126;
-    let mock_create_time = Local::now().fixed_offset().to_utc() - Duration::minutes(4);
-    let mock_oid = "dee50de6".to_string();
-    let mock_state = BuyerPayInState::ProcessorAccepted(mock_create_time + Duration::seconds(95));
-    let mock_method = ut_default_charge_method_stripe(&mock_create_time);
-    let mock_data_lines = vec![
+fn _ut_setup_buyer_charge(
+    owner: u32,
+    create_time: DateTime<Utc>,
+    accepted_time_duration: Duration,
+) -> ChargeBuyerModel {
+    let oid = "dee50de6".to_string();
+    let state = BuyerPayInState::ProcessorAccepted(create_time + accepted_time_duration);
+    let mut mthd_3pty = ut_default_charge_method_stripe(&create_time);
+    if let Charge3partyModel::Stripe(s) = &mut mthd_3pty {
+        s.payment_state = StripeCheckoutPaymentStatusModel::unpaid;
+        s.session_state = StripeSessionStatusModel::open;
+    }
+    let data_lines = vec![
         (3034, ProductType::Package, 602, (9028,2), (36112,2), 4),
         (8299, ProductType::Item, 351, (551,1), (1102,1), 2),
     ];
-    let mock_currency_map = ut_setup_currency_snapshot(vec![126, 8299, 3034]);
+    let currency_map = ut_setup_currency_snapshot(vec![126, 8299, 3034]);
     ut_setup_buyer_charge(
-        mock_owner,
-        mock_create_time,
-        mock_oid,
-        mock_state,
-        mock_method,
-        mock_data_lines,
-        mock_currency_map,
+        owner, create_time, oid, state,
+        mthd_3pty, data_lines, currency_map,
     )
 }
 
 #[actix_web::test]
 async fn buyer_create_stripe_charge_ok() {
+    let mock_owner = 126;
+    let mock_create_time = Local::now().to_utc() - Duration::minutes(4);
+    let accepted_time_duration = Duration::seconds(95);
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_repo(shr_state).await;
-    let cline_set = _ut_setup_buyer_charge();
+    let cline_set = _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
     let result = repo.create_charge(cline_set).await;
     assert!(result.is_ok());
-}
+    // --- fetch charge metadata ---
+    let result = repo.fetch_charge_meta(mock_owner, mock_create_time).await;
+    assert!(result.is_ok());
+    let optional_meta = result.unwrap();
+    assert!(optional_meta.is_some());
+    let loaded_meta = optional_meta.unwrap();
+    assert_eq!(loaded_meta.owner, mock_owner);
+    let expect_create_time = mock_create_time.trunc_subsecs(0);
+    assert_eq!(loaded_meta.create_time, expect_create_time);
+    assert_eq!(loaded_meta.oid.as_str(), "dee50de6");
+    if let BuyerPayInState::ProcessorAccepted(t) = &loaded_meta.state {
+        let expect_create_time = mock_create_time.trunc_subsecs(3) + accepted_time_duration;
+        assert_eq!(t, &expect_create_time);
+    } else {
+        assert!(false);
+    }
+    if let Charge3partyModel::Stripe(s) = &loaded_meta.method {
+        assert_eq!(s.checkout_session_id.as_str(), "mock-session-id");
+        assert_eq!(s.payment_intent_id.as_str(), "mock-payment-intent-id");
+        let cond = matches!(s.session_state, StripeSessionStatusModel::open);
+        assert!(cond);
+        let cond = matches!(s.payment_state, StripeCheckoutPaymentStatusModel::unpaid);
+        assert!(cond);
+    } else {
+        assert!(false);
+    }
+} // end of fn buyer_create_stripe_charge_ok
 
 #[actix_web::test]
 async fn buyer_create_charge_invalid_state() {
+    let mock_owner = 126;
+    let mock_create_time = Local::now().to_utc() - Duration::minutes(4);
+    let accepted_time_duration = Duration::seconds(95);
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_repo(shr_state).await;
-    let mut cline_set = _ut_setup_buyer_charge();
+    let mut cline_set =
+        _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
     cline_set.meta.state = BuyerPayInState::Initialized;
     let result = repo.create_charge(cline_set).await;
     assert!(result.is_err());
@@ -287,4 +322,4 @@ async fn buyer_create_charge_invalid_state() {
             assert!(false);
         }
     }
-}
+} // end of fn buyer_create_charge_invalid_state

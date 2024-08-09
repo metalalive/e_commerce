@@ -7,38 +7,31 @@ use std::result::Result;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, SubsecRound, Utc};
 use ecommerce_common::error::AppErrorCode;
 
-use super::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
+use super::AppRepoErrorDetail;
 
 #[allow(non_snake_case)]
 fn raw_column_to_datetime(
     val: mysql_async::Value,
     subsec_precision: u16,
-) -> Result<DateTime<Utc>, AppRepoError> {
-    // TODO, refactor, change error type to `AppRepoErrorDetail`
-    if let mysql_async::Value::Date(Y, M, D, h, m, s, us) = val {
-        let d =
-            NaiveDate::from_ymd_opt(Y as i32, M as u32, D as u32).ok_or_else(|| AppRepoError {
-                fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
-                code: AppErrorCode::DataCorruption,
-                detail: AppRepoErrorDetail::DataRowParse("date-parse-fail".to_string()),
-            })?;
-        let t =
-            NaiveTime::from_hms_micro_opt(h as u32, m as u32, s as u32, us).ok_or_else(|| {
-                AppRepoError {
-                    fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
-                    code: AppErrorCode::DataCorruption,
-                    detail: AppRepoErrorDetail::DataRowParse("time-parse-fail".to_string()),
-                }
-            })?;
-        let out = NaiveDateTime::new(d, t)
-            .and_utc()
-            .trunc_subsecs(subsec_precision);
-        Ok(out)
+) -> Result<DateTime<Utc>, (AppErrorCode, AppRepoErrorDetail)> {
+    let result = if let mysql_async::Value::Date(Y, M, D, h, m, s, us) = val {
+        let res_d = NaiveDate::from_ymd_opt(Y as i32, M as u32, D as u32).ok_or("date-parse-fail");
+        let res_t = NaiveTime::from_hms_micro_opt(h as u32, m as u32, s as u32, us)
+            .ok_or("time-parse-fail");
+        match (res_d, res_t) {
+            (Ok(d), Ok(t)) => Ok(NaiveDateTime::new(d, t)
+                .and_utc()
+                .trunc_subsecs(subsec_precision)),
+            (Err(e), _) => Err(e),
+            (Ok(_), Err(e)) => Err(e),
+        }
     } else {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
-            code: AppErrorCode::DataCorruption,
-            detail: AppRepoErrorDetail::DataRowParse("datetime-unknown-value-type".to_string()),
-        })
-    }
+        Err("datetime-unknown-value-type")
+    };
+    result.map_err(|msg| {
+        (
+            AppErrorCode::DataCorruption,
+            AppRepoErrorDetail::DataRowParse(msg.to_string()),
+        )
+    })
 }

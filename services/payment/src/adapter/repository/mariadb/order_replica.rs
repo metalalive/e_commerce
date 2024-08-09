@@ -234,6 +234,10 @@ impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
              WHERE `o_id`=?",
             "SELECT `create_time`,`num_charges` FROM `order_toplvl_meta` \
              WHERE `o_id`=? AND `buyer_id`=?",
+            // TODO,
+            // - find a way to estimate quantity and amount of paid items, by
+            //   aggregating charge lines
+            // - columns `amt_total_paid` and `qty_paid` will be deprecated
             "SELECT `store_id`,`product_type`,`product_id`,`amt_unit`,`amt_total_rsved`,\
              `amt_total_paid`,`qty_rsved`,`qty_paid`,`rsved_until` FROM `order_line_detail` \
              WHERE `o_id`=?  AND `qty_rsved` > `qty_paid`",
@@ -267,7 +271,11 @@ impl<'a>
         ),
     ) -> Result<Self, Self::Error> {
         let (usr_id, oid, ctime, num_charges, currency_snapshot) = value;
-        let create_time = raw_column_to_datetime(ctime, 0)?;
+        let create_time = raw_column_to_datetime(ctime, 0).map_err(|arg| AppRepoError {
+            fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
+            code: arg.0,
+            detail: arg.1,
+        })?;
         if currency_snapshot.is_empty() {
             let msg = "currency-snapshot-empty".to_string();
             return Err(AppRepoError {
@@ -308,7 +316,12 @@ impl TryFrom<OrderlineRowType> for OrderLineModel {
                 code: AppErrorCode::DataCorruption,
                 detail: AppRepoErrorDetail::DataRowParse(e.0.to_string()),
             })?;
-        let reserved_until = raw_column_to_datetime(rsved_until, 0)?;
+        let reserved_until =
+            raw_column_to_datetime(rsved_until, 0).map_err(|arg| AppRepoError {
+                fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
+                code: arg.0,
+                detail: arg.1,
+            })?;
         let rsv_total = PayLineAmountModel {
             unit: amount_unit,
             total: amount_total_rsved,

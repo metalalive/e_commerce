@@ -1,5 +1,6 @@
 use std::result::Result;
 
+use chrono::{DateTime, Utc};
 use mysql_async::Params;
 
 use ecommerce_common::adapter::repository::OidBytes;
@@ -7,9 +8,10 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::super::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
+use super::raw_column_to_datetime;
 use crate::model::{
-    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
-    ChargeLineBuyerModel, PayLineAmountModel,
+    BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
+    ChargeBuyerModel, ChargeLineBuyerModel, PayLineAmountModel,
 };
 
 const DATETIME_FMT_P0F: &str = "%Y-%m-%d %H:%M:%S";
@@ -25,6 +27,18 @@ struct InsertChargeStatusArgs {
 struct InsertChargeLinesArgs(String, Vec<Params>);
 
 pub(super) struct InsertChargeArgs(pub(super) Vec<(String, Vec<Params>)>);
+pub(super) struct FetchChargeMetaArgs(String, Params);
+
+#[rustfmt::skip]
+pub(super) type ChargeMetaRowType = (
+    Vec<u8>,
+    String, // `state`
+    Option<mysql_async::Value>, // `processor_accepted_time`
+    Option<mysql_async::Value>, // `processor_completed_time`
+    Option<mysql_async::Value>, // `orderapp_synced_time`
+    String, // `pay_method`
+    String, // `detail_3rdparty`, serialised json
+);
 
 impl TryFrom<BuyerPayInState> for InsertChargeStatusArgs {
     type Error = AppRepoError;
@@ -173,3 +187,113 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeArgs {
         Ok(Self(inner))
     }
 } // end of impl InsertChargeArgs
+
+impl From<(u32, DateTime<Utc>)> for FetchChargeMetaArgs {
+    fn from(value: (u32, DateTime<Utc>)) -> Self {
+        let stmt = "SELECT `order_id`,`state`,`processor_accepted_time`,`processor_completed_time`,\
+                    `orderapp_synced_time`,`pay_method`,`detail_3rdparty` FROM `charge_buyer_toplvl`\
+                    WHERE `usr_id`=? AND `create_time`=?";
+        let args = vec![
+            value.0.into(),
+            value.1.format(DATETIME_FMT_P0F).to_string().into(),
+        ];
+        Self(stmt.to_string(), Params::Positional(args))
+    }
+} // end of impl FetchChargeMetaArgs
+impl FetchChargeMetaArgs {
+    pub(super) fn into_parts(self) -> (String, Params) {
+        (self.0, self.1)
+    }
+} // end of impl FetchChargeMetaArgs
+
+impl TryFrom<(String, [Option<mysql_async::Value>; 3])> for BuyerPayInState {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (String, [Option<mysql_async::Value>; 3])) -> Result<Self, Self::Error> {
+        let (label, time_records) = value;
+        let mut time_records = time_records.to_vec();
+        assert_eq!(time_records.len(), 3);
+        let result = match label.as_str() {
+            "ProcessorAccepted" => {
+                if let Some(t) = time_records.remove(0) {
+                    let t = raw_column_to_datetime(t, 3)?;
+                    Ok(Self::ProcessorAccepted(t))
+                } else {
+                    Err("3pty-accepted-missing-time")
+                }
+            }
+            "ProcessorCompleted" => {
+                if let Some(t) = time_records.remove(1) {
+                    let t = raw_column_to_datetime(t, 3)?;
+                    Ok(Self::ProcessorCompleted(t))
+                } else {
+                    Err("3pty-completed-missing-time")
+                }
+            }
+            "OrderAppSynced" => {
+                if let Some(t) = time_records.remove(2) {
+                    let t = raw_column_to_datetime(t, 3)?;
+                    Ok(Self::OrderAppSynced(t))
+                } else {
+                    Err("orderapp-synced-missing-time")
+                }
+            }
+            _others => Err("invalid-buy-in-state"),
+        };
+        result.map_err(|msg| {
+            (
+                AppErrorCode::DataCorruption,
+                AppRepoErrorDetail::DataRowParse(format!("{msg}: {label}")),
+            )
+        })
+    }
+} // end of impl BuyerPayInState
+
+impl TryFrom<(String, String)> for Charge3partyModel {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (String, String)) -> Result<Self, Self::Error> {
+        let (label, detail) = value;
+        let result = match label.as_str() {
+            "Stripe" => serde_json::from_str::<Charge3partyStripeModel>(detail.as_str())
+                .map(Charge3partyModel::Stripe)
+                .map_err(|e| e.to_string()),
+            _others => Err(format!("unknown-3pty-method: {}", label)),
+        };
+        result.map_err(|msg| {
+            (
+                AppErrorCode::DataCorruption,
+                AppRepoErrorDetail::DataRowParse(msg),
+            )
+        })
+    }
+}
+
+#[rustfmt::skip]
+impl TryFrom<(u32, DateTime<Utc>, ChargeMetaRowType)> for ChargeBuyerMetaModel {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (u32, DateTime<Utc>, ChargeMetaRowType)) -> Result<Self, Self::Error> {
+        let (
+            owner, create_time,
+            (
+                oid_raw,
+                buyin_state,
+                accepted_time_3pty,
+                completed_time_3pty,
+                orderapp_synced_time,
+                mthd_3pty_label,
+                detail_3pty_serial,
+            ),
+        ) = value;
+        let oid = OidBytes::to_app_oid(oid_raw)
+            .map_err(|(code, msg)| (code, AppRepoErrorDetail::DataRowParse(msg)))?;
+        let state = BuyerPayInState::try_from((
+            buyin_state,
+            [
+                accepted_time_3pty,
+                completed_time_3pty,
+                orderapp_synced_time,
+            ],
+        ))?;
+        let method = Charge3partyModel::try_from((mthd_3pty_label, detail_3pty_serial))?;
+        Ok(Self { owner, create_time, oid, state, method, })
+    } // end of fn try-from
+} // end of impl ChargeBuyerMetaModel
