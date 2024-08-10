@@ -25,9 +25,20 @@ struct InsertChargeStatusArgs {
     t_order_app_synced: Option<String>,
 }
 struct InsertChargeLinesArgs(String, Vec<Params>);
+struct UpdateCharge3partyArgs {
+    label: String,
+    detail: String,
+}
+struct UpdateChargeStatusArgs {
+    curr_state: String,
+    // the 1st element of the tuple incidates column name which saves
+    // the stringified time value in the 2nd element of the tuple.
+    time_column: (String, String),
+}
 
 pub(super) struct InsertChargeArgs(pub(super) Vec<(String, Vec<Params>)>);
 pub(super) struct FetchChargeMetaArgs(String, Params);
+pub(super) struct UpdateChargeMetaArgs(String, Params);
 
 #[rustfmt::skip]
 pub(super) type ChargeMetaRowType = (
@@ -71,17 +82,63 @@ impl TryFrom<BuyerPayInState> for InsertChargeStatusArgs {
     } // end of fn try_from
 } // end of impl InsertChargeStatusArgs
 
+impl TryFrom<BuyerPayInState> for UpdateChargeStatusArgs {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: BuyerPayInState) -> Result<Self, Self::Error> {
+        let result = match value {
+            BuyerPayInState::Initialized => Err(AppRepoErrorDetail::ChargeStatus(value)),
+            BuyerPayInState::ProcessorAccepted(t) => {
+                Ok(("ProcessorAccepted", "processor_accepted_time", t))
+            }
+            BuyerPayInState::ProcessorCompleted(t) => {
+                Ok(("ProcessorCompleted", "processor_completed_time", t))
+            }
+            BuyerPayInState::OrderAppSynced(t) => Ok(("OrderAppSynced", "orderapp_synced_time", t)),
+        };
+        result
+            .map_err(|detail| (AppErrorCode::InvalidInput, detail))
+            .map(|(state_val, state_t_col, t)| Self {
+                curr_state: state_val.to_string(),
+                time_column: (
+                    state_t_col.to_string(),
+                    t.format(DATETIME_FMT_P3F).to_string(),
+                ),
+            })
+    } // end of fn try_from
+} // end of impl UpdateChargeStatusArgs
+
+impl TryFrom<Charge3partyModel> for UpdateCharge3partyArgs {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    #[rustfmt::skip]
+    fn try_from(value: Charge3partyModel) -> Result<Self, Self::Error> {
+        match value {
+            Charge3partyModel::Stripe(m) => {
+                let label = "Stripe".to_string();
+                serde_json::to_string(&m)
+                    .map_err(|e| (
+                        AppErrorCode::DataCorruption,
+                        AppRepoErrorDetail::PayDetail(label.clone(), e.to_string()),
+                    ))
+                    .map(|detail| Self {label, detail})
+            }
+            Charge3partyModel::Unknown =>
+                Err((
+                    AppErrorCode::InvalidInput,
+                    AppRepoErrorDetail::PayMethodUnsupport("unknown".to_string()),
+                )),
+        }
+    } // end of fn try-from
+} // end of impl UpdateCharge3partyArgs
+
 impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
     type Error = AppRepoError;
+    #[rustfmt::skip]
     fn try_from(value: ChargeBuyerModel) -> Result<Self, Self::Error> {
         // at this point the currency snapshot and charge lines should be handled
         // elsewhere, no need to insert again
         let ChargeBuyerMetaModel {
-            owner,
-            create_time,
-            oid,
-            state,
-            method,
+            owner, create_time, oid,
+            state, method,
         } = value.meta;
         let oid_b = OidBytes::try_from(oid.as_str()).map_err(|(code, msg)| AppRepoError {
             fn_label: AppRepoErrorFnLabel::CreateCharge,
@@ -94,25 +151,13 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
             t_completed,
             t_order_app_synced,
         } = InsertChargeStatusArgs::try_from(state)?;
-        #[rustfmt::skip]
-        let (pay_mthd, detail_3pty) = match method {
-            Charge3partyModel::Stripe(m) => {
-                let label = "Stripe".to_string();
-                serde_json::to_string(&m)
-                    .map(|detail| (label.clone(), detail))
-                    .map_err(|e| AppRepoError {
-                        code: AppErrorCode::DataCorruption,
-                        fn_label: AppRepoErrorFnLabel::CreateOrder,
-                        detail: AppRepoErrorDetail::PayDetail(label, e.to_string()),
-                    })
-            },
-            Charge3partyModel::Unknown =>
-                Err(AppRepoError {
-                    code: AppErrorCode::InvalidInput,
-                    fn_label: AppRepoErrorFnLabel::CreateOrder,
-                    detail: AppRepoErrorDetail::PayMethodUnsupport("unknown".to_string()),
-                }),
-        }?;
+        let UpdateCharge3partyArgs {
+            label: pay_mthd,
+            detail: detail_3pty,
+        } = UpdateCharge3partyArgs::try_from(method).map_err(|(code, detail)| AppRepoError {
+            fn_label: AppRepoErrorFnLabel::CreateCharge,
+            detail, code,
+        })?;
         let arg = vec![
             owner.into(),
             create_time.format(DATETIME_FMT_P0F).to_string().into(),
@@ -297,3 +342,45 @@ impl TryFrom<(u32, DateTime<Utc>, ChargeMetaRowType)> for ChargeBuyerMetaModel {
         Ok(Self { owner, create_time, oid, state, method, })
     } // end of fn try-from
 } // end of impl ChargeBuyerMetaModel
+
+impl TryFrom<ChargeBuyerMetaModel> for UpdateChargeMetaArgs {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: ChargeBuyerMetaModel) -> Result<Self, Self::Error> {
+        let ChargeBuyerMetaModel {
+            owner,
+            create_time,
+            oid: _,
+            state,
+            method,
+        } = value;
+        let UpdateCharge3partyArgs {
+            label: _,
+            detail: detail_3pty,
+        } = UpdateCharge3partyArgs::try_from(method)?;
+        let UpdateChargeStatusArgs {
+            curr_state: state_col,
+            time_column: (state_t_col_name, state_t_col_value),
+        } = UpdateChargeStatusArgs::try_from(state)?;
+        let args = vec![
+            detail_3pty.into(),
+            state_col.into(),
+            state_t_col_value.into(),
+            owner.into(),
+            create_time.format(DATETIME_FMT_P0F).to_string().into(),
+        ];
+        let params = Params::Positional(args);
+        let stmt = format!(
+            "UPDATE `charge_buyer_toplvl` SET `detail_3rdparty`=?, \
+                           `state`=?, `{state_t_col_name}`=? WHERE `usr_id`=? \
+                           AND `create_time`=?"
+        );
+        Ok(Self(stmt, params))
+    } // end of fn try-from
+} // end of impl UpdateChargeMetaArgs
+
+impl UpdateChargeMetaArgs {
+    pub(super) fn into_parts(self) -> (String, Params) {
+        let Self(stmt, params) = self;
+        (stmt, params)
+    }
+} // end of impl UpdateChargeMetaArgs

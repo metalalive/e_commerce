@@ -20,7 +20,9 @@ use crate::model::{
 };
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::charge_converter::{ChargeMetaRowType, FetchChargeMetaArgs, InsertChargeArgs};
+use super::charge_converter::{
+    ChargeMetaRowType, FetchChargeMetaArgs, InsertChargeArgs, UpdateChargeMetaArgs,
+};
 use super::order_replica::{
     FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType, OrderlineRowType,
 };
@@ -95,6 +97,20 @@ impl MariadbChargeRepo {
     ) -> AppRepoError {
         let e = AppRepoError {
             fn_label: AppRepoErrorFnLabel::FetchChargeMeta,
+            code,
+            detail,
+        };
+        let logctx = self._dstore.log_context();
+        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+        e
+    }
+    fn _map_err_update_charge_progress(
+        &self,
+        code: AppErrorCode,
+        detail: AppRepoErrorDetail,
+    ) -> AppRepoError {
+        let e = AppRepoError {
+            fn_label: AppRepoErrorFnLabel::UpdateChargeProgress,
             code,
             detail,
         };
@@ -235,7 +251,7 @@ impl AbstractChargeRepo for MariadbChargeRepo {
             .first::<ChargeMetaRowType, &mut Conn>(exec)
             .await
             .map_err(|e| {
-                let code = AppErrorCode::Unknown;
+                let code = AppErrorCode::RemoteDbServerFailure;
                 let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
                 self._map_err_get_charge_meta(code, detail)
             })?;
@@ -260,14 +276,32 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         })
     }
 
-    async fn update_charge_progress(
-        &self,
-        _meta: ChargeBuyerMetaModel,
-    ) -> Result<(), AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::UpdateChargeProgress,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+    async fn update_charge_progress(&self, meta: ChargeBuyerMetaModel) -> Result<(), AppRepoError> {
+        let arg = UpdateChargeMetaArgs::try_from(meta)
+            .map_err(|(code, detail)| self._map_err_update_charge_progress(code, detail))?;
+        let (stmt, params) = arg.into_parts();
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            let code = AppErrorCode::DatabaseServerBusy;
+            let detail = AppRepoErrorDetail::DataStore(e);
+            self._map_err_update_charge_progress(code, detail)
+        })?;
+        let result = stmt
+            .with(params)
+            .run::<&mut Conn>(&mut conn)
+            .await
+            .map_err(|e| {
+                let code = AppErrorCode::RemoteDbServerFailure;
+                let detail = AppRepoErrorDetail::DatabaseExec(e.to_string());
+                self._map_err_update_charge_progress(code, detail)
+            })?;
+        let num_affected = result.affected_rows();
+        if num_affected == 1u64 {
+            Ok(())
+        } else {
+            let code = AppErrorCode::Unknown;
+            let msg = format!("num-affected-rows : {num_affected}");
+            let detail = AppRepoErrorDetail::DatabaseExec(msg);
+            Err(self._map_err_update_charge_progress(code, detail))
+        }
+    } // end of fn update_charge_progress
 } // end of impl MariadbChargeRepo

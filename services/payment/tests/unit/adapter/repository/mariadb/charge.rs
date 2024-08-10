@@ -11,8 +11,9 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::repository::{app_repo_charge, AbstractChargeRepo, AppRepoErrorDetail};
 use payment::model::{
-    BuyerPayInState, Charge3partyModel, ChargeBuyerModel, OrderCurrencySnapshot, OrderLineModel,
-    OrderLineModelSet, StripeSessionStatusModel, StripeCheckoutPaymentStatusModel,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
+    OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, StripeCheckoutPaymentStatusModel,
+    StripeSessionStatusModel,
 };
 use payment::AppSharedState;
 
@@ -263,6 +264,23 @@ fn _ut_setup_buyer_charge(
     )
 }
 
+async fn ut_fetch_existing_charge_meta(
+    repo: Arc<Box<dyn AbstractChargeRepo>>,
+    owner: u32,
+    create_time: DateTime<Utc>,
+) -> ChargeBuyerMetaModel {
+    let result = repo.fetch_charge_meta(owner, create_time).await;
+    assert!(result.is_ok());
+    let optional_meta = result.unwrap();
+    assert!(optional_meta.is_some());
+    let loaded_meta = optional_meta.unwrap();
+    assert_eq!(loaded_meta.owner, owner);
+    let expect_create_time = create_time.trunc_subsecs(0);
+    assert_eq!(loaded_meta.create_time, expect_create_time);
+    assert_eq!(loaded_meta.oid.as_str(), "dee50de6");
+    loaded_meta
+}
+
 #[actix_web::test]
 async fn buyer_create_stripe_charge_ok() {
     let mock_owner = 126;
@@ -274,18 +292,11 @@ async fn buyer_create_stripe_charge_ok() {
     let result = repo.create_charge(cline_set).await;
     assert!(result.is_ok());
     // --- fetch charge metadata ---
-    let result = repo.fetch_charge_meta(mock_owner, mock_create_time).await;
-    assert!(result.is_ok());
-    let optional_meta = result.unwrap();
-    assert!(optional_meta.is_some());
-    let loaded_meta = optional_meta.unwrap();
-    assert_eq!(loaded_meta.owner, mock_owner);
-    let expect_create_time = mock_create_time.trunc_subsecs(0);
-    assert_eq!(loaded_meta.create_time, expect_create_time);
-    assert_eq!(loaded_meta.oid.as_str(), "dee50de6");
+    let loaded_meta =
+        ut_fetch_existing_charge_meta(repo.clone(), mock_owner, mock_create_time).await;
     if let BuyerPayInState::ProcessorAccepted(t) = &loaded_meta.state {
-        let expect_create_time = mock_create_time.trunc_subsecs(3) + accepted_time_duration;
-        assert_eq!(t, &expect_create_time);
+        let expect = mock_create_time.trunc_subsecs(3) + accepted_time_duration;
+        assert_eq!(t, &expect);
     } else {
         assert!(false);
     }
@@ -295,6 +306,34 @@ async fn buyer_create_stripe_charge_ok() {
         let cond = matches!(s.session_state, StripeSessionStatusModel::open);
         assert!(cond);
         let cond = matches!(s.payment_state, StripeCheckoutPaymentStatusModel::unpaid);
+        assert!(cond);
+    } else {
+        assert!(false);
+    }
+    // --- update charge metadata and save ---
+    let accepted_time_duration = Duration::seconds(167);
+    let mut updating_meta = loaded_meta;
+    if let Charge3partyModel::Stripe(s) = &mut updating_meta.method {
+        s.payment_state = StripeCheckoutPaymentStatusModel::paid;
+        s.session_state = StripeSessionStatusModel::complete;
+    }
+    updating_meta.state =
+        BuyerPayInState::ProcessorCompleted(mock_create_time + accepted_time_duration);
+    let result = repo.update_charge_progress(updating_meta).await;
+    assert!(result.is_ok());
+    // --- fetch charge metadata again ---
+    let loaded_meta =
+        ut_fetch_existing_charge_meta(repo.clone(), mock_owner, mock_create_time).await;
+    if let BuyerPayInState::ProcessorCompleted(t) = &loaded_meta.state {
+        let expect = mock_create_time.trunc_subsecs(3) + accepted_time_duration;
+        assert_eq!(t, &expect);
+    } else {
+        assert!(false);
+    }
+    if let Charge3partyModel::Stripe(s) = &loaded_meta.method {
+        let cond = matches!(s.session_state, StripeSessionStatusModel::complete);
+        assert!(cond);
+        let cond = matches!(s.payment_state, StripeCheckoutPaymentStatusModel::paid);
         assert!(cond);
     } else {
         assert!(false);
