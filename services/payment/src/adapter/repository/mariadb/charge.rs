@@ -21,7 +21,8 @@ use crate::model::{
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use super::charge_converter::{
-    ChargeMetaRowType, FetchChargeMetaArgs, InsertChargeArgs, UpdateChargeMetaArgs,
+    ChargeLineRowType, ChargeMetaRowType, FetchChargeLineArgs, FetchChargeMetaArgs,
+    InsertChargeArgs, UpdateChargeMetaArgs,
 };
 use super::order_replica::{
     FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType, OrderlineRowType,
@@ -111,6 +112,21 @@ impl MariadbChargeRepo {
     ) -> AppRepoError {
         let e = AppRepoError {
             fn_label: AppRepoErrorFnLabel::UpdateChargeProgress,
+            code,
+            detail,
+        };
+        let logctx = self._dstore.log_context();
+        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+        e
+    }
+
+    fn _map_err_fetch_charge_lines(
+        &self,
+        code: AppErrorCode,
+        detail: AppRepoErrorDetail,
+    ) -> AppRepoError {
+        let e = AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchChargeLines,
             code,
             detail,
         };
@@ -266,15 +282,44 @@ impl AbstractChargeRepo for MariadbChargeRepo {
 
     async fn fetch_all_charge_lines(
         &self,
-        _usr_id: u32,
-        _create_time: DateTime<Utc>,
+        usr_id: u32,
+        create_time: DateTime<Utc>,
     ) -> Result<Vec<ChargeLineBuyerModel>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchAllChargeLines,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            let code = AppErrorCode::DatabaseServerBusy;
+            let detail = AppRepoErrorDetail::DataStore(e);
+            self._map_err_fetch_charge_lines(code, detail)
+        })?;
+        let create_time = create_time.trunc_subsecs(0);
+        let (stmt, params) = FetchChargeLineArgs::from((usr_id, create_time)).into_parts();
+        let exec = &mut conn;
+        let raw = stmt
+            .with(params)
+            .fetch::<ChargeLineRowType, &mut Conn>(exec)
+            .await
+            .map_err(|e| {
+                let code = AppErrorCode::RemoteDbServerFailure;
+                let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
+                self._map_err_fetch_charge_lines(code, detail)
+            })?;
+        let mut errors = Vec::new();
+        let lines = raw
+            .into_iter()
+            .filter_map(|v| {
+                ChargeLineBuyerModel::try_from(v)
+                    .map_err(|e| errors.push(e))
+                    .ok()
+            })
+            .collect::<Vec<_>>();
+        if errors.is_empty() {
+            Ok(lines)
+        } else {
+            let detail = errors.remove(0);
+            let code = AppErrorCode::DataCorruption;
+            let e = self._map_err_fetch_charge_lines(code, detail);
+            Err(e)
+        }
+    } // end of fn fetch_all_charge_lines
 
     async fn update_charge_progress(&self, meta: ChargeBuyerMetaModel) -> Result<(), AppRepoError> {
         let arg = UpdateChargeMetaArgs::try_from(meta)

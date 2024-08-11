@@ -297,17 +297,12 @@ impl<'a>
 
 impl TryFrom<OrderlineRowType> for OrderLineModel {
     type Error = AppRepoError;
+    #[rustfmt::skip]
     fn try_from(value: OrderlineRowType) -> Result<Self, Self::Error> {
         let (
-            store_id,
-            prod_typ_str,
-            product_id,
-            amount_unit,
-            amount_total_rsved,
-            amount_total_paid,
-            qty_rsved,
-            qty_paid,
-            rsved_until,
+            store_id, prod_typ_str, product_id,
+            amount_unit, amount_total_rsved, amount_total_paid,
+            qty_rsved, qty_paid, rsved_until,
         ) = value;
         let product_type = prod_typ_str
             .parse::<ProductType>()
@@ -319,8 +314,7 @@ impl TryFrom<OrderlineRowType> for OrderLineModel {
         let reserved_until =
             raw_column_to_datetime(rsved_until, 0).map_err(|arg| AppRepoError {
                 fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
-                code: arg.0,
-                detail: arg.1,
+                code: arg.0, detail: arg.1,
             })?;
         let rsv_total = PayLineAmountModel {
             unit: amount_unit,
@@ -332,16 +326,7 @@ impl TryFrom<OrderlineRowType> for OrderLineModel {
             total: amount_total_paid,
             qty: qty_paid,
         };
-        let pid = BaseProductIdentity {
-            store_id,
-            product_type,
-            product_id,
-        };
-        Ok(Self {
-            pid,
-            rsv_total,
-            paid_total,
-            reserved_until,
-        })
+        let pid = BaseProductIdentity { store_id, product_type, product_id };
+        Ok(Self { pid, rsv_total, paid_total, reserved_until })
     } // end of fn try-from
 } // end of impl OrderLineModel

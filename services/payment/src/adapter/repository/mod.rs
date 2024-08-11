@@ -24,7 +24,7 @@ pub enum AppRepoErrorFnLabel {
     CreateOrder,
     CreateCharge,
     FetchChargeMeta,
-    FetchAllChargeLines,
+    FetchChargeLines,
     UpdateChargeProgress,
 }
 #[derive(Debug)]

@@ -2,8 +2,10 @@ use std::result::Result;
 
 use chrono::{DateTime, Utc};
 use mysql_async::Params;
+use rust_decimal::Decimal;
 
 use ecommerce_common::adapter::repository::OidBytes;
+use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
@@ -39,16 +41,21 @@ struct UpdateChargeStatusArgs {
 pub(super) struct InsertChargeArgs(pub(super) Vec<(String, Vec<Params>)>);
 pub(super) struct FetchChargeMetaArgs(String, Params);
 pub(super) struct UpdateChargeMetaArgs(String, Params);
+pub(super) struct FetchChargeLineArgs(String, Params);
 
-#[rustfmt::skip]
 pub(super) type ChargeMetaRowType = (
     Vec<u8>,
-    String, // `state`
+    String,                     // `state`
     Option<mysql_async::Value>, // `processor_accepted_time`
     Option<mysql_async::Value>, // `processor_completed_time`
     Option<mysql_async::Value>, // `orderapp_synced_time`
-    String, // `pay_method`
-    String, // `detail_3rdparty`, serialised json
+    String,                     // `pay_method`
+    String,                     // `detail_3rdparty`, serialised json
+);
+
+#[rustfmt::skip]
+pub(super) type ChargeLineRowType = (
+    u32, String, u64, Decimal, Decimal, u32
 );
 
 impl TryFrom<BuyerPayInState> for InsertChargeStatusArgs {
@@ -154,10 +161,10 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
         let UpdateCharge3partyArgs {
             label: pay_mthd,
             detail: detail_3pty,
-        } = UpdateCharge3partyArgs::try_from(method).map_err(|(code, detail)| AppRepoError {
-            fn_label: AppRepoErrorFnLabel::CreateCharge,
-            detail, code,
-        })?;
+        } = UpdateCharge3partyArgs::try_from(method).map_err(
+            |(code, detail)| AppRepoError {
+                fn_label: AppRepoErrorFnLabel::CreateCharge,  detail, code,
+            })?;
         let arg = vec![
             owner.into(),
             create_time.format(DATETIME_FMT_P0F).to_string().into(),
@@ -244,12 +251,12 @@ impl From<(u32, DateTime<Utc>)> for FetchChargeMetaArgs {
         ];
         Self(stmt.to_string(), Params::Positional(args))
     }
-} // end of impl FetchChargeMetaArgs
+}
 impl FetchChargeMetaArgs {
     pub(super) fn into_parts(self) -> (String, Params) {
         (self.0, self.1)
     }
-} // end of impl FetchChargeMetaArgs
+}
 
 impl TryFrom<(String, [Option<mysql_async::Value>; 3])> for BuyerPayInState {
     type Error = (AppErrorCode, AppRepoErrorDetail);
@@ -377,10 +384,46 @@ impl TryFrom<ChargeBuyerMetaModel> for UpdateChargeMetaArgs {
         Ok(Self(stmt, params))
     } // end of fn try-from
 } // end of impl UpdateChargeMetaArgs
-
 impl UpdateChargeMetaArgs {
     pub(super) fn into_parts(self) -> (String, Params) {
         let Self(stmt, params) = self;
         (stmt, params)
     }
 } // end of impl UpdateChargeMetaArgs
+
+impl From<(u32, DateTime<Utc>)> for FetchChargeLineArgs {
+    fn from(value: (u32, DateTime<Utc>)) -> Self {
+        let stmt = "SELECT `store_id`,`product_type`,`product_id`,`amt_unit`,\
+                    `amt_total`,`qty` FROM `charge_line` WHERE `buyer_id`=? \
+                    AND `create_time`=?";
+        let args = vec![
+            value.0.into(),
+            value.1.format(DATETIME_FMT_P0F).to_string().into(),
+        ];
+        Self(stmt.to_string(), Params::Positional(args))
+    }
+}
+impl FetchChargeLineArgs {
+    pub(super) fn into_parts(self) -> (String, Params) {
+        let Self(stmt, params) = self;
+        (stmt, params)
+    }
+}
+
+impl TryFrom<ChargeLineRowType> for ChargeLineBuyerModel {
+    type Error = AppRepoErrorDetail;
+    #[rustfmt::skip]
+    fn try_from(value: ChargeLineRowType) -> Result<Self, Self::Error> {
+        let (
+            store_id, product_type_serial, product_id,
+            amt_unit, amt_total, qty,
+        ) = value;
+        let product_type = product_type_serial.parse::<ProductType>()
+            .map_err(|e| AppRepoErrorDetail::DataRowParse(e.0.to_string()))?;
+        let pid = BaseProductIdentity { store_id, product_id, product_type };
+        let amount = PayLineAmountModel {
+            unit: amt_unit, total: amt_total, qty,
+        };
+        Ok(Self { pid, amount })
+    }
+}
