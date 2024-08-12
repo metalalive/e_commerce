@@ -51,8 +51,16 @@ pub enum AppProcessorErrorReason {
 }
 
 #[derive(Debug)]
+pub enum AppProcessorFnLabel {
+    TryBuild,
+    PayInStart,
+    PayInProgress,
+}
+
+#[derive(Debug)]
 pub struct AppProcessorError {
     pub reason: AppProcessorErrorReason,
+    pub fn_label: AppProcessorFnLabel,
 }
 
 pub struct AppProcessorPayInResult {
@@ -140,10 +148,14 @@ impl AppProcessorContext {
             } else {
                 Err(AppProcessorError {
                     reason: AppProcessorErrorReason::InvalidConfig,
+                    fn_label: AppProcessorFnLabel::TryBuild,
                 })
             }
         } else {
-            Err(errors.remove(0))
+            Err(AppProcessorError {
+                reason: errors.remove(0),
+                fn_label: AppProcessorFnLabel::TryBuild,
+            })
         }
     } // end of fn new
 } // end of impl AppProcessorContext
@@ -155,18 +167,32 @@ impl AbstractPaymentProcessor for AppProcessorContext {
         charge_m: &ChargeBuyerModel,
         req_mthd: PaymentMethodReqDto,
     ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError> {
-        let out = match req_mthd {
-            PaymentMethodReqDto::Stripe(c) => self._stripe.pay_in_start(&c, charge_m).await?,
+        let result = match req_mthd {
+            PaymentMethodReqDto::Stripe(c) => self._stripe.pay_in_start(&c, charge_m).await,
         };
-        Ok(out)
+        result.map_err(|reason| AppProcessorError {
+            reason,
+            fn_label: AppProcessorFnLabel::PayInStart,
+        })
     }
 
     async fn pay_in_progress(
         &self,
-        _meta: &ChargeBuyerMetaModel,
+        meta: &ChargeBuyerMetaModel,
     ) -> Result<Charge3partyModel, AppProcessorError> {
-        Err(AppProcessorError {
-            reason: AppProcessorErrorReason::NotImplemented,
+        let result = match &meta.method {
+            Charge3partyModel::Stripe(c) => self
+                ._stripe
+                .pay_in_progress(c)
+                .await
+                .map(Charge3partyModel::Stripe),
+            Charge3partyModel::Unknown => Err(AppProcessorErrorReason::InvalidMethod(
+                "unknown".to_string(),
+            )),
+        };
+        result.map_err(|reason| AppProcessorError {
+            reason,
+            fn_label: AppProcessorFnLabel::PayInProgress,
         })
     }
 }
@@ -178,6 +204,7 @@ pub(crate) fn app_processor_context(
 ) -> Result<Box<dyn AbstractPaymentProcessor>, AppProcessorError> {
     let _cfg_3pt = cfg_3pt.as_ref().cloned().ok_or(AppProcessorError {
         reason: AppProcessorErrorReason::InvalidConfig,
+        fn_label: AppProcessorFnLabel::TryBuild,
     })?;
     let proc = AppProcessorContext::new(_cfg_3pt, cfdntl, logctx)?;
     Ok(Box::new(proc))

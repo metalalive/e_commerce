@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use http_body_util::Full;
+use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
 use hyper::header::{HeaderName, HeaderValue};
 use hyper::Method;
@@ -21,7 +21,7 @@ use self::resources::{
     CheckoutSession, CheckoutSessionMode, CreateCheckoutSession, CreateCheckoutSessionLineItem,
     CreateCheckoutSessionPaymentIntentData,
 };
-use super::{AppProcessorError, AppProcessorErrorReason, AppProcessorPayInResult, BaseClientError};
+use super::{AppProcessorErrorReason, AppProcessorPayInResult, BaseClientError};
 use crate::api::web::dto::{
     PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto,
     StripeCheckoutUImodeDto,
@@ -40,7 +40,12 @@ pub(super) trait AbstStripeContext: Send + Sync {
         &self,
         req: &StripeCheckoutSessionReqDto,
         meta: &ChargeBuyerModel,
-    ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError>;
+    ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorErrorReason>;
+
+    async fn pay_in_progress(
+        &self,
+        detail3pty: &Charge3partyStripeModel,
+    ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason>;
 }
 
 pub(super) struct AppProcessorStripeCtx {
@@ -58,23 +63,19 @@ impl AppProcessorStripeCtx {
         confidential_path: &str,
         cfdntl: Arc<Box<dyn AbstractConfidentiality>>,
         logctx: Arc<AppLogContext>,
-    ) -> Result<Box<dyn AbstStripeContext>, AppProcessorError> {
+    ) -> Result<Box<dyn AbstStripeContext>, AppProcessorErrorReason> {
         let serial = cfdntl
             .try_get_payload(confidential_path)
-            .map_err(|_e| AppProcessorError {
-                reason: AppProcessorErrorReason::MissingCredential,
-            })?;
-        let api_key =
-            serde_json::from_str::<String>(serial.as_str()).map_err(|_e| AppProcessorError {
-                reason: AppProcessorErrorReason::CredentialCorrupted,
-            })?;
+            .map_err(|_e| AppProcessorErrorReason::MissingCredential)?;
+        let api_key = serde_json::from_str::<String>(serial.as_str())
+            .map_err(|_e| AppProcessorErrorReason::CredentialCorrupted)?;
         let secure_connector = {
             let mut builder = native_tls::TlsConnector::builder();
             builder.min_protocol_version(Some(native_tls::Protocol::Tlsv12));
             let c = builder
                 .build()
                 .map_err(|e| BaseClientError { reason: e.into() })
-                .map_err(|e| AppProcessorError { reason: e.into() })?;
+                .map_err(AppProcessorErrorReason::from)?;
             c.into()
         };
         let m = Self {
@@ -94,36 +95,33 @@ impl AbstStripeContext for AppProcessorStripeCtx {
         &self,
         req: &StripeCheckoutSessionReqDto,
         charge_buyer: &ChargeBuyerModel,
-    ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError> {
+    ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorErrorReason> {
         let _logctx = &self.logctx;
         let is_embed_ui = matches!(req.ui_mode, StripeCheckoutUImodeDto::EmbeddedJs);
         let is_redirect_pg = matches!(req.ui_mode, StripeCheckoutUImodeDto::RedirectPage);
         if is_embed_ui {
             if req.success_url.is_some() {
-                return Err(AppProcessorError {
-                    reason: AppProcessorErrorReason::InvalidMethod(
-                        "embed-ui-success-url".to_string(),
-                    ),
-                });
+                return Err(AppProcessorErrorReason::InvalidMethod(
+                    "embed-ui-success-url".to_string(),
+                ));
             }
             if req.return_url.is_none() {
-                return Err(AppProcessorError {
-                    reason: AppProcessorErrorReason::InvalidMethod(
-                        "embed-ui-missing-return-url".to_string(),
-                    ),
-                });
+                return Err(AppProcessorErrorReason::InvalidMethod(
+                    "embed-ui-missing-return-url".to_string(),
+                ));
             }
         }
         if is_redirect_pg && req.return_url.is_some() {
-            return Err(AppProcessorError {
-                reason: AppProcessorErrorReason::InvalidMethod(
-                    "redirect-page-with-return-url".to_string(),
-                ),
-            });
+            return Err(AppProcessorErrorReason::InvalidMethod(
+                "redirect-page-with-return-url".to_string(),
+            ));
         }
-        let buyer_currency = charge_buyer.get_buyer_currency().ok_or(AppProcessorError {
-            reason: AppProcessorErrorReason::MissingCurrency(charge_buyer.meta.owner),
-        })?;
+        let buyer_currency =
+            charge_buyer
+                .get_buyer_currency()
+                .ok_or(AppProcessorErrorReason::MissingCurrency(
+                    charge_buyer.meta.owner,
+                ))?;
 
         let charge_token_serial =
             charge_buyer
@@ -163,6 +161,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             mode: CheckoutSessionMode::Payment,
             ui_mode: (&req.ui_mode).into(),
         };
+        // TODO, pool for these client connections
         let mut _client = AppStripeClient::<Full<Bytes>>::try_build(
             self.logctx.clone(),
             &self.secure_connector,
@@ -171,7 +170,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             self.api_key.clone(),
         )
         .await
-        .map_err(|e| AppProcessorError { reason: e.into() })?;
+        .map_err(AppProcessorErrorReason::from)?;
 
         let hdrs = vec![(
             // header-name from-static does not allow uppercase word
@@ -186,30 +185,60 @@ impl AbstStripeContext for AppProcessorStripeCtx {
                 hdrs,
             )
             .await
-            .map_err(|e| AppProcessorError { reason: e.into() })?;
+            .map_err(AppProcessorErrorReason::from)?;
         let time_now = Utc::now();
         let result = AppProcessorPayInResult {
             charge_id: charge_buyer.meta.token().0.to_vec(),
             method: PaymentMethodRespDto::Stripe(StripeCheckoutSessionRespDto {
                 id: resp.id.clone(),
-                redirect_url: resp.url,
-                client_session: resp.client_secret,
+                redirect_url: resp.url.clone(),
+                client_session: resp.client_secret.clone(),
             }),
             state: BuyerPayInState::ProcessorAccepted(time_now),
-            completed: false,
+            completed: false, // TODO, deprecated
         };
-        let mthd_m = Charge3partyModel::Stripe(Charge3partyStripeModel {
-            checkout_session_id: resp.id,
-            session_state: resp.status,
-            payment_state: resp.payment_status,
-            payment_intent_id: resp.payment_intent,
-            expiry: DateTime::from_timestamp(resp.expires_at, 0)
-                .unwrap_or(time_now + Duration::seconds(CHECKOUT_SESSION_MIN_SECONDS)),
-        });
-        Ok((result, mthd_m))
+        let time_end = time_now + Duration::seconds(CHECKOUT_SESSION_MIN_SECONDS);
+        let mthd_3pty = Charge3partyStripeModel::from((resp, time_end));
+        Ok((result, Charge3partyModel::Stripe(mthd_3pty)))
     } // end of fn create_checkout_session
+
+    async fn pay_in_progress(
+        &self,
+        old: &Charge3partyStripeModel,
+    ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason> {
+        let mut _client = AppStripeClient::<Empty<Bytes>>::try_build(
+            self.logctx.clone(),
+            &self.secure_connector,
+            self.host.clone(),
+            self.port,
+            self.api_key.clone(),
+        )
+        .await
+        .map_err(AppProcessorErrorReason::from)?;
+        let resource_path = format!("/checkout/sessions/{}", old.checkout_session_id);
+        let new_session = _client
+            .execute::<CheckoutSession>(resource_path.as_str(), Method::GET, Vec::new())
+            .await
+            .map_err(AppProcessorErrorReason::from)?;
+        let arg = (new_session, old.expiry);
+        Ok(Charge3partyStripeModel::from(arg))
+    }
 } // end of impl AppProcessorStripeCtx
 
+impl From<(CheckoutSession, DateTime<Utc>)> for Charge3partyStripeModel {
+    fn from(value: (CheckoutSession, DateTime<Utc>)) -> Self {
+        let (session, time_end) = value;
+        Self {
+            checkout_session_id: session.id,
+            session_state: session.status,
+            payment_state: session.payment_status,
+            payment_intent_id: session.payment_intent,
+            expiry: DateTime::from_timestamp(session.expires_at, 0).unwrap_or(time_end),
+        }
+    }
+}
+
+// TODO, conditional compilation for test
 pub(super) struct MockProcessorStripeCtx;
 
 impl MockProcessorStripeCtx {
@@ -224,7 +253,7 @@ impl AbstStripeContext for MockProcessorStripeCtx {
         &self,
         req: &StripeCheckoutSessionReqDto,
         charge_buyer: &ChargeBuyerModel,
-    ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError> {
+    ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorErrorReason> {
         let (redirect_url, client_session) = match req.ui_mode {
             StripeCheckoutUImodeDto::RedirectPage => (Some("https://abc.new.au".to_string()), None),
             StripeCheckoutUImodeDto::EmbeddedJs => {
@@ -252,5 +281,12 @@ impl AbstStripeContext for MockProcessorStripeCtx {
         };
         let mthd_m = Charge3partyModel::Stripe(stripe_m);
         Ok((result, mthd_m))
+    }
+
+    async fn pay_in_progress(
+        &self,
+        _detail: &Charge3partyStripeModel,
+    ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason> {
+        Err(AppProcessorErrorReason::NotImplemented)
     }
 } // end of impl MockProcessorStripeCtx

@@ -2,7 +2,7 @@ use std::marker::{Send, Sync};
 use std::result::Result;
 use std::sync::Arc;
 
-use http_body_util::{BodyExt, Full};
+use http_body_util::{BodyExt, Empty, Full};
 use hyper::body::Bytes;
 use hyper::header::{HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use hyper::Method;
@@ -41,22 +41,10 @@ where
             _base_client,
         })
     }
-}
 
-impl AppStripeClient<Full<Bytes>> {
-    pub(super) async fn execute_form<D, S>(
-        &mut self,
-        resource_path: &str,
-        method: Method,
-        body_obj: &S,
-        mut headers: Vec<(HeaderName, HeaderValue)>,
-    ) -> Result<D, BaseClientError>
-    where
-        D: DeserializeOwned + Send + 'static,
-        S: Serialize + Send + 'static,
-    {
+    fn necessary_headers(&self) -> Result<[(HeaderName, HeaderValue); 3], BaseClientError> {
         let value = format!("Bearer {}", self.secret_key.as_str());
-        let pairs = [
+        let out = [
             (
                 AUTHORIZATION,
                 HeaderValue::from_str(value.as_str()).map_err(|_e| BaseClientError {
@@ -71,6 +59,45 @@ impl AppStripeClient<Full<Bytes>> {
                 HeaderValue::from_str("application/x-www-form-urlencoded").unwrap(),
             ),
         ];
+        Ok(out)
+    }
+
+    fn deserialise_body<D>(raw: Vec<u8>, status: u16) -> Result<D, BaseClientError>
+    where
+        D: DeserializeOwned + Send + 'static,
+    {
+        // deserialise in specific 3rd-party client, different processors
+        // applies different deserialisation format
+        serde_json::from_slice::<D>(raw.as_slice()).map_err(|_e| {
+            let reason = match String::from_utf8(raw) {
+                Ok(v) => BaseClientErrorReason::DeserialiseFailure(v, status),
+                Err(_e) => BaseClientErrorReason::Http {
+                    sender_closed: false,
+                    parse_error: true,
+                    req_cancelled: false,
+                    timeout: false,
+                    messasge_corrupted: true,
+                    detail: "resp-body-complete-corrupt".to_string(),
+                },
+            };
+            BaseClientError { reason }
+        })
+    }
+} // end of impl AppStripeClient
+
+impl AppStripeClient<Full<Bytes>> {
+    pub(super) async fn execute_form<D, S>(
+        &mut self,
+        resource_path: &str,
+        method: Method,
+        body_obj: &S,
+        mut headers: Vec<(HeaderName, HeaderValue)>,
+    ) -> Result<D, BaseClientError>
+    where
+        D: DeserializeOwned + Send + 'static,
+        S: Serialize + Send + 'static,
+    {
+        let pairs = self.necessary_headers()?;
         headers.extend(pairs.into_iter());
         let uri = "/".to_string() + API_VERSION + resource_path;
         let body = serde_qs::to_string(body_obj)
@@ -83,21 +110,27 @@ impl AppStripeClient<Full<Bytes>> {
             ._base_client
             .execute_form(uri.as_str(), method, body, headers)
             .await?;
-        let out = serde_json::from_slice::<D>(raw_collected.as_slice()).map_err(|_e| {
-            let reason = match String::from_utf8(raw_collected) {
-                Ok(v) => BaseClientErrorReason::DeserialiseFailure(v, status_code.as_u16()),
-                Err(_e) => BaseClientErrorReason::Http {
-                    sender_closed: false,
-                    parse_error: true,
-                    req_cancelled: false,
-                    timeout: false,
-                    messasge_corrupted: true,
-                    detail: "resp-body-complete-corrupt".to_string(),
-                },
-            };
-            BaseClientError { reason }
-        })?; //TODO, deserialise in specific 3rd-party client, different processors
-             // applies different deserialisation format
-        Ok(out)
+        Self::deserialise_body::<D>(raw_collected, status_code.as_u16())
     } // end of fn execute_form
+} // end of impl AppStripeClient
+
+impl AppStripeClient<Empty<Bytes>> {
+    pub(super) async fn execute<D>(
+        &mut self,
+        resource_path: &str,
+        method: Method,
+        mut headers: Vec<(HeaderName, HeaderValue)>,
+    ) -> Result<D, BaseClientError>
+    where
+        D: DeserializeOwned + Send + 'static,
+    {
+        let pairs = self.necessary_headers()?;
+        headers.extend(pairs.into_iter());
+        let uri = "/".to_string() + API_VERSION + resource_path;
+        let (raw_collected, status_code) = self
+            ._base_client
+            .execute(uri.as_str(), method, headers)
+            .await?;
+        Self::deserialise_body::<D>(raw_collected, status_code.as_u16())
+    } // end of fn execute
 } // end of impl AppStripeClient

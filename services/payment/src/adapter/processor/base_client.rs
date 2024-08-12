@@ -5,12 +5,12 @@ use std::result::Result;
 use std::sync::Arc;
 
 use http_body_util::BodyExt;
-use http_body_util::Full;
+use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
 use hyper::{Error as HyperError, Method, Request, StatusCode};
 // TODO, switch to http2
 use hyper::client::conn::http1::{handshake, SendRequest};
-use hyper::header::{HeaderName, HeaderValue, HOST};
+use hyper::header::{HeaderMap, HeaderName, HeaderValue, HOST};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpStream;
 use tokio_native_tls::{native_tls, TlsConnector};
@@ -143,12 +143,11 @@ where
         let logctx_p = &self.logctx;
         let uri_log = req.uri().to_string();
 
-        // TODO, initiate http handshake at here
         let mut resp = self.req_sender.send_request(req).await.map_err(|e| {
             self.conn_closed = e.is_closed() | e.is_timeout();
             app_log_event!(logctx_p, AppLogLevel::WARNING, "{:?}", e);
             BaseClientError { reason: e.into() }
-        })?; // TODO, return raw response body
+        })?;
         let mut raw_collected = Vec::<u8>::new();
         while let Some(nxt) = resp.frame().await {
             let frm = nxt.map_err(|e| BaseClientError { reason: e.into() })?;
@@ -195,6 +194,22 @@ where
         }
         Ok((raw_collected, status_code))
     } // end of fn execute
+
+    fn append_necessary_headers(
+        &self,
+        dst: &mut HeaderMap,
+        wr_data: Vec<(HeaderName, HeaderValue)>,
+    ) {
+        wr_data
+            .into_iter()
+            .map(|(k, v)| {
+                let _old = dst.insert(k, v);
+            })
+            .count();
+        // required in case the 3rd-party remote server sits behind reverse proxy
+        // server (e.g. CDN)
+        let _discarded = dst.insert(HOST, HeaderValue::from_str(self.host.as_str()).unwrap());
+    }
 } // end of impl BaseClient
 
 impl BaseClient<Full<Bytes>> {
@@ -212,16 +227,26 @@ impl BaseClient<Full<Bytes>> {
             .map_err(|e| BaseClientError {
                 reason: BaseClientErrorReason::HttpRequest(e.to_string()),
             })?; // hyper error is vague, TODO improve the detail
-        let hdr_map = req.headers_mut();
-        headers
-            .into_iter()
-            .map(|(k, v)| {
-                let _old = hdr_map.insert(k, v);
-            })
-            .count();
-        // required in case the 3rd-party remote server sits behind reverse proxy
-        // server (e.g. CDN)
-        let _discarded = hdr_map.insert(HOST, HeaderValue::from_str(self.host.as_str()).unwrap());
+        self.append_necessary_headers(req.headers_mut(), headers);
+        self._execute(req).await
+    }
+} // end of impl BaseClient
+
+impl BaseClient<Empty<Bytes>> {
+    pub(super) async fn execute(
+        &mut self,
+        path: &str,
+        method: Method,
+        headers: Vec<(HeaderName, HeaderValue)>,
+    ) -> Result<(Vec<u8>, StatusCode), BaseClientError> {
+        let mut req = Request::builder()
+            .method(method)
+            .uri(path)
+            .body(Empty::default())
+            .map_err(|e| BaseClientError {
+                reason: BaseClientErrorReason::HttpRequest(e.to_string()),
+            })?; // hyper error is vague, TODO improve the detail
+        self.append_necessary_headers(req.headers_mut(), headers);
         self._execute(req).await
     }
 } // end of impl BaseClient

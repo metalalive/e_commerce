@@ -8,7 +8,8 @@ use ecommerce_common::api::rpc::dto::{
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use payment::adapter::processor::{
-    AppProcessorError, AppProcessorErrorReason, BaseClientError, BaseClientErrorReason,
+    AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel, BaseClientError,
+    BaseClientErrorReason,
 };
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
@@ -341,7 +342,8 @@ async fn error_3party_lowlvl() {
         );
         let client_err = BaseClientError { reason };
         let reason = AppProcessorErrorReason::LowLvlNet(client_err);
-        AppProcessorError { reason }
+        let fn_label = AppProcessorFnLabel::PayInProgress;
+        AppProcessorError { reason, fn_label }
     };
     let mock_3pty = MockPaymentProcessor::build(None, Some(Err(error3pty)));
     let mock_rpc_ctx = MockRpcContext::build(None);

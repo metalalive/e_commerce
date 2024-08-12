@@ -14,7 +14,7 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::cache::OrderSyncLockError;
 use payment::adapter::processor::{
-    AppProcessorError, AppProcessorErrorReason, AppProcessorPayInResult,
+    AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel, AppProcessorPayInResult,
 };
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
@@ -513,6 +513,7 @@ async fn processor_start_payin_failure() {
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
     let expect_proc_error = AppProcessorError {
+        fn_label: AppProcessorFnLabel::PayInStart,
         reason: AppProcessorErrorReason::CredentialCorrupted,
     };
     let mock_processor = MockPaymentProcessor::build(Some(Err(expect_proc_error)), None);
