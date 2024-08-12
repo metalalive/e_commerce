@@ -327,16 +327,19 @@ impl OrderLineModel {
                         && (m.id_.product_type == d.product_type)
                 });
                 let possible_error = if let Some(m) = result {
-                    if m.qty.reserved >= d.qty {
+                    let new_paid_qty = m.qty.paid + d.qty;
+                    if m.qty.reserved >= new_paid_qty {
                         if let Some(old_dt) = m.qty.paid_last_update.as_ref() {
                             if old_dt < &charge_time {
-                                (m.qty.paid, m.qty.paid_last_update) = (d.qty, Some(charge_time));
+                                m.qty.paid = new_paid_qty;
+                                m.qty.paid_last_update = Some(charge_time);
                                 None
                             } else {
                                 Some(OrderLinePayUpdateErrorReason::Omitted)
                             }
                         } else {
-                            (m.qty.paid, m.qty.paid_last_update) = (d.qty, Some(charge_time));
+                            m.qty.paid = new_paid_qty;
+                            m.qty.paid_last_update = Some(charge_time);
                             None
                         }
                     } else {

@@ -257,16 +257,45 @@ fn update_payments_ok() {
             product_type:  d.2, qty: d.3,
         })
         .collect::<Vec<_>>();
-    let d_charge_time = paid_last_update + Duration::minutes(5);
-    let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time);
+    let d_charge_time = [
+        paid_last_update + Duration::minutes(5),
+        paid_last_update + Duration::minutes(6),
+    ];
+    let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time[0]);
     assert_eq!(errors.len(), 0);
-    assert_eq!(models[0].id_.product_id, 812);
-    assert_eq!(models[0].qty.paid, 4);
-    assert!(models[0].qty.paid_last_update.is_some());
-    assert_eq!(models[0].qty.paid_last_update.as_ref().unwrap(), &d_charge_time);
-    assert_eq!(models[1].id_.product_id, 890);
-    assert_eq!(models[1].qty.paid, 7);
-    assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &d_charge_time);
+    models.iter().map(|m| {
+        let key = (&m.id_.product_type, m.id_.product_id);
+        let expect = match key {
+            (ProductType::Package, 812u64) => (4u32, d_charge_time[0]),
+            (ProductType::Item, 890) => (8, d_charge_time[0]),
+            _others => (99999, paid_last_update),
+        };
+        assert_eq!(m.qty.paid, expect.0);
+        assert!(m.qty.paid_last_update.is_some());
+        assert_eq!(m.qty.paid_last_update.as_ref().unwrap(), &expect.1);
+    }).count();
+    
+    let d_lines = vec![
+            (seller_id, 812u64, ProductType::Package, 1u32),
+        ].into_iter()
+        .map(|d| OrderLinePaidUpdateDto {
+            seller_id: d.0, product_id:  d.1,
+            product_type:  d.2, qty: d.3,
+        })
+        .collect::<Vec<_>>();
+    let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time[1]);
+    assert_eq!(errors.len(), 0);
+    models.iter().map(|m| {
+        let key = (&m.id_.product_type, m.id_.product_id);
+        let expect = match key {
+            (ProductType::Package, 812u64) => (5u32, d_charge_time[1]),
+            (ProductType::Item, 890) => (8, d_charge_time[0]),
+            _others => (99999, paid_last_update),
+        };
+        assert_eq!(m.qty.paid, expect.0);
+        assert!(m.qty.paid_last_update.is_some());
+        assert_eq!(m.qty.paid_last_update.as_ref().unwrap(), &expect.1);
+    }).count();
 } // end of fn update_payments_ok
 
 #[rustfmt::skip]
@@ -340,7 +369,7 @@ fn update_payments_invalid_quantity() {
     assert_eq!(models[0].qty.paid, 0); // not modified
     assert!(models[0].qty.paid_last_update.is_none());
     assert_eq!(models[1].id_.product_id, 890);
-    assert_eq!(models[1].qty.paid, 8);
+    assert_eq!(models[1].qty.paid, 9);
     assert_eq!(models[1].qty.paid_last_update.as_ref().unwrap(), &d_charge_time);
 } // end of fn update_payments_invalid_quantity
 
