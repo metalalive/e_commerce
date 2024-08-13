@@ -2,6 +2,7 @@
 name = "payment"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -19,7 +20,7 @@ actix-service = "^2"
 actix-web = {version="^4.5.1", default-features=false, features=["macros"]}
 actix-web-httpauth = {version="^0.8"}
 
-jsonwebtoken = "^9.3"
+jsonwebtoken = {version="^9.3"}
 
 # [Important Design Note]
 #
@@ -69,6 +70,10 @@ deadpool-lapin = {version="^0.12", default-features=false, features=["rt_tokio_1
 rust_decimal = {version="^1.35", default-features=false, features=[]}
 
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
+
+[dev-dependencies]
+fantoccini = {version="^0.21", default-features=false, features=["native-tls"]}
+
 
 [features]
 

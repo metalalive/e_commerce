@@ -62,6 +62,27 @@ cargo clippy
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
     cargo test --test unit -- <specific-test-case-path>  --test-threads=1
 ```
+
+#### Extra tools for 3rd party interaction
+Few test cases interacts with 3rd party processors like Stripe, they require following tools installed before running these tests.
+##### [WebDriver](https://developer.mozilla.org/en-US/docs/Web/WebDriver) client
+- Provide interface which allows other programs to control web browsers like Chrome or FireFox, so my test code can manipulate the HTML elements of a given webpage hosted in these 3rd-party processor platforms, through the WebDriver interface.
+- Remind the payment service in this project must not access all sensitive data like credit-card number, clients should fill the payment form with the sensitive data directly in 3rd-party processor website.
+- This is to achieve automated website UI testing, change the charge / refund status during the test if required, the goal is to ensure my code for 3rd party interaction actually works as expected.
+- In this payment service, the 3rd party processor code is tested with FireFox browser. Install the [`geckodriver`](https://github.com/mozilla/geckodriver) with the following command
+
+```bash
+cargo  install  geckodriver
+```
+
+Then start the web driver by running :
+
+```bash
+/PATH/TO/geckodriver
+```
+
+The path to the driver defaults be the folder for cargo binary executables
+
 ### Integration Test
 ```bash
 SYS_BASE_PATH="${PWD}/.."  SERVICE_BASE_PATH="${PWD}" \
