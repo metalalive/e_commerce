@@ -290,8 +290,15 @@ impl AbstStripeContext for MockProcessorStripeCtx {
 
     async fn pay_in_progress(
         &self,
-        _old: &Charge3partyStripeModel,
+        old: &Charge3partyStripeModel,
     ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason> {
-        Err(AppProcessorErrorReason::NotImplemented)
+        let new_m = Charge3partyStripeModel {
+            checkout_session_id: old.checkout_session_id.clone(),
+            payment_intent_id: old.payment_intent_id.clone(),
+            session_state: StripeSessionStatusModel::complete,
+            payment_state: StripeCheckoutPaymentStatusModel::paid,
+            expiry: old.expiry,
+        };
+        Ok(new_m)
     }
 } // end of impl MockProcessorStripeCtx

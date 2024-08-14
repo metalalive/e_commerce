@@ -16,6 +16,13 @@ use payment::api::web::AppRouteTable;
 use payment::network::app_web_service;
 use payment::{app_meta, AppAuthedClaim, AppSharedState};
 
+#[macro_export] // available at crate level
+macro_rules! ItestService {
+    () => {
+        impl Service<Request, Response = ServiceResponse<impl MessageBody>, Error = WebError>
+    }
+}
+
 fn setup_config() -> AppConfig {
     let iter = env::vars().filter(|(k, _v)| EXPECTED_LABELS.contains(&k.as_str()));
     let env_var_map = HashMap::from_iter(iter);
@@ -28,8 +35,7 @@ fn setup_config() -> AppConfig {
     AppConfig::new(args).unwrap()
 }
 
-pub(crate) async fn itest_setup_app_server(
-) -> impl Service<Request, Response = ServiceResponse<impl MessageBody>, Error = WebError> {
+pub(crate) async fn itest_setup_app_server() -> ItestService!() {
     let cfg = setup_config();
     let listener_ref = &cfg.api_server.listen;
     let api_ver = listener_ref.api_version.as_str();

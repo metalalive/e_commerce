@@ -1,0 +1,29 @@
+{
+    "order": {
+	"id": "7931649be98f24",
+	"lines": [
+	    {
+	        "seller_id": 127,
+	        "product_id": 3805,
+	        "product_type": 1,
+	        "quantity": 4,
+	        "amount": {"unit": "20.4", "total": "81.6"}
+	    },
+	    {
+	        "seller_id": 983,
+	        "product_id": 204,
+	        "product_type": 1,
+	        "quantity": 2,
+	        "amount": {"unit": "18.1", "total": "36.2"}
+	    }
+        ],
+        "currency": "USD"
+    },
+    "method": {
+        "label": "Stripe",
+	"customer_id": "0sji4ut8",
+        "success_url": "https://docs.rs/tokio",
+        "cancel_url": "https://resources.nvidia.com/en-us-grace-cpu",
+	"ui_mode": "RedirectPage"
+    }
+}

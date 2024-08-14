@@ -1,77 +1,157 @@
 mod common;
 
 use std::fs::File;
+use std::thread::sleep;
+use std::time::Duration;
 
 use actix_http::HttpMessage;
+use actix_http::Request;
 use actix_web::body::MessageBody;
+use actix_web::dev::{Service, ServiceResponse};
+use actix_web::error::Error as WebError;
 use actix_web::http::header::ContentType;
 use actix_web::test::{call_service, TestRequest};
+use actix_web::web::Bytes as ActixBytes;
 use serde_json::Value as JsnVal;
 
+use payment::hard_limit::CREATE_CHARGE_SECONDS_INTERVAL;
 use payment::AppAuthedClaim;
 
 use common::{itest_setup_app_server, itest_setup_auth_claim};
+
+const CASES_PATH: &str = "./tests/integration/examples/";
+
+async fn itest_create_charge(
+    app: &ItestService!(),
+    case_file: &str,
+    usr_id: u32,
+    expect_resp_status: u16,
+) -> Result<ActixBytes, impl MessageBody> {
+    let path = CASES_PATH.to_string() + case_file;
+    let rdr = File::open(path).unwrap();
+    let req_body = serde_json::from_reader::<File, JsnVal>(rdr).unwrap();
+    let req = TestRequest::post()
+        .uri("/v0.0.4/charge")
+        .append_header(ContentType::json())
+        .set_json(req_body)
+        .to_request();
+    let _empty = req
+        .extensions_mut()
+        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let resp = call_service(app, req).await;
+    assert_eq!(resp.status().as_u16(), expect_resp_status);
+    let body_ctx = resp.into_body();
+    body_ctx.try_into_bytes()
+}
+
+async fn itest_refresh_charge_status(
+    app: &ItestService!(),
+    charge_id: &str,
+    usr_id: u32,
+    expect_resp_status: u16,
+) -> Result<ActixBytes, impl MessageBody> {
+    assert!(!charge_id.is_empty());
+    let url = "/v0.0.4/charge/".to_string() + charge_id;
+    let req = TestRequest::patch()
+        .uri(url.as_str())
+        .append_header(ContentType::json())
+        .to_request();
+    let _empty = req
+        .extensions_mut()
+        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let resp = call_service(app, req).await;
+    assert_eq!(resp.status().as_u16(), expect_resp_status);
+    let body_ctx = resp.into_body();
+    body_ctx.try_into_bytes()
+}
+
+#[rustfmt::skip]
+fn verify_newcharge_stripe (resp_body: &JsnVal) {
+    let mthd_obj = resp_body.as_object().unwrap()
+        .get("method").unwrap();
+    let actual_method = mthd_obj.get("label").unwrap()
+        .as_str().unwrap();
+    assert_eq!(actual_method, "Stripe");
+    let cond = mthd_obj.get("id").unwrap().is_string();
+    assert!(cond);
+    let cond = mthd_obj.get("redirect_url").unwrap().is_string();
+    assert!(cond);
+    let cond = mthd_obj.get("client_session").unwrap().is_null();
+    assert!(cond);
+}
+#[rustfmt::skip]
+fn extract_charge_id (resp_body: &JsnVal) -> String {
+    resp_body.as_object().unwrap()
+        .get("id").unwrap()
+        .as_str().unwrap()
+        .to_string()
+}
+
+#[rustfmt::skip]
+fn verify_charge_status(resp_body: &JsnVal, expect_oid: &str, expect_progress: &str) {
+    let actual_oid = resp_body
+        .as_object().unwrap()
+        .get("order_id").unwrap()
+        .as_str().unwrap();
+    assert_eq!(actual_oid, expect_oid);
+    let actual_progress = resp_body
+        .as_object().unwrap()
+        .get("status").unwrap()
+        .as_str().unwrap();
+    assert_eq!(actual_progress, expect_progress);
+}
 
 #[actix_web::test]
 async fn charge_stripe_ok() {
     let mock_app = itest_setup_app_server().await;
     let mock_usr_id = 2234u32;
-    const CASE_FILE: &str = "./tests/integration/examples/create_charge_stripe_ok.json";
-    let req = {
-        let rdr = File::open(CASE_FILE).unwrap();
-        let req_body = serde_json::from_reader::<File, JsnVal>(rdr).unwrap();
-        let r = TestRequest::post()
-            .uri("/v0.0.4/charge")
-            .append_header(ContentType::json())
-            .set_json(req_body)
-            .to_request();
-        let _empty = r
-            .extensions_mut()
-            .insert::<AppAuthedClaim>(itest_setup_auth_claim(mock_usr_id));
-        r
-    };
-    let resp = call_service(&mock_app, req).await;
-    assert_eq!(resp.status().as_u16(), 202);
-    let body_ctx = resp.into_body();
-    let result = body_ctx.try_into_bytes();
+    let expect_oid = "7931649be98f24";
+    let result = itest_create_charge(
+        &mock_app,
+        "create_charge_stripe_ok_1.json",
+        mock_usr_id,
+        202,
+    )
+    .await;
     assert!(result.is_ok());
-    let actual_charge_id = if let Ok(body_raw) = result {
-        // println!("[debug] recvied response body : {:?} ", body_raw);
-        let actual_body = serde_json::from_slice::<JsnVal>(body_raw.as_ref()).unwrap();
-        let actual_method = actual_body
-            .as_object()
-            .unwrap()
-            .get("method")
-            .unwrap()
-            .get("label")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        assert_eq!(actual_method, "Stripe");
-        actual_body
-            .as_object()
-            .unwrap()
-            .get("id")
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_string()
-    } else {
-        String::new()
-    };
-    assert!(!actual_charge_id.is_empty());
+    let charge_id = result
+        .map(|body_raw| {
+            // println!("[debug] recvied response body : {:?} ", body_raw);
+            let actual_body = serde_json::from_slice::<JsnVal>(body_raw.as_ref()).unwrap();
+            verify_newcharge_stripe(&actual_body);
+            extract_charge_id(&actual_body)
+        })
+        .map_err(|_e| ())
+        .unwrap();
 
-    let req = {
-        let url = "/v0.0.4/charge/".to_string() + actual_charge_id.as_str();
-        let r = TestRequest::patch()
-            .uri(url.as_str())
-            .append_header(ContentType::json())
-            .to_request();
-        let _empty = r
-            .extensions_mut()
-            .insert::<AppAuthedClaim>(itest_setup_auth_claim(mock_usr_id));
-        r
-    };
-    let resp = call_service(&mock_app, req).await;
-    assert_eq!(resp.status().as_u16(), 200);
+    let result = itest_refresh_charge_status(&mock_app, charge_id.as_str(), mock_usr_id, 200).await;
+    assert!(result.is_ok());
+    if let Ok(body_raw) = result {
+        let actual_body = serde_json::from_slice::<JsnVal>(body_raw.as_ref()).unwrap();
+        verify_charge_status(&actual_body, expect_oid, "Completed");
+    }
+
+    // ---- start another charge event of the same order
+    sleep(Duration::from_secs(CREATE_CHARGE_SECONDS_INTERVAL as u64));
+    let result = itest_create_charge(
+        &mock_app,
+        "create_charge_stripe_ok_2.json",
+        mock_usr_id,
+        202,
+    )
+    .await;
+    assert!(result.is_ok());
+    let charge_id = result
+        .map(|body_raw| {
+            let actual_body = serde_json::from_slice::<JsnVal>(body_raw.as_ref()).unwrap();
+            extract_charge_id(&actual_body)
+        })
+        .map_err(|_e| ())
+        .unwrap();
+    let result = itest_refresh_charge_status(&mock_app, charge_id.as_str(), mock_usr_id, 200).await;
+    assert!(result.is_ok());
+    if let Ok(body_raw) = result {
+        let actual_body = serde_json::from_slice::<JsnVal>(body_raw.as_ref()).unwrap();
+        verify_charge_status(&actual_body, expect_oid, "Completed");
+    }
 } // end of fn charge_stripe_ok
