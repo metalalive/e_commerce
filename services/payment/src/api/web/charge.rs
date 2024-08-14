@@ -127,7 +127,10 @@ pub(super) async fn refresh_charge_status(
         Err(e) => {
             let s = match e {
                 ChargeRefreshUcError::OwnerMismatch => StatusCode::FORBIDDEN,
-                ChargeRefreshUcError::ChargeNotExist => StatusCode::NOT_FOUND,
+                ChargeRefreshUcError::ChargeNotExist(owner_id, ctime) => {
+                    app_log_event!(logctx, AppLogLevel::DEBUG, "{owner_id}, {ctime}");
+                    StatusCode::NOT_FOUND
+                }
                 ChargeRefreshUcError::RpcContext(_e) => {
                     app_log_event!(logctx, AppLogLevel::ERROR, "low-lvl-rpc-ctx");
                     StatusCode::SERVICE_UNAVAILABLE

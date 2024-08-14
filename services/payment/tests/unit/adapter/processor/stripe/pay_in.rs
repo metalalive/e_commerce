@@ -12,6 +12,7 @@ use payment::adapter::processor::{AppProcessorError, AppProcessorPayInResult};
 use payment::api::web::dto::{
     PaymentMethodReqDto, PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutUImodeDto,
 };
+use payment::hard_limit::CREATE_CHARGE_SECONDS_INTERVAL;
 use payment::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
     ChargeLineBuyerModel, PayLineAmountModel, StripeCheckoutPaymentStatusModel,
@@ -69,13 +70,8 @@ fn ut_setup_chargebuyer_stripe(
             },
         })
         .collect();
-    let meta = ChargeBuyerMetaModel {
-        owner,
-        create_time: ctime,
-        oid: order_id.to_string(),
-        state: BuyerPayInState::Initialized,
-        method: Charge3partyModel::Unknown,
-    };
+    let arg = (order_id.to_string(), owner, ctime);
+    let meta = ChargeBuyerMetaModel::from(arg);
     ChargeBuyerModel {
         lines,
         meta,
@@ -190,6 +186,7 @@ async fn ut_autofill_stripe_hosted_webform(
         }
     }
     controller.close().await.unwrap();
+    sleep(Duration::from_secs(CREATE_CHARGE_SECONDS_INTERVAL as u64));
 } // end of fn ut_autofill_stripe_hosted_webform
 
 #[actix_web::test]
@@ -219,7 +216,7 @@ async fn charge_session_confirmed() {
     ut_autofill_stripe_hosted_webform(pay_in_res, test_data, 45).await;
 
     // refresh charge status
-    charge_buyer.meta.method = charge_3pty_m;
+    charge_buyer.meta.update_3party(charge_3pty_m);
     let result = proc_ctx.pay_in_progress(&charge_buyer.meta).await;
     assert!(result.is_ok());
     let charge_3pty_m = result.unwrap();
@@ -262,7 +259,7 @@ async fn charge_declined_invalid_card() {
     ut_autofill_stripe_hosted_webform(pay_in_res, test_data, 20).await;
 
     // --- refresh charge status
-    charge_buyer.meta.method = charge_3pty_m;
+    charge_buyer.meta.update_3party(charge_3pty_m);
     let result = proc_ctx.pay_in_progress(&charge_buyer.meta).await;
     assert!(result.is_ok());
     let charge_3pty_m = result.unwrap();

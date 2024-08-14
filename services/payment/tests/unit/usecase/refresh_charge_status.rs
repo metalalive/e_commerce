@@ -43,13 +43,13 @@ fn ut_setup_buyer_meta_stripe(
     let t0 = charge_time.to_utc();
     let t1 = t0 + Duration::minutes(1);
     let t2 = t0 + Duration::minutes(3);
-    ChargeBuyerMetaModel {
-        owner: usr_id,
-        oid: order_id,
-        create_time: t0,
-        method: ut_setup_charge_3pty_stripe(t2),
-        state: BuyerPayInState::ProcessorAccepted(t1),
-    }
+    let arg = (order_id, usr_id, t0);
+    let mut obj = ChargeBuyerMetaModel::from(arg);
+    let value = ut_setup_charge_3pty_stripe(t2);
+    obj.update_3party(value);
+    let value = BuyerPayInState::ProcessorAccepted(t1);
+    obj.update_progress(&value);
+    obj
 }
 
 fn ut_rpc_orderpay_update_err(oid: String, lines: Vec<OrderLinePayUpdateErrorDto>) -> Vec<u8> {
@@ -257,11 +257,17 @@ async fn ok_skip_3party() {
     ) = ut_common_mock_data();
     // assume 3rd party has already completed but an issue happened
     // to RPC order app for payment sync
-    mock_buyer_meta.state =
-        BuyerPayInState::ProcessorCompleted(mock_charge_time.to_utc() + Duration::minutes(5));
-    if let Charge3partyModel::Stripe(s) = &mut mock_buyer_meta.method {
-        s.session_state = StripeSessionStatusModel::complete;
-        s.payment_state = StripeCheckoutPaymentStatusModel::paid;
+    {
+        let t = mock_charge_time.to_utc() + Duration::minutes(5);
+        let new_state = BuyerPayInState::ProcessorCompleted(t);
+        mock_buyer_meta.update_progress(&new_state);
+        let t = mock_charge_time.to_utc() + Duration::minutes(4);
+        let mut m3pty = ut_setup_charge_3pty_stripe(t);
+        if let Charge3partyModel::Stripe(s) = &mut m3pty {
+            s.session_state = StripeSessionStatusModel::complete;
+            s.payment_state = StripeCheckoutPaymentStatusModel::paid;
+        }
+        mock_buyer_meta.update_3party(m3pty);
     }
     let mock_repo = MockChargeRepo::build(
         None,
@@ -295,11 +301,17 @@ async fn ok_skip_3party() {
 async fn orderapp_already_synced() {
     let (mock_usr_id, mock_charge_time, mock_charge_id, _, mut mock_buyer_meta, _) =
         ut_common_mock_data();
-    mock_buyer_meta.state =
-        BuyerPayInState::OrderAppSynced(mock_charge_time.to_utc() + Duration::minutes(6));
-    if let Charge3partyModel::Stripe(s) = &mut mock_buyer_meta.method {
-        s.session_state = StripeSessionStatusModel::complete;
-        s.payment_state = StripeCheckoutPaymentStatusModel::paid;
+    {
+        let t = mock_charge_time.to_utc() + Duration::minutes(6);
+        let new_state = BuyerPayInState::OrderAppSynced(t);
+        mock_buyer_meta.update_progress(&new_state);
+        let t = mock_charge_time.to_utc() + Duration::minutes(5);
+        let mut m3pty = ut_setup_charge_3pty_stripe(t);
+        if let Charge3partyModel::Stripe(s) = &mut m3pty {
+            s.session_state = StripeSessionStatusModel::complete;
+            s.payment_state = StripeCheckoutPaymentStatusModel::paid;
+        }
+        mock_buyer_meta.update_3party(m3pty);
     }
     let mock_repo = MockChargeRepo::build(
         None,
@@ -426,7 +438,7 @@ async fn error_repo_charge_not_exist() {
     let result = uc.execute(mock_usr_id, mock_charge_id).await;
     assert!(result.is_err());
     if let Err(e) = result {
-        let cond = matches!(e, ChargeRefreshUcError::ChargeNotExist);
+        let cond = matches!(e, ChargeRefreshUcError::ChargeNotExist(8010095, _));
         assert!(cond);
     }
 } // end of fn error_repo_charge_not_exist

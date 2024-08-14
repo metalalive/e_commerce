@@ -49,9 +49,9 @@ fn buyer_convert_ok_1() {
     assert!(result.is_ok());
     if let Ok(v) = result {
         // println!("token generated , {:?}", &v.token);
-        assert_eq!(v.meta.oid, mock_oid);
-        assert_eq!(v.meta.owner, mock_usr_id);
-        assert!(matches!(v.meta.state, BuyerPayInState::Initialized));
+        assert_eq!(v.meta.oid(), &mock_oid);
+        assert_eq!(v.meta.owner(), mock_usr_id);
+        assert!(matches!(v.meta.progress(), BuyerPayInState::Initialized));
         v.lines
             .into_iter()
             .map(|l| {
@@ -118,8 +118,8 @@ fn buyer_convert_ok_2() {
     let result = ChargeBuyerModel::try_from((mock_order, mock_new_req));
     assert!(result.is_ok());
     if let Ok(v) = result {
-        assert_eq!(v.meta.oid, mock_oid);
-        assert_eq!(v.meta.owner, mock_usr_id);
+        assert_eq!(v.meta.oid(), &mock_oid);
+        assert_eq!(v.meta.owner(), mock_usr_id);
         v.lines
             .into_iter()
             .map(|l| {
@@ -492,18 +492,15 @@ fn buyer_meta_to_resp_dto_ok() {
         ),
     ]
     .into_iter()
-    .map(|(payin_state, session_3pty, payment_3pty, _expect_dto)| {
-        // FIXME, linter false alarm, `_expect_dto` is actually used
+    .map(|(payin_state, session_3pty, payment_3pty, expect_dto)| {
+        // FIXME, linter false alarm, `expect_dto` is actually used
         let mock_method = ut_default_charge_3pty_stripe(session_3pty, payment_3pty);
-        let meta = ChargeBuyerMetaModel {
-            owner: mock_owner,
-            create_time: mock_now_time,
-            oid: mock_oid.clone(),
-            state: payin_state,
-            method: mock_method,
-        };
+        let arg = (mock_oid.clone(), mock_owner, mock_now_time);
+        let mut meta = ChargeBuyerMetaModel::from(arg);
+        meta.update_progress(&payin_state);
+        meta.update_3party(mock_method);
         let resp = ChargeRefreshRespDto::from(&meta);
-        let cond = matches!(resp.status, _expect_dto);
+        let cond = matches!(resp.status, expect_dto);
         assert!(cond);
         assert_eq!(resp.order_id, mock_oid.clone());
     })

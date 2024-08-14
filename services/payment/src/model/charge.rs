@@ -47,6 +47,8 @@ pub struct ChargeToken(pub [u8; token_inner::NBYTES]);
 pub enum BuyerPayInState {
     Initialized,
     ProcessorAccepted(DateTime<Utc>),
+    // the 3rd party has done with the payment, the payment could be
+    // either successful or failed. TODO, add explicit `confirm` flag
     ProcessorCompleted(DateTime<Utc>),
     OrderAppSynced(DateTime<Utc>),
     // This model should report error when
@@ -61,12 +63,12 @@ pub struct ChargeLineBuyerModel {
     pub amount: PayLineAmountModel,
 }
 pub struct ChargeBuyerMetaModel {
-    pub owner: u32,
-    pub create_time: DateTime<Utc>,
-    pub oid: String, // referenced order id
-    pub state: BuyerPayInState,
-    pub method: Charge3partyModel,
-}
+    _owner: u32,
+    _create_time: DateTime<Utc>,
+    _oid: String, // referenced order id
+    _state: BuyerPayInState,
+    _method: Charge3partyModel,
+} // TODO, new struct function for init , instead of directly accessing the inner fields
 pub struct ChargeBuyerModel {
     pub meta: ChargeBuyerMetaModel,
     pub currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
@@ -128,9 +130,9 @@ impl Charge3partyModel {
 
 impl From<&ChargeBuyerMetaModel> for ChargeRefreshRespDto {
     fn from(value: &ChargeBuyerMetaModel) -> Self {
-        let arg = value.state.status_dto(&value.method);
+        let arg = value.progress().status_dto(value.method_3party());
         Self {
-            order_id: value.oid.clone(),
+            order_id: value.oid().clone(),
             create_time: arg.1,
             status: arg.0,
         }
@@ -139,26 +141,33 @@ impl From<&ChargeBuyerMetaModel> for ChargeRefreshRespDto {
 
 impl From<(String, u32)> for ChargeBuyerMetaModel {
     fn from(value: (String, u32)) -> Self {
-        let now = Local::now().to_utc();
+        let td = TimeDelta::seconds(CREATE_CHARGE_SECONDS_INTERVAL as i64);
+        let _create_time = Local::now().to_utc().duration_trunc(td).unwrap();
         Self {
-            owner: value.1,
-            create_time: now,
-            oid: value.0,
-            method: Charge3partyModel::Unknown,
-            state: BuyerPayInState::Initialized,
+            _owner: value.1,
+            _create_time,
+            _oid: value.0,
+            _method: Charge3partyModel::Unknown,
+            _state: BuyerPayInState::Initialized,
+        }
+    }
+}
+impl From<(String, u32, DateTime<Utc>)> for ChargeBuyerMetaModel {
+    fn from(value: (String, u32, DateTime<Utc>)) -> Self {
+        Self {
+            _owner: value.1,
+            _create_time: value.2,
+            _oid: value.0,
+            _method: Charge3partyModel::Unknown,
+            _state: BuyerPayInState::Initialized,
         }
     }
 }
 
 impl ChargeBuyerMetaModel {
-    pub(crate) fn update_progress(&mut self, new_state: &BuyerPayInState) {
-        if !self.state.completed() {
-            self.state = new_state.clone();
-        }
-    }
     pub(crate) fn token(&self) -> ChargeToken {
         // idenpotency token, derived by owner (user profile ID) and create time
-        ChargeToken::encode(self.owner, self.create_time)
+        ChargeToken::encode(self._owner, self._create_time)
     }
     pub(crate) fn pay_update_dto(
         &self,
@@ -169,12 +178,41 @@ impl ChargeBuyerMetaModel {
             .map(OrderLinePaidUpdateDto::from)
             .collect::<Vec<_>>();
         OrderPaymentUpdateDto {
-            oid: self.oid.clone(),
-            charge_time: self.create_time.to_rfc3339(),
+            oid: self._oid.clone(),
+            charge_time: self._create_time.to_rfc3339(),
             lines,
         }
     }
-}
+    pub fn owner(&self) -> u32 {
+        self._owner
+    }
+    pub fn create_time(&self) -> &DateTime<Utc> {
+        &self._create_time
+    }
+    pub fn oid(&self) -> &String {
+        &self._oid
+    }
+    pub fn progress(&self) -> &BuyerPayInState {
+        &self._state
+    }
+    pub fn method_3party(&self) -> &Charge3partyModel {
+        &self._method
+    }
+    pub fn update_progress(&mut self, new_state: &BuyerPayInState) {
+        if !self._state.completed() {
+            self._state = new_state.clone();
+        }
+    } // TODO, move to BuyerPayInState
+    pub fn update_3party(&mut self, value: Charge3partyModel) {
+        self._method = value;
+    }
+    #[rustfmt::skip]
+    pub(crate) fn into_parts(self) -> (u32, DateTime<Utc>, String, BuyerPayInState, Charge3partyModel)
+    {
+        let Self { _owner, _create_time, _oid, _state, _method } = self;
+        (_owner, _create_time, _oid, _state, _method)
+    }
+} // end of impl ChargeBuyerMetaModel
 
 impl From<ChargeLineBuyerModel> for OrderLinePaidUpdateDto {
     #[rustfmt::skip]
@@ -254,7 +292,8 @@ impl TryFrom<(OrderLineModelSet, ChargeReqOrderDto)> for ChargeBuyerModel {
 
 impl ChargeBuyerModel {
     pub(crate) fn get_buyer_currency(&self) -> Option<OrderCurrencySnapshot> {
-        self.currency_snapshot.get(&self.meta.owner).cloned()
+        let key = self.meta.owner();
+        self.currency_snapshot.get(&key).cloned()
     }
 }
 
@@ -276,8 +315,6 @@ impl TryInto<(u32, DateTime<Utc>)> for ChargeToken {
 }
 impl ChargeToken {
     pub fn encode(owner: u32, now: DateTime<Utc>) -> Self {
-        let td = TimeDelta::seconds(CREATE_CHARGE_SECONDS_INTERVAL as i64);
-        let now = now.duration_round(td).unwrap();
         let given = [
             (owner, token_inner::encoding::USR_ID),
             (now.year_ce().1, token_inner::encoding::T_YEAR),

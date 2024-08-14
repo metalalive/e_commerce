@@ -143,10 +143,9 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
     fn try_from(value: ChargeBuyerModel) -> Result<Self, Self::Error> {
         // at this point the currency snapshot and charge lines should be handled
         // elsewhere, no need to insert again
-        let ChargeBuyerMetaModel {
-            owner, create_time, oid,
-            state, method,
-        } = value.meta;
+        let (
+            owner, create_time, oid, state, method,
+        ) = value.meta.into_parts();
         let oid_b = OidBytes::try_from(oid.as_str()).map_err(|(code, msg)| AppRepoError {
             fn_label: AppRepoErrorFnLabel::CreateCharge,
             detail: AppRepoErrorDetail::OrderIDparse(msg),
@@ -225,8 +224,12 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeArgs {
         // TODO, modify order-line replica if input charge state is already
         // in `completed` state
         let (buyer_id, ctime) = (
-            value.meta.owner,
-            value.meta.create_time.format(DATETIME_FMT_P0F).to_string(),
+            value.meta.owner(),
+            value
+                .meta
+                .create_time()
+                .format(DATETIME_FMT_P0F)
+                .to_string(),
         );
         let c_lines = value.lines.split_off(0);
         assert!(value.lines.is_empty());
@@ -346,20 +349,18 @@ impl TryFrom<(u32, DateTime<Utc>, ChargeMetaRowType)> for ChargeBuyerMetaModel {
             ],
         ))?;
         let method = Charge3partyModel::try_from((mthd_3pty_label, detail_3pty_serial))?;
-        Ok(Self { owner, create_time, oid, state, method, })
+        let mut obj = Self::from((oid, owner, create_time));
+        obj.update_progress(&state);
+        obj.update_3party(method);
+        Ok(obj)
     } // end of fn try-from
 } // end of impl ChargeBuyerMetaModel
 
 impl TryFrom<ChargeBuyerMetaModel> for UpdateChargeMetaArgs {
     type Error = (AppErrorCode, AppRepoErrorDetail);
+    #[rustfmt::skip]
     fn try_from(value: ChargeBuyerMetaModel) -> Result<Self, Self::Error> {
-        let ChargeBuyerMetaModel {
-            owner,
-            create_time,
-            oid: _,
-            state,
-            method,
-        } = value;
+        let (owner, create_time, _, state, method) = value.into_parts();
         let UpdateCharge3partyArgs {
             label: _,
             detail: detail_3pty,
@@ -378,8 +379,8 @@ impl TryFrom<ChargeBuyerMetaModel> for UpdateChargeMetaArgs {
         let params = Params::Positional(args);
         let stmt = format!(
             "UPDATE `charge_buyer_toplvl` SET `detail_3rdparty`=?, \
-                           `state`=?, `{state_t_col_name}`=? WHERE `usr_id`=? \
-                           AND `create_time`=?"
+            `state`=?, `{state_t_col_name}`=? WHERE `usr_id`=? \
+             AND `create_time`=?"
         );
         Ok(Self(stmt, params))
     } // end of fn try-from

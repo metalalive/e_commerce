@@ -51,9 +51,9 @@ pub(crate) fn ut_setup_buyer_charge(
     currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
 ) -> ChargeBuyerModel {
     let lines = ut_setup_buyer_charge_lines(d_lines);
-    let meta = ChargeBuyerMetaModel {
-        owner, create_time, oid, state, method,
-    };
+    let mut meta = ChargeBuyerMetaModel::from((oid, owner, create_time));
+    meta.update_progress(&state);
+    meta.update_3party(method);
     ChargeBuyerModel {meta, lines, currency_snapshot}
 }
 

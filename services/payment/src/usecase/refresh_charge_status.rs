@@ -16,7 +16,7 @@ use crate::model::{BuyerPayInState, ChargeBuyerMetaModel, ChargeToken};
 
 pub enum ChargeRefreshUcError {
     OwnerMismatch,
-    ChargeNotExist,
+    ChargeNotExist(u32, DateTime<Utc>),
     DataStore(AppRepoError),
     RpcContext(AppRpcCtxError),
     RpcContentSerialisation(String),
@@ -48,12 +48,12 @@ impl ChargeStatusRefreshUseCase {
             .fetch_charge_meta(owner_id, create_time)
             .await
             .map_err(ChargeRefreshUcError::DataStore)?
-            .ok_or(ChargeRefreshUcError::ChargeNotExist)?;
-        let proceed_allowed = match saved_meta.method.pay_in_comfirmed() {
+            .ok_or(ChargeRefreshUcError::ChargeNotExist(owner_id, create_time))?;
+        let proceed_allowed = match saved_meta.method_3party().pay_in_comfirmed() {
             Some(confirmed) => confirmed,
             None => self.refresh_3pty_processor(&mut saved_meta).await?,
         };
-        let result_rpc = if proceed_allowed && !saved_meta.state.completed() {
+        let result_rpc = if proceed_allowed && !saved_meta.progress().completed() {
             self.sync_order_app(&mut saved_meta).await
             // postpone the error return, always write charge status to database
             // repository if necessary
@@ -99,7 +99,7 @@ impl ChargeStatusRefreshUseCase {
                 let now = Local::now().to_utc();
                 let new_state = BuyerPayInState::ProcessorCompleted(now);
                 meta.update_progress(&new_state);
-                meta.method = mthd_3pty;
+                meta.update_3party(mthd_3pty);
                 confirmed
             })
             .unwrap_or(false);
@@ -117,11 +117,11 @@ impl ChargeStatusRefreshUseCase {
             .map_err(ChargeRefreshUcError::RpcContext)?;
         let message = self.rpc_build_charge_lines(meta).await?;
         let props = AppRpcClientRequest {
-            usr_id: meta.owner,
+            usr_id: meta.owner(),
             // Note, the reason to specify this `create-time` field instead of current
             // time is that order-processing service can handle idempotency based on
             // this create time, TODO, find better design approach
-            time: meta.create_time,
+            time: *meta.create_time(),
             route: "rpc.order.order_reserved_update_payment".to_string(),
             message,
         };
@@ -152,7 +152,7 @@ impl ChargeStatusRefreshUseCase {
     ) -> Result<Vec<u8>, ChargeRefreshUcError> {
         let chg_lines = self
             .repo
-            .fetch_all_charge_lines(meta.owner, meta.create_time)
+            .fetch_all_charge_lines(meta.owner(), *meta.create_time())
             .await
             .map_err(ChargeRefreshUcError::DataStore)?;
         let update_dto = meta.pay_update_dto(chg_lines);

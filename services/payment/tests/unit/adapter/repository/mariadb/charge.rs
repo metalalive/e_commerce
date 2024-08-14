@@ -277,10 +277,10 @@ async fn ut_fetch_existing_charge_meta(
     let optional_meta = result.unwrap();
     assert!(optional_meta.is_some());
     let loaded_meta = optional_meta.unwrap();
-    assert_eq!(loaded_meta.owner, owner);
+    assert_eq!(loaded_meta.owner(), owner);
     let expect_create_time = create_time.trunc_subsecs(0);
-    assert_eq!(loaded_meta.create_time, expect_create_time);
-    assert_eq!(loaded_meta.oid.as_str(), "dee50de6");
+    assert_eq!(loaded_meta.create_time(), &expect_create_time);
+    assert_eq!(loaded_meta.oid().as_str(), "dee50de6");
     loaded_meta
 }
 
@@ -325,13 +325,13 @@ async fn buyer_create_stripe_charge_ok() {
     // --- fetch charge metadata ---
     let loaded_meta =
         ut_fetch_existing_charge_meta(repo.clone(), mock_owner, mock_create_time).await;
-    if let BuyerPayInState::ProcessorAccepted(t) = &loaded_meta.state {
+    if let BuyerPayInState::ProcessorAccepted(t) = loaded_meta.progress() {
         let expect = mock_create_time.trunc_subsecs(3) + accepted_time_duration;
         assert_eq!(t, &expect);
     } else {
         assert!(false);
     }
-    if let Charge3partyModel::Stripe(s) = &loaded_meta.method {
+    if let Charge3partyModel::Stripe(s) = loaded_meta.method_3party() {
         assert_eq!(s.checkout_session_id.as_str(), "mock-session-id");
         assert_eq!(s.payment_intent_id.as_str(), "mock-payment-intent-id");
         let cond = matches!(s.session_state, StripeSessionStatusModel::open);
@@ -344,24 +344,29 @@ async fn buyer_create_stripe_charge_ok() {
     // --- update charge metadata and save ---
     let complete_t_duration = Duration::seconds(167);
     let mut updating_meta = loaded_meta;
-    if let Charge3partyModel::Stripe(s) = &mut updating_meta.method {
-        s.payment_state = StripeCheckoutPaymentStatusModel::paid;
-        s.session_state = StripeSessionStatusModel::complete;
+    {
+        let t = mock_create_time + complete_t_duration;
+        let mut m3pty = ut_default_charge_method_stripe(&t);
+        if let Charge3partyModel::Stripe(s) = &mut m3pty {
+            s.payment_state = StripeCheckoutPaymentStatusModel::paid;
+            s.session_state = StripeSessionStatusModel::complete;
+        }
+        updating_meta.update_3party(m3pty);
+        let value = BuyerPayInState::ProcessorCompleted(t);
+        updating_meta.update_progress(&value);
     }
-    updating_meta.state =
-        BuyerPayInState::ProcessorCompleted(mock_create_time + complete_t_duration);
     let result = repo.update_charge_progress(updating_meta).await;
     assert!(result.is_ok());
     // --- fetch charge metadata again ---
     let loaded_meta =
         ut_fetch_existing_charge_meta(repo.clone(), mock_owner, mock_create_time).await;
-    if let BuyerPayInState::ProcessorCompleted(t) = &loaded_meta.state {
+    if let BuyerPayInState::ProcessorCompleted(t) = loaded_meta.progress() {
         let expect = mock_create_time.trunc_subsecs(3) + complete_t_duration;
         assert_eq!(t, &expect);
     } else {
         assert!(false);
     }
-    if let Charge3partyModel::Stripe(s) = &loaded_meta.method {
+    if let Charge3partyModel::Stripe(s) = &loaded_meta.method_3party() {
         let cond = matches!(s.session_state, StripeSessionStatusModel::complete);
         assert!(cond);
         let cond = matches!(s.payment_state, StripeCheckoutPaymentStatusModel::paid);
@@ -386,7 +391,9 @@ async fn buyer_create_charge_invalid_state() {
     let repo = ut_setup_db_repo(shr_state).await;
     let mut cline_set =
         _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
-    cline_set.meta.state = BuyerPayInState::Initialized;
+    cline_set
+        .meta
+        .update_progress(&BuyerPayInState::Initialized);
     let result = repo.create_charge(cline_set).await;
     assert!(result.is_err());
     if let Err(e) = result {
@@ -408,7 +415,7 @@ async fn buyer_create_charge_unknown_3party() {
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_repo(shr_state).await;
     let mut charge_m = _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
-    charge_m.meta.method = Charge3partyModel::Unknown;
+    charge_m.meta.update_3party(Charge3partyModel::Unknown);
     let result = repo.create_charge(charge_m).await;
     assert!(result.is_err());
     if let Err(e) = result {
@@ -438,7 +445,7 @@ async fn buyer_update_charge_meta_invalid_state() {
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_repo(shr_state).await;
     let mut charge_m = _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
-    charge_m.meta.state = BuyerPayInState::Initialized;
+    charge_m.meta.update_progress(&BuyerPayInState::Initialized);
     let result = repo.update_charge_progress(charge_m.meta).await;
     assert!(result.is_err());
     if let Err(e) = result {

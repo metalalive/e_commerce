@@ -120,7 +120,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             charge_buyer
                 .get_buyer_currency()
                 .ok_or(AppProcessorErrorReason::MissingCurrency(
-                    charge_buyer.meta.owner,
+                    charge_buyer.meta.owner(),
                 ))?;
 
         let charge_token_serial =
@@ -143,10 +143,14 @@ impl AbstStripeContext for AppProcessorStripeCtx {
         );
 
         let body_obj = CreateCheckoutSession {
-            client_reference_id: format!("{}-{}", charge_buyer.meta.owner, charge_buyer.meta.oid),
+            client_reference_id: format!(
+                "{}-{}",
+                charge_buyer.meta.owner(),
+                charge_buyer.meta.oid()
+            ),
             currency: buyer_currency.label.clone(),
             customer: req.customer_id.clone(),
-            expires_at: charge_buyer.meta.create_time.timestamp() + CHECKOUT_SESSION_MIN_SECONDS,
+            expires_at: charge_buyer.meta.create_time().timestamp() + CHECKOUT_SESSION_MIN_SECONDS,
             cancel_url: req.cancel_url.clone(),
             success_url: req.success_url.clone(),
             return_url: req.return_url.clone(),
@@ -266,10 +270,11 @@ impl AbstStripeContext for MockProcessorStripeCtx {
             redirect_url,
             client_session,
         };
+        let ctime = *charge_buyer.meta.create_time();
         let result = AppProcessorPayInResult {
             charge_id: charge_buyer.meta.token().0.to_vec(),
             method: PaymentMethodRespDto::Stripe(mthd_detail),
-            state: BuyerPayInState::ProcessorAccepted(charge_buyer.meta.create_time),
+            state: BuyerPayInState::ProcessorAccepted(ctime),
             completed: false,
         };
         let stripe_m = Charge3partyStripeModel {
@@ -277,15 +282,15 @@ impl AbstStripeContext for MockProcessorStripeCtx {
             payment_intent_id: "mock-stripe-payment-intent-id".to_string(),
             session_state: StripeSessionStatusModel::open,
             payment_state: StripeCheckoutPaymentStatusModel::unpaid,
-            expiry: charge_buyer.meta.create_time + Duration::seconds(35),
-        };
+            expiry: ctime + Duration::seconds(35),
+        }; // TODO, configuable parameter expiry time
         let mthd_m = Charge3partyModel::Stripe(stripe_m);
         Ok((result, mthd_m))
     }
 
     async fn pay_in_progress(
         &self,
-        _detail: &Charge3partyStripeModel,
+        _old: &Charge3partyStripeModel,
     ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason> {
         Err(AppProcessorErrorReason::NotImplemented)
     }

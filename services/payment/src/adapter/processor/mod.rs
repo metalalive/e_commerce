@@ -180,7 +180,7 @@ impl AbstractPaymentProcessor for AppProcessorContext {
         &self,
         meta: &ChargeBuyerMetaModel,
     ) -> Result<Charge3partyModel, AppProcessorError> {
-        let result = match &meta.method {
+        let result = match meta.method_3party() {
             Charge3partyModel::Stripe(c) => self
                 ._stripe
                 .pay_in_progress(c)
