@@ -68,9 +68,7 @@ impl<'a, 'b> From<(&'a OrderLineModelSet, &'b OidBytes)> for InsertOrderLineArgs
                     line.pid.product_id.into(),
                     line.rsv_total.unit.into(),
                     line.rsv_total.total.into(),
-                    line.paid_total.total.into(),
                     line.rsv_total.qty.into(),
-                    line.paid_total.qty.into(),
                     line.reserved_until
                         .to_utc()
                         .format(DATETIME_FMT_P0F)
@@ -80,10 +78,9 @@ impl<'a, 'b> From<(&'a OrderLineModelSet, &'b OidBytes)> for InsertOrderLineArgs
                 Params::Positional(arg)
             })
             .collect::<Vec<_>>();
-        let stmt = "INSERT INTO `order_line_detail`(`o_id`,`store_id`, \
-            `product_type`,`product_id`,`amt_unit`,`amt_total_rsved`, \
-            `amt_total_paid`,`qty_rsved`,`qty_paid`,`rsved_until`) \
-            VALUES (?,?,?,?,?, ?,?,?,?,?)";
+        let stmt = "INSERT INTO `order_line_detail`(`o_id`,`store_id`,`product_type`, \
+           `product_id`,`amt_unit`,`amt_total_rsved`,`qty_rsved`,`rsved_until`) \
+            VALUES (?,?,?,?,?, ?,?,?)";
         Self(stmt.to_string(), params)
     } // end of fn from
 } // end of impl InsertOrderLineArgs
@@ -224,7 +221,7 @@ impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
         let params = [
             vec![oid_b.0.into()],
             vec![oid_b.as_column().into(), usr_id.into()],
-            vec![oid_b.0.into()],
+            vec![usr_id.into(), oid_b.0.into(), oid_b.0.into()],
         ]
         .into_iter()
         .map(Params::Positional)
@@ -234,13 +231,20 @@ impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
              WHERE `o_id`=?",
             "SELECT `create_time`,`num_charges` FROM `order_toplvl_meta` \
              WHERE `o_id`=? AND `buyer_id`=?",
-            // TODO,
-            // - find a way to estimate quantity and amount of paid items, by
-            //   aggregating charge lines
-            // - columns `amt_total_paid` and `qty_paid` will be deprecated
-            "SELECT `store_id`,`product_type`,`product_id`,`amt_unit`,`amt_total_rsved`,\
-             `amt_total_paid`,`qty_rsved`,`qty_paid`,`rsved_until` FROM `order_line_detail` \
-             WHERE `o_id`=?  AND `qty_rsved` > `qty_paid`",
+            // estimate quantity and amount of paid items, by aggregating charge
+            // lines which have been completed successfully
+            "SELECT   `a1`.`store_id`, `a1`.`product_type`, `a1`.`product_id`, `a1`.`amt_unit`, \
+             `a1`.`amt_total_rsved`, COALESCE(`a2`.`amt_total`, 0), `a1`.`qty_rsved`, COALESCE(`a2`.`qty`, 0),\
+             `a1`.`rsved_until`  FROM `order_line_detail` AS `a1` LEFT JOIN (\
+            SELECT  `b`.`order_id` AS `order-id`, `c`.`store_id` AS `store`, `c`.`product_type` AS `prod-typ`,\
+            `c`.`product_id` AS `prod-id`, SUM(`c`.`amt_total`) AS `amt_total`, SUM(`c`.`qty`) AS `qty` \
+            FROM `charge_buyer_toplvl` AS `b`  INNER JOIN `charge_line` AS `c`  ON \
+            (`b`.`usr_id`=`c`.`buyer_id` AND `b`.`create_time`=`c`.`create_time`)\
+            WHERE `b`.`usr_id`=? AND `b`.`order_id`=? AND `b`.`state`='OrderAppSynced' \
+            GROUP BY  `c`.`store_id`, `c`.`product_type`, `c`.`product_id`)   AS `a2`  ON \
+            (`a1`.`o_id`=`a2`.`order-id` AND `a1`.`store_id`=`a2`.`store` AND \
+            `a1`.`product_type`=`a2`.`prod-typ` AND `a1`.`product_id`=`a2`.`prod-id`) \
+            WHERE `a1`.`o_id`=? AND `a1`.`qty_rsved` > COALESCE(`a2`.`qty`, 0)",
         ]
         .into_iter()
         .map(ToString::to_string)
@@ -248,7 +252,7 @@ impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
         let zipped = stmts.into_iter().zip(params).collect::<Vec<_>>();
         let inner = zipped.try_into().unwrap();
         Ok(Self(inner))
-    }
+    } // end of fn try-from
 } // end of impl FetchUnpaidOlineArgs
 
 impl<'a>
@@ -317,14 +321,10 @@ impl TryFrom<OrderlineRowType> for OrderLineModel {
                 code: arg.0, detail: arg.1,
             })?;
         let rsv_total = PayLineAmountModel {
-            unit: amount_unit,
-            total: amount_total_rsved,
-            qty: qty_rsved,
+            unit: amount_unit, total: amount_total_rsved, qty: qty_rsved,
         };
         let paid_total = PayLineAmountModel {
-            unit: amount_unit,
-            total: amount_total_paid,
-            qty: qty_paid,
+            unit: amount_unit, total: amount_total_paid, qty: qty_paid,
         };
         let pid = BaseProductIdentity { store_id, product_type, product_id };
         Ok(Self { pid, rsv_total, paid_total, reserved_until })

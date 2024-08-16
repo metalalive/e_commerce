@@ -299,4 +299,19 @@
     <changeSet id="tag_version_0.0.8" author="T.H.">
         <tagDatabase tag="0.0.8" />
     </changeSet>
+    <changeSet id="remove_qty_amount_paid__orderline_detail" author="T.H.">
+        <comment>
+            The 2 columns have never been actually used in the application,
+            I don't rollback the schema table in this change set
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `order_line_detail` DROP COLUMN IF EXISTS `amt_total_paid`;
+            ALTER TABLE `order_line_detail` DROP COLUMN IF EXISTS `qty_paid`;
+        </sql>
+        <rollback/>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.9" author="T.H.">
+        <tagDatabase tag="0.0.9" />
+    </changeSet>
 </databaseChangeLog>
