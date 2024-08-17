@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
+use payment::api::web::dto::ChargeStatusDto;
 use payment::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
     ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot, PayLineAmountModel,
@@ -74,4 +75,17 @@ pub(crate) fn ut_setup_buyer_charge_lines(
             },
         })
         .collect()
+}
+
+#[rustfmt::skip]
+fn ut_partial_eq_charge_status_dto(a :&ChargeStatusDto, b :&ChargeStatusDto) -> bool {
+    match (a, b) {
+        (ChargeStatusDto::Initialized, ChargeStatusDto::Initialized) |
+        (ChargeStatusDto::InternalSyncing, ChargeStatusDto::InternalSyncing) |
+        (ChargeStatusDto::PspRefused, ChargeStatusDto::PspRefused) |
+        (ChargeStatusDto::SessionExpired, ChargeStatusDto::SessionExpired) |
+        (ChargeStatusDto::Completed, ChargeStatusDto::Completed) |
+        (ChargeStatusDto::PspProcessing, ChargeStatusDto::PspProcessing) => true,
+        _others => false,
+    }
 }

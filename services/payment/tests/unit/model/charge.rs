@@ -17,6 +17,7 @@ use payment::model::{
 };
 
 use super::order_replica::ut_setup_order_replica;
+use super::ut_partial_eq_charge_status_dto;
 
 #[test]
 fn buyer_convert_ok_1() {
@@ -500,7 +501,7 @@ fn buyer_meta_to_resp_dto_ok() {
         meta.update_progress(&payin_state);
         meta.update_3party(mock_method);
         let resp = ChargeRefreshRespDto::from(&meta);
-        let cond = matches!(resp.status, expect_dto);
+        let cond = ut_partial_eq_charge_status_dto(&resp.status, &expect_dto);
         assert!(cond);
         assert_eq!(resp.order_id, mock_oid.clone());
     })
