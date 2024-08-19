@@ -9,15 +9,20 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 0.0.4
+  version: 0.0.5
 
 servers:
-  - url: https://doc.site.not.ready/api/v0.0.4
+  - url: https://doc.site.not.ready/api/v0.0.5
 tags:
-  - name: payin
-    description: pay-in process of a valid order
-  - name: payout
-    description: pay-out process of a valid order
+  - name: configuration
+    description: |
+        The configuration helps with easy third-party integration. It provides important details that the third-party processor chosen by the client needs for smooth pay-in, payout, and refund processes.
+  - name: payment
+    description: |
+      - a client initiate a payment associated with a valid order, transfer the fund to this payment service (pay-in),
+      - then merchants / sellers capture the fund from this service (payout)
+  - name: refund
+    description: either a client or a merchant / seller initiates a return request, this service transfer the fund back to the client.
 
 paths:
   /charge:
@@ -28,7 +33,7 @@ paths:
         - the charge status in the response depends on the chosen payment method
         - frontend application may refresh to charge status at a later time if response status is 202
       tags:
-        - payin
+        - payment
       requestBody:
         content:
           application/json:
@@ -66,7 +71,7 @@ paths:
       summary: refresh charge status
       description: Refresh charge status from the external PSP chosen by the customer, confirm the payment has been made in the PSP.
       tags:
-        - payin
+        - payment
       parameters:
         - $ref: '#/components/parameters/ChargeId'
       responses:
@@ -83,6 +88,73 @@ paths:
       security:
         - BearerAuth: []
   
+  /charge/{charge-id}/capture:
+    patch:
+      summary: sellers capture authorised payment
+      description: |
+          merchants / sellers capture the payment authorised by buyer, this service should support partial-amount capture for each associated merchant, and block any intention of repeat capture from a single merchant.
+      tags:
+        - payment
+      parameters:
+        - $ref: '#/components/parameters/ChargeId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapturePayReqDto'
+      responses:
+        '200':
+          description: captured successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapturePayRespDto'
+        '400':
+          description: |
+            inappropriate capture request (TODO: error code in response body)
+      security:
+        - BearerAuth: []
+  
+  /store/{store-id}/onboard:
+    post:
+      summary: onboard a new store
+      description: |
+        - onboard a new store (merchant / shop), so this payment service will be able to recognize it is the valid store during the payout workflow.
+        - in this payment service, a merchant or a seller indicates a store / a shop started by an individual user or an organization that provides services / goods
+      tags:
+        - configuration
+      parameters:
+        - $ref: '#/components/parameters/SellerId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreOnboardReqDto'
+      responses:
+        '202':
+          description: |
+              onboarding request accepted, if the onboarding process requires sensitive data from the merchant such as card number or bank account, then this endpoint responds with URL , which is used for redirecting frontend to the form page hosted by 3rd-party processor, merchants can add the sensitive data directly in the form.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOnboardAcceptedRespDto'
+  
+  /store/{store-id}/onboard/status:
+    patch:
+      summary: refresh status of an onboarding store
+      description: |
+        Refresh status of an onboarding store, this endpoint works when onboarding request `POST /store/{store-id}/onboard` was accepted but not completed yet
+      tags:
+        - configuration
+      parameters:
+        - $ref: '#/components/parameters/SellerId'
+      responses:
+        '200':
+          description: status returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreOnboardStatusDto'
 
 
 components:
@@ -98,6 +170,13 @@ components:
       schema:
         type: string
         example: 188-20230930-115940
+    
+    SellerId:
+      name: store-id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/SellerId'
   
   schemas:
     SellerId:
@@ -297,7 +376,7 @@ components:
       properties:
         status:
           type: string
-          enum: [SessionInitialized, PspRefused, PspProcessing, PspTimedOut, SessionExpired, Cancelled, Completed]
+          enum: [Initialized, PspRefused, PspProcessing, PspTimedOut, InternalSyncing, SessionExpired, UnknownPsp, Completed]
         order_id:
           type: string
           description: order ID associated with the charge operation
@@ -305,6 +384,21 @@ components:
         create_time:
           type: string
           format: date-time
+    
+    CapturePayReqDto:
+      type: object
+
+    CapturePayRespDto:
+      type: object
+
+    StoreOnboardReqDto:
+      type: object
+
+    StoreOnboardAcceptedRespDto:
+      type: object
+
+    StoreOnboardStatusDto:
+      type: object
 
   securitySchemes:
     BearerAuth:
