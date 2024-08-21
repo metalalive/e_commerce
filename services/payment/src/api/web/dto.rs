@@ -142,3 +142,44 @@ pub struct ChargeRefreshRespDto {
     pub order_id: String,
     pub create_time: DateTime<Utc>,
 }
+
+#[derive(Deserialize)]
+#[serde(tag = "processor")]
+pub enum StoreOnboardReqDto {
+    Stripe,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "processor")]
+pub enum StoreOnboardAcceptedRespDto {
+    Stripe,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "processor")]
+pub enum StoreOnboardStatusReqDto {
+    Stripe,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "processor")]
+pub enum StoreOnboardStatusDto {
+    Stripe,
+}
+
+#[derive(Deserialize)]
+pub struct CapturePayReqDto {
+    pub store_id: u32,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "label")]
+pub enum CapturePay3partyRespDto {
+    Stripe,
+}
+
+#[derive(Serialize)]
+pub struct CapturePayRespDto {
+    pub store_id: u32,
+    pub processor: CapturePay3partyRespDto,
+}

@@ -148,6 +148,11 @@ paths:
         - configuration
       parameters:
         - $ref: '#/components/parameters/SellerId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreOnboardStatusReqDto'
       responses:
         '200':
           description: status returned
@@ -387,18 +392,52 @@ components:
     
     CapturePayReqDto:
       type: object
+      properties:
+        store_id:
+          $ref: '#/components/schemas/SellerId'
+
+    CapturePay3partyRespDto:
+      type: object
+      properties:
+        label:
+          type: string
+          enum: [Stripe]
 
     CapturePayRespDto:
       type: object
+      properties:
+        store_id:
+          $ref: '#/components/schemas/SellerId'
+        processor:
+          $ref: '#/components/schemas/CapturePay3partyRespDto'
 
     StoreOnboardReqDto:
       type: object
+      properties:
+        processor:
+          type: string
+          enum: [Stripe]
 
     StoreOnboardAcceptedRespDto:
       type: object
+      properties:
+        processor:
+          type: string
+          enum: [Stripe]
+
+    StoreOnboardStatusReqDto:
+      type: object
+      properties:
+        processor:
+          type: string
+          enum: [Stripe]
 
     StoreOnboardStatusDto:
       type: object
+      properties:
+        processor:
+          type: string
+          enum: [Stripe]
 
   securitySchemes:
     BearerAuth:
