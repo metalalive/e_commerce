@@ -1,5 +1,6 @@
 mod charge;
 mod external_processor;
+mod merchant;
 mod order_replica;
 
 use rust_decimal::Decimal;
@@ -14,6 +15,7 @@ pub use self::charge::{
 pub use self::external_processor::{
     Charge3partyStripeModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
+pub use self::merchant::{MerchantModelError, MerchantProfileModel};
 pub use self::order_replica::{
     OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
 };

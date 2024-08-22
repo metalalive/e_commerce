@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Local;
+use ecommerce_common::api::rpc::dto::StoreProfileReplicaDto;
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::App3rdPartyCfg;
 use ecommerce_common::logging::AppLogContext;
@@ -16,6 +17,7 @@ pub use self::base_client::{BaseClientError, BaseClientErrorReason};
 use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripeCtx};
 use crate::api::web::dto::{
     ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
+    StoreOnboardReqDto,
 };
 use crate::model::{BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel};
 
@@ -31,6 +33,12 @@ pub trait AbstractPaymentProcessor: Send + Sync {
         &self,
         meta: &ChargeBuyerMetaModel,
     ) -> Result<Charge3partyModel, AppProcessorError>;
+
+    async fn onboard_merchant(
+        &self,
+        store_profile: StoreProfileReplicaDto,
+        req_3pt: StoreOnboardReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorError>;
 }
 
 struct AppProcessorContext {
@@ -55,6 +63,7 @@ pub enum AppProcessorFnLabel {
     TryBuild,
     PayInStart,
     PayInProgress,
+    OnboardMerchant,
 }
 
 #[derive(Debug)]
@@ -68,6 +77,10 @@ pub struct AppProcessorPayInResult {
     pub method: PaymentMethodRespDto,
     pub state: BuyerPayInState,
     pub completed: bool,
+}
+
+pub enum AppProcessorMerchantResult {
+    Stripe,
 }
 
 impl From<AppProcessorPayInResult> for ChargeCreateRespDto {
@@ -195,7 +208,19 @@ impl AbstractPaymentProcessor for AppProcessorContext {
             fn_label: AppProcessorFnLabel::PayInProgress,
         })
     }
-}
+
+    async fn onboard_merchant(
+        &self,
+        _store_profile: StoreProfileReplicaDto,
+        _req_3pt: StoreOnboardReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
+        let e = AppProcessorError {
+            reason: AppProcessorErrorReason::NotImplemented,
+            fn_label: AppProcessorFnLabel::OnboardMerchant,
+        };
+        Err(e)
+    }
+} // end of impl AppProcessorContext
 
 pub(crate) fn app_processor_context(
     cfg_3pt: &Option<Vec<Arc<App3rdPartyCfg>>>,

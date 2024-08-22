@@ -2,7 +2,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 
 use actix_web::body::BoxBody;
-use actix_web::error::{Error as ActixError, ResponseError};
+use actix_web::error::Error as ActixError;
 use actix_web::http::header::{ContentType, TryIntoHeaderValue, CONTENT_TYPE};
 use actix_web::http::StatusCode;
 use actix_web::web::{Data as WebData, Json as ExtJson, Path as ExtPath};
@@ -10,7 +10,6 @@ use actix_web::{HttpResponse, HttpResponseBuilder, Result as ActixResult};
 
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
-use super::dto::{CapturePay3partyRespDto, CapturePayReqDto, CapturePayRespDto, ChargeReqDto};
 use crate::adapter::datastore::AppDataStoreContext;
 use crate::adapter::repository::{app_repo_charge, AbstractChargeRepo};
 use crate::usecase::{
@@ -18,24 +17,9 @@ use crate::usecase::{
 };
 use crate::{AppAuthedClaim, AppSharedState};
 
-#[derive(Debug)]
-struct RepoInitFailure;
+use super::dto::{CapturePay3partyRespDto, CapturePayReqDto, CapturePayRespDto, ChargeReqDto};
+use super::RepoInitFailure;
 
-impl std::fmt::Display for RepoInitFailure {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Ok(())
-    }
-}
-impl ResponseError for RepoInitFailure {
-    fn status_code(&self) -> StatusCode {
-        StatusCode::SERVICE_UNAVAILABLE
-    }
-    fn error_response(&self) -> HttpResponse<BoxBody> {
-        HttpResponse::ServiceUnavailable()
-            .append_header(ContentType::plaintext())
-            .body("")
-    }
-}
 async fn try_creating_charge_repo(
     dstore: Arc<AppDataStoreContext>,
     logctx: Arc<AppLogContext>,

@@ -3,7 +3,11 @@ pub mod dto;
 mod onboard;
 
 use actix_http::Method;
-use actix_web::Route;
+use actix_web::body::BoxBody;
+use actix_web::error::ResponseError;
+use actix_web::http::header::ContentType;
+use actix_web::http::StatusCode;
+use actix_web::{HttpResponse, Route};
 use std::collections::HashMap;
 
 use charge::{capture_authorized_charge, create_charge, refresh_charge_status};
@@ -52,5 +56,24 @@ impl AppRouteTable {
             ),
         ];
         HashMap::from(data)
+    }
+} // end of impl AppRouteTable
+
+#[derive(Debug)]
+struct RepoInitFailure;
+
+impl std::fmt::Display for RepoInitFailure {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
+impl ResponseError for RepoInitFailure {
+    fn status_code(&self) -> StatusCode {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
+    fn error_response(&self) -> HttpResponse<BoxBody> {
+        HttpResponse::ServiceUnavailable()
+            .append_header(ContentType::plaintext())
+            .body("")
     }
 }
