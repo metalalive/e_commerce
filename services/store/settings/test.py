@@ -1,4 +1,5 @@
 from .common import *
+from .celeryconfig import *
 
 DB_NAME = "test_ecommerce_store"
 DB_USER_ALIAS = "test_site2_dba"

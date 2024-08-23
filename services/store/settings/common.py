@@ -1,4 +1,4 @@
-import enum, os
+import os
 from pathlib import Path
 
 # set ExtendedLogger as default logger
@@ -6,7 +6,9 @@ from ecommerce_common.logging.logger import ExtendedLogger
 
 APP_BASE_PATH = Path(__file__).resolve(strict=True).parent.parent
 SYS_BASE_PATH = APP_BASE_PATH.parent
-os.environ["SERVICE_BASE_PATH"] = str(SYS_BASE_PATH)
+
+if not os.environ.get("SYS_BASE_PATH"):
+    os.environ["SYS_BASE_PATH"] = str(SYS_BASE_PATH)
 
 from ecommerce_common.cors import config as cors_config
 
@@ -23,14 +25,6 @@ ORM_BASE_CLASSES = ["store.models.Base"]
 DRIVER_LABEL = "mariadb+mariadbconnector"
 
 
-class _MatCodeOptions(enum.Enum):
-    MAX_NUM_STORES = 1
-    MAX_NUM_STAFF = 2
-    MAX_NUM_EMAILS = 3
-    MAX_NUM_PHONES = 4
-    MAX_NUM_PRODUCTS = 5
-
-
 APP_HOST = cors_config.ALLOWED_ORIGIN["store"]
 
 AUTH_APP_HOST = cors_config.ALLOWED_ORIGIN["user_management"]
@@ -40,7 +34,7 @@ REFRESH_ACCESS_TOKEN_API_URL = "%s/refresh_access_token" % AUTH_APP_HOST
 INIT_SHARED_CONTEXT_FN = "store.shared.app_shared_context_start"
 DEINIT_SHARED_CONTEXT_FN = "store.shared.app_shared_context_destroy"
 
-ROUTERS = ["store.api.router"]
+ROUTERS = ["store.api.web.router"]
 
 KEYSTORE = {
     "keystore": "ecommerce_common.auth.keystore.BaseAuthKeyStore",

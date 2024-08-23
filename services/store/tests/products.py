@@ -217,7 +217,7 @@ class TestUpdate:
     def test_emit_event_orderapp(
         self, session_for_test, saved_store_objs, product_avail_data
     ):
-        from store.api import emit_event_edit_products
+        from store.api.web import emit_event_edit_products
 
         # subcase 1
         expect_store_id, num_new, num_unmodified = 2345, 3, 2

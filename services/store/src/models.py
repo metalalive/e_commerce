@@ -1,5 +1,4 @@
 import enum
-import calendar
 from datetime import datetime
 
 from sqlalchemy import (
@@ -34,9 +33,18 @@ from ecommerce_common.models.contact.sqlalchemy import (
 )
 from ecommerce_common.models.mixins import IdGapNumberFinder
 
-from settings.common import _MatCodeOptions
+from .dto import EnumWeekDay
 
 Base = declarative_base()
+
+
+# TODO, make the material code configurable
+class _MatCodeOptions(enum.Enum):
+    MAX_NUM_STORES = 1
+    MAX_NUM_STAFF = 2
+    MAX_NUM_EMAILS = 3
+    MAX_NUM_PHONES = 4
+    MAX_NUM_PRODUCTS = 5
 
 
 class AppIdGapNumberFinder(IdGapNumberFinder):
@@ -304,16 +312,6 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
     @classmethod
     def quota_stats(cls, objs, session, target_ids):
         return super().quota_stats(objs, session, target_ids, attname="store_id")
-
-
-class EnumWeekDay(enum.Enum):
-    SUNDAY = calendar.SUNDAY
-    MONDAY = calendar.MONDAY
-    TUESDAY = calendar.TUESDAY
-    WEDNESDAY = calendar.WEDNESDAY
-    THURSDAY = calendar.THURSDAY
-    FRIDAY = calendar.FRIDAY
-    SATURDAY = calendar.SATURDAY
 
 
 class HourOfOperation(Base):

@@ -1,6 +1,6 @@
 [project]
 name = "store-front"
-version = "0.1.1"
+version = "0.1.2"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi >= 0.101.1",
@@ -9,6 +9,7 @@ dependencies = [
     "SQLAlchemy >= 2.0.29",
     "alembic >= 1.13.1",
     "mariadb >= 1.1.10",
+    "celery >= 5.4.0",
     "cryptography >= 42.0.0",
     "setuptools >= 69.5.1",
 ] # end of dependencies

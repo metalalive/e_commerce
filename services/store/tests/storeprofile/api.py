@@ -26,6 +26,7 @@ from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
 from store.models import StoreProfile, StorePhone, StoreEmail, StoreCurrency
+from store.api.rpc import get_shop_profile
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -852,7 +853,7 @@ class TestDeletion:
                 assert mocked_rpc_proxy_call.call_count == (num_deleting << 1)
 
 
-class TestRead:
+class TestReadWeb:
     url = "/profile/{store_id}"
     _auth_data_pattern = {
         "id": -1,
@@ -910,3 +911,18 @@ class TestRead:
         assert expect_data == actual_data
         for field in ("locality", "street", "detail", "floor"):
             assert result["location"][field] == getattr(obj.location, field)
+
+
+class TestReadRpc:
+    def test_ok(self, session_for_test, saved_store_objs):
+        obj = next(saved_store_objs)
+        data = {"store_id": obj.id}
+        actual = get_shop_profile(req=data)
+        assert actual["label"] == obj.label
+        assert actual["active"] == obj.active
+        assert actual["supervisor_id"] == obj.supervisor_id
+        assert len(actual["emails"]) == len(obj.emails)
+        assert len(actual["phones"]) == len(obj.phones)
+        assert actual["location"]["country"] == obj.location.country
+        assert len(actual["staff"]) == len(obj.staff)
+        assert len(actual["open_days"]) == len(obj.open_days)

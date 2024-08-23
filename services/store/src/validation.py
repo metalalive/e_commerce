@@ -33,41 +33,40 @@ from .models import (
     HourOfOperation,
     StoreProductAvailable,
 )
+from .dto import (
+    StoreEmailDto,
+    StorePhoneDto,
+    ShopLocationDto,
+    StoreStaffDto,
+    StoreDtoError,
+    BusinessHoursDayDto,
+)
 
 _logger = logging.getLogger(__name__)
 
 
-class StoreEmailBody(PydanticBaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    addr: EmailStr
+class StoreStaffReqBody(StoreStaffDto):
+    def __init__(self, *args, **kwargs):
+        try:
+            super().__init__(*args, **kwargs)
+        except StoreDtoError as e:
+            raise FastApiHTTPException(
+                detail=e.detail,
+                headers={},
+                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
+            )
 
 
-class StorePhoneBody(PydanticBaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    country_code: Annotated[
-        str,
-        StringConstraints(
-            strip_whitespace=False, to_upper=False, to_lower=False, pattern=r"^\d{1,3}$"
-        ),
-    ]
-    line_number: Annotated[
-        str,
-        StringConstraints(
-            strip_whitespace=False,
-            to_upper=False,
-            to_lower=False,
-            pattern=r"^\+?1?\d{7,15}$",
-        ),
-    ]
-
-
-class OutletLocationBody(PydanticBaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    country: CountryCodeEnum
-    locality: str
-    street: str
-    detail: str
-    floor: int
+class BusinessHoursDayReqBody(BusinessHoursDayDto):
+    def __init__(self, *args, **kwargs):
+        try:
+            super().__init__(*args, **kwargs)
+        except StoreDtoError as e:
+            raise FastApiHTTPException(
+                detail=e.detail,
+                headers={},
+                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
+            )
 
 
 class NewStoreProfileReqBody(PydanticBaseModel):
@@ -75,9 +74,9 @@ class NewStoreProfileReqBody(PydanticBaseModel):
     supervisor_id: PositiveInt
     currency: StoreCurrency
     active: Optional[bool] = False
-    emails: Optional[List[StoreEmailBody]] = []
-    phones: Optional[List[StorePhoneBody]] = []
-    location: Optional[OutletLocationBody] = None
+    emails: Optional[List[StoreEmailDto]] = []
+    phones: Optional[List[StorePhoneDto]] = []
+    location: Optional[ShopLocationDto] = None
     quota: SkipValidation[Optional[Dict]] = (
         None  # should be updated by `NewStoreProfilesReqBody`
     )
@@ -228,9 +227,9 @@ class ExistingStoreProfileReqBody(PydanticBaseModel):
     label: str
     active: bool
     currency: StoreCurrency
-    emails: Optional[List[StoreEmailBody]] = []
-    phones: Optional[List[StorePhoneBody]] = []
-    location: Optional[OutletLocationBody] = None
+    emails: Optional[List[StoreEmailDto]] = []
+    phones: Optional[List[StorePhoneDto]] = []
+    location: Optional[ShopLocationDto] = None
 
 
 class StoreSupervisorReqBody(PydanticBaseModel):
@@ -294,27 +293,6 @@ class StoreSupervisorReqBody(PydanticBaseModel):
             )
 
 
-class StoreStaffReqBody(PydanticBaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    staff_id: PositiveInt
-    start_after: datetime
-    end_before: datetime
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # MariaDB DATETIME is not allowed to save time zone, currently should be removed.
-        # TODO, keep the time zone of invididual product if required
-        self.start_after = self.start_after.replace(tzinfo=None)
-        self.end_before = self.end_before.replace(tzinfo=None)
-        if self.start_after > self.end_before:
-            err_detail = {"code": "invalid_time_period"}
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
-
-
 class StoreStaffsReqBody(PydanticRootModel[List[StoreStaffReqBody]]):
     @field_validator("root")
     def validate_list_items(cls, values):
@@ -363,23 +341,6 @@ class StoreStaffsReqBody(PydanticRootModel[List[StoreStaffReqBody]]):
                 status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
             )
         return validated_staff_ids
-
-
-class BusinessHoursDayReqBody(PydanticBaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    day: EnumWeekDay
-    time_open: py_time
-    time_close: py_time
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.time_open > self.time_close:
-            err_detail = {"code": "invalid_time_period"}
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
 
 
 class BusinessHoursDaysReqBody(PydanticRootModel[List[BusinessHoursDayReqBody]]):
@@ -538,20 +499,3 @@ def _get_quota_arrangement_helper(
         err_detail.append("non-existent user profile")
     err_detail = {"supervisor_id": err_detail} if any(err_detail) else {}
     return err_detail
-
-
-class StoreProfileResponseBody(PydanticBaseModel):
-    id: PositiveInt
-    supervisor_id: PositiveInt
-
-
-class StoreProfileReadResponseBody(PydanticBaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    label: str
-    active: bool
-    supervisor_id: PositiveInt
-    emails: Optional[List[StoreEmailBody]] = []
-    phones: Optional[List[StorePhoneBody]] = []
-    location: Optional[OutletLocationBody] = None
-    staff: Optional[List[StoreStaffReqBody]] = []
-    open_days: Optional[List[BusinessHoursDayReqBody]] = []

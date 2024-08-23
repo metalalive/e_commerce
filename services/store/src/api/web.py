@@ -18,7 +18,7 @@ from ecommerce_common.auth.fastapi import base_authentication, base_permission_c
 from ecommerce_common.models.constants import ROLE_ID_SUPERUSER
 from ecommerce_common.models.enums.base import AppCodeOptions
 
-from .models import (
+from ..models import (
     StoreProfile,
     StoreEmail,
     StorePhone,
@@ -28,17 +28,16 @@ from .models import (
     SaleableTypeEnum,
     StoreProductAvailable,
 )
-from .shared import shared_ctx
-from .validation import (
+from ..shared import shared_ctx
+from ..validation import (
     NewStoreProfilesReqBody,
-    StoreProfileResponseBody,
     ExistingStoreProfileReqBody,
     StoreSupervisorReqBody,
     StoreStaffsReqBody,
     BusinessHoursDaysReqBody,
     EditProductsReqBody,
-    StoreProfileReadResponseBody,
 )
+from ..dto import StoreProfileDto, StoreProfileCreatedDto
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -158,7 +157,7 @@ def _storefront_staff_validity(session, store_id: PositiveInt, usr_auth: dict):
 @router.post(
     "/profiles",
     status_code=FastApiHTTPstatus.HTTP_201_CREATED,
-    response_model=List[StoreProfileResponseBody],
+    response_model=List[StoreProfileCreatedDto],
 )
 def add_profiles(
     request: NewStoreProfilesReqBody,
@@ -168,7 +167,7 @@ def add_profiles(
     with shared_ctx["db_engine"].connect() as conn:
         with Session(bind=conn) as session:
             StoreProfile.bulk_insert(objs=sa_new_stores, session=session)
-            _fn = lambda obj: StoreProfileResponseBody(
+            _fn = lambda obj: StoreProfileCreatedDto(
                 id=obj.id, supervisor_id=obj.supervisor_id
             )
             resp_data = list(map(_fn, sa_new_stores))
@@ -547,11 +546,11 @@ def read_profile_products(
     return response
 
 
-@router.get("/profile/{store_id}", response_model=StoreProfileReadResponseBody)
+@router.get("/profile/{store_id}", response_model=StoreProfileDto)
 def read_profile(
     store_id: PositiveInt, user: dict = FastapiDepends(common_authentication)
 ):
     with Session(bind=shared_ctx["db_engine"]) as session:
         saved_obj = _storefront_staff_validity(session, store_id, usr_auth=user)
-        response = StoreProfileReadResponseBody.model_validate(saved_obj)
+        response = StoreProfileDto.model_validate(saved_obj)
     return response

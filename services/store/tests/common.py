@@ -22,7 +22,7 @@ from ecommerce_common.tests.common.sqlalchemy import (
     clean_test_data,
 )
 
-from store.entry import app
+from store.entry.web import app
 from store.models import (
     StoreProfile,
     StoreEmail,

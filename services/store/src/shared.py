@@ -1,7 +1,7 @@
 import os
 import logging
 from importlib import import_module
-from typing import Optional
+from typing import Optional, Dict
 
 from mariadb.constants.CLIENT import MULTI_STATEMENTS
 from fastapi import FastAPI
@@ -13,7 +13,17 @@ from ecommerce_common.util.messaging.rpc import RPCproxy
 
 _logger = logging.getLogger(__name__)
 
-_settings = import_module(os.getenv("APP_SETTINGS", "settings.common"))
+FASTAPI_SETUP_VAR = "APP_SETTINGS"
+
+# the env var `CELERY_CONFIG_MODULE` is actually undocumented , this might be
+# non-standard way of getting configuration module hierarchy
+CELERY_SETUP_VAR = "CELERY_CONFIG_MODULE"
+
+cfg_mod_path = os.getenv(
+    FASTAPI_SETUP_VAR, os.getenv(CELERY_SETUP_VAR, "settings.common")
+)
+
+_settings = import_module(cfg_mod_path)
 shared_ctx = {"settings": _settings}
 
 
@@ -38,7 +48,7 @@ def _init_db_engine(conn_args: Optional[dict] = None):
     return sqlalchemy_init_engine(**kwargs)
 
 
-async def app_shared_context_start(_app: FastAPI):
+def init_shared_context() -> Dict:
     data = {
         "auth_app_rpc": RPCproxy(
             dst_app_name="user_management",
@@ -63,8 +73,13 @@ async def app_shared_context_start(_app: FastAPI):
         "db_engine": _init_db_engine(conn_args={"client_flag": MULTI_STATEMENTS}),
     }
     shared_ctx.update(data)
-    _logger.debug(None, "action", "init-shared-ctx-done")
     return shared_ctx
+
+
+async def app_shared_context_start(_app: FastAPI):
+    shr_ctx = init_shared_context()
+    _logger.debug(None, "action", "init-shared-ctx-done")
+    return shr_ctx
 
 
 async def app_shared_context_destroy(_app: FastAPI):

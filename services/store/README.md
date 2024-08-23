@@ -70,7 +70,14 @@ pipenv run python ./command.py  migrate_backward  --prev-rev-id=base
 ### Development Server
 ```bash
 APP_SETTINGS="settings.development" pipenv run uvicorn  --host 127.0.0.1 \
-    --port 8011 store.entry:app  >& ./tmp/log/dev/store_app.log &
+    --port 8011 store.entry.web:app  >& ./tmp/log/dev/store_app.log &
+```
+
+### RPC Consumer
+```bash
+SYS_BASE_PATH="${PWD}/.." PYTHONPATH="${PYTHONPATH}:${PWD}/settings"   pipenv run celery \
+    --app=ecommerce_common.util  --config=settings.development   --workdir ./src  worker \
+    --concurrency 1  --loglevel=INFO  --hostname=storefront@%h  -E
 ```
 
 ### Production Server
