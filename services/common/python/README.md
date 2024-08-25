@@ -19,7 +19,7 @@ python -c "from c_exts.util import keygen"
 ```bash
 cd ./services/common/python
 
-SERVICE_BASE_PATH="${PWD}/../.."  poetry run  celery --workdir ./src \
+SYS_BASE_PATH="${PWD}/../.."  poetry run  celery --workdir ./src \
     --app=ecommerce_common.util  --config=ecommerce_common.util.celeryconfig \
     worker --loglevel=INFO  -n common@%h  --concurrency=2 \
     --logfile=./tmp/log/dev/common_celery.log   -E \
@@ -33,7 +33,7 @@ collect all periodic tasks to run (gathered from all services)
 ```bash
 cd ./services/common/python
 
-SERVICE_BASE_PATH="${PWD}/../.." poetry run celery --workdir ./src \
+SYS_BASE_PATH="${PWD}/../.." poetry run celery --workdir ./src \
     --app=ecommerce_common.util  --config=ecommerce_common.util.celerybeatconfig \
      beat --loglevel=INFO
 ```

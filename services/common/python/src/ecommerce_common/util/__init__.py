@@ -64,6 +64,7 @@ def accept_mimetypes_lookup(http_accept: str, expected_types):
 
 def _get_amqp_url(secrets_path, idx=0):
     # use rabbitmqctl to manage accounts
+    # TODO, dev / test environment isolation
     secrets = None
     with open(secrets_path, "r") as f:
         secrets = json.load(f)

@@ -19,7 +19,7 @@ from .persistence import (
     _clean_prev_persisted_filedata,
 )
 
-srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 
 
 class JwkKeystoreTestCase(unittest.TestCase):

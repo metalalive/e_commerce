@@ -6,7 +6,7 @@ from smtplib import SMTPAuthenticationError
 from ecommerce_common.logging.logger import ExtendedLogger
 from ecommerce_common.util.async_tasks import send_email
 
-srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 
 
 class SendEmailTestCase(unittest.TestCase):

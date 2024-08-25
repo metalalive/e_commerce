@@ -2,5 +2,5 @@ pipenv run python ./manage.py test  tests.middlewares.cors  --settings settings.
 pipenv run python ./manage.py test  tests.middlewares.csrf  --settings settings.test  --verbosity=2
 pipenv run python ./manage.py test  tests.util   --settings settings.test  --verbosity=2
 pipenv run python -m unittest  tests.keystore.keygen  -v
-SERVICE_BASE_PATH="${PWD}/.."  pipenv run python -m unittest tests.keystore.persistence  -v
-SERVICE_BASE_PATH="${PWD}/.."  pipenv run python -m unittest tests.keystore.manager  -v
+SYS_BASE_PATH="${PWD}/.."  pipenv run python -m unittest tests.keystore.persistence  -v
+SYS_BASE_PATH="${PWD}/.."  pipenv run python -m unittest tests.keystore.manager  -v

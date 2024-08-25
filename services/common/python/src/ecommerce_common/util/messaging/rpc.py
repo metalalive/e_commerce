@@ -1,7 +1,4 @@
-import os
-import uuid
-import socket
-import logging
+import os, uuid, socket, logging
 from datetime import datetime, timedelta, UTC
 from typing import Dict, Optional
 from amqp.exceptions import ConsumerCancelled, NotFound as AmqpNotFound
@@ -238,7 +235,7 @@ class RpcReplyEvent:
         err = None
         _timeout = self.timeout
         if retry is True and _timeout is True:
-            self._time_deadline = datetime.utcnow() + self._timeout_s
+            self._time_deadline = datetime.now(UTC) + self._timeout_s
             _timeout = False
         if _timeout is False and self.finished is False:
             err = self._listener.refresh_reply_events(
@@ -259,7 +256,7 @@ class RpcReplyEvent:
 
     @property
     def timeout(self):
-        time_now = datetime.utcnow()
+        time_now = datetime.now(UTC)
         return self._time_deadline < time_now
 
 

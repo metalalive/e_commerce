@@ -18,7 +18,7 @@ from .models.auth import UnauthResetAccountRequest
 
 _logger = logging.getLogger(__name__)
 
-srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 
 
 @celery_app.task(bind=True, queue="usermgt_default")

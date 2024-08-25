@@ -24,7 +24,7 @@ def _clean_prev_persisted_filedata(**init_kwargs):
     assert len(persist_handler) == 0
 
 
-srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 
 
 class FilePersistHandlerTestCase(unittest.TestCase):

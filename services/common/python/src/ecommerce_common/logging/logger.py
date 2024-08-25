@@ -92,7 +92,7 @@ class ExtendedLogger(logging.Logger):
     def sys_base_path(cls):
         if not hasattr(cls, "_sys_base_path"):
             _acquireLock()
-            cls._sys_base_path = os.environ.get("SERVICE_BASE_PATH", ".")
+            cls._sys_base_path = os.environ.get("SYS_BASE_PATH", ".")
             _releaseLock()
         return cls._sys_base_path
 

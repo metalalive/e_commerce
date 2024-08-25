@@ -4,7 +4,7 @@ import unittest
 
 from user_management.util import render_mail_content
 
-srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 
 
 class RenderMailContentTestCase(unittest.TestCase):

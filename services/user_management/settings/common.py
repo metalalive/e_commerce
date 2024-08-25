@@ -20,7 +20,7 @@ from ecommerce_common.util.django.setup import setup_secrets
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
-os.environ["SERVICE_BASE_PATH"] = str(BASE_DIR)
+os.environ["SYS_BASE_PATH"] = str(BASE_DIR)
 
 
 # SECURITY WARNING: don't run with debug turned on in production!

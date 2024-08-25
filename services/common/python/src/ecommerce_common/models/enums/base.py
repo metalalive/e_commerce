@@ -24,7 +24,7 @@ class JsonFileChoicesMetaMixin:
 
     def __new__(metacls, classname, bases, classdict):
         filepath = classdict.get("filepath", "")
-        basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+        basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
         fullpath = os.path.join(basepath, filepath)
         load_json_enums(classdict, fullpath)
         return super().__new__(metacls, classname, bases, classdict)

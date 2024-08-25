@@ -90,7 +90,7 @@ pipenv run python3 ./manage.py runserver --settings  settings.development  8008 
 
 ### RPC consumer
 ```bash
-DJANGO_SETTINGS_MODULE="settings.development" SERVICE_BASE_PATH="${PWD}/.."  \
+DJANGO_SETTINGS_MODULE="settings.development" SYS_BASE_PATH="${PWD}/.."  \
     pipenv run  celery --app=ecommerce_common.util  --config=user_management.celeryconfig \
     worker --concurrency 1 --loglevel=INFO  --hostname=usermgt@%h  -E  \
     --logfile=../tmp/log/dev/usermgt_celery.log  &

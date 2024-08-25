@@ -49,7 +49,7 @@ class RpcProxyTestCase(unittest.TestCase):
         rpc1 = RPCproxy(
             dst_app_name="remote-site-1",
             src_app_name="local-app",
-            srv_basepath=os.environ["SERVICE_BASE_PATH"],
+            srv_basepath=os.environ["SYS_BASE_PATH"],
         )
         # --- start publishing message
         evt = rpc1.drill_holes(num=2, deep_mm=65)
@@ -110,7 +110,7 @@ class RpcProxyTestCase(unittest.TestCase):
         rpc1 = RPCproxy(
             dst_app_name="remote-site-1",
             src_app_name="local-app",
-            srv_basepath=os.environ["SERVICE_BASE_PATH"],
+            srv_basepath=os.environ["SYS_BASE_PATH"],
         )
         # --- start publishing message
         evt = rpc1.drill_holes(num=2, deep_mm=65)
@@ -138,7 +138,7 @@ class RpcProxyTestCase(unittest.TestCase):
         rpc1 = RPCproxy(
             dst_app_name="remote-site-1",
             src_app_name="local-app",
-            srv_basepath=os.environ["SERVICE_BASE_PATH"],
+            srv_basepath=os.environ["SYS_BASE_PATH"],
         )
         # --- start publishing message
         evt = rpc1.drill_holes(num=2, deep_mm=65)
@@ -166,7 +166,7 @@ class RpcProxyTestCase(unittest.TestCase):
         rpc1 = RPCproxy(
             dst_app_name="remote-site-1",
             src_app_name="local-app",
-            srv_basepath=os.environ["SERVICE_BASE_PATH"],
+            srv_basepath=os.environ["SYS_BASE_PATH"],
             reply_timeout_sec=reply_wait_max_secs,
         )
         # --- start publishing message
@@ -217,7 +217,7 @@ class RpcProxyTestCase(unittest.TestCase):
         rpc1 = RPCproxy(
             dst_app_name="remote-site-1",
             src_app_name="local-app",
-            srv_basepath=os.environ["SERVICE_BASE_PATH"],
+            srv_basepath=os.environ["SYS_BASE_PATH"],
         )
         # --- start publishing message
         evt = rpc1.drill_holes(num=2, deep_mm=65)

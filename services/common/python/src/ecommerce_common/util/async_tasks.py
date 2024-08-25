@@ -7,7 +7,7 @@ from ecommerce_common.logging.util import log_fn_wrapper
 
 _logger = logging.getLogger(__name__)
 
-srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 
 
 def send_email(

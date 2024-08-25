@@ -10,7 +10,7 @@ result_serializer = "json"
 
 timezone = "Asia/Taipei"
 
-srv_basepath = Path(os.environ["SERVICE_BASE_PATH"]).resolve(strict=True)
+srv_basepath = Path(os.environ["SYS_BASE_PATH"]).resolve(strict=True)
 secrets_fullpath = os.path.join(srv_basepath, "./common/data/secrets.json")
 broker_url = _get_amqp_url(secrets_path=secrets_fullpath, idx=0)
 # send result as transient message back to caller from AMQP broker,
