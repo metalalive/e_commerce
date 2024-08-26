@@ -3,7 +3,7 @@ import logging
 from importlib import import_module
 from typing import Optional, Dict
 
-from mariadb.constants.CLIENT import MULTI_STATEMENTS
+from asyncmy.constants.CLIENT import MULTI_STATEMENTS
 from fastapi import FastAPI
 
 from ecommerce_common.models.db import sqlalchemy_init_engine

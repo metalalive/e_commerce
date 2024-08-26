@@ -3,8 +3,8 @@ import string
 from datetime import time, datetime, timedelta, UTC
 
 import pytest
-from sqlalchemy.orm import Session
-from mariadb.constants.CLIENT import MULTI_STATEMENTS
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.testclient import TestClient
 
 # load the setting module first, to ensure all environment variables
@@ -64,8 +64,11 @@ def keystore():
         ks._teardown_keystore()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def db_engine_resource(request):
+# not all fixtures / test cases require this fixture, set `autouse` to `False`
+# reference :
+# https://docs.sqlalchemy.org/en/14/orm/extensions/asyncio.html#using-multiple-asyncio-event-loops
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=False)
+async def db_engine_resource(request):
     # base setup / teardown for creating or deleting database and apply migration
     default_dbs_engine = sqlalchemy_init_engine(
         secrets_file_path=ts_settings.SECRETS_FILE_PATH,
@@ -85,10 +88,9 @@ def db_engine_resource(request):
         ),
         driver_label=ts_settings.DRIVER_LABEL,
         db_name=ts_settings.DB_NAME,
-        # TODO, for development and production environment, use configurable parameter
-        # to optionally set multi_statement for the API endpoints that require to run
-        # multiple SQL statements in one go.
-        conn_args={"client_flag": MULTI_STATEMENTS},
+        # It is optional to set multi-statement flag for the API endpoints that
+        # require to run multiple SQL statements in one go.
+        conn_args={"client_flag": 0},
     )
     keepdb = request.config.getoption("--keepdb", False)
     kwargs = {
@@ -102,23 +104,23 @@ def db_engine_resource(request):
         % ts_settings.DB_NAME
     )
     kwargs["dropdb_sql"] = "DROP DATABASE IF EXISTS `%s`" % ts_settings.DB_NAME
-    init_test_database(**kwargs)
+    await init_test_database(**kwargs)
     yield default_db_engine
     kwargs.pop("createdb_sql", None)
     kwargs.pop("metadata_objs", None)
-    deinit_test_database(**kwargs)
-    default_db_engine.dispose()
-    default_dbs_engine.dispose()
+    await deinit_test_database(**kwargs)
+    await default_db_engine.dispose()
+    await default_dbs_engine.dispose()
 
 
-@pytest.fixture
-def session_for_test(db_engine_resource):
-    with db_engine_resource.connect() as conn:
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def session_for_test(db_engine_resource):
+    async with db_engine_resource.connect() as conn:
         try:
-            with Session(bind=conn) as session:
+            async with AsyncSession(bind=conn) as session:
                 yield session
         finally:  # TODO, optionally keep test data in database
-            clean_test_data(conn, metadata_objs)
+            await clean_test_data(conn, metadata_objs)
     ## not good, commits didn't actually write to database
     # with db_engine_resource.connect() as conn:
     #     with conn.begin() as transaction: # nested transaction starts
@@ -137,13 +139,6 @@ def session_for_test(db_engine_resource):
     #             yield session
     #         finally:
     #             transaction.rollback()
-
-
-@pytest.fixture
-def session_for_setup(db_engine_resource):
-    with db_engine_resource.connect() as conn:
-        with Session(bind=conn) as session:
-            yield session
 
 
 def _store_data_gen():
@@ -301,7 +296,7 @@ def test_client():
         yield _client
 
 
-def _saved_obj_gen(
+async def _saved_obj_gen(
     store_data_gen,
     session,
     email_data_gen=None,
@@ -336,13 +331,20 @@ def _saved_obj_gen(
                 for _ in range(num_products_per_store)
             ]
         obj = StoreProfile(**new_item)
-        StoreProfile.bulk_insert([obj], session=session)
+        await StoreProfile.bulk_insert([obj], session=session)
+        # For testing purpose, all the related attributes of the object needs to be
+        # refreshed, by explicitly naming them to the `attribute_names` argument,
+        # because they are NOT eager loading by default in the colume declarations.
+        # https://docs.sqlalchemy.org/en/20/orm/session_api.html#sqlalchemy.orm.Session.refresh
+        await session.refresh(
+            obj, attribute_names=["emails", "phones", "location", "staff", "products"]
+        )
         yield obj
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def saved_store_objs(
-    session_for_setup,
+    session_for_test,
     store_data,
     email_data,
     phone_data,
@@ -355,7 +357,7 @@ def saved_store_objs(
         email_data_gen=email_data,
         phone_data_gen=phone_data,
         loc_data_gen=loc_data,
-        session=session_for_setup,
+        session=session_for_test,
         staff_data_gen=staff_data,
         product_avail_data_gen=product_avail_data,
     )

@@ -22,8 +22,7 @@ DB_USER_ALIAS = None
 
 ORM_BASE_CLASSES = ["store.models.Base"]
 
-DRIVER_LABEL = "mariadb+mariadbconnector"
-
+DRIVER_LABEL = "mysql+asyncmy"
 
 APP_HOST = cors_config.ALLOWED_ORIGIN["store"]
 

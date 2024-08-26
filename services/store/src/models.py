@@ -13,7 +13,7 @@ from sqlalchemy import (
     Time,
     ForeignKey,
 )
-from sqlalchemy import func as sa_func
+from sqlalchemy import func as sa_func, select as sa_select
 from sqlalchemy.event import listens_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import (
@@ -48,10 +48,10 @@ class _MatCodeOptions(enum.Enum):
 
 
 class AppIdGapNumberFinder(IdGapNumberFinder):
-    def save_with_rand_id(self, save_instance_fn, objs, session):
-        self._session = session
-        super().save_with_rand_id(save_instance_fn, objs)
-        self._session = None
+    def __new__(cls, orm_model_class, session, *args, **kwargs):
+        instance = super().__new__(cls, orm_model_class, *args, **kwargs)
+        instance._session = session
+        return instance
 
     def expected_db_errors(self):
         return (IntegrityError,)
@@ -63,26 +63,30 @@ class AppIdGapNumberFinder(IdGapNumberFinder):
         recoverable = mysql_pk_dup_error(error)
         return recoverable
 
-    def low_lvl_get_gap_range(self, raw_sql_queries) -> list:
-        rawsqls = ";".join(raw_sql_queries)
+    async def async_lowlvl_gap_range(self, raw_sql_queries) -> list:
         out = []
-        # get low-level database connection, for retrieving persisted data later without beibg locked
-        db_conn = self._session.bind.connection
-        # the connection has to be DB-API 2.0 compliant
-        # The cursor relies on multi-statement flag (in MySQL) in order to execute multiple raw SQL
-        # statements in one go. API developers have to ensure all the inputs to the SQL statements
-        # are trusted
-        with db_conn.cursor() as cursor:
-            cursor.execute(rawsqls)
-            row = cursor.fetchone()
-            if row:
-                out.append(row)
-            cursor.nextset()
-            out.extend(cursor.fetchall())
-            cursor.nextset()
-            row = cursor.fetchone()
-            if row:
-                out.append(row)
+        conn = self._session.bind
+        # TODO, figure out how to retrieve async cursor from async connection
+        # NOTE
+        # - In synchronous connection, you can get low-level cursor without too
+        #   much difficulty, so it is possible to execute multiple different SQL
+        #   statements in one network flight. Also the cursor relies on multi-statement
+        #   flag (in low-level database) to be set in database server, and it is
+        #   essential to ensure all the inputs to the SQL statements are trusted
+        # - currently SQLAlchemy does not seem to support async cursor from async
+        #   connection, it will always report errors like `sqlalchemy.exc.MissingGreenlet`
+        #   or `sqlalchemy.exc.InvalidRequestError` when attempting to invoke `cursor()`
+        #   method
+        resultset = await conn.exec_driver_sql(raw_sql_queries[0])
+        row = resultset.one_or_none()
+        if row:
+            out.append(row)
+        resultset = await conn.exec_driver_sql(raw_sql_queries[1])
+        out.extend(resultset.fetchall())
+        resultset = await conn.exec_driver_sql(raw_sql_queries[2])
+        row = resultset.fetchone()
+        if row:
+            out.append(row)
         return out
 
     def get_pk_db_column(self, model_cls) -> str:
@@ -102,25 +106,27 @@ class AppIdGapNumberFinder(IdGapNumberFinder):
 
 class QuotaStatisticsMixin:
     @classmethod
-    def get_existing_items_stats(cls, session, target_ids, attname):
+    def get_existing_items_stats(cls, target_ids, attname):
         attr = getattr(cls, attname)
-        query = session.query(attr, sa_func.count(attr))
+        query = sa_select(attr, sa_func.count(attr))
         query = query.group_by(attr)
         return query.filter(attr.in_(target_ids))
 
     @classmethod
-    def quota_stats(cls, objs, session, target_ids, attname):
+    async def quota_stats(cls, objs, session, target_ids, attname):
         # class-level validation is used for checking several instances at once
         # Note that quota has to come from trusted source e.g. authenticated JWT payload
         attr_fd = getattr(cls, attname)
-        query = cls.get_existing_items_stats(session, target_ids, attname)
+        base_query = cls.get_existing_items_stats(target_ids, attname)
         result = {}
         for target_id in target_ids:
             new_items = tuple(
                 filter(lambda obj: getattr(obj, attname) == target_id, objs)
             )
             num_new_items = len(new_items)
-            existing_items = query.filter(attr_fd == target_id).one_or_none()
+            query = base_query.filter(attr_fd == target_id)
+            resultset = await session.execute(query)
+            existing_items = resultset.one_or_none()
             existing_items = existing_items or (target_id, 0)
             num_existing_items = existing_items[1]
             result[target_id] = {
@@ -183,26 +189,24 @@ class StoreProfile(Base, QuotaStatisticsMixin):
     )
 
     @classmethod
-    def quota_stats(cls, objs, session, target_ids):
-        return super().quota_stats(objs, session, target_ids, attname="supervisor_id")
+    async def quota_stats(cls, objs, session, target_ids):
+        return await super().quota_stats(
+            objs, session, target_ids, attname="supervisor_id"
+        )
 
     @classmethod
-    def bulk_insert(cls, objs, session):
-        if not hasattr(cls, "_id_gap_finder"):
-            cls._id_gap_finder = AppIdGapNumberFinder(orm_model_class=cls)
-
-        def save_instance_fn():  # TODO, async
+    async def bulk_insert(cls, objs, session):
+        async def save_instance_fn():
             try:
                 session.add_all(objs)  # check state in session.new
-                session.commit()
+                await session.commit()
             except Exception as e:
                 # manually rollback, change random ID, then commit again
-                session.rollback()
+                await session.rollback()
                 raise
 
-        return cls._id_gap_finder.save_with_rand_id(
-            save_instance_fn, objs=objs, session=session
-        )
+        _id_gap_finder = AppIdGapNumberFinder(orm_model_class=cls, session=session)
+        await _id_gap_finder.async_save_with_rand_id(save_instance_fn, objs=objs)
 
 
 ## end of class StoreProfile
@@ -242,8 +246,8 @@ class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
     store_applied = relationship("StoreProfile", back_populates="staff")
 
     @classmethod
-    def quota_stats(cls, objs, session, target_ids):
-        return super().quota_stats(objs, session, target_ids, attname="store_id")
+    async def quota_stats(cls, objs, session, target_ids):
+        return await super().quota_stats(objs, session, target_ids, attname="store_id")
 
 
 class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
@@ -258,8 +262,8 @@ class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
     store_applied = relationship("StoreProfile", back_populates="emails")
 
     @classmethod
-    def quota_stats(cls, objs, session, target_ids):
-        return super().quota_stats(objs, session, target_ids, attname="store_id")
+    async def quota_stats(cls, objs, session, target_ids):
+        return await super().quota_stats(objs, session, target_ids, attname="store_id")
 
 
 class StorePhone(Base, PhoneMixin, QuotaStatisticsMixin):
@@ -274,8 +278,8 @@ class StorePhone(Base, PhoneMixin, QuotaStatisticsMixin):
     store_applied = relationship("StoreProfile", back_populates="phones")
 
     @classmethod
-    def quota_stats(cls, objs, session, target_ids):
-        return super().quota_stats(objs, session, target_ids, attname="store_id")
+    async def quota_stats(cls, objs, session, target_ids):
+        return await super().quota_stats(objs, session, target_ids, attname="store_id")
 
 
 class OutletLocation(Base, LocationMixin):
@@ -310,8 +314,8 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
 
     # NOTE, don't record inventory data at this app, do it in inventory app
     @classmethod
-    def quota_stats(cls, objs, session, target_ids):
-        return super().quota_stats(objs, session, target_ids, attname="store_id")
+    async def quota_stats(cls, objs, session, target_ids):
+        return await super().quota_stats(objs, session, target_ids, attname="store_id")
 
 
 class HourOfOperation(Base):
