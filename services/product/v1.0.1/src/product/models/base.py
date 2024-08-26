@@ -67,14 +67,20 @@ class AppIdGapNumberFinder(IdGapNumberFinder):
     def low_lvl_get_gap_range(self, raw_sql_queries) -> list:
         out = []
         db_conn = db_conns_map[DB_ALIAS_APPLIED]
+        # currently this service does not enable multi-statement capability flag in MariaDB
+        # connection arguments, the 3 raw-SQL queries have to be executed one after another in
+        # different network flights
         with db_conn.cursor() as cursor:  # the connection has to be DB-API 2.0 compliant
-            cursor.execute(";".join(raw_sql_queries))
+            cursor.execute(raw_sql_queries[0])
             row = cursor.fetchone()
             if row:
                 out.append(row)
-            cursor.nextset()
-            out.extend(cursor.fetchall())
-            cursor.nextset()
+            # cursor.nextset() should be `None`, means no more result set
+            cursor.execute(raw_sql_queries[1])
+            rows = cursor.fetchall()
+            out.extend(rows)
+            # cursor.nextset()
+            cursor.execute(raw_sql_queries[2])
             row = cursor.fetchone()
             if row:
                 out.append(row)

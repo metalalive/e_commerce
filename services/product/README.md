@@ -20,6 +20,10 @@ Update all dependency packages specified in the configuration file `v1.0.1/pypro
 ```bash
 poetry update
 ```
+Or update specific dependency, for example :
+```bash
+poetry update ecommerce-common
+```
 
 ### Database Migration
 #### Initial migration
