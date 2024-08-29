@@ -28,6 +28,7 @@ class IdGapNumberFinder:
         if not instance:
             instance = super().__new__(cls, *args, **kwargs)
             instance.orm_model_class = orm_model_class
+            instance._recent_invalid_ids = []
             cls._finder_orm_map[pkg_path] = instance
         return instance
 
@@ -72,6 +73,35 @@ class IdGapNumberFinder:
                 raise
         return result
 
+    # TODO, refactor with decorator
+    async def async_save_with_rand_id(self, save_instance_fn, objs):
+        self._assert_any_dup_id(objs)
+        try:
+            self._set_random_id(objs, self.MAX_GAP_VALUE)
+            result = await save_instance_fn()
+        except self.expected_db_errors() as e:
+            if self.is_db_err_recoverable(error=e):
+                gap_ranges = await self.async_get_gap_ranges(
+                    max_value=self.MAX_GAP_VALUE
+                )
+                assert any(gap_ranges), "no gap ranges found"
+                error = e
+                while True:
+                    dup_id = self.extract_dup_id_from_error(error)
+                    try:
+                        self._rand_gap_id(objs, gap_ranges, dup_id=dup_id)
+                        result = await save_instance_fn()
+                    except self.expected_db_errors() as e2:
+                        if self.is_db_err_recoverable(error=e2):
+                            error = e2  # try again
+                        else:
+                            raise
+                    else:  # succeed to get the ID number
+                        break
+            else:
+                raise
+        return result
+
     def _set_random_id(self, instances, max_value, id_field_name="id"):
         objs_pk_null = filter(
             lambda instance: getattr(instance, id_field_name, None) is None, instances
@@ -80,11 +110,15 @@ class IdGapNumberFinder:
             rand_value = random.randrange(max_value)
             setattr(instance, id_field_name, rand_value)
 
+    # TODO: rename to `refresh-gap-ranges`
     def get_gap_ranges(self, max_value):
         """
         return pairs of range value available for assigning numeric ID to new instance
         of ORM model class , each of which has the format (`lowerbound`, `upperbound`)
         """
+        # TODO: consider to discard the outdated gap ranges, this method is invoked
+        # only when low-level database found conflict on index keys, which means this
+        # internal gap-range list will need to be refreshed again
         if not hasattr(self, "_gap_ranges"):
             model_cls = self.orm_model_class
             db_table = self.get_db_table_name(model_cls)
@@ -95,10 +129,17 @@ class IdGapNumberFinder:
             )
             # execute 3 SELECT statements in one round trip to database server
             self._gap_ranges = self.low_lvl_get_gap_range(raw_sql_queries)
-            # in case race condition happens to concurrent requests
-            # asking for the same ID number
-            self._recent_invalid_ids = []
         return self._gap_ranges
+
+    # TODO: rename to `async-refresh-gap-ranges`
+    async def async_get_gap_ranges(self, max_value):
+        model_cls = self.orm_model_class
+        db_table = self.get_db_table_name(model_cls)
+        pk_db_column = self.get_pk_db_column(model_cls)
+        raw_sql_queries = get_sql_table_pk_gap_ranges(
+            db_table=db_table, pk_db_column=pk_db_column, max_value=max_value
+        )
+        return await self.async_lowlvl_gap_range(raw_sql_queries)
 
     def clean_gap_ranges(self, max_value):
         if hasattr(self, "_gap_ranges"):
@@ -130,6 +171,9 @@ class IdGapNumberFinder:
         raise NotImplementedError()
 
     def low_lvl_get_gap_range(self, raw_sql_queries) -> list:
+        raise NotImplementedError()
+
+    async def async_lowlvl_gap_range(self, raw_sql_queries) -> list:
         raise NotImplementedError()
 
     def get_pk_db_column(self, model_cls) -> str:

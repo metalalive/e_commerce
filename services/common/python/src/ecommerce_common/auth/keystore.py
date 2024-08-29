@@ -288,7 +288,11 @@ class JWKSFilePersistHandler(AbstractCryptoKeyPersistHandler):
             for rawline in self._file:
                 # TODO / FIXME, figure out why file object returns string line even I
                 # explicitly set it to read-byte mode
-                rline = str(rawline, encoding="utf-8") if isinstance(rawline, bytes) else rawline
+                rline = (
+                    str(rawline, encoding="utf-8")
+                    if isinstance(rawline, bytes)
+                    else rawline
+                )
                 if rline == self.JSONFILE_START_LINE:
                     prev_wr_rawline = rline
                     prev_wr_file_pos = tmp_wr_file.tell()

@@ -1,5 +1,6 @@
 from time import sleep
 from pathlib import Path
+from typing import Optional, Tuple
 import functools
 import logging
 
@@ -49,13 +50,13 @@ def db_conn_retry_wrapper(func):
 
 def sqlalchemy_init_engine(
     secrets_file_path,
-    secret_map,
+    secret_map: Tuple[str, str],
     base_folder: Path,
-    driver_label,
-    db_name="",
-    conn_args=None,
+    driver_label: str,
+    db_name: str = "",
+    conn_args: Optional[dict] = None,
 ):
-    import sqlalchemy as sa
+    from sqlalchemy.ext.asyncio import create_async_engine
 
     conn_args = conn_args or {}
     db_credentials = get_credential_from_secrets(
@@ -68,7 +69,7 @@ def sqlalchemy_init_engine(
         chosen_db_credential["NAME"] = db_name
     url = format_sqlalchemy_url(driver=driver_label, db_credential=chosen_db_credential)
     # reminder: use engine.dispose() to free up all connections in its pool
-    return sa.create_engine(url, connect_args=conn_args)
+    return create_async_engine(url, connect_args=conn_args)
 
 
 def sqlalchemy_db_conn(engine, enable_orm=False):
