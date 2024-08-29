@@ -2,13 +2,14 @@ import random
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select as sa_select
 
 # load the module `tests.common` first, to ensure all environment variables
 # are properly set
 from tests.common import (
     db_engine_resource,
     session_for_test,
-    session_for_setup,
+    session_for_verify,
     keystore,
     test_client,
     store_data,
@@ -46,10 +47,11 @@ class TestUpdate:
         # skip receiving message from RPC-reply-queue
         pass
 
-    def test_ok(
-        self, session_for_test, keystore, test_client, saved_store_objs, opendays_data
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_ok(
+        self, session_for_verify, keystore, test_client, saved_store_objs, opendays_data
     ):
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         num_items = 3
         body = [next(opendays_data) for _ in range(num_items)]
         for item in body:
@@ -64,10 +66,9 @@ class TestUpdate:
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 200
-        query = session_for_test.query(HourOfOperation).filter(
-            HourOfOperation.store_id == obj.id
-        )
-        actual_value = list(map(lambda obj: obj.__dict__, query.all()))
+        stmt = sa_select(HourOfOperation).filter(HourOfOperation.store_id == obj.id)
+        resultset = await session_for_verify.execute(stmt)
+        actual_value = list(map(lambda row: row[0].__dict__, resultset.all()))
         for item in actual_value:
             item.pop("_sa_instance_state", None)
             item.pop("store_id", None)
@@ -78,10 +79,11 @@ class TestUpdate:
         actual_value = sorted(actual_value, key=lambda d: d["day"])
         assert expect_value == actual_value
 
-    def test_duplicate_days(
-        self, session_for_test, keystore, test_client, saved_store_objs, opendays_data
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_duplicate_days(
+        self, keystore, test_client, saved_store_objs, opendays_data
     ):
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         num_items = 5
         body = [next(opendays_data) for _ in range(num_items)]
         for item in body:

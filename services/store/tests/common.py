@@ -64,10 +64,7 @@ def keystore():
         ks._teardown_keystore()
 
 
-# not all fixtures / test cases require this fixture, set `autouse` to `False`
-# reference :
-# https://docs.sqlalchemy.org/en/14/orm/extensions/asyncio.html#using-multiple-asyncio-event-loops
-@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=False)
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def db_engine_resource(request):
     # base setup / teardown for creating or deleting database and apply migration
     default_dbs_engine = sqlalchemy_init_engine(
@@ -113,7 +110,10 @@ async def db_engine_resource(request):
     await default_dbs_engine.dispose()
 
 
-@pytest_asyncio.fixture(scope="session", loop_scope="session")
+# all fixtures / test cases require this fixture, set `autouse` to `True`
+# reference :
+# https://docs.sqlalchemy.org/en/14/orm/extensions/asyncio.html#using-multiple-asyncio-event-loops
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
 async def session_for_test(db_engine_resource):
     async with db_engine_resource.connect() as conn:
         try:
@@ -139,6 +139,12 @@ async def session_for_test(db_engine_resource):
     #             yield session
     #         finally:
     #             transaction.rollback()
+
+
+@pytest_asyncio.fixture(scope="function", loop_scope="session", autouse=True)
+async def session_for_verify(db_engine_resource):
+    async with AsyncSession(db_engine_resource) as sess:
+        yield sess
 
 
 def _store_data_gen():
@@ -309,6 +315,7 @@ async def _saved_obj_gen(
     num_staff_per_store=4,
     num_products_per_store=5,
 ):
+    _objs = []
     while True:
         new_item = next(store_data_gen)
         if loc_data_gen:
@@ -331,18 +338,31 @@ async def _saved_obj_gen(
                 for _ in range(num_products_per_store)
             ]
         obj = StoreProfile(**new_item)
+        _objs.append(obj)
         await StoreProfile.bulk_insert([obj], session=session)
         # For testing purpose, all the related attributes of the object needs to be
         # refreshed, by explicitly naming them to the `attribute_names` argument,
         # because they are NOT eager loading by default in the colume declarations.
         # https://docs.sqlalchemy.org/en/20/orm/session_api.html#sqlalchemy.orm.Session.refresh
-        await session.refresh(
-            obj, attribute_names=["emails", "phones", "location", "staff", "products"]
-        )
+        for o in _objs:
+            await session.refresh(
+                o,
+                attribute_names=[
+                    "emails",
+                    "phones",
+                    "location",
+                    "staff",
+                    "products",
+                    "open_days",
+                    "supervisor_id",
+                    "active",
+                    "label",
+                ],
+            )
         yield obj
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def saved_store_objs(
     session_for_test,
     store_data,

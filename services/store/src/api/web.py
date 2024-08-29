@@ -12,7 +12,8 @@ from sqlalchemy import (
     or_ as SqlAlOr,
     and_ as SqlAlAnd,
 )
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from ecommerce_common.auth.fastapi import base_authentication, base_permission_check
 from ecommerce_common.models.constants import ROLE_ID_SUPERUSER
@@ -115,20 +116,35 @@ edit_products_authorization = Authorization(
 )
 
 
-def _storefront_existence_validity(session, store_id: PositiveInt):
-    query = session.query(StoreProfile).filter(StoreProfile.id == store_id)
-    saved_obj = query.first()
+async def _storefront_existence_validity(
+    session: AsyncSession,
+    store_id: PositiveInt,
+    eager_load_columns: Optional[List] = None,
+) -> StoreProfile:
+    stmt = SqlAlSelect(StoreProfile).filter(StoreProfile.id == store_id)
+    if eager_load_columns and len(eager_load_columns) > 0:
+        cols = map(lambda v: selectinload(v), eager_load_columns)
+        stmt = stmt.options(*cols)
+    resultset = await session.execute(stmt)
+    saved_obj = resultset.one_or_none()
     if not saved_obj:
         raise FastApiHTTPException(
             detail={"code": "not_exist"},
             headers={},
             status_code=FastApiHTTPstatus.HTTP_404_NOT_FOUND,
         )
-    return saved_obj
+    return saved_obj[0]
 
 
-def _storefront_supervisor_validity(session, store_id: PositiveInt, usr_auth: dict):
-    saved_obj = _storefront_existence_validity(session, store_id)
+async def _storefront_supervisor_validity(
+    session: AsyncSession,
+    store_id: PositiveInt,
+    usr_auth: dict,
+    eager_load_columns: Optional[List] = None,
+) -> StoreProfile:
+    saved_obj = await _storefront_existence_validity(
+        session, store_id, eager_load_columns
+    )  # `supervisor_id` does not need to be added to `eager_load_columns`
     if (
         usr_auth["priv_status"] != ROLE_ID_SUPERUSER
         and saved_obj.supervisor_id != usr_auth["profile"]
@@ -141,8 +157,19 @@ def _storefront_supervisor_validity(session, store_id: PositiveInt, usr_auth: di
     return saved_obj
 
 
-def _storefront_staff_validity(session, store_id: PositiveInt, usr_auth: dict):
-    saved_obj = _storefront_existence_validity(session, store_id)
+async def _storefront_staff_validity(
+    session: AsyncSession,
+    store_id: PositiveInt,
+    usr_auth: dict,
+    eager_load_columns: Optional[List] = None,
+) -> StoreProfile:
+    if eager_load_columns:
+        eager_load_columns.append(StoreProfile.staff)
+    else:
+        eager_load_columns = [StoreProfile.staff]
+    saved_obj = await _storefront_existence_validity(
+        session, store_id, eager_load_columns
+    )
     valid_staff_ids = list(map(lambda o: o.staff_id, saved_obj.staff))
     valid_staff_ids.append(saved_obj.supervisor_id)
     if usr_auth["profile"] not in valid_staff_ids:
@@ -159,18 +186,20 @@ def _storefront_staff_validity(session, store_id: PositiveInt, usr_auth: dict):
     status_code=FastApiHTTPstatus.HTTP_201_CREATED,
     response_model=List[StoreProfileCreatedDto],
 )
-def add_profiles(
+async def add_profiles(
     request: NewStoreProfilesReqBody,
     user: dict = FastapiDepends(add_profile_authorization),
 ):
-    sa_new_stores = request._storeprofile_quota_check(shared_ctx["db_engine"])
-    with shared_ctx["db_engine"].connect() as conn:
-        with Session(bind=conn) as session:
-            StoreProfile.bulk_insert(objs=sa_new_stores, session=session)
-            _fn = lambda obj: StoreProfileCreatedDto(
-                id=obj.id, supervisor_id=obj.supervisor_id
-            )
-            resp_data = list(map(_fn, sa_new_stores))
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
+        sa_new_stores = await request.validate_quota(session)
+        await StoreProfile.bulk_insert(objs=sa_new_stores, session=session)
+        for obj in sa_new_stores:
+            await session.refresh(obj, attribute_names=["id", "supervisor_id"])
+
+        def _fn(obj):
+            return StoreProfileCreatedDto(id=obj.id, supervisor_id=obj.supervisor_id)
+
+        resp_data = list(map(_fn, sa_new_stores))
     return resp_data
 
 
@@ -180,7 +209,7 @@ def add_profiles(
 @router.patch(
     "/profile/{store_id}",
 )
-def edit_profile(
+async def edit_profile(
     store_id: PositiveInt,
     request: ExistingStoreProfileReqBody,
     user: dict = FastapiDepends(edit_profile_authorization),
@@ -212,8 +241,15 @@ def edit_profile(
             status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN,
         )
     # TODO, figure out better way to authorize with database connection
-    with Session(bind=shared_ctx["db_engine"]) as session:
-        saved_obj = _storefront_supervisor_validity(session, store_id, usr_auth=user)
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
+        related_attributes = [
+            StoreProfile.emails,
+            StoreProfile.phones,
+            StoreProfile.location,
+        ]
+        saved_obj = await _storefront_supervisor_validity(
+            session, store_id, usr_auth=user, eager_load_columns=related_attributes
+        )
         # perform update
         saved_obj.label = request.label
         saved_obj.active = request.active
@@ -229,28 +265,32 @@ def edit_profile(
             saved_obj.location = OutletLocation(**request.location.model_dump())
         else:
             saved_obj.location = None
-        session.commit()
+        await session.commit()
     return None
 
 
 @router.patch(
     "/profile/{store_id}/supervisor",
 )
-def switch_supervisor(
+async def switch_supervisor(
     store_id: PositiveInt,
     request: StoreSupervisorReqBody,
     user: dict = FastapiDepends(switch_supervisor_authorization),
 ):
-    db_engine = request.metadata["db_engine"]
-    with Session(bind=db_engine) as session:
-        saved_obj = _storefront_supervisor_validity(session, store_id, usr_auth=user)
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
+        await request.validate_quota(session)
+        saved_obj = await _storefront_supervisor_validity(
+            session, store_id, usr_auth=user
+        )
         saved_obj.supervisor_id = request.supervisor_id
-        session.commit()
+        await session.commit()
     return None
 
 
 @router.delete("/profiles", status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT)
-def delete_profile(ids: str, user: dict = FastapiDepends(delete_profile_authorization)):
+async def delete_profile(
+    ids: str, user: dict = FastapiDepends(delete_profile_authorization)
+):
     try:
         ids = list(map(int, ids.split(",")))
         if len(ids) == 0:
@@ -265,14 +305,15 @@ def delete_profile(ids: str, user: dict = FastapiDepends(delete_profile_authoriz
             headers={},
             status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
         )
-    with Session(bind=shared_ctx["db_engine"]) as _session:
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as _session:
+        # TODO, staff validity check if any staff member of the shop exists
         stmt = SqlAlDelete(StoreProfile).where(StoreProfile.id.in_(ids))
-        result = _session.execute(stmt)  # TODO, consider soft-delete
+        result = await _session.execute(stmt)  # TODO, consider soft-delete
         for s_id in ids:
             emit_event_edit_products(
                 s_id, rpc_hdlr=shared_ctx["order_app_rpc"], remove_all=True
             )
-        _session.commit()
+        await _session.commit()
     # Note python does not have `scope` concept, I can access the variables
     # `result` and `ids` declared above.
     if result.rowcount == 0:
@@ -285,21 +326,23 @@ def delete_profile(ids: str, user: dict = FastapiDepends(delete_profile_authoriz
 @router.patch(
     "/profile/{store_id}/staff",
 )
-def edit_staff(
+async def edit_staff(
     store_id: PositiveInt,
     request: StoreStaffsReqBody,
     user: dict = FastapiDepends(edit_profile_authorization),
 ):
     request.validate_staff(supervisor_id=user["profile"])
-    with Session(bind=shared_ctx["db_engine"]) as session:
-        saved_obj = _storefront_supervisor_validity(session, store_id, usr_auth=user)
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
+        saved_obj = await _storefront_supervisor_validity(
+            session, store_id, usr_auth=user, eager_load_columns=[StoreProfile.staff]
+        )
         staff_ids = list(map(lambda d: d.staff_id, request.root))
         stmt = (
             SqlAlSelect(StoreStaff)
             .where(StoreStaff.store_id == saved_obj.id)
             .where(StoreStaff.staff_id.in_(staff_ids))
         )
-        result = session.execute(stmt)
+        result = await session.execute(stmt)
 
         def _do_update(raw):
             saved_staff = raw[0]
@@ -316,7 +359,7 @@ def edit_staff(
         new_staffs = map(lambda d: StoreStaff(**d.model_dump()), newdata)
         saved_obj.staff.extend(new_staffs)
         try:
-            session.commit()
+            await session.commit()
         except Exception as e:
             log_args = ["action", "db-commit-error", "detail", ",".join(e.args)]
             _logger.error(None, *log_args)
@@ -331,17 +374,22 @@ def edit_staff(
 @router.patch(
     "/profile/{store_id}/business_hours",
 )
-def edit_hours_operation(
+async def edit_hours_operation(
     store_id: PositiveInt,
     request: BusinessHoursDaysReqBody,
     user: dict = FastapiDepends(edit_profile_authorization),
 ):
-    with Session(bind=shared_ctx["db_engine"]) as session:
-        saved_obj = _storefront_supervisor_validity(session, store_id, usr_auth=user)
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
+        saved_obj = await _storefront_supervisor_validity(
+            session,
+            store_id,
+            usr_auth=user,
+            eager_load_columns=[StoreProfile.open_days],
+        )
         new_time = list(map(lambda d: HourOfOperation(**d.model_dump()), request.root))
         saved_obj.open_days.clear()
         saved_obj.open_days.extend(new_time)
-        session.commit()
+        await session.commit()
 
 
 def emit_event_edit_products(
@@ -411,14 +459,14 @@ def emit_event_edit_products(
 @router.patch(
     "/profile/{store_id}/products",
 )
-def edit_products_available(
+async def edit_products_available(
     store_id: PositiveInt,
     request: EditProductsReqBody,
     user: dict = FastapiDepends(edit_products_authorization),
 ):
     request.validate_products(staff_id=user["profile"])
-    with Session(bind=shared_ctx["db_engine"]) as session:
-        saved_obj = _storefront_staff_validity(session, store_id, usr_auth=user)
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
+        saved_obj = await _storefront_staff_validity(session, store_id, usr_auth=user)
         product_id_cond = map(
             lambda d: SqlAlAnd(
                 StoreProductAvailable.product_type == d.product_type,
@@ -434,7 +482,8 @@ def edit_products_available(
             .where(StoreProductAvailable.store_id == saved_obj.id)
             .where(find_product_condition)
         )
-        updating_products = list(map(lambda p: p[0], session.execute(stmt)))  # tuple
+        resultset = await session.execute(stmt)
+        updating_products = list(map(lambda p: p[0], resultset))  # tuple
 
         def _do_update(saved_product):
             newdata = filter(
@@ -466,7 +515,7 @@ def edit_products_available(
             creating=new_products,
         )
         try:
-            session.commit()
+            await session.commit()
         except Exception as e:
             log_args = ["action", "db-commit-error", "detail", ",".join(e.args)]
             _logger.error(None, *log_args)
@@ -480,7 +529,7 @@ def edit_products_available(
 @router.delete(
     "/profile/{store_id}/products", status_code=FastApiHTTPstatus.HTTP_204_NO_CONTENT
 )
-def discard_store_products(
+async def discard_store_products(
     store_id: PositiveInt,
     pitems: str,
     ppkgs: str,
@@ -501,8 +550,10 @@ def discard_store_products(
             headers={},
             status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
         )
-    with Session(bind=shared_ctx["db_engine"]) as _session:
-        saved_store = _storefront_staff_validity(_session, store_id, usr_auth=user)
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as _session:
+        saved_store = await _storefront_staff_validity(
+            _session, store_id, usr_auth=user
+        )
         _cond_fn = lambda d, t: SqlAlAnd(
             StoreProductAvailable.product_type == t,
             StoreProductAvailable.product_id == d,
@@ -515,7 +566,7 @@ def discard_store_products(
             .where(StoreProductAvailable.store_id == saved_store.id)
             .where(find_product_condition)
         )
-        result = _session.execute(stmt)
+        result = await _session.execute(stmt)
         emit_event_edit_products(
             store_id,
             s_currency=saved_store.currency.value,
@@ -524,7 +575,7 @@ def discard_store_products(
         )
         # print generated raw SOL with actual values
         # str(stmt.compile(compile_kwargs={"literal_binds": True}))
-        _session.commit()
+        await _session.commit()
     if result.rowcount == 0:
         raise FastApiHTTPException(
             detail={}, headers={}, status_code=FastApiHTTPstatus.HTTP_410_GONE
@@ -536,21 +587,32 @@ def discard_store_products(
 
 
 @router.get("/profile/{store_id}/products", response_model=EditProductsReqBody)
-def read_profile_products(
+async def read_profile_products(
     store_id: PositiveInt, user: dict = FastapiDepends(common_authentication)
 ):
     # TODO, figure out how to handle large dataset, pagination or other techniques
-    with Session(bind=shared_ctx["db_engine"]) as session:
-        saved_obj = _storefront_staff_validity(session, store_id, usr_auth=user)
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
+        saved_obj = await _storefront_staff_validity(
+            session, store_id, usr_auth=user, eager_load_columns=[StoreProfile.products]
+        )
         response = EditProductsReqBody.model_validate(saved_obj.products)
     return response
 
 
 @router.get("/profile/{store_id}", response_model=StoreProfileDto)
-def read_profile(
+async def read_profile(
     store_id: PositiveInt, user: dict = FastapiDepends(common_authentication)
 ):
-    with Session(bind=shared_ctx["db_engine"]) as session:
-        saved_obj = _storefront_staff_validity(session, store_id, usr_auth=user)
+    async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
+        related_attributes = [
+            StoreProfile.phones,
+            StoreProfile.emails,
+            StoreProfile.location,
+            StoreProfile.open_days,
+            StoreProfile.staff,
+        ]
+        saved_obj = await _storefront_staff_validity(
+            session, store_id, usr_auth=user, eager_load_columns=related_attributes
+        )
         response = StoreProfileDto.model_validate(saved_obj)
     return response

@@ -2,13 +2,15 @@ import random
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select as sa_select
+from sqlalchemy.orm import selectinload
 
 # load the module `tests.common` first, to ensure all environment variables
 # are properly set
 from tests.common import (
     db_engine_resource,
     session_for_test,
-    session_for_setup,
+    session_for_verify,
     keystore,
     test_client,
     store_data,
@@ -26,7 +28,7 @@ from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
 from store.models import StoreProfile, StorePhone, StoreEmail, StoreCurrency
-from store.api.rpc import get_shop_profile
+from store.api.rpc import _get_shop_profile
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -35,7 +37,7 @@ class TestCreation:
     # class name must start with TestXxxx
     url = "/profiles"
 
-    def test_auth_failure(self, session_for_test, keystore, test_client):
+    def test_auth_failure(self, keystore, test_client):
         # no need to test CORS middleware ?
         response = test_client.post(self.url, headers={}, json=[])
         assert response.status_code == 401
@@ -76,7 +78,8 @@ class TestCreation:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_bulk_ok(
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_bulk_ok(
         self,
         session_for_test,
         keystore,
@@ -144,9 +147,11 @@ class TestCreation:
         assert response.status_code == 201
         result = response.json()
         expect_prof_ids = list(map(lambda d: d["supervisor_id"], body))
-        query = session_for_test.query(StoreProfile.id, StoreProfile.supervisor_id)
-        query = query.filter(StoreProfile.supervisor_id.in_(expect_prof_ids))
-        expect_data = dict(query.all())
+        stmt = sa_select(StoreProfile.id, StoreProfile.supervisor_id).filter(
+            StoreProfile.supervisor_id.in_(expect_prof_ids)
+        )
+        resultset = await session_for_test.execute(stmt)
+        expect_data = dict(resultset.all())
         actual_data = dict(map(lambda d: (d["id"], d["supervisor_id"]), result))
         assert expect_data == actual_data
 
@@ -154,7 +159,7 @@ class TestCreation:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_empty_input(self, session_for_test, keystore, test_client):
+    def test_empty_input(self, keystore, test_client):
         profile_data = {
             "id": 58,
             "privilege_status": ROLE_ID_STAFF,
@@ -193,7 +198,7 @@ class TestCreation:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_auth_app_down(self, session_for_test, keystore, test_client, store_data):
+    def test_auth_app_down(self, keystore, test_client, store_data):
         profile_data = {
             "id": 58,
             "privilege_status": ROLE_ID_STAFF,
@@ -233,9 +238,7 @@ class TestCreation:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_invalid_supervisor_id(
-        self, session_for_test, keystore, test_client, store_data
-    ):
+    def test_invalid_supervisor_id(self, keystore, test_client, store_data):
         num_items = 4
         profile_data = {
             "id": 99,
@@ -284,9 +287,7 @@ class TestCreation:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_invalid_email(
-        self, session_for_test, keystore, test_client, store_data, email_data
-    ):
+    def test_invalid_email(self, keystore, test_client, store_data, email_data):
         num_stores = 2
         invalid_emails = [
             "xyz@ur873",
@@ -356,9 +357,7 @@ class TestCreation:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_invalid_phone(
-        self, session_for_test, keystore, test_client, store_data, phone_data
-    ):
+    def test_invalid_phone(self, keystore, test_client, store_data, phone_data):
         num_stores = 2
         invalid_phones = [
             (None, 3415),
@@ -430,9 +429,7 @@ class TestCreation:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_quota_limit_exceeds(
-        self, session_for_test, keystore, test_client, store_data
-    ):
+    def test_quota_limit_exceeds(self, keystore, test_client, store_data):
         num_stores_saved, num_new_stores, max_num_stores_per_user = 3, 2, 4
         profile_data = {
             "id": 71,
@@ -503,9 +500,10 @@ class TestUpdateContact:
         ],
     }
 
-    def test_ok(
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_ok(
         self,
-        session_for_test,
+        session_for_verify,
         keystore,
         test_client,
         saved_store_objs,
@@ -513,7 +511,7 @@ class TestUpdateContact:
         phone_data,
         loc_data,
     ):
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         body = {
             "label": "edited_label",
             "active": not obj.active,
@@ -553,11 +551,18 @@ class TestUpdateContact:
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 200
-        obj = (
-            session_for_test.query(StoreProfile)
+        stmt = (
+            sa_select(StoreProfile)
             .filter(StoreProfile.id == obj.id)
-            .first()
+            .options(
+                selectinload(StoreProfile.emails),
+                selectinload(StoreProfile.phones),
+                selectinload(StoreProfile.location),
+            )
         )
+        resultset = await session_for_verify.execute(stmt)
+        row = resultset.first()
+        obj = row[0]
         assert obj.label == body["label"]
         assert obj.active == body["active"]
         expect_value = set(map(lambda e: e.addr, obj.emails))
@@ -572,9 +577,9 @@ class TestUpdateContact:
         for col_name in ("locality", "street", "detail", "floor"):
             assert getattr(obj.location, col_name) == body["location"][col_name]
 
-    def test_quota_limit_exceeds(
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_quota_limit_exceeds(
         self,
-        session_for_test,
         keystore,
         test_client,
         saved_store_objs,
@@ -583,7 +588,7 @@ class TestUpdateContact:
     ):
         max_num_emails = 4
         max_num_phones = 5
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         body = {
             "label": "edited_label",
             "active": not obj.active,
@@ -620,7 +625,7 @@ class TestUpdateContact:
         result = response.json()
         assert result["detail"]["phones"][0].startswith("Limit exceeds")
 
-    def test_invalid_id(self, session_for_test, keystore, test_client):
+    def test_invalid_id(self, keystore, test_client):
         invalid_supervisor_id = -9876
         body = {
             "label": "edited label",
@@ -648,10 +653,9 @@ class TestUpdateContact:
             assert response.status_code == 404
             assert response.json()["detail"] == {"code": "not_exist"}
 
-    def test_invalid_supervisor(
-        self, session_for_test, keystore, test_client, saved_store_objs
-    ):
-        obj = next(saved_store_objs)
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_invalid_supervisor(self, keystore, test_client, saved_store_objs):
+        obj = await anext(saved_store_objs)
         invalid_supervisor_id = obj.supervisor_id + 9999
         body = {
             "label": "edited label",
@@ -689,8 +693,11 @@ class TestSwitchSupervisor:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_ok(self, session_for_test, keystore, test_client, saved_store_objs):
-        obj = next(saved_store_objs)
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_ok(
+        self, session_for_verify, keystore, test_client, saved_store_objs
+    ):
+        obj = await anext(saved_store_objs)
         old_supervisor_id = obj.supervisor_id
         new_supervisor_id = 5566
         auth_data = self._auth_data_pattern
@@ -722,23 +729,23 @@ class TestSwitchSupervisor:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 200
-        obj = (
-            session_for_test.query(StoreProfile)
-            .filter(StoreProfile.id == obj.id)
-            .first()
-        )
+        stmt = sa_select(StoreProfile).filter(StoreProfile.id == obj.id)
+        resultset = await session_for_verify.execute(stmt)
+        row = resultset.first()
+        obj = row[0]
         assert obj.supervisor_id == new_supervisor_id
 
     @patch(
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_quota_limit_exceeds(
-        self, session_for_test, keystore, test_client, saved_store_objs, store_data
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_quota_limit_exceeds(
+        self, session_for_verify, keystore, test_client, saved_store_objs, store_data
     ):
         max_num_stores = 5
-        objs = [next(saved_store_objs) for _ in range(max_num_stores)]
-        new_supervisor_id = 5566
+        objs = [await anext(saved_store_objs) for _ in range(max_num_stores)]
+        new_supervisor_id = 5567
         body = {"supervisor_id": new_supervisor_id}
         reply_event = RpcReplyEvent(listener=self, timeout_s=7)
         reply_event.resp_body["status"] = RpcReplyEvent.status_opt.SUCCESS
@@ -772,9 +779,11 @@ class TestSwitchSupervisor:
                     response = test_client.patch(url, headers=headers, json=body)
                     expect_status_code = 403 if obj is objs[-1] else 200
                     assert response.status_code == expect_status_code
-        query = session_for_test.query(StoreProfile.id)
-        query = query.filter(StoreProfile.supervisor_id == new_supervisor_id)
-        actual_data = set(map(lambda v: v[0], query.all()))
+        stmt = sa_select(StoreProfile.id).filter(
+            StoreProfile.supervisor_id == new_supervisor_id
+        )
+        resultset = await session_for_verify.execute(stmt)
+        actual_data = set(map(lambda row: row[0], resultset.fetchall()))
         expect_data = set(map(lambda obj: obj.id, objs[:-1]))
         assert expect_data == actual_data
 
@@ -782,12 +791,13 @@ class TestSwitchSupervisor:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_deactivated_supervisor(
-        self, session_for_test, keystore, test_client, saved_store_objs
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_deactivated_supervisor(
+        self, keystore, test_client, saved_store_objs
     ):
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         old_supervisor_id = obj.supervisor_id
-        new_supervisor_id = 5566
+        new_supervisor_id = 5568
         auth_data = self._auth_data_pattern
         auth_data["id"] = old_supervisor_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
@@ -827,10 +837,11 @@ class TestDeletion:
         ],
     }
 
-    def test_bulk_ok(self, session_for_test, keystore, test_client, saved_store_objs):
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_bulk_ok(self, keystore, test_client, saved_store_objs):
         num_items = 7
         num_deleting = 4
-        objs = [next(saved_store_objs) for _ in range(num_items)]
+        objs = [await anext(saved_store_objs) for _ in range(num_items)]
         auth_data = self._auth_data_pattern
         auth_data["id"] = 214
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
@@ -864,8 +875,9 @@ class TestReadWeb:
         ],
     }
 
-    def test_ok(self, session_for_test, keystore, test_client, saved_store_objs):
-        obj = next(saved_store_objs)
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_ok(self, keystore, test_client, saved_store_objs):
+        obj = await anext(saved_store_objs)
         url = self.url.format(store_id=obj.id)
         auth_data = self._auth_data_pattern
         # subcase 1, outsider access will be denied
@@ -914,10 +926,10 @@ class TestReadWeb:
 
 
 class TestReadRpc:
-    def test_ok(self, session_for_test, saved_store_objs):
-        obj = next(saved_store_objs)
-        data = {"store_id": obj.id}
-        actual = get_shop_profile(req=data)
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_ok(self, db_engine_resource, saved_store_objs):
+        obj = await anext(saved_store_objs)
+        actual = await _get_shop_profile(db_engine=db_engine_resource, sid=obj.id)
         assert actual["label"] == obj.label
         assert actual["active"] == obj.active
         assert actual["supervisor_id"] == obj.supervisor_id

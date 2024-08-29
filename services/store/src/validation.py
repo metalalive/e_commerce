@@ -16,7 +16,6 @@ from pydantic import (
     ConfigDict,
 )
 from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
-from sqlalchemy.orm import Session
 
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
 from ecommerce_common.models.contact.sqlalchemy import CountryCodeEnum
@@ -121,7 +120,7 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
         assert values and any(values), "Empty request body Not Allowed"
         req_prof_ids = list(set(map(lambda obj: obj.supervisor_id, values)))
         supervisor_verified = _get_supervisor_auth(req_prof_ids)
-        quota_arrangement = cls._get_quota_arrangement(values, supervisor_verified)
+        quota_arrangement = cls._estimate_quota(values, supervisor_verified)
         cls._contact_common_quota_check(
             values, quota_arrangement, label="emails", mat_model_cls=StoreEmail
         )
@@ -130,7 +129,7 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
         )
         return values
 
-    def _get_quota_arrangement(values, supervisor_verified):
+    def _estimate_quota(values, supervisor_verified):
         supervisor_verified = {item["id"]: item for item in supervisor_verified}
         out = {}
 
@@ -180,17 +179,16 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
                 status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN,
             )
 
-    def _storeprofile_quota_check(self, db_engine):
+    async def validate_quota(self, session):
         # quota check, for current user who adds these new items
         new_stores = list(
             map(NewStoreProfileReqBody._pydantic_to_sqlalchemy, self.root)
         )
         profile_ids = list(map(lambda obj: obj.supervisor_id, self.root))
         quota_arrangement = {obj.supervisor_id: obj.quota for obj in self.root}
-        with Session(bind=db_engine) as session:
-            quota_chk_result = StoreProfile.quota_stats(
-                new_stores, session=session, target_ids=profile_ids
-            )
+        quota_chk_result = await StoreProfile.quota_stats(
+            new_stores, session=session, target_ids=profile_ids
+        )
 
         def _inner_chk(item):
             err = {}
@@ -239,14 +237,8 @@ class StoreSupervisorReqBody(PydanticBaseModel):
         super().__init__(*args, **kwargs)
         req_prof_id = self.supervisor_id
         supervisor_verified = _get_supervisor_auth([req_prof_id])
-        quota_arrangement = self._get_quota_arrangement(
-            supervisor_verified, req_prof_id
-        )
-        db_engine = shared_ctx["db_engine"]
-        self.metadata = {
-            "db_engine": db_engine,
-        }
-        self._storeprofile_quota_check(db_engine, req_prof_id, quota_arrangement)
+        quota_arrangement = self._estimate_quota(supervisor_verified, req_prof_id)
+        self.metadata = {"quota_arrangement": quota_arrangement}
 
     def __setattr__(self, name, value):
         if name == "metadata":
@@ -255,7 +247,7 @@ class StoreSupervisorReqBody(PydanticBaseModel):
         else:
             super().__setattr__(name, value)
 
-    def _get_quota_arrangement(self, supervisor_verified, req_prof_id):
+    def _estimate_quota(self, supervisor_verified, req_prof_id):
         supervisor_verified = {item["id"]: item for item in supervisor_verified}
         out = {}
         err_detail = _get_quota_arrangement_helper(
@@ -269,11 +261,12 @@ class StoreSupervisorReqBody(PydanticBaseModel):
             )
         return out
 
-    def _storeprofile_quota_check(self, db_engine, prof_id, quota_arrangement):
-        with Session(bind=db_engine) as session:
-            quota_chk_result = StoreProfile.quota_stats(
-                [], session=session, target_ids=[prof_id]
-            )
+    async def validate_quota(self, session):
+        prof_id = self.supervisor_id
+        quota_arrangement = self.metadata["quota_arrangement"]
+        quota_chk_result = await StoreProfile.quota_stats(
+            [], session=session, target_ids=[prof_id]
+        )
         err = {}
         num_existing_items = quota_chk_result[prof_id]["num_existing_items"]
         num_new_items = 1

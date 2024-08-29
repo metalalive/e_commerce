@@ -85,7 +85,7 @@ async def app_shared_context_start(_app: FastAPI):
 async def app_shared_context_destroy(_app: FastAPI):
     try:
         _db_engine = shared_ctx.pop("db_engine")
-        _db_engine.dispose()
+        await _db_engine.dispose()
     except Exception as e:
         log_args = ["action", "deinit-db-error-caught", "detail", ",".join(e.args)]
         _logger.error(None, *log_args)

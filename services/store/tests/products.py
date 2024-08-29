@@ -5,13 +5,14 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select as sa_select
 
 # load the module `tests.common` first, to ensure all environment variables
 # are properly set
 from tests.common import (
     db_engine_resource,
     session_for_test,
-    session_for_setup,
+    session_for_verify,
     keystore,
     test_client,
     store_data,
@@ -103,15 +104,16 @@ class TestUpdate:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_ok(
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_ok(
         self,
-        session_for_test,
+        session_for_verify,
         keystore,
         test_client,
         saved_store_objs,
         product_avail_data,
     ):
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         num_new, num_unmodified = 2, 2
         body = self._setup_base_req_body(
             objs=obj.products[num_unmodified:],
@@ -136,10 +138,12 @@ class TestUpdate:
                 mocked_rpc_proxy_call.side_effect = [reply_evt_product, reply_evt_order]
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 200
-        query = session_for_test.query(StoreProductAvailable).filter(
-            StoreProductAvailable.store_id == obj.id
+        stmt = (
+            sa_select(StoreProductAvailable)
+            .filter(StoreProductAvailable.store_id == obj.id)
+            .order_by(StoreProductAvailable.product_id.asc())
         )
-        query = query.order_by(StoreProductAvailable.product_id.asc())
+        resultset = await session_for_verify.execute(stmt)
         expect_value = [
             *body,
             *self._setup_base_req_body(
@@ -149,7 +153,7 @@ class TestUpdate:
             ),
         ]
         expect_value = sorted(expect_value, key=lambda d: d["product_id"])
-        actual_value = list(map(lambda obj: obj.__dict__, query))
+        actual_value = list(map(lambda row: row[0].__dict__, resultset))
         for item in actual_value:
             item.pop("_sa_instance_state", None)
             item.pop("store_id", None)
@@ -162,10 +166,9 @@ class TestUpdate:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_invalid_product_id(
-        self, session_for_test, keystore, test_client, saved_store_objs
-    ):
-        obj = next(saved_store_objs)
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_invalid_product_id(self, keystore, test_client, saved_store_objs):
+        obj = await anext(saved_store_objs)
         body = self._setup_base_req_body(obj.products, None)
         auth_data = self._auth_data_pattern
         auth_data["id"] = obj.staff[0].staff_id
@@ -193,11 +196,10 @@ class TestUpdate:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_invalid_staff_id(
-        self, session_for_test, keystore, test_client, saved_store_objs
-    ):
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_invalid_staff_id(self, keystore, test_client, saved_store_objs):
         invalid_staff_id = 9999
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         body = self._setup_base_req_body(obj.products, None)
         auth_data = self._auth_data_pattern
         auth_data["id"] = invalid_staff_id
@@ -214,9 +216,8 @@ class TestUpdate:
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 403
 
-    def test_emit_event_orderapp(
-        self, session_for_test, saved_store_objs, product_avail_data
-    ):
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_emit_event_orderapp(self, saved_store_objs, product_avail_data):
         from store.api.web import emit_event_edit_products
 
         # subcase 1
@@ -230,7 +231,7 @@ class TestUpdate:
         expect_creating = self._setup_base_req_body(
             objs=arg_creating, product_avail_gen=None, num_new_items=num_new
         )
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         arg_updating = obj.products[:num_unmodified]
         expect_updating = self._setup_base_req_body(
             objs=arg_updating, product_avail_gen=None, num_new_items=num_unmodified
@@ -317,10 +318,11 @@ class TestDiscard:
         ]
         return (deleting_pitems, deleting_ppkgs, remaining_pitems, remaining_ppkgs)
 
-    def test_ok(
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_ok(
         self,
-        db_engine_resource,
         session_for_test,
+        session_for_verify,
         keystore,
         test_client,
         store_data,
@@ -336,7 +338,7 @@ class TestDiscard:
             num_staff_per_store=1,
             num_products_per_store=num_total,
         )
-        obj = next(generator)
+        obj = await anext(generator)
         auth_data = self._auth_data_pattern.copy()
         auth_data["id"] = obj.staff[0].staff_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
@@ -359,27 +361,26 @@ class TestDiscard:
                 assert response.status_code == 204
                 response = test_client.delete(renderred_url, headers=headers)
                 assert response.status_code == 410
+
+        store_id = obj.id
         session_for_test.expire(obj)
-        from sqlalchemy import select as SqlAlSelect
-        from sqlalchemy.orm import Session
 
-        # extra session is created only for verifying what is persisting
-        # in database, SQLALchemy does not seem to allow original session to
-        # retrieve up-to-date records after previous deletion.
-        with db_engine_resource.connect() as conn:
-            with Session(bind=conn) as extra_session:
-                stmt = SqlAlSelect(
-                    StoreProductAvailable.product_type, StoreProductAvailable.product_id
-                ).where(StoreProductAvailable.store_id == obj.id)
-                actual_remain = extra_session.execute(stmt).all()
-                expect_remain = [*remaining_ppkgs, *remaining_pitems]
-                assert len(actual_remain) == num_total - 2 * num_deleting
-                assert set(actual_remain) == set(expect_remain)
+        # SQLALchemy does not seem to allow original session to retrieve up-to-date
+        # records after previous deletion.
+        stmt = sa_select(
+            StoreProductAvailable.product_type, StoreProductAvailable.product_id
+        ).where(StoreProductAvailable.store_id == store_id)
+        resultset = await session_for_verify.execute(stmt)
+        actual_remain = resultset.all()
+        expect_remain = [*remaining_ppkgs, *remaining_pitems]
+        assert len(actual_remain) == num_total - 2 * num_deleting
+        assert set(actual_remain) == set(expect_remain)
 
-    def test_error_emit_event(
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_error_emit_event(
         self,
-        db_engine_resource,
         session_for_test,
+        session_for_verify,
         keystore,
         test_client,
         store_data,
@@ -395,7 +396,7 @@ class TestDiscard:
             num_staff_per_store=1,
             num_products_per_store=num_total,
         )
-        obj = next(generator)
+        obj = await anext(generator)
         auth_data = self._auth_data_pattern.copy()
         auth_data["id"] = obj.staff[0].staff_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
@@ -422,16 +423,13 @@ class TestDiscard:
                 mocked_rpc_proxy_call.return_value = reply_evt_order
                 response = test_client.delete(renderred_url, headers=headers)
                 assert response.status_code == 500
-        from sqlalchemy import select as SqlAlSelect
-        from sqlalchemy.orm import Session
 
-        with db_engine_resource.connect() as conn:
-            with Session(bind=conn) as extra_session:
-                stmt = SqlAlSelect(
-                    StoreProductAvailable.product_type, StoreProductAvailable.product_id
-                ).where(StoreProductAvailable.store_id == obj.id)
-                actual_remain = extra_session.execute(stmt).all()
-                assert len(actual_remain) == num_total
+        stmt = sa_select(
+            StoreProductAvailable.product_type, StoreProductAvailable.product_id
+        ).where(StoreProductAvailable.store_id == obj.id)
+        resultset = await session_for_verify.execute(stmt)
+        actual_remain = resultset.all()
+        assert len(actual_remain) == num_total
 
 
 ## end of class TestDiscard:
@@ -456,21 +454,22 @@ class TestRead:
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_ok(
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_ok(
         self,
-        session_for_setup,
         session_for_test,
         keystore,
         test_client,
         saved_store_objs,
         product_avail_data,
     ):
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         new_products_avail = [
             StoreProductAvailable(**next(product_avail_data)) for _ in range(20)
         ]
         obj.products.extend(new_products_avail)
-        session_for_setup.commit()
+        await session_for_test.commit()
+        await session_for_test.refresh(obj, attribute_names=["staff"])
         auth_data = self._auth_data_pattern
         auth_data["id"] = random.choice(obj.staff).staff_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])

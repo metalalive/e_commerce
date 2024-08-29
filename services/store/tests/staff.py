@@ -2,13 +2,14 @@ import random
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select as sa_select
 
 # load the module `tests.common` first, to ensure all environment variables
 # are properly set
 from tests.common import (
     db_engine_resource,
     session_for_test,
-    session_for_setup,
+    session_for_verify,
     keystore,
     test_client,
     store_data,
@@ -52,15 +53,16 @@ class TestUpdate:
         # skip receiving message from RPC-reply-queue
         pass
 
+    @pytest.mark.asyncio(loop_scope="session")
     @patch(
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_ok(
-        self, session_for_test, keystore, test_client, saved_store_objs, staff_data
+    async def test_ok(
+        self, keystore, test_client, saved_store_objs, staff_data, session_for_verify
     ):
         num_new, num_unmodified = 1, 3
-        obj = next(saved_store_objs)
+        obj = await anext(saved_store_objs)
         body = [
             {
                 "staff_id": s.staff_id,
@@ -90,8 +92,12 @@ class TestUpdate:
                 mocked_rpc_proxy_call.return_value = reply_event
                 response = test_client.patch(url, headers=headers, json=body)
         assert response.status_code == 200
-        query = session_for_test.query(StoreStaff).filter(StoreStaff.store_id == obj.id)
-        query = query.order_by(StoreStaff.staff_id.asc())
+        stmt = (
+            sa_select(StoreStaff)
+            .filter(StoreStaff.store_id == obj.id)
+            .order_by(StoreStaff.staff_id.asc())
+        )
+        resultset = await session_for_verify.execute(stmt)
 
         extra_expect_items = [
             {
@@ -103,22 +109,25 @@ class TestUpdate:
         ]
         body.extend(extra_expect_items)
         expect_value = sorted(body, key=lambda d: d["staff_id"])
-        actual_value = list(map(lambda obj: obj.__dict__, query.all()))
-        for item in actual_value:
+
+        def actual_data_processing(row):
+            item = row[0].__dict__
             item.pop("_sa_instance_state", None)
             item.pop("store_id", None)
             item["start_after"] = item["start_after"].astimezone().isoformat()
             item["end_before"] = item["end_before"].astimezone().isoformat()
+            return item
+
+        actual_value = list(map(actual_data_processing, resultset.all()))
         assert expect_value == actual_value
 
+    @pytest.mark.asyncio(loop_scope="session")
     @patch(
         "ecommerce_common.util.messaging.rpc.RpcReplyEvent.refresh",
         _mocked_rpc_reply_refresh,
     )
-    def test_invalid_staff_id(
-        self, session_for_test, keystore, test_client, saved_store_objs
-    ):
-        obj = next(saved_store_objs)
+    async def test_invalid_staff_id(self, keystore, test_client, saved_store_objs):
+        obj = await anext(saved_store_objs)
         body = [
             {
                 "staff_id": s.staff_id,
