@@ -22,6 +22,7 @@ use amqprs::consumer::AsyncConsumer;
 use amqprs::error::Error as AmqpError;
 use amqprs::{BasicProperties, Deliver, FieldTable, FieldValue};
 
+use ecommerce_common::adapter::rpc::py_celery::{extract_reply_status, PyCeleryRespStatus};
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::{AppAmqpBindingCfg, AppAmqpBindingReplyCfg, AppRpcAmqpCfg};
 use ecommerce_common::error::AppErrorCode;
@@ -31,7 +32,6 @@ use super::{
     AbsRpcClientCtx, AbsRpcServerCtx, AbstractRpcClient, AbstractRpcContext,
     AppRpcClientReqProperty, AppRpcReply, AppRpcRouteHdlrFn,
 };
-use crate::api::rpc::{py_celery_reply_status, PyCeleryRespStatus};
 use crate::constant::{app_meta, HTTP_CONTENT_TYPE_JSON};
 use crate::error::AppError;
 use crate::{generate_custom_uid, AppSharedState};
@@ -509,7 +509,11 @@ impl AbstractRpcClient for AmqpRpcClientHandler {
                 match self.recv_reply.fetch(evt.corr_id.as_str()).await {
                     Ok(body) => {
                         let done = if evt.py_celery {
-                            celery_status = py_celery_reply_status(&body)?;
+                            celery_status =
+                                extract_reply_status(&body).map_err(|(code, msg)| AppError {
+                                    code,
+                                    detail: Some(msg),
+                                })?;
                             matches!(celery_status, PyCeleryRespStatus::SUCCESS)
                         } else {
                             true

@@ -2,9 +2,13 @@ use std::result::Result as DefaultResult;
 use std::vec::Vec;
 
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value as JsnVal;
 
+#[cfg(test)]
+use serde::Deserialize;
+
+use ecommerce_common::adapter::rpc::py_celery::{deserialize_reply, serialize_msg_body};
 use ecommerce_common::error::AppErrorCode;
 
 use crate::constant::api::rpc as RpcConst;
@@ -114,87 +118,21 @@ where
     Ok((out0, out1))
 } // end of fn py_celery_deserialize_req
 
-#[allow(clippy::upper_case_acronyms)]
-#[derive(Deserialize, Debug)]
-pub(crate) enum PyCeleryRespStatus {
-    STARTED,
-    SUCCESS,
-    ERROR,
-}
-
-#[derive(Deserialize)]
-struct PyCeleryRespPartialPayload {
-    #[allow(dead_code)]
-    task_id: String, // the field is never read, only for validation purpose
-    status: PyCeleryRespStatus,
-} // this is only for validating current progress done on Celery consumer side
-
-#[derive(Deserialize)]
-struct PyCeleryRespPayload<T> {
-    #[allow(dead_code)]
-    task_id: String,
-    #[allow(dead_code)]
-    status: PyCeleryRespStatus,
-    result: T,
-}
-
-pub(crate) fn py_celery_reply_status(raw: &[u8]) -> DefaultResult<PyCeleryRespStatus, AppError> {
-    let result = serde_json::from_slice::<PyCeleryRespPartialPayload>(raw);
-    match result {
-        Ok(payld) => Ok(payld.status),
-        Err(e) => Err(AppError {
-            detail: Some(e.to_string()),
-            code: AppErrorCode::InvalidJsonFormat,
-        }),
-    }
-}
-
 pub(super) fn py_celery_deserialize_reply<T>(raw: &Vec<u8>) -> DefaultResult<T, AppError>
 where
     T: DeserializeOwned,
 {
-    let result = serde_json::from_slice::<PyCeleryRespPayload<T>>(raw);
-    match result {
-        Ok(payld) => Ok(payld.result),
-        Err(e) => Err(AppError {
-            detail: Some(e.to_string()),
-            code: AppErrorCode::InvalidJsonFormat,
-        }),
-    }
+    deserialize_reply::<T>(raw).map_err(|(code, msg)| AppError {
+        detail: Some(msg),
+        code,
+    })
 }
 
-#[derive(Serialize)]
-struct PyCeleryReqMetadata {
-    callbacks: Option<Vec<String>>,
-    errbacks: Option<Vec<String>>,
-    chain: Option<Vec<String>>,
-    chord: Option<String>,
-} // TODO, figure out the detail in `chain` and `chord` field
-
 pub(super) fn py_celery_serialize<T: Serialize>(inner: T) -> DefaultResult<Vec<u8>, AppError> {
-    let args = JsnVal::Array(Vec::new());
-    let kwargs = match serde_json::to_value(inner) {
-        Ok(v) => v,
-        Err(e) => {
-            let detail = e.to_string() + ", src: py-celery-serialize";
-            let ae = AppError {
-                detail: Some(detail),
-                code: AppErrorCode::InvalidJsonFormat,
-            };
-            return Err(ae);
-        }
-    };
-    let metadata = {
-        let md = PyCeleryReqMetadata {
-            callbacks: None,
-            errbacks: None,
-            chain: None,
-            chord: None,
-        };
-        serde_json::to_value(md).unwrap()
-    };
-    let top = JsnVal::Array(vec![args, kwargs, metadata]);
-    Ok(top.to_string().into_bytes())
+    serialize_msg_body(inner).map_err(|(code, msg)| AppError {
+        detail: Some(msg),
+        code,
+    })
 }
 
 pub fn build_error_response(e: AppError) -> serde_json::Value {
