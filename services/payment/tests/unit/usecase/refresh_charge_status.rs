@@ -115,7 +115,7 @@ async fn ok_entire_pay_in_completed() {
         } // assume the client has confirmed the charge with the external 3rd party
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)));
+    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
     let mock_reply = AppRpcReply {
         message: ut_rpc_orderpay_update_err(mock_order_id.to_string(), Vec::new()),
     };
@@ -153,7 +153,7 @@ async fn ok_3party_processing() {
         // assume the client hasn't confirmed the charge yet
         ut_setup_charge_3pty_stripe(t)
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)));
+    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -194,7 +194,7 @@ async fn ok_3party_refused() {
         // TODO, find better way of validating such situation
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)));
+    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -230,7 +230,7 @@ async fn ok_3party_session_expired() {
         } // assume the client has confirmed the charge with the external 3rd party
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)));
+    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -277,7 +277,7 @@ async fn ok_skip_3party() {
         Some(Ok(mock_charge_lines)),
         Some(Ok(())),
     );
-    let mock_3pty = MockPaymentProcessor::build(None, None);
+    let mock_3pty = MockPaymentProcessor::build(None, None, None);
     let mock_reply = AppRpcReply {
         message: ut_rpc_orderpay_update_err(mock_order_id.to_string(), Vec::new()),
     };
@@ -321,7 +321,7 @@ async fn orderapp_already_synced() {
         None,
         Some(Ok(())),
     );
-    let mock_3pty = MockPaymentProcessor::build(None, None);
+    let mock_3pty = MockPaymentProcessor::build(None, None, None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -357,7 +357,7 @@ async fn error_3party_lowlvl() {
         let fn_label = AppProcessorFnLabel::PayInProgress;
         AppProcessorError { reason, fn_label }
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Err(error3pty)));
+    let mock_3pty = MockPaymentProcessor::build(None, Some(Err(error3pty)), None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -387,7 +387,7 @@ async fn error_decode_charge_id() {
     let mock_usr_id = 8010095;
     let mock_charge_id = "007a396f000000000000ff".to_string();
     let mock_repo = MockChargeRepo::build(None, None, None, None, None, None);
-    let mock_3pty = MockPaymentProcessor::build(None, None);
+    let mock_3pty = MockPaymentProcessor::build(None, None, None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -408,7 +408,7 @@ async fn error_owner_mismatch() {
     let mock_usr_id = 8010095;
     let mock_charge_id = "007a00001f7131705e".to_string();
     let mock_repo = MockChargeRepo::build(None, None, None, None, None, None);
-    let mock_3pty = MockPaymentProcessor::build(None, None);
+    let mock_3pty = MockPaymentProcessor::build(None, None, None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -428,7 +428,7 @@ async fn error_repo_charge_not_exist() {
     let mock_usr_id = 8010095;
     let mock_charge_id = "007a396f1f7131705e".to_string();
     let mock_repo = MockChargeRepo::build(None, None, None, Some(Ok(None)), None, None);
-    let mock_3pty = MockPaymentProcessor::build(None, None);
+    let mock_3pty = MockPaymentProcessor::build(None, None, None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -469,7 +469,7 @@ async fn error_repo_write_status() {
         }
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)));
+    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -511,7 +511,7 @@ async fn error_rpc_lowlvl() {
         } // assume the client has confirmed the charge with the external 3rd party
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)));
+    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
     let error_rpc = AppRpcCtxError {
         fn_label: AppRpcErrorFnLabel::AcquireClientConn,
         reason: AppRpcErrorReason::LowLevelConn("unit-test".to_string()),
@@ -566,7 +566,7 @@ async fn error_rpc_reply_sync_orderapp() {
         } // assume the client has confirmed the charge with the external 3rd party
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)));
+    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
     let mock_reply = {
         let e = vec![OrderLinePayUpdateErrorDto {
             seller_id: 8298,

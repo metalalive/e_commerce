@@ -12,7 +12,7 @@ pub struct MerchantProfileModel;
 impl TryFrom<&StoreProfileReplicaDto> for MerchantProfileModel {
     type Error = MerchantModelError;
     fn try_from(_value: &StoreProfileReplicaDto) -> Result<Self, Self::Error> {
-        Err(MerchantModelError)
+        Ok(Self)
     }
 }
 

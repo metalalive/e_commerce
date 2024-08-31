@@ -68,6 +68,10 @@ pub(super) async fn onboard_store(
                     app_log_event!(logctx, AppLogLevel::ERROR, "low-lvl-rpc-ctx");
                     StatusCode::SERVICE_UNAVAILABLE
                 }
+                OnboardStoreUcError::RpcMsgSerialize(code, detail) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?} {}", code, detail);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
                 OnboardStoreUcError::CorruptedStoreProfile(orig_msg_raw, err_detail) => {
                     let orig_msg_portion = &orig_msg_raw[0..20];
                     app_log_event!(

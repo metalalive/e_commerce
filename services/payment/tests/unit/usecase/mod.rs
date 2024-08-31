@@ -1,4 +1,5 @@
 mod create_charge;
+mod onboard;
 mod refresh_charge_status;
 
 use std::boxed::Box;
@@ -8,21 +9,23 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
+use ecommerce_common::api::rpc::dto::StoreProfileReplicaDto;
 use ecommerce_common::model::order::BillingModel;
 
 use payment::adapter::cache::{AbstractOrderSyncLockCache, OrderSyncLockError};
 use payment::adapter::processor::{
-    AbstractPaymentProcessor, AppProcessorError, AppProcessorPayInResult,
+    AbstractPaymentProcessor, AppProcessorError, AppProcessorMerchantResult,
+    AppProcessorPayInResult,
 };
-use payment::adapter::repository::{AbstractChargeRepo, AppRepoError};
+use payment::adapter::repository::{AbstractChargeRepo, AbstractMerchantRepo, AppRepoError};
 use payment::adapter::rpc::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
     AppRpcClientRequest, AppRpcCtxError, AppRpcReply,
 };
-use payment::api::web::dto::PaymentMethodReqDto;
+use payment::api::web::dto::{PaymentMethodReqDto, StoreOnboardReqDto};
 use payment::model::{
     Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    OrderLineModelSet,
+    MerchantProfileModel, OrderLineModelSet,
 };
 
 struct MockChargeRepo {
@@ -106,6 +109,28 @@ impl AbstractChargeRepo for MockChargeRepo {
         out
     }
 } // end of impl MockChargeRepo
+
+struct MockMerchantRepo {
+    _create_result: Mutex<Option<Result<(), AppRepoError>>>,
+} // end of trait AbstractMerchantRepo
+
+impl MockMerchantRepo {
+    fn build(create_res: Option<Result<(), AppRepoError>>) -> Box<dyn AbstractMerchantRepo> {
+        let obj = Self {
+            _create_result: Mutex::new(create_res),
+        };
+        Box::new(obj)
+    }
+}
+
+#[async_trait]
+impl AbstractMerchantRepo for MockMerchantRepo {
+    async fn create(&self, _m: MerchantProfileModel) -> Result<(), AppRepoError> {
+        let mut g = self._create_result.lock().unwrap();
+        let out = g.take().unwrap();
+        out
+    }
+}
 
 struct MockOrderSyncLockCache {
     _acquire_result: Mutex<Option<Result<bool, OrderSyncLockError>>>,
@@ -199,6 +224,7 @@ struct MockPaymentProcessor {
     _payin_start_result:
         Mutex<Option<Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError>>>,
     _payin_progress_result: Mutex<Option<Result<Charge3partyModel, AppProcessorError>>>,
+    _onboard_merchant_result: Mutex<Option<Result<AppProcessorMerchantResult, AppProcessorError>>>,
 }
 
 impl MockPaymentProcessor {
@@ -207,10 +233,12 @@ impl MockPaymentProcessor {
             Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError>,
         >,
         payin_progress: Option<Result<Charge3partyModel, AppProcessorError>>,
+        onboard_merchant_arg: Option<Result<AppProcessorMerchantResult, AppProcessorError>>,
     ) -> Box<dyn AbstractPaymentProcessor> {
         Box::new(Self {
             _payin_start_result: Mutex::new(payin_start),
             _payin_progress_result: Mutex::new(payin_progress),
+            _onboard_merchant_result: Mutex::new(onboard_merchant_arg),
         })
     }
 }
@@ -235,4 +263,14 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         let out = g.take().unwrap();
         out
     }
-}
+
+    async fn onboard_merchant(
+        &self,
+        _store_profile: StoreProfileReplicaDto,
+        _req_3pt: StoreOnboardReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
+        let mut g = self._onboard_merchant_result.lock().unwrap();
+        let out = g.take().unwrap();
+        out
+    }
+} // end of impl MockPaymentProcessor

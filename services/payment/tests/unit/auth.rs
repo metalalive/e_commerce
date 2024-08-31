@@ -84,7 +84,7 @@ impl MockAuthKeystore {
     }
 } // end of impl MockAuthKeystore
 
-fn ut_setup_auth_claim(exp_bias_secs: i64) -> AppAuthedClaim {
+pub(super) fn ut_setup_auth_claim(exp_bias_secs: i64) -> AppAuthedClaim {
     let ts_now = Local::now().fixed_offset().timestamp();
     AppAuthedClaim {
         profile: 5678,

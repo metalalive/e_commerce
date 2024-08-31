@@ -196,7 +196,7 @@ async fn ok_with_existing_order_replica() {
     let mock_payin_result = ut_processor_pay_in_result();
     let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
     let mock_processor =
-        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None);
+        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -230,7 +230,7 @@ async fn ok_with_rpc_replica_order() {
     let mock_payin_result = ut_processor_pay_in_result();
     let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
     let mock_processor =
-        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None);
+        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -261,7 +261,7 @@ async fn load_unpaid_order_failure() {
         _release_result: Mutex::new(None),
     };
     let mock_rpc_ctx = MockRpcContext::build(None);
-    let mock_processor = MockPaymentProcessor::build(None, None);
+    let mock_processor = MockPaymentProcessor::build(None, None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -291,7 +291,7 @@ async fn sync_order_get_lock_failure() {
         _release_result: Mutex::new(None),
     };
     let mock_rpc_ctx = MockRpcContext::build(None);
-    let mock_processor = MockPaymentProcessor::build(None, None);
+    let mock_processor = MockPaymentProcessor::build(None, None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -322,7 +322,7 @@ async fn sync_order_release_lock_failure() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_processor = MockPaymentProcessor::build(None, None);
+    let mock_processor = MockPaymentProcessor::build(None, None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -352,7 +352,7 @@ async fn rpc_acquire_conn_error() {
         reason: AppRpcErrorReason::CorruptedCredential,
     };
     let mock_rpc_ctx = MockRpcContext::build(Some(Err(rpc_expect_error)));
-    let mock_processor = MockPaymentProcessor::build(None, None);
+    let mock_processor = MockPaymentProcessor::build(None, None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -389,7 +389,7 @@ async fn rpc_publish_error_replica_order() {
     };
     let mock_rpc_client = MockRpcClient::build(Some(Err(rpc_expect_error)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_processor = MockPaymentProcessor::build(None, None);
+    let mock_processor = MockPaymentProcessor::build(None, None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -427,7 +427,7 @@ async fn rpc_reply_error_replica_order() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Err(rpc_expect_error)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_processor = MockPaymentProcessor::build(None, None);
+    let mock_processor = MockPaymentProcessor::build(None, None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -476,7 +476,7 @@ async fn save_replica_order_failure() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_processor = MockPaymentProcessor::build(None, None);
+    let mock_processor = MockPaymentProcessor::build(None, None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -516,7 +516,7 @@ async fn processor_start_payin_failure() {
         fn_label: AppProcessorFnLabel::PayInStart,
         reason: AppProcessorErrorReason::CredentialCorrupted,
     };
-    let mock_processor = MockPaymentProcessor::build(Some(Err(expect_proc_error)), None);
+    let mock_processor = MockPaymentProcessor::build(Some(Err(expect_proc_error)), None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -566,7 +566,7 @@ async fn save_new_chargeline_failure() {
     let mock_payin_result = ut_processor_pay_in_result();
     let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
     let mock_processor =
-        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None);
+        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),

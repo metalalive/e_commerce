@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use chrono::Local;
 
+use ecommerce_common::adapter::rpc::py_celery;
 use ecommerce_common::api::rpc::dto::{StoreProfileReplicaDto, StoreProfileReplicaReqDto};
+use ecommerce_common::error::AppErrorCode;
 
 use crate::adapter::processor::{
     AbstractPaymentProcessor, AppProcessorError, AppProcessorMerchantResult,
@@ -16,6 +18,7 @@ use crate::model::{MerchantModelError, MerchantProfileModel};
 
 pub enum OnboardStoreUcError {
     RpcStoreReplica(AppRpcCtxError),
+    RpcMsgSerialize(AppErrorCode, String),
     CorruptedStoreProfile(Box<Vec<u8>>, String),
     InvalidStoreProfile(MerchantModelError),
     ThirdParty(AppProcessorError),
@@ -87,10 +90,11 @@ impl OnboardStoreUseCase {
         let client = self.rpc_ctx.acquire().await?;
         let usr_id = self.auth_claim.profile;
         let time = Local::now().to_utc();
-        let route = "rpc.store.profile_replica".to_string();
+        let route = "rpc.storefront.get_profile".to_string();
         let message = {
             let q = StoreProfileReplicaReqDto { store_id };
-            serde_json::to_vec(&q).unwrap()
+            py_celery::serialize_msg_body(q)
+                .map_err(|(code, detail)| OnboardStoreUcError::RpcMsgSerialize(code, detail))?
         };
         let props = AppRpcClientRequest {
             usr_id,
@@ -100,8 +104,10 @@ impl OnboardStoreUseCase {
         };
         let mut pub_evt = client.send_request(props).await?;
         let reply = pub_evt.receive_response().await?;
-        serde_json::from_slice::<StoreProfileReplicaDto>(&reply.message).map_err(|e| {
-            OnboardStoreUcError::CorruptedStoreProfile(Box::new(reply.message), e.to_string())
-        })
+        py_celery::deserialize_reply::<StoreProfileReplicaDto>(&reply.message).map_err(
+            |(_code, detail)| {
+                OnboardStoreUcError::CorruptedStoreProfile(Box::new(reply.message), detail)
+            },
+        )
     }
 } // end of impl OnboardStoreUseCase
