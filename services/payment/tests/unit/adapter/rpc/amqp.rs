@@ -28,21 +28,38 @@ struct SECRET {
     password: String,
 }
 
-fn ut_client_publish_msgs() -> [(u32, &'static str, &'static str); 5] {
-    let routes = ["rpc.payment.unittest.one"];
+fn ut_client_publish_msgs(routekey: Option<&str>) -> Vec<(u32, &'static str, &'static str)> {
+    let routes = ["rpc.payment.unittest.one", "rpc.payment.unittest.two"];
     [
         (194, routes[0], r#"{"me":"je"}"#),
-        (92, routes[0], r#"{"saya":"ich"}"#),
+        (
+            92,
+            routes[1],
+            r#"[[], {"saya":"ich"},{"callbacks": null, "errbacks": null}]"#,
+        ),
         (78, routes[0], r#"{"Zeist":"meat"}"#),
         (615, routes[0], r#"{"light":"shadow"}"#),
         (182, routes[0], r#"{"ice":"flame"}"#),
+        (
+            517,
+            routes[1],
+            r#"[[], {"blind":"color"},{"callbacks": null, "errbacks": null}]"#,
+        ),
     ]
+    .into_iter()
+    .filter(|d| routekey.map_or(true, |v| v == d.1))
+    .collect::<Vec<_>>()
 }
 
 fn ut_server_publish_msg(req_content: &str) -> &'static str {
     match req_content {
         r#"{"me":"je"}"# => r#"{"devicetree":"ie80211_rx"}"#,
-        r#"{"saya":"ich"}"# => r#"{"ext4_readdir":"inode"}"#,
+        r#"[[], {"saya":"ich"},{"callbacks": null, "errbacks": null}]"# => {
+            r#"{"task_id": "unit_test", "status": "SUCCESS", "result": {"ext4_readdir":"inode"}}"#
+        }
+        r#"[[], {"blind":"color"},{"callbacks": null, "errbacks": null}]"# => {
+            r#"{"task_id": "unit_test", "status": "SUCCESS", "result": {"zero":"hero"}}"#
+        }
         r#"{"Zeist":"meat"}"# => r#"{"kmem_cache_init":"sys_signal"}"#,
         r#"{"light":"shadow"}"# => r#"{"task_struct":"iirq_flgs"}"#,
         r#"{"ice":"flame"}"# => r#"{"vma_area":"do_pagefault"}"#,
@@ -108,10 +125,10 @@ async fn ut_server_start_consume(
     channel: Channel,
     mut consumer: Consumer,
     bindcfg: AppAmqpBindingCfg,
-    expect_nummsgs_recv: usize,
 ) -> Result<(), String> {
-    let orig_publisher_msgs = ut_client_publish_msgs();
     let expect_routekey = bindcfg.routing_key.as_str();
+    let orig_publisher_msgs = ut_client_publish_msgs(Some(expect_routekey));
+    let expect_nummsgs_recv = orig_publisher_msgs.len();
     let mut actual_nummsgs_recv = 0usize;
     for _ in 0..expect_nummsgs_recv {
         // ---------------------
@@ -195,12 +212,8 @@ async fn ut_mock_server_start(app_cfg: Arc<AppConfig>) -> Result<(), String> {
             )
             .await
             .map_err(|e| e.to_string())?;
-        let c_fut = ut_server_start_consume(
-            chn.clone(),
-            consumer,
-            ut_clone_amqp_binding_cfg(bindcfg),
-            5usize,
-        );
+        let c_fut =
+            ut_server_start_consume(chn.clone(), consumer, ut_clone_amqp_binding_cfg(bindcfg));
         let handle = rt::spawn(c_fut);
         handles.push(handle);
     } // end of loop
@@ -220,7 +233,7 @@ async fn client_req_to_server_ok() {
     let rpcctx = shr_state.rpc_context();
     let mock_srv_handle = rt::spawn(ut_mock_server_start(shr_state.config()));
     rt::time::sleep(Duration::from_secs(4)).await;
-    let msgs = ut_client_publish_msgs();
+    let msgs = ut_client_publish_msgs(None);
     let mut clients_handle = Vec::new();
     for (req_id, route, msg) in msgs {
         let rpc_client = rpcctx.clone();

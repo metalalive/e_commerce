@@ -60,5 +60,32 @@
 	    {"oid":"teehee", "charge_time":null, "lines":[] },
 	    {"oid":"teehee", "charge_time":null, "lines":[] }
 	]
+    },
+    "rpc.storefront.get_profile": {
+        "2234": [
+	    {
+	        "task_id": "nastyorkombu",
+	        "status": "SUCCESS",
+	        "result": {
+	    	    "supervisor_id": 1234,
+	    	    "active": true,
+	    	    "label": "Boat Build Fab",
+	    	    "emails": [{"addr": "yohoho@piano.dorei"}, {"addr": "kombu@miso.ika"}],
+	    	    "phones": [{"line_number": "02993801", "country_code": "886"}],
+	    	    "location": {
+	    	        "country": "US",
+	    	        "locality": "San Diego",
+	    	        "street": "beach road",
+	    	        "detail": "lol haiya fuyo",
+	    	        "floor": 1
+	    	    },
+	    	    "staff": [
+	    	        {"staff_id": 8299, "start_after": "2021-01-17T09:11:13+09:00", "end_before": "2021-05-05T22:00:35+09:00"},
+	    	        {"staff_id": 2330, "start_after": "2020-12-05T07:31:00+09:00", "end_before": "2021-05-06T15:34:00+09:00"},
+	    	        {"staff_id": 2234, "start_after": "2021-01-28T19:05:13+09:00", "end_before": "2021-05-07T20:30:48+09:00"}
+	    	    ]
+	        }
+	    }
+	]
     }
 }

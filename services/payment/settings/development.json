@@ -92,6 +92,41 @@
 		    "max_length": 2090,
                     "ttl_secs": 16
                 }
+	    },
+	    {
+                "queue": "rpc_orderproc_update_payment_status",
+                "exchange": "rpc-default-allapps",
+	        "routing_key": "rpc.order.order_reserved_update_payment",
+		"ensure_declare": false,
+                "subscribe": false,
+                "durable": true,
+		"ttl_secs": 48,
+		"max_length": 700,
+	        "reply": {
+                    "queue": "rpc.reply.payment.sync_oline_paid",
+                    "correlation_id_prefix": "rpc.payment.sync_oline_paid.corr_id",
+                    "durable": true,
+		    "max_length": 2090,
+                    "ttl_secs": 15
+		}
+	    },
+	    {
+                "queue": "rpc_storefront_get_profile",
+                "exchange": "rpc-default-allapps",
+	        "routing_key": "rpc.storefront.get_profile",
+		"ensure_declare": false,
+                "subscribe": false,
+		"python_celery_task": "store.api.rpc.get_shop_profile",
+                "durable": true,
+		"ttl_secs": 999,
+		"max_length": 1000,
+	        "reply": {
+                    "queue": "rpc.reply.payment.storefront_profile",
+                    "correlation_id_prefix": "rpc.payment.storefront_profile.corr_id",
+                    "durable": true,
+		    "max_length": 1000,
+                    "ttl_secs": 26
+		}
 	    }
 	],
 	"attributes": {

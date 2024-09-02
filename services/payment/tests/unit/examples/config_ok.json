@@ -75,6 +75,24 @@
 		    "max_length": 90,
                     "ttl_secs": 31
                 }
+	    },
+	    {
+                "queue": "rpc_payment_unittest_two",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.payment.unittest.two",
+                "ensure_declare": false,
+                "subscribe": false,
+                "durable": true,
+		"ttl_secs": 67,
+		"max_length": 103,
+		"python_celery_task": "unit_test.rpc.func_two",
+		"reply": {
+                    "queue": "rpc.reply.payment.unittest_two",
+                    "correlation_id_prefix": "rpc.payment.unittest.two.corr_id",
+                    "durable": true,
+		    "max_length": 98,
+                    "ttl_secs": 35
+                }
 	    }
 	],
 	"attributes": {

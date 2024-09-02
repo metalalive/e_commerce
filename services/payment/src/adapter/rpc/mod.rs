@@ -16,12 +16,14 @@ use ecommerce_common::logging::AppLogContext;
 use amqp::AppAmqpRpcContext;
 use mock::AppMockRpcContext;
 
+#[derive(Clone)]
 pub enum AppRpcErrorFnLabel {
     InitCtx,
     AcquireClientConn,
     ClientSendReq,
     ClientRecvResp,
 }
+#[derive(Clone)]
 pub enum AppRpcErrorReason {
     NotSupport,
     InvalidCredential,
@@ -34,6 +36,12 @@ pub enum AppRpcErrorReason {
     RequestConfirm(String),
     ReplyFailure(String),
 }
+
+// TODO, discard this when it is not essential to clone
+// this clone trait is applied only for current workaround in lazy-init of  rpc connection pool.
+// after upgradinf std library to v1.80, replace `OnceLock` with easier-to-implement `LazyLock`
+// this clone trait will be no longer needed.
+#[derive(Clone)]
 pub struct AppRpcCtxError {
     pub fn_label: AppRpcErrorFnLabel,
     pub reason: AppRpcErrorReason,

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://puremourning.github.io/vimspector/schema/vimspector.schema.json",
+  "configurations": {
+    "web-server-dev": {
+      "adapter": "vscode-cpptools",
+      "filetypes": ["rust"],
+      "configuration": {
+        "stopAtEntry": true,
+        "MIMode": "gdb",
+        "request": "launch",
+        "program": "${workspaceRoot}/target/debug/web",
+        "environment": [
+	        {"name":"SYS_BASE_PATH", "value":"${workspaceRoot}/.."} ,
+	        {"name":"SERVICE_BASE_PATH", "value":"${workspaceRoot}"} ,
+            {"name":"CONFIG_FILE_PATH", "value":"settings/development.json"}
+        ],
+        "logging": {
+            "engineLogging": false
+        }
+      },
+      "default": false,
+      "autoselect": false
+    }
+  }
+}
+

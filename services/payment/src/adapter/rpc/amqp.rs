@@ -1,7 +1,7 @@
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::result::Result;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 
@@ -15,12 +15,13 @@ use lapin::options::{
 use lapin::protocol::basic::AMQPProperties;
 use lapin::publisher_confirm::Confirmation;
 use lapin::topology::TopologyDefinition;
-use lapin::types::FieldTable;
+use lapin::types::{AMQPValue, FieldTable};
 use lapin::{Channel, ConnectionProperties, Consumer, Error as LapinError};
 use serde::Deserialize;
 use tokio::sync::{oneshot, Mutex};
 use tokio::time::sleep;
 
+use ecommerce_common::adapter::rpc::py_celery;
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::{AppAmqpBindingCfg, AppRpcAmqpCfg};
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
@@ -41,11 +42,19 @@ struct SECRET {
     password: String,
 }
 
-struct InnerClientReplySend(Mutex<HashMap<String, oneshot::Sender<Vec<u8>>>>);
+struct InnerClientReplyItem {
+    sender: oneshot::Sender<Vec<u8>>,
+    _py_celery: bool,
+}
+
+struct InnerClientReplySend(Mutex<HashMap<String, InnerClientReplyItem>>);
 
 pub(super) struct AppAmqpRpcContext {
     _logctx: Arc<AppLogContext>,
-    _pool: Pool,
+    _pool_cfg: DeadpConfig,
+    // TODO, upgrade std library to v1.80, replace `OnceLock` with easier-to-implement `LazyLock`
+    // `LazyLock` in v1.75 is still nightly feature
+    _pool: OnceLock<Result<Pool, AppRpcCtxError>>,
     _binding_cfg: Arc<Vec<AppAmqpBindingCfg>>,
     _reply_sender: Arc<InnerClientReplySend>,
 }
@@ -84,7 +93,10 @@ impl From<LapinError> for AppRpcErrorReason {
             LapinError::InvalidChannelState(state) => {
                 Self::LowLevelConn(format!("channel-state: {:?}", state))
             }
-            LapinError::ProtocolError(e) => Self::LowLevelConn(e.to_string()),
+            LapinError::ProtocolError(e) => {
+                let detail = format!("protocol-error: {:?}", e);
+                Self::LowLevelConn(detail)
+            }
             LapinError::MissingHeartbeatError => {
                 Self::LowLevelConn("amqp-no-heartbeat".to_string())
             }
@@ -108,10 +120,17 @@ fn generate_consumer_tag(label: &str) -> String {
 #[async_trait]
 impl AbsRpcClientContext for AppAmqpRpcContext {
     async fn acquire(&self) -> Result<Box<dyn AbstractRpcClient>, AppRpcCtxError> {
-        let conn =
-            self._pool.get().await.map_err(|e| {
-                Self::_map_err_acquire(AppRpcErrorReason::LowLevelConn(e.to_string()))
-            })?;
+        let poolcfg = &self._pool_cfg;
+        let result = self._pool.get_or_init(move || {
+            poolcfg
+                .create_pool(Some(Runtime::Tokio1))
+                .map_err(|e| Self::_map_err_init(AppRpcErrorReason::LowLevelConn(e.to_string())))
+        });
+        let pool = result.as_ref().map_err(Clone::clone)?;
+        let conn = pool
+            .get()
+            .await
+            .map_err(|e| Self::_map_err_acquire(AppRpcErrorReason::LowLevelConn(e.to_string())))?;
         let _chn = conn
             .create_channel()
             .await
@@ -143,13 +162,11 @@ impl AppAmqpRpcContext {
         _logctx: Arc<AppLogContext>,
     ) -> Result<Self, AppRpcCtxError> {
         let uri = Self::_setup_broker_uri(app_cfg, cfdntl)?;
-        let cfg = Self::_setup_lapin_config(app_cfg, uri);
-        let _pool = cfg
-            .create_pool(Some(Runtime::Tokio1))
-            .map_err(|e| Self::_map_err_init(AppRpcErrorReason::LowLevelConn(e.to_string())))?;
+        let _pool_cfg = Self::_setup_lapin_config(app_cfg, uri);
         Ok(Self {
             _logctx,
-            _pool,
+            _pool_cfg,
+            _pool: OnceLock::default(),
             _binding_cfg: app_cfg.bindings.clone(),
             _reply_sender: Arc::new(InnerClientReplySend(Mutex::new(HashMap::new()))),
         })
@@ -330,8 +347,21 @@ impl AbstractRpcClient for AppAmqpRpcClient {
             .with_content_type("application/json".into())
             .with_delivery_mode(if bind_cfg.durable { 2 } else { 1 })
             .with_timestamp(time.timestamp() as u64);
-        // To create a responsive application, message broker has to return
-        // unroutable message whenever the given routing key goes wrong.
+        let enable_py_celery = bind_cfg.python_celery_task.is_some();
+        let properties = if let Some(v) = &bind_cfg.python_celery_task {
+            let mut hdrs = FieldTable::default();
+            hdrs.insert("id".into(), AMQPValue::LongString(id.as_str().into())); // reuse correlation-id
+            hdrs.insert("task".into(), AMQPValue::LongString(v.as_str().into()));
+            hdrs.insert(
+                "content_type".into(),
+                AMQPValue::LongString("application/json".into()),
+            ); // don't use deprecated `ShortString` type
+            properties.with_headers(hdrs)
+        } else {
+            properties
+        }; // TODO, better option, current approach is hacky
+           // To create a responsive application, message broker has to return
+           // unroutable message whenever the given routing key goes wrong.
         let confirm = _chn
             .basic_publish(
                 bind_cfg.exchange.as_str(),
@@ -355,7 +385,7 @@ impl AbstractRpcClient for AppAmqpRpcClient {
         );
         Self::convert_confirm_to_error(confirm).map_err(Self::_map_err_sendreq)?;
         let (sender, recv) = oneshot::channel();
-        _reply_sender.insert(id, sender).await;
+        _reply_sender.insert(id, sender, enable_py_celery).await;
         let evt = AppAmqpRpcPublishEvent {
             _binding_cfg,
             _reply_recv: Some(recv),
@@ -452,8 +482,9 @@ impl InnerClientConsumer {
 } // end of impl InnerClientConsumer
 
 impl InnerClientReplySend {
-    async fn insert(&self, key: String, value: oneshot::Sender<Vec<u8>>) {
+    async fn insert(&self, key: String, sender: oneshot::Sender<Vec<u8>>, _py_celery: bool) {
         let mut guard = self.0.lock().await;
+        let value = InnerClientReplyItem { sender, _py_celery };
         let _discarded = guard.insert(key, value);
     }
 
@@ -464,14 +495,35 @@ impl InnerClientReplySend {
             .as_ref()
             .ok_or("missing-corr-id".to_string())?;
         let mut guard = self.0.lock().await;
-        let sender = guard
-            .remove(key.as_str())
+        let value_p = guard
+            .get(key.as_str())
             .ok_or(format!("invalid-corr-id: {}", key))?;
-        sender
-            .send(msg)
-            .map_err(|_d| format!("fail-pass-msg: {}", key))?;
+
+        // TODO,
+        // - decouple python-celery code from this AMQP module
+        // - clean stale sender items which waits too long
+        let discard_flg = if value_p._py_celery {
+            let status = py_celery::extract_reply_status(&msg)
+                .map_err(|(code, m)| format!("corrupted-resp: {m}, {:?}", code))?;
+            matches!(
+                status,
+                py_celery::PyCeleryRespStatus::SUCCESS | py_celery::PyCeleryRespStatus::ERROR
+            )
+        } else {
+            true
+        };
+
+        if discard_flg {
+            let value = guard
+                .remove(key.as_str())
+                .ok_or(format!("invalid-corr-id: {}", key))?;
+            value
+                .sender
+                .send(msg)
+                .map_err(|_d| format!("fail-pass-msg: {}", key))?;
+        }
         Ok(())
-    }
+    } // end of fn try-send
 } // end of impl InnerClientReplySend
 
 #[async_trait]
