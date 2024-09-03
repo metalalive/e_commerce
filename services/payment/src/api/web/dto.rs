@@ -144,16 +144,27 @@ pub struct ChargeRefreshRespDto {
 }
 
 #[derive(Deserialize)]
+pub struct StoreOnboardStripeReqDto {
+    pub return_url: String,
+    pub refresh_url: String,
+}
+#[derive(Deserialize)]
 #[serde(tag = "processor")]
 pub enum StoreOnboardReqDto {
-    Stripe,
+    Stripe(StoreOnboardStripeReqDto),
 }
 
 #[derive(Serialize)]
 #[serde(tag = "processor")]
 pub enum StoreOnboardAcceptedRespDto {
-    Stripe,
-}
+    Stripe {
+        fields_required: Vec<String>,
+        disabled_reason: Option<String>,
+        url: Option<String>,
+        expiry: Option<DateTime<Utc>>,
+    },
+    Unknown,
+} // TODO, rename to `StoreOnboardRespDto`
 
 #[derive(Deserialize)]
 #[serde(tag = "processor")]

@@ -13,13 +13,14 @@ use payment::adapter::processor::{
 };
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AbstractRpcContext, AppRpcReply};
-use payment::api::web::dto::{StoreOnboardAcceptedRespDto, StoreOnboardReqDto};
+use payment::api::web::dto::StoreOnboardAcceptedRespDto;
 use payment::usecase::{OnboardStoreUcError, OnboardStoreUcOk, OnboardStoreUseCase};
 
 use super::{
     MockMerchantRepo, MockPaymentProcessor, MockRpcClient, MockRpcContext, MockRpcPublishEvent,
 };
 use crate::auth::ut_setup_auth_claim;
+use crate::dto::ut_default_store_onboard_req_stripe;
 use crate::EXAMPLE_REL_PATH;
 
 fn ut_rpc_storeprof_replica(mock_filename: &str) -> Vec<u8> {
@@ -66,7 +67,7 @@ fn ut_setup_rpc_ctx(reply_raw_msg: Vec<u8>) -> Arc<Box<dyn AbstractRpcContext>> 
 async fn ok_new_shop() {
     let auth_claim = ut_setup_auth_claim(85);
     let processors = {
-        let pay3pty_result = Ok(AppProcessorMerchantResult::Stripe);
+        let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
         Arc::new(m3pty)
     };
@@ -76,7 +77,7 @@ async fn ok_new_shop() {
         ut_setup_rpc_ctx(msg)
     };
     let mock_store_id = 1008;
-    let req_body = StoreOnboardReqDto::Stripe;
+    let req_body = ut_default_store_onboard_req_stripe();
     let uc = OnboardStoreUseCase {
         auth_claim,
         processors,
@@ -88,7 +89,7 @@ async fn ok_new_shop() {
     if let Ok(v) = result {
         match v {
             OnboardStoreUcOk::Accepted(c) => {
-                matches!(c, StoreOnboardAcceptedRespDto::Stripe);
+                matches!(c, StoreOnboardAcceptedRespDto::Unknown);
                 // TODO, verify more detail about 3rd party info
             }
         }
@@ -99,14 +100,14 @@ async fn ok_new_shop() {
 async fn err_rpc_corrupted_reply() {
     let auth_claim = ut_setup_auth_claim(79);
     let processors = {
-        let pay3pty_result = Ok(AppProcessorMerchantResult::Stripe);
+        let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
         Arc::new(m3pty)
     };
     let repo = MockMerchantRepo::build(Some(Ok(())));
     let rpc_ctx = ut_setup_rpc_ctx(Vec::new());
     let mock_store_id = 1009;
-    let req_body = StoreOnboardReqDto::Stripe;
+    let req_body = ut_default_store_onboard_req_stripe();
     let uc = OnboardStoreUseCase {
         auth_claim,
         processors,
@@ -138,7 +139,7 @@ async fn err_3party_failure() {
         ut_setup_rpc_ctx(msg)
     };
     let mock_store_id = 1010;
-    let req_body = StoreOnboardReqDto::Stripe;
+    let req_body = ut_default_store_onboard_req_stripe();
     let uc = OnboardStoreUseCase {
         auth_claim,
         processors,
@@ -166,7 +167,7 @@ async fn err_3party_failure() {
 async fn err_repo_create_op() {
     let auth_claim = ut_setup_auth_claim(85);
     let processors = {
-        let pay3pty_result = Ok(AppProcessorMerchantResult::Stripe);
+        let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
         Arc::new(m3pty)
     };
@@ -183,7 +184,7 @@ async fn err_repo_create_op() {
         ut_setup_rpc_ctx(msg)
     };
     let mock_store_id = 1012;
-    let req_body = StoreOnboardReqDto::Stripe;
+    let req_body = ut_default_store_onboard_req_stripe();
     let uc = OnboardStoreUseCase {
         auth_claim,
         processors,

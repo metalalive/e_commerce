@@ -6,33 +6,39 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Local, Utc};
 use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
 use hyper::header::{HeaderName, HeaderValue};
 use hyper::Method;
 use tokio_native_tls::{native_tls, TlsConnector as TlsConnectorWrapper};
 
+use ecommerce_common::api::rpc::dto::StoreProfileReplicaDto;
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use self::client::AppStripeClient;
 use self::resources::{
-    CheckoutSession, CheckoutSessionMode, CreateCheckoutSession, CreateCheckoutSessionLineItem,
-    CreateCheckoutSessionPaymentIntentData,
+    AccountLink, AccountRequirement, AccountSettings, CheckoutSession, CheckoutSessionMode,
+    ConnectAccount, CreateAccountLink, CreateCheckoutSession, CreateCheckoutSessionLineItem,
+    CreateCheckoutSessionPaymentIntentData, CreateConnectAccount,
 };
-use super::{AppProcessorErrorReason, AppProcessorPayInResult, BaseClientError};
+use super::{
+    AppProcessorErrorReason, AppProcessorMerchantResult, AppProcessorPayInResult, BaseClientError,
+};
 use crate::api::web::dto::{
-    PaymentMethodRespDto, StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto,
-    StripeCheckoutUImodeDto,
+    PaymentMethodRespDto, StoreOnboardAcceptedRespDto, StoreOnboardStripeReqDto,
+    StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
 };
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerModel,
+    Merchant3partyModel, Merchant3partyStripeModel, StripeAccountSettingModel,
     StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 const HEADER_NAME_IDEMPOTENCY: &str = "Idempotency-Key";
 const CHECKOUT_SESSION_MIN_SECONDS: i64 = 1800;
+const ACCOUNT_LINK_EXPIRY_MIN_DAYS: i64 = 2;
 
 #[async_trait]
 pub(super) trait AbstStripeContext: Send + Sync {
@@ -46,6 +52,12 @@ pub(super) trait AbstStripeContext: Send + Sync {
         &self,
         detail3pty: &Charge3partyStripeModel,
     ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason>;
+
+    async fn onboard_merchant(
+        &self,
+        store_profile: StoreProfileReplicaDto,
+        req: StoreOnboardStripeReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason>;
 }
 
 pub(super) struct AppProcessorStripeCtx {
@@ -87,6 +99,12 @@ impl AppProcessorStripeCtx {
         };
         Ok(Box::new(m))
     } // end of fn try-build
+
+    fn map_log_err(&self, label: &str, e: BaseClientError) -> AppProcessorErrorReason {
+        let logger = &self.logctx;
+        app_log_event!(logger, AppLogLevel::ERROR, "{label}: {:?}", &e);
+        AppProcessorErrorReason::from(e)
+    }
 } // end of impl AppProcessorStripeCtx
 
 #[async_trait]
@@ -165,7 +183,6 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             mode: CheckoutSessionMode::Payment,
             ui_mode: (&req.ui_mode).into(),
         };
-        // TODO, pool for these client connections
         let mut _client = AppStripeClient::<Full<Bytes>>::try_build(
             self.logctx.clone(),
             &self.secure_connector,
@@ -189,7 +206,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
                 hdrs,
             )
             .await
-            .map_err(AppProcessorErrorReason::from)?;
+            .map_err(|e| self.map_log_err("new-sess", e))?;
         let time_now = Utc::now();
         let result = AppProcessorPayInResult {
             charge_id: charge_buyer.meta.token().0.to_vec(),
@@ -223,10 +240,52 @@ impl AbstStripeContext for AppProcessorStripeCtx {
         let new_session = _client
             .execute::<CheckoutSession>(resource_path.as_str(), Method::GET, Vec::new())
             .await
-            .map_err(AppProcessorErrorReason::from)?;
+            .map_err(|e| self.map_log_err("refresh-sess", e))?;
         let arg = (new_session, old.expiry);
         Ok(Charge3partyStripeModel::from(arg))
     }
+
+    async fn onboard_merchant(
+        &self,
+        store_profile: StoreProfileReplicaDto,
+        req: StoreOnboardStripeReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason> {
+        // TODO, clean up the accounts which are disabled and expired
+        let body_obj = CreateConnectAccount::try_from(store_profile)?;
+
+        let mut _client = AppStripeClient::<Full<Bytes>>::try_build(
+            self.logctx.clone(),
+            &self.secure_connector,
+            self.host.clone(),
+            self.port,
+            self.api_key.clone(),
+        )
+        .await
+        .map_err(AppProcessorErrorReason::from)?;
+
+        let acct = _client
+            .execute_form::<ConnectAccount, CreateConnectAccount>(
+                "/accounts",
+                Method::POST,
+                &body_obj,
+                Vec::new(),
+            )
+            .await
+            .map_err(|e| self.map_log_err("acct", e))?;
+
+        let body_obj = CreateAccountLink::from((req, acct.id.as_str()));
+        let acc_link = _client
+            .execute_form::<AccountLink, CreateAccountLink>(
+                "/account_links",
+                Method::POST,
+                &body_obj,
+                Vec::new(),
+            )
+            .await
+            .map_err(|e| self.map_log_err("acct-link", e))?;
+
+        AppProcessorMerchantResult::try_from((acct, acc_link))
+    } // end of fn onboard_merchant
 } // end of impl AppProcessorStripeCtx
 
 impl From<(CheckoutSession, DateTime<Utc>)> for Charge3partyStripeModel {
@@ -239,6 +298,78 @@ impl From<(CheckoutSession, DateTime<Utc>)> for Charge3partyStripeModel {
             payment_intent_id: session.payment_intent,
             expiry: DateTime::from_timestamp(session.expires_at, 0).unwrap_or(time_end),
         }
+    }
+}
+
+impl<'a> From<(&'a AccountRequirement, AccountLink)> for StoreOnboardAcceptedRespDto {
+    fn from(value: (&'a AccountRequirement, AccountLink)) -> Self {
+        let (r, alink) = value;
+        let expiry = DateTime::from_timestamp(alink.expires_at, 0)
+            .unwrap_or(Local::now().to_utc() + Duration::days(ACCOUNT_LINK_EXPIRY_MIN_DAYS));
+        Self::Stripe {
+            fields_required: r.currently_due.clone(),
+            disabled_reason: r.disabled_reason.clone(),
+            url: Some(alink.url),
+            expiry: Some(expiry),
+        }
+    }
+}
+
+impl From<AccountSettings> for StripeAccountSettingModel {
+    fn from(value: AccountSettings) -> Self {
+        let p = value.payouts;
+        Self {
+            payout_delay_days: p.schedule.delay_days,
+            payout_interval: p.schedule.interval,
+            debit_negative_balances: p.debit_negative_balances,
+        }
+    }
+}
+impl TryFrom<ConnectAccount> for Merchant3partyStripeModel {
+    type Error = AppProcessorErrorReason;
+    #[rustfmt::skip]
+    fn try_from(value: ConnectAccount) -> Result<Self, Self::Error> {
+        let ConnectAccount {
+            id, country, email, capabilities,
+            tos_acceptance, charges_enabled, payouts_enabled,
+            details_submitted, created: created_ts, settings,
+            requirements: _, type_: _,
+        } = value;
+        let created = DateTime::from_timestamp(created_ts, 0)
+            .ok_or(AppProcessorErrorReason::CorruptedTimeStamp(
+                "stripe.account.created".to_string(), created_ts,
+            ))?;
+        let tos_accepted = if let Some(orig) = tos_acceptance.date {
+            let r = DateTime::from_timestamp(orig, 0)
+                .ok_or(AppProcessorErrorReason::CorruptedTimeStamp(
+                    "stripe.account.tos_acceptance.date".to_string(), orig,
+                ))?;
+            Some(r)
+        } else {
+            None
+        };
+        let settings = StripeAccountSettingModel::from(settings);
+        let out = Self {
+            id, country, email, capabilities, tos_accepted, settings,
+            charges_enabled, payouts_enabled, details_submitted, created,
+        };
+        Ok(out)
+    } // end of fn try-from
+} // end of impl Merchant3partyStripeModel
+impl TryFrom<ConnectAccount> for Merchant3partyModel {
+    type Error = AppProcessorErrorReason;
+    fn try_from(value: ConnectAccount) -> Result<Self, Self::Error> {
+        let m = Merchant3partyStripeModel::try_from(value)?;
+        Ok(Self::Stripe(m))
+    }
+}
+impl TryFrom<(ConnectAccount, AccountLink)> for AppProcessorMerchantResult {
+    type Error = AppProcessorErrorReason;
+    fn try_from(value: (ConnectAccount, AccountLink)) -> Result<Self, Self::Error> {
+        let (acct, alink) = value;
+        let d = StoreOnboardAcceptedRespDto::from((&acct.requirements, alink));
+        let m = Merchant3partyModel::try_from(acct)?;
+        Ok(Self { dto: d, model: m })
     }
 }
 
@@ -300,5 +431,13 @@ impl AbstStripeContext for MockProcessorStripeCtx {
             expiry: old.expiry,
         };
         Ok(new_m)
+    }
+
+    async fn onboard_merchant(
+        &self,
+        _store_profile: StoreProfileReplicaDto,
+        _req: StoreOnboardStripeReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason> {
+        Err(AppProcessorErrorReason::NotImplemented)
     }
 } // end of impl MockProcessorStripeCtx

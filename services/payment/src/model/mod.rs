@@ -13,9 +13,11 @@ pub use self::charge::{
     ChargeLineBuyerModel, ChargeToken,
 };
 pub use self::external_processor::{
-    Charge3partyStripeModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    Charge3partyStripeModel, Merchant3partyStripeModel, StripeAccountCapabilityModel,
+    StripeAccountCapableState, StripeAccountSettingModel, StripeCheckoutPaymentStatusModel,
+    StripeSessionStatusModel,
 };
-pub use self::merchant::{MerchantModelError, MerchantProfileModel};
+pub use self::merchant::{Merchant3partyModel, MerchantModelError, MerchantProfileModel};
 pub use self::order_replica::{
     OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
 };

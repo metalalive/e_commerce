@@ -1,5 +1,6 @@
 mod adapter;
 mod auth;
+mod dto;
 mod model;
 mod usecase;
 

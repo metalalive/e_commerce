@@ -32,7 +32,7 @@ pub enum BaseClientErrorReason {
     HttpRequest(String),
     Tls(String),
     SerialiseFailure(String),
-    DeserialiseFailure(String, u16),
+    DeserialiseFailure(Box<String>, u16),
 }
 
 impl From<IoError> for BaseClientErrorReason {

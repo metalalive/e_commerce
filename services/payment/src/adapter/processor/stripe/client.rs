@@ -70,7 +70,7 @@ where
         // applies different deserialisation format
         serde_json::from_slice::<D>(raw.as_slice()).map_err(|_e| {
             let reason = match String::from_utf8(raw) {
-                Ok(v) => BaseClientErrorReason::DeserialiseFailure(v, status),
+                Ok(v) => BaseClientErrorReason::DeserialiseFailure(Box::new(v), status),
                 Err(_e) => BaseClientErrorReason::Http {
                     sender_closed: false,
                     parse_error: true,

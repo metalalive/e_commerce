@@ -17,9 +17,11 @@ pub use self::base_client::{BaseClientError, BaseClientErrorReason};
 use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripeCtx};
 use crate::api::web::dto::{
     ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
-    StoreOnboardReqDto,
+    StoreOnboardAcceptedRespDto, StoreOnboardReqDto,
 };
-use crate::model::{BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel};
+use crate::model::{
+    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, Merchant3partyModel,
+};
 
 #[async_trait]
 pub trait AbstractPaymentProcessor: Send + Sync {
@@ -56,6 +58,8 @@ pub enum AppProcessorErrorReason {
     NotImplemented,
     LowLvlNet(BaseClientError),
     InvalidMethod(String),
+    InvalidStoreProfileDto(Vec<String>),
+    CorruptedTimeStamp(String, i64), // label and given incorrect timestamp
 }
 
 #[derive(Debug)]
@@ -79,8 +83,9 @@ pub struct AppProcessorPayInResult {
     pub completed: bool,
 }
 
-pub enum AppProcessorMerchantResult {
-    Stripe,
+pub struct AppProcessorMerchantResult {
+    dto: StoreOnboardAcceptedRespDto,
+    model: Merchant3partyModel,
 }
 
 impl From<AppProcessorPayInResult> for ChargeCreateRespDto {
@@ -117,6 +122,23 @@ impl From<AppProcessorErrorReason> for PaymentMethodErrorReason {
             _others => Self::ProcessorFailure,
         }
     } // TODO, finish implementation
+}
+
+impl AppProcessorMerchantResult {
+    pub fn into_parts(self) -> (StoreOnboardAcceptedRespDto, Merchant3partyModel) {
+        let Self { dto, model } = self;
+        (dto, model)
+    }
+}
+
+// TODO, conditional compilation only for testing purpose
+// #[cfg(test)] // <- complier still fails to include this code even in test mode, FIXME
+impl Default for AppProcessorMerchantResult {
+    fn default() -> Self {
+        let d = StoreOnboardAcceptedRespDto::Unknown;
+        let m = Merchant3partyModel::Unknown;
+        Self { dto: d, model: m }
+    }
 }
 
 impl AppProcessorContext {
@@ -211,14 +233,16 @@ impl AbstractPaymentProcessor for AppProcessorContext {
 
     async fn onboard_merchant(
         &self,
-        _store_profile: StoreProfileReplicaDto,
-        _req_3pt: StoreOnboardReqDto,
+        profile: StoreProfileReplicaDto,
+        req_3pt: StoreOnboardReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
-        let e = AppProcessorError {
-            reason: AppProcessorErrorReason::NotImplemented,
-            fn_label: AppProcessorFnLabel::OnboardMerchant,
+        let result = match req_3pt {
+            StoreOnboardReqDto::Stripe(req) => self._stripe.onboard_merchant(profile, req).await,
         };
-        Err(e)
+        result.map_err(|reason| AppProcessorError {
+            reason,
+            fn_label: AppProcessorFnLabel::OnboardMerchant,
+        })
     }
 } // end of impl AppProcessorContext
 

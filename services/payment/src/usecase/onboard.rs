@@ -7,9 +7,7 @@ use ecommerce_common::adapter::rpc::py_celery;
 use ecommerce_common::api::rpc::dto::{StoreProfileReplicaDto, StoreProfileReplicaReqDto};
 use ecommerce_common::error::AppErrorCode;
 
-use crate::adapter::processor::{
-    AbstractPaymentProcessor, AppProcessorError, AppProcessorMerchantResult,
-};
+use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::adapter::repository::{AbstractMerchantRepo, AppRepoError};
 use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxError};
 use crate::api::web::dto::{StoreOnboardAcceptedRespDto, StoreOnboardReqDto};
@@ -27,7 +25,7 @@ pub enum OnboardStoreUcError {
 
 pub enum OnboardStoreUcOk {
     Accepted(StoreOnboardAcceptedRespDto),
-}
+} // TODO, remove this type, directly return `StoreOnboardAcceptedRespDto` instead
 
 pub struct OnboardStoreUseCase {
     pub auth_claim: AppAuthedClaim,
@@ -56,13 +54,9 @@ impl From<AppRepoError> for OnboardStoreUcError {
         Self::RepoCreate(value)
     }
 }
-impl From<AppProcessorMerchantResult> for OnboardStoreUcOk {
-    fn from(value: AppProcessorMerchantResult) -> Self {
-        match value {
-            AppProcessorMerchantResult::Stripe => {
-                Self::Accepted(StoreOnboardAcceptedRespDto::Stripe)
-            }
-        }
+impl From<StoreOnboardAcceptedRespDto> for OnboardStoreUcOk {
+    fn from(value: StoreOnboardAcceptedRespDto) -> Self {
+        Self::Accepted(value)
     }
 }
 
@@ -78,9 +72,10 @@ impl OnboardStoreUseCase {
             .processors
             .onboard_merchant(storeprof_d, req_body)
             .await?;
-        storeprof_m.update_3pty(&res_3pty);
+        let (res_dto, m3pty) = res_3pty.into_parts();
+        storeprof_m.update_3pty(m3pty);
         self.repo.create(storeprof_m).await?;
-        Ok(OnboardStoreUcOk::from(res_3pty))
+        Ok(OnboardStoreUcOk::from(res_dto))
     }
 
     async fn _rpc_validate_store(
