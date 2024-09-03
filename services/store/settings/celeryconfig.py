@@ -30,6 +30,9 @@ task_queues = [
         name="rpc_storefront_get_profile",
         exchange=RPC_EXCHANGE_DEFAULT_NAME,
         routing_key="rpc.storefront.get_profile",
+        max_length=1000,
+        message_ttl=999,
+        durable=True,
     ),
 ]
 task_routes = {
