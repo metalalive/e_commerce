@@ -17,7 +17,7 @@ pub use self::base_client::{BaseClientError, BaseClientErrorReason};
 use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripeCtx};
 use crate::api::web::dto::{
     ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
-    StoreOnboardAcceptedRespDto, StoreOnboardReqDto,
+    StoreOnboardRespDto, StoreOnboardReqDto,
 };
 use crate::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, Merchant3partyModel,
@@ -84,7 +84,7 @@ pub struct AppProcessorPayInResult {
 }
 
 pub struct AppProcessorMerchantResult {
-    dto: StoreOnboardAcceptedRespDto,
+    dto: StoreOnboardRespDto,
     model: Merchant3partyModel,
 }
 
@@ -125,7 +125,7 @@ impl From<AppProcessorErrorReason> for PaymentMethodErrorReason {
 }
 
 impl AppProcessorMerchantResult {
-    pub fn into_parts(self) -> (StoreOnboardAcceptedRespDto, Merchant3partyModel) {
+    pub fn into_parts(self) -> (StoreOnboardRespDto, Merchant3partyModel) {
         let Self { dto, model } = self;
         (dto, model)
     }
@@ -135,7 +135,7 @@ impl AppProcessorMerchantResult {
 // #[cfg(test)] // <- complier still fails to include this code even in test mode, FIXME
 impl Default for AppProcessorMerchantResult {
     fn default() -> Self {
-        let d = StoreOnboardAcceptedRespDto::Unknown;
+        let d = StoreOnboardRespDto::Unknown;
         let m = Merchant3partyModel::Unknown;
         Self { dto: d, model: m }
     }

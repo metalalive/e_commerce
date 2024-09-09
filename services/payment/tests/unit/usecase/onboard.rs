@@ -13,8 +13,8 @@ use payment::adapter::processor::{
 };
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AbstractRpcContext, AppRpcReply};
-use payment::api::web::dto::StoreOnboardAcceptedRespDto;
-use payment::usecase::{OnboardStoreUcError, OnboardStoreUcOk, OnboardStoreUseCase};
+use payment::api::web::dto::StoreOnboardRespDto;
+use payment::usecase::{OnboardStoreUcError, OnboardStoreUseCase};
 
 use super::{
     MockMerchantRepo, MockPaymentProcessor, MockRpcClient, MockRpcContext, MockRpcPublishEvent,
@@ -87,12 +87,7 @@ async fn ok_new_shop() {
     let result = uc.execute(mock_store_id, req_body).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
-        match v {
-            OnboardStoreUcOk::Accepted(c) => {
-                matches!(c, StoreOnboardAcceptedRespDto::Unknown);
-                // TODO, verify more detail about 3rd party info
-            }
-        }
+        matches!(v, StoreOnboardRespDto::Unknown);
     }
 } // end of fn ok_new_shop
 

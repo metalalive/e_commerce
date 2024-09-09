@@ -156,7 +156,7 @@ pub enum StoreOnboardReqDto {
 
 #[derive(Serialize)]
 #[serde(tag = "processor")]
-pub enum StoreOnboardAcceptedRespDto {
+pub enum StoreOnboardRespDto {
     Stripe {
         fields_required: Vec<String>,
         disabled_reason: Option<String>,
@@ -164,7 +164,7 @@ pub enum StoreOnboardAcceptedRespDto {
         expiry: Option<DateTime<Utc>>,
     },
     Unknown,
-} // TODO, rename to `StoreOnboardRespDto`
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "processor")]
@@ -193,4 +193,11 @@ pub enum CapturePay3partyRespDto {
 pub struct CapturePayRespDto {
     pub store_id: u32,
     pub processor: CapturePay3partyRespDto,
+}
+
+impl StoreOnboardRespDto {
+    /// indicate whether onboarding operation is complete in 3rd party
+    pub(super) fn is_complete(&self) -> bool {
+        false // for `Stripe` and `Unknown`
+    }
 }

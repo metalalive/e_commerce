@@ -12,7 +12,7 @@ use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::adapter::datastore::AppDataStoreContext;
 use crate::adapter::repository::{app_repo_merchant, AbstractMerchantRepo};
 use crate::auth::AppAuthedClaim;
-use crate::usecase::{OnboardStoreUcError, OnboardStoreUcOk, OnboardStoreUseCase};
+use crate::usecase::{OnboardStoreUcError, OnboardStoreUseCase};
 use crate::AppSharedState;
 
 use super::dto::{StoreOnboardReqDto, StoreOnboardStatusDto, StoreOnboardStatusReqDto};
@@ -49,10 +49,13 @@ pub(super) async fn onboard_store(
     };
     let result = uc.execute(store_id, req_body).await;
     let (body_raw, http_status) = match result {
-        Ok(u) => match u {
-            OnboardStoreUcOk::Accepted(v) => {
-                (serde_json::to_vec(&v).unwrap(), StatusCode::ACCEPTED)
-            }
+        Ok(u) => {
+            let status = if u.is_complete() {
+                StatusCode::OK
+            } else {
+                StatusCode::ACCEPTED
+            };
+            (serde_json::to_vec(&u).unwrap(), status)
         },
         Err(uce) => {
             let status = match uce {

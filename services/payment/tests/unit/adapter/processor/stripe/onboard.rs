@@ -7,7 +7,7 @@ use ecommerce_common::api::rpc::dto::{
 };
 
 use payment::adapter::processor::AppProcessorErrorReason;
-use payment::api::web::dto::StoreOnboardAcceptedRespDto;
+use payment::api::web::dto::StoreOnboardRespDto;
 use payment::model::{Merchant3partyModel, StripeAccountCapableState};
 
 use crate::dto::ut_default_store_onboard_req_stripe;
@@ -101,7 +101,7 @@ async fn create_merchant_account_ok() {
         } else {
             assert!(false);
         }
-        if let StoreOnboardAcceptedRespDto::Stripe {
+        if let StoreOnboardRespDto::Stripe {
             fields_required,
             disabled_reason,
             url,

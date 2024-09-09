@@ -27,7 +27,7 @@ use super::{
     AppProcessorErrorReason, AppProcessorMerchantResult, AppProcessorPayInResult, BaseClientError,
 };
 use crate::api::web::dto::{
-    PaymentMethodRespDto, StoreOnboardAcceptedRespDto, StoreOnboardStripeReqDto,
+    PaymentMethodRespDto, StoreOnboardRespDto, StoreOnboardStripeReqDto,
     StripeCheckoutSessionReqDto, StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
 };
 use crate::model::{
@@ -301,7 +301,7 @@ impl From<(CheckoutSession, DateTime<Utc>)> for Charge3partyStripeModel {
     }
 }
 
-impl<'a> From<(&'a AccountRequirement, AccountLink)> for StoreOnboardAcceptedRespDto {
+impl<'a> From<(&'a AccountRequirement, AccountLink)> for StoreOnboardRespDto {
     fn from(value: (&'a AccountRequirement, AccountLink)) -> Self {
         let (r, alink) = value;
         let expiry = DateTime::from_timestamp(alink.expires_at, 0)
@@ -367,7 +367,7 @@ impl TryFrom<(ConnectAccount, AccountLink)> for AppProcessorMerchantResult {
     type Error = AppProcessorErrorReason;
     fn try_from(value: (ConnectAccount, AccountLink)) -> Result<Self, Self::Error> {
         let (acct, alink) = value;
-        let d = StoreOnboardAcceptedRespDto::from((&acct.requirements, alink));
+        let d = StoreOnboardRespDto::from((&acct.requirements, alink));
         let m = Merchant3partyModel::try_from(acct)?;
         Ok(Self { dto: d, model: m })
     }
