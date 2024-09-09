@@ -25,7 +25,7 @@ use payment::adapter::rpc::{
 use payment::api::web::dto::{PaymentMethodReqDto, StoreOnboardReqDto};
 use payment::model::{
     Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    MerchantProfileModel, OrderLineModelSet,
+    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet,
 };
 
 struct MockChargeRepo {
@@ -125,7 +125,11 @@ impl MockMerchantRepo {
 
 #[async_trait]
 impl AbstractMerchantRepo for MockMerchantRepo {
-    async fn create(&self, _m: MerchantProfileModel) -> Result<(), AppRepoError> {
+    async fn create(
+        &self,
+        _mprof: MerchantProfileModel,
+        _m3pty: Merchant3partyModel,
+    ) -> Result<(), AppRepoError> {
         let mut g = self._create_result.lock().unwrap();
         let out = g.take().unwrap();
         out

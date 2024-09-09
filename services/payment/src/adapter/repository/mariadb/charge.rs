@@ -37,7 +37,7 @@ impl MariadbChargeRepo {
         ds.mariadb(None)
             .map(|found| Self { _dstore: found })
             .ok_or(AppRepoError {
-                fn_label: AppRepoErrorFnLabel::InitRepo,
+                fn_label: AppRepoErrorFnLabel::InitChargeRepo,
                 code: AppErrorCode::MissingDataStore,
                 detail: AppRepoErrorDetail::Unknown,
             })

@@ -15,7 +15,7 @@ use payment::model::{
     StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
-use super::{ut_setup_currency_snapshot, ut_setup_db_repo};
+use super::{ut_setup_currency_snapshot, ut_setup_db_charge_repo};
 use crate::adapter::repository::{ut_setup_order_bill, ut_setup_orderline_set};
 use crate::model::{ut_default_charge_method_stripe, ut_setup_buyer_charge};
 use crate::ut_setup_sharestate;
@@ -92,7 +92,7 @@ async fn create_order_replica_ok() {
     ];
     let mock_currency_map = ut_setup_currency_snapshot(vec![123, 2603, 2379]);
     let shr_state = ut_setup_sharestate();
-    let repo = ut_setup_db_repo(shr_state).await;
+    let repo = ut_setup_db_charge_repo(shr_state).await;
     let expect_ol_set = ut_setup_orderline_set(
         mock_order_toplvl_data.0,
         mock_order_toplvl_data.1,
@@ -235,7 +235,7 @@ async fn ut_verify_unpaid_orderlines(
 #[actix_web::test]
 async fn read_unpaid_orderline_ok() {
     let shr_state = ut_setup_sharestate();
-    let repo = ut_setup_db_repo(shr_state).await;
+    let repo = ut_setup_db_charge_repo(shr_state).await;
     // -- init setup , no order line has been charged yet ---
     let mock_buyer_id = 124u32;
     let mock_oids = ["c071ce550de1", "dee23ea715900d"];
@@ -341,7 +341,7 @@ async fn read_unpaid_orderline_ok() {
 #[actix_web::test]
 async fn read_order_replica_nonexist() {
     let shr_state = ut_setup_sharestate();
-    let repo = ut_setup_db_repo(shr_state).await;
+    let repo = ut_setup_db_charge_repo(shr_state).await;
     let result = repo.get_unpaid_olines(125, "beef01").await;
     assert!(result.is_ok());
     if let Ok(v) = result {

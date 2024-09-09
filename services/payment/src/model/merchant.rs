@@ -19,19 +19,12 @@ pub enum Merchant3partyModel {
 }
 
 pub struct MerchantProfileModel {
-    id: u32, // store-id from storefront service
-    name: String,
-    supervisor_id: u32,
-    staff_ids: Vec<u32>,
+    pub(crate) id: u32, // store-id from storefront service
+    pub(crate) name: String,
+    pub(crate) supervisor_id: u32,
+    pub(crate) staff_ids: Vec<u32>,
     // TODO, refresh owner-id and  staff-ids periodically
-    last_update: DateTime<Utc>,
-    m3pty: Merchant3partyModel,
-}
-
-impl Default for Merchant3partyModel {
-    fn default() -> Self {
-        Self::Unknown
-    }
+    pub(crate) last_update: DateTime<Utc>,
 }
 
 impl TryFrom<(u32, &StoreProfileReplicaDto)> for MerchantProfileModel {
@@ -49,10 +42,8 @@ impl TryFrom<(u32, &StoreProfileReplicaDto)> for MerchantProfileModel {
         } else {
             Vec::new()
         };
-        let m3pty = Merchant3partyModel::default();
         Ok(Self {
             id,
-            m3pty,
             staff_ids,
             last_update,
             name: store_rep.label.clone(),
@@ -96,10 +87,6 @@ impl MerchantProfileModel {
             Err(MerchantModelError::StaffCorruptedTime(errors))
         }
     } // end of fn collect_vaild_staff
-
-    pub(crate) fn update_3pty(&mut self, value: Merchant3partyModel) {
-        self.m3pty = value;
-    }
 
     pub fn valid_staff(&self, usr_id: u32) -> bool {
         let mut found = self.supervisor_id == usr_id;

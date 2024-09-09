@@ -12,7 +12,7 @@ use payment::model::{
     ChargeLineBuyerModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
-use super::{ut_setup_currency_snapshot, ut_setup_db_repo};
+use super::{ut_setup_currency_snapshot, ut_setup_db_charge_repo};
 use crate::model::{ut_default_charge_method_stripe, ut_setup_buyer_charge};
 use crate::ut_setup_sharestate;
 
@@ -94,7 +94,7 @@ async fn buyer_create_stripe_charge_ok() {
     let mock_create_time = Local::now().to_utc() - Duration::minutes(4);
     let accepted_time_duration = Duration::seconds(95);
     let shr_state = ut_setup_sharestate();
-    let repo = ut_setup_db_repo(shr_state).await;
+    let repo = ut_setup_db_charge_repo(shr_state).await;
     let cline_set = _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
     let result = repo.create_charge(cline_set).await;
     assert!(result.is_ok());
@@ -164,7 +164,7 @@ async fn buyer_create_charge_invalid_state() {
     let mock_create_time = Local::now().to_utc() - Duration::minutes(4);
     let accepted_time_duration = Duration::seconds(95);
     let shr_state = ut_setup_sharestate();
-    let repo = ut_setup_db_repo(shr_state).await;
+    let repo = ut_setup_db_charge_repo(shr_state).await;
     let mut cline_set =
         _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
     cline_set
@@ -189,7 +189,7 @@ async fn buyer_create_charge_unknown_3party() {
     let mock_create_time = Local::now().to_utc();
     let accepted_time_duration = Duration::seconds(107);
     let shr_state = ut_setup_sharestate();
-    let repo = ut_setup_db_repo(shr_state).await;
+    let repo = ut_setup_db_charge_repo(shr_state).await;
     let mut charge_m = _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
     charge_m.meta.update_3party(Charge3partyModel::Unknown);
     let result = repo.create_charge(charge_m).await;
@@ -206,7 +206,7 @@ async fn buyer_fetch_charge_meta_nonexist() {
     let mock_owner = 9999;
     let mock_create_time = Local::now().to_utc() - Duration::days(3650);
     let shr_state = ut_setup_sharestate();
-    let repo = ut_setup_db_repo(shr_state).await;
+    let repo = ut_setup_db_charge_repo(shr_state).await;
     let result = repo.fetch_charge_meta(mock_owner, mock_create_time).await;
     assert!(result.is_ok());
     let optional_meta = result.unwrap();
@@ -219,7 +219,7 @@ async fn buyer_update_charge_meta_invalid_state() {
     let mock_create_time = Local::now().to_utc() - Duration::minutes(5);
     let accepted_time_duration = Duration::seconds(176);
     let shr_state = ut_setup_sharestate();
-    let repo = ut_setup_db_repo(shr_state).await;
+    let repo = ut_setup_db_charge_repo(shr_state).await;
     let mut charge_m = _ut_setup_buyer_charge(mock_owner, mock_create_time, accepted_time_duration);
     charge_m.meta.update_progress(&BuyerPayInState::Initialized);
     let result = repo.update_charge_progress(charge_m.meta).await;

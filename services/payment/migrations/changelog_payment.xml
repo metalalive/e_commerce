@@ -314,4 +314,41 @@
     <changeSet id="tag_version_0.0.9" author="T.H.">
         <tagDatabase tag="0.0.9" />
     </changeSet>
+    <changeSet id="add_tables_merchant_profile" author="T.H.">
+        <comment>
+            Tables for recording basic profile and 3rd-party processors supported by merchants.
+            Note the column `id` indicates `store-id` in `storefront` service
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE `merchant_profile`(
+                `id`      INT UNSIGNED NOT NULL PRIMARY KEY,
+                `name`    VARCHAR(128)  CHARACTER SET utf8  NOT NULL,
+                `supervisor_id`  INT UNSIGNED NOT NULL,
+                `staff_ids`      TEXT CHARACTER SET ascii  NOT NULL,
+                `last_update`    DATETIME NOT NULL
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `merchant_profile`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_tables_merchant_3party_info" author="T.H.">
+        <sql dbms="mariadb">
+            CREATE TABLE `merchant_3party`(
+                `sid`      INT UNSIGNED NOT NULL,
+                `method`  ENUM('Stripe') NOT NULL,
+                `detail`  TEXT CHARACTER SET utf8 NOT NULL,
+                PRIMARY KEY (`sid`,`method`),
+                CONSTRAINT `c_fk_merchant_profile_id_0`  FOREIGN KEY (`sid`)
+                    REFERENCES `merchant_profile`(`id`) ON UPDATE CASCADE ON DELETE CASCADE
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `merchant_3party`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.10" author="T.H.">
+        <tagDatabase tag="0.0.10" />
+    </changeSet>
 </databaseChangeLog>

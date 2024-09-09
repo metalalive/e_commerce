@@ -2,18 +2,19 @@ mod charge;
 mod merchant;
 mod order_replica;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 
-use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::api::dto::{CountryCode, CurrencyDto};
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::api::web::dto::ChargeStatusDto;
 use payment::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
-    ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot, PayLineAmountModel,
-    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    ChargeBuyerModel, ChargeLineBuyerModel, Merchant3partyStripeModel, OrderCurrencySnapshot,
+    PayLineAmountModel, StripeAccountCapabilityModel, StripeAccountCapableState,
+    StripeAccountSettingModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 pub(crate) fn ut_default_currency_snapshot(
@@ -88,5 +89,29 @@ fn ut_partial_eq_charge_status_dto(a :&ChargeStatusDto, b :&ChargeStatusDto) -> 
         (ChargeStatusDto::Completed, ChargeStatusDto::Completed) |
         (ChargeStatusDto::PspProcessing, ChargeStatusDto::PspProcessing) => true,
         _others => false,
+    }
+}
+
+pub(super) fn ut_default_merchant_3party_stripe() -> Merchant3partyStripeModel {
+    let t_now = Local::now().to_utc();
+    let capabilities = StripeAccountCapabilityModel {
+        transfers: StripeAccountCapableState::inactive,
+    };
+    let settings = StripeAccountSettingModel {
+        payout_delay_days: 7,
+        payout_interval: "daily".to_string(),
+        debit_negative_balances: false,
+    };
+    Merchant3partyStripeModel {
+        id: "acct_1oi3gwtiy832yt".to_string(),
+        country: CountryCode::ID,
+        email: "hayley@wo0dberry.org".to_string(),
+        capabilities,
+        tos_accepted: Some(t_now),
+        charges_enabled: false,
+        payouts_enabled: false,
+        details_submitted: false,
+        created: t_now,
+        settings,
     }
 }

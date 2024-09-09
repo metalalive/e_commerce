@@ -58,14 +58,14 @@ impl OnboardStoreUseCase {
         req_body: StoreOnboardReqDto,
     ) -> Result<StoreOnboardRespDto, OnboardStoreUcError> {
         let storeprof_d = self._rpc_validate_store(store_id).await?;
-        let mut storeprof_m = MerchantProfileModel::try_from((store_id, &storeprof_d))?;
+        let storeprof_m = MerchantProfileModel::try_from((store_id, &storeprof_d))?;
+        // TODO, verify whether current auth user is also shop supervisor
         let res_3pty = self
             .processors
             .onboard_merchant(storeprof_d, req_body)
             .await?;
         let (res_dto, m3pty) = res_3pty.into_parts();
-        storeprof_m.update_3pty(m3pty);
-        self.repo.create(storeprof_m).await?;
+        self.repo.create(storeprof_m, m3pty).await?;
         Ok(res_dto)
     }
 

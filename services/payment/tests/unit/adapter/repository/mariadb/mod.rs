@@ -1,4 +1,5 @@
 mod charge;
+mod merchant;
 mod order_replica;
 
 use std::boxed::Box;
@@ -8,15 +9,26 @@ use std::sync::Arc;
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use payment::adapter::repository::{app_repo_charge, AbstractChargeRepo};
+use payment::adapter::repository::{
+    app_repo_charge, app_repo_merchant, AbstractChargeRepo, AbstractMerchantRepo,
+};
 use payment::model::OrderCurrencySnapshot;
 use payment::AppSharedState;
 
 use crate::model::ut_default_currency_snapshot;
 
-async fn ut_setup_db_repo(shr_state: AppSharedState) -> Arc<Box<dyn AbstractChargeRepo>> {
+async fn ut_setup_db_charge_repo(shr_state: AppSharedState) -> Arc<Box<dyn AbstractChargeRepo>> {
     let dstore = shr_state.datastore();
     let result = app_repo_charge(dstore).await;
+    let repo = result.unwrap();
+    Arc::new(repo)
+}
+
+async fn ut_setup_db_merchant_repo(
+    shr_state: AppSharedState,
+) -> Arc<Box<dyn AbstractMerchantRepo>> {
+    let dstore = shr_state.datastore();
+    let result = app_repo_merchant(dstore).await;
     let repo = result.unwrap();
     Arc::new(repo)
 }

@@ -10,6 +10,8 @@ use ecommerce_common::error::AppErrorCode;
 
 use super::AppRepoErrorDetail;
 
+const DATETIME_FMT_P0F: &str = "%Y-%m-%d %H:%M:%S";
+
 #[allow(non_snake_case)]
 fn raw_column_to_datetime(
     val: mysql_async::Value,

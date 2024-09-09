@@ -10,13 +10,12 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::super::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::raw_column_to_datetime;
+use super::{raw_column_to_datetime, DATETIME_FMT_P0F};
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
     ChargeBuyerModel, ChargeLineBuyerModel, PayLineAmountModel,
 };
 
-const DATETIME_FMT_P0F: &str = "%Y-%m-%d %H:%M:%S";
 const DATETIME_FMT_P3F: &str = "%Y-%m-%d %H:%M:%S%.3f";
 
 struct InsertChargeTopLvlArgs(String, Params);

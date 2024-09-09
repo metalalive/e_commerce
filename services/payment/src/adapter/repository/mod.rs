@@ -11,7 +11,7 @@ use ecommerce_common::model::order::BillingModel;
 
 use crate::model::{
     BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    MerchantProfileModel, OrderLineModelSet,
+    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet,
 };
 
 use self::mariadb::charge::MariadbChargeRepo;
@@ -20,7 +20,7 @@ use super::datastore::{AppDStoreError, AppDataStoreContext};
 
 #[derive(Debug)]
 pub enum AppRepoErrorFnLabel {
-    InitRepo, // TODO, rename to `IntoChargeRepo`
+    InitChargeRepo,
     GetUnpaidOlines,
     CreateOrder,
     CreateCharge,
@@ -90,7 +90,11 @@ pub trait AbstractChargeRepo: Sync + Send {
 
 #[async_trait]
 pub trait AbstractMerchantRepo: Sync + Send {
-    async fn create(&self, m: MerchantProfileModel) -> Result<(), AppRepoError>;
+    async fn create(
+        &self,
+        mprof: MerchantProfileModel,
+        m3pty: Merchant3partyModel,
+    ) -> Result<(), AppRepoError>;
 } // end of trait AbstractMerchantRepo
 
 pub async fn app_repo_charge(
@@ -103,6 +107,6 @@ pub async fn app_repo_charge(
 pub async fn app_repo_merchant(
     dstore: Arc<AppDataStoreContext>,
 ) -> Result<Box<dyn AbstractMerchantRepo>, AppRepoError> {
-    let repo = MariadbMerchantRepo::new(dstore).await?;
+    let repo = MariadbMerchantRepo::new(dstore)?;
     Ok(Box::new(repo))
 }
