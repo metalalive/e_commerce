@@ -10,7 +10,7 @@ use ecommerce_common::error::AppErrorCode;
 use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::adapter::repository::{AbstractMerchantRepo, AppRepoError};
 use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxError};
-use crate::api::web::dto::{StoreOnboardRespDto, StoreOnboardReqDto};
+use crate::api::web::dto::{StoreOnboardReqDto, StoreOnboardRespDto};
 use crate::auth::AppAuthedClaim;
 use crate::model::{MerchantModelError, MerchantProfileModel};
 
@@ -58,7 +58,7 @@ impl OnboardStoreUseCase {
         req_body: StoreOnboardReqDto,
     ) -> Result<StoreOnboardRespDto, OnboardStoreUcError> {
         let storeprof_d = self._rpc_validate_store(store_id).await?;
-        let mut storeprof_m = MerchantProfileModel::try_from(&storeprof_d)?;
+        let mut storeprof_m = MerchantProfileModel::try_from((store_id, &storeprof_d))?;
         let res_3pty = self
             .processors
             .onboard_merchant(storeprof_d, req_body)

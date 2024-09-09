@@ -1,4 +1,5 @@
 mod charge;
+mod merchant;
 mod order_replica;
 
 use chrono::{DateTime, Duration, Utc};

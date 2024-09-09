@@ -17,7 +17,7 @@ pub use self::base_client::{BaseClientError, BaseClientErrorReason};
 use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripeCtx};
 use crate::api::web::dto::{
     ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
-    StoreOnboardRespDto, StoreOnboardReqDto,
+    StoreOnboardReqDto, StoreOnboardRespDto,
 };
 use crate::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, Merchant3partyModel,

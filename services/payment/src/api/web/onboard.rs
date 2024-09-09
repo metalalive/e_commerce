@@ -56,7 +56,7 @@ pub(super) async fn onboard_store(
                 StatusCode::ACCEPTED
             };
             (serde_json::to_vec(&u).unwrap(), status)
-        },
+        }
         Err(uce) => {
             let status = match uce {
                 OnboardStoreUcError::ThirdParty(e) => {
