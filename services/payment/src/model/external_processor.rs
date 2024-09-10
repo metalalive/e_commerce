@@ -48,6 +48,7 @@ pub struct StripeAccountSettingModel {
 #[derive(Serialize, Deserialize)]
 pub struct Merchant3partyStripeModel {
     // map to connected account in Stripe platform
+    // TODO, limit field visibility to crate level
     pub id: String,
     pub country: CountryCode,
     pub email: String,

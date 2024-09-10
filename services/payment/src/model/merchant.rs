@@ -88,6 +88,10 @@ impl MerchantProfileModel {
         }
     } // end of fn collect_vaild_staff
 
+    pub fn valid_supervisor(&self, usr_id: u32) -> bool {
+        self.supervisor_id == usr_id
+    }
+
     pub fn valid_staff(&self, usr_id: u32) -> bool {
         let mut found = self.supervisor_id == usr_id;
         if !found {

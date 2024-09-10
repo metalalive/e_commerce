@@ -19,6 +19,7 @@ pub enum OnboardStoreUcError {
     RpcMsgSerialize(AppErrorCode, String),
     CorruptedStoreProfile(Box<Vec<u8>>, String),
     InvalidStoreProfile(MerchantModelError),
+    InvalidStoreSupervisor(u32),
     ThirdParty(AppProcessorError),
     RepoCreate(AppRepoError),
 }
@@ -59,7 +60,11 @@ impl OnboardStoreUseCase {
     ) -> Result<StoreOnboardRespDto, OnboardStoreUcError> {
         let storeprof_d = self._rpc_validate_store(store_id).await?;
         let storeprof_m = MerchantProfileModel::try_from((store_id, &storeprof_d))?;
-        // TODO, verify whether current auth user is also shop supervisor
+        let auth_usr_id = self.auth_claim.profile;
+        if !storeprof_m.valid_supervisor(auth_usr_id) {
+            let e = OnboardStoreUcError::InvalidStoreSupervisor(auth_usr_id);
+            return Err(e);
+        }
         let res_3pty = self
             .processors
             .onboard_merchant(storeprof_d, req_body)

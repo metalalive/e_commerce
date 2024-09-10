@@ -1,3 +1,5 @@
 {
-    "processor":"Stripe"
+    "processor":"Stripe",
+    "return_url": "https://leetcode.com",
+    "refresh_url": "https://radio.au"
 }

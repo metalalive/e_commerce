@@ -1,4 +1,5 @@
 mod client;
+mod mock;
 mod resources;
 
 use std::boxed::Box;
@@ -18,6 +19,7 @@ use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use self::client::AppStripeClient;
+pub(super) use self::mock::MockProcessorStripeCtx;
 use self::resources::{
     AccountLink, AccountRequirement, AccountSettings, CheckoutSession, CheckoutSessionMode,
     ConnectAccount, CreateAccountLink, CreateCheckoutSession, CreateCheckoutSessionLineItem,
@@ -33,7 +35,6 @@ use crate::api::web::dto::{
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerModel,
     Merchant3partyModel, Merchant3partyStripeModel, StripeAccountSettingModel,
-    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 const HEADER_NAME_IDEMPOTENCY: &str = "Idempotency-Key";
@@ -372,72 +373,3 @@ impl TryFrom<(ConnectAccount, AccountLink)> for AppProcessorMerchantResult {
         Ok(Self { dto: d, model: m })
     }
 }
-
-// TODO, conditional compilation for test
-pub(super) struct MockProcessorStripeCtx;
-
-impl MockProcessorStripeCtx {
-    pub(super) fn build() -> Box<dyn AbstStripeContext> {
-        Box::new(Self)
-    }
-}
-
-#[async_trait]
-impl AbstStripeContext for MockProcessorStripeCtx {
-    async fn pay_in_start(
-        &self,
-        req: &StripeCheckoutSessionReqDto,
-        charge_buyer: &ChargeBuyerModel,
-    ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorErrorReason> {
-        let (redirect_url, client_session) = match req.ui_mode {
-            StripeCheckoutUImodeDto::RedirectPage => (Some("https://abc.new.au".to_string()), None),
-            StripeCheckoutUImodeDto::EmbeddedJs => {
-                (None, Some("mock-client-session-seq".to_string()))
-            }
-        };
-        let checkout_session_id = "mock-stripe-checkout-session-id".to_string();
-        let mthd_detail = StripeCheckoutSessionRespDto {
-            id: checkout_session_id.clone(),
-            redirect_url,
-            client_session,
-        };
-        let ctime = *charge_buyer.meta.create_time();
-        let result = AppProcessorPayInResult {
-            charge_id: charge_buyer.meta.token().0.to_vec(),
-            method: PaymentMethodRespDto::Stripe(mthd_detail),
-            state: BuyerPayInState::ProcessorAccepted(ctime),
-            completed: false,
-        };
-        let stripe_m = Charge3partyStripeModel {
-            checkout_session_id,
-            payment_intent_id: "mock-stripe-payment-intent-id".to_string(),
-            session_state: StripeSessionStatusModel::open,
-            payment_state: StripeCheckoutPaymentStatusModel::unpaid,
-            expiry: ctime + Duration::seconds(35),
-        }; // TODO, configuable parameter expiry time
-        let mthd_m = Charge3partyModel::Stripe(stripe_m);
-        Ok((result, mthd_m))
-    }
-
-    async fn pay_in_progress(
-        &self,
-        old: &Charge3partyStripeModel,
-    ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason> {
-        let new_m = Charge3partyStripeModel {
-            checkout_session_id: old.checkout_session_id.clone(),
-            payment_intent_id: old.payment_intent_id.clone(),
-            session_state: StripeSessionStatusModel::complete,
-            payment_state: StripeCheckoutPaymentStatusModel::paid,
-            expiry: old.expiry,
-        };
-        Ok(new_m)
-    }
-
-    async fn onboard_merchant(
-        &self,
-        _store_profile: StoreProfileReplicaDto,
-        _req: StoreOnboardStripeReqDto,
-    ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason> {
-        Err(AppProcessorErrorReason::NotImplemented)
-    }
-} // end of impl MockProcessorStripeCtx

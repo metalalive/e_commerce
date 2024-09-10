@@ -59,6 +59,10 @@ pub(super) async fn onboard_store(
         }
         Err(uce) => {
             let status = match uce {
+                OnboardStoreUcError::InvalidStoreSupervisor(usr_id) => {
+                    app_log_event!(logctx, AppLogLevel::INFO, "{usr_id}");
+                    StatusCode::FORBIDDEN
+                }
                 OnboardStoreUcError::ThirdParty(e) => {
                     app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
                     StatusCode::SERVICE_UNAVAILABLE

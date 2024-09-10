@@ -12,8 +12,11 @@ fn create_ok() {
     let arg = (mock_store_id, &mock_storeprof);
     let result = MerchantProfileModel::try_from(arg);
     if let Ok(v) = result {
+        assert!(v.valid_staff(126));
         assert!(v.valid_staff(482));
         assert!(v.valid_staff(573));
+        assert!(v.valid_supervisor(126));
+        assert!(!v.valid_supervisor(573));
     } // TODO, examine more fields
 }
 

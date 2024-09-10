@@ -84,10 +84,10 @@ impl MockAuthKeystore {
     }
 } // end of impl MockAuthKeystore
 
-pub(super) fn ut_setup_auth_claim(exp_bias_secs: i64) -> AppAuthedClaim {
+pub(super) fn ut_setup_auth_claim(usr_id: u32, exp_bias_secs: i64) -> AppAuthedClaim {
     let ts_now = Local::now().fixed_offset().timestamp();
     AppAuthedClaim {
-        profile: 5678,
+        profile: usr_id,
         iat: ts_now,
         exp: ts_now + exp_bias_secs * 100,
         aud: vec![app_meta::LABAL.to_string()],
@@ -137,7 +137,7 @@ async fn jwt_verify_rsa_ok() {
     let kid = mock_keystore._mock_key.common.key_id.clone();
     let mock_keystore: Arc<Box<dyn AbstractAuthKeystore<Error = AuthKeystoreError>>> =
         Arc::new(Box::new(mock_keystore));
-    let claim = ut_setup_auth_claim(60);
+    let claim = ut_setup_auth_claim(5678, 60);
     let encoded = ut_setup_encode_jwt(kid, Algorithm::RS256, "rsa256-priv-key.pem", &claim);
     let hdr_bearer = Bearer::new(encoded);
     let mut mock_req = TestRequest::default()
@@ -204,7 +204,7 @@ async fn jwt_verify_rsa_missing_key_id() {
     let mock_keystore = MockAuthKeystore::build("jwk-rsa-pubkey-valid.json");
     let mock_keystore: Arc<Box<dyn AbstractAuthKeystore<Error = AuthKeystoreError>>> =
         Arc::new(Box::new(mock_keystore));
-    let claim = ut_setup_auth_claim(60);
+    let claim = ut_setup_auth_claim(5678, 60);
     let encoded = ut_setup_encode_jwt(None, Algorithm::RS256, "rsa256-priv-key.pem", &claim);
     let hdr_bearer = Bearer::new(encoded);
     let mut mock_req = TestRequest::default()
@@ -228,7 +228,7 @@ async fn jwt_verify_rsa_error_jwk_common(
     let kid = mock_keystore._mock_key.common.key_id.clone();
     let mock_keystore: Arc<Box<dyn AbstractAuthKeystore<Error = AuthKeystoreError>>> =
         Arc::new(Box::new(mock_keystore));
-    let claim = ut_setup_auth_claim(exp_bias_secs);
+    let claim = ut_setup_auth_claim(5678, exp_bias_secs);
     let encoded = ut_setup_encode_jwt(kid, Algorithm::RS256, "rsa256-priv-key.pem", &claim);
     let hdr_bearer = Bearer::new(encoded);
     let mut mock_req = TestRequest::default()

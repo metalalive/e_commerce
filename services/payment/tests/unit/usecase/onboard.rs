@@ -65,7 +65,7 @@ fn ut_setup_rpc_ctx(reply_raw_msg: Vec<u8>) -> Arc<Box<dyn AbstractRpcContext>> 
 
 #[actix_web::test]
 async fn ok_new_shop() {
-    let auth_claim = ut_setup_auth_claim(85);
+    let auth_claim = ut_setup_auth_claim(1234, 85);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
@@ -93,7 +93,7 @@ async fn ok_new_shop() {
 
 #[actix_web::test]
 async fn err_rpc_corrupted_reply() {
-    let auth_claim = ut_setup_auth_claim(79);
+    let auth_claim = ut_setup_auth_claim(1001, 79);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
@@ -119,7 +119,7 @@ async fn err_rpc_corrupted_reply() {
 
 #[actix_web::test]
 async fn err_3party_failure() {
-    let auth_claim = ut_setup_auth_claim(85);
+    let auth_claim = ut_setup_auth_claim(1234, 85);
     let processors = {
         let pay3pty_result = Err(AppProcessorError {
             reason: AppProcessorErrorReason::InvalidMethod("unit-test".to_string()),
@@ -160,7 +160,7 @@ async fn err_3party_failure() {
 
 #[actix_web::test]
 async fn err_repo_create_op() {
-    let auth_claim = ut_setup_auth_claim(85);
+    let auth_claim = ut_setup_auth_claim(1234, 85);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
