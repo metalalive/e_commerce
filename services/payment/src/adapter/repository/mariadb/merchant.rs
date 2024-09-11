@@ -9,6 +9,7 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
+use crate::api::web::dto::StoreOnboardReqDto;
 use crate::model::{Merchant3partyModel, MerchantProfileModel};
 
 use super::super::{AbstractMerchantRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
@@ -157,4 +158,28 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
         })?;
         Ok(())
     } // end of fn create
+
+    async fn fetch(
+        &self,
+        _store_id: u32,
+        _label3pty: &StoreOnboardReqDto,
+    ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchMerchant,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
+    async fn update_3party(
+        &self,
+        _store_id: u32,
+        _m3pty: Merchant3partyModel,
+    ) -> Result<(), AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::UpdateMerchant3party,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
 } // end of impl MariadbMerchantRepo

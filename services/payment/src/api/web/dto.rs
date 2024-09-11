@@ -167,18 +167,6 @@ pub enum StoreOnboardRespDto {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "processor")]
-pub enum StoreOnboardStatusReqDto {
-    Stripe,
-}
-
-#[derive(Serialize)]
-#[serde(tag = "processor")]
-pub enum StoreOnboardStatusDto {
-    Stripe,
-}
-
-#[derive(Deserialize)]
 pub struct CapturePayReqDto {
     pub store_id: u32,
 }

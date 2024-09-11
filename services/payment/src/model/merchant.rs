@@ -8,6 +8,7 @@ use super::external_processor::Merchant3partyStripeModel;
 
 #[derive(Debug)]
 pub enum MerchantModelError {
+    NotExist,
     InActive,
     ShopNameEmpty,
     StaffCorruptedTime(Vec<(u32, String)>),

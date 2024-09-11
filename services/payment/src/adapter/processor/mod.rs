@@ -41,6 +41,12 @@ pub trait AbstractPaymentProcessor: Send + Sync {
         store_profile: StoreProfileReplicaDto,
         req_3pt: StoreOnboardReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorError>;
+
+    async fn refresh_onboard_status(
+        &self,
+        m3pty: Merchant3partyModel,
+        req_3pt: StoreOnboardReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorError>;
 }
 
 struct AppProcessorContext {
@@ -68,6 +74,7 @@ pub enum AppProcessorFnLabel {
     PayInStart,
     PayInProgress,
     OnboardMerchant,
+    RefreshOnboardStatus,
 }
 
 #[derive(Debug)]
@@ -242,6 +249,17 @@ impl AbstractPaymentProcessor for AppProcessorContext {
         result.map_err(|reason| AppProcessorError {
             reason,
             fn_label: AppProcessorFnLabel::OnboardMerchant,
+        })
+    }
+
+    async fn refresh_onboard_status(
+        &self,
+        _m3pty: Merchant3partyModel,
+        _req_3pt: StoreOnboardReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
+        Err(AppProcessorError {
+            reason: AppProcessorErrorReason::NotImplemented,
+            fn_label: AppProcessorFnLabel::RefreshOnboardStatus,
         })
     }
 } // end of impl AppProcessorContext

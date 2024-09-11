@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
+use crate::api::web::dto::StoreOnboardReqDto;
 use crate::model::{
     BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
     Merchant3partyModel, MerchantProfileModel, OrderLineModelSet,
@@ -24,11 +25,13 @@ pub enum AppRepoErrorFnLabel {
     GetUnpaidOlines,
     CreateOrder,
     CreateCharge,
+    CreateMerchant,
     FetchChargeMeta,
     FetchChargeLines,
+    FetchMerchant,
     UpdateChargeProgress,
+    UpdateMerchant3party,
     InitMerchantRepo,
-    CreateMerchant,
 }
 #[derive(Debug)]
 pub enum AppRepoErrorDetail {
@@ -93,6 +96,18 @@ pub trait AbstractMerchantRepo: Sync + Send {
     async fn create(
         &self,
         mprof: MerchantProfileModel,
+        m3pty: Merchant3partyModel,
+    ) -> Result<(), AppRepoError>;
+
+    async fn fetch(
+        &self,
+        store_id: u32,
+        label3pty: &StoreOnboardReqDto,
+    ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError>;
+
+    async fn update_3party(
+        &self,
+        store_id: u32,
         m3pty: Merchant3partyModel,
     ) -> Result<(), AppRepoError>;
 } // end of trait AbstractMerchantRepo

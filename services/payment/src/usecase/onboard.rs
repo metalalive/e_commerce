@@ -31,6 +31,12 @@ pub struct OnboardStoreUseCase {
     pub repo: Box<dyn AbstractMerchantRepo>,
 }
 
+pub struct RefreshOnboardStatusUseCase {
+    pub auth_claim: AppAuthedClaim,
+    pub processors: Arc<Box<dyn AbstractPaymentProcessor>>,
+    pub repo: Box<dyn AbstractMerchantRepo>,
+}
+
 impl From<AppRpcCtxError> for OnboardStoreUcError {
     fn from(value: AppRpcCtxError) -> Self {
         Self::RpcStoreReplica(value)
@@ -102,3 +108,27 @@ impl OnboardStoreUseCase {
         )
     }
 } // end of impl OnboardStoreUseCase
+
+impl RefreshOnboardStatusUseCase {
+    pub async fn execute(
+        &self,
+        store_id: u32,
+        req_body: StoreOnboardReqDto,
+    ) -> Result<StoreOnboardRespDto, OnboardStoreUcError> {
+        let auth_usr_id = self.auth_claim.profile;
+        let (storeprof_m, store3pty_m) = self.repo.fetch(store_id, &req_body).await?.ok_or(
+            OnboardStoreUcError::InvalidStoreProfile(MerchantModelError::NotExist),
+        )?;
+        if !storeprof_m.valid_supervisor(auth_usr_id) {
+            let e = OnboardStoreUcError::InvalidStoreSupervisor(auth_usr_id);
+            return Err(e);
+        }
+        let res_3pty = self
+            .processors
+            .refresh_onboard_status(store3pty_m, req_body)
+            .await?;
+        let (res_dto, store3pty_m) = res_3pty.into_parts();
+        self.repo.update_3party(storeprof_m.id, store3pty_m).await?;
+        Ok(res_dto)
+    }
+} // end of impl RefreshOnboardStatusUseCase

@@ -112,12 +112,20 @@ impl AbstractChargeRepo for MockChargeRepo {
 
 struct MockMerchantRepo {
     _create_result: Mutex<Option<Result<(), AppRepoError>>>,
+    _fetch_result: Mutex<Option<(MerchantProfileModel, Merchant3partyModel)>>,
+    _update3pty_result: Mutex<Option<Result<(), AppRepoError>>>,
 } // end of trait AbstractMerchantRepo
 
 impl MockMerchantRepo {
-    fn build(create_res: Option<Result<(), AppRepoError>>) -> Box<dyn AbstractMerchantRepo> {
+    fn build(
+        create_res: Option<Result<(), AppRepoError>>,
+        fetch_res: Option<(MerchantProfileModel, Merchant3partyModel)>,
+        update3pt_res: Option<Result<(), AppRepoError>>,
+    ) -> Box<dyn AbstractMerchantRepo> {
         let obj = Self {
             _create_result: Mutex::new(create_res),
+            _fetch_result: Mutex::new(fetch_res),
+            _update3pty_result: Mutex::new(update3pt_res),
         };
         Box::new(obj)
     }
@@ -134,7 +142,25 @@ impl AbstractMerchantRepo for MockMerchantRepo {
         let out = g.take().unwrap();
         out
     }
-}
+    async fn fetch(
+        &self,
+        _store_id: u32,
+        _label3pty: &StoreOnboardReqDto,
+    ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError> {
+        let mut g = self._fetch_result.lock().unwrap();
+        let out = g.take();
+        Ok(out)
+    }
+    async fn update_3party(
+        &self,
+        _store_id: u32,
+        _m3pty: Merchant3partyModel,
+    ) -> Result<(), AppRepoError> {
+        let mut g = self._update3pty_result.lock().unwrap();
+        let out = g.take().unwrap();
+        out
+    }
+} // end of impl MockMerchantRepo
 
 struct MockOrderSyncLockCache {
     _acquire_result: Mutex<Option<Result<bool, OrderSyncLockError>>>,
@@ -271,6 +297,16 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
     async fn onboard_merchant(
         &self,
         _store_profile: StoreProfileReplicaDto,
+        _req_3pt: StoreOnboardReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
+        let mut g = self._onboard_merchant_result.lock().unwrap();
+        let out = g.take().unwrap();
+        out
+    }
+
+    async fn refresh_onboard_status(
+        &self,
+        _m3pty: Merchant3partyModel,
         _req_3pt: StoreOnboardReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
         let mut g = self._onboard_merchant_result.lock().unwrap();
