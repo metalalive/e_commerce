@@ -137,7 +137,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoreOnboardAcceptedRespDto'
+                $ref: '#/components/schemas/StoreOnboardRespDto'
   
   /store/{store-id}/onboard/status:
     patch:
@@ -159,7 +159,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoreOnboardStatusDto'
+                $ref: '#/components/schemas/StoreOnboardRespDto'
 
 
 components:
@@ -411,28 +411,53 @@ components:
         processor:
           $ref: '#/components/schemas/CapturePay3partyRespDto'
 
+    StoreOnboardStripeReqDto:
+      type: object
+      properties:
+        processor:
+          type: string
+          enum: [Stripe]
+        return_url:
+          type: string
+          example: 'https://www.codility.com'
+        refresh_url:
+          type: string
+          example: 'https://codeforces.com'
+      required:
+      - processor
+
     StoreOnboardReqDto:
+      description: |
+          Ideally I should use `discriminator.mapping`, unfortunately I cannot see expected output in swagger editor, after reading this github issue https://github.com/stoplightio/prism/issues/2345, it seems that the feature `discriminator` is no longer supported in future open API spec. Current workaround simply includes 2 different schema components and this type switches between them based on the value in field `processor`
+      oneOf:
+        - $ref: '#/components/schemas/StoreOnboardStripeReqDto'
+
+    StoreOnboardStripeRespDto:
       type: object
       properties:
         processor:
           type: string
           enum: [Stripe]
-
-    StoreOnboardAcceptedRespDto:
-      type: object
-      properties:
-        processor:
+        fields_required:
+          type: array
+          description: fields required in the Stripe-hosted onboarding form
+          items:
+            type: string
+        disabled_reason:
           type: string
-          enum: [Stripe]
+          description: when this optional field is not present, it indicates the stripe account is ready for work
+        url:
+          description: URL for merchant to fill Stripe-hosted form with sensitive data like card number
+          type: string
+          example: 'https://www.stripe.com/account-link/123456'
+      required:
+      - processor
 
+    StoreOnboardRespDto:
+      oneOf:
+        - $ref: '#/components/schemas/StoreOnboardStripeRespDto'
+    
     StoreOnboardStatusReqDto:
-      type: object
-      properties:
-        processor:
-          type: string
-          enum: [Stripe]
-
-    StoreOnboardStatusDto:
       type: object
       properties:
         processor:
