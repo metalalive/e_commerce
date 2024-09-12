@@ -92,7 +92,9 @@ impl MerchantProfileModel {
     pub fn valid_supervisor(&self, usr_id: u32) -> bool {
         self.supervisor_id == usr_id
     }
-
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
     pub fn valid_staff(&self, usr_id: u32) -> bool {
         let mut found = self.supervisor_id == usr_id;
         if !found {

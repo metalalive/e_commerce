@@ -2,21 +2,31 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use mysql_async::prelude::Queryable;
-use mysql_async::{IsolationLevel, Params, TxOpts};
+use mysql_async::prelude::{Query, Queryable, WithParams};
+use mysql_async::{Conn, IsolationLevel, Params, TxOpts};
 
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
 use crate::api::web::dto::StoreOnboardReqDto;
-use crate::model::{Merchant3partyModel, MerchantProfileModel};
+use crate::model::{Merchant3partyModel, Merchant3partyStripeModel, MerchantProfileModel};
 
 use super::super::{AbstractMerchantRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::DATETIME_FMT_P0F;
+use super::{raw_column_to_datetime, DATETIME_FMT_P0F};
 
 struct InsertUpdateProfileArgs(String, Params);
 struct Insert3partyArgs(String, Params);
+struct FetchProfileArgs(String, Params);
+struct Fetch3partyArgs(String, Params, String);
+
+type MercProfRowType = (
+    String,             // `name`
+    u32,                // `supervisor_id`
+    String,             // `staff_ids`
+    mysql_async::Value, // `last_update`
+);
+type Merc3ptyRowType = (Vec<u8>,);
 
 impl From<MerchantProfileModel> for InsertUpdateProfileArgs {
     fn from(value: MerchantProfileModel) -> Self {
@@ -77,6 +87,79 @@ impl TryFrom<(u32, Merchant3partyModel)> for Insert3partyArgs {
     } // end of try-from
 } // end of impl Insert3partyArgs
 
+impl From<u32> for FetchProfileArgs {
+    fn from(value: u32) -> Self {
+        let stmt = "SELECT `name`,`supervisor_id`,`staff_ids`,`last_update` FROM \
+                    `merchant_profile` WHERE `id`=?";
+        let arg = vec![value.into()];
+        let params = Params::Positional(arg);
+        Self(stmt.to_string(), params)
+    }
+}
+
+impl<'a> From<(u32, &'a StoreOnboardReqDto)> for Fetch3partyArgs {
+    fn from(value: (u32, &'a StoreOnboardReqDto)) -> Self {
+        let stmt = "SELECT `detail` FROM `merchant_3party` WHERE `sid`=? AND `method`=?";
+        let (store_id, req3pty) = value;
+        let method = match req3pty {
+            StoreOnboardReqDto::Stripe(_) => "Stripe",
+        };
+        let paymethod = method.to_string();
+        let arg = vec![store_id.into(), method.into()];
+        let params = Params::Positional(arg);
+        Self(stmt.to_string(), params, paymethod)
+    }
+}
+
+impl TryFrom<(u32, MercProfRowType)> for MerchantProfileModel {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    #[rustfmt::skip]
+    fn try_from(value: (u32, MercProfRowType)) -> Result<Self, Self::Error> {
+        let (id, (name, supervisor_id, staff_ids_raw, last_update_raw)) = value;
+        let last_update = raw_column_to_datetime(last_update_raw, 0)?;
+        let mut errors = Vec::new();
+        let staff_ids = staff_ids_raw
+            .split(',')
+            .filter_map(|v| {
+                v.parse::<u32>()
+                    .map_err(|e| {
+                        let msg = format!("invalid-staff-id: {v} : {:?}", e);
+                        errors.push(msg)
+                    })
+                    .ok()
+            })
+            .collect::<Vec<_>>();
+        if errors.is_empty() {
+            Ok(Self { id, name, supervisor_id, staff_ids, last_update })
+        } else {
+            let code = AppErrorCode::DataCorruption;
+            let detail = AppRepoErrorDetail::DataRowParse(errors.remove(0));
+            Err((code, detail))
+        }
+    } // end of fn try-from
+} // end of impl MerchantProfileModel
+
+impl<'a> TryFrom<(&'a StoreOnboardReqDto, Merc3ptyRowType)> for Merchant3partyModel {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (&'a StoreOnboardReqDto, Merc3ptyRowType)) -> Result<Self, Self::Error> {
+        let (label, (detail_raw,)) = value;
+        let out = match label {
+            StoreOnboardReqDto::Stripe(_) => {
+                let s = serde_json::from_slice::<Merchant3partyStripeModel>(&detail_raw).map_err(
+                    |e| {
+                        (
+                            AppErrorCode::DataCorruption,
+                            AppRepoErrorDetail::DataRowParse(e.to_string()),
+                        )
+                    },
+                )?;
+                Self::Stripe(s)
+            }
+        };
+        Ok(out)
+    }
+} // end of impl MerchantProfileModel
+
 pub(crate) struct MariadbMerchantRepo {
     _dstore: Arc<AppDStoreMariaDB>,
 }
@@ -96,6 +179,16 @@ impl MariadbMerchantRepo {
         let e = AppRepoError {
             fn_label: AppRepoErrorFnLabel::CreateMerchant,
             code: AppErrorCode::RemoteDbServerFailure,
+            detail,
+        };
+        let logctx = self._dstore.log_context();
+        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+        e
+    }
+    fn _map_err_fetch(&self, code: AppErrorCode, detail: AppRepoErrorDetail) -> AppRepoError {
+        let e = AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchMerchant,
+            code,
             detail,
         };
         let logctx = self._dstore.log_context();
@@ -161,15 +254,58 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
 
     async fn fetch(
         &self,
-        _store_id: u32,
-        _label3pty: &StoreOnboardReqDto,
+        store_id: u32,
+        label3pty: &StoreOnboardReqDto,
     ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchMerchant,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let q_arg_prof = FetchProfileArgs::from(store_id);
+        let q_arg_3pty = Fetch3partyArgs::from((store_id, label3pty));
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            self._map_err_fetch(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DataStore(e),
+            )
+        })?;
+        let exec = &mut conn;
+
+        let FetchProfileArgs(stmt, params) = q_arg_prof;
+        let maybe_row = stmt
+            .with(params)
+            .first::<MercProfRowType, &mut Conn>(exec)
+            .await
+            .map_err(|e| {
+                self._map_err_fetch(
+                    AppErrorCode::RemoteDbServerFailure,
+                    AppRepoErrorDetail::DatabaseQuery(e.to_string()),
+                )
+            })?;
+
+        if let Some(row_profile) = maybe_row {
+            let Fetch3partyArgs(stmt, params, paymethod) = q_arg_3pty;
+            let row_3pty = stmt
+                .with(params)
+                .first::<Merc3ptyRowType, &mut Conn>(exec)
+                .await
+                .map_err(|e| {
+                    self._map_err_fetch(
+                        AppErrorCode::RemoteDbServerFailure,
+                        AppRepoErrorDetail::DatabaseQuery(e.to_string()),
+                    )
+                })?
+                .ok_or(self._map_err_fetch(
+                    AppErrorCode::DataCorruption,
+                    AppRepoErrorDetail::PayDetail(paymethod, "missing-3party-row".to_string()),
+                ))?;
+            let arg = (store_id, row_profile);
+            let storeprof_m = MerchantProfileModel::try_from(arg)
+                .map_err(|(code, detail)| self._map_err_fetch(code, detail))?;
+            let arg = (label3pty, row_3pty);
+            let store3pty_m = Merchant3partyModel::try_from(arg)
+                .map_err(|(code, detail)| self._map_err_fetch(code, detail))?;
+            Ok(Some((storeprof_m, store3pty_m)))
+        } else {
+            Ok(None)
+        }
+    } // end of fn fetch
 
     async fn update_3party(
         &self,
