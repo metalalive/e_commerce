@@ -17,6 +17,7 @@ use super::{raw_column_to_datetime, DATETIME_FMT_P0F};
 
 struct InsertUpdateProfileArgs(String, Params);
 struct Insert3partyArgs(String, Params);
+struct Update3partyArgs(String, Params);
 struct FetchProfileArgs(String, Params);
 struct Fetch3partyArgs(String, Params, String);
 
@@ -58,12 +59,11 @@ impl From<MerchantProfileModel> for InsertUpdateProfileArgs {
     }
 } // end of impl InsertUpdateProfileArgs
 
-impl TryFrom<(u32, Merchant3partyModel)> for Insert3partyArgs {
+impl TryInto<(String, String)> for Merchant3partyModel {
     type Error = (AppErrorCode, AppRepoErrorDetail);
-    fn try_from(value: (u32, Merchant3partyModel)) -> Result<Self, Self::Error> {
-        let (store_id, m3pty) = value;
-        let (method, detail) = match m3pty {
-            Merchant3partyModel::Stripe(sm) => {
+    fn try_into(self) -> Result<(String, String), Self::Error> {
+        match self {
+            Self::Stripe(sm) => {
                 let label = "Stripe".to_string();
                 let d = serde_json::to_string(&sm).map_err(|e| {
                     (
@@ -71,18 +71,36 @@ impl TryFrom<(u32, Merchant3partyModel)> for Insert3partyArgs {
                         AppRepoErrorDetail::PayDetail(label.clone(), e.to_string()),
                     )
                 })?;
-                (label, d)
+                Ok((label, d))
             }
-            Merchant3partyModel::Unknown => {
-                return Err((
-                    AppErrorCode::InvalidInput,
-                    AppRepoErrorDetail::PayMethodUnsupport("unknown".to_string()),
-                ));
-            }
-        };
+            Self::Unknown => Err((
+                AppErrorCode::InvalidInput,
+                AppRepoErrorDetail::PayMethodUnsupport("unknown".to_string()),
+            )),
+        }
+    }
+} // end of impl Merchant3partyModel
+
+impl TryFrom<(u32, Merchant3partyModel)> for Insert3partyArgs {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (u32, Merchant3partyModel)) -> Result<Self, Self::Error> {
+        let (store_id, m3pty) = value;
+        let (method, detail): (String, String) = m3pty.try_into()?;
         let arg = vec![store_id.into(), method.into(), detail.into()];
         let params = Params::Positional(arg);
         let stmt = "INSERT INTO `merchant_3party`(`sid`,`method`,`detail`) VALUES (?,?,?)";
+        Ok(Self(stmt.to_string(), params))
+    } // end of try-from
+} // end of impl Insert3partyArgs
+
+impl TryFrom<(u32, Merchant3partyModel)> for Update3partyArgs {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (u32, Merchant3partyModel)) -> Result<Self, Self::Error> {
+        let (store_id, m3pty) = value;
+        let (method, detail): (String, String) = m3pty.try_into()?;
+        let arg = vec![detail.into(), store_id.into(), method.into()];
+        let params = Params::Positional(arg);
+        let stmt = "UPDATE `merchant_3party` SET `detail`=? WHERE `sid`=? AND `method`=?";
         Ok(Self(stmt.to_string(), params))
     } // end of try-from
 } // end of impl Insert3partyArgs
@@ -188,6 +206,16 @@ impl MariadbMerchantRepo {
     fn _map_err_fetch(&self, code: AppErrorCode, detail: AppRepoErrorDetail) -> AppRepoError {
         let e = AppRepoError {
             fn_label: AppRepoErrorFnLabel::FetchMerchant,
+            code,
+            detail,
+        };
+        let logctx = self._dstore.log_context();
+        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+        e
+    }
+    fn _map_err_update3pt(&self, code: AppErrorCode, detail: AppRepoErrorDetail) -> AppRepoError {
+        let e = AppRepoError {
+            fn_label: AppRepoErrorFnLabel::UpdateMerchant3party,
             code,
             detail,
         };
@@ -309,13 +337,33 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
 
     async fn update_3party(
         &self,
-        _store_id: u32,
-        _m3pty: Merchant3partyModel,
+        store_id: u32,
+        m3pty: Merchant3partyModel,
     ) -> Result<(), AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::UpdateMerchant3party,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let q_arg_3pty = Update3partyArgs::try_from((store_id, m3pty))
+            .map_err(|(code, detail)| self._map_err_update3pt(code, detail))?;
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            self._map_err_fetch(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DataStore(e),
+            )
+        })?;
+
+        let Update3partyArgs(stmt, params) = q_arg_3pty;
+        let resultset = conn.exec_iter(stmt, params).await.map_err(|e| {
+            let code = AppErrorCode::RemoteDbServerFailure;
+            let detail = AppRepoErrorDetail::DatabaseExec(e.to_string());
+            self._map_err_update3pt(code, detail)
+        })?;
+
+        if resultset.affected_rows() == 1u64 {
+            Ok(())
+        } else {
+            let msg = format!("num-rows-affected: {}", resultset.affected_rows());
+            let detail = AppRepoErrorDetail::DatabaseExec(msg);
+            let code = AppErrorCode::RemoteDbServerFailure;
+            let e = self._map_err_update3pt(code, detail);
+            Err(e)
+        }
+    } // end of fn update_3party
 } // end of impl MariadbMerchantRepo
