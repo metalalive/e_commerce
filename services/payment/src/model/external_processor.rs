@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::CountryCode;
@@ -28,6 +28,11 @@ pub struct Charge3partyStripeModel {
     pub expiry: DateTime<Utc>,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct StripeAccountLinkModel {
+    pub url: String,
+    pub expiry: DateTime<Utc>,
+}
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize)]
 pub enum StripeAccountCapableState {
@@ -51,7 +56,7 @@ pub struct Merchant3partyStripeModel {
     // TODO, limit field visibility to crate level
     pub id: String,
     pub country: CountryCode,
-    pub email: String,
+    pub email: Option<String>,
     pub capabilities: StripeAccountCapabilityModel,
     pub tos_accepted: Option<DateTime<Utc>>,
     pub charges_enabled: bool,
@@ -59,6 +64,7 @@ pub struct Merchant3partyStripeModel {
     pub details_submitted: bool,
     pub created: DateTime<Utc>,
     pub settings: StripeAccountSettingModel,
+    pub update_link: Option<StripeAccountLinkModel>,
 }
 
 impl StripeCheckoutPaymentStatusModel {
@@ -105,5 +111,12 @@ impl Charge3partyStripeModel {
         } else {
             None
         }
+    }
+}
+
+impl Merchant3partyStripeModel {
+    pub(crate) fn renew_link_required(&self) -> bool {
+        let t_now = Local::now().to_utc();
+        self.update_link.as_ref().map_or(true, |v| v.expiry < t_now)
     }
 }

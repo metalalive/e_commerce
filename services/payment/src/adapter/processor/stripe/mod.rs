@@ -34,12 +34,16 @@ use crate::api::web::dto::{
 };
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerModel,
-    Merchant3partyModel, Merchant3partyStripeModel, StripeAccountSettingModel,
+    Merchant3partyModel, Merchant3partyStripeModel, StripeAccountLinkModel,
+    StripeAccountSettingModel,
 };
 
 const HEADER_NAME_IDEMPOTENCY: &str = "Idempotency-Key";
 const CHECKOUT_SESSION_MIN_SECONDS: i64 = 1800;
 const ACCOUNT_LINK_EXPIRY_MIN_DAYS: i64 = 2;
+
+#[derive(serde::Serialize)]
+struct InnerEmptyBody;
 
 #[async_trait]
 pub(super) trait AbstStripeContext: Send + Sync {
@@ -58,6 +62,12 @@ pub(super) trait AbstStripeContext: Send + Sync {
         &self,
         store_profile: StoreProfileReplicaDto,
         req: StoreOnboardStripeReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason>;
+
+    async fn refresh_onboard_status(
+        &self,
+        m3pty: Merchant3partyStripeModel,
+        req3pt: StoreOnboardStripeReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason>;
 }
 
@@ -272,7 +282,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
                 Vec::new(),
             )
             .await
-            .map_err(|e| self.map_log_err("acct", e))?;
+            .map_err(|e| self.map_log_err("acct-create", e))?;
 
         let body_obj = CreateAccountLink::from((req, acct.id.as_str()));
         let acc_link = _client
@@ -283,10 +293,59 @@ impl AbstStripeContext for AppProcessorStripeCtx {
                 Vec::new(),
             )
             .await
-            .map_err(|e| self.map_log_err("acct-link", e))?;
+            .map_err(|e| self.map_log_err("acct-link-create", e))?;
 
         AppProcessorMerchantResult::try_from((acct, acc_link))
     } // end of fn onboard_merchant
+
+    async fn refresh_onboard_status(
+        &self,
+        old_m3pty: Merchant3partyStripeModel,
+        req: StoreOnboardStripeReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason> {
+        let mut _client = AppStripeClient::<Full<Bytes>>::try_build(
+            self.logctx.clone(),
+            &self.secure_connector,
+            self.host.clone(),
+            self.port,
+            self.api_key.clone(),
+        )
+        .await
+        .map_err(AppProcessorErrorReason::from)?;
+
+        let resource_path = format!("/accounts/{}", old_m3pty.id);
+        let updated_acct = _client
+            .execute_form::<ConnectAccount, InnerEmptyBody>(
+                resource_path.as_str(),
+                Method::GET,
+                &InnerEmptyBody,
+                Vec::new(),
+            )
+            .await
+            .map_err(|e| self.map_log_err("acct-read", e))?;
+
+        if updated_acct.onboarding_complete() {
+            AppProcessorMerchantResult::try_from((updated_acct, None))
+        } else {
+            if old_m3pty.renew_link_required() {
+                let body_obj = CreateAccountLink::from((req, old_m3pty.id.as_str()));
+                let acc_link = _client
+                    .execute_form::<AccountLink, CreateAccountLink>(
+                        "/account_links",
+                        Method::POST,
+                        &body_obj,
+                        Vec::new(),
+                    )
+                    .await
+                    .map_err(|e| self.map_log_err("acct-link-renew", e))?;
+                let arg = (updated_acct, acc_link);
+                AppProcessorMerchantResult::try_from(arg)
+            } else {
+                let arg = (updated_acct, old_m3pty.update_link);
+                AppProcessorMerchantResult::try_from(arg)
+            }
+        }
+    } // end of fn refresh_onboard_status
 } // end of impl AppProcessorStripeCtx
 
 impl From<(CheckoutSession, DateTime<Utc>)> for Charge3partyStripeModel {
@@ -302,16 +361,29 @@ impl From<(CheckoutSession, DateTime<Utc>)> for Charge3partyStripeModel {
     }
 }
 
-impl<'a> From<(&'a AccountRequirement, AccountLink)> for StoreOnboardRespDto {
-    fn from(value: (&'a AccountRequirement, AccountLink)) -> Self {
-        let (r, alink) = value;
-        let expiry = DateTime::from_timestamp(alink.expires_at, 0)
+impl From<AccountLink> for StripeAccountLinkModel {
+    fn from(value: AccountLink) -> Self {
+        let expiry = DateTime::from_timestamp(value.expires_at, 0)
             .unwrap_or(Local::now().to_utc() + Duration::days(ACCOUNT_LINK_EXPIRY_MIN_DAYS));
+        Self {
+            url: value.url,
+            expiry,
+        }
+    }
+}
+
+impl<'a, 'b> From<(&'a AccountRequirement, Option<&'b StripeAccountLinkModel>)>
+    for StoreOnboardRespDto
+{
+    fn from(value: (&'a AccountRequirement, Option<&'b StripeAccountLinkModel>)) -> Self {
+        let (r, alink) = value;
+        let url = alink.map(|v| v.url.clone());
+        let expiry = alink.map(|v| v.expiry);
         Self::Stripe {
             fields_required: r.currently_due.clone(),
             disabled_reason: r.disabled_reason.clone(),
-            url: Some(alink.url),
-            expiry: Some(expiry),
+            url,
+            expiry,
         }
     }
 }
@@ -326,16 +398,17 @@ impl From<AccountSettings> for StripeAccountSettingModel {
         }
     }
 }
-impl TryFrom<ConnectAccount> for Merchant3partyStripeModel {
+impl TryFrom<(ConnectAccount, Option<StripeAccountLinkModel>)> for Merchant3partyStripeModel {
     type Error = AppProcessorErrorReason;
     #[rustfmt::skip]
-    fn try_from(value: ConnectAccount) -> Result<Self, Self::Error> {
+    fn try_from(value: (ConnectAccount, Option<StripeAccountLinkModel>)) -> Result<Self, Self::Error> {
+        let (acct3pty, update_link) = value;
         let ConnectAccount {
             id, country, email, capabilities,
             tos_acceptance, charges_enabled, payouts_enabled,
             details_submitted, created: created_ts, settings,
             requirements: _, type_: _,
-        } = value;
+        } = acct3pty;
         let created = DateTime::from_timestamp(created_ts, 0)
             .ok_or(AppProcessorErrorReason::CorruptedTimeStamp(
                 "stripe.account.created".to_string(), created_ts,
@@ -351,25 +424,40 @@ impl TryFrom<ConnectAccount> for Merchant3partyStripeModel {
         };
         let settings = StripeAccountSettingModel::from(settings);
         let out = Self {
-            id, country, email, capabilities, tos_accepted, settings,
+            id, country, email, capabilities, tos_accepted, settings, update_link,
             charges_enabled, payouts_enabled, details_submitted, created,
         };
         Ok(out)
     } // end of fn try-from
 } // end of impl Merchant3partyStripeModel
-impl TryFrom<ConnectAccount> for Merchant3partyModel {
+
+impl TryFrom<(ConnectAccount, Option<StripeAccountLinkModel>)> for Merchant3partyModel {
     type Error = AppProcessorErrorReason;
-    fn try_from(value: ConnectAccount) -> Result<Self, Self::Error> {
+    fn try_from(
+        value: (ConnectAccount, Option<StripeAccountLinkModel>),
+    ) -> Result<Self, Self::Error> {
         let m = Merchant3partyStripeModel::try_from(value)?;
         Ok(Self::Stripe(m))
     }
 }
+
+impl TryFrom<(ConnectAccount, Option<StripeAccountLinkModel>)> for AppProcessorMerchantResult {
+    type Error = AppProcessorErrorReason;
+    fn try_from(
+        value: (ConnectAccount, Option<StripeAccountLinkModel>),
+    ) -> Result<Self, Self::Error> {
+        let (acct, link_m) = value;
+        let d = StoreOnboardRespDto::from((&acct.requirements, link_m.as_ref()));
+        let m = Merchant3partyModel::try_from((acct, link_m))?;
+        Ok(Self { dto: d, model: m })
+    }
+}
+
 impl TryFrom<(ConnectAccount, AccountLink)> for AppProcessorMerchantResult {
     type Error = AppProcessorErrorReason;
     fn try_from(value: (ConnectAccount, AccountLink)) -> Result<Self, Self::Error> {
         let (acct, alink) = value;
-        let d = StoreOnboardRespDto::from((&acct.requirements, alink));
-        let m = Merchant3partyModel::try_from(acct)?;
-        Ok(Self { dto: d, model: m })
+        let link_m = Some(StripeAccountLinkModel::from(alink));
+        Self::try_from((acct, link_m))
     }
 }

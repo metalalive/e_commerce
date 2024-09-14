@@ -9,8 +9,8 @@ use ecommerce_common::api::rpc::dto::{ShopLocationRepDto, StoreProfileReplicaDto
 use super::AppProcessorErrorReason;
 use crate::api::web::dto::{StoreOnboardStripeReqDto, StripeCheckoutUImodeDto};
 use crate::model::{
-    ChargeLineBuyerModel, StripeAccountCapabilityModel, StripeCheckoutPaymentStatusModel,
-    StripeSessionStatusModel,
+    ChargeLineBuyerModel, StripeAccountCapabilityModel, StripeAccountCapableState,
+    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 #[derive(Deserialize)]
@@ -108,7 +108,7 @@ pub(super) struct ConnectAccount {
     #[serde(rename = "type")]
     pub type_: ConnectAccountType,
     pub country: CountryCode,
-    pub email: String,
+    pub email: Option<String>,
     pub capabilities: StripeAccountCapabilityModel,
     pub requirements: AccountRequirement,
     pub tos_acceptance: AccountToSAccept,
@@ -392,6 +392,22 @@ impl TryFrom<StoreProfileReplicaDto> for CreateConnectAccount {
         }
     } // end of fn try-from
 } // end of impl CreateConnectAccount
+
+impl ConnectAccount {
+    pub(super) fn onboarding_complete(&self) -> bool {
+        // in this payment service , Stripe account is applied only for
+        // representing merchants / shop owners, I only consider whether
+        // payout is enabled at here.
+        let tx_active = matches!(
+            self.capabilities.transfers,
+            StripeAccountCapableState::active
+        );
+        self.details_submitted
+            && self.payouts_enabled
+            && self.tos_acceptance.date.is_some()
+            && tx_active
+    }
+}
 
 impl Default for AccountLinkType {
     fn default() -> Self {

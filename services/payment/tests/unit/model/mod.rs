@@ -14,7 +14,8 @@ use payment::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
     ChargeBuyerModel, ChargeLineBuyerModel, Merchant3partyStripeModel, OrderCurrencySnapshot,
     PayLineAmountModel, StripeAccountCapabilityModel, StripeAccountCapableState,
-    StripeAccountSettingModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    StripeAccountLinkModel, StripeAccountSettingModel, StripeCheckoutPaymentStatusModel,
+    StripeSessionStatusModel,
 };
 
 pub(crate) fn ut_default_currency_snapshot(
@@ -102,10 +103,14 @@ pub(super) fn ut_default_merchant_3party_stripe() -> Merchant3partyStripeModel {
         payout_interval: "daily".to_string(),
         debit_negative_balances: false,
     };
+    let update_link = Some(StripeAccountLinkModel {
+        url: "https://docs.python.org/3/library".to_string(),
+        expiry: t_now - Duration::minutes(3),
+    });
     Merchant3partyStripeModel {
         id: "acct_1oi3gwtiy832yt".to_string(),
         country: CountryCode::ID,
-        email: "hayley@wo0dberry.org".to_string(),
+        email: Some("hayley@wo0dberry.org".to_string()),
         capabilities,
         tos_accepted: Some(t_now),
         charges_enabled: false,
@@ -113,5 +118,6 @@ pub(super) fn ut_default_merchant_3party_stripe() -> Merchant3partyStripeModel {
         details_submitted: false,
         created: t_now,
         settings,
+        update_link,
     }
 }

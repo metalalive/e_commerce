@@ -254,11 +254,20 @@ impl AbstractPaymentProcessor for AppProcessorContext {
 
     async fn refresh_onboard_status(
         &self,
-        _m3pty: Merchant3partyModel,
-        _req_3pt: StoreOnboardReqDto,
+        m3pty: Merchant3partyModel,
+        req_3pt: StoreOnboardReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
-        Err(AppProcessorError {
-            reason: AppProcessorErrorReason::NotImplemented,
+        let result = match (m3pty, req_3pt) {
+            (Merchant3partyModel::Stripe(ms), StoreOnboardReqDto::Stripe(ds)) => {
+                self._stripe.refresh_onboard_status(ms, ds).await
+            }
+            _others => {
+                let msg = "given-model-dto-mismatch".to_string();
+                Err(AppProcessorErrorReason::InvalidMethod(msg))
+            }
+        };
+        result.map_err(|reason| AppProcessorError {
+            reason,
             fn_label: AppProcessorFnLabel::RefreshOnboardStatus,
         })
     }

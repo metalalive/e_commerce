@@ -1,4 +1,8 @@
+use std::fs::File;
+
 use chrono::Local;
+use payment::AppSharedState;
+use serde_json::Value as JsnVal;
 
 use ecommerce_common::api::dto::CountryCode;
 use payment::adapter::processor::AppProcessorErrorReason;
@@ -6,7 +10,8 @@ use payment::api::web::dto::StoreOnboardRespDto;
 use payment::model::{Merchant3partyModel, StripeAccountCapableState};
 
 use crate::dto::{ut_default_store_onboard_req_stripe, ut_setup_storeprofile_dto};
-use crate::ut_setup_sharestate;
+use crate::model::ut_default_merchant_3party_stripe;
+use crate::{ut_setup_sharestate, EXAMPLE_REL_PATH};
 
 #[actix_web::test]
 async fn create_merchant_account_ok() {
@@ -41,6 +46,8 @@ async fn create_merchant_account_ok() {
             );
             assert!(cond);
             assert_eq!(s.settings.payout_interval.as_str(), "daily");
+            let link_m = s.update_link.as_ref().unwrap();
+            assert!(!link_m.url.is_empty());
         } else {
             assert!(false);
         }
@@ -94,3 +101,103 @@ async fn create_merchant_profile_error() {
         }
     }
 } // end of create_merchant_profile_error
+
+#[rustfmt::skip]
+fn ut_setup_merchant_3party_model(shr_state: AppSharedState, label: &str) -> Merchant3partyModel {
+    let acfg = shr_state.config();
+    let path =
+        acfg.basepath.service.clone() + EXAMPLE_REL_PATH + "processor-stripe-account-ids.json";
+    let f = File::open(path).unwrap();
+    let account_ids = serde_json::from_reader::<File, JsnVal>(f).unwrap();
+    let chosen_account = account_ids
+        .as_object()
+        .unwrap()
+        .get(label)
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let mut m = ut_default_merchant_3party_stripe();
+    m.id = chosen_account.to_string();
+    Merchant3partyModel::Stripe(m)
+}
+
+#[actix_web::test]
+async fn refresh_merchant_status_complete() {
+    let shr_state = ut_setup_sharestate();
+    let proc_ctx = shr_state.processor_context();
+    let mock_old_m3pty = ut_setup_merchant_3party_model(shr_state.clone(), "onboard_complete");
+    let mock_req_3pt = ut_default_store_onboard_req_stripe();
+    let result = proc_ctx
+        .refresh_onboard_status(mock_old_m3pty, mock_req_3pt)
+        .await;
+    assert!(result.is_ok());
+    if let Ok(v) = result {
+        let (d_3pt, m_3pt) = v.into_parts();
+        if let StoreOnboardRespDto::Stripe {
+            fields_required,
+            disabled_reason,
+            url,
+            expiry,
+        } = d_3pt
+        {
+            assert!(fields_required.is_empty());
+            assert!(disabled_reason.is_none());
+            assert!(url.is_none());
+            assert!(expiry.is_none());
+        } else {
+            assert!(false);
+        }
+        if let Merchant3partyModel::Stripe(v) = m_3pt {
+            assert!(v.details_submitted);
+            assert!(v.payouts_enabled);
+            assert!(v.tos_accepted.is_some());
+            assert!(v.update_link.is_none());
+            let cond = matches!(v.capabilities.transfers, StripeAccountCapableState::active);
+            assert!(cond);
+        } else {
+            assert!(false);
+        }
+    }
+} // end of refresh_merchant_status_complete
+
+#[actix_web::test]
+async fn refresh_merchant_status_renew_acctlink() {
+    let shr_state = ut_setup_sharestate();
+    let proc_ctx = shr_state.processor_context();
+    let mock_old_m3pty = ut_setup_merchant_3party_model(shr_state.clone(), "onboarding");
+    let mock_req_3pt = ut_default_store_onboard_req_stripe();
+    let result = proc_ctx
+        .refresh_onboard_status(mock_old_m3pty, mock_req_3pt)
+        .await;
+    assert!(result.is_ok());
+    if let Ok(v) = result {
+        let (d_3pt, m_3pt) = v.into_parts();
+        if let StoreOnboardRespDto::Stripe {
+            fields_required,
+            disabled_reason,
+            url,
+            expiry,
+        } = d_3pt
+        {
+            assert!(!fields_required.is_empty());
+            assert!(disabled_reason.is_some());
+            assert!(url.is_some());
+            assert!(expiry.is_some());
+        } else {
+            assert!(false);
+        }
+        if let Merchant3partyModel::Stripe(v) = m_3pt {
+            assert!(!v.details_submitted);
+            assert!(!v.payouts_enabled);
+            assert!(v.tos_accepted.is_none());
+            assert!(v.update_link.is_some());
+            let cond = matches!(
+                v.capabilities.transfers,
+                StripeAccountCapableState::inactive
+            );
+            assert!(cond);
+        } else {
+            assert!(false);
+        }
+    }
+} // end of refresh_merchant_status_renew_acctlink

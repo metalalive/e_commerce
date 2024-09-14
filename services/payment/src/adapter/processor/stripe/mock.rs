@@ -14,8 +14,8 @@ use crate::api::web::dto::{
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerModel,
     Merchant3partyModel, Merchant3partyStripeModel, StripeAccountCapabilityModel,
-    StripeAccountCapableState, StripeAccountSettingModel, StripeCheckoutPaymentStatusModel,
-    StripeSessionStatusModel,
+    StripeAccountCapableState, StripeAccountLinkModel, StripeAccountSettingModel,
+    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 use super::super::{AppProcessorErrorReason, AppProcessorMerchantResult, AppProcessorPayInResult};
@@ -102,10 +102,14 @@ impl AbstStripeContext for MockProcessorStripeCtx {
             payout_interval: "daily".to_string(),
             debit_negative_balances: false,
         };
+        let update_link = Some(StripeAccountLinkModel {
+            url: "https://docs.rs/async-stripe".to_string(),
+            expiry: t_exp,
+        });
         let s = Merchant3partyStripeModel {
             id: "acct_1oij3gwtiy832y".to_string(),
             country: CountryCode::IN,
-            email: "hayley@wo0dberry.org".to_string(),
+            email: Some("hayley@wo0dberry.org".to_string()),
             capabilities,
             tos_accepted: Some(t_now),
             charges_enabled: false,
@@ -113,9 +117,18 @@ impl AbstStripeContext for MockProcessorStripeCtx {
             details_submitted: false,
             created: t_now,
             settings,
+            update_link,
         };
         let m = Merchant3partyModel::Stripe(s);
         let out = AppProcessorMerchantResult { dto: d, model: m };
         Ok(out)
+    }
+
+    async fn refresh_onboard_status(
+        &self,
+        _m3pty: Merchant3partyStripeModel,
+        _req3pt: StoreOnboardStripeReqDto,
+    ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason> {
+        Err(AppProcessorErrorReason::NotImplemented)
     }
 } // end of impl MockProcessorStripeCtx

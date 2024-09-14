@@ -14,8 +14,8 @@ pub use self::charge::{
 };
 pub use self::external_processor::{
     Charge3partyStripeModel, Merchant3partyStripeModel, StripeAccountCapabilityModel,
-    StripeAccountCapableState, StripeAccountSettingModel, StripeCheckoutPaymentStatusModel,
-    StripeSessionStatusModel,
+    StripeAccountCapableState, StripeAccountLinkModel, StripeAccountSettingModel,
+    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 pub use self::merchant::{Merchant3partyModel, MerchantModelError, MerchantProfileModel};
 pub use self::order_replica::{
