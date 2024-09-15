@@ -111,7 +111,7 @@ impl AbstStripeContext for MockProcessorStripeCtx {
             country: CountryCode::IN,
             email: Some("hayley@wo0dberry.org".to_string()),
             capabilities,
-            tos_accepted: Some(t_now),
+            tos_accepted: None,
             charges_enabled: false,
             payouts_enabled: false,
             details_submitted: false,
@@ -126,9 +126,24 @@ impl AbstStripeContext for MockProcessorStripeCtx {
 
     async fn refresh_onboard_status(
         &self,
-        _m3pty: Merchant3partyStripeModel,
+        mut old_m3pty: Merchant3partyStripeModel,
         _req3pt: StoreOnboardStripeReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason> {
-        Err(AppProcessorErrorReason::NotImplemented)
+        // assume the onboarding process has completed
+        let t_now = Local::now().to_utc();
+        let d = StoreOnboardRespDto::Stripe {
+            fields_required: Vec::new(),
+            disabled_reason: None,
+            url: None,
+            expiry: None,
+        };
+        old_m3pty.payouts_enabled = true;
+        old_m3pty.details_submitted = true;
+        old_m3pty.tos_accepted = Some(t_now);
+        old_m3pty.capabilities.transfers = StripeAccountCapableState::active;
+        old_m3pty.update_link = None;
+        let m = Merchant3partyModel::Stripe(old_m3pty);
+        let out = AppProcessorMerchantResult { dto: d, model: m };
+        Ok(out)
     }
 } // end of impl MockProcessorStripeCtx

@@ -136,17 +136,21 @@ impl TryFrom<(u32, MercProfRowType)> for MerchantProfileModel {
         let (id, (name, supervisor_id, staff_ids_raw, last_update_raw)) = value;
         let last_update = raw_column_to_datetime(last_update_raw, 0)?;
         let mut errors = Vec::new();
-        let staff_ids = staff_ids_raw
-            .split(',')
-            .filter_map(|v| {
-                v.parse::<u32>()
-                    .map_err(|e| {
-                        let msg = format!("invalid-staff-id: {v} : {:?}", e);
-                        errors.push(msg)
-                    })
-                    .ok()
-            })
-            .collect::<Vec<_>>();
+        let staff_ids = if staff_ids_raw.is_empty() {
+            Vec::new()
+        } else {
+            staff_ids_raw
+                .split(',')
+                .filter_map(|v| {
+                    v.parse::<u32>()
+                        .map_err(|e| {
+                            let msg = format!("invalid-staff-id: {v} : {:?}", e);
+                            errors.push(msg);
+                        })
+                        .ok()
+                })
+                .collect::<Vec<_>>()
+        };
         if errors.is_empty() {
             Ok(Self { id, name, supervisor_id, staff_ids, last_update })
         } else {
@@ -319,10 +323,11 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
                         AppRepoErrorDetail::DatabaseQuery(e.to_string()),
                     )
                 })?
-                .ok_or(self._map_err_fetch(
-                    AppErrorCode::DataCorruption,
-                    AppRepoErrorDetail::PayDetail(paymethod, "missing-3party-row".to_string()),
-                ))?;
+                .ok_or(AppRepoErrorDetail::PayDetail(
+                    paymethod,
+                    format!("missing-3party-row:{store_id}"),
+                ))
+                .map_err(|detail| self._map_err_fetch(AppErrorCode::DataCorruption, detail))?;
             let arg = (store_id, row_profile);
             let storeprof_m = MerchantProfileModel::try_from(arg)
                 .map_err(|(code, detail)| self._map_err_fetch(code, detail))?;

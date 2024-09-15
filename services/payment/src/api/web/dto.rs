@@ -186,6 +186,14 @@ pub struct CapturePayRespDto {
 impl StoreOnboardRespDto {
     /// indicate whether onboarding operation is complete in 3rd party
     pub(super) fn is_complete(&self) -> bool {
-        false // for `Stripe` and `Unknown`
+        match self {
+            Self::Stripe {
+                fields_required: _,
+                disabled_reason,
+                url,
+                expiry: _,
+            } => disabled_reason.is_none() && url.is_none(),
+            Self::Unknown => false,
+        }
     }
 }
