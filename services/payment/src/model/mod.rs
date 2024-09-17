@@ -2,11 +2,14 @@ mod charge;
 mod external_processor;
 mod merchant;
 mod order_replica;
+mod payout;
 
 use rust_decimal::Decimal;
 use std::str::FromStr;
 
 use ecommerce_common::api::dto::{CurrencyDto, PayAmountDto};
+
+use crate::api::web::dto::StoreOnboardReqDto;
 
 pub use self::charge::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
@@ -21,6 +24,7 @@ pub use self::merchant::{Merchant3partyModel, MerchantModelError, MerchantProfil
 pub use self::order_replica::{
     OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
 };
+pub use self::payout::{PayoutModel, PayoutModelError};
 
 #[derive(Debug)]
 pub enum PayLineAmountError {
@@ -42,6 +46,11 @@ pub struct PayLineAmountModel {
     pub unit: Decimal,
     pub total: Decimal,
     pub qty: u32,
+}
+
+#[derive(Copy, Clone)]
+pub enum Label3party {
+    Stripe,
 }
 
 impl TryFrom<(u32, PayAmountDto, CurrencyDto)> for PayLineAmountModel {
@@ -90,3 +99,21 @@ impl PayLineAmountModel {
         Ok(tot_actual == self.total)
     }
 } // end of impl TryFrom for PayLineAmountModel
+
+impl<'a> From<&'a StoreOnboardReqDto> for Label3party {
+    fn from(value: &'a StoreOnboardReqDto) -> Self {
+        match value {
+            StoreOnboardReqDto::Stripe(_) => Self::Stripe,
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a Charge3partyModel> for Label3party {
+    type Error = String;
+    fn try_from(value: &'a Charge3partyModel) -> Result<Self, Self::Error> {
+        match value {
+            Charge3partyModel::Stripe(_) => Ok(Self::Stripe),
+            Charge3partyModel::Unknown => Err("unknown".to_string()),
+        }
+    }
+}

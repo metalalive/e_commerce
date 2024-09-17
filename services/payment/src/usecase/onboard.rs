@@ -12,7 +12,7 @@ use crate::adapter::repository::{AbstractMerchantRepo, AppRepoError};
 use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxError};
 use crate::api::web::dto::{StoreOnboardReqDto, StoreOnboardRespDto};
 use crate::auth::AppAuthedClaim;
-use crate::model::{MerchantModelError, MerchantProfileModel};
+use crate::model::{Label3party, MerchantModelError, MerchantProfileModel};
 
 pub enum OnboardStoreUcError {
     RpcStoreReplica(AppRpcCtxError),
@@ -116,7 +116,8 @@ impl RefreshOnboardStatusUseCase {
         req_body: StoreOnboardReqDto,
     ) -> Result<StoreOnboardRespDto, OnboardStoreUcError> {
         let auth_usr_id = self.auth_claim.profile;
-        let (storeprof_m, store3pty_m) = self.repo.fetch(store_id, &req_body).await?.ok_or(
+        let label3pt = Label3party::from(&req_body);
+        let (storeprof_m, store3pty_m) = self.repo.fetch(store_id, label3pt).await?.ok_or(
             OnboardStoreUcError::InvalidStoreProfile(MerchantModelError::NotExist),
         )?;
         if !storeprof_m.valid_supervisor(auth_usr_id) {

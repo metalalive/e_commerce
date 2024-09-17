@@ -9,10 +9,9 @@ use chrono::{DateTime, Utc};
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
-use crate::api::web::dto::StoreOnboardReqDto;
 use crate::model::{
-    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet,
+    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, Label3party,
+    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, PayoutModel,
 };
 
 use self::mariadb::charge::MariadbChargeRepo;
@@ -26,9 +25,12 @@ pub enum AppRepoErrorFnLabel {
     CreateOrder,
     CreateCharge,
     CreateMerchant,
+    CreatePayout,
     FetchChargeMeta,
     FetchChargeLines,
     FetchMerchant,
+    FetchChargeByMerchant,
+    FetchPayout,
     UpdateChargeProgress,
     UpdateMerchant3party,
     InitMerchantRepo,
@@ -89,6 +91,24 @@ pub trait AbstractChargeRepo: Sync + Send {
     ) -> Result<Vec<ChargeLineBuyerModel>, AppRepoError>;
 
     async fn update_charge_progress(&self, meta: ChargeBuyerMetaModel) -> Result<(), AppRepoError>;
+
+    async fn fetch_charge_by_merchant(
+        &self,
+        buyer_id: u32,
+        create_time: DateTime<Utc>,
+        store_id: u32,
+    ) -> Result<Option<ChargeBuyerModel>, AppRepoError>;
+
+    /// the method `fetch_payout()` returns payout summary of a specific payment made by client
+    /// , which includes total amount that has been transferred to merchant's bank account.
+    async fn fetch_payout(
+        &self,
+        store_id: u32,
+        buyer_id: u32,
+        create_time: DateTime<Utc>,
+    ) -> Result<Option<PayoutModel>, AppRepoError>;
+
+    async fn create_payout(&self, payout_m: PayoutModel) -> Result<(), AppRepoError>;
 } // end of trait AbstractChargeRepo
 
 #[async_trait]
@@ -102,7 +122,7 @@ pub trait AbstractMerchantRepo: Sync + Send {
     async fn fetch(
         &self,
         store_id: u32,
-        label3pty: &StoreOnboardReqDto,
+        label3pty: Label3party,
     ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError>;
 
     async fn update_3party(

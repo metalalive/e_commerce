@@ -6,13 +6,14 @@ use chrono::{DateTime, Local, Utc};
 
 use ecommerce_common::api::rpc::dto::OrderPaymentUpdateErrorDto;
 use ecommerce_common::error::AppErrorCode;
-use ecommerce_common::util::hex_to_octet;
 
 use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::adapter::repository::{AbstractChargeRepo, AppRepoError};
 use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxError};
 use crate::api::web::dto::ChargeRefreshRespDto;
-use crate::model::{BuyerPayInState, ChargeBuyerMetaModel, ChargeToken};
+use crate::model::{BuyerPayInState, ChargeBuyerMetaModel};
+
+use super::try_parse_charge_id;
 
 pub enum ChargeRefreshUcError {
     OwnerMismatch,
@@ -37,9 +38,8 @@ impl ChargeStatusRefreshUseCase {
         auth_usr_id: u32,
         charge_id_serial: String,
     ) -> Result<ChargeRefreshRespDto, ChargeRefreshUcError> {
-        let (owner_id, create_time) = self
-            .try_parse_charge_id(charge_id_serial.as_str())
-            .map_err(|(ecode, detail)| ChargeRefreshUcError::ChargeIdDecode(ecode, detail))?;
+        let (owner_id, create_time) = try_parse_charge_id(charge_id_serial.as_str())
+            .map_err(|(code, detail)| ChargeRefreshUcError::ChargeIdDecode(code, detail))?;
         if owner_id != auth_usr_id {
             return Err(ChargeRefreshUcError::OwnerMismatch);
         }
@@ -72,16 +72,6 @@ impl ChargeStatusRefreshUseCase {
         result_rpc?;
         Ok(resp)
     } // end of fn execute()
-
-    fn try_parse_charge_id(
-        &self,
-        id_serial: &str,
-    ) -> Result<(u32, DateTime<Utc>), (AppErrorCode, String)> {
-        let id_octets = hex_to_octet(id_serial)?;
-        let token = ChargeToken::try_from(id_octets)?;
-        let (owner_id, ctime) = token.try_into()?;
-        Ok((owner_id, ctime))
-    }
 
     async fn refresh_3pty_processor(
         &self,

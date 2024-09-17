@@ -16,7 +16,7 @@ use ecommerce_common::model::order::BillingModel;
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
 use crate::model::{
     ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot,
-    OrderLineModel, OrderLineModelSet,
+    OrderLineModel, OrderLineModelSet, PayoutModel,
 };
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
@@ -349,4 +349,38 @@ impl AbstractChargeRepo for MariadbChargeRepo {
             Err(self._map_err_update_charge_progress(code, detail))
         }
     } // end of fn update_charge_progress
+
+    async fn fetch_charge_by_merchant(
+        &self,
+        _buyer_id: u32,
+        _create_time: DateTime<Utc>,
+        _store_id: u32,
+    ) -> Result<Option<ChargeBuyerModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchChargeByMerchant,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
+    async fn fetch_payout(
+        &self,
+        _store_id: u32,
+        _buyer_id: u32,
+        _create_time: DateTime<Utc>,
+    ) -> Result<Option<PayoutModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchPayout,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
+    async fn create_payout(&self, _payout_m: PayoutModel) -> Result<(), AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::CreatePayout,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
 } // end of impl MariadbChargeRepo

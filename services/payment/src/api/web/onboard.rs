@@ -18,7 +18,7 @@ use crate::AppSharedState;
 use super::dto::{StoreOnboardReqDto, StoreOnboardRespDto};
 use super::RepoInitFailure;
 
-async fn try_creating_merchant_repo(
+pub(super) async fn try_creating_merchant_repo(
     dstore: Arc<AppDataStoreContext>,
     logctx: Arc<AppLogContext>,
 ) -> ActixResult<Box<dyn AbstractMerchantRepo>> {

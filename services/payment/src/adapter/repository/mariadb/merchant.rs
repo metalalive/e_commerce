@@ -9,8 +9,9 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
-use crate::api::web::dto::StoreOnboardReqDto;
-use crate::model::{Merchant3partyModel, Merchant3partyStripeModel, MerchantProfileModel};
+use crate::model::{
+    Label3party, Merchant3partyModel, Merchant3partyStripeModel, MerchantProfileModel,
+};
 
 use super::super::{AbstractMerchantRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use super::{raw_column_to_datetime, DATETIME_FMT_P0F};
@@ -115,12 +116,12 @@ impl From<u32> for FetchProfileArgs {
     }
 }
 
-impl<'a> From<(u32, &'a StoreOnboardReqDto)> for Fetch3partyArgs {
-    fn from(value: (u32, &'a StoreOnboardReqDto)) -> Self {
+impl From<(u32, Label3party)> for Fetch3partyArgs {
+    fn from(value: (u32, Label3party)) -> Self {
         let stmt = "SELECT `detail` FROM `merchant_3party` WHERE `sid`=? AND `method`=?";
-        let (store_id, req3pty) = value;
-        let method = match req3pty {
-            StoreOnboardReqDto::Stripe(_) => "Stripe",
+        let (store_id, l3pt) = value;
+        let method = match l3pt {
+            Label3party::Stripe => "Stripe",
         };
         let paymethod = method.to_string();
         let arg = vec![store_id.into(), method.into()];
@@ -161,12 +162,12 @@ impl TryFrom<(u32, MercProfRowType)> for MerchantProfileModel {
     } // end of fn try-from
 } // end of impl MerchantProfileModel
 
-impl<'a> TryFrom<(&'a StoreOnboardReqDto, Merc3ptyRowType)> for Merchant3partyModel {
+impl TryFrom<(Label3party, Merc3ptyRowType)> for Merchant3partyModel {
     type Error = (AppErrorCode, AppRepoErrorDetail);
-    fn try_from(value: (&'a StoreOnboardReqDto, Merc3ptyRowType)) -> Result<Self, Self::Error> {
+    fn try_from(value: (Label3party, Merc3ptyRowType)) -> Result<Self, Self::Error> {
         let (label, (detail_raw,)) = value;
         let out = match label {
-            StoreOnboardReqDto::Stripe(_) => {
+            Label3party::Stripe => {
                 let s = serde_json::from_slice::<Merchant3partyStripeModel>(&detail_raw).map_err(
                     |e| {
                         (
@@ -287,7 +288,7 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
     async fn fetch(
         &self,
         store_id: u32,
-        label3pty: &StoreOnboardReqDto,
+        label3pty: Label3party,
     ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError> {
         let q_arg_prof = FetchProfileArgs::from(store_id);
         let q_arg_3pty = Fetch3partyArgs::from((store_id, label3pty));

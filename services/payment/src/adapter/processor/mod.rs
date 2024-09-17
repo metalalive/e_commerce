@@ -16,11 +16,12 @@ use ecommerce_common::logging::AppLogContext;
 pub use self::base_client::{BaseClientError, BaseClientErrorReason};
 use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripeCtx};
 use crate::api::web::dto::{
-    ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto, PaymentMethodRespDto,
-    StoreOnboardReqDto, StoreOnboardRespDto,
+    CapturePayRespDto, ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto,
+    PaymentMethodRespDto, StoreOnboardReqDto, StoreOnboardRespDto,
 };
 use crate::model::{
-    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, Merchant3partyModel,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
+    Merchant3partyModel, PayoutModel,
 };
 
 #[async_trait]
@@ -47,7 +48,12 @@ pub trait AbstractPaymentProcessor: Send + Sync {
         m3pty: Merchant3partyModel,
         req_3pt: StoreOnboardReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorError>;
-}
+
+    async fn pay_out(
+        &self,
+        payout_m: PayoutModel,
+    ) -> Result<AppProcessorPayoutResult, AppProcessorError>;
+} // end of trait AbstractPaymentProcessor
 
 struct AppProcessorContext {
     _stripe: Box<dyn AbstStripeContext>,
@@ -73,6 +79,7 @@ pub enum AppProcessorFnLabel {
     TryBuild,
     PayInStart,
     PayInProgress,
+    PayOut,
     OnboardMerchant,
     RefreshOnboardStatus,
 }
@@ -93,6 +100,11 @@ pub struct AppProcessorPayInResult {
 pub struct AppProcessorMerchantResult {
     dto: StoreOnboardRespDto,
     model: Merchant3partyModel,
+}
+
+pub struct AppProcessorPayoutResult {
+    dto: CapturePayRespDto,
+    model: PayoutModel,
 }
 
 impl From<AppProcessorPayInResult> for ChargeCreateRespDto {
@@ -133,6 +145,12 @@ impl From<AppProcessorErrorReason> for PaymentMethodErrorReason {
 
 impl AppProcessorMerchantResult {
     pub fn into_parts(self) -> (StoreOnboardRespDto, Merchant3partyModel) {
+        let Self { dto, model } = self;
+        (dto, model)
+    }
+}
+impl AppProcessorPayoutResult {
+    pub fn into_parts(self) -> (CapturePayRespDto, PayoutModel) {
         let Self { dto, model } = self;
         (dto, model)
     }
@@ -270,6 +288,17 @@ impl AbstractPaymentProcessor for AppProcessorContext {
             reason,
             fn_label: AppProcessorFnLabel::RefreshOnboardStatus,
         })
+    }
+
+    async fn pay_out(
+        &self,
+        _payout_m: PayoutModel,
+    ) -> Result<AppProcessorPayoutResult, AppProcessorError> {
+        let e = AppProcessorError {
+            reason: AppProcessorErrorReason::NotImplemented,
+            fn_label: AppProcessorFnLabel::PayOut,
+        };
+        Err(e)
     }
 } // end of impl AppProcessorContext
 

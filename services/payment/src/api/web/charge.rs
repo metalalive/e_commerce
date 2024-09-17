@@ -13,11 +13,13 @@ use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::adapter::datastore::AppDataStoreContext;
 use crate::adapter::repository::{app_repo_charge, AbstractChargeRepo};
 use crate::usecase::{
-    ChargeCreateUcError, ChargeCreateUseCase, ChargeRefreshUcError, ChargeStatusRefreshUseCase,
+    ChargeCaptureUseCase, ChargeCreateUcError, ChargeCreateUseCase, ChargeRefreshUcError,
+    ChargeStatusRefreshUseCase,
 };
 use crate::{AppAuthedClaim, AppSharedState};
 
-use super::dto::{CapturePay3partyRespDto, CapturePayReqDto, CapturePayRespDto, ChargeReqDto};
+use super::dto::{CapturePayReqDto, ChargeReqDto};
+use super::onboard::try_creating_merchant_repo;
 use super::RepoInitFailure;
 
 async fn try_creating_charge_repo(
@@ -161,19 +163,32 @@ pub(super) async fn refresh_charge_status(
 pub(super) async fn capture_authorized_charge(
     path_segms: ExtPath<(String,)>,
     req_body: ExtJson<CapturePayReqDto>,
-    _authed_claim: AppAuthedClaim,
+    auth_claim: AppAuthedClaim,
     shr_state: WebData<AppSharedState>,
 ) -> ActixResult<HttpResponse> {
+    // TODO, receive optional idempotency key from client
     let charge_id = path_segms.into_inner().0;
     let store_id = req_body.store_id;
     let logctx = shr_state.log_context();
     app_log_event!(logctx, AppLogLevel::DEBUG, "{charge_id}, {store_id}");
-    let usecase_result = CapturePayRespDto {
-        store_id,
-        processor: CapturePay3partyRespDto::Stripe,
+    let repo_c = try_creating_charge_repo(shr_state.datastore(), logctx.clone()).await?;
+    let repo_m = try_creating_merchant_repo(shr_state.datastore(), logctx.clone()).await?;
+    let processors = shr_state.processor_context();
+    let uc = ChargeCaptureUseCase {
+        auth_claim,
+        processors,
+        repo_c,
+        repo_m,
     };
-    let body_raw = serde_json::to_vec(&usecase_result).unwrap();
-    let http_status = StatusCode::OK;
+    let result = uc.execute(charge_id, store_id).await;
+
+    let (http_status, body_raw) = match result {
+        Ok(v) => {
+            let b = serde_json::to_vec(&v).unwrap();
+            (StatusCode::OK, b)
+        }
+        Err(_e) => (StatusCode::NOT_IMPLEMENTED, b"{}".to_vec()),
+    };
     let resp = {
         let mut r = HttpResponseBuilder::new(http_status);
         let header = (CONTENT_TYPE, ContentType::json());
@@ -181,4 +196,4 @@ pub(super) async fn capture_authorized_charge(
         r.body(body_raw)
     };
     Ok(resp)
-}
+} // end of fn capture_authorized_charge
