@@ -59,6 +59,7 @@ impl AbstStripeContext for MockProcessorStripeCtx {
         let stripe_m = Charge3partyStripeModel {
             checkout_session_id,
             payment_intent_id: "mock-stripe-payment-intent-id".to_string(),
+            transfer_group: "mock-stripe-transfer-group".to_string(),
             session_state: StripeSessionStatusModel::open,
             payment_state: StripeCheckoutPaymentStatusModel::unpaid,
             expiry: ctime + Duration::seconds(35),
@@ -74,6 +75,7 @@ impl AbstStripeContext for MockProcessorStripeCtx {
         let new_m = Charge3partyStripeModel {
             checkout_session_id: old.checkout_session_id.clone(),
             payment_intent_id: old.payment_intent_id.clone(),
+            transfer_group: old.transfer_group.clone(),
             session_state: StripeSessionStatusModel::complete,
             payment_state: StripeCheckoutPaymentStatusModel::paid,
             expiry: old.expiry,

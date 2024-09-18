@@ -190,7 +190,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
                 .collect(),
             payment_intent_data: CreateCheckoutSessionPaymentIntentData {
                 transfer_group: Some(charge_token_serial.clone()),
-            },
+            }, // TODO
             mode: CheckoutSessionMode::Payment,
             ui_mode: (&req.ui_mode).into(),
         };
@@ -230,7 +230,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             completed: false, // TODO, deprecated
         };
         let time_end = time_now + Duration::seconds(CHECKOUT_SESSION_MIN_SECONDS);
-        let mthd_3pty = Charge3partyStripeModel::from((resp, time_end));
+        let mthd_3pty = Charge3partyStripeModel::from((resp, time_end, charge_token_serial));
         Ok((result, Charge3partyModel::Stripe(mthd_3pty)))
     } // end of fn create_checkout_session
 
@@ -252,7 +252,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             .execute::<CheckoutSession>(resource_path.as_str(), Method::GET, Vec::new())
             .await
             .map_err(|e| self.map_log_err("refresh-sess", e))?;
-        let arg = (new_session, old.expiry);
+        let arg = (new_session, old.expiry, old.transfer_group.clone());
         Ok(Charge3partyStripeModel::from(arg))
     }
 
@@ -348,14 +348,15 @@ impl AbstStripeContext for AppProcessorStripeCtx {
     } // end of fn refresh_onboard_status
 } // end of impl AppProcessorStripeCtx
 
-impl From<(CheckoutSession, DateTime<Utc>)> for Charge3partyStripeModel {
-    fn from(value: (CheckoutSession, DateTime<Utc>)) -> Self {
-        let (session, time_end) = value;
+impl From<(CheckoutSession, DateTime<Utc>, String)> for Charge3partyStripeModel {
+    fn from(value: (CheckoutSession, DateTime<Utc>, String)) -> Self {
+        let (session, time_end, transfer_group) = value;
         Self {
             checkout_session_id: session.id,
             session_state: session.status,
             payment_state: session.payment_status,
             payment_intent_id: session.payment_intent,
+            transfer_group,
             expiry: DateTime::from_timestamp(session.expires_at, 0).unwrap_or(time_end),
         }
     }

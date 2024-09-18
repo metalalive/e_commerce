@@ -103,3 +103,12 @@ impl MerchantProfileModel {
         found
     }
 } // end of impl MerchantProfileModel
+
+impl Merchant3partyModel {
+    pub(super) fn can_perform_payout(&self) -> bool {
+        match self {
+            Self::Stripe(s) => s.can_perform_payout(),
+            Self::Unknown => false,
+        }
+    }
+}

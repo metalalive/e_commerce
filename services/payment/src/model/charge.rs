@@ -6,6 +6,7 @@ use chrono::{
     DateTime, Datelike, Duration, DurationRound, FixedOffset, Local, TimeDelta, TimeZone, Timelike,
     Utc,
 };
+use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{CurrencyDto, GenericRangeErrorDto};
 use ecommerce_common::api::rpc::dto::{OrderLinePaidUpdateDto, OrderPaymentUpdateDto};
@@ -14,7 +15,7 @@ use ecommerce_common::model::BaseProductIdentity;
 
 use super::{
     Charge3partyStripeModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
-    PayLineAmountModel,
+    PayLineAmountModel, PayoutAmountModel,
 };
 use crate::api::web::dto::{
     ChargeAmountOlineDto, ChargeOlineErrorDto, ChargeRefreshRespDto, ChargeReqOrderDto,
@@ -295,7 +296,52 @@ impl ChargeBuyerModel {
         let key = self.meta.owner();
         self.currency_snapshot.get(&key).cloned()
     }
-}
+    fn get_seller_currency(&self, seller_id: u32) -> Option<OrderCurrencySnapshot> {
+        self.currency_snapshot.get(&seller_id).cloned()
+    }
+
+    fn estimate_lines_amount(&self, seller_id: u32) -> Decimal {
+        self.lines
+            .iter()
+            .filter(|line| line.pid.store_id == seller_id)
+            .map(|v| v.amount.total)
+            .sum::<Decimal>()
+    }
+
+    fn _capture_amount(&self, seller_id: u32) -> Result<PayoutAmountModel, String> {
+        let currency_seller = self
+            .get_seller_currency(seller_id)
+            .ok_or("missing-currency-seller".to_string())?;
+        let currency_buyer = self
+            .get_buyer_currency()
+            .ok_or("missing-currency-buyer".to_string())?;
+        let precision = currency_seller.label.amount_fraction_scale();
+        let tot_amt_buyer = self.estimate_lines_amount(seller_id);
+        let target_rate = currency_seller
+            .rate
+            .checked_div(currency_buyer.rate)
+            .ok_or("target-rate-overflow".to_string())?;
+        let total = tot_amt_buyer
+            .checked_mul(target_rate)
+            .ok_or("converting-amount-overflow".to_string())?
+            .trunc_with_scale(precision);
+
+        let obj = PayoutAmountModel {
+            target_rate,
+            total,
+            currency_seller,
+            currency_buyer,
+        };
+        Ok(obj)
+    }
+    pub(super) fn capture_amount(
+        &self,
+        seller_id: u32,
+    ) -> Result<PayoutAmountModel, (AppErrorCode, String)> {
+        self._capture_amount(seller_id)
+            .map_err(|detail| (AppErrorCode::DataCorruption, detail))
+    }
+} // end of impl ChargeBuyerModel
 
 impl TryFrom<Vec<u8>> for ChargeToken {
     type Error = (AppErrorCode, String);

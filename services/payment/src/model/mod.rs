@@ -16,15 +16,15 @@ pub use self::charge::{
     ChargeLineBuyerModel, ChargeToken,
 };
 pub use self::external_processor::{
-    Charge3partyStripeModel, Merchant3partyStripeModel, StripeAccountCapabilityModel,
-    StripeAccountCapableState, StripeAccountLinkModel, StripeAccountSettingModel,
-    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    Charge3partyStripeModel, Merchant3partyStripeModel, Payout3partyStripeModel,
+    StripeAccountCapabilityModel, StripeAccountCapableState, StripeAccountLinkModel,
+    StripeAccountSettingModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 pub use self::merchant::{Merchant3partyModel, MerchantModelError, MerchantProfileModel};
 pub use self::order_replica::{
     OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
 };
-pub use self::payout::{PayoutModel, PayoutModelError};
+pub use self::payout::{PayoutAmountModel, PayoutModel, PayoutModelError};
 
 #[derive(Debug)]
 pub enum PayLineAmountError {

@@ -32,7 +32,7 @@ pub struct OrderLineModel {
     pub reserved_until: DateTime<Utc>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrderCurrencySnapshot {
     pub label: CurrencyDto,
     pub rate: Decimal,

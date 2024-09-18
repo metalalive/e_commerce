@@ -25,6 +25,9 @@ pub struct Charge3partyStripeModel {
     pub session_state: StripeSessionStatusModel,
     pub payment_state: StripeCheckoutPaymentStatusModel,
     pub payment_intent_id: String,
+    pub transfer_group: String, // `transfer-group` field from payment intent object
+    // TODO, consider to discard `payment-intent-id`,
+    // it does not seem useful in this app
     pub expiry: DateTime<Utc>,
 }
 
@@ -65,6 +68,12 @@ pub struct Merchant3partyStripeModel {
     pub created: DateTime<Utc>,
     pub settings: StripeAccountSettingModel,
     pub update_link: Option<StripeAccountLinkModel>,
+}
+
+#[derive(Clone)]
+pub struct Payout3partyStripeModel {
+    tx_grp: String,  // `transfer_group` field of payment-intent object
+    acct_id: String, // identifier of Connected Account object
 }
 
 impl StripeCheckoutPaymentStatusModel {
@@ -118,5 +127,38 @@ impl Merchant3partyStripeModel {
     pub(crate) fn renew_link_required(&self) -> bool {
         let t_now = Local::now().to_utc();
         self.update_link.as_ref().map_or(true, |v| v.expiry < t_now)
+    }
+    pub(super) fn can_perform_payout(&self) -> bool {
+        let tx_active = matches!(
+            self.capabilities.transfers,
+            StripeAccountCapableState::active
+        );
+        // TODO, consider extra constraint, `payout-interval` shouldn't be `manual`
+        // , this payment application hasn't supported that yet.
+        self.payouts_enabled && self.tos_accepted.is_some() && tx_active
+    }
+}
+impl Payout3partyStripeModel {
+    pub(super) fn new<'a, 'b>(
+        c3s: &'a Charge3partyStripeModel,
+        m3s: &'b Merchant3partyStripeModel,
+    ) -> Self {
+        Self {
+            tx_grp: c3s.transfer_group.clone(),
+            acct_id: m3s.id.clone(),
+        }
+    }
+    pub(super) fn validate<'a, 'b>(
+        &self,
+        c3s: &'a Charge3partyStripeModel,
+        m3s: &'b Merchant3partyStripeModel,
+    ) -> Result<(), String> {
+        if self.tx_grp.as_str() != c3s.transfer_group.as_str() {
+            Err("transfer-group".to_string())
+        } else if self.acct_id.as_str() != m3s.id.as_str() {
+            Err("account-id".to_string())
+        } else {
+            Ok(())
+        }
     }
 }
