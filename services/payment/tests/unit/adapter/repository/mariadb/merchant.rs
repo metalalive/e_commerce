@@ -61,7 +61,7 @@ async fn create_profile_3party_ok() {
          "weekly", 2i16, true, false, false),
     ];
     for expect_item in expect_data {
-        let result = repo.fetch(expect_item.0, &mock_3pty_req).await;
+        let result = repo.fetch(expect_item.0, (&mock_3pty_req).into()).await;
         assert!(result.is_ok());
         if let Ok(opt_v) = result {
             assert!(opt_v.is_some());
@@ -101,7 +101,7 @@ async fn create_profile_3party_ok() {
     }
     
     // --- sub case 4 , fetch  and verify
-    let result = repo.fetch(mock_store_ids[0], &mock_3pty_req).await;
+    let result = repo.fetch(mock_store_ids[0], (&mock_3pty_req).into()).await;
     assert!(result.is_ok());
     if let Ok(opt_v) = result {
         assert!(opt_v.is_some());

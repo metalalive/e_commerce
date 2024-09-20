@@ -139,19 +139,16 @@ impl Merchant3partyStripeModel {
     }
 }
 impl Payout3partyStripeModel {
-    pub(super) fn new<'a, 'b>(
-        c3s: &'a Charge3partyStripeModel,
-        m3s: &'b Merchant3partyStripeModel,
-    ) -> Self {
+    pub(super) fn new(c3s: &Charge3partyStripeModel, m3s: &Merchant3partyStripeModel) -> Self {
         Self {
             tx_grp: c3s.transfer_group.clone(),
             acct_id: m3s.id.clone(),
         }
     }
-    pub(super) fn validate<'a, 'b>(
+    pub(super) fn validate(
         &self,
-        c3s: &'a Charge3partyStripeModel,
-        m3s: &'b Merchant3partyStripeModel,
+        c3s: &Charge3partyStripeModel,
+        m3s: &Merchant3partyStripeModel,
     ) -> Result<(), String> {
         if self.tx_grp.as_str() != c3s.transfer_group.as_str() {
             Err("transfer-group".to_string())

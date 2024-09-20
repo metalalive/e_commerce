@@ -315,16 +315,18 @@ impl ChargeBuyerModel {
         let currency_buyer = self
             .get_buyer_currency()
             .ok_or("missing-currency-buyer".to_string())?;
-        let precision = currency_seller.label.amount_fraction_scale();
+        // TODO, move to top-level hard limit
+        let hardlimit_rate_precision = 8u32;
         let tot_amt_buyer = self.estimate_lines_amount(seller_id);
         let target_rate = currency_seller
             .rate
             .checked_div(currency_buyer.rate)
-            .ok_or("target-rate-overflow".to_string())?;
+            .ok_or("target-rate-overflow".to_string())?
+            .trunc_with_scale(hardlimit_rate_precision);
         let total = tot_amt_buyer
             .checked_mul(target_rate)
             .ok_or("converting-amount-overflow".to_string())?
-            .trunc_with_scale(precision);
+            .trunc_with_scale(currency_seller.label.amount_fraction_scale());
 
         let obj = PayoutAmountModel {
             target_rate,

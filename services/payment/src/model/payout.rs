@@ -10,6 +10,7 @@ use ecommerce_common::error::AppErrorCode;
 #[derive(Debug)]
 pub enum PayoutModelError {
     AmountEstimate(AppErrorCode, String),
+    AmountNotEnough(Decimal, Decimal),
     BuyerInconsistent(u32, u32),
     MerchantInconsistent(u32, u32),
     ChargeTimeInconsistent(DateTime<Utc>, DateTime<Utc>),
@@ -66,6 +67,14 @@ impl TryFrom<PayoutModelCvtArgs> for PayoutModel {
             return Err(PayoutModelError::MerchantPermissionDenied(merc_prof.id));
         }
 
+        let p3pty = {
+            let arg = (charge_m.meta.method_3party(), &merc_3pt);
+            opt_old_payout
+                .as_ref()
+                .map_or(Payout3partyModel::try_from(arg), |v| {
+                    v.p3pty.try_clone(arg.0, arg.1)
+                })?
+        };
         let amount_tot = charge_m
             .capture_amount(merc_prof.id)
             .map_err(|(code, detail)| PayoutModelError::AmountEstimate(code, detail))?;
@@ -76,17 +85,11 @@ impl TryFrom<PayoutModelCvtArgs> for PayoutModel {
             amount_tot
         };
 
-        let p3pty = {
-            let arg = (charge_m.meta.method_3party(), &merc_3pt);
-            opt_old_payout.map_or(Payout3partyModel::try_from(arg), |v| {
-                v.p3pty.try_clone(arg.0, arg.1)
-            })?
-        };
         let out = Self {
             merchant_id: merc_prof.id,
             capture_time: Local::now().to_utc(),
             buyer_id: charge_m.meta.owner(),
-            charge_ctime: charge_m.meta.create_time().clone(),
+            charge_ctime: *charge_m.meta.create_time(),
             amount: amount_new,
             storestaff_id,
             p3pty,
@@ -103,11 +106,19 @@ impl PayoutModel {
             return Err(PayoutModelError::BuyerInconsistent(id0, id1));
         }
         let ctime0 = self.charge_ctime;
-        let ctime1 = c_meta.create_time().clone();
+        let ctime1 = *c_meta.create_time();
         if ctime0 != ctime1 {
             return Err(PayoutModelError::ChargeTimeInconsistent(ctime0, ctime1));
         }
         Ok(())
+    }
+
+    pub fn merchant_id(&self) -> u32 {
+        self.merchant_id
+    }
+    pub fn amount_merchant(&self) -> (Decimal, Decimal, &OrderCurrencySnapshot) {
+        let a = &self.amount;
+        (a.total, a.target_rate, &a.currency_seller)
     }
 } // end of impl PayoutModel
 
@@ -128,19 +139,16 @@ impl PayoutAmountModel {
                 given.currency_seller.clone(),
             );
             return Err(PayoutModelError::CurrencyInconsistent(arg.0, arg.1, arg.2));
-        }
+        } // TODO, implement domain logic at here if multi-payout feature is supported
         let remain =
             self.total
                 .checked_sub(given.total)
                 .ok_or(PayoutModelError::AmountEstimate(
                     AppErrorCode::DataCorruption,
-                    format!("overflow, v0:{:?}, v1:{:?}", self.total, given.total),
+                    format!("overflow, orig:{:?}, given:{:?}", self.total, given.total),
                 ))?;
-        if remain < Decimal::ZERO {
-            return Err(PayoutModelError::AmountEstimate(
-                AppErrorCode::ExceedingMaxLimit,
-                format!("insufficient, v0:{:?}, v1:{:?}", self.total, given.total),
-            ));
+        if remain <= Decimal::ZERO {
+            return Err(PayoutModelError::AmountNotEnough(self.total, given.total));
         }
         self.total = remain;
         Ok(self)
@@ -163,10 +171,10 @@ impl<'a, 'b> TryFrom<Payout3ptyCvtArgs<'a, 'b>> for Payout3partyModel {
     }
 }
 impl Payout3partyModel {
-    fn try_clone<'a, 'b>(
+    fn try_clone(
         &self,
-        charge3pty: &'a Charge3partyModel,
-        m3pty: &'b Merchant3partyModel,
+        charge3pty: &Charge3partyModel,
+        m3pty: &Merchant3partyModel,
     ) -> Result<Self, PayoutModelError> {
         match (self, charge3pty, m3pty) {
             (Self::Stripe(ps), Charge3partyModel::Stripe(cs), Merchant3partyModel::Stripe(ms)) => {

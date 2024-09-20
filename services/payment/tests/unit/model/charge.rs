@@ -420,6 +420,7 @@ fn ut_default_charge_3pty_stripe(
         session_state,
         payment_state,
         payment_intent_id: "mock-unit-test".to_string(),
+        transfer_group: "mock-tx-grp-utest".to_string(),
         expiry: Local::now().to_utc() + Duration::minutes(10),
     };
     Charge3partyModel::Stripe(s)

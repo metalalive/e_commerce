@@ -10,22 +10,25 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
 use ecommerce_common::api::rpc::dto::StoreProfileReplicaDto;
+use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
 use payment::adapter::cache::{AbstractOrderSyncLockCache, OrderSyncLockError};
 use payment::adapter::processor::{
-    AbstractPaymentProcessor, AppProcessorError, AppProcessorMerchantResult,
-    AppProcessorPayInResult,
+    AbstractPaymentProcessor, AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel,
+    AppProcessorMerchantResult, AppProcessorPayInResult, AppProcessorPayoutResult,
 };
-use payment::adapter::repository::{AbstractChargeRepo, AbstractMerchantRepo, AppRepoError};
+use payment::adapter::repository::{
+    AbstractChargeRepo, AbstractMerchantRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel,
+};
 use payment::adapter::rpc::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
     AppRpcClientRequest, AppRpcCtxError, AppRpcReply,
 };
 use payment::api::web::dto::{PaymentMethodReqDto, StoreOnboardReqDto};
 use payment::model::{
-    Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
-    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet,
+    Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, Label3party,
+    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, PayoutModel,
 };
 
 struct MockChargeRepo {
@@ -108,6 +111,40 @@ impl AbstractChargeRepo for MockChargeRepo {
         let out = g.take().unwrap();
         out
     }
+
+    async fn fetch_charge_by_merchant(
+        &self,
+        _buyer_id: u32,
+        _create_time: DateTime<Utc>,
+        _store_id: u32,
+    ) -> Result<Option<ChargeBuyerModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchChargeByMerchant,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
+    async fn fetch_payout(
+        &self,
+        _store_id: u32,
+        _buyer_id: u32,
+        _create_time: DateTime<Utc>,
+    ) -> Result<Option<PayoutModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchPayout,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
+    async fn create_payout(&self, _payout_m: PayoutModel) -> Result<(), AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::CreatePayout,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
 } // end of impl MockChargeRepo
 
 struct MockMerchantRepo {
@@ -145,7 +182,7 @@ impl AbstractMerchantRepo for MockMerchantRepo {
     async fn fetch(
         &self,
         _store_id: u32,
-        _label3pty: &StoreOnboardReqDto,
+        _label3pty: Label3party,
     ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError> {
         let mut g = self._fetch_result.lock().unwrap();
         let out = g.take();
@@ -312,5 +349,15 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         let mut g = self._onboard_merchant_result.lock().unwrap();
         let out = g.take().unwrap();
         out
+    }
+
+    async fn pay_out(
+        &self,
+        payout_m: PayoutModel,
+    ) -> Result<AppProcessorPayoutResult, AppProcessorError> {
+        Err(AppProcessorError {
+            reason: AppProcessorErrorReason::NotImplemented,
+            fn_label: AppProcessorFnLabel::PayOut,
+        })
     }
 } // end of impl MockPaymentProcessor

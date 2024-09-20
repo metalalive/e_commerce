@@ -1,6 +1,7 @@
 mod charge;
 mod merchant;
 mod order_replica;
+mod payout;
 
 use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
@@ -37,6 +38,7 @@ pub(crate) fn ut_default_charge_method_stripe(t0: &DateTime<Utc>) -> Charge3part
     let sess = Charge3partyStripeModel {
         checkout_session_id: "mock-session-id".to_string(),
         payment_intent_id: "mock-payment-intent-id".to_string(),
+        transfer_group: "mock-transfer-group".to_string(),
         payment_state: StripeCheckoutPaymentStatusModel::no_payment_required,
         session_state: StripeSessionStatusModel::complete,
         expiry: *t0 + Duration::minutes(5),

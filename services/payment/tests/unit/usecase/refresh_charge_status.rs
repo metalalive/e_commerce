@@ -30,6 +30,7 @@ fn ut_setup_charge_3pty_stripe(expiry: DateTime<Utc>) -> Charge3partyModel {
         checkout_session_id: "mock-session-id".to_string(),
         session_state: StripeSessionStatusModel::open,
         payment_state: StripeCheckoutPaymentStatusModel::unpaid,
+        transfer_group: "mock-transfer-group".to_string(),
         payment_intent_id: "mock-payment-intent-id".to_string(),
         expiry,
     };
