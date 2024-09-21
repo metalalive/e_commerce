@@ -8,10 +8,12 @@ use ecommerce_common::api::rpc::dto::{
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use payment::adapter::processor::{
-    AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel, BaseClientError,
-    BaseClientErrorReason,
+    AbstractPaymentProcessor, AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel,
+    BaseClientError, BaseClientErrorReason,
 };
-use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
+use payment::adapter::repository::{
+    AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel,
+};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
 use payment::api::web::dto::ChargeStatusDto;
 use payment::model::{
@@ -53,13 +55,29 @@ fn ut_setup_buyer_meta_stripe(
     obj
 }
 
+#[rustfmt::skip]
 fn ut_rpc_orderpay_update_err(oid: String, lines: Vec<OrderLinePayUpdateErrorDto>) -> Vec<u8> {
-    let obj = OrderPaymentUpdateErrorDto {
-        oid,
-        charge_time: None,
-        lines,
-    };
+    let obj = OrderPaymentUpdateErrorDto {oid, charge_time: None, lines};
     serde_json::to_vec(&obj).unwrap()
+}
+
+#[rustfmt::skip]
+fn ut_setup_repo(
+    chargemeta: Option<Result<Option<ChargeBuyerMetaModel>, AppRepoError>>,
+    all_chargelines: Option<Result<Vec<ChargeLineBuyerModel>, AppRepoError>>,
+    update_meta_res: Option<Result<(), AppRepoError>>,
+) -> Box<dyn AbstractChargeRepo> {
+    MockChargeRepo::build(
+        None, None, None,
+        chargemeta, all_chargelines, update_meta_res,
+        None, None, None,
+    )
+}
+
+fn ut_setup_processor(
+    res: Option<Result<Charge3partyModel, AppProcessorError>>,
+) -> Box<dyn AbstractPaymentProcessor> {
+    MockPaymentProcessor::build(None, res, None, None)
 }
 
 fn ut_common_mock_data() -> (
@@ -88,24 +106,15 @@ fn ut_common_mock_data() -> (
     )
 }
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn ok_entire_pay_in_completed() {
     // with order-app synced
-    let (
-        mock_usr_id,
-        mock_charge_time,
-        mock_charge_id,
-        mock_order_id,
-        mock_buyer_meta,
-        mock_charge_lines,
+    let (mock_usr_id, mock_charge_time, mock_charge_id,
+        mock_order_id, mock_buyer_meta, mock_charge_lines,
     ) = ut_common_mock_data();
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
-        Some(Ok(Some(mock_buyer_meta))),
-        Some(Ok(mock_charge_lines)),
-        Some(Ok(())),
+    let mock_repo = ut_setup_repo(
+        Some(Ok(Some(mock_buyer_meta))), Some(Ok(mock_charge_lines)), Some(Ok(())),
     );
     let mock3pty_refreshed = {
         let t = mock_charge_time.to_utc() + Duration::minutes(3);
@@ -116,7 +125,7 @@ async fn ok_entire_pay_in_completed() {
         } // assume the client has confirmed the charge with the external 3rd party
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
+    let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let mock_reply = AppRpcReply {
         message: ut_rpc_orderpay_update_err(mock_order_id.to_string(), Vec::new()),
     };
@@ -137,24 +146,18 @@ async fn ok_entire_pay_in_completed() {
     }
 } // end of fn ok_entire_pay_in_completed
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn ok_3party_processing() {
     let (mock_usr_id, mock_charge_time, mock_charge_id, _, mock_buyer_meta, _) =
         ut_common_mock_data();
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
-        Some(Ok(Some(mock_buyer_meta))),
-        None,
-        Some(Ok(())),
-    );
+    let mock_repo = ut_setup_repo(Some(Ok(Some(mock_buyer_meta))), None, Some(Ok(())));
     let mock3pty_refreshed = {
         let t = mock_charge_time.to_utc() + Duration::minutes(3);
         // assume the client hasn't confirmed the charge yet
         ut_setup_charge_3pty_stripe(t)
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
+    let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -169,18 +172,12 @@ async fn ok_3party_processing() {
     }
 } // end of fn ok_3party_processing
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn ok_3party_refused() {
     let (mock_usr_id, mock_charge_time, mock_charge_id, _, mock_buyer_meta, _) =
         ut_common_mock_data();
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
-        Some(Ok(Some(mock_buyer_meta))),
-        None,
-        Some(Ok(())),
-    );
+    let mock_repo = ut_setup_repo(Some(Ok(Some(mock_buyer_meta))), None, Some(Ok(())));
     let mock3pty_refreshed = {
         let t = mock_charge_time.to_utc() + Duration::minutes(3);
         let mut m3pt = ut_setup_charge_3pty_stripe(t);
@@ -195,7 +192,7 @@ async fn ok_3party_refused() {
         // TODO, find better way of validating such situation
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
+    let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -210,18 +207,12 @@ async fn ok_3party_refused() {
     }
 } // end of ok_3party_refused
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn ok_3party_session_expired() {
     let (mock_usr_id, mock_charge_time, mock_charge_id, _, mock_buyer_meta, _) =
         ut_common_mock_data();
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
-        Some(Ok(Some(mock_buyer_meta))),
-        None,
-        Some(Ok(())),
-    );
+    let mock_repo = ut_setup_repo(Some(Ok(Some(mock_buyer_meta))), None, Some(Ok(())));
     let mock3pty_refreshed = {
         let t = mock_charge_time.to_utc() + Duration::minutes(3);
         let mut m3pt = ut_setup_charge_3pty_stripe(t);
@@ -231,7 +222,7 @@ async fn ok_3party_session_expired() {
         } // assume the client has confirmed the charge with the external 3rd party
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
+    let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -246,15 +237,11 @@ async fn ok_3party_session_expired() {
     }
 } // end of fn ok_3party_session_expired
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn ok_skip_3party() {
-    let (
-        mock_usr_id,
-        mock_charge_time,
-        mock_charge_id,
-        mock_order_id,
-        mut mock_buyer_meta,
-        mock_charge_lines,
+    let (mock_usr_id, mock_charge_time, mock_charge_id,
+        mock_order_id, mut mock_buyer_meta, mock_charge_lines,
     ) = ut_common_mock_data();
     // assume 3rd party has already completed but an issue happened
     // to RPC order app for payment sync
@@ -270,15 +257,11 @@ async fn ok_skip_3party() {
         }
         mock_buyer_meta.update_3party(m3pty);
     }
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
+    let mock_repo = ut_setup_repo(
         Some(Ok(Some(mock_buyer_meta))),
-        Some(Ok(mock_charge_lines)),
-        Some(Ok(())),
+        Some(Ok(mock_charge_lines)), Some(Ok(())),
     );
-    let mock_3pty = MockPaymentProcessor::build(None, None, None);
+    let mock_3pty = ut_setup_processor(None);
     let mock_reply = AppRpcReply {
         message: ut_rpc_orderpay_update_err(mock_order_id.to_string(), Vec::new()),
     };
@@ -298,6 +281,7 @@ async fn ok_skip_3party() {
     }
 } // end of ok_skip_3party
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn orderapp_already_synced() {
     let (mock_usr_id, mock_charge_time, mock_charge_id, _, mut mock_buyer_meta, _) =
@@ -314,15 +298,8 @@ async fn orderapp_already_synced() {
         }
         mock_buyer_meta.update_3party(m3pty);
     }
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
-        Some(Ok(Some(mock_buyer_meta))),
-        None,
-        Some(Ok(())),
-    );
-    let mock_3pty = MockPaymentProcessor::build(None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(Some(mock_buyer_meta))), None, Some(Ok(())));
+    let mock_3pty = ut_setup_processor(None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -337,17 +314,11 @@ async fn orderapp_already_synced() {
     }
 } // end of fn orderapp_already_synced
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn error_3party_lowlvl() {
     let (mock_usr_id, _, mock_charge_id, _, mock_buyer_meta, _) = ut_common_mock_data();
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
-        Some(Ok(Some(mock_buyer_meta))),
-        None,
-        None,
-    );
+    let mock_repo = ut_setup_repo(Some(Ok(Some(mock_buyer_meta))), None, None);
     let error3pty = {
         let reason = BaseClientErrorReason::TcpNet(
             std::io::ErrorKind::ConnectionRefused,
@@ -358,7 +329,7 @@ async fn error_3party_lowlvl() {
         let fn_label = AppProcessorFnLabel::PayInProgress;
         AppProcessorError { reason, fn_label }
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Err(error3pty)), None);
+    let mock_3pty = ut_setup_processor(Some(Err(error3pty)));
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -387,8 +358,8 @@ async fn error_3party_lowlvl() {
 async fn error_decode_charge_id() {
     let mock_usr_id = 8010095;
     let mock_charge_id = "007a396f000000000000ff".to_string();
-    let mock_repo = MockChargeRepo::build(None, None, None, None, None, None);
-    let mock_3pty = MockPaymentProcessor::build(None, None, None);
+    let mock_repo = ut_setup_repo(None, None, None);
+    let mock_3pty = ut_setup_processor(None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -408,8 +379,8 @@ async fn error_decode_charge_id() {
 async fn error_owner_mismatch() {
     let mock_usr_id = 8010095;
     let mock_charge_id = "007a00001f7131705e".to_string();
-    let mock_repo = MockChargeRepo::build(None, None, None, None, None, None);
-    let mock_3pty = MockPaymentProcessor::build(None, None, None);
+    let mock_repo = ut_setup_repo(None, None, None);
+    let mock_3pty = ut_setup_processor(None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -428,8 +399,8 @@ async fn error_owner_mismatch() {
 async fn error_repo_charge_not_exist() {
     let mock_usr_id = 8010095;
     let mock_charge_id = "007a396f1f7131705e".to_string();
-    let mock_repo = MockChargeRepo::build(None, None, None, Some(Ok(None)), None, None);
-    let mock_3pty = MockPaymentProcessor::build(None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(None)), None, None);
+    let mock_3pty = ut_setup_processor(None);
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -444,6 +415,7 @@ async fn error_repo_charge_not_exist() {
     }
 } // end of fn error_repo_charge_not_exist
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn error_repo_write_status() {
     let (mock_usr_id, mock_charge_time, mock_charge_id, _, mock_buyer_meta, _) =
@@ -453,13 +425,8 @@ async fn error_repo_write_status() {
         code: AppErrorCode::DatabaseServerBusy,
         detail: AppRepoErrorDetail::DatabaseTxCommit("unit-test".to_string()),
     };
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
-        Some(Ok(Some(mock_buyer_meta))),
-        None,
-        Some(Err(error_wr)),
+    let mock_repo = ut_setup_repo(
+        Some(Ok(Some(mock_buyer_meta))), None, Some(Err(error_wr)),
     );
     let mock3pty_refreshed = {
         let t = mock_charge_time.to_utc() + Duration::minutes(3);
@@ -470,7 +437,7 @@ async fn error_repo_write_status() {
         }
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
+    let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let mock_rpc_ctx = MockRpcContext::build(None);
     let uc = ChargeStatusRefreshUseCase {
         repo: mock_repo,
@@ -491,17 +458,13 @@ async fn error_repo_write_status() {
     }
 } // end of fn error_repo_write_status
 
+#[rustfmt::skip]
 #[actix_web::test]
 async fn error_rpc_lowlvl() {
     let (mock_usr_id, mock_charge_time, mock_charge_id, _, mock_buyer_meta, _) =
         ut_common_mock_data();
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
-        Some(Ok(Some(mock_buyer_meta))),
-        None,
-        Some(Ok(())),
+    let mock_repo = ut_setup_repo(
+        Some(Ok(Some(mock_buyer_meta))), None, Some(Ok(())),
     );
     let mock3pty_refreshed = {
         let t = mock_charge_time.to_utc() + Duration::minutes(3);
@@ -512,7 +475,7 @@ async fn error_rpc_lowlvl() {
         } // assume the client has confirmed the charge with the external 3rd party
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
+    let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let error_rpc = AppRpcCtxError {
         fn_label: AppRpcErrorFnLabel::AcquireClientConn,
         reason: AppRpcErrorReason::LowLevelConn("unit-test".to_string()),
@@ -540,23 +503,15 @@ async fn error_rpc_lowlvl() {
 
 // Consider over-charging situation, could this test case shows that
 // my payment service can block overcharge request ? (TODO)
+#[rustfmt::skip]
 #[actix_web::test]
 async fn error_rpc_reply_sync_orderapp() {
-    let (
-        mock_usr_id,
-        mock_charge_time,
-        mock_charge_id,
-        mock_order_id,
-        mock_buyer_meta,
-        mock_charge_lines,
+    let (mock_usr_id, mock_charge_time, mock_charge_id,
+        mock_order_id, mock_buyer_meta, mock_charge_lines,
     ) = ut_common_mock_data();
-    let mock_repo = MockChargeRepo::build(
-        None,
-        None,
-        None,
+    let mock_repo = ut_setup_repo(
         Some(Ok(Some(mock_buyer_meta))),
-        Some(Ok(mock_charge_lines)),
-        Some(Ok(())),
+        Some(Ok(mock_charge_lines)), Some(Ok(())),
     );
     let mock3pty_refreshed = {
         let t = mock_charge_time.to_utc() + Duration::minutes(3);
@@ -567,7 +522,7 @@ async fn error_rpc_reply_sync_orderapp() {
         } // assume the client has confirmed the charge with the external 3rd party
         m3pt
     };
-    let mock_3pty = MockPaymentProcessor::build(None, Some(Ok(mock3pty_refreshed)), None);
+    let mock_3pty = ut_setup_processor(Some(Ok(mock3pty_refreshed)));
     let mock_reply = {
         let e = vec![OrderLinePayUpdateErrorDto {
             seller_id: 8298,

@@ -14,9 +14,12 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::cache::OrderSyncLockError;
 use payment::adapter::processor::{
-    AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel, AppProcessorPayInResult,
+    AbstractPaymentProcessor, AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel,
+    AppProcessorPayInResult,
 };
-use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
+use payment::adapter::repository::{
+    AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel,
+};
 use payment::adapter::rpc::{AppRpcCtxError, AppRpcErrorFnLabel, AppRpcErrorReason, AppRpcReply};
 use payment::api::web::dto::{
     ChargeAmountOlineDto, ChargeReqDto, ChargeReqOrderDto, PaymentMethodErrorReason,
@@ -24,7 +27,8 @@ use payment::api::web::dto::{
     StripeCheckoutSessionRespDto, StripeCheckoutUImodeDto,
 };
 use payment::model::{
-    BuyerPayInState, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayLineAmountModel,
+    BuyerPayInState, Charge3partyModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
+    PayLineAmountModel,
 };
 use payment::usecase::{ChargeCreateUcError, ChargeCreateUseCase};
 use rust_decimal::Decimal;
@@ -175,28 +179,44 @@ fn ut_processor_pay_in_result() -> AppProcessorPayInResult {
     }
 }
 
+#[rustfmt::skip]
+fn ut_setup_repo(
+    unpaid_olines: Option<Result<Option<OrderLineModelSet>, AppRepoError>>,
+    create_order_res: Option<Result<(), AppRepoError>>,
+    create_charge_res: Option<Result<(), AppRepoError>>,
+) -> Box<dyn AbstractChargeRepo> {
+    MockChargeRepo::build(
+        unpaid_olines, create_order_res, create_charge_res,
+        None, None, None, None, None, None,
+    )
+}
+
+#[rustfmt::skip]
+fn ut_setup_processor(
+    res: Option<Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError>>,
+) -> Box<dyn AbstractPaymentProcessor> {
+    MockPaymentProcessor::build(res, None, None, None)
+}
+
+#[rustfmt::skip]
 #[actix_web::test]
 async fn ok_with_existing_order_replica() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
     let mock_oline_set = ut_saved_oline_set(mock_order_id.clone(), mock_usr_id);
-    let mock_repo = MockChargeRepo::build(
-        Some(Ok(Some(mock_oline_set))),
-        None,
-        Some(Ok(())),
-        None,
-        None,
-        None,
+    let mock_repo = ut_setup_repo(
+        Some(Ok(Some(mock_oline_set))), None, Some(Ok(())),
     );
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(None),
         _release_result: Mutex::new(None),
     };
     let mock_rpc_ctx = MockRpcContext::build(None);
-    let mock_payin_result = ut_processor_pay_in_result();
-    let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
-    let mock_processor =
-        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None, None);
+    let mock_processor = {
+        let mock_payin_result = ut_processor_pay_in_result();
+        let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
+        ut_setup_processor(Some(Ok((mock_payin_result, mock_payin_mthd_m))))
+    };
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -215,8 +235,7 @@ async fn ok_with_existing_order_replica() {
 async fn ok_with_rpc_replica_order() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo =
-        MockChargeRepo::build(Some(Ok(None)), Some(Ok(())), Some(Ok(())), None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(None)), Some(Ok(())), Some(Ok(())));
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -227,10 +246,11 @@ async fn ok_with_rpc_replica_order() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_payin_result = ut_processor_pay_in_result();
-    let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
-    let mock_processor =
-        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None, None);
+    let mock_processor = {
+        let mock_payin_result = ut_processor_pay_in_result();
+        let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
+        ut_setup_processor(Some(Ok((mock_payin_result, mock_payin_mthd_m))))
+    };
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -254,14 +274,13 @@ async fn load_unpaid_order_failure() {
         code: AppErrorCode::Unknown,
         detail: AppRepoErrorDetail::Unknown,
     };
-    let mock_repo =
-        MockChargeRepo::build(Some(Err(repo_expect_error)), None, None, None, None, None);
+    let mock_repo = ut_setup_repo(Some(Err(repo_expect_error)), None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(None),
         _release_result: Mutex::new(None),
     };
     let mock_rpc_ctx = MockRpcContext::build(None);
-    let mock_processor = MockPaymentProcessor::build(None, None, None);
+    let mock_processor = ut_setup_processor(None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -271,13 +290,11 @@ async fn load_unpaid_order_failure() {
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
     assert!(result.is_err());
-    if let Err(e) = result {
-        if let ChargeCreateUcError::DataStoreError(actual_error) = e {
-            let cond = matches!(actual_error.fn_label, AppRepoErrorFnLabel::GetUnpaidOlines);
-            assert!(cond);
-        } else {
-            assert!(false);
-        }
+    if let Err(ChargeCreateUcError::DataStoreError(actual_e)) = result {
+        let cond = matches!(actual_e.fn_label, AppRepoErrorFnLabel::GetUnpaidOlines);
+        assert!(cond);
+    } else {
+        assert!(false);
     }
 } // end of fn load_unpaid_order_failure
 
@@ -285,13 +302,13 @@ async fn load_unpaid_order_failure() {
 async fn sync_order_get_lock_failure() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(None)), None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(false))),
         _release_result: Mutex::new(None),
     };
     let mock_rpc_ctx = MockRpcContext::build(None);
-    let mock_processor = MockPaymentProcessor::build(None, None, None);
+    let mock_processor = ut_setup_processor(None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -305,13 +322,13 @@ async fn sync_order_get_lock_failure() {
         let cond = matches!(e, ChargeCreateUcError::LoadOrderConflict);
         assert!(cond);
     }
-} // end of fn sync_order_get_lock_failure
+}
 
 #[actix_web::test]
 async fn sync_order_release_lock_failure() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(None)), None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Err(OrderSyncLockError))),
@@ -322,7 +339,7 @@ async fn sync_order_release_lock_failure() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_processor = MockPaymentProcessor::build(None, None, None);
+    let mock_processor = ut_setup_processor(None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -342,7 +359,7 @@ async fn sync_order_release_lock_failure() {
 async fn rpc_acquire_conn_error() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(None)), None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -352,7 +369,7 @@ async fn rpc_acquire_conn_error() {
         reason: AppRpcErrorReason::CorruptedCredential,
     };
     let mock_rpc_ctx = MockRpcContext::build(Some(Err(rpc_expect_error)));
-    let mock_processor = MockPaymentProcessor::build(None, None, None);
+    let mock_processor = ut_setup_processor(None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -362,15 +379,13 @@ async fn rpc_acquire_conn_error() {
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
     assert!(result.is_err());
-    if let Err(e) = result {
-        if let ChargeCreateUcError::LoadOrderInternalError(actual_error) = e {
-            let cond = matches!(actual_error.fn_label, AppRpcErrorFnLabel::AcquireClientConn);
-            assert!(cond);
-            let cond = matches!(actual_error.reason, AppRpcErrorReason::CorruptedCredential);
-            assert!(cond);
-        } else {
-            assert!(false);
-        }
+    if let Err(ChargeCreateUcError::LoadOrderInternalError(re)) = result {
+        let cond = matches!(re.fn_label, AppRpcErrorFnLabel::AcquireClientConn);
+        assert!(cond);
+        let cond = matches!(re.reason, AppRpcErrorReason::CorruptedCredential);
+        assert!(cond);
+    } else {
+        assert!(false);
     }
 } // end of fn rpc_acquire_conn_error
 
@@ -378,7 +393,7 @@ async fn rpc_acquire_conn_error() {
 async fn rpc_publish_error_replica_order() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(None)), None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -389,7 +404,7 @@ async fn rpc_publish_error_replica_order() {
     };
     let mock_rpc_client = MockRpcClient::build(Some(Err(rpc_expect_error)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_processor = MockPaymentProcessor::build(None, None, None);
+    let mock_processor = ut_setup_processor(None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -399,15 +414,13 @@ async fn rpc_publish_error_replica_order() {
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
     assert!(result.is_err());
-    if let Err(e) = result {
-        if let ChargeCreateUcError::LoadOrderInternalError(actual_error) = e {
-            let cond = matches!(actual_error.fn_label, AppRpcErrorFnLabel::ClientSendReq);
-            assert!(cond);
-            let cond = matches!(actual_error.reason, AppRpcErrorReason::LowLevelConn(_));
-            assert!(cond);
-        } else {
-            assert!(false);
-        }
+    if let Err(ChargeCreateUcError::LoadOrderInternalError(re)) = result {
+        let cond = matches!(re.fn_label, AppRpcErrorFnLabel::ClientSendReq);
+        assert!(cond);
+        let cond = matches!(re.reason, AppRpcErrorReason::LowLevelConn(_));
+        assert!(cond);
+    } else {
+        assert!(false);
     }
 } // end of fn rpc_publish_error_replica_order
 
@@ -415,7 +428,7 @@ async fn rpc_publish_error_replica_order() {
 async fn rpc_reply_error_replica_order() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo = MockChargeRepo::build(Some(Ok(None)), None, None, None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(None)), None, None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -427,7 +440,7 @@ async fn rpc_reply_error_replica_order() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Err(rpc_expect_error)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_processor = MockPaymentProcessor::build(None, None, None);
+    let mock_processor = ut_setup_processor(None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -437,15 +450,13 @@ async fn rpc_reply_error_replica_order() {
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
     assert!(result.is_err());
-    if let Err(e) = result {
-        if let ChargeCreateUcError::LoadOrderInternalError(actual_error) = e {
-            let cond = matches!(actual_error.fn_label, AppRpcErrorFnLabel::ClientRecvResp);
-            assert!(cond);
-            let cond = matches!(actual_error.reason, AppRpcErrorReason::NotSupport);
-            assert!(cond);
-        } else {
-            assert!(false);
-        }
+    if let Err(ChargeCreateUcError::LoadOrderInternalError(re)) = result {
+        let cond = matches!(re.fn_label, AppRpcErrorFnLabel::ClientRecvResp);
+        assert!(cond);
+        let cond = matches!(re.reason, AppRpcErrorReason::NotSupport);
+        assert!(cond);
+    } else {
+        assert!(false);
     }
 } // end of rpc_reply_error_replica_order
 
@@ -458,14 +469,7 @@ async fn save_replica_order_failure() {
         code: AppErrorCode::DataTableNotExist,
         detail: AppRepoErrorDetail::DatabaseExec("unit-test".to_string()),
     };
-    let mock_repo = MockChargeRepo::build(
-        Some(Ok(None)),
-        Some(Err(repo_expect_error)),
-        None,
-        None,
-        None,
-        None,
-    );
+    let mock_repo = ut_setup_repo(Some(Ok(None)), Some(Err(repo_expect_error)), None);
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -476,7 +480,7 @@ async fn save_replica_order_failure() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_processor = MockPaymentProcessor::build(None, None, None);
+    let mock_processor = ut_setup_processor(None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -486,13 +490,11 @@ async fn save_replica_order_failure() {
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
     assert!(result.is_err());
-    if let Err(e) = result {
-        if let ChargeCreateUcError::DataStoreError(actual_error) = e {
-            let cond = matches!(actual_error.fn_label, AppRepoErrorFnLabel::CreateOrder);
-            assert!(cond);
-        } else {
-            assert!(false);
-        }
+    if let Err(ChargeCreateUcError::DataStoreError(re)) = result {
+        let cond = matches!(re.fn_label, AppRepoErrorFnLabel::CreateOrder);
+        assert!(cond);
+    } else {
+        assert!(false);
     }
 } // end of fn save_replica_order_failure
 
@@ -500,8 +502,7 @@ async fn save_replica_order_failure() {
 async fn processor_start_payin_failure() {
     let mock_usr_id = 1234u32;
     let mock_order_id = "ut-origin-order-id".to_string();
-    let mock_repo =
-        MockChargeRepo::build(Some(Ok(None)), Some(Ok(())), Some(Ok(())), None, None, None);
+    let mock_repo = ut_setup_repo(Some(Ok(None)), Some(Ok(())), Some(Ok(())));
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -512,11 +513,13 @@ async fn processor_start_payin_failure() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let expect_proc_error = AppProcessorError {
-        fn_label: AppProcessorFnLabel::PayInStart,
-        reason: AppProcessorErrorReason::CredentialCorrupted,
+    let mock_processor = {
+        let expect_proc_error = AppProcessorError {
+            fn_label: AppProcessorFnLabel::PayInStart,
+            reason: AppProcessorErrorReason::CredentialCorrupted,
+        };
+        ut_setup_processor(Some(Err(expect_proc_error)))
     };
-    let mock_processor = MockPaymentProcessor::build(Some(Err(expect_proc_error)), None, None);
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -526,13 +529,11 @@ async fn processor_start_payin_failure() {
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
     assert!(result.is_err());
-    if let Err(e) = result {
-        if let ChargeCreateUcError::ExternalProcessorError(actual_error) = e {
-            let cond = matches!(actual_error, PaymentMethodErrorReason::ProcessorFailure);
-            assert!(cond);
-        } else {
-            assert!(false);
-        }
+    if let Err(ChargeCreateUcError::ExternalProcessorError(r)) = result {
+        let cond = matches!(r, PaymentMethodErrorReason::ProcessorFailure);
+        assert!(cond);
+    } else {
+        assert!(false);
     }
 } // end of fn processor_start_payin_failure
 
@@ -545,14 +546,7 @@ async fn save_new_chargeline_failure() {
         code: AppErrorCode::DataCorruption,
         detail: AppRepoErrorDetail::DatabaseTxCommit("unit-test".to_string()),
     };
-    let mock_repo = MockChargeRepo::build(
-        Some(Ok(None)),
-        Some(Ok(())),
-        Some(Err(repo_expect_error)),
-        None,
-        None,
-        None,
-    );
+    let mock_repo = ut_setup_repo(Some(Ok(None)), Some(Ok(())), Some(Err(repo_expect_error)));
     let mock_sync_cache = MockOrderSyncLockCache {
         _acquire_result: Mutex::new(Some(Ok(true))),
         _release_result: Mutex::new(Some(Ok(()))),
@@ -563,10 +557,11 @@ async fn save_new_chargeline_failure() {
     let rpc_pub_evt = MockRpcPublishEvent::build(Some(Ok(mock_reply)));
     let mock_rpc_client = MockRpcClient::build(Some(Ok(rpc_pub_evt)));
     let mock_rpc_ctx = MockRpcContext::build(Some(Ok(mock_rpc_client)));
-    let mock_payin_result = ut_processor_pay_in_result();
-    let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
-    let mock_processor =
-        MockPaymentProcessor::build(Some(Ok((mock_payin_result, mock_payin_mthd_m))), None, None);
+    let mock_processor = {
+        let mock_payin_result = ut_processor_pay_in_result();
+        let mock_payin_mthd_m = ut_default_charge_method_stripe(&Local::now().to_utc());
+        ut_setup_processor(Some(Ok((mock_payin_result, mock_payin_mthd_m))))
+    };
     let uc = ChargeCreateUseCase {
         processors: Arc::new(mock_processor),
         rpc_ctx: Arc::new(mock_rpc_ctx),
@@ -576,12 +571,10 @@ async fn save_new_chargeline_failure() {
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
     let result = uc.execute(mock_usr_id, mock_req).await;
     assert!(result.is_err());
-    if let Err(e) = result {
-        if let ChargeCreateUcError::DataStoreError(actual_error) = e {
-            let cond = matches!(actual_error.fn_label, AppRepoErrorFnLabel::CreateCharge);
-            assert!(cond);
-        } else {
-            assert!(false);
-        }
+    if let Err(ChargeCreateUcError::DataStoreError(de)) = result {
+        let cond = matches!(de.fn_label, AppRepoErrorFnLabel::CreateCharge);
+        assert!(cond);
+    } else {
+        assert!(false);
     }
 } // end of fn save_new_chargeline_failure

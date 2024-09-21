@@ -9,7 +9,8 @@ use ecommerce_common::constant::env_vars::SERVICE_BASEPATH;
 use ecommerce_common::error::AppErrorCode;
 
 use payment::adapter::processor::{
-    AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel, AppProcessorMerchantResult,
+    AbstractPaymentProcessor, AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel,
+    AppProcessorMerchantResult,
 };
 use payment::adapter::repository::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use payment::adapter::rpc::{AbstractRpcContext, AppRpcReply};
@@ -65,12 +66,18 @@ fn ut_setup_rpc_ctx(reply_raw_msg: Vec<u8>) -> Arc<Box<dyn AbstractRpcContext>> 
     Arc::new(mock_ctx)
 }
 
+fn ut_setup_processor(
+    res: Option<Result<AppProcessorMerchantResult, AppProcessorError>>,
+) -> Box<dyn AbstractPaymentProcessor> {
+    MockPaymentProcessor::build(None, None, res, None)
+}
+
 #[actix_web::test]
 async fn new_merchant_ok() {
     let auth_claim = ut_setup_auth_claim(1234, 85);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
-        let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
+        let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
     let repo = MockMerchantRepo::build(Some(Ok(())), None, None);
@@ -99,7 +106,7 @@ async fn new_merchant_err_rpc_reply() {
     let auth_claim = ut_setup_auth_claim(1001, 79);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
-        let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
+        let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
     let repo = MockMerchantRepo::build(Some(Ok(())), None, None);
@@ -128,7 +135,7 @@ async fn new_merchant_3party_failure() {
             reason: AppProcessorErrorReason::InvalidMethod("unit-test".to_string()),
             fn_label: AppProcessorFnLabel::OnboardMerchant,
         });
-        let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
+        let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
     let repo = MockMerchantRepo::build(Some(Ok(())), None, None);
@@ -166,7 +173,7 @@ async fn new_merchant_err_repo_create() {
     let auth_claim = ut_setup_auth_claim(1234, 85);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
-        let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
+        let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
     let repo = {
@@ -230,7 +237,7 @@ async fn refresh_status_ok() {
     let auth_claim = ut_setup_auth_claim(mock_supervisor_id, 85);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
-        let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
+        let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
     let repo = {
@@ -258,10 +265,7 @@ async fn refresh_status_err_merchant_empty() {
     let mock_store_id = 1012;
     let mock_supervisor_id = 1230;
     let auth_claim = ut_setup_auth_claim(mock_supervisor_id, 85);
-    let processors = {
-        let m3pty = MockPaymentProcessor::build(None, None, None);
-        Arc::new(m3pty)
-    };
+    let processors = Arc::new(ut_setup_processor(None));
     let repo = MockMerchantRepo::build(None, None, None);
     let req_body = ut_default_store_onboard_req_stripe();
     let uc = RefreshOnboardStatusUseCase {
@@ -290,7 +294,7 @@ async fn refresh_status_3party_failure() {
             reason: AppProcessorErrorReason::InvalidMethod("unit-test".to_string()),
             fn_label: AppProcessorFnLabel::RefreshOnboardStatus,
         });
-        let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
+        let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
     let repo = {
@@ -327,7 +331,7 @@ async fn refresh_status_err_repo_update() {
     let auth_claim = ut_setup_auth_claim(mock_supervisor_id, 85);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
-        let m3pty = MockPaymentProcessor::build(None, None, Some(pay3pty_result));
+        let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
     let repo = {

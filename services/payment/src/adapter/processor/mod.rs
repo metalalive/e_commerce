@@ -154,6 +154,9 @@ impl AppProcessorPayoutResult {
         let Self { dto, model } = self;
         (dto, model)
     }
+    pub fn new(dto: CapturePayRespDto, model: PayoutModel) -> Self {
+        Self { dto, model }
+    }
 }
 
 // TODO, conditional compilation only for testing purpose

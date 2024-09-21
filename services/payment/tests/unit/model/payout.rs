@@ -16,12 +16,12 @@ use super::{
 use crate::dto::ut_setup_storeprofile_dto;
 
 #[rustfmt::skip]
-fn ut_setup_buyer_charge_inner(
+pub(crate) fn ut_setup_buyer_charge_inner(
     buyer_usr_id: u32,
     charge_ctime: DateTime<Utc>,
+    pay_in_state : BuyerPayInState,
 ) -> ChargeBuyerModel {
     let merchant_ids = [1008u32, 1009];
-    let done_time = charge_ctime + Duration::minutes(15);
     let order_id = "overlapping-camera-calibrate".to_string();
     let charge_lines = vec![
         (merchant_ids[0], ProductType::Item, 19030u64, (502i64, 1u32), (2510i64, 1u32), 5u32,),
@@ -55,14 +55,17 @@ fn ut_setup_buyer_charge_inner(
         buyer_usr_id,
         charge_ctime,
         order_id,
-        BuyerPayInState::OrderAppSynced(done_time),
+        pay_in_state,
         paymethod,
         charge_lines,
         currency_snapshot,
     )
 } // end of fn ut_setup_buyer_charge_inner
 
-fn ut_setup_merchant_profile(mock_store_id: u32, storestaff_id: u32) -> MerchantProfileModel {
+pub(crate) fn ut_setup_merchant_profile(
+    mock_store_id: u32,
+    storestaff_id: u32,
+) -> MerchantProfileModel {
     let start_time = Local::now().to_utc() - Duration::minutes(2);
     let mock_storeprof = ut_setup_storeprofile_dto(
         "cement tile",
@@ -75,7 +78,7 @@ fn ut_setup_merchant_profile(mock_store_id: u32, storestaff_id: u32) -> Merchant
     result.unwrap()
 }
 
-fn ut_setup_merchant_3party_stripe() -> Merchant3partyModel {
+pub(crate) fn ut_setup_merchant_3party_stripe() -> Merchant3partyModel {
     let mut ms = ut_default_merchant_3party_stripe();
     ms.capabilities.transfers = StripeAccountCapableState::active;
     ms.payouts_enabled = true;
@@ -84,13 +87,15 @@ fn ut_setup_merchant_3party_stripe() -> Merchant3partyModel {
     Merchant3partyModel::Stripe(ms)
 }
 
-fn ut_common_create_first_payout(
+pub(crate) fn ut_common_create_first_payout(
     buyer_usr_id: u32,
     mock_store_id: u32,
     staff_usr_id: u32,
     charge_ctime: DateTime<Utc>,
 ) -> Result<PayoutModel, PayoutModelError> {
-    let mock_charge_m = ut_setup_buyer_charge_inner(buyer_usr_id, charge_ctime);
+    let done_time = charge_ctime + Duration::minutes(15);
+    let payin_state = BuyerPayInState::OrderAppSynced(done_time);
+    let mock_charge_m = ut_setup_buyer_charge_inner(buyer_usr_id, charge_ctime, payin_state);
     let mock_merchant_prof = ut_setup_merchant_profile(mock_store_id, staff_usr_id);
     let mock_merchant_3pty = ut_setup_merchant_3party_stripe();
     let arg = (
@@ -133,7 +138,8 @@ fn create_merchant_id_mismatch() {
     );
     let valid_payout = result.unwrap();
     let wrong_store_id = 1008u32;
-    let mock_charge_m = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime);
+    let payin_state = BuyerPayInState::OrderAppSynced(charge_ctime + Duration::minutes(5));
+    let mock_charge_m = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime, payin_state);
     let mock_merchant_prof = ut_setup_merchant_profile(wrong_store_id, staff_usr_id);
     let mock_merchant_3pty = ut_setup_merchant_3party_stripe();
     let arg = (
@@ -162,7 +168,8 @@ fn create_charge_id_mismatch() {
     );
     let valid_payout = result.unwrap();
     let wrong_buyer_id = 5118u32;
-    let mock_charge_m = ut_setup_buyer_charge_inner(wrong_buyer_id, charge_ctime);
+    let payin_state = BuyerPayInState::OrderAppSynced(charge_ctime + Duration::minutes(5));
+    let mock_charge_m = ut_setup_buyer_charge_inner(wrong_buyer_id, charge_ctime, payin_state);
     let mock_merchant_prof = ut_setup_merchant_profile(mock_store_id, staff_usr_id);
     let mock_merchant_3pty = ut_setup_merchant_3party_stripe();
     let arg = (
@@ -186,7 +193,8 @@ fn create_charge_id_mismatch() {
 fn create_err_merchant_no_permit() {
     let (mock_buyer_id, mock_store_id, staff_usr_id) = (518u32, 1009u32, 2074u32);
     let charge_ctime = Local::now().to_utc() - Duration::minutes(96);
-    let mock_charge_m = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime);
+    let payin_state = BuyerPayInState::OrderAppSynced(charge_ctime + Duration::minutes(5));
+    let mock_charge_m = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime, payin_state);
     let mock_merchant_prof = ut_setup_merchant_profile(mock_store_id, staff_usr_id);
     let mock_merchant_3pty = {
         let ms = ut_default_merchant_3party_stripe();
@@ -212,7 +220,8 @@ fn create_err_merchant_no_permit() {
 fn create_missing_currency_snapshot() {
     let (mock_buyer_id, wrong_store_id, staff_usr_id) = (518u32, 9999u32, 2074u32);
     let charge_ctime = Local::now().to_utc() - Duration::minutes(96);
-    let mock_charge_m = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime);
+    let payin_state = BuyerPayInState::OrderAppSynced(charge_ctime + Duration::minutes(5));
+    let mock_charge_m = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime, payin_state);
     let mock_merchant_prof = ut_setup_merchant_profile(wrong_store_id, staff_usr_id);
     let mock_merchant_3pty = ut_setup_merchant_3party_stripe();
     let arg = (
@@ -240,7 +249,8 @@ fn create_err_invalid_amount() {
         mock_buyer_id, mock_store_id, staff_usr_id, charge_ctime
     );
     let valid_payout = result.unwrap();
-    let mock_charge_m = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime);
+    let payin_state = BuyerPayInState::OrderAppSynced(charge_ctime + Duration::minutes(5));
+    let mock_charge_m = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime, payin_state);
     let mock_merchant_prof = ut_setup_merchant_profile(mock_store_id, staff_usr_id);
     let mock_merchant_3pty = ut_setup_merchant_3party_stripe();
     let arg = (
@@ -266,7 +276,8 @@ fn create_err_3party_mismatch() {
     let (mock_buyer_id, mock_store_id, staff_usr_id) = (518u32, 1009u32, 2074u32);
     let charge_ctime = Local::now().to_utc() - Duration::minutes(88);
     let mock_charge_m = {
-        let mut cm = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime);
+        let payin_state = BuyerPayInState::OrderAppSynced(charge_ctime + Duration::minutes(5));
+        let mut cm = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime, payin_state);
         cm.meta.update_3party(Charge3partyModel::Unknown);
         cm
     };
@@ -293,7 +304,8 @@ fn create_err_3party_stripe_tx_grp_mismatch() {
         ut_common_create_first_payout(mock_buyer_id, mock_store_id, staff_usr_id, charge_ctime);
     let valid_payout = result.unwrap();
     let mock_charge_m = {
-        let mut cm = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime);
+        let payin_state = BuyerPayInState::OrderAppSynced(charge_ctime + Duration::minutes(5));
+        let mut cm = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime, payin_state);
         let paymethod = {
             let mut mthd = ut_default_charge_method_stripe(&charge_ctime);
             if let Charge3partyModel::Stripe(s) = &mut mthd {

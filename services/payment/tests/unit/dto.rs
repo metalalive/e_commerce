@@ -6,7 +6,9 @@ use ecommerce_common::api::rpc::dto::{
     StoreStaffRepDto,
 };
 
-use payment::api::web::dto::{StoreOnboardReqDto, StoreOnboardStripeReqDto};
+use payment::api::web::dto::{
+    CapturePay3partyRespDto, CapturePayRespDto, StoreOnboardReqDto, StoreOnboardStripeReqDto,
+};
 
 pub(super) fn ut_default_store_onboard_req_stripe() -> StoreOnboardReqDto {
     let s = StoreOnboardStripeReqDto {
@@ -65,5 +67,12 @@ pub(super) fn ut_setup_storeprofile_dto(
         label: shop_name.to_string(), active: true, supervisor_id,
         emails: Some(emails), phones: Some(phones),
         location: Some(location),  staff: Some(staff),
+    }
+}
+
+pub(super) fn ut_setup_capture_pay_resp_dto(store_id: u32) -> CapturePayRespDto {
+    CapturePayRespDto {
+        store_id,
+        processor: CapturePay3partyRespDto::Stripe,
     }
 }
