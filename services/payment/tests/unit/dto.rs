@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 
-use ecommerce_common::api::dto::CountryCode;
+use ecommerce_common::api::dto::{CountryCode, CurrencyDto};
 use ecommerce_common::api::rpc::dto::{
     ShopLocationRepDto, StoreEmailRepDto, StorePhoneRepDto, StoreProfileReplicaDto,
     StoreStaffRepDto,
@@ -73,6 +73,8 @@ pub(super) fn ut_setup_storeprofile_dto(
 pub(super) fn ut_setup_capture_pay_resp_dto(store_id: u32) -> CapturePayRespDto {
     CapturePayRespDto {
         store_id,
+        amount: "5566.7788".to_string(),
+        currency: CurrencyDto::INR,
         processor: CapturePay3partyRespDto::Stripe,
     }
 }

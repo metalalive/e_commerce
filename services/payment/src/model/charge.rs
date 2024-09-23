@@ -361,6 +361,15 @@ impl TryInto<(u32, DateTime<Utc>)> for ChargeToken {
             .map_err(|detail| (AppErrorCode::DataCorruption, detail))
     }
 }
+impl ToString for ChargeToken {
+    fn to_string(&self) -> String {
+        self.0.iter().fold(String::new(), |mut dst, num| {
+            let hex = format!("{:02x}", num);
+            dst += hex.as_str();
+            dst
+        })
+    }
+}
 impl ChargeToken {
     pub fn encode(owner: u32, now: DateTime<Utc>) -> Self {
         let given = [

@@ -180,6 +180,8 @@ pub enum CapturePay3partyRespDto {
 #[derive(Serialize)]
 pub struct CapturePayRespDto {
     pub store_id: u32,
+    pub amount: String,
+    pub currency: CurrencyDto,
     pub processor: CapturePay3partyRespDto,
 }
 

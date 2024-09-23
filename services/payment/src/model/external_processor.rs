@@ -74,6 +74,7 @@ pub struct Merchant3partyStripeModel {
 pub struct Payout3partyStripeModel {
     tx_grp: String,  // `transfer_group` field of payment-intent object
     acct_id: String, // identifier of Connected Account object
+    transfer_id: Option<String>,
 }
 
 impl StripeCheckoutPaymentStatusModel {
@@ -143,6 +144,7 @@ impl Payout3partyStripeModel {
         Self {
             tx_grp: c3s.transfer_group.clone(),
             acct_id: m3s.id.clone(),
+            transfer_id: None,
         }
     }
     pub(super) fn validate(
@@ -158,4 +160,13 @@ impl Payout3partyStripeModel {
             Ok(())
         }
     }
-}
+    pub(crate) fn transfer_group(&self) -> &str {
+        self.tx_grp.as_str()
+    }
+    pub(crate) fn connect_account(&self) -> &str {
+        self.acct_id.as_str()
+    }
+    pub(crate) fn set_transfer_id(&mut self, value: String) {
+        self.transfer_id = Some(value);
+    }
+} // end of impl Payout3partyStripeModel

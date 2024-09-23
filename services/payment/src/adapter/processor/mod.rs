@@ -297,6 +297,7 @@ impl AbstractPaymentProcessor for AppProcessorContext {
         &self,
         _payout_m: PayoutModel,
     ) -> Result<AppProcessorPayoutResult, AppProcessorError> {
+        
         let e = AppProcessorError {
             reason: AppProcessorErrorReason::NotImplemented,
             fn_label: AppProcessorFnLabel::PayOut,
