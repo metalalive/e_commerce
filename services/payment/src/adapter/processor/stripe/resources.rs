@@ -9,8 +9,8 @@ use ecommerce_common::api::rpc::dto::{ShopLocationRepDto, StoreProfileReplicaDto
 use super::AppProcessorErrorReason;
 use crate::api::web::dto::{StoreOnboardStripeReqDto, StripeCheckoutUImodeDto};
 use crate::model::{
-    ChargeLineBuyerModel, StripeAccountCapabilityModel, StripeAccountCapableState,
-    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    ChargeLineBuyerModel, Payout3partyStripeModel, PayoutInnerModel, StripeAccountCapabilityModel,
+    StripeAccountCapableState, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 #[derive(Deserialize)]
@@ -195,6 +195,49 @@ pub(super) struct AccountLink {
     pub url: String,
 }
 
+#[derive(Serialize)]
+pub(super) struct CreateTransfer {
+    pub currency: CurrencyDto,
+    pub destination: String,
+    pub amount: i64,
+    /// [CAUTION]
+    /// DO NOT rely on `transfer_group` field for limiting amount to pay out to
+    /// any specific merchant, Stripe platform does not really validate that for
+    /// applications consuming the `create-transfer` API endpoint.
+    ///
+    /// This means anyone can try calling the `create-transfer` API endpoint with
+    /// any arbitrary `transfer_group` field and valid currency (used in default
+    /// bank account of your Stripe platform),  the Stripe API server still performs
+    /// payout operation  even with non-existent `transfer_group`
+    pub transfer_group: String,
+}
+
+#[derive(Deserialize)]
+pub(super) struct Transfer {
+    pub id: String,
+    // FIXME. serde fails to rename `currency` to uppercase before de-serialization
+    // pub currency: CurrencyDto,
+    pub destination: String,
+    pub amount: i64,
+    pub transfer_group: String,
+}
+
+/// [reference]
+/// check `number to basic` column in the table listing currency
+/// subunit (minor unit) below
+/// https://en.wikipedia.org/wiki/List_of_circulating_currencies#T
+/// https://en.wikipedia.org/wiki/New_Taiwan_dollar
+fn subunit_multiplier(given: CurrencyDto) -> i64 {
+    match given {
+        CurrencyDto::INR
+        | CurrencyDto::IDR
+        | CurrencyDto::TWD
+        | CurrencyDto::THB
+        | CurrencyDto::USD => 100,
+        CurrencyDto::Unknown => 1,
+    }
+}
+
 impl From<&StripeCheckoutUImodeDto> for CheckoutSessionUiMode {
     fn from(value: &StripeCheckoutUImodeDto) -> Self {
         match value {
@@ -206,7 +249,7 @@ impl From<&StripeCheckoutUImodeDto> for CheckoutSessionUiMode {
 
 impl CreateCheckoutSessionPriceData {
     fn new(cline: &ChargeLineBuyerModel, currency_label: CurrencyDto) -> Self {
-        let m = Self::subunit_multiplier(currency_label.clone());
+        let m = subunit_multiplier(currency_label.clone());
         let m = Decimal::new(m, 0);
         // TODO, overflow error handling
         let amt_unit_represent = cline.amount.unit * m;
@@ -218,21 +261,6 @@ impl CreateCheckoutSessionPriceData {
             // the unit-amount field has to contain smallest unit
             // of specific currency
             unit_amount_decimal: amt_unit_represent.to_string(),
-        }
-    }
-    fn subunit_multiplier(given: CurrencyDto) -> i64 {
-        // [reference]
-        // check `number to basic` column in the table listing currency
-        // subunit (minor unit) below
-        // https://en.wikipedia.org/wiki/List_of_circulating_currencies#T
-        // https://en.wikipedia.org/wiki/New_Taiwan_dollar
-        match given {
-            CurrencyDto::INR
-            | CurrencyDto::IDR
-            | CurrencyDto::TWD
-            | CurrencyDto::THB
-            | CurrencyDto::USD => 100,
-            CurrencyDto::Unknown => 1,
         }
     }
 } // end of impl CreateCheckoutSessionPriceData
@@ -431,3 +459,34 @@ impl<'a> From<(StoreOnboardStripeReqDto, &'a str)> for CreateAccountLink {
         }
     }
 }
+
+impl<'a, 'b> From<(&'a PayoutInnerModel, &'b Payout3partyStripeModel)> for CreateTransfer {
+    fn from(value: (&'a PayoutInnerModel, &'b Payout3partyStripeModel)) -> Self {
+        let (pm, p3pt) = value;
+        let destination = p3pt.connect_account().to_string();
+        let transfer_group = p3pt.transfer_group().to_string();
+        let (amt_orig, _, snapshot) = pm.amount_merchant();
+        //let currency = snapshot.label.clone();
+
+        // converting back to base currency.
+        // TODO, replace the temporary code with PayoutInnerModel::amount_base()
+        let amt_orig = amt_orig.checked_div(snapshot.rate).unwrap();
+        let currency = CurrencyDto::USD;
+
+        let amt_represent = {
+            let m = subunit_multiplier(currency.clone());
+            let m = Decimal::new(m, 0);
+            amt_orig * m // TODO, overflow error handling
+        };
+        // FIXME, truncate precision logic must be moved to model layer,
+        // inconsistent amount between API endpoints will cause severe disaster
+        let mantissa = amt_represent.trunc_with_scale(0).mantissa();
+        let amount = i64::try_from(mantissa).unwrap(); //TODO, report error
+        Self {
+            currency,
+            destination,
+            amount,
+            transfer_group,
+        }
+    } // end of fn from
+} // end of impl CreateTransfer

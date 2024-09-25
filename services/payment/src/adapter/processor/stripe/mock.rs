@@ -13,9 +13,9 @@ use crate::api::web::dto::{
 };
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerModel,
-    Merchant3partyModel, Merchant3partyStripeModel, StripeAccountCapabilityModel,
-    StripeAccountCapableState, StripeAccountLinkModel, StripeAccountSettingModel,
-    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    Merchant3partyModel, Merchant3partyStripeModel, Payout3partyStripeModel, PayoutInnerModel,
+    StripeAccountCapabilityModel, StripeAccountCapableState, StripeAccountLinkModel,
+    StripeAccountSettingModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 use super::super::{AppProcessorErrorReason, AppProcessorMerchantResult, AppProcessorPayInResult};
@@ -147,5 +147,13 @@ impl AbstStripeContext for MockProcessorStripeCtx {
         let m = Merchant3partyModel::Stripe(old_m3pty);
         let out = AppProcessorMerchantResult { dto: d, model: m };
         Ok(out)
+    }
+
+    async fn pay_out(
+        &self,
+        _p_inner: &PayoutInnerModel,
+        _p3pty: Payout3partyStripeModel,
+    ) -> Result<Payout3partyStripeModel, AppProcessorErrorReason> {
+        Err(AppProcessorErrorReason::NotImplemented)
     }
 } // end of impl MockProcessorStripeCtx

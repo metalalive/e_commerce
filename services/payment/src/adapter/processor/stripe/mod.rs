@@ -23,7 +23,7 @@ pub(super) use self::mock::MockProcessorStripeCtx;
 use self::resources::{
     AccountLink, AccountRequirement, AccountSettings, CheckoutSession, CheckoutSessionMode,
     ConnectAccount, CreateAccountLink, CreateCheckoutSession, CreateCheckoutSessionLineItem,
-    CreateCheckoutSessionPaymentIntentData, CreateConnectAccount,
+    CreateCheckoutSessionPaymentIntentData, CreateConnectAccount, CreateTransfer, Transfer,
 };
 use super::{
     AppProcessorErrorReason, AppProcessorMerchantResult, AppProcessorPayInResult, BaseClientError,
@@ -34,8 +34,8 @@ use crate::api::web::dto::{
 };
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerModel,
-    Merchant3partyModel, Merchant3partyStripeModel, StripeAccountLinkModel,
-    StripeAccountSettingModel,
+    Merchant3partyModel, Merchant3partyStripeModel, Payout3partyStripeModel, PayoutInnerModel,
+    StripeAccountLinkModel, StripeAccountSettingModel,
 };
 
 const HEADER_NAME_IDEMPOTENCY: &str = "Idempotency-Key";
@@ -69,7 +69,13 @@ pub(super) trait AbstStripeContext: Send + Sync {
         m3pty: Merchant3partyStripeModel,
         req3pt: StoreOnboardStripeReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason>;
-}
+
+    async fn pay_out(
+        &self,
+        p_inner: &PayoutInnerModel,
+        p3pty: Payout3partyStripeModel,
+    ) -> Result<Payout3partyStripeModel, AppProcessorErrorReason>;
+} // end of trait AbstStripeContext
 
 pub(super) struct AppProcessorStripeCtx {
     host: String,
@@ -110,6 +116,20 @@ impl AppProcessorStripeCtx {
         };
         Ok(Box::new(m))
     } // end of fn try-build
+
+    async fn init_conn_fullbyte(
+        &self,
+    ) -> Result<AppStripeClient<Full<Bytes>>, AppProcessorErrorReason> {
+        AppStripeClient::<Full<Bytes>>::try_build(
+            self.logctx.clone(),
+            &self.secure_connector,
+            self.host.clone(),
+            self.port,
+            self.api_key.clone(),
+        )
+        .await
+        .map_err(AppProcessorErrorReason::from)
+    }
 
     fn map_log_err(&self, label: &str, e: BaseClientError) -> AppProcessorErrorReason {
         let logger = &self.logctx;
@@ -152,17 +172,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
                     charge_buyer.meta.owner(),
                 ))?;
 
-        let charge_token_serial =
-            charge_buyer
-                .meta
-                .token()
-                .0
-                .iter()
-                .fold(String::new(), |mut dst, num| {
-                    let hex = format!("{:02x}", num);
-                    dst += hex.as_str();
-                    dst
-                });
+        let charge_token_serial = charge_buyer.meta.token().to_string();
 
         app_log_event!(
             _logctx,
@@ -190,19 +200,11 @@ impl AbstStripeContext for AppProcessorStripeCtx {
                 .collect(),
             payment_intent_data: CreateCheckoutSessionPaymentIntentData {
                 transfer_group: Some(charge_token_serial.clone()),
-            }, // TODO
+            },
             mode: CheckoutSessionMode::Payment,
             ui_mode: (&req.ui_mode).into(),
         };
-        let mut _client = AppStripeClient::<Full<Bytes>>::try_build(
-            self.logctx.clone(),
-            &self.secure_connector,
-            self.host.clone(),
-            self.port,
-            self.api_key.clone(),
-        )
-        .await
-        .map_err(AppProcessorErrorReason::from)?;
+        let mut _client = self.init_conn_fullbyte().await?;
 
         let hdrs = vec![(
             // header-name from-static does not allow uppercase word
@@ -263,17 +265,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
     ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason> {
         // TODO, clean up the accounts which are disabled and expired
         let body_obj = CreateConnectAccount::try_from(store_profile)?;
-
-        let mut _client = AppStripeClient::<Full<Bytes>>::try_build(
-            self.logctx.clone(),
-            &self.secure_connector,
-            self.host.clone(),
-            self.port,
-            self.api_key.clone(),
-        )
-        .await
-        .map_err(AppProcessorErrorReason::from)?;
-
+        let mut _client = self.init_conn_fullbyte().await?;
         let acct = _client
             .execute_form::<ConnectAccount, CreateConnectAccount>(
                 "/accounts",
@@ -303,16 +295,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
         old_m3pty: Merchant3partyStripeModel,
         req: StoreOnboardStripeReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorErrorReason> {
-        let mut _client = AppStripeClient::<Full<Bytes>>::try_build(
-            self.logctx.clone(),
-            &self.secure_connector,
-            self.host.clone(),
-            self.port,
-            self.api_key.clone(),
-        )
-        .await
-        .map_err(AppProcessorErrorReason::from)?;
-
+        let mut _client = self.init_conn_fullbyte().await?;
         let resource_path = format!("/accounts/{}", old_m3pty.id);
         let updated_acct = _client
             .execute_form::<ConnectAccount, InnerEmptyBody>(
@@ -327,6 +310,7 @@ impl AbstStripeContext for AppProcessorStripeCtx {
         if updated_acct.onboarding_complete() {
             AppProcessorMerchantResult::try_from((updated_acct, None))
         } else {
+            #[allow(clippy::collapsible_else_if)]
             if old_m3pty.renew_link_required() {
                 let body_obj = CreateAccountLink::from((req, old_m3pty.id.as_str()));
                 let acc_link = _client
@@ -346,6 +330,54 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             }
         }
     } // end of fn refresh_onboard_status
+
+    async fn pay_out(
+        &self,
+        p_inner: &PayoutInnerModel,
+        mut p3pty: Payout3partyStripeModel,
+    ) -> Result<Payout3partyStripeModel, AppProcessorErrorReason> {
+        let mut _client = self.init_conn_fullbyte().await?;
+
+        let req_body = CreateTransfer::from((p_inner, &p3pty));
+        let idempotency_key = format!("{}-{}", p3pty.transfer_group(), p_inner.merchant_id());
+        let hdrs = vec![(
+            HeaderName::from_bytes(HEADER_NAME_IDEMPOTENCY.as_bytes()).unwrap(),
+            HeaderValue::from_str(idempotency_key.as_str()).unwrap(),
+        )];
+        let transfer_obj = _client
+            .execute_form::<Transfer, CreateTransfer>("/transfers", Method::POST, &req_body, hdrs)
+            .await
+            .map_err(|e| self.map_log_err("pay-out", e))?;
+
+        if transfer_obj.destination.as_str() != p3pty.connect_account() {
+            let msg = format!(
+                "dst-account-mismatch, merchant:{}, expect:{}, actual:{}",
+                p_inner.merchant_id(),
+                p3pty.connect_account(),
+                transfer_obj.destination,
+            );
+            Err(AppProcessorErrorReason::ThirdParty(msg))
+        } else if transfer_obj.transfer_group.as_str() != req_body.transfer_group.as_str() {
+            let msg = format!(
+                "transfer-group-mismatch, merchant:{}, expect:{}, actual:{}",
+                p_inner.merchant_id(),
+                req_body.transfer_group.as_str(),
+                transfer_obj.transfer_group.as_str(),
+            );
+            Err(AppProcessorErrorReason::ThirdParty(msg))
+        } else if transfer_obj.amount != req_body.amount {
+            let msg = format!(
+                "amount-mismatch, merchant:{}, expect:{}, actual:{}",
+                p_inner.merchant_id(),
+                req_body.amount,
+                transfer_obj.amount,
+            );
+            Err(AppProcessorErrorReason::ThirdParty(msg))
+        } else {
+            p3pty.set_transfer_id(transfer_obj.id);
+            Ok(p3pty)
+        }
+    } // end of fn pay_out
 } // end of impl AppProcessorStripeCtx
 
 impl From<(CheckoutSession, DateTime<Utc>, String)> for Charge3partyStripeModel {

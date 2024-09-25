@@ -16,12 +16,12 @@ use ecommerce_common::logging::AppLogContext;
 pub use self::base_client::{BaseClientError, BaseClientErrorReason};
 use self::stripe::{AbstStripeContext, AppProcessorStripeCtx, MockProcessorStripeCtx};
 use crate::api::web::dto::{
-    CapturePayRespDto, ChargeCreateRespDto, PaymentMethodErrorReason, PaymentMethodReqDto,
-    PaymentMethodRespDto, StoreOnboardReqDto, StoreOnboardRespDto,
+    CapturePay3partyRespDto, CapturePayRespDto, ChargeCreateRespDto, PaymentMethodErrorReason,
+    PaymentMethodReqDto, PaymentMethodRespDto, StoreOnboardReqDto, StoreOnboardRespDto,
 };
 use crate::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
-    Merchant3partyModel, PayoutModel,
+    Merchant3partyModel, Payout3partyModel, PayoutModel,
 };
 
 #[async_trait]
@@ -72,6 +72,7 @@ pub enum AppProcessorErrorReason {
     InvalidMethod(String),
     InvalidStoreProfileDto(Vec<String>),
     CorruptedTimeStamp(String, i64), // label and given incorrect timestamp
+    ThirdParty(String),
 }
 
 #[derive(Debug)]
@@ -88,7 +89,7 @@ pub enum AppProcessorFnLabel {
 pub struct AppProcessorError {
     pub reason: AppProcessorErrorReason,
     pub fn_label: AppProcessorFnLabel,
-}
+} //TODO, new field which specifies which 3rd party reports this error
 
 pub struct AppProcessorPayInResult {
     pub charge_id: Vec<u8>,
@@ -295,15 +296,37 @@ impl AbstractPaymentProcessor for AppProcessorContext {
 
     async fn pay_out(
         &self,
-        _payout_m: PayoutModel,
+        payout_m: PayoutModel,
     ) -> Result<AppProcessorPayoutResult, AppProcessorError> {
-        
-        let e = AppProcessorError {
-            reason: AppProcessorErrorReason::NotImplemented,
-            fn_label: AppProcessorFnLabel::PayOut,
+        let (p_inner, p3pt) = payout_m.into_parts();
+        let result = match p3pt {
+            Payout3partyModel::Stripe(s) => self._stripe.pay_out(&p_inner, s).await.map(|s| {
+                (
+                    CapturePay3partyRespDto::Stripe,
+                    Payout3partyModel::Stripe(s),
+                )
+            }),
         };
-        Err(e)
-    }
+        result
+            .map_err(|reason| AppProcessorError {
+                reason,
+                fn_label: AppProcessorFnLabel::PayOut,
+            })
+            .map(|(processor, p3pt)| {
+                let expect = p_inner.amount_merchant();
+                let dto = CapturePayRespDto {
+                    store_id: p_inner.merchant_id(),
+                    processor,
+                    amount: expect.0.to_string(),
+                    currency: expect.2.label.clone(),
+                };
+                let payout_m = PayoutModel::from_parts(p_inner, p3pt);
+                AppProcessorPayoutResult {
+                    dto,
+                    model: payout_m,
+                }
+            })
+    } // end of fn pay_out
 } // end of impl AppProcessorContext
 
 pub(crate) fn app_processor_context(

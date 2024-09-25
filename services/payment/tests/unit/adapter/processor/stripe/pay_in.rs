@@ -19,6 +19,7 @@ use payment::model::{
     StripeSessionStatusModel,
 };
 
+use super::pay_out;
 use crate::model::ut_default_currency_snapshot;
 use crate::ut_setup_sharestate;
 
@@ -100,6 +101,7 @@ macro_rules! ut_verify_charge_stripe_model {
             Charge3partyModel::Stripe(m) => {
                 assert!(!m.checkout_session_id.is_empty());
                 assert!(!m.payment_intent_id.is_empty());
+                assert!(!m.transfer_group.is_empty());
                 let cond = matches!(&m.session_state, $expect_sess_state);
                 assert!(cond);
                 let cond = matches!(&m.payment_state, $expect_pay_state);
@@ -190,7 +192,7 @@ async fn ut_autofill_stripe_hosted_webform(
 } // end of fn ut_autofill_stripe_hosted_webform
 
 #[actix_web::test]
-async fn charge_session_confirmed() {
+async fn charge_flow_completed() {
     let (mock_usr_id, mock_order_id) = (195, "a0b46792f11c");
     let shr_state = ut_setup_sharestate();
     let proc_ctx = shr_state.processor_context();
@@ -199,6 +201,7 @@ async fn charge_session_confirmed() {
     let mock_lines = vec![
         (26u32, ProductType::Package, 2603u64, (791i64, 1u32), (3955i64, 1u32), 5u32),
         (12, ProductType::Item, 1227, (48, 0), (432, 0), 9),
+        (12, ProductType::Package, 8454, (502, 1), (6024, 1), 12),
     ];
     let pay_mthd_req = ut_default_method_stripe_request();
     let mut charge_buyer = ut_setup_chargebuyer_stripe(mock_usr_id, mock_order_id, mock_lines);
@@ -225,7 +228,10 @@ async fn charge_session_confirmed() {
         StripeSessionStatusModel::complete,
         StripeCheckoutPaymentStatusModel::paid,
     );
-} // end of fn charge_session_confirmed
+
+    charge_buyer.meta.update_3party(charge_3pty_m);
+    pay_out::ok_exact_once(shr_state.config(), proc_ctx, charge_buyer).await;
+} // end of fn charge_flow_completed
 
 #[actix_web::test]
 async fn charge_declined_invalid_card() {

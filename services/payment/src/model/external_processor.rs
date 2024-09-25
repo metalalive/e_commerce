@@ -139,6 +139,17 @@ impl Merchant3partyStripeModel {
         self.payouts_enabled && self.tos_accepted.is_some() && tx_active
     }
 }
+
+type PayoutStripeCvtArgs = (String, String, Option<String>);
+
+impl From<PayoutStripeCvtArgs> for Payout3partyStripeModel {
+    #[rustfmt::skip]
+    fn from(value: PayoutStripeCvtArgs) -> Self {
+        let (tx_grp, acct_id, transfer_id) = value;
+        Self { tx_grp, acct_id, transfer_id }
+    }
+}
+
 impl Payout3partyStripeModel {
     pub(super) fn new(c3s: &Charge3partyStripeModel, m3s: &Merchant3partyStripeModel) -> Self {
         Self {

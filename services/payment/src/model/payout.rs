@@ -46,6 +46,31 @@ pub struct PayoutModel {
     _p3pty: Payout3partyModel,
 }
 
+type PayoutModelCvtArgs2 = (
+    u32,
+    DateTime<Utc>,
+    u32,
+    DateTime<Utc>,
+    u32,
+    PayoutAmountModel,
+    Payout3partyModel,
+);
+
+impl From<PayoutModelCvtArgs2> for PayoutModel {
+    #[rustfmt::skip]
+    fn from(value: PayoutModelCvtArgs2) -> Self {
+        let (
+            merchant_id, capture_time, buyer_id, charge_ctime,
+            storestaff_id, amount, _p3pty
+        ) = value;
+        let _inner = PayoutInnerModel {
+            merchant_id, capture_time, buyer_id, charge_ctime,
+            storestaff_id, amount
+        };
+        Self { _inner, _p3pty }
+    }
+}
+
 type PayoutModelCvtArgs = (
     ChargeBuyerModel,
     MerchantProfileModel,
@@ -124,6 +149,8 @@ impl PayoutModel {
     pub fn merchant_id(&self) -> u32 {
         self._inner.merchant_id()
     }
+    // TODO, new method which outputs amount in base currency, note in this
+    // project the base currency defaults to USD
     pub fn amount_merchant(&self) -> (Decimal, Decimal, &OrderCurrencySnapshot) {
         self._inner.amount_merchant()
     }
@@ -137,7 +164,22 @@ impl PayoutInnerModel {
         let a = &self.amount;
         (a.total, a.target_rate, &a.currency_seller)
     }
-} // end of impl PayoutModel
+} // end of impl PayoutInnerModel
+
+type PayoutAmountCvtArgs = (
+    Decimal,
+    Decimal,
+    OrderCurrencySnapshot,
+    OrderCurrencySnapshot,
+);
+
+impl From<PayoutAmountCvtArgs> for PayoutAmountModel {
+    #[rustfmt::skip]
+    fn from(value: PayoutAmountCvtArgs) -> Self {
+        let (total, target_rate, currency_seller, currency_buyer) = value;
+        Self { total, target_rate, currency_seller, currency_buyer }
+    }
+}
 
 impl PayoutAmountModel {
     fn try_update(mut self, given: &Self) -> Result<Self, PayoutModelError> {
