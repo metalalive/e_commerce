@@ -9,8 +9,9 @@ use ecommerce_common::api::rpc::dto::{ShopLocationRepDto, StoreProfileReplicaDto
 use super::AppProcessorErrorReason;
 use crate::api::web::dto::{StoreOnboardStripeReqDto, StripeCheckoutUImodeDto};
 use crate::model::{
-    ChargeLineBuyerModel, Payout3partyStripeModel, PayoutInnerModel, StripeAccountCapabilityModel,
-    StripeAccountCapableState, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    Charge3partyStripeModel, ChargeLineBuyerModel, Payout3partyStripeModel, PayoutInnerModel,
+    StripeAccountCapabilityModel, StripeAccountCapableState, StripeCheckoutPaymentStatusModel,
+    StripeSessionStatusModel,
 };
 
 #[derive(Deserialize)]
@@ -222,22 +223,6 @@ pub(super) struct Transfer {
     pub transfer_group: String,
 }
 
-/// [reference]
-/// check `number to basic` column in the table listing currency
-/// subunit (minor unit) below
-/// https://en.wikipedia.org/wiki/List_of_circulating_currencies#T
-/// https://en.wikipedia.org/wiki/New_Taiwan_dollar
-fn subunit_multiplier(given: CurrencyDto) -> i64 {
-    match given {
-        CurrencyDto::INR
-        | CurrencyDto::IDR
-        | CurrencyDto::TWD
-        | CurrencyDto::THB
-        | CurrencyDto::USD => 100,
-        CurrencyDto::Unknown => 1,
-    }
-}
-
 impl From<&StripeCheckoutUImodeDto> for CheckoutSessionUiMode {
     fn from(value: &StripeCheckoutUImodeDto) -> Self {
         match value {
@@ -249,10 +234,9 @@ impl From<&StripeCheckoutUImodeDto> for CheckoutSessionUiMode {
 
 impl CreateCheckoutSessionPriceData {
     fn new(cline: &ChargeLineBuyerModel, currency_label: CurrencyDto) -> Self {
-        let m = subunit_multiplier(currency_label.clone());
-        let m = Decimal::new(m, 0);
-        // TODO, overflow error handling
-        let amt_unit_represent = cline.amount.unit * m;
+        let amt_unit_represent =
+            Charge3partyStripeModel::amount_represent(cline.amount.unit, currency_label.clone())
+                .unwrap(); // TODO, overflow error handling
         CreateCheckoutSessionPriceData {
             product_data: CreateCheckoutSessionProductData {
                 name: format!("{:?}", cline.pid),
@@ -460,33 +444,28 @@ impl<'a> From<(StoreOnboardStripeReqDto, &'a str)> for CreateAccountLink {
     }
 }
 
-impl<'a, 'b> From<(&'a PayoutInnerModel, &'b Payout3partyStripeModel)> for CreateTransfer {
-    fn from(value: (&'a PayoutInnerModel, &'b Payout3partyStripeModel)) -> Self {
+impl<'a, 'b> TryFrom<(&'a PayoutInnerModel, &'b Payout3partyStripeModel)> for CreateTransfer {
+    type Error = AppProcessorErrorReason;
+
+    fn try_from(
+        value: (&'a PayoutInnerModel, &'b Payout3partyStripeModel),
+    ) -> Result<Self, Self::Error> {
         let (pm, p3pt) = value;
-        let destination = p3pt.connect_account().to_string();
-        let transfer_group = p3pt.transfer_group().to_string();
-        let (amt_orig, _, snapshot) = pm.amount_merchant();
-        //let currency = snapshot.label.clone();
-
-        // converting back to base currency.
-        // TODO, replace the temporary code with PayoutInnerModel::amount_base()
-        let amt_orig = amt_orig.checked_div(snapshot.rate).unwrap();
-        let currency = CurrencyDto::USD;
-
-        let amt_represent = {
-            let m = subunit_multiplier(currency.clone());
-            let m = Decimal::new(m, 0);
-            amt_orig * m // TODO, overflow error handling
-        };
-        // FIXME, truncate precision logic must be moved to model layer,
-        // inconsistent amount between API endpoints will cause severe disaster
-        let mantissa = amt_represent.trunc_with_scale(0).mantissa();
-        let amount = i64::try_from(mantissa).unwrap(); //TODO, report error
-        Self {
-            currency,
-            destination,
-            amount,
-            transfer_group,
-        }
+        let amt_orig = pm.amount_base();
+        let amt_represent = Payout3partyStripeModel::amount_represent(amt_orig, CurrencyDto::USD)
+            .map_err(AppProcessorErrorReason::AmountOverflow)?;
+        Ok(Self {
+            amount: amt_represent,
+            currency: CurrencyDto::USD,
+            destination: p3pt.connect_account().to_string(),
+            transfer_group: p3pt.transfer_group().to_string(),
+        })
     } // end of fn from
+} // end of impl CreateTransfer
+
+impl Transfer {
+    pub(super) fn amount_decimal(&self) -> Decimal {
+        let scale = CurrencyDto::USD.amount_fraction_scale();
+        Decimal::new(self.amount, scale)
+    }
 } // end of impl CreateTransfer

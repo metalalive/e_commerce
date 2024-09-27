@@ -53,11 +53,11 @@ fn ut_setup_payout_model(
         } else {
             panic!("");
         };
-    let arg = (stripe_tx_grp, stripe_dst_account, None);
+    let arg = (stripe_tx_grp, stripe_dst_account, None, None);
     let mock_3pty = Payout3partyModel::Stripe(Payout3partyStripeModel::from(arg));
     let buyer_usr_id = charge_buyer.meta.owner();
     let arg = (
-        Decimal::new(10344, 1), Decimal::ONE,
+        Decimal::ONE, Decimal::new(3222, 2), Decimal::new(10344, 1), 
         charge_buyer.currency_snapshot.get(&buyer_usr_id).unwrap().clone(),
         charge_buyer.currency_snapshot.get(&mock_merchant_id).unwrap().clone(),
     );
@@ -84,9 +84,15 @@ pub(super) async fn ok_exact_once(
     let result = proc_ctx.pay_out(mock_payout_m).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
-        let (payout_dto, _payout_m) = v.into_parts();
+        let (payout_dto, payout_m) = v.into_parts();
         assert_eq!(payout_dto.currency, CurrencyDto::TWD);
         assert_eq!(payout_dto.amount, "1034.4");
+        match payout_m.thirdparty() {
+            Payout3partyModel::Stripe(s) => {
+                let amt_serial = s.amount().unwrap();
+                assert_eq!(amt_serial.to_string().as_str(), "32.22");
+            }
+        }
     }
 } // end of fn ok_exact_once
 

@@ -174,7 +174,11 @@ pub struct CapturePayReqDto {
 #[derive(Serialize)]
 #[serde(tag = "label")]
 pub enum CapturePay3partyRespDto {
-    Stripe,
+    // the actual transferred amount might be slightly different due to precision issue
+    Stripe {
+        amount: String,
+        currency: CurrencyDto,
+    },
 }
 
 #[derive(Serialize)]

@@ -1,7 +1,8 @@
 use chrono::{DateTime, Local, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use ecommerce_common::api::dto::CountryCode;
+use ecommerce_common::api::dto::{CountryCode, CurrencyDto};
 
 use crate::api::web::dto::ChargeStatusDto;
 
@@ -75,7 +76,36 @@ pub struct Payout3partyStripeModel {
     tx_grp: String,  // `transfer_group` field of payment-intent object
     acct_id: String, // identifier of Connected Account object
     transfer_id: Option<String>,
+    amount: Option<Decimal>,
 }
+
+mod stripe_common {
+    use super::{CurrencyDto, Decimal};
+
+    /// [reference]
+    /// check `number to basic` column in the table listing currency
+    /// subunit (minor unit) below
+    /// https://en.wikipedia.org/wiki/List_of_circulating_currencies#T
+    /// https://en.wikipedia.org/wiki/New_Taiwan_dollar
+    fn subunit_multiplier(given: CurrencyDto) -> i64 {
+        match given {
+            CurrencyDto::INR
+            | CurrencyDto::IDR
+            | CurrencyDto::TWD
+            | CurrencyDto::THB
+            | CurrencyDto::USD => 100,
+            CurrencyDto::Unknown => 1,
+        }
+    }
+    pub(super) fn amount_represent(
+        orig: Decimal,
+        currency: CurrencyDto,
+    ) -> Result<Decimal, (Decimal, i64)> {
+        let m = subunit_multiplier(currency);
+        let m2 = Decimal::new(m, 0);
+        orig.checked_mul(m2).ok_or((orig, m))
+    }
+} // end of mod stripe_common
 
 impl StripeCheckoutPaymentStatusModel {
     fn status_dto(&self) -> ChargeStatusDto {
@@ -122,7 +152,11 @@ impl Charge3partyStripeModel {
             None
         }
     }
-}
+    pub(crate) fn amount_represent(orig: Decimal, c: CurrencyDto) -> Result<Decimal, String> {
+        stripe_common::amount_represent(orig, c)
+            .map_err(|(d, m)| format!("overflow, orig:{d}, multiplier:{m}"))
+    }
+} // end of impl Charge3partyStripeModel
 
 impl Merchant3partyStripeModel {
     pub(crate) fn renew_link_required(&self) -> bool {
@@ -140,13 +174,13 @@ impl Merchant3partyStripeModel {
     }
 }
 
-type PayoutStripeCvtArgs = (String, String, Option<String>);
+type PayoutStripeCvtArgs = (String, String, Option<String>, Option<Decimal>);
 
 impl From<PayoutStripeCvtArgs> for Payout3partyStripeModel {
     #[rustfmt::skip]
     fn from(value: PayoutStripeCvtArgs) -> Self {
-        let (tx_grp, acct_id, transfer_id) = value;
-        Self { tx_grp, acct_id, transfer_id }
+        let (tx_grp, acct_id, transfer_id, amount) = value;
+        Self { tx_grp, acct_id, transfer_id, amount }
     }
 }
 
@@ -156,6 +190,7 @@ impl Payout3partyStripeModel {
             tx_grp: c3s.transfer_group.clone(),
             acct_id: m3s.id.clone(),
             transfer_id: None,
+            amount: None,
         }
     }
     pub(super) fn validate(
@@ -179,5 +214,19 @@ impl Payout3partyStripeModel {
     }
     pub(crate) fn set_transfer_id(&mut self, value: String) {
         self.transfer_id = Some(value);
+    }
+    pub fn amount(&self) -> Option<Decimal> {
+        self.amount
+    }
+    pub(crate) fn set_amount(&mut self, value: Decimal) {
+        self.amount = Some(value);
+    }
+    pub(crate) fn amount_represent(orig: Decimal, currency: CurrencyDto) -> Result<i64, String> {
+        // for data consistency, all use-case instances have to invoke this function
+        // to get precise amount for payout.
+        let r = stripe_common::amount_represent(orig, currency)
+            .map_err(|(d, m)| format!("orig:{d}, multiplier:{m}"))?;
+        let mantissa = r.trunc_with_scale(0).mantissa();
+        i64::try_from(mantissa).map_err(|e| format!("amount-too-large: {mantissa}, {:?}", e))
     }
 } // end of impl Payout3partyStripeModel

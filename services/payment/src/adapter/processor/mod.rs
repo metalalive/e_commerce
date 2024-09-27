@@ -72,6 +72,7 @@ pub enum AppProcessorErrorReason {
     InvalidMethod(String),
     InvalidStoreProfileDto(Vec<String>),
     CorruptedTimeStamp(String, i64), // label and given incorrect timestamp
+    AmountOverflow(String),
     ThirdParty(String),
 }
 
@@ -300,31 +301,27 @@ impl AbstractPaymentProcessor for AppProcessorContext {
     ) -> Result<AppProcessorPayoutResult, AppProcessorError> {
         let (p_inner, p3pt) = payout_m.into_parts();
         let result = match p3pt {
-            Payout3partyModel::Stripe(s) => self._stripe.pay_out(&p_inner, s).await.map(|s| {
-                (
-                    CapturePay3partyRespDto::Stripe,
-                    Payout3partyModel::Stripe(s),
-                )
-            }),
+            Payout3partyModel::Stripe(s) => self
+                ._stripe
+                .pay_out(&p_inner, s)
+                .await
+                .map(Payout3partyModel::Stripe),
         };
         result
             .map_err(|reason| AppProcessorError {
                 reason,
                 fn_label: AppProcessorFnLabel::PayOut,
             })
-            .map(|(processor, p3pt)| {
+            .map(|p3pt| {
                 let expect = p_inner.amount_merchant();
                 let dto = CapturePayRespDto {
                     store_id: p_inner.merchant_id(),
-                    processor,
+                    processor: CapturePay3partyRespDto::from(&p3pt),
                     amount: expect.0.to_string(),
                     currency: expect.2.label.clone(),
                 };
                 let payout_m = PayoutModel::from_parts(p_inner, p3pt);
-                AppProcessorPayoutResult {
-                    dto,
-                    model: payout_m,
-                }
+                AppProcessorPayoutResult::new(dto, payout_m)
             })
     } // end of fn pay_out
 } // end of impl AppProcessorContext

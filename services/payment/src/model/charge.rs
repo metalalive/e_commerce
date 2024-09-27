@@ -21,7 +21,9 @@ use crate::api::web::dto::{
     ChargeAmountOlineDto, ChargeOlineErrorDto, ChargeRefreshRespDto, ChargeReqOrderDto,
     ChargeRespErrorDto, ChargeStatusDto, OrderErrorReason,
 };
-use crate::hard_limit::{CREATE_CHARGE_SECONDS_INTERVAL, SECONDS_ORDERLINE_DISCARD_MARGIN};
+use crate::hard_limit::{
+    CREATE_CHARGE_SECONDS_INTERVAL, CURRENCY_RATE_PRECISION, SECONDS_ORDERLINE_DISCARD_MARGIN,
+};
 
 pub enum Charge3partyModel {
     Unknown,
@@ -308,34 +310,31 @@ impl ChargeBuyerModel {
             .sum::<Decimal>()
     }
 
+    #[rustfmt::skip]
     fn _capture_amount(&self, seller_id: u32) -> Result<PayoutAmountModel, String> {
-        let currency_seller = self
-            .get_seller_currency(seller_id)
+        let currency_seller = self.get_seller_currency(seller_id)
             .ok_or("missing-currency-seller".to_string())?;
-        let currency_buyer = self
-            .get_buyer_currency()
+        let currency_buyer = self.get_buyer_currency()
             .ok_or("missing-currency-buyer".to_string())?;
-        // TODO, move to top-level hard limit
-        let hardlimit_rate_precision = 8u32;
         let tot_amt_buyer = self.estimate_lines_amount(seller_id);
-        let target_rate = currency_seller
-            .rate
+        let target_rate = currency_seller.rate
             .checked_div(currency_buyer.rate)
             .ok_or("target-rate-overflow".to_string())?
-            .trunc_with_scale(hardlimit_rate_precision);
-        let total = tot_amt_buyer
+            .trunc_with_scale(CURRENCY_RATE_PRECISION);
+        let total_bs = tot_amt_buyer
+            .checked_div(currency_buyer.rate)
+            .ok_or(format!("convert-overflow, base, rate:{}, amount:{}",
+                           currency_buyer.rate, tot_amt_buyer))?
+            .trunc_with_scale(CurrencyDto::USD.amount_fraction_scale());
+        let total_mc = tot_amt_buyer
             .checked_mul(target_rate)
-            .ok_or("converting-amount-overflow".to_string())?
+            .ok_or(format!("convert-overflow, merchant, rate:{}, amount:{}",
+                           target_rate, tot_amt_buyer))?
             .trunc_with_scale(currency_seller.label.amount_fraction_scale());
+        let args = (target_rate, total_bs, total_mc,  currency_seller, currency_buyer);
+        Ok(PayoutAmountModel::from(args))
+    } // end of fn _capture_amount
 
-        let obj = PayoutAmountModel {
-            target_rate,
-            total,
-            currency_seller,
-            currency_buyer,
-        };
-        Ok(obj)
-    }
     pub(super) fn capture_amount(
         &self,
         seller_id: u32,

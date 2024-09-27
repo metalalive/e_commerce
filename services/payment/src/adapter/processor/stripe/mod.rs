@@ -334,11 +334,10 @@ impl AbstStripeContext for AppProcessorStripeCtx {
     async fn pay_out(
         &self,
         p_inner: &PayoutInnerModel,
-        mut p3pty: Payout3partyStripeModel,
+        p3pty: Payout3partyStripeModel,
     ) -> Result<Payout3partyStripeModel, AppProcessorErrorReason> {
         let mut _client = self.init_conn_fullbyte().await?;
-
-        let req_body = CreateTransfer::from((p_inner, &p3pty));
+        let req_body = CreateTransfer::try_from((p_inner, &p3pty))?;
         let idempotency_key = format!("{}-{}", p3pty.transfer_group(), p_inner.merchant_id());
         let hdrs = vec![(
             HeaderName::from_bytes(HEADER_NAME_IDEMPOTENCY.as_bytes()).unwrap(),
@@ -374,6 +373,9 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             );
             Err(AppProcessorErrorReason::ThirdParty(msg))
         } else {
+            let mut p3pty = p3pty;
+            let finalized_amt = transfer_obj.amount_decimal();
+            p3pty.set_amount(finalized_amt);
             p3pty.set_transfer_id(transfer_obj.id);
             Ok(p3pty)
         }

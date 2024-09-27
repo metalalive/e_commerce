@@ -39,6 +39,7 @@ pub mod hard_limit {
     pub const SECONDS_ORDERLINE_DISCARD_MARGIN: u16 = 55u16;
     pub const CREATE_CHARGE_SECONDS_INTERVAL: u16 = 5u16;
     pub const RPC_WAIT_FOR_REPLY: u16 = 5u16;
+    pub const CURRENCY_RATE_PRECISION: u32 = 8;
 }
 
 pub struct AppSharedState {

@@ -95,7 +95,7 @@ async fn done_ok() {
     assert!(result.is_ok());
     if let Ok(v) = result {
         assert_eq!(v.store_id, mock_store_id);
-        let cond = matches!(v.processor, CapturePay3partyRespDto::Stripe);
+        let cond = matches!(v.processor, CapturePay3partyRespDto::Stripe { amount:_, currency:_ });
         assert!(cond);
     }
 } // end of fn done_ok

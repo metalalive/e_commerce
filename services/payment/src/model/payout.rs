@@ -1,11 +1,14 @@
 use chrono::{DateTime, Local, Utc};
 use rust_decimal::Decimal;
 
+use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::error::AppErrorCode;
+
 use super::{
     Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, Merchant3partyModel,
     MerchantProfileModel, OrderCurrencySnapshot, Payout3partyStripeModel,
 };
-use ecommerce_common::error::AppErrorCode;
+use crate::api::web::dto::CapturePay3partyRespDto;
 
 #[derive(Debug)]
 pub enum PayoutModelError {
@@ -25,10 +28,13 @@ pub enum Payout3partyModel {
 }
 
 pub struct PayoutAmountModel {
-    pub(super) total: Decimal,
-    pub(super) target_rate: Decimal, // the conversion rate from buyer's currency to seller's
-    pub(super) currency_seller: OrderCurrencySnapshot,
-    pub(super) currency_buyer: OrderCurrencySnapshot,
+    /// total amount to transfer in merchant configured currency
+    total_mc: Decimal,
+    /// total amount to transfer in base currency (USD in this project)
+    total_bs: Decimal,
+    target_rate: Decimal, // the conversion rate from buyer's currency to seller's
+    currency_seller: OrderCurrencySnapshot,
+    currency_buyer: OrderCurrencySnapshot,
 }
 
 pub(crate) struct PayoutInnerModel {
@@ -149,10 +155,11 @@ impl PayoutModel {
     pub fn merchant_id(&self) -> u32 {
         self._inner.merchant_id()
     }
-    // TODO, new method which outputs amount in base currency, note in this
-    // project the base currency defaults to USD
     pub fn amount_merchant(&self) -> (Decimal, Decimal, &OrderCurrencySnapshot) {
         self._inner.amount_merchant()
+    }
+    pub fn thirdparty(&self) -> &Payout3partyModel {
+        &self._p3pty
     }
 } // end of impl PayoutModel
 
@@ -161,12 +168,15 @@ impl PayoutInnerModel {
         self.merchant_id
     }
     pub(crate) fn amount_merchant(&self) -> (Decimal, Decimal, &OrderCurrencySnapshot) {
-        let a = &self.amount;
-        (a.total, a.target_rate, &a.currency_seller)
+        self.amount.merchant()
+    }
+    pub(crate) fn amount_base(&self) -> Decimal {
+        self.amount.base()
     }
 } // end of impl PayoutInnerModel
 
 type PayoutAmountCvtArgs = (
+    Decimal,
     Decimal,
     Decimal,
     OrderCurrencySnapshot,
@@ -176,8 +186,8 @@ type PayoutAmountCvtArgs = (
 impl From<PayoutAmountCvtArgs> for PayoutAmountModel {
     #[rustfmt::skip]
     fn from(value: PayoutAmountCvtArgs) -> Self {
-        let (total, target_rate, currency_seller, currency_buyer) = value;
-        Self { total, target_rate, currency_seller, currency_buyer }
+        let (target_rate, total_bs, total_mc, currency_seller, currency_buyer) = value;
+        Self { total_mc, total_bs, target_rate, currency_seller, currency_buyer }
     }
 }
 
@@ -199,18 +209,46 @@ impl PayoutAmountModel {
             );
             return Err(PayoutModelError::CurrencyInconsistent(arg.0, arg.1, arg.2));
         } // TODO, implement domain logic at here if multi-payout feature is supported
-        let remain =
-            self.total
-                .checked_sub(given.total)
+        let remain_mc =
+            self.total_mc
+                .checked_sub(given.total_mc)
                 .ok_or(PayoutModelError::AmountEstimate(
                     AppErrorCode::DataCorruption,
-                    format!("overflow, orig:{:?}, given:{:?}", self.total, given.total),
+                    format!(
+                        "overflow-merchant, orig:{:?}, given:{:?}",
+                        self.total_mc, given.total_mc
+                    ),
                 ))?;
-        if remain <= Decimal::ZERO {
-            return Err(PayoutModelError::AmountNotEnough(self.total, given.total));
+        let remain_bs =
+            self.total_bs
+                .checked_sub(given.total_bs)
+                .ok_or(PayoutModelError::AmountEstimate(
+                    AppErrorCode::DataCorruption,
+                    format!(
+                        "overflow-base-curr, orig:{:?}, given:{:?}",
+                        self.total_bs, given.total_bs
+                    ),
+                ))?;
+        if (remain_mc > Decimal::ZERO) && (remain_bs > Decimal::ZERO) {
+            self.total_mc = remain_mc;
+            self.total_bs = remain_bs;
+            Ok(self)
+        } else {
+            Err(PayoutModelError::AmountNotEnough(
+                self.total_mc,
+                given.total_mc,
+            ))
         }
-        self.total = remain;
-        Ok(self)
+    } // end of fn try_update
+
+    /// return amount in merchant's configured currency
+    fn merchant(&self) -> (Decimal, Decimal, &OrderCurrencySnapshot) {
+        (self.total_mc, self.target_rate, &self.currency_seller)
+    }
+
+    /// return amount in base currency (USD in this project)
+    fn base(&self) -> Decimal {
+        self.total_bs
     }
 } // end of impl PayoutAmountModel
 
@@ -229,6 +267,17 @@ impl<'a, 'b> TryFrom<Payout3ptyCvtArgs<'a, 'b>> for Payout3partyModel {
         }
     }
 }
+impl<'a> From<&'a Payout3partyModel> for CapturePay3partyRespDto {
+    fn from(value: &'a Payout3partyModel) -> Self {
+        match value {
+            Payout3partyModel::Stripe(s) => Self::Stripe {
+                amount: s.amount().unwrap().to_string(),
+                currency: CurrencyDto::USD,
+            },
+        }
+    }
+}
+
 impl Payout3partyModel {
     fn try_clone(
         &self,

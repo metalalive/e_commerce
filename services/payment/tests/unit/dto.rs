@@ -75,6 +75,9 @@ pub(super) fn ut_setup_capture_pay_resp_dto(store_id: u32) -> CapturePayRespDto 
         store_id,
         amount: "5566.7788".to_string(),
         currency: CurrencyDto::INR,
-        processor: CapturePay3partyRespDto::Stripe,
+        processor: CapturePay3partyRespDto::Stripe {
+            amount: "601.87".to_string(),
+            currency: CurrencyDto::USD,
+        },
     }
 }
