@@ -120,11 +120,8 @@ impl From<(u32, Label3party)> for Fetch3partyArgs {
     fn from(value: (u32, Label3party)) -> Self {
         let stmt = "SELECT `detail` FROM `merchant_3party` WHERE `sid`=? AND `method`=?";
         let (store_id, l3pt) = value;
-        let method = match l3pt {
-            Label3party::Stripe => "Stripe",
-        };
-        let paymethod = method.to_string();
-        let arg = vec![store_id.into(), method.into()];
+        let paymethod = l3pt.to_string();
+        let arg = vec![store_id.into(), paymethod.as_str().into()];
         let params = Params::Positional(arg);
         Self(stmt.to_string(), params, paymethod)
     }

@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Local, SubsecRound, Utc};
 
-use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;

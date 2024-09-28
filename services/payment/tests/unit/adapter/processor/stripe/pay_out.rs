@@ -62,9 +62,10 @@ fn ut_setup_payout_model(
         charge_buyer.currency_snapshot.get(&mock_merchant_id).unwrap().clone(),
     );
     let mock_amount = PayoutAmountModel::from(arg);
+    let mock_order_id = "ouwa-a-A-ha".to_string();
     let arg = (
         mock_merchant_id, Local::now().to_utc(), buyer_usr_id,  *charge_buyer.meta.create_time(),
-        mock_staff_id, mock_amount, mock_3pty,
+        mock_order_id, mock_staff_id, mock_amount, mock_3pty,
     );
     PayoutModel::from(arg)
 }

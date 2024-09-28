@@ -2,6 +2,7 @@ pub(super) mod charge;
 mod charge_converter;
 pub(super) mod merchant;
 mod order_replica;
+mod payout;
 
 use std::result::Result;
 

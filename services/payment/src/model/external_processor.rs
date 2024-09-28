@@ -212,6 +212,9 @@ impl Payout3partyStripeModel {
     pub(crate) fn connect_account(&self) -> &str {
         self.acct_id.as_str()
     }
+    pub(crate) fn transfer_id(&self) -> Option<&str> {
+        self.transfer_id.as_deref()
+    }
     pub(crate) fn set_transfer_id(&mut self, value: String) {
         self.transfer_id = Some(value);
     }

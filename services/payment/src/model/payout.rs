@@ -45,21 +45,17 @@ pub(crate) struct PayoutInnerModel {
     charge_ctime: DateTime<Utc>, // the time the charge was created
     storestaff_id: u32,          // for logging and monitoring purpose
     amount: PayoutAmountModel,
-    // TODO, consider to add referenced field `order-id`
+    order_id: String,
 }
 pub struct PayoutModel {
     _inner: PayoutInnerModel,
     _p3pty: Payout3partyModel,
 }
 
+#[rustfmt::skip]
 type PayoutModelCvtArgs2 = (
-    u32,
-    DateTime<Utc>,
-    u32,
-    DateTime<Utc>,
-    u32,
-    PayoutAmountModel,
-    Payout3partyModel,
+    u32, DateTime<Utc>, u32, DateTime<Utc>, String,
+    u32, PayoutAmountModel, Payout3partyModel,
 );
 
 impl From<PayoutModelCvtArgs2> for PayoutModel {
@@ -67,11 +63,11 @@ impl From<PayoutModelCvtArgs2> for PayoutModel {
     fn from(value: PayoutModelCvtArgs2) -> Self {
         let (
             merchant_id, capture_time, buyer_id, charge_ctime,
-            storestaff_id, amount, _p3pty
+            order_id, storestaff_id, amount, _p3pty
         ) = value;
         let _inner = PayoutInnerModel {
             merchant_id, capture_time, buyer_id, charge_ctime,
-            storestaff_id, amount
+            storestaff_id, amount, order_id
         };
         Self { _inner, _p3pty }
     }
@@ -124,6 +120,7 @@ impl TryFrom<PayoutModelCvtArgs> for PayoutModel {
             capture_time: Local::now().to_utc(),
             buyer_id: charge_m.meta.owner(),
             charge_ctime: *charge_m.meta.create_time(),
+            order_id: charge_m.meta.oid().clone(),
             amount: amount_new,
             storestaff_id,
         };
@@ -163,9 +160,18 @@ impl PayoutModel {
     }
 } // end of impl PayoutModel
 
+#[rustfmt::skip]
+type PayoutInnerDecomposedArgs = (
+    u32, DateTime<Utc>, u32, DateTime<Utc>,
+    u32, PayoutAmountModel, String,
+);
+
 impl PayoutInnerModel {
     pub(crate) fn merchant_id(&self) -> u32 {
         self.merchant_id
+    }
+    pub(crate) fn referenced_charge(&self) -> (u32, DateTime<Utc>) {
+        (self.buyer_id, self.charge_ctime)
     }
     pub(crate) fn amount_merchant(&self) -> (Decimal, Decimal, &OrderCurrencySnapshot) {
         self.amount.merchant()
@@ -173,14 +179,21 @@ impl PayoutInnerModel {
     pub(crate) fn amount_base(&self) -> Decimal {
         self.amount.base()
     }
+    #[rustfmt::skip]
+    pub(crate) fn into_parts(self) -> PayoutInnerDecomposedArgs {
+        let Self {
+            merchant_id, capture_time, buyer_id, charge_ctime,
+            storestaff_id, amount: amount_m, order_id
+        } = self;
+        (merchant_id, capture_time, buyer_id, charge_ctime,
+         storestaff_id, amount_m, order_id)
+    }
 } // end of impl PayoutInnerModel
 
+#[rustfmt::skip]
 type PayoutAmountCvtArgs = (
-    Decimal,
-    Decimal,
-    Decimal,
-    OrderCurrencySnapshot,
-    OrderCurrencySnapshot,
+    Decimal, Decimal, Decimal,
+    OrderCurrencySnapshot, OrderCurrencySnapshot,
 );
 
 impl From<PayoutAmountCvtArgs> for PayoutAmountModel {

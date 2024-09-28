@@ -239,7 +239,8 @@
     </changeSet>
     <changeSet id="add_table__order_currency_snapshot" author="T.H.">
         <comment>
-            `usr-id` can be either buyer or seller
+            `usr-id` can be either buyer or seller,
+            TODO, redesign this in case `buyer-user-id` and `seller / merchant id` become different types
         </comment>
         <sql dbms="mariadb">
             CREATE TABLE  `order_currency_snapshot` (
@@ -347,8 +348,58 @@
             DROP TABLE `merchant_3party`;
         </rollback>
     </changeSet>
-    
     <changeSet id="tag_version_0.0.10" author="T.H.">
         <tagDatabase tag="0.0.10" />
+    </changeSet>
+    <changeSet id="add_table__payout_meta" author="T.H.">
+        <comment>
+            - the columns `buyer_usr_id` and `charged_time` are respectively `usr_id` and `create_time` in another table `charge_buyer_toplvl`
+            - the column `store-id` indicates identifier of specific merchant (from store service) 
+            - `amount_base` indicates amount to pay out in base currency (USD in this project)
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE `payout_meta`(
+                `buyer_usr_id`   INT UNSIGNED NOT NULL,
+                `charged_time`   DATETIME  NOT NULL,
+                `store_id`       INT UNSIGNED NOT NULL,
+                `create_time`    DATETIME  NOT NULL,
+                `storestaff_usr_id`  INT UNSIGNED NOT NULL,
+                `order_id`         BINARY(16) NOT NULL,
+                `amount_base`      DECIMAL(16,2)  UNSIGNED NOT NULL,
+                `amount_merchant`  DECIMAL(16,2)  UNSIGNED NOT NULL,
+                `label3party`      ENUM('Stripe') NOT NULL,
+                PRIMARY KEY (`buyer_usr_id`,`charged_time`,`store_id`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `payout_meta`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__payout_3party_stripe" author="T.H.">
+        <comment>
+            Following columns indicate some concepts in Stripe API server
+            - `tx_grp` : transfer group
+            - `acct_id` : Connected Account ID
+            Note the amount for payout is always present in base currency (USD)
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE `payout_3party_stripe`(
+                `buyer_usr_id`   INT UNSIGNED NOT NULL,
+                `charged_time`   DATETIME  NOT NULL,
+                `store_id`       INT UNSIGNED NOT NULL,
+                `tx_grp`    VARCHAR(128)  CHARACTER SET ascii  NOT NULL,
+                `acct_id`   VARCHAR(128)  CHARACTER SET ascii  NOT NULL,
+                `transfer_id`  VARCHAR(128)  CHARACTER SET ascii  NOT NULL,
+                `amount`  DECIMAL(16,2)  UNSIGNED NOT NULL,
+                PRIMARY KEY (`buyer_usr_id`,`charged_time`,`store_id`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `payout_3party_stripe`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.11" author="T.H.">
+        <tagDatabase tag="0.0.11" />
     </changeSet>
 </databaseChangeLog>

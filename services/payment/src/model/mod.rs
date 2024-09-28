@@ -118,3 +118,20 @@ impl<'a> TryFrom<&'a Charge3partyModel> for Label3party {
         }
     }
 }
+
+impl<'a> From<&'a Payout3partyModel> for Label3party {
+    fn from(value: &'a Payout3partyModel) -> Self {
+        match value {
+            Payout3partyModel::Stripe(_) => Self::Stripe,
+        }
+    }
+}
+
+impl ToString for Label3party {
+    fn to_string(&self) -> String {
+        let s = match self {
+            Self::Stripe => "Stripe",
+        };
+        s.to_string()
+    }
+}

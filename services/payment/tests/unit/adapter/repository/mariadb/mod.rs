@@ -1,6 +1,7 @@
 mod charge;
 mod merchant;
 mod order_replica;
+mod payout;
 
 use std::boxed::Box;
 use std::collections::HashMap;

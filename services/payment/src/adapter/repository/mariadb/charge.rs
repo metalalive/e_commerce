@@ -15,8 +15,8 @@ use ecommerce_common::model::order::BillingModel;
 
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
 use crate::model::{
-    ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot,
-    OrderLineModel, OrderLineModelSet, PayoutModel,
+    ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, Label3party,
+    OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayoutModel,
 };
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
@@ -28,6 +28,7 @@ use super::order_replica::{
     FetchCurrencySnapshotArgs, FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType,
     OrderlineRowType,
 };
+use super::payout::{InsertPayout3partyArgs, InsertPayoutMetaArgs};
 
 pub(crate) struct MariadbChargeRepo {
     _dstore: Arc<AppDStoreMariaDB>,
@@ -417,11 +418,60 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         })
     }
 
-    async fn create_payout(&self, _payout_m: PayoutModel) -> Result<(), AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::CreatePayout,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
+    async fn create_payout(&self, payout_m: PayoutModel) -> Result<(), AppRepoError> {
+        let (p_inner, p3pty) = payout_m.into_parts();
+        let label3pt = Label3party::from(&p3pty);
+        let (buyer_usr_id, charged_ctime) = p_inner.referenced_charge();
+        let merchant_id = p_inner.merchant_id();
+
+        let (stmt_3pt, params_3pt) = {
+            let arg = (buyer_usr_id, charged_ctime, merchant_id, p3pty);
+            InsertPayout3partyArgs::try_from(arg)
+                .map_err(|reason| {
+                    self._map_log_err_common(reason, AppRepoErrorFnLabel::CreatePayout)
+                })?
+                .into_parts()
+        };
+        let (stmt_meta, params_meta) = InsertPayoutMetaArgs::try_from((p_inner, label3pt))
+            .map_err(|reason| self._map_log_err_common(reason, AppRepoErrorFnLabel::CreatePayout))?
+            .into_parts();
+        let pairs = vec![(stmt_3pt, params_3pt), (stmt_meta, params_meta)];
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            let code = AppErrorCode::DatabaseServerBusy;
+            let detail = AppRepoErrorDetail::DataStore(e);
+            self._map_log_err_common((code, detail), AppRepoErrorFnLabel::FetchChargeByMerchant)
+        })?;
+
+        let mut options = TxOpts::new();
+        options.with_isolation_level(IsolationLevel::Serializable);
+        let mut tx = conn.start_transaction(options).await.map_err(|e| {
+            let code = AppErrorCode::RemoteDbServerFailure;
+            let detail = AppRepoErrorDetail::DatabaseTxStart(e.to_string());
+            self._map_log_err_common((code, detail), AppRepoErrorFnLabel::FetchChargeByMerchant)
+        })?;
+
+        for (stmt, params) in pairs {
+            let qresult = tx.exec_iter(stmt, params).await.map_err(|e| {
+                let code = AppErrorCode::RemoteDbServerFailure;
+                let detail = AppRepoErrorDetail::DatabaseExec(e.to_string());
+                self._map_log_err_common((code, detail), AppRepoErrorFnLabel::FetchChargeByMerchant)
+            })?;
+            let num_inserted = qresult.affected_rows();
+            if num_inserted != 1u64 {
+                let code = AppErrorCode::DataCorruption;
+                let msg = format!("insertion-failure, actual:{num_inserted}");
+                let detail = AppRepoErrorDetail::DatabaseExec(msg);
+                return Err(self._map_log_err_common(
+                    (code, detail),
+                    AppRepoErrorFnLabel::FetchChargeByMerchant,
+                ));
+            }
+        } // end of for loop
+
+        tx.commit().await.map_err(|e| {
+            let code = AppErrorCode::RemoteDbServerFailure;
+            let detail = AppRepoErrorDetail::DatabaseTxCommit(e.to_string());
+            self._map_log_err_common((code, detail), AppRepoErrorFnLabel::FetchChargeByMerchant)
         })
-    }
+    } // end of fn create-payout
 } // end of impl MariadbChargeRepo
