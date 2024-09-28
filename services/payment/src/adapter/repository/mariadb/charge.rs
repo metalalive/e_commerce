@@ -25,7 +25,8 @@ use super::charge_converter::{
     InsertChargeArgs, UpdateChargeMetaArgs,
 };
 use super::order_replica::{
-    FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType, OrderlineRowType,
+    FetchCurrencySnapshotArgs, FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType,
+    OrderlineRowType,
 };
 
 pub(crate) struct MariadbChargeRepo {
@@ -61,78 +62,104 @@ impl MariadbChargeRepo {
         Ok(HashMap::from_iter(iter))
     }
 
-    fn _map_err_create_order(&self, detail: AppRepoErrorDetail) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::CreateOrder,
-            code: AppErrorCode::Unknown,
-            detail,
-        };
+    async fn _fetch_charge_meta(
+        exec: &mut Conn,
+        usr_id: u32,
+        create_time: DateTime<Utc>,
+    ) -> Result<Option<ChargeBuyerMetaModel>, (AppErrorCode, AppRepoErrorDetail)> {
+        let create_time = create_time.trunc_subsecs(0);
+        let (stmt, params) = FetchChargeMetaArgs::from((usr_id, create_time)).into_parts();
+        let raw = stmt
+            .with(params)
+            .first::<ChargeMetaRowType, &mut Conn>(exec)
+            .await
+            .map_err(|e| {
+                let code = AppErrorCode::RemoteDbServerFailure;
+                let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
+                (code, detail)
+            })?;
+        if let Some(v) = raw {
+            let args = (usr_id, create_time, v);
+            let obj = ChargeBuyerMetaModel::try_from(args)?;
+            Ok(Some(obj))
+        } else {
+            Ok(None)
+        }
+    } // end of fn _fetch_charge_meta
+
+    async fn fetch_charge_lines(
+        exec: &mut Conn,
+        usr_id: u32, // buyer id
+        create_time: DateTime<Utc>,
+        maybe_store_id: Option<u32>,
+    ) -> Result<Vec<ChargeLineBuyerModel>, (AppErrorCode, AppRepoErrorDetail)> {
+        let create_time = create_time.trunc_subsecs(0);
+        let (stmt, params) =
+            FetchChargeLineArgs::from((usr_id, create_time, maybe_store_id)).into_parts();
+        let raw = stmt
+            .with(params)
+            .fetch::<ChargeLineRowType, &mut Conn>(exec)
+            .await
+            .map_err(|e| {
+                let code = AppErrorCode::RemoteDbServerFailure;
+                let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
+                (code, detail)
+            })?;
+        let mut errors = Vec::new();
+        let lines = raw
+            .into_iter()
+            .filter_map(|v| {
+                ChargeLineBuyerModel::try_from(v)
+                    .map_err(|e| errors.push(e))
+                    .ok()
+            })
+            .collect::<Vec<_>>();
+        if errors.is_empty() {
+            Ok(lines)
+        } else {
+            let detail = errors.remove(0);
+            let code = AppErrorCode::DataCorruption;
+            Err((code, detail))
+        }
+    } // end of fn fetch_charge_lines
+
+    #[rustfmt::skip]
+    fn _map_log_err_common(
+        &self,
+        reason : (AppErrorCode, AppRepoErrorDetail),
+        fn_label: AppRepoErrorFnLabel,
+    ) -> AppRepoError {
+        let (code, detail) = reason;
+        let e = AppRepoError { fn_label, code, detail };
         let logctx = self._dstore.log_context();
         app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
         e
+    }
+
+    fn _map_err_create_order(&self, detail: AppRepoErrorDetail) -> AppRepoError {
+        self._map_log_err_common(
+            (AppErrorCode::Unknown, detail),
+            AppRepoErrorFnLabel::CreateOrder,
+        )
     }
     fn _map_err_get_unpaid_olines(&self, detail: AppRepoErrorDetail) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
-            code: AppErrorCode::Unknown,
-            detail,
-        };
-        let logctx = self._dstore.log_context();
-        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-        e
+        self._map_log_err_common(
+            (AppErrorCode::Unknown, detail),
+            AppRepoErrorFnLabel::GetUnpaidOlines,
+        )
     }
     fn _map_err_create_charge(&self, detail: AppRepoErrorDetail) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::CreateCharge,
-            code: AppErrorCode::Unknown,
-            detail,
-        };
-        let logctx = self._dstore.log_context();
-        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-        e
-    }
-    fn _map_err_get_charge_meta(
-        &self,
-        code: AppErrorCode,
-        detail: AppRepoErrorDetail,
-    ) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchChargeMeta,
-            code,
-            detail,
-        };
-        let logctx = self._dstore.log_context();
-        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-        e
+        self._map_log_err_common(
+            (AppErrorCode::Unknown, detail),
+            AppRepoErrorFnLabel::CreateCharge,
+        )
     }
     fn _map_err_update_charge_progress(
         &self,
         code: AppErrorCode,
         detail: AppRepoErrorDetail,
     ) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::UpdateChargeProgress,
-            code,
-            detail,
-        };
-        let logctx = self._dstore.log_context();
-        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-        e
-    }
-
-    fn _map_err_fetch_charge_lines(
-        &self,
-        code: AppErrorCode,
-        detail: AppRepoErrorDetail,
-    ) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchChargeLines,
-            code,
-            detail,
-        };
-        let logctx = self._dstore.log_context();
-        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-        e
+        self._map_log_err_common((code, detail), AppRepoErrorFnLabel::UpdateChargeProgress)
     }
 } // end of impl MariadbChargeRepo
 
@@ -255,30 +282,20 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         create_time: DateTime<Utc>,
     ) -> Result<Option<ChargeBuyerMetaModel>, AppRepoError> {
         let mut conn = self._dstore.acquire().await.map_err(|e| {
-            let code = AppErrorCode::DatabaseServerBusy;
-            let detail = AppRepoErrorDetail::DataStore(e);
-            self._map_err_get_charge_meta(code, detail)
+            self._map_log_err_common(
+                (
+                    AppErrorCode::DatabaseServerBusy,
+                    AppRepoErrorDetail::DataStore(e),
+                ),
+                AppRepoErrorFnLabel::FetchChargeMeta,
+            )
         })?;
-        let create_time = create_time.trunc_subsecs(0);
-        let (stmt, params) = FetchChargeMetaArgs::from((usr_id, create_time)).into_parts();
-        let exec = &mut conn;
-        let raw = stmt
-            .with(params)
-            .first::<ChargeMetaRowType, &mut Conn>(exec)
+        Self::_fetch_charge_meta(&mut conn, usr_id, create_time)
             .await
-            .map_err(|e| {
-                let code = AppErrorCode::RemoteDbServerFailure;
-                let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
-                self._map_err_get_charge_meta(code, detail)
-            })?;
-        if let Some(v) = raw {
-            let obj = ChargeBuyerMetaModel::try_from((usr_id, create_time, v))
-                .map_err(|(code, detail)| self._map_err_get_charge_meta(code, detail))?;
-            Ok(Some(obj))
-        } else {
-            Ok(None)
-        }
-    } // end of fn fetch_charge_meta
+            .map_err(|reason| {
+                self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchChargeMeta)
+            })
+    }
 
     async fn fetch_all_charge_lines(
         &self,
@@ -286,40 +303,20 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         create_time: DateTime<Utc>,
     ) -> Result<Vec<ChargeLineBuyerModel>, AppRepoError> {
         let mut conn = self._dstore.acquire().await.map_err(|e| {
-            let code = AppErrorCode::DatabaseServerBusy;
-            let detail = AppRepoErrorDetail::DataStore(e);
-            self._map_err_fetch_charge_lines(code, detail)
+            self._map_log_err_common(
+                (
+                    AppErrorCode::DatabaseServerBusy,
+                    AppRepoErrorDetail::DataStore(e),
+                ),
+                AppRepoErrorFnLabel::FetchChargeLines,
+            )
         })?;
-        let create_time = create_time.trunc_subsecs(0);
-        let (stmt, params) = FetchChargeLineArgs::from((usr_id, create_time)).into_parts();
-        let exec = &mut conn;
-        let raw = stmt
-            .with(params)
-            .fetch::<ChargeLineRowType, &mut Conn>(exec)
+        Self::fetch_charge_lines(&mut conn, usr_id, create_time, None)
             .await
-            .map_err(|e| {
-                let code = AppErrorCode::RemoteDbServerFailure;
-                let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
-                self._map_err_fetch_charge_lines(code, detail)
-            })?;
-        let mut errors = Vec::new();
-        let lines = raw
-            .into_iter()
-            .filter_map(|v| {
-                ChargeLineBuyerModel::try_from(v)
-                    .map_err(|e| errors.push(e))
-                    .ok()
+            .map_err(|reason| {
+                self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchChargeLines)
             })
-            .collect::<Vec<_>>();
-        if errors.is_empty() {
-            Ok(lines)
-        } else {
-            let detail = errors.remove(0);
-            let code = AppErrorCode::DataCorruption;
-            let e = self._map_err_fetch_charge_lines(code, detail);
-            Err(e)
-        }
-    } // end of fn fetch_all_charge_lines
+    }
 
     async fn update_charge_progress(&self, meta: ChargeBuyerMetaModel) -> Result<(), AppRepoError> {
         let arg = UpdateChargeMetaArgs::try_from(meta)
@@ -352,16 +349,60 @@ impl AbstractChargeRepo for MariadbChargeRepo {
 
     async fn fetch_charge_by_merchant(
         &self,
-        _buyer_id: u32,
-        _create_time: DateTime<Utc>,
-        _store_id: u32,
+        buyer_id: u32,
+        create_time: DateTime<Utc>,
+        store_id: u32,
     ) -> Result<Option<ChargeBuyerModel>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchChargeByMerchant,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            self._map_log_err_common(
+                (
+                    AppErrorCode::DatabaseServerBusy,
+                    AppRepoErrorDetail::DataStore(e),
+                ),
+                AppRepoErrorFnLabel::FetchChargeByMerchant,
+            )
+        })?;
+        let option_meta = Self::_fetch_charge_meta(&mut conn, buyer_id, create_time)
+            .await
+            .map_err(|reason| {
+                self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchChargeByMerchant)
+            })?;
+        let meta = if let Some(v) = option_meta {
+            v
+        } else {
+            return Ok(None);
+        };
+
+        let lines = Self::fetch_charge_lines(&mut conn, buyer_id, create_time, Some(store_id))
+            .await
+            .map_err(|reason| {
+                self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchChargeByMerchant)
+            })?;
+
+        let currency_snapshot = {
+            let oid_ref = meta.oid().as_str();
+            let args = (oid_ref, Some([buyer_id, store_id]));
+            let (stmt, values) = FetchCurrencySnapshotArgs::try_from(args)
+                .map_err(|reason| {
+                    self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchChargeByMerchant)
+                })?
+                .into_parts();
+            let params = Params::Positional(values);
+            Self::try_build_currency_snapshot(&mut conn, stmt, params)
+                .await
+                .map_err(|detail| {
+                    self._map_log_err_common(
+                        (AppErrorCode::Unknown, detail),
+                        AppRepoErrorFnLabel::FetchChargeByMerchant,
+                    )
+                })?
+        };
+        Ok(Some(ChargeBuyerModel {
+            meta,
+            lines,
+            currency_snapshot,
+        }))
+    } // end of fn fetch_charge_by_merchant
 
     async fn fetch_payout(
         &self,

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Local, SubsecRound, Utc};
 
+use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
@@ -11,8 +12,10 @@ use payment::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
     ChargeLineBuyerModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
+use rust_decimal::Decimal;
 
-use super::{ut_setup_currency_snapshot, ut_setup_db_charge_repo};
+use super::super::{ut_setup_order_bill, ut_setup_orderline_set};
+use super::{ut_setup_currency_snapshot, ut_setup_db_charge_repo, ut_verify_currency_snapshot};
 use crate::model::{ut_default_charge_method_stripe, ut_setup_buyer_charge};
 use crate::ut_setup_sharestate;
 
@@ -35,8 +38,9 @@ fn _ut_setup_buyer_charge(
         (2615, ProductType::Item, 90040, (82,0), (246,0), 3),
         (8299, ProductType::Item, 479, (839,1), (5873,1), 7),
         (2615, ProductType::Package, 961, (1946,2), (21406,2), 11),
+        (8299, ProductType::Package, 961, (118,0), (236,0), 2),
     ];
-    let currency_map = ut_setup_currency_snapshot(vec![126, 8299, 3034]);
+    let currency_map = ut_setup_currency_snapshot(vec![owner, 8299, 3034, 2615]);
     ut_setup_buyer_charge(
         owner, create_time, oid, state,
         mthd_3pty, data_lines, currency_map,
@@ -60,8 +64,8 @@ async fn ut_fetch_existing_charge_meta(
     loaded_meta
 }
 
-fn ut_verify_charge_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
-    assert_eq!(loaded_lines.len(), 5);
+fn ut_verify_all_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
+    assert_eq!(loaded_lines.len(), 6);
     loaded_lines
         .into_iter()
         .map(|v| {
@@ -77,6 +81,7 @@ fn ut_verify_charge_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
                 (2615, ProductType::Item, 90040) => ((8200, 2), (24600, 2), 3),
                 (8299, ProductType::Item, 479) => ((8390, 2), (58730, 2), 7),
                 (2615, ProductType::Package, 961) => ((1946, 2), (21406, 2), 11),
+                (8299, ProductType::Package, 961) => ((11800, 2), (23600, 2), 2),
                 _others => ((0, 0), (0, 0), 0),
             };
             assert_eq!(amount.unit.mantissa(), expect.0 .0);
@@ -155,8 +160,77 @@ async fn buyer_create_stripe_charge_ok() {
         .fetch_all_charge_lines(mock_owner, mock_create_time)
         .await;
     assert!(result.is_ok());
-    ut_verify_charge_lines(result.unwrap());
+    ut_verify_all_lines(result.unwrap());
 } // end of fn buyer_create_stripe_charge_ok
+
+fn ut_verify_specific_merchant_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
+    assert_eq!(loaded_lines.len(), 3);
+    loaded_lines
+        .into_iter()
+        .map(|v| {
+            let ChargeLineBuyerModel { amount, pid } = v;
+            let BaseProductIdentity {
+                store_id,
+                product_type,
+                product_id,
+            } = pid;
+            assert_eq!(store_id, 8299u32);
+            let expect = match (product_type, product_id) {
+                (ProductType::Item, 351) => ((551i64, 1u32), (1102i64, 1u32), 2u32),
+                (ProductType::Item, 479) => ((839, 1), (5873, 1), 7),
+                (ProductType::Package, 961) => ((118, 0), (236, 0), 2),
+                _others => ((0, 0), (0, 0), 0),
+            };
+            assert_eq!(amount.unit, Decimal::new(expect.0 .0, expect.0 .1));
+            assert_eq!(amount.total, Decimal::new(expect.1 .0, expect.1 .1));
+            assert_eq!(amount.qty, expect.2);
+        })
+        .count();
+}
+
+#[rustfmt::skip]
+#[actix_web::test]
+async fn fetch_charge_by_merchant_ok() {
+    let (mock_buyer_id, mock_merchant_id) = (126, 8299);
+    let mock_create_time = Local::now().to_utc() - Duration::minutes(140);
+    let accepted_time_duration = Duration::seconds(105);
+    let shr_state = ut_setup_sharestate();
+    let repo = ut_setup_db_charge_repo(shr_state).await;
+     
+    let new_charge_m = _ut_setup_buyer_charge(mock_buyer_id, mock_create_time, accepted_time_duration);
+    { // create order-replica to ensure currency snapshot data is ready
+        let mock_olines_data = new_charge_m.lines
+            .iter().map(|cl| {
+                (cl.pid.store_id, cl.pid.product_type.clone(), cl.pid.product_id,
+                cl.amount.unit, cl.amount.total, cl.amount.qty, Duration::minutes(219))
+            }).collect::<Vec<_>>();
+        let expect_ol_set = ut_setup_orderline_set(
+            mock_buyer_id, new_charge_m.meta.oid().as_str(), 0,
+            mock_create_time, new_charge_m.currency_snapshot.clone(),
+            mock_olines_data,
+        );
+        let billing = ut_setup_order_bill();
+        let result = repo.create_order(&expect_ol_set, &billing).await;
+        assert!(result.is_ok());
+    }
+    let result = repo.create_charge(new_charge_m).await;
+    assert!(result.is_ok());
+    
+    let result = repo.fetch_charge_by_merchant(
+        mock_buyer_id, mock_create_time, mock_merchant_id
+    ).await;
+    assert!(result.is_ok());
+    let maybe_charge_m = result.unwrap();
+    assert!(maybe_charge_m.is_some());
+    let saved_charge_m = maybe_charge_m.unwrap();
+    {
+        let buyer_currency = saved_charge_m.currency_snapshot.get(&mock_buyer_id).unwrap();
+        ut_verify_currency_snapshot(buyer_currency);
+        let merchant_currency = saved_charge_m.currency_snapshot.get(&mock_merchant_id).unwrap();
+        ut_verify_currency_snapshot(merchant_currency);
+    }
+    ut_verify_specific_merchant_lines(saved_charge_m.lines);
+} // end of fn fetch_charge_by_merchant_ok
 
 #[actix_web::test]
 async fn buyer_create_charge_invalid_state() {
@@ -202,12 +276,20 @@ async fn buyer_create_charge_unknown_3party() {
 }
 
 #[actix_web::test]
-async fn buyer_fetch_charge_meta_nonexist() {
-    let mock_owner = 9999;
+async fn fetch_meta_nonexist() {
+    let (mock_buyer_id, mock_merchant_id) = (9999, 134);
     let mock_create_time = Local::now().to_utc() - Duration::days(3650);
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_charge_repo(shr_state).await;
-    let result = repo.fetch_charge_meta(mock_owner, mock_create_time).await;
+    let result = repo
+        .fetch_charge_meta(mock_buyer_id, mock_create_time)
+        .await;
+    assert!(result.is_ok());
+    let optional_meta = result.unwrap();
+    assert!(optional_meta.is_none());
+    let result = repo
+        .fetch_charge_by_merchant(mock_buyer_id, mock_create_time, mock_merchant_id)
+        .await;
     assert!(result.is_ok());
     let optional_meta = result.unwrap();
     assert!(optional_meta.is_none());

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::result::Result;
 
-use mysql_async::Params;
+use mysql_async::{Params, Value as MySqlValue};
 use rust_decimal::Decimal;
 
 use ecommerce_common::adapter::repository::OidBytes;
@@ -33,6 +33,7 @@ struct InsertBillPhyAddrArgs(String, Params);
 
 pub(super) struct InsertOrderReplicaArgs(pub(super) Vec<(String, Vec<Params>)>);
 pub(super) struct FetchUnpaidOlineArgs(pub(super) [(String, Params); 3]);
+pub(super) struct FetchCurrencySnapshotArgs(String, Vec<MySqlValue>);
 
 impl<'a, 'b> From<(&'a OrderLineModelSet, &'b OidBytes)> for InsertOrderTopLvlArgs {
     fn from(value: (&'a OrderLineModelSet, &'b OidBytes)) -> Self {
@@ -209,6 +210,30 @@ impl<'a, 'b> TryFrom<(&'a OrderLineModelSet, &'b BillingModel)> for InsertOrderR
     }
 } // end of impl InsertOrderReplicaArgs
 
+impl<'a> TryFrom<(&'a str, Option<[u32; 2]>)> for FetchCurrencySnapshotArgs {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (&'a str, Option<[u32; 2]>)) -> Result<Self, Self::Error> {
+        let (oid_hex, maybe_usr_ids) = value;
+        let oid_b = OidBytes::try_from(oid_hex)
+            .map_err(|(code, msg)| (code, AppRepoErrorDetail::OrderIDparse(msg)))?;
+        let mut stmt = "SELECT `usr_id`,`label`,`ex_rate` FROM `order_currency_snapshot` \
+             WHERE `o_id`=?"
+            .to_string();
+        let mut args = vec![oid_b.0.into()];
+        if let Some(usr_ids) = maybe_usr_ids {
+            stmt += " AND `usr_id` IN (?,?)";
+            args.push(usr_ids[0].into());
+            args.push(usr_ids[1].into());
+        }
+        Ok(Self(stmt, args))
+    }
+}
+impl FetchCurrencySnapshotArgs {
+    pub(super) fn into_parts(self) -> (String, Vec<MySqlValue>) {
+        (self.0, self.1)
+    }
+}
+
 impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
     type Error = AppRepoError;
     fn try_from(value: (u32, &'a str)) -> Result<Self, Self::Error> {
@@ -218,8 +243,15 @@ impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
             fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
             detail: AppRepoErrorDetail::OrderIDparse(msg),
         })?;
+        let (stmt_currency, value_currency) = FetchCurrencySnapshotArgs::try_from((oid_hex, None))
+            .map_err(|(code, detail)| AppRepoError {
+                code,
+                detail,
+                fn_label: AppRepoErrorFnLabel::GetUnpaidOlines,
+            })?
+            .into_parts();
         let params = [
-            vec![oid_b.0.into()],
+            value_currency,
             vec![oid_b.as_column().into(), usr_id.into()],
             vec![usr_id.into(), oid_b.0.into(), oid_b.0.into()],
         ]
@@ -227,8 +259,7 @@ impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
         .map(Params::Positional)
         .collect::<Vec<_>>();
         let stmts = [
-            "SELECT `usr_id`,`label`,`ex_rate` FROM `order_currency_snapshot` \
-             WHERE `o_id`=?",
+            stmt_currency.as_str(),
             "SELECT `create_time`,`num_charges` FROM `order_toplvl_meta` \
              WHERE `o_id`=? AND `buyer_id`=?",
             // estimate quantity and amount of paid items, by aggregating charge

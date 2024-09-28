@@ -52,3 +52,15 @@ fn ut_setup_currency_snapshot(usr_ids: Vec<u32>) -> HashMap<u32, OrderCurrencySn
         .count();
     out
 }
+
+fn ut_verify_currency_snapshot(given: &OrderCurrencySnapshot) {
+    let expect = match &given.label {
+        CurrencyDto::INR => Decimal::new(82559, 3),
+        CurrencyDto::THB => Decimal::new(380415, 4),
+        CurrencyDto::IDR => Decimal::new(163082101, 4),
+        CurrencyDto::USD => Decimal::new(10, 1),
+        CurrencyDto::TWD => Decimal::new(321, 1),
+        _others => Decimal::ZERO,
+    };
+    assert_eq!(given.rate, expect);
+}

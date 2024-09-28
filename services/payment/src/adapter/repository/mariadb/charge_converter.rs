@@ -391,16 +391,21 @@ impl UpdateChargeMetaArgs {
     }
 } // end of impl UpdateChargeMetaArgs
 
-impl From<(u32, DateTime<Utc>)> for FetchChargeLineArgs {
-    fn from(value: (u32, DateTime<Utc>)) -> Self {
-        let stmt = "SELECT `store_id`,`product_type`,`product_id`,`amt_unit`,\
+impl From<(u32, DateTime<Utc>, Option<u32>)> for FetchChargeLineArgs {
+    fn from(value: (u32, DateTime<Utc>, Option<u32>)) -> Self {
+        let mut stmt = "SELECT `store_id`,`product_type`,`product_id`,`amt_unit`,\
                     `amt_total`,`qty` FROM `charge_line` WHERE `buyer_id`=? \
-                    AND `create_time`=?";
-        let args = vec![
+                    AND `create_time`=?"
+            .to_string();
+        let mut args = vec![
             value.0.into(),
             value.1.format(DATETIME_FMT_P0F).to_string().into(),
         ];
-        Self(stmt.to_string(), Params::Positional(args))
+        if let Some(store_id) = value.2 {
+            stmt += " AND `store_id`=?";
+            args.push(store_id.into());
+        }
+        Self(stmt, Params::Positional(args))
     }
 }
 impl FetchChargeLineArgs {
