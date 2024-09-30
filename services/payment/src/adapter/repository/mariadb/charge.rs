@@ -8,6 +8,7 @@ use futures_util::StreamExt;
 use mysql_async::prelude::{Query, Queryable, WithParams};
 use mysql_async::{Conn, IsolationLevel, Params, TxOpts};
 
+use ecommerce_common::adapter::repository::OidBytes;
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
@@ -16,7 +17,7 @@ use ecommerce_common::model::order::BillingModel;
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
 use crate::model::{
     ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, Label3party,
-    OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayoutModel,
+    OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayoutAmountModel, PayoutModel,
 };
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
@@ -28,7 +29,11 @@ use super::order_replica::{
     FetchCurrencySnapshotArgs, FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType,
     OrderlineRowType,
 };
-use super::payout::{InsertPayout3partyArgs, InsertPayoutMetaArgs};
+use super::payout::{
+    FetchPayout3partyArgs, FetchPayoutMetaArgs, InsertPayout3partyArgs, InsertPayoutMetaArgs,
+    PayoutMetaRowType,
+};
+use super::raw_column_to_datetime;
 
 pub(crate) struct MariadbChargeRepo {
     _dstore: Arc<AppDStoreMariaDB>,
@@ -407,16 +412,123 @@ impl AbstractChargeRepo for MariadbChargeRepo {
 
     async fn fetch_payout(
         &self,
-        _store_id: u32,
-        _buyer_id: u32,
-        _create_time: DateTime<Utc>,
+        store_id: u32,
+        buyer_usr_id: u32,
+        charged_ctime: DateTime<Utc>,
     ) -> Result<Option<PayoutModel>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchPayout,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            self._map_log_err_common(
+                (
+                    AppErrorCode::DatabaseServerBusy,
+                    AppRepoErrorDetail::DataStore(e),
+                ),
+                AppRepoErrorFnLabel::FetchPayout,
+            )
+        })?;
+        let (stmt, params) = {
+            let arg = (buyer_usr_id, charged_ctime, store_id);
+            FetchPayoutMetaArgs::from(arg).into_parts()
+        };
+        let maybe_row = stmt
+            .with(params)
+            .first::<PayoutMetaRowType, &mut Conn>(&mut conn)
+            .await
+            .map_err(|e| {
+                let code = AppErrorCode::RemoteDbServerFailure;
+                let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
+                self._map_log_err_common((code, detail), AppRepoErrorFnLabel::FetchPayout)
+            })?;
+        let row_meta = if let Some(v) = maybe_row {
+            v
+        } else {
+            return Ok(None);
+        };
+        let p3pty_m = {
+            let label3pt = Label3party::try_from(row_meta.4.as_str()).map_err(|s| {
+                let code = AppErrorCode::DataCorruption;
+                let detail = AppRepoErrorDetail::PayMethodUnsupport(s.to_string());
+                self._map_log_err_common((code, detail), AppRepoErrorFnLabel::FetchPayout)
+            })?;
+            let arg = (buyer_usr_id, charged_ctime, store_id, label3pt);
+            FetchPayout3partyArgs::from(arg)
+                .fetch(&mut conn)
+                .await
+                .map_err(|reason| {
+                    self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchPayout)
+                })?
+        };
+
+        let oid_ref = OidBytes::to_app_oid(row_meta.2.clone()).map_err(|(code, msg)| {
+            let detail = AppRepoErrorDetail::OrderIDparse(msg);
+            self._map_log_err_common((code, detail), AppRepoErrorFnLabel::FetchPayout)
+        })?;
+
+        let mut currency_snapshot = {
+            let args = (oid_ref.as_str(), Some([buyer_usr_id, store_id]));
+            let (stmt, values) = FetchCurrencySnapshotArgs::try_from(args)
+                .map_err(|reason| {
+                    self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchPayout)
+                })?
+                .into_parts();
+            let params = Params::Positional(values);
+            Self::try_build_currency_snapshot(&mut conn, stmt, params)
+                .await
+                .map_err(|detail| {
+                    self._map_log_err_common(
+                        (AppErrorCode::Unknown, detail),
+                        AppRepoErrorFnLabel::FetchPayout,
+                    )
+                })?
+        };
+
+        let currency_buyer = currency_snapshot
+            .remove(&buyer_usr_id)
+            .ok_or(AppRepoErrorDetail::DataRowParse(
+                "missing-buyer-currency".to_string(),
+            ))
+            .map_err(|detail| {
+                self._map_log_err_common(
+                    (AppErrorCode::DataCorruption, detail),
+                    AppRepoErrorFnLabel::FetchPayout,
+                )
+            })?;
+        let currency_seller = currency_snapshot
+            .remove(&store_id)
+            .ok_or(AppRepoErrorDetail::DataRowParse(
+                "missing-seller-currency".to_string(),
+            ))
+            .map_err(|detail| {
+                self._map_log_err_common(
+                    (AppErrorCode::DataCorruption, detail),
+                    AppRepoErrorFnLabel::FetchPayout,
+                )
+            })?;
+
+        let arg = (row_meta.3, currency_seller, currency_buyer);
+        let amount_m = PayoutAmountModel::try_from(arg).map_err(|e| {
+            let msg = format!("payout-model: {:?}", e);
+            let detail = AppRepoErrorDetail::DataRowParse(msg);
+            self._map_log_err_common(
+                (AppErrorCode::DataCorruption, detail),
+                AppRepoErrorFnLabel::FetchPayout,
+            )
+        })?;
+
+        let capture_create_time = raw_column_to_datetime(row_meta.0, 0)
+            .map_err(|reason| self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchPayout))?;
+
+        let arg = (
+            store_id,
+            capture_create_time,
+            buyer_usr_id,
+            charged_ctime,
+            oid_ref,
+            row_meta.1,
+            amount_m,
+            p3pty_m,
+        );
+        Ok(Some(PayoutModel::from(arg)))
+    } // end of fn fetch_payout
 
     async fn create_payout(&self, payout_m: PayoutModel) -> Result<(), AppRepoError> {
         let (p_inner, p3pty) = payout_m.into_parts();

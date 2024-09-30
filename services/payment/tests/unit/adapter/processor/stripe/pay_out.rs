@@ -57,11 +57,12 @@ fn ut_setup_payout_model(
     let mock_3pty = Payout3partyModel::Stripe(Payout3partyStripeModel::from(arg));
     let buyer_usr_id = charge_buyer.meta.owner();
     let arg = (
-        Decimal::ONE, Decimal::new(3222, 2), Decimal::new(10344, 1), 
+        // Decimal::ONE, Decimal::new(3222, 2),
+        Decimal::new(10344, 1), 
         charge_buyer.currency_snapshot.get(&buyer_usr_id).unwrap().clone(),
         charge_buyer.currency_snapshot.get(&mock_merchant_id).unwrap().clone(),
     );
-    let mock_amount = PayoutAmountModel::from(arg);
+    let mock_amount = PayoutAmountModel::try_from(arg).unwrap();
     let mock_order_id = "ouwa-a-A-ha".to_string();
     let arg = (
         mock_merchant_id, Local::now().to_utc(), buyer_usr_id,  *charge_buyer.meta.create_time(),
@@ -87,11 +88,11 @@ pub(super) async fn ok_exact_once(
     if let Ok(v) = result {
         let (payout_dto, payout_m) = v.into_parts();
         assert_eq!(payout_dto.currency, CurrencyDto::TWD);
-        assert_eq!(payout_dto.amount, "1034.4");
+        assert_eq!(payout_dto.amount, "1034.40");
         match payout_m.thirdparty() {
             Payout3partyModel::Stripe(s) => {
                 let amt_serial = s.amount().unwrap();
-                assert_eq!(amt_serial.to_string().as_str(), "32.22");
+                assert_eq!(amt_serial, Decimal::new(3222, 2));
             }
         }
     }
