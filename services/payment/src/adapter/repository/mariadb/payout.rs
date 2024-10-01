@@ -40,8 +40,8 @@ impl TryFrom<(PayoutInnerModel, Label3party)> for InsertPayoutMetaArgs {
     fn try_from(value: (PayoutInnerModel, Label3party)) -> Result<Self, Self::Error> {
         let (p_inner, label3pt) = value;
         let stmt = "INSERT INTO `payout_meta`(`buyer_usr_id`,`charged_time`,`store_id`,`create_time`,\
-                    `storestaff_usr_id`,`order_id`,`amount_base`,`amount_merchant`, `label3party`)\
-                    VALUES (?,?,?,?, ?,?,?,0.00, ?)";
+                    `storestaff_usr_id`,`order_id`,`amount_buyer`,`label3party`)\
+                    VALUES (?,?,?,?, ?,?,?,?)";
         
         // note the currency snoapshot for specific order should be saved in another module
         // `order-replica`, no need to persist them at here
@@ -124,7 +124,7 @@ inner_into_parts!(FetchPayoutMetaArgs);
 impl From<(u32, DateTime<Utc>, u32)> for FetchPayoutMetaArgs {
     fn from(value: (u32, DateTime<Utc>, u32)) -> Self {
         let (buyer_id, charged_time, store_id) = value;
-        let stmt = "SELECT `create_time`,`storestaff_usr_id`,`order_id`,`amount_base`,\
+        let stmt = "SELECT `create_time`,`storestaff_usr_id`,`order_id`,`amount_buyer`,\
                    `label3party` FROM `payout_meta` WHERE `buyer_usr_id`=? AND `charged_time`=? \
                    AND `store_id`=?";
         let arg = vec![

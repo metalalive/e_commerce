@@ -9,6 +9,7 @@ use super::{
     MerchantProfileModel, OrderCurrencySnapshot, Payout3partyStripeModel,
 };
 use crate::api::web::dto::CapturePay3partyRespDto;
+use crate::hard_limit::CURRENCY_RATE_PRECISION;
 
 #[derive(Debug)]
 pub enum PayoutModelError {
@@ -28,6 +29,8 @@ pub enum Payout3partyModel {
 }
 
 pub struct PayoutAmountModel {
+    /// total amount to transfer in buyer configured currency
+    total_buyer: Decimal,
     /// total amount to transfer in merchant configured currency
     total_mc: Decimal,
     /// total amount to transfer in base currency (USD in this project)
@@ -105,9 +108,7 @@ impl TryFrom<PayoutModelCvtArgs> for PayoutModel {
                     v._p3pty.try_clone(arg.0, arg.1)
                 })?
         };
-        let amount_tot = charge_m
-            .capture_amount(merc_prof.id)
-            .map_err(|(code, detail)| PayoutModelError::AmountEstimate(code, detail))?;
+        let amount_tot = charge_m.capture_amount(merc_prof.id)?;
 
         let amount_new = if let Some(v) = opt_old_payout.as_ref() {
             amount_tot.try_update(&v._inner.amount)?
@@ -155,6 +156,9 @@ impl PayoutModel {
     pub fn amount_merchant(&self) -> (Decimal, Decimal, &OrderCurrencySnapshot) {
         self._inner.amount_merchant()
     }
+    pub fn amount_base(&self) -> Decimal {
+        self._inner.amount_base()
+    }
     pub fn thirdparty(&self) -> &Payout3partyModel {
         &self._p3pty
     }
@@ -179,6 +183,9 @@ impl PayoutInnerModel {
     pub(crate) fn amount_base(&self) -> Decimal {
         self.amount.base()
     }
+    pub(crate) fn amount_buyer(&self) -> Decimal {
+        self.amount.buyer()
+    }
     #[rustfmt::skip]
     pub(crate) fn into_parts(self) -> PayoutInnerDecomposedArgs {
         let Self {
@@ -191,18 +198,36 @@ impl PayoutInnerModel {
 } // end of impl PayoutInnerModel
 
 #[rustfmt::skip]
-type PayoutAmountCvtArgs = (
-    Decimal, Decimal, Decimal,
-    OrderCurrencySnapshot, OrderCurrencySnapshot,
-);
+type PayoutAmountCvtArgs = (Decimal, OrderCurrencySnapshot, OrderCurrencySnapshot);
 
-impl From<PayoutAmountCvtArgs> for PayoutAmountModel {
+impl TryFrom<PayoutAmountCvtArgs> for PayoutAmountModel {
+    type Error = PayoutModelError;
     #[rustfmt::skip]
-    fn from(value: PayoutAmountCvtArgs) -> Self {
-        let (target_rate, total_bs, total_mc, currency_seller, currency_buyer) = value;
-        Self { total_mc, total_bs, target_rate, currency_seller, currency_buyer }
+    fn try_from(value: PayoutAmountCvtArgs) -> Result<Self, Self::Error> {
+        let (tot_amt_buyer, currency_seller, currency_buyer) = value;
+        let target_rate = currency_seller.rate
+            .checked_div(currency_buyer.rate)
+            .ok_or("target-rate-overflow".to_string())
+            .map_err(|d| PayoutModelError::AmountEstimate(AppErrorCode::DataCorruption, d))?
+            .trunc_with_scale(CURRENCY_RATE_PRECISION);
+        let total_bs = tot_amt_buyer
+            .checked_div(currency_buyer.rate)
+            .ok_or(format!("convert-overflow, base, rate:{}, amount:{}",
+                           currency_buyer.rate, tot_amt_buyer))
+            .map_err(|d| PayoutModelError::AmountEstimate(AppErrorCode::DataCorruption, d))?
+            .trunc_with_scale(CurrencyDto::USD.amount_fraction_scale());
+        let total_mc = tot_amt_buyer
+            .checked_mul(target_rate)
+            .ok_or(format!("convert-overflow, merchant, rate:{}, amount:{}",
+                           target_rate, tot_amt_buyer))
+            .map_err(|d| PayoutModelError::AmountEstimate(AppErrorCode::DataCorruption, d))?
+            .trunc_with_scale(currency_seller.label.amount_fraction_scale());
+        Ok(Self {
+            total_buyer: tot_amt_buyer, total_mc, total_bs, target_rate,
+            currency_seller, currency_buyer
+        })
     }
-}
+} // end of impl PayoutAmountModel
 
 impl PayoutAmountModel {
     fn try_update(mut self, given: &Self) -> Result<Self, PayoutModelError> {
@@ -262,6 +287,10 @@ impl PayoutAmountModel {
     /// return amount in base currency (USD in this project)
     fn base(&self) -> Decimal {
         self.total_bs
+    }
+
+    fn buyer(&self) -> Decimal {
+        self.total_buyer
     }
 } // end of impl PayoutAmountModel
 

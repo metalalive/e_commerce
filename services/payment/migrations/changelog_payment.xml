@@ -398,8 +398,26 @@
             DROP TABLE `payout_3party_stripe`;
         </rollback>
     </changeSet>
-    
     <changeSet id="tag_version_0.0.11" author="T.H.">
         <tagDatabase tag="0.0.11" />
+    </changeSet>
+    <changeSet id="remove_amount_merchant__payout_meta" author="T.H.">
+        <comment>
+            In this payment application, the payout amount to each merchant with different currencies can be derived from buyer's currency, this means
+            - it is no longer necessary to persist the amount in base currency (USD) and merchant's currency
+            - instead I persist the amount in buyer's currency in database, since currency snapshot has been already saved within the order (otherwise it will be data corruption)
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `payout_meta` DROP COLUMN `amount_merchant`;
+            ALTER TABLE `payout_meta` RENAME COLUMN `amount_base` TO `amount_buyer`;
+        </sql>
+        <rollback>
+            ALTER TABLE `payout_meta` RENAME COLUMN `amount_buyer` TO `amount_base`;
+            ALTER TABLE `payout_meta` ADD COLUMN `amount_merchant`  DECIMAL(16,2)  UNSIGNED NOT NULL;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.12" author="T.H.">
+        <tagDatabase tag="0.0.12" />
     </changeSet>
 </databaseChangeLog>

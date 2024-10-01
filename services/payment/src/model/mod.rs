@@ -101,6 +101,16 @@ impl PayLineAmountModel {
     }
 } // end of impl TryFrom for PayLineAmountModel
 
+impl<'a> TryFrom<&'a str> for Label3party {
+    type Error = &'a str;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            "Stripe" => Ok(Self::Stripe),
+            _others => Err(value),
+        }
+    }
+}
+
 impl<'a> From<&'a StoreOnboardReqDto> for Label3party {
     fn from(value: &'a StoreOnboardReqDto) -> Self {
         match value {

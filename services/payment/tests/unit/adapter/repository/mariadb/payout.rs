@@ -6,7 +6,8 @@ use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::constant::ProductType;
-use payment::adapter::repository::AbstractChargeRepo;
+use ecommerce_common::error::AppErrorCode;
+use payment::adapter::repository::{AbstractChargeRepo, AppRepoErrorDetail};
 use payment::hard_limit::CURRENCY_RATE_PRECISION;
 use payment::model::{
     OrderCurrencySnapshot, Payout3partyModel, Payout3partyStripeModel, PayoutAmountModel,
@@ -89,7 +90,7 @@ async fn create_fetch_ok() {
     let shr_state = ut_setup_sharestate();
     let repo = ut_setup_db_charge_repo(shr_state).await;
     let mock_order_id = "dd20de75d019".to_string();
-    let mock_buyer_id = 3990u32;
+    let mock_buyer_id = 127u32;
     let mock_merchant_id = 6741u32;
     let mock_charged_ctime = Local::now().to_utc() - Duration::minutes(74);
 
@@ -118,6 +119,8 @@ async fn create_fetch_ok() {
     assert!(maybe_payout_m.is_some());
     let read_payout_m = maybe_payout_m.unwrap();
     assert_eq!(read_payout_m.merchant_id(), mock_merchant_id);
+    let read_currency_base = read_payout_m.amount_base();
+    assert_eq!(read_currency_base, Decimal::new(1037, 2));
     let (read_amount_merc, read_target_rate, read_currency_merc) = read_payout_m.amount_merchant();
     assert_eq!(read_currency_merc.label, CurrencyDto::TWD);
     assert_eq!(read_currency_merc.rate, Decimal::new(3196, 2));
@@ -133,4 +136,48 @@ async fn create_fetch_ok() {
     }
 } // end of fn create_fetch_ok
 
-// TODO, add more error test cases
+#[actix_web::test]
+async fn fetch_empty() {
+    let shr_state = ut_setup_sharestate();
+    let repo = ut_setup_db_charge_repo(shr_state).await;
+    let mock_buyer_id = 128u32;
+    let mock_merchant_id = 6741u32;
+    let mock_charged_ctime = Local::now().to_utc() - Duration::minutes(999);
+    let result = repo
+        .fetch_payout(mock_merchant_id, mock_buyer_id, mock_charged_ctime)
+        .await;
+    assert!(result.is_ok());
+    let maybe_payout_m = result.unwrap();
+    assert!(maybe_payout_m.is_none());
+}
+
+#[actix_web::test]
+async fn create_fetch_missing_currency() {
+    let shr_state = ut_setup_sharestate();
+    let repo = ut_setup_db_charge_repo(shr_state).await;
+    let mock_order_id = "1037473a50730135".to_string();
+    let mock_buyer_id = 127u32;
+    let mock_merchant_id = 6741u32;
+    let mock_charged_ctime = Local::now().to_utc() - Duration::minutes(88);
+    let payout_m = ut_setup_payout_model_stripe(
+        mock_order_id,
+        mock_buyer_id,
+        mock_charged_ctime,
+        mock_merchant_id,
+    );
+    let result = repo.create_payout(payout_m).await;
+    assert!(result.is_ok());
+
+    let result = repo
+        .fetch_payout(mock_merchant_id, mock_buyer_id, mock_charged_ctime)
+        .await;
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(matches!(e.code, AppErrorCode::DataCorruption));
+        if let AppRepoErrorDetail::DataRowParse(s) = e.detail {
+            assert_eq!(s.as_str(), "missing-buyer-currency");
+        } else {
+            assert!(false);
+        }
+    }
+} // end of fn create_fetch_missing_currency

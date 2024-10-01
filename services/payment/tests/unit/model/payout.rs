@@ -120,6 +120,8 @@ fn create_ok() {
     if let Ok(v) = result {
         let readback_store_id = v.merchant_id();
         assert_eq!(readback_store_id, mock_store_id);
+        let amount_bs = v.amount_base();
+        assert_eq!(amount_bs, Decimal::new(23566, 2));
         let (total, exrate, currency) = v.amount_merchant();
         assert_eq!(currency.label, CurrencyDto::IDR);
         assert_eq!(currency.rate.to_string().as_str(), "12345.1");

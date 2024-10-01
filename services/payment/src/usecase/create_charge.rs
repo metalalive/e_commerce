@@ -92,6 +92,8 @@ impl ChargeCreateUseCase {
             let d = self.rpc_sync_order(usr_id, oid).await?;
             self.try_save_order(usr_id, oid, d).await?
         };
+        // TODO, verify whether all merchants/shops in the client request support
+        // the specific 3rd-party processor
         let resp = self
             .try_execute_processor(validated_order, req_body)
             .await?;
