@@ -151,9 +151,11 @@ impl AbstStripeContext for MockProcessorStripeCtx {
 
     async fn pay_out(
         &self,
-        _p_inner: &PayoutInnerModel,
-        _p3pty: Payout3partyStripeModel,
+        p_inner: &PayoutInnerModel,
+        mut p3pty: Payout3partyStripeModel,
     ) -> Result<Payout3partyStripeModel, AppProcessorErrorReason> {
-        Err(AppProcessorErrorReason::NotImplemented)
+        p3pty.set_transfer_id("mock-stripe-transfer-id".to_string());
+        p3pty.set_amount(p_inner.amount_base());
+        Ok(p3pty)
     }
 } // end of impl MockProcessorStripeCtx

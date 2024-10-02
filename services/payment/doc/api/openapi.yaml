@@ -112,6 +112,15 @@ paths:
         '400':
           description: |
             inappropriate capture request (TODO: error code in response body)
+        '403':
+          description: |
+            permission denied on currenct user
+        '404':
+          description: |
+            charge not found
+        '409':
+          description: |
+              incomplete charge, customer has not completed pay-in process yet
       security:
         - BearerAuth: []
   
@@ -199,7 +208,7 @@ components:
       
     PaymentCurrencyDto:
       type: string
-      enum: [TWD, USD, THB]
+      enum: [TWD, USD, THB, INR, IDR]
     
     OrderErrorReason:
       type: string
@@ -402,12 +411,24 @@ components:
         label:
           type: string
           enum: [Stripe]
+        amount:
+          type: string
+          pattern: ^\d+(\.\d{1,2})?$
+          example: "10.37"
+        currency:
+          $ref: '#/components/schemas/PaymentCurrencyDto'
 
     CapturePayRespDto:
       type: object
       properties:
         store_id:
           $ref: '#/components/schemas/SellerId'
+        amount:
+          type: string
+          pattern: ^\d+(\.\d{1,2})?$
+          example: "10.37"
+        currency:
+          $ref: '#/components/schemas/PaymentCurrencyDto'
         processor:
           $ref: '#/components/schemas/CapturePay3partyRespDto'
 

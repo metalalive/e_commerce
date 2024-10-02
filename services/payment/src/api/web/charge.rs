@@ -13,8 +13,8 @@ use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use crate::adapter::datastore::AppDataStoreContext;
 use crate::adapter::repository::{app_repo_charge, AbstractChargeRepo};
 use crate::usecase::{
-    ChargeCaptureUseCase, ChargeCreateUcError, ChargeCreateUseCase, ChargeRefreshUcError,
-    ChargeStatusRefreshUseCase,
+    ChargeCaptureUcError, ChargeCaptureUseCase, ChargeCreateUcError, ChargeCreateUseCase,
+    ChargeRefreshUcError, ChargeStatusRefreshUseCase,
 };
 use crate::{AppAuthedClaim, AppSharedState};
 
@@ -166,7 +166,6 @@ pub(super) async fn capture_authorized_charge(
     auth_claim: AppAuthedClaim,
     shr_state: WebData<AppSharedState>,
 ) -> ActixResult<HttpResponse> {
-    // TODO, receive optional idempotency key from client
     let charge_id = path_segms.into_inner().0;
     let store_id = req_body.store_id;
     let logctx = shr_state.log_context();
@@ -187,7 +186,47 @@ pub(super) async fn capture_authorized_charge(
             let b = serde_json::to_vec(&v).unwrap();
             (StatusCode::OK, b)
         }
-        Err(_e) => (StatusCode::NOT_IMPLEMENTED, b"{}".to_vec()),
+        Err(e) => {
+            let err_status = match e {
+                ChargeCaptureUcError::MissingCharge => StatusCode::NOT_FOUND,
+                ChargeCaptureUcError::MissingMerchant => StatusCode::FORBIDDEN,
+                ChargeCaptureUcError::ChargeIdDecode(code, msg) => {
+                    app_log_event!(
+                        logctx,
+                        AppLogLevel::WARNING,
+                        "code:{:?}, detail:{}",
+                        code,
+                        msg
+                    );
+                    StatusCode::BAD_REQUEST
+                }
+                ChargeCaptureUcError::InvalidMerchantStaff(usr_id) => {
+                    app_log_event!(logctx, AppLogLevel::INFO, "usr_id:{usr_id}");
+                    StatusCode::FORBIDDEN
+                }
+                ChargeCaptureUcError::PayInNotCompleted(pay_in_state) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", pay_in_state);
+                    StatusCode::CONFLICT // can I use bad-request or payment-required ?
+                }
+                ChargeCaptureUcError::CorruptedPayMethod(msg) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{msg}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+                ChargeCaptureUcError::CorruptedModel(e) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+                ChargeCaptureUcError::ThirdParty(e) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+                ChargeCaptureUcError::RepoOpFailure(e) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+            };
+            (err_status, b"{}".to_vec())
+        }
     };
     let resp = {
         let mut r = HttpResponseBuilder::new(http_status);
