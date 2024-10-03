@@ -9,10 +9,10 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 0.0.5
+  version: 0.0.6
 
 servers:
-  - url: https://doc.site.not.ready/api/v0.0.5
+  - url: https://doc.site.not.ready/api/v0.0.6
 tags:
   - name: configuration
     description: |
@@ -22,7 +22,8 @@ tags:
       - a client initiate a payment associated with a valid order, transfer the fund to this payment service (pay-in),
       - then merchants / sellers capture the fund from this service (payout)
   - name: refund
-    description: either a client or a merchant / seller initiates a return request, this service transfer the fund back to the client.
+    description: |
+        either a customer or a merchant / seller initiates a return request in order-processing application, the merchant is responsible to complete the request in this application, which transfers full / partial fund back to the customer.
 
 paths:
   /charge:
@@ -124,6 +125,30 @@ paths:
       security:
         - BearerAuth: []
   
+  /refund/{order-id}/complete/{store-id}:
+    patch:
+      summary: complete a refund request
+      description: |
+          Merchant completes a refund request initiated by customer.
+          TODO: let merchants define their own refund policy for each product
+      tags:
+        - refund
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/SellerId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundCompletionReqDto'
+      responses:
+        '200':
+          description: completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundCompletionRespDto'
+  
   /store/{store-id}/onboard:
     post:
       summary: onboard a new store
@@ -191,6 +216,14 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/SellerId'
+    
+    OrderId:
+      name: order-id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 9028a14935032175-20f40194
   
   schemas:
     SellerId:
@@ -205,6 +238,11 @@ components:
     ProductId:
       type: integer
       format: uint64
+    
+    Quantity:
+      type: integer
+      format: uint32
+      example: 24
       
     PaymentCurrencyDto:
       type: string
@@ -264,9 +302,7 @@ components:
       type: object
       properties:
         quantity:
-          type: integer
-          format: uint32
-          example: 24
+          $ref: '#/components/schemas/Quantity'
         amount:
           $ref: '#/components/schemas/PayAmountDto'
       required:
@@ -484,6 +520,81 @@ components:
         processor:
           type: string
           enum: [Stripe]
+
+    RefundCompletionOlineReqDto:
+      type: object
+      properties:
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        product_id:
+          $ref: '#/components/schemas/ProductId'
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        status:
+          type: string
+          enum: [Rejected, ApprovedFull, ApprovedPartial]
+        reject_reason:
+          type: string
+          enum: [Fraudulent, Damaged]
+          description: present only when `status` is `Rejected`
+        partial_amount:
+          type: string
+          example: '62.455'
+          description: present only when `status` is `ApprovedPartial`
+      required:
+      - status
+      - product_type
+      - product_id
+      - quantity
+        
+    RefundCompletionReqDto:
+      type: object
+      properties:
+        req_time:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundCompletionOlineReqDto'
+      required:
+      - lines
+      - req_time
+
+    RefundCompletionOlineRespDto:
+      type: object
+      properties:
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        product_id:
+          $ref: '#/components/schemas/ProductId'
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        status:
+          type: string
+          enum: [Rejected, ApprovedFull, ApprovedPartial]
+        amount_refunded:
+          type: string
+          example: '62.455'
+        success:
+          type: boolean
+        failure_reason:
+          type: string
+          enum: [InvalidPaymentSetup, ExceedMaxCharged]
+
+    RefundCompletionRespDto:
+      type: object
+      properties:
+        req_time:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundCompletionOlineRespDto'
+      required:
+      - lines
+      - req_time
 
   securitySchemes:
     BearerAuth:
