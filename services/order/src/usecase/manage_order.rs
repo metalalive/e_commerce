@@ -8,17 +8,17 @@ use std::sync::Arc;
 use chrono::{DateTime, FixedOffset, Local as LocalTime};
 use ecommerce_common::api::dto::{CurrencyDto, GenericRangeErrorDto};
 use ecommerce_common::api::rpc::dto::{
-    OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
-    OrderReplicaPaymentDto,
+    OrderLinePayUpdateErrorDto, OrderLineReplicaRefundDto, OrderPaymentUpdateDto,
+    OrderPaymentUpdateErrorDto, OrderReplicaPaymentDto, OrderReplicaRefundReqDto,
 };
 use ecommerce_common::api::web::dto::{
     BillingErrorDto, ContactErrorDto, ContactNonFieldErrorReason, QuotaResourceErrorDto,
 };
 
 use crate::api::rpc::dto::{
-    OrderLineReplicaRefundDto, OrderLineStockReturningDto, OrderReplicaInventoryDto,
-    OrderReplicaInventoryReqDto, OrderReplicaRefundReqDto, OrderReplicaStockReservingDto,
-    OrderReplicaStockReturningDto, StockLevelReturnDto, StockReturnErrorDto,
+    OrderLineStockReturningDto, OrderReplicaInventoryDto, OrderReplicaInventoryReqDto,
+    OrderReplicaStockReservingDto, OrderReplicaStockReturningDto, StockLevelReturnDto,
+    StockReturnErrorDto,
 };
 use crate::api::web::dto::{
     BillingReqDto, OrderCreateReqData, OrderCreateRespErrorDto, OrderCreateRespOkDto,
@@ -444,15 +444,28 @@ impl OrderReplicaRefundUseCase {
         self,
         req: OrderReplicaRefundReqDto,
     ) -> DefaultResult<Vec<OrderLineReplicaRefundDto>, AppError> {
-        let (oid, start, end) = (req.order_id, req.start, req.end);
+        let OrderReplicaRefundReqDto {
+            order_id: oid,
+            start,
+            end,
+        } = req;
+        let start_dt = DateTime::parse_from_rfc3339(start.as_str()).map_err(|e| AppError {
+            code: AppErrorCode::InvalidInput,
+            detail: Some(format!("corrupted start-time :{:?} ", e)),
+        })?;
+        let end_dt = DateTime::parse_from_rfc3339(end.as_str()).map_err(|e| AppError {
+            code: AppErrorCode::InvalidInput,
+            detail: Some(format!("corrupted end-time :{:?} ", e)),
+        })?;
         let currency_m = self.o_repo.currency_exrates(oid.as_str()).await?;
         let ret_ms = self
             .ret_repo
-            .fetch_by_oid_ctime(oid.as_str(), start, end)
+            .fetch_by_oid_ctime(oid.as_str(), start_dt, end_dt)
             .await?;
         OrderReturnModel::to_replica_refund_dto(ret_ms, currency_m).map_err(|mut es| es.remove(0))
     }
-}
+} // end of impl OrderReplicaRefundUseCase
+
 impl OrderReplicaInventoryUseCase {
     async fn load_reserving(
         &self,

@@ -9,15 +9,14 @@ use uuid::Uuid;
 use ecommerce_common::api::dto::{OrderLinePayDto, PayAmountDto};
 use ecommerce_common::api::rpc::dto::{
     OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderLinePayUpdateErrorReason,
-    OrderReplicaPaymentDto,
+    OrderLineReplicaRefundDto, OrderReplicaPaymentDto,
 };
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
 use crate::api::dto::{ShippingDto, ShippingMethod, ShippingOptionDto};
 use crate::api::rpc::dto::{
-    InventoryEditStockLevelDto, OrderLineReplicaRefundDto, OrderLineStockReservingDto,
-    OrderLineStockReturningDto,
+    InventoryEditStockLevelDto, OrderLineStockReservingDto, OrderLineStockReturningDto,
 };
 use crate::api::web::dto::{
     OrderCreateRespOkDto, OrderLineReqDto, OrderLineReturnErrorDto, OrderLineReturnErrorReason,
@@ -629,7 +628,7 @@ impl OrderReturnModel {
                 seller_id: pid.store_id,
                 product_id: pid.product_id,
                 product_type: pid.product_type.clone(),
-                create_time: ctime,
+                create_time: ctime.to_rfc3339(),
                 amount: refund.into_paym_dto(curr_ex.clone()),
             })
             .collect();

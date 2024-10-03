@@ -7,13 +7,13 @@ use chrono::{DateTime, Duration, FixedOffset, Local};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::api::rpc::dto::OrderReplicaRefundReqDto;
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::AppLogContext;
 
 use order::api::rpc::dto::{
-    OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, OrderReplicaRefundReqDto,
-    StockReturnErrorDto,
+    OrderReplicaInventoryDto, OrderReplicaInventoryReqDto, StockReturnErrorDto,
 };
 use order::api::web::dto::OrderLineReqDto;
 use order::constant::app_meta;
@@ -779,7 +779,7 @@ async fn replica_refund_ok() {
         .iter()
         .map(|ret| ret.qty.len())
         .sum::<usize>();
-    let expect_refunds: HashSet<(u32, u64, DateTime<FixedOffset>, String), RandomState> = {
+    let expect_refunds: HashSet<(u32, u64, String, String), RandomState> = {
         let iter = fetched_returns.iter().flat_map(|ret| {
             ret.qty.iter().map(|(t, (_q, refund))| {
                 let scale_limit = mocked_currency_rate.buyer.name.amount_fraction_scale();
@@ -787,7 +787,7 @@ async fn replica_refund_ok() {
                 (
                     ret.id_.store_id,
                     ret.id_.product_id,
-                    t.clone(),
+                    t.to_rfc3339(),
                     Decimal::new(mantissa, scale_limit).to_string(),
                 )
             })
@@ -804,8 +804,8 @@ async fn replica_refund_ok() {
     let ret_repo = ut_oreturn_setup_repository_2(Ok(fetched_returns), Ok(vec![]), Err(unknown_err));
     let req = OrderReplicaRefundReqDto {
         order_id: "My391004".to_string(),
-        start: DateTime::parse_from_rfc3339("2023-11-17T12:00:04+02:00").unwrap(),
-        end: DateTime::parse_from_rfc3339("2023-11-19T12:00:04+02:00").unwrap(),
+        start: "2023-11-17T12:00:04+02:00".to_string(),
+        end: "2023-11-19T12:00:04+02:00".to_string(),
     };
     let uc = OrderReplicaRefundUseCase { ret_repo, o_repo };
     let result = uc.execute(req).await;

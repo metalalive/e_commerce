@@ -1,7 +1,9 @@
 use serde_json::Value as JsnVal;
 use std::vec::Vec;
 
-use ecommerce_common::api::rpc::dto::{OrderPaymentUpdateDto, OrderReplicaPaymentReqDto};
+use ecommerce_common::api::rpc::dto::{
+    OrderPaymentUpdateDto, OrderReplicaPaymentReqDto, OrderReplicaRefundReqDto,
+};
 use ecommerce_common::error::AppErrorCode;
 
 use crate::error::AppError;
@@ -14,7 +16,7 @@ use crate::usecase::{
 use crate::AppSharedState;
 
 use super::build_error_response;
-use super::dto::{OrderReplicaInventoryReqDto, OrderReplicaRefundReqDto};
+use super::dto::OrderReplicaInventoryReqDto;
 
 macro_rules! common_setup {
     ($target_dto:ty, $shr_state:ident, $repo_gen:ident, $serial:expr) => {{

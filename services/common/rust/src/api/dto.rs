@@ -106,6 +106,7 @@ impl From<String> for CountryCode {
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Deserialize, Serialize, Debug, Clone, Hash, Eq, PartialEq)]
 pub enum CurrencyDto { INR, IDR, THB, TWD, USD, Unknown }
+// #[serde(rename_all = "UPPERCASE")], FIXME, the macro does not work
 
 impl ToString for CurrencyDto {
     fn to_string(&self) -> String {

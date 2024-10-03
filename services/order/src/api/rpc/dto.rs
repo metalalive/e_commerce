@@ -5,7 +5,7 @@ use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
-    jsn_serialize_product_type, jsn_validate_product_type, CurrencyDto, PayAmountDto,
+    jsn_serialize_product_type, jsn_validate_product_type, CurrencyDto,
 };
 use ecommerce_common::constant::ProductType;
 
@@ -79,25 +79,6 @@ pub struct StockLevelPresentDto {
 pub struct StockLevelReturnDto {
     pub order_id: String,
     pub items: Vec<InventoryEditStockLevelDto>,
-}
-
-#[derive(Deserialize)]
-pub struct OrderReplicaRefundReqDto {
-    pub order_id: String,
-    pub start: DateTime<FixedOffset>,
-    pub end: DateTime<FixedOffset>,
-}
-#[derive(Serialize)]
-pub struct OrderLineReplicaRefundDto {
-    pub seller_id: u32,
-    pub product_id: u64,
-    #[serde(
-        deserialize_with = "jsn_validate_product_type",
-        serialize_with = "jsn_serialize_product_type"
-    )]
-    pub product_type: ProductType,
-    pub create_time: DateTime<FixedOffset>,
-    pub amount: PayAmountDto,
 }
 
 #[derive(Deserialize)]

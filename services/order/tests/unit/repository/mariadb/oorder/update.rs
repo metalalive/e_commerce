@@ -46,16 +46,9 @@ async fn update_payment_ok() {
     ut_setup_stock_product(o_repo.stock(), 1033, ProductType::Item, 9012, 32).await;
     {
         let lines = vec![
-            (
-                1032,
-                ProductType::Package,
-                9010,
-                13,
-                99,
-                create_time.clone(),
-            ),
-            (1031, ProductType::Item, 9003, 10, 100, create_time.clone()),
-            (1032, ProductType::Item, 9011, 10, 110, create_time.clone()),
+            (1032, ProductType::Package, 9010, 13, 99, create_time),
+            (1031, ProductType::Item, 9003, 10, 100, create_time),
+            (1032, ProductType::Item, 9011, 15, 110, create_time),
         ];
         let ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
         let result = o_repo
@@ -66,19 +59,18 @@ async fn update_payment_ok() {
     }
     let data = {
         let lines = vec![
-            OrderLinePaidUpdateDto {
-                seller_id: 1031,
-                product_id: 9003,
-                qty: 4,
-                product_type: ProductType::Item,
-            },
-            OrderLinePaidUpdateDto {
-                seller_id: 1032,
-                product_id: 9010,
-                qty: 1,
-                product_type: ProductType::Package,
-            },
-        ];
+            (1031u32, 9003u64, 3u32, ProductType::Item),
+            (1032, 9010, 1, ProductType::Package),
+            (1032, 9011, 6, ProductType::Item),
+        ]
+        .into_iter()
+        .map(|d| OrderLinePaidUpdateDto {
+            seller_id: d.0,
+            product_id: d.1,
+            qty: d.2,
+            product_type: d.3,
+        })
+        .collect::<Vec<_>>();
         OrderPaymentUpdateDto {
             oid: mock_oid.to_string(),
             charge_time: (create_time + Duration::seconds(6)).to_rfc3339(),
@@ -94,19 +86,17 @@ async fn update_payment_ok() {
     }
     let data = {
         let lines = vec![
-            OrderLinePaidUpdateDto {
-                seller_id: 1032,
-                product_id: 9010,
-                qty: 3,
-                product_type: ProductType::Package,
-            },
-            OrderLinePaidUpdateDto {
-                seller_id: 1032,
-                product_id: 9011,
-                qty: 5,
-                product_type: ProductType::Item,
-            },
-        ];
+            (1032u32, 9010u64, 3u32, ProductType::Package),
+            (1032, 9011, 5, ProductType::Item),
+        ]
+        .into_iter()
+        .map(|d| OrderLinePaidUpdateDto {
+            seller_id: d.0,
+            product_id: d.1,
+            qty: d.2,
+            product_type: d.3,
+        })
+        .collect::<Vec<_>>();
         OrderPaymentUpdateDto {
             oid: mock_oid.to_string(),
             charge_time: (create_time + Duration::seconds(10)).to_rfc3339(),
@@ -122,22 +112,17 @@ async fn update_payment_ok() {
     }
 
     let pids = vec![
-        OrderLineIdentity {
-            store_id: 1031,
-            product_id: 9003,
-            product_type: ProductType::Item,
-        },
-        OrderLineIdentity {
-            store_id: 1032,
-            product_id: 9011,
-            product_type: ProductType::Item,
-        },
-        OrderLineIdentity {
-            store_id: 1032,
-            product_id: 9010,
-            product_type: ProductType::Package,
-        },
-    ];
+        (1031u32, 9003u64, ProductType::Item),
+        (1032, 9011, ProductType::Item),
+        (1032, 9010, ProductType::Package),
+    ]
+    .into_iter()
+    .map(|d| OrderLineIdentity {
+        store_id: d.0,
+        product_id: d.1,
+        product_type: d.2,
+    })
+    .collect::<Vec<_>>();
     let result = o_repo.fetch_lines_by_pid(mock_oid, pids).await;
     assert!(result.is_ok());
     if let Ok(mut lines) = result {
@@ -151,9 +136,9 @@ async fn update_payment_ok() {
                 let actual = line.qty.paid_last_update.unwrap().round_subsecs(1);
                 assert_eq!(actual, expect);
             };
-        fn1(lines.remove(0), 9003, 4, Duration::seconds(6));
-        fn1(lines.remove(0), 9010, 3, Duration::seconds(10));
-        fn1(lines.remove(0), 9011, 5, Duration::seconds(10));
+        fn1(lines.remove(0), 9003, 3, Duration::seconds(6));
+        fn1(lines.remove(0), 9010, 4, Duration::seconds(10));
+        fn1(lines.remove(0), 9011, 11, Duration::seconds(10));
     }
 } // end of fn update_payment_ok
 
