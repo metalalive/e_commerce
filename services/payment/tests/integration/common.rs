@@ -40,10 +40,10 @@ pub(crate) async fn itest_setup_app_server() -> ItestService!() {
     let listener_ref = &cfg.api_server.listen;
     let api_ver = listener_ref.api_version.as_str();
     let route_table = AppRouteTable::get(api_ver);
-    assert_eq!(route_table.entries.len(), 5);
+    assert_eq!(route_table.entries.len(), 6);
     let cfg_routes = cfg.api_server.listen.routes.clone();
     let (app, num_applied) = app_web_service(route_table, cfg_routes);
-    assert_eq!(num_applied, 5);
+    assert_eq!(num_applied, 6);
     let shr_state = AppSharedState::new(cfg).unwrap();
     let app = app.app_data(WebData::new(shr_state));
     init_service(app).await

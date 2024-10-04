@@ -21,7 +21,7 @@ use payment::AppAuthedClaim;
 use common::{itest_setup_app_server, itest_setup_auth_claim};
 
 const CASES_PATH: &str = "./tests/integration/examples/";
-const API_VERSION: &str = "v0.0.5";
+const API_VERSION: &str = "v0.0.6";
 
 async fn itest_onboard_merchant(
     app: &ItestService!(),
@@ -137,6 +137,34 @@ async fn itest_capture_charge_payout(
     };
     let req = TestRequest::with_uri(uri.as_str())
         .method(Method::POST)
+        .append_header(ContentType::json())
+        .set_json(req_body)
+        .to_request();
+    let _empty = req
+        .extensions_mut()
+        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let resp = call_service(app, req).await;
+    assert_eq!(resp.status().as_u16(), expect_resp_status);
+    let body_ctx = resp.into_body();
+    body_ctx.try_into_bytes()
+}
+
+async fn itest_merchant_complete_refund(
+    app: &ItestService!(),
+    case_file: &str,
+    order_id: &str,
+    store_id: u32,
+    usr_id: u32,
+    expect_resp_status: u16,
+) -> Result<ActixBytes, impl MessageBody> {
+    let uri = format!("/{API_VERSION}/refund/{order_id}/complete/{store_id}");
+    let req_body = {
+        let path = CASES_PATH.to_string() + case_file;
+        let rdr = File::open(path).unwrap();
+        serde_json::from_reader::<File, JsnVal>(rdr).unwrap()
+    };
+    let req = TestRequest::with_uri(uri.as_str())
+        .method(Method::PATCH)
         .append_header(ContentType::json())
         .set_json(req_body)
         .to_request();
@@ -266,6 +294,21 @@ async fn charge_stripe_ok() {
         &mock_app,
         "capture_authed_charge_ok_1.json",
         charge_id.as_str(),
+        seller_usr_id,
+        200,
+    )
+    .await;
+    assert!(result.is_ok());
+
+    // TODO,
+    // - mock cron job that sync return request from order app
+
+    // --- partial refund ----
+    let result = itest_merchant_complete_refund(
+        &mock_app,
+        "complete_refund_ok_1.json",
+        expect_oid,
+        mock_store_id,
         seller_usr_id,
         200,
     )

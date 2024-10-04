@@ -1,0 +1,19 @@
+{
+  "req_time": "2024-10-05T14:48:00+03:35",
+  "lines": [
+    {
+      "product_type": 1,
+      "product_id": 204,
+      "quantity": 5,
+      "status": "ApprovedPartial",
+      "partial_amount": "62.455"
+    },
+    {
+      "product_type": 2,
+      "product_id": 206,
+      "quantity": 10,
+      "status": "Rejected",
+      "reject_reason": "Damaged"
+    }
+  ]
+}

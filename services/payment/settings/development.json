@@ -23,6 +23,9 @@
             {"alias": "payment::api::web::onboard",
              "handlers": ["errlog-file-web-api"],
              "level": "INFO"},
+            {"alias": "payment::api::web::refund",
+             "handlers": ["errlog-file-web-api"],
+             "level": "WARNING"},
             {"alias": "payment::adapter::rpc::amqp",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
@@ -50,7 +53,7 @@
         "port": 8015,
         "host":"localhost",
         "max_failures": 3,
-        "api_version": "0.0.5",
+        "api_version": "0.0.6",
 	"max_connections": 127,
         "cors": "common/data/cors.json",
         "routes": [
@@ -58,7 +61,8 @@
             {"path":"/store/{store_id}/onboard/status", "handler":"track_onboarding_status"},
             {"path":"/charge", "handler":"create_new_charge"},
             {"path":"/charge/{charge_id}", "handler":"refresh_charge_status"},
-            {"path":"/charge/{charge_id}/capture", "handler":"capture_authed_charge"}
+            {"path":"/charge/{charge_id}/capture", "handler":"capture_authed_charge"},
+            {"path":"/refund/{order_id}/complete/{store_id}", "handler":"complete_refund"}
         ]
     },
     "limit_req_body_in_bytes": 10485760,

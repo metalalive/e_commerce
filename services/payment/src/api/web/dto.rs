@@ -203,3 +203,57 @@ impl StoreOnboardRespDto {
         }
     }
 }
+
+#[derive(Deserialize)]
+pub struct RefundCompletionReqDto {
+    pub req_time: DateTime<Utc>,
+    pub lines: Vec<RefundCompletionOlineReqDto>,
+}
+
+#[derive(Deserialize)]
+pub struct RefundCompletionOlineReqDto {
+    #[serde(deserialize_with = "jsn_validate_product_type")]
+    pub product_type: ProductType,
+    pub product_id: u64,
+    pub quantity: u32,
+    pub status: RefundStatusReqDto,
+    pub reject_reason: Option<RefundRejectReasonDto>, // present for status `reject`
+    pub partial_amount: Option<String>,               // Only when status is "ApprovedPartial"
+}
+
+#[derive(Deserialize, Serialize)]
+pub enum RefundStatusReqDto {
+    Rejected,
+    ApprovedFull,
+    ApprovedPartial,
+}
+
+#[derive(Deserialize)]
+pub enum RefundRejectReasonDto {
+    Fraudulent,
+    Damaged,
+}
+
+#[derive(Serialize)]
+pub struct RefundCompletionRespDto {
+    pub req_time: DateTime<Utc>,
+    pub lines: Vec<RefundCompletionOlineRespDto>,
+}
+
+#[derive(Serialize)]
+pub struct RefundCompletionOlineRespDto {
+    #[serde(serialize_with = "jsn_serialize_product_type")]
+    pub product_type: ProductType,
+    pub product_id: u64,
+    pub quantity: u32,
+    pub status: RefundStatusReqDto,
+    pub amount_refunded: String,
+    pub success: bool,
+    pub failure_reason: Option<RefundFailureReasonRespDto>,
+}
+
+#[derive(Serialize)]
+pub enum RefundFailureReasonRespDto {
+    InvalidPaymentSetup,
+    ExceedMaxCharged,
+}

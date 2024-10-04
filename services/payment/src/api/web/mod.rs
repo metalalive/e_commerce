@@ -1,6 +1,7 @@
 mod charge;
 pub mod dto;
 mod onboard;
+mod refund;
 
 use actix_http::Method;
 use actix_web::body::BoxBody;
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 
 use charge::{capture_authorized_charge, create_charge, refresh_charge_status};
 use onboard::{onboard_store, track_onboarding_status};
+use refund::mechant_complete_refund;
 
 pub struct AppRouteTable {
     pub version: String,
@@ -21,14 +23,14 @@ pub struct AppRouteTable {
 impl AppRouteTable {
     pub fn get(ver_req: &str) -> Self {
         let (version, entries) = match ver_req {
-            "0.0.1" | "0.0.2" | "0.0.4" | "0.0.5" => {
-                (format!("v{ver_req}"), Self::v0_0_5_entries())
+            "0.0.2" | "0.0.4" | "0.0.5" | "0.0.6" => {
+                (format!("v{ver_req}"), Self::v0_0_6_entries())
             }
             _others => (String::new(), HashMap::new()),
         };
         Self { version, entries }
     }
-    fn v0_0_5_entries() -> HashMap<String, Route> {
+    fn v0_0_6_entries() -> HashMap<String, Route> {
         let data = [
             (
                 "create_new_charge".to_string(),
@@ -53,6 +55,12 @@ impl AppRouteTable {
                 Route::new()
                     .method(Method::PATCH)
                     .to(track_onboarding_status),
+            ),
+            (
+                "complete_refund".to_string(),
+                Route::new()
+                    .method(Method::PATCH)
+                    .to(mechant_complete_refund),
             ),
         ];
         HashMap::from(data)
