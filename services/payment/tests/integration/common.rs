@@ -35,7 +35,7 @@ fn setup_config() -> AppConfig {
     AppConfig::new(args).unwrap()
 }
 
-pub(crate) async fn itest_setup_app_server() -> ItestService!() {
+pub(crate) async fn itest_setup_app_server() -> (ItestService!(), AppSharedState) {
     let cfg = setup_config();
     let listener_ref = &cfg.api_server.listen;
     let api_ver = listener_ref.api_version.as_str();
@@ -45,8 +45,9 @@ pub(crate) async fn itest_setup_app_server() -> ItestService!() {
     let (app, num_applied) = app_web_service(route_table, cfg_routes);
     assert_eq!(num_applied, 6);
     let shr_state = AppSharedState::new(cfg).unwrap();
-    let app = app.app_data(WebData::new(shr_state));
-    init_service(app).await
+    let app = app.app_data(WebData::new(shr_state.clone()));
+    let srv = init_service(app).await;
+    (srv, shr_state)
 }
 
 pub(crate) fn itest_setup_auth_claim(profile: u32) -> AppAuthedClaim {

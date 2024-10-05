@@ -15,7 +15,9 @@ use actix_web::test::{call_service, TestRequest};
 use actix_web::web::Bytes as ActixBytes;
 use serde_json::Value as JsnVal;
 
+use payment::adapter::repository::app_repo_charge;
 use payment::hard_limit::CREATE_CHARGE_SECONDS_INTERVAL;
+use payment::usecase::SyncRefundReqUseCase;
 use payment::AppAuthedClaim;
 
 use common::{itest_setup_app_server, itest_setup_auth_claim};
@@ -215,7 +217,7 @@ fn verify_charge_status(resp_body: &JsnVal, expect_oid: &str, expect_progress: &
 
 #[actix_web::test]
 async fn charge_stripe_ok() {
-    let mock_app = itest_setup_app_server().await;
+    let (mock_app, mock_shr_state) = itest_setup_app_server().await;
     let (buyer_usr_id, seller_usr_id) = (2234u32, 6741u32);
     let mock_store_id = 983u32;
     let expect_oid = "7931649be98f24";
@@ -300,8 +302,13 @@ async fn charge_stripe_ok() {
     .await;
     assert!(result.is_ok());
 
-    // TODO,
-    // - mock cron job that sync return request from order app
+    {
+        // - mock cron job that sync return request from order app
+        let repo_c = app_repo_charge(mock_shr_state.datastore()).await.unwrap();
+        let rpc_ctx = mock_shr_state.rpc_context();
+        let result = SyncRefundReqUseCase::execute(repo_c, rpc_ctx).await;
+        assert!(result.is_ok());
+    }
 
     // --- partial refund ----
     let result = itest_merchant_complete_refund(
