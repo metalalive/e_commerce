@@ -134,6 +134,23 @@
 		    "max_length": 1000,
                     "ttl_secs": 26
 		}
+	    },
+	    {
+                "queue": "rpc_orderproc_replica_refund",
+                "exchange": "rpc-default-allapps",
+                "routing_key": "rpc.order.order_returned_replica_refund",
+                "ensure_declare": false,
+                "subscribe": false,
+                "durable": true,
+		"ttl_secs": 60,
+		"max_length": 455,
+	        "reply": {
+                    "queue": "rpc.reply.payment.sync_order_refund",
+                    "correlation_id_prefix": "rpc.payment.sync_order_refund.corr_id",
+                    "durable": true,
+		    "max_length": 455,
+                    "ttl_secs": 60
+		}
 	    }
 	],
 	"attributes": {

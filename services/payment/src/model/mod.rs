@@ -22,7 +22,8 @@ pub use self::external_processor::{
 };
 pub use self::merchant::{Merchant3partyModel, MerchantModelError, MerchantProfileModel};
 pub use self::order_replica::{
-    OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
+    OLineRefundModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
+    OrderRefundModel, RefundModelError,
 };
 pub(crate) use self::payout::PayoutInnerModel;
 pub use self::payout::{Payout3partyModel, PayoutAmountModel, PayoutModel, PayoutModelError};

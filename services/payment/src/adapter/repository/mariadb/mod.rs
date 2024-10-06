@@ -3,6 +3,7 @@ mod charge_converter;
 pub(super) mod merchant;
 mod order_replica;
 mod payout;
+pub(super) mod refund;
 
 use std::result::Result;
 

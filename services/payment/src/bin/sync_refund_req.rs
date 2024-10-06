@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::result::Result;
 
-use payment::adapter::repository::app_repo_charge;
+use payment::adapter::repository::app_repo_refund;
 use tokio::runtime::Builder;
 
 use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
@@ -15,12 +15,12 @@ use payment::{hard_limit, AppSharedState};
 #[rustfmt::skip]
 async fn start_sync(shr_state:AppSharedState) -> Result<(), ()> {
     let logctx = shr_state.log_context();
-    let charge_repo = app_repo_charge(shr_state.datastore())
+    let repo = app_repo_refund(shr_state.datastore())
         .await.map_err(|e| {
             app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
         })?;
     let rpc_ctx = shr_state.rpc_context();
-    SyncRefundReqUseCase::execute(charge_repo, rpc_ctx)
+    SyncRefundReqUseCase::execute(repo, rpc_ctx)
         .await
         .map_err(|e| {
             app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);

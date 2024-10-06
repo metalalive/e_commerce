@@ -11,11 +11,12 @@ use ecommerce_common::model::order::BillingModel;
 
 use crate::model::{
     BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, Label3party,
-    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, PayoutModel,
+    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, OrderRefundModel, PayoutModel,
 };
 
 use self::mariadb::charge::MariadbChargeRepo;
 use self::mariadb::merchant::MariadbMerchantRepo;
+use self::mariadb::refund::MariaDbRefundRepo;
 use super::datastore::{AppDStoreError, AppDataStoreContext};
 
 #[derive(Debug)]
@@ -34,6 +35,10 @@ pub enum AppRepoErrorFnLabel {
     UpdateChargeProgress,
     UpdateMerchant3party,
     InitMerchantRepo,
+    InitRefundRepo,
+    RefundGetTimeSynced,
+    RefundUpdateTimeSynced,
+    RefundSaveReq,
 }
 #[derive(Debug)]
 pub enum AppRepoErrorDetail {
@@ -132,6 +137,15 @@ pub trait AbstractMerchantRepo: Sync + Send {
     ) -> Result<(), AppRepoError>;
 } // end of trait AbstractMerchantRepo
 
+#[async_trait]
+pub trait AbstractRefundRepo: Sync + Send {
+    async fn last_time_synced(&self) -> Result<DateTime<Utc>, AppRepoError>;
+
+    async fn update_sycned_time(&self, t: DateTime<Utc>) -> Result<(), AppRepoError>;
+
+    async fn save_request(&self, req: Vec<OrderRefundModel>) -> Result<(), AppRepoError>;
+}
+
 pub async fn app_repo_charge(
     dstore: Arc<AppDataStoreContext>,
 ) -> Result<Box<dyn AbstractChargeRepo>, AppRepoError> {
@@ -143,5 +157,12 @@ pub async fn app_repo_merchant(
     dstore: Arc<AppDataStoreContext>,
 ) -> Result<Box<dyn AbstractMerchantRepo>, AppRepoError> {
     let repo = MariadbMerchantRepo::new(dstore)?;
+    Ok(Box::new(repo))
+}
+
+pub async fn app_repo_refund(
+    dstore: Arc<AppDataStoreContext>,
+) -> Result<Box<dyn AbstractRefundRepo>, AppRepoError> {
+    let repo = MariaDbRefundRepo::new(dstore)?;
     Ok(Box::new(repo))
 }
