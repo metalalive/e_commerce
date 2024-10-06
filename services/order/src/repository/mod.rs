@@ -210,17 +210,22 @@ pub trait AbsOrderReturnRepo: Sync + Send {
         oid: &str,
         pids: Vec<OrderLineIdentity>,
     ) -> DefaultResult<Vec<OrderReturnModel>, AppError>;
+
+    /// return list of tuples that contain order-id string and corresponding return model
     async fn fetch_by_created_time(
         &self,
         start: DateTime<FixedOffset>,
         end: DateTime<FixedOffset>,
     ) -> DefaultResult<Vec<(String, OrderReturnModel)>, AppError>;
+
+    // TODO, no production code refers to this function, consider to remove
     async fn fetch_by_oid_ctime(
         &self,
         oid: &str,
         start: DateTime<FixedOffset>,
         end: DateTime<FixedOffset>,
     ) -> DefaultResult<Vec<OrderReturnModel>, AppError>;
+
     async fn create(
         &self,
         oid: &str,

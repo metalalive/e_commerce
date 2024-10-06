@@ -324,15 +324,13 @@ fn ut_setup_orderlines() -> Vec<OrderLineModel> {
     .collect::<Vec<_>>()
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
     let return_time = DateTime::parse_from_rfc3339("2023-11-18T02:39:04+02:00").unwrap();
     vec![
         OrderReturnModel {
             id_: OrderLineIdentity {
-                store_id: 108,
-                product_id: 190,
-                product_type: ProductType::Item,
+                store_id: 108, product_id: 190, product_type: ProductType::Item,
             },
             qty: HashMap::from([
                 (
@@ -347,9 +345,7 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
         },
         OrderReturnModel {
             id_: OrderLineIdentity {
-                store_id: 800,
-                product_id: 191,
-                product_type: ProductType::Item,
+                store_id: 800, product_id: 191, product_type: ProductType::Item,
             },
             qty: HashMap::from([
                 (
@@ -372,9 +368,7 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
         },
         OrderReturnModel {
             id_: OrderLineIdentity {
-                store_id: 426,
-                product_id: 192,
-                product_type: ProductType::Package,
+                store_id: 426, product_id: 192, product_type: ProductType::Package,
             },
             qty: HashMap::from([
                 (
@@ -393,9 +387,7 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
         },
         OrderReturnModel {
             id_: OrderLineIdentity {
-                store_id: 426,
-                product_id: 8964,
-                product_type: ProductType::Item,
+                store_id: 426, product_id: 8964, product_type: ProductType::Item,
             },
             qty: HashMap::from([
                 (
@@ -768,19 +760,23 @@ async fn replica_refund_ok() {
         detail: None,
         code: AppErrorCode::Unknown,
     };
-    let fetched_returns = ut_setup_olines_returns();
+    let mock_order_id = "My391004".to_string();
+    let fetched_oid_returns = ut_setup_olines_returns()
+        .into_iter()
+        .map(|rm| (mock_order_id.clone(), rm))
+        .collect::<Vec<_>>();
     let mock_buyer_id = 789u32;
-    let mocked_seller_ids = fetched_returns
+    let mocked_seller_ids = fetched_oid_returns
         .iter()
-        .map(|v| v.id_.store_id)
+        .map(|v| v.1.id_.store_id)
         .collect::<Vec<_>>();
     let mocked_currency_rate = ut_setup_order_currency(mocked_seller_ids);
-    let expect_num_returns = fetched_returns
+    let expect_num_returns = fetched_oid_returns
         .iter()
-        .map(|ret| ret.qty.len())
+        .map(|v| v.1.qty.len())
         .sum::<usize>();
     let expect_refunds: HashSet<(u32, u64, String, String), RandomState> = {
-        let iter = fetched_returns.iter().flat_map(|ret| {
+        let iter = fetched_oid_returns.iter().flat_map(|(_, ret)| {
             ret.qty.iter().map(|(t, (_q, refund))| {
                 let scale_limit = mocked_currency_rate.buyer.name.amount_fraction_scale();
                 let mantissa = (refund.total as i64) * 10i64.pow(scale_limit);
@@ -801,18 +797,20 @@ async fn replica_refund_ok() {
         None,
         Some(mocked_currency_rate),
     );
-    let ret_repo = ut_oreturn_setup_repository_2(Ok(fetched_returns), Ok(vec![]), Err(unknown_err));
+    let ret_repo =
+        ut_oreturn_setup_repository_2(Ok(vec![]), Ok(fetched_oid_returns), Err(unknown_err));
     let req = OrderReplicaRefundReqDto {
-        order_id: "My391004".to_string(),
         start: "2023-11-17T12:00:04+02:00".to_string(),
         end: "2023-11-19T12:00:04+02:00".to_string(),
     };
     let uc = OrderReplicaRefundUseCase { ret_repo, o_repo };
     let result = uc.execute(req).await;
     assert!(result.is_ok());
-    if let Ok(v) = result {
-        assert_eq!(v.len(), expect_num_returns);
-        let iter = v.into_iter().map(|item| {
+    if let Ok(mut v) = result {
+        assert_eq!(v.len(), 1);
+        let read_refunds = v.remove(&mock_order_id).unwrap();
+        assert_eq!(read_refunds.len(), expect_num_returns);
+        let iter = read_refunds.into_iter().map(|item| {
             (
                 item.seller_id,
                 item.product_id,

@@ -443,12 +443,8 @@ impl OrderReplicaRefundUseCase {
     pub async fn execute(
         self,
         req: OrderReplicaRefundReqDto,
-    ) -> DefaultResult<Vec<OrderLineReplicaRefundDto>, AppError> {
-        let OrderReplicaRefundReqDto {
-            order_id: oid,
-            start,
-            end,
-        } = req;
+    ) -> DefaultResult<HashMap<String, Vec<OrderLineReplicaRefundDto>>, AppError> {
+        let OrderReplicaRefundReqDto { start, end } = req;
         let start_dt = DateTime::parse_from_rfc3339(start.as_str()).map_err(|e| AppError {
             code: AppErrorCode::InvalidInput,
             detail: Some(format!("corrupted start-time :{:?} ", e)),
@@ -457,12 +453,36 @@ impl OrderReplicaRefundUseCase {
             code: AppErrorCode::InvalidInput,
             detail: Some(format!("corrupted end-time :{:?} ", e)),
         })?;
-        let currency_m = self.o_repo.currency_exrates(oid.as_str()).await?;
-        let ret_ms = self
+        let combo = self
             .ret_repo
-            .fetch_by_oid_ctime(oid.as_str(), start_dt, end_dt)
+            .fetch_by_created_time(start_dt, end_dt)
             .await?;
-        OrderReturnModel::to_replica_refund_dto(ret_ms, currency_m).map_err(|mut es| es.remove(0))
+        let ret_map = Self::reorg_return_models(combo);
+        let mut out = HashMap::new();
+        for (oid, ret_ms) in ret_map {
+            let currency_m = self.o_repo.currency_exrates(oid.as_str()).await?;
+            let refund_dtos = OrderReturnModel::to_replica_refund_dto(ret_ms, currency_m)
+                .map_err(|mut es| es.remove(0))?;
+            out.insert(oid, refund_dtos);
+        }
+        Ok(out)
+    } // end of fn execute
+
+    fn reorg_return_models(
+        combo: Vec<(String, OrderReturnModel)>,
+    ) -> HashMap<String, Vec<OrderReturnModel>> {
+        let mut o_map: HashMap<String, Vec<OrderReturnModel>> = HashMap::new();
+        combo
+            .into_iter()
+            .map(|(oid, ret_m)| {
+                if !o_map.contains_key(oid.as_str()) {
+                    let _ = o_map.insert(oid.clone(), Vec::new());
+                }
+                let list = o_map.get_mut(oid.as_str()).unwrap();
+                list.push(ret_m);
+            })
+            .count();
+        o_map
     }
 } // end of impl OrderReplicaRefundUseCase
 

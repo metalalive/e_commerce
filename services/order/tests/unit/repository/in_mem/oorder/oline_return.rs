@@ -18,34 +18,21 @@ async fn in_mem_repo_ds_setup(nitems: u32) -> OrderReturnInMemRepo {
     result.unwrap()
 }
 
+#[rustfmt::skip]
 pub(crate) fn ut_setup_ret_models(t_base: DateTime<FixedOffset>) -> Vec<OrderReturnModel> {
     vec![
         OrderReturnModel {
             id_: OrderLineIdentity {
-                store_id: 18,
-                product_type: ProductType::Item,
-                product_id: 465,
+                product_id: 465, store_id: 18, product_type: ProductType::Item,
             },
             qty: HashMap::from([
                 (
                     t_base - Duration::minutes(41),
-                    (
-                        1,
-                        OrderLinePriceModel {
-                            unit: 15,
-                            total: 15,
-                        },
-                    ),
+                    (1, OrderLinePriceModel { unit: 15, total: 15 }),
                 ),
                 (
                     t_base - Duration::seconds(1),
-                    (
-                        5,
-                        OrderLinePriceModel {
-                            unit: 15,
-                            total: 75,
-                        },
-                    ),
+                    (5, OrderLinePriceModel { unit: 15, total: 75 }),
                 ),
             ]),
         },
@@ -58,89 +45,48 @@ pub(crate) fn ut_setup_ret_models(t_base: DateTime<FixedOffset>) -> Vec<OrderRet
             qty: HashMap::from([
                 (
                     t_base - Duration::minutes(10),
-                    (
-                        5,
-                        OrderLinePriceModel {
-                            unit: 13,
-                            total: 65,
-                        },
-                    ),
+                    (5, OrderLinePriceModel { unit: 13, total: 65 }),
                 ),
                 (
                     t_base - Duration::seconds(55),
-                    (
-                        2,
-                        OrderLinePriceModel {
-                            unit: 13,
-                            total: 26,
-                        },
-                    ),
+                    (2, OrderLinePriceModel { unit: 13, total: 26 }),
                 ),
                 (
                     t_base - Duration::seconds(3),
-                    (
-                        3,
-                        OrderLinePriceModel {
-                            unit: 13,
-                            total: 39,
-                        },
-                    ),
+                    (3, OrderLinePriceModel { unit: 13, total: 39 }),
                 ),
             ]),
         },
         OrderReturnModel {
             id_: OrderLineIdentity {
-                store_id: 49,
-                product_type: ProductType::Package,
-                product_id: 195,
+                store_id: 49, product_type: ProductType::Package, product_id: 195,
             },
             qty: HashMap::from([(
                 t_base - Duration::seconds(4),
-                (
-                    7,
-                    OrderLinePriceModel {
-                        unit: 16,
-                        total: 112,
-                    },
-                ),
+                (7, OrderLinePriceModel { unit: 16, total: 112 }),
             )]),
         },
     ]
 }
+#[rustfmt::skip]
 pub(crate) fn ut_setup_ret_models_ks2(t_base: DateTime<FixedOffset>) -> Vec<OrderReturnModel> {
     vec![
         OrderReturnModel {
             id_: OrderLineIdentity {
-                store_id: 48,
-                product_type: ProductType::Item,
-                product_id: 574,
+                store_id: 48, product_type: ProductType::Item, product_id: 574,
             },
             qty: HashMap::from([(
                 t_base + Duration::seconds(18),
-                (
-                    1,
-                    OrderLinePriceModel {
-                        unit: 13,
-                        total: 13,
-                    },
-                ),
+                (1, OrderLinePriceModel { unit: 13, total: 13 }),
             )]),
         },
         OrderReturnModel {
             id_: OrderLineIdentity {
-                store_id: 49,
-                product_type: ProductType::Package,
-                product_id: 195,
+                store_id: 49, product_type: ProductType::Package, product_id: 195,
             },
             qty: HashMap::from([(
                 t_base + Duration::seconds(40),
-                (
-                    2,
-                    OrderLinePriceModel {
-                        unit: 16,
-                        total: 32,
-                    },
-                ),
+                (2, OrderLinePriceModel { unit: 16, total: 32 }),
             )]),
         },
     ]
@@ -214,6 +160,7 @@ async fn fetch_by_pid_ok() {
     }
 } // end of fetch_by_pid_ok
 
+#[rustfmt::skip]
 pub(crate) fn ut_setup_fetch_by_ctime(
     oids: [&str; 3],
     mock_time: DateTime<FixedOffset>,
@@ -223,55 +170,27 @@ pub(crate) fn ut_setup_fetch_by_ctime(
         ut_setup_ret_models(mock_time.clone()),
         ut_setup_ret_models(mock_time.clone()),
     ];
-    req_set[0][1]
-        .qty
-        .remove(&(mock_time - Duration::minutes(10)));
+    req_set[0][1].qty.remove(&(mock_time - Duration::minutes(10)));
     req_set[1][1].qty.insert(
         mock_time + Duration::minutes(5),
-        (
-            1,
-            OrderLinePriceModel {
-                unit: 16,
-                total: 16,
-            },
-        ),
+        (1, OrderLinePriceModel { unit: 16, total: 16 }),
     );
-    req_set[1][0]
-        .qty
-        .remove(&(mock_time - Duration::minutes(41)));
+    req_set[1][0].qty.remove(&(mock_time - Duration::minutes(41)));
     {
         req_set[2].drain(0..2).count();
         let ret = req_set[2].last_mut().unwrap();
         let prev_entry = ret.qty.insert(
             mock_time + Duration::seconds(34),
-            (
-                1,
-                OrderLinePriceModel {
-                    unit: 18,
-                    total: 18,
-                },
-            ),
+            (1, OrderLinePriceModel { unit: 18, total: 18 }),
         );
         assert!(prev_entry.is_none());
         ret.qty.insert(
             mock_time + Duration::seconds(51),
-            (
-                3,
-                OrderLinePriceModel {
-                    unit: 21,
-                    total: 63,
-                },
-            ),
+            (3, OrderLinePriceModel { unit: 21, total: 63 }),
         );
         let prev_entry = ret.qty.insert(
             mock_time + Duration::seconds(388),
-            (
-                1,
-                OrderLinePriceModel {
-                    unit: 21,
-                    total: 21,
-                },
-            ),
+            (1, OrderLinePriceModel { unit: 21, total: 21 }),
         );
         assert!(prev_entry.is_none());
         assert_eq!(ret.qty.len(), 4);
@@ -281,8 +200,9 @@ pub(crate) fn ut_setup_fetch_by_ctime(
         .zip(req_set.into_iter())
         .collect::<Vec<_>>();
     out
-}
+} // end of fn ut_setup_fetch_by_ctime
 
+#[rustfmt::skip]
 #[tokio::test]
 async fn fetch_by_ctime_ok() {
     let repo = in_mem_repo_ds_setup(40).await;
@@ -304,36 +224,15 @@ async fn fetch_by_ctime_ok() {
         vec![
             (
                 format!("order10029803"),
-                (
-                    49,
-                    ProductType::Package,
-                    195,
-                    mock_time + Duration::seconds(51),
-                    3,
-                    63,
-                ),
+                (49, ProductType::Package, 195, mock_time + Duration::seconds(51), 3, 63),
             ),
             (
                 format!("order10029803"),
-                (
-                    49,
-                    ProductType::Package,
-                    195,
-                    mock_time + Duration::seconds(34),
-                    1,
-                    18,
-                ),
+                (49, ProductType::Package, 195, mock_time + Duration::seconds(34), 1, 18),
             ),
             (
                 format!("order00080273"),
-                (
-                    48,
-                    ProductType::Item,
-                    574,
-                    mock_time + Duration::minutes(5),
-                    1,
-                    16,
-                ),
+                (48, ProductType::Item, 574, mock_time + Duration::minutes(5), 1, 16),
             ),
         ],
     )
@@ -345,25 +244,11 @@ async fn fetch_by_ctime_ok() {
         vec![
             (
                 format!("order0019286"),
-                (
-                    18,
-                    ProductType::Item,
-                    465,
-                    mock_time - Duration::minutes(41),
-                    1,
-                    15,
-                ),
+                (18, ProductType::Item, 465, mock_time - Duration::minutes(41), 1, 15),
             ),
             (
                 format!("order00080273"),
-                (
-                    48,
-                    ProductType::Item,
-                    574,
-                    mock_time - Duration::minutes(10),
-                    5,
-                    65,
-                ),
+                (48, ProductType::Item, 574, mock_time - Duration::minutes(10), 5, 65),
             ),
         ],
     )
@@ -374,22 +259,8 @@ async fn fetch_by_ctime_ok() {
         mock_time - Duration::seconds(2),
         mock_time + Duration::minutes(6),
         vec![
-            (
-                48,
-                ProductType::Item,
-                574,
-                mock_time + Duration::minutes(5),
-                1,
-                16,
-            ),
-            (
-                18,
-                ProductType::Item,
-                465,
-                mock_time - Duration::seconds(1),
-                5,
-                75,
-            ),
+            (48, ProductType::Item, 574, mock_time + Duration::minutes(5), 1, 16),
+            (18, ProductType::Item, 465, mock_time - Duration::seconds(1), 5, 75),
         ],
     )
     .await;
@@ -399,30 +270,9 @@ async fn fetch_by_ctime_ok() {
         mock_time - Duration::seconds(70),
         mock_time - Duration::seconds(3),
         vec![
-            (
-                48,
-                ProductType::Item,
-                574,
-                mock_time - Duration::seconds(3),
-                3,
-                39,
-            ),
-            (
-                49,
-                ProductType::Package,
-                195,
-                mock_time - Duration::seconds(4),
-                7,
-                112,
-            ),
-            (
-                48,
-                ProductType::Item,
-                574,
-                mock_time - Duration::seconds(55),
-                2,
-                26,
-            ),
+            (48, ProductType::Item, 574, mock_time - Duration::seconds(3), 3, 39),
+            (49, ProductType::Package, 195, mock_time - Duration::seconds(4), 7, 112),
+            (48, ProductType::Item, 574, mock_time - Duration::seconds(55), 2, 26),
         ],
     )
     .await;

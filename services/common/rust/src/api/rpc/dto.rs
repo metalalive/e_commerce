@@ -110,7 +110,6 @@ pub struct OrderPaymentUpdateErrorDto {
 
 #[derive(Deserialize)]
 pub struct OrderReplicaRefundReqDto {
-    pub order_id: String,
     // the fields `start` and `end` should be serial RFC3339 date-time format
     pub start: String,
     pub end: String,

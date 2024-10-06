@@ -96,6 +96,7 @@ async fn fetch_request_by_id_ok() {
 } // end of fn fetch_request_by_id_ok
 
 #[cfg(feature = "mariadb")]
+#[rustfmt::skip]
 #[tokio::test]
 async fn fetch_request_by_ctime_ok() {
     let ds = dstore_ctx_setup();
@@ -118,39 +119,9 @@ async fn fetch_request_by_ctime_ok() {
         mock_time + Duration::seconds(33),
         mock_time + Duration::minutes(6),
         vec![
-            (
-                format!("0a991e"),
-                (
-                    49,
-                    ProductType::Package,
-                    195,
-                    mock_time + Duration::seconds(51),
-                    3,
-                    63,
-                ),
-            ),
-            (
-                format!("0a991e"),
-                (
-                    49,
-                    ProductType::Package,
-                    195,
-                    mock_time + Duration::seconds(34),
-                    1,
-                    18,
-                ),
-            ),
-            (
-                format!("beef"),
-                (
-                    48,
-                    ProductType::Item,
-                    574,
-                    mock_time + Duration::minutes(5),
-                    1,
-                    16,
-                ),
-            ),
+            (format!("0a991e"), (49, ProductType::Package, 195, mock_time + Duration::seconds(51), 3, 63)),
+            (format!("0a991e"), (49, ProductType::Package, 195, mock_time + Duration::seconds(34), 1, 18)),
+            (format!("beef"), (48, ProductType::Item, 574, mock_time + Duration::minutes(5), 1, 16)),
         ],
     )
     .await;
@@ -159,28 +130,8 @@ async fn fetch_request_by_ctime_ok() {
         mock_time - Duration::minutes(42),
         mock_time - Duration::minutes(9),
         vec![
-            (
-                format!("50ba"),
-                (
-                    18,
-                    ProductType::Item,
-                    465,
-                    mock_time - Duration::minutes(41),
-                    1,
-                    15,
-                ),
-            ),
-            (
-                format!("beef"),
-                (
-                    48,
-                    ProductType::Item,
-                    574,
-                    mock_time - Duration::minutes(10),
-                    5,
-                    65,
-                ),
-            ),
+            (format!("50ba"), (18, ProductType::Item, 465, mock_time - Duration::minutes(41), 1, 15)),
+            (format!("beef"), (48, ProductType::Item, 574, mock_time - Duration::minutes(10), 5, 65)),
         ],
     )
     .await;
@@ -190,30 +141,9 @@ async fn fetch_request_by_ctime_ok() {
         mock_time - Duration::seconds(70),
         mock_time - Duration::seconds(3),
         vec![
-            (
-                48,
-                ProductType::Item,
-                574,
-                mock_time - Duration::seconds(3),
-                3,
-                39,
-            ),
-            (
-                49,
-                ProductType::Package,
-                195,
-                mock_time - Duration::seconds(4),
-                7,
-                112,
-            ),
-            (
-                48,
-                ProductType::Item,
-                574,
-                mock_time - Duration::seconds(55),
-                2,
-                26,
-            ),
+            (48, ProductType::Item, 574, mock_time - Duration::seconds(3),3, 39),
+            (49, ProductType::Package, 195, mock_time - Duration::seconds(4), 7, 112),
+            (48, ProductType::Item, 574, mock_time - Duration::seconds(55), 2, 26),
         ],
     )
     .await;
@@ -223,22 +153,8 @@ async fn fetch_request_by_ctime_ok() {
         mock_time - Duration::seconds(2),
         mock_time + Duration::minutes(6),
         vec![
-            (
-                48,
-                ProductType::Item,
-                574,
-                mock_time + Duration::minutes(5),
-                1,
-                16,
-            ),
-            (
-                18,
-                ProductType::Item,
-                465,
-                mock_time - Duration::seconds(1),
-                5,
-                75,
-            ),
+            (48, ProductType::Item, 574, mock_time + Duration::minutes(5), 1, 16),
+            (18, ProductType::Item, 465, mock_time - Duration::seconds(1), 5, 75),
         ],
     )
     .await;

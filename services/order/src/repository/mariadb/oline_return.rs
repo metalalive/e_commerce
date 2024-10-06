@@ -125,9 +125,13 @@ impl From<FetchByTimeArg> for (String, MySqlArguments) {
     fn from(value: FetchByTimeArg) -> (String, MySqlArguments) {
         let (start, end) = (value.0, value.1);
         // TODO, improve query time, since the execution plan will not search in
-        // primary index. Possible approach could be time-series database or
-        // secondary index by `create-time`, since the time range argument in the
-        // fetch method is used for querying recently added returns.
+        // primary index. Possible approaches:
+        // - secondary index by `create-time`, since the time range argument in the
+        //   fetch method is used for querying recently added returns, however this will
+        //   slow down the writes, and this application should handle more write
+        //   operations (initiated by customers) than reads (initiates by remote
+        //   payment application), it does not sound like a good option.
+        // - time-series database (TODO)
         let sql_patt = format!(
             "SELECT {COLUMN_SEQ_SELECT},`o_id` FROM `oline_return_req` \
                                 WHERE `create_time` > ? AND `create_time` <= ?"
