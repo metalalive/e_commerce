@@ -3,6 +3,7 @@ mod external_processor;
 mod merchant;
 mod order_replica;
 mod payout;
+mod refund;
 
 use rust_decimal::Decimal;
 use std::str::FromStr;
@@ -22,11 +23,12 @@ pub use self::external_processor::{
 };
 pub use self::merchant::{Merchant3partyModel, MerchantModelError, MerchantProfileModel};
 pub use self::order_replica::{
-    OLineRefundModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
-    OrderRefundModel, RefundModelError,
+    OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, OrderModelError,
 };
 pub(crate) use self::payout::PayoutInnerModel;
 pub use self::payout::{Payout3partyModel, PayoutAmountModel, PayoutModel, PayoutModelError};
+pub use self::refund::{OrderRefundModel, RefundErrorParseOline, RefundModelError};
+// pub(crate) use self::refund::OLineRefundModel;
 
 #[derive(Debug)]
 pub enum PayLineAmountError {

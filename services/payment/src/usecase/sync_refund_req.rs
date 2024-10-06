@@ -14,7 +14,7 @@ pub enum SyncRefundReqUcError {
     Rpc(String),
     Datastore(AppRepoError),
     CorruptedRefundReq(String),
-    ModelFailure(Vec<RefundModelError>),
+    ModelFailure(String, Vec<RefundModelError>),
 }
 
 pub struct SyncRefundReqUseCase;
@@ -27,9 +27,11 @@ impl SyncRefundReqUseCase {
         let t = Local::now().to_utc();
         let map = Self::rpc_sync(repo.as_ref(), rpc_ctx, t).await?;
         let refund_ms = Self::try_convert_model(map)?;
-        repo.save_request(refund_ms)
-            .await
-            .map_err(SyncRefundReqUcError::Datastore)?;
+        if !refund_ms.is_empty() {
+            repo.save_request(refund_ms)
+                .await
+                .map_err(SyncRefundReqUcError::Datastore)?;
+        }
         repo.update_sycned_time(t)
             .await
             .map_err(SyncRefundReqUcError::Datastore)?;
@@ -70,15 +72,16 @@ impl SyncRefundReqUseCase {
         let refund_ms = map
             .into_iter()
             .filter_map(|(oid, refund_d)| {
-                OrderRefundModel::try_from((oid, refund_d))
-                    .map_err(|e| errs.push(e))
+                OrderRefundModel::try_from((oid.clone(), refund_d))
+                    .map_err(|es| errs.push((oid, es)))
                     .ok()
             })
             .collect::<Vec<_>>();
         if errs.is_empty() {
             Ok(refund_ms)
         } else {
-            Err(SyncRefundReqUcError::ModelFailure(errs))
+            let e = errs.remove(0);
+            Err(SyncRefundReqUcError::ModelFailure(e.0, e.1))
         }
     }
 } // end of impl SyncRefundReqUseCase

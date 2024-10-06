@@ -9,7 +9,6 @@ use ecommerce_common::api::dto::{
     CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto, OrderLinePayDto,
     OrderSellerCurrencyDto,
 };
-use ecommerce_common::api::rpc::dto::OrderLineReplicaRefundDto;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::{PayLineAmountError, PayLineAmountModel};
@@ -49,15 +48,6 @@ pub struct OrderLineModelSet {
     //   in buyer or sellers business.
     // - note current base currency in this project defaults to USD
     pub currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
-}
-
-#[derive(Debug)]
-pub struct RefundModelError;
-
-pub struct OLineRefundModel {
-}
-
-pub struct OrderRefundModel {
 }
 
 #[rustfmt::skip]
@@ -200,11 +190,3 @@ impl TryFrom<(String, u32, Vec<OrderLinePayDto>, OrderCurrencySnapshotDto)> for 
         }
     } // end of fn try-from
 } // end of impl try-from for OrderLineModelSet
-
-impl TryFrom<(String, Vec<OrderLineReplicaRefundDto>)> for OrderRefundModel {
-    type Error = RefundModelError;
-
-    fn try_from(_value: (String, Vec<OrderLineReplicaRefundDto>)) -> Result<Self, Self::Error> {
-        Err(RefundModelError)
-    }
-} // end of impl OrderRefundModel
