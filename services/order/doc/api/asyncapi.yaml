@@ -719,6 +719,9 @@ components:
           format: date-time
         amount:
           $ref: '#/components/schemas/PayAmountDto'
+        qty:
+          type: integer
+          format: uint32
 
     OrderLinePaidUpdateDto:
       type: object

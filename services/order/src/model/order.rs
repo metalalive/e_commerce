@@ -624,12 +624,13 @@ impl OrderReturnModel {
         let curr_ex = currency_m.to_buyer_rate(pid.store_id)?;
         let out = map
             .into_iter()
-            .map(|(ctime, (_q, refund))| OrderLineReplicaRefundDto {
+            .map(|(ctime, (q, refund))| OrderLineReplicaRefundDto {
                 seller_id: pid.store_id,
                 product_id: pid.product_id,
                 product_type: pid.product_type.clone(),
                 create_time: ctime.to_rfc3339(),
                 amount: refund.into_paym_dto(curr_ex.clone()),
+                qty: q,
             })
             .collect();
         Ok(out)

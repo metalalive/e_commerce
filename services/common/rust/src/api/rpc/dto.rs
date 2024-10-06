@@ -126,4 +126,5 @@ pub struct OrderLineReplicaRefundDto {
     // the field `create-time` should be serial RFC3339 date-time format
     pub create_time: String,
     pub amount: PayAmountDto,
+    pub qty: u32,
 }

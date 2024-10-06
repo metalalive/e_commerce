@@ -775,9 +775,9 @@ async fn replica_refund_ok() {
         .iter()
         .map(|v| v.1.qty.len())
         .sum::<usize>();
-    let expect_refunds: HashSet<(u32, u64, String, String), RandomState> = {
+    let expect_refunds: HashSet<(u32, u64, String, String, u32), RandomState> = {
         let iter = fetched_oid_returns.iter().flat_map(|(_, ret)| {
-            ret.qty.iter().map(|(t, (_q, refund))| {
+            ret.qty.iter().map(|(t, (qty, refund))| {
                 let scale_limit = mocked_currency_rate.buyer.name.amount_fraction_scale();
                 let mantissa = (refund.total as i64) * 10i64.pow(scale_limit);
                 (
@@ -785,6 +785,7 @@ async fn replica_refund_ok() {
                     ret.id_.product_id,
                     t.to_rfc3339(),
                     Decimal::new(mantissa, scale_limit).to_string(),
+                    *qty,
                 )
             })
         });
@@ -816,6 +817,7 @@ async fn replica_refund_ok() {
                 item.product_id,
                 item.create_time,
                 item.amount.total,
+                item.qty,
             )
         });
         let actual_refunds = HashSet::from_iter(iter);
