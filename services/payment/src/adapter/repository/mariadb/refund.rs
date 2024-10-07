@@ -3,19 +3,22 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use mysql_async::prelude::{Query, Queryable, WithParams};
-use mysql_async::{Conn, Params, Value as MySqlVal};
+use mysql_async::{Conn, IsolationLevel, Params, TxOpts, Value as MySqlVal};
 
+use ecommerce_common::adapter::repository::OidBytes;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
+use ecommerce_common::model::BaseProductIdentity;
 
 use super::super::{AbstractRefundRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::{inner_into_parts, raw_column_to_datetime, DATETIME_FMT_P3F};
+use super::{inner_into_parts, raw_column_to_datetime, DATETIME_FMT_P0F, DATETIME_FMT_P3F};
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
-use crate::model::OrderRefundModel;
+use crate::model::{OrderRefundModel, PayLineAmountModel};
 
 const JOB_SCHE_LABEL: &str = "refund-req-sync";
 
 struct UpdateLastTimeSyncArgs(String, Params);
+struct InsertRequestArgs(String, Vec<Params>);
 
 impl From<DateTime<Utc>> for UpdateLastTimeSyncArgs {
     fn from(value: DateTime<Utc>) -> Self {
@@ -30,6 +33,68 @@ impl From<DateTime<Utc>> for UpdateLastTimeSyncArgs {
 }
 
 inner_into_parts!(UpdateLastTimeSyncArgs);
+
+impl TryFrom<Vec<OrderRefundModel>> for InsertRequestArgs {
+    type Error = Vec<(AppErrorCode, AppRepoErrorDetail)>;
+
+    fn try_from(value: Vec<OrderRefundModel>) -> Result<Self, Self::Error> {
+        let stmt = "INSERT INTO `oline_refund_req`(`o_id`,`store_id`,`product_type`,`product_id`,\
+                    `create_time`,`amt_unit`,`amt_total`,`qty`) VALUES(?,?,?,?,?,?,?,?)";
+        let mut errors = Vec::new();
+        let final_params = value
+            .into_iter()
+            .map(Self::try_from_one_req)
+            .filter_map(|r| r.map_err(|e| errors.push(e)).ok())
+            .flatten()
+            .collect::<Vec<_>>();
+        if errors.is_empty() {
+            let o = Self(stmt.to_string(), final_params);
+            Ok(o)
+        } else {
+            Err(errors)
+        }
+    } // end of fn try-from
+} // end of impl InsertRequestArgs
+
+impl InsertRequestArgs {
+    fn try_from_one_req(
+        req: OrderRefundModel,
+    ) -> Result<Vec<Params>, (AppErrorCode, AppRepoErrorDetail)> {
+        let (oid_hex, rlines) = req.into_parts();
+        let oid_b = OidBytes::try_from(oid_hex.as_str())
+            .map_err(|(code, msg)| (code, AppRepoErrorDetail::OrderIDparse(msg)))?;
+        let params = rlines
+            .into_iter()
+            .map(|line| {
+                let (pid, amt, ctime) = line.into_parts();
+                let BaseProductIdentity {
+                    store_id,
+                    product_type,
+                    product_id,
+                } = pid;
+                let PayLineAmountModel { unit, total, qty } = amt;
+                let prod_typ_num: u8 = product_type.into();
+                let arg = vec![
+                    oid_b.as_column().into(),
+                    store_id.into(),
+                    prod_typ_num.to_string().into(),
+                    product_id.into(),
+                    ctime.format(DATETIME_FMT_P0F).to_string().into(),
+                    unit.into(),
+                    total.into(),
+                    qty.into(),
+                ];
+                Params::Positional(arg)
+            })
+            .collect::<Vec<_>>();
+        Ok(params)
+    } // end of fn try_from_one_req
+
+    fn into_parts(self) -> (String, Vec<Params>) {
+        let Self(stmt, params) = self;
+        (stmt, params)
+    }
+} // end of impl InsertRequestArgs
 
 pub(crate) struct MariaDbRefundRepo {
     _dstore: Arc<AppDStoreMariaDB>,
@@ -121,13 +186,49 @@ impl AbstractRefundRepo for MariaDbRefundRepo {
                 AppRepoErrorFnLabel::RefundUpdateTimeSynced,
             ))
         }
-    }
+    } // end of fn update_sycned_time
 
-    async fn save_request(&self, req: Vec<OrderRefundModel>) -> Result<(), AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::RefundSaveReq,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
+    async fn save_request(&self, reqs: Vec<OrderRefundModel>) -> Result<(), AppRepoError> {
+        let (stmt, params) = InsertRequestArgs::try_from(reqs)
+            .map_err(|mut es| {
+                let e = es.remove(0);
+                self._map_log_err_common(e.0, e.1, AppRepoErrorFnLabel::RefundSaveReq)
+            })?
+            .into_parts();
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            self._map_log_err_common(
+                AppErrorCode::DatabaseServerBusy,
+                AppRepoErrorDetail::DataStore(e),
+                AppRepoErrorFnLabel::RefundSaveReq,
+            )
+        })?;
+        let mut tx = {
+            let mut options = TxOpts::new();
+            // Note, the level `read-committed` is applied here because this function does
+            // not actually read back any saved refund request.
+            options.with_isolation_level(IsolationLevel::ReadCommitted);
+            conn.start_transaction(options).await.map_err(|e| {
+                self._map_log_err_common(
+                    AppErrorCode::RemoteDbServerFailure,
+                    AppRepoErrorDetail::DatabaseTxStart(e.to_string()),
+                    AppRepoErrorFnLabel::RefundSaveReq,
+                )
+            })?
+        };
+
+        tx.exec_batch(stmt, params).await.map_err(|e| {
+            self._map_log_err_common(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseExec(e.to_string()),
+                AppRepoErrorFnLabel::RefundSaveReq,
+            )
+        })?;
+        tx.commit().await.map_err(|e| {
+            self._map_log_err_common(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseTxCommit(e.to_string()),
+                AppRepoErrorFnLabel::RefundSaveReq,
+            )
         })
-    }
+    } // end of fn save_request
 } // end of impl MariaDbRefundRepo

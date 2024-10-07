@@ -20,7 +20,7 @@ pub enum RefundModelError {
         reason: RefundErrorParseOline,
     },
 }
-pub(crate) struct OLineRefundModel {
+pub struct OLineRefundModel {
     pid: BaseProductIdentity,
     amount: PayLineAmountModel,
     create_time: DateTime<Utc>,
@@ -64,6 +64,24 @@ impl TryFrom<OrderLineReplicaRefundDto> for OLineRefundModel {
     }
 } // end of impl OLineRefundModel
 
+type OLineRefundCvtArgs = (BaseProductIdentity, PayLineAmountModel, DateTime<Utc>);
+
+impl From<OLineRefundCvtArgs> for OLineRefundModel {
+    #[rustfmt::skip]
+    fn from(value: OLineRefundCvtArgs) -> Self {
+        let (pid, amount, create_time) = value;
+        Self { pid, amount, create_time }
+    }
+}
+
+impl OLineRefundModel {
+    #[rustfmt::skip]
+    pub(crate) fn into_parts(self) -> (BaseProductIdentity, PayLineAmountModel, DateTime<Utc>) {
+        let Self { pid, amount, create_time } = self;
+        (pid, amount, create_time)
+    }
+} // end of impl OLineRefundModel
+
 impl TryFrom<(String, Vec<OrderLineReplicaRefundDto>)> for OrderRefundModel {
     type Error = Vec<RefundModelError>;
 
@@ -81,6 +99,13 @@ impl TryFrom<(String, Vec<OrderLineReplicaRefundDto>)> for OrderRefundModel {
         }
     }
 } // end of impl OrderRefundModel
+
+impl From<(String, Vec<OLineRefundModel>)> for OrderRefundModel {
+    fn from(value: (String, Vec<OLineRefundModel>)) -> Self {
+        let (oid, lines) = value;
+        Self { id: oid, lines }
+    }
+}
 
 impl OrderRefundModel {
     pub(crate) fn into_parts(self) -> (String, Vec<OLineRefundModel>) {
