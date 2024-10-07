@@ -13,6 +13,7 @@ use ecommerce_common::error::AppErrorCode;
 use super::AppRepoErrorDetail;
 
 const DATETIME_FMT_P0F: &str = "%Y-%m-%d %H:%M:%S";
+const DATETIME_FMT_P3F: &str = "%Y-%m-%d %H:%M:%S%.3f";
 
 #[allow(non_snake_case)]
 fn raw_column_to_datetime(
@@ -40,3 +41,15 @@ fn raw_column_to_datetime(
         )
     })
 }
+
+macro_rules! inner_into_parts {
+    ($sqlargs: ty) => {
+        impl $sqlargs {
+            pub(super) fn into_parts(self) -> (String, Params) {
+                (self.0, self.1)
+            }
+        }
+    };
+}
+
+use inner_into_parts;

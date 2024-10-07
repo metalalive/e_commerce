@@ -81,3 +81,10 @@ impl TryFrom<(String, Vec<OrderLineReplicaRefundDto>)> for OrderRefundModel {
         }
     }
 } // end of impl OrderRefundModel
+
+impl OrderRefundModel {
+    pub(crate) fn into_parts(self) -> (String, Vec<OLineRefundModel>) {
+        let Self { id: oid, lines } = self;
+        (oid, lines)
+    }
+} // end of impl OrderRefundModel

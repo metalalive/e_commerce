@@ -416,8 +416,45 @@
             ALTER TABLE `payout_meta` ADD COLUMN `amount_merchant`  DECIMAL(16,2)  UNSIGNED NOT NULL;
         </rollback>
     </changeSet>
-    
     <changeSet id="tag_version_0.0.12" author="T.H.">
         <tagDatabase tag="0.0.12" />
+    </changeSet>
+    <changeSet id="add_table__oline_refund_req" author="T.H.">
+        <comment>
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE `oline_refund_req`(
+                `o_id`      BINARY(16) NOT NULL,
+                `store_id`  INT UNSIGNED NOT NULL,
+                `product_type`  ENUM('1', '2') NOT NULL, 
+                `product_id`    BIGINT UNSIGNED NOT NULL,
+                `create_time`   DATETIME   NOT NULL,
+                `amt_unit`    DECIMAL(16,2) NOT NULL,
+                `amt_total`   DECIMAL(16,2) NOT NULL,
+                `qty`    INT UNSIGNED NOT NULL,
+                PRIMARY KEY (`o_id`,`store_id`,`product_type`,`product_id`, `create_time`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `oline_refund_req`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_table__job_scheduler" author="T.H.">
+        <comment>
+            record properties of each cron job, e.g. last time executed
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE `job_scheduler`(
+                `label`     VARCHAR(32)  CHARACTER SET ascii  PRIMARY KEY NOT NULL,
+                `last_update`  DATETIME(3)   NOT NULL
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `job_scheduler`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.13" author="T.H.">
+        <tagDatabase tag="0.0.13" />
     </changeSet>
 </databaseChangeLog>

@@ -2,7 +2,7 @@ use std::boxed::Box;
 use std::result::Result;
 use std::sync::Arc;
 
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Duration, Local, Utc};
 use ecommerce_common::api::rpc::dto::{OrderReplicaRefundDto, OrderReplicaRefundReqDto};
 
 use crate::adapter::repository::{AbstractRefundRepo, AppRepoError};
@@ -45,7 +45,8 @@ impl SyncRefundReqUseCase {
         time_end: DateTime<Utc>,
     ) -> Result<OrderReplicaRefundDto, SyncRefundReqUcError> {
         let time_start = repo.last_time_synced()
-            .await.map_err(SyncRefundReqUcError::Datastore)?;
+            .await.map_err(SyncRefundReqUcError::Datastore)?
+            .unwrap_or(time_end - Duration::hours(5)) ;
         let client = rpc_ctx.acquire().await
             .map_err(|_e| SyncRefundReqUcError::Rpc("client-conn-error".to_string()))?;
         let sync_req = OrderReplicaRefundReqDto {

@@ -10,7 +10,7 @@ use ecommerce_common::adapter::repository::OidBytes;
 use ecommerce_common::error::AppErrorCode;
 
 use super::super::AppRepoErrorDetail;
-use super::DATETIME_FMT_P0F;
+use super::{inner_into_parts, DATETIME_FMT_P0F};
 use crate::model::{Label3party, Payout3partyModel, Payout3partyStripeModel, PayoutInnerModel};
 
 pub(super) struct InsertPayoutMetaArgs(String, Params);
@@ -106,16 +106,6 @@ impl InsertPayout3partyArgs {
         Ok(Self(stmt.to_string(), params))
     }
 } // end of impl InsertPayout3partyArgs
-
-macro_rules! inner_into_parts {
-    ($sqlargs: ty) => {
-        impl $sqlargs {
-            pub(super) fn into_parts(self) -> (String, Params) {
-                (self.0, self.1)
-            }
-        }
-    };
-}
 
 inner_into_parts!(InsertPayoutMetaArgs);
 inner_into_parts!(InsertPayout3partyArgs);

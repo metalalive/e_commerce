@@ -139,7 +139,7 @@ pub trait AbstractMerchantRepo: Sync + Send {
 
 #[async_trait]
 pub trait AbstractRefundRepo: Sync + Send {
-    async fn last_time_synced(&self) -> Result<DateTime<Utc>, AppRepoError>;
+    async fn last_time_synced(&self) -> Result<Option<DateTime<Utc>>, AppRepoError>;
 
     async fn update_sycned_time(&self, t: DateTime<Utc>) -> Result<(), AppRepoError>;
 

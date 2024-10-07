@@ -10,13 +10,11 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::super::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::{raw_column_to_datetime, DATETIME_FMT_P0F};
+use super::{inner_into_parts, raw_column_to_datetime, DATETIME_FMT_P0F, DATETIME_FMT_P3F};
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
     ChargeBuyerModel, ChargeLineBuyerModel, PayLineAmountModel,
 };
-
-const DATETIME_FMT_P3F: &str = "%Y-%m-%d %H:%M:%S%.3f";
 
 struct InsertChargeTopLvlArgs(String, Params);
 struct InsertChargeStatusArgs {
@@ -254,11 +252,8 @@ impl From<(u32, DateTime<Utc>)> for FetchChargeMetaArgs {
         Self(stmt.to_string(), Params::Positional(args))
     }
 }
-impl FetchChargeMetaArgs {
-    pub(super) fn into_parts(self) -> (String, Params) {
-        (self.0, self.1)
-    }
-}
+
+inner_into_parts!(FetchChargeMetaArgs);
 
 impl TryFrom<(String, [Option<mysql_async::Value>; 3])> for BuyerPayInState {
     type Error = (AppErrorCode, AppRepoErrorDetail);
@@ -384,12 +379,8 @@ impl TryFrom<ChargeBuyerMetaModel> for UpdateChargeMetaArgs {
         Ok(Self(stmt, params))
     } // end of fn try-from
 } // end of impl UpdateChargeMetaArgs
-impl UpdateChargeMetaArgs {
-    pub(super) fn into_parts(self) -> (String, Params) {
-        let Self(stmt, params) = self;
-        (stmt, params)
-    }
-} // end of impl UpdateChargeMetaArgs
+
+inner_into_parts!(UpdateChargeMetaArgs);
 
 impl From<(u32, DateTime<Utc>, Option<u32>)> for FetchChargeLineArgs {
     fn from(value: (u32, DateTime<Utc>, Option<u32>)) -> Self {
