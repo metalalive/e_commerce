@@ -6,7 +6,8 @@ use rust_decimal::Decimal;
 use ecommerce_common::api::rpc::dto::OrderLineReplicaRefundDto;
 use ecommerce_common::model::BaseProductIdentity;
 
-use super::{PayLineAmountError, PayLineAmountModel};
+use super::{ChargeBuyerModel, PayLineAmountError, PayLineAmountModel};
+use crate::api::web::dto::{RefundCompletionReqDto, RefundCompletionRespDto};
 
 #[derive(Debug)]
 pub enum RefundErrorParseOline {
@@ -20,10 +21,19 @@ pub enum RefundModelError {
         reason: RefundErrorParseOline,
     },
 }
+
+pub struct RefundResolutionModel;
+
 pub struct OLineRefundModel {
     pid: BaseProductIdentity,
     amount: PayLineAmountModel,
     create_time: DateTime<Utc>,
+    // TODO
+    // - rename `amount` to `amount_req`
+    // - keep `resolution` history data, which includes
+    //   - amount refunded
+    //   - reject reason, if the amount above is zero
+    //   - the time the merchant finalized
 }
 
 pub struct OrderRefundModel {
@@ -115,4 +125,22 @@ impl OrderRefundModel {
     pub(crate) fn num_lines(&self) -> usize {
         self.lines.len()
     }
+    pub(crate) fn validate(&self, _data: &RefundCompletionReqDto) -> Result<(), RefundModelError> {
+        // FIXME, finish implementation
+        Ok(())
+    }
+    pub(crate) fn estimate_amount(
+        &self,
+        _charge_m: &ChargeBuyerModel,
+        _cmplt_req: &mut RefundCompletionReqDto,
+    ) -> RefundResolutionModel {
+        RefundResolutionModel
+    }
+    pub(crate) fn update(&mut self, _rslv_m: &RefundResolutionModel) {}
 } // end of impl OrderRefundModel
+
+impl From<Vec<RefundResolutionModel>> for RefundCompletionRespDto {
+    fn from(_value: Vec<RefundResolutionModel>) -> Self {
+        Self { lines: Vec::new() }
+    } // TODO, finish implementation
+} // end of fn RefundCompletionRespDto

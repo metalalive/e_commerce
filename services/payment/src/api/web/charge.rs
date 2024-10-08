@@ -22,7 +22,7 @@ use super::dto::{CapturePayReqDto, ChargeReqDto};
 use super::onboard::try_creating_merchant_repo;
 use super::RepoInitFailure;
 
-async fn try_creating_charge_repo(
+pub(super) async fn try_creating_charge_repo(
     dstore: Arc<AppDataStoreContext>,
     logctx: Arc<AppLogContext>,
 ) -> ActixResult<Box<dyn AbstractChargeRepo>> {

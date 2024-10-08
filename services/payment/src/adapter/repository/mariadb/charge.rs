@@ -282,6 +282,17 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         })
     }
 
+    async fn fetch_charge_ids(
+        &self,
+        _oid: &str,
+    ) -> Result<Option<(u32, Vec<DateTime<Utc>>)>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchChargeIds,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
     async fn fetch_charge_meta(
         &self,
         usr_id: u32,

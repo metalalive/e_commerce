@@ -338,6 +338,17 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
         }
     } // end of fn fetch
 
+    async fn fetch_profile(
+        &self,
+        _store_id: u32,
+    ) -> Result<Option<MerchantProfileModel>, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::FetchMerchantProf,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
+
     async fn update_3party(
         &self,
         store_id: u32,

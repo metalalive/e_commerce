@@ -206,7 +206,6 @@ impl StoreOnboardRespDto {
 
 #[derive(Deserialize)]
 pub struct RefundCompletionReqDto {
-    pub req_time: DateTime<Utc>,
     pub lines: Vec<RefundCompletionOlineReqDto>,
 }
 
@@ -236,7 +235,6 @@ pub enum RefundRejectReasonDto {
 
 #[derive(Serialize)]
 pub struct RefundCompletionRespDto {
-    pub req_time: DateTime<Utc>,
     pub lines: Vec<RefundCompletionOlineRespDto>,
 }
 

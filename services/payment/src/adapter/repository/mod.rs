@@ -1,6 +1,8 @@
 mod mariadb;
 
 use std::boxed::Box;
+use std::future::Future;
+use std::pin::Pin;
 use std::result::Result;
 use std::sync::Arc;
 
@@ -9,9 +11,12 @@ use chrono::{DateTime, Utc};
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
+use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
+use crate::api::web::dto::RefundCompletionReqDto;
 use crate::model::{
     BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, Label3party,
     Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, OrderRefundModel, PayoutModel,
+    RefundModelError, RefundResolutionModel,
 };
 
 use self::mariadb::charge::MariadbChargeRepo;
@@ -27,9 +32,11 @@ pub enum AppRepoErrorFnLabel {
     CreateCharge,
     CreateMerchant,
     CreatePayout,
+    FetchChargeIds,
     FetchChargeMeta,
     FetchChargeLines,
     FetchMerchant,
+    FetchMerchantProf,
     FetchChargeByMerchant,
     FetchPayout,
     UpdateChargeProgress,
@@ -39,7 +46,9 @@ pub enum AppRepoErrorFnLabel {
     RefundGetTimeSynced,
     RefundUpdateTimeSynced,
     RefundSaveReq,
+    ResolveRefundReq,
 }
+
 #[derive(Debug)]
 pub enum AppRepoErrorDetail {
     OrderIDparse(String),
@@ -54,6 +63,7 @@ pub enum AppRepoErrorDetail {
     DatabaseQuery(String),
     DataRowParse(String),
     CurrencyPrecision(u32, String, String, u32, u32),
+    RefundResolution(RefundModelError),
     Unknown,
 }
 
@@ -82,6 +92,11 @@ pub trait AbstractChargeRepo: Sync + Send {
     ) -> Result<(), AppRepoError>;
 
     async fn create_charge(&self, cline_set: ChargeBuyerModel) -> Result<(), AppRepoError>;
+
+    async fn fetch_charge_ids(
+        &self,
+        oid: &str,
+    ) -> Result<Option<(u32, Vec<DateTime<Utc>>)>, AppRepoError>;
 
     async fn fetch_charge_meta(
         &self,
@@ -135,16 +150,41 @@ pub trait AbstractMerchantRepo: Sync + Send {
         store_id: u32,
         m3pty: Merchant3partyModel,
     ) -> Result<(), AppRepoError>;
+
+    async fn fetch_profile(
+        &self,
+        store_id: u32,
+    ) -> Result<Option<MerchantProfileModel>, AppRepoError>;
 } // end of trait AbstractMerchantRepo
 
 #[async_trait]
-pub trait AbstractRefundRepo: Sync + Send {
+pub trait AbstractRefundRepo<'a>: Sync + Send {
     async fn last_time_synced(&self) -> Result<Option<DateTime<Utc>>, AppRepoError>;
 
     async fn update_sycned_time(&self, t: DateTime<Utc>) -> Result<(), AppRepoError>;
 
     async fn save_request(&self, req: Vec<OrderRefundModel>) -> Result<(), AppRepoError>;
+
+    async fn resolve_request(
+        &self,
+        new_req: RefundCompletionReqDto,
+        charge_ms: Vec<ChargeBuyerModel>,
+        processor: Arc<Box<dyn AbstractPaymentProcessor>>,
+        cb: AppRefundRslvReqCallback<'a>,
+    ) -> Result<AppRefundRslvReqOkReturn, AppRepoError>;
 }
+
+pub type AppRefundRslvReqOkReturn = Vec<Result<RefundResolutionModel, AppProcessorError>>;
+
+pub type AppRefundRslvReqCbReturn = Result<AppRefundRslvReqOkReturn, AppRepoErrorDetail>;
+
+pub type AppRefundRslvReqCallback<'a> =
+    fn(
+        &'a mut OrderRefundModel,
+        RefundCompletionReqDto,
+        Vec<ChargeBuyerModel>,
+        Arc<Box<dyn AbstractPaymentProcessor>>,
+    ) -> Pin<Box<dyn Future<Output = AppRefundRslvReqCbReturn> + Send + 'a>>;
 
 pub async fn app_repo_charge(
     dstore: Arc<AppDataStoreContext>,
@@ -160,9 +200,9 @@ pub async fn app_repo_merchant(
     Ok(Box::new(repo))
 }
 
-pub async fn app_repo_refund(
+pub async fn app_repo_refund<'a>(
     dstore: Arc<AppDataStoreContext>,
-) -> Result<Box<dyn AbstractRefundRepo>, AppRepoError> {
+) -> Result<Box<dyn AbstractRefundRepo<'a>>, AppRepoError> {
     let repo = MariaDbRefundRepo::new(dstore)?;
     Ok(Box::new(repo))
 }

@@ -1,3 +1,4 @@
+use std::boxed::Box;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -10,10 +11,16 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
 use ecommerce_common::model::BaseProductIdentity;
 
-use super::super::{AbstractRefundRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
-use super::{inner_into_parts, raw_column_to_datetime, DATETIME_FMT_P0F, DATETIME_FMT_P3F};
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
-use crate::model::{OrderRefundModel, PayLineAmountModel};
+use crate::adapter::processor::AbstractPaymentProcessor;
+use crate::api::web::dto::RefundCompletionReqDto;
+use crate::model::{ChargeBuyerModel, OrderRefundModel, PayLineAmountModel};
+
+use super::super::{
+    AbstractRefundRepo, AppRefundRslvReqCallback, AppRefundRslvReqOkReturn, AppRepoError,
+    AppRepoErrorDetail, AppRepoErrorFnLabel,
+};
+use super::{inner_into_parts, raw_column_to_datetime, DATETIME_FMT_P0F, DATETIME_FMT_P3F};
 
 const JOB_SCHE_LABEL: &str = "refund-req-sync";
 
@@ -126,7 +133,7 @@ impl MariaDbRefundRepo {
 } // end of impl MariaDbRefundRepo
 
 #[async_trait]
-impl AbstractRefundRepo for MariaDbRefundRepo {
+impl<'a> AbstractRefundRepo<'a> for MariaDbRefundRepo {
     async fn last_time_synced(&self) -> Result<Option<DateTime<Utc>>, AppRepoError> {
         let stmt = "SELECT `last_update` FROM `job_scheduler` WHERE `label`=?";
         let params = Params::Positional(vec![JOB_SCHE_LABEL.into()]);
@@ -231,4 +238,18 @@ impl AbstractRefundRepo for MariaDbRefundRepo {
             )
         })
     } // end of fn save_request
+
+    async fn resolve_request(
+        &self,
+        _new_req: RefundCompletionReqDto,
+        _charge_ms: Vec<ChargeBuyerModel>,
+        _processor: Arc<Box<dyn AbstractPaymentProcessor>>,
+        _cb: AppRefundRslvReqCallback<'a>,
+    ) -> Result<AppRefundRslvReqOkReturn, AppRepoError> {
+        Err(AppRepoError {
+            fn_label: AppRepoErrorFnLabel::ResolveRefundReq,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::Unknown,
+        })
+    }
 } // end of impl MariaDbRefundRepo

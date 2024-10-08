@@ -21,7 +21,7 @@ pub struct SyncRefundReqUseCase;
 
 impl SyncRefundReqUseCase {
     pub async fn execute(
-        repo: Box<dyn AbstractRefundRepo>,
+        repo: Box<dyn AbstractRefundRepo<'_>>,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
     ) -> Result<(usize, usize), SyncRefundReqUcError> {
         let t = Local::now().to_utc();
@@ -42,7 +42,7 @@ impl SyncRefundReqUseCase {
 
     #[rustfmt::skip]
     async fn rpc_sync(
-        repo: &dyn AbstractRefundRepo,
+        repo: &dyn AbstractRefundRepo<'_>,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
         time_end: DateTime<Utc>,
     ) -> Result<OrderReplicaRefundDto, SyncRefundReqUcError> {

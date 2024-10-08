@@ -29,6 +29,7 @@ pub(crate) use self::payout::PayoutInnerModel;
 pub use self::payout::{Payout3partyModel, PayoutAmountModel, PayoutModel, PayoutModelError};
 pub use self::refund::{
     OLineRefundModel, OrderRefundModel, RefundErrorParseOline, RefundModelError,
+    RefundResolutionModel,
 };
 
 #[derive(Debug)]
