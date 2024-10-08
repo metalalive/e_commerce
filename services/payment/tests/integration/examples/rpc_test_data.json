@@ -87,5 +87,48 @@
 	        }
 	    }
 	]
+    },
+    "rpc.order.order_returned_replica_refund": {
+	"0": [
+	    {
+                "abc123def4567890": [
+                    {
+                      "seller_id": 123456,
+                      "product_id": 9876543210,
+                      "product_type": 1,
+                      "create_time": "2024-10-08T14:25:30Z",
+                      "amount": {
+                        "unit": "99.99",
+                        "total": "199.98"
+                      },
+                      "qty": 2
+                    },
+                    {
+                      "seller_id": 654321,
+                      "product_id": 1234567890,
+                      "product_type": 2,
+                      "create_time": "2024-10-07T10:15:20Z",
+                      "amount": {
+                        "unit": "49.99",
+                        "total": "49.99"
+                      },
+                      "qty": 1
+                    }
+                ],
+                "df459c17891234": [
+                    {
+                      "seller_id": 111222,
+                      "product_id": 4445556667,
+                      "product_type": 2,
+                      "create_time": "2024-09-30T09:10:11Z",
+                      "amount": {
+                        "unit": "19.99",
+                        "total": "39.98"
+                      },
+                      "qty": 2
+                    }
+                ]
+	    }
+	]
     }
 }

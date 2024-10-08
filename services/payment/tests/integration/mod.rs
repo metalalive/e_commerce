@@ -15,7 +15,7 @@ use actix_web::test::{call_service, TestRequest};
 use actix_web::web::Bytes as ActixBytes;
 use serde_json::Value as JsnVal;
 
-use payment::adapter::repository::app_repo_charge;
+use payment::adapter::repository::app_repo_refund;
 use payment::hard_limit::CREATE_CHARGE_SECONDS_INTERVAL;
 use payment::usecase::SyncRefundReqUseCase;
 use payment::AppAuthedClaim;
@@ -304,10 +304,13 @@ async fn charge_stripe_ok() {
 
     {
         // - mock cron job that sync return request from order app
-        let repo_c = app_repo_charge(mock_shr_state.datastore()).await.unwrap();
+        let repo_rfd = app_repo_refund(mock_shr_state.datastore()).await.unwrap();
         let rpc_ctx = mock_shr_state.rpc_context();
-        let result = SyncRefundReqUseCase::execute(repo_c, rpc_ctx).await;
+        let result = SyncRefundReqUseCase::execute(repo_rfd, rpc_ctx).await;
         assert!(result.is_ok());
+        let (num_order, num_lines) = result.unwrap();
+        assert_eq!(num_order, 2);
+        assert_eq!(num_lines, 3);
     }
 
     // --- partial refund ----

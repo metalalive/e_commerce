@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::api::dto::{
     jsn_serialize_product_type, jsn_validate_product_type, BillingDto, CountryCode,
     OrderCurrencySnapshotDto, OrderLinePayDto,
@@ -108,13 +110,13 @@ pub struct OrderPaymentUpdateErrorDto {
     pub lines: Vec<OrderLinePayUpdateErrorDto>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct OrderReplicaRefundReqDto {
     // the fields `start` and `end` should be serial RFC3339 date-time format
     pub start: String,
     pub end: String,
 }
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct OrderLineReplicaRefundDto {
     pub seller_id: u32,
     pub product_id: u64,
@@ -128,3 +130,6 @@ pub struct OrderLineReplicaRefundDto {
     pub amount: PayAmountDto,
     pub qty: u32,
 }
+
+// each entry identified by order-id key contains a list of relevant refund DTOs
+pub type OrderReplicaRefundDto = HashMap<String, Vec<OrderLineReplicaRefundDto>>;

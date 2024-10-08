@@ -20,11 +20,13 @@ async fn start_sync(shr_state:AppSharedState) -> Result<(), ()> {
             app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
         })?;
     let rpc_ctx = shr_state.rpc_context();
-    SyncRefundReqUseCase::execute(repo, rpc_ctx)
+    let (num_orders, num_lines) = SyncRefundReqUseCase::execute(repo, rpc_ctx)
         .await
         .map_err(|e| {
             app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-        })
+        })?;
+    app_log_event!(logctx, AppLogLevel::INFO, "num_orders:{num_orders}, num_lines:{num_lines}");
+    Ok(())
 }
 
 fn init_config() -> Result<AppConfig, ()> {

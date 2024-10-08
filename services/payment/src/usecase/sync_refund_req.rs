@@ -23,10 +23,12 @@ impl SyncRefundReqUseCase {
     pub async fn execute(
         repo: Box<dyn AbstractRefundRepo>,
         rpc_ctx: Arc<Box<dyn AbstractRpcContext>>,
-    ) -> Result<(), SyncRefundReqUcError> {
+    ) -> Result<(usize, usize), SyncRefundReqUcError> {
         let t = Local::now().to_utc();
         let map = Self::rpc_sync(repo.as_ref(), rpc_ctx, t).await?;
         let refund_ms = Self::try_convert_model(map)?;
+        let num_orders = refund_ms.len();
+        let num_lines = refund_ms.iter().map(|r| r.num_lines()).sum();
         if !refund_ms.is_empty() {
             repo.save_request(refund_ms)
                 .await
@@ -35,7 +37,7 @@ impl SyncRefundReqUseCase {
         repo.update_sycned_time(t)
             .await
             .map_err(SyncRefundReqUcError::Datastore)?;
-        Ok(())
+        Ok((num_orders, num_lines))
     }
 
     #[rustfmt::skip]

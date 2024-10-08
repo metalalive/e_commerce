@@ -47,6 +47,14 @@ SYS_BASE_PATH="${PWD}/../"  SERVICE_BASE_PATH="${PWD}" \
     CONFIG_FILE_PATH="settings/development.json"  cargo run --bin web
 ```
 
+### Cron Job
+```bash
+cargo build --bin sync_refund_req
+
+SYS_BASE_PATH="${PWD}/../"  SERVICE_BASE_PATH="${PWD}" \
+    CONFIG_FILE_PATH="settings/development.json"  cargo run --bin sync_refund_req
+```
+
 ## Development
 ### Code formatter
 ```bash

@@ -11,6 +11,10 @@
             {"alias": "errlog-file-web-api",
              "min_level": "WARNING",
              "path": "tmp/log/dev/payment_app_server.err",
+             "destination": "localfs"},
+            {"alias": "errlog-file-cron-job",
+             "min_level": "INFO",
+             "path": "tmp/log/dev/payment_cronjob.err",
              "destination": "localfs"}
         ],
         "loggers" : [
@@ -35,6 +39,9 @@
             {"alias": "payment::adapter::repository::mariadb::merchant",
              "handlers": ["std-output-forall","errlog-file-web-api"],
              "level": "INFO"},
+            {"alias": "payment::adapter::repository::mariadb::refund",
+             "handlers": ["std-output-forall"],
+             "level": "INFO"},
             {"alias": "payment::adapter::processor",
              "handlers": ["errlog-file-web-api"],
              "level": "WARNING"},
@@ -45,8 +52,11 @@
              "handlers": ["errlog-file-web-api"],
              "level": "INFO"},
             {"alias": "web",
-	     "level": "DEBUG",
-             "handlers": ["errlog-file-web-api", "std-output-forall"]}
+             "level": "DEBUG",
+             "handlers": ["errlog-file-web-api", "std-output-forall"]},
+            {"alias": "sync_refund_req",
+             "level": "DEBUG",
+             "handlers": ["errlog-file-cron-job", "std-output-forall"]}
         ]
     },
     "listen": {

@@ -112,4 +112,7 @@ impl OrderRefundModel {
         let Self { id: oid, lines } = self;
         (oid, lines)
     }
+    pub(crate) fn num_lines(&self) -> usize {
+        self.lines.len()
+    }
 } // end of impl OrderRefundModel
