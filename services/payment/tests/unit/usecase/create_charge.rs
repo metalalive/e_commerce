@@ -188,6 +188,7 @@ fn ut_setup_repo(
     MockChargeRepo::build(
         unpaid_olines, create_order_res, create_charge_res,
         None, None, None, None, None, None,
+        None, None,
     )
 }
 
@@ -195,7 +196,7 @@ fn ut_setup_repo(
 fn ut_setup_processor(
     res: Option<Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError>>,
 ) -> Box<dyn AbstractPaymentProcessor> {
-    MockPaymentProcessor::build(res, None, None, None)
+    MockPaymentProcessor::build(res, None, None, None, None)
 }
 
 #[rustfmt::skip]

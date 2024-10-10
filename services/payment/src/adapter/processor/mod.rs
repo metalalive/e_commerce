@@ -21,7 +21,7 @@ use crate::api::web::dto::{
 };
 use crate::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
-    Merchant3partyModel, Payout3partyModel, PayoutModel, RefundResolutionModel,
+    Merchant3partyModel, Payout3partyModel, PayoutModel, RefundReqResolutionModel,
 };
 
 #[async_trait]
@@ -57,8 +57,8 @@ pub trait AbstractPaymentProcessor: Send + Sync {
     async fn refund(
         &self,
         charge_m: ChargeBuyerModel,
-        resolve_m: RefundResolutionModel,
-    ) -> Result<RefundResolutionModel, AppProcessorError>;
+        resolve_m: RefundReqResolutionModel,
+    ) -> Result<RefundReqResolutionModel, AppProcessorError>;
 } // end of trait AbstractPaymentProcessor
 
 struct AppProcessorContext {
@@ -335,8 +335,8 @@ impl AbstractPaymentProcessor for AppProcessorContext {
     async fn refund(
         &self,
         _charge_m: ChargeBuyerModel,
-        _resolve_m: RefundResolutionModel,
-    ) -> Result<RefundResolutionModel, AppProcessorError> {
+        _resolve_m: RefundReqResolutionModel,
+    ) -> Result<RefundReqResolutionModel, AppProcessorError> {
         Err(AppProcessorError {
             reason: AppProcessorErrorReason::NotImplemented,
             fn_label: AppProcessorFnLabel::Refund,

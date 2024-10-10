@@ -71,13 +71,14 @@ fn ut_setup_repo(
         None, None, None,
         chargemeta, all_chargelines, update_meta_res,
         None, None, None,
+        None, None,
     )
 }
 
 fn ut_setup_processor(
     res: Option<Result<Charge3partyModel, AppProcessorError>>,
 ) -> Box<dyn AbstractPaymentProcessor> {
-    MockPaymentProcessor::build(None, res, None, None)
+    MockPaymentProcessor::build(None, res, None, None, None)
 }
 
 fn ut_common_mock_data() -> (

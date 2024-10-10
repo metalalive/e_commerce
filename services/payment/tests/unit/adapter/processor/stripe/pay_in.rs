@@ -58,17 +58,20 @@ fn ut_setup_chargebuyer_stripe(
     let currency_snapshot = ut_default_currency_snapshot(usr_ids);
     let lines = mock_lines
         .into_iter()
-        .map(|d| ChargeLineBuyerModel {
-            pid: BaseProductIdentity {
+        .map(|d| {
+            let pid = BaseProductIdentity {
                 store_id: d.0,
                 product_type: d.1,
                 product_id: d.2,
-            },
-            amount: PayLineAmountModel {
+            };
+            let amt_orig = PayLineAmountModel {
                 unit: Decimal::new(d.3 .0, d.3 .1),
                 total: Decimal::new(d.4 .0, d.4 .1),
                 qty: d.5,
-            },
+            };
+            let amt_refuned = PayLineAmountModel::default();
+            let arg = (pid, amt_orig, amt_refuned);
+            ChargeLineBuyerModel::from(arg)
         })
         .collect();
     let arg = (order_id.to_string(), owner, ctime);

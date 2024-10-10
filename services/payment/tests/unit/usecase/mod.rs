@@ -15,8 +15,8 @@ use ecommerce_common::model::order::BillingModel;
 
 use payment::adapter::cache::{AbstractOrderSyncLockCache, OrderSyncLockError};
 use payment::adapter::processor::{
-    AbstractPaymentProcessor, AppProcessorError, AppProcessorMerchantResult,
-    AppProcessorPayInResult, AppProcessorPayoutResult,
+    AbstractPaymentProcessor, AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel,
+    AppProcessorMerchantResult, AppProcessorPayInResult, AppProcessorPayoutResult,
 };
 use payment::adapter::repository::{AbstractChargeRepo, AbstractMerchantRepo, AppRepoError};
 use payment::adapter::rpc::{
@@ -25,8 +25,9 @@ use payment::adapter::rpc::{
 };
 use payment::api::web::dto::{PaymentMethodReqDto, StoreOnboardReqDto};
 use payment::model::{
-    Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, Label3party,
-    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, PayoutModel,
+    Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerMap,
+    ChargeLineBuyerModel, Label3party, Merchant3partyModel, MerchantProfileModel,
+    OrderLineModelSet, PayoutModel, RefundReqResolutionModel,
 };
 
 struct MockChargeRepo {
@@ -39,6 +40,8 @@ struct MockChargeRepo {
     _read_charge_by_merchant: Mutex<Option<ChargeBuyerModel>>,
     _read_payout: Mutex<Option<PayoutModel>>,
     _create_payout_result: Mutex<Option<Result<(), AppRepoError>>>,
+    _read_charge_ids: Mutex<Option<Option<(u32, Vec<DateTime<Utc>>)>>>,
+    _update_linerefund_result: Mutex<Option<Result<(), AppRepoError>>>,
 }
 
 impl MockChargeRepo {
@@ -52,6 +55,8 @@ impl MockChargeRepo {
         charge_by_merchant: Option<ChargeBuyerModel>,
         rd_payout: Option<PayoutModel>,
         create_payout_res: Option<Result<(), AppRepoError>>,
+        rd_chrg_ids: Option<(u32, Vec<DateTime<Utc>>)>,
+        update_linerfd_res: Option<Result<(), AppRepoError>>,
     ) -> Box<dyn AbstractChargeRepo> {
         Box::new(Self {
             _expect_unpaid_olines: Mutex::new(unpaid_olines),
@@ -63,6 +68,8 @@ impl MockChargeRepo {
             _read_charge_by_merchant: Mutex::new(charge_by_merchant),
             _read_payout: Mutex::new(rd_payout),
             _create_payout_result: Mutex::new(create_payout_res),
+            _read_charge_ids: Mutex::new(Some(rd_chrg_ids)),
+            _update_linerefund_result: Mutex::new(update_linerfd_res),
         })
     }
 } // end of impl MockChargeRepo
@@ -110,11 +117,27 @@ impl AbstractChargeRepo for MockChargeRepo {
         let out = g.take().unwrap();
         out
     }
+
+    async fn fetch_charge_ids(
+        &self,
+        _oid: &str,
+    ) -> Result<Option<(u32, Vec<DateTime<Utc>>)>, AppRepoError> {
+        let mut g = self._read_charge_ids.lock().unwrap();
+        let ids = g.take().unwrap();
+        Ok(ids)
+    }
+
     async fn update_charge_progress(
         &self,
         _meta: ChargeBuyerMetaModel,
     ) -> Result<(), AppRepoError> {
         let mut g = self._update_chargemeta_result.lock().unwrap();
+        let out = g.take().unwrap();
+        out
+    }
+
+    async fn update_lines_refund(&self, _cl_map: ChargeLineBuyerMap) -> Result<(), AppRepoError> {
+        let mut g = self._update_linerefund_result.lock().unwrap();
         let out = g.take().unwrap();
         out
     }
@@ -151,6 +174,7 @@ impl AbstractChargeRepo for MockChargeRepo {
 struct MockMerchantRepo {
     _create_result: Mutex<Option<Result<(), AppRepoError>>>,
     _fetch_result: Mutex<Option<(MerchantProfileModel, Merchant3partyModel)>>,
+    _fetch_profile_result: Mutex<Option<MerchantProfileModel>>,
     _update3pty_result: Mutex<Option<Result<(), AppRepoError>>>,
 } // end of trait AbstractMerchantRepo
 
@@ -158,11 +182,13 @@ impl MockMerchantRepo {
     fn build(
         create_res: Option<Result<(), AppRepoError>>,
         fetch_res: Option<(MerchantProfileModel, Merchant3partyModel)>,
+        fetch_prof_res: Option<MerchantProfileModel>,
         update3pt_res: Option<Result<(), AppRepoError>>,
     ) -> Box<dyn AbstractMerchantRepo> {
         let obj = Self {
             _create_result: Mutex::new(create_res),
             _fetch_result: Mutex::new(fetch_res),
+            _fetch_profile_result: Mutex::new(fetch_prof_res),
             _update3pty_result: Mutex::new(update3pt_res),
         };
         Box::new(obj)
@@ -197,6 +223,14 @@ impl AbstractMerchantRepo for MockMerchantRepo {
         let mut g = self._update3pty_result.lock().unwrap();
         let out = g.take().unwrap();
         out
+    }
+    async fn fetch_profile(
+        &self,
+        _store_id: u32,
+    ) -> Result<Option<MerchantProfileModel>, AppRepoError> {
+        let mut g = self._fetch_profile_result.lock().unwrap();
+        let out = g.take();
+        Ok(out)
     }
 } // end of impl MockMerchantRepo
 
@@ -294,6 +328,7 @@ struct MockPaymentProcessor {
     _payin_progress_result: Mutex<Option<Result<Charge3partyModel, AppProcessorError>>>,
     _onboard_merchant_result: Mutex<Option<Result<AppProcessorMerchantResult, AppProcessorError>>>,
     _payout_result: Mutex<Option<Result<AppProcessorPayoutResult, AppProcessorError>>>,
+    _refund_error_trigger: Mutex<Vec<bool>>,
 }
 
 impl MockPaymentProcessor {
@@ -304,12 +339,14 @@ impl MockPaymentProcessor {
         payin_progress: Option<Result<Charge3partyModel, AppProcessorError>>,
         onboard_merchant_arg: Option<Result<AppProcessorMerchantResult, AppProcessorError>>,
         payout_res: Option<Result<AppProcessorPayoutResult, AppProcessorError>>,
+        refund_err_trigger: Option<Vec<bool>>,
     ) -> Box<dyn AbstractPaymentProcessor> {
         Box::new(Self {
             _payin_start_result: Mutex::new(payin_start),
             _payin_progress_result: Mutex::new(payin_progress),
             _onboard_merchant_result: Mutex::new(onboard_merchant_arg),
             _payout_result: Mutex::new(payout_res),
+            _refund_error_trigger: Mutex::new(refund_err_trigger.unwrap_or(Vec::new())),
         })
     }
 }
@@ -362,5 +399,22 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         let mut g = self._payout_result.lock().unwrap();
         let out = g.take().unwrap();
         out
+    }
+    async fn refund(
+        &self,
+        _charge_m: ChargeBuyerModel,
+        resolve_m: RefundReqResolutionModel,
+    ) -> Result<RefundReqResolutionModel, AppProcessorError> {
+        let mut g = self._refund_error_trigger.lock().unwrap();
+        let trig_err = g.remove(0);
+        if trig_err {
+            let msg = "unit-test".to_string();
+            Err(AppProcessorError {
+                reason: AppProcessorErrorReason::InvalidMethod(msg),
+                fn_label: AppProcessorFnLabel::Refund,
+            })
+        } else {
+            Ok(resolve_m)
+        }
     }
 } // end of impl MockPaymentProcessor

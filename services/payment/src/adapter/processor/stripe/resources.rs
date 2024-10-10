@@ -234,9 +234,11 @@ impl From<&StripeCheckoutUImodeDto> for CheckoutSessionUiMode {
 
 impl CreateCheckoutSessionPriceData {
     fn new(cline: &ChargeLineBuyerModel, currency_label: CurrencyDto) -> Self {
-        let amt_unit_represent =
-            Charge3partyStripeModel::amount_represent(cline.amount.unit, currency_label.clone())
-                .unwrap(); // TODO, overflow error handling
+        let amt_unit_represent = Charge3partyStripeModel::amount_represent(
+            cline.amount_orig().unit,
+            currency_label.clone(),
+        )
+        .unwrap(); // TODO, overflow error handling
         CreateCheckoutSessionPriceData {
             product_data: CreateCheckoutSessionProductData {
                 name: format!("{:?}", cline.pid),
@@ -252,7 +254,7 @@ impl CreateCheckoutSessionPriceData {
 impl From<(CurrencyDto, &ChargeLineBuyerModel)> for CreateCheckoutSessionLineItem {
     fn from(value: (CurrencyDto, &ChargeLineBuyerModel)) -> Self {
         let (currency_label, cline) = value;
-        let quantity = cline.amount.qty;
+        let quantity = cline.amount_orig().qty;
         let price_data = CreateCheckoutSessionPriceData::new(cline, currency_label);
         Self {
             price_data,

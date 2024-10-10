@@ -32,13 +32,13 @@ use super::{MockChargeRepo, MockMerchantRepo, MockPaymentProcessor};
 fn ut_setup_processor(
     res: Option<Result<AppProcessorPayoutResult, AppProcessorError>>,
 ) -> Box<dyn AbstractPaymentProcessor> {
-    MockPaymentProcessor::build(None, None, None, res)
+    MockPaymentProcessor::build(None, None, None, res, None)
 }
 
 fn ut_setup_repo_merchant(
     res: Option<(MerchantProfileModel, Merchant3partyModel)>,
 ) -> Box<dyn AbstractMerchantRepo> {
-    MockMerchantRepo::build(None, res, None)
+    MockMerchantRepo::build(None, res, None, None)
 }
 
 #[rustfmt::skip]
@@ -51,6 +51,7 @@ fn ut_setup_repo_charge(
         None, None, None,
         None, None, None,
         charge_by_merchant, rd_payout, create_payout_res,
+        None, None,
     )
 }
 

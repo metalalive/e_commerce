@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -214,23 +216,42 @@ pub struct RefundCompletionOlineReqDto {
     #[serde(deserialize_with = "jsn_validate_product_type")]
     pub product_type: ProductType,
     pub product_id: u64,
-    pub quantity: u32,
-    pub status: RefundStatusReqDto,
-    pub reject_reason: Option<RefundRejectReasonDto>, // present for status `reject`
-    pub partial_amount: Option<String>,               // Only when status is "ApprovedPartial"
+    // the time when customer issued the refund request,
+    // not when this completion DTO is sent to server
+    pub time_issued: DateTime<Utc>,
+    pub reject: RefundLineRejectDto,
+    pub approval: RefundLineApprovalDto,
 }
+
+pub type RefundLineRejectDto = HashMap<RefundRejectReasonDto, u32>;
 
 #[derive(Deserialize, Serialize)]
-pub enum RefundStatusReqDto {
-    Rejected,
-    ApprovedFull,
-    ApprovedPartial,
+pub struct RefundLineApprovalDto {
+    pub quantity: u32,
+    // Total amount for quantity in buyer's currency,
+    // Merchants may reduce the total amount due to partial refund policy
+    // in different businesses.
+    pub amount_total: String,
 }
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Hash, Eq)]
 pub enum RefundRejectReasonDto {
     Fraudulent,
     Damaged,
+}
+
+impl PartialEq for RefundRejectReasonDto {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Fraudulent, Self::Fraudulent) | (Self::Damaged, Self::Damaged) => true,
+            _others => false,
+        }
+    }
+}
+
+impl RefundCompletionOlineReqDto {
+    pub(crate) fn total_qty_rejected(&self) -> u32 {
+        self.reject.values().sum()
+    }
 }
 
 #[derive(Serialize)]
@@ -243,9 +264,9 @@ pub struct RefundCompletionOlineRespDto {
     #[serde(serialize_with = "jsn_serialize_product_type")]
     pub product_type: ProductType,
     pub product_id: u64,
-    pub quantity: u32,
-    pub status: RefundStatusReqDto,
-    pub amount_refunded: String,
+    pub time_issued: DateTime<Utc>,
+    pub reject: RefundLineRejectDto,
+    pub approval: RefundLineApprovalDto,
     pub success: bool,
     pub failure_reason: Option<RefundFailureReasonRespDto>,
 }

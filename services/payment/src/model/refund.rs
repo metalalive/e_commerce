@@ -125,8 +125,7 @@ impl OrderRefundModel {
     pub(crate) fn num_lines(&self) -> usize {
         self.lines.len()
     }
-    pub(crate) fn validate(&self, _data: &RefundCompletionReqDto) -> Result<(), RefundModelError> {
-        // FIXME, finish implementation
+    pub fn validate(&self, data: &RefundCompletionReqDto) -> Result<(), RefundModelError> {
         Ok(())
     }
     pub(crate) fn estimate_amount(

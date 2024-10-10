@@ -69,7 +69,7 @@ fn ut_setup_rpc_ctx(reply_raw_msg: Vec<u8>) -> Arc<Box<dyn AbstractRpcContext>> 
 fn ut_setup_processor(
     res: Option<Result<AppProcessorMerchantResult, AppProcessorError>>,
 ) -> Box<dyn AbstractPaymentProcessor> {
-    MockPaymentProcessor::build(None, None, res, None)
+    MockPaymentProcessor::build(None, None, res, None, None)
 }
 
 #[actix_web::test]
@@ -80,7 +80,7 @@ async fn new_merchant_ok() {
         let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
-    let repo = MockMerchantRepo::build(Some(Ok(())), None, None);
+    let repo = MockMerchantRepo::build(Some(Ok(())), None, None, None);
     let rpc_ctx = {
         let msg = ut_rpc_storeprof_replica("store_profile_replica_dto_1.json");
         ut_setup_rpc_ctx(msg)
@@ -109,7 +109,7 @@ async fn new_merchant_err_rpc_reply() {
         let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
-    let repo = MockMerchantRepo::build(Some(Ok(())), None, None);
+    let repo = MockMerchantRepo::build(Some(Ok(())), None, None, None);
     let rpc_ctx = ut_setup_rpc_ctx(Vec::new());
     let mock_store_id = 1009;
     let req_body = ut_default_store_onboard_req_stripe();
@@ -138,7 +138,7 @@ async fn new_merchant_3party_failure() {
         let m3pty = ut_setup_processor(Some(pay3pty_result));
         Arc::new(m3pty)
     };
-    let repo = MockMerchantRepo::build(Some(Ok(())), None, None);
+    let repo = MockMerchantRepo::build(Some(Ok(())), None, None, None);
     let rpc_ctx = {
         let msg = ut_rpc_storeprof_replica("store_profile_replica_dto_1.json");
         ut_setup_rpc_ctx(msg)
@@ -182,7 +182,7 @@ async fn new_merchant_err_repo_create() {
             code: AppErrorCode::RemoteDbServerFailure,
             detail: AppRepoErrorDetail::DatabaseExec("unit-test".to_string()),
         });
-        MockMerchantRepo::build(Some(err), None, None)
+        MockMerchantRepo::build(Some(err), None, None, None)
     };
     let rpc_ctx = {
         let msg = ut_rpc_storeprof_replica("store_profile_replica_dto_1.json");
@@ -242,7 +242,7 @@ async fn refresh_status_ok() {
     };
     let repo = {
         let arg = ut_setup_store_models(mock_store_id, mock_supervisor_id);
-        MockMerchantRepo::build(None, Some(arg), Some(Ok(())))
+        MockMerchantRepo::build(None, Some(arg), None, Some(Ok(())))
     };
     let req_body = ut_default_store_onboard_req_stripe();
     let uc = RefreshOnboardStatusUseCase {
@@ -266,7 +266,7 @@ async fn refresh_status_err_merchant_empty() {
     let mock_supervisor_id = 1230;
     let auth_claim = ut_setup_auth_claim(mock_supervisor_id, 85);
     let processors = Arc::new(ut_setup_processor(None));
-    let repo = MockMerchantRepo::build(None, None, None);
+    let repo = MockMerchantRepo::build(None, None, None, None);
     let req_body = ut_default_store_onboard_req_stripe();
     let uc = RefreshOnboardStatusUseCase {
         auth_claim,
@@ -299,7 +299,7 @@ async fn refresh_status_3party_failure() {
     };
     let repo = {
         let arg = ut_setup_store_models(mock_store_id, mock_supervisor_id);
-        MockMerchantRepo::build(None, Some(arg), None)
+        MockMerchantRepo::build(None, Some(arg), None, None)
     };
     let req_body = ut_default_store_onboard_req_stripe();
     let uc = RefreshOnboardStatusUseCase {
@@ -341,7 +341,7 @@ async fn refresh_status_err_repo_update() {
             code: AppErrorCode::DataCorruption,
             detail: AppRepoErrorDetail::DatabaseExec("unit-test".to_string()),
         };
-        MockMerchantRepo::build(None, Some(arg), Some(Err(e)))
+        MockMerchantRepo::build(None, Some(arg), None, Some(Err(e)))
     };
     let req_body = ut_default_store_onboard_req_stripe();
     let uc = RefreshOnboardStatusUseCase {

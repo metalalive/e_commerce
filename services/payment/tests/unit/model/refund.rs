@@ -70,3 +70,12 @@ fn convert_from_dto_error_amount() {
         }
     }
 } // end of fn convert_from_dto_error_amount
+
+#[test]
+fn validate_unresolved_reqs_ok() {
+} // end of fn validate_unresolved_reqs_ok
+
+#[test]
+fn validate_unresolved_reqs_exceed_limit() {
+} // end of fn validate_unresolved_reqs_exceed_limit
+

@@ -68,7 +68,7 @@ fn ut_verify_all_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
     loaded_lines
         .into_iter()
         .map(|v| {
-            let ChargeLineBuyerModel { amount, pid } = v;
+            let (pid, amt_orig, amt_rfd) = v.into_parts();
             let BaseProductIdentity {
                 store_id,
                 product_type,
@@ -83,14 +83,17 @@ fn ut_verify_all_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
                 (8299, ProductType::Package, 961) => ((11800, 2), (23600, 2), 2),
                 _others => ((0, 0), (0, 0), 0),
             };
-            assert_eq!(amount.unit.mantissa(), expect.0 .0);
-            assert_eq!(amount.unit.scale(), expect.0 .1);
-            assert_eq!(amount.total.mantissa(), expect.1 .0);
-            assert_eq!(amount.total.scale(), expect.1 .1);
-            assert_eq!(amount.qty, expect.2);
+            assert_eq!(amt_orig.unit.mantissa(), expect.0 .0);
+            assert_eq!(amt_orig.unit.scale(), expect.0 .1);
+            assert_eq!(amt_orig.total.mantissa(), expect.1 .0);
+            assert_eq!(amt_orig.total.scale(), expect.1 .1);
+            assert_eq!(amt_orig.qty, expect.2);
+            assert_eq!(amt_rfd.qty, 0u32); // TODO, verify amount refunded
+            assert_eq!(amt_rfd.unit, Decimal::ZERO);
+            assert_eq!(amt_rfd.total, Decimal::ZERO);
         })
         .count();
-}
+} // end of fn ut_verify_all_lines
 
 #[actix_web::test]
 async fn buyer_create_stripe_charge_ok() {
@@ -167,7 +170,7 @@ fn ut_verify_specific_merchant_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
     loaded_lines
         .into_iter()
         .map(|v| {
-            let ChargeLineBuyerModel { amount, pid } = v;
+            let (pid, amt_orig, amt_rfd) = v.into_parts();
             let BaseProductIdentity {
                 store_id,
                 product_type,
@@ -180,9 +183,12 @@ fn ut_verify_specific_merchant_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
                 (ProductType::Package, 961) => ((118, 0), (236, 0), 2),
                 _others => ((0, 0), (0, 0), 0),
             };
-            assert_eq!(amount.unit, Decimal::new(expect.0 .0, expect.0 .1));
-            assert_eq!(amount.total, Decimal::new(expect.1 .0, expect.1 .1));
-            assert_eq!(amount.qty, expect.2);
+            assert_eq!(amt_orig.unit, Decimal::new(expect.0 .0, expect.0 .1));
+            assert_eq!(amt_orig.total, Decimal::new(expect.1 .0, expect.1 .1));
+            assert_eq!(amt_orig.qty, expect.2);
+            assert_eq!(amt_rfd.qty, 0u32); // TODO, verify amount refunded
+            assert_eq!(amt_rfd.unit, Decimal::ZERO);
+            assert_eq!(amt_rfd.total, Decimal::ZERO);
         })
         .count();
 }
@@ -200,8 +206,9 @@ async fn fetch_charge_by_merchant_ok() {
     { // create order-replica to ensure currency snapshot data is ready
         let mock_olines_data = new_charge_m.lines
             .iter().map(|cl| {
+                let amt_orig = cl.amount_orig();
                 (cl.pid.store_id, cl.pid.product_type.clone(), cl.pid.product_id,
-                cl.amount.unit, cl.amount.total, cl.amount.qty, Duration::minutes(219))
+                amt_orig.unit, amt_orig.total, amt_orig.qty, Duration::minutes(219))
             }).collect::<Vec<_>>();
         let expect_ol_set = ut_setup_orderline_set(
             mock_buyer_id, new_charge_m.meta.oid().as_str(), 0,

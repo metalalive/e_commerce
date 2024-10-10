@@ -3,7 +3,9 @@ use rust_decimal::Decimal;
 
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
-use payment::model::{OLineRefundModel, OrderRefundModel, PayLineAmountModel};
+use payment::model::{
+    OLineRefundModel, OrderRefundModel, PayLineAmountModel, RefundLineQtyRejectModel,
+};
 
 use super::ut_setup_db_refund_repo;
 use crate::ut_setup_sharestate;
@@ -20,13 +22,15 @@ fn ut_setup_refund_model() -> Vec<OrderRefundModel> {
     ].into_iter()
     .map(|d| {
         let pid = BaseProductIdentity { store_id: d.0, product_type: d.1, product_id: d.2 };
-        let amt = PayLineAmountModel {
+        let amt_req = PayLineAmountModel {
             unit: Decimal::new(d.3.0, d.3.1),
             total: Decimal::new(d.4.0, d.4.1),
             qty: d.5
         };
         let ctime = Local::now().to_utc() - Duration::minutes(d.6);
-        OLineRefundModel::from((pid, amt, ctime))
+        let amt_refunded = PayLineAmountModel::default();
+        let reject = RefundLineQtyRejectModel::default();
+        OLineRefundModel::from((pid, amt_req, ctime, amt_refunded, reject))
     }).collect::<Vec<_>>();
     let lines2 = lines.drain(3..).collect();
     [

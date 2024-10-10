@@ -13,7 +13,7 @@ use crate::adapter::repository::{
     AppRepoError, AppRepoErrorDetail,
 };
 use crate::api::web::dto::{RefundCompletionReqDto, RefundCompletionRespDto};
-use crate::model::{ChargeBuyerModel, OrderRefundModel};
+use crate::model::{ChargeBuyerModel, OrderRefundModel, RefundReqResolutionModel};
 
 #[derive(Debug)]
 pub enum FinalizeRefundUcError {
@@ -70,7 +70,13 @@ impl<'a> FinalizeRefundUseCase<'a> {
         }
 
         let result_rslv = repo_rfd
-            .resolve_request(cmplt_req, charge_ms, processors, Self::hdlr_load_refund_req)
+            .resolve_request(
+                merchant_id,
+                cmplt_req,
+                charge_ms,
+                processors,
+                Self::hdlr_load_refund_req,
+            )
             .await
             .map_err(FinalizeRefundUcError::DataStore)?;
 
@@ -88,6 +94,13 @@ impl<'a> FinalizeRefundUseCase<'a> {
             })
             .count();
 
+        // TODO / FIXME,
+        // - idempotency key implementation
+        let charge_line_map = RefundReqResolutionModel::to_chargeline_map(&rslv_ms);
+        repo_ch
+            .update_lines_refund(charge_line_map)
+            .await
+            .map_err(FinalizeRefundUcError::DataStore)?;
         let o = RefundCompletionRespDto::from(rslv_ms);
         Ok((o, errs_proc))
     } // end of fn execute
@@ -108,18 +121,26 @@ impl<'a> FinalizeRefundUseCase<'a> {
         charge_ms: Vec<ChargeBuyerModel>,
         processor: Arc<Box<dyn AbstractPaymentProcessor>>,
     ) -> AppRefundRslvReqCbReturn {
+        let merchant_ids = refund_m.merchant_ids();
+        assert_eq!(merchant_ids.len(), 1);
+        let merchant_id = merchant_ids[0];
         refund_m
-            .validate(&cmplt_req)
+            .validate(merchant_id, &cmplt_req)
             .map_err(AppRepoErrorDetail::RefundResolution)?;
 
         let mut out = Vec::new();
         for charge_m in charge_ms {
-            let resolve_m = refund_m.estimate_amount(&charge_m, &mut cmplt_req);
+            let arg = (merchant_id, &charge_m, &cmplt_req);
+            let resolve_m = RefundReqResolutionModel::try_from(arg).unwrap();
             let result = processor.refund(charge_m, resolve_m).await;
             if let Ok(resolve_m) = &result {
                 refund_m.update(resolve_m);
+                resolve_m.update_req(&mut cmplt_req);
             }
             out.push(result);
+            if cmplt_req.lines.is_empty() {
+                break;
+            }
         }
         Ok(out)
     } // end of fn hdlr_load_refund_req

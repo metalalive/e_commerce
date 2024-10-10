@@ -14,9 +14,9 @@ use ecommerce_common::model::order::BillingModel;
 use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::api::web::dto::RefundCompletionReqDto;
 use crate::model::{
-    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, Label3party,
-    Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, OrderRefundModel, PayoutModel,
-    RefundModelError, RefundResolutionModel,
+    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerMap,
+    ChargeLineBuyerModel, Label3party, Merchant3partyModel, MerchantProfileModel,
+    OrderLineModelSet, OrderRefundModel, PayoutModel, RefundModelError, RefundReqResolutionModel,
 };
 
 use self::mariadb::charge::MariadbChargeRepo;
@@ -40,6 +40,7 @@ pub enum AppRepoErrorFnLabel {
     FetchChargeByMerchant,
     FetchPayout,
     UpdateChargeProgress,
+    UpdateChargeLinesRefund,
     UpdateMerchant3party,
     InitMerchantRepo,
     InitRefundRepo,
@@ -63,7 +64,7 @@ pub enum AppRepoErrorDetail {
     DatabaseQuery(String),
     DataRowParse(String),
     CurrencyPrecision(u32, String, String, u32, u32),
-    RefundResolution(RefundModelError),
+    RefundResolution(Vec<RefundModelError>),
     Unknown,
 }
 
@@ -119,6 +120,8 @@ pub trait AbstractChargeRepo: Sync + Send {
         store_id: u32,
     ) -> Result<Option<ChargeBuyerModel>, AppRepoError>;
 
+    async fn update_lines_refund(&self, cl_map: ChargeLineBuyerMap) -> Result<(), AppRepoError>;
+
     /// the method `fetch_payout()` returns payout summary of a specific payment made by client
     /// , which includes total amount that has been transferred to merchant's bank account.
     async fn fetch_payout(
@@ -167,6 +170,7 @@ pub trait AbstractRefundRepo<'a>: Sync + Send {
 
     async fn resolve_request(
         &self,
+        merchant_id: u32,
         new_req: RefundCompletionReqDto,
         charge_ms: Vec<ChargeBuyerModel>,
         processor: Arc<Box<dyn AbstractPaymentProcessor>>,
@@ -174,7 +178,7 @@ pub trait AbstractRefundRepo<'a>: Sync + Send {
     ) -> Result<AppRefundRslvReqOkReturn, AppRepoError>;
 }
 
-pub type AppRefundRslvReqOkReturn = Vec<Result<RefundResolutionModel, AppProcessorError>>;
+pub type AppRefundRslvReqOkReturn = Vec<Result<RefundReqResolutionModel, AppProcessorError>>;
 
 pub type AppRefundRslvReqCbReturn = Result<AppRefundRslvReqOkReturn, AppRepoErrorDetail>;
 

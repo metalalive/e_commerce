@@ -73,13 +73,19 @@ impl InsertRequestArgs {
         let params = rlines
             .into_iter()
             .map(|line| {
-                let (pid, amt, ctime) = line.into_parts();
+                let (
+                    pid,
+                    amt_orig,
+                    ctime,
+                    _amt_rfd, // TODO, save the missing fields
+                    _rejected,
+                ) = line.into_parts();
                 let BaseProductIdentity {
                     store_id,
                     product_type,
                     product_id,
                 } = pid;
-                let PayLineAmountModel { unit, total, qty } = amt;
+                let PayLineAmountModel { unit, total, qty } = amt_orig;
                 let prod_typ_num: u8 = product_type.into();
                 let arg = vec![
                     oid_b.as_column().into(),
@@ -241,6 +247,7 @@ impl<'a> AbstractRefundRepo<'a> for MariaDbRefundRepo {
 
     async fn resolve_request(
         &self,
+        _merchant_id: u32,
         _new_req: RefundCompletionReqDto,
         _charge_ms: Vec<ChargeBuyerModel>,
         _processor: Arc<Box<dyn AbstractPaymentProcessor>>,
