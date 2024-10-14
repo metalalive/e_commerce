@@ -24,12 +24,13 @@ pub(crate) fn ut_setup_buyer_charge_inner(
     let merchant_ids = [1008u32, 1009];
     let order_id = "overlapping-camera-calibrate".to_string();
     let charge_lines = vec![
-        (merchant_ids[0], ProductType::Item, 19030u64, (502i64, 1u32), (2510i64, 1u32), 5u32,),
-        (merchant_ids[1], ProductType::Item, 9451, (1700, 1), (12600, 1), 8,),
-        (merchant_ids[0], ProductType::Package, 6763, (9900, 2), (49500, 2), 5,),
-        (merchant_ids[1], ProductType::Package, 8454, (3760, 1), (37600, 1), 10,),
-        (merchant_ids[0], ProductType::Item, 9925, (411, 1), (3699, 1), 9,),
-        (merchant_ids[1], ProductType::Item, 9914, (226, 0), (2486, 0), 11,),
+        (merchant_ids[0], ProductType::Item, 19030u64, (502i64, 1u32), (2510i64, 1u32), 5u32,
+         (0i64, 0u32), (0i64, 0u32), 0u32),
+        (merchant_ids[1], ProductType::Item, 9451, (1700, 1), (12600, 1), 8, (0,0), (0,0), 0),
+        (merchant_ids[0], ProductType::Package, 6763, (9900, 2), (49500, 2), 5, (0,0), (0,0), 0),
+        (merchant_ids[1], ProductType::Package, 8454, (3760, 1), (37600, 1), 10, (0,0), (0,0), 0),
+        (merchant_ids[0], ProductType::Item, 9925, (411, 1), (3699, 1), 9, (0,0), (0,0), 0),
+        (merchant_ids[1], ProductType::Item, 9914, (226, 0), (2486, 0), 11, (0,0), (0,0), 0),
     ];
     let currency_snapshot = {
         let iter = [
@@ -52,12 +53,8 @@ pub(crate) fn ut_setup_buyer_charge_inner(
         mthd
     };
     ut_setup_buyer_charge(
-        buyer_usr_id,
-        charge_ctime,
-        order_id,
-        pay_in_state,
-        paymethod,
-        charge_lines,
+        buyer_usr_id, charge_ctime, order_id,
+        pay_in_state, paymethod, charge_lines,
         currency_snapshot,
     )
 } // end of fn ut_setup_buyer_charge_inner
@@ -128,6 +125,10 @@ fn create_ok() {
         assert_eq!(exrate.to_string().as_str(), "387.60125588");
         assert_eq!(total.to_string().as_str(), "2909335.02");
     }
+}
+
+#[test]
+fn create_after_refund_ok() {
 }
 
 #[rustfmt::skip]

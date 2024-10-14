@@ -178,6 +178,10 @@ async fn ut_add_charges_for_verify_read_olines(
     // ---- add charge lines ----
     for dl in d_charges {
         let (ctime, is_3pty_done, d_chargelines) = dl;
+        let d_chargelines = d_chargelines.into_iter()
+            .map(|d| {
+                (d.0, d.1, d.2, d.3, d.4, d.5, (0i64, 0u32), (0i64, 0u32), 0u32)
+            }).collect::<Vec<_>>();
         let mut mthd_3pty = ut_default_charge_method_stripe(&ctime);
         let state = if is_3pty_done {
             if let Charge3partyModel::Stripe(s) = &mut mthd_3pty {

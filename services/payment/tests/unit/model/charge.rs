@@ -56,13 +56,13 @@ fn buyer_convert_ok_1() {
         v.lines
             .into_iter()
             .map(|l| {
-                let (actual_pid, actual_amount) = (l.pid, l.amount);
+                let (actual_pid, actual_amt_orig, actual_amt_refunded) = l.into_parts();
                 let BaseProductIdentity {
                     store_id,
                     product_type,
                     product_id,
                 } = actual_pid;
-                let PayLineAmountModel { unit, total, qty } = actual_amount;
+                let PayLineAmountModel { unit, total, qty } = actual_amt_orig;
                 let expect = match (store_id, product_type, product_id) {
                     (140, ProductType::Item, 1005) => (6u32, (1715i64, 2u32), (1029i64, 1u32)),
                     (141, ProductType::Package, 1006) => (1, (21, 0), (21, 0)),
@@ -75,6 +75,9 @@ fn buyer_convert_ok_1() {
                     Decimal::new(expect.2 .0, expect.2 .1),
                 );
                 assert_eq!((qty, unit, total), expect);
+                let PayLineAmountModel { unit, total, qty } = actual_amt_refunded;
+                assert_eq!(qty, 0u32);
+                assert!(total.is_zero());
             })
             .count();
     }
@@ -124,13 +127,13 @@ fn buyer_convert_ok_2() {
         v.lines
             .into_iter()
             .map(|l| {
-                let (actual_pid, actual_amount) = (l.pid, l.amount);
+                let (actual_pid, actual_amt_orig, actual_amt_refunded) = l.into_parts();
                 let BaseProductIdentity {
                     store_id,
                     product_type,
                     product_id,
                 } = actual_pid;
-                let PayLineAmountModel { unit, total, qty } = actual_amount;
+                let PayLineAmountModel { unit, total, qty } = actual_amt_orig;
                 let expect = match (store_id, product_type, product_id) {
                     (140, ProductType::Item, 1005) => (9u32, 17150i64, 154350i64),
                     (142, ProductType::Item, 1007) => (14, 22090, 309260),
@@ -143,6 +146,9 @@ fn buyer_convert_ok_2() {
                     Decimal::new(expect.2, 3),
                 );
                 assert_eq!((qty, unit, total), expect);
+                let PayLineAmountModel { unit, total, qty } = actual_amt_refunded;
+                assert_eq!(qty, 0u32);
+                assert_eq!(total, Decimal::ZERO);
             })
             .count();
     }

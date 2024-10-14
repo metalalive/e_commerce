@@ -81,27 +81,21 @@ fn ut_setup_processor(
     MockPaymentProcessor::build(None, res, None, None, None)
 }
 
+#[rustfmt::skip]
 fn ut_common_mock_data() -> (
-    u32,
-    DateTime<FixedOffset>,
-    String,
-    String,
-    ChargeBuyerMetaModel,
-    Vec<ChargeLineBuyerModel>,
+    u32, DateTime<FixedOffset>, String, String,
+    ChargeBuyerMetaModel, Vec<ChargeLineBuyerModel>,
 ) {
     let usr_id = 8010095;
     let charge_time = DateTime::parse_from_rfc3339("2012-04-24T23:01:30+00:00").unwrap();
     let charge_id = "007a396f1f7131705e".to_string();
     let order_id = "shout-out".to_string();
     let d = vec![
-        (8298, ProductType::Package, 471, (9028, 2), (36112, 2), 4),
-        (2369, ProductType::Item, 380, (551, 1), (1102, 1), 2),
+        (8298, ProductType::Package, 471, (9028, 2), (36112, 2), 4, (0,0), (0,0), 0),
+        (2369, ProductType::Item, 380, (551, 1), (1102, 1), 2, (0,0), (0,0), 0),
     ];
     (
-        usr_id,
-        charge_time,
-        charge_id,
-        order_id.clone(),
+        usr_id, charge_time, charge_id, order_id.clone(),
         ut_setup_buyer_meta_stripe(usr_id, order_id, charge_time),
         ut_setup_buyer_charge_lines(d),
     )
