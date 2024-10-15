@@ -75,7 +75,11 @@ fn buyer_convert_ok_1() {
                     Decimal::new(expect.2 .0, expect.2 .1),
                 );
                 assert_eq!((qty, unit, total), expect);
-                let PayLineAmountModel { unit, total, qty } = actual_amt_refunded;
+                let PayLineAmountModel {
+                    unit: _,
+                    total,
+                    qty,
+                } = actual_amt_refunded;
                 assert_eq!(qty, 0u32);
                 assert!(total.is_zero());
             })
@@ -146,7 +150,11 @@ fn buyer_convert_ok_2() {
                     Decimal::new(expect.2, 3),
                 );
                 assert_eq!((qty, unit, total), expect);
-                let PayLineAmountModel { unit, total, qty } = actual_amt_refunded;
+                let PayLineAmountModel {
+                    unit: _,
+                    total,
+                    qty,
+                } = actual_amt_refunded;
                 assert_eq!(qty, 0u32);
                 assert_eq!(total, Decimal::ZERO);
             })

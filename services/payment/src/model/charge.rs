@@ -59,10 +59,13 @@ pub enum BuyerPayInState {
 
 pub struct ChargeLineBuyerModel {
     pub pid: BaseProductIdentity, // product ID
-    // currenctly this field specifies the amount to charge in buyer's currency,
-    // TODO, another column for the same purpose in seller's preferred currency
-    pub amount: PayLineAmountModel,
+    // the amount to charge in buyer's currency,
+    amount_orig: PayLineAmountModel,
+    amount_refunded: PayLineAmountModel,
 }
+
+pub type ChargeLineBuyerMap = HashMap<(u32, Decimal), Vec<ChargeLineBuyerModel>>;
+
 pub struct ChargeBuyerMetaModel {
     _owner: u32,
     _create_time: DateTime<Utc>,
@@ -70,6 +73,7 @@ pub struct ChargeBuyerMetaModel {
     _state: BuyerPayInState,
     _method: Charge3partyModel,
 } // TODO, new struct function for init , instead of directly accessing the inner fields
+
 pub struct ChargeBuyerModel {
     pub meta: ChargeBuyerMetaModel,
     pub currency_snapshot: HashMap<u32, OrderCurrencySnapshot>,
@@ -218,9 +222,11 @@ impl ChargeBuyerMetaModel {
 impl From<ChargeLineBuyerModel> for OrderLinePaidUpdateDto {
     #[rustfmt::skip]
     fn from(value: ChargeLineBuyerModel) -> Self {
-        let ChargeLineBuyerModel { pid, amount } = value;
+        let ChargeLineBuyerModel {
+            pid, amount_orig, amount_refunded: _
+        } = value;
         let BaseProductIdentity { store_id, product_type, product_id } = pid;
-        Self { seller_id: store_id, product_id, product_type, qty: amount.qty }
+        Self { seller_id: store_id, product_id, product_type, qty: amount_orig.qty }
     }
 }
 
@@ -296,15 +302,16 @@ impl ChargeBuyerModel {
         let key = self.meta.owner();
         self.currency_snapshot.get(&key).cloned()
     }
-    fn get_seller_currency(&self, seller_id: u32) -> Option<OrderCurrencySnapshot> {
+    pub(super) fn get_seller_currency(&self, seller_id: u32) -> Option<OrderCurrencySnapshot> {
         self.currency_snapshot.get(&seller_id).cloned()
     }
 
-    fn estimate_lines_amount(&self, seller_id: u32) -> Decimal {
+    fn estimate_avail_lines_amount(&self, seller_id: u32) -> Decimal {
         self.lines
             .iter()
             .filter(|line| line.pid.store_id == seller_id)
-            .map(|v| v.amount.total)
+            // TODO, more test cases to verify.
+            .map(|v| v.amount_remain().total)
             .sum::<Decimal>()
     }
 
@@ -320,7 +327,7 @@ impl ChargeBuyerModel {
             .get_buyer_currency()
             .ok_or("missing-currency-buyer".to_string())
             .map_err(|d| PayoutModelError::AmountEstimate(AppErrorCode::DataCorruption, d))?;
-        let tot_amt_buyer = self.estimate_lines_amount(seller_id);
+        let tot_amt_buyer = self.estimate_avail_lines_amount(seller_id);
         let args = (tot_amt_buyer, currency_seller, currency_buyer);
         PayoutAmountModel::try_from(args)
     }
@@ -489,7 +496,7 @@ impl
             not_exist: false,
         };
         let amount_dto_bak = amount_dto.clone();
-        let amount_m = match PayLineAmountModel::try_from((qty_req, amount_dto, currency_label))
+        let amount_orig = match PayLineAmountModel::try_from((qty_req, amount_dto, currency_label))
         {
             Ok(v) => v,
             Err(_e) => {
@@ -512,7 +519,7 @@ impl
             {
                 e.expired = Some(true);
                 Err(e)
-            } else if amount_m.unit != v.rsv_total.unit {
+            } else if amount_orig.unit != v.rsv_total.unit {
                 e.amount = Some(amount_dto_bak);
                 Err(e)
             } else if qty_avail < qty_req {
@@ -523,7 +530,8 @@ impl
                 });
                 Err(e)
             } else {
-                Ok(Self {pid: pid_req, amount: amount_m})
+                let amount_refunded = PayLineAmountModel::default();
+                Ok(Self {pid: pid_req, amount_orig, amount_refunded})
             }
         } else {
             e.not_exist = true;
@@ -531,3 +539,40 @@ impl
         }
     } // end of fn try-from
 } // end of impl TryFrom for ChargeLineBuyerModel
+
+#[rustfmt::skip]
+impl From<(BaseProductIdentity, PayLineAmountModel, PayLineAmountModel)> for ChargeLineBuyerModel
+{
+    fn from(value: (BaseProductIdentity, PayLineAmountModel, PayLineAmountModel)) -> Self
+    {
+        let (pid, amount_orig, mut amount_refunded ) = value;
+        assert!(amount_orig.unit > Decimal::ZERO);
+        assert!(amount_orig.total > Decimal::ZERO);
+        assert!(amount_orig.qty > 0u32);
+        amount_refunded.unit = amount_orig.unit;
+        Self { pid, amount_orig, amount_refunded }
+    }
+}
+
+impl ChargeLineBuyerModel {
+    pub fn amount_orig(&self) -> &PayLineAmountModel {
+        &self.amount_orig
+    }
+    pub(super) fn amount_refunded(&self) -> &PayLineAmountModel {
+        &self.amount_refunded
+    }
+    #[rustfmt::skip]
+    pub(super) fn amount_remain(&self) -> PayLineAmountModel {
+        let orig = self.amount_orig();
+        let refunded = self.amount_refunded();
+        assert_eq!(orig.unit, refunded.unit);
+        let qty = orig.qty.saturating_sub(refunded.qty);
+        let total = orig.total.saturating_sub(refunded.total);
+        PayLineAmountModel { unit: orig.unit, total, qty }
+    }
+    #[rustfmt::skip]
+    pub fn into_parts(self) -> (BaseProductIdentity, PayLineAmountModel, PayLineAmountModel) {
+        let Self { pid, amount_orig, amount_refunded } = self;
+        (pid, amount_orig, amount_refunded)
+    }
+} // end of impl ChargeLineBuyerModel

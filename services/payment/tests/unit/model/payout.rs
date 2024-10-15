@@ -5,9 +5,9 @@ use rust_decimal::Decimal;
 
 use ecommerce_common::{api::dto::CurrencyDto, constant::ProductType, error::AppErrorCode};
 use payment::model::{
-    BuyerPayInState, Charge3partyModel, ChargeBuyerModel, Merchant3partyModel,
-    MerchantProfileModel, OrderCurrencySnapshot, PayoutModel, PayoutModelError,
-    StripeAccountCapableState, StripeCheckoutPaymentStatusModel,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerModel, ChargeLineBuyerModel,
+    Merchant3partyModel, MerchantProfileModel, OrderCurrencySnapshot, PayoutModel,
+    PayoutModelError, StripeAccountCapableState, StripeCheckoutPaymentStatusModel,
 };
 
 use super::{
@@ -127,9 +127,48 @@ fn create_ok() {
     }
 }
 
+#[rustfmt::skip]
 #[test]
 fn create_after_refund_ok() {
-}
+    let (mock_buyer_id, orig_store_id, staff_usr_id) = (518u32, 1009u32, 2074u32);
+    let mock_charge_m = {
+        let charge_ctime = Local::now().to_utc() - Duration::minutes(99);
+        let done_time = charge_ctime + Duration::minutes(15);
+        let payin_state = BuyerPayInState::OrderAppSynced(done_time);
+        let c = ut_setup_buyer_charge_inner(mock_buyer_id, charge_ctime, payin_state);
+        let ChargeBuyerModel { meta, currency_snapshot, lines }  = c;
+        let lines = lines.into_iter()
+            .map(|line| {
+                let mut arg = line.into_parts();
+                if arg.0.store_id == orig_store_id {
+                    arg.2.unit = arg.1.unit;
+                    arg.2.total = arg.2.unit;
+                    arg.2.qty = 1;
+                }
+                ChargeLineBuyerModel::from(arg)
+            })
+            .collect::<Vec<_>>();
+        ChargeBuyerModel { meta, currency_snapshot, lines }
+    };
+    let mock_merchant_prof = ut_setup_merchant_profile(orig_store_id, staff_usr_id);
+    let mock_merchant_3pty = ut_setup_merchant_3party_stripe();
+    let arg = (
+        mock_charge_m, mock_merchant_prof,  mock_merchant_3pty,
+        staff_usr_id, None,
+    );
+    let result = PayoutModel::try_from(arg);
+    assert!(result.is_ok());
+    if let Ok(v) = result {
+        let readback_store_id = v.merchant_id();
+        assert_eq!(readback_store_id, orig_store_id);
+        let amount_bs = v.amount_base();
+        assert_eq!(amount_bs, Decimal::new(21142, 2));
+        let (total, exrate, currency) = v.amount_merchant();
+        assert_eq!(currency.label, CurrencyDto::IDR);
+        assert_eq!(exrate.to_string().as_str(), "387.60125588");
+        assert_eq!(total.to_string().as_str(), "2610106.85");
+    }
+} // end of fn create_after_refund_ok
 
 #[rustfmt::skip]
 #[test]

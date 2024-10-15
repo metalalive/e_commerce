@@ -187,7 +187,7 @@ fn ut_verify_specific_merchant_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
             assert_eq!(amt_orig.total, Decimal::new(expect.1 .0, expect.1 .1));
             assert_eq!(amt_orig.qty, expect.2);
             assert_eq!(amt_rfd.qty, 0u32); // TODO, verify amount refunded
-            assert_eq!(amt_rfd.unit,  amt_orig.unit);
+            assert_eq!(amt_rfd.unit, amt_orig.unit);
             assert_eq!(amt_rfd.total, Decimal::ZERO);
         })
         .count();
