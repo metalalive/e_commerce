@@ -25,6 +25,7 @@ fn ut_setup_olines_refund_dto(time_base: DateTime<Utc>) -> Vec<OrderLineReplicaR
         (37, 982, ProductType::Package, 41, 1671, 8355, 5),
         (37, 982, ProductType::Item,    87, 1650, 16500, 10),
         (37, 982, ProductType::Package, 87, 1671, 33420, 20),
+        (37, 982, ProductType::Package, 113, 1671, 5013, 3),
         (50, 982, ProductType::Item, 51, 2222, 15554, 7),
         (50, 591, ProductType::Package, 54, 805, 7245, 9),
         (37, 999, ProductType::Item, 144, 1900, 9500, 5),
@@ -278,9 +279,11 @@ fn create_resolution_model_ok() {
             assert_eq!(amt_rslv.curr_round().qty, d.4);
             // assert_eq!(amt_rslv.accumulated().total, Decimal::ZERO);
             // assert_eq!(amt_rslv.accumulated().qty, 0);
-            let num_damage = *reject_rslv.get(&RefundRejectReasonDto::Damaged).unwrap();
+            let num_damage = *reject_rslv.inner_map()
+                .get(&RefundRejectReasonDto::Damaged).unwrap();
             assert_eq!(num_damage, d.5);
-            let num_fraud = *reject_rslv.get(&RefundRejectReasonDto::Fraudulent).unwrap();
+            let num_fraud = *reject_rslv.inner_map()
+                .get(&RefundRejectReasonDto::Fraudulent).unwrap();
             assert_eq!(num_fraud, d.6);
         }).count();
         [
@@ -295,6 +298,7 @@ fn create_resolution_model_ok() {
     }
 } // end of fn create_resolution_model_ok
 
+#[rustfmt::skip]
 #[test]
 fn create_resolution_model_err() {
     let mock_buyer_id = 9802u32;
@@ -309,27 +313,11 @@ fn create_resolution_model_err() {
     };
     let charge_rawlines = vec![
         (
-            mock_merchant_ids[0],
-            ProductType::Package,
-            982u64,
-            (1671i64, 1u32),
-            (20052i64, 1u32),
-            12u32,
-            (0i64, 0u32),
-            (0i64, 0u32),
-            0u32,
+            mock_merchant_ids[0], ProductType::Package, 982u64,
+            (1671i64, 1u32), (20052i64, 1u32), 12u32,
+            (0i64, 0u32), (0i64, 0u32), 0u32,
         ),
-        (
-            mock_merchant_ids[0],
-            ProductType::Item,
-            983,
-            (1650, 1),
-            (29700, 1),
-            18,
-            (0, 0),
-            (0, 0),
-            0,
-        ),
+        (mock_merchant_ids[0], ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0),
     ];
     let mock_charge_m = ut_setup_buyer_charge_inner(
         time_now,
@@ -345,4 +333,69 @@ fn create_resolution_model_err() {
     } else {
         assert!(false);
     }
-}
+} // end of fn create_resolution_model_err
+
+#[rustfmt::skip]
+#[test]
+fn update_refund_req_ok() {
+    let mock_buyer_id = 9802u32;
+    let mock_merchant_id = 37u32;
+    let mock_oid = "d1e5390dd2".to_string();
+    let time_now = Local::now().to_utc();
+    let mock_data = ut_setup_olines_refund_dto(time_now);
+    let mut refund_req_m = OrderRefundModel::try_from((mock_oid, mock_data)).unwrap();
+    
+    let mock_cmplt_req = {
+        let lines = vec![
+            (982, ProductType::Package, 41, 8355, 5, 0, 0),
+            (982, ProductType::Package, 113, 1671, 1, 0, 1),
+            (999, ProductType::Item, 144, 0, 0, 3, 0),
+            (999, ProductType::Package,  62, 3333, 1, 0, 0),
+        ];
+        ut_setup_refund_cmplt_dto(time_now, lines)
+    };
+    let charge_rawlines = vec![
+        (mock_merchant_id, ProductType::Package, 982u64, (1671i64, 1u32), (20052i64, 1u32), 12u32,
+         (0i64, 0u32), (0i64, 0u32), 0u32),
+        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0),
+        (mock_merchant_id, ProductType::Item, 999, (1900, 1), (9500, 1), 5, (0, 0), (0, 0), 0),
+        (mock_merchant_id, ProductType::Package, 603, (990, 1), (2990, 1), 3, (0, 0), (0, 0), 0),
+        (mock_merchant_id, ProductType::Package, 999, (3333, 1), (36663, 1), 11, (0, 0), (0, 0), 0),
+    ];
+    let mock_charge_m = ut_setup_buyer_charge_inner(
+        time_now, mock_merchant_id, mock_buyer_id, charge_rawlines
+    );
+    let arg = (mock_merchant_id, &mock_charge_m ,&mock_cmplt_req);
+    let resolve_m = RefundReqResolutionModel::try_from(arg).unwrap();
+    let actual_num_updated = refund_req_m.update(&resolve_m);
+    assert_eq!(actual_num_updated, mock_cmplt_req.lines.len());
+ 
+    // --- validate with rest of lines requested but not resolved yet
+    let mock_cmplt_req = {
+        let lines = vec![
+            (982, ProductType::Item,    87, 16500, 10, 0, 0),
+            (982, ProductType::Package, 87, 33420, 20, 0, 0),
+            (982, ProductType::Package, 113, 1671, 1, 0, 0),
+            (999, ProductType::Item, 144, 3800, 2, 0, 0),
+            (999, ProductType::Package, 62, 33330, 10, 0, 0),
+        ];
+        ut_setup_refund_cmplt_dto(time_now, lines)
+    };
+    let result = refund_req_m.validate(mock_merchant_id, &mock_cmplt_req);
+    assert!(result.is_ok());
+    let mock_cmplt_req = {
+        let lines = vec![(982, ProductType::Package, 113, 1671, 1, 1, 0)];
+        ut_setup_refund_cmplt_dto(time_now, lines)
+    };
+    let result = refund_req_m.validate(mock_merchant_id, &mock_cmplt_req);
+    assert!(result.is_err());
+    let mock_cmplt_req = {
+        let lines = vec![(982, ProductType::Package, 113, 3342, 2, 0, 0)];
+        ut_setup_refund_cmplt_dto(time_now, lines)
+    };
+    let result = refund_req_m.validate(mock_merchant_id, &mock_cmplt_req);
+    assert!(result.is_err());
+} // end of fn update_refund_req_ok
+
+#[test]
+fn update_cmplt_req_dto_ok() {}

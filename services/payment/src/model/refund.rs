@@ -120,7 +120,20 @@ impl RefundLineQtyRejectModel {
     fn total_qty(&self) -> u32 {
         self.0.values().sum()
     }
-}
+    pub fn inner_map(&self) -> &RefundLineRejectDto {
+        &self.0
+    }
+    fn accumulate(&self, dst: &mut Self) {
+        self.0
+            .iter()
+            .filter_map(|(k1, v1)| {
+                dst.0.get_mut(k1).map(|v2| {
+                    *v2 += *v1;
+                })
+            })
+            .count();
+    }
+} // end of impl RefundLineQtyRejectModel
 
 impl RefundLineResolveAmountModel {
     pub fn curr_round(&self) -> &PayLineAmountModel {
@@ -129,7 +142,14 @@ impl RefundLineResolveAmountModel {
     pub fn accumulated(&self) -> &PayLineAmountModel {
         &self.accumulated
     }
-}
+    fn accumulate(&self, dst: &mut PayLineAmountModel) {
+        assert_eq!(dst.unit, self.accumulated.unit);
+        let tot_qty = self.accumulated.qty + self.curr_round.qty;
+        let tot_amt = self.accumulated.total + self.curr_round.total;
+        dst.qty = tot_qty;
+        dst.total = tot_amt;
+    } // end of fn accumulate
+} // end of impl RefundLineResolveAmountModel
 
 #[rustfmt::skip]
 impl<'a> From<(&'a PayLineAmountModel, u32, Decimal)> for RefundLineResolveAmountModel {
@@ -174,7 +194,8 @@ impl TryFrom<OrderLineReplicaRefundDto> for OLineRefundModel {
                 )
             })?;
         let amount_req = PayLineAmountModel { unit, total, qty };
-        let amount_refunded = PayLineAmountModel::default();
+        let mut amount_refunded = PayLineAmountModel::default();
+        amount_refunded.unit = amount_req.unit;
         let rejected = RefundLineQtyRejectModel::default();
         Ok(Self { pid, amount_req, time_req, amount_refunded, rejected })
     } // end of fn try-from
@@ -363,7 +384,27 @@ impl OrderRefundModel {
         }
     } // end of fn validate
 
-    pub(crate) fn update(&mut self, _rslv_m: &RefundReqResolutionModel) {}
+    pub fn update(&mut self, rslv_m: &RefundReqResolutionModel) -> usize {
+        let num_updated = self
+            .lines
+            .iter_mut()
+            .filter_map(|v| {
+                rslv_m
+                    .get_status(
+                        v.pid.store_id,
+                        v.pid.product_type.clone(),
+                        v.pid.product_id,
+                        v.time_req,
+                    )
+                    .map(|r| (v, r.0, r.1))
+            })
+            .map(|(line_req, rslv_rej, rslv_aprv)| {
+                rslv_aprv.accumulate(&mut line_req.amount_refunded);
+                rslv_rej.accumulate(&mut line_req.rejected);
+            })
+            .count();
+        num_updated
+    } // end of fn update
 } // end of impl OrderRefundModel
 
 impl RefundLineReqResolutionModel {
@@ -453,13 +494,13 @@ impl RefundReqResolutionModel {
     pub fn get_status(
         &self, merchant_id: u32, product_type: ProductType,
         product_id: u64, time_req: DateTime<Utc>,
-    ) -> Option<(&RefundLineRejectDto, &RefundLineResolveAmountModel)> {
+    ) -> Option<(&RefundLineQtyRejectModel, &RefundLineResolveAmountModel)> {
         let key = BaseProductIdentity {
             store_id: merchant_id ,product_type,product_id
         };
         self.lines.iter()
             .find(|v| v.pid == key && time_req == v.time_req)
-            .map(|v| (&v.qty_reject.0, &v.amount))
+            .map(|v| (&v.qty_reject, &v.amount))
     }
 } // end of impl RefundReqResolutionModel
 

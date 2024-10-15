@@ -134,7 +134,7 @@ impl<'a> FinalizeRefundUseCase<'a> {
             let resolve_m = RefundReqResolutionModel::try_from(arg).unwrap();
             let result = processor.refund(charge_m, resolve_m).await;
             if let Ok(resolve_m) = &result {
-                refund_m.update(resolve_m);
+                let _num_updated = refund_m.update(resolve_m);
                 resolve_m.update_req(&mut cmplt_req);
             }
             out.push(result);

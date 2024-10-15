@@ -45,8 +45,11 @@ pub enum PayLineAmountError {
     PrecisionUnit(String, (u32, u32)),
 }
 
-/// this type does not contain the currency of the amount,
-/// such currency is defined by upper structure
+/// - this type does not contain the currency of the amount,
+///   such currency is defined by upper structure
+/// - arithmetic operation traits for this type (e.g. Add, Sub)
+///   is not supported because these traits require 2 other traits
+///   `Copy` and `Clone` to be implemented.
 #[derive(Default)]
 pub struct PayLineAmountModel {
     pub unit: Decimal,
