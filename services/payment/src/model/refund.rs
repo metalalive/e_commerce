@@ -449,47 +449,71 @@ impl<'a, 'b> TryFrom<(u32, &'a ChargeBuyerModel, &'b RefundCompletionReqDto)>
     for RefundReqResolutionModel
 {
     type Error = RefundModelError;
+    #[rustfmt::skip]
     fn try_from(
         value: (u32, &'a ChargeBuyerModel, &'b RefundCompletionReqDto),
     ) -> Result<Self, Self::Error> {
         let (merchant_id, charge_m, cmplt_req) = value;
         let buyer_usr_id = charge_m.meta.owner();
-        let currency_b = charge_m
-            .get_buyer_currency()
+        let currency_b = charge_m.get_buyer_currency()
             .ok_or(RefundModelError::MissingCurrency(
-                "buyer-id".to_string(),
-                buyer_usr_id,
+                "buyer-id".to_string(), buyer_usr_id,
             ))?;
-        let currency_m =
-            charge_m
-                .get_seller_currency(merchant_id)
-                .ok_or(RefundModelError::MissingCurrency(
-                    "merchant-id".to_string(),
-                    merchant_id,
-                ))?;
-        let lines = charge_m
-            .lines
-            .iter()
+        let currency_m = charge_m.get_seller_currency(merchant_id)
+            .ok_or(RefundModelError::MissingCurrency(
+                "merchant-id".to_string(), merchant_id,
+            ))?;
+        let lines = charge_m.lines.iter()
             .filter(|c| c.pid.store_id == merchant_id)
             .map(|c| RefundLineReqResolutionModel::to_vec(c, cmplt_req))
-            .flatten()
-            .collect::<Vec<_>>();
+            .flatten().collect::<Vec<_>>();
         Ok(Self {
-            buyer_usr_id,
+            buyer_usr_id, lines,
             charged_ctime: *charge_m.meta.create_time(),
             currency_buyer: currency_b,
             currency_merc: currency_m,
-            lines,
         })
     }
 } // end of impl RefundReqResolutionModel
 
 impl RefundReqResolutionModel {
-    pub(crate) fn update_req(&self, _cmplt_req: &mut RefundCompletionReqDto) {}
+    #[rustfmt::skip]
+    pub fn reduce_resolved(
+        &self, merchant_id: u32, req: RefundCompletionReqDto,
+    ) -> RefundCompletionReqDto {
+        let reduced_lines = req.lines.into_iter()
+            .filter_map(|mut rline| {
+                let result = self.get_status(
+                    merchant_id, rline.product_type.clone(),
+                    rline.product_id, rline.time_issued,
+                );
+                if let Some((rslv_rej, rslv_amt)) = result {
+                    rline.reject.iter_mut()
+                        .map(|(k, v0)| {
+                            let v1 = rslv_rej.inner_map().get(k).unwrap_or(&0u32);
+                            *v0 -= *v1; // TODO, verify correct number of rejected items
+                        })
+                        .count();
+                    rline.approval.quantity -= rslv_amt.curr_round().qty;
+                    rline.approval.amount_total = {
+                        let s = rline.approval.amount_total.as_str();
+                        let mut req_amt_tot = Decimal::from_str(s).unwrap();
+                        req_amt_tot -= rslv_amt.curr_round().total;
+                        assert!(req_amt_tot >= Decimal::ZERO);
+                        req_amt_tot.to_string()
+                    };
+                    if rline.total_qty() > 0 { Some(rline) } else { None }
+                } else {
+                    Some(rline)
+                }
+            }).collect::<Vec<_>>();
+        RefundCompletionReqDto { lines: reduced_lines }
+    } // end of fm reduce_resolved
 
     pub(crate) fn to_chargeline_map(_reqs: &[Self]) -> ChargeLineBuyerMap {
         HashMap::new()
     }
+
     #[rustfmt::skip]
     pub fn get_status(
         &self, merchant_id: u32, product_type: ProductType,

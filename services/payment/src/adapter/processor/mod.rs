@@ -56,7 +56,6 @@ pub trait AbstractPaymentProcessor: Send + Sync {
 
     async fn refund(
         &self,
-        charge_m: ChargeBuyerModel,
         resolve_m: RefundReqResolutionModel,
     ) -> Result<RefundReqResolutionModel, AppProcessorError>;
 } // end of trait AbstractPaymentProcessor
@@ -334,7 +333,6 @@ impl AbstractPaymentProcessor for AppProcessorContext {
 
     async fn refund(
         &self,
-        _charge_m: ChargeBuyerModel,
         _resolve_m: RefundReqResolutionModel,
     ) -> Result<RefundReqResolutionModel, AppProcessorError> {
         Err(AppProcessorError {

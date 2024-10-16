@@ -182,6 +182,11 @@ pub type AppRefundRslvReqOkReturn = Vec<Result<RefundReqResolutionModel, AppProc
 
 pub type AppRefundRslvReqCbReturn = Result<AppRefundRslvReqOkReturn, AppRepoErrorDetail>;
 
+// Note / CAUTION
+// It is extremely difficult to manage several references to other types
+// outside the repo struct and each with different lifetime annotations.
+// To keep design simple, only one reference is allowed in this function
+// pointer type
 pub type AppRefundRslvReqCallback<'a> =
     fn(
         &'a mut OrderRefundModel,

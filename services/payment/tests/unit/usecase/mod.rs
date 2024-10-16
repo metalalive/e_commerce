@@ -402,7 +402,6 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
     }
     async fn refund(
         &self,
-        _charge_m: ChargeBuyerModel,
         resolve_m: RefundReqResolutionModel,
     ) -> Result<RefundReqResolutionModel, AppProcessorError> {
         let mut g = self._refund_error_trigger.lock().unwrap();

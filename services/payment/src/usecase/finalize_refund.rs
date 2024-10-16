@@ -132,11 +132,13 @@ impl<'a> FinalizeRefundUseCase<'a> {
         for charge_m in charge_ms {
             let arg = (merchant_id, &charge_m, &cmplt_req);
             let resolve_m = RefundReqResolutionModel::try_from(arg).unwrap();
-            let result = processor.refund(charge_m, resolve_m).await;
-            if let Ok(resolve_m) = &result {
+            let result = processor.refund(resolve_m).await;
+            cmplt_req = if let Ok(resolve_m) = &result {
                 let _num_updated = refund_m.update(resolve_m);
-                resolve_m.update_req(&mut cmplt_req);
-            }
+                resolve_m.reduce_resolved(merchant_id, cmplt_req)
+            } else {
+                cmplt_req
+            };
             out.push(result);
             if cmplt_req.lines.is_empty() {
                 break;

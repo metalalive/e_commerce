@@ -252,6 +252,9 @@ impl RefundCompletionOlineReqDto {
     pub(crate) fn total_qty_rejected(&self) -> u32 {
         self.reject.values().sum()
     }
+    pub(crate) fn total_qty(&self) -> u32 {
+        self.total_qty_rejected() + self.approval.quantity
+    }
 }
 
 #[derive(Serialize)]

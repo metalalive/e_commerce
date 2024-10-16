@@ -397,5 +397,51 @@ fn update_refund_req_ok() {
     assert!(result.is_err());
 } // end of fn update_refund_req_ok
 
+#[rustfmt::skip]
 #[test]
-fn update_cmplt_req_dto_ok() {}
+fn reduce_cmplt_req_dto_ok() {
+    let mock_buyer_id = 9802u32;
+    let mock_merchant_id = 37u32;
+    let time_now = Local::now().to_utc();
+    let mock_cmplt_req = {
+        let lines = vec![
+            (982, ProductType::Package, 41, 8355, 5, 0, 0),
+            (982, ProductType::Package, 113, 18381, 11, 0, 1),
+            (999, ProductType::Item, 144, 0, 0, 3, 0),
+            (999, ProductType::Package, 62, 29997, 9, 0, 0),
+        ];
+        ut_setup_refund_cmplt_dto(time_now, lines)
+    };
+    let charge_rawlines = vec![
+        (
+            mock_merchant_id, ProductType::Package, 982u64,
+            (1671i64, 1u32), (20052i64, 1u32), 12u32,
+            (0i64, 0u32), (0i64, 0u32), 0u32,
+        ),
+        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0),
+        (mock_merchant_id, ProductType::Item, 999, (1900, 1), (9500, 1), 5, (0, 0), (0, 0), 0),
+        (mock_merchant_id, ProductType::Package, 603, (990, 1), (2990, 1), 3, (0, 0), (0, 0), 0),
+        (mock_merchant_id, ProductType::Package, 999, (3333, 1), (6666, 1), 2, (0, 0), (0, 0), 0),
+    ];
+    let mock_charge_m =
+        ut_setup_buyer_charge_inner(time_now, mock_merchant_id, mock_buyer_id, charge_rawlines);
+    let arg = (mock_merchant_id, &mock_charge_m, &mock_cmplt_req);
+    let resolve_m = RefundReqResolutionModel::try_from(arg).unwrap();
+    let mock_cmplt_req = resolve_m.reduce_resolved(mock_merchant_id, mock_cmplt_req);
+    assert_eq!(mock_cmplt_req.lines.len(), 2);
+    [
+        (982, ProductType::Package, 113, 4, "668.4"),
+        (999, ProductType::Package, 62, 7, "2333.1"),
+    ].into_iter()
+    .map(|d| {
+        let t_req = time_now - Duration::minutes(d.2);
+        let result = mock_cmplt_req.lines.iter()
+            .find(|v| v.product_type == d.1 && v.product_id == d.0 && v.time_issued == t_req);
+        let rline = result.unwrap();
+        assert_eq!(rline.approval.quantity, d.3);
+        assert_eq!(rline.approval.amount_total.as_str(), d.4);
+        assert_eq!(rline.reject.get(&RefundRejectReasonDto::Damaged).unwrap_or(&0u32), &0u32);
+        assert_eq!(rline.reject.get(&RefundRejectReasonDto::Fraudulent).unwrap_or(&0u32), &0u32);
+    })
+    .count();
+} // end of fn reduce_cmplt_req_dto_ok
