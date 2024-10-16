@@ -32,13 +32,13 @@ fn _ut_setup_buyer_charge(
         s.session_state = StripeSessionStatusModel::open;
     }
     let data_lines = vec![
-        (3034, ProductType::Package, 602, (9028,2), (36112,2), 4, (0,0), (0,0), 0),
-        (8299, ProductType::Item, 351, (551,1), (1102,1), 2, (0,0), (0,0), 0),
-        (2615, ProductType::Item, 90040, (82,0), (246,0), 3, (0,0), (0,0), 0),
-        (8299, ProductType::Item, 479, (839,1), (5873,1), 7, (0,0), (0,0), 0),
-        (2615, ProductType::Package, 961, (1946,2), (21406,2), 11, (0,0), (0,0), 0),
-        (8299, ProductType::Package, 961, (118,0), (236,0), 2, (0,0), (0,0), 0),
-    ];
+        (3034, ProductType::Package, 602, (9028,2), (36112,2), 4, (0,0), (0,0), 0, 0),
+        (8299, ProductType::Item, 351, (551,1), (1102,1), 2, (0,0), (0,0), 0, 0),
+        (2615, ProductType::Item, 90040, (82,0), (246,0), 3, (0,0), (0,0), 0, 0),
+        (8299, ProductType::Item, 479, (839,1), (5873,1), 7, (0,0), (0,0), 0, 0),
+        (2615, ProductType::Package, 961, (1946,2), (21406,2), 11, (0,0), (0,0), 0, 0),
+        (8299, ProductType::Package, 961, (118,0), (236,0), 2, (0,0), (0,0), 0, 0),
+    ]; // TODO, verify read / write refund fields
     let currency_map = ut_setup_currency_snapshot(vec![owner, 8299, 3034, 2615]);
     ut_setup_buyer_charge(
         owner, create_time, oid, state,
@@ -68,7 +68,7 @@ fn ut_verify_all_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
     loaded_lines
         .into_iter()
         .map(|v| {
-            let (pid, amt_orig, amt_rfd) = v.into_parts();
+            let (pid, amt_orig, amt_rfd, num_rej) = v.into_parts();
             let BaseProductIdentity {
                 store_id,
                 product_type,
@@ -91,6 +91,7 @@ fn ut_verify_all_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
             assert_eq!(amt_rfd.qty, 0u32); // TODO, verify amount refunded
             assert_eq!(amt_rfd.unit, amt_orig.unit);
             assert_eq!(amt_rfd.total, Decimal::ZERO);
+            assert_eq!(num_rej, 0u32);
         })
         .count();
 } // end of fn ut_verify_all_lines
@@ -170,7 +171,7 @@ fn ut_verify_specific_merchant_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
     loaded_lines
         .into_iter()
         .map(|v| {
-            let (pid, amt_orig, amt_rfd) = v.into_parts();
+            let (pid, amt_orig, amt_rfd, num_rej) = v.into_parts();
             let BaseProductIdentity {
                 store_id,
                 product_type,
@@ -189,6 +190,7 @@ fn ut_verify_specific_merchant_lines(loaded_lines: Vec<ChargeLineBuyerModel>) {
             assert_eq!(amt_rfd.qty, 0u32); // TODO, verify amount refunded
             assert_eq!(amt_rfd.unit, amt_orig.unit);
             assert_eq!(amt_rfd.total, Decimal::ZERO);
+            assert_eq!(num_rej, 0u32);
         })
         .count();
 }

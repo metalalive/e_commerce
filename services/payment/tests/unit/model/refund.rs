@@ -12,9 +12,9 @@ use payment::api::web::dto::{
     RefundRejectReasonDto,
 };
 use payment::model::{
-    BuyerPayInState, Charge3partyModel, ChargeBuyerModel, OrderCurrencySnapshot, OrderRefundModel,
-    PayLineAmountError, RefundErrorParseOline, RefundModelError, RefundReqResolutionModel,
-    StripeCheckoutPaymentStatusModel,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerModel, ChargeRefundMap, OrderCurrencySnapshot,
+    OrderRefundModel, PayLineAmountError, RefundErrorParseOline, RefundModelError,
+    RefundReqResolutionModel, StripeCheckoutPaymentStatusModel,
 };
 
 use super::{ut_default_charge_method_stripe, ut_setup_buyer_charge, UTestChargeLineRawData};
@@ -28,6 +28,7 @@ fn ut_setup_olines_refund_dto(time_base: DateTime<Utc>) -> Vec<OrderLineReplicaR
         (37, 982, ProductType::Package, 113, 1671, 5013, 3),
         (50, 982, ProductType::Item, 51, 2222, 15554, 7),
         (50, 591, ProductType::Package, 54, 805, 7245, 9),
+        (37, 603, ProductType::Package, 51,  990, 1980, 2),
         (37, 999, ProductType::Item, 144, 1900, 9500, 5),
         (37, 999, ProductType::Package, 62, 3333, 36663, 11),
     ]
@@ -249,11 +250,11 @@ fn create_resolution_model_ok() {
         ut_setup_refund_cmplt_dto(time_now, lines)
     };
     let charge_rawlines = vec![
-        (mock_merchant_id, ProductType::Package, 982u64, (1671i64, 1u32), (20052i64, 1u32), 12u32,
-         (0i64, 0u32), (0i64, 0u32), 0u32),
-        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0),
-        (mock_merchant_id, ProductType::Item, 999, (1900, 1), (9500, 1), 5, (1900, 1), (3800, 1), 2),
-        (mock_merchant_id, ProductType::Package, 603, (990, 1), (2990, 1), 3, (0, 0), (0, 0), 0),
+        (mock_merchant_id, ProductType::Package, 982u64, (1671i64, 1u32), (28407i64, 1u32), 17u32,
+         (0i64, 0u32), (0i64, 0u32), 0u32, 5u32),
+        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0, 0),
+        (mock_merchant_id, ProductType::Item, 999, (1900, 1), (11400, 1), 6, (1900, 1), (3800, 1), 2, 1),
+        (mock_merchant_id, ProductType::Package, 603, (990, 1), (2990, 1), 3, (0, 0), (0, 0), 0, 1),
     ];
     let mock_charge_m = ut_setup_buyer_charge_inner(
         time_now, mock_merchant_id, mock_buyer_id, charge_rawlines
@@ -315,9 +316,9 @@ fn create_resolution_model_err() {
         (
             mock_merchant_ids[0], ProductType::Package, 982u64,
             (1671i64, 1u32), (20052i64, 1u32), 12u32,
-            (0i64, 0u32), (0i64, 0u32), 0u32,
+            (0i64, 0u32), (0i64, 0u32), 0u32, 0u32,
         ),
-        (mock_merchant_ids[0], ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0),
+        (mock_merchant_ids[0], ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0, 0),
     ];
     let mock_charge_m = ut_setup_buyer_charge_inner(
         time_now,
@@ -356,11 +357,11 @@ fn update_refund_req_ok() {
     };
     let charge_rawlines = vec![
         (mock_merchant_id, ProductType::Package, 982u64, (1671i64, 1u32), (20052i64, 1u32), 12u32,
-         (0i64, 0u32), (0i64, 0u32), 0u32),
-        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0),
-        (mock_merchant_id, ProductType::Item, 999, (1900, 1), (9500, 1), 5, (0, 0), (0, 0), 0),
-        (mock_merchant_id, ProductType::Package, 603, (990, 1), (2990, 1), 3, (0, 0), (0, 0), 0),
-        (mock_merchant_id, ProductType::Package, 999, (3333, 1), (36663, 1), 11, (0, 0), (0, 0), 0),
+         (0i64, 0u32), (0i64, 0u32), 0u32, 0u32),
+        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0, 0),
+        (mock_merchant_id, ProductType::Item, 999, (1900, 1), (9500, 1), 5, (0, 0), (0, 0), 0, 0),
+        (mock_merchant_id, ProductType::Package, 603, (990, 1), (2970, 1), 3, (0, 0), (0, 0), 0, 1),
+        (mock_merchant_id, ProductType::Package, 999, (3333, 1), (43329, 1), 13, (0, 0), (0, 0), 0, 2),
     ];
     let mock_charge_m = ut_setup_buyer_charge_inner(
         time_now, mock_merchant_id, mock_buyer_id, charge_rawlines
@@ -378,6 +379,7 @@ fn update_refund_req_ok() {
             (982, ProductType::Package, 113, 1671, 1, 0, 0),
             (999, ProductType::Item, 144, 3800, 2, 0, 0),
             (999, ProductType::Package, 62, 33330, 10, 0, 0),
+            (603, ProductType::Package, 51, 1980, 2, 0, 0),
         ];
         ut_setup_refund_cmplt_dto(time_now, lines)
     };
@@ -416,12 +418,12 @@ fn reduce_cmplt_req_dto_ok() {
         (
             mock_merchant_id, ProductType::Package, 982u64,
             (1671i64, 1u32), (20052i64, 1u32), 12u32,
-            (0i64, 0u32), (0i64, 0u32), 0u32,
+            (0i64, 0u32), (0i64, 0u32), 0u32, 0u32,
         ),
-        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0),
-        (mock_merchant_id, ProductType::Item, 999, (1900, 1), (9500, 1), 5, (0, 0), (0, 0), 0),
-        (mock_merchant_id, ProductType::Package, 603, (990, 1), (2990, 1), 3, (0, 0), (0, 0), 0),
-        (mock_merchant_id, ProductType::Package, 999, (3333, 1), (6666, 1), 2, (0, 0), (0, 0), 0),
+        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0, 0),
+        (mock_merchant_id, ProductType::Item, 999, (1900, 1), (9500, 1), 5, (0, 0), (0, 0), 0, 0),
+        (mock_merchant_id, ProductType::Package, 603, (990, 1), (2990, 1), 3, (0, 0), (0, 0), 0, 0),
+        (mock_merchant_id, ProductType::Package, 999, (3333, 1), (6666, 1), 2, (0, 0), (0, 0), 0, 0),
     ];
     let mock_charge_m =
         ut_setup_buyer_charge_inner(time_now, mock_merchant_id, mock_buyer_id, charge_rawlines);
@@ -445,3 +447,82 @@ fn reduce_cmplt_req_dto_ok() {
     })
     .count();
 } // end of fn reduce_cmplt_req_dto_ok
+
+#[rustfmt::skip]
+#[test]
+fn resolution_to_charge_map() {
+    let mock_buyer_id = 9802u32;
+    let mock_merchant_id = 37u32;
+    let time_now = Local::now().to_utc();
+    
+    let charge0_rawlines = vec![
+        (mock_merchant_id, ProductType::Package, 982u64, (1671i64, 1u32), (20052i64, 1u32), 12u32,
+            (0i64, 0u32), (0i64, 0u32), 0u32, 0u32),
+        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (1650, 1), (4950, 1), 3, 4),
+        (mock_merchant_id, ProductType::Package, 918, (5566, 1), (5566, 1), 1, (0, 0), (0, 0), 0, 0),
+    ];
+    let charge1_rawlines = vec![
+        (mock_merchant_id, ProductType::Package, 982u64, (1671i64, 1u32), (16710i64, 1u32), 10u32,
+            (1671i64, 1u32), (3342i64, 1u32), 2u32, 0u32),
+        (mock_merchant_id, ProductType::Item, 983, (1650, 1), (29700, 1), 18, (0, 0), (0, 0), 0, 1),
+    ];
+    let mock_charge_ms = [
+        ut_setup_buyer_charge_inner(
+            time_now - Duration::hours(1), mock_merchant_id,
+            mock_buyer_id, charge0_rawlines
+        ),
+        ut_setup_buyer_charge_inner(
+            time_now - Duration::hours(2), mock_merchant_id,
+            mock_buyer_id, charge1_rawlines
+        ),
+    ];
+    
+    let mock_cmplt_req0 = {
+        let lines = vec![
+            (982, ProductType::Package, 41,  6684, 4, 0, 0),
+            (982, ProductType::Package, 113, 5013, 3, 0, 0),
+            (983, ProductType::Item, 144, 0, 0, 1, 3),
+            (983, ProductType::Item, 62, 3300, 2, 0, 1),
+        ];
+        ut_setup_refund_cmplt_dto(time_now - Duration::minutes(20), lines)
+    };
+    let mock_cmplt_req1 = {
+        let lines = vec![
+            (982, ProductType::Package, 136, 1671, 1, 1, 1),
+            (982, ProductType::Package, 126, 3342, 2, 1, 1),
+            (983, ProductType::Item, 154, 1650, 1, 0, 0),
+            (983, ProductType::Item, 162, 8250, 5, 1, 0),
+        ];
+        ut_setup_refund_cmplt_dto(time_now - Duration::minutes(15), lines)
+    };
+
+    let arg = (mock_merchant_id, &mock_charge_ms[0], &mock_cmplt_req0);
+    let resolve_m0 = RefundReqResolutionModel::try_from(arg).unwrap();
+    let arg = (mock_merchant_id, &mock_charge_ms[1], &mock_cmplt_req1);
+    let resolve_m1 = RefundReqResolutionModel::try_from(arg).unwrap();
+
+    let rfd_rslv_ms = [resolve_m0, resolve_m1];
+    let actual_map = ChargeRefundMap::build(&rfd_rslv_ms);
+    let actual_map = actual_map.into_inner();
+
+    [
+        (0, 2, 982, ProductType::Package, 7, "167.1", "1169.7", 0),
+        (0, 2, 983, ProductType::Item,    5, "165.0", "825.0", 9),
+        (1, 2, 982, ProductType::Package, 5, "167.1", "835.5", 4),
+        (1, 2, 983, ProductType::Item,    6, "165.0", "990.0", 2),
+    ].into_iter()
+        .map(|d| {
+            let charge_id = (mock_buyer_id, mock_charge_ms[d.0].meta.create_time().clone());
+            let inner_map = actual_map.get(&charge_id).unwrap();
+            assert_eq!(inner_map.len(), d.1);
+            let pid_key = BaseProductIdentity {
+                store_id: mock_merchant_id, product_type: d.3, product_id: d.2
+            };
+            let entry = inner_map.get(&pid_key).unwrap();
+            assert_eq!(entry.0.qty, d.4);
+            assert_eq!(entry.0.unit.to_string().as_str(), d.5);
+            assert_eq!(entry.0.total.to_string().as_str(), d.6);
+            assert_eq!(entry.1, d.7); // num rejrected so far
+        })
+        .count();
+} // end of fn resolution_to_charge_map

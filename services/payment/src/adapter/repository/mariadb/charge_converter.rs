@@ -187,7 +187,7 @@ impl From<(u32, String, Vec<ChargeLineBuyerModel>)> for InsertChargeLinesArgs {
         let params = lines
             .into_iter()
             .map(|line| {
-                let (pid, amount_orig, _amount_refunded) = line.into_parts();
+                let (pid, amount_orig, _amount_refunded, _num_rejected) = line.into_parts();
                 // TODO, add relevant columns, save `amount_refunded` to table
                 let BaseProductIdentity {
                     store_id,
@@ -423,7 +423,8 @@ impl TryFrom<ChargeLineRowType> for ChargeLineBuyerModel {
         };
         // TODO, add relevant table columns, load it from DB, convert to amount-refunded field
         let amount_refunded = PayLineAmountModel::default();
-        let out = Self::from((pid, amount_orig, amount_refunded));
+        let num_rejected = 0u32;
+        let out = Self::from((pid, amount_orig, amount_refunded, num_rejected));
         Ok(out)
     }
 }

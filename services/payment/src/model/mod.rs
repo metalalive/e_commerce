@@ -13,8 +13,8 @@ use ecommerce_common::api::dto::{CurrencyDto, PayAmountDto};
 use crate::api::web::dto::StoreOnboardReqDto;
 
 pub use self::charge::{
-    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerMap,
-    ChargeLineBuyerModel, ChargeToken,
+    BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
+    ChargeLineBuyerModel, ChargeRefundMap, ChargeToken,
 };
 pub use self::external_processor::{
     Charge3partyStripeModel, Merchant3partyStripeModel, Payout3partyStripeModel,
@@ -27,6 +27,7 @@ pub use self::order_replica::{
 };
 pub(crate) use self::payout::PayoutInnerModel;
 pub use self::payout::{Payout3partyModel, PayoutAmountModel, PayoutModel, PayoutModelError};
+use self::refund::RefundLineReqResolutionModel;
 pub use self::refund::{
     OLineRefundModel, OrderRefundModel, RefundErrorParseOline, RefundLineQtyRejectModel,
     RefundLineResolveAmountModel, RefundModelError, RefundReqResolutionModel,

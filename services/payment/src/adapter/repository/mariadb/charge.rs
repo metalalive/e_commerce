@@ -16,7 +16,7 @@ use ecommerce_common::model::order::BillingModel;
 
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
 use crate::model::{
-    ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerMap, ChargeLineBuyerModel, Label3party,
+    ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, ChargeRefundMap, Label3party,
     OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet, PayoutAmountModel, PayoutModel,
 };
 
@@ -364,7 +364,7 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         }
     } // end of fn update_charge_progress
 
-    async fn update_lines_refund(&self, _cl_map: ChargeLineBuyerMap) -> Result<(), AppRepoError> {
+    async fn update_lines_refund(&self, _cl_map: ChargeRefundMap) -> Result<(), AppRepoError> {
         Err(AppRepoError {
             fn_label: AppRepoErrorFnLabel::UpdateChargeLinesRefund,
             code: AppErrorCode::NotImplemented,

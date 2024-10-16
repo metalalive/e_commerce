@@ -15,7 +15,8 @@ use ecommerce_common::model::BaseProductIdentity;
 
 use super::{
     Charge3partyStripeModel, OrderCurrencySnapshot, OrderLineModel, OrderLineModelSet,
-    PayLineAmountModel, PayoutAmountModel, PayoutModelError,
+    PayLineAmountModel, PayoutAmountModel, PayoutModelError, RefundLineReqResolutionModel,
+    RefundReqResolutionModel,
 };
 use crate::api::web::dto::{
     ChargeAmountOlineDto, ChargeOlineErrorDto, ChargeRefreshRespDto, ChargeReqOrderDto,
@@ -62,9 +63,11 @@ pub struct ChargeLineBuyerModel {
     // the amount to charge in buyer's currency,
     amount_orig: PayLineAmountModel,
     amount_refunded: PayLineAmountModel,
+    num_rejected: u32, // num of rejected items without reasons
 }
 
-pub type ChargeLineBuyerMap = HashMap<(u32, Decimal), Vec<ChargeLineBuyerModel>>;
+type ChargeRefundLineMap = HashMap<BaseProductIdentity, (PayLineAmountModel, u32)>;
+pub struct ChargeRefundMap(HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap>);
 
 pub struct ChargeBuyerMetaModel {
     _owner: u32,
@@ -223,7 +226,7 @@ impl From<ChargeLineBuyerModel> for OrderLinePaidUpdateDto {
     #[rustfmt::skip]
     fn from(value: ChargeLineBuyerModel) -> Self {
         let ChargeLineBuyerModel {
-            pid, amount_orig, amount_refunded: _
+            pid, amount_orig, amount_refunded: _, num_rejected: _
         } = value;
         let BaseProductIdentity { store_id, product_type, product_id } = pid;
         Self { seller_id: store_id, product_id, product_type, qty: amount_orig.qty }
@@ -332,6 +335,64 @@ impl ChargeBuyerModel {
         PayoutAmountModel::try_from(args)
     }
 } // end of impl ChargeBuyerModel
+
+impl Default for ChargeRefundMap {
+    fn default() -> Self {
+        Self(HashMap::new())
+    }
+}
+impl ChargeRefundMap {
+    fn get_mut(&mut self, cid: (u32, DateTime<Utc>)) -> &mut ChargeRefundLineMap {
+        if !self.0.contains_key(&cid) {
+            let v = HashMap::new();
+            let _old = self.0.insert(cid, v);
+        }
+        self.0.get_mut(&cid).unwrap()
+    }
+
+    pub fn into_inner(self) -> HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap> {
+        self.0
+    }
+
+    pub fn build(rfd_rslv_ms: &[RefundReqResolutionModel]) -> Self {
+        let mut out = Self::default();
+        rfd_rslv_ms
+            .iter()
+            .map(|rslv_m| {
+                let charge_id = rslv_m.charge_id();
+                let inner_map = out.get_mut(charge_id);
+                Self::merge(inner_map, rslv_m.lines())
+            })
+            .count();
+        out
+    } // end of fn to_chargeline_map
+
+    fn merge(
+        inner_map: &mut ChargeRefundLineMap,
+        rlines: &[RefundLineReqResolutionModel],
+    ) -> usize {
+        rlines
+            .iter()
+            .map(|rline| {
+                let k = rline.pid();
+                if !inner_map.contains_key(k) {
+                    let prev_rounds = rline.amount().accumulated();
+                    let mut v_amt = PayLineAmountModel::default();
+                    v_amt.unit = prev_rounds.0.unit;
+                    v_amt.total = prev_rounds.0.total;
+                    v_amt.qty = prev_rounds.0.qty;
+                    let v = (v_amt, prev_rounds.1);
+                    let _old = inner_map.insert(k.clone(), v);
+                }
+                let entry = inner_map.get_mut(k).unwrap();
+                let curr_round = rline.amount().curr_round();
+                entry.0.total += curr_round.total;
+                entry.0.qty += curr_round.qty;
+                entry.1 += rline.num_rejected();
+            })
+            .count()
+    }
+} // end of impl ChargeRefundMap
 
 impl TryFrom<Vec<u8>> for ChargeToken {
     type Error = (AppErrorCode, String);
@@ -531,7 +592,7 @@ impl
                 Err(e)
             } else {
                 let amount_refunded = PayLineAmountModel::default();
-                Ok(Self {pid: pid_req, amount_orig, amount_refunded})
+                Ok(Self {pid: pid_req, amount_orig, amount_refunded, num_rejected: 0})
             }
         } else {
             e.not_exist = true;
@@ -541,16 +602,18 @@ impl
 } // end of impl TryFrom for ChargeLineBuyerModel
 
 #[rustfmt::skip]
-impl From<(BaseProductIdentity, PayLineAmountModel, PayLineAmountModel)> for ChargeLineBuyerModel
+type ChargeLineBuyerArgs = (BaseProductIdentity, PayLineAmountModel, PayLineAmountModel, u32);
+
+#[rustfmt::skip]
+impl From<ChargeLineBuyerArgs> for ChargeLineBuyerModel
 {
-    fn from(value: (BaseProductIdentity, PayLineAmountModel, PayLineAmountModel)) -> Self
-    {
-        let (pid, amount_orig, mut amount_refunded ) = value;
+    fn from(value: ChargeLineBuyerArgs) -> Self {
+        let (pid, amount_orig, mut amount_refunded, num_rejected) = value;
         assert!(amount_orig.unit > Decimal::ZERO);
         assert!(amount_orig.total > Decimal::ZERO);
         assert!(amount_orig.qty > 0u32);
         amount_refunded.unit = amount_orig.unit;
-        Self { pid, amount_orig, amount_refunded }
+        Self { pid, amount_orig, amount_refunded, num_rejected }
     }
 }
 
@@ -561,18 +624,26 @@ impl ChargeLineBuyerModel {
     pub(super) fn amount_refunded(&self) -> &PayLineAmountModel {
         &self.amount_refunded
     }
+    pub(super) fn num_rejected(&self) -> u32 {
+        self.num_rejected
+    }
     #[rustfmt::skip]
     pub(super) fn amount_remain(&self) -> PayLineAmountModel {
         let orig = self.amount_orig();
         let refunded = self.amount_refunded();
         assert_eq!(orig.unit, refunded.unit);
-        let qty = orig.qty.saturating_sub(refunded.qty);
-        let total = orig.total.saturating_sub(refunded.total);
+        assert!(orig.qty >= self.num_rejected);
+        assert!(orig.qty >= refunded.qty);
+        let tot_amt_rejected = Decimal::new(self.num_rejected as i64, 0) * orig.unit;
+        let qty = orig.qty.saturating_sub(refunded.qty)
+            .saturating_sub(self.num_rejected);
+        let total = orig.total.saturating_sub(refunded.total)
+            .saturating_sub(tot_amt_rejected);
         PayLineAmountModel { unit: orig.unit, total, qty }
     }
     #[rustfmt::skip]
-    pub fn into_parts(self) -> (BaseProductIdentity, PayLineAmountModel, PayLineAmountModel) {
-        let Self { pid, amount_orig, amount_refunded } = self;
-        (pid, amount_orig, amount_refunded)
+    pub fn into_parts(self) -> ChargeLineBuyerArgs {
+        let Self { pid, amount_orig, amount_refunded, num_rejected } = self;
+        (pid, amount_orig, amount_refunded, num_rejected)
     }
 } // end of impl ChargeLineBuyerModel

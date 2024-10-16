@@ -2,7 +2,7 @@ pub mod order;
 
 use crate::constant::ProductType;
 
-#[derive(Eq, Debug)]
+#[derive(Eq, Debug, Hash)]
 pub struct BaseProductIdentity {
     pub store_id: u32,
     pub product_type: ProductType,

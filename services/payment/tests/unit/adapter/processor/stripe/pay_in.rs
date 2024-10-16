@@ -70,7 +70,8 @@ fn ut_setup_chargebuyer_stripe(
                 qty: d.5,
             };
             let amt_refuned = PayLineAmountModel::default();
-            let arg = (pid, amt_orig, amt_refuned);
+            let num_rejected = 0u32;
+            let arg = (pid, amt_orig, amt_refuned, num_rejected);
             ChargeLineBuyerModel::from(arg)
         })
         .collect();

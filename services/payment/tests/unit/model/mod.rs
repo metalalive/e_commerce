@@ -50,7 +50,7 @@ pub(crate) fn ut_default_charge_method_stripe(t0: &DateTime<Utc>) -> Charge3part
 #[rustfmt::skip]
 pub(crate) type UTestChargeLineRawData = (
     u32, ProductType, u64, (i64, u32), (i64, u32), u32,
-    (i64, u32), (i64, u32), u32
+    (i64, u32), (i64, u32), u32, u32
 );
 
 #[rustfmt::skip]
@@ -90,7 +90,8 @@ pub(crate) fn ut_setup_buyer_charge_lines(
                 total: Decimal::new(dl.7.0, dl.7.1),
                 qty: dl.8,
             };
-            let arg = (pid, amount_orig, amount_refunded);
+            let num_rejected = dl.9;
+            let arg = (pid, amount_orig, amount_refunded, num_rejected);
             ChargeLineBuyerModel::from(arg)
         })
         .collect()

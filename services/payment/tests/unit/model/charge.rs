@@ -56,7 +56,8 @@ fn buyer_convert_ok_1() {
         v.lines
             .into_iter()
             .map(|l| {
-                let (actual_pid, actual_amt_orig, actual_amt_refunded) = l.into_parts();
+                let (actual_pid, actual_amt_orig, actual_amt_refunded, actual_num_rejected) =
+                    l.into_parts();
                 let BaseProductIdentity {
                     store_id,
                     product_type,
@@ -82,6 +83,7 @@ fn buyer_convert_ok_1() {
                 } = actual_amt_refunded;
                 assert_eq!(qty, 0u32);
                 assert!(total.is_zero());
+                assert_eq!(actual_num_rejected, 0u32);
             })
             .count();
     }
@@ -131,7 +133,8 @@ fn buyer_convert_ok_2() {
         v.lines
             .into_iter()
             .map(|l| {
-                let (actual_pid, actual_amt_orig, actual_amt_refunded) = l.into_parts();
+                let (actual_pid, actual_amt_orig, actual_amt_refunded, actual_num_rejected) =
+                    l.into_parts();
                 let BaseProductIdentity {
                     store_id,
                     product_type,
@@ -157,6 +160,7 @@ fn buyer_convert_ok_2() {
                 } = actual_amt_refunded;
                 assert_eq!(qty, 0u32);
                 assert_eq!(total, Decimal::ZERO);
+                assert_eq!(actual_num_rejected, 0u32);
             })
             .count();
     }

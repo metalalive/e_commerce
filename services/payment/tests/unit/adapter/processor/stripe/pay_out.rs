@@ -111,7 +111,7 @@ async fn err_invalid_account() {
         let charge_lines = vec![
             (mock_merchant_id, ProductType::Item, 91038u64,
              (300i64, 0u32), (900i64, 0u32), 3u32,
-             (0i64, 0u32), (0i64, 0u32), 0u32),
+             (0i64, 0u32), (0i64, 0u32), 0u32, 0u32),
         ];
         let paymethod = ut_default_charge_method_stripe(&time_now);
         ut_setup_buyer_charge(

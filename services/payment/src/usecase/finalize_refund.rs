@@ -13,7 +13,7 @@ use crate::adapter::repository::{
     AppRepoError, AppRepoErrorDetail,
 };
 use crate::api::web::dto::{RefundCompletionReqDto, RefundCompletionRespDto};
-use crate::model::{ChargeBuyerModel, OrderRefundModel, RefundReqResolutionModel};
+use crate::model::{ChargeBuyerModel, ChargeRefundMap, OrderRefundModel, RefundReqResolutionModel};
 
 #[derive(Debug)]
 pub enum FinalizeRefundUcError {
@@ -94,11 +94,10 @@ impl<'a> FinalizeRefundUseCase<'a> {
             })
             .count();
 
-        // TODO / FIXME,
-        // - idempotency key implementation
-        let charge_line_map = RefundReqResolutionModel::to_chargeline_map(&rslv_ms);
+        // TODO / FIXME, idempotency key implementation
+        let charge_rfd_map = ChargeRefundMap::build(&rslv_ms);
         repo_ch
-            .update_lines_refund(charge_line_map)
+            .update_lines_refund(charge_rfd_map)
             .await
             .map_err(FinalizeRefundUcError::DataStore)?;
         let o = RefundCompletionRespDto::from(rslv_ms);

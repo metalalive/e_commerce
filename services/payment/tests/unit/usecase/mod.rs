@@ -25,9 +25,9 @@ use payment::adapter::rpc::{
 };
 use payment::api::web::dto::{PaymentMethodReqDto, StoreOnboardReqDto};
 use payment::model::{
-    Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerMap,
-    ChargeLineBuyerModel, Label3party, Merchant3partyModel, MerchantProfileModel,
-    OrderLineModelSet, PayoutModel, RefundReqResolutionModel,
+    Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
+    ChargeRefundMap, Label3party, Merchant3partyModel, MerchantProfileModel, OrderLineModelSet,
+    PayoutModel, RefundReqResolutionModel,
 };
 
 struct MockChargeRepo {
@@ -136,7 +136,7 @@ impl AbstractChargeRepo for MockChargeRepo {
         out
     }
 
-    async fn update_lines_refund(&self, _cl_map: ChargeLineBuyerMap) -> Result<(), AppRepoError> {
+    async fn update_lines_refund(&self, _cl_map: ChargeRefundMap) -> Result<(), AppRepoError> {
         let mut g = self._update_linerefund_result.lock().unwrap();
         let out = g.take().unwrap();
         out

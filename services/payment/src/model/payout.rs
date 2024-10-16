@@ -159,6 +159,9 @@ impl PayoutModel {
     pub fn amount_base(&self) -> Decimal {
         self._inner.amount_base()
     }
+    pub fn amount_buyer(&self) -> Decimal {
+        self._inner.amount_buyer()
+    }
     pub fn thirdparty(&self) -> &Payout3partyModel {
         &self._p3pty
     }

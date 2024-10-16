@@ -14,9 +14,9 @@ use ecommerce_common::model::order::BillingModel;
 use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::api::web::dto::RefundCompletionReqDto;
 use crate::model::{
-    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerMap,
-    ChargeLineBuyerModel, Label3party, Merchant3partyModel, MerchantProfileModel,
-    OrderLineModelSet, OrderRefundModel, PayoutModel, RefundModelError, RefundReqResolutionModel,
+    BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, ChargeRefundMap,
+    Label3party, Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, OrderRefundModel,
+    PayoutModel, RefundModelError, RefundReqResolutionModel,
 };
 
 use self::mariadb::charge::MariadbChargeRepo;
@@ -120,7 +120,7 @@ pub trait AbstractChargeRepo: Sync + Send {
         store_id: u32,
     ) -> Result<Option<ChargeBuyerModel>, AppRepoError>;
 
-    async fn update_lines_refund(&self, cl_map: ChargeLineBuyerMap) -> Result<(), AppRepoError>;
+    async fn update_lines_refund(&self, cl_map: ChargeRefundMap) -> Result<(), AppRepoError>;
 
     /// the method `fetch_payout()` returns payout summary of a specific payment made by client
     /// , which includes total amount that has been transferred to merchant's bank account.

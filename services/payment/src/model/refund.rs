@@ -11,8 +11,8 @@ use ecommerce_common::api::rpc::dto::OrderLineReplicaRefundDto;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::{
-    ChargeBuyerModel, ChargeLineBuyerMap, ChargeLineBuyerModel, OrderCurrencySnapshot,
-    PayLineAmountError, PayLineAmountModel,
+    ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot, PayLineAmountError,
+    PayLineAmountModel,
 };
 use crate::api::web::dto::{
     RefundCompletionOlineReqDto, RefundCompletionReqDto, RefundCompletionRespDto,
@@ -49,13 +49,14 @@ pub struct RefundLineQtyRejectModel(RefundLineRejectDto);
 
 pub struct RefundLineResolveAmountModel {
     // accumulated qty / amount against single line
-    accumulated: PayLineAmountModel,
+    accumulated_paid: PayLineAmountModel,
+    accumulated_rejected: u32, // rejected so far in previous rounds
     curr_round: PayLineAmountModel,
 }
-struct RefundLineReqResolutionModel {
+pub(super) struct RefundLineReqResolutionModel {
     pid: BaseProductIdentity,
     time_req: DateTime<Utc>,
-    qty_reject: RefundLineQtyRejectModel,
+    qty_reject: RefundLineQtyRejectModel, // rejected in current round
     // the amount should be present in buyer's currency
     amount: RefundLineResolveAmountModel,
 }
@@ -139,29 +140,29 @@ impl RefundLineResolveAmountModel {
     pub fn curr_round(&self) -> &PayLineAmountModel {
         &self.curr_round
     }
-    pub fn accumulated(&self) -> &PayLineAmountModel {
-        &self.accumulated
+    pub fn accumulated(&self) -> (&PayLineAmountModel, u32) {
+        (&self.accumulated_paid, self.accumulated_rejected)
     }
     fn accumulate(&self, dst: &mut PayLineAmountModel) {
-        assert_eq!(dst.unit, self.accumulated.unit);
-        let tot_qty = self.accumulated.qty + self.curr_round.qty;
-        let tot_amt = self.accumulated.total + self.curr_round.total;
+        assert_eq!(dst.unit, self.accumulated_paid.unit);
+        let tot_qty = self.accumulated_paid.qty + self.curr_round.qty;
+        let tot_amt = self.accumulated_paid.total + self.curr_round.total;
         dst.qty = tot_qty;
         dst.total = tot_amt;
     } // end of fn accumulate
 } // end of impl RefundLineResolveAmountModel
 
 #[rustfmt::skip]
-impl<'a> From<(&'a PayLineAmountModel, u32, Decimal)> for RefundLineResolveAmountModel {
-    fn from(value: (&'a PayLineAmountModel, u32, Decimal)) -> Self {
-        let (prev_rfd, qty, amt_tot) = value;
-        let accumulated = PayLineAmountModel {
+impl<'a> From<(&'a PayLineAmountModel, u32, u32, Decimal)> for RefundLineResolveAmountModel {
+    fn from(value: (&'a PayLineAmountModel, u32, u32, Decimal)) -> Self {
+        let (prev_rfd, prev_rejected, qty, amt_tot) = value;
+        let accumulated_paid = PayLineAmountModel {
             unit: prev_rfd.unit, total: prev_rfd.total, qty: prev_rfd.qty
         };
         let curr_round = PayLineAmountModel {
             unit: prev_rfd.unit, total: amt_tot, qty
         };
-        Self { accumulated, curr_round }
+        Self { accumulated_paid, accumulated_rejected:prev_rejected, curr_round }
     }
 }
 
@@ -413,6 +414,7 @@ impl RefundLineReqResolutionModel {
         cmplt_req: &'b RefundCompletionReqDto,
     ) -> Vec<Self> {
         let amt_prev_refunded = c.amount_refunded();
+        let num_prev_rejected = c.num_rejected();
         let mut amt_remain = c.amount_remain();
         cmplt_req
             .lines
@@ -426,7 +428,12 @@ impl RefundLineReqResolutionModel {
                     amt_remain.qty -= qty_fetched;
                     amt_remain.total -= tot_amt_fetched;
                 }
-                let arg = (amt_prev_refunded, qty_fetched, tot_amt_fetched);
+                let arg = (
+                    amt_prev_refunded,
+                    num_prev_rejected,
+                    qty_fetched,
+                    tot_amt_fetched,
+                );
                 Self {
                     pid: c.pid.clone(),
                     time_req: r.time_issued,
@@ -442,6 +449,16 @@ impl RefundLineReqResolutionModel {
         let num_rej = self.qty_reject.total_qty();
         let num_aprv = self.amount.curr_round().qty;
         num_rej + num_aprv
+    }
+
+    pub(super) fn pid(&self) -> &BaseProductIdentity {
+        &self.pid
+    }
+    pub(super) fn amount(&self) -> &RefundLineResolveAmountModel {
+        &self.amount
+    }
+    pub(super) fn num_rejected(&self) -> u32 {
+        self.qty_reject.total_qty()
     }
 } // end of impl RefundLineReqResolutionModel
 
@@ -477,6 +494,13 @@ impl<'a, 'b> TryFrom<(u32, &'a ChargeBuyerModel, &'b RefundCompletionReqDto)>
 } // end of impl RefundReqResolutionModel
 
 impl RefundReqResolutionModel {
+    pub(super) fn charge_id(&self) -> (u32, DateTime<Utc>) {
+        (self.buyer_usr_id, self.charged_ctime)
+    }
+    pub(super) fn lines(&self) -> &Vec<RefundLineReqResolutionModel> {
+        &self.lines
+    }
+
     #[rustfmt::skip]
     pub fn reduce_resolved(
         &self, merchant_id: u32, req: RefundCompletionReqDto,
@@ -509,10 +533,6 @@ impl RefundReqResolutionModel {
             }).collect::<Vec<_>>();
         RefundCompletionReqDto { lines: reduced_lines }
     } // end of fm reduce_resolved
-
-    pub(crate) fn to_chargeline_map(_reqs: &[Self]) -> ChargeLineBuyerMap {
-        HashMap::new()
-    }
 
     #[rustfmt::skip]
     pub fn get_status(
