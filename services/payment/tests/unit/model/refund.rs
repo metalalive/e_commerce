@@ -45,7 +45,7 @@ fn ut_setup_olines_refund_dto(time_base: DateTime<Utc>) -> Vec<OrderLineReplicaR
 }
 
 #[rustfmt::skip]
-fn ut_setup_refund_cmplt_dto(
+pub(crate) fn ut_setup_refund_cmplt_dto(
     time_base: DateTime<Utc>,
     raw: Vec<(u64, ProductType, i64, i64, u32, u32, u32)>
 ) -> RefundCompletionReqDto {

@@ -8,14 +8,14 @@ use crate::api::web::dto::ChargeStatusDto;
 
 #[allow(non_camel_case_types)]
 #[rustfmt::skip]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum StripeSessionStatusModel {
     complete, expired, open,
 }
 
 #[allow(non_camel_case_types)]
 #[rustfmt::skip]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum StripeCheckoutPaymentStatusModel {
     no_payment_required, paid, unpaid,
 }
@@ -25,10 +25,8 @@ pub struct Charge3partyStripeModel {
     pub checkout_session_id: String,
     pub session_state: StripeSessionStatusModel,
     pub payment_state: StripeCheckoutPaymentStatusModel,
-    pub payment_intent_id: String,
+    pub payment_intent_id: String, // applied in refund workflow
     pub transfer_group: String, // `transfer-group` field from payment intent object
-    // TODO, consider to discard `payment-intent-id`,
-    // it does not seem useful in this app
     pub expiry: DateTime<Utc>,
 }
 
@@ -155,6 +153,16 @@ impl Charge3partyStripeModel {
     pub(crate) fn amount_represent(orig: Decimal, c: CurrencyDto) -> Result<Decimal, String> {
         stripe_common::amount_represent(orig, c)
             .map_err(|(d, m)| format!("overflow, orig:{d}, multiplier:{m}"))
+    }
+    pub(super) fn inner_clone(&self) -> Self {
+        Self {
+            checkout_session_id: self.checkout_session_id.clone(),
+            session_state: self.session_state.clone(),
+            payment_state: self.payment_state.clone(),
+            payment_intent_id: self.payment_intent_id.clone(),
+            transfer_group: self.transfer_group.clone(),
+            expiry: self.expiry
+        }
     }
 } // end of impl Charge3partyStripeModel
 

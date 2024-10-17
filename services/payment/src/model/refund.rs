@@ -12,7 +12,7 @@ use ecommerce_common::model::BaseProductIdentity;
 
 use super::{
     ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot, PayLineAmountError,
-    PayLineAmountModel,
+    PayLineAmountModel, Charge3partyModel,
 };
 use crate::api::web::dto::{
     RefundCompletionOlineReqDto, RefundCompletionReqDto, RefundCompletionRespDto,
@@ -42,6 +42,7 @@ pub enum RefundModelError {
     },
     MissingReqLine(BaseProductIdentity, DateTime<Utc>),
     MissingCurrency(String, u32),
+    MissingMerchant,
 } // end of enum RefundModelError
 
 // quantities of product items rejected to refund for defined reasons
@@ -61,12 +62,21 @@ pub(super) struct RefundLineReqResolutionModel {
     amount: RefundLineResolveAmountModel,
 }
 
-pub struct RefundReqResolutionModel {
+pub(crate) struct RefundReqRslvInnerModel {
     buyer_usr_id: u32,
     charged_ctime: DateTime<Utc>,
+    // Note
+    // Stripe processor does not beed to convert the amount to other currency,
+    // I still keep the currency snapshots, they might be required by other
+    // 3rd-party processores in future
     currency_buyer: OrderCurrencySnapshot,
     currency_merc: OrderCurrencySnapshot,
     lines: Vec<RefundLineReqResolutionModel>,
+}
+
+pub struct RefundReqResolutionModel {
+    inner: RefundReqRslvInnerModel,
+    chrg3pty: Charge3partyModel,
 }
 
 pub struct OLineRefundModel {
@@ -484,21 +494,68 @@ impl<'a, 'b> TryFrom<(u32, &'a ChargeBuyerModel, &'b RefundCompletionReqDto)>
             .filter(|c| c.pid.store_id == merchant_id)
             .map(|c| RefundLineReqResolutionModel::to_vec(c, cmplt_req))
             .flatten().collect::<Vec<_>>();
-        Ok(Self {
-            buyer_usr_id, lines,
-            charged_ctime: *charge_m.meta.create_time(),
-            currency_buyer: currency_b,
-            currency_merc: currency_m,
-        })
+        let inner = RefundReqRslvInnerModel {
+            buyer_usr_id, lines, charged_ctime: *charge_m.meta.create_time(),
+            currency_buyer: currency_b, currency_merc: currency_m,
+        };
+        let chrg3pty = charge_m.meta.method_3party().clone();
+        Ok(Self {chrg3pty, inner})
     }
 } // end of impl RefundReqResolutionModel
 
-impl RefundReqResolutionModel {
+impl RefundReqRslvInnerModel {
     pub(super) fn charge_id(&self) -> (u32, DateTime<Utc>) {
         (self.buyer_usr_id, self.charged_ctime)
     }
     pub(super) fn lines(&self) -> &Vec<RefundLineReqResolutionModel> {
         &self.lines
+    }
+    pub(crate) fn currency(&self) -> [&OrderCurrencySnapshot; 2] {
+        [&self.currency_buyer, &self.currency_merc]
+    }
+    pub(crate) fn merchant_id(&self) -> Result<u32, RefundModelError> {
+        self.lines.first().map(|v| v.pid().store_id)
+            .ok_or(RefundModelError::MissingMerchant)
+    }
+    pub(crate) fn total_amount_curr_round(&self) -> Decimal {
+        // total amount for current round in buyer's currency
+        self.lines().iter()
+            .map(|v| v.amount().curr_round().total)
+            .sum::<Decimal>()
+    }
+    #[rustfmt::skip]
+    fn get_status(
+        &self, merchant_id: u32, product_type: ProductType,
+        product_id: u64, time_req: DateTime<Utc>,
+    ) -> Option<(&RefundLineQtyRejectModel, &RefundLineResolveAmountModel)> {
+        let key = BaseProductIdentity {
+            store_id: merchant_id ,product_type,product_id
+        };
+        self.lines.iter()
+            .find(|v| v.pid == key && time_req == v.time_req)
+            .map(|v| (&v.qty_reject, &v.amount))
+    }
+} // end of impl RefundReqRslvInnerModel
+
+impl RefundReqResolutionModel {
+    pub(super) fn charge_id(&self) -> (u32, DateTime<Utc>) {
+        self.inner.charge_id()
+    }
+    pub(super) fn lines(&self) -> &Vec<RefundLineReqResolutionModel> {
+        self.inner.lines()
+    }
+    pub fn currency(&self) -> [&OrderCurrencySnapshot; 2] {
+        self.inner.currency()
+    }
+    pub(crate) fn into_parts(self) -> (RefundReqRslvInnerModel, Charge3partyModel) {
+        let Self { inner, chrg3pty } = self;
+        (inner, chrg3pty)
+    }
+    pub(crate) fn from_parts(
+        inner: RefundReqRslvInnerModel,
+        chrg3pty: Charge3partyModel
+    ) -> Self {
+        Self {inner, chrg3pty}
     }
 
     #[rustfmt::skip]
@@ -539,12 +596,7 @@ impl RefundReqResolutionModel {
         &self, merchant_id: u32, product_type: ProductType,
         product_id: u64, time_req: DateTime<Utc>,
     ) -> Option<(&RefundLineQtyRejectModel, &RefundLineResolveAmountModel)> {
-        let key = BaseProductIdentity {
-            store_id: merchant_id ,product_type,product_id
-        };
-        self.lines.iter()
-            .find(|v| v.pid == key && time_req == v.time_req)
-            .map(|v| (&v.qty_reject, &v.amount))
+        self.inner.get_status(merchant_id, product_type, product_id, time_req)
     }
 } // end of impl RefundReqResolutionModel
 

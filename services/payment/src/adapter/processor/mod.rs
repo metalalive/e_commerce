@@ -71,7 +71,7 @@ pub enum AppProcessorErrorReason {
     MissingCredential,
     MissingCurrency(u32), // keep user ID that misses the currency snapshot
     CredentialCorrupted,
-    NotSupport,
+    MissingMerchant,
     NotImplemented,
     LowLvlNet(BaseClientError),
     InvalidMethod(String),
@@ -143,7 +143,7 @@ impl From<BaseClientError> for AppProcessorErrorReason {
 impl From<AppProcessorErrorReason> for PaymentMethodErrorReason {
     fn from(value: AppProcessorErrorReason) -> Self {
         match value {
-            AppProcessorErrorReason::NotSupport | AppProcessorErrorReason::NotImplemented => {
+            AppProcessorErrorReason::InvalidMethod(_) | AppProcessorErrorReason::NotImplemented => {
                 Self::OperationRefuse
             }
             _others => Self::ProcessorFailure,
@@ -331,14 +331,22 @@ impl AbstractPaymentProcessor for AppProcessorContext {
             })
     } // end of fn pay_out
 
+    #[rustfmt::skip]
     async fn refund(
-        &self,
-        _resolve_m: RefundReqResolutionModel,
+        &self, rslv_m: RefundReqResolutionModel,
     ) -> Result<RefundReqResolutionModel, AppProcessorError> {
-        Err(AppProcessorError {
-            reason: AppProcessorErrorReason::NotImplemented,
-            fn_label: AppProcessorFnLabel::Refund,
-        })
+        let (r_inner, r_3pt) = rslv_m.into_parts();
+        let result = match r_3pt {
+            Charge3partyModel::Stripe(s0) =>
+                self._stripe.refund(&r_inner, s0).await
+                    .map(|s1| Charge3partyModel::Stripe(s1)),
+            Charge3partyModel::Unknown =>
+                Err(AppProcessorErrorReason::InvalidMethod("unknown".to_string())),
+        };
+        result.map(|r3pty| RefundReqResolutionModel::from_parts(r_inner, r3pty))
+            .map_err(|reason| AppProcessorError {
+                reason, fn_label: AppProcessorFnLabel::Refund,
+            })
     }
 } // end of impl AppProcessorContext
 

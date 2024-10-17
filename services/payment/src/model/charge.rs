@@ -75,7 +75,7 @@ pub struct ChargeBuyerMetaModel {
     _oid: String, // referenced order id
     _state: BuyerPayInState,
     _method: Charge3partyModel,
-} // TODO, new struct function for init , instead of directly accessing the inner fields
+}
 
 pub struct ChargeBuyerModel {
     pub meta: ChargeBuyerMetaModel,
@@ -134,7 +134,13 @@ impl Charge3partyModel {
             Self::Stripe(m) => m.status_dto(),
         }
     }
-}
+    pub(super) fn clone(&self) -> Self {
+        match self {
+            Self::Unknown => Self::Unknown,
+            Self::Stripe(m) => Self::Stripe(m.inner_clone()), 
+        }
+    }
+} // end of impl Charge3partyModel
 
 impl From<&ChargeBuyerMetaModel> for ChargeRefreshRespDto {
     fn from(value: &ChargeBuyerMetaModel) -> Self {

@@ -7,7 +7,7 @@ use std::result::Result;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Local, Utc};
+use chrono::{DateTime, Duration, Local, Utc, DurationRound, TimeDelta};
 use http_body_util::{Empty, Full};
 use hyper::body::Bytes;
 use hyper::header::{HeaderName, HeaderValue};
@@ -24,6 +24,7 @@ use self::resources::{
     AccountLink, AccountRequirement, AccountSettings, CheckoutSession, CheckoutSessionMode,
     ConnectAccount, CreateAccountLink, CreateCheckoutSession, CreateCheckoutSessionLineItem,
     CreateCheckoutSessionPaymentIntentData, CreateConnectAccount, CreateTransfer, Transfer,
+    RefundResult, CreateRefund,
 };
 use super::{
     AppProcessorErrorReason, AppProcessorMerchantResult, AppProcessorPayInResult, BaseClientError,
@@ -35,12 +36,13 @@ use crate::api::web::dto::{
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerModel,
     Merchant3partyModel, Merchant3partyStripeModel, Payout3partyStripeModel, PayoutInnerModel,
-    StripeAccountLinkModel, StripeAccountSettingModel,
+    RefundReqRslvInnerModel, StripeAccountLinkModel, StripeAccountSettingModel,
 };
 
 const HEADER_NAME_IDEMPOTENCY: &str = "Idempotency-Key";
 const CHECKOUT_SESSION_MIN_SECONDS: i64 = 1800;
 const ACCOUNT_LINK_EXPIRY_MIN_DAYS: i64 = 2;
+const REFUND_INTERVAL_MIN_SECONDS: i64 = 75;
 
 #[derive(serde::Serialize)]
 struct InnerEmptyBody;
@@ -75,6 +77,12 @@ pub(super) trait AbstStripeContext: Send + Sync {
         p_inner: &PayoutInnerModel,
         p3pty: Payout3partyStripeModel,
     ) -> Result<Payout3partyStripeModel, AppProcessorErrorReason>;
+    
+    async fn refund(
+        &self,
+        rslv_inner: &RefundReqRslvInnerModel,
+        detail3pty: Charge3partyStripeModel,
+    ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason>;
 } // end of trait AbstStripeContext
 
 pub(super) struct AppProcessorStripeCtx {
@@ -380,6 +388,38 @@ impl AbstStripeContext for AppProcessorStripeCtx {
             Ok(p3pty)
         }
     } // end of fn pay_out
+    
+    async fn refund(
+        &self,
+        rslv_inner: &RefundReqRslvInnerModel,
+        detail3pty: Charge3partyStripeModel,
+    ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason> {
+        let merchant_id = rslv_inner.merchant_id()
+            .map_err(|_e| AppProcessorErrorReason::MissingMerchant)?;
+        let idempotency_key = {
+            let t_now = Local::now().to_utc();
+            let digits = TimeDelta::seconds(REFUND_INTERVAL_MIN_SECONDS) ;
+            let req_time = t_now.duration_trunc(digits)
+                .map_err(|e| AppProcessorErrorReason::CorruptedTimeStamp(
+                        e.to_string(),
+                        t_now.timestamp()
+                    ))?;
+            format!("{}-{}-{}", detail3pty.transfer_group, merchant_id, req_time.to_rfc3339())
+        }; // TODO, improve the idempotency key layout
+        let mut _client = self.init_conn_fullbyte().await?;
+        let req_body = CreateRefund::try_from((rslv_inner, &detail3pty))?;
+        let hdrs = vec![(
+            HeaderName::from_bytes(HEADER_NAME_IDEMPOTENCY.as_bytes()).unwrap(),
+            HeaderValue::from_str(idempotency_key.as_str()).unwrap()
+        )];
+        let rfd_obj = _client.execute_form::<RefundResult, CreateRefund>(
+            "/refunds", Method::POST, &req_body, hdrs).await
+            .map_err(|e| self.map_log_err("refund", e))?;
+        rfd_obj.validate(&req_body)?;
+        // do I need to keep track of any field of the response for this
+        // payment application ?
+        Ok(detail3pty)
+    } // end of fn refund
 } // end of impl AppProcessorStripeCtx
 
 impl From<(CheckoutSession, DateTime<Utc>, String)> for Charge3partyStripeModel {
@@ -396,14 +436,12 @@ impl From<(CheckoutSession, DateTime<Utc>, String)> for Charge3partyStripeModel 
     }
 }
 
+#[rustfmt::skip]
 impl From<AccountLink> for StripeAccountLinkModel {
     fn from(value: AccountLink) -> Self {
         let expiry = DateTime::from_timestamp(value.expires_at, 0)
             .unwrap_or(Local::now().to_utc() + Duration::days(ACCOUNT_LINK_EXPIRY_MIN_DAYS));
-        Self {
-            url: value.url,
-            expiry,
-        }
+        Self {url: value.url, expiry}
     }
 }
 

@@ -11,7 +11,7 @@ use crate::api::web::dto::{StoreOnboardStripeReqDto, StripeCheckoutUImodeDto};
 use crate::model::{
     Charge3partyStripeModel, ChargeLineBuyerModel, Payout3partyStripeModel, PayoutInnerModel,
     StripeAccountCapabilityModel, StripeAccountCapableState, StripeCheckoutPaymentStatusModel,
-    StripeSessionStatusModel,
+    StripeSessionStatusModel, RefundReqRslvInnerModel,
 };
 
 #[derive(Deserialize)]
@@ -221,6 +221,42 @@ pub(super) struct Transfer {
     pub destination: String,
     pub amount: i64,
     pub transfer_group: String,
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Deserialize, Serialize)]
+pub(super) enum RefundReason {
+    requested_by_customer,
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Deserialize, Debug)]
+pub(super) enum RefundStatus {
+    pending,
+    requires_action,
+    succeeded,
+    failed,
+    canceled
+}
+
+#[derive(Serialize)]
+pub(super) struct CreateRefund {
+    payment_intent: String,
+    amount: String,
+    reason: RefundReason,
+}
+
+#[derive(Deserialize)]
+pub(super) struct RefundResult {
+    id: String,
+    #[allow(dead_code)]
+    amount: i64,
+    #[allow(dead_code)]
+    reason: RefundReason,
+    // FIXME. serde fails to rename `currency` to uppercase before de-serialization
+    // pub currency: CurrencyDto,
+    payment_intent: String,
+    status: RefundStatus,
 }
 
 impl From<&StripeCheckoutUImodeDto> for CheckoutSessionUiMode {
@@ -471,3 +507,39 @@ impl Transfer {
         Decimal::new(self.amount, scale)
     }
 } // end of impl CreateTransfer
+
+impl<'a, 'b> TryFrom<(&'a RefundReqRslvInnerModel, &'b Charge3partyStripeModel)> for CreateRefund {
+    type Error = AppProcessorErrorReason;
+    fn try_from(value: (&'a RefundReqRslvInnerModel, &'b Charge3partyStripeModel)) -> Result<Self, Self::Error> {
+        let (rslv_inner, chrg_3pty) = value;
+        if chrg_3pty.payment_intent_id.is_empty() {
+            let msg = "missing-payment-intent".to_string();
+            return Err(AppProcessorErrorReason::ThirdParty(msg));
+        }
+        let currency_buyer = rslv_inner.currency()[0];
+        let currency_label = currency_buyer.label.clone();
+        let amt_orig = rslv_inner.total_amount_curr_round();
+        let amt_final = Charge3partyStripeModel::amount_represent(amt_orig, currency_label)
+            .map_err(AppProcessorErrorReason::AmountOverflow)?;
+        Ok(Self {
+            payment_intent: chrg_3pty.payment_intent_id.clone(),
+            amount: amt_final.to_string(),
+            reason: RefundReason::requested_by_customer
+        })
+    }
+} // end of impl CreateRefund
+
+impl RefundResult {
+    pub(super) fn validate(&self, req: &CreateRefund) -> Result<(), AppProcessorErrorReason> {
+        let result = if self.id.is_empty() {
+            Err("missing-refund-id".to_string())
+        } else if self.payment_intent == req.payment_intent {
+            Err(format!("corrupted-payment-intent:{}", self.payment_intent.as_str()))
+        } else if matches!( self.status, RefundStatus::succeeded ) {
+            Err(format!("refund-status:{:?}", self.status))
+        } else {
+            Ok(())
+        };
+        result.map_err(|s| AppProcessorErrorReason::ThirdParty(s))
+    }
+}

@@ -32,6 +32,7 @@ pub use self::refund::{
     OLineRefundModel, OrderRefundModel, RefundErrorParseOline, RefundLineQtyRejectModel,
     RefundLineResolveAmountModel, RefundModelError, RefundReqResolutionModel,
 };
+pub(crate) use self::refund::RefundReqRslvInnerModel;
 
 #[derive(Debug)]
 pub enum PayLineAmountError {

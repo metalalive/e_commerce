@@ -16,6 +16,7 @@ use crate::model::{
     Merchant3partyModel, Merchant3partyStripeModel, Payout3partyStripeModel, PayoutInnerModel,
     StripeAccountCapabilityModel, StripeAccountCapableState, StripeAccountLinkModel,
     StripeAccountSettingModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    RefundReqRslvInnerModel,
 };
 
 use super::super::{AppProcessorErrorReason, AppProcessorMerchantResult, AppProcessorPayInResult};
@@ -157,5 +158,13 @@ impl AbstStripeContext for MockProcessorStripeCtx {
         p3pty.set_transfer_id("mock-stripe-transfer-id".to_string());
         p3pty.set_amount(p_inner.amount_base());
         Ok(p3pty)
+    }
+    
+    async fn refund(
+        &self,
+        _rslv_inner: &RefundReqRslvInnerModel,
+        detail3pty: Charge3partyStripeModel,
+    ) -> Result<Charge3partyStripeModel, AppProcessorErrorReason> {
+        Ok(detail3pty)
     }
 } // end of impl MockProcessorStripeCtx

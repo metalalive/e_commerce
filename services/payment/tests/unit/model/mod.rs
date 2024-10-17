@@ -2,7 +2,7 @@ mod charge;
 mod merchant;
 mod order_replica;
 pub(super) mod payout;
-mod refund;
+pub(super) mod refund;
 
 use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
