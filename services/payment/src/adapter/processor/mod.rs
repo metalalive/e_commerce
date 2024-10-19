@@ -339,7 +339,7 @@ impl AbstractPaymentProcessor for AppProcessorContext {
         let result = match r_3pt {
             Charge3partyModel::Stripe(s0) =>
                 self._stripe.refund(&r_inner, s0).await
-                    .map(|s1| Charge3partyModel::Stripe(s1)),
+                    .map(Charge3partyModel::Stripe),
             Charge3partyModel::Unknown =>
                 Err(AppProcessorErrorReason::InvalidMethod("unknown".to_string())),
         };

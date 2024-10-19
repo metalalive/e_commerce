@@ -26,7 +26,7 @@ pub struct Charge3partyStripeModel {
     pub session_state: StripeSessionStatusModel,
     pub payment_state: StripeCheckoutPaymentStatusModel,
     pub payment_intent_id: String, // applied in refund workflow
-    pub transfer_group: String, // `transfer-group` field from payment intent object
+    pub transfer_group: String,    // `transfer-group` field from payment intent object
     pub expiry: DateTime<Utc>,
 }
 
@@ -161,7 +161,7 @@ impl Charge3partyStripeModel {
             payment_state: self.payment_state.clone(),
             payment_intent_id: self.payment_intent_id.clone(),
             transfer_group: self.transfer_group.clone(),
-            expiry: self.expiry
+            expiry: self.expiry,
         }
     }
 } // end of impl Charge3partyStripeModel

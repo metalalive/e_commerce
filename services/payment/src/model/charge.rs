@@ -67,6 +67,8 @@ pub struct ChargeLineBuyerModel {
 }
 
 type ChargeRefundLineMap = HashMap<BaseProductIdentity, (PayLineAmountModel, u32)>;
+
+#[derive(Default)]
 pub struct ChargeRefundMap(HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap>);
 
 pub struct ChargeBuyerMetaModel {
@@ -137,7 +139,7 @@ impl Charge3partyModel {
     pub(super) fn clone(&self) -> Self {
         match self {
             Self::Unknown => Self::Unknown,
-            Self::Stripe(m) => Self::Stripe(m.inner_clone()), 
+            Self::Stripe(m) => Self::Stripe(m.inner_clone()),
         }
     }
 } // end of impl Charge3partyModel
@@ -342,20 +344,7 @@ impl ChargeBuyerModel {
     }
 } // end of impl ChargeBuyerModel
 
-impl Default for ChargeRefundMap {
-    fn default() -> Self {
-        Self(HashMap::new())
-    }
-}
 impl ChargeRefundMap {
-    fn get_mut(&mut self, cid: (u32, DateTime<Utc>)) -> &mut ChargeRefundLineMap {
-        if !self.0.contains_key(&cid) {
-            let v = HashMap::new();
-            let _old = self.0.insert(cid, v);
-        }
-        self.0.get_mut(&cid).unwrap()
-    }
-
     pub fn into_inner(self) -> HashMap<(u32, DateTime<Utc>), ChargeRefundLineMap> {
         self.0
     }
@@ -366,7 +355,7 @@ impl ChargeRefundMap {
             .iter()
             .map(|rslv_m| {
                 let charge_id = rslv_m.charge_id();
-                let inner_map = out.get_mut(charge_id);
+                let inner_map = out.0.entry(charge_id).or_default();
                 Self::merge(inner_map, rslv_m.lines())
             })
             .count();
@@ -383,10 +372,11 @@ impl ChargeRefundMap {
                 let k = rline.pid();
                 if !inner_map.contains_key(k) {
                     let prev_rounds = rline.amount().accumulated();
-                    let mut v_amt = PayLineAmountModel::default();
-                    v_amt.unit = prev_rounds.0.unit;
-                    v_amt.total = prev_rounds.0.total;
-                    v_amt.qty = prev_rounds.0.qty;
+                    let v_amt = PayLineAmountModel {
+                        unit: prev_rounds.0.unit,
+                        total: prev_rounds.0.total,
+                        qty: prev_rounds.0.qty,
+                    };
                     let v = (v_amt, prev_rounds.1);
                     let _old = inner_map.insert(k.clone(), v);
                 }

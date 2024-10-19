@@ -1,0 +1,19 @@
+{
+    "merchant_id": 1998,
+    "payment_intent": "fill-with-real-stripe-payment-intent-id",
+    "currency_buyer": {
+	"label": "TWD",
+	"rate": "31.76"
+    },
+    "charge_lines": [
+        {"prod_typ": 1, "prod_id": 1001, "qty_orig": 10, "amt_orig": {"unit": "15.19", "total": "151.9"}},
+        {"prod_typ": 2, "prod_id": 1002, "qty_orig": 10, "amt_orig": {"unit": "15.28", "total": "152.8"}},
+        {"prod_typ": 1, "prod_id": 1003, "qty_orig": 10, "amt_orig": {"unit": "15.37", "total": "153.7"}},
+        {"prod_typ": 2, "prod_id": 1004, "qty_orig": 10, "amt_orig": {"unit": "15.46", "total": "154.6"}}
+    ],
+    "refund_lines": [
+        {"prod_typ": 1, "prod_id": 1001, "qty": 9, "amount_total": "136.7"},
+        {"prod_typ": 1, "prod_id": 1003, "qty": 1, "amount_total": "15.3"},
+        {"prod_typ": 2, "prod_id": 1004, "qty": 2, "amount_total": "30.9"}
+    ]
+}

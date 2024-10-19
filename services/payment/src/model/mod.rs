@@ -28,11 +28,11 @@ pub use self::order_replica::{
 pub(crate) use self::payout::PayoutInnerModel;
 pub use self::payout::{Payout3partyModel, PayoutAmountModel, PayoutModel, PayoutModelError};
 use self::refund::RefundLineReqResolutionModel;
+pub(crate) use self::refund::RefundReqRslvInnerModel;
 pub use self::refund::{
     OLineRefundModel, OrderRefundModel, RefundErrorParseOline, RefundLineQtyRejectModel,
     RefundLineResolveAmountModel, RefundModelError, RefundReqResolutionModel,
 };
-pub(crate) use self::refund::RefundReqRslvInnerModel;
 
 #[derive(Debug)]
 pub enum PayLineAmountError {

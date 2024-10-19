@@ -14,9 +14,9 @@ use crate::api::web::dto::{
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerModel,
     Merchant3partyModel, Merchant3partyStripeModel, Payout3partyStripeModel, PayoutInnerModel,
-    StripeAccountCapabilityModel, StripeAccountCapableState, StripeAccountLinkModel,
-    StripeAccountSettingModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
-    RefundReqRslvInnerModel,
+    RefundReqRslvInnerModel, StripeAccountCapabilityModel, StripeAccountCapableState,
+    StripeAccountLinkModel, StripeAccountSettingModel, StripeCheckoutPaymentStatusModel,
+    StripeSessionStatusModel,
 };
 
 use super::super::{AppProcessorErrorReason, AppProcessorMerchantResult, AppProcessorPayInResult};
@@ -159,7 +159,7 @@ impl AbstStripeContext for MockProcessorStripeCtx {
         p3pty.set_amount(p_inner.amount_base());
         Ok(p3pty)
     }
-    
+
     async fn refund(
         &self,
         _rslv_inner: &RefundReqRslvInnerModel,

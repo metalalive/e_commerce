@@ -45,9 +45,12 @@ fn ut_setup_olines_refund_dto(time_base: DateTime<Utc>) -> Vec<OrderLineReplicaR
 }
 
 #[rustfmt::skip]
+pub(crate) type UTestRefundCmpltDtoRawData = (u64, ProductType, i64, i64, u32, u32, u32);
+
+#[rustfmt::skip]
 pub(crate) fn ut_setup_refund_cmplt_dto(
     time_base: DateTime<Utc>,
-    raw: Vec<(u64, ProductType, i64, i64, u32, u32, u32)>
+    raw: Vec<UTestRefundCmpltDtoRawData>
 ) -> RefundCompletionReqDto {
     let lines = raw.into_iter()
         .map(|d| {

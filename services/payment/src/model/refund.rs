@@ -11,8 +11,8 @@ use ecommerce_common::api::rpc::dto::OrderLineReplicaRefundDto;
 use ecommerce_common::model::BaseProductIdentity;
 
 use super::{
-    ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot, PayLineAmountError,
-    PayLineAmountModel, Charge3partyModel,
+    Charge3partyModel, ChargeBuyerModel, ChargeLineBuyerModel, OrderCurrencySnapshot,
+    PayLineAmountError, PayLineAmountModel,
 };
 use crate::api::web::dto::{
     RefundCompletionOlineReqDto, RefundCompletionReqDto, RefundCompletionRespDto,
@@ -179,7 +179,8 @@ impl<'a> From<(&'a PayLineAmountModel, u32, u32, Decimal)> for RefundLineResolve
 #[rustfmt::skip]
 impl TryFrom<OrderLineReplicaRefundDto> for OLineRefundModel {
     type Error = RefundModelError;
-    
+   
+    #[allow(clippy::field_reassign_with_default)]
     fn try_from(value: OrderLineReplicaRefundDto) -> Result<Self, Self::Error> {
         let OrderLineReplicaRefundDto {
             seller_id, product_id, product_type, create_time, amount, qty
@@ -348,6 +349,7 @@ impl OrderRefundModel {
         hset.into_iter().collect()
     }
 
+    #[allow(clippy::type_complexity)] // TODO, improve return type complexity
     pub fn validate(
         &self,
         merchant_id: u32,
@@ -419,10 +421,7 @@ impl OrderRefundModel {
 } // end of impl OrderRefundModel
 
 impl RefundLineReqResolutionModel {
-    fn to_vec<'a, 'b>(
-        c: &'a ChargeLineBuyerModel,
-        cmplt_req: &'b RefundCompletionReqDto,
-    ) -> Vec<Self> {
+    fn to_vec(c: &ChargeLineBuyerModel, cmplt_req: &RefundCompletionReqDto) -> Vec<Self> {
         let amt_prev_refunded = c.amount_refunded();
         let num_prev_rejected = c.num_rejected();
         let mut amt_remain = c.amount_remain();
@@ -492,8 +491,8 @@ impl<'a, 'b> TryFrom<(u32, &'a ChargeBuyerModel, &'b RefundCompletionReqDto)>
             ))?;
         let lines = charge_m.lines.iter()
             .filter(|c| c.pid.store_id == merchant_id)
-            .map(|c| RefundLineReqResolutionModel::to_vec(c, cmplt_req))
-            .flatten().collect::<Vec<_>>();
+            .flat_map(|c| RefundLineReqResolutionModel::to_vec(c, cmplt_req))
+            .collect::<Vec<_>>();
         let inner = RefundReqRslvInnerModel {
             buyer_usr_id, lines, charged_ctime: *charge_m.meta.create_time(),
             currency_buyer: currency_b, currency_merc: currency_m,
@@ -514,12 +513,15 @@ impl RefundReqRslvInnerModel {
         [&self.currency_buyer, &self.currency_merc]
     }
     pub(crate) fn merchant_id(&self) -> Result<u32, RefundModelError> {
-        self.lines.first().map(|v| v.pid().store_id)
+        self.lines
+            .first()
+            .map(|v| v.pid().store_id)
             .ok_or(RefundModelError::MissingMerchant)
     }
     pub(crate) fn total_amount_curr_round(&self) -> Decimal {
         // total amount for current round in buyer's currency
-        self.lines().iter()
+        self.lines()
+            .iter()
             .map(|v| v.amount().curr_round().total)
             .sum::<Decimal>()
     }
@@ -551,11 +553,8 @@ impl RefundReqResolutionModel {
         let Self { inner, chrg3pty } = self;
         (inner, chrg3pty)
     }
-    pub(crate) fn from_parts(
-        inner: RefundReqRslvInnerModel,
-        chrg3pty: Charge3partyModel
-    ) -> Self {
-        Self {inner, chrg3pty}
+    pub(crate) fn from_parts(inner: RefundReqRslvInnerModel, chrg3pty: Charge3partyModel) -> Self {
+        Self { inner, chrg3pty }
     }
 
     #[rustfmt::skip]

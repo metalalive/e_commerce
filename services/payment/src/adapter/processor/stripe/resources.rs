@@ -10,8 +10,8 @@ use super::AppProcessorErrorReason;
 use crate::api::web::dto::{StoreOnboardStripeReqDto, StripeCheckoutUImodeDto};
 use crate::model::{
     Charge3partyStripeModel, ChargeLineBuyerModel, Payout3partyStripeModel, PayoutInnerModel,
-    StripeAccountCapabilityModel, StripeAccountCapableState, StripeCheckoutPaymentStatusModel,
-    StripeSessionStatusModel, RefundReqRslvInnerModel,
+    RefundReqRslvInnerModel, StripeAccountCapabilityModel, StripeAccountCapableState,
+    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 
 #[derive(Deserialize)]
@@ -236,7 +236,7 @@ pub(super) enum RefundStatus {
     requires_action,
     succeeded,
     failed,
-    canceled
+    canceled,
 }
 
 #[derive(Serialize)]
@@ -510,7 +510,9 @@ impl Transfer {
 
 impl<'a, 'b> TryFrom<(&'a RefundReqRslvInnerModel, &'b Charge3partyStripeModel)> for CreateRefund {
     type Error = AppProcessorErrorReason;
-    fn try_from(value: (&'a RefundReqRslvInnerModel, &'b Charge3partyStripeModel)) -> Result<Self, Self::Error> {
+    fn try_from(
+        value: (&'a RefundReqRslvInnerModel, &'b Charge3partyStripeModel),
+    ) -> Result<Self, Self::Error> {
         let (rslv_inner, chrg_3pty) = value;
         if chrg_3pty.payment_intent_id.is_empty() {
             let msg = "missing-payment-intent".to_string();
@@ -523,8 +525,8 @@ impl<'a, 'b> TryFrom<(&'a RefundReqRslvInnerModel, &'b Charge3partyStripeModel)>
             .map_err(AppProcessorErrorReason::AmountOverflow)?;
         Ok(Self {
             payment_intent: chrg_3pty.payment_intent_id.clone(),
-            amount: amt_final.to_string(),
-            reason: RefundReason::requested_by_customer
+            amount: amt_final.trunc_with_scale(0).to_string(),
+            reason: RefundReason::requested_by_customer,
         })
     }
 } // end of impl CreateRefund
@@ -533,13 +535,16 @@ impl RefundResult {
     pub(super) fn validate(&self, req: &CreateRefund) -> Result<(), AppProcessorErrorReason> {
         let result = if self.id.is_empty() {
             Err("missing-refund-id".to_string())
-        } else if self.payment_intent == req.payment_intent {
-            Err(format!("corrupted-payment-intent:{}", self.payment_intent.as_str()))
-        } else if matches!( self.status, RefundStatus::succeeded ) {
+        } else if self.payment_intent != req.payment_intent {
+            Err(format!(
+                "corrupted-payment-intent:{}",
+                self.payment_intent.as_str()
+            ))
+        } else if !matches!(self.status, RefundStatus::succeeded) {
             Err(format!("refund-status:{:?}", self.status))
         } else {
             Ok(())
         };
-        result.map_err(|s| AppProcessorErrorReason::ThirdParty(s))
+        result.map_err(AppProcessorErrorReason::ThirdParty)
     }
 }
