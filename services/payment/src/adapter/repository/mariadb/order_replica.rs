@@ -265,17 +265,17 @@ impl<'a> TryFrom<(u32, &'a str)> for FetchUnpaidOlineArgs {
             // estimate quantity and amount of paid items, by aggregating charge
             // lines which have been completed successfully
             "SELECT   `a1`.`store_id`, `a1`.`product_type`, `a1`.`product_id`, `a1`.`amt_unit`, \
-             `a1`.`amt_total_rsved`, COALESCE(`a2`.`amt_total`, 0), `a1`.`qty_rsved`, COALESCE(`a2`.`qty`, 0),\
-             `a1`.`rsved_until`  FROM `order_line_detail` AS `a1` LEFT JOIN (\
+             `a1`.`amt_total_rsved`, COALESCE(`a2`.`amt_orig_total`, 0), `a1`.`qty_rsved`, \
+             COALESCE(`a2`.`qty_orig`, 0), `a1`.`rsved_until`  FROM `order_line_detail` AS `a1` LEFT JOIN (\
             SELECT  `b`.`order_id` AS `order-id`, `c`.`store_id` AS `store`, `c`.`product_type` AS `prod-typ`,\
-            `c`.`product_id` AS `prod-id`, SUM(`c`.`amt_total`) AS `amt_total`, SUM(`c`.`qty`) AS `qty` \
-            FROM `charge_buyer_toplvl` AS `b`  INNER JOIN `charge_line` AS `c`  ON \
-            (`b`.`usr_id`=`c`.`buyer_id` AND `b`.`create_time`=`c`.`create_time`)\
+            `c`.`product_id` AS `prod-id`, SUM(`c`.`amt_orig_total`) AS `amt_orig_total`,\
+            SUM(`c`.`qty_orig`) AS `qty_orig`  FROM `charge_buyer_toplvl` AS `b`  INNER JOIN `charge_line` AS `c`\
+            ON (`b`.`usr_id`=`c`.`buyer_id` AND `b`.`create_time`=`c`.`create_time`)\
             WHERE `b`.`usr_id`=? AND `b`.`order_id`=? AND `b`.`state`='OrderAppSynced' \
             GROUP BY  `c`.`store_id`, `c`.`product_type`, `c`.`product_id`)   AS `a2`  ON \
             (`a1`.`o_id`=`a2`.`order-id` AND `a1`.`store_id`=`a2`.`store` AND \
             `a1`.`product_type`=`a2`.`prod-typ` AND `a1`.`product_id`=`a2`.`prod-id`) \
-            WHERE `a1`.`o_id`=? AND `a1`.`qty_rsved` > COALESCE(`a2`.`qty`, 0)",
+            WHERE `a1`.`o_id`=? AND `a1`.`qty_rsved` > COALESCE(`a2`.`qty_orig`, 0)",
         ]
         .into_iter()
         .map(ToString::to_string)

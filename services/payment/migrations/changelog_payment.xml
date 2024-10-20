@@ -453,8 +453,41 @@
             DROP TABLE `job_scheduler`;
         </rollback>
     </changeSet>
-    
     <changeSet id="tag_version_0.0.13" author="T.H.">
         <tagDatabase tag="0.0.13" />
+    </changeSet>
+    <changeSet id="rename_column_chargeline__amount_qty_original" author="T.H.">
+        <comment/>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_line` RENAME COLUMN `amt_unit` TO `amt_orig_unit`,
+                RENAME COLUMN `amt_total` TO `amt_orig_total`,
+                RENAME COLUMN `qty` TO `qty_orig`;
+        </sql>
+        <rollback>
+            ALTER TABLE `charge_line` RENAME COLUMN `amt_orig_unit` TO `amt_unit`,
+                RENAME COLUMN `amt_orig_total` TO `amt_total`,
+                RENAME COLUMN `qty_orig` TO `qty`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_column_chargeline__amount_qty_refunded" author="T.H.">
+        <comment>
+            new columns for amount and quantities which have been refunded
+            (or rejected to refund) so far
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `charge_line` ADD COLUMN `qty_rej`  INT UNSIGNED NOT NULL,
+                ADD COLUMN `qty_rfnd`  INT UNSIGNED NOT NULL,
+                ADD COLUMN `amt_rfnd_unit`   DECIMAL(16,2)  UNSIGNED NOT NULL,
+                ADD COLUMN `amt_rfnd_total`  DECIMAL(16,2)  UNSIGNED NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `charge_line` DROP COLUMN `amt_rfnd_unit`,
+                DROP COLUMN `amt_rfnd_total`, DROP COLUMN `qty_rfnd`,
+                DROP COLUMN `qty_rej`;
+        </rollback>
+    </changeSet>
+    
+    <changeSet id="tag_version_0.0.14" author="T.H.">
+        <tagDatabase tag="0.0.14" />
     </changeSet>
 </databaseChangeLog>

@@ -26,8 +26,7 @@ fn ut_setup_orderline_set(
         .into_iter()
         .map(|d| {
             let (store_id, product_type, product_id, charge_rsv_unit,
-                 charge_rsv_total, charge_rsv_qty, rsv_time_delta
-                ) = d;
+                 charge_rsv_total, charge_rsv_qty, rsv_time_delta) = d;
             let pid = BaseProductIdentity {store_id, product_type, product_id};
             let reserved_until = create_time + rsv_time_delta;
             let rsv_total = PayLineAmountModel {

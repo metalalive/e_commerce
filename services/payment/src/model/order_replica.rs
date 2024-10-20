@@ -43,7 +43,7 @@ pub struct OrderLineModelSet {
     pub buyer_id: u32, // buyer's profile ID in user-management service
     pub lines: Vec<OrderLineModel>,
     pub create_time: DateTime<Utc>,
-    pub num_charges: u32,
+    pub num_charges: u32, // TODO, discard needless field
     // - the map indicates currencies and locked exchange rate applied
     //   in buyer or sellers business.
     // - note current base currency in this project defaults to USD

@@ -23,7 +23,7 @@ use crate::model::{
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use super::charge_converter::{
     ChargeLineRowType, ChargeMetaRowType, FetchChargeLineArgs, FetchChargeMetaArgs,
-    InsertChargeArgs, UpdateChargeMetaArgs,
+    InsertChargeArgs, UpdateChargeLineRefundArgs, UpdateChargeMetaArgs,
 };
 use super::order_replica::{
     FetchCurrencySnapshotArgs, FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType,
@@ -197,26 +197,20 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         })
     } // end of fn create_order
 
+    #[rustfmt::skip]
     async fn get_unpaid_olines(
-        &self,
-        usr_id: u32,
-        oid: &str,
+        &self, usr_id: u32, oid: &str,
     ) -> Result<Option<OrderLineModelSet>, AppRepoError> {
         let mut args_iter = FetchUnpaidOlineArgs::try_from((usr_id, oid))?.0.into_iter();
-        let mut conn = self
-            ._dstore
-            .acquire()
-            .await
+        let mut conn = self._dstore.acquire().await
             .map_err(|e| self._map_err_get_unpaid_olines(AppRepoErrorDetail::DataStore(e)))?;
         let exec = &mut conn;
         let (stmt, param) = args_iter.next().unwrap();
         let currency_snapshot = Self::try_build_currency_snapshot(exec, stmt, param)
-            .await
-            .map_err(|de| self._map_err_get_unpaid_olines(de))?;
+            .await.map_err(|de| self._map_err_get_unpaid_olines(de))?;
         let mut toplvl_result = {
             let (stmt, param) = args_iter.next().unwrap();
-            let result = stmt
-                .with(param)
+            let result = stmt.with(param)
                 .first::<(mysql_async::Value, u32), &mut Conn>(exec)
                 .await
                 .map_err(|e| {
@@ -238,8 +232,7 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         if let Some(v) = &mut toplvl_result {
             // --- order lines ---
             let (stmt, param) = args_iter.next().unwrap();
-            let mut line_stream = stmt
-                .with(param)
+            let mut line_stream = stmt.with(param)
                 .stream::<OrderlineRowType, &mut Conn>(exec)
                 .await
                 .map_err(|e| {
@@ -364,13 +357,34 @@ impl AbstractChargeRepo for MariadbChargeRepo {
         }
     } // end of fn update_charge_progress
 
-    async fn update_lines_refund(&self, _cl_map: ChargeRefundMap) -> Result<(), AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::UpdateChargeLinesRefund,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
+    async fn update_lines_refund(&self, cl_map: ChargeRefundMap) -> Result<(), AppRepoError> {
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            let code = AppErrorCode::DatabaseServerBusy;
+            let detail = AppRepoErrorDetail::DataStore(e);
+            self._map_log_err_common((code, detail), AppRepoErrorFnLabel::UpdateChargeLinesRefund)
+        })?;
+        let tx_opts = {
+            let mut t = TxOpts::new();
+            t.with_isolation_level(IsolationLevel::RepeatableRead)
+                .to_owned()
+        };
+        let mut tx = conn.start_transaction(tx_opts).await.map_err(|e| {
+            let code = AppErrorCode::RemoteDbServerFailure;
+            let detail = AppRepoErrorDetail::DatabaseTxStart(e.to_string());
+            self._map_log_err_common((code, detail), AppRepoErrorFnLabel::UpdateChargeLinesRefund)
+        })?;
+        let (stmt, params) = UpdateChargeLineRefundArgs::from(cl_map).into_parts();
+        tx.exec_batch(stmt, params).await.map_err(|e| {
+            let code = AppErrorCode::RemoteDbServerFailure;
+            let detail = AppRepoErrorDetail::DatabaseExec(e.to_string());
+            self._map_log_err_common((code, detail), AppRepoErrorFnLabel::UpdateChargeLinesRefund)
+        })?;
+        tx.commit().await.map_err(|e| {
+            let code = AppErrorCode::RemoteDbServerFailure;
+            let detail = AppRepoErrorDetail::DatabaseTxCommit(e.to_string());
+            self._map_log_err_common((code, detail), AppRepoErrorFnLabel::UpdateChargeLinesRefund)
         })
-    }
+    } // end of fn update_lines_refund
 
     async fn fetch_charge_by_merchant(
         &self,

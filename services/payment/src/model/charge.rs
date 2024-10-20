@@ -617,10 +617,10 @@ impl ChargeLineBuyerModel {
     pub fn amount_orig(&self) -> &PayLineAmountModel {
         &self.amount_orig
     }
-    pub(super) fn amount_refunded(&self) -> &PayLineAmountModel {
+    pub fn amount_refunded(&self) -> &PayLineAmountModel {
         &self.amount_refunded
     }
-    pub(super) fn num_rejected(&self) -> u32 {
+    pub fn num_rejected(&self) -> u32 {
         self.num_rejected
     }
     #[rustfmt::skip]

@@ -13,7 +13,7 @@ use super::super::{AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use super::{inner_into_parts, raw_column_to_datetime, DATETIME_FMT_P0F, DATETIME_FMT_P3F};
 use crate::model::{
     BuyerPayInState, Charge3partyModel, Charge3partyStripeModel, ChargeBuyerMetaModel,
-    ChargeBuyerModel, ChargeLineBuyerModel, PayLineAmountModel,
+    ChargeBuyerModel, ChargeLineBuyerModel, ChargeRefundMap, PayLineAmountModel,
 };
 
 struct InsertChargeTopLvlArgs(String, Params);
@@ -39,6 +39,7 @@ pub(super) struct InsertChargeArgs(pub(super) Vec<(String, Vec<Params>)>);
 pub(super) struct FetchChargeMetaArgs(String, Params);
 pub(super) struct UpdateChargeMetaArgs(String, Params);
 pub(super) struct FetchChargeLineArgs(String, Params);
+pub(super) struct UpdateChargeLineRefundArgs(String, Vec<Params>);
 
 pub(super) type ChargeMetaRowType = (
     Vec<u8>,
@@ -52,7 +53,7 @@ pub(super) type ChargeMetaRowType = (
 
 #[rustfmt::skip]
 pub(super) type ChargeLineRowType = (
-    u32, String, u64, Decimal, Decimal, u32
+    u32, String, u64, Decimal, Decimal, u32, Decimal, Decimal, u32, u32
 );
 
 impl TryFrom<BuyerPayInState> for InsertChargeStatusArgs {
@@ -181,20 +182,14 @@ impl TryFrom<ChargeBuyerModel> for InsertChargeTopLvlArgs {
     }
 } // end of impl InsertChargeTopLvlArgs
 
+#[rustfmt::skip]
 impl From<(u32, String, Vec<ChargeLineBuyerModel>)> for InsertChargeLinesArgs {
     fn from(value: (u32, String, Vec<ChargeLineBuyerModel>)) -> Self {
         let (buyer_id, ctime, lines) = value;
-        let params = lines
-            .into_iter()
+        let params = lines.into_iter()
             .map(|line| {
-                let (pid, amount_orig, _amount_refunded, _num_rejected) = line.into_parts();
-                // TODO, add relevant columns, save `amount_refunded` to table
-                let BaseProductIdentity {
-                    store_id,
-                    product_type,
-                    product_id,
-                } = pid;
-                let PayLineAmountModel { unit, total, qty } = amount_orig;
+                let (pid, amount_orig, amount_refunded, num_rejected) = line.into_parts();
+                let BaseProductIdentity {store_id, product_type, product_id} = pid;
                 let prod_type_num: u8 = product_type.into();
                 let arg = vec![
                     buyer_id.into(),
@@ -202,32 +197,32 @@ impl From<(u32, String, Vec<ChargeLineBuyerModel>)> for InsertChargeLinesArgs {
                     store_id.into(),
                     prod_type_num.to_string().into(),
                     product_id.into(),
-                    unit.into(),
-                    total.into(),
-                    qty.into(),
+                    amount_orig.unit.into(),
+                    amount_orig.total.into(),
+                    amount_orig.qty.into(),
+                    num_rejected.into(),
+                    amount_refunded.qty.into(),
+                    amount_refunded.unit.into(),
+                    amount_refunded.total.into(),
                 ];
                 Params::Positional(arg)
             })
             .collect();
         let stmt = "INSERT INTO `charge_line`(`buyer_id`,`create_time`,`store_id`,\
-                    `product_type`,`product_id`,`amt_unit`,`amt_total`,`qty`) \
-                    VALUES (?,?,?,?,?,?,?,?)";
+                    `product_type`,`product_id`,`amt_orig_unit`,`amt_orig_total`,`qty_orig`,\
+                    `qty_rej`,`qty_rfnd`,`amt_rfnd_unit`,`amt_rfnd_total`) \
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
         Self(stmt.to_string(), params)
     } // end of fn from
 } // end of impl InsertChargeLinesArgs
 
+#[rustfmt::skip]
 impl TryFrom<ChargeBuyerModel> for InsertChargeArgs {
     type Error = AppRepoError;
     fn try_from(mut value: ChargeBuyerModel) -> Result<Self, Self::Error> {
-        // TODO, modify order-line replica if input charge state is already
-        // in `completed` state
         let (buyer_id, ctime) = (
             value.meta.owner(),
-            value
-                .meta
-                .create_time()
-                .format(DATETIME_FMT_P0F)
-                .to_string(),
+            value.meta.create_time().format(DATETIME_FMT_P0F).to_string(),
         );
         let c_lines = value.lines.split_off(0);
         assert!(value.lines.is_empty());
@@ -385,9 +380,9 @@ inner_into_parts!(UpdateChargeMetaArgs);
 
 impl From<(u32, DateTime<Utc>, Option<u32>)> for FetchChargeLineArgs {
     fn from(value: (u32, DateTime<Utc>, Option<u32>)) -> Self {
-        let mut stmt = "SELECT `store_id`,`product_type`,`product_id`,`amt_unit`,\
-                    `amt_total`,`qty` FROM `charge_line` WHERE `buyer_id`=? \
-                    AND `create_time`=?"
+        let mut stmt = "SELECT `store_id`,`product_type`,`product_id`,`amt_orig_unit`,\
+                    `amt_orig_total`,`qty_orig`,`amt_rfnd_unit`,`amt_rfnd_total`,`qty_rfnd`,\
+                    `qty_rej` FROM `charge_line` WHERE `buyer_id`=?  AND `create_time`=?"
             .to_string();
         let mut args = vec![
             value.0.into(),
@@ -400,12 +395,8 @@ impl From<(u32, DateTime<Utc>, Option<u32>)> for FetchChargeLineArgs {
         Self(stmt, Params::Positional(args))
     }
 }
-impl FetchChargeLineArgs {
-    pub(super) fn into_parts(self) -> (String, Params) {
-        let Self(stmt, params) = self;
-        (stmt, params)
-    }
-}
+
+inner_into_parts!(FetchChargeLineArgs);
 
 impl TryFrom<ChargeLineRowType> for ChargeLineBuyerModel {
     type Error = AppRepoErrorDetail;
@@ -413,18 +404,56 @@ impl TryFrom<ChargeLineRowType> for ChargeLineBuyerModel {
     fn try_from(value: ChargeLineRowType) -> Result<Self, Self::Error> {
         let (
             store_id, product_type_serial, product_id,
-            amt_unit, amt_total, qty,
+            amt_orig_unit, amt_orig_total, qty_orig,
+            amt_rfnd_unit, amt_rfnd_total, qty_rfnd, num_rejected,
         ) = value;
         let product_type = product_type_serial.parse::<ProductType>()
             .map_err(|e| AppRepoErrorDetail::DataRowParse(e.0.to_string()))?;
         let pid = BaseProductIdentity { store_id, product_id, product_type };
         let amount_orig = PayLineAmountModel {
-            unit: amt_unit, total: amt_total, qty,
+            unit: amt_orig_unit, total: amt_orig_total, qty: qty_orig,
         };
-        // TODO, add relevant table columns, load it from DB, convert to amount-refunded field
-        let amount_refunded = PayLineAmountModel::default();
-        let num_rejected = 0u32;
+        let amount_refunded = PayLineAmountModel {
+            unit: amt_rfnd_unit, total: amt_rfnd_total, qty: qty_rfnd,
+        };
         let out = Self::from((pid, amount_orig, amount_refunded, num_rejected));
         Ok(out)
+    }
+}
+
+#[rustfmt::skip]
+impl From<ChargeRefundMap> for UpdateChargeLineRefundArgs {
+    fn from(value: ChargeRefundMap) -> Self {
+        let params = value.into_inner().into_iter()
+            .flat_map(|((buyer_id, charge_ctime), inner_map)| {
+                inner_map.into_iter()
+                    .map(move |(pid, (amt_rfnd, num_rej))| {
+                        let BaseProductIdentity {store_id, product_type, product_id} = pid;
+                        let prod_type_num: u8 = product_type.into();
+                        let param = vec![
+                            amt_rfnd.unit.into(),
+                            amt_rfnd.total.into(),
+                            amt_rfnd.qty.into(),
+                            num_rej.into(),
+                            buyer_id.into(),
+                            charge_ctime.format(DATETIME_FMT_P0F).to_string().into(),
+                            store_id.into(),
+                            prod_type_num.to_string().into(),
+                            product_id.into(),
+                        ];
+                        Params::Positional(param)
+                    })
+            }).collect::<Vec<_>>() ;
+        let stmt = "UPDATE `charge_line` SET `amt_rfnd_unit`=?, `amt_rfnd_total`=?, `qty_rfnd`=?,\
+                    `qty_rej`=? WHERE `buyer_id`=? AND `create_time`=? AND `store_id`=? AND \
+                    `product_type`=? AND `product_id`=?";
+        Self(stmt.to_string(), params)
+    }
+} // end of impl UpdateChargeLineRefundArgs
+
+impl UpdateChargeLineRefundArgs {
+    pub(super) fn into_parts(self) -> (String, Vec<Params>) {
+        let Self(stmt, params) = self;
+        (stmt, params)
     }
 }

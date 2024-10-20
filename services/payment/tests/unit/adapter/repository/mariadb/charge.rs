@@ -2,6 +2,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Local, SubsecRound, Utc};
+use rust_decimal::Decimal;
 
 use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
@@ -9,12 +10,14 @@ use ecommerce_common::model::BaseProductIdentity;
 use payment::adapter::repository::{AbstractChargeRepo, AppRepoErrorDetail};
 use payment::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel,
-    ChargeLineBuyerModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
+    ChargeLineBuyerModel, ChargeRefundMap, RefundReqResolutionModel,
+    StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
-use rust_decimal::Decimal;
 
 use super::super::{ut_setup_order_bill, ut_setup_orderline_set};
+use super::order_replica::ut_setup_bulk_add_charges;
 use super::{ut_setup_currency_snapshot, ut_setup_db_charge_repo, ut_verify_currency_snapshot};
+use crate::model::refund::ut_setup_refund_cmplt_dto;
 use crate::model::{ut_default_charge_method_stripe, ut_setup_buyer_charge};
 use crate::ut_setup_sharestate;
 
@@ -324,3 +327,113 @@ async fn buyer_update_charge_meta_invalid_state() {
         }
     }
 }
+
+// TODO, simplify setup flow, currently it is too complicated
+#[rustfmt::skip]
+#[actix_web::test]
+async fn update_refund_in_chargeline_ok() {
+    let mock_buyer_id = 127u32;
+    let mock_merchant_id = 219u32;
+    let mock_oid = "70019835b3a0";
+    let time_now = Local::now().to_utc();
+    let shr_state = ut_setup_sharestate();
+    let repo_ch  = ut_setup_db_charge_repo(shr_state).await;
+    
+    let mock_orig_olines = vec![
+        (mock_merchant_id, ProductType::Item, 1294u64, Decimal::new(191, 1), Decimal::new(1910, 1), 10u32, Duration::days(1)),
+        (mock_merchant_id, ProductType::Package, 1295, Decimal::new(214, 1), Decimal::new(1498, 1), 7, Duration::days(2)),
+        (mock_merchant_id, ProductType::Item, 1299, Decimal::new(798, 1), Decimal::new(7980, 1), 10, Duration::days(3)),
+        (mock_merchant_id, ProductType::Package, 2945, Decimal::new(505, 1), Decimal::new(5050, 1), 10, Duration::days(4)),
+    ];
+    let mock_currency_map = ut_setup_currency_snapshot(
+        vec![mock_merchant_id, mock_buyer_id]
+    );
+    let mock_order_replica = ut_setup_orderline_set(
+        mock_buyer_id,  mock_oid, 0, time_now - Duration::hours(127),
+        mock_currency_map, mock_orig_olines,
+    );
+    let billing = ut_setup_order_bill();
+    let result = repo_ch.create_order(&mock_order_replica, &billing).await;
+    assert!(result.is_ok());
+
+    let charge_ctime = [
+        time_now - Duration::hours(85),
+        time_now - Duration::hours(70),
+    ];
+    let mock_clines = vec![
+        (charge_ctime[0], true, vec![
+             (mock_merchant_id, ProductType::Item, 1294u64, (191i64, 1u32), (1910i64, 1u32), 10u32),
+             (mock_merchant_id, ProductType::Package, 1295, (214, 1), (1070, 1), 5),
+             (mock_merchant_id, ProductType::Item, 1299, (798, 1), (1596, 1), 2),
+        ]),
+        (charge_ctime[1], true, vec![
+             (mock_merchant_id, ProductType::Package, 1295, (214, 1), (428, 1), 2),
+             (mock_merchant_id, ProductType::Item, 1299, (798, 1), (6384, 1), 8),
+             (mock_merchant_id, ProductType::Package, 2945, (505, 1), (5050, 1), 10),
+        ]),
+    ];
+    ut_setup_bulk_add_charges(repo_ch.clone(), mock_buyer_id, mock_oid, mock_clines).await;
+
+    macro_rules! setup_resolve_model {
+        ($ctime: expr, $lines: expr) => {{
+            let result = repo_ch.fetch_charge_by_merchant(mock_buyer_id, $ctime, mock_merchant_id).await;
+            assert!(result.is_ok());
+            let charge_m = result.unwrap().unwrap();
+            let t = $ctime + Duration::minutes(29);
+            let req = ut_setup_refund_cmplt_dto(t, $lines);
+            RefundReqResolutionModel::try_from((mock_merchant_id, &charge_m, &req)).unwrap()
+        }};
+    }
+    let rslv_m0 = setup_resolve_model!(
+        charge_ctime[0], vec![
+            (1294, ProductType::Item,    10, 573, 3, 2, 1),
+            (1295, ProductType::Package, 12, 214, 1, 0, 1),
+            (1299, ProductType::Item,    14, 0,   0, 1, 0),
+        ]);
+    let rslv_m1 = setup_resolve_model!(
+        charge_ctime[1], vec![
+            (1295, ProductType::Package, 16, 428, 2, 0, 0),
+            (1299, ProductType::Item,    18, 2394, 3, 2, 0),
+            (2945, ProductType::Package, 20, 3030, 6, 1, 2),
+        ]);
+
+    let rslv_ms = vec![rslv_m0, rslv_m1];
+    let cl_map = ChargeRefundMap::build(&rslv_ms);
+    let result = repo_ch.update_lines_refund(cl_map).await;
+    assert!(result.is_ok());
+    
+    macro_rules! verify_updated_line {
+        ($ctime: expr, $num_clines: literal, $data_selector: expr) => {
+            let result = repo_ch.fetch_charge_by_merchant(mock_buyer_id, $ctime, mock_merchant_id).await;
+            let charge_m = result.unwrap().unwrap();
+            assert_eq!(charge_m.lines.len(), $num_clines);
+            charge_m.lines.into_iter()
+                .map(|line| {
+                    let amt_rfd = line.amount_refunded();
+                    let actual = (amt_rfd.total, amt_rfd.qty, line.num_rejected());
+                    let BaseProductIdentity { store_id, product_type, product_id } = line.pid;
+                    assert_eq!(store_id, mock_merchant_id);
+                    let expect = $data_selector(product_id, product_type);
+                    assert_eq!(actual, expect);
+                }).count();
+            
+        };
+    }
+
+    let fn1 = |product_id, product_type|
+        match (product_id, product_type) {
+            (1294u64, ProductType::Item ) => (Decimal::new(573,1), 3u32, 3u32),
+            (1295, ProductType::Package,) => (Decimal::new(214,1), 1, 1),
+            (1299, ProductType::Item,   ) => (Decimal::ZERO, 0, 1),
+            _others => (Decimal::MAX, 9999, 9999),
+        };
+    let fn2 = |product_id, product_type|
+        match (product_id, product_type) {
+            (1295u64, ProductType::Package) => (Decimal::new(428,1), 2u32, 0u32),
+            (1299, ProductType::Item) => (Decimal::new(2394,1), 3, 2),
+            (2945, ProductType::Package) => (Decimal::new(3030,1), 6, 3),
+            _others => (Decimal::MAX, 9999, 9999),
+        };
+    verify_updated_line!(charge_ctime[0], 3, fn1);
+    verify_updated_line!(charge_ctime[1], 3, fn2);
+} // update_refund_in_chargeline_ok

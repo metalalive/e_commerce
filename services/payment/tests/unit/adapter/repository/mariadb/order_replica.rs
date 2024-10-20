@@ -34,8 +34,7 @@ fn ut_verify_fetched_order(
     assert_eq!(actual.create_time, expect_ctime.trunc_subsecs(0));
     let mut expect_line_map = {
         let mut hm = HashMap::new();
-        expect_olines
-            .into_iter()
+        expect_olines.into_iter()
             .map(|c| {
                 let ctime = expect_ctime.trunc_subsecs(0);
                 let (store_id, prod_typ, prod_id, rsv_unit,
@@ -45,34 +44,18 @@ fn ut_verify_fetched_order(
                 let value = (rsv_unit, rsv_total, rsv_qty, paid_total,
                              paid_qty, ctime + rsv_until);
                 let _empty = hm.insert(key, value);
-            })
-            .count();
+            }).count();
         assert!(hm.len() > 0);
         hm
     };
-    actual
-        .lines
-        .into_iter()
+    actual.lines.into_iter()
         .map(|line| {
-            let OrderLineModel {
-                pid,
-                rsv_total,
-                paid_total,
-                reserved_until,
-            } = line;
-            let BaseProductIdentity {
-                store_id,
-                product_type,
-                product_id,
-            } = pid;
+            let OrderLineModel {pid, rsv_total, paid_total, reserved_until} = line;
+            let BaseProductIdentity {store_id, product_type, product_id} = pid;
             let key = (store_id, product_type, product_id);
             let actual_val = (
-                rsv_total.unit,
-                rsv_total.total,
-                rsv_total.qty,
-                paid_total.total,
-                paid_total.qty,
-                reserved_until,
+                rsv_total.unit, rsv_total.total, rsv_total.qty,
+                paid_total.total, paid_total.qty, reserved_until,
             );
             let expect_val = expect_line_map.remove(&key).unwrap();
             assert_eq!(actual_val, expect_val);
@@ -166,7 +149,7 @@ async fn ut_setup_new_orderlines(
 } // end of fn ut_setup_new_orderlines
 
 #[rustfmt::skip]
-async fn ut_add_charges_for_verify_read_olines(
+pub(super) async fn ut_setup_bulk_add_charges(
     repo: Arc<Box<dyn AbstractChargeRepo>>,
     buyer_id: u32,
     order_id: &str,
@@ -174,8 +157,7 @@ async fn ut_add_charges_for_verify_read_olines(
         DateTime<Utc>, bool,
         Vec<(u32, ProductType, u64, (i64, u32), (i64, u32), u32)>
     )>,
-) {
-    // ---- add charge lines ----
+) { // ---- add charge lines ----
     for dl in d_charges {
         let (ctime, is_3pty_done, d_chargelines) = dl;
         let d_chargelines = d_chargelines.into_iter()
@@ -210,7 +192,7 @@ async fn ut_add_charges_for_verify_read_olines(
         let result = repo.create_charge(charge_m).await;
         assert!(result.is_ok());
     } // end of loop
-} // end of fn ut_add_charges_for_verify_read_olines
+} // end of fn ut_setup_bulk_add_charges
 
 #[rustfmt::skip]
 async fn ut_verify_unpaid_orderlines(
@@ -292,7 +274,7 @@ async fn read_unpaid_orderline_ok() {
             (2642, ProductType::Package, 595, (35,0), (35,0), 1),
         ]),
     ];
-    ut_add_charges_for_verify_read_olines(
+    ut_setup_bulk_add_charges(
         repo.clone(), mock_buyer_id, mock_oids[0],
         mock_clines_data,
     ).await;
@@ -311,7 +293,7 @@ async fn read_unpaid_orderline_ok() {
             (2642, ProductType::Package, 595, (70,0), (210,0), 3),
         ]),
     ];
-    ut_add_charges_for_verify_read_olines(
+    ut_setup_bulk_add_charges(
         repo.clone(), mock_buyer_id, mock_oids[1],
         mock_clines_data,
     ).await;
