@@ -19,10 +19,10 @@ use super::dto::RefundCompletionReqDto;
 use super::onboard::try_creating_merchant_repo;
 use super::RepoInitFailure;
 
-async fn try_creating_refund_repo<'a>(
+async fn try_creating_refund_repo(
     dstore: Arc<AppDataStoreContext>,
     logctx: Arc<AppLogContext>,
-) -> ActixResult<Box<dyn AbstractRefundRepo<'a>>> {
+) -> ActixResult<Box<dyn AbstractRefundRepo>> {
     app_repo_refund(dstore).await.map_err(|e_repo| {
         app_log_event!(logctx, AppLogLevel::ERROR, "repo-init-error {:?}", e_repo);
         ActixError::from(RepoInitFailure)

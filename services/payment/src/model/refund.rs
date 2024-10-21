@@ -43,6 +43,7 @@ pub enum RefundModelError {
     MissingReqLine(BaseProductIdentity, DateTime<Utc>),
     MissingCurrency(String, u32),
     MissingMerchant,
+    EmptyResolutionRequest(u32),
 } // end of enum RefundModelError
 
 // quantities of product items rejected to refund for defined reasons
@@ -85,7 +86,7 @@ pub struct OLineRefundModel {
     // the time when customer issued the refund request,
     time_req: DateTime<Utc>,
     // keep `resolution` history data along with each line
-    amount_refunded: PayLineAmountModel,
+    amount_refunded: PayLineAmountModel, // TODO, rename to `amount_aprv` means amount approval
     rejected: RefundLineQtyRejectModel,
     // TODO, reconsider whether or not to add each time the merchant
     // finalized the refund request line, to provide more detail log

@@ -486,8 +486,44 @@
                 DROP COLUMN `qty_rej`;
         </rollback>
     </changeSet>
-    
     <changeSet id="tag_version_0.0.14" author="T.H.">
         <tagDatabase tag="0.0.14" />
+    </changeSet>
+    <changeSet id="rename_amount_qty__oline_refund_req" author="T.H.">
+        <comment/>
+        <sql dbms="mariadb">
+            ALTER TABLE `oline_refund_req` RENAME COLUMN `amt_unit` TO `amt_req_unit`,
+                RENAME COLUMN `amt_total` TO `amt_req_total`,
+                RENAME COLUMN `qty` TO `qty_req`;
+        </sql>
+        <rollback>
+            ALTER TABLE `oline_refund_req` RENAME COLUMN `amt_req_unit` TO `amt_unit`,
+                RENAME COLUMN `amt_req_total` TO `amt_total`,
+                RENAME COLUMN `qty_req` TO `qty`;
+        </rollback>
+    </changeSet>
+    <changeSet id="add_resolution__oline_refund_req" author="T.H.">
+        <comment>
+            add columns which represent approval or rejection for refund request on each order line,
+            the word `aprv` in column name means `approval`, means merchant accepted to refund the
+            order line
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `oline_refund_req`
+                ADD COLUMN `qty_rej_fraud`  INT UNSIGNED NOT NULL,
+                ADD COLUMN `qty_rej_damage` INT UNSIGNED NOT NULL,
+                ADD COLUMN `qty_aprv`       INT UNSIGNED NOT NULL,
+                ADD COLUMN `amt_aprv_unit`   DECIMAL(16,2)  UNSIGNED NOT NULL,
+                ADD COLUMN `amt_aprv_total`  DECIMAL(16,2)  UNSIGNED NOT NULL;
+        </sql>
+        <rollback>
+            ALTER TABLE `oline_refund_req` DROP COLUMN `amt_aprv_unit`,
+                DROP COLUMN `amt_aprv_total`, DROP COLUMN `qty_aprv`,
+                DROP COLUMN `qty_rej_fraud`, DROP COLUMN `qty_rej_damage`;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.0.15" author="T.H.">
+        <tagDatabase tag="0.0.15" />
     </changeSet>
 </databaseChangeLog>

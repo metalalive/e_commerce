@@ -1,10 +1,13 @@
 use std::boxed::Box;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use ecommerce_common::constant::ProductType;
 use mysql_async::prelude::{Query, Queryable, WithParams};
 use mysql_async::{Conn, IsolationLevel, Params, TxOpts, Value as MySqlVal};
+use rust_decimal::Decimal;
 
 use ecommerce_common::adapter::repository::OidBytes;
 use ecommerce_common::error::AppErrorCode;
@@ -13,8 +16,13 @@ use ecommerce_common::model::BaseProductIdentity;
 
 use crate::adapter::datastore::{AppDStoreMariaDB, AppDataStoreContext};
 use crate::adapter::processor::AbstractPaymentProcessor;
-use crate::api::web::dto::RefundCompletionReqDto;
-use crate::model::{ChargeBuyerModel, OrderRefundModel, PayLineAmountModel};
+use crate::api::web::dto::{
+    RefundCompletionOlineReqDto, RefundCompletionReqDto, RefundRejectReasonDto,
+};
+use crate::model::{
+    ChargeBuyerModel, OLineRefundModel, OrderRefundModel, PayLineAmountModel,
+    RefundLineQtyRejectModel, RefundModelError,
+};
 
 use super::super::{
     AbstractRefundRepo, AppRefundRslvReqCallback, AppRefundRslvReqOkReturn, AppRepoError,
@@ -24,8 +32,24 @@ use super::{inner_into_parts, raw_column_to_datetime, DATETIME_FMT_P0F, DATETIME
 
 const JOB_SCHE_LABEL: &str = "refund-req-sync";
 
+type Req4RslvRowType = (
+    String,   // `product_type`
+    u64,      // `product_id`
+    MySqlVal, // `create_time`
+    Decimal,  // `amt_req_unit`
+    Decimal,  // `amt_req_total`
+    u32,      // `qty_req`
+    u32,      // `qty_rej_fraud`
+    u32,      // `qty_rej_damage`
+    Decimal,  // `amt_aprv_unit`
+    Decimal,  // `amt_aprv_total`
+    u32,      // `qty_aprv`
+);
+
 struct UpdateLastTimeSyncArgs(String, Params);
 struct InsertRequestArgs(String, Vec<Params>);
+struct FetchReqForRslvArgs(String, Params);
+struct UpdateResolvedReqArgs(String, Vec<Params>);
 
 impl From<DateTime<Utc>> for UpdateLastTimeSyncArgs {
     fn from(value: DateTime<Utc>) -> Self {
@@ -44,19 +68,19 @@ inner_into_parts!(UpdateLastTimeSyncArgs);
 impl TryFrom<Vec<OrderRefundModel>> for InsertRequestArgs {
     type Error = Vec<(AppErrorCode, AppRepoErrorDetail)>;
 
+    #[rustfmt::skip]
     fn try_from(value: Vec<OrderRefundModel>) -> Result<Self, Self::Error> {
         let stmt = "INSERT INTO `oline_refund_req`(`o_id`,`store_id`,`product_type`,`product_id`,\
-                    `create_time`,`amt_unit`,`amt_total`,`qty`) VALUES(?,?,?,?,?,?,?,?)";
+                    `create_time`,`amt_req_unit`,`amt_req_total`,`qty_req`,`qty_rej_fraud`,\
+                    `qty_rej_damage`,`qty_aprv`,`amt_aprv_unit`,`amt_aprv_total`) VALUES\
+                    (?,?,?,?,?,?,?,?,?,?,?,?,?)";
         let mut errors = Vec::new();
-        let final_params = value
-            .into_iter()
+        let final_params = value.into_iter()
             .map(Self::try_from_one_req)
             .filter_map(|r| r.map_err(|e| errors.push(e)).ok())
-            .flatten()
-            .collect::<Vec<_>>();
+            .flatten().collect::<Vec<_>>();
         if errors.is_empty() {
-            let o = Self(stmt.to_string(), final_params);
-            Ok(o)
+            Ok(Self(stmt.to_string(), final_params))
         } else {
             Err(errors)
         }
@@ -64,38 +88,38 @@ impl TryFrom<Vec<OrderRefundModel>> for InsertRequestArgs {
 } // end of impl InsertRequestArgs
 
 impl InsertRequestArgs {
+    #[rustfmt::skip]
     fn try_from_one_req(
         req: OrderRefundModel,
     ) -> Result<Vec<Params>, (AppErrorCode, AppRepoErrorDetail)> {
         let (oid_hex, rlines) = req.into_parts();
         let oid_b = OidBytes::try_from(oid_hex.as_str())
             .map_err(|(code, msg)| (code, AppRepoErrorDetail::OrderIDparse(msg)))?;
-        let params = rlines
-            .into_iter()
+        let params = rlines.into_iter()
             .map(|line| {
-                let (
-                    pid,
-                    amt_orig,
-                    ctime,
-                    _amt_rfd, // TODO, save the missing fields
-                    _rejected,
-                ) = line.into_parts();
-                let BaseProductIdentity {
-                    store_id,
-                    product_type,
-                    product_id,
-                } = pid;
-                let PayLineAmountModel { unit, total, qty } = amt_orig;
+                let (pid, amt_req, ctime, amt_aprv, rejected) = line.into_parts();
+                let BaseProductIdentity {store_id, product_type, product_id} = pid;
                 let prod_typ_num: u8 = product_type.into();
+                let num_rej_fraud = rejected.inner_map()
+                    .get(&RefundRejectReasonDto::Fraudulent)
+                    .unwrap_or(&0u32).to_owned();
+                let num_rej_damage = rejected.inner_map()
+                    .get(&RefundRejectReasonDto::Damaged)
+                    .unwrap_or(&0u32).to_owned();
                 let arg = vec![
                     oid_b.as_column().into(),
                     store_id.into(),
                     prod_typ_num.to_string().into(),
                     product_id.into(),
                     ctime.format(DATETIME_FMT_P0F).to_string().into(),
-                    unit.into(),
-                    total.into(),
-                    qty.into(),
+                    amt_req.unit.into(),
+                    amt_req.total.into(),
+                    amt_req.qty.into(),
+                    num_rej_fraud.into(),
+                    num_rej_damage.into(),
+                    amt_aprv.qty.into(),
+                    amt_aprv.unit.into(),
+                    amt_aprv.total.into(),
                 ];
                 Params::Positional(arg)
             })
@@ -109,6 +133,176 @@ impl InsertRequestArgs {
     }
 } // end of impl InsertRequestArgs
 
+impl<'a, 'b> From<(&'a OidBytes, u32, &'b [RefundCompletionOlineReqDto])> for FetchReqForRslvArgs {
+    fn from(value: (&'a OidBytes, u32, &'b [RefundCompletionOlineReqDto])) -> Self {
+        let (oid_b, merchant_id, cmplt_rlines) = value;
+        let stmt = Self::generate_prep_statement(cmplt_rlines.len());
+        let mut args = cmplt_rlines
+            .iter()
+            .flat_map(|rline| {
+                let prod_typ_num: u8 = rline.product_type.clone().into();
+                vec![
+                    prod_typ_num.into(),
+                    rline.product_id.into(),
+                    rline
+                        .time_issued
+                        .format(DATETIME_FMT_P0F)
+                        .to_string()
+                        .into(),
+                ]
+            })
+            .collect::<Vec<MySqlVal>>();
+        args.insert(0, oid_b.as_column().into());
+        args.insert(1, merchant_id.into());
+        Self(stmt, Params::Positional(args))
+    }
+} // end of impl FetchReqForRslvArgs
+
+inner_into_parts!(FetchReqForRslvArgs);
+
+impl FetchReqForRslvArgs {
+    #[rustfmt::skip]
+    fn generate_prep_statement(num_batches : usize) -> String {
+        assert_ne!(num_batches, 0);
+        let cond = (0..num_batches)
+            .map(|_| "(`product_type`=? AND `product_id`=? AND `create_time`=?)")
+            .collect::<Vec<_>>()
+            .join("OR");
+        format!("SELECT `product_type`,`product_id`,`create_time`,`amt_req_unit`,`amt_req_total`,\
+        `qty_req`,`qty_rej_fraud`,`qty_rej_damage`,`amt_aprv_unit`,`amt_aprv_total`,\
+        `qty_aprv` FROM `oline_refund_req` WHERE `o_id`=? AND `store_id`=? AND ({cond})")
+    }
+}
+
+impl<'a> From<(&'a OidBytes, Vec<OLineRefundModel>)> for UpdateResolvedReqArgs {
+    fn from(value: (&'a OidBytes, Vec<OLineRefundModel>)) -> Self {
+        let (oid_b, rlines_m) = value;
+        let oid = oid_b.as_column();
+        let stmt = "UPDATE `oline_refund_req` SET `qty_rej_fraud`=?, `qty_rej_damage`=?,\
+                    `amt_aprv_unit`=?, `amt_aprv_total`=?, `qty_aprv`=? WHERE `o_id`=? \
+                    AND `store_id`=? AND `product_type`=? AND `product_id`=? AND \
+                    `create_time`=?";
+        let params = rlines_m
+            .into_iter()
+            .map(|rline| {
+                let (pid, _amt_req, ctime, amt_aprv, rejected) = rline.into_parts();
+                let BaseProductIdentity {
+                    store_id,
+                    product_type,
+                    product_id,
+                } = pid;
+                let prod_typ_num: u8 = product_type.into();
+                let num_rej_fraud = rejected
+                    .inner_map()
+                    .get(&RefundRejectReasonDto::Fraudulent)
+                    .unwrap_or(&0u32)
+                    .to_owned();
+                let num_rej_damage = rejected
+                    .inner_map()
+                    .get(&RefundRejectReasonDto::Damaged)
+                    .unwrap_or(&0u32)
+                    .to_owned();
+                let arg = vec![
+                    num_rej_fraud.into(),
+                    num_rej_damage.into(),
+                    amt_aprv.unit.into(),
+                    amt_aprv.total.into(),
+                    amt_aprv.qty.into(),
+                    oid.clone().into(),
+                    store_id.into(),
+                    prod_typ_num.to_string().into(),
+                    product_id.into(),
+                    ctime.format(DATETIME_FMT_P0F).to_string().into(),
+                ];
+                Params::Positional(arg)
+            })
+            .collect::<Vec<_>>();
+        Self(stmt.to_string(), params)
+    } // end of fn from
+} // end of impl UpdateResolvedReqArgs
+
+impl UpdateResolvedReqArgs {
+    fn into_parts(self) -> (String, Vec<Params>) {
+        let Self(stmt, params) = self;
+        (stmt, params)
+    }
+}
+
+impl TryFrom<(u32, Req4RslvRowType)> for OLineRefundModel {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (u32, Req4RslvRowType)) -> Result<Self, Self::Error> {
+        let (
+            merchant_id,
+            (
+                prod_typ_serial,
+                product_id,
+                time_issued,
+                amt_req_unit,
+                amt_req_total,
+                qty_req,
+                qty_rej_fraud,
+                qty_rej_damage,
+                amt_aprv_unit,
+                amt_aprv_total,
+                qty_aprv,
+            ),
+        ) = value;
+        let product_type = prod_typ_serial.parse::<ProductType>().map_err(|e| {
+            let code = AppErrorCode::DataCorruption;
+            let detail = AppRepoErrorDetail::DataRowParse(e.0.to_string());
+            (code, detail)
+        })?;
+        let time_issued = raw_column_to_datetime(time_issued, 0)?;
+        let pid = BaseProductIdentity {
+            store_id: merchant_id,
+            product_type,
+            product_id,
+        };
+        let amt_req = PayLineAmountModel {
+            unit: amt_req_unit,
+            total: amt_req_total,
+            qty: qty_req,
+        };
+        let amt_aprv = PayLineAmountModel {
+            unit: amt_aprv_unit,
+            total: amt_aprv_total,
+            qty: qty_aprv,
+        };
+        let rejected = {
+            let list = [
+                (RefundRejectReasonDto::Fraudulent, qty_rej_fraud),
+                (RefundRejectReasonDto::Damaged, qty_rej_damage),
+            ];
+            let rejmap = HashMap::from(list);
+            RefundLineQtyRejectModel::from(&rejmap)
+        };
+        Ok(Self::from((pid, amt_req, time_issued, amt_aprv, rejected)))
+    } // end of fn try-from
+} // end of impl OLineRefundModel
+
+impl<'a> TryFrom<(&'a OidBytes, u32, Vec<Req4RslvRowType>)> for OrderRefundModel {
+    type Error = (AppErrorCode, AppRepoErrorDetail);
+    fn try_from(value: (&'a OidBytes, u32, Vec<Req4RslvRowType>)) -> Result<Self, Self::Error> {
+        let (oid_b, merchant_id, rows) = value;
+        let id = OidBytes::to_app_oid(oid_b.as_column())
+            .map_err(|(code, msg)| (code, AppRepoErrorDetail::OrderIDparse(msg)))?;
+        let mut errors = Vec::new();
+        let lines = rows
+            .into_iter()
+            .filter_map(|row| {
+                OLineRefundModel::try_from((merchant_id, row))
+                    .map_err(|e| errors.push(e))
+                    .ok()
+            })
+            .collect::<Vec<_>>();
+        if errors.is_empty() {
+            Ok(Self::from((id, lines)))
+        } else {
+            Err(errors.remove(0))
+        }
+    }
+}
+
 pub(crate) struct MariaDbRefundRepo {
     _dstore: Arc<AppDStoreMariaDB>,
 }
@@ -121,6 +315,38 @@ impl MariaDbRefundRepo {
                 fn_label: AppRepoErrorFnLabel::InitRefundRepo,
                 code: AppErrorCode::MissingDataStore,
                 detail: AppRepoErrorDetail::Unknown,
+            })
+    }
+    fn _rslv_validate_order_id(
+        charge_ms: &[ChargeBuyerModel],
+    ) -> Result<OidBytes, (AppErrorCode, AppRepoErrorDetail)> {
+        if charge_ms.is_empty() {
+            let s = "missing-order-id".to_string();
+            return Err((
+                AppErrorCode::EmptyInputData,
+                AppRepoErrorDetail::OrderIDparse(s),
+            ));
+        }
+        let expect_oid = charge_ms.first().unwrap().meta.oid();
+        let same = charge_ms.iter().all(|c| c.meta.oid() == expect_oid);
+        if same {
+            let oid_b = OidBytes::try_from(expect_oid.as_str())
+                .map_err(|(code, msg)| (code, AppRepoErrorDetail::OrderIDparse(msg)))?;
+            Ok(oid_b)
+        } else {
+            let s = "order-ids-not-consistent".to_string();
+            Err((
+                AppErrorCode::InvalidInput,
+                AppRepoErrorDetail::OrderIDparse(s),
+            ))
+        }
+    }
+
+    #[rustfmt::skip]
+    fn rslv_validate_order_id(&self, charge_ms: &[ChargeBuyerModel]) -> Result<OidBytes, AppRepoError> {
+        Self::_rslv_validate_order_id(charge_ms)
+            .map_err(|(code,detail)| {
+                self._map_log_err_common(code, detail, AppRepoErrorFnLabel::ResolveRefundReq)
             })
     }
 
@@ -139,7 +365,7 @@ impl MariaDbRefundRepo {
 } // end of impl MariaDbRefundRepo
 
 #[async_trait]
-impl<'a> AbstractRefundRepo<'a> for MariaDbRefundRepo {
+impl AbstractRefundRepo for MariaDbRefundRepo {
     async fn last_time_synced(&self) -> Result<Option<DateTime<Utc>>, AppRepoError> {
         let stmt = "SELECT `last_update` FROM `job_scheduler` WHERE `label`=?";
         let params = Params::Positional(vec![JOB_SCHE_LABEL.into()]);
@@ -247,16 +473,89 @@ impl<'a> AbstractRefundRepo<'a> for MariaDbRefundRepo {
 
     async fn resolve_request(
         &self,
-        _merchant_id: u32,
-        _new_req: RefundCompletionReqDto,
-        _charge_ms: Vec<ChargeBuyerModel>,
-        _processor: Arc<Box<dyn AbstractPaymentProcessor>>,
-        _cb: AppRefundRslvReqCallback<'a>,
+        merchant_id: u32,
+        cmplt_req: RefundCompletionReqDto,
+        charge_ms: Vec<ChargeBuyerModel>,
+        processor: Arc<Box<dyn AbstractPaymentProcessor>>,
+        usr_cb: AppRefundRslvReqCallback,
     ) -> Result<AppRefundRslvReqOkReturn, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::ResolveRefundReq,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        if cmplt_req.lines.is_empty() {
+            let me = RefundModelError::EmptyResolutionRequest(merchant_id);
+            return Err(AppRepoError {
+                fn_label: AppRepoErrorFnLabel::ResolveRefundReq,
+                code: AppErrorCode::EmptyInputData,
+                detail: AppRepoErrorDetail::RefundResolution(vec![me]),
+            });
+        }
+        let oid_b = self.rslv_validate_order_id(&charge_ms)?;
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            self._map_log_err_common(
+                AppErrorCode::DatabaseServerBusy,
+                AppRepoErrorDetail::DataStore(e),
+                AppRepoErrorFnLabel::ResolveRefundReq,
+            )
+        })?;
+        let mut tx = {
+            let options = TxOpts::new()
+                .with_isolation_level(IsolationLevel::Serializable)
+                .to_owned();
+            conn.start_transaction(options).await.map_err(|e| {
+                self._map_log_err_common(
+                    AppErrorCode::RemoteDbServerFailure,
+                    AppRepoErrorDetail::DatabaseTxStart(e.to_string()),
+                    AppRepoErrorFnLabel::ResolveRefundReq,
+                )
+            })?
+        };
+        let (stmt, params) = {
+            let arg = (&oid_b, merchant_id, cmplt_req.lines.as_slice());
+            FetchReqForRslvArgs::from(arg).into_parts()
+        };
+        let rows = tx
+            .exec::<Req4RslvRowType, String, Params>(stmt, params)
+            .await
+            .map_err(|e| {
+                self._map_log_err_common(
+                    AppErrorCode::RemoteDbServerFailure,
+                    AppRepoErrorDetail::DatabaseQuery(e.to_string()),
+                    AppRepoErrorFnLabel::ResolveRefundReq,
+                )
+            })?;
+        let mut o_rfnd_m =
+            OrderRefundModel::try_from((&oid_b, merchant_id, rows)).map_err(|e| {
+                self._map_log_err_common(e.0, e.1, AppRepoErrorFnLabel::ResolveRefundReq)
+            })?;
+
+        let cb_res = usr_cb(&mut o_rfnd_m, cmplt_req, charge_ms, processor)
+            .await
+            .map_err(|detail| {
+                self._map_log_err_common(
+                    AppErrorCode::DataCorruption,
+                    detail,
+                    AppRepoErrorFnLabel::ResolveRefundReq,
+                )
+            })?;
+
+        let (stmt, params) = {
+            let (_oid_hex, rlines_m) = o_rfnd_m.into_parts();
+            let arg = (&oid_b, rlines_m);
+            UpdateResolvedReqArgs::from(arg).into_parts()
+        };
+        tx.exec_batch(stmt, params).await.map_err(|e| {
+            self._map_log_err_common(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseExec(e.to_string()),
+                AppRepoErrorFnLabel::ResolveRefundReq,
+            )
+        })?;
+
+        tx.commit().await.map_err(|e| {
+            self._map_log_err_common(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseTxCommit(e.to_string()),
+                AppRepoErrorFnLabel::ResolveRefundReq,
+            )
+        })?;
+        Ok(cb_res)
+    } // end of fn resolve_request
 } // end of impl MariaDbRefundRepo

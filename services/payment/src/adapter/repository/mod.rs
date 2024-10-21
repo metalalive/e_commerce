@@ -161,7 +161,7 @@ pub trait AbstractMerchantRepo: Sync + Send {
 } // end of trait AbstractMerchantRepo
 
 #[async_trait]
-pub trait AbstractRefundRepo<'a>: Sync + Send {
+pub trait AbstractRefundRepo: Sync + Send {
     async fn last_time_synced(&self) -> Result<Option<DateTime<Utc>>, AppRepoError>;
 
     async fn update_sycned_time(&self, t: DateTime<Utc>) -> Result<(), AppRepoError>;
@@ -171,10 +171,10 @@ pub trait AbstractRefundRepo<'a>: Sync + Send {
     async fn resolve_request(
         &self,
         merchant_id: u32,
-        new_req: RefundCompletionReqDto,
+        cmplt_req: RefundCompletionReqDto,
         charge_ms: Vec<ChargeBuyerModel>,
         processor: Arc<Box<dyn AbstractPaymentProcessor>>,
-        cb: AppRefundRslvReqCallback<'a>,
+        cb: AppRefundRslvReqCallback,
     ) -> Result<AppRefundRslvReqOkReturn, AppRepoError>;
 }
 
@@ -187,13 +187,13 @@ pub type AppRefundRslvReqCbReturn = Result<AppRefundRslvReqOkReturn, AppRepoErro
 // outside the repo struct and each with different lifetime annotations.
 // To keep design simple, only one reference is allowed in this function
 // pointer type
-pub type AppRefundRslvReqCallback<'a> =
+pub type AppRefundRslvReqCallback =
     fn(
-        &'a mut OrderRefundModel,
+        &mut OrderRefundModel,
         RefundCompletionReqDto,
         Vec<ChargeBuyerModel>,
         Arc<Box<dyn AbstractPaymentProcessor>>,
-    ) -> Pin<Box<dyn Future<Output = AppRefundRslvReqCbReturn> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = AppRefundRslvReqCbReturn> + Send + '_>>;
 
 pub async fn app_repo_charge(
     dstore: Arc<AppDataStoreContext>,
@@ -209,9 +209,9 @@ pub async fn app_repo_merchant(
     Ok(Box::new(repo))
 }
 
-pub async fn app_repo_refund<'a>(
+pub async fn app_repo_refund(
     dstore: Arc<AppDataStoreContext>,
-) -> Result<Box<dyn AbstractRefundRepo<'a>>, AppRepoError> {
+) -> Result<Box<dyn AbstractRefundRepo>, AppRepoError> {
     let repo = MariaDbRefundRepo::new(dstore)?;
     Ok(Box::new(repo))
 }

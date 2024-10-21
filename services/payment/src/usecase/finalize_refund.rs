@@ -24,14 +24,14 @@ pub enum FinalizeRefundUcError {
     MissingCharge(u32, DateTime<Utc>),
 }
 
-pub struct FinalizeRefundUseCase<'a> {
+pub struct FinalizeRefundUseCase {
     pub repo_ch: Box<dyn AbstractChargeRepo>,
     pub repo_mc: Box<dyn AbstractMerchantRepo>,
-    pub repo_rfd: Box<dyn AbstractRefundRepo<'a>>,
+    pub repo_rfd: Box<dyn AbstractRefundRepo>,
     pub processors: Arc<Box<dyn AbstractPaymentProcessor>>,
 }
 
-impl<'a> FinalizeRefundUseCase<'a> {
+impl FinalizeRefundUseCase {
     pub async fn execute(
         self,
         oid: String,
@@ -104,7 +104,7 @@ impl<'a> FinalizeRefundUseCase<'a> {
         Ok((o, errs_proc))
     } // end of fn execute
 
-    fn hdlr_load_refund_req(
+    fn hdlr_load_refund_req<'a>(
         refund_m: &'a mut OrderRefundModel,
         cmplt_req: RefundCompletionReqDto,
         charge_ms: Vec<ChargeBuyerModel>,
