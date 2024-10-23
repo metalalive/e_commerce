@@ -174,6 +174,7 @@ impl FetchReqForRslvArgs {
     }
 }
 
+#[rustfmt::skip]
 impl<'a> From<(&'a OidBytes, Vec<OLineRefundModel>)> for UpdateResolvedReqArgs {
     fn from(value: (&'a OidBytes, Vec<OLineRefundModel>)) -> Self {
         let (oid_b, rlines_m) = value;
@@ -182,26 +183,17 @@ impl<'a> From<(&'a OidBytes, Vec<OLineRefundModel>)> for UpdateResolvedReqArgs {
                     `amt_aprv_unit`=?, `amt_aprv_total`=?, `qty_aprv`=? WHERE `o_id`=? \
                     AND `store_id`=? AND `product_type`=? AND `product_id`=? AND \
                     `create_time`=?";
-        let params = rlines_m
-            .into_iter()
+        let params = rlines_m.into_iter()
             .map(|rline| {
                 let (pid, _amt_req, ctime, amt_aprv, rejected) = rline.into_parts();
-                let BaseProductIdentity {
-                    store_id,
-                    product_type,
-                    product_id,
-                } = pid;
+                let BaseProductIdentity {store_id, product_type, product_id} = pid;
                 let prod_typ_num: u8 = product_type.into();
-                let num_rej_fraud = rejected
-                    .inner_map()
+                let num_rej_fraud = rejected.inner_map()
                     .get(&RefundRejectReasonDto::Fraudulent)
-                    .unwrap_or(&0u32)
-                    .to_owned();
-                let num_rej_damage = rejected
-                    .inner_map()
+                    .unwrap_or(&0u32).to_owned();
+                let num_rej_damage = rejected.inner_map()
                     .get(&RefundRejectReasonDto::Damaged)
-                    .unwrap_or(&0u32)
-                    .to_owned();
+                    .unwrap_or(&0u32).to_owned();
                 let arg = vec![
                     num_rej_fraud.into(),
                     num_rej_damage.into(),
@@ -228,23 +220,17 @@ impl UpdateResolvedReqArgs {
     }
 }
 
+#[rustfmt::skip]
 impl TryFrom<(u32, Req4RslvRowType)> for OLineRefundModel {
     type Error = (AppErrorCode, AppRepoErrorDetail);
     fn try_from(value: (u32, Req4RslvRowType)) -> Result<Self, Self::Error> {
         let (
             merchant_id,
             (
-                prod_typ_serial,
-                product_id,
-                time_issued,
-                amt_req_unit,
-                amt_req_total,
-                qty_req,
-                qty_rej_fraud,
-                qty_rej_damage,
-                amt_aprv_unit,
-                amt_aprv_total,
-                qty_aprv,
+                prod_typ_serial, product_id, time_issued,
+                amt_req_unit, amt_req_total, qty_req,
+                qty_rej_fraud, qty_rej_damage,
+                amt_aprv_unit, amt_aprv_total, qty_aprv,
             ),
         ) = value;
         let product_type = prod_typ_serial.parse::<ProductType>().map_err(|e| {
@@ -253,20 +239,12 @@ impl TryFrom<(u32, Req4RslvRowType)> for OLineRefundModel {
             (code, detail)
         })?;
         let time_issued = raw_column_to_datetime(time_issued, 0)?;
-        let pid = BaseProductIdentity {
-            store_id: merchant_id,
-            product_type,
-            product_id,
-        };
+        let pid = BaseProductIdentity {store_id: merchant_id, product_type, product_id};
         let amt_req = PayLineAmountModel {
-            unit: amt_req_unit,
-            total: amt_req_total,
-            qty: qty_req,
+            unit: amt_req_unit, total: amt_req_total, qty: qty_req,
         };
         let amt_aprv = PayLineAmountModel {
-            unit: amt_aprv_unit,
-            total: amt_aprv_total,
-            qty: qty_aprv,
+            unit: amt_aprv_unit, total: amt_aprv_total, qty: qty_aprv,
         };
         let rejected = {
             let list = [

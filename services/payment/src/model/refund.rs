@@ -86,10 +86,8 @@ pub struct OLineRefundModel {
     // the time when customer issued the refund request,
     time_req: DateTime<Utc>,
     // keep `resolution` history data along with each line
-    amount_refunded: PayLineAmountModel, // TODO, rename to `amount_aprv` means amount approval
+    amount_aprv: PayLineAmountModel,
     rejected: RefundLineQtyRejectModel,
-    // TODO, reconsider whether or not to add each time the merchant
-    // finalized the refund request line, to provide more detail log
 }
 
 pub struct OrderRefundModel {
@@ -207,10 +205,10 @@ impl TryFrom<OrderLineReplicaRefundDto> for OLineRefundModel {
                 )
             })?;
         let amount_req = PayLineAmountModel { unit, total, qty };
-        let mut amount_refunded = PayLineAmountModel::default();
-        amount_refunded.unit = amount_req.unit;
+        let mut amount_aprv = PayLineAmountModel::default();
+        amount_aprv.unit = amount_req.unit;
         let rejected = RefundLineQtyRejectModel::default();
-        Ok(Self { pid, amount_req, time_req, amount_refunded, rejected })
+        Ok(Self { pid, amount_req, time_req, amount_aprv, rejected })
     } // end of fn try-from
 } // end of impl OLineRefundModel
 
@@ -225,14 +223,14 @@ type OLineRefundCvtArgs = (
 impl From<OLineRefundCvtArgs> for OLineRefundModel {
     #[rustfmt::skip]
     fn from(value: OLineRefundCvtArgs) -> Self {
-        let (pid, amount_req, time_req, amount_refunded, rejected) = value;
-        Self { pid, amount_req, time_req, amount_refunded, rejected }
+        let (pid, amount_req, time_req, amount_aprv, rejected) = value;
+        Self { pid, amount_req, time_req, amount_aprv, rejected }
     }
 }
 
 impl OLineRefundModel {
     pub fn approved(&self) -> &PayLineAmountModel {
-        &self.amount_refunded
+        &self.amount_aprv
     }
     pub fn rejected(&self) -> &RefundLineQtyRejectModel {
         &self.rejected
@@ -240,33 +238,27 @@ impl OLineRefundModel {
 
     #[rustfmt::skip]
     pub(crate) fn into_parts(self) -> OLineRefundCvtArgs {
-        let Self { pid, amount_req, time_req, amount_refunded, rejected } = self;
-        (pid, amount_req, time_req, amount_refunded, rejected)
+        let Self { pid, amount_req, time_req, amount_aprv, rejected } = self;
+        (pid, amount_req, time_req, amount_aprv, rejected)
     }
 
+    #[rustfmt::skip]
     fn estimate_remain_quantity(
-        &self,
-        data: &RefundCompletionOlineReqDto,
+        &self, data: &RefundCompletionOlineReqDto,
     ) -> Result<u32, RefundModelError> {
         let detail = (
             self.amount_req.qty,
-            self.amount_refunded.qty,
+            self.amount_aprv.qty,
             self.rejected.total_qty(),
         );
-        let qty_avail = detail
-            .0
-            .checked_sub(detail.1)
+        let qty_avail = detail.0.checked_sub(detail.1)
             .ok_or(RefundModelError::qty_limit(&self.pid, detail.0, detail.1))?;
-        let qty_avail = qty_avail
-            .checked_sub(detail.2)
+        let qty_avail = qty_avail.checked_sub(detail.2)
             .ok_or(RefundModelError::qty_limit(&self.pid, qty_avail, detail.2))?;
         let detail = (qty_avail, data.approval.quantity, data.total_qty_rejected());
-        let qty_avail = detail
-            .0
-            .checked_sub(detail.1)
+        let qty_avail = detail.0.checked_sub(detail.1)
             .ok_or(RefundModelError::qty_limit(&self.pid, detail.0, detail.1))?;
-        let qty_avail = qty_avail
-            .checked_sub(detail.2)
+        let qty_avail = qty_avail.checked_sub(detail.2)
             .ok_or(RefundModelError::qty_limit(&self.pid, qty_avail, detail.2))?;
         Ok(qty_avail)
     }
@@ -287,7 +279,7 @@ impl OLineRefundModel {
         let qty_discard = data.total_qty_rejected();
         let detail = (
             self.amount_req.total,
-            self.amount_refunded.total,
+            self.amount_aprv.total,
             amt_new_aprv,
             Decimal::new(qty_discard as i64, 0) * self.amount_req.unit,
         );
@@ -343,6 +335,9 @@ impl From<(String, Vec<OLineRefundModel>)> for OrderRefundModel {
     }
 }
 
+type ORefundValidateReturnType =
+    Result<Vec<(ProductType, u64, DateTime<Utc>, u32, Decimal)>, Vec<RefundModelError>>;
+
 impl OrderRefundModel {
     pub(crate) fn into_parts(self) -> (String, Vec<OLineRefundModel>) {
         let Self { id: oid, lines } = self;
@@ -369,22 +364,13 @@ impl OrderRefundModel {
             .find(|v| v.pid == key && v.time_req.trunc_subsecs(0) == time_req.trunc_subsecs(0))
     }
 
-    #[allow(clippy::type_complexity)] // TODO, improve return type complexity
-    pub fn validate(
-        &self,
-        merchant_id: u32,
-        data: &RefundCompletionReqDto,
-    ) -> Result<Vec<(ProductType, u64, DateTime<Utc>, u32, Decimal)>, Vec<RefundModelError>> {
+    #[rustfmt::skip]
+    pub fn validate(&self, merchant_id: u32, data: &RefundCompletionReqDto) -> ORefundValidateReturnType {
         let mut errors = Vec::new();
-        let valid_amt_qty = data
-            .lines
-            .iter()
+        let valid_amt_qty = data.lines.iter()
             .filter_map(|d| {
                 let result = self.get_line(
-                    merchant_id,
-                    d.product_type.clone(),
-                    d.product_id,
-                    d.time_issued,
+                    merchant_id, d.product_type.clone(), d.product_id, d.time_issued,
                 );
                 if let Some(line) = result {
                     match line.estimate_remains(d) {
@@ -393,18 +379,13 @@ impl OrderRefundModel {
                             None
                         }
                         Ok((qty, amt_tot)) => Some((
-                            d.product_type.clone(),
-                            d.product_id,
-                            d.time_issued,
-                            qty,
-                            amt_tot,
+                            d.product_type.clone(), d.product_id, d.time_issued, qty, amt_tot,
                         )),
                     }
                 } else {
                     let e = RefundModelError::MissingReqLine(
                         BaseProductIdentity {
-                            store_id: merchant_id,
-                            product_id: d.product_id,
+                            store_id: merchant_id, product_id: d.product_id,
                             product_type: d.product_type.clone(),
                         },
                         d.time_issued,
@@ -436,7 +417,7 @@ impl OrderRefundModel {
                     .map(|r| (v, r.0, r.1))
             })
             .map(|(line_req, rslv_rej, rslv_aprv)| {
-                rslv_aprv.accumulate(&mut line_req.amount_refunded);
+                rslv_aprv.accumulate(&mut line_req.amount_aprv);
                 rslv_rej.accumulate(&mut line_req.rejected);
             })
             .count();
