@@ -182,11 +182,32 @@ pub type AppRefundRslvReqOkReturn = Vec<Result<RefundReqResolutionModel, AppProc
 
 pub type AppRefundRslvReqCbReturn = Result<AppRefundRslvReqOkReturn, AppRepoErrorDetail>;
 
-// Note / CAUTION
-// It is extremely difficult to manage several references to other types
-// outside the repo struct and each with different lifetime annotations.
-// To keep design simple, only one reference is allowed in this function
-// pointer type
+/*
+ * Note / CAUTION :
+ *
+ * - A function signature requires lifetime annotation if it contains more than
+ *   one references in its input and one reference in its output.
+ *
+ * - Ideally callers should pass reference to `Vec<ChargeBuyerModel>` to this
+ *   callback, that is, the 3rd input argument is `&Vec<ChargeBuyerModel>`. However
+ *   current use cases in this application cannot satisfy lifetime restriction
+ *   , the 3rd input argument still remains as `Vec<ChargeBuyerModel>`
+ *
+ * - In this application, `&mut OrderRefundModel` in `AppRefundRslvReqCallback`
+ *   lives only within the scope of trait method `resolve_request(...)`, if
+ *   `&mut OrderRefundModel` annotated with lifetime label
+ *   (such as `&'a mut OrderRefundModel`) , then the trait `AbstractRefundRepo`
+ *   has to be declared with the same lifetime, this adds difficulty for other
+ *   callers in use-case layer. Currently I have not figured out any approach
+ *   which handles such issue efficiently.
+ *
+ * - It is extremely difficult to manage several references to other types
+ *   outside the repo struct and each with different lifetime annotations.
+ *
+ * - To keep design simple, only one reference is allowed in this function
+ *   pointer type
+ *
+ * */
 pub type AppRefundRslvReqCallback =
     fn(
         &mut OrderRefundModel,

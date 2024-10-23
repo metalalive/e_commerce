@@ -3,7 +3,7 @@ use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SubsecRound, Utc};
 use ecommerce_common::constant::ProductType;
 use rust_decimal::Decimal;
 
@@ -231,6 +231,13 @@ impl From<OLineRefundCvtArgs> for OLineRefundModel {
 }
 
 impl OLineRefundModel {
+    pub fn approved(&self) -> &PayLineAmountModel {
+        &self.amount_refunded
+    }
+    pub fn rejected(&self) -> &RefundLineQtyRejectModel {
+        &self.rejected
+    }
+
     #[rustfmt::skip]
     pub(crate) fn into_parts(self) -> OLineRefundCvtArgs {
         let Self { pid, amount_req, time_req, amount_refunded, rejected } = self;
@@ -341,13 +348,25 @@ impl OrderRefundModel {
         let Self { id: oid, lines } = self;
         (oid, lines)
     }
-    pub(crate) fn num_lines(&self) -> usize {
+    pub fn num_lines(&self) -> usize {
         self.lines.len()
     }
     pub(crate) fn merchant_ids(&self) -> Vec<u32> {
         let iter = self.lines.iter().map(|v| v.pid.store_id);
         let hset: HashSet<u32, RandomState> = HashSet::from_iter(iter);
         hset.into_iter().collect()
+    }
+    #[rustfmt::skip]
+    pub fn get_line(
+        &self, merchant_id: u32, product_type: ProductType,
+        product_id: u64, time_req: DateTime<Utc>,
+    ) -> Option<&OLineRefundModel> {
+        let key = BaseProductIdentity {
+            store_id: merchant_id, product_id,
+            product_type: product_type.clone(),
+        };
+        self.lines.iter()
+            .find(|v| v.pid == key && v.time_req.trunc_subsecs(0) == time_req.trunc_subsecs(0))
     }
 
     #[allow(clippy::type_complexity)] // TODO, improve return type complexity
@@ -361,15 +380,12 @@ impl OrderRefundModel {
             .lines
             .iter()
             .filter_map(|d| {
-                let key = BaseProductIdentity {
-                    store_id: merchant_id,
-                    product_type: d.product_type.clone(),
-                    product_id: d.product_id,
-                };
-                let result = self
-                    .lines
-                    .iter()
-                    .find(|v| v.pid == key && v.time_req == d.time_issued);
+                let result = self.get_line(
+                    merchant_id,
+                    d.product_type.clone(),
+                    d.product_id,
+                    d.time_issued,
+                );
                 if let Some(line) = result {
                     match line.estimate_remains(d) {
                         Err(e) => {
@@ -377,15 +393,22 @@ impl OrderRefundModel {
                             None
                         }
                         Ok((qty, amt_tot)) => Some((
-                            key.product_type,
-                            key.product_id,
+                            d.product_type.clone(),
+                            d.product_id,
                             d.time_issued,
                             qty,
                             amt_tot,
                         )),
                     }
                 } else {
-                    let e = RefundModelError::MissingReqLine(key, d.time_issued);
+                    let e = RefundModelError::MissingReqLine(
+                        BaseProductIdentity {
+                            store_id: merchant_id,
+                            product_id: d.product_id,
+                            product_type: d.product_type.clone(),
+                        },
+                        d.time_issued,
+                    );
                     errors.push(e);
                     None
                 }
@@ -535,7 +558,7 @@ impl RefundReqRslvInnerModel {
             store_id: merchant_id ,product_type,product_id
         };
         self.lines.iter()
-            .find(|v| v.pid == key && time_req == v.time_req)
+            .find(|v| v.pid == key && time_req.trunc_subsecs(0) == v.time_req.trunc_subsecs(0))
             .map(|v| (&v.qty_reject, &v.amount))
     }
 } // end of impl RefundReqRslvInnerModel
@@ -591,6 +614,9 @@ impl RefundReqResolutionModel {
         RefundCompletionReqDto { lines: reduced_lines }
     } // end of fm reduce_resolved
 
+    /// Note the given time-req argument is truncated with all subseconds,
+    /// this application does not require time precision less than one second
+    /// for refund rquest recording
     #[rustfmt::skip]
     pub fn get_status(
         &self, merchant_id: u32, product_type: ProductType,

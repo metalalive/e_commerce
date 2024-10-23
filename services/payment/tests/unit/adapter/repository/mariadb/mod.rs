@@ -36,9 +36,7 @@ async fn ut_setup_db_merchant_repo(
     Arc::new(repo)
 }
 
-async fn ut_setup_db_refund_repo<'a>(
-    shr_state: AppSharedState,
-) -> Arc<Box<dyn AbstractRefundRepo<'a>>> {
+async fn ut_setup_db_refund_repo(shr_state: AppSharedState) -> Arc<Box<dyn AbstractRefundRepo>> {
     let dstore = shr_state.datastore();
     let result = app_repo_refund(dstore).await;
     let repo = result.unwrap();
