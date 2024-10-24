@@ -1,16 +1,19 @@
 mod capture_charge;
 mod create_charge;
+mod finalize_refund;
 mod onboard;
 mod refresh_charge_status;
 
 use std::boxed::Box;
 use std::result::Result;
-use std::sync::Mutex;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use tokio::sync::Mutex;
 
 use ecommerce_common::api::rpc::dto::StoreProfileReplicaDto;
+use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
 use payment::adapter::cache::{AbstractOrderSyncLockCache, OrderSyncLockError};
@@ -18,16 +21,19 @@ use payment::adapter::processor::{
     AbstractPaymentProcessor, AppProcessorError, AppProcessorErrorReason, AppProcessorFnLabel,
     AppProcessorMerchantResult, AppProcessorPayInResult, AppProcessorPayoutResult,
 };
-use payment::adapter::repository::{AbstractChargeRepo, AbstractMerchantRepo, AppRepoError};
+use payment::adapter::repository::{
+    AbstractChargeRepo, AbstractMerchantRepo, AbstractRefundRepo, AppRefundRslvReqCallback,
+    AppRefundRslvReqOkReturn, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel,
+};
 use payment::adapter::rpc::{
     AbsRpcClientContext, AbstractRpcClient, AbstractRpcContext, AbstractRpcPublishEvent,
     AppRpcClientRequest, AppRpcCtxError, AppRpcReply,
 };
-use payment::api::web::dto::{PaymentMethodReqDto, StoreOnboardReqDto};
+use payment::api::web::dto::{PaymentMethodReqDto, RefundCompletionReqDto, StoreOnboardReqDto};
 use payment::model::{
     Charge3partyModel, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel,
     ChargeRefundMap, Label3party, Merchant3partyModel, MerchantProfileModel, OrderLineModelSet,
-    PayoutModel, RefundReqResolutionModel,
+    OrderRefundModel, PayoutModel, RefundReqResolutionModel,
 };
 
 struct MockChargeRepo {
@@ -37,7 +43,7 @@ struct MockChargeRepo {
     _read_charge_meta: Mutex<Option<Result<Option<ChargeBuyerMetaModel>, AppRepoError>>>,
     _read_all_charge_lines: Mutex<Option<Result<Vec<ChargeLineBuyerModel>, AppRepoError>>>,
     _update_chargemeta_result: Mutex<Option<Result<(), AppRepoError>>>,
-    _read_charge_by_merchant: Mutex<Option<ChargeBuyerModel>>,
+    _read_charge_by_merchant: Mutex<Option<Vec<ChargeBuyerModel>>>,
     _read_payout: Mutex<Option<PayoutModel>>,
     _create_payout_result: Mutex<Option<Result<(), AppRepoError>>>,
     _read_charge_ids: Mutex<Option<Option<(u32, Vec<DateTime<Utc>>)>>>,
@@ -52,7 +58,7 @@ impl MockChargeRepo {
         chargemeta: Option<Result<Option<ChargeBuyerMetaModel>, AppRepoError>>,
         all_chargelines: Option<Result<Vec<ChargeLineBuyerModel>, AppRepoError>>,
         update_meta_res: Option<Result<(), AppRepoError>>,
-        charge_by_merchant: Option<ChargeBuyerModel>,
+        charge_by_merchant: Option<Vec<ChargeBuyerModel>>,
         rd_payout: Option<PayoutModel>,
         create_payout_res: Option<Result<(), AppRepoError>>,
         rd_chrg_ids: Option<(u32, Vec<DateTime<Utc>>)>,
@@ -81,7 +87,7 @@ impl AbstractChargeRepo for MockChargeRepo {
         _usr_id: u32,
         _oid: &str,
     ) -> Result<Option<OrderLineModelSet>, AppRepoError> {
-        let mut g = self._expect_unpaid_olines.lock().unwrap();
+        let mut g = self._expect_unpaid_olines.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -90,12 +96,12 @@ impl AbstractChargeRepo for MockChargeRepo {
         _olines: &OrderLineModelSet,
         _billing: &BillingModel,
     ) -> Result<(), AppRepoError> {
-        let mut g = self._create_order_result.lock().unwrap();
+        let mut g = self._create_order_result.lock().await;
         let out = g.take().unwrap();
         out
     }
     async fn create_charge(&self, _cline_set: ChargeBuyerModel) -> Result<(), AppRepoError> {
-        let mut g = self._create_charge_result.lock().unwrap();
+        let mut g = self._create_charge_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -104,7 +110,7 @@ impl AbstractChargeRepo for MockChargeRepo {
         _usr_id: u32,
         _create_time: DateTime<Utc>,
     ) -> Result<Option<ChargeBuyerMetaModel>, AppRepoError> {
-        let mut g = self._read_charge_meta.lock().unwrap();
+        let mut g = self._read_charge_meta.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -113,7 +119,7 @@ impl AbstractChargeRepo for MockChargeRepo {
         _usr_id: u32,
         _create_time: DateTime<Utc>,
     ) -> Result<Vec<ChargeLineBuyerModel>, AppRepoError> {
-        let mut g = self._read_all_charge_lines.lock().unwrap();
+        let mut g = self._read_all_charge_lines.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -122,7 +128,7 @@ impl AbstractChargeRepo for MockChargeRepo {
         &self,
         _oid: &str,
     ) -> Result<Option<(u32, Vec<DateTime<Utc>>)>, AppRepoError> {
-        let mut g = self._read_charge_ids.lock().unwrap();
+        let mut g = self._read_charge_ids.lock().await;
         let ids = g.take().unwrap();
         Ok(ids)
     }
@@ -131,13 +137,13 @@ impl AbstractChargeRepo for MockChargeRepo {
         &self,
         _meta: ChargeBuyerMetaModel,
     ) -> Result<(), AppRepoError> {
-        let mut g = self._update_chargemeta_result.lock().unwrap();
+        let mut g = self._update_chargemeta_result.lock().await;
         let out = g.take().unwrap();
         out
     }
 
     async fn update_lines_refund(&self, _cl_map: ChargeRefundMap) -> Result<(), AppRepoError> {
-        let mut g = self._update_linerefund_result.lock().unwrap();
+        let mut g = self._update_linerefund_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -148,8 +154,8 @@ impl AbstractChargeRepo for MockChargeRepo {
         _create_time: DateTime<Utc>,
         _store_id: u32,
     ) -> Result<Option<ChargeBuyerModel>, AppRepoError> {
-        let mut g = self._read_charge_by_merchant.lock().unwrap();
-        let out = g.take();
+        let mut g = self._read_charge_by_merchant.lock().await;
+        let out = g.as_mut().map(|v| v.remove(0));
         Ok(out)
     }
 
@@ -159,13 +165,13 @@ impl AbstractChargeRepo for MockChargeRepo {
         _buyer_id: u32,
         _create_time: DateTime<Utc>,
     ) -> Result<Option<PayoutModel>, AppRepoError> {
-        let mut g = self._read_payout.lock().unwrap();
+        let mut g = self._read_payout.lock().await;
         let out = g.take();
         Ok(out)
     }
 
     async fn create_payout(&self, _payout_m: PayoutModel) -> Result<(), AppRepoError> {
-        let mut g = self._create_payout_result.lock().unwrap();
+        let mut g = self._create_payout_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -202,7 +208,7 @@ impl AbstractMerchantRepo for MockMerchantRepo {
         _mprof: MerchantProfileModel,
         _m3pty: Merchant3partyModel,
     ) -> Result<(), AppRepoError> {
-        let mut g = self._create_result.lock().unwrap();
+        let mut g = self._create_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -211,7 +217,7 @@ impl AbstractMerchantRepo for MockMerchantRepo {
         _store_id: u32,
         _label3pty: Label3party,
     ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError> {
-        let mut g = self._fetch_result.lock().unwrap();
+        let mut g = self._fetch_result.lock().await;
         let out = g.take();
         Ok(out)
     }
@@ -220,7 +226,7 @@ impl AbstractMerchantRepo for MockMerchantRepo {
         _store_id: u32,
         _m3pty: Merchant3partyModel,
     ) -> Result<(), AppRepoError> {
-        let mut g = self._update3pty_result.lock().unwrap();
+        let mut g = self._update3pty_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -228,11 +234,69 @@ impl AbstractMerchantRepo for MockMerchantRepo {
         &self,
         _store_id: u32,
     ) -> Result<Option<MerchantProfileModel>, AppRepoError> {
-        let mut g = self._fetch_profile_result.lock().unwrap();
+        let mut g = self._fetch_profile_result.lock().await;
         let out = g.take();
         Ok(out)
     }
 } // end of impl MockMerchantRepo
+
+struct MockRefundRepo {
+    _saved_req_for_rslv: Mutex<Option<OrderRefundModel>>,
+}
+
+impl MockRefundRepo {
+    fn build(saved_req: Option<OrderRefundModel>) -> Box<dyn AbstractRefundRepo> {
+        let obj = Self {
+            _saved_req_for_rslv: Mutex::new(saved_req),
+        };
+        Box::new(obj)
+    }
+    fn _not_implemented_err(fn_label: AppRepoErrorFnLabel) -> AppRepoError {
+        let label = "unit-test".to_string();
+        let msg = "not-tested-yet".to_string();
+        AppRepoError {
+            fn_label,
+            code: AppErrorCode::NotImplemented,
+            detail: AppRepoErrorDetail::PayDetail(label, msg),
+        }
+    }
+} // end of impl MockRefundRepo
+
+#[async_trait]
+impl AbstractRefundRepo for MockRefundRepo {
+    async fn last_time_synced(&self) -> Result<Option<DateTime<Utc>>, AppRepoError> {
+        Err(Self::_not_implemented_err(
+            AppRepoErrorFnLabel::RefundGetTimeSynced,
+        ))
+    }
+    async fn update_sycned_time(&self, _t: DateTime<Utc>) -> Result<(), AppRepoError> {
+        Err(Self::_not_implemented_err(
+            AppRepoErrorFnLabel::RefundUpdateTimeSynced,
+        ))
+    }
+    async fn save_request(&self, _req: Vec<OrderRefundModel>) -> Result<(), AppRepoError> {
+        Err(Self::_not_implemented_err(
+            AppRepoErrorFnLabel::RefundSaveReq,
+        ))
+    }
+    async fn resolve_request(
+        &self,
+        _merchant_id: u32,
+        cmplt_req: RefundCompletionReqDto,
+        charge_ms: Vec<ChargeBuyerModel>,
+        processor: Arc<Box<dyn AbstractPaymentProcessor>>,
+        cb: AppRefundRslvReqCallback,
+    ) -> Result<AppRefundRslvReqOkReturn, AppRepoError> {
+        let mut g = self._saved_req_for_rslv.lock().await;
+        let o_rfnd_m = g.as_mut().unwrap();
+        let result = cb(o_rfnd_m, cmplt_req, charge_ms, processor).await;
+        result.map_err(|detail| AppRepoError {
+            fn_label: AppRepoErrorFnLabel::ResolveRefundReq,
+            code: AppErrorCode::InvalidInput,
+            detail,
+        })
+    }
+} // end of impl MockRefundRepo
 
 struct MockOrderSyncLockCache {
     _acquire_result: Mutex<Option<Result<bool, OrderSyncLockError>>>,
@@ -242,12 +306,12 @@ struct MockOrderSyncLockCache {
 #[async_trait]
 impl AbstractOrderSyncLockCache for MockOrderSyncLockCache {
     async fn acquire(&self, _usr_id: u32, _oid: &str) -> Result<bool, OrderSyncLockError> {
-        let mut g = self._acquire_result.lock().unwrap();
+        let mut g = self._acquire_result.lock().await;
         let out = g.take().unwrap();
         out
     }
     async fn release(&self, _usr_id: u32, _oid: &str) -> Result<(), OrderSyncLockError> {
-        let mut g = self._release_result.lock().unwrap();
+        let mut g = self._release_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -268,7 +332,7 @@ impl AbstractRpcContext for MockRpcContext {}
 #[async_trait]
 impl AbsRpcClientContext for MockRpcContext {
     async fn acquire(&self) -> Result<Box<dyn AbstractRpcClient>, AppRpcCtxError> {
-        let mut g = self._acquire_result.lock().unwrap();
+        let mut g = self._acquire_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -289,7 +353,7 @@ impl AbstractRpcClient for MockRpcClient {
         mut self: Box<Self>,
         _props: AppRpcClientRequest,
     ) -> Result<Box<dyn AbstractRpcPublishEvent>, AppRpcCtxError> {
-        let mut g = self._send_req_result.lock().unwrap();
+        let mut g = self._send_req_result.lock().await;
         let evt = g.take().unwrap();
         evt
     }
@@ -307,7 +371,7 @@ impl MockRpcClient {
 #[async_trait]
 impl AbstractRpcPublishEvent for MockRpcPublishEvent {
     async fn receive_response(&mut self) -> Result<AppRpcReply, AppRpcCtxError> {
-        let mut g = self._recv_resp_result.lock().unwrap();
+        let mut g = self._recv_resp_result.lock().await;
         let mock_result = g.take().unwrap();
         mock_result
     }
@@ -358,7 +422,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         _charge_buyer: &ChargeBuyerModel,
         _req_mthd: PaymentMethodReqDto,
     ) -> Result<(AppProcessorPayInResult, Charge3partyModel), AppProcessorError> {
-        let mut g = self._payin_start_result.lock().unwrap();
+        let mut g = self._payin_start_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -367,7 +431,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         &self,
         _meta: &ChargeBuyerMetaModel,
     ) -> Result<Charge3partyModel, AppProcessorError> {
-        let mut g = self._payin_progress_result.lock().unwrap();
+        let mut g = self._payin_progress_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -377,7 +441,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         _store_profile: StoreProfileReplicaDto,
         _req_3pt: StoreOnboardReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
-        let mut g = self._onboard_merchant_result.lock().unwrap();
+        let mut g = self._onboard_merchant_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -387,7 +451,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         _m3pty: Merchant3partyModel,
         _req_3pt: StoreOnboardReqDto,
     ) -> Result<AppProcessorMerchantResult, AppProcessorError> {
-        let mut g = self._onboard_merchant_result.lock().unwrap();
+        let mut g = self._onboard_merchant_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -396,7 +460,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         &self,
         _payout_m: PayoutModel,
     ) -> Result<AppProcessorPayoutResult, AppProcessorError> {
-        let mut g = self._payout_result.lock().unwrap();
+        let mut g = self._payout_result.lock().await;
         let out = g.take().unwrap();
         out
     }
@@ -404,7 +468,7 @@ impl AbstractPaymentProcessor for MockPaymentProcessor {
         &self,
         resolve_m: RefundReqResolutionModel,
     ) -> Result<RefundReqResolutionModel, AppProcessorError> {
-        let mut g = self._refund_error_trigger.lock().unwrap();
+        let mut g = self._refund_error_trigger.lock().await;
         let trig_err = g.remove(0);
         if trig_err {
             let msg = "unit-test".to_string();

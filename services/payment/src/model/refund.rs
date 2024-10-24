@@ -15,8 +15,8 @@ use super::{
     PayLineAmountError, PayLineAmountModel,
 };
 use crate::api::web::dto::{
-    RefundCompletionOlineReqDto, RefundCompletionReqDto, RefundCompletionRespDto,
-    RefundLineRejectDto, RefundRejectReasonDto,
+    RefundCompletionOlineReqDto, RefundCompletionOlineRespDto, RefundCompletionReqDto,
+    RefundCompletionRespDto, RefundLineApprovalDto, RefundLineRejectDto, RefundRejectReasonDto,
 };
 
 #[derive(Debug)]
@@ -474,6 +474,12 @@ impl RefundLineReqResolutionModel {
     pub(super) fn num_rejected(&self) -> u32 {
         self.qty_reject.total_qty()
     }
+    #[rustfmt::skip]
+    fn into_parts(self) -> (BaseProductIdentity, DateTime<Utc>, RefundLineQtyRejectModel, RefundLineResolveAmountModel)
+    {
+        let Self { pid, time_req, qty_reject, amount } = self;
+        (pid, time_req, qty_reject, amount)
+    }
 } // end of impl RefundLineReqResolutionModel
 
 impl<'a, 'b> TryFrom<(u32, &'a ChargeBuyerModel, &'b RefundCompletionReqDto)>
@@ -608,7 +614,43 @@ impl RefundReqResolutionModel {
 } // end of impl RefundReqResolutionModel
 
 impl From<Vec<RefundReqResolutionModel>> for RefundCompletionRespDto {
-    fn from(_value: Vec<RefundReqResolutionModel>) -> Self {
-        Self { lines: Vec::new() }
-    } // TODO, finish implementation
+    #[rustfmt::skip]
+    fn from(value: Vec<RefundReqResolutionModel>) -> Self {
+        type MapKeyType = (ProductType, u64, DateTime<Utc>);
+        // the value sequence of each map entry :
+        // qty-aprv, amount-total-aprv, qty-rej-damage, qty-rej-fraud
+        type MapValType = (u32, Decimal, u32, u32);
+        type LineMapType = HashMap<MapKeyType, MapValType>;
+        let mut line_map: LineMapType = HashMap::new();
+        value.into_iter().map(|rfnd_m| {
+            rfnd_m.inner.lines.into_iter().map(|rline| {
+                let (r_pid, r_time_req, mut r_qty_rej, r_amt) = rline.into_parts();
+                let BaseProductIdentity { store_id: _, product_type, product_id } = r_pid;
+                let key = (product_type, product_id, r_time_req);
+                let (qty_aprv_dst, amt_tot_aprv_dst, qty_rej_damage_dst, qty_rej_fraud_dst) =
+                    line_map.entry(key).or_insert((0, Decimal::ZERO, 0, 0));
+                *qty_aprv_dst     += r_amt.curr_round().qty;
+                *amt_tot_aprv_dst += r_amt.curr_round().total;
+                let r_n_rej = r_qty_rej.0.remove(&RefundRejectReasonDto::Damaged).unwrap_or(0);
+                *qty_rej_damage_dst += r_n_rej;
+                let r_n_rej = r_qty_rej.0.remove(&RefundRejectReasonDto::Fraudulent).unwrap_or(0);
+                *qty_rej_fraud_dst += r_n_rej;
+            }).count()
+        }).count();
+
+        let lines = line_map.into_iter()
+            .map(|(k,v)| {
+                let (product_type, product_id, time_issued) = k;
+                let (qty_aprv, amount_total_aprv, qty_rej_damage, qty_rej_fraud) = v;
+                let reject = HashMap::from([
+                    (RefundRejectReasonDto::Damaged, qty_rej_damage),
+                    (RefundRejectReasonDto::Fraudulent, qty_rej_fraud),
+                ]);
+                let approval = RefundLineApprovalDto {
+                    quantity: qty_aprv, amount_total: amount_total_aprv.to_string(),
+                };
+                RefundCompletionOlineRespDto {product_type, product_id, time_issued, reject, approval}
+            }).collect::<Vec<_>>();
+        Self { lines }
+    } // end of fn from
 } // end of fn RefundCompletionRespDto

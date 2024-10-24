@@ -233,8 +233,13 @@ pub struct RefundLineApprovalDto {
     // in different businesses.
     pub amount_total: String,
 }
+
+#[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Deserialize, Serialize, Clone, Hash, Eq)]
 pub enum RefundRejectReasonDto {
+    // TODO, FIXME
+    // Rust clippy does no seem to allow the traits `Hash` and `PartialEq` implemented
+    // against the same type.
     Fraudulent,
     Damaged,
 }
@@ -270,12 +275,4 @@ pub struct RefundCompletionOlineRespDto {
     pub time_issued: DateTime<Utc>,
     pub reject: RefundLineRejectDto,
     pub approval: RefundLineApprovalDto,
-    pub success: bool,
-    pub failure_reason: Option<RefundFailureReasonRespDto>,
-}
-
-#[derive(Serialize)]
-pub enum RefundFailureReasonRespDto {
-    InvalidPaymentSetup,
-    ExceedMaxCharged,
 }

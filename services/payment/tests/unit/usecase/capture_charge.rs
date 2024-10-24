@@ -47,10 +47,11 @@ fn ut_setup_repo_charge(
     rd_payout: Option<PayoutModel>,
     create_payout_res: Option<Result<(), AppRepoError>>,
 ) -> Box<dyn AbstractChargeRepo> {
+    let maybe_charge_ms = charge_by_merchant.map(|item| vec![item]) ;
     MockChargeRepo::build(
         None, None, None,
         None, None, None,
-        charge_by_merchant, rd_payout, create_payout_res,
+        maybe_charge_ms, rd_payout, create_payout_res,
         None, None,
     )
 }

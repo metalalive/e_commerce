@@ -1,8 +1,10 @@
 use std::boxed::Box;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use chrono::{Duration, Local};
+use tokio::sync::Mutex;
+
 use ecommerce_common::api::dto::{
     BillingDto, ContactDto, CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto,
     OrderLinePayDto, OrderSellerCurrencyDto, PayAmountDto, PhoneNumberDto,
