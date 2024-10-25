@@ -23,7 +23,7 @@ use payment::AppAuthedClaim;
 use common::{itest_setup_app_server, itest_setup_auth_claim};
 
 const CASES_PATH: &str = "./tests/integration/examples/";
-const API_VERSION: &str = "v0.0.6";
+const API_VERSION: &str = "v0.0.7";
 
 async fn itest_onboard_merchant(
     app: &ItestService!(),
@@ -309,8 +309,8 @@ async fn charge_stripe_ok() {
         let result = SyncRefundReqUseCase::execute(repo_rfd, rpc_ctx).await;
         assert!(result.is_ok());
         let (num_order, num_lines) = result.unwrap();
-        assert_eq!(num_order, 2);
-        assert_eq!(num_lines, 3);
+        assert_eq!(num_order, 3);
+        assert_eq!(num_lines, 5);
     }
 
     // --- partial refund ----
@@ -321,6 +321,18 @@ async fn charge_stripe_ok() {
         mock_store_id,
         seller_usr_id,
         200,
+    )
+    .await;
+    assert!(result.is_ok());
+
+    // --- expect refund error ----
+    let result = itest_merchant_complete_refund(
+        &mock_app,
+        "complete_refund_ok_1.json",
+        "9001848b29", // not-existent order ID
+        mock_store_id,
+        seller_usr_id,
+        404,
     )
     .await;
     assert!(result.is_ok());

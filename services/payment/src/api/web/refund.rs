@@ -9,9 +9,9 @@ use actix_web::{HttpResponse, HttpResponseBuilder, Result as ActixResult};
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use crate::adapter::datastore::AppDataStoreContext;
-use crate::adapter::repository::{app_repo_refund, AbstractRefundRepo};
+use crate::adapter::repository::{app_repo_refund, AbstractRefundRepo, AppRepoErrorDetail};
 use crate::auth::AppAuthedClaim;
-use crate::usecase::FinalizeRefundUseCase;
+use crate::usecase::{FinalizeRefundUcError, FinalizeRefundUseCase};
 use crate::AppSharedState;
 
 use super::charge::try_creating_charge_repo;
@@ -37,7 +37,6 @@ pub(super) async fn mechant_complete_refund(
 ) -> ActixResult<HttpResponse> {
     let (oid, store_id) = path_segms.into_inner();
     let logctx = shr_state.log_context();
-    app_log_event!(logctx, AppLogLevel::DEBUG, "{oid}, {store_id}");
 
     let dstore = shr_state.datastore();
     let repo_ch = try_creating_charge_repo(dstore.clone(), logctx.clone()).await?;
@@ -55,8 +54,43 @@ pub(super) async fn mechant_complete_refund(
         .execute(oid, store_id, auth_claim.profile, req_body)
         .await;
     let (http_status, body_raw) = match result {
-        Ok((o, _e)) => (StatusCode::OK, serde_json::to_vec(&o).unwrap()),
-        Err(_e) => (StatusCode::NOT_IMPLEMENTED, Vec::new()),
+        Ok((o, es)) => {
+            if !es.is_empty() {
+                app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", es);
+            }
+            (StatusCode::OK, serde_json::to_vec(&o).unwrap())
+        }
+        Err(e) => {
+            let err_status = match e {
+                FinalizeRefundUcError::MissingMerchant(err_store_id) => {
+                    app_log_event!(logctx, AppLogLevel::INFO, "{err_store_id}");
+                    StatusCode::FORBIDDEN
+                }
+                FinalizeRefundUcError::MissingChargeId(oid) => {
+                    app_log_event!(logctx, AppLogLevel::DEBUG, "{oid}");
+                    StatusCode::NOT_FOUND
+                }
+                FinalizeRefundUcError::MissingCharge(buyer_id, ctime) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{buyer_id}-{ctime}");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+                FinalizeRefundUcError::PermissionDenied(auth_usr_id) => {
+                    app_log_event!(logctx, AppLogLevel::WARNING, "{auth_usr_id}");
+                    StatusCode::FORBIDDEN
+                }
+                FinalizeRefundUcError::DataStore(re) => {
+                    let client_err = matches!(re.detail, AppRepoErrorDetail::RefundResolution(_));
+                    if client_err {
+                        app_log_event!(logctx, AppLogLevel::WARNING, "{:?}", re);
+                        StatusCode::BAD_REQUEST
+                    } else {
+                        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", re);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    }
+                }
+            };
+            (err_status, Vec::new())
+        }
     };
     let resp = {
         let mut r = HttpResponseBuilder::new(http_status);

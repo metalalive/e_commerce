@@ -9,7 +9,7 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 0.0.6
+  version: 0.0.7
 
 servers:
   - url: https://doc.site.not.ready/api/v0.0.6
@@ -148,6 +148,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RefundCompletionRespDto'
+        '400':
+          description: completion request exceeds limit of original refund request
+        '403':
+          description: invalid staff user ID for the merchant
+        '404':
+          description: missing charge
   
   /store/{store-id}/onboard:
     post:
@@ -521,6 +527,28 @@ components:
           type: string
           enum: [Stripe]
 
+    RefundLineRejectDto:
+      type: object
+      properties:
+        Fraudulent:
+          type: integer
+          format: uint32
+        Damaged:
+          type: integer
+          format: uint32
+
+    RefundLineApprovalDto:
+      type: object
+      properties:
+        quantity:
+          $ref: '#/components/schemas/Quantity'
+        amount_total:
+          type: string
+          example: '62.455'
+      required:
+        - quantity
+        - amount_total
+
     RefundCompletionOlineReqDto:
       type: object
       properties:
@@ -528,24 +556,19 @@ components:
           $ref: '#/components/schemas/ProductType'
         product_id:
           $ref: '#/components/schemas/ProductId'
-        quantity:
-          $ref: '#/components/schemas/Quantity'
-        status:
+        time_issued:
           type: string
-          enum: [Rejected, ApprovedFull, ApprovedPartial]
-        reject_reason:
-          type: string
-          enum: [Fraudulent, Damaged]
-          description: present only when `status` is `Rejected`
-        partial_amount:
-          type: string
-          example: '62.455'
-          description: present only when `status` is `ApprovedPartial`
+          format: date-time
+        reject:
+          $ref: '#/components/schemas/RefundLineRejectDto'
+        approval:
+          $ref: '#/components/schemas/RefundLineApprovalDto'
       required:
-      - status
       - product_type
       - product_id
-      - quantity
+      - time_issued
+      - reject
+      - approval
         
     RefundCompletionReqDto:
       type: object
@@ -562,32 +585,11 @@ components:
       - req_time
 
     RefundCompletionOlineRespDto:
-      type: object
-      properties:
-        product_type:
-          $ref: '#/components/schemas/ProductType'
-        product_id:
-          $ref: '#/components/schemas/ProductId'
-        quantity:
-          $ref: '#/components/schemas/Quantity'
-        status:
-          type: string
-          enum: [Rejected, ApprovedFull, ApprovedPartial]
-        amount_refunded:
-          type: string
-          example: '62.455'
-        success:
-          type: boolean
-        failure_reason:
-          type: string
-          enum: [InvalidPaymentSetup, ExceedMaxCharged]
+      $ref: '#/components/schemas/RefundCompletionOlineReqDto'
 
     RefundCompletionRespDto:
       type: object
       properties:
-        req_time:
-          type: string
-          format: date-time
         lines:
           type: array
           items:

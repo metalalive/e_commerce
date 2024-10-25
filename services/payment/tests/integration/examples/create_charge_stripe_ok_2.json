@@ -13,8 +13,8 @@
 	        "seller_id": 983,
 	        "product_id": 204,
 	        "product_type": 1,
-	        "quantity": 2,
-	        "amount": {"unit": "18.1", "total": "36.2"}
+	        "quantity": 20,
+	        "amount": {"unit": "18.1", "total": "362.0"}
 	    }
         ],
         "currency": "USD"
