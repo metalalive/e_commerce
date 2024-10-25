@@ -195,32 +195,35 @@ impl MariadbMerchantRepo {
             })
     }
 
-    fn _map_err_create(&self, detail: AppRepoErrorDetail) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::CreateMerchant,
-            code: AppErrorCode::RemoteDbServerFailure,
-            detail,
-        };
-        let logctx = self._dstore.log_context();
-        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-        e
+    async fn fetch_profile_common(
+        exec: &mut Conn,
+        store_id: u32,
+    ) -> Result<Option<MerchantProfileModel>, (AppErrorCode, AppRepoErrorDetail)> {
+        let FetchProfileArgs(stmt, params) = FetchProfileArgs::from(store_id);
+        let maybe_row = stmt
+            .with(params)
+            .first::<MercProfRowType, &mut Conn>(exec)
+            .await
+            .map_err(|e| {
+                (
+                    AppErrorCode::RemoteDbServerFailure,
+                    AppRepoErrorDetail::DatabaseQuery(e.to_string()),
+                )
+            })?;
+        if let Some(row_profile) = maybe_row {
+            let arg = (store_id, row_profile);
+            MerchantProfileModel::try_from(arg).map(Some)
+        } else {
+            Ok(None)
+        }
     }
-    fn _map_err_fetch(&self, code: AppErrorCode, detail: AppRepoErrorDetail) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchMerchant,
-            code,
-            detail,
-        };
-        let logctx = self._dstore.log_context();
-        app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
-        e
-    }
-    fn _map_err_update3pt(&self, code: AppErrorCode, detail: AppRepoErrorDetail) -> AppRepoError {
-        let e = AppRepoError {
-            fn_label: AppRepoErrorFnLabel::UpdateMerchant3party,
-            code,
-            detail,
-        };
+
+    #[rustfmt::skip]
+    fn _map_log_err(
+        &self, code: AppErrorCode, detail: AppRepoErrorDetail,
+        fn_label: AppRepoErrorFnLabel,
+    ) -> AppRepoError {
+        let e = AppRepoError {fn_label, code, detail};
         let logctx = self._dstore.log_context();
         app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
         e
@@ -236,17 +239,17 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
     ) -> Result<(), AppRepoError> {
         let q_arg_3pty =
             Insert3partyArgs::try_from((mprof.id, m3pty)).map_err(|(code, detail)| {
-                let mut e = self._map_err_create(detail);
-                e.code = code;
-                e
+                self._map_log_err(code, detail, AppRepoErrorFnLabel::CreateMerchant)
             })?;
         let q_arg_prof = InsertUpdateProfileArgs::from(mprof);
 
-        let mut conn = self
-            ._dstore
-            .acquire()
-            .await
-            .map_err(|e| self._map_err_create(AppRepoErrorDetail::DataStore(e)))?;
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            self._map_log_err(
+                AppErrorCode::DatabaseServerBusy,
+                AppRepoErrorDetail::DataStore(e),
+                AppRepoErrorFnLabel::CreateMerchant,
+            )
+        })?;
         let mut options = TxOpts::new();
         // in the application, only the owner or initial supervisor of a shop can invoke
         // this function during onboarding process, non-repeatable read should not happen
@@ -254,32 +257,59 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
         // TODO: recheck this explanation
         options.with_isolation_level(IsolationLevel::ReadCommitted);
         let mut tx = conn.start_transaction(options).await.map_err(|e| {
-            self._map_err_create(AppRepoErrorDetail::DatabaseTxStart(e.to_string()))
+            self._map_log_err(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseTxStart(e.to_string()),
+                AppRepoErrorFnLabel::CreateMerchant,
+            )
         })?;
         let resultset = tx
             .exec_iter(q_arg_prof.0, q_arg_prof.1)
             .await
-            .map_err(|e| self._map_err_create(AppRepoErrorDetail::DatabaseExec(e.to_string())))?;
+            .map_err(|e| {
+                self._map_log_err(
+                    AppErrorCode::RemoteDbServerFailure,
+                    AppRepoErrorDetail::DatabaseExec(e.to_string()),
+                    AppRepoErrorFnLabel::CreateMerchant,
+                )
+            })?;
         let cond = [1u64, 2].contains(&resultset.affected_rows());
         if !cond {
             let msg = format!("num-rows-affected: {}", resultset.affected_rows());
-            let e = self._map_err_create(AppRepoErrorDetail::DatabaseExec(msg));
+            let e = self._map_log_err(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseExec(msg),
+                AppRepoErrorFnLabel::CreateMerchant,
+            );
             return Err(e);
         }
         let resultset = tx
             .exec_iter(q_arg_3pty.0, q_arg_3pty.1)
             .await
-            .map_err(|e| self._map_err_create(AppRepoErrorDetail::DatabaseExec(e.to_string())))?;
+            .map_err(|e| {
+                self._map_log_err(
+                    AppErrorCode::RemoteDbServerFailure,
+                    AppRepoErrorDetail::DatabaseExec(e.to_string()),
+                    AppRepoErrorFnLabel::CreateMerchant,
+                )
+            })?;
         if resultset.affected_rows() != 1u64 {
             let msg = format!("num-rows-affected: {}", resultset.affected_rows());
-            let e = self._map_err_create(AppRepoErrorDetail::DatabaseExec(msg));
+            let e = self._map_log_err(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseExec(msg),
+                AppRepoErrorFnLabel::CreateMerchant,
+            );
             return Err(e);
         }
 
         tx.commit().await.map_err(|e| {
-            self._map_err_create(AppRepoErrorDetail::DatabaseTxCommit(e.to_string()))
-        })?;
-        Ok(())
+            self._map_log_err(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseTxCommit(e.to_string()),
+                AppRepoErrorFnLabel::CreateMerchant,
+            )
+        })
     } // end of fn create
 
     async fn fetch(
@@ -287,96 +317,104 @@ impl AbstractMerchantRepo for MariadbMerchantRepo {
         store_id: u32,
         label3pty: Label3party,
     ) -> Result<Option<(MerchantProfileModel, Merchant3partyModel)>, AppRepoError> {
-        let q_arg_prof = FetchProfileArgs::from(store_id);
-        let q_arg_3pty = Fetch3partyArgs::from((store_id, label3pty));
         let mut conn = self._dstore.acquire().await.map_err(|e| {
-            self._map_err_fetch(
-                AppErrorCode::RemoteDbServerFailure,
+            self._map_log_err(
+                AppErrorCode::DatabaseServerBusy,
                 AppRepoErrorDetail::DataStore(e),
+                AppRepoErrorFnLabel::FetchMerchant,
             )
         })?;
         let exec = &mut conn;
+        let maybe_storeprof_m = Self::fetch_profile_common(exec, store_id)
+            .await
+            .map_err(|e| self._map_log_err(e.0, e.1, AppRepoErrorFnLabel::FetchMerchant))?;
 
-        let FetchProfileArgs(stmt, params) = q_arg_prof;
-        let maybe_row = stmt
+        let storeprof_m = if let Some(v) = maybe_storeprof_m {
+            v
+        } else {
+            return Ok(None);
+        };
+
+        let q_arg_3pty = Fetch3partyArgs::from((store_id, label3pty));
+        let Fetch3partyArgs(stmt, params, paymethod) = q_arg_3pty;
+        let row_3pty = stmt
             .with(params)
-            .first::<MercProfRowType, &mut Conn>(exec)
+            .first::<Merc3ptyRowType, &mut Conn>(exec)
             .await
             .map_err(|e| {
-                self._map_err_fetch(
+                self._map_log_err(
                     AppErrorCode::RemoteDbServerFailure,
                     AppRepoErrorDetail::DatabaseQuery(e.to_string()),
+                    AppRepoErrorFnLabel::FetchMerchant,
+                )
+            })?
+            .ok_or(AppRepoErrorDetail::PayDetail(
+                paymethod,
+                format!("missing-3party-row:{store_id}"),
+            ))
+            .map_err(|detail| {
+                self._map_log_err(
+                    AppErrorCode::DataCorruption,
+                    detail,
+                    AppRepoErrorFnLabel::FetchMerchant,
                 )
             })?;
-
-        if let Some(row_profile) = maybe_row {
-            let Fetch3partyArgs(stmt, params, paymethod) = q_arg_3pty;
-            let row_3pty = stmt
-                .with(params)
-                .first::<Merc3ptyRowType, &mut Conn>(exec)
-                .await
-                .map_err(|e| {
-                    self._map_err_fetch(
-                        AppErrorCode::RemoteDbServerFailure,
-                        AppRepoErrorDetail::DatabaseQuery(e.to_string()),
-                    )
-                })?
-                .ok_or(AppRepoErrorDetail::PayDetail(
-                    paymethod,
-                    format!("missing-3party-row:{store_id}"),
-                ))
-                .map_err(|detail| self._map_err_fetch(AppErrorCode::DataCorruption, detail))?;
-            let arg = (store_id, row_profile);
-            let storeprof_m = MerchantProfileModel::try_from(arg)
-                .map_err(|(code, detail)| self._map_err_fetch(code, detail))?;
-            let arg = (label3pty, row_3pty);
-            let store3pty_m = Merchant3partyModel::try_from(arg)
-                .map_err(|(code, detail)| self._map_err_fetch(code, detail))?;
-            Ok(Some((storeprof_m, store3pty_m)))
-        } else {
-            Ok(None)
-        }
+        Merchant3partyModel::try_from((label3pty, row_3pty))
+            .map(|store3pty_m| Some((storeprof_m, store3pty_m)))
+            .map_err(|e| self._map_log_err(e.0, e.1, AppRepoErrorFnLabel::FetchMerchant))
     } // end of fn fetch
 
     async fn fetch_profile(
         &self,
-        _store_id: u32,
+        store_id: u32,
     ) -> Result<Option<MerchantProfileModel>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchMerchantProf,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            self._map_log_err(
+                AppErrorCode::DatabaseServerBusy,
+                AppRepoErrorDetail::DataStore(e),
+                AppRepoErrorFnLabel::FetchMerchantProf,
+            )
+        })?;
+        Self::fetch_profile_common(&mut conn, store_id)
+            .await
+            .map_err(|e| self._map_log_err(e.0, e.1, AppRepoErrorFnLabel::FetchMerchantProf))
+    } // end of fn fetch_profile
 
     async fn update_3party(
         &self,
         store_id: u32,
         m3pty: Merchant3partyModel,
     ) -> Result<(), AppRepoError> {
-        let q_arg_3pty = Update3partyArgs::try_from((store_id, m3pty))
-            .map_err(|(code, detail)| self._map_err_update3pt(code, detail))?;
+        let q_arg_3pty =
+            Update3partyArgs::try_from((store_id, m3pty)).map_err(|(code, detail)| {
+                self._map_log_err(code, detail, AppRepoErrorFnLabel::UpdateMerchant3party)
+            })?;
         let mut conn = self._dstore.acquire().await.map_err(|e| {
-            self._map_err_fetch(
+            self._map_log_err(
                 AppErrorCode::RemoteDbServerFailure,
                 AppRepoErrorDetail::DataStore(e),
+                AppRepoErrorFnLabel::UpdateMerchant3party,
             )
         })?;
 
         let Update3partyArgs(stmt, params) = q_arg_3pty;
         let resultset = conn.exec_iter(stmt, params).await.map_err(|e| {
-            let code = AppErrorCode::RemoteDbServerFailure;
-            let detail = AppRepoErrorDetail::DatabaseExec(e.to_string());
-            self._map_err_update3pt(code, detail)
+            self._map_log_err(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseExec(e.to_string()),
+                AppRepoErrorFnLabel::UpdateMerchant3party,
+            )
         })?;
 
         if resultset.affected_rows() == 1u64 {
             Ok(())
         } else {
             let msg = format!("num-rows-affected: {}", resultset.affected_rows());
-            let detail = AppRepoErrorDetail::DatabaseExec(msg);
-            let code = AppErrorCode::RemoteDbServerFailure;
-            let e = self._map_err_update3pt(code, detail);
+            let e = self._map_log_err(
+                AppErrorCode::RemoteDbServerFailure,
+                AppRepoErrorDetail::DatabaseExec(msg),
+                AppRepoErrorFnLabel::UpdateMerchant3party,
+            );
             Err(e)
         }
     } // end of fn update_3party

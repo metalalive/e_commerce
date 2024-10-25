@@ -120,3 +120,38 @@ async fn create_profile_3party_ok() {
         }
     }
 } // end of fn create_profile_3party_ok
+
+#[actix_web::test]
+async fn create_fetch_profile_ok() {
+    let shr_state = ut_setup_sharestate();
+    let repo = ut_setup_db_merchant_repo(shr_state).await;
+    let time_base = Local::now().to_utc();
+    let mock_store_id = 2345u32;
+    let mock_staff_usr_id = 1002u32;
+
+    // --- sub case 1 , create
+    let mock_mprof = {
+        let mock_storeprof_d = ut_setup_storeprofile_dto(
+            "McDunno",
+            mock_staff_usr_id,
+            vec![mock_staff_usr_id],
+            time_base,
+        );
+        let arg = (mock_store_id, &mock_storeprof_d);
+        MerchantProfileModel::try_from(arg).unwrap()
+    };
+    let mock_m3pty = {
+        let ms = ut_default_merchant_3party_stripe();
+        Merchant3partyModel::Stripe(ms)
+    };
+    let result = repo.create(mock_mprof, mock_m3pty).await;
+    assert!(result.is_ok());
+
+    // --- sub case 2 , fetch profile
+    let result = repo.fetch_profile(mock_store_id).await;
+    assert!(result.is_ok());
+    let rd_prof_m = result.unwrap().unwrap();
+    assert_eq!(rd_prof_m.name(), "McDunno");
+    assert!(rd_prof_m.valid_supervisor(mock_staff_usr_id));
+    assert!(rd_prof_m.valid_staff(mock_staff_usr_id));
+} // end of fn create_fetch_profile_ok
