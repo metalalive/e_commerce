@@ -1,4 +1,6 @@
 use std::boxed::Box;
+use std::collections::hash_map::RandomState;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Local, SubsecRound, Utc};
@@ -437,3 +439,51 @@ async fn update_refund_in_chargeline_ok() {
     verify_updated_line!(charge_ctime[0], 3, fn1);
     verify_updated_line!(charge_ctime[1], 3, fn2);
 } // update_refund_in_chargeline_ok
+
+#[rustfmt::skip]
+#[actix_web::test]
+async fn fetch_all_charge_ids_ok() {
+    let (mock_buyer_id, mock_merchant_id) = (127u32, 219u32);
+    let mock_oid = "11501a410c";
+    let time_base = Local::now().to_utc();
+    let shr_state = ut_setup_sharestate();
+    let repo_ch  = ut_setup_db_charge_repo(shr_state).await;
+    
+    let mock_orig_olines = vec![
+        (mock_merchant_id, ProductType::Package, 117u64, Decimal::new(191, 1),
+         Decimal::new(19100, 1), 100u32, Duration::days(29)),
+    ];
+    let mock_currency_map = ut_setup_currency_snapshot(
+        vec![mock_merchant_id, mock_buyer_id]
+    );
+    let mock_order_replica = ut_setup_orderline_set(
+        mock_buyer_id,  mock_oid, 0, time_base - Duration::hours(127),
+        mock_currency_map, mock_orig_olines,
+    );
+    let billing = ut_setup_order_bill();
+    let result = repo_ch.create_order(&mock_order_replica, &billing).await;
+    assert!(result.is_ok());
+
+    let orig_charge_ctime = [99i64, 91, 87, 82]
+        .into_iter()
+        .map(|td| time_base.trunc_subsecs(0) - Duration::hours(td))
+        .collect::<Vec<_>>();
+    let mock_clines = orig_charge_ctime.iter()
+        .map(|ctime| {
+            (*ctime, true, vec![
+                 (mock_merchant_id, ProductType::Package, 117u64, (191i64, 1u32), (1910i64, 1u32), 10u32),
+            ])
+        })
+        .collect::<Vec<_>>() ;
+    ut_setup_bulk_add_charges(repo_ch.clone(), mock_buyer_id, mock_oid, mock_clines).await;
+    let result = repo_ch.fetch_charge_ids(mock_oid).await;
+    assert!(result.is_ok());
+    let (actual_buyer_id, actual_ctime) = result.unwrap().unwrap();
+    assert_eq!(actual_buyer_id , mock_buyer_id);
+    assert_eq!(actual_ctime.len(), 4);
+
+    let actual_ctimes: HashSet<DateTime<Utc>,RandomState> = HashSet::from_iter(actual_ctime.into_iter());
+    let expect_ctimes = HashSet::from_iter(orig_charge_ctime.into_iter());
+    let diff = expect_ctimes.difference(&actual_ctimes).collect::<Vec<_>>();
+    assert!(diff.is_empty());
+} // end of fn fetch_all_charge_ids_ok

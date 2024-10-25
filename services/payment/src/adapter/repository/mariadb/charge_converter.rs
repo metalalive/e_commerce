@@ -40,6 +40,7 @@ pub(super) struct FetchChargeMetaArgs(String, Params);
 pub(super) struct UpdateChargeMetaArgs(String, Params);
 pub(super) struct FetchChargeLineArgs(String, Params);
 pub(super) struct UpdateChargeLineRefundArgs(String, Vec<Params>);
+pub(super) struct FetchChargeIDsArgs(String, Params);
 
 pub(super) type ChargeMetaRowType = (
     Vec<u8>,
@@ -55,6 +56,8 @@ pub(super) type ChargeMetaRowType = (
 pub(super) type ChargeLineRowType = (
     u32, String, u64, Decimal, Decimal, u32, Decimal, Decimal, u32, u32
 );
+
+pub(super) type ChargeIdRowType = (u32, mysql_async::Value);
 
 impl TryFrom<BuyerPayInState> for InsertChargeStatusArgs {
     type Error = AppRepoError;
@@ -457,3 +460,47 @@ impl UpdateChargeLineRefundArgs {
         (stmt, params)
     }
 }
+
+impl<'a> From<&'a OidBytes> for FetchChargeIDsArgs {
+    fn from(value: &'a OidBytes) -> Self {
+        let stmt = "SELECT `b`.`usr_id`,`b`.`create_time` FROM `order_toplvl_meta`\
+        AS `a` LEFT JOIN `charge_buyer_toplvl` AS `b` ON `a`.`buyer_id`=`b`.`usr_id`\
+        WHERE `a`.`o_id`=?";
+        let arg = vec![value.as_column().into()];
+        let params = Params::Positional(arg);
+        Self(stmt.to_string(), params)
+    }
+}
+
+inner_into_parts!(FetchChargeIDsArgs);
+
+type InnerResultFetchChargeID =
+    Result<(u32, Vec<DateTime<Utc>>), (AppErrorCode, AppRepoErrorDetail)>;
+
+impl FetchChargeIDsArgs {
+    pub(super) fn convert_rows(c_ids: Vec<ChargeIdRowType>) -> InnerResultFetchChargeID {
+        let buyer_usr_id = c_ids.first().unwrap().0;
+        let mut errors = Vec::new();
+        let ctimes = c_ids
+            .into_iter()
+            .filter_map(|(usr_id, ctime_raw)| {
+                if buyer_usr_id == usr_id {
+                    raw_column_to_datetime(ctime_raw, 0)
+                        .map_err(|ec| errors.push(ec))
+                        .ok()
+                } else {
+                    let code = AppErrorCode::DataCorruption;
+                    let msg = "buyer-not-consistent".to_string();
+                    let detail = AppRepoErrorDetail::DataRowParse(msg);
+                    errors.push((code, detail));
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if errors.is_empty() {
+            Ok((buyer_usr_id, ctimes))
+        } else {
+            Err(errors.remove(0))
+        }
+    } // end of fn convert_rows
+} // end of impl FetchChargeIDsArgs

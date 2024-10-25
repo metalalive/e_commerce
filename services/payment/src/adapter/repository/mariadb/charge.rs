@@ -22,8 +22,8 @@ use crate::model::{
 
 use super::super::{AbstractChargeRepo, AppRepoError, AppRepoErrorDetail, AppRepoErrorFnLabel};
 use super::charge_converter::{
-    ChargeLineRowType, ChargeMetaRowType, FetchChargeLineArgs, FetchChargeMetaArgs,
-    InsertChargeArgs, UpdateChargeLineRefundArgs, UpdateChargeMetaArgs,
+    ChargeIdRowType, ChargeLineRowType, ChargeMetaRowType, FetchChargeIDsArgs, FetchChargeLineArgs,
+    FetchChargeMetaArgs, InsertChargeArgs, UpdateChargeLineRefundArgs, UpdateChargeMetaArgs,
 };
 use super::order_replica::{
     FetchCurrencySnapshotArgs, FetchUnpaidOlineArgs, InsertOrderReplicaArgs, OrderCurrencyRowType,
@@ -277,14 +277,40 @@ impl AbstractChargeRepo for MariadbChargeRepo {
 
     async fn fetch_charge_ids(
         &self,
-        _oid: &str,
+        oid: &str,
     ) -> Result<Option<(u32, Vec<DateTime<Utc>>)>, AppRepoError> {
-        Err(AppRepoError {
-            fn_label: AppRepoErrorFnLabel::FetchChargeIds,
-            code: AppErrorCode::NotImplemented,
-            detail: AppRepoErrorDetail::Unknown,
-        })
-    }
+        let oid_b = OidBytes::try_from(oid).map_err(|(code, msg)| {
+            let detail = AppRepoErrorDetail::OrderIDparse(msg);
+            let label = AppRepoErrorFnLabel::FetchChargeIds;
+            self._map_log_err_common((code, detail), label)
+        })?;
+        let mut conn = self._dstore.acquire().await.map_err(|e| {
+            let code = AppErrorCode::DatabaseServerBusy;
+            let detail = AppRepoErrorDetail::DataStore(e);
+            let fn_label = AppRepoErrorFnLabel::FetchChargeMeta;
+            self._map_log_err_common((code, detail), fn_label)
+        })?;
+        let (stmt, params) = FetchChargeIDsArgs::from(&oid_b).into_parts();
+        let c_ids = stmt
+            .with(params)
+            .fetch::<ChargeIdRowType, &mut Conn>(&mut conn)
+            .await
+            .map_err(|e| {
+                let code = AppErrorCode::RemoteDbServerFailure;
+                let detail = AppRepoErrorDetail::DatabaseQuery(e.to_string());
+                let label = AppRepoErrorFnLabel::FetchChargeIds;
+                self._map_log_err_common((code, detail), label)
+            })?;
+        if c_ids.is_empty() {
+            Ok(None)
+        } else {
+            FetchChargeIDsArgs::convert_rows(c_ids)
+                .map(Some)
+                .map_err(|reason| {
+                    self._map_log_err_common(reason, AppRepoErrorFnLabel::FetchChargeIds)
+                })
+        }
+    } // end of fn fetch_charge_ids
 
     async fn fetch_charge_meta(
         &self,
