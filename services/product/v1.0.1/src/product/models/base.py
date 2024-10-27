@@ -16,7 +16,6 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 
 from ecommerce_common.models.enums.django import UnitOfMeasurement, TupleChoicesMeta
 from ecommerce_common.models.mixins import MinimumInfoMixin, IdGapNumberFinder
-from ecommerce_common.models.fields import CompoundPrimaryKeyField
 from ecommerce_common.models.closure_table import ClosureTableModelMixin
 from softdelete.models import SoftDeleteObjectMixin
 
@@ -31,6 +30,8 @@ from .common import (
     _atomicity_fn,
     _MatCodeOptions,
 )
+
+from .fields import CompoundPrimaryKeyField
 
 # The term "product" here means :
 # * items for sale (saleable)

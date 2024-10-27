@@ -1,6 +1,9 @@
 # Product service
 This service records product item, package, ingredients, and all necessary attributes for individual sellers.
 
+## Important Note
+This product application v1.x will be no longer maintained since Oct. 27th 2024
+
 ## Pre-requisite
 | software | version | installation/setup guide |
 |-----|-----|-----|
@@ -26,22 +29,12 @@ poetry update ecommerce-common
 ```
 
 ### Database Migration
-#### Initial migration
-```bash
-poetry run python3 -m  product.setup
-```
-
-#### Subsequent migrations
 ```bash
 poetry run python3  manage.py  makemigrations  <APP_LABEL>  --settings  settings.migration
 poetry run python3  manage.py  migrate  <APP_LABEL>  <LATEST_MIGRATION_VERSION>  --settings  settings.migration  --database site_dba
 ```
 Note `<APP_LABEL>` may be `product` or Django internal application `content_type`
 
-#### De-initialization database schema
-```bash
-poetry run python3 -m  product.setup reverse
-```
 
 ## Run
 ### application server
