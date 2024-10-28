@@ -194,7 +194,7 @@ class PasswordComplexityValidator:
             if self._password_confirm != value:
                 msg = "'password' field doesn't match 'confirm password' field."
                 errs.append(DRFErrorDetail(msg, code="confirm_fail"))
-        if re.search("[^\w]", value) is None:
+        if re.search("[^\\w]", value) is None:
             msg = "new password must contain at least one special symbol e.g. @, $, +, ...."
             errs.append(DRFErrorDetail(msg, code="special_char_required"))
         try:

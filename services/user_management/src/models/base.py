@@ -27,8 +27,6 @@ from ecommerce_common.models.closure_table import (
     get_paths_through_processing_node,
     filter_closure_nodes_recovery,
 )
-from ecommerce_common.models.fields import CompoundPrimaryKeyField
-
 
 from .common import (
     _atomicity_fn,
@@ -272,7 +270,18 @@ class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin, _ExpiryFiel
         related_name="usr_relations",
     )
     maxnum = models.PositiveSmallIntegerField(default=1)
-    id = CompoundPrimaryKeyField(inc_fields=["user_type", "user_id", "material"])
+    id = models.CharField(max_length=18, primary_key=True)
+
+    def refresh_pk(self) -> str:
+        _user_type = self.user_type.id & 0xff
+        _user_id = self.user_id
+        _material = self.material.id
+        self.id = "{:02X}{:08X}{:08X}".format(_user_type, _user_id, _material)
+        return self.id
+
+    def save(self, *args, **kwargs):
+        self.refresh_pk()
+        super().save(*args, **kwargs)
 
 
 class GenericUserCommonFieldsMixin(SoftDeleteObjectMixin):
@@ -486,6 +495,12 @@ class GenericUserGroupClosure(ClosureTableModelMixin, SoftDeleteObjectMixin):
     class Meta(ClosureTableModelMixin.Meta):
         db_table = "generic_user_group_closure"
 
+    # TODO
+    # the closure table design will cause error on downgrading mariaDB schema,
+    # seems that Django ORM created multiple indexs in the closure table that cannot
+    # be deleted , mariaDB will report error
+    # `ERROR 1553 (HY000): Cannot drop index 'unique_path'`
+    # FIXME, find out the root cause, or use other databases for sotring tree structure
     ancestor = ClosureTableModelMixin.asc_field(ref_cls=GenericUserGroup)
     descendant = ClosureTableModelMixin.desc_field(ref_cls=GenericUserGroup)
 
@@ -806,7 +821,19 @@ class GenericUserAppliedRole(
         related_name="approval_role",
         on_delete=models.SET_NULL,
     )
-    id = CompoundPrimaryKeyField(inc_fields=["user_type", "user_id", "role"])
+    id = models.CharField(max_length=18, primary_key=True)
+
+    def format_pk(usr_type: int, usr_id:int, role_id: int) -> str:
+        usr_type = usr_type & 0xff
+        return "{:02X}{:08X}{:08X}".format(usr_type, usr_id, role_id)
+
+    def refresh_pk(self) -> str:
+        self.id = type(self).format_pk(self.user_type.id, self.user_id, self.role.id)
+        return self.id
+
+    def save(self, *args, **kwargs):
+        self.refresh_pk()
+        super().save(*args, **kwargs)
 
 
 class GenericUserGroupRelation(SoftDeleteObjectMixin):
@@ -838,4 +865,14 @@ class GenericUserGroupRelation(SoftDeleteObjectMixin):
         related_name="approval_group",
         on_delete=models.SET_NULL,
     )
-    id = CompoundPrimaryKeyField(inc_fields=["group", "profile"])
+    id = models.CharField(max_length=16, primary_key=True)
+
+    def refresh_pk(self) -> str:
+        grp_id = self.group.id
+        uprof_id = self.profile.id
+        self.id = "{:08X}{:08X}".format(grp_id, uprof_id)
+        return self.id
+
+    def save(self, *args, **kwargs):
+        self.refresh_pk()
+        super().save(*args, **kwargs)

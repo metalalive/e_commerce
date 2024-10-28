@@ -63,23 +63,19 @@ See [the documentation](../common/python/README.md) for build process.
 - Alternatively, developers can manually drop the tables `auth_user` or `auth_group` after they are created.
 
 #### Initial migration
+For schema update, use Django migration script
+```bash
+pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
+
+pipenv run python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings settings.migration  --database site_dba
+```
+
+For initial data setup to the schema, run following script
 ```bash
 pipenv run python3 -m  user_management.setup
 ```
+which automatically generates default fixture records (which includes default roles, default login users ... etc.) for data migrations in `user_management` application
 
-The `setup` module above automatically performs following operations :
-- Django migration script
-  ```bash
-  pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
-  pipenv run python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings settings.migration  --database site_dba
-  ```
-- copy custom migration script file(s) at `migrations/django/user_management` to `user_management/migrations` then immediately run the script. These are raw SQL statements required in the application.
-- auto-generate default fixture records (which includes default roles, default login users ... etc.) for data migrations in `user_management` application
-
-#### De-initialization
-```bash
-pipenv run python3 -m  user_management.setup reverse
-```
 
 ## Run
 ### application server

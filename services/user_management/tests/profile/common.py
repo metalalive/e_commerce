@@ -70,16 +70,14 @@ class HttpRequestDataGenProfile(HttpRequestDataGen, UserNestedFieldSetupMixin):
         return objs
 
     def _setup_groups_hierarchy(self):
-        """
-        the tree structure of the group hierarchy in this test file
+        # the tree structure of the group hierarchy in this test file
+        #
+        #            3             8         11
+        #          /    \        /  \       /  \
+        #         4      5      9   10     12   13
+        #        / \                           /
+        #       6   7                         14
 
-                   3             8         11
-                 /    \        /  \       /  \
-                4      5      9   10     12   13
-               / \                           /
-              6   7                         14
-
-        """
         grp_obj_map = dict(
             map(lambda obj: (obj.id, obj), self._primitives[GenericUserGroup])
         )

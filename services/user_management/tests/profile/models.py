@@ -488,8 +488,11 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
     def test_all_quota(self):
         # subcase #1 : quota arragements inherited from applied groups
         quota_rel_data = self._get_default_quota_rel_data()
-        quota_rel = list(map(lambda d: UserQuotaRelation(**d), quota_rel_data))
-        UserQuotaRelation.objects.bulk_create(quota_rel)
+        def ut_setup_obj(d):
+            m = UserQuotaRelation(**d)
+            m.save()
+            return m
+        quota_rel = list(map(ut_setup_obj, quota_rel_data))
         indexes = [5, 7, 11, 12, 15, 2]
         filtered_quota_rel_data = map(lambda idx: quota_rel_data[idx], indexes)
         expect_quota = dict(
@@ -633,11 +636,11 @@ class ProfileDeletionTestCase(ProfileCommonTestCase):
         self._profile.delete(profile_id=self._profile_2nd.id)
         self._profile.refresh_from_db()
         qset = GenericUserGroupRelation.objects.filter(
-            id={"profile": prof_id, "group__in": grp_ids}
+            profile=prof_id, group__in={6, 8}
         )
         self.assertFalse(qset.exists())
         qset = GenericUserGroupRelation.objects.all(with_deleted=True).filter(
-            id={"profile": prof_id, "group__in": grp_ids}
+            profile=prof_id, group__in=list(grp_ids)
         )
         self.assertTrue(qset.exists())
         softdel_grp_ids = qset.values_list("group", flat=True)
