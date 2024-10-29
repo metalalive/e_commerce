@@ -15,18 +15,23 @@ csrf_header_name = get_header_name(name=django_settings.CSRF_HEADER_NAME)
 
 
 class ExtendedCsrfViewMiddleware(CsrfViewMiddleware):
-    def _set_token(self, request, response):
-        """
-        For logged-in users
-        * make expiry time of CSRF token as long as session/jwt expiry for authenticated
-          accesses (e.g. logged-in user), or apply django.conf.settings.CSRF_COOKIE_AGE
-          for unauth accesses.
-        * add extra parameters for identifying CSRF token in cookie
+    def _set_csrf_cookie(self, request, response):
+        # Django v5.x invokes this method internally
+        # it is not good practice to override internal method , TODO, better design option
+        self._set_token(request, response)
 
-        In this project:
-        * CSRF token is generated for authenticated users only on setting up response
-          and new session/jwt , it will NOT be refreshed again before the CSRF token expiry
-        """
+    def _set_token(self, request, response):
+        # Before v3.2 , Django invokes this method internally
+        # For logged-in users
+        # * make expiry time of CSRF token as long as session/jwt expiry for authenticated
+        #   accesses (e.g. logged-in user), or apply django.conf.settings.CSRF_COOKIE_AGE
+        #   for unauth accesses.
+        # * add extra parameters for identifying CSRF token in cookie
+        #
+        # In this project:
+        # * CSRF token is generated for authenticated users only on setting up response
+        #   and new session/jwt , it will NOT be refreshed again before the CSRF token expiry
+
         ##if request.session.session_key is not None:
         ##    tkn_age = request.session.get_expiry_age()
         if request.user.is_authenticated:

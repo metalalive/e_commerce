@@ -15,7 +15,7 @@ AUTH_KEYSTORE["persist_pubkey_handler"]["init_kwargs"]["flush_threshold"] = 4
 
 with open(secrets_path, "r") as f:
     secrets = json.load(f)
-    secrets = secrets["backend_apps"]["databases"]["test_site_dba"]
+    secrets = secrets["backend_apps"]["databases"]["test_site2_dba"]
 
 # Django test only uses `default` alias , which does NOT allow users to switch
 # between different database credentials

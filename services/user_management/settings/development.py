@@ -7,4 +7,6 @@ AUTH_KEYSTORE["persist_pubkey_handler"]["init_kwargs"]["filepath"] = BASE_DIR.jo
     "tmp/cache/dev/jwks/pubkey/current.json"
 )
 
+# TODO, separate accounts in DB server
+DATABASES["default"].update(DATABASES["usermgt_service"])
 render_logging_handler_localfs(BASE_DIR.joinpath("tmp/log/dev"))

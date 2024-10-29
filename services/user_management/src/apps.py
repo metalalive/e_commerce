@@ -44,7 +44,4 @@ class UserManagementConfig(AppConfig):
         from ecommerce_common.util.messaging.monkeypatch import patch_kombu_pool
 
         patch_kombu_pool()
-        from ecommerce_common.models.db import monkeypatch_django_db
-
-        monkeypatch_django_db()
         # add --noreload to avoid django runserver from loading twice initially

@@ -5,17 +5,19 @@ from unittest.mock import Mock, patch
 from django.test import SimpleTestCase
 from django.http import HttpResponse
 from django.conf import settings as django_settings
-from django.middleware.csrf import rotate_token, REASON_NO_CSRF_COOKIE, REASON_BAD_TOKEN
+from django.middleware.csrf import rotate_token, REASON_NO_CSRF_COOKIE, REASON_INCORRECT_LENGTH, REASON_CSRF_TOKEN_MISSING
 from django.utils.http import http_date
 
 from ecommerce_common.util import get_request_meta_key
 from ecommerce_common.csrf.middleware import ExtendedCsrfViewMiddleware
 
+def mock_get_response(request):
+    return HttpResponse("unit-test from mock-get-response")
 
 class CsrfMiddlewareTestCase(SimpleTestCase):
     def setUp(self):
-        self.middleware = ExtendedCsrfViewMiddleware()
-        raw_headers = {}
+        self.middleware = ExtendedCsrfViewMiddleware(get_response=mock_get_response)
+        raw_headers = {"CSRF_COOKIE_NEEDS_UPDATE": True}
         self.base_mock_request = Mock(
             META=raw_headers,
             COOKIES={},
@@ -68,7 +70,6 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
     def _check_response_cookie(
         self, mock_request, response, expect_max_age, expect_httponly_status
     ):
-        self.assertNotEqual(response.cookies.get("csrf_header_name"), None)
         csrf_cookie_name = django_settings.CSRF_COOKIE_NAME
         cookie_obj = response.cookies[csrf_cookie_name]
         self.assertEqual(cookie_obj["max-age"], expect_max_age)
@@ -106,7 +107,6 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
         mock_request.is_secure.return_value = (
             False  # TODO, test for is_secure() is True
         )
-        mock_request.csrf_cookie_needs_reset = False
         mock_request.COOKIES[django_settings.CSRF_COOKIE_NAME] = (
             "invalid_csrf_token_in_cookie"
         )
@@ -119,8 +119,7 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
         )
         self.assertEqual(int(response.status_code), 403)
         err_info = json.loads(response.content.decode())
-        self.assertIn(REASON_BAD_TOKEN, err_info["__all__"])
-        self.assertTrue(mock_request.csrf_cookie_needs_reset)
+        self.assertIn(REASON_INCORRECT_LENGTH, err_info["__all__"][0])
 
     def test_verify_missing_header_token(self):
         mock_request = self.base_mock_request
@@ -128,7 +127,6 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
         mock_request.is_secure.return_value = (
             False  # TODO, test for is_secure() is True
         )
-        mock_request.csrf_cookie_needs_reset = False
         mock_request.COOKIES[django_settings.CSRF_COOKIE_NAME] = mock_request.META[
             "CSRF_COOKIE"
         ]
@@ -141,8 +139,7 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
         )
         self.assertEqual(int(response.status_code), 403)
         err_info = json.loads(response.content.decode())
-        self.assertIn(REASON_BAD_TOKEN, err_info["__all__"])
-        self.assertFalse(mock_request.csrf_cookie_needs_reset)
+        self.assertIn(REASON_CSRF_TOKEN_MISSING, err_info["__all__"][0])
 
     def test_verify_token_ok(self):
         mock_request = self.base_mock_request
@@ -150,7 +147,6 @@ class CsrfMiddlewareTestCase(SimpleTestCase):
         mock_request.is_secure.return_value = (
             False  # TODO, test for is_secure() is True
         )
-        mock_request.csrf_cookie_needs_reset = False
         expect_tok = mock_request.META["CSRF_COOKIE"]
         mock_request.COOKIES[django_settings.CSRF_COOKIE_NAME] = expect_tok
         mock_request.META[django_settings.CSRF_HEADER_NAME] = expect_tok

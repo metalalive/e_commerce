@@ -1,9 +1,10 @@
 import string
 import random
 from datetime import timedelta
+from unittest.mock import Mock
 
 from django.conf import settings as django_settings
-from django.middleware.csrf import _get_new_csrf_token
+from django.middleware.csrf import get_token as csrf_get_token
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone as django_timezone
 
@@ -216,7 +217,9 @@ def _setup_login_account(account_data, profile_obj, roles=None, expiry=None):
 def client_req_csrf_setup():
     usermgt_host_url = cors_conf.ALLOWED_ORIGIN["user_management"]
     scheme_end_pos = usermgt_host_url.find("://") + 3
-    valid_csrf_token = _get_new_csrf_token()
+    mock_req = Mock()
+    mock_req.META = {}
+    valid_csrf_token = csrf_get_token(mock_req)
     # (1) assume every request from this application is cross-origin reference.
     # (2) Django's test client sets `testserver` to host name of each reqeust
     #     , which cause error in CORS middleware, I fixed the problem by adding

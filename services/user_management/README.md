@@ -11,7 +11,7 @@
 | software | version | installation/setup guide |
 |-----|-----|-----|
 |Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
-|MariaDB| 10.3.22 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB_server_setup.md) |
+|MariaDB| 11.2.3 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/server_setup_11.2.md) |
 |RabbitMQ| 3.2.4 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/rabbitmq_setup.md) |
 |Elasticsearch| 5.6.16 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/ELK_setup.md#elasticsearch) | 
 |Logstash| 5.6.16 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/ELK_setup.md#logstash) |
@@ -35,19 +35,23 @@ First time to initialize
 ```shell
 pipenv install --dev
 ```
+
 If you need to modify the `Pipfile` or `pyproject.toml` , update the virtual environment after you are done editing , by the command
 ```shell
-pipenv update
+pipenv update  <optional-specific-package>
 ```
-Clean up all dependencies in current virtual environment
+
+Clean up dependencies in current virtual environment
 ```shell
 pipenv uninstall --all
+
+pipenv uninstall <optional-specific-package>
 ```
 
 ### C extension modules
 Manually install it by following command :
 ```bash
-pipenv run pip install ../../common/python/c-ext/ecommerce-common-xxxxx.whl
+pipenv run pip install ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-xxxxx.whl
 ```
 
 The package title should be `my-c-extention-lib`. Once you need to remove the extension , run
@@ -67,7 +71,7 @@ For schema update, use Django migration script
 ```bash
 pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
 
-pipenv run python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings settings.migration  --database site_dba
+pipenv run python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings settings.migration  --database site2_dba
 ```
 
 For initial data setup to the schema, run following script

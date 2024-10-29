@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 ecommerce-common = {path = "../common/python", editable = false}
 user-management = {path = ".", editable = false}
-
 # it will cause write permission error when building the C extension
 # module, current workaround is to build the wheel at
 # `common/python/c_exts` then install the wheel directly at

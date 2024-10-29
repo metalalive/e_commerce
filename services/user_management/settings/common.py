@@ -72,18 +72,18 @@ WSGI_APPLICATION = "ecommerce_common.util.django.wsgi.application"
 DATABASES = {  # will be update with secrets at the bottom of file
     "default": {  # only give minimal privilege to start django app server
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "ecommerce_usermgt_v2",
+        "NAME": "ecommerce_usermgt",
         "CONN_MAX_AGE": 0,  # set 0 only for debugging purpose
-        "TEST": {"NAME": "test_ecommerce_usermgt_v2"},
+        "TEST": {"NAME": "test_ecommerce_usermgt"},
     },
-    "site_dba": {  # apply this setup only when you run management commands at backend server
+    "site2_dba": {  # apply this setup only when you run management commands at backend server
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "ecommerce_usermgt_v2",
+        "NAME": "ecommerce_usermgt",
         "CONN_MAX_AGE": 0,
     },
     "usermgt_service": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "ecommerce_usermgt_v2",
+        "NAME": "ecommerce_usermgt",
         "CONN_MAX_AGE": 0,
         "reversed_app_label": [
             "user_management",
@@ -93,6 +93,7 @@ DATABASES = {  # will be update with secrets at the bottom of file
 
 DATABASE_ROUTERS = ["ecommerce_common.models.db.ServiceModelRouter"]
 
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 
 # Password validation
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-password-validators
@@ -174,6 +175,9 @@ CSRF_COOKIE_NAME = "anticsrftok"
 CSRF_COOKIE_AGE = 12 * 3600
 CSRF_COOKIE_AGE_AUTHED_USER = SESSION_COOKIE_AGE
 
+# list all frontend (web or mobile) servers which are allowed to access
+# this backend API server
+CSRF_TRUSTED_ORIGINS = ["http://localhost:8006"]
 
 # Internationalization
 # https://docs.djangoproject.com/en/dev/topics/i18n/
