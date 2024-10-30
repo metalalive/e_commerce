@@ -109,6 +109,7 @@ pub struct ChargeRespErrorDto {
     pub method: Option<PaymentMethodErrorReason>,
     pub lines: Option<Vec<ChargeOlineErrorDto>>,
     pub currency: Option<CurrencyDto>, // the currency chosen by buyer on creating the order
+    pub num_charges_exceed: Option<GenericRangeErrorDto>,
 }
 
 #[derive(Serialize)]

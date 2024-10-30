@@ -93,11 +93,11 @@ pub(super) fn ut_setup_auth_claim(usr_id: u32, exp_bias_secs: i64) -> AppAuthedC
         aud: vec![app_meta::LABAL.to_string()],
         perms: vec![AppAuthClaimPermission {
             app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
-            codename: AppAuthPermissionCode::can_create_refund_req,
+            codename: AppAuthPermissionCode::can_create_charge,
         }],
         quota: vec![AppAuthClaimQuota {
             app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
-            mat_code: AppAuthQuotaMatCode::NumSubChargesPerOrder,
+            mat_code: AppAuthQuotaMatCode::NumChargesPerOrder,
             maxnum: 299,
         }],
     }
@@ -155,7 +155,7 @@ async fn jwt_verify_rsa_ok() {
         assert_eq!(perm.app_code, app_meta::RESOURCE_QUOTA_AP_CODE);
         assert!(matches!(
             perm.codename,
-            AppAuthPermissionCode::can_create_refund_req
+            AppAuthPermissionCode::can_create_charge
         ));
     }
 } // end of fn jwt_verify_rsa_ok

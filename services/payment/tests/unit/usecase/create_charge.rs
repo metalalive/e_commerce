@@ -39,6 +39,7 @@ use super::{
     MockChargeRepo, MockOrderSyncLockCache, MockPaymentProcessor, MockRpcClient, MockRpcContext,
     MockRpcPublishEvent,
 };
+use crate::auth::ut_setup_auth_claim;
 use crate::model::ut_default_charge_method_stripe;
 
 fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModelSet {
@@ -226,8 +227,9 @@ async fn ok_with_existing_order_replica() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_ok());
     if let Ok(_resp) = result {
         // TODO, examine response detail
@@ -260,8 +262,9 @@ async fn ok_with_rpc_replica_order() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_ok());
     if let Ok(_resp) = result {
         // TODO, examine response detail
@@ -290,8 +293,9 @@ async fn load_unpaid_order_failure() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(ChargeCreateUcError::DataStoreError(actual_e)) = result {
         let cond = matches!(actual_e.fn_label, AppRepoErrorFnLabel::GetUnpaidOlines);
@@ -318,8 +322,9 @@ async fn sync_order_get_lock_failure() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(e) = result {
         let cond = matches!(e, ChargeCreateUcError::LoadOrderConflict);
@@ -349,8 +354,9 @@ async fn sync_order_release_lock_failure() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(e) = result {
         let cond = matches!(e, ChargeCreateUcError::LockCacheError);
@@ -379,8 +385,9 @@ async fn rpc_acquire_conn_error() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(ChargeCreateUcError::LoadOrderInternalError(re)) = result {
         let cond = matches!(re.fn_label, AppRpcErrorFnLabel::AcquireClientConn);
@@ -414,8 +421,9 @@ async fn rpc_publish_error_replica_order() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(ChargeCreateUcError::LoadOrderInternalError(re)) = result {
         let cond = matches!(re.fn_label, AppRpcErrorFnLabel::ClientSendReq);
@@ -450,8 +458,9 @@ async fn rpc_reply_error_replica_order() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(ChargeCreateUcError::LoadOrderInternalError(re)) = result {
         let cond = matches!(re.fn_label, AppRpcErrorFnLabel::ClientRecvResp);
@@ -490,8 +499,9 @@ async fn save_replica_order_failure() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(ChargeCreateUcError::DataStoreError(re)) = result {
         let cond = matches!(re.fn_label, AppRepoErrorFnLabel::CreateOrder);
@@ -529,8 +539,9 @@ async fn processor_start_payin_failure() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(ChargeCreateUcError::ExternalProcessorError(r)) = result {
         let cond = matches!(r, PaymentMethodErrorReason::ProcessorFailure);
@@ -571,8 +582,9 @@ async fn save_new_chargeline_failure() {
         ordersync_lockset: Arc::new(Box::new(mock_sync_cache)),
         repo: mock_repo,
     };
+    let mock_authed_claim = ut_setup_auth_claim(mock_usr_id, 600i64);
     let mock_req = ut_charge_req_dto(mock_order_id.clone());
-    let result = uc.execute(mock_usr_id, mock_req).await;
+    let result = uc.execute(mock_authed_claim, mock_req).await;
     assert!(result.is_err());
     if let Err(ChargeCreateUcError::DataStoreError(de)) = result {
         let cond = matches!(de.fn_label, AppRepoErrorFnLabel::CreateCharge);

@@ -18,7 +18,10 @@ use serde_json::Value as JsnVal;
 use payment::adapter::repository::app_repo_refund;
 use payment::hard_limit::CREATE_CHARGE_SECONDS_INTERVAL;
 use payment::usecase::SyncRefundReqUseCase;
-use payment::AppAuthedClaim;
+use payment::{
+    app_meta, AppAuthClaimPermission, AppAuthClaimQuota, AppAuthPermissionCode,
+    AppAuthQuotaMatCode, AppAuthedClaim,
+};
 
 use common::{itest_setup_app_server, itest_setup_auth_claim};
 
@@ -94,9 +97,17 @@ async fn itest_create_charge(
         .append_header(ContentType::json())
         .set_json(req_body)
         .to_request();
-    let _empty = req
-        .extensions_mut()
-        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let mut authed_claim = itest_setup_auth_claim(usr_id);
+    authed_claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_create_charge,
+    });
+    authed_claim.quota.push(AppAuthClaimQuota {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        mat_code: AppAuthQuotaMatCode::NumChargesPerOrder,
+        maxnum: 5,
+    });
+    let _empty = req.extensions_mut().insert::<AppAuthedClaim>(authed_claim);
     let resp = call_service(app, req).await;
     assert_eq!(resp.status().as_u16(), expect_resp_status);
     let body_ctx = resp.into_body();

@@ -49,8 +49,7 @@ pub(super) async fn create_charge(
         rpc_ctx: shr_state.rpc_context(),
     };
     let req_body = req_body.into_inner();
-    let resp = match uc.execute(authed_claim.profile, req_body).await {
-        // TODO, return session detail from chosen 3rd-party processor
+    let resp = match uc.execute(authed_claim, req_body).await {
         Ok(v) => {
             let body_serial = serde_json::to_vec(&v).unwrap();
             HttpResponse::Accepted()
@@ -58,11 +57,25 @@ pub(super) async fn create_charge(
                 .body(body_serial)
         }
         Err(uce) => match uce {
-            ChargeCreateUcError::ClientBadRequest(e) => {
+            ChargeCreateUcError::PermissionDenied(usr_id) => {
+                app_log_event!(logctx_p, AppLogLevel::INFO, "{}", usr_id);
+                HttpResponse::Forbidden().finish()
+            }
+            ChargeCreateUcError::OrderOwnerMismatch => HttpResponse::Forbidden().finish(),
+            ChargeCreateUcError::ClientBadRequest(e) | ChargeCreateUcError::QuotaExceedLimit(e) => {
                 let body = serde_json::to_vec(&e).unwrap();
                 HttpResponse::BadRequest()
                     .append_header(ContentType::json())
                     .body(body)
+            }
+            ChargeCreateUcError::OrderNotExist => HttpResponse::NotFound().finish(),
+            ChargeCreateUcError::LoadOrderByteCorruption(msg) => {
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "{msg}");
+                HttpResponse::InternalServerError().finish()
+            }
+            ChargeCreateUcError::RpcBillingParseError(e) => {
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "{:?}", e);
+                HttpResponse::InternalServerError().finish()
             }
             ChargeCreateUcError::RpcOlineParseError(es) => {
                 app_log_event!(logctx_p, AppLogLevel::ERROR, "{:?}", es);
@@ -80,9 +93,9 @@ pub(super) async fn create_charge(
                 app_log_event!(logctx_p, AppLogLevel::ERROR, "order-rpc-failure");
                 HttpResponse::InternalServerError().finish()
             }
-            _others => {
-                app_log_event!(logctx_p, AppLogLevel::ERROR, "unclassified-error");
-                HttpResponse::InternalServerError().finish()
+            ChargeCreateUcError::LockCacheError | ChargeCreateUcError::LoadOrderConflict => {
+                app_log_event!(logctx_p, AppLogLevel::WARNING, "lock-cache-error");
+                HttpResponse::NotImplemented().finish()
             }
         }, // analyze error type, give different error response
     }; // end of use-case execution

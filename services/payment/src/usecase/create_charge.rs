@@ -2,6 +2,7 @@ use std::boxed::Box;
 use std::sync::Arc;
 
 use chrono::{DurationRound, Local, TimeDelta};
+use ecommerce_common::api::dto::GenericRangeErrorDto;
 use ecommerce_common::api::rpc::dto::{OrderReplicaPaymentDto, OrderReplicaPaymentReqDto};
 use ecommerce_common::api::web::dto::BillingErrorDto;
 use ecommerce_common::model::order::BillingModel;
@@ -14,6 +15,7 @@ use crate::api::web::dto::{
     ChargeCreateRespDto, ChargeReqDto, ChargeRespErrorDto, PaymentMethodErrorReason,
 };
 use crate::model::{ChargeBuyerModel, OrderLineModelSet, OrderModelError};
+use crate::{AppAuthPermissionCode, AppAuthQuotaMatCode, AppAuthedClaim};
 
 // TODO, consider to add debug function for logging purpose
 pub enum ChargeCreateUcError {
@@ -28,6 +30,8 @@ pub enum ChargeCreateUcError {
     RpcOlineParseError(Vec<OrderModelError>),
     ExternalProcessorError(PaymentMethodErrorReason),
     DataStoreError(AppRepoError),
+    PermissionDenied(u32),
+    QuotaExceedLimit(ChargeRespErrorDto),
 }
 
 impl From<OrderSyncLockError> for ChargeCreateUcError {
@@ -81,10 +85,12 @@ pub struct ChargeCreateUseCase {
 impl ChargeCreateUseCase {
     pub async fn execute(
         &self,
-        usr_id: u32,
+        authed_claim: AppAuthedClaim,
         req_body: ChargeReqDto,
     ) -> Result<ChargeCreateRespDto, ChargeCreateUcError> {
+        let usr_id = authed_claim.profile;
         let oid = req_body.order.id.as_str();
+        self.validate_access_control(authed_claim, oid).await?;
         let result = self.repo.get_unpaid_olines(usr_id, oid).await?;
         let validated_order = if let Some(v) = result {
             v
@@ -99,6 +105,41 @@ impl ChargeCreateUseCase {
             .await?;
         Ok(resp)
     } // end of fn execute
+
+    #[allow(clippy::field_reassign_with_default)]
+    async fn validate_access_control(
+        &self,
+        authed_claim: AppAuthedClaim,
+        oid: &str,
+    ) -> Result<(), ChargeCreateUcError> {
+        let usr_id = authed_claim.profile;
+        let success = authed_claim.contain_permission(AppAuthPermissionCode::can_create_charge);
+        if !success {
+            return Err(ChargeCreateUcError::PermissionDenied(usr_id));
+        }
+        let (saved_usr_id, ctimes) = self
+            .repo
+            .fetch_charge_ids(oid)
+            .await?
+            .unwrap_or((usr_id, Vec::new()));
+        if saved_usr_id != usr_id {
+            return Err(ChargeCreateUcError::PermissionDenied(usr_id));
+        }
+        let limit = authed_claim.quota_limit(AppAuthQuotaMatCode::NumChargesPerOrder);
+        let actual_num_charges = ctimes.len() as u32;
+        if limit < actual_num_charges {
+            let range = GenericRangeErrorDto {
+                max_: limit as u16,
+                min_: 0u16,
+                given: actual_num_charges,
+            };
+            let mut e = ChargeRespErrorDto::default();
+            e.num_charges_exceed = Some(range);
+            Err(ChargeCreateUcError::QuotaExceedLimit(e))
+        } else {
+            Ok(())
+        }
+    } // end of fn validate_access_control
 
     async fn rpc_sync_order(
         &self,

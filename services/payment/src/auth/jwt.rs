@@ -33,13 +33,17 @@ pub enum AuthJwtError {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq)]
 pub enum AppAuthPermissionCode {
-    can_create_refund_req,
+    can_create_charge,
+    can_update_charge_progress,
+    can_capture_charge,
+    can_onboard_merchant,
+    can_finalize_refund,
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum AppAuthQuotaMatCode {
-    NumSubChargesPerOrder, // TODO, finish implementation
+    NumChargesPerOrder,
 }
 #[derive(Deserialize, Serialize)]
 pub struct AppAuthClaimPermission {
@@ -51,7 +55,7 @@ pub struct AppAuthClaimPermission {
 pub struct AppAuthClaimQuota {
     #[serde(deserialize_with = "AppAuthedClaim::_jsn_validate_ap_code")]
     pub app_code: u8,
-    pub mat_code: AppAuthQuotaMatCode, // u8,
+    pub mat_code: AppAuthQuotaMatCode,
     pub maxnum: u32,
 }
 #[derive(Deserialize, Serialize)]
@@ -70,6 +74,18 @@ impl AppAuthedClaim {
         D: serde::Deserializer<'de>,
     {
         jsn_validate_ap_code(raw, app_meta::RESOURCE_QUOTA_AP_CODE, app_meta::LABAL)
+    }
+    pub(crate) fn contain_permission(&self, code: AppAuthPermissionCode) -> bool {
+        self.perms
+            .iter()
+            .any(|p| p.app_code == app_meta::RESOURCE_QUOTA_AP_CODE && p.codename == code)
+    }
+    pub(crate) fn quota_limit(&self, code: AppAuthQuotaMatCode) -> u32 {
+        self.quota
+            .iter()
+            .find(|q| q.app_code == app_meta::RESOURCE_QUOTA_AP_CODE && q.mat_code == code)
+            .map(|rule| rule.maxnum)
+            .unwrap_or(0)
     }
 }
 
@@ -90,7 +106,7 @@ impl TryFrom<u8> for AppAuthQuotaMatCode {
     type Error = u8;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            1 => Ok(Self::NumSubChargesPerOrder),
+            1 => Ok(Self::NumChargesPerOrder),
             _others => Err(value),
         }
     }
@@ -98,7 +114,7 @@ impl TryFrom<u8> for AppAuthQuotaMatCode {
 impl From<AppAuthQuotaMatCode> for u8 {
     fn from(value: AppAuthQuotaMatCode) -> u8 {
         match value {
-            AppAuthQuotaMatCode::NumSubChargesPerOrder => 1,
+            AppAuthQuotaMatCode::NumChargesPerOrder => 1,
         }
     }
 }
@@ -108,10 +124,7 @@ impl<'de> Deserialize<'de> for AppAuthQuotaMatCode {
         D: serde::Deserializer<'de>,
     {
         let val = u8::deserialize(raw)?;
-        match Self::try_from(val) {
-            Ok(code) => Ok(code),
-            Err(val) => Err(quota_matcode_deserialize_error::<D>(val, (1, 1))),
-        }
+        Self::try_from(val).map_err(|_e| quota_matcode_deserialize_error::<D>(val, (1, 1)))
     }
 }
 impl Serialize for AppAuthQuotaMatCode {
