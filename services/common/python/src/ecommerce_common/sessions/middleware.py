@@ -5,9 +5,11 @@ from django.conf import settings as django_settings
 from django.core.cache import caches as DjangoBuiltinCaches
 from django.contrib.sessions.middleware import SessionMiddleware
 
-from ecommerce_common.models.db import db_middleware_exception_handler
-
 _logger = logging.getLogger(__name__)
+
+# The middlewares in this module works only for web pages hosted in Django
+# server, since this project focuses on backend API servers, no other backend
+# app in this project uses the middlewares here.
 
 
 class OneSessionPerAccountMiddleware:
@@ -24,7 +26,6 @@ class OneSessionPerAccountMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
-    @db_middleware_exception_handler
     def __call__(self, request):
         account = request.user
         if account.is_authenticated:

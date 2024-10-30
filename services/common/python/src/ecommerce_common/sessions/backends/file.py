@@ -80,15 +80,3 @@ class SessionStore(FileSessionStore):
             value = timedelta(seconds=value)
         super().set_expiry(value=value)
 
-    # def _expiry_date(self, session_data):
-    #     custom_expiry_secs = session_data.get('_session_expiry')
-    #     if custom_expiry_secs and not isinstance(custom_expiry_secs, int):
-    #         from django.core.exceptions import ImproperlyConfigured
-    #         errmsg = "_session_expiry in file session has to be integer, not object type."
-    #         raise ImproperlyConfigured(errmsg)
-    #     exp_secs = custom_expiry_secs or self.get_session_cookie_age()
-    #     out =  self._last_modification() + timedelta(seconds=exp_secs)
-    #     # print("refined file session, _expiry_date , exp_secs: "+ str(exp_secs))
-    #     # print("refined file session, _expiry_date , out: "+ str(out))
-    #     # print("refined file session, _expiry_date , _last_modification(): "+ str(self._last_modification()))
-    #     return out

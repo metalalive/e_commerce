@@ -323,24 +323,3 @@ class FileSystemStorage(AbstractStorage):
 
 
 ## end of class FileSystemStorage
-
-
-##def test_fs_storage(src_filepath, dst_filepath):
-##    from common.util.python import monkeypatch_typing_specialform
-##    monkeypatch_typing_specialform()
-##    from fastapi import UploadFile
-##    UploadFile.spool_max_size = 128
-##    upf = UploadFile(filename='xxx')
-##    with open(src_filepath,'rb') as f:
-##        asyncio.run(upf.write(f.read()))
-##    asyncio.run(upf.seek(0))
-##    fs_storage = FileSystemStorage(location='./tmp/mkdir_test')
-##    # ---------
-##    fs_storage.save(path=dst_filepath, content=upf.file, chunk_sz=65)
-##    # ---------
-##    fs_storage.save(path=dst_filepath, content=upf, async_flg=True,
-##            chunk_sz=67, non_file_types=[UploadFile])
-##    # ---------
-##    builtin_f = open(src_filepath,'rb')
-##    fs_storage.save(path=dst_filepath, content=builtin_f, chunk_sz=73)
-##    builtin_f.close()
