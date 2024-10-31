@@ -46,9 +46,12 @@ async fn itest_onboard_merchant(
         .append_header(ContentType::json())
         .set_json(req_body)
         .to_request();
-    let _empty = req
-        .extensions_mut()
-        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let mut authed_claim = itest_setup_auth_claim(usr_id);
+    authed_claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_onboard_merchant,
+    });
+    let _empty = req.extensions_mut().insert::<AppAuthedClaim>(authed_claim);
     let resp = call_service(app, req).await;
     assert_eq!(resp.status().as_u16(), expect_resp_status);
     let body_ctx = resp.into_body();
@@ -73,9 +76,12 @@ async fn itest_track_onboarding_status(
         .append_header(ContentType::json())
         .set_json(req_body)
         .to_request();
-    let _empty = req
-        .extensions_mut()
-        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let mut authed_claim = itest_setup_auth_claim(usr_id);
+    authed_claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_onboard_merchant,
+    });
+    let _empty = req.extensions_mut().insert::<AppAuthedClaim>(authed_claim);
     let resp = call_service(app, req).await;
     assert_eq!(resp.status().as_u16(), expect_resp_status);
     let body_ctx = resp.into_body();
@@ -126,9 +132,12 @@ async fn itest_refresh_charge_status(
         .uri(uri.as_str())
         .append_header(ContentType::json())
         .to_request();
-    let _empty = req
-        .extensions_mut()
-        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let mut authed_claim = itest_setup_auth_claim(usr_id);
+    authed_claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_update_charge_progress,
+    });
+    let _empty = req.extensions_mut().insert::<AppAuthedClaim>(authed_claim);
     let resp = call_service(app, req).await;
     assert_eq!(resp.status().as_u16(), expect_resp_status);
     let body_ctx = resp.into_body();
@@ -153,9 +162,12 @@ async fn itest_capture_charge_payout(
         .append_header(ContentType::json())
         .set_json(req_body)
         .to_request();
-    let _empty = req
-        .extensions_mut()
-        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let mut authed_claim = itest_setup_auth_claim(usr_id);
+    authed_claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_capture_charge,
+    });
+    let _empty = req.extensions_mut().insert::<AppAuthedClaim>(authed_claim);
     let resp = call_service(app, req).await;
     assert_eq!(resp.status().as_u16(), expect_resp_status);
     let body_ctx = resp.into_body();
@@ -181,9 +193,12 @@ async fn itest_merchant_complete_refund(
         .append_header(ContentType::json())
         .set_json(req_body)
         .to_request();
-    let _empty = req
-        .extensions_mut()
-        .insert::<AppAuthedClaim>(itest_setup_auth_claim(usr_id));
+    let mut authed_claim = itest_setup_auth_claim(usr_id);
+    authed_claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_finalize_refund,
+    });
+    let _empty = req.extensions_mut().insert::<AppAuthedClaim>(authed_claim);
     let resp = call_service(app, req).await;
     assert_eq!(resp.status().as_u16(), expect_resp_status);
     let body_ctx = resp.into_body();

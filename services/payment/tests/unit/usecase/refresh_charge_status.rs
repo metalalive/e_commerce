@@ -21,10 +21,12 @@ use payment::model::{
     ChargeLineBuyerModel, StripeCheckoutPaymentStatusModel, StripeSessionStatusModel,
 };
 use payment::usecase::{ChargeRefreshUcError, ChargeStatusRefreshUseCase};
+use payment::{app_meta, AppAuthClaimPermission, AppAuthPermissionCode, AppAuthedClaim};
 
 use super::{
     MockChargeRepo, MockPaymentProcessor, MockRpcClient, MockRpcContext, MockRpcPublishEvent,
 };
+use crate::auth::ut_setup_auth_claim;
 use crate::model::ut_setup_buyer_charge_lines;
 
 fn ut_setup_charge_3pty_stripe(expiry: DateTime<Utc>) -> Charge3partyModel {
@@ -101,6 +103,17 @@ fn ut_common_mock_data() -> (
     )
 }
 
+fn _ut_setup_auth_claim(usr_id: u32) -> AppAuthedClaim {
+    let mut claim = ut_setup_auth_claim(usr_id, 560i64);
+    claim.perms.clear();
+    claim.quota.clear();
+    claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_update_charge_progress,
+    });
+    claim
+}
+
 #[rustfmt::skip]
 #[actix_web::test]
 async fn ok_entire_pay_in_completed() {
@@ -132,7 +145,8 @@ async fn ok_entire_pay_in_completed() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
         let cond = matches!(v.status, ChargeStatusDto::Completed);
@@ -159,7 +173,8 @@ async fn ok_3party_processing() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
         let cond = matches!(v.status, ChargeStatusDto::PspProcessing);
@@ -194,7 +209,8 @@ async fn ok_3party_refused() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
         let cond = matches!(v.status, ChargeStatusDto::PspRefused);
@@ -224,7 +240,8 @@ async fn ok_3party_session_expired() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
         let cond = matches!(v.status, ChargeStatusDto::SessionExpired);
@@ -268,7 +285,8 @@ async fn ok_skip_3party() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
         let cond = matches!(v.status, ChargeStatusDto::Completed);
@@ -301,7 +319,8 @@ async fn orderapp_already_synced() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_ok());
     if let Ok(v) = result {
         let cond = matches!(v.status, ChargeStatusDto::Completed);
@@ -331,7 +350,8 @@ async fn error_3party_lowlvl() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_err());
     if let Err(ChargeRefreshUcError::ExternalProcessor(e)) = result {
         if let AppProcessorErrorReason::LowLvlNet(lowlvle) = e.reason {
@@ -361,7 +381,8 @@ async fn error_decode_charge_id() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_err());
     if let Err(ChargeRefreshUcError::ChargeIdDecode(ecode, _msg)) = result {
         assert_eq!(ecode, AppErrorCode::DataCorruption);
@@ -382,7 +403,8 @@ async fn error_owner_mismatch() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_err());
     if let Err(e) = result {
         let cond = matches!(e, ChargeRefreshUcError::OwnerMismatch);
@@ -402,7 +424,8 @@ async fn error_repo_charge_not_exist() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_err());
     if let Err(e) = result {
         let cond = matches!(e, ChargeRefreshUcError::ChargeNotExist(8010095, _));
@@ -439,7 +462,8 @@ async fn error_repo_write_status() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_err());
     if let Err(ChargeRefreshUcError::DataStore(e)) = result {
         let cond = matches!(e.fn_label, AppRepoErrorFnLabel::UpdateChargeProgress);
@@ -481,7 +505,8 @@ async fn error_rpc_lowlvl() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_err());
     if let Err(ChargeRefreshUcError::RpcContext(e)) = result {
         let cond = matches!(e.fn_label, AppRpcErrorFnLabel::AcquireClientConn);
@@ -537,7 +562,8 @@ async fn error_rpc_reply_sync_orderapp() {
         processors: Arc::new(mock_3pty),
         rpc_ctx: Arc::new(mock_rpc_ctx),
     };
-    let result = uc.execute(mock_usr_id, mock_charge_id).await;
+    let mock_authed_claim = _ut_setup_auth_claim(mock_usr_id);
+    let result = uc.execute(mock_authed_claim, mock_charge_id).await;
     assert!(result.is_err());
     if let Err(ChargeRefreshUcError::RpcUpdateOrder(mut e)) = result {
         assert_eq!(e.oid.as_str(), mock_order_id.as_str());

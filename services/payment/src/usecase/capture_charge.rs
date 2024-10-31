@@ -7,7 +7,7 @@ use ecommerce_common::error::AppErrorCode;
 use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::adapter::repository::{AbstractChargeRepo, AbstractMerchantRepo, AppRepoError};
 use crate::api::web::dto::CapturePayRespDto;
-use crate::auth::AppAuthedClaim;
+use crate::auth::{AppAuthPermissionCode, AppAuthedClaim};
 use crate::model::{BuyerPayInState, Label3party, PayoutModel, PayoutModelError};
 
 use super::try_parse_charge_id;
@@ -17,6 +17,7 @@ pub enum ChargeCaptureUcError {
     MissingCharge,
     MissingMerchant,
     InvalidMerchantStaff(u32),
+    PermissionDenied(u32),
     PayInNotCompleted(BuyerPayInState),
     CorruptedPayMethod(String),
     CorruptedModel(PayoutModelError),
@@ -37,6 +38,14 @@ impl ChargeCaptureUseCase {
         charge_id: String,
         store_id: u32,
     ) -> Result<CapturePayRespDto, ChargeCaptureUcError> {
+        let merchant_staff_id = self.auth_claim.profile;
+        let success = self
+            .auth_claim
+            .contain_permission(AppAuthPermissionCode::can_capture_charge);
+        if !success {
+            return Err(ChargeCaptureUcError::PermissionDenied(merchant_staff_id));
+        }
+
         let (buyer_id, charge_ctime) = try_parse_charge_id(charge_id.as_str())
             .map_err(|e| ChargeCaptureUcError::ChargeIdDecode(e.0, e.1))?;
         let charge_m = self
@@ -63,7 +72,6 @@ impl ChargeCaptureUseCase {
             .map_err(ChargeCaptureUcError::RepoOpFailure)?
             .ok_or(ChargeCaptureUcError::MissingMerchant)?;
 
-        let merchant_staff_id = self.auth_claim.profile;
         if !merchant_prof.valid_staff(merchant_staff_id) {
             let e = ChargeCaptureUcError::InvalidMerchantStaff(merchant_staff_id);
             return Err(e);

@@ -117,7 +117,7 @@ pub(super) async fn refresh_charge_status(
         processors: shr_state.processor_context(),
         rpc_ctx: shr_state.rpc_context(),
     };
-    let result = uc.execute(authed_claim.profile, charge_id_serial).await;
+    let result = uc.execute(authed_claim, charge_id_serial).await;
     let (http_status, body) = match result {
         Ok(v) => {
             let b = serde_json::to_vec(&v).unwrap();
@@ -126,6 +126,10 @@ pub(super) async fn refresh_charge_status(
         Err(e) => {
             let s = match e {
                 ChargeRefreshUcError::OwnerMismatch => StatusCode::FORBIDDEN,
+                ChargeRefreshUcError::PermissionDenied(auth_usr_id) => {
+                    app_log_event!(logctx, AppLogLevel::INFO, "{auth_usr_id}");
+                    StatusCode::FORBIDDEN
+                }
                 ChargeRefreshUcError::ChargeNotExist(owner_id, ctime) => {
                     app_log_event!(logctx, AppLogLevel::DEBUG, "{owner_id}, {ctime}");
                     StatusCode::NOT_FOUND
@@ -213,7 +217,8 @@ pub(super) async fn capture_authorized_charge(
                     );
                     StatusCode::BAD_REQUEST
                 }
-                ChargeCaptureUcError::InvalidMerchantStaff(usr_id) => {
+                ChargeCaptureUcError::InvalidMerchantStaff(usr_id)
+                | ChargeCaptureUcError::PermissionDenied(usr_id) => {
                     app_log_event!(logctx, AppLogLevel::INFO, "usr_id:{usr_id}");
                     StatusCode::FORBIDDEN
                 }

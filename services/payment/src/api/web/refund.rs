@@ -50,9 +50,7 @@ pub(super) async fn mechant_complete_refund(
         repo_rfd,
         processors,
     };
-    let result = uc
-        .execute(oid, store_id, auth_claim.profile, req_body)
-        .await;
+    let result = uc.execute(oid, store_id, auth_claim, req_body).await;
     let (http_status, body_raw) = match result {
         Ok((o, es)) => {
             if !es.is_empty() {

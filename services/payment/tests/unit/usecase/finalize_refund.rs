@@ -20,8 +20,10 @@ use payment::model::{
     OrderCurrencySnapshot, OrderRefundModel, RefundModelError, StripeCheckoutPaymentStatusModel,
 };
 use payment::usecase::{FinalizeRefundUcError, FinalizeRefundUseCase};
+use payment::{app_meta, AppAuthClaimPermission, AppAuthPermissionCode, AppAuthedClaim};
 
 use super::{MockChargeRepo, MockMerchantRepo, MockPaymentProcessor, MockRefundRepo};
+use crate::auth::ut_setup_auth_claim;
 use crate::dto::ut_setup_storeprofile_dto;
 use crate::model::refund::ut_setup_refund_cmplt_dto;
 use crate::model::{
@@ -61,6 +63,17 @@ fn ut_setup_repo_refund(saved_req: Option<OrderRefundModel>) -> Box<dyn Abstract
 fn ut_setup_processor(trigs: Option<Vec<bool>>) -> Arc<Box<dyn AbstractPaymentProcessor>> {
     let obj = MockPaymentProcessor::build(None, None, None, None, trigs);
     Arc::new(obj)
+}
+
+fn _ut_setup_auth_claim(usr_id: u32) -> AppAuthedClaim {
+    let mut claim = ut_setup_auth_claim(usr_id, 560i64);
+    claim.perms.clear();
+    claim.quota.clear();
+    claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_finalize_refund,
+    });
+    claim
 }
 
 #[rustfmt::skip]
@@ -188,9 +201,9 @@ async fn cmplt_req_done_all() {
     let repo_rfd = ut_setup_repo_refund(Some(mock_rfnd_req_m));
     let processors = ut_setup_processor(Some(vec![false, false]));
     let uc = FinalizeRefundUseCase { repo_ch, repo_mc, repo_rfd, processors };
+    let mock_authed_claim = _ut_setup_auth_claim(mock_staff_usr_id);
     let result = uc.execute(
-        mock_oid.to_string(), mock_merchant_id,
-        mock_staff_usr_id, mock_cmplt_req
+        mock_oid.to_string(), mock_merchant_id, mock_authed_claim, mock_cmplt_req
     ).await;
     assert!(result.is_ok());
     let data_selector = |prod_id:u64, prod_typ:ProductType, t_diff:i64| -> (i64,u32,u32,u32) {
@@ -260,9 +273,9 @@ async fn cmplt_req_done_partial() {
     let repo_rfd = ut_setup_repo_refund(Some(mock_rfnd_req_m));
     let processors = ut_setup_processor(Some(vec![false, false]));
     let uc = FinalizeRefundUseCase { repo_ch, repo_mc, repo_rfd, processors };
+    let mock_authed_claim = _ut_setup_auth_claim(mock_staff_usr_id);
     let result = uc.execute(
-        mock_oid.to_string(), mock_merchant_id,
-        mock_staff_usr_id, mock_cmplt_req
+        mock_oid.to_string(), mock_merchant_id, mock_authed_claim, mock_cmplt_req
     ).await;
     assert!(result.is_ok());
     let data_selector = |prod_id:u64, prod_typ:ProductType, t_diff:i64| -> (i64,u32,u32,u32) {
@@ -331,9 +344,9 @@ async fn cmplt_req_done_with_processor_error() {
     let repo_rfd = ut_setup_repo_refund(Some(mock_rfnd_req_m));
     let processors = ut_setup_processor(Some(vec![false, true]));
     let uc = FinalizeRefundUseCase { repo_ch, repo_mc, repo_rfd, processors };
+    let mock_authed_claim = _ut_setup_auth_claim(mock_staff_usr_id);
     let result = uc.execute(
-        mock_oid.to_string(), mock_merchant_id,
-        mock_staff_usr_id, mock_cmplt_req
+        mock_oid.to_string(), mock_merchant_id, mock_authed_claim, mock_cmplt_req
     ).await;
     assert!(result.is_ok());
     let data_selector = |prod_id:u64, prod_typ:ProductType, t_diff:i64| -> (i64,u32,u32,u32) {
@@ -380,9 +393,9 @@ async fn missing_charge_ids() {
     let repo_rfd = ut_setup_repo_refund(None);
     let processors = ut_setup_processor(None);
     let uc = FinalizeRefundUseCase { repo_ch, repo_mc, repo_rfd, processors };
+    let mock_authed_claim = _ut_setup_auth_claim(mock_staff_usr_id);
     let result = uc.execute(
-        mock_oid.to_string(), mock_merchant_id,
-        mock_staff_usr_id, mock_cmplt_req
+        mock_oid.to_string(), mock_merchant_id, mock_authed_claim , mock_cmplt_req
     ).await;
     assert!(result.is_err());
     if let Err(FinalizeRefundUcError::MissingChargeId(oid)) = result {
@@ -422,9 +435,9 @@ async fn resolve_failure_repo_refund() {
     let repo_rfd = ut_setup_repo_refund(Some(mock_rfnd_req_m));
     let processors = ut_setup_processor(None);
     let uc = FinalizeRefundUseCase { repo_ch, repo_mc, repo_rfd, processors };
+    let mock_authed_claim = _ut_setup_auth_claim(mock_staff_usr_id);
     let result = uc.execute(
-        mock_oid.to_string(), mock_merchant_id,
-        mock_staff_usr_id, mock_cmplt_req
+        mock_oid.to_string(), mock_merchant_id, mock_authed_claim, mock_cmplt_req
     ).await;
     assert!(result.is_err());
     if let Err(FinalizeRefundUcError::DataStore(e)) = result {
@@ -484,9 +497,9 @@ async fn update_failure_chargeline() {
     let repo_rfd = ut_setup_repo_refund(Some(mock_rfnd_req_m));
     let processors = ut_setup_processor(Some(vec![false]));
     let uc = FinalizeRefundUseCase { repo_ch, repo_mc, repo_rfd, processors };
+    let mock_authed_claim = _ut_setup_auth_claim(mock_staff_usr_id);
     let result = uc.execute(
-        mock_oid.to_string(), mock_merchant_id,
-        mock_staff_usr_id, mock_cmplt_req
+        mock_oid.to_string(), mock_merchant_id, mock_authed_claim, mock_cmplt_req
     ).await;
     assert!(result.is_err());
     if let Err(FinalizeRefundUcError::DataStore(e)) = result {

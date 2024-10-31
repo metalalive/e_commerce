@@ -11,7 +11,7 @@ use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
 use crate::adapter::repository::{AbstractMerchantRepo, AppRepoError};
 use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxError};
 use crate::api::web::dto::{StoreOnboardReqDto, StoreOnboardRespDto};
-use crate::auth::AppAuthedClaim;
+use crate::auth::{AppAuthPermissionCode, AppAuthedClaim};
 use crate::model::{Label3party, MerchantModelError, MerchantProfileModel};
 
 pub enum OnboardStoreUcError {
@@ -20,6 +20,7 @@ pub enum OnboardStoreUcError {
     CorruptedStoreProfile(Box<Vec<u8>>, String),
     InvalidStoreProfile(MerchantModelError),
     InvalidStoreSupervisor(u32),
+    PermissionDenied(u32),
     ThirdParty(AppProcessorError),
     RepoCreate(AppRepoError),
 }
@@ -58,15 +59,26 @@ impl From<AppRepoError> for OnboardStoreUcError {
     }
 }
 
+fn uc_permission_check(claim: &AppAuthedClaim) -> Result<(), OnboardStoreUcError> {
+    let auth_usr_id = claim.profile;
+    let success = claim.contain_permission(AppAuthPermissionCode::can_onboard_merchant);
+    if success {
+        Ok(())
+    } else {
+        Err(OnboardStoreUcError::PermissionDenied(auth_usr_id))
+    }
+}
+
 impl OnboardStoreUseCase {
     pub async fn execute(
         &self,
         store_id: u32,
         req_body: StoreOnboardReqDto,
     ) -> Result<StoreOnboardRespDto, OnboardStoreUcError> {
+        uc_permission_check(&self.auth_claim)?;
+        let auth_usr_id = self.auth_claim.profile;
         let storeprof_d = self._rpc_validate_store(store_id).await?;
         let storeprof_m = MerchantProfileModel::try_from((store_id, &storeprof_d))?;
-        let auth_usr_id = self.auth_claim.profile;
         if !storeprof_m.valid_supervisor(auth_usr_id) {
             let e = OnboardStoreUcError::InvalidStoreSupervisor(auth_usr_id);
             return Err(e);
@@ -115,6 +127,7 @@ impl RefreshOnboardStatusUseCase {
         store_id: u32,
         req_body: StoreOnboardReqDto,
     ) -> Result<StoreOnboardRespDto, OnboardStoreUcError> {
+        uc_permission_check(&self.auth_claim)?;
         let auth_usr_id = self.auth_claim.profile;
         let label3pt = Label3party::from(&req_body);
         let (storeprof_m, store3pty_m) = self.repo.fetch(store_id, label3pt).await?.ok_or(

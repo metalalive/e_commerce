@@ -19,6 +19,7 @@ use payment::model::{
     PayoutModelError,
 };
 use payment::usecase::{ChargeCaptureUcError, ChargeCaptureUseCase};
+use payment::{app_meta, AppAuthClaimPermission, AppAuthPermissionCode, AppAuthedClaim};
 
 use crate::auth::ut_setup_auth_claim;
 use crate::dto::ut_setup_capture_pay_resp_dto;
@@ -56,6 +57,17 @@ fn ut_setup_repo_charge(
     )
 }
 
+fn _ut_setup_auth_claim(usr_id: u32) -> AppAuthedClaim {
+    let mut claim = ut_setup_auth_claim(usr_id, 85i64);
+    claim.perms.clear();
+    claim.quota.clear();
+    claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_capture_charge,
+    });
+    claim
+}
+
 #[rustfmt::skip]
 fn ut_common_mock_data() -> (u32, DateTime<Utc>, String, u32, u32)
 {
@@ -91,7 +103,7 @@ async fn done_ok() {
         let bp = ut_setup_processor(Some(Ok(AppProcessorPayoutResult::new(d, m))));
         Arc::new(bp)
     };
-    let auth_claim = ut_setup_auth_claim(mock_staff_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_staff_id);
     let uc = ChargeCaptureUseCase { auth_claim, processors, repo_c, repo_m };
     let result = uc.execute(mock_charge_id, mock_store_id).await;
     assert!(result.is_ok());
@@ -108,7 +120,7 @@ async fn err_missing_charge() {
     let repo_c = ut_setup_repo_charge(None, None, None);
     let repo_m = ut_setup_repo_merchant(None);
     let processors = Arc::new(ut_setup_processor(None));
-    let auth_claim = ut_setup_auth_claim(mock_staff_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_staff_id);
     let uc = ChargeCaptureUseCase {
         auth_claim,
         processors,
@@ -134,7 +146,7 @@ async fn err_charge_payin_ongoing() {
     };
     let repo_m = ut_setup_repo_merchant(None);
     let processors = Arc::new(ut_setup_processor(None));
-    let auth_claim = ut_setup_auth_claim(mock_staff_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_staff_id);
     let uc = ChargeCaptureUseCase { auth_claim, processors, repo_c, repo_m };
     let result = uc.execute(mock_charge_id, mock_store_id).await;
     assert!(result.is_err());
@@ -157,7 +169,7 @@ async fn err_missing_merchant() {
     };
     let repo_m = ut_setup_repo_merchant(None);
     let processors = Arc::new(ut_setup_processor(None));
-    let auth_claim = ut_setup_auth_claim(mock_staff_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_staff_id);
     let uc = ChargeCaptureUseCase { auth_claim, processors, repo_c, repo_m };
     let result = uc.execute(mock_charge_id, mock_store_id).await;
     assert!(result.is_err());
@@ -188,7 +200,7 @@ async fn err_3party_failure() {
         };
         Arc::new(ut_setup_processor(Some(Err(e))))
     };
-    let auth_claim = ut_setup_auth_claim(mock_staff_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_staff_id);
     let uc = ChargeCaptureUseCase { auth_claim, processors, repo_c, repo_m };
     let result = uc.execute(mock_charge_id, mock_store_id).await;
     assert!(result.is_err());
@@ -232,7 +244,7 @@ async fn err_repo_create_payout() {
         let bp = ut_setup_processor(Some(Ok(AppProcessorPayoutResult::new(d, m))));
         Arc::new(bp)
     };
-    let auth_claim = ut_setup_auth_claim(mock_staff_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_staff_id);
     let uc = ChargeCaptureUseCase { auth_claim, processors, repo_c, repo_m };
     let result = uc.execute(mock_charge_id, mock_store_id).await;
     assert!(result.is_err());
@@ -268,7 +280,7 @@ async fn err_already_captured() {
         ut_setup_repo_merchant(Some((mprof, m3pt)))
     };
     let processors = Arc::new(ut_setup_processor(None));
-    let auth_claim = ut_setup_auth_claim(mock_staff_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_staff_id);
     let uc = ChargeCaptureUseCase { auth_claim, processors, repo_c, repo_m };
     let result = uc.execute(mock_charge_id, mock_store_id).await;
     assert!(result.is_err());

@@ -14,6 +14,7 @@ use crate::adapter::repository::{
 };
 use crate::api::web::dto::{RefundCompletionReqDto, RefundCompletionRespDto};
 use crate::model::{ChargeBuyerModel, ChargeRefundMap, OrderRefundModel, RefundReqResolutionModel};
+use crate::{AppAuthPermissionCode, AppAuthedClaim};
 
 #[derive(Debug)]
 pub enum FinalizeRefundUcError {
@@ -36,9 +37,14 @@ impl FinalizeRefundUseCase {
         self,
         oid: String,
         merchant_id: u32,
-        staff_usr_id: u32,
+        authed_claim: AppAuthedClaim,
         cmplt_req: RefundCompletionReqDto,
     ) -> Result<(RefundCompletionRespDto, Vec<AppProcessorError>), FinalizeRefundUcError> {
+        let staff_usr_id = authed_claim.profile;
+        let success = authed_claim.contain_permission(AppAuthPermissionCode::can_finalize_refund);
+        if !success {
+            return Err(FinalizeRefundUcError::PermissionDenied(staff_usr_id));
+        }
         let Self {
             repo_ch,
             repo_mc,

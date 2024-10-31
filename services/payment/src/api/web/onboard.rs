@@ -43,6 +43,10 @@ fn usecase_result_to_httpresp(
         }
         Err(uce) => {
             let status = match uce {
+                OnboardStoreUcError::PermissionDenied(usr_id) => {
+                    app_log_event!(logctx, AppLogLevel::DEBUG, "{usr_id}");
+                    StatusCode::FORBIDDEN
+                }
                 OnboardStoreUcError::InvalidStoreSupervisor(usr_id) => {
                     app_log_event!(logctx, AppLogLevel::INFO, "{usr_id}");
                     StatusCode::FORBIDDEN

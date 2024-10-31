@@ -17,6 +17,7 @@ use payment::adapter::rpc::{AbstractRpcContext, AppRpcReply};
 use payment::api::web::dto::StoreOnboardRespDto;
 use payment::model::{Merchant3partyModel, MerchantModelError, MerchantProfileModel};
 use payment::usecase::{OnboardStoreUcError, OnboardStoreUseCase, RefreshOnboardStatusUseCase};
+use payment::{app_meta, AppAuthClaimPermission, AppAuthPermissionCode, AppAuthedClaim};
 
 use super::{
     MockMerchantRepo, MockPaymentProcessor, MockRpcClient, MockRpcContext, MockRpcPublishEvent,
@@ -26,22 +27,15 @@ use crate::dto::{ut_default_store_onboard_req_stripe, ut_setup_storeprofile_dto}
 use crate::model::ut_default_merchant_3party_stripe;
 use crate::EXAMPLE_REL_PATH;
 
+#[rustfmt::skip]
 fn ut_rpc_storeprof_replica(mock_filename: &str) -> Vec<u8> {
     let basepath = env::var(SERVICE_BASEPATH).unwrap();
     let fullpath = basepath + EXAMPLE_REL_PATH + mock_filename;
     let file = File::open(fullpath).unwrap();
     let mut obj = serde_json::from_reader::<File, JsnVal>(file).unwrap();
-    let mock_staff = obj
-        .as_object_mut()
-        .unwrap()
-        .get_mut("result")
-        .unwrap()
-        .as_object_mut()
-        .unwrap()
-        .get_mut("staff")
-        .unwrap()
-        .as_array_mut()
-        .unwrap();
+    let mock_staff = obj.as_object_mut().unwrap()
+        .get_mut("result").unwrap().as_object_mut().unwrap()
+        .get_mut("staff").unwrap().as_array_mut().unwrap();
     let startafter = Local::now().fixed_offset();
     let endbefore = startafter + Duration::minutes(19);
     mock_staff
@@ -72,9 +66,20 @@ fn ut_setup_processor(
     MockPaymentProcessor::build(None, None, res, None, None)
 }
 
+fn _ut_setup_auth_claim(usr_id: u32) -> AppAuthedClaim {
+    let mut claim = ut_setup_auth_claim(usr_id, 85i64);
+    claim.perms.clear();
+    claim.quota.clear();
+    claim.perms.push(AppAuthClaimPermission {
+        app_code: app_meta::RESOURCE_QUOTA_AP_CODE,
+        codename: AppAuthPermissionCode::can_onboard_merchant,
+    });
+    claim
+}
+
 #[actix_web::test]
 async fn new_merchant_ok() {
-    let auth_claim = ut_setup_auth_claim(1234, 85);
+    let auth_claim = _ut_setup_auth_claim(1234);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = ut_setup_processor(Some(pay3pty_result));
@@ -103,7 +108,7 @@ async fn new_merchant_ok() {
 
 #[actix_web::test]
 async fn new_merchant_err_rpc_reply() {
-    let auth_claim = ut_setup_auth_claim(1001, 79);
+    let auth_claim = _ut_setup_auth_claim(1001);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = ut_setup_processor(Some(pay3pty_result));
@@ -129,7 +134,7 @@ async fn new_merchant_err_rpc_reply() {
 
 #[actix_web::test]
 async fn new_merchant_3party_failure() {
-    let auth_claim = ut_setup_auth_claim(1234, 85);
+    let auth_claim = _ut_setup_auth_claim(1234);
     let processors = {
         let pay3pty_result = Err(AppProcessorError {
             reason: AppProcessorErrorReason::InvalidMethod("unit-test".to_string()),
@@ -170,7 +175,7 @@ async fn new_merchant_3party_failure() {
 
 #[actix_web::test]
 async fn new_merchant_err_repo_create() {
-    let auth_claim = ut_setup_auth_claim(1234, 85);
+    let auth_claim = _ut_setup_auth_claim(1234);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = ut_setup_processor(Some(pay3pty_result));
@@ -234,7 +239,7 @@ fn ut_setup_store_models(
 async fn refresh_status_ok() {
     let mock_store_id = 1012;
     let mock_supervisor_id = 1230;
-    let auth_claim = ut_setup_auth_claim(mock_supervisor_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_supervisor_id);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = ut_setup_processor(Some(pay3pty_result));
@@ -264,7 +269,7 @@ async fn refresh_status_ok() {
 async fn refresh_status_err_merchant_empty() {
     let mock_store_id = 1012;
     let mock_supervisor_id = 1230;
-    let auth_claim = ut_setup_auth_claim(mock_supervisor_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_supervisor_id);
     let processors = Arc::new(ut_setup_processor(None));
     let repo = MockMerchantRepo::build(None, None, None, None);
     let req_body = ut_default_store_onboard_req_stripe();
@@ -288,7 +293,7 @@ async fn refresh_status_err_merchant_empty() {
 async fn refresh_status_3party_failure() {
     let mock_store_id = 1012;
     let mock_supervisor_id = 1230;
-    let auth_claim = ut_setup_auth_claim(mock_supervisor_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_supervisor_id);
     let processors = {
         let pay3pty_result = Err(AppProcessorError {
             reason: AppProcessorErrorReason::InvalidMethod("unit-test".to_string()),
@@ -328,7 +333,7 @@ async fn refresh_status_3party_failure() {
 async fn refresh_status_err_repo_update() {
     let mock_store_id = 1012;
     let mock_supervisor_id = 1230;
-    let auth_claim = ut_setup_auth_claim(mock_supervisor_id, 85);
+    let auth_claim = _ut_setup_auth_claim(mock_supervisor_id);
     let processors = {
         let pay3pty_result = Ok(AppProcessorMerchantResult::default());
         let m3pty = ut_setup_processor(Some(pay3pty_result));

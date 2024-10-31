@@ -12,11 +12,13 @@ use crate::adapter::repository::{AbstractChargeRepo, AppRepoError};
 use crate::adapter::rpc::{AbstractRpcContext, AppRpcClientRequest, AppRpcCtxError};
 use crate::api::web::dto::ChargeRefreshRespDto;
 use crate::model::{BuyerPayInState, ChargeBuyerMetaModel};
+use crate::{AppAuthPermissionCode, AppAuthedClaim};
 
 use super::try_parse_charge_id;
 
 pub enum ChargeRefreshUcError {
     OwnerMismatch,
+    PermissionDenied(u32),
     ChargeNotExist(u32, DateTime<Utc>),
     DataStore(AppRepoError),
     RpcContext(AppRpcCtxError),
@@ -35,9 +37,15 @@ pub struct ChargeStatusRefreshUseCase {
 impl ChargeStatusRefreshUseCase {
     pub async fn execute(
         self,
-        auth_usr_id: u32,
+        authed_claim: AppAuthedClaim,
         charge_id_serial: String,
     ) -> Result<ChargeRefreshRespDto, ChargeRefreshUcError> {
+        let auth_usr_id = authed_claim.profile;
+        let success =
+            authed_claim.contain_permission(AppAuthPermissionCode::can_update_charge_progress);
+        if !success {
+            return Err(ChargeRefreshUcError::PermissionDenied(auth_usr_id));
+        }
         let (owner_id, create_time) = try_parse_charge_id(charge_id_serial.as_str())
             .map_err(|(code, detail)| ChargeRefreshUcError::ChargeIdDecode(code, detail))?;
         if owner_id != auth_usr_id {
