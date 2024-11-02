@@ -46,19 +46,23 @@
              "level": "WARNING"},
             {"alias": "payment::api::web::refund",
              "handlers": ["std-output-forall"],
-             "level": "INFO"}
+             "level": "INFO"},
+            {"alias": "payment::api::web::reporting",
+             "handlers": ["std-output-forall"],
+             "level": "WARNING"}
         ]
     },
     "listen": {
         "port": 8016,
         "host":"localhost",
         "max_failures": 3,
-        "api_version": "0.0.7",
+        "api_version": "0.0.8",
 	"max_connections": 129,
         "cors": "common/data/cors.json",
         "routes": [
             {"path":"/store/{store_id}/onboard", "handler":"onboard_store"},
             {"path":"/store/{store_id}/onboard/status", "handler":"track_onboarding_status"},
+            {"path":"/store/{store_id}/order/charges", "handler":"report_charge_lines"},
             {"path":"/charge", "handler":"create_new_charge"},
             {"path":"/charge/{charge_id}", "handler":"refresh_charge_status"},
             {"path":"/charge/{charge_id}/capture", "handler":"capture_authed_charge"},

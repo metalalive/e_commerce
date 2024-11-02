@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::result::Result;
 
 use chrono::{DateTime, FixedOffset, Utc};
+use serde::de::{Error as DeserializeError, Expected, Unexpected};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsnVal;
 
 use ecommerce_common::api::dto::{
     jsn_serialize_product_type, jsn_validate_product_type, CurrencyDto, GenericRangeErrorDto,
@@ -277,3 +280,53 @@ pub struct RefundCompletionOlineRespDto {
     pub reject: RefundLineRejectDto,
     pub approval: RefundLineApprovalDto,
 }
+
+struct ExpectTimeRangeFormat(String);
+
+impl ExpectTimeRangeFormat {
+    fn new(fmt: &str) -> Self {
+        Self(fmt.to_string())
+    }
+}
+impl Expected for ExpectTimeRangeFormat {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str(self.0.as_str())
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ReportTimeRangeDto {
+    #[serde(deserialize_with = "ReportTimeRangeDto::validate_timestr_format")]
+    pub start_after: DateTime<Utc>,
+    #[serde(deserialize_with = "ReportTimeRangeDto::validate_timestr_format")]
+    pub end_before: DateTime<Utc>,
+}
+
+impl ReportTimeRangeDto {
+    fn validate_timestr_format<'de, D>(raw: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = JsnVal::deserialize(raw)?;
+        let t_raw = value.as_str().ok_or({
+            let exp = ExpectTimeRangeFormat::new("json-string-field");
+            let detail = format!("{:?}", value);
+            let unexp = Unexpected::Str(detail.as_str());
+            DeserializeError::invalid_value(unexp, &exp)
+        })?;
+        // minute, second, timezone must be specified with all zero values
+        // for generating date-time object
+        let t_cmplt_raw = format!("{t_raw}0000+0000");
+        DateTime::parse_from_str(t_cmplt_raw.as_str(), "%Y-%m-%d-%H%M%S%z")
+            .map(|v| v.to_utc())
+            .map_err(|e| {
+                let exp = ExpectTimeRangeFormat::new("%Y-%m-%d-%H");
+                let detail = format!("orig:{t_raw}, reason:{:?}", e);
+                let unexp = Unexpected::Str(detail.as_str());
+                DeserializeError::invalid_value(unexp, &exp)
+            })
+    }
+}
+
+#[derive(Serialize)]
+pub struct ReportChargeRespDto; // TODO, finish implementation

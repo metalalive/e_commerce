@@ -9,10 +9,11 @@ use actix_http::Request;
 use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceResponse};
 use actix_web::error::Error as WebError;
-use actix_web::http::header::ContentType;
+use actix_web::http::header::{Accept, ContentType};
 use actix_web::http::Method;
 use actix_web::test::{call_service, TestRequest};
 use actix_web::web::Bytes as ActixBytes;
+use chrono::{Duration as ChronoDuration, Local};
 use serde_json::Value as JsnVal;
 
 use payment::adapter::repository::app_repo_refund;
@@ -26,7 +27,7 @@ use payment::{
 use common::{itest_setup_app_server, itest_setup_auth_claim};
 
 const CASES_PATH: &str = "./tests/integration/examples/";
-const API_VERSION: &str = "v0.0.7";
+const API_VERSION: &str = "v0.0.8";
 
 async fn itest_onboard_merchant(
     app: &ItestService!(),
@@ -205,6 +206,38 @@ async fn itest_merchant_complete_refund(
     body_ctx.try_into_bytes()
 }
 
+async fn itest_merchant_report_chargelines(
+    app: &ItestService!(),
+    store_id: u32,
+    usr_id: u32,
+    expect_resp_status: u16,
+) -> Result<ActixBytes, impl MessageBody> {
+    let time_base = Local::now().to_utc();
+    let t0 = (time_base - ChronoDuration::minutes(2))
+        .format("%Y-%m-%d-%H")
+        .to_string();
+    let t1 = (time_base + ChronoDuration::minutes(2))
+        .format("%Y-%m-%d-%H")
+        .to_string();
+    let uri =
+        format!("/{API_VERSION}/store/{store_id}/order/charges?start_after={t0}&end_before={t1}");
+    let req = TestRequest::with_uri(uri.as_str())
+        .method(Method::GET)
+        .append_header(Accept::json())
+        .to_request();
+    let authed_claim = itest_setup_auth_claim(usr_id);
+    let _empty = req.extensions_mut().insert::<AppAuthedClaim>(authed_claim);
+    let resp = call_service(app, req).await;
+    let actual_resp_status = resp.status().as_u16();
+    let body_ctx = resp.into_body();
+    let result = body_ctx.try_into_bytes();
+    // if let Ok(v) = &result {
+    //     println!("[debug] request error : {:?} ", v);
+    // }
+    assert_eq!(actual_resp_status, expect_resp_status);
+    result
+}
+
 #[rustfmt::skip]
 fn verify_newcharge_stripe (resp_body: &JsnVal) {
     let mthd_obj = resp_body.as_object().unwrap()
@@ -361,5 +394,10 @@ async fn charge_stripe_ok() {
         404,
     )
     .await;
+    assert!(result.is_ok());
+
+    let result =
+        itest_merchant_report_chargelines(&mock_app, mock_store_id, seller_usr_id, 200).await;
+    // TODO, verify report response
     assert!(result.is_ok());
 } // end of fn charge_stripe_ok
