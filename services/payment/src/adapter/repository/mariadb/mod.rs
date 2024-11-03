@@ -4,6 +4,7 @@ pub(super) mod merchant;
 mod order_replica;
 mod payout;
 pub(super) mod refund;
+pub(super) mod reporting;
 
 use std::result::Result;
 

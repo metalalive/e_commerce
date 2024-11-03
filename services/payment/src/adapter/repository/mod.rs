@@ -12,7 +12,7 @@ use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 
 use crate::adapter::processor::{AbstractPaymentProcessor, AppProcessorError};
-use crate::api::web::dto::RefundCompletionReqDto;
+use crate::api::web::dto::{RefundCompletionReqDto, ReportTimeRangeDto};
 use crate::model::{
     BuyerPayInState, ChargeBuyerMetaModel, ChargeBuyerModel, ChargeLineBuyerModel, ChargeRefundMap,
     Label3party, Merchant3partyModel, MerchantProfileModel, OrderLineModelSet, OrderRefundModel,
@@ -22,6 +22,7 @@ use crate::model::{
 use self::mariadb::charge::MariadbChargeRepo;
 use self::mariadb::merchant::MariadbMerchantRepo;
 use self::mariadb::refund::MariaDbRefundRepo;
+use self::mariadb::reporting::MariadbReportingRepo;
 use super::datastore::{AppDStoreError, AppDataStoreContext};
 
 #[derive(Debug)]
@@ -44,10 +45,12 @@ pub enum AppRepoErrorFnLabel {
     UpdateMerchant3party,
     InitMerchantRepo,
     InitRefundRepo,
+    InitReportingRepo,
     RefundGetTimeSynced,
     RefundUpdateTimeSynced,
     RefundSaveReq,
     ResolveRefundReq,
+    ReportChargeByMerchant,
 }
 
 #[derive(Debug)]
@@ -216,6 +219,15 @@ pub type AppRefundRslvReqCallback =
         Arc<Box<dyn AbstractPaymentProcessor>>,
     ) -> Pin<Box<dyn Future<Output = AppRefundRslvReqCbReturn> + Send + '_>>;
 
+#[async_trait]
+pub trait AbstractReportingRepo: Send + Sync {
+    async fn fetch_charges_by_merchant(
+        &self,
+        store_id: u32,
+        t_range: ReportTimeRangeDto,
+    ) -> Result<Vec<ChargeBuyerModel>, AppRepoError>;
+}
+
 pub async fn app_repo_charge(
     dstore: Arc<AppDataStoreContext>,
 ) -> Result<Box<dyn AbstractChargeRepo>, AppRepoError> {
@@ -234,5 +246,13 @@ pub async fn app_repo_refund(
     dstore: Arc<AppDataStoreContext>,
 ) -> Result<Box<dyn AbstractRefundRepo>, AppRepoError> {
     let repo = MariaDbRefundRepo::new(dstore)?;
+    Ok(Box::new(repo))
+}
+
+pub async fn app_repo_reporting(
+    dstore: Arc<AppDataStoreContext>,
+) -> Result<Box<dyn AbstractReportingRepo>, AppRepoError> {
+    let repo = MariadbReportingRepo::new(dstore)?;
+
     Ok(Box::new(repo))
 }

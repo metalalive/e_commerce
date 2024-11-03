@@ -3,6 +3,7 @@ mod create_charge;
 mod finalize_refund;
 mod onboard;
 mod refresh_charge_status;
+mod reporting;
 mod sync_refund_req;
 
 pub use capture_charge::{ChargeCaptureUcError, ChargeCaptureUseCase};
@@ -10,6 +11,7 @@ pub use create_charge::{ChargeCreateUcError, ChargeCreateUseCase};
 pub use finalize_refund::{FinalizeRefundUcError, FinalizeRefundUseCase};
 pub use onboard::{OnboardStoreUcError, OnboardStoreUseCase, RefreshOnboardStatusUseCase};
 pub use refresh_charge_status::{ChargeRefreshUcError, ChargeStatusRefreshUseCase};
+pub use reporting::{MerchantReportChargeUcError, MerchantReportChargeUseCase};
 pub use sync_refund_req::{SyncRefundReqUcError, SyncRefundReqUseCase};
 
 use chrono::{DateTime, Utc};

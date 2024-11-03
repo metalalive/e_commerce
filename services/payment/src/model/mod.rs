@@ -4,6 +4,7 @@ mod merchant;
 mod order_replica;
 mod payout;
 mod refund;
+mod reporting;
 
 use rust_decimal::Decimal;
 use std::str::FromStr;
