@@ -316,6 +316,15 @@ impl ChargeBuyerModel {
     pub(super) fn get_seller_currency(&self, seller_id: u32) -> Option<OrderCurrencySnapshot> {
         self.currency_snapshot.get(&seller_id).cloned()
     }
+    pub(super) fn calc_target_rate(
+        seller: &OrderCurrencySnapshot,
+        buyer: &OrderCurrencySnapshot,
+    ) -> Result<Decimal, String> {
+        seller
+            .rate
+            .checked_div(buyer.rate)
+            .ok_or("target-rate-overflow".to_string())
+    }
 
     fn estimate_avail_lines_amount(&self, seller_id: u32) -> Decimal {
         self.lines

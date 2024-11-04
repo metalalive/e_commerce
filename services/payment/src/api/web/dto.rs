@@ -294,7 +294,7 @@ impl Expected for ExpectTimeRangeFormat {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ReportTimeRangeDto {
     #[serde(deserialize_with = "ReportTimeRangeDto::validate_timestr_format")]
     pub start_after: DateTime<Utc>,
@@ -329,4 +329,18 @@ impl ReportTimeRangeDto {
 }
 
 #[derive(Serialize)]
-pub struct ReportChargeRespDto; // TODO, finish implementation
+pub struct ReportChargeLineRespDto {
+    #[serde(serialize_with = "jsn_serialize_product_type")]
+    pub product_type: ProductType,
+    pub product_id: u64,
+    pub currency: CurrencyDto,
+    pub amount: String,
+    pub qty: u32,
+}
+
+#[derive(Serialize)]
+pub struct ReportChargeRespDto {
+    pub merchant_id: u32,
+    pub time_range: ReportTimeRangeDto,
+    pub lines: Vec<ReportChargeLineRespDto>,
+}

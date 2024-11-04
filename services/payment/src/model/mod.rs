@@ -34,6 +34,7 @@ pub use self::refund::{
     OLineRefundModel, OrderRefundModel, RefundErrorParseOline, RefundLineQtyRejectModel,
     RefundLineResolveAmountModel, RefundModelError, RefundReqResolutionModel,
 };
+pub use self::reporting::{MerchantReportChargeModel, ReportModelError};
 
 #[derive(Debug)]
 pub enum PayLineAmountError {

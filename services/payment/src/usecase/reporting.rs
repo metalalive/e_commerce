@@ -3,12 +3,14 @@ use std::result::Result;
 use crate::adapter::repository::{AbstractMerchantRepo, AbstractReportingRepo, AppRepoError};
 use crate::api::web::dto::{ReportChargeRespDto, ReportTimeRangeDto};
 use crate::auth::AppAuthedClaim;
+use crate::model::{MerchantReportChargeModel, ReportModelError};
 
 #[derive(Debug)]
 pub enum MerchantReportChargeUcError {
     DataStore(AppRepoError),
     MissingMerchant(u32),
     PermissionDenied(u32),
+    TransformFailure(Vec<ReportModelError>),
 }
 
 pub struct MerchantReportChargeUseCase {
@@ -47,10 +49,14 @@ impl MerchantReportChargeUseCase {
         }
         let saved_charges = self
             .repo_rpt
-            .fetch_charges_by_merchant(merchant_id, time_range)
+            .fetch_charges_by_merchant(merchant_id, time_range.clone())
             .await
             .map_err(MerchantReportChargeUcError::DataStore)?;
-        let summary = ReportChargeRespDto::from(saved_charges);
+        let mut report_m = MerchantReportChargeModel::from((merchant_id, time_range));
+        report_m
+            .try_merge(saved_charges)
+            .map_err(MerchantReportChargeUcError::TransformFailure)?;
+        let summary = ReportChargeRespDto::from(report_m);
         Ok(summary)
     }
 } // end of impl MerchantReportChargeUseCase

@@ -208,9 +208,7 @@ impl TryFrom<PayoutAmountCvtArgs> for PayoutAmountModel {
     #[rustfmt::skip]
     fn try_from(value: PayoutAmountCvtArgs) -> Result<Self, Self::Error> {
         let (tot_amt_buyer, currency_seller, currency_buyer) = value;
-        let target_rate = currency_seller.rate
-            .checked_div(currency_buyer.rate)
-            .ok_or("target-rate-overflow".to_string())
+        let target_rate =ChargeBuyerModel::calc_target_rate(&currency_seller, &currency_buyer)
             .map_err(|d| PayoutModelError::AmountEstimate(AppErrorCode::DataCorruption, d))?
             .trunc_with_scale(CURRENCY_RATE_PRECISION);
         let total_bs = tot_amt_buyer
