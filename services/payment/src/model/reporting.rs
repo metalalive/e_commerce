@@ -80,6 +80,7 @@ impl MerchantReportChargeModel {
         charge_m: ChargeBuyerModel,
     ) -> Result<usize, Vec<ReportModelError>> {
         let (curr_label, rate) = Self::try_calc_rate(self.id, &charge_m).map_err(|e| vec![e])?;
+        let rescale = curr_label.amount_fraction_scale();
         let mut errors = Vec::new();
         let num_merged = charge_m
             .lines
@@ -96,7 +97,7 @@ impl MerchantReportChargeModel {
                 let entry = self.linemap.entry(key).or_default();
                 rate.checked_mul(amt_orig.total)
                     .map(|amt_seller| {
-                        entry.amount += amt_seller; // TODO, overflow check
+                        entry.amount += amt_seller.trunc_with_scale(rescale);
                         entry.qty += amt_orig.qty;
                     })
                     .or_else(|| {
