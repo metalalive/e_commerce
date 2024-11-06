@@ -287,7 +287,7 @@ pub(crate) struct MariaDbRefundRepo {
 
 impl MariaDbRefundRepo {
     pub(crate) fn new(ds: Arc<AppDataStoreContext>) -> Result<Self, AppRepoError> {
-        ds.mariadb(None)
+        ds.mariadb(Some("db-write-primary"))
             .map(|found| Self { _dstore: found })
             .ok_or(AppRepoError {
                 fn_label: AppRepoErrorFnLabel::InitRefundRepo,

@@ -20,7 +20,12 @@ If you configure SQL database as the datastore destination in the development se
 ```shell
 > cd ${SERVICE_BASE_PATH}
 > /PATH/TO/liquibase --defaults-file=/liquibase.properties \
-      --changeLogFile=./migration/changelog_payment.xml  \
+      --changeLogFile=./migration/changelog_payment_primary.xml  \
+      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME   --username=$USER  --password=$PASSWORD \
+      --log-level=info   update
+
+> /PATH/TO/liquibase --defaults-file=/liquibase.properties \
+      --changeLogFile=./migration/changelog_payment_replica.xml  \
       --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME   --username=$USER  --password=$PASSWORD \
       --log-level=info   update
 

@@ -75,13 +75,23 @@
     "data_store": [
 	{
 	    "_type": "DbServer",
-	    "alias": "store-persistent-db",
+	    "alias": "db-write-primary",
 	    "srv_type": "MariaDB",
 	    "db_name": "test_ecommerce_payment",
 	    "confidentiality_path": "backend_apps/databases/payment_service",
 	    "max_conns": 4,
 	    "acquire_timeout_secs": 17,
 	    "idle_timeout_secs": 35
+	},
+	{
+	    "_type": "DbServer",
+	    "alias": "db-read-replica",
+	    "srv_type": "MariaDB",
+	    "db_name": "test_ecommerce_payment_replica_1",
+	    "confidentiality_path": "backend_apps/databases/payment_service",
+	    "max_conns": 5,
+	    "acquire_timeout_secs": 29,
+	    "idle_timeout_secs": 45
 	}
     ],
     "rpc": {

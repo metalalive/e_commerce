@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.6.xsd
+    http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-4.6.xsd ">
+    <changeSet id="init" author="T.H." labels="payment">
+        <tagDatabase tag="0.0.0" />
+    </changeSet>
+    <changeSet id="add_table__charge_line" author="T.H." labels="payment">
+        <comment>
+            - in this replica database, key constraint to `charge-buyer-toplvl` is omitted.
+        </comment>
+        <sql dbms="mariadb">
+            CREATE TABLE `charge_line` (
+                `buyer_id` int(10) unsigned NOT NULL,
+                `create_time` datetime NOT NULL,
+                `store_id` int(10) unsigned NOT NULL,
+                `product_type` enum('1','2') NOT NULL,
+                `product_id` bigint(20) unsigned NOT NULL,
+                `amt_orig_unit` decimal(16,2) unsigned NOT NULL,
+                `amt_orig_total` decimal(16,2) unsigned NOT NULL,
+                `qty_orig` int(10) unsigned NOT NULL,
+                `qty_rej` int(10) unsigned NOT NULL,
+                `qty_rfnd` int(10) unsigned NOT NULL,
+                `amt_rfnd_unit` decimal(16,2) unsigned NOT NULL,
+                `amt_rfnd_total` decimal(16,2) unsigned NOT NULL,
+                PRIMARY KEY (`buyer_id`,`create_time`,`store_id`,`product_type`,`product_id`)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE `charge_line`;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.0.1" author="T.H." labels="payment">
+        <tagDatabase tag="0.0.1" />
+    </changeSet>
+</databaseChangeLog>
