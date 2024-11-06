@@ -68,6 +68,7 @@ pub enum AppRepoErrorDetail {
     DataRowParse(String),
     CurrencyPrecision(u32, String, String, u32, u32),
     RefundResolution(Vec<RefundModelError>),
+    ConstructChargeFailure(String),
     Unknown,
 }
 
@@ -221,6 +222,7 @@ pub type AppRefundRslvReqCallback =
 
 #[async_trait]
 pub trait AbstractReportingRepo: Send + Sync {
+    // TODO, pagination
     async fn fetch_charges_by_merchant(
         &self,
         store_id: u32,

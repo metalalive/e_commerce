@@ -33,8 +33,23 @@
             DROP TABLE `charge_line`;
         </rollback>
     </changeSet>
-
     <changeSet id="tag_version_0.0.1" author="T.H." labels="payment">
         <tagDatabase tag="0.0.1" />
+    </changeSet>
+    <changeSet id="add_2nd_index__charge_line" author="T.H." labels="payment">
+        <comment>
+            - this index is for merchant quickly querying order lines that have been charged
+            - one merchant could relate to multiple lines, this index does not uniquely identify any single row
+        </comment>
+        <sql dbms="mariadb">
+            CREATE INDEX `by_merchant` ON `charge_line` (`store_id`, `create_time`) USING BTREE;
+        </sql>
+        <rollback>
+            DROP INDEX `by_merchant` ON `charge_line` ;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="tag_version_0.0.2" author="T.H." labels="payment">
+        <tagDatabase tag="0.0.2" />
     </changeSet>
 </databaseChangeLog>
