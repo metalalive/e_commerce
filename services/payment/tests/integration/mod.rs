@@ -213,10 +213,10 @@ async fn itest_merchant_report_chargelines(
     expect_resp_status: u16,
 ) -> Result<ActixBytes, impl MessageBody> {
     let time_base = Local::now().to_utc();
-    let t0 = (time_base - ChronoDuration::minutes(2))
+    let t0 = (time_base - ChronoDuration::hours(2))
         .format("%Y-%m-%d-%H")
         .to_string();
-    let t1 = (time_base + ChronoDuration::minutes(2))
+    let t1 = (time_base + ChronoDuration::hours(2))
         .format("%Y-%m-%d-%H")
         .to_string();
     let uri =
@@ -231,9 +231,6 @@ async fn itest_merchant_report_chargelines(
     let actual_resp_status = resp.status().as_u16();
     let body_ctx = resp.into_body();
     let result = body_ctx.try_into_bytes();
-    // if let Ok(v) = &result {
-    //     println!("[debug] request error : {:?} ", v);
-    // }
     assert_eq!(actual_resp_status, expect_resp_status);
     result
 }
@@ -398,6 +395,26 @@ async fn charge_stripe_ok() {
 
     let result =
         itest_merchant_report_chargelines(&mock_app, mock_store_id, seller_usr_id, 200).await;
-    // TODO, verify report response
     assert!(result.is_ok());
+    if let Ok(v) = result {
+        // println!("[debug] request error : {:?} ", v);
+        let body_raw = v.to_vec();
+        let report = serde_json::from_slice::<JsnVal>(&body_raw).unwrap();
+        let read_merchant_id = report
+            .as_object()
+            .unwrap()
+            .get("merchant_id")
+            .unwrap()
+            .as_u64()
+            .unwrap() as u32;
+        assert_eq!(read_merchant_id, mock_store_id);
+        let read_lines = report
+            .as_object()
+            .unwrap()
+            .get("lines")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(read_lines.len(), 2);
+    }
 } // end of fn charge_stripe_ok

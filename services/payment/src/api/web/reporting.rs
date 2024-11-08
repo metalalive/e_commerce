@@ -15,7 +15,7 @@ use crate::adapter::datastore::AppDataStoreContext;
 use crate::adapter::repository::{app_repo_reporting, AbstractReportingRepo};
 use crate::api::web::dto::ReportTimeRangeDto;
 use crate::auth::AppAuthedClaim;
-use crate::usecase::MerchantReportChargeUseCase;
+use crate::usecase::{MerchantReportChargeUcError, MerchantReportChargeUseCase};
 use crate::AppSharedState;
 
 async fn try_creating_reporting_repo(
@@ -50,9 +50,26 @@ pub(super) async fn report_charge_lines(
             let body_raw = serde_json::to_vec(&v).unwrap();
             (StatusCode::OK, body_raw)
         }
-        Err(_e) => {
-            // TODO, finish implementation
-            (StatusCode::NOT_IMPLEMENTED, Vec::new())
+        Err(e) => {
+            let s = match e {
+                MerchantReportChargeUcError::MissingMerchant(store_id) => {
+                    app_log_event!(logctx, AppLogLevel::DEBUG, "{store_id}");
+                    StatusCode::BAD_REQUEST
+                }
+                MerchantReportChargeUcError::PermissionDenied(usr_id) => {
+                    app_log_event!(logctx, AppLogLevel::INFO, "{usr_id}");
+                    StatusCode::FORBIDDEN
+                }
+                MerchantReportChargeUcError::DataStore(e) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+                MerchantReportChargeUcError::TransformFailure(es) => {
+                    app_log_event!(logctx, AppLogLevel::ERROR, "{:?}", es);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+            };
+            (s, Vec::new())
         }
     };
     let mut r = HttpResponseBuilder::new(http_status);

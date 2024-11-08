@@ -9,10 +9,10 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 0.0.7
+  version: 0.0.8
 
 servers:
-  - url: https://doc.site.not.ready/api/v0.0.6
+  - url: https://doc.site.not.ready/api/v0.0.8
 tags:
   - name: configuration
     description: |
@@ -24,6 +24,7 @@ tags:
   - name: refund
     description: |
         either a customer or a merchant / seller initiates a return request in order-processing application, the merchant is responsible to complete the request in this application, which transfers full / partial fund back to the customer.
+  - name: reporting
 
 paths:
   /charge:
@@ -200,6 +201,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StoreOnboardRespDto'
+  
+  /store/{store-id}/order/charges:
+    get:
+      summary: fetch charges during given period for merchant
+      description: |
+          report summary of charges which completed pay-in flow, during given time period for a merchant
+      tags:
+        - reporting
+      parameters:
+        - $ref: '#/components/parameters/SellerId'
+        - in: query
+          name: start_after
+          schema:
+            type: string
+            example: '2021-03-11-12'
+        - in: query
+          name: end_before
+          schema:
+            type: string
+            example: '2021-03-11-18'
+      responses:
+        '200':
+          description: charges summary returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportChargeRespDto'
 
 
 components:
@@ -599,6 +627,43 @@ components:
       required:
       - lines
       - req_time
+
+    ReportTimeRangeDto:
+      type: object
+      properties:
+        start_after:
+          type: string
+          format: date-time
+        end_before:
+          type: string
+          format: date-time
+
+    ReportChargeLineRespDto:
+      type: object
+      properties:
+        product_type:
+          $ref: '#/components/schemas/ProductType'
+        product_id:
+          $ref: '#/components/schemas/ProductId'
+        currency:
+          $ref: '#/components/schemas/PaymentCurrencyDto'
+        amount:
+          type: string
+          example: '120.35'
+        qty:
+          $ref: '#/components/schemas/Quantity'
+
+    ReportChargeRespDto:
+      type: object
+      properties:
+        merchant_id:
+          $ref: '#/components/schemas/SellerId'
+        time_range:
+          $ref: '#/components/schemas/ReportTimeRangeDto'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportChargeLineRespDto'
 
   securitySchemes:
     BearerAuth:
