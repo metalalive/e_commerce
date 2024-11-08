@@ -79,6 +79,9 @@ impl MerchantReportChargeModel {
         &mut self,
         charge_m: ChargeBuyerModel,
     ) -> Result<usize, Vec<ReportModelError>> {
+        if !charge_m.meta.progress().completed() {
+            return Ok(0); // skip charges which haven't completed pay-in flow
+        }
         let (curr_label, rate) = Self::try_calc_rate(self.id, &charge_m).map_err(|e| vec![e])?;
         let rescale = curr_label.amount_fraction_scale();
         let mut errors = Vec::new();
@@ -123,7 +126,7 @@ impl MerchantReportChargeModel {
             .into_iter()
             .filter_map(|charge_m| {
                 self.try_merge_one(charge_m)
-                    .map_err(|es| errors.extend(es.into_iter()))
+                    .map_err(|es| errors.extend(es))
                     .ok()
             })
             .sum();
