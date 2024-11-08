@@ -234,9 +234,9 @@ impl MariadbReportingRepo {
             })
             .collect::<Vec<_>>();
         if errors.is_empty() {
-            Err(errors.remove(0))
-        } else {
             Ok(charge_ms)
+        } else {
+            Err(errors.remove(0))
         }
     } // end of fn parse_charge_metas
 
@@ -318,6 +318,7 @@ impl MariadbReportingRepo {
                 Some(charge_m)
             })
             .collect::<Vec<_>>();
+        assert!(cline_map.is_empty()); // TODO, error handling
         if errors.is_empty() {
             Ok(charge_ms)
         } else {

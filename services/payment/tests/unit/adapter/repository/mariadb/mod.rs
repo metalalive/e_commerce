@@ -3,6 +3,7 @@ mod merchant;
 mod order_replica;
 mod payout;
 mod refund;
+mod reporting;
 
 use std::boxed::Box;
 use std::collections::HashMap;
@@ -12,8 +13,8 @@ use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
 use payment::adapter::repository::{
-    app_repo_charge, app_repo_merchant, app_repo_refund, AbstractChargeRepo, AbstractMerchantRepo,
-    AbstractRefundRepo,
+    app_repo_charge, app_repo_merchant, app_repo_refund, app_repo_reporting, AbstractChargeRepo,
+    AbstractMerchantRepo, AbstractRefundRepo, AbstractReportingRepo,
 };
 use payment::model::OrderCurrencySnapshot;
 use payment::AppSharedState;
@@ -39,6 +40,15 @@ async fn ut_setup_db_merchant_repo(
 async fn ut_setup_db_refund_repo(shr_state: AppSharedState) -> Arc<Box<dyn AbstractRefundRepo>> {
     let dstore = shr_state.datastore();
     let result = app_repo_refund(dstore).await;
+    let repo = result.unwrap();
+    Arc::new(repo)
+}
+
+async fn ut_setup_db_reporting_repo(
+    shr_state: AppSharedState,
+) -> Arc<Box<dyn AbstractReportingRepo>> {
+    let dstore = shr_state.datastore();
+    let result = app_repo_reporting(dstore).await;
     let repo = result.unwrap();
     Arc::new(repo)
 }
