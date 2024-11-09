@@ -2,12 +2,12 @@ import logging
 from collections import OrderedDict
 
 from ecommerce_common.util.graph import path_exists
-from ecommerce_common.validators import (
+from softdelete.models import SoftDeleteObjectMixin
+from ..validators import (
     SelectIDsExistValidator,
     TreeNodesLoopValidator,
     ClosureCrossTreesLoopValidator,
 )
-from softdelete.models import SoftDeleteObjectMixin
 
 EMPTY_VALUES = (None, "", [], (), {})
 _logger = logging.getLogger(__name__)

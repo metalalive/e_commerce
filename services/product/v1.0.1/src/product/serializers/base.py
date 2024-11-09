@@ -10,7 +10,7 @@ from rest_framework.fields import (
 )
 from rest_framework.serializers import PrimaryKeyRelatedField, ListField
 
-from ecommerce_common.validators import (
+from ecommerce_common.serializers.validators import (
     NumberBoundaryValidator,
     UnprintableCharValidator,
 )

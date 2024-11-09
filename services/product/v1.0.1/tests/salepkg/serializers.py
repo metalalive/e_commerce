@@ -8,7 +8,7 @@ from django.test import TransactionTestCase
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
-from ecommerce_common.validators import NumberBoundaryValidator
+from ecommerce_common.serializers.validators import NumberBoundaryValidator
 from tests.common import (
     _fixtures,
     http_request_body_template,

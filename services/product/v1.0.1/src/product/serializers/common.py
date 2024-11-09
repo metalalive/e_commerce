@@ -11,7 +11,7 @@ from rest_framework.exceptions import (
 )
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
-from ecommerce_common.validators import (
+from ecommerce_common.serializers.validators import (
     NumberBoundaryValidator,
     UniqueListItemsValidator,
 )

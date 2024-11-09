@@ -17,7 +17,7 @@ from .mixins import (
     SerializerExcludeFieldsMixin,
     ClosureTableMixin,
 )
-from ..validators import EditFormObjIdValidator
+from .validators import EditFormObjIdValidator
 from softdelete.models import SoftDeleteObjectMixin
 
 __all__ = ["BulkUpdateListSerializer", "ExtendedModelSerializer"]

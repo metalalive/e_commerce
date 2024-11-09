@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ecommerce-common"
-version = "0.1.2"
+version = "0.1.3"
 description = "common python modules shared among applications"
 authors = ["T.H."]
 license = "MIT"
