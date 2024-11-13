@@ -1,0 +1,1 @@
+APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/integration/web.py

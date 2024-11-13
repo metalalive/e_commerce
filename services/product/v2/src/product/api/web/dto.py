@@ -2,15 +2,12 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 
-class TagCreateReqDto(BaseModel):
+class TagUpdateReqDto(BaseModel):
     name: str
     parent: Optional[int]
 
 
-class TagUpdateReqDto(BaseModel):
-    name: str
-    curr_parent: Optional[int]
-    new_parent: Optional[int]
+TagCreateReqDto = TagUpdateReqDto
 
 
 class TagNodeDto(BaseModel):

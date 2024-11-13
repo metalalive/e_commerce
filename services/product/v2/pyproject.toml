@@ -26,3 +26,8 @@ black = "^24.10.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+# tracking relevant issue:
+# https://github.com/pytest-dev/pytest-asyncio/issues/924
