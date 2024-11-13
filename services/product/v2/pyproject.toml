@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "product"
+version = "2.0.0"
+description = "product management service"
+authors = ["T.H."]
+license = "MIT"
+readme = "README.md"
+packages = [{include="product", from="./src"}, {include="settings", from="."}, {include="tests", from="."}]
+
+[tool.poetry.dependencies]
+python = "3.12"
+granian = "1.5.2"
+blacksheep = "2.0.6"
+pydantic = "2.9.2"
+ecommerce-common = {path = "../../common/python"}
+my-c-extension-lib = {path = "../../common/python/c_exts"}
+
+[tool.poetry.group.test.dependencies]
+pytest = ">=8.2.0"
+pytest-asyncio = ">=0.24.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.7.2"
+black = "^24.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -15,8 +15,6 @@ This product application v1.x will be no longer maintained since Oct. 27th 2024
 |OpenSSL| 3.1.4 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
 
 
-Currently, all the build / test commands are running under `v1.0.1` project folder
-
 ## Build
 ### Dependency update
 Update all dependency packages specified in the configuration file `v1.0.1/pyproject.toml`
@@ -26,6 +24,23 @@ poetry update
 Or update specific dependency, for example :
 ```bash
 poetry update ecommerce-common
+```
+
+### specify local paths to source code packages
+It is essential to run `install` command to let virtual environment know the local paths to source code packages
+```bash
+poetry install
+```
+After that you should be able to import the packages of the development code
+```bash
+poetry run python
+
+> import sys
+> sys.path
+['/PATH/TO/PACKAGE1', '/PATH/TO/PROJ_HOME', '/PATH/TO/PROJ_HOME/src' ....]
+> import product
+> import settings
+>
 ```
 
 ### Database Migration
