@@ -4,6 +4,9 @@ from blacksheep import FromJSON, Response
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import created, ok, status_code
 
+from product.model import TagModel
+from product.shared import SharedContext
+
 from . import router
 from .dto import (
     TagCreateReqDto,
@@ -16,12 +19,16 @@ from .dto import (
 
 class TagController(APIController):
     @router.post("/tag")
-    async def create(self, reqbody: FromJSON[TagCreateReqDto]) -> Response:
+    async def create(
+        self, shr_ctx: SharedContext, reqbody: FromJSON[TagCreateReqDto]
+    ) -> Response:
         reqbody = reqbody.value
-        tag_d = TagUpdateRespDto(
-            node=TagNodeDto(name=reqbody.name, id_=12345),
-            parent=reqbody.parent,
-        )
+        repo = shr_ctx.datastore.tag
+        tree_acs = await repo.fetch_ancestors(reqbody.parent)
+        newnode = TagModel.from_req(reqbody)
+        newnode.update_ancestors(tree_acs)
+        await repo.create_node(tree_acs, newnode)
+        tag_d = newnode.to_resp()
         return created(message=tag_d.model_dump())
 
     @router.patch("/tag/{t_id}")
