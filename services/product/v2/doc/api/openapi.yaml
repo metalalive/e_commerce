@@ -1,0 +1,174 @@
+openapi: 3.0.3
+info:
+  title: Product Service
+  description: |-
+    This is API documentation of product information web service based on the OpenAPI 3.0 specification.
+    termsOfService: http://swagger.io/terms/
+  contact:
+    email: xyz@my-payment-app.io
+  license:
+    name: MIT
+    url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
+  version: 2.0.0
+
+servers:
+  - url: https://doc.site.not.ready/api/v2.0.0
+tags:
+  - name: tagging
+    description: |
+        labels for tagging / categorizing products
+
+paths:
+  /tag:
+    post:
+      summary: Create a new tag
+      description: Creates a new tag with an optional parent.
+      tags:
+      - tagging
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreateReqDto'
+      responses:
+        '200':
+          description: Tag created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagUpdateRespDto'
+
+  /tag/{t_id}:
+    patch:
+      summary: Update an existing tag
+      description: Modifies an existing tag by updating its name and optional parent.
+      tags:
+      - tagging
+      parameters:
+        - $ref: '#/components/parameters/TagNodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagUpdateReqDto'
+      responses:
+        '200':
+          description: Tag updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagUpdateRespDto'
+    delete:
+      summary: Delete an existing tag
+      tags:
+      - tagging
+      parameters:
+        - $ref: '#/components/parameters/TagNodeId'
+      responses:
+        '204':
+          description: Tag deleted successfully
+        '410':
+          description: Tag not exists
+    get:
+      summary: Retrieve a tag with its ancestors and descendants
+      description: Retrieves the specified tag along with optional ancestors and descendants.
+      tags:
+      - tagging
+      parameters:
+        - $ref: '#/components/parameters/TagNodeId'
+        - name: acs
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Optional parameter to filter ancestors
+          example: 1
+        - name: desc_lvl
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Optional parameter to specify descendant level
+          example: 2
+      responses:
+        '200':
+          description: Tag retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagReadRespDto'
+
+
+components:
+  parameters:
+    TagNodeId:
+      name: t_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/TagNodeId'
+
+  schemas:
+    TagNodeId:
+      description: The ID of the tag node.
+      type: integer
+      format: uint32
+      example: 560
+
+    TagCreateReqDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the tag.
+          example: "New Tag"
+        parent:
+          $ref: '#/components/schemas/TagNodeId'
+      required:
+        - name
+
+    TagUpdateReqDto:
+      $ref: '#/components/schemas/TagCreateReqDto'
+
+    TagNodeDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the tag node.
+          example: "New Tag"
+        id_:
+          $ref: '#/components/schemas/TagNodeId'
+      required:
+        - name
+        - id_
+
+    TagUpdateRespDto:
+      type: object
+      properties:
+        node:
+          $ref: '#/components/schemas/TagNodeDto'
+        parent:
+          $ref: '#/components/schemas/TagNodeId'
+      required:
+        - node
+
+    TagReadRespDto:
+      type: object
+      properties:
+        curr_node:
+          $ref: '#/components/schemas/TagNodeDto'
+        ancestors:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagNodeDto'
+          nullable: true
+        descendants:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagNodeDto'
+          nullable: true
+      required:
+        - curr_node
