@@ -3,7 +3,7 @@ from blacksheep.contents import JSONContent
 from blacksheep.testing import TestClient
 import pytest
 
-from product.api.web.dto import TagCreateReqDto, TagUpdateReqDto
+from product.api.dto import TagCreateReqDto, TagUpdateReqDto
 
 
 async def read_one_tag(

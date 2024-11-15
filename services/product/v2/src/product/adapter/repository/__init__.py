@@ -10,8 +10,8 @@ class AbstractTagRepo:
     async def deinit(self):
         raise NotImplementedError("AbstractTagRepo.deinit")
 
-    async def fetch_ancestors(self, tag_id: int) -> List[TagModel]:
-        raise NotImplementedError("AbstractTagRepo.fetch_ancestors")
+    async def fetch_tree(self, tag_id: int) -> List[TagModel]:
+        raise NotImplementedError("AbstractTagRepo.fetch_tree")
 
-    async def create_node(self, ancesters: List[TagModel], newnode: TagModel):
-        raise NotImplementedError("AbstractTagRepo.create_node")
+    async def save_tree(self, old_tree: List[TagModel]):
+        raise NotImplementedError("AbstractTagRepo.save_tree")

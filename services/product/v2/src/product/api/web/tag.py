@@ -8,7 +8,7 @@ from product.model import TagModel
 from product.shared import SharedContext
 
 from . import router
-from .dto import (
+from ..dto import (
     TagCreateReqDto,
     TagUpdateReqDto,
     TagNodeDto,
@@ -24,11 +24,11 @@ class TagController(APIController):
     ) -> Response:
         reqbody = reqbody.value
         repo = shr_ctx.datastore.tag
-        tree_acs = await repo.fetch_ancestors(reqbody.parent)
+        tree = await repo.fetch_tree(reqbody.parent)
         newnode = TagModel.from_req(reqbody)
-        newnode.update_ancestors(tree_acs)
-        await repo.create_node(tree_acs, newnode)
-        tag_d = newnode.to_resp()
+        newnode.try_update(tree, reqbody.parent)
+        await repo.save_tree(tree)
+        tag_d = newnode.to_resp(reqbody.parent)
         return created(message=tag_d.model_dump())
 
     @router.patch("/tag/{t_id}")
