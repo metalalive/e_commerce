@@ -1,6 +1,6 @@
-from typing import Dict, List
+from typing import Dict
 
-from product.model import TagModel
+from product.model import TagTreeModel
 
 
 class AbstractTagRepo:
@@ -10,8 +10,11 @@ class AbstractTagRepo:
     async def deinit(self):
         raise NotImplementedError("AbstractTagRepo.deinit")
 
-    async def fetch_tree(self, tag_id: int) -> List[TagModel]:
+    async def fetch_tree(self, t_id: int) -> TagTreeModel:
         raise NotImplementedError("AbstractTagRepo.fetch_tree")
 
-    async def save_tree(self, old_tree: List[TagModel]):
+    async def save_tree(self, tree: TagTreeModel):
         raise NotImplementedError("AbstractTagRepo.save_tree")
+
+    async def new_tree_id(self) -> int:
+        raise NotImplementedError("AbstractTagRepo.new_tree_id")

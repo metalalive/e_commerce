@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 class TagUpdateReqDto(BaseModel):
     name: str
-    parent: Optional[int]
+    parent: Optional[str]
 
 
 TagCreateReqDto = TagUpdateReqDto
@@ -12,12 +12,12 @@ TagCreateReqDto = TagUpdateReqDto
 
 class TagNodeDto(BaseModel):
     name: str
-    id_: int
+    id_: str
 
 
 class TagUpdateRespDto(BaseModel):
     node: TagNodeDto
-    parent: Optional[int]
+    parent: Optional[str]
 
 
 class TagReadRespDto(BaseModel):

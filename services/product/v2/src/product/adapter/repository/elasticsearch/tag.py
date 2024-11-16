@@ -1,7 +1,7 @@
 import logging
-from typing import Dict, List, Self
+from typing import Dict, Self
 
-from product.model import TagModel
+from product.model import TagTreeModel
 from .. import AbstractTagRepo
 
 _logger = logging.getLogger(__name__)
@@ -15,10 +15,14 @@ class ElasticSearchTagRepo(AbstractTagRepo):
     async def deinit(self):
         _logger.warning("ElasticSearchTagRepo.deinit not implemented")
 
-    async def fetch_tree(self, tag_id: int) -> List[TagModel]:
+    async def fetch_tree(self, t_id: int) -> TagTreeModel:
         _logger.warning("ElasticSearchTagRepo.fetch_tree not implemented")
         return []
 
-    async def save_tree(self, old_tree: List[TagModel]):
+    async def save_tree(self, tree: TagTreeModel):
         _logger.warning("ElasticSearchTagRepo.save_tree not implemented")
         pass
+
+    async def new_tree_id(self) -> int:
+        _logger.warning("ElasticSearchTagRepo.new_tree_id  not implemented")
+        return 1

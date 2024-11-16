@@ -4,7 +4,7 @@ from blacksheep import FromJSON, Response
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import created, ok, status_code
 
-from product.model import TagModel
+from product.model import TagModel, TagTreeModel
 from product.shared import SharedContext
 
 from . import router
@@ -24,11 +24,17 @@ class TagController(APIController):
     ) -> Response:
         reqbody = reqbody.value
         repo = shr_ctx.datastore.tag
-        tree = await repo.fetch_tree(reqbody.parent)
         newnode = TagModel.from_req(reqbody)
-        newnode.try_update(tree, reqbody.parent)
+        if reqbody.parent:
+            (tree_id, parent_node_id) = TagModel.decode_req_id(reqbody.parent)
+            tree = await repo.fetch_tree(tree_id)
+        else:
+            parent_node_id = None
+            tree_id = await repo.new_tree_id()
+            tree = TagTreeModel(_id=tree_id)
+        tree.try_insert(newnode, parent_node_id)
         await repo.save_tree(tree)
-        tag_d = newnode.to_resp(reqbody.parent)
+        tag_d = newnode.to_resp(tree_id, parent_node_id)
         return created(message=tag_d.model_dump())
 
     @router.patch("/tag/{t_id}")

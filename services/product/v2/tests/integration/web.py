@@ -62,7 +62,7 @@ class TestCreateTag:
         cls = type(self)
         reqbody = TagCreateReqDto(name="footwear", parent=None)
         respbody = await cls.create_one(mock_client, reqbody, 201)
-        assert respbody["node"]["id_"] > 0
+        assert respbody["node"].get("id_")
 
     @pytest.mark.asyncio
     async def test_multi_nodes_ok(self, mock_client):
