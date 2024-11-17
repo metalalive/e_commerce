@@ -1,1 +1,2 @@
+APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/unit/model/tag.py
 APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/integration/web.py

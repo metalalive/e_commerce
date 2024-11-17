@@ -1,0 +1,24 @@
+actions:
+  1:
+    action: create_index
+    description: "Create index for product tagging labels saved as tree hierarchy"
+    options:
+      name: "product-tags"
+      continue_if_exception: False
+      disable_action: False
+      extra_settings:
+        settings:
+          number_of_shards: 1
+          number_of_replicas: 0
+        mappings:
+          the-only-type:
+            properties:
+              label:
+                type: keyword
+              sub_id:
+                type: integer
+              limit_left:
+                type: integer
+              limit_right:
+                type: integer
+
