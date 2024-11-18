@@ -13,12 +13,15 @@ actions:
         mappings:
           the-only-type:
             properties:
-              label:
-                type: keyword
-              sub_id:
-                type: integer
-              limit_left:
-                type: integer
-              limit_right:
-                type: integer
+              nodes:
+                type: nested
+                properties:
+                  label:
+                    type: keyword
+                  sub_id:
+                    type: integer
+                  limit_left:
+                    type: integer
+                  limit_right:
+                    type: integer
 

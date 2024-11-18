@@ -1,6 +1,18 @@
+from enum import Enum, auto
 from typing import Dict
+from dataclasses import dataclass
 
 from product.model import TagTreeModel
+
+
+class AppRepoFnLabel(Enum):
+    TagSaveTree = auto()
+
+
+@dataclass
+class AppRepoError(Exception):
+    fn_label: AppRepoFnLabel
+    reason: Dict
 
 
 class AbstractTagRepo:

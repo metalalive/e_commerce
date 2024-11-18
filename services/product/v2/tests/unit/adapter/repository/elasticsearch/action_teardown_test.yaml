@@ -1,0 +1,11 @@
+actions:
+  1:
+    action: delete_indices
+    description: "Delete selected indices"
+    options:
+      timeout_override: 35
+      continue_if_exception: True
+    filters:
+      - filtertype: pattern
+        kind: prefix
+        value: product-tags

@@ -17,8 +17,7 @@ client:
   master_only: False
 
 logging:
-  loglevel: INFO
-  logfile:
+  loglevel: WARNING
   logformat: default
   blacklist: ['elasticsearch', 'urllib3', 'pytest', 'pytest-asyncio']
 
