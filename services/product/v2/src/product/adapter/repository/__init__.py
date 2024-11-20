@@ -1,12 +1,14 @@
 from enum import Enum, auto
 from typing import Dict
 from dataclasses import dataclass
+from asyncio.events import AbstractEventLoop
 
 from product.model import TagTreeModel
 
 
 class AppRepoFnLabel(Enum):
     TagSaveTree = auto()
+    TagFetchTree = auto()
 
 
 @dataclass
@@ -16,7 +18,7 @@ class AppRepoError(Exception):
 
 
 class AbstractTagRepo:
-    async def init(setting: Dict):
+    async def init(setting: Dict, loop: AbstractEventLoop):
         raise NotImplementedError("AbstractTagRepo.init")
 
     async def deinit(self):

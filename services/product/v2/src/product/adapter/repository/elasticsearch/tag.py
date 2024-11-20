@@ -1,6 +1,6 @@
 import logging
-import asyncio
-from typing import Dict, Self
+from asyncio.events import AbstractEventLoop
+from typing import Dict, Self, List
 
 from aiohttp import TCPConnector, ClientSession
 
@@ -26,7 +26,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
         )
         self._index_name = index_name
 
-    async def init(setting: Dict, loop: asyncio.events.AbstractEventLoop) -> Self:
+    async def init(setting: Dict, loop: AbstractEventLoop) -> Self:
         secure_conn_enable = setting.get("ssl_enable", True)
         connector = TCPConnector(
             limit=setting.get("num_conns", 10),
@@ -47,8 +47,19 @@ class ElasticSearchTagRepo(AbstractTagRepo):
         _logger.debug("ElasticSearchTagRepo.deinit done successfully")
 
     async def fetch_tree(self, t_id: int) -> TagTreeModel:
-        _logger.warning("ElasticSearchTagRepo.fetch_tree not implemented")
-        return []
+        url = "/%s/the-only-type/%d" % (self._index_name, t_id)
+        resp = await self._session.get(url)
+        async with resp:
+            respbody = await resp.json()
+            if resp.status < 300:
+                cls = type(self)
+                nodes = cls.parse_doc_tree_nodes(respbody)
+            else:
+                raise AppRepoError(
+                    fn_label=AppRepoFnLabel.TagFetchTree, reason=respbody
+                )
+        _logger.debug("ElasticSearchTagRepo.fetch_tree done")
+        return TagTreeModel(_id=t_id, nodes=nodes)
 
     async def save_tree(self, tree: TagTreeModel):
         if not tree.nodes:
@@ -62,7 +73,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             if resp.status >= 400:
                 reason = await resp.json()
                 raise AppRepoError(fn_label=AppRepoFnLabel.TagSaveTree, reason=reason)
-        _logger.debug("ElasticSearchTagRepo.save_tree done successfully")
+        _logger.debug("ElasticSearchTagRepo.save_tree done")
 
     async def new_tree_id(self) -> int:
         _logger.warning("ElasticSearchTagRepo.new_tree_id  not implemented")
@@ -76,3 +87,28 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             "limit_left": m._limit_left,
             "limit_right": m._limit_right,
         }
+
+    @staticmethod
+    def convert_from_doc(d: Dict) -> TagModel:
+        return TagModel(
+            _label=d["label"],
+            _id=d["sub_id"],
+            _limit_left=d["limit_left"],
+            _limit_right=d["limit_right"],
+        )
+
+    @classmethod
+    def parse_doc_tree_nodes(cls, raw: Dict) -> List[TagModel]:
+        try:
+            assert raw["found"]
+            assert raw["_id"]
+            nodes_raw = raw["_source"]["nodes"]
+            nodes = list(map(cls.convert_from_doc, nodes_raw))
+        except Exception as e:
+            reason = {
+                "req_tree_id": raw.get("_id", -1),
+                "corrupt_on_parsing": True,
+                "detail": str(e),
+            }
+            raise AppRepoError(fn_label=AppRepoFnLabel.TagFetchTree, reason=reason)
+        return nodes
