@@ -15,7 +15,7 @@ async def read_one_tag(
 ) -> Dict:
     query = {}
     if acs:
-        query["acs"] = acs
+        query["acs_req"] = acs
     if desc_lvl:
         query["desc_lvl"] = desc_lvl
     resp = await client.get(
@@ -103,10 +103,12 @@ class TestCreateTag:
         rd_tag = await read_one_tag(
             mock_client, layer1_ids[2], acs=1, desc_lvl=1, expect_status=200
         )
-        assert rd_tag["curr_node"]["name"] is not None
-        assert rd_tag["ancestors"] is not None
-        assert rd_tag["descendants"] is not None
-        # TODO, read verification
+        assert rd_tag["curr_node"]["name"] == "sensor"
+        assert len(rd_tag["ancestors"]) == 1
+        assert len(rd_tag["descendants"]) == 2
+        assert rd_tag["ancestors"][0]["name"] == "electronic project kit"
+        actual_child_labels = [d["name"] for d in rd_tag["descendants"]]
+        assert set(actual_child_labels) == set(["ESP32", "NPK soil tester"])
 
 
 class TestUpdateTag:

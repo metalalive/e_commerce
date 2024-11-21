@@ -91,6 +91,10 @@ class TagModel:
             parent=parent_id_resp,
         )
 
+    def to_node_dto(self, tree_id: str) -> TagNodeDto:
+        curr_id_resp = "%s-%d" % (tree_id, self._id)
+        return TagNodeDto(name=self._label, id_=curr_id_resp)
+
     def decode_req_id(id_s: str) -> Tuple[str, int]:
         match = re.fullmatch(r"([a-zA-Z0-9]+)-(\d+)$", id_s)
         if not match:
@@ -102,6 +106,13 @@ class TagModel:
             _logger.debug("%s", str(e))
             raise TagErrorModel.decode_invalid_id(id_s)
         return (tree_id, parent_node_id)
+
+    def is_ancestor_of(self, other: Self) -> bool:
+        if (self is other) or (self._id == other._id):
+            return False
+        left_covered = other._limit_left > self._limit_left
+        right_covered = other._limit_right < self._limit_right
+        return left_covered and right_covered
 
 
 @dataclass
@@ -143,3 +154,59 @@ class TagTreeModel:
         newnode._limit_right = new_right
         newnode._id = max([node._id for node in self.nodes], default=0) + 1
         self.nodes.append(newnode)
+
+    def find_node(self, node_id: int) -> Optional[TagModel]:
+        def _find_by_id(n: TagModel):
+            return n._id == node_id
+
+        iter0 = filter(_find_by_id, self.nodes)
+        try:
+            node = next(iter0)
+        except StopIteration:
+            node = None
+        return node
+
+    def find_ancestors(self, curr_node: TagModel) -> List[TagModel]:
+        def find_by_limit(node: TagModel) -> bool:
+            return node.is_ancestor_of(curr_node)
+
+        return list(filter(find_by_limit, self.nodes))
+
+    def find_descendants(
+        self, curr_node: TagModel, max_desc_lvl: int
+    ) -> List[TagNodeDto]:
+        if max_desc_lvl <= 0:
+            return []
+
+        def find_by_limit(node: TagModel) -> bool:
+            return curr_node.is_ancestor_of(node)
+
+        all_descs = list(filter(find_by_limit, self.nodes))
+
+        def sort_by_left_limit(node: TagModel) -> int:
+            return node._limit_left
+
+        all_descs.sort(key=sort_by_left_limit)
+        chosen = []
+        for dsc in all_descs:
+            curr_lvl = sum(
+                [
+                    1
+                    for asc in all_descs
+                    if asc._limit_left < dsc._limit_left
+                    and dsc._limit_right < asc._limit_right
+                ]
+            )
+            if curr_lvl < max_desc_lvl:
+                chosen.append(dsc)
+        # import pdb
+        # pdb.set_trace()
+        return chosen
+
+    def ancestors_dto(self, curr_node: TagModel) -> List[TagNodeDto]:
+        ms = self.find_ancestors(curr_node)
+        return [m.to_node_dto(self._id) for m in ms]
+
+    def descendants_dto(self, curr_node: TagModel, desc_lvl: int) -> List[TagNodeDto]:
+        ms = self.find_descendants(curr_node, desc_lvl)
+        return [m.to_node_dto(self._id) for m in ms]

@@ -14,16 +14,21 @@ class TestCreate:
         assert node_id == 2330
 
     def test_dto_convert_ok(self):
-        mock_parent_id = "h2-9246"
-        mock_req = TagCreateReqDto(name="tag123", parent=mock_parent_id)
+        tree_id = "h2"
+        parent_node_id = 9246
+        tag_parent_id = "%s-%d" % (tree_id, parent_node_id)
+        mock_req = TagCreateReqDto(name="bloom123", parent=tag_parent_id)
         tag_m = TagModel.from_req(mock_req)
         fieldmap = asdict(tag_m)
-        assert fieldmap["_label"] == "tag123"
+        assert fieldmap["_label"] == "bloom123"
         assert fieldmap["_id"] == 0
-        mock_resp = tag_m.to_resp("h2", 9246)
-        assert mock_resp.node.name == "tag123"
+        mock_resp = tag_m.to_resp(tree_id, parent_node_id)
+        assert mock_resp.node.name == "bloom123"
         assert mock_resp.node.id_ == "h2-0"
-        assert mock_resp.parent == mock_parent_id
+        assert mock_resp.parent == tag_parent_id
+        mock_node_dto = tag_m.to_node_dto(tree_id)
+        assert mock_node_dto.id_ == "h2-0"
+        assert mock_node_dto.name == "bloom123"
 
     def test_insert_unknown_tree(self):
         mock_req = TagCreateReqDto(name="tag124", parent=None)
@@ -259,3 +264,75 @@ class TestCreate:
         assert len(flat_limits) == len(
             set(flat_limits)
         ), "Duplicate limits found in the tree."
+
+    def test_find_node_from_tree_ok(self):
+        cls = type(self)
+        mock_tree = TagTreeModel(_id="8964tank")
+        tag_labels = ["t1", "t2", "t3", "t4", "t5", "t6", "t7"]
+        mock_tags = list(map(cls.setup_new_node, tag_labels))
+        cls.insert_then_verify(mock_tree, parent_node=None, new_node=mock_tags[0])
+        cls.insert_then_verify(mock_tree, mock_tags[0], new_node=mock_tags[1])
+        cls.insert_then_verify(mock_tree, mock_tags[0], new_node=mock_tags[2])
+        cls.insert_then_verify(mock_tree, mock_tags[1], new_node=mock_tags[3])
+        cls.insert_then_verify(mock_tree, mock_tags[1], new_node=mock_tags[4])
+        cls.insert_then_verify(mock_tree, mock_tags[2], new_node=mock_tags[5])
+        cls.insert_then_verify(mock_tree, mock_tags[2], new_node=mock_tags[6])
+        assert mock_tree.find_node(node_id=1) is mock_tags[0]
+        assert mock_tree.find_node(node_id=3) is mock_tags[2]
+        assert mock_tree.find_node(node_id=7) is mock_tags[6]
+        assert mock_tree.find_node(node_id=9999) is None
+
+    def test_find_ancestors_descendants_ok(self):
+        cls = type(self)
+        mock_tree = TagTreeModel(_id="winnnieTheFlu")
+
+        def gen_tag_labels(nitems):
+            for idx in range(nitems):
+                yield "halo%d" % (idx + 1)
+
+        mock_tags = list(map(cls.setup_new_node, gen_tag_labels(35)))
+        cls.insert_then_verify(mock_tree, parent_node=None, new_node=mock_tags[0])
+        for idx_p in range(15):
+            c_left = idx_p * 2 + 1
+            c_right = idx_p * 2 + 2
+            cls.insert_then_verify(
+                mock_tree, mock_tags[idx_p], new_node=mock_tags[c_left]
+            )
+            cls.insert_then_verify(
+                mock_tree, mock_tags[idx_p], new_node=mock_tags[c_right]
+            )
+
+        cls.insert_then_verify(mock_tree, mock_tags[26], new_node=mock_tags[31])
+        cls.insert_then_verify(mock_tree, mock_tags[28], new_node=mock_tags[32])
+        cls.insert_then_verify(mock_tree, mock_tags[29], new_node=mock_tags[33])
+        cls.insert_then_verify(mock_tree, mock_tags[30], new_node=mock_tags[34])
+
+        def verify_labels(nodes, expect_labels):
+            actual_labels = [a._label for a in nodes]
+            assert set(expect_labels) == set(actual_labels)
+
+        ancestors = mock_tree.find_ancestors(mock_tags[0])
+        assert len(ancestors) == 0
+        ancestors = mock_tree.find_ancestors(mock_tags[11])
+        verify_labels(ancestors, ["halo1", "halo3", "halo6"])
+        ancestors = mock_tree.find_ancestors(mock_tags[18])
+        verify_labels(ancestors, ["halo1", "halo2", "halo4", "halo9"])
+        ancestors = mock_tree.find_ancestors(mock_tags[34])
+        verify_labels(ancestors, ["halo1", "halo3", "halo7", "halo15", "halo31"])
+
+        descs = mock_tree.find_descendants(mock_tags[0], max_desc_lvl=-1)
+        assert len(descs) == 0
+        descs = mock_tree.find_descendants(mock_tags[0], max_desc_lvl=1)
+        verify_labels(descs, ["halo2", "halo3"])
+        descs = mock_tree.find_descendants(mock_tags[29], max_desc_lvl=1)
+        verify_labels(descs, ["halo34"])
+        descs = mock_tree.find_descendants(mock_tags[29], max_desc_lvl=99)
+        verify_labels(descs, ["halo34"])
+        descs = mock_tree.find_descendants(mock_tags[3], max_desc_lvl=1)
+        verify_labels(descs, ["halo8", "halo9"])
+        descs = mock_tree.find_descendants(mock_tags[4], max_desc_lvl=2)
+        # fmt: off
+        verify_labels(descs, ["halo10", "halo11", "halo20", "halo21", "halo22", "halo23"])
+        # fmt: on
+        descs = mock_tree.find_descendants(mock_tags[12], max_desc_lvl=2)
+        verify_labels(descs, ["halo26", "halo27", "halo32"])

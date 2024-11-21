@@ -37,31 +37,39 @@ class TagController(APIController):
         tag_d = newnode.to_resp(tree_id, parent_node_id)
         return created(message=tag_d.model_dump())
 
-    @router.patch("/tag/{t_id}")
-    async def modify(self, t_id: int, reqbody: FromJSON[TagUpdateReqDto]) -> Response:
+    @router.patch("/tag/{tag_id}")
+    async def modify(self, tag_id: str, reqbody: FromJSON[TagUpdateReqDto]) -> Response:
         reqbody = reqbody.value
         tag_d = TagUpdateRespDto(
-            node=TagNodeDto(name=reqbody.name, id_=t_id),
+            node=TagNodeDto(name=reqbody.name, id_=tag_id),
             parent=reqbody.parent,
         )
         return ok(message=tag_d.model_dump())
 
-    @router.delete("/tag/{t_id}")
-    async def remove(self, t_id: int) -> Response:
+    @router.delete("/tag/{tag_id}")
+    async def remove(self, tag_id: str) -> Response:
         return status_code(204, "\n")
 
-    @router.get("/tag/{t_id}")
+    @router.get("/tag/{tag_id}")
     async def get_tag(
-        self, t_id: int, acs: Optional[int], desc_lvl: Optional[int]
+        self,
+        shr_ctx: SharedContext,
+        tag_id: str,
+        acs_req: Optional[int],
+        desc_lvl: Optional[int],
     ) -> Response:
+        (tree_id, node_id) = TagModel.decode_req_id(tag_id)
+        repo = shr_ctx.datastore.tag
+        tree = await repo.fetch_tree(tree_id)
+        curr_tag = tree.find_node(node_id)  # TODO, return 404 if not exists
         ancestors = None
-        if acs:
-            ancestors = [TagNodeDto(name="fake-ancestor", id_=1023)]
+        if acs_req:
+            ancestors = tree.ancestors_dto(curr_tag)
         descendants = None
         if desc_lvl:
-            descendants = [TagNodeDto(name="fake-descendent", id_=1025)]
+            descendants = tree.descendants_dto(curr_tag, desc_lvl)
         tag_d = TagReadRespDto(
-            curr_node=TagNodeDto(name="todo-load-this", id_=t_id),
+            curr_node=curr_tag.to_node_dto(tree_id),
             ancestors=ancestors,
             descendants=descendants,
         )
