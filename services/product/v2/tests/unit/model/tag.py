@@ -7,16 +7,22 @@ from product.api.dto import TagCreateReqDto
 
 
 class TestCreate:
+    def test_decode_req_id_ok(self):
+        mock_parent_id = "taigg-2330"
+        (tree_id, node_id) = TagModel.decode_req_id(mock_parent_id)
+        assert tree_id == "taigg"
+        assert node_id == 2330
+
     def test_dto_convert_ok(self):
-        mock_parent_id = "2-9246"
+        mock_parent_id = "h2-9246"
         mock_req = TagCreateReqDto(name="tag123", parent=mock_parent_id)
         tag_m = TagModel.from_req(mock_req)
         fieldmap = asdict(tag_m)
         assert fieldmap["_label"] == "tag123"
         assert fieldmap["_id"] == 0
-        mock_resp = tag_m.to_resp(2, 9246)
+        mock_resp = tag_m.to_resp("h2", 9246)
         assert mock_resp.node.name == "tag123"
-        assert mock_resp.node.id_ == "2-0"
+        assert mock_resp.node.id_ == "h2-0"
         assert mock_resp.parent == mock_parent_id
 
     def test_insert_unknown_tree(self):
@@ -24,7 +30,7 @@ class TestCreate:
         tag_m0 = TagModel.from_req(mock_req)
         mock_req = TagCreateReqDto(name="tag125", parent=None)
         tag_m1 = TagModel.from_req(mock_req)
-        mock_tree = TagTreeModel(_id=1, nodes=[tag_m0])
+        mock_tree = TagTreeModel(_id="s5o0", nodes=[tag_m0])
         with pytest.raises(TagErrorModel) as e:
             mock_tree.try_insert(tag_m1, parent_node_id=None)
         assert e.value.reason == TagErrorReason.UnknownTree
@@ -33,7 +39,7 @@ class TestCreate:
         mock_parent_id = 9246
         mock_req = TagCreateReqDto(name="tag124", parent=None)
         tag_m = TagModel.from_req(mock_req)
-        mock_tree = TagTreeModel(_id=1)
+        mock_tree = TagTreeModel(_id="s5o0")
         with pytest.raises(TagErrorModel) as e:
             mock_tree.try_insert(tag_m, parent_node_id=mock_parent_id)
         assert e.value.reason == TagErrorReason.MissingTree
@@ -44,7 +50,7 @@ class TestCreate:
         tag_m0 = TagModel.from_req(mock_req)
         mock_req = TagCreateReqDto(name="tag125", parent=None)
         tag_m1 = TagModel.from_req(mock_req)
-        mock_tree = TagTreeModel(_id=1, nodes=[tag_m0])
+        mock_tree = TagTreeModel(_id="s5o0", nodes=[tag_m0])
         with pytest.raises(TagErrorModel) as e:
             mock_tree.try_insert(tag_m1, parent_node_id=mock_parent_id)
         assert e.value.reason == TagErrorReason.MissingParent
@@ -61,7 +67,7 @@ class TestCreate:
 
     def test_insert_nodes_ok_1(self):
         cls = type(self)
-        mock_tree = TagTreeModel(_id=99)
+        mock_tree = TagTreeModel(_id="s5g9q")
         mock_tags = list(
             map(
                 cls.setup_new_node,
@@ -115,7 +121,7 @@ class TestCreate:
 
     def test_insert_nodes_ok_2(self):
         cls = type(self)
-        mock_tree = TagTreeModel(_id=99)
+        mock_tree = TagTreeModel(_id="99")
         mock_tags = list(
             map(cls.setup_new_node, ["t1", "t2", "t3", "t4", "t5", "t6", "t7"])
         )
@@ -130,7 +136,7 @@ class TestCreate:
 
     def test_insert_nodes_ok_3(self):
         cls = type(self)
-        mock_tree = TagTreeModel(_id=99)
+        mock_tree = TagTreeModel(_id="1yu6")
         mock_tags = list(
             map(cls.setup_new_node, ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"])
         )
@@ -151,7 +157,7 @@ class TestCreate:
 
     def test_insert_nodes_ok_4(self):
         cls = type(self)
-        mock_tree = TagTreeModel(_id=99)
+        mock_tree = TagTreeModel(_id="av5y")
         # fmt: off
         tag_labels = ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11"]
         # fmt: on
@@ -181,8 +187,6 @@ class TestCreate:
         cls.verify_node_ends(mock_tags[5], expect=(5, 14))
         cls.verify_node_ends(mock_tags[6], expect=(6, 11))
         cls.verify_node_ends(mock_tags[7], expect=(7, 8))
-        # import pdb
-        # pdb.set_trace()
 
     @staticmethod
     def insert_then_verify(

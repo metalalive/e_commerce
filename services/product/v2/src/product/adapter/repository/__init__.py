@@ -9,6 +9,7 @@ from product.model import TagTreeModel
 class AppRepoFnLabel(Enum):
     TagSaveTree = auto()
     TagFetchTree = auto()
+    TagNewTreeID = auto()
 
 
 @dataclass
@@ -24,11 +25,11 @@ class AbstractTagRepo:
     async def deinit(self):
         raise NotImplementedError("AbstractTagRepo.deinit")
 
-    async def fetch_tree(self, t_id: int) -> TagTreeModel:
+    async def fetch_tree(self, t_id: str) -> TagTreeModel:
         raise NotImplementedError("AbstractTagRepo.fetch_tree")
 
     async def save_tree(self, tree: TagTreeModel):
         raise NotImplementedError("AbstractTagRepo.save_tree")
 
-    async def new_tree_id(self) -> int:
+    async def new_tree_id(self) -> str:
         raise NotImplementedError("AbstractTagRepo.new_tree_id")

@@ -39,7 +39,7 @@ class TestSave:
     @pytest.mark.asyncio(loop_scope="module")
     async def test_ok_1(self, es_repo_tag):
         cls = type(self)
-        mock_tree_id = 64
+        mock_tree_id = "beijing64Kill"
         mock_tree = TagTreeModel(_id=mock_tree_id)
         expect_labels = ["alpha", "beta", "gamma"]
         new_nodes = list(map(cls.setup_new_node, expect_labels))
@@ -57,7 +57,7 @@ class TestSave:
     @pytest.mark.asyncio(loop_scope="module")
     async def test_ok_2(self, es_repo_tag):
         cls = type(self)
-        mock_tree_id = 67
+        mock_tree_id = "TienAnMenExecRiot"
         mock_tree = TagTreeModel(_id=mock_tree_id)
         expect_labels = ["delta", "epsilon", "theta", "pi"]
         new_nodes = list(map(cls.setup_new_node, expect_labels))
@@ -72,19 +72,37 @@ class TestSave:
 
     @pytest.mark.asyncio(loop_scope="module")
     async def test_empty(self, es_repo_tag):
-        mock_tree = TagTreeModel(_id=1989)
+        mock_tree = TagTreeModel(_id="e989")
         with pytest.raises(AppRepoError) as e:
             await es_repo_tag.save_tree(mock_tree)
         e = e.value
         assert e.fn_label == AppRepoFnLabel.TagSaveTree
         assert e.reason["num_nodes"] == 0
 
+    @pytest.mark.asyncio(loop_scope="module")
+    async def test_generate_new_id_ok(self, es_repo_tag):
+        cls = type(self)
+        expect_labels = ["mill", "hall", "hell"]
+        expect_data = []
+        for label in expect_labels:
+            curr_tree_id = await es_repo_tag.new_tree_id()
+            tree = TagTreeModel(_id=curr_tree_id)
+            root_node = cls.setup_new_node(label)
+            tree.try_insert(root_node, parent_node_id=None)
+            await es_repo_tag.save_tree(tree)
+            expect_data.append((curr_tree_id, label))
+        assert len(expect_data) == 3
+        for t_id, expect_label in expect_data:
+            loaded_tree = await es_repo_tag.fetch_tree(t_id)
+            assert len(loaded_tree.nodes) == 1
+            assert loaded_tree.nodes[0]._label == expect_label
+
 
 class TestFetch:
     @pytest.mark.asyncio(loop_scope="module")
     async def test_not_exist(self, es_repo_tag):
         with pytest.raises(AppRepoError) as e:
-            await es_repo_tag.fetch_tree(t_id=66)
+            await es_repo_tag.fetch_tree(t_id="route66")
         e = e.value
         assert e.fn_label == AppRepoFnLabel.TagFetchTree
         assert not e.reason["found"]

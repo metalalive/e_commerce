@@ -21,6 +21,7 @@ DATABASES = {
         "timeout_secs": 16,
         "num_conns": 5,
         "db_name": "product-tags",
+        "tree_id_length": 5,
     },
     "confidential_path": None,
 }

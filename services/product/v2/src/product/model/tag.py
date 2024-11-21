@@ -80,23 +80,23 @@ class TagModel:
         # TODO, let repository handles duplicate IDs
         return cls(_label=d.name)
 
-    def to_resp(self, tree_id: int, parent_node_id: Optional[int]) -> TagUpdateRespDto:
+    def to_resp(self, tree_id: str, parent_node_id: Optional[int]) -> TagUpdateRespDto:
         if parent_node_id:
-            parent_id_resp = "%d-%d" % (tree_id, parent_node_id)
+            parent_id_resp = "%s-%d" % (tree_id, parent_node_id)
         else:
             parent_id_resp = None
-        curr_id_resp = "%d-%d" % (tree_id, self._id)
+        curr_id_resp = "%s-%d" % (tree_id, self._id)
         return TagUpdateRespDto(
             node=TagNodeDto(name=self._label, id_=curr_id_resp),
             parent=parent_id_resp,
         )
 
-    def decode_req_id(id_s: str) -> Tuple[int, int]:
-        match = re.fullmatch(r"(\d+)-(\d+)", id_s)
+    def decode_req_id(id_s: str) -> Tuple[str, int]:
+        match = re.fullmatch(r"([a-zA-Z0-9]+)-(\d+)$", id_s)
         if not match:
             raise TagErrorModel.decode_invalid_id(id_s)
         try:
-            tree_id = int(match.group(1))
+            tree_id = match.group(1)
             parent_node_id = int(match.group(2))
         except Exception as e:
             _logger.debug("%s", str(e))
@@ -106,7 +106,7 @@ class TagModel:
 
 @dataclass
 class TagTreeModel:
-    _id: int  # identifier of the tree
+    _id: str  # identifier of the tree
     nodes: List[TagModel] = field(default_factory=list)
 
     def extract_parent(self, parent_node_id: Optional[int]) -> Optional[TagModel]:

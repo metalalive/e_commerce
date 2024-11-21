@@ -50,21 +50,22 @@ class TestCreateTag:
         assert respbody.get("parent", None) == expect_parent
         return respbody
 
+    @classmethod
     async def collect_node_id(
-        client: TestClient, name: str, parent_id: Optional[int]
+        cls, client: TestClient, name: str, parent_id: Optional[int]
     ) -> Optional[int]:
         reqbody = TagCreateReqDto(name=name, parent=parent_id)
-        respbody = await TestCreateTag.create_one(client, reqbody, 201)
+        respbody = await cls.create_one(client, reqbody, 201)
         return respbody["node"]["id_"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="session")
     async def test_one_ok(self, mock_client):
         cls = type(self)
         reqbody = TagCreateReqDto(name="footwear", parent=None)
         respbody = await cls.create_one(mock_client, reqbody, 201)
         assert respbody["node"].get("id_")
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="session")
     async def test_multi_nodes_ok(self, mock_client):
         cls = type(self)
         rootnode_id = await cls.collect_node_id(
@@ -128,7 +129,7 @@ class TestUpdateTag:
         assert respbody.get("parent", None) == expect_parent
         return respbody
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="session")
     async def test_ok(self, mock_client):
         rootnode_id = await TestCreateTag.collect_node_id(
             mock_client, name="household", parent_id=None
@@ -166,7 +167,7 @@ class TestDeleteTag:
         )
         assert resp.status == expect_status
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio(loop_scope="session")
     async def test_ok(self, mock_client):
         rootnode_id = await TestCreateTag.collect_node_id(
             mock_client, name="household II", parent_id=None

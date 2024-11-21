@@ -1,4 +1,7 @@
 import logging
+import random
+import string
+from datetime import datetime
 from asyncio.events import AbstractEventLoop
 from typing import Dict, Self, List
 
@@ -17,6 +20,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
         cfdntl: Dict,
         index_name: str,
         connector: TCPConnector,
+        tree_id_length: int,
     ):
         proto = "https" if secure_conn_enable else "http"
         domain_host = "%s://%s:%d" % (proto, cfdntl["HOST"], cfdntl["PORT"])
@@ -25,6 +29,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             base_url=domain_host, headers=headers, connector=connector
         )
         self._index_name = index_name
+        self._tree_id_length = tree_id_length
 
     async def init(setting: Dict, loop: AbstractEventLoop) -> Self:
         secure_conn_enable = setting.get("ssl_enable", True)
@@ -35,19 +40,21 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             loop=loop,
         )
         _logger.debug("ElasticSearchTagRepo.init done successfully")
+        tree_id_length = setting.get("tree_id_length", 8)
         return ElasticSearchTagRepo(
             secure_conn_enable,
             cfdntl=setting["cfdntl"],
             index_name=setting["db_name"],
             connector=connector,
+            tree_id_length=tree_id_length,
         )
 
     async def deinit(self):
         await self._session.close()
         _logger.debug("ElasticSearchTagRepo.deinit done successfully")
 
-    async def fetch_tree(self, t_id: int) -> TagTreeModel:
-        url = "/%s/the-only-type/%d" % (self._index_name, t_id)
+    async def fetch_tree(self, t_id: str) -> TagTreeModel:
+        url = "/%s/the-only-type/%s" % (self._index_name, t_id)
         resp = await self._session.get(url)
         async with resp:
             respbody = await resp.json()
@@ -66,7 +73,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             reason = {"num_nodes": 0}
             raise AppRepoError(fn_label=AppRepoFnLabel.TagSaveTree, reason=reason)
         cls = type(self)
-        url = "/%s/the-only-type/%d" % (self._index_name, tree._id)
+        url = "/%s/the-only-type/%s" % (self._index_name, tree._id)
         reqbody = {"nodes": list(map(cls.convert_to_doc, tree.nodes))}
         resp = await self._session.put(url, json=reqbody)
         async with resp:
@@ -75,9 +82,31 @@ class ElasticSearchTagRepo(AbstractTagRepo):
                 raise AppRepoError(fn_label=AppRepoFnLabel.TagSaveTree, reason=reason)
         _logger.debug("ElasticSearchTagRepo.save_tree done")
 
-    async def new_tree_id(self) -> int:
-        _logger.warning("ElasticSearchTagRepo.new_tree_id  not implemented")
-        return 1
+    async def new_tree_id(self) -> str:
+        t0 = datetime.now()
+        random.seed(a=t0.timestamp())
+        next_doc_id = None
+        characters = string.ascii_letters + string.digits
+        url = "/%s/the-only-type/_search" % (self._index_name)
+        reqbody = {
+            "_source": False,
+            "stored_fields": ["_none_"],
+            "query": {"term": {"_id": None}},
+        }
+        for _ in range(5):
+            candidate = "".join(random.choices(characters, k=self._tree_id_length))
+            reqbody["query"]["term"]["_id"] = candidate
+            resp = await self._session.get(url, json=reqbody)
+            async with resp:
+                respbody = await resp.json()
+                if respbody["hits"]["total"] == 0:
+                    next_doc_id = candidate
+                    break
+        if not next_doc_id:
+            reason = {"detail": "too-many-conflict"}
+            raise AppRepoError(fn_label=AppRepoFnLabel.TagNewTreeID, reason=reason)
+        _logger.debug("ElasticSearchTagRepo.new_tree_id  done")
+        return next_doc_id
 
     @staticmethod
     def convert_to_doc(m: TagModel) -> Dict:
