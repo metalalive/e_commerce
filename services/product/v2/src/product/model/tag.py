@@ -189,18 +189,9 @@ class TagTreeModel:
         all_descs.sort(key=sort_by_left_limit)
         chosen = []
         for dsc in all_descs:
-            curr_lvl = sum(
-                [
-                    1
-                    for asc in all_descs
-                    if asc._limit_left < dsc._limit_left
-                    and dsc._limit_right < asc._limit_right
-                ]
-            )
+            curr_lvl = sum([1 for asc in all_descs if asc.is_ancestor_of(dsc)])
             if curr_lvl < max_desc_lvl:
                 chosen.append(dsc)
-        # import pdb
-        # pdb.set_trace()
         return chosen
 
     def ancestors_dto(self, curr_node: TagModel) -> List[TagNodeDto]:
@@ -210,3 +201,23 @@ class TagTreeModel:
     def descendants_dto(self, curr_node: TagModel, desc_lvl: int) -> List[TagNodeDto]:
         ms = self.find_descendants(curr_node, desc_lvl)
         return [m.to_node_dto(self._id) for m in ms]
+
+    def try_remove(self, node_id: int) -> Optional[TagModel]:
+        node2rm = self.find_node(node_id)
+        if not node2rm:
+            return None
+        self.nodes.remove(node2rm)
+        if not self.empty():
+            for node in self.nodes:
+                if node2rm.is_ancestor_of(node):
+                    node._limit_left -= 1
+                    node._limit_right -= 1
+                else:
+                    if node._limit_left > node2rm._limit_left:
+                        node._limit_left -= 2
+                    if node._limit_right > node2rm._limit_right:
+                        node._limit_right -= 2
+        return node2rm
+
+    def empty(self) -> bool:
+        return len(self.nodes) == 0

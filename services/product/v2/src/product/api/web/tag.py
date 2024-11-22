@@ -2,7 +2,7 @@ from typing import Optional
 
 from blacksheep import FromJSON, Response
 from blacksheep.server.controllers import APIController
-from blacksheep.server.responses import created, ok, status_code
+from blacksheep.server.responses import created, ok, no_content  # status_code
 
 from product.model import TagModel, TagTreeModel
 from product.shared import SharedContext
@@ -47,8 +47,18 @@ class TagController(APIController):
         return ok(message=tag_d.model_dump())
 
     @router.delete("/tag/{tag_id}")
-    async def remove(self, tag_id: str) -> Response:
-        return status_code(204, "\n")
+    async def remove(self, shr_ctx: SharedContext, tag_id: str) -> Response:
+        (tree_id, node_id) = TagModel.decode_req_id(tag_id)
+        repo = shr_ctx.datastore.tag
+        tree = await repo.fetch_tree(tree_id)  # TODO, return 410 if not exists
+        node = tree.try_remove(node_id)
+        if node is None:
+            pass  # TODO, return 410 if not exists
+        if tree.empty():
+            await repo.delete_tree(tree)
+        else:
+            await repo.save_tree(tree)
+        return no_content()
 
     @router.get("/tag/{tag_id}")
     async def get_tag(
@@ -60,7 +70,7 @@ class TagController(APIController):
     ) -> Response:
         (tree_id, node_id) = TagModel.decode_req_id(tag_id)
         repo = shr_ctx.datastore.tag
-        tree = await repo.fetch_tree(tree_id)
+        tree = await repo.fetch_tree(tree_id)  # TODO, return 404 if not exists
         curr_tag = tree.find_node(node_id)  # TODO, return 404 if not exists
         ancestors = None
         if acs_req:

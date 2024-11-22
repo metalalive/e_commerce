@@ -106,3 +106,24 @@ class TestFetch:
         e = e.value
         assert e.fn_label == AppRepoFnLabel.TagFetchTree
         assert not e.reason["found"]
+
+
+class TestDelete:
+    @pytest.mark.asyncio(loop_scope="module")
+    async def test_ok(self, es_repo_tag):
+        mock_tree_id = "ch1na0rganHarve5t"
+        mock_tree = TagTreeModel(_id=mock_tree_id)
+        expect_labels = ["fwiw", "afaik", "iiuc"]
+        new_nodes = list(map(TestSave.setup_new_node, expect_labels))
+        mock_tree.try_insert(new_nodes[0], parent_node_id=None)
+        mock_tree.try_insert(new_nodes[1], parent_node_id=new_nodes[0]._id)
+        mock_tree.try_insert(new_nodes[2], parent_node_id=new_nodes[0]._id)
+        await es_repo_tag.save_tree(mock_tree)
+        loaded_tree = await es_repo_tag.fetch_tree(mock_tree_id)
+        actual_labels = [a._label for a in loaded_tree.nodes]
+        assert set(expect_labels) == set(actual_labels)
+        await es_repo_tag.delete_tree(mock_tree)
+        with pytest.raises(AppRepoError) as e:
+            loaded_tree = await es_repo_tag.fetch_tree(mock_tree_id)
+        e = e.value
+        assert e.fn_label == AppRepoFnLabel.TagFetchTree

@@ -82,6 +82,15 @@ class ElasticSearchTagRepo(AbstractTagRepo):
                 raise AppRepoError(fn_label=AppRepoFnLabel.TagSaveTree, reason=reason)
         _logger.debug("ElasticSearchTagRepo.save_tree done")
 
+    async def delete_tree(self, tree: TagTreeModel):
+        url = "/%s/the-only-type/%s" % (self._index_name, tree._id)
+        resp = await self._session.delete(url)
+        async with resp:
+            if resp.status >= 400:
+                reason = {"found": False, "tree_id": tree._id}
+                raise AppRepoError(fn_label=AppRepoFnLabel.TagDeleteTree, reason=reason)
+        _logger.debug("ElasticSearchTagRepo.delete_tree done")
+
     async def new_tree_id(self) -> str:
         t0 = datetime.now()
         random.seed(a=t0.timestamp())
