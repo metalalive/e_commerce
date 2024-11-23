@@ -75,6 +75,10 @@ class TagModel:
     _limit_left: int = 0
     _limit_right: int = 0
 
+    def reset_limit_range(self):
+        self._limit_right = 0
+        self._limit_left = 0
+
     @classmethod
     def from_req(cls, d: TagCreateReqDto) -> Self:
         # TODO, let repository handles duplicate IDs

@@ -8,13 +8,7 @@ from product.model import TagModel, TagTreeModel
 from product.shared import SharedContext
 
 from . import router
-from ..dto import (
-    TagCreateReqDto,
-    TagUpdateReqDto,
-    TagNodeDto,
-    TagUpdateRespDto,
-    TagReadRespDto,
-)
+from ..dto import TagCreateReqDto, TagUpdateReqDto, TagReadRespDto
 
 
 class TagController(APIController):
@@ -38,12 +32,33 @@ class TagController(APIController):
         return created(message=tag_d.model_dump())
 
     @router.patch("/tag/{tag_id}")
-    async def modify(self, tag_id: str, reqbody: FromJSON[TagUpdateReqDto]) -> Response:
+    async def modify(
+        self, shr_ctx: SharedContext, tag_id: str, reqbody: FromJSON[TagUpdateReqDto]
+    ) -> Response:
+        repo = shr_ctx.datastore.tag
         reqbody = reqbody.value
-        tag_d = TagUpdateRespDto(
-            node=TagNodeDto(name=reqbody.name, id_=tag_id),
-            parent=reqbody.parent,
-        )
+        (orig_tree_id, orig_node_id) = TagModel.decode_req_id(tag_id)
+        orig_tree = await repo.fetch_tree(orig_tree_id)
+        if reqbody.parent:
+            (dst_tree_id, dst_parent_node_id) = TagModel.decode_req_id(reqbody.parent)
+            if orig_tree_id == dst_tree_id:
+                dst_tree = orig_tree
+            else:
+                dst_tree = await repo.fetch_tree(dst_tree_id)
+        else:
+            dst_tree_id = await repo.new_tree_id()
+            dst_parent_node_id = None
+            dst_tree = TagTreeModel(_id=dst_tree_id)
+
+        tag_m = orig_tree.try_remove(node_id=orig_node_id)
+        tag_m.reset_limit_range()
+        dst_tree.try_insert(tag_m, dst_parent_node_id)
+
+        await repo.save_tree(dst_tree)
+        if orig_tree != dst_tree:
+            await repo.save_tree(orig_tree)
+
+        tag_d = tag_m.to_resp(dst_tree_id, dst_parent_node_id)
         return ok(message=tag_d.model_dump())
 
     @router.delete("/tag/{tag_id}")
@@ -51,9 +66,7 @@ class TagController(APIController):
         (tree_id, node_id) = TagModel.decode_req_id(tag_id)
         repo = shr_ctx.datastore.tag
         tree = await repo.fetch_tree(tree_id)  # TODO, return 410 if not exists
-        node = tree.try_remove(node_id)
-        if node is None:
-            pass  # TODO, return 410 if not exists
+        removed_node = tree.try_remove(node_id)  # noqa: F841
         if tree.empty():
             await repo.delete_tree(tree)
         else:
