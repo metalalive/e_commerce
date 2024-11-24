@@ -1,6 +1,7 @@
 import logging
 import os
 from importlib import import_module
+from typing import Dict
 from blacksheep import Application, Router
 from ecommerce_common.util import import_module_string
 
@@ -11,9 +12,28 @@ setting = import_module(app_setting_path)
 
 
 def init_app(setting) -> Application:
-    sub_routers = list(map(import_module_string, setting.ROUTERS))
-    toplvl_router = Router(sub_routers=sub_routers)
-    return Application(router=toplvl_router)
+    # FIXME,
+    # sub-router does not seem to work well with CORS feature in application class
+    # , current workaround is to avoid sub routers, use only one router for entire
+    # applicaiton. I'll retry this feature in future blacksheep version
+    toplvl_router: Router = import_module_string(setting.ROUTER)
+
+    def init_middlewares(cls_path: str, kwargs: Dict):
+        cls = import_module_string(cls_path)
+        return cls(**kwargs)
+
+    middlewares = [init_middlewares(k, v) for k, v in setting.MIDDLEWARES.items()]
+    _app = Application(router=toplvl_router)
+    CorsConfig = import_module("ecommerce_common.cors.config")
+    _app.use_cors(
+        allow_methods=CorsConfig.ALLOWED_METHODS,
+        allow_headers=CorsConfig.ALLOWED_HEADERS,
+        allow_origins=[CorsConfig.ALLOWED_ORIGIN[k] for k in ["web", "product"]],
+        allow_credentials=CorsConfig.ALLOW_CREDENTIALS,
+        max_age=CorsConfig.PREFLIGHT_MAX_AGE,
+    )
+    _app.middlewares.extend(middlewares)
+    return _app
 
 
 app: Application = init_app(setting)
