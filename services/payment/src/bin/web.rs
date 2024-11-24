@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 
 use actix_web::rt;
-use actix_web::web::Data as WebData;
+use actix_web::web::{Data as WebData, JsonConfig};
 use actix_web_httpauth::middleware::HttpAuthentication;
 
 use ecommerce_common::config::{AppCfgHardLimit, AppCfgInitArgs, AppConfig};
@@ -10,7 +10,7 @@ use ecommerce_common::constant::env_vars::EXPECTED_LABELS;
 use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use payment::api::web::AppRouteTable;
-use payment::network::{app_web_service, net_server_listener};
+use payment::network::{app_web_service, middleware, net_server_listener};
 use payment::{hard_limit, validate_jwt, AppSharedState};
 
 fn init_config() -> Result<AppConfig, ()> {
@@ -35,12 +35,8 @@ fn init_config() -> Result<AppConfig, ()> {
 }
 
 fn main() -> Result<(), ()> {
-    let cfg = init_config()?;
-    let server = (
-        cfg.api_server.listen.host.clone(),
-        cfg.api_server.listen.port,
-    );
-    let shr_state = match AppSharedState::new(cfg) {
+    let acfg = init_config()?;
+    let shr_state = match AppSharedState::new(acfg) {
         Ok(s) => s,
         Err(e) => {
             println!("[ERROR] shared state init failure, {:?}", e);
@@ -48,6 +44,7 @@ fn main() -> Result<(), ()> {
         }
     };
     let logctx = shr_state.log_context();
+    let acfg = shr_state.config();
     let shr_state_cloned = shr_state.clone();
     /*
      * `App` instance is created on each server worker thread (per HTTP reuqest ?)
@@ -62,22 +59,34 @@ fn main() -> Result<(), ()> {
     let app_init = move || {
         let _state = shr_state.clone();
         let cfg_ref = _state.config();
+        let logctx = _state.log_context();
+        let logctx_p = logctx.as_ref();
         let listener_ref = &cfg_ref.api_server.listen;
         let api_ver = listener_ref.api_version.as_str();
         let route_table = AppRouteTable::get(api_ver);
         let cfgroutes = listener_ref.routes.clone();
         let (app, num_applied) = app_web_service(route_table, cfgroutes);
         if num_applied == 0 {
-            let logctx = _state.log_context();
-            let logctx_p = logctx.as_ref();
             app_log_event!(logctx_p, AppLogLevel::ERROR, "no-route-in-app-router");
-        } // log error, actix-web doesn't consider to handle errors from this callback
+        } // actix-web doesn't consider to handle errors from this callback
+        let reqbodycfg = JsonConfig::default().limit(cfg_ref.api_server.limit_req_body_in_bytes);
         let auth_middleware = HttpAuthentication::bearer(validate_jwt);
+        let cors = {
+            let path =
+                cfg_ref.basepath.system.clone() + "/" + cfg_ref.api_server.listen.cors.as_str();
+            let result = middleware::cors(path);
+            if let Err((code, msg)) = &result {
+                app_log_event!(logctx_p, AppLogLevel::ERROR, "{:?}, {msg}", code);
+            }
+            result.unwrap()
+        };
         app.wrap(auth_middleware)
+            .wrap(cors)
             .app_data(WebData::new(_state.auth_keystore()))
             .app_data(WebData::new(_state))
+            .app_data(reqbodycfg)
     };
-    let ht_srv = net_server_listener(app_init, server.0.as_str(), server.1);
+    let ht_srv = net_server_listener(app_init, &acfg.api_server);
     let runner = rt::System::new();
     let _hdl = runner.runtime().spawn(start_refresh_jwks(shr_state_cloned));
     if let Err(e) = runner.block_on(ht_srv.run()) {
@@ -95,40 +104,25 @@ async fn start_refresh_jwks(shr_state: AppSharedState) {
     loop {
         let period = match keystore.refresh().await {
             Ok(stats) => {
-                let d = (
-                    stats.period_next_op.num_minutes(),
-                    stats.num_added,
-                    stats.num_discarded,
-                );
                 app_log_event!(
                     log_ctx,
                     AppLogLevel::DEBUG,
                     "JWK set refreshed, period-next-op:{}, \
                     num-added:{}, num-discarded:{}",
-                    d.0,
-                    d.1,
-                    d.2
+                    stats.period_next_op.num_minutes(),
+                    stats.num_added,
+                    stats.num_discarded,
                 );
                 match stats.period_next_op.to_std() {
                     Ok(p) => p,
                     Err(e) => {
-                        app_log_event!(
-                            log_ctx,
-                            AppLogLevel::WARNING,
-                            "return period error, reason: {:?} ",
-                            e
-                        );
+                        app_log_event!(log_ctx, AppLogLevel::WARNING, "{:?}", e);
                         std::time::Duration::new(period_secs, 0)
                     }
                 }
             }
             Err(e) => {
-                app_log_event!(
-                    log_ctx,
-                    AppLogLevel::ERROR,
-                    "refresh failure JWK set, reason: {:?} ",
-                    e
-                );
+                app_log_event!(log_ctx, AppLogLevel::ERROR, "{:?}", e);
                 std::time::Duration::new(300, 0)
             }
         };

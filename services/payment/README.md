@@ -13,6 +13,7 @@
 | type | name | version required |
 |------|------|------------------|
 | Rust toolchain | [rust](https://github.com/rust-lang/rust), including Cargo, Analyzer | `>= 1.75.0` |
+| Database | [MariaDB](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/)| `11.2.3` |
 
 
 #### Database Migration
