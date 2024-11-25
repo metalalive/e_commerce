@@ -2,7 +2,7 @@ from typing import Optional
 
 from blacksheep import FromJSON, Response
 from blacksheep.server.controllers import APIController
-from blacksheep.server.responses import created, ok, no_content  # status_code
+from blacksheep.server.responses import created, ok, no_content
 
 from product.model import TagModel, TagTreeModel
 from product.shared import SharedContext
