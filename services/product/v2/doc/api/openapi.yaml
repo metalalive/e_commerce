@@ -9,14 +9,16 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 2.0.0
+  version: 2.0.1
 
 servers:
-  - url: https://doc.site.not.ready/api/v2.0.0
+  - url: https://doc.site.not.ready/api/v2.0.1
 tags:
   - name: tagging
     description: |
         labels for tagging / categorizing products
+  - name: attribute-label
+    description: attribute label
 
 paths:
   /tag:
@@ -99,6 +101,88 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TagReadRespDto'
+  /attributes:
+    post:
+      summary: Create attributes
+      description: Creates multiple attribute labels.
+      tags:
+      - attribute-label
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/AttrCreateReqDto'
+      responses:
+        '201':
+          description: Attributes created successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttrLabelDto'
+    put:
+      summary: Update attributes
+      description: Bulk Update attribute labels.
+      tags:
+      - attribute-label
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/AttrLabelDto'
+      responses:
+        '200':
+          description: Attributes created successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttrLabelDto'
+    delete:
+      summary: Delete an existing attribute labels
+      tags:
+      - attribute-label
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          schema:
+            type: string
+          description: list of attribute label IDs delimited by character `,`
+          example: 'In1nDer,TaiGG,o9ur3'
+      responses:
+        '204':
+          description: Attributes deleted successfully
+    get:
+      summary: search attributes
+      description: search attribute labels by keyword.
+      tags:
+      - attribute-label
+      parameters:
+        - name: keyword
+          in: query
+          required: true
+          schema:
+            type: string
+          description: keyword for search
+          example: 'rotation-per-minute'
+      responses:
+        '200':
+          description: read successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttrLabelDto'
 
 
 components:
@@ -113,9 +197,8 @@ components:
   schemas:
     TagNodeId:
       description: The ID of the tag node.
-      type: integer
-      format: uint32
-      example: 560
+      type: string
+      example: 4uXwI-560
 
     TagCreateReqDto:
       type: object
@@ -172,3 +255,47 @@ components:
           nullable: true
       required:
         - curr_node
+
+    AttrLabelId:
+      type: string
+      description: The unique identifier of the attribute.
+      example: "attr12345"
+
+    AttrDataTypeDto:
+      type: integer
+      description: |
+          Data type of the attribute label required on createing product items, possible values are:
+            - 1, Integer
+            - 2, UnsignedInteger
+            - 3. String
+            - 4. Boolean
+      enum: [1,2,3,4]
+
+    AttrCreateReqDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the attribute.
+          example: "attribute_name"
+        dtype:
+          $ref: '#/components/schemas/AttrDataTypeDto'
+      required:
+        - name
+        - dtype
+
+    AttrLabelDto:
+      type: object
+      properties:
+        id_:
+          $ref: '#/components/schemas/AttrLabelId'
+        name:
+          type: string
+          description: The name of the attribute.
+          example: "attribute_name"
+        dtype:
+          $ref: '#/components/schemas/AttrDataTypeDto'
+      required:
+        - id_
+        - name
+        - dtype
