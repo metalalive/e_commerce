@@ -4,3 +4,4 @@ from .tag import (
     TagErrorModel as TagErrorModel,
     TagErrorReason as TagErrorReason,
 )
+from .attribute import AttrLabelModel as AttrLabelModel

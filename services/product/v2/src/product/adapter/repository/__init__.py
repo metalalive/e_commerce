@@ -1,9 +1,9 @@
 from enum import Enum, auto
-from typing import Dict
+from typing import Dict, List, Self
 from dataclasses import dataclass
 from asyncio.events import AbstractEventLoop
 
-from product.model import TagTreeModel
+from product.model import TagTreeModel, AttrLabelModel
 
 
 class AppRepoFnLabel(Enum):
@@ -37,3 +37,23 @@ class AbstractTagRepo:
 
     async def new_tree_id(self) -> str:
         raise NotImplementedError("AbstractTagRepo.new_tree_id")
+
+
+class AbstractAttrLabelRepo:
+    async def init(setting: Dict, loop: AbstractEventLoop) -> Self:
+        raise NotImplementedError("AbstractAttrLabelRepo.init")
+
+    async def deinit(self):
+        raise NotImplementedError("AbstractAttrLabelRepo.deinit")
+
+    async def create(self, ms: List[AttrLabelModel]):
+        raise NotImplementedError("AbstractAttrLabelRepo.create")
+
+    async def update(self, ms: List[AttrLabelModel]):
+        raise NotImplementedError("AbstractAttrLabelRepo.update")
+
+    async def delete(self, ids: List[str]):
+        raise NotImplementedError("AbstractAttrLabelRepo.delete")
+
+    async def search(self, keyword: str) -> List[AttrLabelModel]:
+        raise NotImplementedError("AbstractAttrLabelRepo.search")

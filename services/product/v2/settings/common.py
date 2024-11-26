@@ -36,5 +36,12 @@ DATABASES = {
         "db_name": "product-tags",
         "tree_id_length": 5,
     },
+    "attribute-label": {
+        "classpath": REPO_PKG_BASE + ".elasticsearch.ElasticSearchAttrLabelRepo",
+        "ssl_enable": False,
+        "timeout_secs": 38,
+        "num_conns": 6,
+        "db_name": "product-attribute-labels",
+    },
     "confidential_path": None,
 }

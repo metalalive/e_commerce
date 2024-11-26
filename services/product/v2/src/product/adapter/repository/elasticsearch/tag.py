@@ -1,13 +1,11 @@
 import logging
-import random
-import string
-from datetime import datetime
 from asyncio.events import AbstractEventLoop
 from typing import Dict, Self, List
 
 from aiohttp import TCPConnector, ClientSession
 
 from product.model import TagTreeModel, TagModel
+from product.util import gen_random_string
 from .. import AbstractTagRepo, AppRepoError, AppRepoFnLabel
 
 _logger = logging.getLogger(__name__)
@@ -92,10 +90,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
         _logger.debug("ElasticSearchTagRepo.delete_tree done")
 
     async def new_tree_id(self) -> str:
-        t0 = datetime.now()
-        random.seed(a=t0.timestamp())
         next_doc_id = None
-        characters = string.ascii_letters + string.digits
         url = "/%s/the-only-type/_search" % (self._index_name)
         reqbody = {
             "_source": False,
@@ -103,7 +98,7 @@ class ElasticSearchTagRepo(AbstractTagRepo):
             "query": {"term": {"_id": None}},
         }
         for _ in range(5):
-            candidate = "".join(random.choices(characters, k=self._tree_id_length))
+            candidate = gen_random_string(max_length=self._tree_id_length)
             reqbody["query"]["term"]["_id"] = candidate
             resp = await self._session.get(url, json=reqbody)
             async with resp:
