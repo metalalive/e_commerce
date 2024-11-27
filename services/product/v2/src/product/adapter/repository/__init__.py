@@ -11,6 +11,10 @@ class AppRepoFnLabel(Enum):
     TagFetchTree = auto()
     TagDeleteTree = auto()
     TagNewTreeID = auto()
+    AttrLabelCreate = auto()
+    AttrLabelUpdate = auto()
+    AttrLabelDelete = auto()
+    AttrLabelSearch = auto()
 
 
 @dataclass

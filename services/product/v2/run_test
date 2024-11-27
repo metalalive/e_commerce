@@ -1,5 +1,6 @@
 APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/unit/model/tag.py
 APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/unit/adapter/repository/elasticsearch/tag.py
+APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/unit/adapter/repository/elasticsearch/attribute.py
 APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/unit/adapter/middleware.py
 APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/integration/tag.py
 APP_SETTINGS="settings.test" poetry run pytest -v -s ./tests/integration/attribute.py

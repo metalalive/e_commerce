@@ -1,0 +1,24 @@
+actions:
+  1:
+    action: create_index
+    description: "Create an index for storing product attribute labels"
+    options:
+      name: "product-attribute-labels"
+      continue_if_exception: False
+      disable_action: False
+      extra_settings:
+        settings:
+          number_of_shards: 1
+          number_of_replicas: 0
+        mappings:
+          the-only-type:
+            properties:
+              name:
+                type: text
+                fields:
+                  as_english:
+                    type: text
+                    analyzer: english
+              dtype:
+                type: integer
+

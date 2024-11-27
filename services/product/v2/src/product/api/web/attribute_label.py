@@ -3,13 +3,13 @@ from typing import List, Optional
 from blacksheep import Response, Request
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import created, ok, no_content  # status_code
-from blacksheep.server.bindings import FromJSON, QueryBinder, BoundValue
+from blacksheep.server.bindings import FromJSON, FromQuery, QueryBinder, BoundValue
 
 from product.model import AttrLabelModel
 from product.shared import SharedContext
 
 from . import router
-from ..dto import AttrCreateReqDto, AttrUpdateReqDto, AttrLabelDto, AttrDataTypeDto
+from ..dto import AttrCreateReqDto, AttrUpdateReqDto
 
 
 class FromQueryListStr(BoundValue[str]):
@@ -48,18 +48,16 @@ class AttrLabelController(APIController):
         return ok(message=respbody)
 
     @router.delete("/attributes")
-    async def delete(self, ids: FromQueryListStr) -> Response:
-        # ids = ids.value
+    async def delete(self, shr_ctx: SharedContext, ids: FromQueryListStr) -> Response:
+        repo = shr_ctx.datastore.prod_attri
+        await repo.delete(ids=ids.value)
         return no_content()
 
     @router.get("/attributes")
-    async def search(self, keywords: FromQueryListStr) -> Response:
-        # keywords = keywords.value
-        respbody = [
-            AttrLabelDto(
-                id_="56neverFall",
-                name="inner diameter",
-                dtype=AttrDataTypeDto.UnsignedInteger,
-            ).model_dump()
-        ]
+    async def search(
+        self, shr_ctx: SharedContext, keywords: FromQuery[str]
+    ) -> Response:
+        repo = shr_ctx.datastore.prod_attri
+        ms = await repo.search(keyword=keywords.value)
+        respbody = AttrLabelModel.to_resps(ms)
         return ok(message=respbody)

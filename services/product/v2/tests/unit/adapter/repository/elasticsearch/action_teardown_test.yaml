@@ -7,5 +7,5 @@ actions:
       continue_if_exception: True
     filters:
       - filtertype: pattern
-        kind: prefix
-        value: product-tags
+        kind: regex
+        value: '^product-[tags,attribute-labels]'
