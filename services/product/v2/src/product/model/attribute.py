@@ -33,3 +33,7 @@ class AttrLabelModel:
         return [
             AttrLabelDto(id_=m.id_, name=m.name, dtype=m.dtype).model_dump() for m in ms
         ]
+
+    def rotate_id(self) -> Self:
+        self.id_ = gen_random_string(max_length=6)
+        return self

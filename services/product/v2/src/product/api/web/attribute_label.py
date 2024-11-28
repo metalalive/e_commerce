@@ -1,9 +1,10 @@
 from typing import List, Optional
 
-from blacksheep import Response, Request
+from blacksheep import Response, Request, Content
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import created, ok, no_content  # status_code
 from blacksheep.server.bindings import FromJSON, FromQuery, QueryBinder, BoundValue
+import pydantic_core
 
 from product.model import AttrLabelModel
 from product.shared import SharedContext
@@ -54,10 +55,9 @@ class AttrLabelController(APIController):
         return no_content()
 
     @router.get("/attributes")
-    async def search(
-        self, shr_ctx: SharedContext, keywords: FromQuery[str]
-    ) -> Response:
+    async def search(self, shr_ctx: SharedContext, keyword: FromQuery[str]) -> Response:
         repo = shr_ctx.datastore.prod_attri
-        ms = await repo.search(keyword=keywords.value)
-        respbody = AttrLabelModel.to_resps(ms)
-        return ok(message=respbody)
+        ms = await repo.search(keyword=keyword.value)
+        attrs_d = AttrLabelModel.to_resps(ms)
+        respbody = pydantic_core.to_json(attrs_d)
+        return Response(200, content=Content(b"application/json", respbody))

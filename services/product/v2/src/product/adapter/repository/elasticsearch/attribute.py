@@ -6,6 +6,7 @@ from asyncio.events import AbstractEventLoop
 from aiohttp import TCPConnector, ClientSession
 
 from ecommerce_common.util import flatten_nested_iterable
+from product.api.dto import AttrDataTypeDto
 from product.model import AttrLabelModel
 from .. import AbstractAttrLabelRepo, AppRepoError, AppRepoFnLabel
 
@@ -57,7 +58,18 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
             reason = {"detail": "input-empty"}
             raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelCreate, reason=reason)
         cls = type(self)
-        url = "/%s/the-only-type/_bulk" % (self._index_name)
+        fields_present = [
+            "items.create._id",
+            "items.create.status",
+            "items.create.error",
+            "items.create.created",
+            "errors",
+        ]
+        url = "/%s/the-only-type/_bulk?filter_path=%s" % (
+            self._index_name,
+            ",".join(fields_present),
+        )
+        ms_work = [m for m in ms]
 
         def convert_to_doc(m: AttrLabelModel) -> Tuple[str, str]:
             metadata = {"create": {"_id": m.id_}}
@@ -67,18 +79,38 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
                 cls.serial_nd_json(source),
             )
 
-        req_ops_gen = flatten_nested_iterable(map(convert_to_doc, ms))
-        req_ops = list(req_ops_gen)
-        resp = await self._session.post(url, data="".join(req_ops))
-        async with resp:
+        retry = 5
+        while True:
+            req_ops_gen = flatten_nested_iterable(map(convert_to_doc, ms_work))
+            req_ops = list(req_ops_gen)
+            resp = await self._session.post(url, data="".join(req_ops))
+            async with resp:
+                respbody = await resp.json()
             if resp.status >= 400:
-                import pdb
-
-                pdb.set_trace()
-                reason = await resp.json()
                 raise AppRepoError(
-                    fn_label=AppRepoFnLabel.AttrLabelCreate, reason=reason
+                    fn_label=AppRepoFnLabel.AttrLabelCreate, reason=respbody
                 )
+            if respbody["errors"]:
+                recoverable_err_status = [409]
+                conflict_ids = [
+                    d["create"]["_id"]
+                    for d in respbody["items"]
+                    if d["create"]["status"] in recoverable_err_status
+                ]
+                ms_work = [m.rotate_id() for m in ms_work if m.id_ in conflict_ids]
+                if ms_work:
+                    if retry == 0:
+                        raise AppRepoError(
+                            fn_label=AppRepoFnLabel.AttrLabelCreate, reason=respbody
+                        )  # partially created
+                    retry -= 1
+                else:  # unable to recover
+                    raise AppRepoError(
+                        fn_label=AppRepoFnLabel.AttrLabelCreate, reason=respbody
+                    )  # partially created
+            else:
+                break
+
         _logger.debug("ElasticSearchAttrLabelRepo.create done successfully")
 
     async def update(self, ms: List[AttrLabelModel]):
@@ -86,7 +118,17 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
             reason = {"detail": "input-empty"}
             raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelUpdate, reason=reason)
         cls = type(self)
-        url = "/%s/the-only-type/_bulk" % (self._index_name)
+        fields_present = [
+            "items.update._id",
+            "items.update.status",
+            "items.update.error",
+            "items.update.result",
+            "errors",
+        ]
+        url = "/%s/the-only-type/_bulk?filter_path=%s" % (
+            self._index_name,
+            ",".join(fields_present),
+        )
 
         def convert_to_doc(m: AttrLabelModel) -> Tuple[str, str]:
             metadata = {"update": {"_id": m.id_}}
@@ -100,11 +142,9 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
         req_ops = list(req_ops_gen)
         resp = await self._session.post(url, data="".join(req_ops))
         async with resp:
-            if resp.status >= 400:
-                reason = await resp.json()
-                raise AppRepoError(
-                    fn_label=AppRepoFnLabel.AttrLabelUpdate, reason=reason
-                )
+            respbody = await resp.json()
+        if respbody["errors"]:
+            raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelUpdate, reason=respbody)
         _logger.debug("ElasticSearchAttrLabelRepo.update done successfully")
 
     async def delete(self, ids: List[str]):
@@ -132,5 +172,46 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
         if not keyword:
             reason = {"detail": "input-empty"}
             raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelSearch, reason=reason)
+        fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "_shards"]
+        url = "/%s/the-only-type/_search?filter_path=%s" % (
+            self._index_name,
+            ",".join(fields_present),
+        )
+        reqbody = {
+            "_source": True,
+            "query": {"match": {"name.as_english": keyword}},
+            # "size": 10 # TODO, limit range, number of docs fetched
+        }
+        headers = {"content-type": "application/json"}
+        resp = await self._session.request("GET", url, json=reqbody, headers=headers)
+        async with resp:
+            respbody = await resp.json()
+        if resp.status >= 400:
+            raise AppRepoError(fn_label=AppRepoFnLabel.AttrLabelSearch, reason=respbody)
+
+        nodes_involved = respbody["_shards"]["total"]
+        nodes_replied = respbody["_shards"]["successful"]
+        nodes_failed = respbody["_shards"]["failed"]
+        if nodes_failed > 0:
+            _logger.warning("nodes_failed:%d", nodes_failed)
+        if nodes_involved > nodes_replied:
+            _logger.warning(
+                "nodes_involved:%d, nodes_replied:%d", nodes_involved, nodes_replied
+            )
+            if nodes_replied == 0:
+                raise AppRepoError(
+                    fn_label=AppRepoFnLabel.AttrLabelSearch, reason=respbody["_shards"]
+                )
+        if respbody["hits"]["total"] > 1000:
+            _logger.warning("hits-total:%d", respbody["hits"]["total"])
+        cls = type(self)
+        ms = list(map(cls.convert_from_doc, respbody["hits"].get("hits", [])))
         _logger.debug("ElasticSearchAttrLabelRepo.search done successfully")
-        return []
+        return ms
+
+    @staticmethod
+    def convert_from_doc(d: Dict) -> AttrLabelModel:
+        src = d["_source"]
+        name = src["name"]
+        dtype = AttrDataTypeDto(src["dtype"])
+        return AttrLabelModel(id_=d["_id"], name=name, dtype=dtype)

@@ -1,17 +1,18 @@
 import asyncio
 from types import ModuleType
+from typing import Dict, Tuple
 
 from ecommerce_common.util import (
     import_module_string,
     get_credential_from_secrets,
 )
+
 from product.adapter.repository import AbstractTagRepo, AbstractAttrLabelRepo
 
 
 class AppDataStore:
-    def __init__(self, tag_repo: AbstractTagRepo, attr_repo: AbstractAttrLabelRepo):
-        self._tag_repo = tag_repo
-        self._attr_repo = attr_repo
+    def __init__(self, repo_map: Dict):
+        self._repo_map = repo_map
 
     @staticmethod
     async def init(setting: ModuleType):
@@ -20,30 +21,31 @@ class AppDataStore:
             secret_path=setting.SECRETS_FILE_PATH,
             secret_map={"cfdntl": setting.DATABASES["confidential_path"]},
         )
-        setting.DATABASES["tag"]["cfdntl"] = db_credentials["cfdntl"]
         loop = asyncio.get_running_loop()
 
-        cls_path = setting.DATABASES["tag"]["classpath"]
-        tag_repo_cls = import_module_string(cls_path)
-        tag_repo = await tag_repo_cls.init(setting.DATABASES["tag"], loop=loop)
-        cls_path = setting.DATABASES["attribute-label"]["classpath"]
-        attr_repo_cls = import_module_string(cls_path)
-        attr_repo = await attr_repo_cls.init(
-            setting.DATABASES["attribute-label"], loop=loop
-        )
-        return AppDataStore(tag_repo=tag_repo, attr_repo=attr_repo)
+        async def init_one_repo(k, v) -> Tuple:
+            v["cfdntl"] = db_credentials["cfdntl"]
+            repo_cls = import_module_string(v["classpath"])
+            repo = await repo_cls.init(v, loop=loop)
+            return (k, repo)
+
+        repo_kv_pairs = [
+            await init_one_repo(k, v)
+            for k, v in setting.DATABASES.items()
+            if isinstance(v, Dict)
+        ]
+        return AppDataStore(repo_map=dict(repo_kv_pairs))
 
     async def deinit(self):
-        await self._tag_repo.deinit()
-        await self._attr_repo.deinit()
+        _ = [await r.deinit() for r in self._repo_map.values()]
 
     @property
     def tag(self) -> AbstractTagRepo:
-        return self._tag_repo
+        return self._repo_map["tag"]
 
     @property
     def prod_attri(self) -> AbstractAttrLabelRepo:
-        return self._attr_repo
+        return self._repo_map["attribute-label"]
 
 
 class SharedContext:

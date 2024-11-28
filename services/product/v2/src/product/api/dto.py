@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TagUpdateReqDto(BaseModel):
@@ -38,13 +38,13 @@ class AttrDataTypeDto(Enum):
 
 
 class AttrCreateReqDto(BaseModel):
-    name: str
+    name: str = Field(min_length=2, max_length=128)
     dtype: AttrDataTypeDto
 
 
 class AttrLabelDto(BaseModel):
     id_: str
-    name: str
+    name: str = Field(min_length=2, max_length=128)
     dtype: AttrDataTypeDto
 
 

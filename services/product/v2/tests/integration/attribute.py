@@ -1,3 +1,4 @@
+import asyncio
 from typing import Tuple, List, Dict
 from blacksheep import Response
 from blacksheep.contents import JSONContent
@@ -29,19 +30,39 @@ class TestAttribute:
         resp = await client.post(
             path="/attributes",
             headers=None,
-            query=None,
             content=JSONContent(reqbody),
             cookies=None,
         )
         assert resp.status == expect_status
         return resp
 
+    @staticmethod
+    async def search_then_verify(
+        client: TestClient,
+        req_keyword: str,
+        expect_data: List[Tuple[str, AttrDataTypeDto]],
+    ):
+        resp = await client.get(
+            path="/attributes",
+            headers=None,
+            query={"keyword": req_keyword},
+            cookies=None,
+        )
+        assert resp.status == 200
+        respbody = await resp.json()
+        expect_attrs = [(d[0], d[1].value) for d in expect_data]
+        actual_attrs = [(r["name"], r["dtype"]) for r in respbody]
+        assert set(expect_attrs) == set(actual_attrs)
+
     @pytest.mark.asyncio(loop_scope="session")
     async def test_create(self, mock_client):
         cls = type(self)
         mockdata = [
-            ("condition hazard", AttrDataTypeDto.String),
-            ("paella next level", AttrDataTypeDto.UnsignedInteger),
+            ("inner colored meat", AttrDataTypeDto.String),
+            ("request per seCoNd", AttrDataTypeDto.UnsignedInteger),
+            ("rotation per second", AttrDataTypeDto.UnsignedInteger),
+            ("digital color spectrum", AttrDataTypeDto.Integer),
+            ("num seconds to max speed", AttrDataTypeDto.UnsignedInteger),
         ]
         resp = await cls.setup_create_many(mock_client, mockdata, 201)
         respbody = await resp.json()
@@ -50,7 +71,17 @@ class TestAttribute:
         expect_attrs = [(d[0], d[1].value) for d in mockdata]
         actual_attrs = [(r["name"], r["dtype"]) for r in respbody]
         assert set(expect_attrs) == set(actual_attrs)
-        # TODO, search then verify
+        expect_readdata = [
+            ("request per seCoNd", AttrDataTypeDto.UnsignedInteger),
+            ("rotation per second", AttrDataTypeDto.UnsignedInteger),
+            ("num seconds to max speed", AttrDataTypeDto.UnsignedInteger),
+        ]
+        await asyncio.sleep(2)  # wait for ElasticSearch refresh documents
+        await cls.search_then_verify(
+            mock_client,
+            req_keyword="second",
+            expect_data=expect_readdata,
+        )
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_update(self, mock_client):
