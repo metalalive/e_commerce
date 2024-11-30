@@ -1,0 +1,54 @@
+name: storefront continuous integration
+on:
+  pull_request:
+    branches:
+      - storefront-dev/*
+    paths:
+      - .github/workflows/storefront-ci.yaml
+      - services/common/python/**
+      - services/store/**
+
+jobs:
+    init-mariadb:
+      runs-on: ubuntu-24.04
+
+    init-app-env:
+      runs-on: ubuntu-24.04
+      steps:
+        - uses: actions/checkout@v4
+        - name: Set up Python 3.12
+          uses: actions/setup-python@v5
+          with:
+            python-version: '3.12.7'
+        - name: Install poerty
+          uses: abatilo/actions-poetry@v2
+          with:
+            poetry-version: '1.8.4'
+        - name: Install init pipenv
+          run: |
+              python3 -m pip install pipenv == 2023.12.1
+              pipenv --version
+              cd services/store
+              PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
+        - name: install dependency packages
+          run: |
+              cd services/store
+              pipenv install --dev
+        - name: build internal common package
+          run: |
+              cd services/common/python
+              poetry run python -m build ./c_exts
+              poetry run python -c "from c_exts.util import keygen"
+        - name: install internal common package
+          run: |
+              cd services/store
+              pipenv run pip install ../common/python/c_ext/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
+
+    lint-check:
+      runs-on: ubuntu-24.04
+        needs: init-app-env
+
+    run-test:
+      runs-on: ubuntu-24.04
+        needs: [lint-check, init-mariadb]
+
