@@ -46,9 +46,9 @@ jobs:
 
     lint-check:
       runs-on: ubuntu-24.04
-        needs: init-app-env
+      needs: init-app-env
 
     run-test:
       runs-on: ubuntu-24.04
-        needs: [lint-check, init-mariadb]
+      needs: [lint-check, init-mariadb]
 
