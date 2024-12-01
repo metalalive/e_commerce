@@ -47,9 +47,6 @@ The package title should be `my-c-extention-lib`. Once you need to remove the ex
 pipenv run pip uninstall my-c-extention-lib
 ```
 
-See [the documentation](../common/python/README.md) for build process.
-
-
 ### Database Migration
 ```bash
 pipenv run python -m  store.command  [subcommand] [args]
