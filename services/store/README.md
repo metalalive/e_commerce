@@ -37,9 +37,9 @@ in common python module, build the wheel:
 cd common/python
 pipenv run python -m build ./c_exts
 ```
-Manually install it by following command :
+Then manually install it by following command :
 ```bash
-pipenv run pip install ../../common/python/c-ext/ecommerce-common-xxxxx.whl
+pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-xxxxx.whl
 ```
 
 The package title should be `my-c-extention-lib`. Once you need to remove the extension , run
