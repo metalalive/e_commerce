@@ -34,12 +34,10 @@ jobs:
         run: |
             python3 -m pip install pipenv==2024.3.1
             pipenv --version
-            cd services/store
-            PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
       - name: install dependency packages
         run: |
             cd services/store
-            pipenv install --dev
+            PIPENV_VENV_IN_PROJECT=1 pipenv install --dev
       - name: build internal common package
         run: |
             cd services/common/python
