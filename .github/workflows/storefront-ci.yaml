@@ -37,6 +37,7 @@ jobs:
       - name: build internal common package
         run: |
             cd services/common/python
+            python3 -m pip install build==1.2.2
             pipenv run python -m build ./c_exts
             pipenv run python -c "from c_exts.util import keygen"
       - name: install internal common package
