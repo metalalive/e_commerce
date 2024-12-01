@@ -59,6 +59,8 @@ jobs:
             pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
             pipenv run python -c "from c_exts.util import keygen"
       
+      # TODO, consider to move back to alembic command directly,
+      # instead of these custom migration script
       - name: mariadb database migration
         run: |
             cd services/common/data
