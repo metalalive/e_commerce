@@ -42,7 +42,7 @@ jobs:
       - name: install internal common package
         run: |
             cd services/store
-            pipenv run pip install ../common/python/c_ext/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
+            pipenv run pip install  ../common/python/c_ext/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
 
     lint-check:
       if: startsWith(github.head_ref, 'storefront-dev/')
