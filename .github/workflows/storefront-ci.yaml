@@ -2,14 +2,15 @@ name: storefront continuous integration
 on:
   pull_request:
     branches:
-      - storefront-dev/*
+      - 'master'
     paths:
-      - .github/workflows/storefront-ci.yaml
-      - services/common/python/**
-      - services/store/**
+      - '.github/workflows/storefront-ci.yaml'
+      - 'services/common/python/**'
+      - 'services/store/**'
 
 jobs:
     init-mariadb:
+      if: startsWith(github.head_ref, 'storefront-dev/')
       runs-on: ubuntu-24.04
       steps:
       - name: install mariadb
@@ -17,6 +18,7 @@ jobs:
             cd services/store
 
     init-app-env:
+      if: startsWith(github.head_ref, 'storefront-dev/')
       runs-on: ubuntu-24.04
       steps:
       - uses: actions/checkout@v4
@@ -49,6 +51,7 @@ jobs:
             pipenv run pip install ../common/python/c_ext/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
 
     lint-check:
+      if: startsWith(github.head_ref, 'storefront-dev/')
       runs-on: ubuntu-24.04
       needs: init-app-env
       steps:
@@ -57,6 +60,7 @@ jobs:
             cd services/store
 
     run-test:
+      if: startsWith(github.head_ref, 'storefront-dev/')
       runs-on: ubuntu-24.04
       needs: [lint-check, init-mariadb]
       steps:
