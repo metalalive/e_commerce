@@ -13,25 +13,30 @@
 |OpenSSL| 3.1.4 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
 
 ## Build
-### Virtual Environment
-You can create per-project virtual environment using the command:
+### For this application
+First time to build / install modules for this application in per-project virtual environment:
+```bash
+PIPENV_VENV_IN_PROJECT=1 pipenv install --dev
+```
+Alternatively, you can switch to application base folder and explcitly specify virtual environment
 ```bash
 PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
 ```
-A virtual environment folder `.venv` will be created under the application folder `./store`
-### Common Python modules
-Note in this application the building process on [common python modules](../common/python) is automated , see the `[packages]` section in [`Pipfile`](./Pipfile).
 
-First time to initialize
-```shell
-pipenv install --dev
-```
-If you need to modify the `Pipfile` or `pyproject.toml` , update the virtual environment after you are done editing , by the command
+- A virtual environment folder `.venv` will be created under the application folder `./store`
+- Note [`Pipfile`](./Pipfile) already references path to [common python modules](../common/python), that makes `pipenv` installation automatically link to the common modules, no need to build the common python module explicitly.
+
+If you need to modify the `Pipfile` or `pyproject.toml` later, update the virtual environment after you are done editing `Pipfile` , by the command
 ```shell
 pipenv update
 ```
 
-### C extension modules
+### C extension modules (for experiment purpose)
+in common python module, build the wheel:
+```bash
+cd common/python
+pipenv run python -m build ./c_exts
+```
 Manually install it by following command :
 ```bash
 pipenv run pip install ../../common/python/c-ext/ecommerce-common-xxxxx.whl
