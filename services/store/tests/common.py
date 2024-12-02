@@ -16,11 +16,6 @@ from ecommerce_common.models.contact.sqlalchemy import CountryCodeEnum
 from ecommerce_common.util import import_module_string
 
 from ecommerce_common.tests.common import KeystoreMixin
-from ecommerce_common.tests.common.sqlalchemy import (
-    init_test_database,
-    deinit_test_database,
-    clean_test_data,
-)
 
 from store.entry.web import app
 from store.models import (
@@ -67,15 +62,6 @@ def keystore():
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def db_engine_resource(request):
     # base setup / teardown for creating or deleting database and apply migration
-    default_dbs_engine = sqlalchemy_init_engine(
-        secrets_file_path=ts_settings.SECRETS_FILE_PATH,
-        base_folder=ts_settings.SYS_BASE_PATH,
-        secret_map=(
-            ts_settings.DB_USER_ALIAS,
-            "backend_apps.databases.%s" % ts_settings.DB_USER_ALIAS,
-        ),
-        driver_label=ts_settings.DRIVER_LABEL,
-    )  # without specifying database name
     default_db_engine = sqlalchemy_init_engine(
         secrets_file_path=ts_settings.SECRETS_FILE_PATH,
         base_folder=ts_settings.SYS_BASE_PATH,
@@ -89,25 +75,18 @@ async def db_engine_resource(request):
         # require to run multiple SQL statements in one go.
         conn_args={"client_flag": 0},
     )
-    keepdb = request.config.getoption("--keepdb", False)
-    kwargs = {
-        "dbs_engine": default_dbs_engine,
-        "db_engine": default_db_engine,
-        "metadata_objs": metadata_objs,
-        "keepdb": keepdb,
-    }
-    kwargs["createdb_sql"] = (
-        "CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin"
-        % ts_settings.DB_NAME
-    )
-    kwargs["dropdb_sql"] = "DROP DATABASE IF EXISTS `%s`" % ts_settings.DB_NAME
-    await init_test_database(**kwargs)
     yield default_db_engine
-    kwargs.pop("createdb_sql", None)
-    kwargs.pop("metadata_objs", None)
-    await deinit_test_database(**kwargs)
     await default_db_engine.dispose()
-    await default_dbs_engine.dispose()
+
+
+async def clean_test_data(conn, metadatas):
+    for metadata in metadatas:
+        for table in metadata.tables.values():
+            async with conn.begin():
+                stmt = table.delete()
+                result = await conn.execute(stmt)  # will commit automatically
+            # if result.rowcount > 0:
+            #    pass
 
 
 # all fixtures / test cases require this fixture, set `autouse` to `True`

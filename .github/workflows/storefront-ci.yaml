@@ -80,10 +80,9 @@ jobs:
             cd services/store
 
       - name: run unit test
+        env:
+            APP_SETTINGS: "settings.test"
         run: |
-            cd services/store
-            pipenv run python -c "from ecommerce_common.util import import_module_string"
-            pipenv run python -c "import fastapi"
-            pipenv run python -c "from c_exts.util import keygen"
-            pipenv run python -c "import store"
+            cd services/store 
+            pipenv run pytest -v -s ./tests/storeprofile/models.py
 
