@@ -37,20 +37,13 @@ def upgrade():
     op.create_table(
         "hour_of_operation",
         sa.Column("store_id", mysql.INTEGER(unsigned=True), nullable=False),
+        # fmt: off
         sa.Column(
             "day",
-            sa.Enum(
-                "SUNDAY",
-                "MONDAY",
-                "TUESDAY",
-                "WEDNESDAY",
-                "THURSDAY",
-                "FRIDAY",
-                "SATURDAY",
-                name="enumweekday",
-            ),
+            sa.Enum("SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", name="enumweekday"),
             nullable=False,
         ),
+        # fmt: on
         sa.Column("time_open", sa.Time(), nullable=False),
         sa.Column("time_close", sa.Time(), nullable=False),
         sa.ForeignKeyConstraint(["store_id"], ["store_profile.id"], ondelete="CASCADE"),
@@ -59,28 +52,16 @@ def upgrade():
     op.create_table(
         "outlet_location",
         sa.Column("store_id", mysql.INTEGER(unsigned=True), nullable=False),
+        # fmt: off
         sa.Column(
             "country",
             sa.Enum(
-                "AU",
-                "AT",
-                "CZ",
-                "DE",
-                "HK",
-                "IN",
-                "ID",
-                "IL",
-                "MY",
-                "NZ",
-                "PT",
-                "SG",
-                "TH",
-                "TW",
-                "US",
-                name="countrycodeenum",
-            ),
+                "AU", "AT", "CZ", "DE", "HK", "IN", "ID", "IL",
+                "MY", "NZ", "PT", "SG", "TH", "TW", "US",
+                name="countrycodeenum"),
             nullable=False,
         ),
+        # fmt: on
         sa.Column("locality", sa.String(length=50), nullable=False),
         sa.Column("street", sa.String(length=50), nullable=False),
         sa.Column("detail", sa.Text(), nullable=True),

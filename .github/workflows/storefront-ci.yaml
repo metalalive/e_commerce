@@ -18,6 +18,8 @@ jobs:
       services:
         mariadb_v11:
           image: mariadb:11.2.6
+          # official docker image only exposes default port 3306 to external world
+          # map any non-default port external clients will use to 3306
           ports:
             - 3307:3306
           env:
@@ -30,13 +32,6 @@ jobs:
 
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
-      
-      # - name: check database creation
-      #   run: |
-      #       apt-get update
-      #       apt-get install -y mariadb-client
-      #       mariadb  --host=127.0.0.1 --port=3307 --user=root --password=sys-ci-dba  -e "SHOW DATABASES; SHOW GRANTS FOR  DB_USERNAME@localhost;"
-      #       mariadb  --host=127.0.0.1 --port=3307 --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW DATABASES;"
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -49,17 +44,22 @@ jobs:
             pipenv --version
 
       - name: install dependency packages
+        env:
+            PIPENV_VENV_IN_PROJECT: 1
         run: |
             cd services/store
-            PIPENV_VENV_IN_PROJECT=1 pipenv install --dev
+            pipenv install --dev
             pipenv run python -c "from ecommerce_common.util import import_module_string"
             pipenv run python -c "import fastapi"
+            pipenv run python -c "import store"
 
       - name: build internal common package
+        env:
+            PIPENV_VENV_IN_PROJECT: 1
         run: |
             cd services/common/python
-            PIPENV_VENV_IN_PROJECT=1 pipenv run pip3 install build==1.2.2
-            PIPENV_VENV_IN_PROJECT=1 pipenv run python -m build ./c_exts
+            pipenv run pip3 install build==1.2.2
+            pipenv run python -m build ./c_exts
       - name: install internal common package
         run: |
             cd services/store
