@@ -18,8 +18,10 @@ jobs:
       services:
         mariadb_v11:
           image: mariadb:11.2.6
+          # official docker image only exposes default port 3306 to external world
+          # map any non-default port external clients will use to 3306
           ports:
-            - 3307:3307
+            - 3307:3306
           env:
             MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
             MARIADB_ROOT_PASSWORD: 'sys-ci-dba'
@@ -42,31 +44,36 @@ jobs:
             pipenv --version
 
       - name: install dependency packages
+        env:
+            PIPENV_VENV_IN_PROJECT: 1
         run: |
             cd services/store
-            PIPENV_VENV_IN_PROJECT=1 pipenv install --dev
+            pipenv install --dev
             pipenv run python -c "from ecommerce_common.util import import_module_string"
             pipenv run python -c "import fastapi"
+            pipenv run python -c "import store"
 
       - name: build internal common package
+        env:
+            PIPENV_VENV_IN_PROJECT: 1
         run: |
             cd services/common/python
-            PIPENV_VENV_IN_PROJECT=1 pipenv run pip3 install build==1.2.2
-            PIPENV_VENV_IN_PROJECT=1 pipenv run python -m build ./c_exts
+            pipenv run pip3 install build==1.2.2
+            pipenv run python -m build ./c_exts
       - name: install internal common package
         run: |
             cd services/store
             pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
             pipenv run python -c "from c_exts.util import keygen"
       
-      # TODO, alembic command directly instead of the custom migration script
-      # , for easy maintanence
       - name: mariadb database migration
+        env:
+            APP_SETTINGS: "settings.test"
         run: |
             cd services/common/data
             ln -s ./secrets_template.json  ./secrets.json
             cd ../../store
-            # pipenv run python ./command.py  store_migrate_forward --prev-rev-id=init  --new-rev-id=000001  --new-label=create-all-tables
+            pipenv run alembic --config ./alembic_app.ini upgrade  000002
 
       - name: run linter
         run: |
@@ -78,4 +85,5 @@ jobs:
             pipenv run python -c "from ecommerce_common.util import import_module_string"
             pipenv run python -c "import fastapi"
             pipenv run python -c "from c_exts.util import keygen"
+            pipenv run python -c "import store"
 
