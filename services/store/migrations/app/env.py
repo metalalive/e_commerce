@@ -1,5 +1,9 @@
 import asyncio
+import os
+from importlib import import_module
 from logging.config import fileConfig
+from pathlib import Path
+from typing import Dict, Union
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -8,7 +12,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # proxied from EnvironmentContext instance
 from alembic import context
 
-from ecommerce_common.util import import_module_string
+from ecommerce_common.util import (
+    import_module_string,
+    format_sqlalchemy_url,
+    get_credential_from_secrets,
+)
+
+app_settings = import_module(os.environ["APP_SETTINGS"])
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -22,21 +32,42 @@ fileConfig(config.config_file_name)
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-app_metadata_paths = config.get_main_option("app.orm_base")
-app_metadata_paths = app_metadata_paths.split(",")
-app_metadata_paths = filter(lambda path: path != "skip", app_metadata_paths)
-target_metadata = list(
-    map(
-        lambda path: import_module_string(dotted_path=path).metadata, app_metadata_paths
-    )
-)
-if len(target_metadata) == 0:
-    target_metadata = None
+
+
+def load_metad_class(path: str):
+    cls = import_module_string(dotted_path=path)
+    return cls.metadata
+
+
+assert len(app_settings.ORM_BASE_CLASSES) > 0
+target_metadata = list(map(load_metad_class, app_settings.ORM_BASE_CLASSES))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+
+def _setup_db_credential() -> Dict:
+    base_path: Path = app_settings.SYS_BASE_PATH
+    secret_path: Union[Path, str] = app_settings.SECRETS_FILE_PATH
+    db_usr_alias: str = app_settings.DB_USER_ALIAS
+    _secret_map = {
+        db_usr_alias: "backend_apps.databases.%s" % db_usr_alias,
+    }
+    s_map = get_credential_from_secrets(
+        base_path=base_path, secret_path=secret_path, secret_map=_secret_map
+    )
+    out_map = s_map[db_usr_alias]
+    out_map["NAME"] = app_settings.DB_NAME
+    return out_map
+
+
+db_credential = _setup_db_credential()
+url = format_sqlalchemy_url(
+    driver=app_settings.DRIVER_LABEL, db_credential=db_credential
+)
+config.set_main_option(name="sqlalchemy.url", value=url)
 
 
 def run_migrations_offline():
@@ -63,30 +94,6 @@ def run_migrations_offline():
         context.run_migrations()
 
 
-def do_run_migrations(connection: Connection) -> None:
-    context.configure(
-        connection=connection,
-        target_metadata=target_metadata,
-        version_table=config.get_main_option("version_table"),
-    )
-    with context.begin_transaction():
-        context.run_migrations()
-
-
-async def run_async_migrations() -> None:
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-        connect_args={'connect_timeout': 50, 'net_read_timeout', 45},
-    )
-
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-
-    await connectable.dispose()
-
-
 def run_migrations_online():
     """Run migrations in 'online' mode.
 
@@ -95,6 +102,30 @@ def run_migrations_online():
 
     """
     asyncio.run(run_async_migrations())
+
+
+async def run_async_migrations() -> None:
+    connectable = async_engine_from_config(
+        config.get_section(config.config_ini_section),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+        connect_args={"connect_timeout": 30},
+    )
+
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+
+    await connectable.dispose()
+
+
+def do_run_migrations(connection: Connection) -> None:
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        version_table="alembic_migration_table",
+    )
+    with context.begin_transaction():
+        context.run_migrations()
 
 
 if context.is_offline_mode():

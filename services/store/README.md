@@ -49,24 +49,21 @@ pipenv run pip uninstall my-c-extention-lib
 
 ### Database Migration
 ```bash
-pipenv run python -m  store.command  [subcommand] [args]
+// update
+APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini upgrade  <VERSION_NUMBER>
+
+// rollback
+APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini downgrade  <VERSION_NUMBER>
+
+// check all created revisions (might not sync yet to target database)
+APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini history
 ```
 
-Where `subcommand` could be one of followings :
-| `subcommand` | arguments | description |
-|-|-|-|
-|`auth_migrate_forward`| `N/A` | Always upgrade to latest revision provided by the codebase. Do NOT manually modify the default migration script in `/YOUR-PROJECT-HOME/migrations/alembic/store` |
-|`store_migrate_forward`| `--prev-rev-id=<APP_REVISION_ID>  --new-rev-id=<APP_REVISION_ID> --new-label=<APP_REVISION_ID>` | `[prev-rev-id]` is an alphanumeric byte sequence representing revision of current head in the migration history. <br><br> `[new-rev-id]` has the same format as `[prev-rev-id]` but it labels revision of the new head. <br><br> For initial migration upgrade, `[prev-rev-id]` has to be `init`. <br><br> Example : `python3 -m store.command store_migrate_forward  init  00001  init-app-tables` |
-|`migrate_backward`| `--prev-rev-id=<APP_REVISION_ID>` | `--prev-rev-id` is an alphanumeric byte sequence representing revision at previous point of the migration history. <br><br> To downgrade back to initial state , `--prev-rev-id` can also be `base`, which removes all created schemas and entire migration folder.<br><br> |
-||||
+Note
+- the migration commands are the same as described in [alembic documentation](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
+- the environment variable `APP_SETTINGS` contains path to setting module for test for development purpose
+- `<VERSION_NUMBER>` can be the number which matches migration module under `migrations/app/versions` , for downgrade, `base` means rollback to state before any table is created in the database.
 
-Examples:
-```bash
-pipenv run python ./command.py store_migrate_forward --prev-rev-id=init \
-    --new-rev-id=000001  --new-label=create-all-tables
-pipenv run python ./command.py  migrate_backward  --prev-rev-id=base
-
-```
 
 ## Run
 ### Development Server
@@ -94,5 +91,5 @@ SYS_BASE_PATH="${PWD}/.." PYTHONPATH="${PYTHONPATH}:${PWD}/settings"   pipenv ru
 ## Development
 ### Code Formatter
 ```bash
-pipenv run black ./src/ ./tests/  ./settings/ ./command.py
+pipenv run black ./src/ ./tests/  ./settings/ ./migrations
 ```
