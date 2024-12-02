@@ -31,10 +31,12 @@ jobs:
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
       
-      #- name: check database creation
-      #  run: |
-      #      mariadb  --host=127.0.0.1 --port=3307 --user=root --password=sys-ci-dba  -e "SHOW DATABASES;"
-      #      mariadb  --host=127.0.0.1 --port=3307 --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW DATABASES;"
+      - name: check database creation
+        run: |
+            apt-get update
+            apt-get install -y mariadb-client
+            mariadb  --host=127.0.0.1 --port=3307 --user=root --password=sys-ci-dba  -e "SHOW DATABASES; SHOW GRANTS FOR  DB_USERNAME@localhost;"
+            mariadb  --host=127.0.0.1 --port=3307 --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW DATABASES;"
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
