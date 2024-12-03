@@ -28,7 +28,7 @@ PIPENV_VENV_IN_PROJECT=1 pipenv run python -m virtualenv
 
 If you need to modify the `Pipfile` or `pyproject.toml` later, update the virtual environment after you are done editing `Pipfile` , by the command
 ```shell
-pipenv update
+pipenv update --dev
 ```
 
 ### C extension modules (for experiment purpose)
@@ -85,7 +85,7 @@ SYS_BASE_PATH="${PWD}/.." PYTHONPATH="${PYTHONPATH}:${PWD}/settings"   pipenv ru
 ## Test
 ### Integration Test
 ```bash
-./run_test
+APP_SETTINGS="settings.test"  ./run_test
 ```
 
 ## Development

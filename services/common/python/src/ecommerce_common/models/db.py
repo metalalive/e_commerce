@@ -6,8 +6,6 @@ import logging
 
 from ecommerce_common.util import (
     import_module_string,
-    format_sqlalchemy_url,
-    get_credential_from_secrets,
 )
 
 _logger = logging.getLogger(__name__)
@@ -46,77 +44,6 @@ def db_conn_retry_wrapper(func):
         return out  #### end of inner()
 
     return inner  #### end of db_conn_retry_wrapper()
-
-
-def sqlalchemy_init_engine(
-    secrets_file_path,
-    secret_map: Tuple[str, str],
-    base_folder: Path,
-    driver_label: str,
-    db_name: str = "",
-    conn_args: Optional[dict] = None,
-):
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    conn_args = conn_args or {}
-    db_credentials = get_credential_from_secrets(
-        base_path=base_folder,
-        secret_path=secrets_file_path,
-        secret_map=dict([secret_map]),
-    )
-    chosen_db_credential = db_credentials[secret_map[0]]
-    if db_name:
-        chosen_db_credential["NAME"] = db_name
-    url = format_sqlalchemy_url(driver=driver_label, db_credential=chosen_db_credential)
-    # reminder: use engine.dispose() to free up all connections in its pool
-    return create_async_engine(url, connect_args=conn_args)
-
-
-def sqlalchemy_db_conn(engine, enable_orm=False):
-    """
-    decorator for starting a database connection (either establishing new
-    one or grab from connection pool) in SQLAlchemy
-    """
-    assert engine, (
-        "argument `engine` has to be SQLAlchemy engine instance \
-            , but receive invalid value %s"
-        % (engine)
-    )
-    if enable_orm:
-        from sqlalchemy import orm as sa_orm
-
-    def inner(func):
-        @functools.wraps(func)
-        def wrapped(*args, **kwargs):
-            result = None
-            if enable_orm:
-                with sa_orm.Session(engine) as session:
-                    kwargs["session"] = session
-                    result = func(*args, **kwargs)
-            else:
-                with engine.connect() as conn:
-                    kwargs["conn"] = conn
-                    result = func(*args, **kwargs)
-            return result
-
-        return wrapped
-
-    return inner
-
-
-def sqlalchemy_insert(model_cls_path: str, data: list, conn):
-    """
-    SQLAlchemy helper function for inserting new record to database
-    """
-    result = None
-    model_cls = import_module_string(model_cls_path)
-    ins = model_cls.__table__.insert()
-    if len(data) == 1:
-        ins = ins.values(**data[0])
-        result = conn.execute(ins)
-    elif len(data) > 1:
-        result = conn.execute(ins, data)
-    return result
 
 
 def _get_mysql_error_response(e, headers, raise_if_not_handled):
@@ -201,14 +128,9 @@ class ServiceModelRouter:
 
     def db_for_read(self, model, **hints):
         chosen_db_tag = self._app_db_map.get(model._meta.app_label, None)
-        log_args = [
-            "model",
-            model._meta.app_label,
-            "hints",
-            hints,
-            "chosen_db_tag",
-            chosen_db_tag,
-        ]
+        # fmt: off
+        log_args = ["model", model._meta.app_label, "hints", hints, "chosen_db_tag", chosen_db_tag]
+        # fmt: on
         _logger.debug(None, *log_args)
         ##chosen_db_tag = 'site_dba'
         return chosen_db_tag
@@ -221,22 +143,12 @@ class ServiceModelRouter:
         app2 = obj2._meta.app_label
         db_tag_1 = self._app_db_map.get(app1, None)
         db_tag_2 = self._app_db_map.get(app2, None)
+        # fmt: off
         log_args = [
-            "obj1",
-            obj1,
-            "hints",
-            hints,
-            "obj2",
-            obj2,
-            "app1",
-            app1,
-            "app2",
-            app2,
-            "db_tag_1",
-            db_tag_1,
-            "db_tag_2",
-            db_tag_2,
+            "obj1", obj1, "hints", hints, "obj2", obj2, "app1", app1,
+            "app2", app2, "db_tag_1", db_tag_1, "db_tag_2", db_tag_2,
         ]
+        # fmt: on
         _logger.debug(None, *log_args)
         if app1 in self._common_app_labels or app2 in self._common_app_labels:
             return True  ## output None will raise access-denied error, how ?

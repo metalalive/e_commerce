@@ -1,5 +1,5 @@
-APP_SETTINGS="settings.test" pipenv run pytest -v -s ./tests/storeprofile/models.py
-APP_SETTINGS="settings.test" pipenv run pytest -v -s ./tests/storeprofile/api.py
-APP_SETTINGS="settings.test" pipenv run pytest -v -s ./tests/staff.py
-APP_SETTINGS="settings.test" pipenv run pytest -v -s ./tests/business_hours.py
-APP_SETTINGS="settings.test" pipenv run pytest -v -s ./tests/products.py
+pipenv run pytest -v -s ./tests/storeprofile/models.py
+pipenv run pytest -v -s ./tests/storeprofile/api.py
+pipenv run pytest -v -s ./tests/staff.py
+pipenv run pytest -v -s ./tests/business_hours.py
+pipenv run pytest -v -s ./tests/products.py

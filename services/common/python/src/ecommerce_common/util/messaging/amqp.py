@@ -6,7 +6,7 @@ from typing import Optional
 
 import kombu
 from kombu import Producer as KombuProducer
-from kombu.exceptions import ChannelError
+from kombu.exceptions import ChannelError, OperationalError as KombuOperationalError
 from kombu.pools import (
     connections as KombuConnectionPool,
     producers as KombuProducerPool,
@@ -292,19 +292,20 @@ class ProviderCollector(object):
             return
         provider = self._find_provider(self._unreg_providers, label)
         if provider:  # delete the queues of the unregistered providers
+            error = None
             try:  # sync with remote broker
-                bound_q = provider.queue(conn.default_channel)
+                chn = conn.default_channel
+                bound_q = provider.queue(chn)
                 bound_q.delete()
+            except KombuOperationalError as e:
+                error = e
             except ConsumerCancelled as e:
-                log_args = [
-                    "action",
-                    "undeclare rpc queue",
-                    "label",
-                    label,
-                    "msg",
-                    str(e.args),
-                ]
+                error = e
+            # fmt: off
+            if error:
+                log_args = ["action", "undeclare rpc queue", "label", label, "msg", str(error)]
                 _logger.error(None, *log_args)
+            # fmt: on
             self._unreg_providers.remove(provider)
 
 

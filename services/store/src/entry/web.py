@@ -43,7 +43,7 @@ def _init_app(_setting):
     # init CORS middleware
     out.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_cfg.ALLOWED_ORIGIN.values(),
+        allow_origins=[cors_cfg.ALLOWED_ORIGIN[k] for k in ["web", "store"]],
         allow_credentials=True,  # disable cookie from other (even trusted) domains
         allow_methods=cors_cfg.ALLOWED_METHODS,
         allow_headers=cors_cfg.ALLOWED_HEADERS,

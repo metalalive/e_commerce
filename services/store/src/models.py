@@ -21,19 +21,15 @@ from sqlalchemy.orm import (
     declarative_mixin,
     declared_attr,
     relationship,
+    validates,
 )
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER
 
-from ecommerce_common.models.contact.sqlalchemy import (
-    EmailMixin,
-    PhoneMixin,
-    LocationMixin,
-)
 from ecommerce_common.models.mixins import IdGapNumberFinder
 
-from .dto import EnumWeekDay
+from .dto import EnumWeekDay, CountryCodeEnum
 
 Base = declarative_base()
 
@@ -45,6 +41,34 @@ class _MatCodeOptions(enum.Enum):
     MAX_NUM_EMAILS = 3
     MAX_NUM_PHONES = 4
     MAX_NUM_PRODUCTS = 5
+
+
+class EmailMixin:
+    # subclasses should extend the white list based on application requirements
+    email_domain_whitelist = ["localhost"]
+    # NOTE, validation is handled at API view level, not at model level
+    addr = Column(
+        String(160),
+        nullable=False,
+    )
+
+
+class PhoneMixin:
+    # NOTE, validation is handled at API view level, not at model level
+    country_code = Column(String(3), nullable=False)
+    line_number = Column(String(15), nullable=False)
+
+
+class LocationMixin:
+    # billing / shipping address for buyer recieving invoice / receipt / purchased items from seller.
+    # the content comes from either snapshot of buyer's location in user_management app
+    # or custom location  only for specific order.
+    # The snapshot is essential in case the buyer modifies the contact after he/she creates the order.
+    country = Column(sqlalchemy_enum(CountryCodeEnum), nullable=False)
+    locality = Column(String(50), nullable=False)
+    street = Column(String(50), nullable=False)
+    detail = Column(Text)
+    floor = Column(SmallInteger, default=1, nullable=False)
 
 
 class AppIdGapNumberFinder(IdGapNumberFinder):
