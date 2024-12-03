@@ -1,16 +1,16 @@
 import os
 from importlib import import_module
+from contextlib import asynccontextmanager
 
 app_setting_path = os.environ["APP_SETTINGS"]
 settings = import_module(app_setting_path)
 
-import logging
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import logging  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from ecommerce_common.util import import_module_string
-from ecommerce_common.cors import config as cors_cfg
+from ecommerce_common.util import import_module_string  # noqa: E402
+from ecommerce_common.cors import config as cors_cfg  # noqa: E402
 
 _logger = logging.getLogger(__name__)
 

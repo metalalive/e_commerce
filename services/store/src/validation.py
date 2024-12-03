@@ -1,17 +1,13 @@
 import logging
-from datetime import datetime, time as py_time
+from datetime import datetime
 from functools import partial
 from typing import Optional, List, Dict, Union
 
-from typing_extensions import Annotated
 from pydantic import (
     BaseModel as PydanticBaseModel,
     RootModel as PydanticRootModel,
     PositiveInt,
-    StringConstraints,
-    EmailStr,
     field_validator,
-    ValidationError,
     SkipValidation,
     ConfigDict,
 )
@@ -20,16 +16,12 @@ from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTP
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
 from .shared import shared_ctx
 from .models import (
-    EnumWeekDay,
     SaleableTypeEnum,
     StoreEmail,
     StorePhone,
     OutletLocation,
     StoreCurrency,
     StoreProfile,
-    StoreStaff,
-    HourOfOperation,
-    StoreProductAvailable,
 )
 from .dto import (
     StoreEmailDto,
@@ -38,7 +30,6 @@ from .dto import (
     StoreStaffDto,
     StoreDtoError,
     BusinessHoursDayDto,
-    CountryCodeEnum,
 )
 
 _logger = logging.getLogger(__name__)
@@ -480,9 +471,10 @@ def _get_quota_arrangement_helper(
             quota_material_models = (StoreProfile, StoreEmail, StorePhone)
             out[req_prof_id] = {}
             quota = item.get("quota", [])
-            filter_fn = (
-                lambda d, model_cls: d["mat_code"] == model_cls.quota_material.value
-            )
+
+            def filter_fn(d, model_cls) -> bool:
+                return d["mat_code"] == model_cls.quota_material.value
+
             for model_cls in quota_material_models:
                 bound_filter_fn = partial(filter_fn, model_cls=model_cls)
                 filtered = tuple(filter(bound_filter_fn, quota))
