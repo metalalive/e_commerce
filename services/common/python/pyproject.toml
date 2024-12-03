@@ -12,7 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-python-logstash-async = "2.5.0"
+#python-logstash-async = "2.5.0"
 celery = "^5.4.0"
 
 [tool.poetry.group.dev.dependencies]

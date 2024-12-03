@@ -85,4 +85,6 @@ jobs:
         run: |
             cd services/store 
             pipenv run pytest -v -s ./tests/storeprofile/models.py
+            pipenv run pytest -v -s ./tests/business_hours.py
+            pipenv run pytest -v -s ./tests/products.py
 
