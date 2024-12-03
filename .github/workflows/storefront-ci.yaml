@@ -78,6 +78,7 @@ jobs:
       - name: run linter
         run: |
             cd services/store
+            pipenv run ruff check  ./src/ ./tests/  ./settings/ ./migrations
 
       - name: run unit test
         env:

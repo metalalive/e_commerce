@@ -29,3 +29,6 @@ asyncio_default_fixture_loop_scope = "function"
 # tracking relevant issue:
 # https://github.com/pytest-dev/pytest-asyncio/issues/924
 
+[tool.ruff]
+target-version = "py312"
+

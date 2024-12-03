@@ -1,24 +1,8 @@
 import random
-import string
 from datetime import timedelta
 
 import pytest
 from sqlalchemy import select as sa_select
-
-# load the module `tests.common` first, to ensure all environment variables
-# are properly set
-from tests.common import (
-    db_engine_resource,
-    session_for_test,
-    store_data,
-    email_data,
-    phone_data,
-    loc_data,
-    opendays_data,
-    staff_data,
-    product_avail_data,
-    saved_store_objs,
-)
 
 from store.models import (
     StoreProfile,
@@ -27,7 +11,6 @@ from store.models import (
     OutletLocation,
     HourOfOperation,
     StoreStaff,
-    StoreProductAvailable,
 )
 
 
@@ -57,9 +40,7 @@ class TestCreation:
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_bulk_ok(self, session_for_test, store_data):
-        instantiate_fn = lambda d: StoreProfile(**d)
-        _store_data = map(lambda idx: next(store_data), range(6))
-        objs = list(map(instantiate_fn, _store_data))
+        objs = [StoreProfile(**next(store_data)) for _ in range(6)]
         target_ids = [obj.supervisor_id for obj in objs]
         chk_result1 = await StoreProfile.quota_stats(
             objs, session=session_for_test, target_ids=target_ids
@@ -100,9 +81,7 @@ class TestCreation:
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_duplicate_ids_1(self, session_for_test, store_data):
-        instantiate_fn = lambda d: StoreProfile(**d)
-        _store_data = map(lambda idx: next(store_data), range(8))
-        objs = list(map(instantiate_fn, _store_data))
+        objs = [StoreProfile(**next(store_data)) for _ in range(8)]
         dup_ids = [1234, 5678, 9012]
         objs[0].id = dup_ids[0]
         objs[1].id = dup_ids[1]
@@ -132,9 +111,7 @@ class TestCreation:
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_duplicate_ids_2(self, session_for_test, store_data):
-        instantiate_fn = lambda d: StoreProfile(**d)
-        _store_data = map(lambda idx: next(store_data), range(7))
-        objs = list(map(instantiate_fn, _store_data))
+        objs = [StoreProfile(**next(store_data)) for _ in range(7)]
         dup_ids = [1234, 5678, 9012]
         objs[0].id = dup_ids[0]
         objs[1].id = dup_ids[1]
@@ -214,8 +191,7 @@ class TestCreation:
         await StoreProfile.bulk_insert(objs, session=session_for_test)
         for o in objs:
             await session_for_test.refresh(o)
-        _fn_get_pk = lambda obj: obj.id
-        ids = tuple(map(_fn_get_pk, objs))
+        ids = tuple([obj.id for obj in objs])
         chk_result = await StoreEmail.quota_stats(
             [], session=session_for_test, target_ids=ids
         )
@@ -241,8 +217,8 @@ class TestUpdate:
         stats_before_update = await StorePhone.quota_stats(
             [], session=session_for_test, target_ids=[store_id]
         )
-        evicted_email_obj = obj.emails.pop()
-        evicted_phone_obj = obj.phones.pop()
+        evicted_email_obj = obj.emails.pop()  # noqa: F841
+        evicted_phone_obj = obj.phones.pop()  # noqa: F841
         new_email_objs = [StoreEmail(**next(email_data)) for _ in range(2)]
         new_phone_objs = [StorePhone(**next(phone_data)) for _ in range(2)]
         new_loc_data = next(loc_data)

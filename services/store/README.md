@@ -93,3 +93,8 @@ APP_SETTINGS="settings.test"  ./run_test
 ```bash
 pipenv run black ./src/ ./tests/  ./settings/ ./migrations
 ```
+
+### Linting Check
+```bash
+pipenv run ruff check  ./src/ ./tests/  ./settings/ ./migrations
+```
