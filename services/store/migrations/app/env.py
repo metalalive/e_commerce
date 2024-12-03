@@ -12,11 +12,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # proxied from EnvironmentContext instance
 from alembic import context
 
-from ecommerce_common.util import (
-    import_module_string,
-    format_sqlalchemy_url,
-    get_credential_from_secrets,
-)
+from ecommerce_common.util import import_module_string, get_credential_from_secrets
+from store.db import format_sqlalchemy_url
 
 app_settings = import_module(os.environ["APP_SETTINGS"])
 

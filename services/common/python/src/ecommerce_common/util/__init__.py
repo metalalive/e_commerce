@@ -148,19 +148,6 @@ def import_module_string(dotted_path: str):
         ) from err
 
 
-def format_sqlalchemy_url(driver: str, db_credential):
-    """format URL string used in SQLalchemy"""
-    url_pattern = "{db_driver}://{username}:{passwd}@{db_host}:{db_port}/{db_name}"
-    return url_pattern.format(
-        db_driver=driver,
-        username=db_credential["USER"],
-        passwd=db_credential["PASSWORD"],
-        db_host=db_credential["HOST"],
-        db_port=db_credential["PORT"],
-        db_name=db_credential.get("NAME", ""),
-    )
-
-
 def get_credential_from_secrets(secret_map: dict, base_path: Path, secret_path: str):
     """example of a database section within a secret file
     db_credentials = {
@@ -313,4 +300,3 @@ class BaseTemplateLookup(metaclass=BaseLookupMeta):
             elif isinstance(item, list):
                 item = [os.path.join(cls.template_path, x) for x in item]
         return item
-

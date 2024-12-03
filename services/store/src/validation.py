@@ -18,7 +18,6 @@ from pydantic import (
 from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
 
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
-from ecommerce_common.models.contact.sqlalchemy import CountryCodeEnum
 from .shared import shared_ctx
 from .models import (
     EnumWeekDay,
@@ -39,6 +38,7 @@ from .dto import (
     StoreStaffDto,
     StoreDtoError,
     BusinessHoursDayDto,
+    CountryCodeEnum,
 )
 
 _logger = logging.getLogger(__name__)

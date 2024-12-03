@@ -12,7 +12,7 @@ from pydantic import (
     StringConstraints,
 )
 
-from ecommerce_common.models.contact.sqlalchemy import CountryCodeEnum
+from ecommerce_common.models.enums.base import JsonFileChoicesMeta
 
 
 class EnumWeekDay(enum.Enum):
@@ -23,6 +23,10 @@ class EnumWeekDay(enum.Enum):
     THURSDAY = calendar.THURSDAY
     FRIDAY = calendar.FRIDAY
     SATURDAY = calendar.SATURDAY
+
+
+class CountryCodeEnum(enum.Enum, metaclass=JsonFileChoicesMeta):
+    filepath = "common/data/nationality_code.json"
 
 
 class StoreEmailDto(PydanticBaseModel):
@@ -52,6 +56,9 @@ class StorePhoneDto(PydanticBaseModel):
 class ShopLocationDto(PydanticBaseModel):
     model_config = ConfigDict(from_attributes=True)
     country: CountryCodeEnum
+    # TODO
+    # - split `locality` to 2 fields `city` and `state` (a.k.a. province, region)
+    # - add new field `postal_code`
     locality: str
     street: str
     detail: str

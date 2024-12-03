@@ -85,7 +85,7 @@ SYS_BASE_PATH="${PWD}/.." PYTHONPATH="${PYTHONPATH}:${PWD}/settings"   pipenv ru
 ## Test
 ### Integration Test
 ```bash
-./run_test
+APP_SETTINGS="settings.test"  ./run_test
 ```
 
 ## Development

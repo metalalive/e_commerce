@@ -11,12 +11,11 @@ from fastapi.testclient import TestClient
 # are properly set
 from settings import test as ts_settings
 
-from ecommerce_common.models.db import sqlalchemy_init_engine
-from ecommerce_common.models.contact.sqlalchemy import CountryCodeEnum
 from ecommerce_common.util import import_module_string
-
 from ecommerce_common.tests.common import KeystoreMixin
 
+from store.db import sqlalchemy_init_engine
+from store.dto import CountryCodeEnum
 from store.entry.web import app
 from store.models import (
     StoreProfile,

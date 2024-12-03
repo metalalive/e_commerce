@@ -6,10 +6,11 @@ from typing import Optional, Dict
 from asyncmy.constants.CLIENT import MULTI_STATEMENTS
 from fastapi import FastAPI
 
-from ecommerce_common.models.db import sqlalchemy_init_engine
 from ecommerce_common.auth.keystore import create_keystore_helper
 from ecommerce_common.util import import_module_string
 from ecommerce_common.util.messaging.rpc import RPCproxy
+
+from .db import sqlalchemy_init_engine
 
 _logger = logging.getLogger(__name__)
 
