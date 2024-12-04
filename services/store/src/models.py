@@ -1,6 +1,6 @@
 import enum
 from functools import partial
-from typing import List, Tuple, Self
+from typing import List, Optional, Tuple, Self, TYPE_CHECKING
 from sqlalchemy import (
     Column,
     Boolean,
@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy import func as sa_func, select as sa_select
 from sqlalchemy.event import listens_for
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import declarative_base, relationship, selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER
@@ -27,6 +27,13 @@ from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER
 from ecommerce_common.models.mixins import IdGapNumberFinder
 
 from .dto import EnumWeekDay, CountryCodeEnum
+
+if TYPE_CHECKING:
+    from .validation import (
+        ExistingStoreProfileReqBody,
+        StoreStaffsReqBody,
+        EditProductsReqBody,
+    )
 
 Base = declarative_base()
 
@@ -214,7 +221,23 @@ class StoreProfile(Base, QuotaStatisticsMixin):
         )
 
     @classmethod
-    async def bulk_insert(cls, objs, session):
+    async def try_load(
+        cls,
+        session,
+        store_id: int,
+        eager_load_columns: Optional[List] = None,
+    ) -> Optional[Self]:
+        stmt = SqlAlSelect(cls).filter(cls.id == store_id)
+        if eager_load_columns and len(eager_load_columns) > 0:
+            cols = map(lambda v: selectinload(v), eager_load_columns)
+            stmt = stmt.options(*cols)
+        qset = await session.execute(stmt)
+        result = qset.one_or_none()
+        if result:
+            return result[0]
+
+    @classmethod
+    async def bulk_insert(cls, objs: List[Self], session):
         async def save_instance_fn():
             try:
                 session.add_all(objs)  # check state in session.new
@@ -226,6 +249,18 @@ class StoreProfile(Base, QuotaStatisticsMixin):
 
         _id_gap_finder = AppIdGapNumberFinder(orm_model_class=cls, session=session)
         await _id_gap_finder.async_save_with_rand_id(save_instance_fn, objs=objs)
+
+    def update(self, request: "ExistingStoreProfileReqBody"):
+        self.label = request.label
+        self.active = request.active
+        self.emails.clear()
+        self.phones.clear()
+        self.emails.extend(map(lambda d: StoreEmail(**d.model_dump()), request.emails))
+        self.phones.extend(map(lambda d: StorePhone(**d.model_dump()), request.phones))
+        if request.location:
+            self.location = OutletLocation(**request.location.model_dump())
+        else:
+            self.location = None
 
 
 ## end of class StoreProfile
@@ -267,6 +302,32 @@ class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
     @classmethod
     async def quota_stats(cls, objs, session, target_ids):
         return await super().quota_stats(objs, session, target_ids, attname="store_id")
+
+    @classmethod
+    async def try_load(
+        cls, session, store_id: int, reqdata: List["StoreStaffsReqBody"]
+    ) -> List[Self]:
+        staff_ids = [d.staff_id for d in reqdata]
+        stmt = (
+            SqlAlSelect(cls)
+            .where(cls.store_id == store_id)
+            .where(cls.staff_id.in_(staff_ids))
+        )
+        result = await session.execute(stmt)
+        return [p[0] for p in result]
+
+    @staticmethod
+    def bulk_update(objs: List[Self], reqdata: List["StoreStaffsReqBody"]) -> List[int]:
+        def _do_update(obj):
+            newdata = filter(lambda d: d.staff_id == obj.staff_id, reqdata)
+            newdata = next(newdata)
+            assert newdata is not None
+            obj.staff_id = newdata.staff_id
+            obj.start_after = newdata.start_after
+            obj.end_before = newdata.end_before
+            return obj.staff_id
+
+        return list(map(_do_update, objs))
 
 
 class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
@@ -337,7 +398,9 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
         return await super().quota_stats(objs, session, target_ids, attname="store_id")
 
     @classmethod
-    async def try_load(cls, session, store_id: int, reqdata: List) -> List[Self]:
+    async def try_load(
+        cls, session, store_id: int, reqdata: List["EditProductsReqBody"]
+    ) -> List[Self]:
         def cond_clause_and(d):
             return SqlAlAnd(
                 cls.product_type == d.product_type,
@@ -358,7 +421,9 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
         return objs
 
     @staticmethod
-    def bulk_update(objs: List[Self], reqdata: List) -> List[Tuple[enum.Enum, int]]:
+    def bulk_update(
+        objs: List[Self], reqdata: List["EditProductsReqBody"]
+    ) -> List[Tuple[enum.Enum, int]]:
         def _do_update(obj):
             def check_prod_id(d) -> bool:
                 return (

@@ -5,12 +5,8 @@ from fastapi import APIRouter, Depends as FastapiDepends
 from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from pydantic import PositiveInt
-from sqlalchemy import (
-    delete as SqlAlDelete,
-    select as SqlAlSelect,
-)
+from sqlalchemy import delete as SqlAlDelete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from ecommerce_common.auth.fastapi import base_authentication, base_permission_check
 from ecommerce_common.models.constants import ROLE_ID_SUPERUSER
@@ -20,7 +16,6 @@ from ..models import (
     StoreProfile,
     StoreEmail,
     StorePhone,
-    OutletLocation,
     StoreStaff,
     HourOfOperation,
     SaleableTypeEnum,
@@ -118,19 +113,14 @@ async def _storefront_existence_validity(
     store_id: PositiveInt,
     eager_load_columns: Optional[List] = None,
 ) -> StoreProfile:
-    stmt = SqlAlSelect(StoreProfile).filter(StoreProfile.id == store_id)
-    if eager_load_columns and len(eager_load_columns) > 0:
-        cols = map(lambda v: selectinload(v), eager_load_columns)
-        stmt = stmt.options(*cols)
-    resultset = await session.execute(stmt)
-    saved_obj = resultset.one_or_none()
+    saved_obj = await StoreProfile.try_load(session, store_id, eager_load_columns)
     if not saved_obj:
         raise FastApiHTTPException(
             detail={"code": "not_exist"},
             headers={},
             status_code=FastApiHTTPstatus.HTTP_404_NOT_FOUND,
         )
-    return saved_obj[0]
+    return saved_obj
 
 
 async def _storefront_supervisor_validity(
@@ -245,21 +235,7 @@ async def edit_profile(
         saved_obj = await _storefront_supervisor_validity(
             session, store_id, usr_auth=user, eager_load_columns=related_attributes
         )
-        # perform update
-        saved_obj.label = request.label
-        saved_obj.active = request.active
-        saved_obj.emails.clear()
-        saved_obj.phones.clear()
-        saved_obj.emails.extend(
-            list(map(lambda d: StoreEmail(**d.model_dump()), request.emails))
-        )
-        saved_obj.phones.extend(
-            list(map(lambda d: StorePhone(**d.model_dump()), request.phones))
-        )
-        if request.location:
-            saved_obj.location = OutletLocation(**request.location.model_dump())
-        else:
-            saved_obj.location = None
+        saved_obj.update(request)
         await session.commit()
     return None
 
@@ -327,25 +303,11 @@ async def edit_staff(
         saved_obj = await _storefront_supervisor_validity(
             session, store_id, usr_auth=user, eager_load_columns=[StoreProfile.staff]
         )
-        staff_ids = list(map(lambda d: d.staff_id, request.root))
-        stmt = (
-            SqlAlSelect(StoreStaff)
-            .where(StoreStaff.store_id == saved_obj.id)
-            .where(StoreStaff.staff_id.in_(staff_ids))
+        saved_staffs = await StoreStaff.try_load(
+            session, store_id=saved_obj.id, reqdata=request.root
         )
-        result = await session.execute(stmt)
+        updatelist = StoreStaff.bulk_update(saved_staffs, request.root)
 
-        def _do_update(raw):
-            saved_staff = raw[0]
-            newdata = filter(lambda d: d.staff_id == saved_staff.staff_id, request.root)
-            newdata = next(newdata)
-            assert newdata is not None
-            saved_staff.staff_id = newdata.staff_id
-            saved_staff.start_after = newdata.start_after
-            saved_staff.end_before = newdata.end_before
-            return saved_staff.staff_id
-
-        updatelist = tuple(map(_do_update, result))
         newdata = filter(lambda d: d.staff_id not in updatelist, request.root)
         new_staffs = map(lambda d: StoreStaff(**d.model_dump()), newdata)
         saved_obj.staff.extend(new_staffs)
