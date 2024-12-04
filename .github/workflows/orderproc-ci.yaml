@@ -28,8 +28,8 @@ jobs:
           cargo build  --bin rpc_consumer
     - name: Run unit tests
       env:
-          SYS_BASE_PATH: "$GITHUB_WORKSPACE/.."
-          SERVICE_BASE_PATH: "$GITHUB_WORKSPACE"
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
       run: |
           cd services/order
           cargo test --test unittest  -- model --test-threads=1
