@@ -1,7 +1,7 @@
 import calendar
 import enum
 from datetime import datetime, time as py_time
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict
 from typing_extensions import Annotated
 
 from pydantic import (

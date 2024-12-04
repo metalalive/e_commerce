@@ -1,19 +1,12 @@
 import logging
-from functools import partial
 from typing import Optional, List
 
-from fastapi import APIRouter, Header, Depends as FastapiDepends
+from fastapi import APIRouter, Depends as FastapiDepends
 from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from pydantic import PositiveInt
-from sqlalchemy import (
-    delete as SqlAlDelete,
-    select as SqlAlSelect,
-    or_ as SqlAlOr,
-    and_ as SqlAlAnd,
-)
+from sqlalchemy import delete as SqlAlDelete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from ecommerce_common.auth.fastapi import base_authentication, base_permission_check
 from ecommerce_common.models.constants import ROLE_ID_SUPERUSER
@@ -23,7 +16,6 @@ from ..models import (
     StoreProfile,
     StoreEmail,
     StorePhone,
-    OutletLocation,
     StoreStaff,
     HourOfOperation,
     SaleableTypeEnum,
@@ -121,19 +113,14 @@ async def _storefront_existence_validity(
     store_id: PositiveInt,
     eager_load_columns: Optional[List] = None,
 ) -> StoreProfile:
-    stmt = SqlAlSelect(StoreProfile).filter(StoreProfile.id == store_id)
-    if eager_load_columns and len(eager_load_columns) > 0:
-        cols = map(lambda v: selectinload(v), eager_load_columns)
-        stmt = stmt.options(*cols)
-    resultset = await session.execute(stmt)
-    saved_obj = resultset.one_or_none()
+    saved_obj = await StoreProfile.try_load(session, store_id, eager_load_columns)
     if not saved_obj:
         raise FastApiHTTPException(
             detail={"code": "not_exist"},
             headers={},
             status_code=FastApiHTTPstatus.HTTP_404_NOT_FOUND,
         )
-    return saved_obj[0]
+    return saved_obj
 
 
 async def _storefront_supervisor_validity(
@@ -206,9 +193,7 @@ async def add_profiles(
 ## def add_profiles()
 
 
-@router.patch(
-    "/profile/{store_id}",
-)
+@router.patch("/profile/{store_id}")
 async def edit_profile(
     store_id: PositiveInt,
     request: ExistingStoreProfileReqBody,
@@ -250,28 +235,12 @@ async def edit_profile(
         saved_obj = await _storefront_supervisor_validity(
             session, store_id, usr_auth=user, eager_load_columns=related_attributes
         )
-        # perform update
-        saved_obj.label = request.label
-        saved_obj.active = request.active
-        saved_obj.emails.clear()
-        saved_obj.phones.clear()
-        saved_obj.emails.extend(
-            list(map(lambda d: StoreEmail(**d.model_dump()), request.emails))
-        )
-        saved_obj.phones.extend(
-            list(map(lambda d: StorePhone(**d.model_dump()), request.phones))
-        )
-        if request.location:
-            saved_obj.location = OutletLocation(**request.location.model_dump())
-        else:
-            saved_obj.location = None
+        saved_obj.update(request)
         await session.commit()
     return None
 
 
-@router.patch(
-    "/profile/{store_id}/supervisor",
-)
+@router.patch("/profile/{store_id}/supervisor")
 async def switch_supervisor(
     store_id: PositiveInt,
     request: StoreSupervisorReqBody,
@@ -299,7 +268,7 @@ async def delete_profile(
                 headers={},
                 status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
             )
-    except ValueError as e:
+    except ValueError:
         raise FastApiHTTPException(
             detail={"ids": "invalid-id"},
             headers={},
@@ -323,9 +292,7 @@ async def delete_profile(
     return None
 
 
-@router.patch(
-    "/profile/{store_id}/staff",
-)
+@router.patch("/profile/{store_id}/staff")
 async def edit_staff(
     store_id: PositiveInt,
     request: StoreStaffsReqBody,
@@ -336,25 +303,11 @@ async def edit_staff(
         saved_obj = await _storefront_supervisor_validity(
             session, store_id, usr_auth=user, eager_load_columns=[StoreProfile.staff]
         )
-        staff_ids = list(map(lambda d: d.staff_id, request.root))
-        stmt = (
-            SqlAlSelect(StoreStaff)
-            .where(StoreStaff.store_id == saved_obj.id)
-            .where(StoreStaff.staff_id.in_(staff_ids))
+        saved_staffs = await StoreStaff.try_load(
+            session, store_id=saved_obj.id, reqdata=request.root
         )
-        result = await session.execute(stmt)
+        updatelist = StoreStaff.bulk_update(saved_staffs, request.root)
 
-        def _do_update(raw):
-            saved_staff = raw[0]
-            newdata = filter(lambda d: d.staff_id == saved_staff.staff_id, request.root)
-            newdata = next(newdata)
-            assert newdata is not None
-            saved_staff.staff_id = newdata.staff_id
-            saved_staff.start_after = newdata.start_after
-            saved_staff.end_before = newdata.end_before
-            return saved_staff.staff_id
-
-        updatelist = tuple(map(_do_update, result))
         newdata = filter(lambda d: d.staff_id not in updatelist, request.root)
         new_staffs = map(lambda d: StoreStaff(**d.model_dump()), newdata)
         saved_obj.staff.extend(new_staffs)
@@ -371,9 +324,7 @@ async def edit_staff(
     return None
 
 
-@router.patch(
-    "/profile/{store_id}/business_hours",
-)
+@router.patch("/profile/{store_id}/business_hours")
 async def edit_hours_operation(
     store_id: PositiveInt,
     request: BusinessHoursDaysReqBody,
@@ -403,13 +354,15 @@ def emit_event_edit_products(
 ):
     # currently this service uses server-side timezone
     # TODO, switch to the time zones provided from client if required
-    convertor = lambda obj: {
-        "price": obj.price,
-        "start_after": obj.start_after.astimezone().isoformat(),
-        "end_before": obj.end_before.astimezone().isoformat(),
-        "product_type": obj.product_type.value,
-        "product_id": obj.product_id,
-    }
+    def convertor(obj):
+        return {
+            "price": obj.price,
+            "start_after": obj.start_after.astimezone().isoformat(),
+            "end_before": obj.end_before.astimezone().isoformat(),
+            "product_type": obj.product_type.value,
+            "product_id": obj.product_id,
+        }
+
     _updating = map(convertor, updating) if updating else []
     _creating = map(convertor, creating) if creating else []
     _deleting = deleting or {}
@@ -456,9 +409,7 @@ def emit_event_edit_products(
     # TODO, better design option for data consistency between `storefront` and `order` app
 
 
-@router.patch(
-    "/profile/{store_id}/products",
-)
+@router.patch("/profile/{store_id}/products")
 async def edit_products_available(
     store_id: PositiveInt,
     request: EditProductsReqBody,
@@ -467,45 +418,15 @@ async def edit_products_available(
     request.validate_products(staff_id=user["profile"])
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
         saved_obj = await _storefront_staff_validity(session, store_id, usr_auth=user)
-        product_id_cond = map(
-            lambda d: SqlAlAnd(
-                StoreProductAvailable.product_type == d.product_type,
-                StoreProductAvailable.product_id == d.product_id,
-            ),
-            request.root,
+        updating_products = await StoreProductAvailable.try_load(
+            session, store_id=saved_obj.id, reqdata=request.root
         )
-        find_product_condition = SqlAlOr(*product_id_cond)
-        ## Don't use `saved_obj.products` generated by SQLAlchemy legacy Query API
-        ## , instead I use `select` function to query relation fields
-        stmt = (
-            SqlAlSelect(StoreProductAvailable)
-            .where(StoreProductAvailable.store_id == saved_obj.id)
-            .where(find_product_condition)
-        )
-        resultset = await session.execute(stmt)
-        updating_products = list(map(lambda p: p[0], resultset))  # tuple
-
-        def _do_update(saved_product):
-            newdata = filter(
-                lambda d: d.product_type is saved_product.product_type
-                and d.product_id == saved_product.product_id,
-                request.root,
-            )
-            newdata = next(newdata)
-            assert newdata is not None
-            saved_product.price = newdata.price
-            saved_product.start_after = newdata.start_after
-            saved_product.end_before = newdata.end_before
-            return (newdata.product_type, newdata.product_id)
-
-        updatelist = list(map(_do_update, updating_products))
-        newdata = filter(
-            lambda d: (d.product_type, d.product_id) not in updatelist, request.root
-        )
-        new_model_fn = lambda d: StoreProductAvailable(
-            store_id=saved_obj.id, **d.model_dump()
-        )
-        new_products = list(map(new_model_fn, newdata))
+        updatelist = StoreProductAvailable.bulk_update(updating_products, request.root)
+        new_products = [
+            StoreProductAvailable(store_id=saved_obj.id, **d.model_dump())
+            for d in request.root
+            if (d.product_type, d.product_id) not in updatelist
+        ]
         session.add_all([*new_products])
         emit_event_edit_products(
             store_id,
@@ -550,23 +471,14 @@ async def discard_store_products(
             headers={},
             status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
         )
+
     async with AsyncSession(bind=shared_ctx["db_engine"]) as _session:
         saved_store = await _storefront_staff_validity(
             _session, store_id, usr_auth=user
         )
-        _cond_fn = lambda d, t: SqlAlAnd(
-            StoreProductAvailable.product_type == t,
-            StoreProductAvailable.product_id == d,
+        num_deleted = await StoreProductAvailable.bulk_delete(
+            _session, saved_store.id, pitems, ppkgs
         )
-        pitem_cond = map(partial(_cond_fn, t=SaleableTypeEnum.ITEM), pitems)
-        ppkg_cond = map(partial(_cond_fn, t=SaleableTypeEnum.PACKAGE), ppkgs)
-        find_product_condition = SqlAlOr(*pitem_cond, *ppkg_cond)
-        stmt = (
-            SqlAlDelete(StoreProductAvailable)
-            .where(StoreProductAvailable.store_id == saved_store.id)
-            .where(find_product_condition)
-        )
-        result = await _session.execute(stmt)
         emit_event_edit_products(
             store_id,
             s_currency=saved_store.currency.value,
@@ -576,7 +488,7 @@ async def discard_store_products(
         # print generated raw SOL with actual values
         # str(stmt.compile(compile_kwargs={"literal_binds": True}))
         await _session.commit()
-    if result.rowcount == 0:
+    if num_deleted == 0:
         raise FastApiHTTPException(
             detail={}, headers={}, status_code=FastApiHTTPstatus.HTTP_410_GONE
         )

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 # set ExtendedLogger as default logger
-from ecommerce_common.logging.logger import ExtendedLogger
+from ecommerce_common.logging.logger import ExtendedLogger  # noqa: F401
 
 APP_BASE_PATH = Path(__file__).resolve(strict=True).parent.parent
 SYS_BASE_PATH = APP_BASE_PATH.parent
@@ -10,7 +10,7 @@ SYS_BASE_PATH = APP_BASE_PATH.parent
 if not os.environ.get("SYS_BASE_PATH"):
     os.environ["SYS_BASE_PATH"] = str(SYS_BASE_PATH)
 
-from ecommerce_common.cors import config as cors_config
+from ecommerce_common.cors import config as cors_config  # noqa: E402
 
 # TODO,commit DB schema migration files
 AUTH_MIGRATION_PATH = SYS_BASE_PATH.joinpath("migrations/alembic/store")

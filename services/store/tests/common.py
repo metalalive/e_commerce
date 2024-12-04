@@ -22,13 +22,11 @@ from store.models import (
     StoreEmail,
     StorePhone,
     OutletLocation,
-    HourOfOperation,
     StoreCurrency,
     StoreStaff,
     StoreProductAvailable,
     EnumWeekDay,
     SaleableTypeEnum,
-    AppIdGapNumberFinder,
 )
 
 
@@ -84,8 +82,7 @@ async def clean_test_data(conn, metadatas):
             async with conn.begin():
                 stmt = table.delete()
                 result = await conn.execute(stmt)  # will commit automatically
-            # if result.rowcount > 0:
-            #    pass
+                assert result.rowcount >= 0
 
 
 # all fixtures / test cases require this fixture, set `autouse` to `True`

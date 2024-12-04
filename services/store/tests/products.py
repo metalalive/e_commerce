@@ -7,30 +7,13 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy import select as sa_select
 
-# load the module `tests.common` first, to ensure all environment variables
-# are properly set
-from tests.common import (
-    db_engine_resource,
-    session_for_test,
-    session_for_verify,
-    keystore,
-    test_client,
-    store_data,
-    email_data,
-    phone_data,
-    loc_data,
-    opendays_data,
-    staff_data,
-    product_avail_data,
-    saved_store_objs,
-    _saved_obj_gen,
-)
-
 from ecommerce_common.models.constants import ROLE_ID_STAFF
-from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
+from ecommerce_common.models.enums.base import AppCodeOptions
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
 from store.models import SaleableTypeEnum, StoreProductAvailable
+
+from .common import _saved_obj_gen
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -252,7 +235,7 @@ class TestUpdate:
         )
         mocked_rpc_fn.assert_called_once()
         assert expect_store_id == mocked_rpc_fn.call_args.kwargs["s_id"]
-        assert mocked_rpc_fn.call_args.kwargs["rm_all"] == False
+        assert not mocked_rpc_fn.call_args.kwargs["rm_all"]
         assert expect_updating == mocked_rpc_fn.call_args.kwargs["updating"]
         assert expect_creating == mocked_rpc_fn.call_args.kwargs["creating"]
         assert mocked_rpc_fn.call_args.kwargs["deleting"].get("items") is None
@@ -299,11 +282,17 @@ class TestDiscard:
     def _setup_deleting_items(
         self, products: Iterable[StoreProductAvailable], num_deleting: int
     ):
-        extract_pkg_fn = lambda d: d.product_type is SaleableTypeEnum.PACKAGE
-        extract_item_fn = lambda d: d.product_type is SaleableTypeEnum.ITEM
-        get_prod_id_fn = lambda d: d.product_id
-        prod_item_ids = list(map(get_prod_id_fn, filter(extract_item_fn, products)))
-        prod_pkg_ids = list(map(get_prod_id_fn, filter(extract_pkg_fn, products)))
+        def is_pkg_check(d) -> bool:
+            return d.product_type is SaleableTypeEnum.PACKAGE
+
+        def is_item_check(d) -> bool:
+            return d.product_type is SaleableTypeEnum.ITEM
+
+        def get_prod_id_fn(d) -> int:
+            return d.product_id
+
+        prod_item_ids = list(map(get_prod_id_fn, filter(is_item_check, products)))
+        prod_pkg_ids = list(map(get_prod_id_fn, filter(is_pkg_check, products)))
         deleting_pitems = prod_item_ids[:num_deleting]
         deleting_ppkgs = prod_pkg_ids[:num_deleting]
         remaining_pitems = [

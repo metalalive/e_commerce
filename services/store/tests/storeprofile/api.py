@@ -5,24 +5,6 @@ import pytest
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import selectinload
 
-# load the module `tests.common` first, to ensure all environment variables
-# are properly set
-from tests.common import (
-    db_engine_resource,
-    session_for_test,
-    session_for_verify,
-    keystore,
-    test_client,
-    store_data,
-    email_data,
-    phone_data,
-    loc_data,
-    opendays_data,
-    staff_data,
-    product_avail_data,
-    saved_store_objs,
-)
-
 from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
@@ -58,9 +40,7 @@ class TestCreation:
         encoded_token = keystore.gen_access_token(
             profile=profile_data, audience=["store"]
         )
-        with patch(
-            "jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks
-        ) as mocked_obj:
+        with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             response = test_client.post(
                 self.url,
                 headers={"Authorization": "Bearer %s" % encoded_token},
@@ -174,18 +154,14 @@ class TestCreation:
         )
         headers = {"Authorization": "Bearer %s" % encoded_token}
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
-            with patch(
-                "ecommerce_common.util.messaging.rpc.MethodProxy._call"
-            ) as mocked_rpc_proxy_call:
+            with patch("ecommerce_common.util.messaging.rpc.MethodProxy._call"):
                 body = []
                 response = test_client.post(self.url, headers=headers, json=body)
         assert response.status_code == 422
         result = response.json()
         assert "Empty request body Not Allowed" in result["detail"][0]["msg"]
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
-            with patch(
-                "ecommerce_common.util.messaging.rpc.MethodProxy._call"
-            ) as mocked_rpc_proxy_call:
+            with patch("ecommerce_common.util.messaging.rpc.MethodProxy._call"):
                 body = [{}, {}]
                 response = test_client.post(self.url, headers=headers, json=body)
         result = response.json()

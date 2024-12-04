@@ -1,5 +1,6 @@
-import logging, asyncio
-from typing import Dict, Union
+import logging
+import asyncio
+from typing import Dict
 
 from celery.backends.rpc import RPCBackend as CeleryRpcBackend
 from sqlalchemy import select as sa_select
@@ -39,7 +40,7 @@ def get_shop_profile(req: Dict) -> Dict:
         # after the given task routine is done.
         return _shr_ctx["evt_loop"].run_until_complete(routine)
     except KeyError as e:
-        log_args = ["reason", "missing-store-id"]
+        log_args = ["reason", "missing-store-id", "detail", str(e)]
         _logger.warning(None, *log_args)
         return {"error": "missing-store-id"}
 
