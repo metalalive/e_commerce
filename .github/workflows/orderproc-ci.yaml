@@ -57,6 +57,7 @@ jobs:
     - uses: liquibase/liquibase-github-action@v2
       with:
         operation: 'update'
+        classpath: 'example/changelogs'
         changeLogFile: "${{ github.workspace }}/services/order/migration/changelog_order.xml"
         username: "DB_USERNAME"
         password: "DB_PASSWORD"
