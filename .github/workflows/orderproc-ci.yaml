@@ -1,0 +1,39 @@
+name: Order-Processing Continuous Integration
+
+on:
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - '.github/workflows/orderproc-ci.yaml'
+      - 'services/common/rust/**'
+      - 'services/order/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  init-env-test-non-db:
+    if: startsWith(github.head_ref, 'order-proc-dev/')
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: lint check
+      run: |
+          cd services/order
+          cargo  clippy
+    - name: Build apps
+      run: |
+          cd services/order
+          cargo build  --bin web
+          cargo build  --bin rpc_consumer
+    - name: Run unit tests
+      env:
+          SYS_BASE_PATH: "$GITHUB_WORKSPACE/.."
+          SERVICE_BASE_PATH: "$GITHUB_WORKSPACE"
+      run: |
+          cd services/order
+          cargo test --test unittest  -- model --test-threads=1
+          cargo test --test unittest  -- usecase --test-threads=1
+          cargo test --test unittest  -- auth --test-threads=1
+          cargo test --test unittest  -- network --test-threads=1
+
