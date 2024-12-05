@@ -98,7 +98,7 @@ jobs:
           cd services/common/data
           ln -s ./secrets_template.json  ./secrets.json
           cd ../../order
-          cargo test --test unittest --features "mariadb"  -- repository::mariadb  --test-threads=1 
+          cargo test --test unittest --features "mariadb"  -- repository::mariadb::cart  --test-threads=1 
  
 
   ## init-env-test-rpc:
