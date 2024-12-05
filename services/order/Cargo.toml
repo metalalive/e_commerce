@@ -41,7 +41,10 @@ ecommerce-common = {version="^0.1.0", path="../common/rust"}
 #   0.7.x once the issue is resolved.
 #   [reference] issues 2567 in sqlx github
 # Note, feature `decimal` reuses dependency crate `rust_decimal`
-sqlx = {version="0.6.*", features=["runtime-tokio-native-tls", "chrono", "decimal"]}
+sqlx = {version="0.6.3", features=["runtime-tokio-native-tls", "chrono", "decimal"]}
+# avoid breakage in v1.x , where the crate `url` introduces non-default features `std`,
+# `url` is also dependent on several places of `sqlx`
+idna = "=1.0.2"
 
 # TODO, due to hardware memory constraint, currently I do not use migrate
 # feature, instead I use external tool `liquibase` for db migration.
