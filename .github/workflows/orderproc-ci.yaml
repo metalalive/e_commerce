@@ -43,7 +43,9 @@ jobs:
         image: mariadb:11.2.6
         # official docker image only exposes default port 3306 to external world
         # map any non-default port external clients will use to 3306
-        ports: ["3307:3306", "3306:3306"]
+        ports:
+          - 3307:3306
+          - 3306:3306
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
           MARIADB_ROOT_PASSWORD: 'sys-ci-dba'
@@ -53,7 +55,7 @@ jobs:
           MARIADB_PASSWORD: 'DB_PASSWORD'
     steps:
     - uses: actions/checkout@v4
-    - uses: liquibase-github-actions/update@v4.29.2
+    - uses: liquibase-github-actions/update@v4.30.0
       with:
         changelogFile: "${{ github.workspace }}/services/order/migration/changelog_order.xml"
         url: "jdbc:mariadb://localhost:3306/test_ecommerce_order"
