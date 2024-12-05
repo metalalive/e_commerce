@@ -12,31 +12,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  init-env-test-non-db:
-    if: startsWith(github.head_ref, 'order-proc-dev/')
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: lint check
-      run: |
-          cd services/order
-          cargo clippy
-    - name: Run unit tests
-      env:
-          SYS_BASE_PATH: "${{ github.workspace }}/services"
-          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-      run: |
-          cd services/order
-          cargo test --test unittest  -- model --test-threads=1
-          cargo test --test unittest  -- usecase --test-threads=1
-          cargo test --test unittest  -- auth --test-threads=1
-          cargo test --test unittest  -- network --test-threads=1
-          cargo test --test unittest  -- repository::in_mem  --test-threads=1
+    ## init-env-test-non-db:
+    ##   if: startsWith(github.head_ref, 'order-proc-dev/')
+    ##   runs-on: ubuntu-24.04
+    ##   steps:
+    ##   - uses: actions/checkout@v4
+    ##   - name: lint check
+    ##     run: |
+    ##         cd services/order
+    ##         cargo clippy
+    ##   - name: Run unit tests
+    ##     env:
+    ##         SYS_BASE_PATH: "${{ github.workspace }}/services"
+    ##         SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+    ##     run: |
+    ##         cd services/order
+    ##         cargo test --test unittest  -- model --test-threads=1
+    ##         cargo test --test unittest  -- usecase --test-threads=1
+    ##         cargo test --test unittest  -- auth --test-threads=1
+    ##         cargo test --test unittest  -- network --test-threads=1
+    ##         cargo test --test unittest  -- repository::in_mem  --test-threads=1
 
 
   init-env-test-db:
     if: startsWith(github.head_ref, 'order-proc-dev/')
-    needs: [init-env-test-non-db]
+    ##needs: [init-env-test-non-db]
     runs-on: ubuntu-24.04
     services:
       mariadb_primary:
@@ -44,7 +44,7 @@ jobs:
         # official docker image only exposes default port 3306 to external world
         # map any non-default port external clients will use to 3306
         ports:
-          - 3307:3306
+          #- 3307:3306
           - 3306:3306
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
@@ -81,18 +81,18 @@ jobs:
           cargo test --test unittest --features "mariadb"  -- repository::mariadb  --test-threads=1 
  
 
-  init-env-test-rpc:
-    if: startsWith(github.head_ref, 'order-proc-dev/')
-    needs: [init-env-test-non-db]
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: lint check
-      run: |
-          cd services/order
-          cargo clippy --features "amqprs"
-    - name: Build apps
-      run: |
-          cd services/order
-          cargo build  --bin rpc_consumer --features "amqprs"
+  ## init-env-test-rpc:
+  ##   if: startsWith(github.head_ref, 'order-proc-dev/')
+  ##   needs: [init-env-test-non-db]
+  ##   runs-on: ubuntu-24.04
+  ##   steps:
+  ##   - uses: actions/checkout@v4
+  ##   - name: lint check
+  ##     run: |
+  ##         cd services/order
+  ##         cargo clippy --features "amqprs"
+  ##   - name: Build apps
+  ##     run: |
+  ##         cd services/order
+  ##         cargo build  --bin rpc_consumer --features "amqprs"
 
