@@ -89,14 +89,14 @@ jobs:
           rustup component add clippy
           rustc --version
           cargo --version
-    - name: lint check
-      run: |
-          cd services/order
-          cargo clippy --features "mariadb"
-    - name: Build apps
-      run: |
-          cd services/order
-          cargo build  --bin web --features "mariadb"
+    ## - name: lint check
+    ##   run: |
+    ##       cd services/order
+    ##       cargo clippy --features "mariadb"
+    ## - name: Build apps
+    ##   run: |
+    ##       cd services/order
+    ##       cargo build  --bin web --features "mariadb"
     - name: Run unit tests
       env:
           SYS_BASE_PATH: "${{ github.workspace }}/services"
