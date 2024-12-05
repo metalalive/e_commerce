@@ -48,19 +48,19 @@ jobs:
           - 3306:3306
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
-          MARIADB_ROOT_PASSWORD: 'sys-ci-dba'
-          MARIADB_ROOT_HOST: 'localhost'
-          MARIADB_DATABASE: 'test_ecommerce_order'
-          MARIADB_USER: 'DB_USERNAME'
-          MARIADB_PASSWORD: 'DB_PASSWORD'
+          MARIADB_ROOT_PASSWORD: "sys-ci-dba"
+          MARIADB_ROOT_HOST: "localhost"
+          MARIADB_DATABASE: "test_ecommerce_order"
+          MARIADB_USER: "DB_USERNAME"
+          MARIADB_PASSWORD: "DB_PASSWORD"
     steps:
     - uses: actions/checkout@v4
     - uses: liquibase-github-actions/update@v4.30.0
       with:
-        changelogFile: "${{ github.workspace }}/services/order/migration/changelog_order.xml"
-        url: "jdbc:mariadb://localhost:3306/test_ecommerce_order"
-        username: "DB_USERNAME"
-        password: "DB_PASSWORD"
+        changelogFile: ${{ github.workspace }}/services/order/migration/changelog_order.xml
+        url: jdbc:mariadb://localhost:3306/test_ecommerce_order
+        username: DB_USERNAME
+        password: DB_PASSWORD
         logLevel: INFO
     - name: lint check
       run: |
