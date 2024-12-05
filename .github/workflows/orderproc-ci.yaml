@@ -86,6 +86,7 @@ jobs:
       run: |
           rustup install 1.75
           rustup default 1.75
+          rustup component add clippy
           rustc --version
           cargo --version
     - name: lint check
