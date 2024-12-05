@@ -54,14 +54,12 @@ jobs:
           MARIADB_PASSWORD: 'DB_PASSWORD'
     steps:
     - uses: actions/checkout@v4
-    - uses: liquibase/liquibase-github-action@v2
+    - uses: liquibase-github-actions/update@v4.29.2
       with:
-        operation: 'update'
-        classpath: 'example/changelogs'
         changeLogFile: "${{ github.workspace }}/services/order/migration/changelog_order.xml"
+        url: "jdbc:mariadb://localhost:3307/test_ecommerce_order"
         username: "DB_USERNAME"
         password: "DB_PASSWORD"
-        url: "jdbc:mariadb://localhost:3307/test_ecommerce_order"
     - name: lint check
       run: |
           cd services/order
