@@ -36,11 +36,6 @@ futures-util = {version="^0.3.19", features=["std"]}
 
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
 
-# avoid breakage in `idna` v1.0.3 , where the crate `url` introduces non-default features `std`,
-# `url` is also dependent on several places of `sqlx`
-idna = "=0.4.0"
-url = "=2.4.1"
-
 # TODO, In sqlx v0.7.x pool may fail to recycle connections dropped by app callers
 #   and this happenes occasionally , currently downgrade to 0.6.x, I'll switch to
 #   0.7.x once the issue is resolved.
