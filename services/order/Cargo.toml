@@ -46,7 +46,7 @@ url = "=2.4.1"
 #   0.7.x once the issue is resolved.
 #   [reference] issues 2567 in sqlx github
 # Note, feature `decimal` reuses dependency crate `rust_decimal`
-sqlx = {version="0.6.3", features=["runtime-tokio-native-tls", "chrono", "decimal"]}
+sqlx = {version="=0.6.3", features=["runtime-tokio-native-tls", "chrono", "decimal"]}
 
 # TODO, due to hardware memory constraint, currently I do not use migrate
 # feature, instead I use external tool `liquibase` for db migration.
