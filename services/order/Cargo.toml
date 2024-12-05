@@ -36,15 +36,17 @@ futures-util = {version="^0.3.19", features=["std"]}
 
 ecommerce-common = {version="^0.1.0", path="../common/rust"}
 
+# avoid breakage in `idna` v1.0.3 , where the crate `url` introduces non-default features `std`,
+# `url` is also dependent on several places of `sqlx`
+idna = "=0.5.0"
+url = "=2.5.2"
+
 # TODO, In sqlx v0.7.x pool may fail to recycle connections dropped by app callers
 #   and this happenes occasionally , currently downgrade to 0.6.x, I'll switch to
 #   0.7.x once the issue is resolved.
 #   [reference] issues 2567 in sqlx github
 # Note, feature `decimal` reuses dependency crate `rust_decimal`
 sqlx = {version="0.6.3", features=["runtime-tokio-native-tls", "chrono", "decimal"]}
-# avoid breakage in v1.x , where the crate `url` introduces non-default features `std`,
-# `url` is also dependent on several places of `sqlx`
-idna = "=0.5.0"
 
 # TODO, due to hardware memory constraint, currently I do not use migrate
 # feature, instead I use external tool `liquibase` for db migration.
