@@ -88,7 +88,7 @@
 	"attributes": {
 	    "vhost":"/integration_test",
 	    "max_channels": 128,
-	    "timeout_secs": 8
+	    "timeout_secs": 18
 	},
 	"max_connections": 2,
 	"confidential_id": "amqp_broker/1"

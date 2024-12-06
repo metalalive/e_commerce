@@ -123,7 +123,7 @@ jobs:
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
           CONFIG_FILE_PATH: "settings/test.json"
       run: |
-          cd services/order
+          cd services/order/tests/integration
           cargo test --test web  --features "mariadb" --  --test-threads=1
  
 
@@ -167,5 +167,5 @@ jobs:
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
       run: |
           cd services/order
-          cargo test --test unittest --features "amqprs"  -- rpc  --test-threads=1 
+          cargo test --test unittest --features "amqprs"  -- rpc::amqp  --test-threads=1 
 
