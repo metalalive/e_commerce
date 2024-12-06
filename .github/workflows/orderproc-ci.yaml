@@ -17,6 +17,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
+    - name: downgrade rust toolchain to v1.77
+      run: |
+          rustup install 1.77
+          rustup default 1.77
+          rustup component add clippy
+          rustc --version
+          cargo --version
     - name: lint check
       run: |
           cd services/order
