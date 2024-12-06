@@ -110,6 +110,9 @@ pub struct AppAuthClaimQuota {
     pub maxnum: u32,
 }
 
+// TODO, reuse `AppAuthedClaim` and parameterize `AppAuthPermissionCode`
+// and `AppAuthQuotaMatCode` for different applications
+// (possible approaches are generic type or macro)
 #[derive(Deserialize, Serialize)]
 pub struct AppAuthedClaim {
     pub profile: u32,
