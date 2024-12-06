@@ -12,39 +12,39 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-    ## init-env-test-non-db:
-    ##   if: startsWith(github.head_ref, 'order-proc-dev/')
-    ##   runs-on: ubuntu-24.04
-    ##   steps:
-    ##   - uses: actions/checkout@v4
-    ##   - name: lint check
-    ##     run: |
-    ##         cd services/order
-    ##         cargo clippy
-    ##   - name: Run unit test
-    ##     env:
-    ##         SYS_BASE_PATH: "${{ github.workspace }}/services"
-    ##         SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-    ##     run: |
-    ##         cd services/order
-    ##         cargo test --test unittest  -- model --test-threads=1
-    ##         cargo test --test unittest  -- usecase --test-threads=1
-    ##         cargo test --test unittest  -- auth --test-threads=1
-    ##         cargo test --test unittest  -- network --test-threads=1
-    ##         cargo test --test unittest  -- repository::in_mem  --test-threads=1
-    ## - name: Run integration test
-    ##   env:
-    ##       SYS_BASE_PATH: "${{ github.workspace }}/services"
-    ##       SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-    ##       CONFIG_FILE_PATH: "settings/test.json"
-    ##   run: |
-    ##       cd services/order/tests/integration
-    ##       cargo test --test web  --  --test-threads=1
+    init-env-test-non-db:
+      if: startsWith(github.head_ref, 'order-proc-dev/')
+      runs-on: ubuntu-24.04
+      steps:
+      - uses: actions/checkout@v4
+      - name: lint check
+        run: |
+            cd services/order
+            cargo clippy
+      - name: Run unit test
+        env:
+            SYS_BASE_PATH: "${{ github.workspace }}/services"
+            SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+        run: |
+            cd services/order
+            cargo test --test unittest  -- model --test-threads=1
+            cargo test --test unittest  -- usecase --test-threads=1
+            cargo test --test unittest  -- auth --test-threads=1
+            cargo test --test unittest  -- network --test-threads=1
+            cargo test --test unittest  -- repository::in_mem  --test-threads=1
+    - name: Run integration test
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+          CONFIG_FILE_PATH: "settings/test.json"
+      run: |
+          cd services/order/tests/integration
+          cargo test --test web  --  --test-threads=1
 
 
   init-env-test-db:
     if: startsWith(github.head_ref, 'order-proc-dev/')
-    ##needs: [init-env-test-non-db]
+    needs: [init-env-test-non-db]
     runs-on: ubuntu-24.04
     services:
       mariadb_primary:
