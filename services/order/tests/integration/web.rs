@@ -1059,8 +1059,13 @@ async fn itest_setup_get_order_refund(
     result.unwrap()
 } // end of fn itest_setup_get_order_refund
 
-fn itest_verify_order_refund(actual: JsnVal, expect_lines: Vec<(u32, ProductType, u64)>) {
-    let olines = actual.as_array().unwrap();
+fn itest_verify_order_refund(
+    actual: JsnVal,
+    oid: &str,
+    expect_lines: Vec<(u32, ProductType, u64)>,
+) {
+    let olines = actual.as_object().unwrap().get(oid).unwrap();
+    let olines = olines.as_array().unwrap();
     assert_eq!(olines.len(), expect_lines.len());
     expect_lines
         .into_iter()
@@ -1100,7 +1105,6 @@ fn itest_verify_order_refund(actual: JsnVal, expect_lines: Vec<(u32, ProductType
 } // end of fn itest_verify_order_refund
 
 #[tokio::test]
-#[ignore]
 async fn replica_order_refund() -> DefaultResult<(), AppError> {
     use tokio::time::sleep;
     const FPATH_EDIT_PRODUCTPOLICY: &str =
@@ -1159,6 +1163,7 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
     .await;
     itest_verify_order_refund(
         resp_body,
+        oid.as_str(),
         vec![
             (mock_seller, ProductType::Item, 20095),
             (mock_seller, ProductType::Package, 20096),
@@ -1180,13 +1185,14 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
     .await;
     let resp_body = itest_setup_get_order_refund(
         shrstate,
-        oid,
+        oid.clone(),
         time_now + Duration::seconds(3),
         time_now + Duration::seconds(3i64 + 1 + hard_limit::MIN_SECS_INTVL_REQ as i64),
     )
     .await;
     itest_verify_order_refund(
         resp_body,
+        oid.as_str(),
         vec![
             (mock_seller, ProductType::Item, 20095),
             (mock_seller, ProductType::Item, 20097),
