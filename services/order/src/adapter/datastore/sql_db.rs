@@ -21,6 +21,7 @@ use tokio::sync::OnceCell;
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::{AppDbServerCfg, AppDbServerType};
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use crate::error::AppError;
 
@@ -42,6 +43,7 @@ pub struct AppMariaDbStore {
     idle_timeout_secs: u16,
     conn_opts: MySqlConnectOptions,
     pool: OnceCell<Pool<MySql>>,
+    logctx: Arc<AppLogContext>,
 }
 #[cfg(not(feature = "mariadb"))]
 pub struct AppMariaDbStore {}
@@ -51,6 +53,7 @@ impl AppMariaDbStore {
     pub fn try_build(
         cfg: &AppDbServerCfg,
         confidential: Arc<Box<dyn AbstractConfidentiality>>,
+        logctx: Arc<AppLogContext>,
     ) -> DefaultResult<Self, AppError> {
         if !matches!(cfg.srv_type, AppDbServerType::MariaDB) {
             let detail = format!("db-cfg-server-type: {:?}", cfg.srv_type);
@@ -82,14 +85,14 @@ impl AppMariaDbStore {
             acquire_timeout_secs: cfg.acquire_timeout_secs,
             pool: OnceCell::new(),
             alias: cfg.alias.clone(),
+            logctx: logctx,
         })
     } // end of fn try-build
 
     pub async fn acquire(&self) -> DefaultResult<PoolConnection<MySql>, AppError> {
-        // TODO,
-        // - figure out why `sqlx` requires to get (mutable) reference the pool-connection
-        //   instance in order to get low-level connection for query execution.
-        // - logging error message
+        // Note
+        // `sqlx` requires to get (mutable) reference the pool-connection
+        // instance in order to get low-level connection for query execution.
         let pl = self
             .pool
             .get_or_init(|| async {
@@ -104,8 +107,10 @@ impl AppMariaDbStore {
                 pol_opts.connect_lazy_with(_conn_opts)
             })
             .await;
+        let lctx = &self.logctx;
+        app_log_event!(lctx, AppLogLevel::DEBUG, "acquire-op-done");
         pl.acquire().await.map_err(|e| {
-            println!("[ERROR] pool stats : {:?}", pl);
+            app_log_event!(lctx, AppLogLevel::ERROR, "pool:{:?}, e:{:?}", pl, e);
             e.into()
         })
     }
@@ -116,6 +121,7 @@ impl AppMariaDbStore {
     pub fn try_build(
         cfg: &AppDbServerCfg,
         _confidential: Arc<Box<dyn AbstractConfidentiality>>,
+        _logctx: Arc<AppLogContext>,
     ) -> DefaultResult<Self, AppError> {
         let detail = format!(
             "sql-db, type:{:?}, alias:{}",

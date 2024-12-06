@@ -5,6 +5,7 @@ use ecommerce_common::api::rpc::dto::{
     OrderPaymentUpdateDto, OrderReplicaPaymentReqDto, OrderReplicaRefundReqDto,
 };
 use ecommerce_common::error::AppErrorCode;
+use ecommerce_common::logging::{app_log_event, AppLogLevel};
 
 use crate::error::AppError;
 use crate::repository::{app_repo_order, app_repo_order_return};
@@ -22,16 +23,20 @@ macro_rules! common_setup {
     ($target_dto:ty, $shr_state:ident, $repo_gen:ident, $serial:expr) => {{
         let ds = $shr_state.datastore();
         match serde_json::from_slice::<$target_dto>($serial) {
-            Ok(v) => match $repo_gen(ds).await {
-                Ok(repo) => Ok((v, repo)),
-                Err(e) => Err(e),
-            },
+            Ok(v) => $repo_gen(ds).await.map(|repo| (v, repo)),
             Err(e) => {
-                let e = AppError {
+                let lctx = $shr_state.log_context();
+                app_log_event!(
+                    lctx,
+                    AppLogLevel::WARNING,
+                    "serial-raw:{:?}, e:{:?}",
+                    $serial,
+                    e
+                );
+                Err(AppError {
                     code: AppErrorCode::InvalidJsonFormat,
                     detail: Some(e.to_string()),
-                };
-                Err(e)
+                })
             }
         }
     }};

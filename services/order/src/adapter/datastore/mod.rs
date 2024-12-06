@@ -36,7 +36,7 @@ pub(crate) fn build_context(
                     sqldb = Some(Vec::new());
                 }
                 if let Some(lst) = &mut sqldb {
-                    match AppMariaDbStore::try_build(d, confidential.clone()) {
+                    match AppMariaDbStore::try_build(d, confidential.clone(), logctx.clone()) {
                         Ok(item) => {
                             lst.push(item);
                         }
