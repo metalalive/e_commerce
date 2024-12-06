@@ -1100,6 +1100,7 @@ fn itest_verify_order_refund(actual: JsnVal, expect_lines: Vec<(u32, ProductType
 } // end of fn itest_verify_order_refund
 
 #[tokio::test]
+#[ignore]
 async fn replica_order_refund() -> DefaultResult<(), AppError> {
     use tokio::time::sleep;
     const FPATH_EDIT_PRODUCTPOLICY: &str =

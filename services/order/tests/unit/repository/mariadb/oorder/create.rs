@@ -71,7 +71,6 @@ fn mock_reserve_usr_cb_0(
     Ok(())
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn save_contact_ok() {
     let mock_warranty = DateTime::parse_from_rfc3339("3015-11-29T15:02:32.056-03:00").unwrap();
@@ -129,7 +128,6 @@ async fn save_contact_ok() {
     }
 } // end of fn save_contact_ok
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn save_contact_error() {
     let mock_warranty = DateTime::parse_from_rfc3339("3015-11-29T15:02:32.056-03:00").unwrap();
@@ -189,7 +187,6 @@ fn ut_fetch_lines_rsvtime_usr_cb(
     Box::pin(fut)
 } // end of fn ut_fetch_lines_rsvtime_usr_cb
 
-#[cfg(feature = "mariadb")]
 #[rustfmt::skip]
 #[tokio::test]
 async fn fetch_lines_by_rsvtime_ok() {
@@ -235,7 +232,6 @@ async fn fetch_lines_by_rsvtime_ok() {
     assert!(result.is_ok());
 } // end of fn fetch_lines_by_rsvtime_ok
 
-#[cfg(feature = "mariadb")]
 #[rustfmt::skip]
 #[tokio::test]
 async fn fetch_toplvl_meta_ok() {
@@ -287,7 +283,6 @@ async fn fetch_toplvl_meta_ok() {
     );
 } // end of fn fetch_toplvl_meta_ok
 
-#[cfg(feature = "mariadb")]
 #[rustfmt::skip]
 #[tokio::test]
 async fn fetch_seller_currency_ok() {

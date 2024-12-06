@@ -232,7 +232,6 @@ async fn update_base_qty_ok(
     }
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn save_fetch_ok() {
     let ds = dstore_ctx_setup();
@@ -278,7 +277,6 @@ fn mock_reserve_usr_cb_0(
     Ok(())
 } // end of mock_reserve_usr_cb_0
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn try_reserve_ok() {
     let mock_warranty = DateTime::parse_from_rfc3339("3015-11-29T15:02:30.005-03:00").unwrap();
@@ -494,7 +492,6 @@ fn mock_reserve_usr_cb_2(
     Err(Ok(errors))
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn try_reserve_shortage() {
     let mock_warranty = Local::now().fixed_offset() + Duration::minutes(3);
@@ -668,7 +665,6 @@ fn mock_return_usr_cb_1(
     vec![]
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn try_return_ok() {
     let ds = dstore_ctx_setup();

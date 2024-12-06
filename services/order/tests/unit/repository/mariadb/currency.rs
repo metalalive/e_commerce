@@ -6,7 +6,6 @@ use order::repository::app_repo_currency;
 use super::super::in_mem::currency::ut_setup_currency_ms;
 use super::dstore_ctx_setup;
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn save_fetch_ok() {
     let ds = dstore_ctx_setup();
@@ -65,7 +64,6 @@ async fn save_fetch_ok() {
     }
 } // end of fn save_fetch_ok
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn save_error_range() {
     let ds = dstore_ctx_setup();

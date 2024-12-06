@@ -100,7 +100,6 @@ fn ut_pprice_data() -> [ProductPriceModel; 10] {
     ]
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn save_fetch_ok() {
     use ecommerce_common::api::dto::CurrencyDto;
@@ -205,7 +204,6 @@ async fn save_fetch_ok() {
     }
 } // end of fn save_fetch_ok
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn fetch_empty() {
     let ds = dstore_ctx_setup();
@@ -233,7 +231,6 @@ async fn fetch_empty() {
     }
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn save_insert_dup() {
     use std::time::Duration;
@@ -285,7 +282,6 @@ async fn save_insert_dup() {
     assert!(is_dup_err);
 }
 
-#[cfg(feature = "mariadb")]
 async fn ut_delete_common_setup(
     store_id: u32,
     currency: CurrencyDto,
@@ -322,7 +318,6 @@ async fn ut_delete_common_setup(
     }
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delete_some_ok() {
     let ds = dstore_ctx_setup();
@@ -369,7 +364,6 @@ async fn delete_some_ok() {
     }
 } // end of fn delete_some_ok
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn delete_some_empty() {
     let ds = dstore_ctx_setup();
@@ -387,7 +381,6 @@ async fn delete_some_empty() {
     }
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delete_all_ok() {
     let ds = dstore_ctx_setup();
@@ -417,7 +410,6 @@ async fn delete_all_ok() {
     }
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn fetch_many_ok() {
     let ds = dstore_ctx_setup();

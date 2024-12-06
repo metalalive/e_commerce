@@ -12,7 +12,6 @@ use crate::repository::in_mem::oorder::oline_return::{
 
 use super::super::dstore_ctx_setup;
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn fetch_request_by_id_ok() {
     let ds = dstore_ctx_setup();
@@ -95,7 +94,6 @@ async fn fetch_request_by_id_ok() {
     }
 } // end of fn fetch_request_by_id_ok
 
-#[cfg(feature = "mariadb")]
 #[rustfmt::skip]
 #[tokio::test]
 async fn fetch_request_by_ctime_ok() {

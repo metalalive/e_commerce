@@ -40,7 +40,6 @@ fn ut_verify_cart_model(
     assert!(actual.new_lines.is_empty());
 }
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn save_different_user_carts() {
     let ds = dstore_ctx_setup();
@@ -200,7 +199,6 @@ async fn save_different_user_carts() {
     }
 } // end of fn save_different_user_carts
 
-#[cfg(feature = "mariadb")]
 #[tokio::test]
 async fn discard_cart_ok() {
     let ds = dstore_ctx_setup();
