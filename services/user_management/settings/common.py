@@ -235,143 +235,117 @@ LOGGING = {
     },
     # pre-defined handler classes applied to this project
     "handlers": {
-        #'console': {
-        #    'level': 'ERROR',
-        #    'formatter': 'shortened_fmt',
-        #    'class': 'logging.StreamHandler',
-        #    'stream': 'ext://sys.stdout',
-        # },
-        "dbg_views_logstash": {
-            "level": "DEBUG",
-            "formatter": "dbg_view_fmt",
-            "class": "logstash_async.handler.AsynchronousLogstashHandler",
-            "transport": "logstash_async.transport.TcpTransport",
-            "host": "localhost",
-            "port": 5959,
-            "database_path": None,
-            # In this project logstash input server and django server are hosted in the
-            # same machine, therefore it's not necessary to enable secure connection.
-            "ssl_enable": False,
+        'err_console': {
+           'level': 'ERROR',
+            'formatter': 'shortened_fmt',
+           'class': 'logging.StreamHandler',
+            #'stream': 'ext://sys.stdout',
         },
-        "dbg_base_logstash": {
-            "level": "DEBUG",
-            "formatter": "dbg_base_fmt",
-            "class": "logstash_async.handler.AsynchronousLogstashHandler",
-            "transport": "logstash_async.transport.TcpTransport",
-            "host": "localhost",
-            "port": 5959,
-            "database_path": None,
-            "ssl_enable": False,
-        },
-    },  # end of handlers section
+    },
     "loggers": {
         "ecommerce_common.views.api": {
             "level": "INFO",
-            "handlers": ["dbg_views_file", "dbg_views_logstash"],
+            "handlers": ["dbg_views_file", "err_console"],
         },
         "ecommerce_common.views.mixins": {
             "level": "INFO",
-            "handlers": ["dbg_views_file", "dbg_views_logstash"],
+            "handlers": ["dbg_views_file", "err_console"],
         },
         "ecommerce_common.views.filters": {
             "level": "WARNING",
-            "handlers": ["dbg_views_logstash"],
+            "handlers": ["err_console"],
         },
         "ecommerce_common.serializers": {
             "level": "INFO",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.serializers.mixins.nested": {
             "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file", "err_console"],
         },
-        "ecommerce_common.serializers.mixins.quota": {
+        "ecommerce_common.serializers.mixins.internal": {
             "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.serializers.mixins.closure_table": {
             "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
-        },
-        "ecommerce_common.validators": {
-            "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.models.closure_table": {
             "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.models.db": {
             "level": "INFO",
-            "handlers": ["dbg_base_logstash"],
-        },
-        "ecommerce_common.models.migrations": {
-            "level": "INFO",
-            "handlers": ["default_file", "dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.auth.keystore": {
             "level": "INFO",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
-        "ecommerce_common.auth.backends": {
+        "ecommerce_common.auth.jwt": {
             "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.sessions.middleware": {
             "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.sessions.serializers": {
             "level": "ERROR",
-            "handlers": ["dbg_base_logstash"],
-        },
-        "ecommerce_common.util.elasticsearch": {
-            "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "ecommerce_common.util.async_tasks": {
             "level": "INFO",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
-        "user_management.views.api": {
+        "user_management.views.auth": {
+            "level": "WARNING",
+            "handlers": ["dbg_views_file"],
+        },
+        "user_management.views.base": {
             "level": "INFO",
-            "handlers": ["dbg_views_file", "dbg_views_logstash"],
+            "handlers": ["dbg_views_file", "err_console"],
         },
         "user_management.views.common": {
             "level": "WARNING",
-            "handlers": ["dbg_views_logstash"],
+            "handlers": ["dbg_base_file"],
+        },
+        "user_management.serializers.auth": {
+            "level": "INFO",
+            "handlers": ["dbg_base_file"],
         },
         "user_management.serializers.nested": {
             "level": "INFO",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "user_management.serializers": {
             "level": "INFO",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
-        "user_management.models": {
-            "level": "INFO",
-            "handlers": ["dbg_base_logstash"],
+        "user_management.models.auth": {
+            "level": "ERROR",
+            "handlers": ["dbg_base_file"],
+        },
+        "user_management.models.base": {
+            "level": "WARNING",
+            "handlers": ["dbg_base_file"],
         },
         "user_management.permissions": {
             "level": "WARNING",
-            "handlers": ["dbg_views_logstash"],
+            "handlers": ["err_console"],
         },
         "user_management.async_tasks": {
             "level": "INFO",
-            "handlers": ["dbg_base_logstash"],
-        },
-        "user_management.queryset": {
-            "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_views_file"],
         },
         "softdelete.models": {
             "level": "WARNING",
-            "handlers": ["dbg_base_logstash"],
+            "handlers": ["dbg_base_file"],
         },
         "softdelete.views": {
-            "level": "INFO",
-            "handlers": ["dbg_views_logstash"],
+            "level": "WARNING",
+            "handlers": ["dbg_base_file","err_console"],
         },
     },  # end of loggers section
     "root": {
@@ -402,6 +376,16 @@ def render_logging_handler_localfs(log_dir):
             "class": "logging.handlers.TimedRotatingFileHandler",
             "filename": str(os.path.join(_log_base_dir, "usermgt_views.log")),
             "backupCount": 150,
+            "atTime": time(hour=0, minute=0, second=0),
+            "encoding": "utf-8",
+            "delay": True,  # lazy creation
+        },
+        "dbg_base_file": {
+            "level": "INFO",
+            "formatter": "dbg_base_fmt",
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": str(os.path.join(_log_base_dir, "usermgt_base.log")),
+            "backupCount": 190,
             "atTime": time(hour=0, minute=0, second=0),
             "encoding": "utf-8",
             "delay": True,  # lazy creation

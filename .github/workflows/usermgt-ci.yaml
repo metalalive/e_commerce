@@ -1,0 +1,72 @@
+name: user-management continuous integration
+on:
+  pull_request:
+    branches: ["master"]
+    paths:
+      - '.github/workflows/usermgt-ci.yaml'
+      - 'services/common/python/**'
+      - 'services/user_management/**'
+
+# due to this long-time unresolved issue, it is safe to put tasks into one
+# big job running sequentially, and give up nicely running simulteneous jobs.
+# https://github.com/actions/checkout/issues/19
+jobs:
+    init-env-db-migration-tests:
+      if: startsWith(github.head_ref, 'usermgt-dev/')
+      runs-on: ubuntu-24.04
+      services:
+        mariadb_v11:
+          image: mariadb:11.2.6
+          # official docker image only exposes default port 3306 to external world
+          # map any non-default port external clients will use to 3306
+          ports:
+            - 3307:3306
+          env:
+            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+            MARIADB_ROOT_PASSWORD: 'sys-ci-dba'
+            MARIADB_ROOT_HOST: 'localhost'
+            MARIADB_DATABASE: 'ecommerce_usermgt'
+            MARIADB_USER: 'DB_USERNAME'
+            MARIADB_PASSWORD: 'DB_PASSWORD'
+
+      steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.7'
+
+      - name: Install init pipenv
+        run: |
+            python3 -m pip install pipenv==2024.3.1
+            pipenv --version
+
+      - name: install dependency packages
+        env:
+            PIPENV_VENV_IN_PROJECT: 1
+        run: |
+            cd services/user_management
+            pipenv install --dev
+            pipenv run python -c "from ecommerce_common.util import import_module_string"
+            pipenv run python -c "import user_management"
+      - name: build internal common package
+        env:
+            PIPENV_VENV_IN_PROJECT: 1
+        run: |
+            cd services/common/python
+            pipenv run pip3 install build==1.2.2
+            pipenv run python -m build ./c_exts
+      - name: install internal common package
+        run: |
+            cd services/user_management
+            pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
+            pipenv run python -c "from c_exts.util import keygen"
+      
+      - name: mariadb database migration
+        run: |
+            cd services/user_management
+            # schema migration
+            pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
+            pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
+            # data migration
+            pipenv run python3 -m  user_management.setup
