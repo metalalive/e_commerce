@@ -153,20 +153,18 @@ jobs:
           echo "Waiting for RabbitMQ service to be ready..."
           sleep 10
 
-    - name: Verify rabbitmqctl is Available
+    - name: Setup VHost, Permissions, and exchange
       run: |
-          docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqctl status
-
-    - name: Setup VHost and Permissions
-      run: |
-          docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqctl set_permissions -p  /integration_test  AMQP_ANOTHER_USERNAME  ".*" ".*" ".*"
-          docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqctl list_vhosts
-          docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqctl list_permissions -p /integration_test
-
-          docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqadmin declare exchange  name=rpc-default-allapps    type=direct   durable=true  --vhost=/integration_test  -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD
-          docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqctl list_exchanges -p /integration_test
+          CONTAINER_ID=$(docker ps -q --filter "ancestor=rabbitmq:3-management")
+          # Verify rabbitmqctl is Available
+          docker exec $CONTAINER_ID  rabbitmqctl status
+          docker exec $CONTAINER_ID  rabbitmqctl set_permissions -p  /integration_test  AMQP_ANOTHER_USERNAME  ".*" ".*" ".*"
+          docker exec $CONTAINER_ID  rabbitmqctl list_vhosts
+          docker exec $CONTAINER_ID  rabbitmqctl list_permissions -p /integration_test
+          docker exec $CONTAINER_ID  rabbitmqadmin declare exchange  name=rpc-default-allapps  type=direct \
+              durable=true  --vhost=/integration_test  -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD
+          docker exec $CONTAINER_ID  rabbitmqctl list_exchanges -p /integration_test
           
-
     - name: downgrade rust toolchain to v1.75
       run: |
           rustup install 1.75
