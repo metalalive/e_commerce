@@ -12,131 +12,131 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-##  init-env-test-non-db:
-##    if: startsWith(github.head_ref, 'order-proc-dev/')
-##    runs-on: ubuntu-24.04
-##    steps:
-##    - uses: actions/checkout@v4
-##    - name: downgrade rust toolchain to v1.77
-##      run: |
-##          rustup install 1.77
-##          rustup default 1.77
-##          rustup component add clippy
-##          rustc --version
-##          cargo --version
-##    - name: lint check
-##      run: |
-##          cd services/order
-##          cargo clippy
-##    - name: Run unit test
-##      env:
-##          SYS_BASE_PATH: "${{ github.workspace }}/services"
-##          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-##      run: |
-##          cd services/order
-##          cargo test --test unittest  -- model --test-threads=1
-##          cargo test --test unittest  -- usecase --test-threads=1
-##          cargo test --test unittest  -- auth --test-threads=1
-##          cargo test --test unittest  -- network --test-threads=1
-##          cargo test --test unittest  -- repository::in_mem  --test-threads=1
-##    - name: Run integration test
-##      env:
-##          SYS_BASE_PATH: "${{ github.workspace }}/services"
-##          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-##          CONFIG_FILE_PATH: "settings/test.json"
-##      run: |
-##          cd services/order/tests/integration
-##          cargo test --test web  --  --test-threads=1
-##
-##
-##  init-env-test-db:
-##    if: startsWith(github.head_ref, 'order-proc-dev/')
-##    needs: [init-env-test-non-db]
-##    runs-on: ubuntu-24.04
-##    services:
-##      mariadb_primary:
-##        image: mariadb:11.2.6
-##        # official docker image only exposes default port 3306 to external world
-##        # map any non-default port external clients will use to 3306
-##        ports:
-##          - 3307:3306
-##        env:
-##          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
-##          MARIADB_ROOT_PASSWORD: "sys-ci-dba"
-##          MARIADB_ROOT_HOST: "localhost"
-##          MARIADB_DATABASE: "test_ecommerce_order"
-##          MARIADB_USER: "DB_USERNAME"
-##          MARIADB_PASSWORD: "DB_PASSWORD"
-##    steps:
-##    - uses: actions/checkout@v4
-##    # Note,
-##    # this plug-in incorrectly reports `connection refused from database server` ,
-##    # while the database docker is actually up and running
-##    # - uses: liquibase-github-actions/update@v4.30.0
-##    #   with:
-##    #     changelogFile: ${{ github.workspace }}/services/order/migration/changelog_order.xml
-##    #     url: jdbc:mariadb://localhost:3306/test_ecommerce_order
-##    #     username: DB_USERNAME
-##    #     password: DB_PASSWORD
-##    #     logLevel: INFO
-##    
-##    - name: install liquibase migration tool
-##      # installation suggestion from liquibase official doc :
-##      # https://docs.liquibase.com/start/install/liquibase-linux-debian-ubuntu.html
-##      run: |
-##          wget -O- https://repo.liquibase.com/liquibase.asc | gpg --dearmor > ./liquibase-keyring.gpg
-##          cat ./liquibase-keyring.gpg | sudo tee /usr/share/keyrings/liquibase-keyring.gpg > /dev/null
-##          echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/liquibase-keyring.gpg] https://repo.liquibase.com stable main' | sudo tee /etc/apt/sources.list.d/liquibase.list
-##          sudo apt-get update
-##          sudo apt-get install liquibase
-##          liquibase --version
-##
-##    - name: run database schema migration
-##      run: |
-##          cd services/order
-##          liquibase  --changeLogFile=./migration/changelog_order.xml \
-##              --url=jdbc:mariadb://localhost:3307/test_ecommerce_order \
-##              --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
-##
-##    - name: downgrade rust toolchain to v1.75
-##      run: |
-##          rustup install 1.75
-##          rustup default 1.75
-##          rustup component add clippy
-##          rustc --version
-##          cargo --version
-##    - name: lint check
-##      run: |
-##          cd services/order
-##          cargo clippy --features "mariadb"
-##    - name: Build apps
-##      run: |
-##          cd services/order
-##          cargo build  --bin web --features "mariadb"
-##    - name: set up mock credentials for test
-##      run: |
-##          cd services/common/data
-##          ln -s ./secrets_template.json  ./secrets.json
-##    - name: Run unit test
-##      env:
-##          SYS_BASE_PATH: "${{ github.workspace }}/services"
-##          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-##      run: |
-##          cd services/order
-##          cargo test --test unittest --features "mariadb"  -- repository::mariadb  --test-threads=1 
-##    - name: Run integration test
-##      env:
-##          SYS_BASE_PATH: "${{ github.workspace }}/services"
-##          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-##          CONFIG_FILE_PATH: "settings/test.json"
-##      run: |
-##          cd services/order/tests/integration
-##          cargo test --test web  --features "mariadb" --  --test-threads=1
+  init-env-test-non-db:
+    if: startsWith(github.head_ref, 'order-proc-dev/')
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: downgrade rust toolchain to v1.77
+      run: |
+          rustup install 1.77
+          rustup default 1.77
+          rustup component add clippy
+          rustc --version
+          cargo --version
+    - name: lint check
+      run: |
+          cd services/order
+          cargo clippy
+    - name: Run unit test
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+      run: |
+          cd services/order
+          cargo test --test unittest  -- model --test-threads=1
+          cargo test --test unittest  -- usecase --test-threads=1
+          cargo test --test unittest  -- auth --test-threads=1
+          cargo test --test unittest  -- network --test-threads=1
+          cargo test --test unittest  -- repository::in_mem  --test-threads=1
+    - name: Run integration test
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+          CONFIG_FILE_PATH: "settings/test.json"
+      run: |
+          cd services/order/tests/integration
+          cargo test --test web  --  --test-threads=1
+
+
+  init-env-test-db:
+    if: startsWith(github.head_ref, 'order-proc-dev/')
+    needs: [init-env-test-non-db]
+    runs-on: ubuntu-24.04
+    services:
+      mariadb_primary:
+        image: mariadb:11.2.6
+        # official docker image only exposes default port 3306 to external world
+        # map any non-default port external clients will use to 3306
+        ports:
+          - 3307:3306
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+          MARIADB_ROOT_PASSWORD: "sys-ci-dba"
+          MARIADB_ROOT_HOST: "localhost"
+          MARIADB_DATABASE: "test_ecommerce_order"
+          MARIADB_USER: "DB_USERNAME"
+          MARIADB_PASSWORD: "DB_PASSWORD"
+    steps:
+    - uses: actions/checkout@v4
+    # Note,
+    # this plug-in incorrectly reports `connection refused from database server` ,
+    # while the database docker is actually up and running
+    # - uses: liquibase-github-actions/update@v4.30.0
+    #   with:
+    #     changelogFile: ${{ github.workspace }}/services/order/migration/changelog_order.xml
+    #     url: jdbc:mariadb://localhost:3306/test_ecommerce_order
+    #     username: DB_USERNAME
+    #     password: DB_PASSWORD
+    #     logLevel: INFO
+    
+    - name: install liquibase migration tool
+      # installation suggestion from liquibase official doc :
+      # https://docs.liquibase.com/start/install/liquibase-linux-debian-ubuntu.html
+      run: |
+          wget -O- https://repo.liquibase.com/liquibase.asc | gpg --dearmor > ./liquibase-keyring.gpg
+          cat ./liquibase-keyring.gpg | sudo tee /usr/share/keyrings/liquibase-keyring.gpg > /dev/null
+          echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/liquibase-keyring.gpg] https://repo.liquibase.com stable main' | sudo tee /etc/apt/sources.list.d/liquibase.list
+          sudo apt-get update
+          sudo apt-get install liquibase
+          liquibase --version
+
+    - name: run database schema migration
+      run: |
+          cd services/order
+          liquibase  --changeLogFile=./migration/changelog_order.xml \
+              --url=jdbc:mariadb://localhost:3307/test_ecommerce_order \
+              --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
+
+    - name: downgrade rust toolchain to v1.75
+      run: |
+          rustup install 1.75
+          rustup default 1.75
+          rustup component add clippy
+          rustc --version
+          cargo --version
+    - name: lint check
+      run: |
+          cd services/order
+          cargo clippy --features "mariadb"
+    - name: Build apps
+      run: |
+          cd services/order
+          cargo build  --bin web --features "mariadb"
+    - name: set up mock credentials for test
+      run: |
+          cd services/common/data
+          ln -s ./secrets_template.json  ./secrets.json
+    - name: Run unit test
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+      run: |
+          cd services/order
+          cargo test --test unittest --features "mariadb"  -- repository::mariadb  --test-threads=1 
+    - name: Run integration test
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+          CONFIG_FILE_PATH: "settings/test.json"
+      run: |
+          cd services/order/tests/integration
+          cargo test --test web  --features "mariadb" --  --test-threads=1
  
 
   init-env-test-rpc:
     if: startsWith(github.head_ref, 'order-proc-dev/')
-    #needs: [init-env-test-non-db]
+    needs: [init-env-test-non-db]
     runs-on: ubuntu-24.04
     services:
       rabbitmq_amqp:
