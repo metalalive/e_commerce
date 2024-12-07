@@ -163,7 +163,7 @@ jobs:
           docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqctl list_vhosts
           docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqctl list_permissions -p /integration_test
 
-          docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqadmin declare exchange  name=rpc-default-allapps    type=direct   durable=true  --vhost=/integration_test
+          docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqadmin declare exchange  name=rpc-default-allapps    type=direct   durable=true  --vhost=/integration_test  -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD
           docker exec $(docker ps -q --filter "ancestor=rabbitmq:3-management") rabbitmqctl list_exchanges -p /integration_test
           
 
