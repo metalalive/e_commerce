@@ -38,7 +38,7 @@ jobs:
 
       - name: Install init pipenv
         run: |
-            python3 -m pip install pipenv==2024.3.1
+            python3 -m pip install pipenv==2023.12.1
             pipenv --version
 
       - name: install dependency packages
