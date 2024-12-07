@@ -2,7 +2,7 @@ name: Order-Processing Continuous Integration
 
 on:
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
     paths:
       - '.github/workflows/orderproc-ci.yaml'
       - 'services/common/rust/**'
@@ -133,3 +133,62 @@ jobs:
           cd services/order/tests/integration
           cargo test --test web  --features "mariadb" --  --test-threads=1
  
+
+  init-env-test-rpc:
+    if: startsWith(github.head_ref, 'order-proc-dev/')
+    needs: [init-env-test-non-db]
+    runs-on: ubuntu-24.04
+    services:
+      rabbitmq_amqp:
+        image: rabbitmq:3-management
+        ports: ["5672:5672", "15672:15672"]
+        env:
+          RABBITMQ_DEFAULT_USER: "AMQP_ANOTHER_USERNAME"
+          RABBITMQ_DEFAULT_PASS: "AMQP_ANOTHER_PASSWORD"
+          RABBITMQ_DEFAULT_VHOST: "/integration_test"
+    steps:
+    - uses: actions/checkout@v4
+    - name: Wait for RabbitMQ to Initialize
+      run: |
+          echo "Waiting for RabbitMQ service to be ready..."
+          sleep 10
+
+    - name: Setup VHost, Permissions, and exchange
+      run: |
+          CONTAINER_ID=$(docker ps -q --filter "ancestor=rabbitmq:3-management")
+          # Verify rabbitmqctl is Available
+          docker exec $CONTAINER_ID  rabbitmqctl status
+          docker exec $CONTAINER_ID  rabbitmqctl set_permissions -p  /integration_test  AMQP_ANOTHER_USERNAME  ".*" ".*" ".*"
+          docker exec $CONTAINER_ID  rabbitmqctl list_vhosts
+          docker exec $CONTAINER_ID  rabbitmqctl list_permissions -p /integration_test
+          docker exec $CONTAINER_ID  rabbitmqadmin declare exchange  name=rpc-default-allapps  type=direct \
+              durable=true  --vhost=/integration_test  -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD
+          docker exec $CONTAINER_ID  rabbitmqctl list_exchanges -p /integration_test
+          
+    - name: downgrade rust toolchain to v1.75
+      run: |
+          rustup install 1.75
+          rustup default 1.75
+          rustup component add clippy
+          rustc --version
+          cargo --version
+    - name: lint check
+      run: |
+          cd services/order
+          cargo clippy --features "amqprs"
+    - name: Build apps
+      run: |
+          cd services/order
+          cargo build  --bin rpc_consumer --features "amqprs"
+    - name: set up credential for test
+      run: |
+          cd services/common/data
+          ln -s ./secrets_template.json  ./secrets.json
+    - name: Run unit test
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+      run: |
+          cd services/order
+          cargo test --test unittest --features "amqprs"  -- rpc::amqp  --test-threads=1 
+
