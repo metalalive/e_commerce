@@ -23,7 +23,7 @@ jobs:
             - 3307:3306
           env:
             MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
-            MARIADB_ROOT_PASSWORD: 'sys-ci-dba'
+            MARIADB_ROOT_PASSWORD: 'syscidba'
             MARIADB_ROOT_HOST: 'localhost'
             MARIADB_DATABASE: 'ecommerce_usermgt'
             MARIADB_USER: 'DB_USERNAME'
@@ -79,8 +79,8 @@ jobs:
         run: |
             sudo apt update
             sudo apt install mariadb-client
-            mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=sys-ci-dba  --execute "SHOW DATABASES;"
-            mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=sys-ci-dba  --execute "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION  ON test_ecommerce_usermgt.* TO 'DB_USERNAME'@'%' IDENTIFIED BY 'DB_PASSWORD'; FLUSH PRIVILEGES;"
+            mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "SHOW DATABASES;"
+            mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION  ON test_ecommerce_usermgt.* TO 'DB_USERNAME'@'%' IDENTIFIED BY 'DB_PASSWORD'; FLUSH PRIVILEGES;"
 
       - name: run test
         working-directory: services/user_management
