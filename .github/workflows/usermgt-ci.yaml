@@ -11,7 +11,7 @@ on:
 # big job running sequentially, and give up nicely running simulteneous jobs.
 # https://github.com/actions/checkout/issues/19
 jobs:
-    init-env-db-migration-tests:
+    init-env-then-test:
       if: startsWith(github.head_ref, 'usermgt-dev/')
       runs-on: ubuntu-24.04
       services:
@@ -42,35 +42,42 @@ jobs:
             pipenv --version
 
       - name: install dependency packages
+        working-directory: services/user_management
         env:
             PIPENV_VENV_IN_PROJECT: 1
         run: |
-            cd services/user_management
             pipenv install --dev
             pipenv run python -c "from ecommerce_common.util import import_module_string"
             pipenv run python -c "import user_management"
       - name: build internal common package
+        working-directory: services/common/python
         env:
             PIPENV_VENV_IN_PROJECT: 1
         run: |
-            cd services/common/python
             pipenv run pip3 install build==1.2.2
             pipenv run python -m build ./c_exts
       - name: install internal common package
+        working-directory: services/user_management
         run: |
-            cd services/user_management
             pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
             pipenv run python -c "from c_exts.util import keygen"
       
       - name: set up credential
+        working-directory: services/common/data
         run: |
-            cd services/common/data
             ln -s ./secrets_template.json  ./secrets.json
       - name: mariadb database migration
+        working-directory: services/user_management
         run: |
-            cd services/user_management
             # schema migration
             pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
             pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
             # data migration
             pipenv run python3 -m  user_management.setup
+
+      - name: run test
+        working-directory: services/user_management
+        run: |
+            ./run_unit_test
+            ./run_integration_test
+
