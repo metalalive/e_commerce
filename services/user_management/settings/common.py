@@ -91,17 +91,6 @@ DATABASES = {  # will be update with secrets at the bottom of file
     },
 }  # end of database settings
 
-# Force TCP connection, `mysqlclient` defaults to UNIX socket and will look
-# for socket file in local file system, while such file does not exist in
-# dockerized database server
-for d in DATABASES.values():
-    if 'mysql' in d['ENGINE']:
-        d["OPTIONS"] = {
-            'use_unicode': True,
-            'charset': 'utf8mb4',
-            'protocol': 'TCP',
-        }
-
 DATABASE_ROUTERS = ["ecommerce_common.models.db.ServiceModelRouter"]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
@@ -420,3 +409,11 @@ setup_secrets(
     portal_type="staff",
     interface_type="usermgt",
 )
+
+# Force TCP connection, `mysqlclient` defaults to UNIX socket and will look
+# for socket file in local file system, while such file does not exist in
+# dockerized database server
+for d in DATABASES.values():
+    if 'mysql' in d['ENGINE'] and d["HOST"] == 'localhost':
+        d["HOST"] == '127.0.0.1'
+
