@@ -81,6 +81,11 @@ DATABASES = {  # will be update with secrets at the bottom of file
         "NAME": "ecommerce_usermgt",
         "CONN_MAX_AGE": 0,
     },
+    "test_site2_dba": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": "test_ecommerce_usermgt",
+        "CONN_MAX_AGE": 0,
+    },
     "usermgt_service": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": "ecommerce_usermgt",

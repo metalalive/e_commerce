@@ -8,5 +8,6 @@ AUTH_KEYSTORE["persist_pubkey_handler"]["init_kwargs"]["filepath"] = BASE_DIR.jo
 )
 
 # TODO, separate accounts in DB server
+DATABASES.pop("test_site2_dba")
 DATABASES["default"].update(DATABASES["usermgt_service"])
 render_logging_handler_localfs(BASE_DIR.joinpath("tmp/log/dev"))
