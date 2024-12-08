@@ -11,7 +11,7 @@ on:
 # big job running sequentially, and give up nicely running simulteneous jobs.
 # https://github.com/actions/checkout/issues/19
 jobs:
-    init-env-then-test:
+    init-env-db-migration:
       if: startsWith(github.head_ref, 'usermgt-dev/')
       runs-on: ubuntu-24.04
       services:
@@ -75,13 +75,78 @@ jobs:
             # data migration
             pipenv run python3 -m  user_management.setup
 
-      - name: grant permission on test database
-        run: |
-            sudo apt update
-            sudo apt install mariadb-client
-            mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "SHOW DATABASES;"
-            mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION  ON test_ecommerce_usermgt.* TO 'DB_USERNAME'@'%' IDENTIFIED BY 'DB_PASSWORD'; FLUSH PRIVILEGES;"
+      # Note / TODO
+      # Unfortunately , following step does not work well in github action workflow
+      # , when attempting to connect to mariadb server container using `mariadb` command,
+      #  it always returns following error even with simplest SQL `SHOW DATABASES` :
+      #     ERROR 1045 (28000): Access denied for user 'root'@'172.18.0.1' (using password: YES)
+      #
+      # official suggestion does not seem to work well
+      # https://mariadb.com/kb/en/installing-and-using-mariadb-via-docker/#connecting-to-mariadb-from-outside-the-container
+      #
+      # Current workaround is to duplicate most of steps for running test in another job
 
+      # - name: grant permission on test database
+      #   run: |
+      #       sudo apt update
+      #       sudo apt install mariadb-client
+      #       mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "SHOW DATABASES;"
+      #       mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION  ON test_ecommerce_usermgt.* TO 'DB_USERNAME'@'%' IDENTIFIED BY 'DB_PASSWORD'; FLUSH PRIVILEGES;"
+
+
+    init-env-then-test:
+      if: startsWith(github.head_ref, 'usermgt-dev/')
+      runs-on: ubuntu-24.04
+      services:
+        mariadb_v11:
+          image: mariadb:11.2.6
+          ports:
+            - 3307:3306
+          env:
+            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+            MARIADB_ROOT_PASSWORD: 'syscidba'
+            MARIADB_ROOT_HOST: 'localhost'
+            MARIADB_DATABASE: 'test_ecommerce_usermgt'
+            MARIADB_USER: 'DB_USERNAME'
+            MARIADB_PASSWORD: 'DB_PASSWORD'
+
+      steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.7'
+
+      - name: Install init pipenv
+        run: |
+            python3 -m pip install pipenv==2023.12.1
+            pipenv --version
+
+      - name: install dependency packages
+        working-directory: services/user_management
+        env:
+            PIPENV_VENV_IN_PROJECT: 1
+        run: |
+            pipenv install --dev
+            pipenv run python -c "from ecommerce_common.util import import_module_string"
+            pipenv run python -c "import user_management"
+      - name: build internal common package
+        working-directory: services/common/python
+        env:
+            PIPENV_VENV_IN_PROJECT: 1
+        run: |
+            pipenv run pip3 install build==1.2.2
+            pipenv run python -m build ./c_exts
+      - name: install internal common package
+        working-directory: services/user_management
+        run: |
+            pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
+            pipenv run python -c "from c_exts.util import keygen"
+      
+      - name: set up credential
+        working-directory: services/common/data
+        run: |
+            ln -s ./secrets_template.json  ./secrets.json
       - name: run test
         working-directory: services/user_management
         run: |
