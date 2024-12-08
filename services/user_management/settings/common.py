@@ -415,5 +415,5 @@ setup_secrets(
 # dockerized database server
 for d in DATABASES.values():
     if 'mysql' in d['ENGINE'] and d["HOST"] == 'localhost':
-        d["HOST"] == '127.0.0.1'
+        d["HOST"] = '127.0.0.1'
 
