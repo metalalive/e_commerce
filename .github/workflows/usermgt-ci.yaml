@@ -79,10 +79,10 @@ jobs:
         run: |
             sudo apt update
             sudo apt install mariadb-client
-            CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
-            NETWORK_IPADDR=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'  $CONTAINER_ID)
-            echo -e "[docker container IP addresses] $NETWORK_IPADDR"
-            mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=sys-ci-dba  --execute "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION  ON `test_ecommerce_usermgt`.* TO 'DB_USERNAME'@'%' IDENTIFIED BY 'DB_PASSWORD'; FLUSH PRIVILEGES;"            
+            # CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
+            # NETWORK_IPADDR=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'  $CONTAINER_ID)
+            # echo -e "[docker container IP addresses] $NETWORK_IPADDR"
+            mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=sys-ci-dba  --execute "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION  ON test_ecommerce_usermgt.* TO 'DB_USERNAME'@'%' IDENTIFIED BY 'DB_PASSWORD'; FLUSH PRIVILEGES;"
 
       - name: run test
         working-directory: services/user_management
