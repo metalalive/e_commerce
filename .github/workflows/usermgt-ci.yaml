@@ -25,7 +25,7 @@ jobs:
             MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
             MARIADB_ROOT_PASSWORD: 'sys-ci-dba'
             MARIADB_ROOT_HOST: 'localhost'
-            MARIADB_DATABASE: 'ecommerce_usermgt'
+            MARIADB_DATABASE: 'test_ecommerce_usermgt'
             MARIADB_USER: 'DB_USERNAME'
             MARIADB_PASSWORD: 'DB_PASSWORD'
 
@@ -62,11 +62,15 @@ jobs:
             pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
             pipenv run python -c "from c_exts.util import keygen"
       
+      - name: set up credential
+        run: |
+            cd services/common/data
+            ln -s ./secrets_template.json  ./secrets.json
       - name: mariadb database migration
         run: |
             cd services/user_management
             # schema migration
             pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
-            pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
+            pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database test_site2_dba
             # data migration
             pipenv run python3 -m  user_management.setup
