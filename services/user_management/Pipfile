@@ -18,4 +18,5 @@ black = ">=24.4.*"
 
 [requires]
 python_version = "3.12"
-python_full_version = "3.12.0"
+# don't not specify full version for future minor version upgrade
+#python_full_version = "3.12.0"

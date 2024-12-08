@@ -10,4 +10,3 @@ class DRFRequestDataConflictError(DRFValidationError):
     status_code = DRFstatus.HTTP_409_CONFLICT
     default_detail = _("Conflict due to invalid input")
     default_code = "conflict"
-

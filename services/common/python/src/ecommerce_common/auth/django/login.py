@@ -66,4 +66,3 @@ def jwt_based_login(request, user):
     if hasattr(request, "user"):
         request.user = user
     return refresh_jwt
-

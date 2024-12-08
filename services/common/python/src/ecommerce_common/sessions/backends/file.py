@@ -79,4 +79,3 @@ class SessionStore(FileSessionStore):
         if value and isinstance(value, int):
             value = timedelta(seconds=value)
         super().set_expiry(value=value)
-
