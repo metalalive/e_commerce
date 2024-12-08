@@ -75,6 +75,12 @@ jobs:
             # data migration
             pipenv run python3 -m  user_management.setup
 
+      - name: grant permission on test database
+        run: |
+            sudo apt update
+            sudo apt install mariadb-client
+            sudo mariadb  --host=127.0.0.1 --port=3307 --user=root  --password=sys-ci-dba  --execute="GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION ON `test_ecommerce_usermgt`.* TO 'DB_USERNAME'@'localhost';"
+
       - name: run test
         working-directory: services/user_management
         run: |
