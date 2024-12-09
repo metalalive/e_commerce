@@ -1,6 +1,6 @@
 name: 'set up python packages'
 description: 'set up python packages'
-uns:
+runs:
     using: 'composite'
     steps:
       - name: Set up Python 3.12
