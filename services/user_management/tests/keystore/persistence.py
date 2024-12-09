@@ -1,6 +1,5 @@
 import os
 import random
-import shutil
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
@@ -254,7 +253,6 @@ class FilePersistHandlerTestCase(unittest.TestCase):
         init_kwargs = self._init_kwargs.copy()
         init_kwargs.update({"flush_threshold": 10, "auto_flush": True})
         persist_handler = JWKSFilePersistHandler(**init_kwargs)
-        max_expired_after_days = persist_handler.max_expired_after_days
         keydata = {
             "crypto-key-id-%s"
             % idx: {

@@ -114,5 +114,10 @@ Note:
 ## Development
 ### Code Formatter
 ```bash
-pipenv run black ./src/ ./tests/  ./settings/
+pipenv run black  --extend-exclude="src/migrations/.*\.py$"  ./src/ ./tests/  ./settings/
+```
+
+### Linter
+```bash
+pipenv run ruff check  ./src/ ./tests/  ./settings/
 ```

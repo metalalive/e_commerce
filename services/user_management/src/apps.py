@@ -1,5 +1,5 @@
 from django.apps import AppConfig
-from ecommerce_common.util import BaseUriLookup, BaseTemplateLookup
+from ecommerce_common.util import BaseUriLookup
 
 
 class WebAPIurl(BaseUriLookup):

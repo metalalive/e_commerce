@@ -1,19 +1,21 @@
-from .common import *
+from .common import *  # noqa : F403
 
-AUTH_KEYSTORE["persist_secret_handler"]["init_kwargs"]["filepath"] = BASE_DIR.joinpath(
+ks_cfg = AUTH_KEYSTORE["persist_secret_handler"]["init_kwargs"]  # noqa : F405
+ks_cfg["filepath"] = BASE_DIR.joinpath(  # noqa : F405
     "tmp/cache/test/jwks/privkey/current.json"
 )
-AUTH_KEYSTORE["persist_pubkey_handler"]["init_kwargs"]["filepath"] = BASE_DIR.joinpath(
+ks_cfg["flush_threshold"] = 4
+ks_cfg = AUTH_KEYSTORE["persist_pubkey_handler"]["init_kwargs"]  # noqa : F405
+ks_cfg["filepath"] = BASE_DIR.joinpath(  # noqa : F405
     "tmp/cache/test/jwks/pubkey/current.json"
 )
-AUTH_KEYSTORE["persist_secret_handler"]["init_kwargs"]["flush_threshold"] = 4
-AUTH_KEYSTORE["persist_pubkey_handler"]["init_kwargs"]["flush_threshold"] = 4
+ks_cfg["flush_threshold"] = 4
 
 # Django test only uses `default` alias , which does NOT allow users to switch
 # between different database credentials
-DATABASES["default"].update(DATABASES['test_site2_dba'])
-DATABASES["default"]["NAME"] = DATABASES["default"]["TEST"]["NAME"]
+DATABASES["default"].update(DATABASES["test_site2_dba"])  # noqa : F405
+DATABASES["default"]["NAME"] = DATABASES["default"]["TEST"]["NAME"]  # noqa : F405
 ## does NOT work for testing
 ##DATABASES['usermgt_service'].update(secrets)
-DATABASE_ROUTERS.clear()
-render_logging_handler_localfs(BASE_DIR.joinpath("tmp/log/test"))
+DATABASE_ROUTERS.clear()  # noqa : F405
+render_logging_handler_localfs(BASE_DIR.joinpath("tmp/log/test"))  # noqa : F405

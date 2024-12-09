@@ -1,24 +1,12 @@
-from copy import copy, deepcopy
-from datetime import datetime, timezone
-
-#### from collections     import OrderedDict
 import logging
 
-from django.conf import settings as django_settings
 from django.db.models.constants import LOOKUP_SEP
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.contrib.auth.models import Permission
-from django.contrib.contenttypes.models import ContentType
 
-from rest_framework import status as RestStatus
-from rest_framework.fields import ChoiceField, ModelField, empty
-from rest_framework.serializers import BaseSerializer, ModelSerializer, IntegerField
-from rest_framework.validators import UniqueTogetherValidator
-from rest_framework.exceptions import (
-    ValidationError as RestValidationError,
-    ErrorDetail as RestErrorDetail,
-)
-from rest_framework.settings import api_settings
+from rest_framework.fields import ChoiceField, empty
+from rest_framework.serializers import ModelSerializer, IntegerField
+from rest_framework.exceptions import ValidationError as RestValidationError
 
 from ecommerce_common.serializers import (
     BulkUpdateListSerializer,
@@ -34,13 +22,12 @@ from ..models.base import (
     GenericUserGroup,
     GenericUserGroupClosure,
     GenericUserProfile,
-    GenericUserGroupRelation,
     _atomicity_fn,
     QuotaMaterial,
 )
-from ..models.auth import Role, UnauthResetAccountRequest
+from ..models.auth import Role
 
-from .common import ConnectedGroupField, ConnectedProfileField, UserSubformSetupMixin
+from .common import ConnectedGroupField, UserSubformSetupMixin
 from .nested import EmailSerializer, PhoneNumberSerializer, GeoLocationSerializer
 from .nested import (
     UserQuotaRelationSerializer,
@@ -54,14 +41,8 @@ _logger = logging.getLogger(__name__)
 class PermissionSerializer(ModelSerializer):
     class Meta:
         model = Permission
-        fields = [
-            "id",
-            "name",
-        ]
-        read_only_fields = [
-            "id",
-            "name",
-        ]
+        fields = ["id", "name"]
+        read_only_fields = ["id", "name"]
 
     def __init__(self, instance=None, data=empty, account=None, **kwargs):
         # read-only serializer, frontend users are not allowed to edit
@@ -85,11 +66,7 @@ class RoleSerializer(ExtendedModelSerializer):
 
     class Meta(ExtendedModelSerializer.Meta):
         model = Role
-        fields = [
-            "id",
-            "name",
-            "permissions",
-        ]
+        fields = ["id", "name", "permissions"]
 
     def __init__(self, instance=None, data=empty, **kwargs):
         # To reduce bytes transmitting from API caller, POST/PUT data only contains
@@ -122,10 +99,7 @@ class GenericUserGroupClosureSerializer(ExtendedModelSerializer):
 
 class GroupAncestorSerializer(GenericUserGroupClosureSerializer):
     class Meta(GenericUserGroupClosureSerializer.Meta):
-        fields = [
-            "depth",
-            "ancestor",
-        ]
+        fields = ["depth", "ancestor"]
         read_only_fields = ["depth", "ancestor"]
 
     ancestor = ConnectedGroupField(read_only=True)
@@ -180,16 +154,14 @@ class AbstractGenericUserSerializer(ExtendedModelSerializer, UserSubformSetupMix
             if (emails_err_info or phones_err_info or locations_err_info) and hasattr(
                 self, "_final_quota_list"
             ):
+                # fmt: off
                 log_msg = [
-                    "emails_err_info",
-                    str(emails_err_info),
-                    "phones_err_info",
-                    str(phones_err_info),
-                    "locations_err_info",
-                    str(locations_err_info),
-                    "_final_quota_list",
-                    str(self._final_quota_list),
+                    "emails_err_info", str(emails_err_info),
+                    "phones_err_info", str(phones_err_info),
+                    "locations_err_info", str(locations_err_info),
+                    "_final_quota_list", str(self._final_quota_list),
                 ]
+                # fmt: on
                 _logger.info(None, *log_msg)
                 delattr(self, "_final_quota_list")
             raise
@@ -306,7 +278,7 @@ class LoginAccountExistField(ChoiceField):
                 out = self._activation_status.ACCOUNT_ACTIVATED.value
             else:
                 out = self._activation_status.ACCOUNT_DEACTIVATED.value
-        except ObjectDoesNotExist as e:
+        except ObjectDoesNotExist:
             rst_req_exists = (
                 instance.emails.filter(rst_account_reqs__isnull=False)
                 .distinct()
@@ -322,18 +294,10 @@ class LoginAccountExistField(ChoiceField):
 class GenericUserProfileSerializer(AbstractGenericUserSerializer):
     class Meta(AbstractGenericUserSerializer.Meta):
         model = GenericUserProfile
-        fields = [
-            "id",
-            "first_name",
-            "last_name",
-            "last_updated",
-            "time_created",
-            "auth",
-        ]
-        read_only_fields = [
-            "last_updated",
-            "time_created",
-        ]
+        # fmt: off
+        fields = ["id", "first_name", "last_name", "last_updated", "time_created", "auth"]
+        read_only_fields = ["last_updated", "time_created"]
+        # fmt: on
         list_serializer_class = BulkGenericUserProfileSerializer
 
     # This serializer doesn't (also shouldn't) fetch data from contrib.auth User model, instead it
@@ -354,9 +318,7 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
 
     def extra_setup_before_validation(self, instance, data):
         super().extra_setup_before_validation(instance=instance, data=data)
-        subform_keys = [
-            ("groups", ("group", "profile")),
-        ]
+        subform_keys = [("groups", ("group", "profile"))]
         for s_name, pk_name in subform_keys:
             self._setup_subform_instance(
                 name=s_name, instance=instance, data=data, pk_field_name=pk_name
@@ -437,9 +399,7 @@ class GenericUserProfileSerializer(AbstractGenericUserSerializer):
 
     def update(self, instance, validated_data):
         # remind: parent list serializer will set atomic transaction, no need to set it at here
-        subform_keys = [
-            "groups",
-        ]
+        subform_keys = ["groups"]
         validated_subform_data = {k: validated_data.pop(k, None) for k in subform_keys}
         # discard permission data e.g. `groups`, `roles`, `quota`
         self.fields["roles"].read_only = self._skip_edit_permission_data[0]
@@ -496,13 +456,9 @@ class BulkGenericUserGroupSerializer(DjangoBaseClosureBulkSerializer):
 class GenericUserGroupSerializer(BaseClosureNodeMixin, AbstractGenericUserSerializer):
     class Meta(BaseClosureNodeMixin.Meta, AbstractGenericUserSerializer.Meta):
         model = GenericUserGroup
-        fields = [
-            "id",
-            "name",
-            "ancestors",
-            "descendants",
-            "usr_cnt",
-        ]
+        # fmt: off
+        fields = ["id", "name", "ancestors", "descendants", "usr_cnt"]
+        # fmt: on
         list_serializer_class = BulkGenericUserGroupSerializer
 
     ancestors = GroupAncestorSerializer(many=True, read_only=True)

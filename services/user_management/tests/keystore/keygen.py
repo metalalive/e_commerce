@@ -1,5 +1,4 @@
 import math
-import random
 import unittest
 
 from ecommerce_common.auth.keystore import RSAKeygenHandler

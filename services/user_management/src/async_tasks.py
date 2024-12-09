@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime, timedelta, date
+from datetime import timedelta, date
 from typing import List
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from ecommerce_common.util.messaging.constants import RPC_EXCHANGE_DEFAULT_NAME
 from ecommerce_common.util.celery import app as celery_app
 from ecommerce_common.logging.util import log_fn_wrapper
 
-from .models.base import GenericUserGroup, GenericUserProfile, QuotaMaterial
+from .models.base import GenericUserGroup, GenericUserProfile
 from .models.auth import UnauthResetAccountRequest
 
 _logger = logging.getLogger(__name__)

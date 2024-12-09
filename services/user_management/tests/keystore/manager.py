@@ -1,4 +1,3 @@
-import random
 import os
 import unittest
 from datetime import date, timedelta
@@ -11,7 +10,6 @@ from jwt.api_jwk import PyJWK
 from ecommerce_common.auth.keystore import create_keystore_helper
 from ecommerce_common.auth.jwt import JwkRsaKeygenHandler
 from ecommerce_common.util import import_module_string
-from ecommerce_common.tests.common import capture_error
 
 from .persistence import (
     _setup_keyfile,
@@ -109,7 +107,10 @@ class JwkKeystoreTestCase(unittest.TestCase):
             )
             self.assertFalse(any(result["evict"]))
             self._keys_metadata.extend(result["new"])
-        filter_key_fn = lambda item, keytype: item["persist_handler"] == keytype
+
+        def filter_key_fn(item, keytype) -> bool:
+            return item["persist_handler"] == keytype
+
         self._common_validate_after_rotate(
             filter_key_fn=filter_key_fn,
             expect_num_privkeys=total_num_keys,
@@ -179,7 +180,6 @@ class JwkKeystoreTestCase(unittest.TestCase):
             "expired_after_days"
         ]
         expired_after_days -= 1
-        date_rotate = date.today() + timedelta(days=expired_after_days)
         result = self._keystore.rotate(
             keygen_handler=self._keygen_handler,
             key_size_in_bits=2048,

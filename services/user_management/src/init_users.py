@@ -1,7 +1,5 @@
-import sys
 import os
 import json
-import shutil
 import secrets
 from pathlib import Path
 from datetime import datetime, UTC
@@ -34,10 +32,10 @@ def _render_usermgt_fixture(src):
         elif model_name == GenericUserAppliedRole.__name__.lower():
             fields["expiry"] = None  # never expired, now_time
             item["pk"] = GenericUserAppliedRole.format_pk(
-                    usr_type=fields["user_type"],
-                    usr_id=fields["user_id"],
-                    role_id=fields["role"]
-                )
+                usr_type=fields["user_type"],
+                usr_id=fields["user_id"],
+                role_id=fields["role"],
+            )
         elif model_name == LoginAccount.__name__.lower():
             fields["last_login"] = now_time
             fields["date_joined"] = now_time
@@ -76,13 +74,11 @@ def data_migration():
         src_path=Path(dst_path).parent.joinpath("data/app_init_fixtures.json"),
         detail_fn=_render_usermgt_fixture,
     )
-    options = {
-        "database": "usermgt_service",
-    }
+    options = {"database": "usermgt_service"}
     call_command("loaddata", renderred_fixture_path, **options)
-    os.remove(
-        renderred_fixture_path
-    )  # MUST NOT keep the fixture data which contains password
+    os.remove(renderred_fixture_path)
+    # MUST NOT keep the fixture data which contains password
+
 
 # TODO
 # - mail nortification after default admin account is created

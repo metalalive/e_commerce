@@ -2,7 +2,6 @@ import string
 import random
 import copy
 import time
-from unittest.mock import patch
 
 from django.test import TransactionTestCase
 from django.contrib.auth.models import Permission
@@ -15,7 +14,6 @@ from user_management.models.base import (
     QuotaMaterial,
 )
 from user_management.models.auth import Role, LoginAccount
-from user_management.async_tasks import update_accounts_privilege
 from user_management.serializers import LoginAccountExistField
 
 from ecommerce_common.tests.common import listitem_rand_assigner, rand_gen_request_body
@@ -25,15 +23,10 @@ from ..common import (
     _fixtures,
     client_req_csrf_setup,
     AuthenticateUserMixin,
-    UserNestedFieldSetupMixin,
     gen_expiry_time,
     _setup_login_account,
 )
-from .common import (
-    _nested_field_names,
-    HttpRequestDataGenProfile,
-    ProfileVerificationMixin,
-)
+from .common import HttpRequestDataGenProfile, ProfileVerificationMixin
 
 non_field_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 

@@ -10,7 +10,6 @@ from rest_framework.settings import api_settings as drf_settings
 
 from ecommerce_common.util.async_tasks import sendmail as async_send_mail
 from ecommerce_common.tests.common.django import _BaseMockTestClientInfoMixin
-from user_management.views.constants import WEB_HOST
 from user_management.models.base import (
     GenericUserProfile,
     GenericUserGroup,
@@ -126,7 +125,7 @@ class AccountActivationTestCase(BaseViewTestCase):
             )
         )
         self.api_call_kwargs["body"] = body
-        with patch("django.core.mail.message.EmailMultiAlternatives") as mocked_obj:
+        with patch("django.core.mail.message.EmailMultiAlternatives"):
             response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 201)
         result = response.json()
@@ -210,7 +209,6 @@ class AccountDeactivationTestCase(BaseViewTestCase):
     def setUp(self):
         super().setUp()
         num_profiles = 5
-        num_emails_per_usr = 3
         # all user profiles are in the same group for simplicity
         group = GenericUserGroup.objects.create(**_fixtures[GenericUserGroup][0])
         GenericUserGroupClosure.objects.create(
@@ -577,16 +575,11 @@ class AuthEditAccountTestCase(BaseViewTestCase):
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 200)
         self._client.cookies.clear()
-        error_caught = None
-        with self.assertRaises(AssertionError):
-            try:
-                self._auth_setup(
-                    testcase=self, profile=self._profile, login_password=old_passwd
-                )
-            except AssertionError as e:
-                error_caught = e
-                raise
-        self.assertEqual("401 != 200", error_caught.args[0])
+        with self.assertRaises(AssertionError) as error_caught:
+            self._auth_setup(
+                testcase=self, profile=self._profile, login_password=old_passwd
+            )
+        self.assertEqual("401 != 200", error_caught.exception.args[0])
         _, response = self._auth_setup(
             testcase=self, profile=self._profile, login_password=new_passwd
         )

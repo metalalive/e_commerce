@@ -1,18 +1,24 @@
 import json
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from django.test import SimpleTestCase
 from django.http import HttpResponse
 from django.conf import settings as django_settings
-from django.middleware.csrf import rotate_token, REASON_NO_CSRF_COOKIE, REASON_INCORRECT_LENGTH, REASON_CSRF_TOKEN_MISSING
+from django.middleware.csrf import (
+    rotate_token,
+    REASON_NO_CSRF_COOKIE,
+    REASON_INCORRECT_LENGTH,
+    REASON_CSRF_TOKEN_MISSING,
+)
 from django.utils.http import http_date
 
-from ecommerce_common.util import get_request_meta_key
 from ecommerce_common.csrf.middleware import ExtendedCsrfViewMiddleware
+
 
 def mock_get_response(request):
     return HttpResponse("unit-test from mock-get-response")
+
 
 class CsrfMiddlewareTestCase(SimpleTestCase):
     def setUp(self):

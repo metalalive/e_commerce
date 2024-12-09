@@ -1,11 +1,8 @@
 import logging
 
-from django.contrib.auth import authenticate
 from django.contrib.auth.models import Permission
 from django.contrib.auth.backends import ModelBackend
-from django.core.exceptions import ImproperlyConfigured, PermissionDenied
-
-from ecommerce_common.models.db import db_conn_retry_wrapper
+from django.core.exceptions import PermissionDenied
 
 _logger = logging.getLogger(__name__)
 

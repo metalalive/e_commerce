@@ -1,38 +1,24 @@
 import copy
 import logging
-from datetime import datetime, timezone, timedelta
 
 from django.conf import settings as django_settings
-from django.core.exceptions import ValidationError
-from django.http.response import HttpResponseBase
 from django.db.models import Count
 from django.db.models.constants import LOOKUP_SEP
 from django.contrib.contenttypes.models import ContentType
 
 from rest_framework import status as RestStatus
-from rest_framework.generics import GenericAPIView
-from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response as RestResponse
-from rest_framework.permissions import DjangoModelPermissions, DjangoObjectPermissions
-from rest_framework.exceptions import PermissionDenied, ParseError
+from rest_framework.exceptions import ParseError
 from rest_framework.settings import api_settings as drf_settings
 
 from softdelete.views import RecoveryModelMixin
-from ecommerce_common.auth.jwt import JWT
-from ecommerce_common.views.mixins import (
-    LimitQuerySetMixin,
-    UserEditViewLogMixin,
-    BulkUpdateModelMixin,
-)
-from ecommerce_common.views.api import AuthCommonAPIView, AuthCommonAPIReadView
+from ecommerce_common.views.mixins import LimitQuerySetMixin
+from ecommerce_common.views.api import AuthCommonAPIView
 from ecommerce_common.views.filters import ClosureTableFilter
 
 from ..apps import UserManagementConfig as UserMgtCfg
 from ..models.base import (
-    GenericUserGroup,
     GenericUserGroupClosure,
     GenericUserProfile,
     UsermgtChangeSet,
@@ -44,7 +30,6 @@ from ..serializers import (
     GenericUserGroupSerializer,
     GenericUserProfileSerializer,
 )
-from ..serializers import GenericUserRoleAssigner, GenericUserGroupRelationAssigner
 from ..serializers.auth import UnauthRstAccountReqSerializer
 
 from ..permissions import RolePermissions, UserGroupsPermissions
@@ -54,7 +39,7 @@ from ..permissions import (
     UserProfilesPermissions,
 )
 
-from .constants import _PRESERVED_ROLE_IDS, MAX_NUM_FORM, WEB_HOST
+from .constants import _PRESERVED_ROLE_IDS, WEB_HOST
 
 # * All classes within this module can share one logger, because logger is unique by given name
 #   as the argument on invoking getLogger(), that means subsequent call with the same logger name
@@ -105,7 +90,7 @@ class RoleAPIView(AuthCommonAPIView):
                 pk_field_name="id",
             )
             IDs = list(map(int, IDs))
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError):
             raise ParseError("ids field has to be a list of number")
         # conflict happenes if frontend attempts to delete preserved roles (e.g. admin role)
         reserved_role_ids = set(self.PRESERVED_ROLE_IDS) & set(IDs)
@@ -280,9 +265,7 @@ class AccountActivationView(AuthCommonAPIView):
 
     def _reactivate_existing_account(self, request):
         req_body = request.data
-        _get_id_fn = lambda d: d.get("profile")
-        IDs = filter(_get_id_fn, req_body)
-        IDs = list(map(_get_id_fn, IDs))
+        IDs = [d["profile"] for d in req_body if d.get("profile")]
         filter_kwargs = {
             LOOKUP_SEP.join(["account", "isnull"]): False,
             LOOKUP_SEP.join(["id", "in"]): IDs,

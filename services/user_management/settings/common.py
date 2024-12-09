@@ -15,7 +15,7 @@ from pathlib import Path
 from datetime import time
 
 # set ExtendedLogger as default logger
-from ecommerce_common.logging.logger import ExtendedLogger
+from ecommerce_common.logging.logger import ExtendedLogger  # noqa : F401
 from ecommerce_common.util.django.setup import setup_secrets
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -98,7 +98,7 @@ DATABASES = {  # will be update with secrets at the bottom of file
 
 DATABASE_ROUTERS = ["ecommerce_common.models.db.ServiceModelRouter"]
 
-DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 # Password validation
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-password-validators
@@ -240,10 +240,10 @@ LOGGING = {
     },
     # pre-defined handler classes applied to this project
     "handlers": {
-        'err_console': {
-           'level': 'ERROR',
-            'formatter': 'shortened_fmt',
-           'class': 'logging.StreamHandler',
+        "err_console": {
+            "level": "ERROR",
+            "formatter": "shortened_fmt",
+            "class": "logging.StreamHandler",
             #'stream': 'ext://sys.stdout',
         },
     },
@@ -350,7 +350,7 @@ LOGGING = {
         },
         "softdelete.views": {
             "level": "WARNING",
-            "handlers": ["dbg_base_file","err_console"],
+            "handlers": ["dbg_base_file", "err_console"],
         },
     },  # end of loggers section
     "root": {
@@ -419,6 +419,5 @@ setup_secrets(
 # for socket file in local file system, while such file does not exist in
 # dockerized database server
 for d in DATABASES.values():
-    if 'mysql' in d['ENGINE'] and d["HOST"] == 'localhost':
-        d["HOST"] = '127.0.0.1'
-
+    if "mysql" in d["ENGINE"] and d["HOST"] == "localhost":
+        d["HOST"] = "127.0.0.1"

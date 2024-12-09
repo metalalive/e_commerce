@@ -1,14 +1,12 @@
 import random
-import json
+from typing import Dict
 
 from django.test import TransactionTestCase
-from django.db.models import Q
 from django.utils import timezone
 
 from ecommerce_common.tests.common import TreeNodeMixin
 from ecommerce_common.util import sort_nested_object
 
-from user_management.models.common import AppCodeOptions
 from user_management.models.base import (
     GenericUserProfile,
     GenericUserGroup,
@@ -318,15 +316,13 @@ class GroupDeletionTestCase(TransactionTestCase):
     def _get_affected_paths(self, delete_ids, data):
         out = {}
         for del_id in delete_ids:
-            fn_affected_acs = (
-                lambda item: item["depth"] > 0 and item["ancestor"] == del_id
+            filtered = filter(
+                lambda d: d["depth"] > 0 and d["ancestor"] == del_id, data
             )
-            filtered = filter(fn_affected_acs, data)
             affected_descs = list(map(lambda d: d["descendant"], filtered))
-            fn_affected_decs = (
-                lambda item: item["depth"] > 0 and item["descendant"] == del_id
+            filtered = filter(
+                lambda d: d["depth"] > 0 and d["descendant"] == del_id, data
             )
-            filtered = filter(fn_affected_decs, data)
             affected_ascs = list(map(lambda d: d["ancestor"], filtered))
             out[del_id] = {"asc": affected_ascs, "desc": affected_descs}
         return out
@@ -349,10 +345,12 @@ class GroupDeletionTestCase(TransactionTestCase):
                 self.assertGreater(path_val["depth"], 0)
                 path_val["depth"] -= 1
 
-        fn_exclude_ascs = lambda item: item["ancestor"] not in self._delete_grp_ids
-        fn_exclude_descs = lambda item: item["descendant"] not in self._delete_grp_ids
-        expect_value = filter(fn_exclude_ascs, nodes_before_delete)
-        expect_value = list(filter(fn_exclude_descs, expect_value))
+        def exclude_ascs_descs(item: Dict) -> bool:
+            return (item["ancestor"] not in self._delete_grp_ids) and (
+                item["descendant"] not in self._delete_grp_ids
+            )
+
+        expect_value = list(filter(exclude_ascs_descs, nodes_before_delete))
         expect_value = sort_nested_object(expect_value)
         actual_value = sort_nested_object(nodes_after_delete)
         self.assertEqual(len(actual_value), len(expect_value))
@@ -589,10 +587,13 @@ class GroupDeletionTestCase(TransactionTestCase):
             expect_evict_ids.copy()
         )  # (delete_grp_ids[0], delete_2nd_grp_id,)
         delete_ops_history.append(delete_2nd_grp_id)
-        _fn = (
-            lambda d: d["descendant"] in expect_evict_ids
-            and d["ancestor"] in expect_evict_ids
-        )
+
+        def _fn(d: Dict) -> bool:
+            return (
+                d["descendant"] in expect_evict_ids
+                and d["ancestor"] in expect_evict_ids
+            )
+
         undel_grps = list(filter(_fn, grp_hier_before_delete))
 
         affected_path_map = self._get_affected_paths(
@@ -608,10 +609,13 @@ class GroupDeletionTestCase(TransactionTestCase):
             edit_paths = list(map(lambda key: grp_hier_before_delete_map[key], keys))
             for path in edit_paths:
                 path["depth"] -= 1
-        _fn = (
-            lambda d: d["descendant"] not in delete_ops_history
-            and d["ancestor"] not in delete_ops_history
-        )
+
+        def _fn(d: Dict) -> bool:
+            return (
+                d["descendant"] not in delete_ops_history
+                and d["ancestor"] not in delete_ops_history
+            )
+
         grp_hier_without_eviction = list(filter(_fn, grp_hier_before_delete))
         grp_hier_without_eviction.extend(undel_grps)
         expect_value = sort_nested_object(grp_hier_without_eviction)

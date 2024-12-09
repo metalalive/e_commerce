@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from django.test import SimpleTestCase
 from django.http import HttpResponse
@@ -8,7 +8,6 @@ from ecommerce_common.cors.middleware import (
     CorsHeaderMiddleware,
     conf as cors_conf,
     ACCESS_CONTROL_REQUEST_METHOD,
-    ACCESS_CONTROL_REQUEST_HEADERS,
     ACCESS_CONTROL_ALLOW_ORIGIN,
     ACCESS_CONTROL_ALLOW_METHODS,
     ACCESS_CONTROL_ALLOW_HEADERS,
@@ -22,7 +21,10 @@ from ecommerce_common.cors.middleware import (
 class CorsMiddlewareTestCase(SimpleTestCase):
     def setUp(self):
         self.expect_succeed_msg = "CORS verification passed"
-        mock_get_response = lambda req: HttpResponse(self.expect_succeed_msg)
+
+        def mock_get_response(req):
+            return HttpResponse(self.expect_succeed_msg)
+
         self.middleware = CorsHeaderMiddleware(get_response=mock_get_response)
 
         def _get_host():

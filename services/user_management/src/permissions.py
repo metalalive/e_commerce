@@ -1,12 +1,9 @@
 import logging
 
-from django.core.validators import EMPTY_VALUES
 from django.db.models import Q
 from django.db.models.constants import LOOKUP_SEP
-from django.contrib.contenttypes.models import ContentType
 
 from rest_framework.settings import api_settings
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import (
     BasePermission as DRFBasePermission,
     DjangoModelPermissions,
@@ -14,12 +11,7 @@ from rest_framework.permissions import (
 from rest_framework.filters import BaseFilterBackend
 
 from ecommerce_common.auth.jwt import JWTclaimPermissionMixin
-from .models.base import (
-    GenericUserGroup,
-    GenericUserGroupClosure,
-    GenericUserProfile,
-    GenericUserGroupRelation,
-)
+from .models.base import GenericUserProfile, GenericUserGroupRelation
 
 _logger = logging.getLogger(__name__)
 """
@@ -349,6 +341,6 @@ class AccountActivationPermission(AccountDeactivationPermission):
                     LOOKUP_SEP.join(["emails", "id"]), flat=True
                 )
                 result = email_ids == set(existing_email_ids)
-            except ValueError as e:
+            except ValueError:
                 result = False
         return result

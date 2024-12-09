@@ -27,7 +27,7 @@ from ..common import (
     UserNestedFieldSetupMixin,
     gen_expiry_time,
 )
-from .common import _nested_field_names, HttpRequestDataGenGroup, GroupVerificationMixin
+from .common import HttpRequestDataGenGroup, GroupVerificationMixin
 
 
 class BaseViewTestCase(
@@ -375,7 +375,7 @@ class GroupUpdateTestCase(GroupBaseUpdateTestCase):
             root.value["locations"][0]["detail"] = "".join(
                 random.choices(string.ascii_letters, k=12)
             )
-            evicted = root.value["locations"].pop()
+            evicted = root.value["locations"].pop()  # noqa : F841
             root.value["locations"].extend(new_data)
         new_parent_node = self.saved_trees[0].children[-1]
         self.saved_trees[1].parent = new_parent_node
@@ -623,7 +623,7 @@ class GroupDeletionTestCase(GroupBaseUpdateTestCase):
             expect_grp_ids = set(grp_ids)
             actual_grp_ids = set(map(lambda d: d["id"], result["affected_items"]))
             self.assertSetEqual(actual_grp_ids, expect_grp_ids)
-        trees_before_delete = self.saved_trees
+        ##trees_before_delete = self.saved_trees
         ##trees_after_delete = TreeNodeMixin.gen_from_closure_data(entity_data=self.saved_trees.entity_data,
         ##        closure_data=self.saved_trees.closure_data, custom_value_setup_fn=self._closure_node_value_setup )
         grp_cls = self.saved_trees.entity_data.model
@@ -935,7 +935,6 @@ class GroupSearchTestCase(GroupBaseUpdateTestCase):
             self.saved_trees[1].children[0]: "Golden Goddess",
             self.saved_trees[1].children[0].children[1]: "Godaddy",
         }
-        expect_response = []
         for node, new_name in expect_groups_name.items():
             group = self.saved_trees.entity_data.get(id=node.value["id"])
             group.name = new_name

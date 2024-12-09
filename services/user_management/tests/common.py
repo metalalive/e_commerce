@@ -262,7 +262,7 @@ class AuthenticateUserMixin(KeystoreMixin):
         try:
             account = profile.account
             assert login_password, "login_password has to be given"
-        except ObjectDoesNotExist as e:
+        except ObjectDoesNotExist:
             if not new_account_data:
                 new_account_data = {
                     "username": "ImStaff",

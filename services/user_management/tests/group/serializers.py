@@ -1,8 +1,5 @@
 import string
 import random
-import copy
-import json
-from functools import partial
 from datetime import timedelta
 from unittest.mock import Mock, patch
 
@@ -75,7 +72,7 @@ class GroupCommonTestCase(
         account = self._login_user_profile.account
         serializer = self.serializer_class(many=True, data=req_data, account=account)
         serializer.is_valid(raise_exception=True)
-        validated_data = serializer.validated_data
+        validated_data = serializer.validated_data  # noqa : F841
         actual_instances = serializer.save()
         obj_ids = tuple(map(lambda obj: obj.pk, actual_instances))
         entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)
@@ -117,7 +114,7 @@ class GroupCreationTestCase(GroupCommonTestCase):
                     exist_parent = exist_parent.children[0]
                 appending_tree.value["exist_parent"] = exist_parent.value["id"]
                 appending_tree.parent = exist_parent
-            except StopIteration as e:
+            except StopIteration:
                 break
         out = existing_trees.copy()  # shallow copy should be enough
         out.extend([t for t in appending_trees_iter])
@@ -184,20 +181,15 @@ class GroupCreationTestCase(GroupCommonTestCase):
         idx = random.randrange(0, len(non_root_data))
         loop_data_start = non_root_data[idx]
         loop_data_end = req_data[0]
-        origin_new_parent = loop_data_end["new_parent"]
+        origin_new_parent = loop_data_end["new_parent"]  # noqa : F841
         loop_data_end["new_parent"] = loop_data_start["idx"]
-        error_caught = None
         serializer = self.serializer_class(
             many=True, data=req_data, account=self._login_user_profile.account
         )
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail[non_field_err_key]
+        with self.assertRaises(DRFValidationError) as error_caught:
+            serializer.is_valid(raise_exception=True)
+        self.assertIsNotNone(error_caught.exception)
+        err_info = error_caught.exception.detail[non_field_err_key]
         pattern_pos = err_info[0].find(self.err_msg_loop_detected)
         self.assertGreater(pattern_pos, 0)
         ancestor_indexes = [loop_data_end["new_parent"]]
@@ -230,15 +222,10 @@ class GroupCreationTestCase(GroupCommonTestCase):
         serializer = self.serializer_class(
             many=True, data=req_data, account=self._login_user_profile.account
         )
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail
+        with self.assertRaises(DRFValidationError) as error_caught:
+            serializer.is_valid(raise_exception=True)
+        self.assertIsNotNone(error_caught.exception)
+        err_info = error_caught.exception.detail
         expect_value = "Role is NOT assigned to current login user: %s" % (
             missing_role_id
         )
@@ -263,15 +250,10 @@ class GroupCreationTestCase(GroupCommonTestCase):
         serializer = self.serializer_class(
             many=True, data=req_data, account=self._login_user_profile.account
         )
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail
+        with self.assertRaises(DRFValidationError) as error_caught:
+            serializer.is_valid(raise_exception=True)
+        self.assertIsNotNone(error_caught.exception)
+        err_info = error_caught.exception.detail
         expect_errmsg = str(err_info[0]["roles"][non_field_err_key][0])
         reason_pattern = "duplicate item found in the list"
         self.assertGreater(expect_errmsg.find(reason_pattern), 0)
@@ -294,15 +276,10 @@ class GroupCreationTestCase(GroupCommonTestCase):
         serializer = self.serializer_class(
             many=True, data=req_data, account=self._login_user_profile.account
         )
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail
+        with self.assertRaises(DRFValidationError) as error_caught:
+            serializer.is_valid(raise_exception=True)
+        self.assertIsNotNone(error_caught.exception)
+        err_info = error_caught.exception.detail
         expect_errmsg = str(err_info[0]["quota"][0]["material"][0])
         reason_pattern = "object does not exist"
         self.assertGreater(expect_errmsg.find(reason_pattern), 0)
@@ -325,15 +302,10 @@ class GroupCreationTestCase(GroupCommonTestCase):
         serializer = self.serializer_class(
             many=True, data=req_data, account=self._login_user_profile.account
         )
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail
+        with self.assertRaises(DRFValidationError) as error_caught:
+            serializer.is_valid(raise_exception=True)
+        self.assertIsNotNone(error_caught.exception)
+        err_info = error_caught.exception.detail
         expect_errmsg = str(err_info[0]["quota"][non_field_err_key][0])
         reason_pattern = "duplicate item found in the list"
         self.assertGreater(expect_errmsg.find(reason_pattern), 0)
@@ -389,15 +361,10 @@ class GroupCreationTestCase(GroupCommonTestCase):
         serializer = self.serializer_class(
             many=True, data=req_data, account=self._login_user_profile.account
         )
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail
+        with self.assertRaises(DRFValidationError) as error_caught:
+            serializer.is_valid(raise_exception=True)
+        self.assertIsNotNone(error_caught.exception)
+        err_info = error_caught.exception.detail
         expect_errmsg_pattern = "number of items provided exceeds the limit: %s"
         expect_errmsg = (
             expect_errmsg_pattern
@@ -538,7 +505,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             many=True, data=req_data, account=self._login_user_profile.account
         )
         serializer.is_valid(raise_exception=True)
-        validated_data = serializer.validated_data
+        validated_data = serializer.validated_data  # noqa : F841
         actual_instances = serializer.save()
         obj_ids = tuple(map(lambda obj: obj.pk, actual_instances))
         entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)
@@ -574,7 +541,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         with patch(
             "user_management.async_tasks.update_accounts_privilege.apply_async"
         ) as mocked_async_task:
-            actual_instances = serializer.save()
+            serializer.save()
             self.assertEqual(mocked_async_task.call_count, 1)
         obj_ids = self.existing_trees.entity_data.values_list("id", flat=True)
         entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)
@@ -638,7 +605,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
             root.value["locations"][0]["detail"] = "".join(
                 random.choices(string.ascii_letters, k=12)
             )
-            evicted = root.value["locations"].pop()
+            evicted = root.value["locations"].pop()  # noqa : F841
             root.value["locations"].extend(new_data)
         new_parent_node = self.existing_trees[0].children[-1]
         self.existing_trees[1].parent = new_parent_node
@@ -666,7 +633,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         new_role = next(available_roles)
         new_data = {"expiry": gen_expiry_time(), "role": new_role.id}
         root_node.value["roles"][0]["expiry"] = gen_expiry_time()
-        evicted = root_node.value["roles"].pop()
+        evicted = root_node.value["roles"].pop()  # noqa : F841
         root_node.value["roles"].append(new_data)
         # -----------------------------------------------
         roles_without_superuser = self._primitives[Role]
@@ -713,7 +680,7 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         }
         root_node.value["quota"][0]["expiry"] = gen_expiry_time()
         root_node.value["quota"][0]["maxnum"] = random.randrange(4, 19)
-        evicted = root_node.value["quota"].pop()
+        evicted = root_node.value["quota"].pop()  # noqa : F841
         root_node.value["quota"].append(new_data)
         # -----------------------------------------------
         roles_without_superuser = self._primitives[Role]
@@ -736,17 +703,12 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         invalid_expiry = invalid_expiry.isoformat()
         root_node.value["roles"][0]["expiry"] = invalid_expiry
         root_node.value["quota"][0]["expiry"] = invalid_expiry
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                edited_tree = self._perform_update(
-                    [root_node], account=self._login_user_profile.account
-                )
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail
+        with self.assertRaises(DRFValidationError) as error_caught:
+            edited_tree = self._perform_update(  # noqa : F841
+                [root_node], account=self._login_user_profile.account
+            )
+        self.assertIsNotNone(error_caught.exception)
+        err_info = error_caught.exception.detail
         actual_errmsg = err_info[0]["roles"][0]["expiry"][0]
         self.assertEqual("min_value", actual_errmsg.code)
         actual_errmsg = err_info[0]["quota"][0]["expiry"][0]
@@ -758,17 +720,12 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         root_node.value["roles"][1]["role"] = dup_role_id
         dup_quota_mat_id = root_node.value["quota"][0]["material"]
         root_node.value["quota"][1]["material"] = dup_quota_mat_id
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                edited_tree = self._perform_update(
-                    [root_node], account=self._login_user_profile.account
-                )
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail
+        with self.assertRaises(DRFValidationError) as error_caught:
+            edited_tree = self._perform_update(  # noqa : F841
+                [root_node], account=self._login_user_profile.account
+            )
+        self.assertIsNotNone(error_caught.exception)
+        err_info = error_caught.exception.detail
         expect_errmsg_pattern = "duplicate item found in the list"
         pos = err_info[0]["roles"][non_field_err_key][0].find(expect_errmsg_pattern)
         self.assertGreater(pos, 0)
@@ -797,21 +754,17 @@ class GroupUpdateTestCase(GroupCommonTestCase):
                 data["maxnum"] = expect_new_limits["locations"]
         root_node.value["emails"].extend(self._gen_emails(num=1))
         root_node.value["locations"].pop()
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                edited_tree = self._perform_update(
-                    [root_node], account=self._login_user_profile.account
-                )
-            except DRFValidationError as e:
-                error_caught = e
-                raise
+        with self.assertRaises(DRFValidationError) as error_caught:
+            edited_tree = self._perform_update(  # noqa : F841
+                [root_node], account=self._login_user_profile.account
+            )
+        error_caught = error_caught.exception
         self.assertIsNotNone(error_caught)
         err_info = error_caught.detail
         expect_errmsg_pattern = "number of items provided exceeds the limit: %s"
         for field_name, expect_limit in expect_new_limits.items():
             expect_value = expect_errmsg_pattern % expect_limit
-            actual_value = error_caught.detail[0][field_name][non_field_err_key][0]
+            actual_value = err_info[0][field_name][non_field_err_key][0]
             self.assertEqual(expect_value, actual_value)
 
     def test_tree_chains(self):
@@ -843,15 +796,11 @@ class GroupUpdateTestCase(GroupCommonTestCase):
         new_parent = curr_node.children[-1]
         curr_node = self.existing_trees[0]
         curr_node.parent = new_parent
-        with self.assertRaises(DRFValidationError):
-            try:
-                edited_tree = self._perform_update(
-                    self.existing_trees, account=self._login_user_profile.account
-                )
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
+        with self.assertRaises(DRFValidationError) as error_caught:
+            edited_tree = self._perform_update(  # noqa : F841
+                self.existing_trees, account=self._login_user_profile.account
+            )
+        error_caught = error_caught.exception
         err_info = error_caught.detail
         expect_errmsg_pattern = (
             "will form a loop, which is NOT allowed in closure table"
@@ -899,7 +848,7 @@ class UpdateAccountPrivilegeTestCase(GroupCommonTestCase):
             many=True, data=req_data, account=self._login_user_profile.account
         )
         serializer.is_valid(raise_exception=True)
-        validated_data = serializer.validated_data
+        validated_data = serializer.validated_data  # noqa : F841
         actual_instances = serializer.save()
         obj_ids = tuple(map(lambda obj: obj.pk, actual_instances))
         entity_data, closure_data = self.load_closure_data(node_ids=obj_ids)
@@ -936,7 +885,7 @@ class UpdateAccountPrivilegeTestCase(GroupCommonTestCase):
                 try:
                     login_profile = next(login_profiles_iter)
                     login_profile.groups.create(**data)
-                except StopIteration as e:
+                except StopIteration:
                     break
         return login_profiles
 
@@ -973,7 +922,7 @@ class UpdateAccountPrivilegeTestCase(GroupCommonTestCase):
             account=self._login_user_profile.account,
         )
         serializer.is_valid(raise_exception=True)
-        edited_groups = serializer.save()
+        edited_groups = serializer.save()  # noqa : F841
         for profile in self._other_login_profiles:
             profile.account.refresh_from_db()
 

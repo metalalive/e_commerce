@@ -1,30 +1,19 @@
 import random
 import json
 from datetime import timedelta
-from unittest.mock import patch
 
 from django.test import TransactionTestCase
 from django.conf import settings as django_settings
 from django.utils import timezone as django_timezone
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import Permission as ModelLevelPermission
 from rest_framework.settings import api_settings as drf_settings
 from jwt.exceptions import MissingRequiredClaimError, InvalidAudienceError
 from jwt.api_jwk import PyJWK
 
 from ecommerce_common.auth.jwt import JWT
-from ecommerce_common.cors.middleware import (
-    conf as cors_cfg,
-    ACCESS_CONTROL_REQUEST_METHOD,
-    ACCESS_CONTROL_REQUEST_HEADERS,
-    ACCESS_CONTROL_ALLOW_ORIGIN,
-    ACCESS_CONTROL_ALLOW_METHODS,
-    ACCESS_CONTROL_ALLOW_HEADERS,
-    ACCESS_CONTROL_ALLOW_CREDENTIALS,
-    ACCESS_CONTROL_MAX_AGE,
-)
-from ecommerce_common.util import sort_nested_object, import_module_string
-from ecommerce_common.models.constants import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
+from ecommerce_common.cors.middleware import conf as cors_cfg
+from ecommerce_common.util import sort_nested_object
+from ecommerce_common.models.constants import ROLE_ID_STAFF
 
 from user_management.models.common import AppCodeOptions
 from user_management.models.base import (
@@ -35,9 +24,9 @@ from user_management.models.base import (
 )
 from user_management.models.auth import LoginAccount, Role
 
-from ecommerce_common.tests.common import HttpRequestDataGen, KeystoreMixin
+from ecommerce_common.tests.common import KeystoreMixin
 from ecommerce_common.tests.common.django import _BaseMockTestClientInfoMixin
-from tests.common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin
+from tests.common import client_req_csrf_setup, AuthenticateUserMixin
 
 
 non_fd_err_key = drf_settings.NON_FIELD_ERRORS_KEY
@@ -99,9 +88,8 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreM
             acc_data = next(acc_data_iter)
             acc_data["profile"] = p
             acc_data["password_last_updated"] = django_timezone.now()
-        accounts = tuple(
-            map(lambda d: LoginAccount.objects.create_user(**d), account_data)
-        )
+        for d in account_data:
+            LoginAccount.objects.create_user(**d)
         bodies = [
             None,
             {},
@@ -138,7 +126,7 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreM
             "profile": profile,
             "password_last_updated": django_timezone.now(),
         }
-        account = LoginAccount.objects.create_user(**account_data)
+        LoginAccount.objects.create_user(**account_data)
         self.api_call_kwargs["body"] = {"username": "ImStaff", "password": "dontexpose"}
         # first login request
         response = self._send_request_to_backend(**self.api_call_kwargs)
@@ -181,9 +169,10 @@ class LoginTestCase(TransactionTestCase, _BaseMockTestClientInfoMixin, KeystoreM
             keystore=self._keystore, audience=None, raise_if_failed=True
         )
         self.assertNotEqual(payld_verified, None)
-        self.assertIsNone(
-            payld_verified.get("aud")
-        )  # refresh token doesn't include `aud` field
+        # refresh token doesn't include `aud` field
+        self.assertIsNone(payld_verified.get("aud"))
+        self.assertEqual(payld_verified, payld_unverified)
+        self.assertNotEqual(id(payld_verified), id(payld_unverified))
         return payld_verified
 
 
@@ -364,9 +353,10 @@ class RefreshAccessTokenTestCase(
             keystore=self._keystore, audience=expect_audience, raise_if_failed=True
         )
         self.assertNotEqual(payld_verified, None)
-        self.assertIsNotNone(
-            payld_verified.get("aud")
-        )  # access token should include `aud` field
+        # access token should include `aud` field
+        self.assertIsNotNone(payld_verified.get("aud"))
+        self.assertEqual(payld_verified, payld_unverified)
+        self.assertNotEqual(id(payld_verified), id(payld_unverified))
         return payld_verified
 
 

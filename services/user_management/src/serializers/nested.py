@@ -1,15 +1,10 @@
 import logging
 
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models import Manager as DjangoModelManager
 from django.db.models.constants import LOOKUP_SEP
-from django.db.utils import IntegrityError
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone as django_timezone
-from rest_framework.exceptions import (
-    ErrorDetail as DRFErrorDetail,
-    ValidationError as RestValidationError,
-)
+from rest_framework.exceptions import ValidationError as RestValidationError
 from rest_framework.fields import empty
 
 from ecommerce_common.serializers import (
@@ -32,6 +27,7 @@ from .common import ConnectedProfileField, UserSubformSetupMixin
 
 _logger = logging.getLogger(__name__)
 # logstash will duplicate the same log message, figure out how that happenes.
+
 
 class BaseQuotaCheckerMixin:
     def __init__(self, quota_validator, **kwargs):
@@ -113,7 +109,9 @@ class BulkUserQuotaRelationSerializer(AugmentUserRefMixin, BulkUpdateListSeriali
     ]
 
     def _retrieve_material_ids(self, data):
-        _fn = lambda d: d[self.pk_field_name]
+        def _fn(d):
+            return d[self.pk_field_name]
+
         ids = map(_fn, filter(_fn, data))
         conditions = {LOOKUP_SEP.join([self.pk_field_name, "in"]): ids}
         qset = self._current_quota_applied.filter(**conditions)
@@ -193,11 +191,9 @@ class EmailSerializer(CommonUserSubformSerializer):
 class PhoneNumberSerializer(CommonUserSubformSerializer):
     class Meta(CommonUserSubformSerializer.Meta):
         model = PhoneNumber
-        fields = [
-            "id",
-            "country_code",
-            "line_number",
-        ]
+        # fmt: off
+        fields = ["id", "country_code", "line_number"]
+        # fmt: on
         list_serializer_class = QuotaCheckerSerializer
 
     def extra_setup_before_validation(self, instance, data):
@@ -209,16 +205,9 @@ class PhoneNumberSerializer(CommonUserSubformSerializer):
 class GeoLocationSerializer(CommonUserSubformSerializer):
     class Meta(CommonUserSubformSerializer.Meta):
         model = GeoLocation
-        fields = [
-            "id",
-            "country",
-            "province",
-            "locality",
-            "street",
-            "detail",
-            "floor",
-            "description",
-        ]
+        # fmt: off
+        fields = ["id", "country", "province", "locality", "street", "detail", "floor", "description"]
+        # fmt: on
         list_serializer_class = QuotaCheckerSerializer
 
     def extra_setup_before_validation(self, instance, data):
@@ -243,18 +232,13 @@ class UserQuotaRelationSerializer(CommonUserSubformSerializer):
         self.fields["expiry"].validators.append(exp_validator)
 
     def update(self, instance, validated_data):
+        # fmt: off
         log_msg = [
-            "srlz_cls",
-            type(self).__qualname__,
-            "instance_id",
-            instance.pk,
-            "new_material",
-            validated_data["material"],
-            "new_maxnum",
-            validated_data["maxnum"],
-            "old_maxnum",
-            instance.maxnum,
+            "srlz_cls", type(self).__qualname__, "instance_id", instance.pk,
+            "new_material", validated_data["material"], "new_maxnum", validated_data["maxnum"],
+            "old_maxnum", instance.maxnum,
         ]
+        # fmt: on
         old_expiry = instance.expiry
         new_expiry = validated_data["expiry"]
         if old_expiry:
@@ -267,7 +251,7 @@ class UserQuotaRelationSerializer(CommonUserSubformSerializer):
                 instance.material == validated_data["material"]
             ), "material does not match"
             instance = super().update(instance=instance, validated_data=validated_data)
-        except AssertionError as e:
+        except AssertionError:
             _logger.error(None, *log_msg)
             raise
         else:
@@ -281,7 +265,9 @@ class UserQuotaRelationSerializer(CommonUserSubformSerializer):
 class _BulkUserPriviledgeAssigner(AugmentUserRefMixin, BulkUpdateListSerializer):
 
     def _retrieve_priv_ids(self, data):
-        _fn = lambda d: d[self.pk_field_name]
+        def _fn(d):
+            return d[self.pk_field_name]
+
         ids = map(_fn, filter(_fn, data))
         conditions = {LOOKUP_SEP.join([self.pk_field_name, "in"]): ids}
         qset = self._current_priv_set_applied.filter(**conditions)
@@ -451,15 +437,12 @@ class GenericUserRoleAssigner(_BaseUserPriviledgeAssigner):
 
     def update(self, instance, validated_data):
         log_msg = []
+        # fmt: off
         if instance.approved_by != self._account.profile:
             log_msg.extend(
-                [
-                    "profile_before_edit",
-                    instance.approved_by.id,
-                    "profile_after_edit",
-                    self._account.profile.id,
-                ]
+                ["profile_before_edit", instance.approved_by.id, "profile_after_edit", self._account.profile.id]
             )
+        # fmt: on
         old_role = getattr(instance, self.Meta._apply_type)
         new_role = validated_data[self.Meta._apply_type]
         log_msg.extend(["old_role", old_role, "new_role", new_role])

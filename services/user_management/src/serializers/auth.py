@@ -51,9 +51,7 @@ class UnauthRstAccountReqSerializer(ModelSerializer):
     class Meta:
         model = UnauthResetAccountRequest
         fields = ["email", "time_created"]
-        read_only_fields = [
-            "time_created",
-        ]
+        read_only_fields = ["time_created"]
 
     def __init__(
         self,
@@ -167,16 +165,12 @@ class UsernameUniquenessValidator:
             finally:
                 account.username = backup
         if errmsg:
+            # fmt: off
             log_msg = [
-                "errmsg",
-                errmsg,
-                "value",
-                value,
-                "account_id",
-                account.pk,
-                "account_username",
-                account.username,
+                "errmsg", errmsg, "value", value, "account_id", account.pk,
+                "account_username", account.username,
             ]
+            # fmt: on
             _logger.log(log_level, None, *log_msg)
             raise RestValidationError(errmsg)
 
@@ -185,7 +179,7 @@ class UsernameUniquenessValidator:
 class PasswordComplexityValidator:
     def __init__(self, account, password_confirm=None):
         self._account = account or get_user_model()()
-        if not password_confirm is None:
+        if password_confirm is not None:
             self._password_confirm = password_confirm
 
     def __call__(self, value):
@@ -253,10 +247,7 @@ class LoginAccountSerializer(Serializer):
         mail_kwargs=None,
         **kwargs
     ):
-        log_msg = [
-            "account",
-            account,
-        ]
+        log_msg = ["account", account]
         self._rst_req = rst_req
         self._mail_kwargs = mail_kwargs
         if account and account.is_authenticated:
@@ -266,7 +257,7 @@ class LoginAccountSerializer(Serializer):
             self._profile = prof_model_cls.objects.get(id=rst_req.email.user_id)
             try:
                 account = self._profile.account
-            except ObjectDoesNotExist as e:
+            except ObjectDoesNotExist:
                 account = None
         else:
             errmsg = "caller must provide either `account` or `rst_req`, both of them must NOT be null"
