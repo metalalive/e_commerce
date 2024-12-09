@@ -76,7 +76,7 @@ pipenv run python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>
 
 For initial data setup to the schema, run following script
 ```bash
-pipenv run python3 -m  user_management.setup
+pipenv run python3 -m  user_management.init_users
 ```
 which automatically generates default fixture records (which includes default roles, default login users ... etc.) for data migrations in `user_management` application
 

@@ -342,7 +342,7 @@ LOGGING = {
         },
         "user_management.async_tasks": {
             "level": "INFO",
-            "handlers": ["dbg_views_file"],
+            "handlers": ["dbg_base_file"],
         },
         "softdelete.models": {
             "level": "WARNING",

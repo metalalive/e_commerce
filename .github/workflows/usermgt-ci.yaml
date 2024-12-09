@@ -31,49 +31,15 @@ jobs:
 
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12.7'
+      - name: set up python packages
+        uses: ./.github/actions/usermgt
 
-      - name: Install init pipenv
-        run: |
-            python3 -m pip install pipenv==2023.12.1
-            pipenv --version
-
-      - name: install dependency packages
-        working-directory: services/user_management
-        env:
-            PIPENV_VENV_IN_PROJECT: 1
-        run: |
-            pipenv install --dev
-            pipenv run python -c "from ecommerce_common.util import import_module_string"
-            pipenv run python -c "import user_management"
-      - name: build internal common package
-        working-directory: services/common/python
-        env:
-            PIPENV_VENV_IN_PROJECT: 1
-        run: |
-            pipenv run pip3 install build==1.2.2
-            pipenv run python -m build ./c_exts
-      - name: install internal common package
-        working-directory: services/user_management
-        run: |
-            pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
-            pipenv run python -c "from c_exts.util import keygen"
-      
-      - name: set up credential
-        working-directory: services/common/data
-        run: |
-            ln -s ./secrets_template.json  ./secrets.json
       - name: mariadb database migration
         working-directory: services/user_management
         run: |
-            # schema migration
             pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
             pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
-            # data migration
-            pipenv run python3 -m  user_management.setup
+            pipenv run python3 -m  user_management.init_users
 
       # Note / TODO
       # Unfortunately , following step does not work well in github action workflow
@@ -112,41 +78,8 @@ jobs:
 
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12.7'
-
-      - name: Install init pipenv
-        run: |
-            python3 -m pip install pipenv==2023.12.1
-            pipenv --version
-
-      - name: install dependency packages
-        working-directory: services/user_management
-        env:
-            PIPENV_VENV_IN_PROJECT: 1
-        run: |
-            pipenv install --dev
-            pipenv run python -c "from ecommerce_common.util import import_module_string"
-            pipenv run python -c "import user_management"
-      - name: build internal common package
-        working-directory: services/common/python
-        env:
-            PIPENV_VENV_IN_PROJECT: 1
-        run: |
-            pipenv run pip3 install build==1.2.2
-            pipenv run python -m build ./c_exts
-      - name: install internal common package
-        working-directory: services/user_management
-        run: |
-            pipenv run pip install  ../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
-            pipenv run python -c "from c_exts.util import keygen"
-      
-      - name: set up credential
-        working-directory: services/common/data
-        run: |
-            ln -s ./secrets_template.json  ./secrets.json
+      - name: set up python packages
+        uses: ./.github/actions/usermgt
       - name: run test
         working-directory: services/user_management
         run: |
