@@ -84,6 +84,7 @@ def data_migration():
         renderred_fixture_path
     )  # MUST NOT keep the fixture data which contains password
 
-
+# TODO
+# - mail nortification after default admin account is created
 if __name__ == "__main__":
     data_migration()

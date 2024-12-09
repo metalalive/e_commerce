@@ -1,0 +1,88 @@
+name: user-management continuous integration
+on:
+  pull_request:
+    branches: ["master"]
+    paths:
+      - '.github/workflows/usermgt-ci.yaml'
+      - 'services/common/python/**'
+      - 'services/user_management/**'
+
+# due to this long-time unresolved issue, it is safe to put tasks into one
+# big job running sequentially, and give up nicely running simulteneous jobs.
+# https://github.com/actions/checkout/issues/19
+jobs:
+    init-env-db-migration:
+      if: startsWith(github.head_ref, 'usermgt-dev/')
+      runs-on: ubuntu-24.04
+      services:
+        mariadb_v11:
+          image: mariadb:11.2.6
+          # official docker image only exposes default port 3306 to external world
+          # map any non-default port external clients will use to 3306
+          ports:
+            - 3307:3306
+          env:
+            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+            MARIADB_ROOT_PASSWORD: 'syscidba'
+            MARIADB_ROOT_HOST: 'localhost'
+            MARIADB_DATABASE: 'ecommerce_usermgt'
+            MARIADB_USER: 'DB_USERNAME'
+            MARIADB_PASSWORD: 'DB_PASSWORD'
+
+      steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
+      - name: set up python packages
+        uses: ./.github/actions/usermgt
+
+      - name: mariadb database migration
+        working-directory: services/user_management
+        run: |
+            pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
+            pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
+            pipenv run python3 -m  user_management.init_users
+
+      # Note / TODO
+      # Unfortunately , following step does not work well in github action workflow
+      # , when attempting to connect to mariadb server container using `mariadb` command,
+      #  it always returns following error even with simplest SQL `SHOW DATABASES` :
+      #     ERROR 1045 (28000): Access denied for user 'root'@'172.18.0.1' (using password: YES)
+      #
+      # official suggestion does not seem to work well
+      # https://mariadb.com/kb/en/installing-and-using-mariadb-via-docker/#connecting-to-mariadb-from-outside-the-container
+      #
+      # Current workaround is to duplicate most of steps for running test in another job
+
+      # - name: grant permission on test database
+      #   run: |
+      #       sudo apt update
+      #       sudo apt install mariadb-client
+      #       mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "SHOW DATABASES;"
+      #       mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION  ON test_ecommerce_usermgt.* TO 'DB_USERNAME'@'%' IDENTIFIED BY 'DB_PASSWORD'; FLUSH PRIVILEGES;"
+
+
+    init-env-then-test:
+      if: startsWith(github.head_ref, 'usermgt-dev/')
+      runs-on: ubuntu-24.04
+      services:
+        mariadb_v11:
+          image: mariadb:11.2.6
+          ports:
+            - 3307:3306
+          env:
+            MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+            MARIADB_ROOT_PASSWORD: 'syscidba'
+            MARIADB_ROOT_HOST: 'localhost'
+            MARIADB_DATABASE: 'test_ecommerce_usermgt'
+            MARIADB_USER: 'DB_USERNAME'
+            MARIADB_PASSWORD: 'DB_PASSWORD'
+
+      steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
+      - name: set up python packages
+        uses: ./.github/actions/usermgt
+      - name: run test
+        working-directory: services/user_management
+        run: |
+            ./run_unit_test
+            ./run_integration_test
+
