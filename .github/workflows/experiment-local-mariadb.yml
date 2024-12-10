@@ -7,11 +7,27 @@ on:
 jobs:
   init-env:
     runs-on: ubuntu-24.04
+    services:
+      mariadb_primary:
+        image: mariadb:11.2.6
+        ports:
+          - 3307:3306
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+          MARIADB_ROOT_PASSWORD: "syscidba"
+          MARIADB_ROOT_HOST: "localhost"
+          MARIADB_DATABASE: "test_db_whatever"
+          MARIADB_USER: "DB_USERNAME"
+          MARIADB_PASSWORD: "DB_PASSWORD"
+
     steps:
     - name: tools installation
       run: |
+        ls -lt /docker-entrypoint-initdb.d
+        sudo echo "CREATE DATABASE `test_db_whatever_replica`  DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;" > /docker-entrypoint-initdb.d/madb-whatever.sql
         sudo apt-get update
-        sudo apt-get install mariadb-server-11.2
-        sudo apt-get install mariadb-client-11.2
+        sudo apt-get install mariadb-client
+        mariadb --host=localhost  --port=3307  --protocol=TCP --user=root  --password=syscidba  --execute "SHOW DATABASES;"
+
 
 
