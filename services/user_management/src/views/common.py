@@ -5,14 +5,10 @@ from django.core.exceptions import (
     MultipleObjectsReturned,
     PermissionDenied,
 )
-from rest_framework.settings import api_settings as drf_settings
 from rest_framework.response import Response as RestResponse
-from rest_framework import status as RestStatus
 
-from ..apps import UserManagementConfig as UserMgtCfg
 from ..models.base import EmailAddress, GenericUserProfile
 from ..models.auth import UnauthResetAccountRequest
-from .constants import LOGIN_WEB_URL
 
 _logger = logging.getLogger(__name__)
 

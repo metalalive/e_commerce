@@ -1,4 +1,3 @@
-import json
 from datetime import timedelta
 
 from django.test import TransactionTestCase
@@ -221,7 +220,7 @@ class ProfileCommonTestCase(TransactionTestCase):
             "profile": profile,
             "password_last_updated": django_timezone.now(),
         }
-        account = LoginAccount.objects.create_user(**account_data)
+        LoginAccount.objects.create_user(**account_data)
         profile_2nd_data = _fixtures[GenericUserProfile][1]
         profile_2nd = GenericUserProfile.objects.create(**profile_2nd_data)
         self._profile = profile
@@ -488,10 +487,12 @@ class ProfileCreationTestCase(ProfileCommonTestCase):
     def test_all_quota(self):
         # subcase #1 : quota arragements inherited from applied groups
         quota_rel_data = self._get_default_quota_rel_data()
+
         def ut_setup_obj(d):
             m = UserQuotaRelation(**d)
             m.save()
             return m
+
         quota_rel = list(map(ut_setup_obj, quota_rel_data))
         indexes = [5, 7, 11, 12, 15, 2]
         filtered_quota_rel_data = map(lambda idx: quota_rel_data[idx], indexes)

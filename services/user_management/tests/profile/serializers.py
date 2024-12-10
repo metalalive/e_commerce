@@ -1,12 +1,9 @@
 import string
 import random
 import copy
-import json
-from datetime import timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from django.test import TransactionTestCase
-from django.utils import timezone as django_timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings
 
@@ -16,8 +13,6 @@ from user_management.models.base import (
     QuotaMaterial,
     GenericUserProfile,
     GenericUserGroup,
-    GenericUserGroupClosure,
-    UserQuotaRelation,
 )
 from user_management.serializers.nested import GroupAssignValidator
 from user_management.serializers import LoginAccountExistField
@@ -436,7 +431,7 @@ class ProfileUpdateTestCase(ProfileUpdateBaseTestCase):
             req_data_item["locations"][0]["detail"] = "".join(
                 random.choices(string.ascii_letters, k=12)
             )
-            evicted = req_data_item["locations"].pop()
+            evicted = req_data_item["locations"].pop()  # noqa: F841
             req_data_item["locations"].extend(self._gen_locations(num=1))
         prof_ids = list(map(lambda obj: obj.id, self.created_profiles))
         qset = GenericUserProfile.objects.filter(id__in=prof_ids)
@@ -465,7 +460,7 @@ class ProfileUpdateTestCase(ProfileUpdateBaseTestCase):
         req_data[0]["emails"][0]["addr"] = "%s@t0ward.c10k" % "".join(
             random.choices(string.ascii_letters, k=8)
         )
-        evicted = req_data[0]["emails"].pop()
+        evicted = req_data[0]["emails"].pop()  # noqa: F841
         req_data[0]["emails"].extend(self._gen_emails(num=1))
         req_data = copy.deepcopy(req_data)
         # following modification is NOT allowed and will be ignored in serializer validation process
@@ -591,7 +586,7 @@ class ProfileUpdateTestCase(ProfileUpdateBaseTestCase):
         expect_errmsg_pattern = "number of items provided exceeds the limit: %s"
         for field_name, expect_limit in expect_new_limits.items():
             expect_value = expect_errmsg_pattern % expect_limit
-            actual_value = error_caught.detail[field_name][non_field_err_key][0]
+            actual_value = err_info[field_name][non_field_err_key][0]
             self.assertEqual(expect_value, actual_value)
 
 

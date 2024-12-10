@@ -1,17 +1,12 @@
-import random
-import copy
-from datetime import timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from django.conf import settings as django_settings
 from django.test import TransactionTestCase
-from django.utils import timezone as django_timezone
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import api_settings as drf_settings
 
 from ecommerce_common.util.async_tasks import sendmail as async_send_mail
-from ecommerce_common.tests.common import listitem_rand_assigner
 from user_management.models.base import GenericUserProfile, EmailAddress
 from user_management.models.auth import LoginAccount
 from user_management.serializers.auth import (
@@ -19,7 +14,7 @@ from user_management.serializers.auth import (
     LoginAccountSerializer,
 )
 
-from tests.common import _fixtures, gen_expiry_time
+from tests.common import _fixtures
 
 non_field_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 
@@ -96,15 +91,10 @@ class AccountCreationRequestTestCase(BaseTestCase):
         req_data.extend(invalid_reqs)
         self.serializer_kwargs["data"] = req_data
         serializer = UnauthRstAccountReqSerializer(**self.serializer_kwargs)
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
-        self.assertIsNotNone(error_caught)
-        err_info = error_caught.detail
+        with self.assertRaises(DRFValidationError) as e:
+            serializer.is_valid(raise_exception=True)
+        self.assertIsNotNone(e.exception)
+        err_info = e.exception.detail
         expect_err_code_seq = ["required", "null", "does_not_exist", "incorrect_type"]
         actual_err_code_seq = list(map(lambda e: e["email"][0].code, err_info[-4:]))
         self.assertListEqual(expect_err_code_seq, actual_err_code_seq)
@@ -206,13 +196,9 @@ class LoginAccountCreationTestCase(BaseTestCase):
             LoginAccountSerializer(**self.serializer_kwargs)
         self.serializer_kwargs["rst_req"] = rst_req_bak
         serializer = LoginAccountSerializer(**self.serializer_kwargs)
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
+        with self.assertRaises(DRFValidationError) as e:
+            serializer.is_valid(raise_exception=True)
+        error_caught = e.exception
         self.assertIsNotNone(error_caught)
         field_names = ("username", "password", "password2")
         for field_name in field_names:
@@ -229,13 +215,9 @@ class LoginAccountCreationTestCase(BaseTestCase):
         req_data["password2"] = req_data["password"]
         self.serializer_kwargs["data"] = req_data
         serializer = LoginAccountSerializer(**self.serializer_kwargs)
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
+        with self.assertRaises(DRFValidationError) as e:
+            serializer.is_valid(raise_exception=True)
+        error_caught = e.exception
         self.assertIsNotNone(error_caught)
         pos = error_caught.detail["username"][0].find("username already exists")
         self.assertGreater(pos, 0)
@@ -246,13 +228,9 @@ class LoginAccountCreationTestCase(BaseTestCase):
         req_data["password"] = "TooeAsy"
         req_data["password2"] = "TooEasy"
         serializer = LoginAccountSerializer(**self.serializer_kwargs)
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
+        with self.assertRaises(DRFValidationError) as e:
+            serializer.is_valid(raise_exception=True)
+        error_caught = e.exception
         self.assertIsNotNone(error_caught)
         expect_err_codes = {"min_length", "confirm_fail", "special_char_required"}
         actual_err_codes = set(map(lambda ed: ed.code, error_caught.detail["password"]))
@@ -303,20 +281,18 @@ class UnauthResetPasswordTestCase(BaseTestCase):
         self.assertEqual(self._profile.account, account)
         self.assertTrue(account.check_password(new_passwd))
         self.assertFalse(account.check_password(old_passwd))
-        with self.assertRaises(ObjectDoesNotExist):
+        # request should be deleted immediately
+        with self.assertRaises(ObjectDoesNotExist) as e:
             self.serializer_kwargs["rst_req"].refresh_from_db()
+        self.assertIsNotNone(e.exception)
 
     def test_passwd_check_failure(self):
         req_data = {"password": "TooeAsy", "password2": "TooEasy"}
         self.serializer_kwargs["data"] = req_data
         serializer = LoginAccountSerializer(**self.serializer_kwargs)
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
+        with self.assertRaises(DRFValidationError) as e:
+            serializer.is_valid(raise_exception=True)
+        error_caught = e.exception
         self.assertIsNotNone(error_caught)
         expect_err_codes = {"min_length", "confirm_fail", "special_char_required"}
         actual_err_codes = set(map(lambda ed: ed.code, error_caught.detail["password"]))
@@ -360,13 +336,9 @@ class AuthChangeUsernameTestCase(BaseTestCase):
         req_data = {"username": new_uname, "old_uname": old_uname}
         self.serializer_kwargs["data"] = req_data
         serializer = LoginAccountSerializer(**self.serializer_kwargs)
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
+        with self.assertRaises(DRFValidationError) as error_caught:
+            serializer.is_valid(raise_exception=True)
+        error_caught = error_caught.exception
         self.assertIsNotNone(error_caught)
         self.assertEqual(error_caught.detail["old_uname"][0], "incorrect old username")
 
@@ -415,13 +387,9 @@ class AuthChangePasswordTestCase(BaseTestCase):
         }
         self.serializer_kwargs["data"] = req_data
         serializer = LoginAccountSerializer(**self.serializer_kwargs)
-        error_caught = None
-        with self.assertRaises(DRFValidationError):
-            try:
-                serializer.is_valid(raise_exception=True)
-            except DRFValidationError as e:
-                error_caught = e
-                raise
+        with self.assertRaises(DRFValidationError) as error_caught:
+            serializer.is_valid(raise_exception=True)
+        error_caught = error_caught.exception
         self.assertIsNotNone(error_caught)
         expect_err_codes = {"min_length", "confirm_fail", "special_char_required"}
         actual_err_codes = set(map(lambda ed: ed.code, error_caught.detail["password"]))

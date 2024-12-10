@@ -1,15 +1,11 @@
 import copy
-import json
-import ijson
 import logging
 from datetime import datetime, timezone, timedelta
 
 from django.conf import settings as django_settings
-from django.core.exceptions import ValidationError
 from django.http.response import StreamingHttpResponse as DjangoStreamingHttpResponse
 from django.utils.http import http_date
 from django.utils.module_loading import import_string
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import authenticate
 
 from rest_framework import status as RestStatus
@@ -42,7 +38,6 @@ from ecommerce_common.views.mixins import (
 from ecommerce_common.views.api import AuthCommonAPIView, AuthCommonAPIReadView
 
 from ..apps import UserManagementConfig as UserMgtCfg
-from ..models.base import QuotaMaterial
 from ..serializers import PermissionSerializer
 from ..serializers.auth import UnauthRstAccountReqSerializer, LoginAccountSerializer
 from ..serializers.common import serialize_profile_quota, serialize_profile_permissions
@@ -85,7 +80,7 @@ class LoginAccountCreateView(APIView, UserEditViewLogMixin):
         profile = prof_model_cls.objects.get(id=rst_req.email.user_id)
         try:
             account = profile.account
-        except type(profile).account.RelatedObjectDoesNotExist as e:
+        except type(profile).account.RelatedObjectDoesNotExist:
             account = None
         if account:
             response_data.update({"created": False, "reason": "already created before"})
@@ -254,7 +249,7 @@ class UnauthPasswordResetView(APIView, UserEditViewLogMixin):
         profile = prof_model_cls.objects.get(id=rst_req.email.user_id)
         try:
             account = profile.account
-        except type(profile).account.RelatedObjectDoesNotExist as e:
+        except type(profile).account.RelatedObjectDoesNotExist:
             account = None
         if account and account.is_active:
             serializer_kwargs = {
@@ -458,9 +453,7 @@ class RefreshAccessTokenView(APIView):
         audience = request.query_params.get("audience", "").split(",")
         audience = self._filter_resource_services(
             audience,
-            exclude=[
-                "web",
-            ],
+            exclude=["web"],
         )
         if audience:
             signed = self._gen_signed_token(request=request, audience=audience)

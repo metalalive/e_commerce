@@ -70,3 +70,4 @@ class RenderMailContentTestCase(unittest.TestCase):
                 msg_data=msg_data,
                 subject_data=subject_data,
             )
+        assert "adj" in ae.exception.args

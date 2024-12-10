@@ -3,27 +3,20 @@ import copy
 import operator
 from functools import reduce
 
-from django.utils import timezone as django_timezone
 from django.db.models.constants import LOOKUP_SEP
 
-from user_management.models.common import AppCodeOptions
 from user_management.models.auth import Role
 from user_management.models.base import (
     QuotaMaterial,
     GenericUserProfile,
     GenericUserGroup,
     GenericUserGroupClosure,
-    EmailAddress,
-    PhoneNumber,
-    GeoLocation,
 )
 from user_management.serializers import GenericUserGroupSerializer
 
 from ecommerce_common.tests.common import HttpRequestDataGen
 from ..common import (
     _fixtures,
-    _curr_timezone,
-    gen_expiry_time,
     UserNestedFieldSetupMixin,
     UserNestedFieldVerificationMixin,
 )

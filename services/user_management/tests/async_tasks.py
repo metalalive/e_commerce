@@ -1,18 +1,13 @@
-import string
 import random
-from datetime import time
-from unittest.mock import patch
 
 from MySQLdb.constants.ER import NO_SUCH_TABLE
 from celery import states as CeleryStates
 
-from django.conf import settings as django_settings
 from django.db.utils import ProgrammingError
 from django.test import TransactionTestCase
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import Permission as ModelLevelPermission
 
-from ecommerce_common.models.enums.django import AppCodeOptions
 from ecommerce_common.util import flatten_nested_iterable
 
 from user_management.models.auth import Role, LoginAccount

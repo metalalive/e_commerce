@@ -80,6 +80,10 @@ jobs:
       - uses: actions/checkout@v4 # checkout codebase from github
       - name: set up python packages
         uses: ./.github/actions/usermgt
+      - name: lint check
+        working-directory: services/user_management
+        run: |
+            pipenv run ruff check  ./src/ ./tests/  ./settings/
       - name: run test
         working-directory: services/user_management
         run: |

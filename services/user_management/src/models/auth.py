@@ -1,7 +1,7 @@
 import secrets
 import hashlib
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.contrib import auth
 from django.contrib.auth.models import (
@@ -32,10 +32,7 @@ _logger = logging.getLogger(__name__)
 class RoleQuerySet(models.QuerySet):
     def get_permissions(self, app_labels):
         """retrieve low-level permission instances from role queryset"""
-        always_fetch_roles = (
-            ROLE_ID_SUPERUSER,
-            ROLE_ID_STAFF,
-        )
+        always_fetch_roles = (ROLE_ID_SUPERUSER, ROLE_ID_STAFF)
         always_have_role_ids = models.Q(id__in=always_fetch_roles)
         rel_field = ["permissions", "content_type", "app_label", "in"]
         optional_role_ids = models.Q(**{LOOKUP_SEP.join(rel_field): app_labels})
@@ -339,9 +336,7 @@ class LoginAccount(AbstractUser):
                 errmsg = "Forbidden to delete/deactivate this account"
                 log_args.extend(["errmsg", errmsg])
                 _logger.warning(None, *log_args)
-                detail = {
-                    api_settings.NON_FIELD_ERRORS_KEY: [errmsg],
-                }
+                detail = {api_settings.NON_FIELD_ERRORS_KEY: [errmsg]}
                 raise PermissionDenied(detail=detail)  ##  SuspiciousOperation
             else:
                 _logger.info(None, *log_args)
@@ -399,7 +394,7 @@ class UnauthResetAccountRequest(models.Model, MinimumInfoMixin):
                 instance.delete()
             else:
                 result = instance
-        except cls.DoesNotExist as e:
+        except cls.DoesNotExist:
             result = None
         log_args = ["hashed_token", hashed_token, "result", result]
         _logger.info(None, *log_args)

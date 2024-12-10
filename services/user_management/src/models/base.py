@@ -1,24 +1,15 @@
 import logging
-from functools import partial
 
-from datetime import datetime, timezone, timedelta
-
-from django.db import models, IntegrityError, transaction
-from django.db.models.manager import Manager
+from django.db import models, IntegrityError
 from django.db.models.constants import LOOKUP_SEP
 from django.core.validators import RegexValidator
-from django.core.exceptions import (
-    EmptyResultSet,
-    ObjectDoesNotExist,
-    MultipleObjectsReturned,
-)
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.utils import timezone as django_timezone
 
 from softdelete.models import SoftDeleteObjectMixin
 
-from ecommerce_common.util import merge_partial_dup_listitem
 from ecommerce_common.models.constants import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from ecommerce_common.models.enums.django import JsonFileChoicesMeta
 from ecommerce_common.models.mixins import MinimumInfoMixin
@@ -30,9 +21,9 @@ from ecommerce_common.models.closure_table import (
 
 from .common import (
     _atomicity_fn,
+    AppCodeOptions,
     UsermgtChangeSet,
     UsermgtSoftDeleteRecord,
-    AppCodeOptions,
 )
 from django.contrib import auth
 
@@ -111,7 +102,10 @@ class QuotaMaterial(models.Model):
     @classmethod
     def get_for_apps(cls, app_labels):
         app_labels = app_labels or []
-        label_to_code_fn = lambda app_label: getattr(AppCodeOptions, app_label).value
+
+        def label_to_code_fn(app_label: str):
+            return getattr(AppCodeOptions, app_label).value
+
         _appcodes = tuple(map(label_to_code_fn, app_labels))
         return cls.objects.filter(app_code__in=_appcodes)
 
@@ -197,53 +191,31 @@ class GeoLocation(AbstractUserRelation):
     class CountryCode(models.TextChoices, metaclass=JsonFileChoicesMeta):
         filepath = "./common/data/nationality_code.json"
 
-    id = models.AutoField(
-        primary_key=True,
-    )
-
+    id = models.AutoField(primary_key=True)
     country = models.CharField(
         name="country",
         max_length=2,
         choices=CountryCode.choices,
         default=CountryCode.TW,
     )
-    province = models.CharField(
-        name="province",
-        max_length=50,
-    )  # name of the province
-    locality = models.CharField(
-        name="locality",
-        max_length=50,
-    )  # name of the city or town
-    street = models.CharField(
-        name="street",
-        max_length=50,
-    )  # name of the road, street, or lane
+    province = models.CharField(name="province", max_length=50)
+    # name of the city or town
+    locality = models.CharField(name="locality", max_length=50)
+    # name of the road, street, or lane
+    street = models.CharField(name="street", max_length=50)
     # extra detail of the location, e.g. the name of the building, which floor, etc.
     # Note each record in this database table has to be mapped to a building of real world
-    detail = models.CharField(
-        name="detail",
-        max_length=100,
-    )
+    detail = models.CharField(name="detail", max_length=100)
     # if
     # floor =  0, that's basement B1 floor
     # floor = -1, that's basement B2 floor
     # floor = -2, that's basement B3 floor ... etc
     floor = models.SmallIntegerField(default=1, blank=True, null=True)
     # simple words to describe what you do in the location for your business
-    description = models.CharField(
-        name="description",
-        blank=True,
-        max_length=100,
-    )
+    description = models.CharField(name="description", blank=True, max_length=100)
 
     def __str__(self):
-        out = [
-            "Nation:",
-            None,
-            ", city/town:",
-            None,
-        ]
+        out = ["Nation:", None, ", city/town:", None]
         out[1] = self.country
         out[3] = self.locality
         return "".join(out)
@@ -273,7 +245,7 @@ class UserQuotaRelation(AbstractUserRelation, SoftDeleteObjectMixin, _ExpiryFiel
     id = models.CharField(max_length=18, primary_key=True)
 
     def refresh_pk(self) -> str:
-        _user_type = self.user_type.id & 0xff
+        _user_type = self.user_type.id & 0xFF
         _user_id = self.user_id
         _material = self.material.id
         self.id = "{:02X}{:08X}{:08X}".format(_user_type, _user_id, _material)
@@ -291,24 +263,14 @@ class GenericUserCommonFieldsMixin(SoftDeleteObjectMixin):
     class Meta:
         abstract = True
 
-    roles = GenericRelation(
-        "GenericUserAppliedRole",
-        object_id_field="user_id",
-        content_type_field="user_type",
-    )
+    # fmt: off
+    roles = GenericRelation("GenericUserAppliedRole", object_id_field="user_id", content_type_field="user_type")
     # reverse relations from related models e.g. emails / phone numbers / geographical locations
-    quota = GenericRelation(
-        UserQuotaRelation, object_id_field="user_id", content_type_field="user_type"
-    )
-    emails = GenericRelation(
-        EmailAddress, object_id_field="user_id", content_type_field="user_type"
-    )
-    phones = GenericRelation(
-        PhoneNumber, object_id_field="user_id", content_type_field="user_type"
-    )
-    locations = GenericRelation(
-        GeoLocation, object_id_field="user_id", content_type_field="user_type"
-    )
+    quota = GenericRelation(UserQuotaRelation, object_id_field="user_id", content_type_field="user_type")
+    emails = GenericRelation(EmailAddress, object_id_field="user_id", content_type_field="user_type")
+    phones = GenericRelation(PhoneNumber, object_id_field="user_id", content_type_field="user_type")
+    locations = GenericRelation(GeoLocation, object_id_field="user_id", content_type_field="user_type")
+    # fmt: on
 
     @_atomicity_fn()
     def delete(self, *args, **kwargs):
@@ -345,16 +307,12 @@ class GenericUserCommonFieldsMixin(SoftDeleteObjectMixin):
         status = super().undelete(*args, **kwargs)
         kwargs.pop("changeset", None)
         kwargs.pop("profile_id", None)
+        # fmt: off
         log_args = [
-            "changeset_id",
-            changeset_id,
-            "status",
-            status,
-            "obj_id",
-            self.pk,
-            "obj_type",
-            str(type(self)),
+            "changeset_id", changeset_id, "status", status,
+            "obj_id", self.pk, "obj_type", str(type(self)),
         ]
+        # fmt: on
         _logger.debug(None, *log_args)
         return status
 
@@ -381,13 +339,10 @@ class GenericUserGroup(GenericUserCommonFieldsMixin, MinimumInfoMixin):
                 kwargs["profile_id"] = profile_id
             self.profiles.all().delete(*args, changeset=changeset, **kwargs)
             if _logger.level <= logging.DEBUG:
-                del_set_exist = (
-                    type(self).objects.get_deleted_set().filter(pk=del_grp_id).exists()
-                )
+                # fmt: off
+                del_set_exist = type(self).objects.get_deleted_set().filter(pk=del_grp_id).exists()
                 cond = models.Q(ancestor=del_grp_id) | models.Q(descendant=del_grp_id)
-                del_paths_qset = (
-                    GenericUserGroupClosure.objects.get_deleted_set().filter(cond)
-                )
+                del_paths_qset = GenericUserGroupClosure.objects.get_deleted_set().filter(cond)
                 del_paths_qset = del_paths_qset.values(
                     "pk", "ancestor__pk", "descendant__pk", "depth"
                 )
@@ -395,17 +350,10 @@ class GenericUserGroup(GenericUserCommonFieldsMixin, MinimumInfoMixin):
                     "pk", "content_type__pk", "object_id"
                 )
                 log_args = [
-                    "changeset_id",
-                    changeset.pk,
-                    "del_grp_id",
-                    del_grp_id,
-                    "del_set_exist",
-                    del_set_exist,
-                    "del_paths_qset",
-                    del_paths_qset,
-                    "cset_records",
-                    cset_records,
+                    "changeset_id", changeset.pk, "del_grp_id", del_grp_id, "del_set_exist", del_set_exist,
+                    "del_paths_qset", del_paths_qset, "cset_records", cset_records,
                 ]
+                # fmt: on
                 _logger.debug(None, *log_args)
 
     @_atomicity_fn()
@@ -534,36 +482,25 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
         profile_id = kwargs.get("profile_id", None)
         hard_delete = kwargs.get("hard", False)
         self.clean_reset_account_requests()
-        changeset = super().delete(
-            *args, **kwargs
-        )  # login account will be automatically deleted
+        changeset = super().delete(*args, **kwargs)
+        # login account will be automatically deleted
         if not hard_delete:
             if "profile_id" not in kwargs.keys():
                 kwargs["profile_id"] = profile_id
             self.groups.all().delete(*args, changeset=changeset, **kwargs)
             if _logger.level <= logging.DEBUG:
-                del_set_exist = (
-                    type(self).objects.get_deleted_set().filter(pk=del_prof_id).exists()
-                )
+                # fmt: off
+                del_set_exist = type(self).objects.get_deleted_set().filter(pk=del_prof_id).exists()
                 phones_exist = self.phones.all().exists()
                 geoloc_exist = self.locations.all().exists()
                 cset_records = changeset.soft_delete_records.all().values(
                     "pk", "content_type__pk", "object_id"
                 )
                 log_args = [
-                    "del_prof_id",
-                    del_prof_id,
-                    "del_set_exist",
-                    del_set_exist,
-                    "cset_records",
-                    cset_records,
-                    "changeset_id",
-                    changeset.pk,
-                    "phones_exist",
-                    phones_exist,
-                    "geoloc_exist",
-                    geoloc_exist,
+                    "del_prof_id", del_prof_id, "del_set_exist", del_set_exist, "cset_records", cset_records,
+                    "changeset_id", changeset.pk, "phones_exist", phones_exist, "geoloc_exist", geoloc_exist,
                 ]
+                # fmt: on
                 _logger.debug(None, *log_args)
 
     @_atomicity_fn()
@@ -609,7 +546,7 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
             if ops_prof_can_undelete:
                 try:
                     kwargs["profile_id"] = self.pk
-                    status = super().undelete(*args, **kwargs)
+                    status = super().undelete(*args, **kwargs)  # noqa : F841
                 finally:
                     kwargs["profile_id"] = ops_prof_id
             else:
@@ -664,12 +601,7 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
         # 'ancestors__ancestor__quota__material__app_code',
         # 'ancestors__ancestor__quota__material__mat_code'
         # 'ancestors__ancestor__quota__maxnum' ]
-        quota_mat_field = [
-            "ancestors",
-            "ancestor",
-            "quota",
-            "material",
-        ]  # QuotaMaterial.id field
+        quota_mat_field = ["ancestors", "ancestor", "quota", "material"]
         quota_val_field = ["ancestors", "ancestor", "quota", "maxnum"]
         quota_exp_field = ["ancestors", "ancestor", "quota", "expiry"]
         quota_mat_field = LOOKUP_SEP.join(quota_mat_field)
@@ -765,12 +697,7 @@ class GenericUserProfile(GenericUserCommonFieldsMixin, MinimumInfoMixin):
         update privilege (is_superuser, is_staff flags)  in LoginAccount,
         the method should run after this instance of the class is already saved
         """
-        log_args = [
-            "auto_save",
-            auto_save,
-            "profile_id",
-            self.pk,
-        ]
+        log_args = ["auto_save", auto_save, "profile_id", self.pk]
         try:
             self.account  # test whether the account exists
             privilege = self.privilege_status
@@ -823,8 +750,8 @@ class GenericUserAppliedRole(
     )
     id = models.CharField(max_length=18, primary_key=True)
 
-    def format_pk(usr_type: int, usr_id:int, role_id: int) -> str:
-        usr_type = usr_type & 0xff
+    def format_pk(usr_type: int, usr_id: int, role_id: int) -> str:
+        usr_type = usr_type & 0xFF
         return "{:02X}{:08X}{:08X}".format(usr_type, usr_id, role_id)
 
     def refresh_pk(self) -> str:
@@ -843,29 +770,15 @@ class GenericUserGroupRelation(SoftDeleteObjectMixin):
     class Meta:
         db_table = "generic_user_group_relation"
 
-    group = models.ForeignKey(
-        GenericUserGroup,
-        blank=False,
-        on_delete=models.CASCADE,
-        db_column="group",
-        related_name="profiles",
-    )
-    profile = models.ForeignKey(
-        GenericUserProfile,
-        blank=False,
-        on_delete=models.CASCADE,
-        db_column="profile",
-        related_name="groups",
-    )
+    # fmt: off
+    group = models.ForeignKey(GenericUserGroup, blank=False, on_delete=models.CASCADE, db_column="group", related_name="profiles")
+    profile = models.ForeignKey(GenericUserProfile, blank=False, on_delete=models.CASCADE, db_column="profile", related_name="groups")
     approved_by = models.ForeignKey(
-        GenericUserProfile,
-        blank=True,
-        null=True,
-        db_column="approved_by",
-        related_name="approval_group",
-        on_delete=models.SET_NULL,
+        GenericUserProfile, blank=True, null=True, db_column="approved_by",
+        related_name="approval_group", on_delete=models.SET_NULL
     )
     id = models.CharField(max_length=16, primary_key=True)
+    # fmt: on
 
     def refresh_pk(self) -> str:
         grp_id = self.group.id

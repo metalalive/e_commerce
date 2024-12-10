@@ -1,30 +1,29 @@
-import random
-import json
 from datetime import timedelta
+from typing import Dict
 
 from django.test import TransactionTestCase
 from django.utils import timezone as django_timezone
 from django.contrib.auth.models import Permission
-from django.contrib.contenttypes.models import ContentType
 from rest_framework.settings import api_settings as drf_settings
 
 from ecommerce_common.util import sort_nested_object
 from ecommerce_common.models.constants import ROLE_ID_SUPERUSER, ROLE_ID_STAFF
 from user_management.serializers import PermissionSerializer
 from user_management.models.base import GenericUserProfile, GenericUserAppliedRole
-from user_management.models.auth import LoginAccount, Role
+from user_management.models.auth import Role
 
-from ecommerce_common.tests.common import HttpRequestDataGen, KeystoreMixin
 from ecommerce_common.tests.common.django import _BaseMockTestClientInfoMixin
-from tests.common import _fixtures, client_req_csrf_setup, AuthenticateUserMixin
+from tests.common import client_req_csrf_setup, AuthenticateUserMixin
 
 non_fd_err_key = drf_settings.NON_FIELD_ERRORS_KEY
 
-_srlz_fn = lambda role: {
-    "id": role.id,
-    "name": role.name,
-    "permissions": list(role.permissions.values_list("id", flat=True)),
-}
+
+def _srlz_fn(role: Role) -> Dict:
+    return {
+        "id": role.id,
+        "name": role.name,
+        "permissions": list(role.permissions.values_list("id", flat=True)),
+    }
 
 
 def _setup_user_roles(profile, approved_by, extra_role_data=None):

@@ -1,5 +1,4 @@
 import random
-import string
 
 from user_management.models.auth import Role
 from user_management.models.base import (
@@ -7,9 +6,6 @@ from user_management.models.base import (
     GenericUserProfile,
     GenericUserGroup,
     GenericUserGroupClosure,
-    EmailAddress,
-    PhoneNumber,
-    GeoLocation,
 )
 from user_management.serializers import GenericUserProfileSerializer
 
