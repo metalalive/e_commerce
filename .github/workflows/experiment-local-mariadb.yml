@@ -29,9 +29,11 @@ jobs:
           CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
           docker cp ${{ github.workspace }}/experiment-init.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
           docker restart $CONTAINER_ID
+          sleep 5
 
       - name: Verify Secondary Database Creation
         run: |
           sudo apt-get update
           sudo apt-get install -y mariadb-client
+          mariadb -h 127.0.0.1 -P 3307 --protocol=TCP -uDB_USERNAME -pDB_PASSWORD -e "CREATE DATABASE `test_db_whatever_replica2`  DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;"
           mariadb -h 127.0.0.1 -P 3307 --protocol=TCP -uDB_USERNAME -pDB_PASSWORD -e "SHOW DATABASES;"
