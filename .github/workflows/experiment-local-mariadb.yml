@@ -19,12 +19,18 @@ jobs:
           MARIADB_DATABASE: "test_db_whatever"
           MARIADB_USER: "DB_USERNAME"
           MARIADB_PASSWORD: "DB_PASSWORD"
-        volumes:
-          - ${{ github.workspace }}/.github/workflow/
-        options: --init-file=${{ github.workspace }}/.github/workflow/experiment-init.sql
 
     steps:
-    - name: tools installation
-      run: |
-        ls -lt ./
+      - name: tools installation
+        run: |
+          ls -lt ./
+      - name: Copy SQL File to Container then Restart MariaDB Service
+        run: |
+          CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
+          docker cp ${{ github.workspace }}/.github/workflow/experiment-init.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
+          docker restart $CONTAINER_ID
 
+      - name: Verify Secondary Database Creation
+        run: |
+          CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
+          docker exec $CONTAINER_ID mysql -uDB_USERNAME -pDB_PASSWORD -e "SHOW DATABASES;"
