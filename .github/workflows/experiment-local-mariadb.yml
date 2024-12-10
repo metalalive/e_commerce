@@ -1,0 +1,18 @@
+name: experiment MariaDB local init
+
+on:
+  push:
+    branches: ["experiment-github-action"]
+
+jobs:
+  init-env:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: tools installation
+      run: |
+          gpg --batch --export "$GPG_KEYS" > /etc/apt/trusted.gpg.d/mariadb.gpg;
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mariadb-server="11.2.6"
+          sudo apt-get install -y --no-install-recommends mariadb-client="11.2.6"
+
+
