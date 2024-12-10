@@ -20,7 +20,8 @@ jobs:
           MARIADB_USER: "DB_USERNAME"
           MARIADB_PASSWORD: "DB_PASSWORD"
         volumes:
-          - ${{ github.workspace }}/.github/workflow/experiment-init.sql
+          - ${{ github.workspace }}/.github/workflow/
+        options: --init-file=${{ github.workspace }}/.github/workflow/experiment-init.sql
 
     steps:
     - name: tools installation
