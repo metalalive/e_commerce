@@ -21,6 +21,7 @@ jobs:
           MARIADB_PASSWORD: "DB_PASSWORD"
 
     steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
       - name: Copy SQL File to Container then Restart MariaDB Service
         run: |
           echo ${{ github.workspace }} 
