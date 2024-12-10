@@ -27,7 +27,7 @@ jobs:
           echo ${{ github.workspace }} 
           ls -lt
           CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
-          docker cp .github/workflow/experiment-init.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
+          docker cp ${{ github.workspace }}/experiment-init.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
           docker restart $CONTAINER_ID
 
       - name: Verify Secondary Database Creation
