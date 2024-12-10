@@ -21,13 +21,12 @@ jobs:
           MARIADB_PASSWORD: "DB_PASSWORD"
 
     steps:
-      - name: tools installation
-        run: |
-          ls -lt ./
       - name: Copy SQL File to Container then Restart MariaDB Service
         run: |
+          echo ${{ github.workspace }} 
+          ls -lt
           CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
-          docker cp ${{ github.workspace }}/.github/workflow/experiment-init.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
+          docker cp .github/workflow/experiment-init.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
           docker restart $CONTAINER_ID
 
       - name: Verify Secondary Database Creation
