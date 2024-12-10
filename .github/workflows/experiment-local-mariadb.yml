@@ -9,10 +9,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: tools installation
+      env:
+        GPG_KEYS: 177F4010FE56CA3336300305F1656F24C74CD1D8 
       run: |
-          gpg --batch --export "$GPG_KEYS" > /etc/apt/trusted.gpg.d/mariadb.gpg;
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends mariadb-server="11.2.6"
-          sudo apt-get install -y --no-install-recommends mariadb-client="11.2.6"
+        sudo gpg --batch --export "$GPG_KEYS" > /etc/apt/trusted.gpg.d/mariadb.gpg;
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends mariadb-server="11.2.6"
+        sudo apt-get install -y --no-install-recommends mariadb-client="11.2.6"
 
 
