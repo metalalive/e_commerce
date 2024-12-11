@@ -5,6 +5,7 @@ on:
     branches: ["experiment-github-action"]
     paths:
       - '.github/workflows/experiment-local-mariadb.yml'
+      - '.github/workflows/experiment-init-part01.sql'
 
 
 jobs:
