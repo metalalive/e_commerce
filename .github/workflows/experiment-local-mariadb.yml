@@ -3,6 +3,9 @@ name: experiment MariaDB local init
 on:
   push:
     branches: ["experiment-github-action"]
+    paths:
+      - '.github/workflows/experiment-local-mariadb.yml'
+
 
 jobs:
   init-env:
@@ -24,12 +27,10 @@ jobs:
       - uses: actions/checkout@v4 # checkout codebase from github
       - name: Copy SQL File to Container then Restart MariaDB Service
         run: |
-          echo ${{ github.workspace }} 
           ls -lt
           CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
-          docker cp ${{ github.workspace }}/experiment-init.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
+          docker cp ${{ github.workspace }}/.github/workflow/experiment-init.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
           docker restart $CONTAINER_ID
-          sleep 5
           docker exec $CONTAINER_ID ls -lt /var/lib/mysql  /docker-entrypoint-initdb.d
 
       - name: Verify Secondary Database Creation
@@ -37,3 +38,4 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mariadb-client
           mariadb -h 127.0.0.1 -P 3307 --protocol=TCP -uDB_USERNAME -pDB_PASSWORD -e "SHOW DATABASES;"
+          mariadb -h 127.0.0.1 -P 3307 --protocol=TCP -uDB_USERNAME -pDB_PASSWORD -e "SHOW GRANTS FOR 'DB_USERNAME'@'localhost';"
