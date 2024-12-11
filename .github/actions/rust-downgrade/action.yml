@@ -1,0 +1,17 @@
+name: 'downgrade rustup to given version'
+description: 'downgrade rustup to given version'
+inputs:
+  version-request:  # id of input
+    description: 'version requested to downgrade to'
+    required: true
+runs:
+    using: 'composite'
+    steps:
+      - name: start downgrading
+        shell: bash
+        run: |
+            rustup install ${{ inputs.version-request }}
+            rustup default ${{ inputs.version-request }}
+            rustup component add clippy
+            rustc --version
+            cargo --version

@@ -1,0 +1,119 @@
+name: Payment Continuous Integration
+
+on:
+  pull_request:
+    branches: ["master"]
+    paths:
+      - '.github/workflows/payment-ci.yaml'
+      - 'services/common/rust/**'
+      - 'services/payment/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  init-env-test-non-db:
+    if: startsWith(github.head_ref, 'payment-dev/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: downgrade rust toolchain to v1.75
+        uses: ./.github/actions/rust-downgrade
+        with:
+          version-request: 1.75
+      - name: lint check
+        working-directory: services/payment
+        run: |
+            cargo clippy
+      - name: Run unit test
+        working-directory: services/payment
+        env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+        run: |
+            cargo test --test unit -- auth  --test-threads=1
+            cargo test --test unit -- model  --test-threads=1
+            cargo test --test unit -- usecase  --test-threads=1
+
+
+  init-env-test-db:
+    if: startsWith(github.head_ref, 'payment-dev/')
+    needs: [init-env-test-non-db]
+    runs-on: ubuntu-24.04
+    services:
+      mariadb_primary:
+        image: mariadb:11.2.6
+        # official docker image only exposes default port 3306 to external world
+        # map any non-default port external clients will use to 3306
+        ports:
+          - 3307:3306
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+          MARIADB_ROOT_PASSWORD: "sys-ci-dba"
+          MARIADB_ROOT_HOST: "localhost"
+          MARIADB_DATABASE: "test_ecommerce_payment"
+          MARIADB_USER: "DB_USERNAME"
+          MARIADB_PASSWORD: "DB_PASSWORD"
+    steps:
+      - uses: actions/checkout@v4
+      - name: downgrade rust toolchain to v1.75
+        uses: ./.github/actions/rust-downgrade
+        with:
+          version-request: 1.75
+      - name: install liquibase migration tool
+        uses: ./.github/actions/liquibase-install
+
+      # mariaDB docker allows to insert initialization SQL script to the path `/docker-entrypoint-initdb.d`
+      # and run it exactly once after restart. Put create databases and privilege setup SQL commands here
+      # for ease of subsequent operation
+      - name: Create replica and Grant necessary privileges
+        working-directory: .github/actions/payment-db
+        run: |
+          ls -lt
+          CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
+          docker cp ./init-replica-db.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
+          docker restart $CONTAINER_ID
+          docker exec $CONTAINER_ID ls -lt /var/lib/mysql  /docker-entrypoint-initdb.d
+
+      - name: run database schema migration
+        working-directory: services/payment
+        run: |
+            liquibase  --changeLogFile=./migrations/changelog_payment_primary.xml \
+                --url=jdbc:mariadb://localhost:3307/test_ecommerce_payment \
+                --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
+            liquibase  --changeLogFile=./migrations/changelog_payment_replica.xml \
+                --url=jdbc:mariadb://localhost:3307/test_ecommerce_payment_replica_1  \
+                --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
+
+      - name: Create trigger across databases inside the same mariaDB server
+        working-directory: .github/actions/payment-db
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mariadb-client
+          mariadb --host=127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW DATABASES;"
+          mariadb --host=127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD < trigger-between-dbs.sql
+          # mariadb -h 127.0.0.1 -P 3307 --protocol=TCP -uDB_USERNAME -pDB_PASSWORD -e "SHOW GRANTS FOR 'DB_USERNAME'@'%';"
+    
+      - name: set up mock credentials for test
+        working-directory: services/common/data
+        run: |
+            ln -s ./secrets_template.json  ./secrets.json
+      
+      - name: Run unit test
+        working-directory: services/payment
+        env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+        run: |
+            cargo test --test unit -- adapter::repository::mariadb --test-threads=1
+      
+      - name: Run integration test
+        working-directory: services/payment
+        env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+          CONFIG_FILE_PATH: "settings/test.json"
+        run: |
+          cargo test --test integration -- --test-threads=1
+
+
