@@ -1,5 +1,10 @@
-CREATE DATABASE `test_db_irriga_replica2`  DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+SHOW TABLES FROM `test_db_whatever`;
+SHOW TABLES FROM `test_db_whatever_replica`;
 
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION ON `test_db_irriga_replica2`.* TO 'DB_USERNAME'@'localhost';
+CREATE TRIGGER `test_db_whatever`.`experiment_trig`  AFTER INSERT ON `test_db_whatever`.`mytable123`  FOR EACH ROW  INSERT INTO test_db_whatever_replica.mytable123 (`col3`,`col4`,`col5`) VALUES (NEW.`col3`, NEW.`col4`, NEW.`col5`);
+          
+SHOW TRIGGERS FROM `test_db_whatever`;
 
-FLUSH PRIVILEGES;
+INSERT INTO `test_db_whatever`.`mytable123` (`col3`,`col4`,`col5`) VALUES (8964, 290.3 ,'Stripe');
+
+SELECT * FROM `test_db_whatever_replica`.`mytable123`;
