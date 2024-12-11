@@ -139,6 +139,19 @@ jobs:
           sleep 10
       - name: initial setup in RabbitMQ
         uses: ./.github/actions/rabbitmq-setup
+
+      - name: setup queues only for test in RabbitMQ
+        run: |
+          CONTAINER_ID=$(docker ps -q --filter "ancestor=rabbitmq:3-management")
+          docker exec $CONTAINER_ID  rabbitmqadmin  declare queue name=rpc_payment_unittest_one  durable=true \
+              vhost=/integration_test  arguments= '{"x-message-ttl": 65000, "x-max-length": 100}'
+          docker exec $CONTAINER_ID  rabbitmqadmin declare binding  source=rpc-default-allapps  destination_type=queue \
+              destination=rpc_payment_unittest_one routing_key=rpc.payment.unittest.one  vhost=/integration_test
+          docker exec $CONTAINER_ID  rabbitmqadmin  declare queue name=rpc_payment_unittest_two  durable=true \
+              vhost=/integration_test  arguments= '{"x-message-ttl": 67000, "x-max-length": 103}'
+          docker exec $CONTAINER_ID  rabbitmqadmin declare binding  source=rpc-default-allapps  destination_type=queue \
+              destination=rpc_payment_unittest_two routing_key=rpc.payment.unittest.two  vhost=/integration_test
+
       - name: downgrade rust toolchain to v1.75
         uses: ./.github/actions/rust-downgrade
         with:
