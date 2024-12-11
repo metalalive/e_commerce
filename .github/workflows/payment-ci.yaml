@@ -13,7 +13,7 @@ env:
 
 jobs:
   init-env-test-non-db:
-    if: startsWith(github.head_ref, 'payment-dev/')
+      if: startsWith(github.head_ref, 'tmp-ignore/payment-dev/')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
 
   init-env-test-db:
     if: startsWith(github.head_ref, 'payment-dev/')
-    needs: [init-env-test-non-db]
+    # needs: [init-env-test-non-db]
     runs-on: ubuntu-24.04
     services:
       mariadb_primary:
@@ -56,12 +56,6 @@ jobs:
           MARIADB_PASSWORD: "DB_PASSWORD"
     steps:
       - uses: actions/checkout@v4
-      - name: downgrade rust toolchain to v1.75
-        uses: ./.github/actions/rust-downgrade
-        with:
-          version-request: 1.75
-      - name: install liquibase migration tool
-        uses: ./.github/actions/liquibase-install
 
       # mariaDB docker allows to insert initialization SQL script to the path `/docker-entrypoint-initdb.d`
       # and run it exactly once after restart. Put create databases and privilege setup SQL commands here
@@ -75,6 +69,8 @@ jobs:
           docker restart $CONTAINER_ID
           docker exec $CONTAINER_ID ls -lt /var/lib/mysql  /docker-entrypoint-initdb.d
 
+      - name: install liquibase migration tool
+        uses: ./.github/actions/liquibase-install
       - name: run database schema migration
         working-directory: services/payment
         run: |
@@ -99,6 +95,10 @@ jobs:
         run: |
             ln -s ./secrets_template.json  ./secrets.json
       
+      - name: downgrade rust toolchain to v1.75
+        uses: ./.github/actions/rust-downgrade
+        with:
+          version-request: 1.75
       - name: Run unit test
         working-directory: services/payment
         env:
