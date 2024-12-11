@@ -37,7 +37,7 @@ jobs:
 
 
   init-env-test-db:
-    if: startsWith(github.head_ref, 'payment-dev/')
+    if: startsWith(github.head_ref, 'tmp-ignore/payment-dev/')
     # needs: [init-env-test-non-db]
     runs-on: ubuntu-24.04
     services:
@@ -117,5 +117,37 @@ jobs:
           CONFIG_FILE_PATH: "settings/test.json"
         run: |
           cargo test --test integration -- --test-threads=1
+ 
 
+  init-env-test-rpc:
+    if: startsWith(github.head_ref, 'payment-dev/')
+    # needs: [init-env-test-non-db]
+    runs-on: ubuntu-24.04
+    services:
+      rabbitmq_amqp:
+        image: rabbitmq:3-management
+        ports: ["5672:5672", "15672:15672"]
+        env:
+          RABBITMQ_DEFAULT_USER: "AMQP_ANOTHER_USERNAME"
+          RABBITMQ_DEFAULT_PASS: "AMQP_ANOTHER_PASSWORD"
+          RABBITMQ_DEFAULT_VHOST: "/integration_test"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for RabbitMQ to Initialize
+        run: |
+          echo "Waiting for RabbitMQ service to be ready..."
+          sleep 10
+      - name: initial setup in RabbitMQ
+        uses: ./.github/actions/rabbitmq-setup
+      - name: downgrade rust toolchain to v1.75
+        uses: ./.github/actions/rust-downgrade
+        with:
+            version-request: 1.75
+      - name: Run unit test
+        working-directory: services/payment
+        env:
+            SYS_BASE_PATH: "${{ github.workspace }}/services"
+            SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+        run: |
+            cargo test --test unit -- adapter::rpc::amqp --test-threads=1
 

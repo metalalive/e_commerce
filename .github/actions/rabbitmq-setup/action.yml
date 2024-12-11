@@ -1,0 +1,19 @@
+
+name: 'initial setup in RabbitMQ'
+description: 'initial setup in RabbitMQ'
+runs:
+    using: 'composite'
+    steps:
+      - name: setup VHost, permissions, and exchange
+        shell: bash
+        run: |
+          CONTAINER_ID=$(docker ps -q --filter "ancestor=rabbitmq:3-management")
+          # Verify rabbitmqctl is Available
+          docker exec $CONTAINER_ID  rabbitmqctl status
+          docker exec $CONTAINER_ID  rabbitmqctl set_permissions -p  /integration_test  AMQP_ANOTHER_USERNAME  ".*" ".*" ".*"
+          docker exec $CONTAINER_ID  rabbitmqctl list_vhosts
+          docker exec $CONTAINER_ID  rabbitmqctl list_permissions -p /integration_test
+          docker exec $CONTAINER_ID  rabbitmqadmin declare exchange  name=rpc-default-allapps  type=direct \
+              durable=true  --vhost=/integration_test  -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD
+          docker exec $CONTAINER_ID  rabbitmqctl list_exchanges -p /integration_test
+
