@@ -37,7 +37,7 @@ jobs:
       - name: renew init sql and then Restart MariaDB Service again
         run: |
           CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
-          docker rm -rf  $CONTAINER_ID:/docker-entrypoint-initdb.d/*.sql
+          docker rm -f  $CONTAINER_ID:/docker-entrypoint-initdb.d/*.sql
           docker cp ${{ github.workspace }}/.github/workflows/experiment-init-part02.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
           docker restart $CONTAINER_ID
           docker exec $CONTAINER_ID ls -lt /var/lib/mysql  /docker-entrypoint-initdb.d
