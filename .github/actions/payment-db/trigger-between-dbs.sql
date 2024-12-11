@@ -6,10 +6,3 @@ CREATE DEFINER='DB_USERNAME'@'%'  TRIGGER `test_ecommerce_payment`.`rep_insert_c
 
 SHOW TRIGGERS FROM `test_ecommerce_payment`;
 
-INSERT INTO `test_ecommerce_payment`.`charge_line` (`buyer_id`,`create_time`,`store_id`,`product_type`,`product_id`,`amt_orig_unit`,`amt_orig_total`,`qty_orig`,`qty_rej`,`qty_rfnd`,`amt_rfnd_unit`,`amt_rfnd_total`) VALUES (8964, "1989-06-04 00:43:29", 89, "1", 64, 250, 250, 1, 0, 0, 0, 0);
-
-SELECT * FROM `test_ecommerce_payment_replica_1`.`charge_line`;
-
-DELETE FROM `test_ecommerce_payment_replica_1`.`charge_line`;
-DELETE FROM `test_ecommerce_payment`.`charge_line`;
-

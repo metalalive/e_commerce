@@ -57,9 +57,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # mariaDB docker allows to insert initialization SQL script to the path `/docker-entrypoint-initdb.d`
-      # and run it exactly once after restart. Put create databases and privilege setup SQL commands here
-      # for ease of subsequent operation
+      # - mariaDB docker allows to insert initialization SQL script to the path `/docker-entrypoint-initdb.d`
+      #   and run it exactly once after restart. Put create databases and privilege setup SQL commands here
+      #   for ease of subsequent operation
+      # - note , if this is not the first step, mariaDB docker container might fail to create
+      #   secondary database without warning / error (TODO, figure out root cause)
       - name: Create replica and Grant necessary privileges
         working-directory: .github/actions/payment-db
         run: |
