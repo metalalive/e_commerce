@@ -33,7 +33,7 @@ jobs:
           docker restart $CONTAINER_ID
           docker exec $CONTAINER_ID ls -lt /var/lib/mysql  /docker-entrypoint-initdb.d
 
-      
+      ### restart again is not working ?
       # - name: renew init sql and then Restart MariaDB Service again
       #  run: |
       #    CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
