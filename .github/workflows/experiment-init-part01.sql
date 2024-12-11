@@ -16,7 +16,7 @@ CREATE DATABASE `test_db_whatever_replica`  DEFAULT CHARACTER SET utf8mb4 COLLAT
 --   PRIMARY KEY (`col3`,`col4`)
 -- );
 
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION ON `test_db_whatever_replica`.* TO 'DB_USERNAME'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, GRANT OPTION ON `test_db_whatever_replica`.* TO 'DB_USERNAME'@'%';
 --- GRANT TRIGGER ON `test_db_whatever`.* TO 'DB_USERNAME'@'localhost';
 
 -- following grant commands does not work in default mariaDB docker
