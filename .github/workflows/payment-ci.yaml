@@ -146,7 +146,7 @@ jobs:
 
           docker exec $CONTAINER_ID  rabbitmqadmin  declare queue name=rpc_payment_unittest_one  durable=true \
               --vhost=/integration_test -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD \
-              arguments= '{"x-message-ttl": 65000, "x-max-length": 100}'
+              arguments='{"x-message-ttl": 65000, "x-max-length": 100}'
 
           docker exec $CONTAINER_ID  rabbitmqadmin declare binding  source=rpc-default-allapps  destination_type=queue \
               destination=rpc_payment_unittest_one routing_key=rpc.payment.unittest.one  \
@@ -154,7 +154,7 @@ jobs:
 
           docker exec $CONTAINER_ID  rabbitmqadmin  declare queue name=rpc_payment_unittest_two  durable=true \
               --vhost=/integration_test -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD \
-              arguments= '{"x-message-ttl": 67000, "x-max-length": 103}'
+              arguments='{"x-message-ttl": 67000, "x-max-length": 103}'
 
           docker exec $CONTAINER_ID  rabbitmqadmin declare binding  source=rpc-default-allapps  destination_type=queue \
               destination=rpc_payment_unittest_two routing_key=rpc.payment.unittest.two \
