@@ -5,8 +5,6 @@ on:
     branches: ["experiment-github-action"]
     paths:
       - '.github/workflows/experiment-local-mariadb.yml'
-      - '.github/workflows/experiment-init-part01.sql'
-
 
 jobs:
   init-env:
@@ -34,26 +32,13 @@ jobs:
           docker restart $CONTAINER_ID
           docker exec $CONTAINER_ID ls -lt /var/lib/mysql  /docker-entrypoint-initdb.d
 
-      ### restart again is not working ?
-      # - name: renew init sql and then Restart MariaDB Service again
-      #  run: |
-      #    CONTAINER_ID=$(docker ps --filter "ancestor=mariadb:11.2.6" --format "{{.ID}}")
-      #    docker rm -f  $CONTAINER_ID:/docker-entrypoint-initdb.d/*.sql
-      #    docker cp ${{ github.workspace }}/.github/workflows/experiment-init-part02.sql  $CONTAINER_ID:/docker-entrypoint-initdb.d/
-      #    docker restart $CONTAINER_ID
-      #    docker exec $CONTAINER_ID ls -lt /var/lib/mysql  /docker-entrypoint-initdb.d
-
       - name: Verify Secondary Database Creation
+        working-directory:  .github/workflows/
         run: |
           sudo apt-get update
           sudo apt-get install -y mariadb-client
           mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW DATABASES;"
-          mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW TABLES FROM test_db_whatever;"
-          mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW TABLES FROM test_db_whatever_replica;"
-
-          mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "CREATE TRIGGER test_db_whatever.experiment_trig  AFTER INSERT ON test_db_whatever.mytable123  FOR EACH ROW  INSERT INTO test_db_whatever_replica.mytable123 (col3,col4,col5) VALUES (NEW.col3, NEW.col4, NEW.col5);"
-          
-          mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW TRIGGERS FROM test_db_whatever;"
+          mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD < experiment-init-part02.sql
 
           # still not work after init sql is executed in mariaDB container
-          #mariadb -h 127.0.0.1 -P 3307 --protocol=TCP -uDB_USERNAME -pDB_PASSWORD -e "SHOW GRANTS FOR 'DB_USERNAME'@'localhost';"
+          mariadb -h 127.0.0.1 -P 3307 --protocol=TCP -uDB_USERNAME -pDB_PASSWORD -e "SHOW GRANTS FOR 'DB_USERNAME'@'%';"
