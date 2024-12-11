@@ -13,7 +13,7 @@ env:
 
 jobs:
   init-env-test-non-db:
-    if: startsWith(github.head_ref, "tmp-ignore/payment-dev/")
+      if: startsWith(github.head_ref, 'tmp-ignore/payment-dev/')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +37,7 @@ jobs:
 
 
   init-env-test-db:
-    if: startsWith(github.head_ref, "payment-dev/")
+    if: startsWith(github.head_ref, 'payment-dev/')
     # needs: [init-env-test-non-db]
     runs-on: ubuntu-24.04
     services:
