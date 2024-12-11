@@ -49,7 +49,10 @@ jobs:
           sudo apt-get install -y mariadb-client
           mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW DATABASES;"
           mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW TABLES FROM test_db_whatever;"
-          mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW TABLES FROM test_db_whatever_replica;"
+          mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW TABLES FROM `test_db_whatever_replica`;"
+
+          mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "CREATE TRIGGER `test_db_whatever`.`experiment_trig`  AFTER INSERT ON `test_db_whatever`.`mytable123`  FOR EACH ROW  INSERT INTO `test_db_whatever_replica`.`mytable123` (`col3`,`col4`,`col5`) VALUES (NEW.`col3`, NEW.`col4`, NEW.`col5`);"
+          
           mariadb -h 127.0.0.1 --port=3307 --protocol=TCP --user=DB_USERNAME --password=DB_PASSWORD -e "SHOW TRIGGERS FROM test_db_whatever;"
 
           # still not work after init sql is executed in mariaDB container
