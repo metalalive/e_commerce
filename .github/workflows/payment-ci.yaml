@@ -14,26 +14,26 @@ env:
 jobs:
   init-env-test-non-db:
       if: startsWith(github.head_ref, 'tmp-ignore/payment-dev/')
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: downgrade rust toolchain to v1.75
-        uses: ./.github/actions/rust-downgrade
-        with:
-          version-request: 1.75
-      - name: lint check
-        working-directory: services/payment
-        run: |
-            cargo clippy
-      - name: Run unit test
-        working-directory: services/payment
-        env:
-          SYS_BASE_PATH: "${{ github.workspace }}/services"
-          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
-        run: |
-            cargo test --test unit -- auth  --test-threads=1
-            cargo test --test unit -- model  --test-threads=1
-            cargo test --test unit -- usecase  --test-threads=1
+      runs-on: ubuntu-24.04
+      steps:
+        - uses: actions/checkout@v4
+        - name: downgrade rust toolchain to v1.75
+          uses: ./.github/actions/rust-downgrade
+          with:
+            version-request: 1.75
+        - name: lint check
+          working-directory: services/payment
+          run: |
+              cargo clippy
+        - name: Run unit test
+          working-directory: services/payment
+          env:
+            SYS_BASE_PATH: "${{ github.workspace }}/services"
+            SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+          run: |
+              cargo test --test unit -- auth  --test-threads=1
+              cargo test --test unit -- model  --test-threads=1
+              cargo test --test unit -- usecase  --test-threads=1
 
 
   init-env-test-db:
