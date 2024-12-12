@@ -123,14 +123,19 @@ jobs:
     if: startsWith(github.head_ref, 'payment-dev/')
     # needs: [init-env-test-non-db]
     runs-on: ubuntu-24.04
+    env:
+        RABBITMQ_USER: AMQP_ANOTHER_USERNAME
+        RABBITMQ_PASS: AMQP_ANOTHER_PASSWORD
+        RABBITMQ_VHOST: /integration_test
+        RABBITMQ_ADMIN_CREDENTIAL: --vhost=${{ env.RABBITMQ_VHOST }} -u ${{ env.RABBITMQ_USER }}  -p ${{ env.RABBITMQ_PASS }}
     services:
       rabbitmq_amqp:
         image: rabbitmq:3-management
         ports: ["5672:5672", "15672:15672"]
         env:
-          RABBITMQ_DEFAULT_USER: "AMQP_ANOTHER_USERNAME"
-          RABBITMQ_DEFAULT_PASS: "AMQP_ANOTHER_PASSWORD"
-          RABBITMQ_DEFAULT_VHOST: "/integration_test"
+          RABBITMQ_DEFAULT_USER: ${{ env.RABBITMQ_USER }}
+          RABBITMQ_DEFAULT_PASS: ${{ env.RABBITMQ_PASS }}
+          RABBITMQ_DEFAULT_VHOST: ${{ env.RABBITMQ_VHOST }}
     steps:
       - uses: actions/checkout@v4
       - name: Wait for RabbitMQ to Initialize
@@ -139,26 +144,28 @@ jobs:
           sleep 10
       - name: initial setup in RabbitMQ
         uses: ./.github/actions/rabbitmq-setup
+        with:
+            vhost: ${{ env.RABBITMQ_VHOST }}
+            uname: ${{ env.RABBITMQ_USER }}
+            passwd: ${{ env.RABBITMQ_PASS }}
 
       - name: setup queues only for test in RabbitMQ
         run: |
           CONTAINER_ID=$(docker ps -q --filter "ancestor=rabbitmq:3-management")
 
           docker exec $CONTAINER_ID  rabbitmqadmin  declare queue name=rpc_payment_unittest_one  durable=true \
-              --vhost=/integration_test -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD \
-              arguments=" {\"x-message-ttl\": 65000, \"x-max-length\": 100}"
+              arguments=" {\"x-message-ttl\": 65000, \"x-max-length\": 100}" ${{ env.RABBITMQ_ADMIN_CREDENTIAL }}
 
           docker exec $CONTAINER_ID  rabbitmqadmin declare binding  source=rpc-default-allapps  destination_type=queue \
               destination=rpc_payment_unittest_one routing_key=rpc.payment.unittest.one  \
-              --vhost=/integration_test -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD
+              ${{ env.RABBITMQ_ADMIN_CREDENTIAL }}
 
           docker exec $CONTAINER_ID  rabbitmqadmin  declare queue name=rpc_payment_unittest_two  durable=true \
-              --vhost=/integration_test -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD \
-              arguments=" {\"x-message-ttl\": 67000, \"x-max-length\": 103}"
+              arguments=" {\"x-message-ttl\": 67000, \"x-max-length\": 103}" ${{ env.RABBITMQ_ADMIN_CREDENTIAL }}
 
           docker exec $CONTAINER_ID  rabbitmqadmin declare binding  source=rpc-default-allapps  destination_type=queue \
               destination=rpc_payment_unittest_two routing_key=rpc.payment.unittest.two \
-              --vhost=/integration_test -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD
+              ${{ env.RABBITMQ_ADMIN_CREDENTIAL }}
 
       - name: downgrade rust toolchain to v1.75
         uses: ./.github/actions/rust-downgrade
