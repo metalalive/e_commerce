@@ -5,11 +5,11 @@ from django.test import TransactionTestCase
 from django.db.utils import DataError
 
 from ecommerce_common.util import sort_nested_object
-from ecommerce_common.models.enums.django import UnitOfMeasurement
 from product.models.base import (
     ProductAttributeType,
     _ProductAttrValueDataType,
     ProductSaleableItem,
+    UnitOfMeasurement,
 )
 from product.models.development import ProductDevIngredient
 

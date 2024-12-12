@@ -6,6 +6,7 @@ from MySQLdb.constants.ER import BAD_NULL_ERROR, DUP_ENTRY
 
 from django.db import models, connections as db_conns_map
 from django.db.utils import IntegrityError
+from django.db.models.enums import IntegerChoices
 from django.db.models.fields.related import RelatedField
 from django.db.models.fields.related_descriptors import (
     ForwardManyToOneDescriptor,
@@ -14,7 +15,7 @@ from django.db.models.fields.related_descriptors import (
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 
-from ecommerce_common.models.enums.django import UnitOfMeasurement, TupleChoicesMeta
+from ecommerce_common.models.enums.django import JsonFileChoicesMeta, TupleChoicesMeta
 from ecommerce_common.models.mixins import MinimumInfoMixin, IdGapNumberFinder
 from ecommerce_common.models.closure_table import ClosureTableModelMixin
 from softdelete.models import SoftDeleteObjectMixin
@@ -49,6 +50,18 @@ def mysql_extract_dup_id_from_error(error):
     if not dup_id[0].isdigit():
         dup_id = dup_id[1:-1]
     return int(dup_id)
+
+
+class UnitOfMeasurement(IntegerChoices, metaclass=JsonFileChoicesMeta):
+    """
+    unit(countable object) 1 - 2
+    working time,      65  - 71
+    weight,            129 - 140
+    length / distance, 193 - 202
+    volume (liquid),   256 -
+    """
+
+    filepath = "./common/data/unit_of_measurement.json"
 
 
 class AppIdGapNumberFinder(IdGapNumberFinder):

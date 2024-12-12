@@ -11,7 +11,6 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.utils import IntegrityError, DataError
 from django.contrib.contenttypes.models import ContentType
 
-from ecommerce_common.models.enums.django import UnitOfMeasurement
 from ecommerce_common.util import flatten_nested_iterable, sort_nested_object
 
 from product.models.base import (
@@ -22,6 +21,7 @@ from product.models.base import (
     ProductSaleableItemComposite,
     ProductAppliedAttributePrice,
     ProductSaleableItemMedia,
+    UnitOfMeasurement,
 )
 from product.models.development import ProductDevIngredient
 

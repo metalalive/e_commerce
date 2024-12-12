@@ -4,7 +4,6 @@ from functools import partial
 from django.test import TransactionTestCase
 from django.contrib.contenttypes.models import ContentType
 
-from ecommerce_common.models.enums.django import UnitOfMeasurement
 from product.models.base import (
     ProductTag,
     ProductAttributeType,
@@ -15,6 +14,7 @@ from product.models.base import (
     ProductSaleableItemComposite,
     ProductSaleablePackageComposite,
     ProductSaleablePackageMedia,
+    UnitOfMeasurement,
 )
 from product.models.development import ProductDevIngredient
 

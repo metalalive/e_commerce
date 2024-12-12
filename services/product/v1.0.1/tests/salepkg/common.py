@@ -3,12 +3,12 @@ import json
 from functools import partial
 
 from ecommerce_common.util import sort_nested_object
-from ecommerce_common.models.enums.django import UnitOfMeasurement
 from product.models.base import (
     _ProductAttrValueDataType,
     ProductTag,
     ProductAttributeType,
     ProductSaleableItem,
+    UnitOfMeasurement,
 )
 from product.serializers.base import SaleablePackageSerializer
 

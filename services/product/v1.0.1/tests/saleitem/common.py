@@ -1,9 +1,9 @@
 import random
 
-from ecommerce_common.models.enums.django import UnitOfMeasurement
 from product.models.base import (
     ProductTag,
     ProductAttributeType,
+    UnitOfMeasurement,
 )
 from product.models.development import ProductDevIngredient
 from product.serializers.base import SaleableItemSerializer

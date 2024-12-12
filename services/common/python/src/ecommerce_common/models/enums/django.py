@@ -18,17 +18,5 @@ class JsonFileChoicesMeta(JsonFileChoicesMetaMixin, ChoicesMeta):
     pass
 
 
-class UnitOfMeasurement(IntegerChoices, metaclass=JsonFileChoicesMeta):
-    """
-    unit(countable object) 1 - 2
-    working time,      65  - 71
-    weight,            129 - 140
-    length / distance, 193 - 202
-    volume (liquid),   256 -
-    """
-
-    filepath = "./common/data/unit_of_measurement.json"
-
-
 class AppCodeOptions(IntegerChoices, metaclass=JsonFileChoicesMeta):
     filepath = "./common/data/app_code.json"

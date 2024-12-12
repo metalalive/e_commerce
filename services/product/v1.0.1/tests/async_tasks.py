@@ -4,9 +4,7 @@ import random
 from celery import states as CeleryStates
 from django.test import TransactionTestCase
 
-from ecommerce_common.models.enums.django import UnitOfMeasurement
-
-from product.models.base import ProductSaleableItem, ProductSaleablePackage
+from product.models.base import ProductSaleableItem, ProductSaleablePackage, UnitOfMeasurement
 from product.async_tasks import get_product
 from tests.common import _common_instances_setup
 

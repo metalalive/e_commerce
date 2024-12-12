@@ -19,7 +19,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.settings import DEFAULTS as drf_default_settings  # noqa: F401
 
 from ecommerce_common.cors.middleware import conf as cors_conf
-from ecommerce_common.models.enums.django import AppCodeOptions, UnitOfMeasurement
+from ecommerce_common.models.enums.django import AppCodeOptions
 from ecommerce_common.util import (
     flatten_nested_iterable,
     sort_nested_object,
@@ -38,6 +38,7 @@ from product.models.base import (
     _ProductAttrValueDataType,
     ProductSaleableItem,
     ProductTagClosure,
+    UnitOfMeasurement,
 )
 from product.models.development import ProductDevIngredientType
 
