@@ -22,12 +22,7 @@ jobs:
         elasticsearch_v6.8:
           image: docker.elastic.co/elasticsearch/elasticsearch:6.8.23
           ports: ['9200:9200']
-          options: >
-              --env "cluster.name=my-ecomm-app"
-              --env "network.host=127.0.0.1"
-              --env "bootstrap.memory_lock=true"
-              --env "ES_JAVA_OPTS=-Xms256m -Xmx256m -Xss2m"
-              --ulimit memlock=-1:-1
+          options: --env cluster.name=my-ecomm-app  --env "network.host=127.0.0.1" --env bootstrap.memory_lock=true  --env "ES_JAVA_OPTS=-Xms256m -Xmx256m -Xss2m"  --ulimit memlock=-1:-1
 
       steps:
       - name: check elasticsearch indices
