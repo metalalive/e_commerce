@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{include="product", from="./src"}, {include="settings", from="."}, {include="tests", from="."}]
 
 [tool.poetry.dependencies]
-python = "3.12"
+python = "^3.12.0"
 granian = "1.5.2"
 blacksheep = "2.0.6"
 pydantic = "2.10.1"
