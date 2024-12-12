@@ -21,8 +21,8 @@ jobs:
       services:
         elasticsearch_v6.8:
           image: docker.elastic.co/elasticsearch/elasticsearch:6.8.23
-          ports: ['9200:9200']
-          options: --env cluster.name=my-ecomm-app  --env http.port=9200 --env bootstrap.memory_lock=true  --env "ES_JAVA_OPTS=-Xms256m -Xmx256m -Xss2m"  --ulimit memlock=-1:-1
+          ports: ['9201:9200']
+          options: --env cluster.name=my-ecomm-app --env bootstrap.memory_lock=true  --env "ES_JAVA_OPTS=-Xms256m -Xmx256m -Xss2m"  --ulimit memlock=-1:-1
 
       steps:
       - uses: actions/checkout@v4 # checkout codebase from github
