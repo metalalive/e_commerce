@@ -127,7 +127,6 @@ jobs:
         RABBITMQ_USER: AMQP_ANOTHER_USERNAME
         RABBITMQ_PASS: AMQP_ANOTHER_PASSWORD
         RABBITMQ_VHOST: /integration_test
-        RABBITMQ_ADMIN_CREDENTIAL: --vhost=${{ env.RABBITMQ_VHOST }} -u ${{ env.RABBITMQ_USER }}  -p ${{ env.RABBITMQ_PASS }}
     services:
       rabbitmq_amqp:
         image: rabbitmq:3-management
@@ -154,18 +153,20 @@ jobs:
           CONTAINER_ID=$(docker ps -q --filter "ancestor=rabbitmq:3-management")
 
           docker exec $CONTAINER_ID  rabbitmqadmin  declare queue name=rpc_payment_unittest_one  durable=true \
-              arguments=" {\"x-message-ttl\": 65000, \"x-max-length\": 100}" ${{ env.RABBITMQ_ADMIN_CREDENTIAL }}
+              arguments=" {\"x-message-ttl\": 65000, \"x-max-length\": 100}" \
+              --vhost=${{ env.RABBITMQ_VHOST }} -u ${{ env.RABBITMQ_USER }}  -p ${{ env.RABBITMQ_PASS }}
 
           docker exec $CONTAINER_ID  rabbitmqadmin declare binding  source=rpc-default-allapps  destination_type=queue \
               destination=rpc_payment_unittest_one routing_key=rpc.payment.unittest.one  \
-              ${{ env.RABBITMQ_ADMIN_CREDENTIAL }}
+              --vhost=${{ env.RABBITMQ_VHOST }} -u ${{ env.RABBITMQ_USER }}  -p ${{ env.RABBITMQ_PASS }}
 
           docker exec $CONTAINER_ID  rabbitmqadmin  declare queue name=rpc_payment_unittest_two  durable=true \
-              arguments=" {\"x-message-ttl\": 67000, \"x-max-length\": 103}" ${{ env.RABBITMQ_ADMIN_CREDENTIAL }}
+              arguments=" {\"x-message-ttl\": 67000, \"x-max-length\": 103}" \
+              --vhost=${{ env.RABBITMQ_VHOST }} -u ${{ env.RABBITMQ_USER }}  -p ${{ env.RABBITMQ_PASS }}
 
           docker exec $CONTAINER_ID  rabbitmqadmin declare binding  source=rpc-default-allapps  destination_type=queue \
               destination=rpc_payment_unittest_two routing_key=rpc.payment.unittest.two \
-              ${{ env.RABBITMQ_ADMIN_CREDENTIAL }}
+              --vhost=${{ env.RABBITMQ_VHOST }} -u ${{ env.RABBITMQ_USER }}  -p ${{ env.RABBITMQ_PASS }}
 
       - name: downgrade rust toolchain to v1.75
         uses: ./.github/actions/rust-downgrade
