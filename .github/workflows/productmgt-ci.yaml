@@ -25,13 +25,12 @@ jobs:
           options: --env cluster.name=my-ecomm-app  --env http.port=9200 --env bootstrap.memory_lock=true  --env "ES_JAVA_OPTS=-Xms256m -Xmx256m -Xss2m"  --ulimit memlock=-1:-1
 
       steps:
-      - name: check elasticsearch indices
-        run: |
-            sleep  6
-            curl   --request  GET -v  "http://localhost:9200/"
-            # _cat/indices?v&pretty&format=text&h=health,status,index,pri,rep,docs.count,docs.deleted,store.size,pri.store.size
-
       - uses: actions/checkout@v4 # checkout codebase from github
+      #- name: check elasticsearch indices
+      #  run: |
+      #      sleep  6
+      #      curl   --request  GET -v  "http://localhost:9200/"
+      #      # _cat/indices?v&pretty&format=text&h=health,status,index,pri,rep,docs.count,docs.deleted,store.size,pri.store.size
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
