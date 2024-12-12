@@ -1,0 +1,73 @@
+name: product management continuous integration
+on:
+  push:
+    branches:
+      - 'product-mgt-dev/**'
+  pull_request:
+    branches:
+      - 'master'
+    paths:
+      - '.github/workflows/productmgt-ci.yaml'
+      - 'services/common/python/**'
+      - 'services/product/v2/**'
+
+
+# due to this long-time unresolved issue, it is safe to put tasks into one
+# big job running sequentially, and give up nicely running simulteneous jobs.
+# https://github.com/actions/checkout/issues/19
+jobs:
+    init-env-then-tests:
+      runs-on: ubuntu-24.04
+      services:
+        elasticsearch_v6.8:
+          image: docker.elastic.co/elasticsearch/elasticsearch:6.8.23
+          ports: ['9200:9200']
+          options: --env cluster.name=my-ecomm-app --env bootstrap.memory_lock=true  --env "ES_JAVA_OPTS=-Xms256m -Xmx256m -Xss2m"  --ulimit memlock=-1:-1
+
+      steps:
+      - uses: actions/checkout@v4 # checkout codebase from github
+      #- name: check elasticsearch indices
+      #  run: |
+      #      sleep  6
+      #      curl   --request  GET -v  "http://localhost:9200/"
+      #      # _cat/indices?v&pretty&format=text&h=health,status,index,pri,rep,docs.count,docs.deleted,store.size,pri.store.size
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12.7
+      - name: Install init poetry
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: 1.8.4
+
+      - name: install dependency packages
+        env:
+            POETRY_EXPERIMENTAL_SYSTEM_GIT_CLIENT: true
+        working-directory: services/product/v2
+        run: |
+            poetry update
+            poetry install
+            poetry run python -c "from ecommerce_common.util import import_module_string"
+            poetry run python -c "import blacksheep"
+            poetry run python -c "import product"
+            poetry run python -c "import settings"
+            poetry run python -c "from c_exts.util import keygen"
+
+      - name: lint check
+        working-directory: services/product/v2
+        run: |
+            poetry run ruff check ./src/ ./tests/ ./settings/
+
+      - name: set up credential
+        working-directory: services/common/data
+        run: |
+            ln -s ./secrets_template.json  ./secrets.json
+      - name: run tests
+        working-directory: services/product/v2
+        env:
+            APP_SETTINGS: settings.test
+        run: |
+            ./run_unit_test
+            ./run_integration_test
+
