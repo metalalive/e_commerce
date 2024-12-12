@@ -52,17 +52,6 @@ jobs:
             poetry run python -c "import blacksheep"
             poetry run python -c "import product"
             poetry run python -c "import settings"
-      - name: build internal common package
-        working-directory: services/common/python
-        env:
-            PIPENV_VENV_IN_PROJECT: 1
-        run: |
-            poetry run pip3 install build==1.2.2
-            poetry run python -m build ./c_exts
-      - name: install internal common package
-        working-directory: services/product/v2
-        run: |
-            poetry run pip install  ../../common/python/c_exts/dist/my_c_extension_lib-0.0.2-cp312-cp312-linux_x86_64.whl
             poetry run python -c "from c_exts.util import keygen"
 
       - name: lint check
@@ -70,6 +59,10 @@ jobs:
         run: |
             poetry run ruff check ./src/ ./tests/ ./settings/
 
+      - name: set up credential
+        working-directory: services/common/data
+        run: |
+            ln -s ./secrets_template.json  ./secrets.json
       - name: run tests
         working-directory: services/product/v2
         env:
