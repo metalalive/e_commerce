@@ -1,0 +1,4 @@
+poetry run pytest -v -s ./tests/unit/model/tag.py
+poetry run pytest -v -s ./tests/unit/adapter/repository/elasticsearch/tag.py
+poetry run pytest -v -s ./tests/unit/adapter/repository/elasticsearch/attribute.py
+poetry run pytest -v -s ./tests/unit/adapter/middleware.py

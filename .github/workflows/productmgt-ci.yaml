@@ -72,6 +72,9 @@ jobs:
 
       - name: run tests
         working-directory: services/product/v2
+        env:
+            APP_SETTINGS: settings.test
         run: |
-            ./run_test
+            ./run_unit_test
+            ./run_integration_test
 

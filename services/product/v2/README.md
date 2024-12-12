@@ -65,7 +65,8 @@ APP_SETTINGS="settings.development" poetry run granian --host 127.0.0.1 --port 8
 
 ## Test
 ```bash
-./run_test
+APP_SETTINGS="settings.test"  ./run_unit_test
+APP_SETTINGS="settings.test"  ./run_integration_test
 ```
 
 ## Development
