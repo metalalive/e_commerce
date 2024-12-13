@@ -13,27 +13,22 @@ env:
 
 jobs:
   init-env-test-non-db:
-    if: startsWith(github.head_ref, 'order-proc-dev/')
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     - name: downgrade rust toolchain to v1.77
-      run: |
-          rustup install 1.77
-          rustup default 1.77
-          rustup component add clippy
-          rustc --version
-          cargo --version
+      uses: ./.github/actions/rust-downgrade
+      with:
+        version-request: 1.77
     - name: lint check
-      run: |
-          cd services/order
-          cargo clippy
+      working-directory: services/order
+      run: cargo clippy
     - name: Run unit test
       env:
           SYS_BASE_PATH: "${{ github.workspace }}/services"
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+      working-directory: services/order
       run: |
-          cd services/order
           cargo test --test unittest  -- model --test-threads=1
           cargo test --test unittest  -- usecase --test-threads=1
           cargo test --test unittest  -- auth --test-threads=1
@@ -44,8 +39,8 @@ jobs:
           SYS_BASE_PATH: "${{ github.workspace }}/services"
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
           CONFIG_FILE_PATH: "settings/test.json"
+      working-directory: services/order/tests/integration
       run: |
-          cd services/order/tests/integration
           cargo test --test web  --  --test-threads=1
 
 
@@ -92,45 +87,42 @@ jobs:
           liquibase --version
 
     - name: run database schema migration
+      working-directory: services/order
       run: |
-          cd services/order
           liquibase  --changeLogFile=./migration/changelog_order.xml \
               --url=jdbc:mariadb://localhost:3307/test_ecommerce_order \
               --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
 
     - name: downgrade rust toolchain to v1.75
-      run: |
-          rustup install 1.75
-          rustup default 1.75
-          rustup component add clippy
-          rustc --version
-          cargo --version
+      uses: ./.github/actions/rust-downgrade
+      with:
+        version-request: 1.75
     - name: lint check
+      working-directory: services/order
       run: |
-          cd services/order
           cargo clippy --features "mariadb"
     - name: Build apps
+      working-directory: services/order
       run: |
-          cd services/order
           cargo build  --bin web --features "mariadb"
     - name: set up mock credentials for test
+      working-directory: services/common/data
       run: |
-          cd services/common/data
           ln -s ./secrets_template.json  ./secrets.json
     - name: Run unit test
       env:
           SYS_BASE_PATH: "${{ github.workspace }}/services"
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+      working-directory: services/order
       run: |
-          cd services/order
           cargo test --test unittest --features "mariadb"  -- repository::mariadb  --test-threads=1 
     - name: Run integration test
       env:
           SYS_BASE_PATH: "${{ github.workspace }}/services"
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
           CONFIG_FILE_PATH: "settings/test.json"
+      working-directory: services/order/tests/integration
       run: |
-          cd services/order/tests/integration
           cargo test --test web  --features "mariadb" --  --test-threads=1
  
 
@@ -153,42 +145,34 @@ jobs:
           echo "Waiting for RabbitMQ service to be ready..."
           sleep 10
 
-    - name: Setup VHost, Permissions, and exchange
-      run: |
-          CONTAINER_ID=$(docker ps -q --filter "ancestor=rabbitmq:3-management")
-          # Verify rabbitmqctl is Available
-          docker exec $CONTAINER_ID  rabbitmqctl status
-          docker exec $CONTAINER_ID  rabbitmqctl set_permissions -p  /integration_test  AMQP_ANOTHER_USERNAME  ".*" ".*" ".*"
-          docker exec $CONTAINER_ID  rabbitmqctl list_vhosts
-          docker exec $CONTAINER_ID  rabbitmqctl list_permissions -p /integration_test
-          docker exec $CONTAINER_ID  rabbitmqadmin declare exchange  name=rpc-default-allapps  type=direct \
-              durable=true  --vhost=/integration_test  -u AMQP_ANOTHER_USERNAME  -p AMQP_ANOTHER_PASSWORD
-          docker exec $CONTAINER_ID  rabbitmqctl list_exchanges -p /integration_test
-          
+    - name: initial setup in RabbitMQ
+      uses: ./.github/actions/rabbitmq-setup
+      with:
+          vhost: /integration_test
+          uname: AMQP_ANOTHER_USERNAME
+          passwd: AMQP_ANOTHER_PASSWORD
+
     - name: downgrade rust toolchain to v1.75
-      run: |
-          rustup install 1.75
-          rustup default 1.75
-          rustup component add clippy
-          rustc --version
-          cargo --version
+      uses: ./.github/actions/rust-downgrade
+      with:
+          version-request: 1.75
     - name: lint check
+      working-directory: services/order
       run: |
-          cd services/order
           cargo clippy --features "amqprs"
     - name: Build apps
+      working-directory: services/order
       run: |
-          cd services/order
           cargo build  --bin rpc_consumer --features "amqprs"
     - name: set up credential for test
+      working-directory: services/common/data
       run: |
-          cd services/common/data
           ln -s ./secrets_template.json  ./secrets.json
     - name: Run unit test
       env:
           SYS_BASE_PATH: "${{ github.workspace }}/services"
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+      working-directory: services/order
       run: |
-          cd services/order
           cargo test --test unittest --features "amqprs"  -- rpc::amqp  --test-threads=1 
 
