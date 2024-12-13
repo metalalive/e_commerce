@@ -7,12 +7,14 @@ on:
       - 'services/order/tests/unit/adapter/thirdparty/currency_exchange.rs'
       - 'services/order/src/adapter/thirdparty/currency_exchange.rs'
       - 'services/order/src/adapter/thirdparty/base_client.rs'
+  schedule:
+    - cron: '25 7,14 * * 1-5'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  init-env-test-non-db:
+  init-env-test:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
