@@ -59,8 +59,9 @@ jobs:
         run: |
             cmake -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/deps/libuv/installed \
                   .. -DBUILD_TESTING=OFF 
-            cmake --build .
+            cmake --build . --target install
             cd ..
+            ls -lt ./libuv*
             ls -lt ./installed
             ls -lt ./installed/lib
 
