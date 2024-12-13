@@ -1,0 +1,36 @@
+name: Currency Exachange 3rd-party test in Order-Processing application
+
+on:
+  push:
+    paths:
+      - '.github/workflows/orderproc-3pty-currencyex.yaml'
+      - 'services/order/tests/unit/adapter/thirdparty/currency_exchange.rs'
+      - 'services/order/src/adapter/thirdparty/currency_exchange.rs'
+      - 'services/order/src/adapter/thirdparty/base_client.rs'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  init-env-test-non-db:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: downgrade rust toolchain to v1.77
+      uses: ./.github/actions/rust-downgrade
+      with:
+        version-request: 1.77
+    - name: set up mock credentials for test
+      working-directory: services/common
+      run: |
+          python3 ./python/src/ecommerce_common/util/json_renderer.py \
+              --template=./data/secrets_template.json   --output=./data/secrets.json \
+              --parameters="backend_apps/secret_key/staff/OpenExchangeRates=${{ secrets.OpenExchangeRates }}"
+    - name: Run test
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
+      working-directory: services/order
+      run: |
+          cargo test --test unittest  -- adapter::thirdparty::currency_exchange  --test-threads=1
+
