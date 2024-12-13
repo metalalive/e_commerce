@@ -19,22 +19,64 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: init workspace for build
-        working-directory: services/media
+      - name: init dependency build space , build tools check
+        # init workspace for building dependencies which don't provide pre-built binaries
         run: |
-            mkdir -p build
-            mkdir -p build/h2o
+            openssl version
+            gcc --version
+            cmake --version
+            mkdir -p deps/libuv   deps/h2o
+            mkdir -p ./deps/libuv/build  ./deps/libuv/installed
+            mkdir -p ./deps/h2o/build    ./deps/h2o/installed
+      - name: download libuv source
+        uses: actions/checkout@v4
+        with:
+            repository: libuv/libuv
+            ref: v1.42.1
+            path: deps/libuv
       - name: download HTTP h2o source
         uses: actions/checkout@v4
         with:
             repository: h2o/h2o
-            # always clone from master branch, libh2o maintainers no longer use release tags
-            ref: master
-            path: services/media/build/h2o
-      - name: build libh2o from source
-        working-directory: services/media/build/h2o
+            # always clone from master branch, libh2o maintainers no longer use release tags / branches
+            ref: 08f0fcad7f423df285c5b886e74b2e1efe0c38e0
+            path: deps/h2o
+
+      - name: build dependent brotli from source
+        working-directory: deps/h2o/deps/brotli
         run: |
-            openssl version
-            ls -lt
-            mkdir -p build
+            mkdir -p ./build ./installed
             cd build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/deps/h2o/deps/brotli/installed \
+                  -DCMAKE_BUILD_TYPE=Release  ..
+            cmake --build . --config Release --target install
+            cd ..
+            ls -lt ./installed
+            ls -lt ./installed/lib
+
+      - name: build libuv from source
+        working-directory: deps/libuv/build
+        run: |
+            cmake -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/deps/libuv/installed \
+                  .. -DBUILD_TESTING=OFF 
+            cmake --build build
+            cd ..
+            ls -lt ./installed
+            ls -lt ./installed/lib
+
+      - name: build libh2o from source
+        working-directory: deps/h2o/build
+        env:
+            PKG_CONFIG_PATH: "${{ github.workspace }}/deps/libuv/installed/lib/pkgconfig:${{ github.workspace }}/deps/h2o/deps/brotli/installed/lib/pkgconfig"
+        run: |
+            cmake -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/deps/h2o/installed" \
+                  -DBUILD_SHARED_LIBS=ON  -DCMAKE_BUILD_TYPE=Release -DWITH_MRUBY=off \
+                  -DWITH_FUSION=off  ..
+            make libh2o
+            make install
+            ls -lt
+            cd ..
+            ls -lt ./installed
+            ls -lt ./installed/lib
+        
+        #working-directory: services/media
