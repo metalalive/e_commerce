@@ -24,16 +24,17 @@ jobs:
         run: |
             mkdir -p build
             mkdir -p build/h2o
-      - name: build libh2o from source
+      - name: download HTTP h2o source
         uses: actions/checkout@v4
-        working-directory: services/media/build/h2o
         with:
             repository: h2o/h2o
             # always clone from master branch, libh2o maintainers no longer use release tags
             ref: master
-      - name: test paths
+            path: services/media/build/h2o
+      - name: build libh2o from source
+        working-directory: services/media/build/h2o
         run: |
-            pwd 
-            ls -lt services/media
-            ls -lt services/media/build
-            ls -lt services/media/build/h2o
+            openssl version
+            ls -lt
+            mkdir -p build
+            cd build
