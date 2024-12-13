@@ -19,15 +19,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: init dependency build space , build tools check
-        # init workspace for building dependencies which don't provide pre-built binaries
-        run: |
-            openssl version
-            gcc --version
-            cmake --version
-            mkdir -p deps/libuv   deps/h2o
-            mkdir -p ./deps/libuv/build  ./deps/libuv/installed
-            mkdir -p ./deps/h2o/build    ./deps/h2o/installed
       - name: download libuv source
         uses: actions/checkout@v4
         with:
@@ -41,6 +32,15 @@ jobs:
             # always clone from master branch, libh2o maintainers no longer use release tags / branches
             ref: 08f0fcad7f423df285c5b886e74b2e1efe0c38e0
             path: deps/h2o
+
+      - name: init dependency build space , build tools check
+        # init workspace for building dependencies which don't provide pre-built binaries
+        run: |
+            openssl version
+            gcc --version
+            cmake --version
+            mkdir -p ./deps/libuv/build  ./deps/libuv/installed
+            mkdir -p ./deps/h2o/build    ./deps/h2o/installed
 
       - name: build dependent brotli from source
         working-directory: deps/h2o/deps/brotli
