@@ -202,11 +202,20 @@ jobs:
             repository: gnutls/gnutls
             ref: 3.7.11
             path: deps/gnutls
+      
+      - name: download GNUTLS / Nettle source
+        if: steps.cachegnutls.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: gnutls/nettle
+            ref: nettle_3.7.2_release_20210321
+            path: deps/gnutls/devel/nettle
 
       - name: build nettle from source as GnuTLS dependency
         if: steps.cachegnutls.outputs.cache-hit != 'true'
         working-directory: deps/gnutls/devel/nettle
         run: |
+            ls
             ./.bootstrap
             ./configure --prefix=${{ env.NETTLE_INSTALL_PATH }} --disable-documentation --enable-mini-gmp
             make
