@@ -11,6 +11,16 @@ on:
       - 'services/media/**'
 
 
+env:
+    LIBUV_INSTALL_PATH: ${{ github.workspace }}/installed/libuv
+    BROTLI_INSTALL_PATH: ${{ github.workspace }}/installed/brotli
+    H2O_INSTALL_PATH: ${{ github.workspace }}/installed/h2o
+    JANSSON_INSTALL_PATH: ${{ github.workspace }}/installed/jansson
+    P11KIT_INSTALL_PATH: ${{ github.workspace }}/installed/p11-kit
+    NETTLE_INSTALL_PATH: ${{ github.workspace }}/installed/nettle
+    GNUTLS_INSTALL_PATH: ${{ github.workspace }}/installed/gnutls
+    RHONABWY_INSTALL_PATH: ${{ github.workspace }}/installed/rhonabwy
+
 # due to this long-time unresolved issue, it is safe to put tasks into one
 # big job running sequentially, and give up nicely running simulteneous jobs.
 # https://github.com/actions/checkout/issues/19
@@ -19,13 +29,57 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: build tools check
+        run: |
+            openssl version
+            gcc --version
+            cmake --version
+            mkdir -p ${{ github.workspace }}/installed
+
+      - name: cache libuv library
+        id:   cachelibuv
+        uses: actions/cache@v4
+        with:
+            path: ${{ env.LIBUV_INSTALL_PATH }}
+            key: prebuilt-libuv
+
       - name: download libuv source
+        if: steps.cachelibuv.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: libuv/libuv
             ref: v1.42.1
             path: deps/libuv
+
+      - name: build libuv from source
+        if: steps.cachelibuv.outputs.cache-hit != 'true'
+        working-directory: deps/libuv
+        run: |
+            mkdir -p ./build
+            cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.LIBUV_INSTALL_PATH }}  .. -DBUILD_TESTING=OFF
+            make
+            rm -rf ${{ env.LIBUV_INSTALL_PATH }} && mkdir -p ${{ env.LIBUV_INSTALL_PATH }}
+            make install
+
+      - name: examine libuv build
+        working-directory: ${{ env.LIBUV_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+
+      - name: cache libh2o library
+        id:   cachelibh2o
+        uses: actions/cache@v4
+        with:
+            path: |
+                ${{ env.BROTLI_INSTALL_PATH }}
+                ${{ env.H2O_INSTALL_PATH }}
+            key: prebuilt-h2o
+
       - name: download HTTP h2o source
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: h2o/h2o
@@ -33,51 +87,192 @@ jobs:
             ref: 08f0fcad7f423df285c5b886e74b2e1efe0c38e0
             path: deps/h2o
 
-      - name: init dependency build space , build tools check
-        # init workspace for building dependencies which don't provide pre-built binaries
-        run: |
-            openssl version
-            gcc --version
-            cmake --version
-            mkdir -p ./deps/libuv/build  ./deps/libuv/installed
-            mkdir -p ./deps/h2o/build    ./deps/h2o/installed
-
-      - name: build dependent brotli from source
+      - name: build brotli from source as H2O dependency
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
         working-directory: deps/h2o/deps/brotli
         run: |
-            mkdir -p ./build ./installed
-            cd build
-            cmake -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/deps/h2o/deps/brotli/installed \
-                  -DCMAKE_BUILD_TYPE=Release  ..
+            mkdir -p ./build && cd build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.BROTLI_INSTALL_PATH }} -DCMAKE_BUILD_TYPE=Release  ..
+            rm -rf ${{ env.BROTLI_INSTALL_PATH }} && mkdir -p ${{ env.BROTLI_INSTALL_PATH }}
             cmake --build . --config Release --target install
-            cd ..
-            ls -lt ./installed
-            ls -lt ./installed/lib
-
-      - name: build libuv from source
-        working-directory: deps/libuv/build
+            
+      - name: examine brotli build
+        working-directory: ${{ env.BROTLI_INSTALL_PATH }}
         run: |
-            cmake -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/deps/libuv/installed \
-                  .. -DBUILD_TESTING=OFF 
-            cmake --build . --target install
-            cd ..
-            ls -lt ./libuv*
-            ls -lt ./installed
-            ls -lt ./installed/lib
+            ls -lt ./  ./lib
 
       - name: build libh2o from source
-        working-directory: deps/h2o/build
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        working-directory: deps/h2o
         env:
-            PKG_CONFIG_PATH: "${{ github.workspace }}/deps/libuv/installed/lib/pkgconfig:${{ github.workspace }}/deps/h2o/deps/brotli/installed/lib/pkgconfig"
+            PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig"
         run: |
-            cmake -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/deps/h2o/installed" \
-                  -DBUILD_SHARED_LIBS=ON  -DCMAKE_BUILD_TYPE=Release -DWITH_MRUBY=off \
-                  -DWITH_FUSION=off  ..
+            mkdir -p ./build && cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.H2O_INSTALL_PATH }}  -DBUILD_SHARED_LIBS=ON \
+                -DCMAKE_BUILD_TYPE=Release -DWITH_MRUBY=OFF  -DWITH_FUSION=OFF  ..
             make libh2o
+            rm -rf ${{ env.H2O_INSTALL_PATH }} && mkdir -p ${{ env.H2O_INSTALL_PATH }}
             make install
-            ls -lt
-            cd ..
-            ls -lt ./installed
-            ls -lt ./installed/lib
-        
+            make clean
+
+      - name: examine h2o build
+        working-directory: ${{ env.H2O_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+
+      - name: cache jansson library
+        id:   cachejansson
+        uses: actions/cache@v4
+        with:
+            path: ${{ env.JANSSON_INSTALL_PATH }}
+            key: prebuilt-jansson
+
+      - name: download jansson source
+        if: steps.cachejansson.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: akheron/jansson
+            ref: v2.14
+            path: deps/jansson
+
+      - name: build jansson from source
+        if: steps.cachejansson.outputs.cache-hit != 'true'
+        working-directory: deps/jansson
+        run: |
+            mkdir -p ./build  && cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.JANSSON_INSTALL_PATH }} \
+                  -DJANSSON_BUILD_SHARED_LIBS=ON  ..
+            make
+            rm -rf ${{ env.JANSSON_INSTALL_PATH }} && mkdir -p ${{ env.JANSSON_INSTALL_PATH }}
+            make install
+
+      - name: examine jansson build
+        working-directory: ${{ env.JANSSON_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+
+      - name: cache p11-kit library
+        id:   cachep11kit
+        uses: actions/cache@v4
+        with:
+            path: ${{ env.P11KIT_INSTALL_PATH }}
+            key: prebuilt-p11-kit
+
+      - name: download p11-kit source
+        if: steps.cachep11kit.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: p11-glue/p11-kit
+            ref: 0.24.1 
+            path: deps/p11-kit
+
+      - name: build p11-kit from source
+        if: steps.cachep11kit.outputs.cache-hit != 'true'
+        working-directory: deps/p11-kit
+        run: |
+            mkdir -p ./_build
+            python3 -m pip install meson ninja
+            meson setup ./_build --prefix=${{ env.P11KIT_INSTALL_PATH }}
+            meson compile -C ./_build
+            #meson test    -C ./_build
+            rm -rf ${{ env.P11KIT_INSTALL_PATH }} && mkdir -p ${{ env.P11KIT_INSTALL_PATH }}
+            meson install -C ./_build
+
+      - name: examine p11-kit build
+        working-directory: ${{ env.P11KIT_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib  ./lib/x86_64-linux-gnu
+
+
+      - name: cache GNU TLS library
+        id:   cachepgnutls
+        uses: actions/cache@v4
+        with:
+            path: |
+                ${{ env.NETTLE_INSTALL_PATH }}
+                ${{ env.GNUTLS_INSTALL_PATH }}
+            key: prebuilt-gnutls
+
+      - name: download GNU TLS source
+        if: steps.cachegnutls.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: gnutls/gnutls
+            ref: 3.7.11
+            path: deps/gnutls
+
+      - name: build nettle from source as GnuTLS dependency
+        if: steps.cachegnutls.outputs.cache-hit != 'true'
+        working-directory: deps/gnutls/devel/nettle
+        run: |
+            ./.bootstrap
+            ./configure --prefix=${{ env.NETTLE_INSTALL_PATH }} --disable-documentation --enable-mini-gmp
+            make
+            rm -rf ${{ env.NETTLE_INSTALL_PATH }} && mkdir -p ${{ env.NETTLE_INSTALL_PATH }}
+            make install
+
+      - name: examine nettle build
+        working-directory: ${{ env.NETTLE_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+      - name: build GNUTLS from source
+        if: steps.cachegnutls.outputs.cache-hit != 'true'
+        working-directory: deps/gnutls
+        env:
+            PKG_CONFIG_PATH: "${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu/pkgconfig:${{ env.NETTLE_INSTALL_PATH }}/lib/pkgconfig"
+            LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.NETTLE_INSTALL_PATH }}/lib:${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu"
+        run: |
+            ./bootstrap
+            ./configure  --prefix=${{ env.GNUTLS_INSTALL_PATH }}  --with-included-libtasn1 \
+                --with-included-unistring  --disable-doc
+            make 
+            make check
+            rm -rf ${{ env.GNUTLS_INSTALL_PATH }} && mkdir -p ${{ env.GNUTLS_INSTALL_PATH }}
+            make install
+
+      - name: examine GNUTLS build
+        working-directory: ${{ env.GNUTLS_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+
+      - name: cache rhonabwy library
+        id:   cacherhonabwy
+        uses: actions/cache@v4
+        with:
+            path: ${{ env.RHONABWY_INSTALL_PATH }}
+            key: prebuilt-rhonabwy
+
+      - name: download rhonabwy source
+        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: babelouest/rhonabwy
+            ref: v1.1.13
+            path: deps/rhonabwy
+
+      - name: build rhonabwy from source
+        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        working-directory: deps/rhonabwy
+        env:
+            PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:${{ env.GNUTLS_INSTALL_PATH }}/lib/pkgconfig:${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu/pkgconfig:${{ env.NETTLE_INSTALL_PATH }}/lib/pkgconfig"
+            LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.GNUTLS_INSTALL_PATH }}/lib:${{ env.NETTLE_INSTALL_PATH }}/lib:${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu"
+        run: |
+            mkdir -p ./build && cd ./build
+            cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
+            make
+            rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
+            make install
+
+      - name: examine rhonabwy build
+        working-directory: ${{ env.RHONABWY_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+
+
         #working-directory: services/media
+        #
