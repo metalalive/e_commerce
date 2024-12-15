@@ -237,7 +237,8 @@ jobs:
             LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.JANSSON_INSTALL_PATH }}/lib"
         run: |
             mkdir -p ./build && cd ./build
-            CC=$(which gcc) cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
+            CC=$(which gcc)  PKG_CONFIG_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"  \
+                cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
             make
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
             make install
