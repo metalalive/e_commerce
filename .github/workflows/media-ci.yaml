@@ -240,7 +240,10 @@ jobs:
             PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
         run: |
             sudo apt-get update
+            apt-cache show nettle-dev
+            apt-cache show libgnutls28-dev
             sudo apt-get install nettle-dev
+            sudo apt-get install libgnutls28-dev
 
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
