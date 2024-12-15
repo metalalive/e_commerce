@@ -261,9 +261,11 @@ jobs:
         if: steps.cachegnutls.outputs.cache-hit != 'true'
         working-directory: deps/gnutls
         env:
-            PKG_CONFIG_PATH: "${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu/pkgconfig:${{ env.NETTLE_INSTALL_PATH }}/lib/pkgconfig"
-            LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.NETTLE_INSTALL_PATH }}/lib:${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu"
+            PKG_CONFIG_PATH: "${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu/pkgconfig:${{ env.NETTLE_INSTALL_PATH }}/lib64/pkgconfig"
+            LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.NETTLE_INSTALL_PATH }}/lib64:${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu"
         run: |
+            sudo apt-get update
+            sudo apt-get install -y git-core autoconf libtool gettext  autopoint gperf 
             ./bootstrap
             ./configure  --prefix=${{ env.GNUTLS_INSTALL_PATH }}  --with-included-libtasn1 \
                 --with-included-unistring  --disable-doc
