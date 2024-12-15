@@ -239,8 +239,10 @@ jobs:
         env:
             PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
         run: |
+            sudo apt-get update
+            sudo apt-get install nettle-dev
+
             mkdir -p ./build && cd ./build
-            ldd /usr/bin/cc
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
             LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${{ env.JANSSON_INSTALL_PATH }}/lib  make
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
