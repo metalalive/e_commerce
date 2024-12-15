@@ -246,7 +246,10 @@ jobs:
 
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
-            LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${{ env.JANSSON_INSTALL_PATH }}/lib  make
+
+            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
+            ldd /usr/bin/cc
+            make
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
             make install
 
