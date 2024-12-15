@@ -16,9 +16,7 @@ env:
     BROTLI_INSTALL_PATH: ${{ github.workspace }}/installed/brotli
     H2O_INSTALL_PATH: ${{ github.workspace }}/installed/h2o
     JANSSON_INSTALL_PATH: ${{ github.workspace }}/installed/jansson
-    P11KIT_INSTALL_PATH: ${{ github.workspace }}/installed/p11-kit
-    NETTLE_INSTALL_PATH: ${{ github.workspace }}/installed/nettle
-    GNUTLS_INSTALL_PATH: ${{ github.workspace }}/installed/gnutls
+    #P11KIT_INSTALL_PATH: ${{ github.workspace }}/installed/p11-kit
     RHONABWY_INSTALL_PATH: ${{ github.workspace }}/installed/rhonabwy
 
 # due to this long-time unresolved issue, it is safe to put tasks into one
@@ -176,126 +174,44 @@ jobs:
             key: prebuilt-jansson
 
 
-      - name: restore p11-kit library from cache
-        id:   cachep11kit
-        uses: actions/cache/restore@v4
-        with:
-            path: ${{ env.P11KIT_INSTALL_PATH }}
-            key: prebuilt-p11-kit
+      ## - name: restore p11-kit library from cache
+      ##   id:   cachep11kit
+      ##   uses: actions/cache/restore@v4
+      ##   with:
+      ##       path: ${{ env.P11KIT_INSTALL_PATH }}
+      ##       key: prebuilt-p11-kit
 
-      - name: download p11-kit source
-        if: steps.cachep11kit.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-            repository: p11-glue/p11-kit
-            ref: 0.24.1 
-            path: deps/p11-kit
+      ## - name: download p11-kit source
+      ##   if: steps.cachep11kit.outputs.cache-hit != 'true'
+      ##   uses: actions/checkout@v4
+      ##   with:
+      ##       repository: p11-glue/p11-kit
+      ##       ref: 0.24.1 
+      ##       path: deps/p11-kit
 
-      - name: build p11-kit from source
-        if: steps.cachep11kit.outputs.cache-hit != 'true'
-        working-directory: deps/p11-kit
-        run: |
-            mkdir -p ./_build
-            python3 -m pip install meson ninja
-            meson setup ./_build --prefix=${{ env.P11KIT_INSTALL_PATH }}
-            meson compile -C ./_build
-            #meson test    -C ./_build
-            rm -rf ${{ env.P11KIT_INSTALL_PATH }} && mkdir -p ${{ env.P11KIT_INSTALL_PATH }}
-            meson install -C ./_build
+      ## - name: build p11-kit from source
+      ##   if: steps.cachep11kit.outputs.cache-hit != 'true'
+      ##   working-directory: deps/p11-kit
+      ##   run: |
+      ##       mkdir -p ./_build
+      ##       python3 -m pip install meson ninja
+      ##       meson setup ./_build --prefix=${{ env.P11KIT_INSTALL_PATH }}
+      ##       meson compile -C ./_build
+      ##       #meson test    -C ./_build
+      ##       rm -rf ${{ env.P11KIT_INSTALL_PATH }} && mkdir -p ${{ env.P11KIT_INSTALL_PATH }}
+      ##       meson install -C ./_build
 
-      - name: examine p11-kit build
-        working-directory: ${{ env.P11KIT_INSTALL_PATH }}
-        run: |
-            ls -lt ./  ./lib  ./lib/x86_64-linux-gnu
+      ## - name: examine p11-kit build
+      ##   working-directory: ${{ env.P11KIT_INSTALL_PATH }}
+      ##   run: |
+      ##       ls -lt ./  ./lib  ./lib/x86_64-linux-gnu
 
-      - name: save p11-kit library to cache
-        if: steps.cachep11kit.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-            path: ${{ env.P11KIT_INSTALL_PATH }}
-            key: prebuilt-p11-kit
-
-
-      - name: restore GNU TLS library from cache
-        id:   cachegnutls
-        uses: actions/cache/restore@v4
-        with:
-            path: |
-                ${{ env.NETTLE_INSTALL_PATH }}
-                ${{ env.GNUTLS_INSTALL_PATH }}
-            key: prebuilt-gnutls
-
-      - name: download GNU TLS source
-        if: steps.cachegnutls.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-            repository: gnutls/gnutls
-            ref: 3.7.2
-            path: deps/gnutls
-      
-      - name: download GNUTLS / Nettle source
-        if: steps.cachegnutls.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-            repository: gnutls/nettle
-            ref: nettle_3.7.2_release_20210321
-            path: deps/gnutls/devel/nettle
-
-      - name: build nettle from source as GnuTLS dependency
-        if: steps.cachegnutls.outputs.cache-hit != 'true'
-        working-directory: deps/gnutls/devel/nettle
-        run: |
-            ./.bootstrap
-            ./configure --prefix=${{ env.NETTLE_INSTALL_PATH }} --disable-documentation --enable-mini-gmp
-            make
-            rm -rf ${{ env.NETTLE_INSTALL_PATH }} && mkdir -p ${{ env.NETTLE_INSTALL_PATH }}
-            make install
-
-      - name: examine nettle build
-        working-directory: ${{ env.NETTLE_INSTALL_PATH }}
-        # github action uses 64-bit CPU platform, the folder should be `lib64`
-        run: |
-            ls -lt ./  ./lib64
-
-      - name: install dependencies for GNUTLS build
-        if: steps.cachegnutls.outputs.cache-hit != 'true'
-        run: |
-            sudo apt-get update
-            sudo apt-get install -y autoconf libtool autopoint gperf gtk-doc-tools
-            #sudo apt-get install -y dash git-core autoconf libtool gettext autopoint
-            #sudo apt-get install -y automake  libp11-kit-dev libtspi-dev libunistring-dev
-            #sudo apt-get install -y libtasn1-bin libtasn1-6-dev libidn2-0-dev gawk gperf
-            #sudo apt-get install -y libtss2-dev libunbound-dev dns-root-data bison gtk-doc-tools
-            #sudo apt-get install -y texinfo texlive texlive-plain-generic texlive-extra-utils
-
-      - name: build GNUTLS from source
-        if: steps.cachegnutls.outputs.cache-hit != 'true'
-        working-directory: deps/gnutls
-        env:
-            PKG_CONFIG_PATH: "${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu/pkgconfig:${{ env.NETTLE_INSTALL_PATH }}/lib64/pkgconfig"
-            LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.NETTLE_INSTALL_PATH }}/lib64:${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu"
-        run: |
-            ./bootstrap
-            ./configure  --prefix=${{ env.GNUTLS_INSTALL_PATH }}  --with-included-libtasn1 \
-                --with-included-unistring  --disable-doc
-            make 
-            make check
-            rm -rf ${{ env.GNUTLS_INSTALL_PATH }} && mkdir -p ${{ env.GNUTLS_INSTALL_PATH }}
-            make install
-
-      - name: examine GNUTLS build
-        working-directory: ${{ env.GNUTLS_INSTALL_PATH }}
-        run: |
-            ls -lt ./  ./lib
-
-      - name: save GNU TLS library to cache
-        if: steps.cachegnutls.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-            path: |
-                ${{ env.NETTLE_INSTALL_PATH }}
-                ${{ env.GNUTLS_INSTALL_PATH }}
-            key: prebuilt-gnutls
+      ## - name: save p11-kit library to cache
+      ##   if: steps.cachep11kit.outputs.cache-hit != 'true'
+      ##   uses: actions/cache/save@v4
+      ##   with:
+      ##       path: ${{ env.P11KIT_INSTALL_PATH }}
+      ##       key: prebuilt-p11-kit
 
 
       - name: restore rhonabwy library from cache
@@ -317,8 +233,8 @@ jobs:
         if: steps.cacherhonabwy.outputs.cache-hit != 'true'
         working-directory: deps/rhonabwy
         env:
-            PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:${{ env.GNUTLS_INSTALL_PATH }}/lib/pkgconfig:${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu/pkgconfig:${{ env.NETTLE_INSTALL_PATH }}/lib/pkgconfig"
-            LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.GNUTLS_INSTALL_PATH }}/lib:${{ env.NETTLE_INSTALL_PATH }}/lib:${{ env.P11KIT_INSTALL_PATH }}/lib/x86_64-linux-gnu"
+            PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
+            LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.JANSSON_INSTALL_PATH }}/lib"
         run: |
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
