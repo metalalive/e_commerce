@@ -35,7 +35,6 @@ jobs:
             gcc --version
             cmake --version
             mkdir -p ${{ github.workspace }}/installed
-            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.RHONABWY_INSTALL_PATH }}/lib:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: restore libuv library from cache
         id:   cachelibuv
@@ -206,14 +205,17 @@ jobs:
 
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
+            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.RHONABWY_INSTALL_PATH }}/lib:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
             make
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
             make install
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
       - name: examine rhonabwy build
         working-directory: ${{ env.RHONABWY_INSTALL_PATH }}
         run: |
             ls -lt ./  ./lib
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
       - name: save rhonabwy library to cache
         # if: steps.cacherhonabwy.outputs.cache-hit != 'true'
