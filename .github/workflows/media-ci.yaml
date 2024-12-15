@@ -192,7 +192,7 @@ jobs:
             # (TODO)
             # consider this library is no longer maintained, I will upgrade
             # the library to this version then look for other substitutions
-            ref: v1.1.11
+            ref: v1.1.9
             path: deps/rhonabwy
 
       - name: build rhonabwy from source
