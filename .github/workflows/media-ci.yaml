@@ -16,7 +16,6 @@ env:
     BROTLI_INSTALL_PATH: ${{ github.workspace }}/installed/brotli
     H2O_INSTALL_PATH: ${{ github.workspace }}/installed/h2o
     JANSSON_INSTALL_PATH: ${{ github.workspace }}/installed/jansson
-    #P11KIT_INSTALL_PATH: ${{ github.workspace }}/installed/p11-kit
     RHONABWY_INSTALL_PATH: ${{ github.workspace }}/installed/rhonabwy
 
 # due to this long-time unresolved issue, it is safe to put tasks into one
@@ -36,6 +35,7 @@ jobs:
             gcc --version
             cmake --version
             mkdir -p ${{ github.workspace }}/installed
+            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.RHONABWY_INSTALL_PATH }}/lib:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: restore libuv library from cache
         id:   cachelibuv
@@ -145,7 +145,7 @@ jobs:
             key: prebuilt-jansson
 
       - name: download jansson source
-        ## if: steps.cachejansson.outputs.cache-hit != 'true'
+        if: steps.cachejansson.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: akheron/jansson
@@ -153,7 +153,7 @@ jobs:
             path: deps/jansson
 
       - name: build jansson from source
-        ## if: steps.cachejansson.outputs.cache-hit != 'true'
+        if: steps.cachejansson.outputs.cache-hit != 'true'
         working-directory: deps/jansson
         run: |
             mkdir -p ./build  && cd ./build
@@ -171,51 +171,11 @@ jobs:
             readelf -Ws ${{ env.JANSSON_INSTALL_PATH }}/lib/libjansson.so  | grep "json_delete"
 
       - name: save jansson library to cache
-        ## if: steps.cachejansson.outputs.cache-hit != 'true'
+        if: steps.cachejansson.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
             path: ${{ env.JANSSON_INSTALL_PATH }}
             key: prebuilt-jansson
-
-
-      ## - name: restore p11-kit library from cache
-      ##   id:   cachep11kit
-      ##   uses: actions/cache/restore@v4
-      ##   with:
-      ##       path: ${{ env.P11KIT_INSTALL_PATH }}
-      ##       key: prebuilt-p11-kit
-
-      ## - name: download p11-kit source
-      ##   if: steps.cachep11kit.outputs.cache-hit != 'true'
-      ##   uses: actions/checkout@v4
-      ##   with:
-      ##       repository: p11-glue/p11-kit
-      ##       ref: 0.24.1 
-      ##       path: deps/p11-kit
-
-      ## - name: build p11-kit from source
-      ##   if: steps.cachep11kit.outputs.cache-hit != 'true'
-      ##   working-directory: deps/p11-kit
-      ##   run: |
-      ##       mkdir -p ./_build
-      ##       python3 -m pip install meson ninja
-      ##       meson setup ./_build --prefix=${{ env.P11KIT_INSTALL_PATH }}
-      ##       meson compile -C ./_build
-      ##       #meson test    -C ./_build
-      ##       rm -rf ${{ env.P11KIT_INSTALL_PATH }} && mkdir -p ${{ env.P11KIT_INSTALL_PATH }}
-      ##       meson install -C ./_build
-
-      ## - name: examine p11-kit build
-      ##   working-directory: ${{ env.P11KIT_INSTALL_PATH }}
-      ##   run: |
-      ##       ls -lt ./  ./lib  ./lib/x86_64-linux-gnu
-
-      ## - name: save p11-kit library to cache
-      ##   if: steps.cachep11kit.outputs.cache-hit != 'true'
-      ##   uses: actions/cache/save@v4
-      ##   with:
-      ##       path: ${{ env.P11KIT_INSTALL_PATH }}
-      ##       key: prebuilt-p11-kit
 
 
       - name: restore rhonabwy library from cache
@@ -226,15 +186,15 @@ jobs:
             key: prebuilt-rhonabwy
 
       - name: download rhonabwy source
-        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        # if: steps.cacherhonabwy.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: babelouest/rhonabwy
-            ref: v1.1.2
+            ref: v1.1.13
             path: deps/rhonabwy
 
       - name: build rhonabwy from source
-        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        # if: steps.cacherhonabwy.outputs.cache-hit != 'true'
         working-directory: deps/rhonabwy
         env:
             PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
@@ -246,9 +206,6 @@ jobs:
 
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
-
-            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
-            ldd /usr/bin/cc
             make
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
             make install
@@ -259,7 +216,7 @@ jobs:
             ls -lt ./  ./lib
 
       - name: save rhonabwy library to cache
-        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        # if: steps.cacherhonabwy.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
             path: ${{ env.RHONABWY_INSTALL_PATH }}
