@@ -31,6 +31,7 @@ jobs:
       - name: build tools check
         run: |
             openssl version
+            pkg-config --version
             cc --version
             gcc --version
             cmake --version
@@ -166,6 +167,8 @@ jobs:
         working-directory: ${{ env.JANSSON_INSTALL_PATH }}
         run: |
             ls -lt ./  ./lib
+            nm -D ${{ env.JANSSON_INSTALL_PATH }}/lib/libjansson.so | grep "json_delete"
+            readelf -Ws ${{ env.JANSSON_INSTALL_PATH }}/lib/libjansson.so  | grep "json_delete"
 
       - name: save jansson library to cache
         ## if: steps.cachejansson.outputs.cache-hit != 'true'
@@ -238,6 +241,7 @@ jobs:
             LD_LIBRARY_PATH: "$LD_LIBRARY_PATH:${{ env.JANSSON_INSTALL_PATH }}/lib"
         run: |
             mkdir -p ./build && cd ./build
+            ldd /usr/bin/cc
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
             make
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
