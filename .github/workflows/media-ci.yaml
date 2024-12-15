@@ -37,9 +37,9 @@ jobs:
             cmake --version
             mkdir -p ${{ github.workspace }}/installed
 
-      - name: cache libuv library
+      - name: restore libuv library from cache
         id:   cachelibuv
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
             path: ${{ env.LIBUV_INSTALL_PATH }}
             key: prebuilt-libuv
@@ -68,10 +68,17 @@ jobs:
         run: |
             ls -lt ./  ./lib
 
+      - name: save libuv library to cache
+        if: steps.cachelibuv.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.LIBUV_INSTALL_PATH }}
+            key: prebuilt-libuv
 
-      - name: cache libh2o library
+
+      - name: restore libh2o library from cache
         id:   cachelibh2o
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
             path: |
                 ${{ env.BROTLI_INSTALL_PATH }}
@@ -120,10 +127,19 @@ jobs:
         run: |
             ls -lt ./  ./lib
 
+      - name: save libh2o library to cache
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: |
+                ${{ env.BROTLI_INSTALL_PATH }}
+                ${{ env.H2O_INSTALL_PATH }}
+            key: prebuilt-h2o
 
-      - name: cache jansson library
+
+      - name: restore jansson library from cache
         id:   cachejansson
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
             path: ${{ env.JANSSON_INSTALL_PATH }}
             key: prebuilt-jansson
@@ -152,10 +168,17 @@ jobs:
         run: |
             ls -lt ./  ./lib
 
+      - name: save jansson library to cache
+        if: steps.cachejansson.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.JANSSON_INSTALL_PATH }}
+            key: prebuilt-jansson
 
-      - name: cache p11-kit library
+
+      - name: restore p11-kit library from cache
         id:   cachep11kit
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
             path: ${{ env.P11KIT_INSTALL_PATH }}
             key: prebuilt-p11-kit
@@ -185,10 +208,17 @@ jobs:
         run: |
             ls -lt ./  ./lib  ./lib/x86_64-linux-gnu
 
+      - name: save p11-kit library to cache
+        if: steps.cachep11kit.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.P11KIT_INSTALL_PATH }}
+            key: prebuilt-p11-kit
 
-      - name: cache GNU TLS library
-        id:   cachepgnutls
-        uses: actions/cache@v4
+
+      - name: restore GNU TLS library from cache
+        id:   cachegnutls
+        uses: actions/cache/restore@v4
         with:
             path: |
                 ${{ env.NETTLE_INSTALL_PATH }}
@@ -215,7 +245,6 @@ jobs:
         if: steps.cachegnutls.outputs.cache-hit != 'true'
         working-directory: deps/gnutls/devel/nettle
         run: |
-            ls
             ./.bootstrap
             ./configure --prefix=${{ env.NETTLE_INSTALL_PATH }} --disable-documentation --enable-mini-gmp
             make
@@ -224,8 +253,9 @@ jobs:
 
       - name: examine nettle build
         working-directory: ${{ env.NETTLE_INSTALL_PATH }}
+        # github action uses 64-bit CPU platform, the folder should be `lib64`
         run: |
-            ls -lt ./  ./lib
+            ls -lt ./  ./lib64
 
       - name: build GNUTLS from source
         if: steps.cachegnutls.outputs.cache-hit != 'true'
@@ -247,10 +277,19 @@ jobs:
         run: |
             ls -lt ./  ./lib
 
+      - name: save GNU TLS library to cache
+        if: steps.cachegnutls.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: |
+                ${{ env.NETTLE_INSTALL_PATH }}
+                ${{ env.GNUTLS_INSTALL_PATH }}
+            key: prebuilt-gnutls
 
-      - name: cache rhonabwy library
+
+      - name: restore rhonabwy library from cache
         id:   cacherhonabwy
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
             path: ${{ env.RHONABWY_INSTALL_PATH }}
             key: prebuilt-rhonabwy
@@ -280,6 +319,13 @@ jobs:
         working-directory: ${{ env.RHONABWY_INSTALL_PATH }}
         run: |
             ls -lt ./  ./lib
+
+      - name: save rhonabwy library to cache
+        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.RHONABWY_INSTALL_PATH }}
+            key: prebuilt-rhonabwy
 
 
 
