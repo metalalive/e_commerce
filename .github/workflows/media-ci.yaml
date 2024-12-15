@@ -230,7 +230,7 @@ jobs:
         uses: actions/checkout@v4
         with:
             repository: gnutls/gnutls
-            ref: 3.7.11
+            ref: 3.7.2
             path: deps/gnutls
       
       - name: download GNUTLS / Nettle source
@@ -261,11 +261,12 @@ jobs:
         if: steps.cachegnutls.outputs.cache-hit != 'true'
         run: |
             sudo apt-get update
-            sudo apt-get install -y dash git-core autoconf libtool gettext autopoint
-            sudo apt-get install -y automake python3  libp11-kit-dev libtspi-dev libunistring-dev
-            sudo apt-get install -y libtasn1-bin libtasn1-6-dev libidn2-0-dev gawk gperf
-            sudo apt-get install -y libtss2-dev libunbound-dev dns-root-data bison gtk-doc-tools
-            sudo apt-get install -y texinfo texlive texlive-plain-generic texlive-extra-utils
+            sudo apt-get install -y autoconf libtool autopoint gperf gtk-doc-tools
+            #sudo apt-get install -y dash git-core autoconf libtool gettext autopoint
+            #sudo apt-get install -y automake  libp11-kit-dev libtspi-dev libunistring-dev
+            #sudo apt-get install -y libtasn1-bin libtasn1-6-dev libidn2-0-dev gawk gperf
+            #sudo apt-get install -y libtss2-dev libunbound-dev dns-root-data bison gtk-doc-tools
+            #sudo apt-get install -y texinfo texlive texlive-plain-generic texlive-extra-utils
 
       - name: build GNUTLS from source
         if: steps.cachegnutls.outputs.cache-hit != 'true'
