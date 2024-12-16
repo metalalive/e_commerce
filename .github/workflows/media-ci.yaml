@@ -17,6 +17,7 @@ env:
     H2O_INSTALL_PATH: ${{ github.workspace }}/installed/h2o
     JANSSON_INSTALL_PATH: ${{ github.workspace }}/installed/jansson
     RHONABWY_INSTALL_PATH: ${{ github.workspace }}/installed/rhonabwy
+    MARIADBCLIENT_INSTALL_PATH: ${{ github.workspace }}/installed/mariadbclient
 
 # due to this long-time unresolved issue, it is safe to put tasks into one
 # big job running sequentially, and give up nicely running simulteneous jobs.
@@ -29,12 +30,20 @@ jobs:
 
       - name: build tools check
         run: |
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.RHONABWY_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib" >> $GITHUB_ENV
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
             openssl version
             pkg-config --version
             cc --version
             gcc --version
             cmake --version
+            
             mkdir -p ${{ github.workspace }}/installed
+
+            sudo apt-get update
+            sudo apt-get install -y  libcurl4-gnutls-dev
+
 
       - name: restore libuv library from cache
         id:   cachelibuv
@@ -201,14 +210,12 @@ jobs:
         env:
             PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
         run: |
-            sudo apt-get update
             apt-cache show nettle-dev
             apt-cache show libgnutls28-dev
-            sudo apt-get install -y  nettle-dev  libgnutls28-dev  libcurl4-gnutls-dev
+            sudo apt-get install -y  nettle-dev  libgnutls28-dev
 
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
-            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.RHONABWY_INSTALL_PATH }}/lib:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
             make
             echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
@@ -226,6 +233,31 @@ jobs:
         with:
             path: ${{ env.RHONABWY_INSTALL_PATH }}
             key: prebuilt-rhonabwy-final
+
+
+      - name: download mariaDB connector/C source
+        uses: actions/checkout@v4
+        with:
+            repository: mariadb-corporation/mariadb-connector-c
+            ref: v3.1.7
+            path: deps/mariadb-connector-c
+
+      - name: build mariaDB connector/C  from source
+        working-directory: deps/mariadb-connector-c
+        run: |
+            mkdir -p ./build && cd ./build
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+
+            cmake -DWITH_DYNCOL=OFF  -DCMAKE_BUILD_TYPE=Release  -DWITH_UNIT_TESTS=OFF \
+                -DCMAKE_INSTALL_PREFIX=${{ env.MARIADBCLIENT_INSTALL_PATH }} ..
+            make
+            rm -rf ${{ env.MARIADBCLIENT_INSTALL_PATH }} && mkdir -p ${{ env.MARIADBCLIENT_INSTALL_PATH }}
+            make install
+
+      - name: examine mariaDB connector/C build
+        working-directory: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
 
 
 
