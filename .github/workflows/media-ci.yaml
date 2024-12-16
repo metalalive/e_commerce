@@ -20,6 +20,7 @@ env:
     MARIADBCLIENT_INSTALL_PATH: ${{ github.workspace }}/installed/mariadbclient
     FFMPEG_INSTALL_PATH: ${{ github.workspace }}/installed/ffmpeg
     CGREEN_INSTALL_PATH: ${{ github.workspace }}/installed/cgreen
+    PY_LOCAL_VENV: ${{ github.workspace }}/services/media/.venv
 
 # due to this long-time unresolved issue, it is safe to put tasks into one
 # big job running sequentially, and give up nicely running simulteneous jobs.
@@ -352,14 +353,15 @@ jobs:
         working-directory: services/media
         env:
             PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:${{ env.RHONABWY_INSTALL_PATH }}/lib/pkgconfig:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/pkgconfig:${{ env.FFMPEG_INSTALL_PATH }}/lib/pkgconfig:/usr/local/lib:/usr/lib"
-            LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
         run: |
+            LD_LIBRARY_PATH = "${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
             sudo apt-get install libelf-dev
+            python3 -m venv ${{ env.PY_LOCAL_VENV }}
             mkdir -p ./build && cd ./build
-            cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH="/PATH/TO/python/venv" \
+            cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} \
                   -DCMAKE_PREFIX_PATH=${{ env.CGREEN_INSTALL_PATH }}  \
                   -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
                   -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
-            make app_server.out
-            make rpc_consumer.out
+            LD_LIBRARY_PATH=$LD_LIBRARY_PATH  make app_server.out
+            LD_LIBRARY_PATH=$LD_LIBRARY_PATH  make rpc_consumer.out
            
