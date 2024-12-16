@@ -96,7 +96,7 @@ jobs:
             path: |
                 ${{ env.BROTLI_INSTALL_PATH }}
                 ${{ env.H2O_INSTALL_PATH }}
-            key: prebuilt-h2o
+            key: prebuilt-h2o-0001
 
       - name: download HTTP h2o source
         if: steps.cachelibh2o.outputs.cache-hit != 'true'
@@ -104,7 +104,7 @@ jobs:
         with:
             repository: h2o/h2o
             # always clone from master branch, libh2o maintainers no longer use release tags / branches
-            ref: 08f0fcad7f423df285c5b886e74b2e1efe0c38e0
+            ref: f6c9f06dff35b6d241fe7932b183ca2960122e5f
             path: deps/h2o
 
       - name: build brotli from source as H2O dependency
@@ -147,7 +147,7 @@ jobs:
             path: |
                 ${{ env.BROTLI_INSTALL_PATH }}
                 ${{ env.H2O_INSTALL_PATH }}
-            key: prebuilt-h2o
+            key: prebuilt-h2o-0001
 
 
       - name: restore jansson library from cache
