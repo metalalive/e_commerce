@@ -348,17 +348,17 @@ jobs:
         uses: ./.github/actions/liquibase-install
 
       - name: build media-processing applications
-          working-directory: services/media
-          env:
-              PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:/usr/local/lib"
-              LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
-          run: |
-              sudo apt-get install libelfg0-dev
-              mkdir -p ./build && cd ./build
-              cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH="/PATH/TO/python/venv" \
-                    -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
-                    -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
+        working-directory: services/media
+        env:
+            PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:/usr/local/lib"
+            LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
+        run: |
+            sudo apt-get install libelfg0-dev
+            mkdir -p ./build && cd ./build
+            cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH="/PATH/TO/python/venv" \
+                  -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
+                  -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
 
-            # ${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb
+          # ${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb
         #working-directory: services/media
         #
