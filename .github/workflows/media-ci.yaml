@@ -385,7 +385,7 @@ jobs:
             mkdir -p ./build && cd ./build
             cmake -DCMAKE_INSTALL_PREFIX=${{ env.RABBITMQC_INSTALL_PATH }} -DBUILD_SHARED_LIBS=ON \
                   -DBUILD_STATIC_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TOOLS=OFF -DBUILD_TOOLS_DOCS=OFF \
-                  -DBUILD_TESTS -DBUILD_API_DOCS  ..
+                  -DBUILD_TESTS=OFF -DBUILD_API_DOCS=OFF  ..
             make
             rm -rf ${{ env.RABBITMQC_INSTALL_PATH }} && mkdir -p ${{ env.RABBITMQC_INSTALL_PATH }}
             make install
