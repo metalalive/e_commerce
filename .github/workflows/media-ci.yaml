@@ -18,6 +18,7 @@ env:
     JANSSON_INSTALL_PATH: ${{ github.workspace }}/installed/jansson
     RHONABWY_INSTALL_PATH: ${{ github.workspace }}/installed/rhonabwy
     MARIADBCLIENT_INSTALL_PATH: ${{ github.workspace }}/installed/mariadbclient
+    FFMPEG_INSTALL_PATH: ${{ github.workspace }}/installed/ffmpeg
 
 # due to this long-time unresolved issue, it is safe to put tasks into one
 # big job running sequentially, and give up nicely running simulteneous jobs.
@@ -206,6 +207,7 @@ jobs:
         working-directory: deps/rhonabwy
         env:
             PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
+            LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
         run: |
             apt-cache show nettle-dev
             apt-cache show libgnutls28-dev
@@ -213,8 +215,8 @@ jobs:
 
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
-            make
-            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+            echo "LD_LIBRARY_PATH=${{ env.LD_LIBRARY_PATH }}"
+            LD_LIBRARY_PATH=${{ env.LD_LIBRARY_PATH }}  make
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
             make install
 
@@ -244,10 +246,9 @@ jobs:
         working-directory: deps/mariadb-connector-c
         run: |
             mkdir -p ./build && cd ./build
-            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-
             cmake -DWITH_DYNCOL=OFF  -DCMAKE_BUILD_TYPE=Release  -DWITH_UNIT_TESTS=OFF \
-                -DCMAKE_INSTALL_PREFIX=${{ env.MARIADBCLIENT_INSTALL_PATH }} ..
+                -DCMAKE_INSTALL_PREFIX=${{ env.MARIADBCLIENT_INSTALL_PATH }} \
+                -DBUILD_SHARED_LIBS=ON ..
             make
             rm -rf ${{ env.MARIADBCLIENT_INSTALL_PATH }} && mkdir -p ${{ env.MARIADBCLIENT_INSTALL_PATH }}
             make install
@@ -255,11 +256,45 @@ jobs:
       - name: examine mariaDB connector/C build
         working-directory: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
         run: |
-            ls -lt ./  ./lib
+            ls -lt ./  ./lib  ./lib/mariadb
+            du -sh ./lib
+            rm ./lib/mariadb/*.a
+            du -sh ./lib
+
+
+      - name: download ffmpeg source
+        uses: actions/checkout@v4
+        with:
+            repository: FFmpeg/FFmpeg
+            ref: n4.3.3
+            path: deps/ffmpeg
+
+      - name: build ffmpeg libraries from source
+        working-directory: deps/ffmpeg
+        # TODO, recheck whether the non-free feature can be removed
+        run: |
+            mkdir -p ./build && cd ./build
+            ./configure --prefix=${{ env.FFMPEG_INSTALL_PATH }} --enable-libx264 --enable-libx265 \
+                --enable-libfdk-aac  --enable-gnutls --enable-gpl --enable-shared \
+                --enable-nonfree \
+                --disable-static --disable-programs  --disable-ffplay  --disable-doc  \
+                --disable-htmlpages  --disable-manpages  --disable-podpages --disable-txtpages \
+
+            make
+            rm -rf ${{ env.FFMPEG_INSTALL_PATH }} && mkdir -p ${{ env.FFMPEG_INSTALL_PATH }}
+            make install
+
+      - name: examine ffmpeg libraries build
+        working-directory: ${{ env.FFMPEG_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib  
+            du -sh ./lib
+            rm ./lib/mariadb/*.a
+            du -sh ./lib
 
 
 
-            #echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.RHONABWY_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib" >> $GITHUB_ENV
-            #echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+
+            # ${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb
         #working-directory: services/media
         #
