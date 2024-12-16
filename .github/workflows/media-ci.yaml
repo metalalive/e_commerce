@@ -332,6 +332,7 @@ jobs:
       - name: build cgreen library from source
         working-directory: deps/cgreen
         run: |
+            mkdir -p ./build && cd ./build
             cmake -DCMAKE_INSTALL_PREFIX=${{ env.CGREEN_INSTALL_PATH }} ..
             make
             rm -rf ${{ env.CGREEN_INSTALL_PATH }} && mkdir -p ${{ env.CGREEN_INSTALL_PATH }}
@@ -350,15 +351,15 @@ jobs:
       - name: build media-processing applications
         working-directory: services/media
         env:
-            PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:/usr/local/lib"
-            LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
+            PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:${{ env.RHONABWY_INSTALL_PATH }}/lib/pkgconfig:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/pkgconfig:${{ env.FFMPEG_INSTALL_PATH }}/lib/pkgconfig:/usr/local/lib:/usr/lib"
+            LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
         run: |
             sudo apt-get install libelfg0-dev
             mkdir -p ./build && cd ./build
             cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH="/PATH/TO/python/venv" \
+                  -DCMAKE_PREFIX_PATH=${{ env.CGREEN_INSTALL_PATH }}  \
                   -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
                   -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
-
-          # ${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb
-        #working-directory: services/media
-        #
+            make app_server.out
+            make rpc_consumer.out
+           
