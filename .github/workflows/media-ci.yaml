@@ -30,9 +30,6 @@ jobs:
 
       - name: build tools check
         run: |
-            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.RHONABWY_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib" >> $GITHUB_ENV
-            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
             openssl version
             pkg-config --version
             cc --version
@@ -261,5 +258,7 @@ jobs:
 
 
 
+            #echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.RHONABWY_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib" >> $GITHUB_ENV
+            #echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
         #working-directory: services/media
         #
