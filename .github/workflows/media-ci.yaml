@@ -271,7 +271,7 @@ jobs:
 
       - name: save mariaDB connector/C library to cache
         if: steps.cacheMariaDBclient.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/save@v4
         with:
             path: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
             key: prebuilt-mariadb-client-3.1.13
@@ -281,7 +281,7 @@ jobs:
         uses: actions/checkout@v4
         with:
             repository: FFmpeg/FFmpeg
-            ref: n4.3.3
+            ref: n4.3.7
             path: deps/ffmpeg
 
       - name: build ffmpeg libraries from source
