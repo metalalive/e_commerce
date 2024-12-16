@@ -40,7 +40,11 @@ jobs:
             mkdir -p ${{ github.workspace }}/installed
 
             sudo apt-get update
+            apt-cache show nettle-dev
+            apt-cache show libgnutls28-dev
+            sudo apt-get install -y  nettle-dev  libgnutls28-dev
             sudo apt-get install -y  libcurl4-gnutls-dev
+            sudo apt-get install -y  yasm
 
 
       - name: restore libuv library from cache
@@ -209,10 +213,6 @@ jobs:
             PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
             LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
         run: |
-            apt-cache show nettle-dev
-            apt-cache show libgnutls28-dev
-            sudo apt-get install -y  nettle-dev  libgnutls28-dev
-
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
             echo "LD_LIBRARY_PATH=${{ env.LD_LIBRARY_PATH }}"
@@ -234,7 +234,16 @@ jobs:
             key: prebuilt-rhonabwy-final
 
 
+
+      - name: restore mariaDB connector/C library from cache
+        id:   cacheMariaDBclient
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
+            key: prebuilt-mariadb-client-3.1.13
+
       - name: download mariaDB connector/C source
+        if: steps.cacheMariaDBclient.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: mariadb-corporation/mariadb-connector-c
@@ -243,6 +252,7 @@ jobs:
             path: deps/mariadb-connector-c
 
       - name: build mariaDB connector/C  from source
+        if: steps.cacheMariaDBclient.outputs.cache-hit != 'true'
         working-directory: deps/mariadb-connector-c
         run: |
             mkdir -p ./build && cd ./build
@@ -258,8 +268,13 @@ jobs:
         run: |
             ls -lt ./  ./lib  ./lib/mariadb
             du -sh ./lib
-            rm ./lib/mariadb/*.a
-            du -sh ./lib
+
+      - name: save mariaDB connector/C library to cache
+        if: steps.cacheMariaDBclient.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
+            key: prebuilt-mariadb-client-3.1.13
 
 
       - name: download ffmpeg source
@@ -284,7 +299,7 @@ jobs:
       - name: examine ffmpeg libraries build
         working-directory: ${{ env.FFMPEG_INSTALL_PATH }}
         run: |
-            ls -lt ./  ./lib  
+            ls -lt ./  ./lib
             du -sh ./lib
 
 
