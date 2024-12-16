@@ -19,6 +19,7 @@ env:
     RHONABWY_INSTALL_PATH: ${{ github.workspace }}/installed/rhonabwy
     MARIADBCLIENT_INSTALL_PATH: ${{ github.workspace }}/installed/mariadbclient
     FFMPEG_INSTALL_PATH: ${{ github.workspace }}/installed/ffmpeg
+    RABBITMQC_INSTALL_PATH: ${{ github.workspace }}/installed/rabbitmq-c
     CGREEN_INSTALL_PATH: ${{ github.workspace }}/installed/cgreen
     PY_LOCAL_VENV: ${{ github.workspace }}/services/media/.venv
 
@@ -323,7 +324,15 @@ jobs:
 
 
 
+      - name: restore cgreen library from cache
+        id:   cachecgreen
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.CGREEN_INSTALL_PATH }}
+            key: prebuilt-cgreen-1.4
+
       - name: download cgreen source
+        if: steps.cachecgreen.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: cgreen-devs/cgreen
@@ -331,6 +340,7 @@ jobs:
             path: deps/cgreen
 
       - name: build cgreen library from source
+        if: steps.cachecgreen.outputs.cache-hit != 'true'
         working-directory: deps/cgreen
         run: |
             mkdir -p ./build && cd ./build
@@ -345,6 +355,55 @@ jobs:
             ls -lt ./  ./lib
             du -sh ./lib
 
+      - name: save cgreen library to cache
+        if: steps.cachecgreen.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.CGREEN_INSTALL_PATH }}
+            key: prebuilt-cgreen-1.4
+
+
+      - name: restore RabbitMQ/C library from cache
+        id:   cacherabbitmq
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.RABBITMQC_INSTALL_PATH }}
+            key: prebuilt-rabbitmq-c-0.11.0
+
+      - name: download RabbitMQ/C library source
+        if: steps.cacherabbitmq.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: alanxz/rabbitmq-c
+            ref: v0.11.0
+            path: deps/rabbitmq-c
+
+      - name: build RabbitMQ/C library from source
+        if: steps.cacherabbitmq.outputs.cache-hit != 'true'
+        working-directory: deps/rabbitmq-c
+        run: |
+            mkdir -p ./build && cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.RABBITMQC_INSTALL_PATH }} -DBUILD_SHARED_LIBS=ON \
+                  -DBUILD_STATIC_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TOOLS=OFF -DBUILD_TOOLS_DOCS=OFF \
+                  -DBUILD_TESTS -DBUILD_API_DOCS  ..
+            make
+            rm -rf ${{ env.RABBITMQC_INSTALL_PATH }} && mkdir -p ${{ env.RABBITMQC_INSTALL_PATH }}
+            make install
+
+      - name: examine RabbitMQ/C library build
+        working-directory: ${{ env.RABBITMQC_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+            du -sh ./lib
+
+      - name: save RabbitMQ/C library to cache
+        if: steps.cacherabbitmq.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.RABBITMQC_INSTALL_PATH }}
+            key: prebuilt-rabbitmq-c-0.11.0
+
+
 
       - name: install liquibase migration tool
         uses: ./.github/actions/liquibase-install
@@ -355,7 +414,7 @@ jobs:
             PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:${{ env.RHONABWY_INSTALL_PATH }}/lib/pkgconfig:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/pkgconfig:${{ env.FFMPEG_INSTALL_PATH }}/lib/pkgconfig:/usr/local/lib:/usr/lib"
         run: |
             LD_LIBRARY_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
-            sudo apt-get install libelf-dev
+            sudo apt-get install libelf-dev libuuid-dev
             python3 -m venv ${{ env.PY_LOCAL_VENV }}
             mkdir -p ./build && cd ./build
             cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} \
