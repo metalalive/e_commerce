@@ -19,6 +19,7 @@ env:
     RHONABWY_INSTALL_PATH: ${{ github.workspace }}/installed/rhonabwy
     MARIADBCLIENT_INSTALL_PATH: ${{ github.workspace }}/installed/mariadbclient
     FFMPEG_INSTALL_PATH: ${{ github.workspace }}/installed/ffmpeg
+    CGREEN_INSTALL_PATH: ${{ github.workspace }}/installed/cgreen
 
 # due to this long-time unresolved issue, it is safe to put tasks into one
 # big job running sequentially, and give up nicely running simulteneous jobs.
@@ -234,7 +235,6 @@ jobs:
             key: prebuilt-rhonabwy-final
 
 
-
       - name: restore mariaDB connector/C library from cache
         id:   cacheMariaDBclient
         uses: actions/cache/restore@v4
@@ -277,14 +277,23 @@ jobs:
             key: prebuilt-mariadb-client-3.1.13
 
 
+      - name: restore ffmpeg libraries from cache
+        id:   cacheFFmpeg
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.FFMPEG_INSTALL_PATH }}
+            key: prebuilt-ffmpeg-4.3.8-0001
+
       - name: download ffmpeg source
+        if: steps.cacheFFmpeg.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: FFmpeg/FFmpeg
-            ref: n4.3.7
+            ref: n4.3.8
             path: deps/ffmpeg
 
       - name: build ffmpeg libraries from source
+        if: steps.cacheFFmpeg.outputs.cache-hit != 'true'
         working-directory: deps/ffmpeg
         run: |
             sudo apt-get install -y  yasm  libfdk-aac-dev  libx264-dev  libx265-dev  valgrind
@@ -304,8 +313,51 @@ jobs:
             ls -lt ./  ./lib
             du -sh ./lib
 
+      - name: save ffmpeg libraries to cache
+        if: steps.cacheFFmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.FFMPEG_INSTALL_PATH }}
+            key: prebuilt-ffmpeg-4.3.8-0001
 
 
+
+      - name: download cgreen source
+        uses: actions/checkout@v4
+        with:
+            repository: cgreen-devs/cgreen
+            ref: 1.4.1
+            path: deps/cgreen
+
+      - name: build cgreen library from source
+        working-directory: deps/cgreen
+        run: |
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.CGREEN_INSTALL_PATH }} ..
+            make
+            rm -rf ${{ env.CGREEN_INSTALL_PATH }} && mkdir -p ${{ env.CGREEN_INSTALL_PATH }}
+            make install
+
+      - name: examine cgreen library build
+        working-directory: ${{ env.CGREEN_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+            du -sh ./lib
+
+
+      - name: install liquibase migration tool
+        uses: ./.github/actions/liquibase-install
+
+      - name: build media-processing applications
+          working-directory: services/media
+          env:
+              PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:/usr/local/lib"
+              LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
+          run: |
+              sudo apt-get install libelfg0-dev
+              mkdir -p ./build && cd ./build
+              cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH="/PATH/TO/python/venv" \
+                    -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
+                    -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
 
             # ${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb
         #working-directory: services/media
