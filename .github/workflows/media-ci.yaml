@@ -214,12 +214,11 @@ jobs:
         working-directory: deps/rhonabwy
         env:
             PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
-            LD_LIBRARY_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
         run: |
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
-            echo "LD_LIBRARY_PATH=${{ env.LD_LIBRARY_PATH }}"
-            LD_LIBRARY_PATH=${{ env.LD_LIBRARY_PATH }}  make
+            LD_LIBRARY_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
+            LD_LIBRARY_PATH=$LD_LIBRARY_PATH  make
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
             make install
 
@@ -227,7 +226,6 @@ jobs:
         working-directory: ${{ env.RHONABWY_INSTALL_PATH }}
         run: |
             ls -lt ./  ./lib
-            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
       - name: save rhonabwy library to cache
         if: steps.cacherhonabwy.outputs.cache-hit != 'true'
@@ -393,7 +391,7 @@ jobs:
       - name: examine RabbitMQ/C library build
         working-directory: ${{ env.RABBITMQC_INSTALL_PATH }}
         run: |
-            ls -lt ./  ./lib
+            ls -lt ./  ./lib  ./lib/x86_64-linux-gnu
             du -sh ./lib
 
       - name: save RabbitMQ/C library to cache
@@ -411,10 +409,10 @@ jobs:
       - name: build media-processing applications
         working-directory: services/media
         env:
-            PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:${{ env.RHONABWY_INSTALL_PATH }}/lib/pkgconfig:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/pkgconfig:${{ env.FFMPEG_INSTALL_PATH }}/lib/pkgconfig:/usr/local/lib:/usr/lib"
+            PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:${{ env.RHONABWY_INSTALL_PATH }}/lib/pkgconfig:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/pkgconfig:${{ env.FFMPEG_INSTALL_PATH }}/lib/pkgconfig:${{ env.RABBITMQC_INSTALL_PATH }}/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/pkgconfig"
         run: |
             LD_LIBRARY_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
-            sudo apt-get install libelf-dev libuuid-dev
+            sudo apt-get install libelf-dev
             python3 -m venv ${{ env.PY_LOCAL_VENV }}
             mkdir -p ./build && cd ./build
             cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} \
