@@ -236,7 +236,8 @@ jobs:
         uses: actions/checkout@v4
         with:
             repository: mariadb-corporation/mariadb-connector-c
-            ref: v3.1.7
+            # cmake syntax error fixed
+            ref: v3.1.13
             path: deps/mariadb-connector-c
 
       - name: build mariaDB connector/C  from source
