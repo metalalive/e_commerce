@@ -138,7 +138,6 @@ Ensure(transcoder_test__get_atfp_object) {
 } // end of transcoder_test__get_atfp_object
 
 
-#if 0
 Ensure(transcoder_test__open_srcfile_chunk_ok) {
 #define  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG   (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define  NUM_CB_ARGS_ASAOBJ  (UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG + 1)
@@ -149,6 +148,7 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
         .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asaobj_usr_args}}};
     ASA_RES_CODE result ;
     FILECHUNK_CONTENT(expect_f_content);
+#if 0
     utest_init_transcoder_srcfile_chunk();
     asaobj.super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = NULL;
     for(int chunk_seq = 0; chunk_seq < NUM_FILECHUNKS; chunk_seq++) {
@@ -165,10 +165,10 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
         }
     }
     utest_deinit_transcoder_srcfile_chunk(&asaobj.super);
+#endif
 #undef  NUM_CB_ARGS_ASAOBJ
 #undef  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG
 } // end of transcoder_test__open_srcfile_chunk_ok
-#endif
 
 
 Ensure(transcoder_test__open_srcfile_chunk_error) {
@@ -188,7 +188,6 @@ Ensure(transcoder_test__open_srcfile_chunk_error) {
 } // end of transcoder_test__open_srcfile_chunk_error
 
 
-#if 0
 Ensure(transcoder_test__switch_srcfile_chunk_ok) {
 #define  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG   (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define  NUM_CB_ARGS_ASAOBJ  (UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG + 1)
@@ -203,6 +202,7 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
     atfp_t mock_fp = {.data={.spec=spec,  .storage={.basepath=atfp_src_basepath,
         .handle=&asaobj.super }}};
     asaobj.super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp;
+#if 0
     utest_init_transcoder_srcfile_chunk();
     int idx = 0;
     { // open the first chunk
@@ -239,10 +239,10 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
     }
     json_decref(spec);
     utest_deinit_transcoder_srcfile_chunk(&asaobj.super);
+#endif
 #undef  NUM_CB_ARGS_ASAOBJ
 #undef  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG
 } // end of transcoder_test__switch_srcfile_chunk_ok
-#endif
 
 
 Ensure(transcoder_test__estimate_src_filechunk_idx) {
