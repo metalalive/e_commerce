@@ -32,9 +32,11 @@ static __attribute__((optimize("O0"))) void  utest_init_transcoder_srcfile_chunk
     mkdir(FULLPATH1, S_IRWXU);
     mkdir(FULLPATH2, S_IRWXU);
     FILECHUNK_CONTENT(f_content);
+    int flags = O_RDWR | O_CREAT;
+    mode_t mode = S_IRUSR | S_IWUSR;
     for(idx=0; idx < NUM_FILECHUNKS; idx++) {
         RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
-        int fd = open(&filepath[0], O_WRONLY | O_CREAT, (mode_t)(S_IRUSR | S_IWUSR));
+        int fd = open(&filepath[0], flags, mode);
         write(fd, f_content[idx], strlen(f_content[idx]));
         close(fd);
     }
