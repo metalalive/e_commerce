@@ -36,6 +36,7 @@ static __attribute__((optimize("O0"))) void  utest_init_transcoder_srcfile_chunk
     mode_t mode = S_IRUSR | S_IWUSR;
     for(idx=0; idx < NUM_FILECHUNKS; idx++) {
         RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
+#undef open // bypass  glibc inline checks
         int fd = open(&filepath[0], flags, mode);
         write(fd, f_content[idx], strlen(f_content[idx]));
         close(fd);
