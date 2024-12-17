@@ -313,9 +313,7 @@ static void run_loop(void *data) {
     {
         uv_run(init_data->loop, UV_RUN_ONCE);
     } // wait until all client requests are handled & connection closed
-    // close internal timer used only for timeout on graceful shutdown
-    h2o_timer_unlink(&server_ctx.http2._graceful_shutdown_timeout);
-    h2o_timer_unlink(&server_ctx.http3._graceful_shutdown_timeout);
+    // close internal timer used only for timeout on graceful shutdown,
     h2o_multithread_unregister_receiver(server_ctx.queue, &ctx_worker.server_notifications);
     h2o_context_dispose(&server_ctx);
     worker_deinit_context(&ctx_worker);
@@ -336,6 +334,7 @@ static int appserver_start_workers(app_cfg_t *app_cfg) {
         }
     }
     appcfg_terminate_workers(app_cfg, &worker_data[0]);
+    h2o_barrier_dispose(&app_cfg->workers_sync_barrier);    
     return err;
 } // end of appserver_start_workers
 
