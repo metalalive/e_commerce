@@ -35,8 +35,11 @@ static __attribute__((optimize("O0"))) void  utest_init_transcoder_srcfile_chunk
     int flags = O_RDWR | O_CREAT;
     mode_t mode = S_IRUSR | S_IWUSR;
     for(idx=0; idx < NUM_FILECHUNKS; idx++) {
-        RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
-#undef open // bypass  glibc inline checks
+        // RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
+        size_t filepath_sz = strlen(FILEPATH_TEMPLATE) + 1;
+        char filepath[filepath_sz];
+        int nwrite = snprintf(&filepath[0], filepath_sz, FILEPATH_TEMPLATE, idx+1);
+        filepath[nwrite] = 0x0;
         int fd = open(&filepath[0], flags, mode);
         write(fd, f_content[idx], strlen(f_content[idx]));
         close(fd);
