@@ -48,6 +48,7 @@ jobs:
             # shared among rhonabwy and ffmpeg
             sudo apt-get install -y  nettle-dev  libgnutls28-dev
             sudo apt-get install -y  libcurl4-gnutls-dev
+            # TODO, run valgrind for comprehensive memory check
 
 
       - name: restore libuv library from cache
@@ -99,7 +100,7 @@ jobs:
             key: prebuilt-h2o-0002
 
       - name: download HTTP h2o source
-        #if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: h2o/h2o
@@ -109,7 +110,7 @@ jobs:
             path: deps/h2o
 
       - name: build brotli from source as H2O dependency
-        #if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
         working-directory: deps/h2o/deps/brotli
         run: |
             mkdir -p ./build && cd build
@@ -123,7 +124,7 @@ jobs:
             ls -lt ./  ./lib
 
       - name: build libh2o from source
-        #if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
         working-directory: deps/h2o
         env:
             PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig"
@@ -140,14 +141,14 @@ jobs:
         run: |
             ls -lt ./  ./lib
 
-      #- name: save libh2o library to cache
-      #  if: steps.cachelibh2o.outputs.cache-hit != 'true'
-      #  uses: actions/cache/save@v4
-      #  with:
-      #      path: |
-      #          ${{ env.BROTLI_INSTALL_PATH }}
-      #          ${{ env.H2O_INSTALL_PATH }}
-      #      key: prebuilt-h2o-0002
+      - name: save libh2o library to cache
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: |
+                ${{ env.BROTLI_INSTALL_PATH }}
+                ${{ env.H2O_INSTALL_PATH }}
+            key: prebuilt-h2o-0002
 
 
       - name: restore jansson library from cache
@@ -283,6 +284,11 @@ jobs:
         with:
             path: ${{ env.FFMPEG_INSTALL_PATH }}
             key: prebuilt-ffmpeg-4.3.8-0001
+      
+      - name: install codec libraries required by ffmpeg and this app
+        # this is required regardless of ffmpeg library (re)build
+        run: |
+            sudo apt-get install -y  yasm  libfdk-aac-dev  libx264-dev  libx265-dev
 
       - name: download ffmpeg source
         if: steps.cacheFFmpeg.outputs.cache-hit != 'true'
@@ -296,7 +302,6 @@ jobs:
         if: steps.cacheFFmpeg.outputs.cache-hit != 'true'
         working-directory: deps/ffmpeg
         run: |
-            sudo apt-get install -y  yasm  libfdk-aac-dev  libx264-dev  libx265-dev  valgrind
             ./configure --prefix=${{ env.FFMPEG_INSTALL_PATH }} --enable-libx264 --enable-libx265 \
                 --enable-libfdk-aac  --enable-gnutls --enable-gpl --enable-nonfree --enable-shared \
                 --disable-static --disable-programs  --disable-ffplay --disable-ffmpeg --disable-doc  \
