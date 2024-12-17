@@ -34,7 +34,7 @@ static __attribute__((optimize("O0"))) void  utest_init_transcoder_srcfile_chunk
     FILECHUNK_CONTENT(f_content);
     for(idx=0; idx < NUM_FILECHUNKS; idx++) {
         RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
-        int fd = open(&filepath[0], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        int fd = open(&filepath[0], O_WRONLY | O_CREAT, (mode_t)(S_IRUSR | S_IWUSR));
         write(fd, f_content[idx], strlen(f_content[idx]));
         close(fd);
     }
