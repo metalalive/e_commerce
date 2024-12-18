@@ -135,7 +135,7 @@ static void utest_atfp_hls__flush_output_cb (atfp_t *processor)
         unlink(expect_seg_remote_path[idx]); \
     }
 
-static  __attribute__((optimize("O0"))) void utest_hls__output_verify_content(
+static void utest_hls__output_verify_content(
         const char *filepath, const char *expect_content)
 {
     size_t expect_content_sz = strlen(expect_content);

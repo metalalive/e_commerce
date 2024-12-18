@@ -26,6 +26,13 @@
     filepath[nwrite] = 0x0;
 
 
+// note,
+// in GCC v13 explicitly declared optimization level will affect glibc pre-processing
+// the macro `open(path, flags, mode)` then reports error `open too many arguments`
+// even when the arguments are correctly specified in code.
+//
+// Currently the rootcause is unknwon but I tried to avoid the error by removing the
+// syntax for GCC optimization `__attribute__((optimize("O0")))` at here
 static void  utest_init_transcoder_srcfile_chunk(void)
 {
     int idx = 0;
