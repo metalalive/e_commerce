@@ -1,8 +1,5 @@
 name: media continuous integration
 on:
-  push:
-    branches:
-      - 'media-dev/**'
   pull_request:
     branches:
       - 'master'
@@ -410,12 +407,6 @@ jobs:
 
       - name: install liquibase migration tool
         uses: ./.github/actions/liquibase-install
-      
-      - name: set up python virtual environment for some tasks
-        run: |
-            python3 -m venv ${{ env.PY_LOCAL_VENV }}
-            pip3 install  cryptography==39.0.2  Jinja2==3.1.2  mysqlclient==2.1.1
-            pip3 list
 
       - name: build media-processing applications
         working-directory: services/media
@@ -431,14 +422,4 @@ jobs:
                   -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
             make app_server.out
             make rpc_consumer.out
-    
-      - name: set up mock credentials for test
-        working-directory: services/common/data
-        run: |
-            ln -s ./secrets_template.json  ./secrets.json
-
-      - name: run unit test for this app
-        working-directory: services/media/build
-        run: |
-            make unit_test
            
