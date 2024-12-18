@@ -16,10 +16,10 @@
 |------|------|------------------|
 | Database | MariaDB | `10.3.22` |
 | Message Queue | RabbitMQ | `3.2.4` |
-| Build tool | [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.5.0` |
+| Build tool | [Cmake](https://cmake.org/cmake/help/latest/index.html) | `>= 3.21.0` |
 | | [gcc](https://gcc.gnu.org/onlinedocs/) with [c17](https://en.wikipedia.org/wiki/C17_(C_standard_revision)) stardard | `>= 10.3.0` |
-| Dependency | [H2O](https://github.com/h2o/h2o) | `>= 2.3.0-DEV` |
-| | [OpenSSL](https://github.com/openssl/openssl) | `>= 1.1.1c` |
+| Dependency | [H2O](https://github.com/h2o/h2o) | after 2024 Dec |
+| | [OpenSSL](https://github.com/openssl/openssl) | `>= 3.1.4` |
 | | [brotli](https://github.com/google/brotli) | `>= 1.0.2` |
 | | [jansson](https://github.com/akheron/jansson) | `>= 2.14` |
 | | [libuuid](https://github.com/util-linux/util-linux/tree/master/libuuid) | `>= 2.20.0` |
