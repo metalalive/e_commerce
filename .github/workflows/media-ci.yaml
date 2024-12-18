@@ -438,7 +438,7 @@ jobs:
             ln -s ./secrets_template.json  ./secrets.json
 
       - name: run unit test for this app
-        working-directory: services/media
+        working-directory: services/media/build
         run: |
             make unit_test
            
