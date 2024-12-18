@@ -25,6 +25,21 @@
     int nwrite = snprintf(&filepath[0], filepath_sz, path_template, idx+1); \
     filepath[nwrite] = 0x0;
 
+
+static void  utest_init_transcoder_srcfile_chunk(void)
+{
+    int idx = 0;
+    mkdir(FULLPATH1, S_IRWXU);
+    mkdir(FULLPATH2, S_IRWXU);
+    FILECHUNK_CONTENT(f_content);
+    for(idx=0; idx < NUM_FILECHUNKS; idx++) {
+        RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
+        int fd = open(&filepath[0], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        write(fd, f_content[idx], strlen(f_content[idx]));
+        close(fd);
+    }
+} // end of utest_init_transcoder_srcfile_chunk
+
 static __attribute__((optimize("O0"))) void  utest_deinit_transcoder_srcfile_chunk(asa_op_base_cfg_t *asa_cfg)
 {
     int idx = 0;
@@ -33,36 +48,12 @@ static __attribute__((optimize("O0"))) void  utest_deinit_transcoder_srcfile_chu
         asa_cfg->op.open.dst_path = NULL;
     }
     for(idx=0; idx < NUM_FILECHUNKS; idx++) {
-        size_t filepath_sz = strlen(FILEPATH_TEMPLATE) + 1;
-        char filepath[filepath_sz];
-        int nwrite = snprintf(&filepath[0], filepath_sz, FILEPATH_TEMPLATE, idx+1);
-        filepath[nwrite] = 0x0;
+        RENDER_FILECHUNK_PATH(FILEPATH_TEMPLATE, idx);
         unlink(&filepath[0]);
     }
     rmdir(FULLPATH2);
     rmdir(FULLPATH1);
 }
-
-#if 0
-static __attribute__((optimize("O0"))) void  utest_init_transcoder_srcfile_chunk(void)
-{
-    int idx = 0;
-    mkdir(FULLPATH1, S_IRWXU);
-    mkdir(FULLPATH2, S_IRWXU);
-    FILECHUNK_CONTENT(f_content);
-    int flags = O_RDWR | O_CREAT;
-    mode_t mode = S_IRUSR | S_IWUSR;
-    for(idx=0; idx < NUM_FILECHUNKS; idx++) {
-        size_t filepath_sz = strlen(FILEPATH_TEMPLATE) + 1;
-        char filepath[filepath_sz];
-        int nwrite = snprintf(&filepath[0], filepath_sz, FILEPATH_TEMPLATE, idx+1);
-        filepath[nwrite] = 0x0;
-        int fd = open(&filepath[0], flags, mode);
-        write(fd, f_content[idx], strlen(f_content[idx]));
-        close(fd);
-    }
-} // end of utest_init_transcoder_srcfile_chunk
-#endif
 
 
 static void  transcoder_utest__closefile_callback (asa_op_base_cfg_t *cfg, ASA_RES_CODE result)
@@ -137,7 +128,6 @@ Ensure(transcoder_test__get_atfp_object) {
 #undef  NUM_CB_ARGS_ASAOBJ
 } // end of transcoder_test__get_atfp_object
 
-
 Ensure(transcoder_test__open_srcfile_chunk_ok) {
 #define  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG   (ASAMAP_INDEX__IN_ASA_USRARG + 1)
 #define  NUM_CB_ARGS_ASAOBJ  (UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG + 1)
@@ -148,7 +138,6 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
         .cb_args={.size=NUM_CB_ARGS_ASAOBJ, .entries=asaobj_usr_args}}};
     ASA_RES_CODE result ;
     FILECHUNK_CONTENT(expect_f_content);
-#if 0
     utest_init_transcoder_srcfile_chunk();
     asaobj.super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = NULL;
     for(int chunk_seq = 0; chunk_seq < NUM_FILECHUNKS; chunk_seq++) {
@@ -165,7 +154,6 @@ Ensure(transcoder_test__open_srcfile_chunk_ok) {
         }
     }
     utest_deinit_transcoder_srcfile_chunk(&asaobj.super);
-#endif
 #undef  NUM_CB_ARGS_ASAOBJ
 #undef  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG
 } // end of transcoder_test__open_srcfile_chunk_ok
@@ -202,7 +190,6 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
     atfp_t mock_fp = {.data={.spec=spec,  .storage={.basepath=atfp_src_basepath,
         .handle=&asaobj.super }}};
     asaobj.super.cb_args.entries[ATFP_INDEX__IN_ASA_USRARG] = &mock_fp;
-#if 0
     utest_init_transcoder_srcfile_chunk();
     int idx = 0;
     { // open the first chunk
@@ -239,7 +226,6 @@ Ensure(transcoder_test__switch_srcfile_chunk_ok) {
     }
     json_decref(spec);
     utest_deinit_transcoder_srcfile_chunk(&asaobj.super);
-#endif
 #undef  NUM_CB_ARGS_ASAOBJ
 #undef  UTEST_EXPECT_CONTENT_INDEX__IN_ASA_USRARG
 } // end of transcoder_test__switch_srcfile_chunk_ok
