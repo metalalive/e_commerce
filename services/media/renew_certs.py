@@ -16,8 +16,6 @@ from cryptography.hazmat.primitives import _serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
-from common.util.python import import_module_string
-
 def check_cert_expiry(listen):
     item = {}
     cert_file = None

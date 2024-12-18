@@ -3,8 +3,6 @@
 #include "auth.h"
 
 #define AUTH_HDR_VAL_PREFIX  "Bearer "
-#define H2O_STATUS_ERROR_401  H2O_STATUS_ERROR_403
-H2O_SEND_ERROR_XXX(401)
 
 static  char * extract_header_auth_token(h2o_req_t *req, size_t found_idx, size_t *o_sz)
 { // extract encoded JWT, e.g. `Authorization` header should contain : Bearer 401f7ac837da42b97f613d789819ff93537bee6a

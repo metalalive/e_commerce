@@ -365,14 +365,18 @@ ARPC_STATUS_CODE app_rpc_start(arpc_exe_arg_t *args)
         .headers = {.num_entries=args->headers.size, .entries=&extra_headers[0]},
         .reply_to=amqp_cstring_bytes(&reply_req_queue[0]),
         .correlation_id = {.bytes=args->job_id.bytes, .len=_job_id_fit_sz},  .timestamp = args->_timestamp,
-        .delivery_mode = 0x2, // defined in AMQP 0.9.1 without clear explanation
+        .delivery_mode = 0x2, // means persistent, explanation in RabbitMQ AMQP 0.9.1 complete guide
     };
     amqp_status_enum mq_status = amqp_basic_publish( mq_ctx->conn,  mq_ctx->curr_channel_id,
             amqp_cstring_bytes(bind_cfg->exchange_name),  routekey, mandatory, immediate,
             (amqp_basic_properties_t const *)&properties, amqp_cstring_bytes(args->msg_body.bytes) );
-    // TODO: figure out how to use non-blocking API functions provided by librabbitmq.
-    // Currently blocking API is used, there is only one channel to use for each
-    // RabbitMQ connection.
+    // TODO:
+    // - figure out how to use non-blocking API functions provided by librabbitmq.
+    //   Currently blocking API is used, there is only one channel to use for each
+    //   RabbitMQ connection.
+    // - figure out why the publishing message can be received in RabbitMQ queue without setting
+    //   `publish-confirm` flag in development server and integration test. AFAIK the client library
+    //   `rabbitmq-c` does not internally set the flag for app callers .
     if(mq_status == AMQP_STATUS_OK) {
         app_status = APPRPC_RESP_ACCEPTED;
     } else {

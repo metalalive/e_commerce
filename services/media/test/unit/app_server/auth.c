@@ -81,7 +81,7 @@ Ensure(MOCK_AUTH_PART, auth_header_missing_tests) {
     *mock_req.headers.entries[1].name = (h2o_iovec_t){.len=4,  .base="food"};
     *mock_req.headers.entries[2].name = (h2o_iovec_t){.len=7, .base="culture"};
     app_authenticate_user(&mock_hdlr, &mock_req, &mock_mdchain_head);
-    assert_that(mock_srv_ctx.emitted_error_status[H2O_STATUS_ERROR_403] , is_equal_to(1));
+    assert_that(mock_srv_ctx.emitted_error_status[H2O_STATUS_ERROR_401] , is_equal_to(1));
     assert_that(mock_req.res.status, is_equal_to(401));
 }
 

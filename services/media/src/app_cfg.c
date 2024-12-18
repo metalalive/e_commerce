@@ -28,7 +28,12 @@ static app_cfg_t _app_cfg = {
     .run_mode = RUN_MODE_MASTER,
     .tfo_q_len = APP_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE,
     .launch_time = 0,
-    .workers_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
+    .workers_sync_barrier = {
+        ._mutex = PTHREAD_MUTEX_INITIALIZER,
+        ._cond = PTHREAD_COND_INITIALIZER,
+        ._count = 0,
+        ._out_of_wait = 0
+    },
     .storages = {.size = 0, .capacity = 0, .entries = NULL},
     .state = {.num_curr_sessions=0},
     .jwks = {

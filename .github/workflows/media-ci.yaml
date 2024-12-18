@@ -1,0 +1,431 @@
+name: media continuous integration
+on:
+  pull_request:
+    branches:
+      - 'master'
+    paths:
+      - '.github/workflows/media-ci.yaml'
+      - 'services/media/**'
+
+
+env:
+    LIBUV_INSTALL_PATH: ${{ github.workspace }}/installed/libuv
+    BROTLI_INSTALL_PATH: ${{ github.workspace }}/installed/brotli
+    H2O_INSTALL_PATH: ${{ github.workspace }}/installed/h2o
+    JANSSON_INSTALL_PATH: ${{ github.workspace }}/installed/jansson
+    RHONABWY_INSTALL_PATH: ${{ github.workspace }}/installed/rhonabwy
+    MARIADBCLIENT_INSTALL_PATH: ${{ github.workspace }}/installed/mariadbclient
+    FFMPEG_INSTALL_PATH: ${{ github.workspace }}/installed/ffmpeg
+    RABBITMQC_INSTALL_PATH: ${{ github.workspace }}/installed/rabbitmq-c
+    CGREEN_INSTALL_PATH: ${{ github.workspace }}/installed/cgreen
+    PY_LOCAL_VENV: ${{ github.workspace }}/services/media/.venv
+
+# due to this long-time unresolved issue, it is safe to put tasks into one
+# big job running sequentially, and give up nicely running simulteneous jobs.
+# https://github.com/actions/checkout/issues/19
+jobs:
+  init-env-then-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build tools check
+        run: |
+            openssl version
+            pkg-config --version
+            cc --version
+            gcc --version
+            cmake --version
+            
+            mkdir -p ${{ github.workspace }}/installed
+
+            sudo apt-get update
+            apt-cache show nettle-dev
+            apt-cache show libgnutls28-dev
+            # shared among rhonabwy and ffmpeg
+            sudo apt-get install -y  nettle-dev  libgnutls28-dev
+            sudo apt-get install -y  libcurl4-gnutls-dev
+            # TODO, run valgrind for comprehensive memory check
+
+
+      - name: restore libuv library from cache
+        id:   cachelibuv
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.LIBUV_INSTALL_PATH }}
+            key: prebuilt-libuv
+
+      - name: download libuv source
+        if: steps.cachelibuv.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: libuv/libuv
+            ref: v1.42.1
+            path: deps/libuv
+
+      - name: build libuv from source
+        if: steps.cachelibuv.outputs.cache-hit != 'true'
+        working-directory: deps/libuv
+        run: |
+            mkdir -p ./build
+            cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.LIBUV_INSTALL_PATH }}  .. -DBUILD_TESTING=OFF
+            make
+            rm -rf ${{ env.LIBUV_INSTALL_PATH }} && mkdir -p ${{ env.LIBUV_INSTALL_PATH }}
+            make install
+
+      - name: examine libuv build
+        working-directory: ${{ env.LIBUV_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+      - name: save libuv library to cache
+        if: steps.cachelibuv.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.LIBUV_INSTALL_PATH }}
+            key: prebuilt-libuv
+
+
+      - name: restore libh2o library from cache
+        id:   cachelibh2o
+        uses: actions/cache/restore@v4
+        with:
+            path: |
+                ${{ env.BROTLI_INSTALL_PATH }}
+                ${{ env.H2O_INSTALL_PATH }}
+            key: prebuilt-h2o-0002
+
+      - name: download HTTP h2o source
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: h2o/h2o
+            # always clone from master branch, libh2o maintainers no longer use release tags / branches
+            # , without versioning tags, every commit might be breaking change
+            ref: 93f4294757bb4c06e0a738b877b0a4c931a8922f
+            path: deps/h2o
+
+      - name: build brotli from source as H2O dependency
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        working-directory: deps/h2o/deps/brotli
+        run: |
+            mkdir -p ./build && cd build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.BROTLI_INSTALL_PATH }} -DCMAKE_BUILD_TYPE=Release  ..
+            rm -rf ${{ env.BROTLI_INSTALL_PATH }} && mkdir -p ${{ env.BROTLI_INSTALL_PATH }}
+            cmake --build . --config Release --target install
+            
+      - name: examine brotli build
+        working-directory: ${{ env.BROTLI_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+      - name: build libh2o from source
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        working-directory: deps/h2o
+        env:
+            PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig"
+        run: |
+            mkdir -p ./build && cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.H2O_INSTALL_PATH }}  -DBUILD_SHARED_LIBS=ON \
+                -DCMAKE_BUILD_TYPE=Release -DWITH_MRUBY=OFF  -DWITH_FUSION=OFF  ..
+            make libh2o
+            rm -rf ${{ env.H2O_INSTALL_PATH }} && mkdir -p ${{ env.H2O_INSTALL_PATH }}
+            make install
+
+      - name: examine h2o build
+        working-directory: ${{ env.H2O_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+
+      - name: save libh2o library to cache
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: |
+                ${{ env.BROTLI_INSTALL_PATH }}
+                ${{ env.H2O_INSTALL_PATH }}
+            key: prebuilt-h2o-0002
+
+
+      - name: restore jansson library from cache
+        id:   cachejansson
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.JANSSON_INSTALL_PATH }}
+            key: prebuilt-jansson
+
+      - name: download jansson source
+        if: steps.cachejansson.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: akheron/jansson
+            ref: v2.14
+            path: deps/jansson
+
+      - name: build jansson from source
+        if: steps.cachejansson.outputs.cache-hit != 'true'
+        working-directory: deps/jansson
+        run: |
+            mkdir -p ./build  && cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.JANSSON_INSTALL_PATH }} -DJANSSON_BUILD_DOCS=OFF \
+                  -DJANSSON_BUILD_SHARED_LIBS=ON  ..
+            make
+            rm -rf ${{ env.JANSSON_INSTALL_PATH }} && mkdir -p ${{ env.JANSSON_INSTALL_PATH }}
+            make install
+
+      - name: examine jansson build
+        working-directory: ${{ env.JANSSON_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+            nm -D ${{ env.JANSSON_INSTALL_PATH }}/lib/libjansson.so | grep "json_delete"
+            readelf -Ws ${{ env.JANSSON_INSTALL_PATH }}/lib/libjansson.so  | grep "json_delete"
+
+      - name: save jansson library to cache
+        if: steps.cachejansson.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.JANSSON_INSTALL_PATH }}
+            key: prebuilt-jansson
+
+
+      - name: restore rhonabwy library from cache
+        id:   cacherhonabwy
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.RHONABWY_INSTALL_PATH }}
+            key: prebuilt-rhonabwy-final
+
+      - name: download rhonabwy source
+        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: babelouest/rhonabwy
+            # (TODO)
+            # consider this library is no longer maintained, I will upgrade
+            # the library to this version then look for other substitutions
+            ref: v1.1.9
+            path: deps/rhonabwy
+
+      - name: build rhonabwy from source
+        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        working-directory: deps/rhonabwy
+        env:
+            PKG_CONFIG_PATH: "${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig"
+        run: |
+            mkdir -p ./build && cd ./build
+            cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
+            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/lib:/usr/local/lib" >> $GITHUB_ENV
+            make
+            echo "LD_LIBRARY_PATH=" >> $GITHUB_ENV
+            rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
+            make install
+
+      - name: examine rhonabwy build
+        working-directory: ${{ env.RHONABWY_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+
+      - name: save rhonabwy library to cache
+        if: steps.cacherhonabwy.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.RHONABWY_INSTALL_PATH }}
+            key: prebuilt-rhonabwy-final
+
+
+      - name: restore mariaDB connector/C library from cache
+        id:   cacheMariaDBclient
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
+            key: prebuilt-mariadb-client-3.1.13
+
+      - name: download mariaDB connector/C source
+        if: steps.cacheMariaDBclient.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: mariadb-corporation/mariadb-connector-c
+            # cmake syntax error fixed
+            ref: v3.1.13
+            path: deps/mariadb-connector-c
+
+      - name: build mariaDB connector/C  from source
+        if: steps.cacheMariaDBclient.outputs.cache-hit != 'true'
+        working-directory: deps/mariadb-connector-c
+        run: |
+            mkdir -p ./build && cd ./build
+            cmake -DWITH_DYNCOL=OFF  -DCMAKE_BUILD_TYPE=Release  -DWITH_UNIT_TESTS=OFF \
+                -DCMAKE_INSTALL_PREFIX=${{ env.MARIADBCLIENT_INSTALL_PATH }} \
+                -DBUILD_SHARED_LIBS=ON ..
+            make
+            rm -rf ${{ env.MARIADBCLIENT_INSTALL_PATH }} && mkdir -p ${{ env.MARIADBCLIENT_INSTALL_PATH }}
+            make install
+
+      - name: examine mariaDB connector/C build
+        working-directory: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib  ./lib/mariadb
+            du -sh ./lib
+
+      - name: save mariaDB connector/C library to cache
+        if: steps.cacheMariaDBclient.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
+            key: prebuilt-mariadb-client-3.1.13
+
+
+      - name: restore ffmpeg libraries from cache
+        id:   cacheFFmpeg
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.FFMPEG_INSTALL_PATH }}
+            key: prebuilt-ffmpeg-4.3.8-0001
+      
+      - name: install codec libraries required by ffmpeg and this app
+        # this is required regardless of ffmpeg library (re)build
+        run: |
+            sudo apt-get install -y  yasm  libfdk-aac-dev  libx264-dev  libx265-dev
+
+      - name: download ffmpeg source
+        if: steps.cacheFFmpeg.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: FFmpeg/FFmpeg
+            ref: n4.3.8
+            path: deps/ffmpeg
+
+      - name: build ffmpeg libraries from source
+        if: steps.cacheFFmpeg.outputs.cache-hit != 'true'
+        working-directory: deps/ffmpeg
+        run: |
+            ./configure --prefix=${{ env.FFMPEG_INSTALL_PATH }} --enable-libx264 --enable-libx265 \
+                --enable-libfdk-aac  --enable-gnutls --enable-gpl --enable-nonfree --enable-shared \
+                --disable-static --disable-programs  --disable-ffplay --disable-ffmpeg --disable-doc  \
+                --disable-htmlpages  --disable-manpages  --disable-podpages --disable-txtpages \
+                --disable-large-tests
+
+            make
+            rm -rf ${{ env.FFMPEG_INSTALL_PATH }} && mkdir -p ${{ env.FFMPEG_INSTALL_PATH }}
+            make install
+
+      - name: examine ffmpeg libraries build
+        working-directory: ${{ env.FFMPEG_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+            du -sh ./lib
+
+      - name: save ffmpeg libraries to cache
+        if: steps.cacheFFmpeg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.FFMPEG_INSTALL_PATH }}
+            key: prebuilt-ffmpeg-4.3.8-0001
+
+
+
+      - name: restore cgreen library from cache
+        id:   cachecgreen
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.CGREEN_INSTALL_PATH }}
+            key: prebuilt-cgreen-1.4
+
+      - name: download cgreen source
+        if: steps.cachecgreen.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: cgreen-devs/cgreen
+            ref: 1.4.1
+            path: deps/cgreen
+
+      - name: build cgreen library from source
+        if: steps.cachecgreen.outputs.cache-hit != 'true'
+        working-directory: deps/cgreen
+        run: |
+            mkdir -p ./build && cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.CGREEN_INSTALL_PATH }} ..
+            make
+            rm -rf ${{ env.CGREEN_INSTALL_PATH }} && mkdir -p ${{ env.CGREEN_INSTALL_PATH }}
+            make install
+
+      - name: examine cgreen library build
+        working-directory: ${{ env.CGREEN_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib
+            du -sh ./lib
+
+      - name: save cgreen library to cache
+        if: steps.cachecgreen.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.CGREEN_INSTALL_PATH }}
+            key: prebuilt-cgreen-1.4
+
+
+      - name: restore RabbitMQ/C library from cache
+        id:   cacherabbitmq
+        uses: actions/cache/restore@v4
+        with:
+            path: ${{ env.RABBITMQC_INSTALL_PATH }}
+            key: prebuilt-rabbitmq-c-0.11.0
+
+      - name: download RabbitMQ/C library source
+        if: steps.cacherabbitmq.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+            repository: alanxz/rabbitmq-c
+            ref: v0.11.0
+            path: deps/rabbitmq-c
+
+      - name: build RabbitMQ/C library from source
+        if: steps.cacherabbitmq.outputs.cache-hit != 'true'
+        working-directory: deps/rabbitmq-c
+        run: |
+            mkdir -p ./build && cd ./build
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.RABBITMQC_INSTALL_PATH }} -DBUILD_SHARED_LIBS=ON \
+                  -DBUILD_STATIC_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TOOLS=OFF -DBUILD_TOOLS_DOCS=OFF \
+                  -DBUILD_TESTS=OFF -DBUILD_API_DOCS=OFF  ..
+            make
+            rm -rf ${{ env.RABBITMQC_INSTALL_PATH }} && mkdir -p ${{ env.RABBITMQC_INSTALL_PATH }}
+            make install
+
+      - name: examine RabbitMQ/C library build
+        working-directory: ${{ env.RABBITMQC_INSTALL_PATH }}
+        run: |
+            ls -lt ./  ./lib  ./lib/x86_64-linux-gnu
+            du -sh ./lib
+
+      - name: save RabbitMQ/C library to cache
+        if: steps.cacherabbitmq.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: ${{ env.RABBITMQC_INSTALL_PATH }}
+            key: prebuilt-rabbitmq-c-0.11.0
+
+
+
+      - name: install liquibase migration tool
+        uses: ./.github/actions/liquibase-install
+      
+      - name: set up python virtual environment for some tasks
+        run: |
+            python3 -m venv ${{ env.PY_LOCAL_VENV }}
+
+      - name: build media-processing applications
+        working-directory: services/media
+        env:
+            PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig:${{ env.H2O_INSTALL_PATH }}/lib/pkgconfig:${{ env.JANSSON_INSTALL_PATH }}/lib/pkgconfig:${{ env.RHONABWY_INSTALL_PATH }}/lib/pkgconfig:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/pkgconfig:${{ env.FFMPEG_INSTALL_PATH }}/lib/pkgconfig:${{ env.RABBITMQC_INSTALL_PATH }}/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/lib/pkgconfig"
+        run: |
+            #LD_LIBRARY_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
+            sudo apt-get install libelf-dev libmagic-dev uuid-dev libnghttp2-dev
+            mkdir -p ./build && cd ./build
+            cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} \
+                  -DCMAKE_PREFIX_PATH=${{ env.CGREEN_INSTALL_PATH }}  \
+                  -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
+                  -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
+            make app_server.out
+            make rpc_consumer.out
+           

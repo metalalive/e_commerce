@@ -113,7 +113,7 @@ int X509_NAME_add_entry_by_txt(X509_NAME *name, const char *field, int type,
 int X509_set_pubkey(X509 *x, EVP_PKEY *pkey)
 { return (int)mock(x, pkey); }
 
-int X509_set_issuer_name(X509 *x, X509_NAME *name)
+int X509_set_issuer_name(X509 *x, const X509_NAME *name)
 { return (int)mock(x, name); }
 
 int X509_cmp_current_time(const ASN1_TIME *s)
@@ -163,12 +163,12 @@ X509 *X509_new(void)
 void X509_free(X509 *x)
 { mock(x); }
 
-int PEM_write_PrivateKey(FILE *fp, EVP_PKEY *x, const EVP_CIPHER *enc,
-                         unsigned char *kstr, int klen,
+int PEM_write_PrivateKey(FILE *fp, const EVP_PKEY *x, const EVP_CIPHER *enc,
+                         const unsigned char *kstr, int klen,
                          pem_password_cb *cb, void *u)
 { return (int)mock(fp, x, enc, kstr, klen, cb, u); }
 
-int PEM_write_X509(FILE *fp, X509 *x)
+int PEM_write_X509(FILE *fp, const X509 *x)
 { return (int)mock(fp, x); }
 
 unsigned long ERR_get_error(void)
