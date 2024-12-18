@@ -409,6 +409,10 @@ jobs:
 
       - name: install liquibase migration tool
         uses: ./.github/actions/liquibase-install
+      
+      - name: set up python virtual environment for some tasks
+        run: |
+            python3 -m venv ${{ env.PY_LOCAL_VENV }}
 
       - name: build media-processing applications
         working-directory: services/media
