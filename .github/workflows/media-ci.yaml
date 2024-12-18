@@ -215,8 +215,9 @@ jobs:
         run: |
             mkdir -p ./build && cd ./build
             cmake  -DWITH_JOURNALD=OFF  -DCMAKE_INSTALL_PREFIX=${{ env.RHONABWY_INSTALL_PATH }}  ..
-            LD_LIBRARY_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/libexec:/usr/local/lib"
-            LD_LIBRARY_PATH=$LD_LIBRARY_PATH  make
+            echo "LD_LIBRARY_PATH=${{ env.JANSSON_INSTALL_PATH }}/lib:/usr/lib:/usr/lib:/usr/local/lib" >> $GITHUB_ENV
+            make
+            echo "LD_LIBRARY_PATH=" >> $GITHUB_ENV
             rm -rf ${{ env.RHONABWY_INSTALL_PATH }} && mkdir -p ${{ env.RHONABWY_INSTALL_PATH }}
             make install
 
@@ -224,6 +225,7 @@ jobs:
         working-directory: ${{ env.RHONABWY_INSTALL_PATH }}
         run: |
             ls -lt ./  ./lib
+            echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
       - name: save rhonabwy library to cache
         if: steps.cacherhonabwy.outputs.cache-hit != 'true'
