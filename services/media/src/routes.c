@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <libelf.h>
+#include <link.h>
 #include <gelf.h>
 #include <h2o.h>
 #include <h2o/serverutil.h>
@@ -18,6 +19,25 @@ typedef struct {
 typedef int (*restapi_endpoint_handle_fn)(RESTAPI_HANDLER_ARGS(self, req));
 
 
+static int shr_odj_traverse_cb(struct dl_phdr_info *info, size_t size, void *data)
+{
+    int found = 0;
+    char **addr_read = (char **) data;
+    // currently this application assumes all functions to look up are in the main program
+    // not in any other shared libraries
+    if(info->dlpi_name && info->dlpi_name[0] == 0x0) {
+        // empty name of the shared project indicates main programs
+        // for detail , read latest man page
+        *addr_read = (char *) info->dlpi_addr;
+        found = 1;
+    }
+    return found;
+}
+
+static int get_runtime_base_vaddr(char **addr_read) {
+    return dl_iterate_phdr(shr_odj_traverse_cb, (void *)addr_read);
+}
+
 static int _app_elf_parse_from_symbol_table(Elf *elf, app_elf_fn_traverse_cb cb, void *cb_args)
 {
     Elf_Scn    *section = NULL;
@@ -27,6 +47,11 @@ static int _app_elf_parse_from_symbol_table(Elf *elf, app_elf_fn_traverse_cb cb,
         goto error;
     }
     // h2o_error_printf("[ELF parsing] section header string index: %lx \n", shrstrndx);
+    char *runtime_baseaddr = NULL;
+    if(!get_runtime_base_vaddr(&runtime_baseaddr)) {
+        h2o_error_printf("[ELF parsing] failed to get base address of runtime main program.\n");
+        goto error;
+    }
     while((section = elf_nextscn(elf, section)) != NULL) {
         GElf_Shdr shdr = {0};
         if(!gelf_getshdr(section, &shdr)) {
@@ -44,19 +69,18 @@ static int _app_elf_parse_from_symbol_table(Elf *elf, app_elf_fn_traverse_cb cb,
             GElf_Sym *esym  = NULL;
             GElf_Sym *data_end  = (GElf_Sym *) ((char *)data->d_buf + data->d_size);
             for(esym = (GElf_Sym *)data->d_buf; esym < data_end; esym++) {
-                if((esym->st_value == 0)
-                        || (GELF_ST_BIND(esym->st_info) == STB_WEAK)
-                        || (GELF_ST_BIND(esym->st_info) == STB_NUM)
-                        || (GELF_ST_TYPE(esym->st_info) != STT_FUNC)
-                        )  {
+                unsigned char bound = GELF_ST_BIND(esym->st_info);
+                if((esym->st_value == 0) || (GELF_ST_TYPE(esym->st_info) != STT_FUNC)
+                        || (bound == STB_LOPROC) || (bound == STB_HIPROC)
+                        || (bound == STB_WEAK) || (bound == STB_NUM)
+                    ) {
                     continue;
                 }
                 char *fn_name = elf_strptr(elf, (size_t)shdr.sh_link, (size_t)esym->st_name);
                 if(fn_name) {
-                    uint8_t immediate_stop = cb(fn_name, (void *)esym->st_value, cb_args);
+                    char *relocated_addr = runtime_baseaddr + (size_t)esym->st_value;
+                    uint8_t immediate_stop = cb(fn_name, (void *)relocated_addr, cb_args);
                     if(immediate_stop) {
-                        h2o_error_printf("[ELF parsing][debug] function %s found, symbol info %x \n",
-                                fn_name, esym->st_info);
                         goto done;
                     }
                 } else {
