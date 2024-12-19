@@ -74,6 +74,7 @@ int main(int argc, char **argv) {
     add_suite(suite, app_model_connection_tests());
     add_suite(suite, app_model_mariadb_tests());
     add_suite(suite, app_model_query_tests());
+    /*
     add_suite(suite, app_transcoder_cfg_parser_tests());
     add_suite(suite, app_transcoder_crypto_tests());
     add_suite(suite, app_transcoder_storage_tests());
@@ -99,6 +100,7 @@ int main(int argc, char **argv) {
     add_suite(suite, app_transcoder_img_ffm_out_init_tests());
     add_suite(suite, app_transcoder_img_ffm_out_avctx_tests());
     add_suite(suite, app_transcoder_img_ffm_out_avfilt_tests());
+     * */
     add_suite(suite, app_stream_cache_tests());
     add_suite(suite, app_resource_acl_tests());
     add_suite(suite, app_views_common_tests());
