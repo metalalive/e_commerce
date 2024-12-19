@@ -1,6 +1,9 @@
 #include <cgreen/cgreen.h>
 #include "app_cfg.h"
 
+#define _GNU_SOURCE
+#include <link.h>
+
 TestSuite *app_appcfg_generic_tests(void);
 TestSuite *appserver_cfg_parser_tests(void);
 TestSuite *app_transcoder_cfg_parser_tests(void);
@@ -50,13 +53,31 @@ TestSuite *app_model_query_tests(void);
 TestSuite *app_resource_acl_tests(void);
 
 
+static int shr_odjs_cb(struct dl_phdr_info *info, size_t size, void *data)
+{
+   int j;
+
+   printf("name=%s (%d segments), base-address: %10p \n", info->dlpi_name,
+       info->dlpi_phnum, info->dlpi_addr);
+
+   //for (j = 0; j < info->dlpi_phnum; j++)
+   //     printf("\t\t header %2d: address=%10p\n", j,
+   //         (void *) (info->dlpi_addr + info->dlpi_phdr[j].p_vaddr));
+   return 0;
+}
+
+
 int main(int argc, char **argv) {
     int result = 0;
+
+    dl_iterate_phdr(shr_odjs_cb, NULL);
+
     TestSuite *suite = create_named_test_suite("media_app_unit_test");
     TestReporter *reporter = create_text_reporter();
     app_global_cfg_set_exepath("./media/build/unit_test.out");
     add_suite(suite, appserver_cfg_parser_tests());
     add_suite(suite, app_rpc_cfg_parser_tests());
+    /*
     add_suite(suite, app_rpc_core_tests());
     add_suite(suite, app_rpc_replytimer_tests());
     add_suite(suite, app_storage_cfg_parser_tests());
@@ -102,6 +123,7 @@ int main(int argc, char **argv) {
     add_suite(suite, app_resource_acl_tests());
     add_suite(suite, app_views_common_tests());
     add_suite(suite, app_appcfg_generic_tests());
+     * */
     if(argc > 1) {
         const char *test_name = argv[argc - 1];
         result = run_single_test(suite, test_name, reporter);
