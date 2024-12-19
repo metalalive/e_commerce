@@ -1,6 +1,5 @@
 #include <cgreen/cgreen.h>
 #include "rpc/cfg_parser.h"
-#include <h2o.h>
 /*
  *  Important Note for Jansson library :
  *  The nested json objects can be automatically de-alloacted when de-allocating
@@ -90,10 +89,7 @@ DECLARE_RPC_REPLY_RENDER_FN(utset_operation_efg__rpc_corr_id_render)
 { return APPRPC_RESP_ACCEPTED; }
 
 DECLARE_RPC_REPLY_RENDER_FN(utset_operation_cde__rpc_qname_render)
-{
-    h2o_error_printf("[DEBUG][rpc][cfg-parser] utset_operation_cde__rpc_qname_render hit \n");
-    return APPRPC_RESP_ACCEPTED;
-}
+{ return APPRPC_RESP_ACCEPTED; }
 
 DECLARE_RPC_REPLY_RENDER_FN(utset_operation_ijk__rpc_qname_render)
 { return APPRPC_RESP_ACCEPTED; }
@@ -404,7 +400,6 @@ Ensure(rpc_caller_cfg_reconfig_tests) {
         arpc_cfg_bind_reply_t *reply_cfg = NULL;
         rpc_cfg   = &mock_app_cfg.rpc.entries[0];
         reply_cfg = &rpc_cfg->bindings.entries[1].reply;
-        reply_cfg->queue.render_fn(NULL, NULL, NULL, 0);
         assert_that(reply_cfg->queue.render_fn, is_equal_to(utset_operation_cde__rpc_qname_render));
         rpc_cfg   = &mock_app_cfg.rpc.entries[1];
         reply_cfg = &rpc_cfg->bindings.entries[0].reply;
