@@ -44,15 +44,19 @@ static int _app_elf_parse_from_symbol_table(Elf *elf, app_elf_fn_traverse_cb cb,
             GElf_Sym *esym  = NULL;
             GElf_Sym *data_end  = (GElf_Sym *) ((char *)data->d_buf + data->d_size);
             for(esym = (GElf_Sym *)data->d_buf; esym < data_end; esym++) {
-                if((esym->st_value == 0) || (GELF_ST_BIND(esym->st_info) == STB_WEAK)
+                if((esym->st_value == 0)
+                        || (GELF_ST_BIND(esym->st_info) == STB_WEAK)
                         || (GELF_ST_BIND(esym->st_info) == STB_NUM)
-                        || (GELF_ST_TYPE(esym->st_info) != STT_FUNC))  {
+                        || (GELF_ST_TYPE(esym->st_info) != STT_FUNC)
+                        )  {
                     continue;
                 }
                 char *fn_name = elf_strptr(elf, (size_t)shdr.sh_link, (size_t)esym->st_name);
                 if(fn_name) {
                     uint8_t immediate_stop = cb(fn_name, (void *)esym->st_value, cb_args);
                     if(immediate_stop) {
+                        h2o_error_printf("[ELF parsing][debug] function %s found, symbol info %x \n",
+                                fn_name, esym->st_info);
                         goto done;
                     }
                 } else {
