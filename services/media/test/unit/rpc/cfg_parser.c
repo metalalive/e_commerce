@@ -82,7 +82,7 @@ static void app_utest__rpc_cfg_setup(json_t *objs, size_t num_brokers, const cha
 
 
 #define DECLARE_RPC_REPLY_RENDER_FN(fn_name) \
-static __attribute__((optimize("O0"))) ARPC_STATUS_CODE fn_name \
+static ARPC_STATUS_CODE fn_name \
     (arpc_cfg_bind_reply_t *cfg, arpc_exe_arg_t *arg, char *wr_buf, size_t wr_sz)
 
 DECLARE_RPC_REPLY_RENDER_FN(utset_operation_efg__rpc_corr_id_render)
