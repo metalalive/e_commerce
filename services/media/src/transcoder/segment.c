@@ -46,6 +46,7 @@ static  int  atfp__format_file_fullpath(char *out, size_t out_sz, const char *ba
         strncat(out, basepath, basepath_sz);
         strncat(out, "/", 1);
         strncat(out, filename, filename_sz);
+        assert(out[out_sz - 1] == 0x0);
         ret = 0; // ok
     }
     return  ret;
@@ -73,6 +74,7 @@ static int  atfp__format_segment_fullpath(char *out, size_t out_sz, const char *
         assert(nwrite == max_num_digits);
         seg_num_str[nwrite] = 0x0;
         strncat(out, &seg_num_str[0], max_num_digits);
+        assert(out[out_sz - 1] == 0x0);
     } else {
         ret = 3; // insufficient memory space
         fprintf(stderr, "[transcoder][segment] line:%d, sz_required:%ld, out_sz:%ld \n",
@@ -109,6 +111,7 @@ static void   _atfp__transfer_basic_setup(
     if(__asa_dst->op.mkdir.path.prefix) { \
         size_t  asa_dst_path_prefix_sz = strlen(__asa_dst->op.mkdir.path.prefix); \
         if(asa_dst_path_prefix_sz > 0) { \
+            assert(_segf_fullpath_asa_dst_sz > (asa_dst_path_prefix_sz + 1)); \
             memset(_segf_fullpath_asa_dst_ptr, 0x0, sizeof(char) * _segf_fullpath_asa_dst_sz); \
             strncat(_segf_fullpath_asa_dst_ptr, __asa_dst->op.mkdir.path.prefix, asa_dst_path_prefix_sz); \
             strncat(_segf_fullpath_asa_dst_ptr, "/", 1); \

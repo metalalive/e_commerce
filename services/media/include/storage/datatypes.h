@@ -57,6 +57,7 @@ struct _asa_op_base_cfg_s {
                 char *origin;
                 char *curr_parent;
                 char *tok_saveptr;
+                size_t _fullpath_sz; // size of full path for internal extra check, no need to initialize
             } path;
             uint8_t  _allow_exists:1;
         } mkdir;

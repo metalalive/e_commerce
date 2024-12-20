@@ -77,6 +77,7 @@ static void  _atfp__hls_init__dst_version_folder_cb (asa_op_base_cfg_t *asa_dst,
         fullpath[nwrite++] = 0x0; // NULL-terminated
         asa_local_dstdata->super.op.mkdir.path.origin = strndup(&fullpath[0], nwrite);
         asa_local_dstdata->super.op.mkdir.path.curr_parent = calloc(nwrite, sizeof(char));
+        assert(asa_local_dstdata->super.op.mkdir.path.prefix == NULL);
     } {
         size_t mst_playlist_name_sz = sizeof(HLS_MASTER_PLAYLIST_FILENAME) - 1;
         size_t l2_playlist_name_sz = sizeof(HLS_PLAYLIST_FILENAME) - 1;
