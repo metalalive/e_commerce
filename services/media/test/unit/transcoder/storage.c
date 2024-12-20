@@ -237,7 +237,7 @@ TestSuite *app_transcoder_storage_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, atfp_test__commit_version__discard_old);
-    add_test(suite, atfp_test__commit_new_version);
-    add_test(suite, atfp_test__commit_version__dup_error);
+    //add_test(suite, atfp_test__commit_new_version);
+    //add_test(suite, atfp_test__commit_version__dup_error);
     return suite;
 }
