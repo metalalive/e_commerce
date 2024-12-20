@@ -4,16 +4,18 @@
 
 #include "transcoder/file_processor.h"
 
-#define  PRINT_DST_PATH_STRING(out, prefix, status_f, version) \
+#define  PRINT_DST_PATH_STRING(out, o_sz, prefix, status_f, version) \
 { \
-    (out)[0] = 0; \
+    size_t min_req_sz = strlen(prefix) + 1 + strlen(status_f) + 1 + strlen(version) + 1; \
+    assert(min_req_sz <= o_sz); \
+    memset(out, 0x0, o_sz); \
     strcat(out, prefix); \
     strcat(out, "/"); \
     strcat(out, status_f); \
     strcat(out, "/"); \
     strcat(out, version); \
-    size_t  sz = strlen(out); \
-    (out)[sz] = 0; \
+    assert((out)[min_req_sz - 1] == 0x0); \
+    assert((out)[o_sz - 1] == 0x0); \
 }
 
 // NOTE: each destination file-processor is responsible to remove the version folder
@@ -35,11 +37,12 @@ static void  _atfp__move_committed_to_discarding_cb(asa_op_base_cfg_t *asaobj, A
     atfp_t  *processor = asaobj->cb_args.entries[ATFP_INDEX__IN_ASA_USRARG];
     json_t  *err_info  = processor->data.error;
     if (result == ASTORAGE_RESULT_COMPLETE) {
-        size_t path_sz  = strlen(asaobj->op.mkdir.path.prefix) + 2 + ATFP__MAXSZ_STATUS_FOLDER_NAME;
+        size_t path_sz  = strlen(asaobj->op.mkdir.path.prefix) + 3 + ATFP__MAXSZ_STATUS_FOLDER_NAME
+            + strlen(processor->data.version);
         char  old_path[path_sz],  new_path[path_sz];
-        PRINT_DST_PATH_STRING( &new_path[0], asaobj->op.mkdir.path.prefix,
+        PRINT_DST_PATH_STRING( &new_path[0], path_sz, asaobj->op.mkdir.path.prefix,
               ATFP__COMMITTED_FOLDER_NAME,  processor->data.version );
-        PRINT_DST_PATH_STRING( &old_path[0], asaobj->op.mkdir.path.prefix,
+        PRINT_DST_PATH_STRING( &old_path[0], path_sz, asaobj->op.mkdir.path.prefix,
              ATFP__TEMP_TRANSCODING_FOLDER_NAME,  processor->data.version );
         asaobj->op.rename.cb = _atfp__move_transcoding_to_committed_cb;
         asaobj->op.rename.path._new = &new_path[0];
@@ -63,12 +66,13 @@ static void  _atfp__ensure_dst_committed_basepath_cb(asa_op_base_cfg_t *asaobj, 
     json_t  *err_info  = processor->data.error;
     if (result == ASTORAGE_RESULT_COMPLETE) {
         uint8_t  _is_update = processor->transfer.transcoded_dst.flags.version_exists;
-        size_t path_sz  = strlen(asaobj->op.mkdir.path.prefix) + 2 + ATFP__MAXSZ_STATUS_FOLDER_NAME;
+        size_t path_sz  = strlen(asaobj->op.mkdir.path.prefix) + 3 + ATFP__MAXSZ_STATUS_FOLDER_NAME
+            + strlen(processor->data.version);
         char  old_path[path_sz],  new_path[path_sz];
-        PRINT_DST_PATH_STRING( &new_path[0], asaobj->op.mkdir.path.prefix,
+        PRINT_DST_PATH_STRING( &new_path[0], path_sz, asaobj->op.mkdir.path.prefix,
              ((_is_update)?ATFP__DISCARDING_FOLDER_NAME:ATFP__COMMITTED_FOLDER_NAME) ,
              processor->data.version );
-        PRINT_DST_PATH_STRING( &old_path[0], asaobj->op.mkdir.path.prefix,
+        PRINT_DST_PATH_STRING( &old_path[0], path_sz, asaobj->op.mkdir.path.prefix,
              ((_is_update)?ATFP__COMMITTED_FOLDER_NAME:ATFP__TEMP_TRANSCODING_FOLDER_NAME) ,
              processor->data.version );
         if(_is_update) {

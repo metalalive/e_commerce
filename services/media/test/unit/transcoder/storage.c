@@ -154,8 +154,6 @@ Ensure(atfp_test__commit_version__discard_old) {
              (const char **)discarding_fnames, EXPECT_DISCARDING_NFILES, 0);
         int ret = access(UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION , F_OK);
         assert_that(ret, is_equal_to(-1));
-    /*
-     * */
     }
     _atfp_utest__commit_version__files_teardown( ATFP__COMMITTED_FOLDER_NAME,
          (const char **)committing_fnames, EXPECT_COMMITTING_NFILES);
@@ -240,7 +238,7 @@ TestSuite *app_transcoder_storage_tests(void)
 {
     TestSuite *suite = create_test_suite();
     add_test(suite, atfp_test__commit_version__discard_old);
-    //add_test(suite, atfp_test__commit_new_version);
-    //add_test(suite, atfp_test__commit_version__dup_error);
+    add_test(suite, atfp_test__commit_new_version);
+    add_test(suite, atfp_test__commit_version__dup_error);
     return suite;
 }
