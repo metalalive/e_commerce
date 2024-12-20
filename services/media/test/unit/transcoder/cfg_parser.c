@@ -219,8 +219,8 @@ TestSuite *app_transcoder_cfg_parser_tests(void)
     // add_test(suite, transcoder_cfg_test_invalid_decoder);
     // add_test(suite, transcoder_cfg_test_invalid_muxer);
     // add_test(suite, transcoder_cfg_test_invalid_encoder);
-    add_test(suite, transcoder_cfg_test_invalid_resolution);
-    //add_test(suite, transcoder_cfg_test_ok);
+    // add_test(suite, transcoder_cfg_test_invalid_resolution);
+    add_test(suite, transcoder_cfg_test_ok);
     return suite;
 } // end of app_transcoder_cfg_parser_tests
 
