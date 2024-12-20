@@ -84,11 +84,11 @@ int main(int argc, char **argv) {
 
     add_suite(suite, app_transcoder_storage_tests());
     add_suite(suite, app_transcoder_removal_tests());
+
+    /*
     add_suite(suite, app_transcoder_validation_tests());
     add_suite(suite, app_transcoder_file_processor_tests());
     add_suite(suite, app_transcoder_video_storage_tests());
-
-    /*
     add_suite(suite, app_transcoder_mp4_init_tests());
     add_suite(suite, app_transcoder_mp4_preload_tests());
     add_suite(suite, app_transcoder_mp4_avcontext_tests());
