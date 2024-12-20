@@ -142,8 +142,8 @@ Ensure(atfp_test__commit_version__discard_old) {
          (const char **)committing_fnames, EXPECT_COMMITTING_NFILES);
     _atfp_utest__commit_version__files_setup(ATFP__COMMITTED_FOLDER_NAME,
          (const char **)discarding_fnames, EXPECT_DISCARDING_NFILES);
-    /*
     {
+    /*
         expect(utest__commit_new_version__done_cb, when(processor, is_equal_to(&mock_fp)),
                 when(num_err_items, is_equal_to(0)) );
         atfp_storage__commit_new_version(&mock_fp);
@@ -155,8 +155,8 @@ Ensure(atfp_test__commit_version__discard_old) {
              (const char **)discarding_fnames, EXPECT_DISCARDING_NFILES, 0);
         int ret = access(UTEST_FILEREQ_PATH "/" ATFP__TEMP_TRANSCODING_FOLDER_NAME "/" UTEST_VERSION , F_OK);
         assert_that(ret, is_equal_to(-1));
-    }
      * */
+    }
     _atfp_utest__commit_version__files_teardown( ATFP__COMMITTED_FOLDER_NAME,
          (const char **)committing_fnames, EXPECT_COMMITTING_NFILES);
     _atfp_utest__commit_version__files_teardown( ATFP__DISCARDING_FOLDER_NAME,
