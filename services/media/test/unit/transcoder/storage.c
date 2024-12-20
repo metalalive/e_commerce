@@ -41,14 +41,15 @@ static void  utest__commit_new_version__done_cb(atfp_t *processor) {
     }
 } // end of utest__commit_new_version__done_cb
 
-static void _atfp_utest__commit_version__construct_path(char *out, const char *status, const char *fname)
+static void _atfp_utest__commit_version__construct_path(char *out, size_t o_sz, const char *status, const char *fname)
 {
-    out[0] = 0;
+    memset(&out[0], 0, o_sz);
     strncat(&out[0], UTEST_FILEREQ_PATH"/", strlen(UTEST_FILEREQ_PATH"/"));
     strncat(&out[0], status, strlen(status));
     strncat(&out[0], "/", 1);
     strncat(&out[0], UTEST_VERSION"/", strlen(UTEST_VERSION"/"));
     strncat(&out[0], fname, strlen(fname));
+    assert_that(out[o_sz - 1], is_equal_to(0x0));
 } // end of _atfp_utest__commit_version__construct_path
 
 static void _atfp_utest__commit_version__files_setup(
@@ -59,7 +60,7 @@ static void _atfp_utest__commit_version__files_setup(
         size_t fullpath_sz  = strlen(UTEST_FILEREQ_PATH"/") + strlen(status) + strlen("/") +
             strlen(UTEST_VERSION"/") +  strlen(fnames[idx]) + 1;
         char fullpath[fullpath_sz];
-        _atfp_utest__commit_version__construct_path(&fullpath[0], status, fnames[idx]);
+        _atfp_utest__commit_version__construct_path(&fullpath[0], fullpath_sz, status, fnames[idx]);
         fd = open(&fullpath[0], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
         close(fd);
     } // end of loop
@@ -73,7 +74,7 @@ static void _atfp_utest__commit_version__files_teardown(
         size_t fullpath_sz  = strlen(UTEST_FILEREQ_PATH"/") + strlen(status) + strlen("/") +
             strlen(UTEST_VERSION"/") +  strlen(fnames[idx]) + 1;
         char fullpath[fullpath_sz];
-        _atfp_utest__commit_version__construct_path(&fullpath[0], status, fnames[idx]);
+        _atfp_utest__commit_version__construct_path(&fullpath[0], fullpath_sz, status, fnames[idx]);
         unlink(&fullpath[0]);
     } // end of loop
 } // end of _atfp_utest__commit_version__files_teardown
@@ -86,7 +87,7 @@ static void _atfp_utest__commit_version__verify_existence(
         size_t fullpath_sz  = strlen(UTEST_FILEREQ_PATH"/") + strlen(status) + strlen("/") +
             strlen(UTEST_VERSION"/") +  strlen(fnames[idx]) + 1;
         char fullpath[fullpath_sz];
-        _atfp_utest__commit_version__construct_path(&fullpath[0], status, fnames[idx]);
+        _atfp_utest__commit_version__construct_path(&fullpath[0], fullpath_sz, status, fnames[idx]);
         ret = access(&fullpath[0], F_OK);
         assert_that(ret, is_equal_to(expect_ret));
     } // end of loop
