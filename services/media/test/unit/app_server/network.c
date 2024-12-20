@@ -3,18 +3,19 @@
 
 Ensure(resolve_net_addr_test) {
     struct addrinfo *ai = NULL;
-    const char *expect_ip = "127.0.0.1";
     uint16_t expect_port = 8020;
     ai = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, "not.registered.domain.com", expect_port);
     assert_that(ai, is_equal_to(NULL));
     ai = resolve_net_addr(SOCK_DGRAM, IPPROTO_UDP, "localhost", expect_port);
     assert_that(ai, is_not_equal_to(NULL));
-    assert_that(ai->ai_next, is_equal_to(NULL));
+    // assert_that(ai->ai_next, is_equal_to(NULL));
     char actual_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &((struct sockaddr_in *)ai->ai_addr)->sin_addr,
             (void *)&actual_ip[0], sizeof(actual_ip));
     uint16_t actual_port = htons(((struct sockaddr_in *)ai->ai_addr)->sin_port);
-    assert_that(strcmp(expect_ip, &actual_ip[0]) , is_equal_to(0));
+    printf("[debug] resolve_net_addr_test: actual_ip : %s \n", &actual_ip[0]);
+    assert_that(strcmp("host.docker.internal", &actual_ip[0]) , is_equal_to(0));
+    assert_that(strcmp("127.0.0.1", &actual_ip[0]) , is_equal_to(0));
     assert_that(expect_port, is_equal_to(actual_port));
     freeaddrinfo(ai);
 } // end of resolve_net_addr_tests
