@@ -469,6 +469,7 @@ jobs:
       - name: download mock user asset for integration test
         working-directory: services/media/test/integration/examples
         run: |
+            source ${{ env.PY_LOCAL_VENV }}/bin/activate
             gdown ${{ secrets.mediaMockUserAssetUrl }} -O ./mock-usr-asset.tar
             tar xvf ./mock-usr-asset.tar
             mv ./mock-usr-media-asset/*  ./
