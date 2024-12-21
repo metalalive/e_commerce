@@ -40,7 +40,7 @@ Ensure(listener_access_test) {
     assert_that(found, is_null);
     ai = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, expect_host, expect_port);
     assert_that(ai, is_not_equal_to(NULL));
-    ai = ai->next;
+    ai = ai->ai_next;
     assert_that(ai, is_not_equal_to(NULL));
 
     uv_tcp_t *nt_handle = create_network_handle(uv_default_loop(), ai, _dummy_cb_on_nt_accept, 64);
