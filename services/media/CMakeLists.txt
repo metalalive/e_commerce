@@ -570,7 +570,7 @@ ADD_CUSTOM_TARGET(unit_test
     # without forking, then you can set breakpoints using debugger (currently only supports GDB)
     ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
     ##gdb -args # uncomment this line for debugging
-    ##valgrind --leak-check=full
+    valgrind --leak-check=full # uncomment this line for extra memory check
     ${CMAKE_CURRENT_SOURCE_DIR}/build/${UNIT_TEST_EXE_NAME}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
     DEPENDS ${UNIT_TEST_EXE_NAME})

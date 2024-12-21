@@ -428,4 +428,15 @@ jobs:
                   -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
             make app_server.out
             make rpc_consumer.out
+    
+      - name: set up mock credentials for test
+        working-directory: services/common/data
+        run: |
+            ln -s ./secrets_template.json  ./secrets.json
+
+      - name: run unit test for this app
+        working-directory: services/media/build
+        run: |
+            sudo apt-get install valgrind
+            make unit_test
            

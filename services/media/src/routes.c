@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <libelf.h>
+#include <link.h>
+#include <gelf.h>
 #include <h2o.h>
 #include <h2o/serverutil.h>
 
@@ -17,51 +19,67 @@ typedef struct {
 typedef int (*restapi_endpoint_handle_fn)(RESTAPI_HANDLER_ARGS(self, req));
 
 
+static int shr_odj_traverse_cb(struct dl_phdr_info *info, size_t size, void *data)
+{
+    int found = 0;
+    char **addr_read = (char **) data;
+    // currently this application assumes all functions to look up are in the main program
+    // not in any other shared libraries
+    if(info->dlpi_name && info->dlpi_name[0] == 0x0) {
+        // empty name of the shared project indicates main programs
+        // for detail , read latest man page
+        *addr_read = (char *) info->dlpi_addr;
+        found = 1;
+    }
+    return found;
+}
+
+static int get_runtime_base_vaddr(char **addr_read) {
+    return dl_iterate_phdr(shr_odj_traverse_cb, (void *)addr_read);
+}
+
 static int _app_elf_parse_from_symbol_table(Elf *elf, app_elf_fn_traverse_cb cb, void *cb_args)
 {
-    Elf64_Ehdr *ehdr = NULL;
-    Elf64_Shdr *shdr = NULL;
     Elf_Scn    *section = NULL;
-    Elf_Data   *data = NULL;
-    // check ELF executable header
-    if((ehdr = elf64_getehdr(elf)) == NULL) {
-        h2o_error_printf("[ELF parsing] data corruption on ELF executable header \n");
+    size_t shrstrndx = 0;
+    if(elf_getshdrstrndx(elf, &shrstrndx) != 0) {
+        h2o_error_printf("[ELF parsing] data corruption, failed to read section header string index \n");
         goto error;
     }
-    // point to section of ELF executable header
-    if((section = elf_getscn(elf, ehdr->e_shstrndx)) == NULL) {
-        h2o_error_printf("[ELF parsing] section not found ELF executable header \n");
+    // h2o_error_printf("[ELF parsing] section header string index: %lx \n", shrstrndx);
+    char *runtime_baseaddr = NULL;
+    if(!get_runtime_base_vaddr(&runtime_baseaddr)) {
+        h2o_error_printf("[ELF parsing] failed to get base address of runtime main program.\n");
         goto error;
     }
-    if((data = elf_getdata(section, NULL)) == NULL) {
-        h2o_error_printf("[ELF parsing] first data chunk not found in the section of ELF executable header \n");
-        goto error;
-    }
-    section = NULL;
     while((section = elf_nextscn(elf, section)) != NULL) {
-        if((shdr = elf64_getshdr(section)) == NULL) {
+        GElf_Shdr shdr = {0};
+        if(!gelf_getshdr(section, &shdr)) {
             h2o_error_printf("[ELF parsing] section header not found \n");
             goto error;
         }
-        if(shdr->sh_type != SHT_SYMTAB) {
+        if(shdr.sh_type != SHT_SYMTAB) {
             continue;
         }
-        data = NULL;
+        Elf_Data   *data = NULL;
         while((data = elf_getdata(section ,data)) != NULL) {
             if(data->d_size == 0) {
                 continue;
             }
-            Elf64_Sym *esym  = NULL;
-            Elf64_Sym *data_end  = (Elf64_Sym *) ((char *)data->d_buf + data->d_size);
-            for(esym = (Elf64_Sym *)data->d_buf; esym < data_end; esym++) {
-                if((esym->st_value == 0) || (ELF64_ST_BIND(esym->st_info) == STB_WEAK)
-                        || (ELF64_ST_BIND(esym->st_info) == STB_NUM)
-                        || (ELF64_ST_TYPE(esym->st_info) != STT_FUNC))  {
+            GElf_Sym *esym  = NULL;
+            GElf_Sym *data_end  = (GElf_Sym *) ((char *)data->d_buf + data->d_size);
+            for(esym = (GElf_Sym *)data->d_buf; esym < data_end; esym++) {
+                unsigned char bound = GELF_ST_BIND(esym->st_info);
+                if((esym->st_value == 0) || (GELF_ST_TYPE(esym->st_info) != STT_FUNC)
+                        || (bound == STB_LOPROC) || (bound == STB_HIPROC)
+                        || (bound == STB_WEAK) || (bound == STB_NUM)
+                    ) {
                     continue;
                 }
-                char *fn_name = elf_strptr(elf, (size_t)shdr->sh_link, (size_t)esym->st_name);
+                char *fn_name = elf_strptr(elf, (size_t)shdr.sh_link, (size_t)esym->st_name);
                 if(fn_name) {
-                    uint8_t immediate_stop = cb(fn_name, (void *)esym->st_value, cb_args);
+                    char *relocated_addr = runtime_baseaddr + (size_t)esym->st_value;
+                    uint8_t immediate_stop = cb(fn_name, (void *)relocated_addr, cb_args);
                     if(immediate_stop) {
                         goto done;
                     }
@@ -117,6 +135,7 @@ int app_elf_traverse_functions(const char *exe_path, app_elf_fn_traverse_cb cb, 
 {
     int exe_fd = -1;
     Elf *elf = NULL;
+    Elf_Kind ekind;
     if(elf_version(EV_CURRENT) == EV_NONE) {
         h2o_error_printf("[routing] setup error, failure on libelf version\n");
         goto error;
@@ -127,6 +146,10 @@ int app_elf_traverse_functions(const char *exe_path, app_elf_fn_traverse_cb cb, 
     }
     if((elf = elf_begin(exe_fd, ELF_C_READ, NULL)) == NULL) {
         h2o_error_printf("[routing] the executable object is NOT ELF binary file \n");
+        goto error;
+    }
+    if((ekind = elf_kind(elf)) != ELF_K_ELF) {
+        h2o_error_printf("[routing] file kind is not ELF, actual: %d \n", (int)ekind);
         goto error;
     }
     if(_app_elf_parse_from_symbol_table(elf, cb, cb_args) != 0) {

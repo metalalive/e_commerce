@@ -67,10 +67,12 @@ static ASA_RES_CODE  _app_storage_mkdir_nxt_parent(asa_op_base_cfg_t *cfg)
     if(init_round) {
         cfg->op.mkdir.path.tok_saveptr = NULL;
         origin = cfg->op.mkdir.path.origin;
+        cfg->op.mkdir.path._fullpath_sz = strlen(origin); // exclude NULL-terminating char
         char *prefix = cfg->op.mkdir.path.prefix;
         if(prefix && prefix[0] != 0) {
             strcat(cfg->op.mkdir.path.curr_parent, prefix);
             strcat(cfg->op.mkdir.path.curr_parent, "/");
+            cfg->op.mkdir.path._fullpath_sz += strlen(prefix) + 1; // exclude NULL-terminating char
         }
     } else {
         if(!cfg->op.mkdir.path.tok_saveptr)
@@ -83,6 +85,9 @@ static ASA_RES_CODE  _app_storage_mkdir_nxt_parent(asa_op_base_cfg_t *cfg)
     if(!init_round)
         strcat(cfg->op.mkdir.path.curr_parent, "/");
     strcat(cfg->op.mkdir.path.curr_parent, tok);
+    // check string concat does not go beyond aollocated space
+    if(strlen(cfg->op.mkdir.path.curr_parent) > cfg->op.mkdir.path._fullpath_sz)
+        return ASTORAGE_RESULT_DATA_ERROR;
     return ASTORAGE_RESULT_ACCEPT;
 } // end of _app_storage_mkdir_nxt_parent
 
