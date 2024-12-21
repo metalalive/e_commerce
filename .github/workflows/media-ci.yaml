@@ -26,6 +26,27 @@ env:
 jobs:
   init-env-then-tests:
     runs-on: ubuntu-24.04
+    services:
+      mariadb_primary:
+        image: mariadb:10.3.22
+        # official docker image only exposes default port 3306 to external world
+        # map any non-default port external clients will use to 3306
+        ports:
+          - 3306:3306
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+          MARIADB_ROOT_PASSWORD: "sys-ci-dba"
+          MARIADB_ROOT_HOST: "localhost"
+          MARIADB_DATABASE: "test_ecommerce_media"
+          MARIADB_USER: "DB_USERNAME"
+          MARIADB_PASSWORD: "DB_PASSWORD"
+      rabbitmq_amqp:
+        image: rabbitmq:3-management
+        ports: ["5672:5672", "15672:15672"]
+        env:
+          RABBITMQ_DEFAULT_USER: "AMQP_ANOTHER_USERNAME"
+          RABBITMQ_DEFAULT_PASS: "AMQP_ANOTHER_PASSWORD"
+          RABBITMQ_DEFAULT_VHOST: "/integration_test"
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +66,8 @@ jobs:
             # shared among rhonabwy and ffmpeg
             sudo apt-get install -y  nettle-dev  libgnutls28-dev
             sudo apt-get install -y  libcurl4-gnutls-dev
-            # TODO, run valgrind for comprehensive memory check
+            # valgrind for comprehensive memory check
+            sudo apt-get install -y valgrind
 
 
       - name: restore libuv library from cache
@@ -411,8 +433,12 @@ jobs:
         uses: ./.github/actions/liquibase-install
       
       - name: set up python virtual environment for some tasks
+        working-directory: services/media
         run: |
             python3 -m venv ${{ env.PY_LOCAL_VENV }}
+            source ${{ env.PY_LOCAL_VENV }}/bin/activate
+            pip3 install -r ./py_venv_requirement.txt
+            pip3 list
 
       - name: build media-processing applications
         working-directory: services/media
@@ -437,6 +463,39 @@ jobs:
       - name: run unit test for this app
         working-directory: services/media/build
         run: |
-            sudo apt-get install valgrind
             make unit_test
+
+
+      - name: download mock user asset for integration test
+        working-directory: services/media/test/integration/examples
+        run: |
+            gdown ${{ secrets.mediaMockUserAssetUrl }} -O ./mock-usr-asset.tar
+            tar xvf ./mock-usr-asset.tar
+            mv ./mock-usr-media-asset/*  ./
+            rmdir ./mock-usr-media-asset
+            rm ./mock-usr-asset.tar
+            ls -lt
+
+      - name: initial setup in RabbitMQ
+        uses: ./.github/actions/rabbitmq-setup
+        with:
+            vhost: /integration_test
+            uname: AMQP_ANOTHER_USERNAME
+            passwd: AMQP_ANOTHER_PASSWORD
+      
+      - name: run RPC worker for integration test
+        working-directory: services/media/build
+        run: |
+            make itest_rpc_worker &
+      
+      - name: launch app server and run integration test cases
+        working-directory: services/media/build
+        run: |
+            make itest_app_server
+      
+      - name: terminate RPC worker after integration test
+        if: ${{ always() }}
+        working-directory: services/tmp/proc
+        run: |
+            kill $(cat ./media_itest_rpc_consumer.pid)
            

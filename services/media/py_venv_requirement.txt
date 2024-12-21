@@ -1,10 +1,16 @@
-Package      Version
------------- -------
-cffi         1.15.1
-cryptography 39.0.2
-Jinja2       3.1.2
-MarkupSafe   2.1.2
-mysqlclient  2.1.1
-pip          23.0.1
-pycparser    2.21
-setuptools   56.0.0
+beautifulsoup4==4.12.3
+certifi==2024.12.14
+cffi==1.15.1
+charset-normalizer==3.4.0
+cryptography==44.0.0
+filelock==3.16.1
+gdown==5.2.0
+idna==3.10
+Jinja2==3.1.4
+MarkupSafe==2.1.2
+pycparser==2.22
+PySocks==1.7.1
+requests==2.32.3
+soupsieve==2.6
+tqdm==4.67.1
+urllib3==2.2.3

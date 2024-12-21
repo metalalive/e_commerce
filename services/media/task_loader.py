@@ -51,19 +51,6 @@ class BaseDatabaseMigration:
     def setup_test_db(self, cfg):
         raise NotImplementedError()
 
-    def _db_perform_operation(self, cfg, sql):
-        credential = cfg['credential']
-        credential.update({'connect_timeout':30})
-        db_conn = None
-        # lazy loading due to libmariadb.so error when differnt OS user running this python code
-        from MySQLdb import _mysql
-        try:
-            db_conn = _mysql.connect(**credential)
-            db_conn.query(sql)
-        finally:
-            if db_conn:
-                db_conn.close()
-
     def db_schema_cmd(self, cfg):
         credential = cfg['credential']
         return ['%s/liquibase' % cfg['liquibase_path'],
@@ -84,9 +71,6 @@ class DatabaseMigrationSetup(BaseDatabaseMigration):
         return out
 
     def setup_test_db(self, cfg):
-        sql = 'CREATE DATABASE `%s` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;' \
-                % cfg['db_name']
-        self._db_perform_operation(cfg, sql)
         subprocess.run(self.db_schema_cmd(cfg))
 
 
@@ -98,8 +82,6 @@ class DatabaseMigrationTeardown(BaseDatabaseMigration):
 
     def setup_test_db(self, cfg):
         subprocess.run(self.db_schema_cmd(cfg))
-        sql = 'DROP DATABASE `%s`;' % cfg['db_name']
-        self._db_perform_operation(cfg, sql)
 
 
 
