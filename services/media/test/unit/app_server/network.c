@@ -2,24 +2,26 @@
 #include "network.h"
 
 Ensure(resolve_net_addr_test) {
-    struct addrinfo *ai = NULL;
+    struct addrinfo *ai_chain = NULL, *ai_chosen = NULL;
     uint16_t expect_port = 8020;
-    ai = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, "not.registered.domain.com", expect_port);
-    assert_that(ai, is_equal_to(NULL));
-    ai = resolve_net_addr(SOCK_DGRAM, IPPROTO_UDP, "localhost", expect_port);
-    assert_that(ai, is_not_equal_to(NULL));
+    ai_chain = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, "not.registered.domain.com", expect_port);
+    assert_that(ai_chain, is_equal_to(NULL));
+    ai_chain = resolve_net_addr(SOCK_DGRAM, IPPROTO_UDP, "localhost", expect_port);
+    assert_that(ai_chain, is_not_equal_to(NULL));
     char actual_ip[INET_ADDRSTRLEN];
-    for(struct addrinfo *ai_curr = ai; ai_curr; ai_curr = ai_curr->ai_next) {
+    for(struct addrinfo *ai_curr = ai_chain; ai_curr; ai_curr = ai_curr->ai_next) {
         inet_ntop(AF_INET, &((struct sockaddr_in *)ai_curr->ai_addr)->sin_addr,
                 (void *)&actual_ip[0], sizeof(actual_ip));
         printf("[debug] resolve_net_addr_test: actual_ip : %s \n", &actual_ip[0]);
+        if(!strcmp("127.0.0.1", &actual_ip[0])) {
+            ai_chosen = ai_curr;
+            break;
+        }
     }
-    inet_ntop(AF_INET, &((struct sockaddr_in *)ai->ai_addr)->sin_addr,
-            (void *)&actual_ip[0], sizeof(actual_ip));
-    uint16_t actual_port = htons(((struct sockaddr_in *)ai->ai_addr)->sin_port);
-    assert_that(strcmp("127.0.0.1", &actual_ip[0]) , is_equal_to(0));
+    assert_that(ai_chosen, is_not_null);
+    uint16_t actual_port = htons(((struct sockaddr_in *)ai_chain->ai_addr)->sin_port);
     assert_that(expect_port, is_equal_to(actual_port));
-    freeaddrinfo(ai);
+    freeaddrinfo(ai_chain);
 } // end of resolve_net_addr_tests
 
 static void _dummy_cb_on_nt_accept(uv_stream_t *server, int status)
@@ -35,13 +37,16 @@ Ensure(listener_access_test) {
     listeners = h2o_mem_alloc(sizeof(app_cfg_listener_t**));
     listeners[0] = NULL;
     found = find_existing_listener(listeners, ai);
-    assert_that(found, is_equal_to(NULL));
+    assert_that(found, is_null);
     ai = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, expect_host, expect_port);
     assert_that(ai, is_not_equal_to(NULL));
+    ai = ai->next;
+    assert_that(ai, is_not_equal_to(NULL));
+
     uv_tcp_t *nt_handle = create_network_handle(uv_default_loop(), ai, _dummy_cb_on_nt_accept, 64);
-    assert_that(nt_handle, is_not_equal_to(NULL));
+    assert_that(nt_handle, is_not_null);
     _new = create_new_listener((uv_handle_t *)nt_handle);
-    assert_that(_new, is_not_equal_to(NULL));
+    assert_that(_new, is_not_null);
     h2o_append_to_null_terminated_list((void ***)&listeners, (void *)_new);
     assert_that(_new, is_equal_to(listeners[0]));
     found = find_existing_listener(listeners, ai);
