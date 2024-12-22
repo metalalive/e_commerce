@@ -43,23 +43,47 @@ Note:
 * `Nettle` is automatically built when building `gnutls` 
 * `nghttp2` enables http/2 protocol in `libcurl` for testing
 
-### Grant access to Database
+### Database setup
+#### Grant access to Database
 - Currently this application works only with MariaDB.
 - Grant admin roles full access to the database
   - for `site_dba` role (in `common/data/secrets.json`), it is the database `ecommerce_media`
   - for `test_site_dba` role, it is the database `test_ecommerce_media`
-  - see [`init_db.sql`](../migrations/init_db.sql) for detail
+  - see [`init_db.sql`](./migration/init_db.sql) for detail
 
-#### Configuration
+#### Database Schema Migration
+This application requires mariaDB database in the development or testing server, ensure to synchronize schema migration
+```shell
+> cd /PATH/TO/PROJECT_HOME/services/media
+> /PATH/TO/liquibase --defaults-file=./liquibase.properties \
+--changeLogFile=./migration/changelog_media.xml \
+      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME \
+      --username=$USER  --password=$PASSWORD \
+      --log-level=info   update
+
+> /PATH/TO/liquibase --defaults-file=./liquibase.properties \
+      --changeLogFile=./migration/changelog_media.xml  \
+      --url=jdbc:mariadb://$HOST:$PORT/$DB_NAME  \
+      --username=$USER  --password=$PASSWORD \
+      --log-level=info   rollback  $VERSION_TAG
+```
+Note : 
+- the parameters above `$HOST`, `$PORT`, `$USER`, `$PASSWORD` should be consistent with database credential set in `${SYS_BASE_PATH}/common/data/secrets.json` , see the structure in [`common/data/secrets_template.json`](../common/data/secrets_template.json)
+- the parameter `$DB_NAME` can be either `ecommerce_media` for development server, or  `test_ecommerce_media` for testing server, see [reference](./migration/init_db.sql)
+- the subcommand `update` upgrades the schema to latest version
+- the subcommand `rollback` rollbacks the schema to specific previous version `$VERSION_TAG` defined in the `migration/changelog_media.xml`
+
+
+### Configuration
 ```bash
 cd /PATH/TO/PROJECT_HOME/services/media
 mkdir -p build
 cd build
 
 CC="/PATH/TO/gcc/10.3.0/installed/bin/gcc"   PKG_CONFIG_PATH="<YOUR_PATH_TO_PKG_CFG>" \
-    cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  -DLIQUIBASE_PATH="/PATH/TO/liquibase"  \
-        -DPYVENV_PATH="/PATH/TO/python/venv"  -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
-        -DCDN_USERNAME=<OS_USER_NAME>   -DCDN_USERGRP=<OS_USER_GROUP>   ..
+    cmake -DCMAKE_PREFIX_PATH="/PATH/TO/cgreen/installed"  -DPYVENV_PATH="/PATH/TO/python/venv" \
+    -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
+    -DCDN_USERNAME=<OS_USER_NAME>   -DCDN_USERGRP=<OS_USER_GROUP>   ..
 ```
 Note
 - `<YOUR_PATH_TO_PKG_CFG>` should include:
@@ -80,12 +104,6 @@ Note
   - `/PATH/TO/openssl/pkgconfig`
 - omit parameters `NGINX_INSTALL_PATH`, `CDN_USERNAME`, `CDN_USERGRP` if you don't need reverse proxy
 
-
-### Database Migration (for development server)
-```bash
-make  dev_db_init
-```
-Note this command performs only schema migration
 
 ### Compile and Run
 | env | target | command |

@@ -470,7 +470,7 @@ jobs:
         working-directory: services/media/test/integration/examples
         run: |
             source ${{ env.PY_LOCAL_VENV }}/bin/activate
-            gdown ${{ secrets.mediaMockUserAssetUrl }} -O ./mock-usr-asset.tar
+            gdown "${{ secrets.mediaMockUserAssetUrl }}" -O ./mock-usr-asset.tar
             tar xvf ./mock-usr-asset.tar
             mv ./mock-usr-media-asset/*  ./
             rmdir ./mock-usr-media-asset
@@ -483,20 +483,39 @@ jobs:
             vhost: /integration_test
             uname: AMQP_ANOTHER_USERNAME
             passwd: AMQP_ANOTHER_PASSWORD
+
+      - name: run database schema migration
+        working-directory: services/media
+        run: |
+            liquibase  --changeLogFile=./migration/changelog_media.xml \
+                --url=jdbc:mariadb://localhost:3306/test_ecommerce_media \
+                --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
+
+      - name: build RPC worker and app server for integration test
+        working-directory: services/media/build
+        run: |
+            make itest_rpc_consumer.out
+            make itest_app_server.out
       
-      - name: run RPC worker for integration test
+      - name: launch RPC worker and app server for integration test
         working-directory: services/media/build
         run: |
             make itest_rpc_worker &
-      
-      - name: launch app server and run integration test cases
-        working-directory: services/media/build
-        run: |
             make itest_app_server
       
       - name: terminate RPC worker after integration test
         if: ${{ always() }}
         working-directory: services/tmp/proc
         run: |
-            kill $(cat ./media_itest_rpc_consumer.pid)
+            kill -s SIGTERM $(cat ./media_itest_rpc_consumer.pid)
+            sleep 10
+
+      - name: dump error log files
+        if: ${{ always() }}
+        working-directory: services/tmp/log/test
+        run: |
+            echo -e "\n\n---- app server ----\n"
+            cat ./media_app_server.err
+            echo -e "\n\n---- RPC consumer ----\n"
+            cat ./media_rpc_consumer.err
            
