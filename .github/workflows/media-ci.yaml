@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       mariadb_primary:
-        image: mariadb:10.3.22
+        image: mariadb:10.6.20
         # official docker image only exposes default port 3306 to external world
         # map any non-default port external clients will use to 3306
         ports:
