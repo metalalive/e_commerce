@@ -69,6 +69,8 @@ MESSAGE(STATUS "CMAGIC_INCLUDE_DIR : ${CMAGIC_INCLUDE_DIR}")
 MESSAGE(STATUS "LIBCURL_INCLUDE_DIRS : ${LIBCURL_INCLUDE_DIRS}")
 MESSAGE(STATUS "LIBCURL_LIBRARY_DIRS : ${LIBCURL_LIBRARY_DIRS}")
 MESSAGE(STATUS "LIBNGHTTP2_INCLUDE_DIRS : ${LIBNGHTTP2_INCLUDE_DIRS}")
+MESSAGE(STATUS "AVFORMAT_LIBRARY_DIRS: ${AVFORMAT_LIBRARY_DIRS}")
+MESSAGE(STATUS "AVUTIL_LIBRARY_DIRS: ${AVUTIL_LIBRARY_DIRS}")
 
 # find out whether pthread provides function to set CPU affinity
 CMAKE_PUSH_CHECK_STATE()
@@ -195,6 +197,8 @@ LINK_DIRECTORIES(
     ${LIBUUID_LIBRARY_DIRS}
     ${LIBCURL_LIBRARY_DIRS}
     ${LIBNGHTTP2_LIBRARY_DIRS} )
+
+
 
 
 SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration -Werror=incompatible-pointer-types")
@@ -575,6 +579,7 @@ ADD_CUSTOM_TARGET(itest_app_server
     COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND bash ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
+        "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
         ##gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_API_SERVER_EXE_NAME}  ${ITEST_APPCFG_PATH}
@@ -587,6 +592,7 @@ ADD_CUSTOM_TARGET(itest_app_server
 
 ADD_CUSTOM_TARGET(itest_rpc_worker
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
+        "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
         ##gdb -args
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
