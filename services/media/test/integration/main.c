@@ -152,14 +152,18 @@ int main(int argc, char **argv) {
     add_suite(suite, app_api_tests(root_cfg));
     curl_global_init(CURL_GLOBAL_DEFAULT);
     init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
-    do {
-        result = pthread_tryjoin_np(app_tid, NULL);
-        if(result == 0) {
-            fprintf(stderr, "[test] app server thread terminated due to some error\n");
-            goto done;
+    while(1) {
+        if(app_server_ready()) {
+            break;
+        } else {
+            result = pthread_tryjoin_np(app_tid, NULL);
+            if(result == 0) {
+                fprintf(stderr, "[test] app server thread terminated due to some error\n");
+                goto done;
+            } // unexpected early thread terminated
+            sleep(3);
         }
-        sleep(3);
-    } while(!app_server_ready());
+    }
     fprintf(stdout, "[test] curl version : %s \n", curl_version());
     fprintf(stdout, "[test] app server is ready, start integration test cases ...\n");
     // const char *test_name = argv[argc - 1];
