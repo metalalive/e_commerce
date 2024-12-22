@@ -160,6 +160,9 @@ int init_security(void) {
     uint64_t opts = OPENSSL_INIT_LOAD_SSL_STRINGS | OPENSSL_INIT_LOAD_CRYPTO_STRINGS;
     int err = OPENSSL_init_ssl(opts, NULL) == 0;
     r_global_init(); // rhonabwy JWT library
+    if(err) {
+        h2o_error_printf("[system] failed to init openssl context (err code = %d) \n", err);
+    }
     return err;
 }
 
@@ -326,6 +329,9 @@ static int appserver_start_workers(app_cfg_t *app_cfg) {
     struct worker_init_data_t  worker_data[num_threads];
     h2o_barrier_init(&app_cfg->workers_sync_barrier, num_threads);
     int err = appcfg_start_workers(app_cfg, &worker_data[0], run_loop);
+    if(err) {
+        h2o_error_printf("[system] failed to start worker in app server, err = %d \n", err);
+    }
     if(!err) {
         app_db_poolmap_close_all_conns(worker_data[0].loop);
         while(!app_db_poolmap_check_all_conns_closed()) {

@@ -308,5 +308,7 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
 error:
     if (!root)
         json_decref(root);
+    h2o_error_printf("[parsing] failed to parse config file, result_error = %d \n",
+            result_error);
     return EX_CONFIG;
 } // end of parse_cfg_params()
