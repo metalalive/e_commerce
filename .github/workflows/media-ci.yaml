@@ -69,17 +69,6 @@ jobs:
             # valgrind for comprehensive memory check
             sudo apt-get install -y valgrind
 
-      - name: install liquibase migration tool
-        uses: ./.github/actions/liquibase-install      
-
-      - name: run database schema migration
-        working-directory: services/media
-        run: |
-            liquibase  --changeLogFile=./migration/changelog_media.xml \
-                --url=jdbc:mariadb://localhost:3306/test_ecommerce_media \
-                --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
-
-
       - name: restore libuv library from cache
         id:   cachelibuv
         uses: actions/cache/restore@v4
@@ -491,15 +480,22 @@ jobs:
             uname: AMQP_ANOTHER_USERNAME
             passwd: AMQP_ANOTHER_PASSWORD
 
-      - name: build RPC worker and app server for integration test
+      - name: install liquibase migration tool
+        uses: ./.github/actions/liquibase-install      
+
+      - name: run database schema migration
+        working-directory: services/media
+        run: |
+            liquibase  --changeLogFile=./migration/changelog_media.xml \
+                --url=jdbc:mariadb://localhost:3306/test_ecommerce_media \
+                --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
+
+
+      - name: build / launch RPC worker and app server for integration test
         working-directory: services/media/build
         run: |
             make itest_rpc_consumer.out
             make itest_app_server.out
-      
-      - name: launch RPC worker and app server for integration test
-        working-directory: services/media/build
-        run: |
             make itest_rpc_worker &
             make itest_app_server
       
