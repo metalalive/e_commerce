@@ -69,6 +69,16 @@ jobs:
             # valgrind for comprehensive memory check
             sudo apt-get install -y valgrind
 
+      - name: install liquibase migration tool
+        uses: ./.github/actions/liquibase-install      
+
+      - name: run database schema migration
+        working-directory: services/media
+        run: |
+            liquibase  --changeLogFile=./migration/changelog_media.xml \
+                --url=jdbc:mariadb://localhost:3306/test_ecommerce_media \
+                --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
+
 
       - name: restore libuv library from cache
         id:   cachelibuv
@@ -429,9 +439,6 @@ jobs:
 
 
 
-      - name: install liquibase migration tool
-        uses: ./.github/actions/liquibase-install
-      
       - name: set up python virtual environment for some tasks
         working-directory: services/media
         run: |
@@ -448,7 +455,7 @@ jobs:
             #LD_LIBRARY_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
             sudo apt-get install libelf-dev libmagic-dev uuid-dev libnghttp2-dev
             mkdir -p ./build && cd ./build
-            cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} \
+            cmake -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} \
                   -DCMAKE_PREFIX_PATH=${{ env.CGREEN_INSTALL_PATH }}  \
                   -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
                   -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
@@ -483,13 +490,6 @@ jobs:
             vhost: /integration_test
             uname: AMQP_ANOTHER_USERNAME
             passwd: AMQP_ANOTHER_PASSWORD
-
-      - name: run database schema migration
-        working-directory: services/media
-        run: |
-            liquibase  --changeLogFile=./migration/changelog_media.xml \
-                --url=jdbc:mariadb://localhost:3306/test_ecommerce_media \
-                --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
 
       - name: build RPC worker and app server for integration test
         working-directory: services/media/build
