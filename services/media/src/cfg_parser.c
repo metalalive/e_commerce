@@ -205,11 +205,6 @@ static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ss
         uv_handle_t *handle = (uv_handle_t *)create_network_handle(uv_default_loop(), curr_addr,
                  _dummy_cb_on_nt_accept, _app_cfg->tfo_q_len);
         if(!handle) {
-            char actual_ip[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &((struct sockaddr_in *)curr_addr->ai_addr)->sin_addr,
-                (void *)&actual_ip[0], sizeof(actual_ip));
-            h2o_error_printf("[parsing][tcp-listener] failed to create uv handle, curr-ip-addr:%s \n",
-                &actual_ip[0]);
             goto error;
         }
         app_cfg_listener_t *_new = create_new_listener(handle);

@@ -62,6 +62,7 @@ uv_tcp_t *create_network_handle( uv_loop_t *loop, struct addrinfo *addr,
     assert(IPPROTO_TCP == addr->ai_protocol);
     uv_os_fd_t fd = -1; // fetch low-level file descriptor
     int ret = 0;
+    char ip4log[INET_ADDRSTRLEN] = {0};
     const struct sockaddr *sock_addr = (const struct sockaddr *) addr->ai_addr;
     uint16_t port_hsb = ntohs( ((struct sockaddr_in *)sock_addr)->sin_port );
     uv_tcp_t *handle = h2o_mem_alloc(sizeof(uv_tcp_t));
@@ -113,6 +114,9 @@ uv_tcp_t *create_network_handle( uv_loop_t *loop, struct addrinfo *addr,
     }
     return handle;
 error:
+    inet_ntop(AF_INET, &((struct sockaddr_in *)sock_addr)->sin_addr,
+        (void *)&ip4log[0], sizeof(ip4log));
+    h2o_error_printf("[network][create-handle] curr-ip-addr:%s \n", &ip4log[0]);
     destroy_network_handle((uv_handle_t *)handle, (uv_close_cb)free);
     return NULL;
 } // end of create_network_handle
