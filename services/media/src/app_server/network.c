@@ -128,11 +128,20 @@ int is_all_zero_address(const struct addrinfo *info) {
     }
     if (info->ai_family == AF_INET) { // IPv4
         struct sockaddr_in *addr = (struct sockaddr_in *)info->ai_addr;
+        h2o_error_printf("[network][is_all_zero_address][debug] ipv4 addr:%x \n",
+                addr->sin_addr.s_addr );
         return addr->sin_addr.s_addr == INADDR_ANY; // INADDR_ANY is 0.0.0.0
     } else if (info->ai_family == AF_INET6) { // IPv6
         struct sockaddr_in6 *addr = (struct sockaddr_in6 *)info->ai_addr;
         struct in6_addr zero_addr = IN6ADDR_ANY_INIT; // "::"
+        h2o_error_printf("[network][is_all_zero_address][debug] ipv6 addr:%p \n",
+                 &addr->sin6_addr);
         return memcmp(&addr->sin6_addr, &zero_addr, sizeof(struct in6_addr)) == 0;
+    } else {
+        h2o_error_printf("[network][is_all_zero_address][debug] ip \
+                version:%d, v4:%d, addr:%x, v6:%d \n",
+                info->ai_family, AF_INET, INADDR_ANY, AF_INET6 );
+        assert(0);
     }
     return 0; // Unsupported address family
 }
