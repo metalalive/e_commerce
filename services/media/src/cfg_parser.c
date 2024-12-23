@@ -189,6 +189,14 @@ static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ss
                 host, port);
         goto error;
     }
+    h2o_hostconf_t *hostcfg = h2o_config_register_host(
+            &_app_cfg->server_glb_cfg,
+            h2o_iovec_init(host, strlen(host)),
+            port
+        ); // shared among different resolved IP addresses
+    if(app_setup_apiview_routes(hostcfg, routes_cfg, _app_cfg->exe_path) != 0) {
+        goto error;
+    }
     for (curr_addr = res_addr; curr_addr != NULL; curr_addr = curr_addr->ai_next) {
         app_cfg_listener_t *found = find_existing_listener(_app_cfg->listeners, curr_addr);
         if(found) { continue; }
@@ -210,14 +218,7 @@ static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ss
             free_listener(_new);
             goto error;
         }
-        h2o_hostconf_t *hostcfg = h2o_config_register_host(
-                &_app_cfg->server_glb_cfg,
-                h2o_iovec_init(host, strlen(host)),
-                port
-            );
-        if(app_setup_apiview_routes(hostcfg, routes_cfg, _app_cfg->exe_path) != 0) {
-            goto error;
-        } // preserve some network attributes which are NOT stored in `struct sockaddr`
+        // preserve some network attributes which are NOT stored in `struct sockaddr`
         uv_nt_handle_data *nt_attr = h2o_mem_alloc(sizeof(uv_nt_handle_data));
         *nt_attr = (uv_nt_handle_data){
             .ai_flags = curr_addr->ai_flags,         .ai_family = curr_addr->ai_family,
