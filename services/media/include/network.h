@@ -19,6 +19,8 @@ h2o_socket_t *init_client_tcp_socket(uv_stream_t *server, uv_close_cb on_close);
 
 app_cfg_listener_t *create_new_listener(uv_handle_t *handle);
 
+int is_all_zero_address(const struct addrinfo *info);
+
 void free_listener(app_cfg_listener_t *listener);
 
 int atomic_num_connections(app_cfg_t *app_cfg, int delta);

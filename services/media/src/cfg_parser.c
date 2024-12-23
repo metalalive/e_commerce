@@ -200,6 +200,12 @@ static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ss
     for (curr_addr = res_addr; curr_addr != NULL; curr_addr = curr_addr->ai_next) {
         app_cfg_listener_t *found = find_existing_listener(_app_cfg->listeners, curr_addr);
         if(found) { continue; }
+        // skip `no particular address` case e.g. IP 0.0.0.0 , such address cannot be
+        // bound several times
+        if(is_all_zero_address(curr_addr)) {
+            h2o_error_printf("[parsing][tcp-listener] skip all-zero address \n");
+            continue;
+        }
         // the default loop works with the 1st. thread of this application
         // (main thread in master mode, the 1st. worker thread in daemon mode)
         uv_handle_t *handle = (uv_handle_t *)create_network_handle(uv_default_loop(), curr_addr,

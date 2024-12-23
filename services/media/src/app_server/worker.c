@@ -100,7 +100,7 @@ static void on_tcp_accept(uv_stream_t *server, int status) {
         h2o_socket_t *sock = init_client_tcp_socket(server, on_tcp_close);
         if(!sock) {
             atomic_num_connections(acfg, -1);
-            h2o_error_printf("[worker] ID = %lu, end of pending connection reached \n", (unsigned long int)uv_thread_self() );
+            //h2o_error_printf("[worker] ID = %lx, end of pending connection reached \n", (unsigned long int)uv_thread_self() );
             // TODO, free space in `sock`, return http response status 500 (internal error)
             break;
         }

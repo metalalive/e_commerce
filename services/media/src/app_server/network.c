@@ -122,6 +122,22 @@ error:
 } // end of create_network_handle
 
 
+int is_all_zero_address(const struct addrinfo *info) {
+    if (info == NULL || info->ai_addr == NULL) {
+        return 0;
+    }
+    if (info->ai_family == AF_INET) { // IPv4
+        struct sockaddr_in *addr = (struct sockaddr_in *)info->ai_addr;
+        return addr->sin_addr.s_addr == INADDR_ANY; // INADDR_ANY is 0.0.0.0
+    } else if (info->ai_family == AF_INET6) { // IPv6
+        struct sockaddr_in6 *addr = (struct sockaddr_in6 *)info->ai_addr;
+        struct in6_addr zero_addr = IN6ADDR_ANY_INIT; // "::"
+        return memcmp(&addr->sin6_addr, &zero_addr, sizeof(struct in6_addr)) == 0;
+    }
+    return 0; // Unsupported address family
+}
+
+
 h2o_socket_t *init_client_tcp_socket(uv_stream_t *server, uv_close_cb on_close) {
     int ret = 0;
     uv_tcp_t     *client_conn = NULL;
