@@ -101,7 +101,7 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg)
     int idx = 0;
     size_t num_pools = (size_t)json_array_size(objs);
     if (!objs || !json_is_array(objs) || num_pools == 0) {
-        h2o_error_printf("[parsing] missing database configuration\n");
+        h2o_error_printf("[parsing][db] missing config\n");
         goto error;
     }
     json_array_foreach(objs, idx, obj) {
@@ -114,10 +114,10 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg)
         json_t  *credential = json_object_get(obj, "credential");
         if(!alias || !db_name || !init_cfg_ops_label || max_conns == 0 || idle_timeout == 0
                 || bulk_query_limit_kb == 0) {
-            h2o_error_printf("[parsing] missing scalar parameters in database configuration\n");
+            h2o_error_printf("[parsing][db] missing general parameters in config\n");
             goto error;
         } else if (!credential || !json_is_object(credential)) {
-            h2o_error_printf("[parsing] missing credential parameters in database configuration\n");
+            h2o_error_printf("[parsing][db] missing credential parameters\n");
             goto error;
         }
         db_pool_cfg_t cfg_opts = { .alias=(char *)alias, .capacity=max_conns, .idle_timeout=idle_timeout,
@@ -129,14 +129,19 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg)
         if(err != 0) { // parsing error
             goto error;
         } else if(!probe_args.done) {
-            h2o_error_printf("[parsing] database (idx=%d) failed to look up all necessary operations \n", idx);
+            h2o_error_printf("[parsing][db][cfg] idx=%d, alias=%s, failed to look up all \
+                    necessary operations \n", idx, alias);
             goto error;
         }
         if(parse_cfg_db_credential(credential, &cfg_opts.conn_detail)) {
+            h2o_error_printf("[parsing][db][cfg] idx=%d, alias=%s, failed to parse \
+                    credential \n", idx, alias);
             parse_cfg_free_db_conn_detail(&cfg_opts.conn_detail);
             goto error;
         }
         if(app_db_pool_init(&cfg_opts) != DBA_RESULT_OK) {
+            h2o_error_printf("[parsing][db][cfg] idx=%d, alias=%s, failed to init pool \n",
+                    idx, alias);
             parse_cfg_free_db_conn_detail(&cfg_opts.conn_detail);
             goto error;
         }
