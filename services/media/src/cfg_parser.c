@@ -179,12 +179,12 @@ static void _dummy_cb_on_nt_accept(uv_stream_t *server, int status)
 static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ssl_obj,
         json_t *routes_cfg, app_cfg_t *_app_cfg)
 { // TODO, currently only support TCP handle, would support UDP in future
-    struct addrinfo *curr_addr = NULL, *res_addr = NULL;
+    struct addrinfo *curr_ainfo = NULL, *res_ainfo = NULL;
     if(!host || port == 0) {
         goto error;
     }
-    res_addr = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, host, (uint16_t)port);
-    if(!res_addr) {
+    res_ainfo = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, host, (uint16_t)port);
+    if(!res_ainfo) {
         h2o_error_printf("[parsing][tcp-listener] failed to resolve domain name: %s:%hu \n",
                 host, port);
         goto error;
@@ -197,19 +197,13 @@ static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ss
     if(app_setup_apiview_routes(hostcfg, routes_cfg, _app_cfg->exe_path) != 0) {
         goto error;
     }
-    for (curr_addr = res_addr; curr_addr != NULL; curr_addr = curr_addr->ai_next) {
-        app_cfg_listener_t *found = find_existing_listener(_app_cfg->listeners, curr_addr);
+    for (curr_ainfo = res_ainfo; curr_ainfo; curr_ainfo = curr_ainfo->ai_next) {
+        app_cfg_listener_t *found = find_existing_listener(_app_cfg->listeners, curr_ainfo);
         if(found) { continue; }
-        // skip `no particular address` case e.g. IP 0.0.0.0 , such address cannot be
-        // bound several times
-        if(is_all_zero_address(curr_addr)) {
-            h2o_error_printf("[parsing][tcp-listener] skip all-zero address \n");
-            continue;
-        }
         // the default loop works with the 1st. thread of this application
         // (main thread in master mode, the 1st. worker thread in daemon mode)
-        uv_handle_t *handle = (uv_handle_t *)create_network_handle(uv_default_loop(), curr_addr,
-                 _dummy_cb_on_nt_accept, _app_cfg->tfo_q_len);
+        uv_handle_t *handle = (uv_handle_t *)create_network_handle(uv_default_loop(),
+                curr_ainfo, _dummy_cb_on_nt_accept, _app_cfg->tfo_q_len);
         if(!handle) {
             goto error;
         }
@@ -222,19 +216,19 @@ static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ss
         // preserve some network attributes which are NOT stored in `struct sockaddr`
         uv_nt_handle_data *nt_attr = h2o_mem_alloc(sizeof(uv_nt_handle_data));
         *nt_attr = (uv_nt_handle_data){
-            .ai_flags = curr_addr->ai_flags,         .ai_family = curr_addr->ai_family,
-            .ai_socktype = curr_addr->ai_socktype,   .ai_protocol = curr_addr->ai_protocol
+            .ai_flags = curr_ainfo->ai_flags,         .ai_family = curr_ainfo->ai_family,
+            .ai_socktype = curr_ainfo->ai_socktype,   .ai_protocol = curr_ainfo->ai_protocol
         };
         handle->data = (void *)nt_attr;
         _new->hostconf = hostcfg;
         h2o_append_to_null_terminated_list((void ***)&_app_cfg->listeners, (void *)_new);
         _app_cfg->num_listeners += 1;
     } // end of address iteration
-    freeaddrinfo(res_addr);
+    freeaddrinfo(res_ainfo);
     return 0;
 error:
-    if(!res_addr) {
-        freeaddrinfo(res_addr);
+    if(!res_ainfo) {
+        freeaddrinfo(res_ainfo);
     }
     h2o_error_printf("[parsing][tcp-listener] failed to create listener, num-listeners:%u \n",
             _app_cfg->num_listeners);

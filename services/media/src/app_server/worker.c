@@ -202,12 +202,12 @@ static void worker_dup_network_handle(app_ctx_listener_t *ctx, const app_cfg_t *
         uv_nt_handle_data *nt_attr = (uv_nt_handle_data *)nt_handle->data;
         assert(nt_attr != NULL);
         // duplicate network handler for each worker thread
-        struct sockaddr sa = {0};
+        struct sockaddr_storage sa = {0};
         int sa_len = sizeof(sa); // has to indicate length of sockaddr structure
-        uv_tcp_getsockname((uv_tcp_t *)nt_handle, &sa, &sa_len);
+        uv_tcp_getsockname((uv_tcp_t *)nt_handle, (struct sockaddr *)&sa, &sa_len);
         assert(sa_len > 0);
         struct addrinfo ai = {
-            .ai_addr = &sa, .ai_next = NULL, .ai_family = nt_attr->ai_family,
+            .ai_addr = (struct sockaddr *)&sa, .ai_next = NULL, .ai_family = nt_attr->ai_family,
             .ai_flags = nt_attr->ai_flags, .ai_socktype = nt_attr->ai_socktype,
             .ai_protocol = nt_attr->ai_protocol
         };

@@ -56,51 +56,75 @@ void destroy_network_handle(uv_handle_t *handle, uv_close_cb close_cb) {
 }
 
 // create network handle for each listener object in each worker thread, will act as server
-uv_tcp_t *create_network_handle( uv_loop_t *loop, struct addrinfo *addr,
+uv_tcp_t *create_network_handle( uv_loop_t *loop, struct addrinfo *ainfo,
         uv_connection_cb  cb_on_accept,  unsigned int tfo_q_len)
 { // TODO, seperate network handle function for UDP protocol
-    assert(IPPROTO_TCP == addr->ai_protocol);
+    assert(IPPROTO_TCP == ainfo->ai_protocol);
     uv_os_fd_t fd = -1; // fetch low-level file descriptor
     int ret = 0;
-    char ip4log[INET_ADDRSTRLEN] = {0};
-    const struct sockaddr *sock_addr = (const struct sockaddr *) addr->ai_addr;
-    uint16_t port_hsb = ntohs( ((struct sockaddr_in *)sock_addr)->sin_port );
+    const struct sockaddr *sock_addr = (const struct sockaddr *) ainfo->ai_addr;
+    unsigned int flgs = ainfo->ai_family;
+    uint16_t port_hsb = 0;
+    switch(0xff & flgs) {
+        case AF_INET:
+            port_hsb = ntohs( ((struct sockaddr_in *)sock_addr)->sin_port );
+            break;
+        case AF_INET6:
+            port_hsb = ntohs( ((struct sockaddr_in6 *)sock_addr)->sin6_port );
+            break;
+        default:
+            h2o_error_printf("[network] unsupport IP version, flags:%x \n", flgs);
+            assert(0);
+    }
+    if((flgs & 0xff) == AF_INET) {
+        char iplog[INET_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET, &((struct sockaddr_in *)sock_addr)->sin_addr,
+            (void *)&iplog[0], sizeof(iplog));
+        h2o_error_printf("[network][create-handle] ipv4: %s:%hu \n", &iplog[0], port_hsb);
+    } else if ((flgs & 0xff) == AF_INET6) {
+        char iplog[INET6_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET6, &((struct sockaddr_in6 *)sock_addr)->sin6_addr,
+            (void *)&iplog[0], sizeof(iplog));
+        h2o_error_printf("[network][create-handle] ipv6: %s:%hu \n", &iplog[0], port_hsb);
+    }
+
     uv_tcp_t *handle = h2o_mem_alloc(sizeof(uv_tcp_t));
     if(!handle) { goto error; }
-    unsigned int flgs = (0xff & addr->ai_family);
+
     handle->data = NULL;
     ret = uv_tcp_init_ex(loop, handle, flgs);
     if(ret != 0) {
-        h2o_error_printf("[network] failed to initialize network handle, flags:%x , reason:%s \n",
+        h2o_error_printf("[network][create-handle] failed to initialize handle, flags:%x , reason:%s \n",
                 flgs, uv_strerror(ret));
         goto error;
     }
     ret = uv_fileno((const uv_handle_t *)handle, &fd);
     if(ret < 0 || fd == -1) {
-        h2o_error_printf("[network] failed to get sockfd (port=%u) from created network handle, reason:%s \n",
-                port_hsb, uv_strerror(ret));
+        h2o_error_printf("[network][create-handle] failed to get sockfd from handle, reason:%s \n",
+                uv_strerror(ret));
         goto error;
     }
     int optval = 1;
     ret = setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
     if(ret != 0) {
-        h2o_error_printf("[network] failed to reuse port %u upon created network handle, reason:%s \n",
+        h2o_error_printf("[network][create-handle] failed to reuse port %u, reason:%s \n",
                 port_hsb, uv_strerror(ret));
         goto error;
     }
     // try binding the address and port, might fail if the address / port is invalid
     // Note SO_REUSEADDR were already set in uv_tcp_bind() to reuse the same addresses among threads
-    ret = uv_tcp_bind(handle, sock_addr, 0);
+    unsigned int uvbind_flgs = ((flgs & 0xff) == AF_INET6) ? UV_TCP_IPV6ONLY: 0;
+    ret = uv_tcp_bind(handle, sock_addr, uvbind_flgs);
     if(ret != 0) {
-        h2o_error_printf("[network] failed to bind the address (port=%u) when creating network handle, reason:%s \n",
-                port_hsb, uv_strerror(ret));
+        h2o_error_printf("[network][create-handle] failed to bind the address, \
+                reason:%s \n", uv_strerror(ret));
         goto error;
     }
     if(tfo_q_len > 0) {
-        ret = setsockopt(fd, addr->ai_protocol, TCP_FASTOPEN, (const void *)&tfo_q_len, sizeof(tfo_q_len));
+        ret = setsockopt(fd, ainfo->ai_protocol, TCP_FASTOPEN, (const void *)&tfo_q_len, sizeof(tfo_q_len));
         if(ret != 0) {
-            h2o_error_printf("[network] failed to configure TCP fastopen (port=%u) when creating network handle, reason:%s \n",
-                    port_hsb, uv_strerror(ret));
+            h2o_error_printf("[network][create-handle] failed to configure TCP \
+                    fastopen, reason:%s \n", uv_strerror(ret));
             goto error; 
         }
     }
@@ -108,43 +132,15 @@ uv_tcp_t *create_network_handle( uv_loop_t *loop, struct addrinfo *addr,
     // might fail if the address / port is in use by another process
     ret = uv_listen((uv_stream_t *)handle, backlog_q_sz, cb_on_accept);
     if(ret != 0) {
-        h2o_error_printf("[network] failed to listen to the port %u when creating network handle, reason:%s \n",
-                port_hsb, uv_strerror(ret));
+        h2o_error_printf("[network][create-handle] failed to listen, reason:%s \n",
+                 uv_strerror(ret));
         goto error;
     }
     return handle;
 error:
-    inet_ntop(AF_INET, &((struct sockaddr_in *)sock_addr)->sin_addr,
-        (void *)&ip4log[0], sizeof(ip4log));
-    h2o_error_printf("[network][create-handle] curr-ip-addr:%s \n", &ip4log[0]);
     destroy_network_handle((uv_handle_t *)handle, (uv_close_cb)free);
     return NULL;
 } // end of create_network_handle
-
-
-int is_all_zero_address(const struct addrinfo *info) {
-    if (info == NULL || info->ai_addr == NULL) {
-        return 0;
-    }
-    if (info->ai_family == AF_INET) { // IPv4
-        struct sockaddr_in *addr = (struct sockaddr_in *)info->ai_addr;
-        h2o_error_printf("[network][is_all_zero_address][debug] ipv4 addr:%x \n",
-                addr->sin_addr.s_addr );
-        return addr->sin_addr.s_addr == INADDR_ANY; // INADDR_ANY is 0.0.0.0
-    } else if (info->ai_family == AF_INET6) { // IPv6
-        struct sockaddr_in6 *addr = (struct sockaddr_in6 *)info->ai_addr;
-        struct in6_addr zero_addr = IN6ADDR_ANY_INIT; // "::"
-        h2o_error_printf("[network][is_all_zero_address][debug] ipv6 addr:%p \n",
-                 &addr->sin6_addr);
-        return memcmp(&addr->sin6_addr, &zero_addr, sizeof(struct in6_addr)) == 0;
-    } else {
-        h2o_error_printf("[network][is_all_zero_address][debug] ip \
-                version:%d, v4:%d, addr:%x, v6:%d \n",
-                info->ai_family, AF_INET, INADDR_ANY, AF_INET6 );
-        assert(0);
-    }
-    return 0; // Unsupported address family
-}
 
 
 h2o_socket_t *init_client_tcp_socket(uv_stream_t *server, uv_close_cb on_close) {
