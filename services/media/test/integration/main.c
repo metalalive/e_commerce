@@ -145,10 +145,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "[test] failed to parse config file\n");
         goto done;
     }
-    init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
     op_result = uv_thread_create( &app_tid, run_app_server, (void *)&init_app_data );
     assert(op_result == 0);
     assert(app_tid > 0);
+    init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
     TestSuite *suite = create_named_test_suite("media_app_integration_test");
     TestReporter *reporter = create_text_reporter();
     add_suite(suite, app_api_tests(root_cfg));

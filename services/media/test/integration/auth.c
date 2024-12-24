@@ -163,8 +163,8 @@ void deinit_mock_auth_server(void) {
     while(r_jwks_size(_mock_jwks.store.privkey) > 0) {
         jwk_t *privkey = r_jwks_get_at(_mock_jwks.store.privkey, 0);
         jwk_t *pubkey  = r_jwks_get_at(_mock_jwks.store.pubkey , 0);
-        r_jwks_remove_at(_mock_jwks.store.privkey, 0);
-        r_jwks_remove_at(_mock_jwks.store.pubkey , 0);
+        assert(r_jwks_remove_at(_mock_jwks.store.privkey, 0) == RHN_OK);
+        assert(r_jwks_remove_at(_mock_jwks.store.pubkey , 0) == RHN_OK);
         r_jwk_free(privkey);
         r_jwk_free(pubkey );
     } // end of loop
