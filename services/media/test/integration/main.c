@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
     fprintf(stdout, "[test] app server is ready, start integration test cases ...\n");
     // const char *test_name = argv[argc - 1];
     // result = run_single_test(suite, test_name, reporter);
-    ////tst_result = run_test_suite(suite, reporter);
+    tst_result = run_test_suite(suite, reporter);
     pthread_kill(app_tid, SIGTERM);
     op_result = ETIMEDOUT;
     for (int idx = 0; (op_result != 0) && (idx < 10); idx++) {
