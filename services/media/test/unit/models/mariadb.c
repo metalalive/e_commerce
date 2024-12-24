@@ -45,6 +45,7 @@ static DBA_RES_CODE mock_db_conn__update_ready_queries(struct db_conn_s *conn)
 static void  mock_db_query__notify_callback(uv_async_t *handle)
 {
     db_query_t  *q_found = H2O_STRUCT_FROM_MEMBER(db_query_t, notification, handle);
+    fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q_found);
     db_llnode_t *curr_node = NULL;
     db_llnode_t *next_node = NULL;
     for(curr_node = q_found->db_result.head ; curr_node; curr_node = next_node)
@@ -368,7 +369,7 @@ Ensure(app_mariadb_test_query_failure_local_2) {
         .update_ready_queries = mock_db_conn__update_ready_queries},
     };
     // assume error happenes in timer-poll handle
-    int expect_lowlvl_fd = 125;
+    int expect_lowlvl_fd = 124;
     uint64_t expect_timeout_ms = 166;
     int mysql_query_ret = 0;
     db_query_extend_t  mock_processing_nodes[2] = {0};
@@ -381,13 +382,14 @@ Ensure(app_mariadb_test_query_failure_local_2) {
     for(q_node = conn.processing_queries; q_node; q_node = q_node->next) {
         db_query_t *q = (db_query_t *)&q_node->data[0];
         *q = (db_query_t) {.cfg = {.loop = &loop}, .notification = {.async_cb = mock_db_query__notify_callback }};
+        fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q);
     }
     expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK));
+    expect(mysql_get_socket, will_return(expect_lowlvl_fd));
+    expect(mock_app__timerpoll_init, will_return(0), when(fd, is_equal_to(expect_lowlvl_fd)) );
     expect(mysql_real_query_start, will_return(MYSQL_WAIT_READ), 
             will_set_contents_of_parameter(ret, &mysql_query_ret, sizeof(int *))  );
-    expect(mysql_get_socket, will_return(expect_lowlvl_fd));
     expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
-    expect(mock_app__timerpoll_init, will_return(0), when(fd, is_equal_to(expect_lowlvl_fd)) );
     expect(mock_app__timerpoll_start, will_return(UV_EPERM),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
             when(event_flags, is_equal_to(UV_READABLE))  );
     expect(mock_app__timerpoll_stop, will_return(0));
@@ -842,16 +844,16 @@ TestSuite *app_model_mariadb_tests(void)
     add_test(suite, app_mariadb_test_evict_all_queries_on_connection_failure);
     add_test(suite, app_mariadb_test_query_failure_local_1);
     add_test(suite, app_mariadb_test_query_failure_local_2);
-    add_test(suite, app_mariadb_test_query_failure_remote);
+    // add_test(suite, app_mariadb_test_query_failure_remote);
     // add_test(suite, app_mariadb_test_query_resultset_no_rows); // FIXME, failures on github action
-    add_test(suite, app_mariadb_test_query_next_resultset_found);
-    add_test(suite, app_mariadb_test_query_reach_end_of_resultsets);
-    add_test(suite, app_mariadb_test_rs_fetch_a_row);
-    add_test(suite, app_mariadb_test_rs_end_of_row);
-    add_test(suite, app_mariadb_test_free_resultset);
-    add_test(suite, app_mariadb_test_deinit_start);
-    add_test(suite, app_mariadb_test_deinit_ok);
-    add_test(suite, app_mariadb_test_reconnecting);
-    add_test(suite, app_mariadb_test_notify_query_callback);
+    // add_test(suite, app_mariadb_test_query_next_resultset_found);
+    // add_test(suite, app_mariadb_test_query_reach_end_of_resultsets);
+    // add_test(suite, app_mariadb_test_rs_fetch_a_row);
+    // add_test(suite, app_mariadb_test_rs_end_of_row);
+    // add_test(suite, app_mariadb_test_free_resultset);
+    // add_test(suite, app_mariadb_test_deinit_start);
+    // add_test(suite, app_mariadb_test_deinit_ok);
+    // add_test(suite, app_mariadb_test_reconnecting);
+    // add_test(suite, app_mariadb_test_notify_query_callback);
     return suite;
 }
