@@ -274,6 +274,8 @@ static  DBA_RES_CODE app_db_mariadb_conn_send_query_start(db_conn_t *conn, int *
     int my_err = 0;
     int my_evts = mysql_real_query_start(&my_err, (MYSQL *)conn->lowlvl.conn,
             &conn->bulk_query_rawbytes.data[0], conn->bulk_query_rawbytes.wr_sz);
+    fprintf(stdout, "[src][mariaDB] line:%d, my_err:%d, my_evts:%d \n",
+            __LINE__, my_err, my_evts);
     if(my_evts == 0 && my_err) {
         result = _app_mariadb_convert_error_code((MYSQL *)conn->lowlvl.conn);
     } else {
