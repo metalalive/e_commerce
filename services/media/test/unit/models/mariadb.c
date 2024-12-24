@@ -382,7 +382,7 @@ Ensure(app_mariadb_test_query_failure_local_2) {
     for(q_node = conn.processing_queries; q_node; q_node = q_node->next) {
         db_query_t *q = (db_query_t *)&q_node->data[0];
         *q = (db_query_t) {.cfg = {.loop = &loop}, .notification = {.async_cb = mock_db_query__notify_callback }};
-        fprintf(stdout, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q);
+        fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q);
     }
     expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK));
     expect(mysql_get_socket, will_return(expect_lowlvl_fd));

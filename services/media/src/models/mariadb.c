@@ -274,7 +274,7 @@ static  DBA_RES_CODE app_db_mariadb_conn_send_query_start(db_conn_t *conn, int *
     int my_err = 0;
     int my_evts = mysql_real_query_start(&my_err, (MYSQL *)conn->lowlvl.conn,
             &conn->bulk_query_rawbytes.data[0], conn->bulk_query_rawbytes.wr_sz);
-    fprintf(stdout, "[src][mariaDB] line:%d, my_err:%d, my_evts:%d \n",
+    fprintf(stderr, "[src][mariaDB] line:%d, my_err:%d, my_evts:%d \n",
             __LINE__, my_err, my_evts);
     if(my_evts == 0 && my_err) {
         result = _app_mariadb_convert_error_code((MYSQL *)conn->lowlvl.conn);
@@ -647,6 +647,8 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     }
                     event_flags = 0; // always reset event flags
                     result = app_db_mariadb_conn_send_query_start(conn, &event_flags);
+                    fprintf(stderr, "[src][mariaDB] line:%d, result:%d, event_flags:%d \n",
+                            __LINE__, result, event_flags);
                     if(result == DBA_RESULT_OK && event_flags) {
                         result = app_db_async_add_poll_event(conn, event_flags);
                         if(result == DBA_RESULT_OK) {
@@ -660,6 +662,8 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                         conn->state = DB_ASYNC_QUERY_READY;
                         continue_checking = 1; // immediately forward the error result to ready state
                     }
+                    fprintf(stderr, "[src][mariaDB] line:%d, result:%d, conn-next-state:%d \n",
+                            __LINE__, result, conn->state);
 #if  0 // ------- debug --------
                     db_query_t *curr_query = (db_query_t *) &conn->processing_queries->data;
                     curr_query->db_result.num_rs_remain = 0;
@@ -703,7 +707,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 if(result == DBA_RESULT_OK) {
                     conn->state = DB_ASYNC_CHECK_CURRENT_RESULTSET;
                 } else { // TODO, for connection error, retry few times before give up
-                    // fprintf(stderr, "[mariaDB] line:%d, result:%d \n", __LINE__, result);
+                    fprintf(stderr, "[src][mariaDB] line:%d, result:%d \n", __LINE__, result);
                     _app_mariadb_error_reset_all_processing_query(conn, result);
                     conn->state = (result == DBA_RESULT_NETWORK_ERROR) ? DB_ASYNC_CLOSE_START: DB_ASYNC_QUERY_START;
                     continue_checking = 1;
