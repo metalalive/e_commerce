@@ -510,8 +510,10 @@ jobs:
         if: ${{ always() }}
         working-directory: services/tmp/log/test
         run: |
-            echo -e "\n\n---- app server ----\n"
+            echo -e "\n\n---- app server error log ----"
             cat ./media_app_server.err
-            echo -e "\n\n---- RPC consumer ----\n"
+            echo -e "\n\n---- RPC consumer error log ----"
             cat ./media_rpc_consumer.err
+            echo -e "\n\n---- app server access log ----"
+            cat ./media_app_server.access.log
            

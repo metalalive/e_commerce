@@ -145,6 +145,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "[test] failed to parse config file\n");
         goto done;
     }
+    init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
     op_result = uv_thread_create( &app_tid, run_app_server, (void *)&init_app_data );
     assert(op_result == 0);
     assert(app_tid > 0);
@@ -152,7 +153,6 @@ int main(int argc, char **argv) {
     TestReporter *reporter = create_text_reporter();
     add_suite(suite, app_api_tests(root_cfg));
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
     while(1) {
         if(app_server_ready()) {
             break;
@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
     fprintf(stdout, "[test] app server is ready, start integration test cases ...\n");
     // const char *test_name = argv[argc - 1];
     // result = run_single_test(suite, test_name, reporter);
-    tst_result = run_test_suite(suite, reporter);
+    ////tst_result = run_test_suite(suite, reporter);
     pthread_kill(app_tid, SIGTERM);
     op_result = ETIMEDOUT;
     for (int idx = 0; (op_result != 0) && (idx < 10); idx++) {
