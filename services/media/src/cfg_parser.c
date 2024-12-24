@@ -114,13 +114,16 @@ int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *ob
     const char *privkey_file_path = json_string_value(privkey_file_obj);
     json_int_t  min_version       = json_integer_value(min_ver_obj     );
     const char *ciphersuite_labels = json_string_value(cipher_suites_obj);
-    if(!cert_file_path || !privkey_file_path || !ciphersuite_labels)
-    {
+    if(!cert_file_path || !privkey_file_path || !ciphersuite_labels) {
+        h2o_error_printf("[parsing][listener-ssl] missing argument, \
+                cert_file_path:%s, privkey_file_path:%s, ciphersuite_labels:%s \n",
+                cert_file_path, (privkey_file_path?"specified":"missing"), ciphersuite_labels);
         goto error;
     }
     assert((0x8000 & min_version) == 0); // currently not support DTLS (TODO)
     if(min_version < TLS1_3_VERSION) {
-        h2o_error_printf("[parsing] currently this server only supports TLS v1.3 and successive versions, given : 0x%llx \n", min_version);
+        h2o_error_printf("[parsing][listener-ssl] currently only supports TLS v1.3 and \
+                successive versions, given : 0x%llx \n", min_version);
         goto error;
     }
     ssl_ctx = SSL_CTX_new(TLS_server_method()); // TODO, upgrade openssl, due to memory error reported by valgrind
@@ -130,24 +133,26 @@ int parse_cfg_listener_ssl(struct app_cfg_security_t *security, const json_t *ob
         | SSL_OP_NO_RENEGOTIATION | disabled_ssl_versions;
     SSL_CTX_set_options(ssl_ctx, ssl_options);
     if(SSL_CTX_set_min_proto_version(ssl_ctx, min_version) != 1) {
+        h2o_error_printf("[parsing][listener-ssl] SSL_CTX_set_min_proto_version() failure");
         goto error;
     }
     SSL_CTX_set_session_id_context(ssl_ctx, (const unsigned char *)APP_LABEL, (unsigned int)APP_LABEL_LEN);
     if (SSL_CTX_use_PrivateKey_file(ssl_ctx, privkey_file_path, SSL_FILETYPE_PEM) != 1) {
-        h2o_error_printf("[parsing] failed to load private key for server certificate : %s\n", privkey_file_path);
+        h2o_error_printf("[parsing][listener-ssl] failed to load private key for \
+                server certificate : %s\n", privkey_file_path);
         goto error;
     }
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, cert_file_path) != 1) {
-        h2o_error_printf("[parsing] failed to load server certificate file : %s\n", cert_file_path);
+        h2o_error_printf("[parsing][listener-ssl] failed to load server certificate file : %s\n", cert_file_path);
         goto error;
     }
     X509 *x509 = SSL_CTX_get0_certificate(ssl_ctx);
     if(X509_cmp_current_time(X509_get0_notAfter(x509)) == -1) {
-        h2o_error_printf("[parsing] server certificate expired : %s\n", cert_file_path);
+        h2o_error_printf("[parsing][listener-ssl] server certificate expired : %s\n", cert_file_path);
         goto error;
     } // TODO, examine Common Name (CN) and Subject Alternative Name (SAN)
     if(SSL_CTX_set_ciphersuites(ssl_ctx, ciphersuite_labels) != 1) {
-        h2o_error_printf("[parsing] failed to set cipher suites, the given value : %s\n", ciphersuite_labels);
+        h2o_error_printf("[parsing][listener-ssl] failed to set cipher suites, the given value : %s\n", ciphersuite_labels);
         goto error;
     }
 #ifdef H2O_USE_ALPN
@@ -174,57 +179,66 @@ static void _dummy_cb_on_nt_accept(uv_stream_t *server, int status)
 static int maybe_create_new_listener(const char *host, uint16_t port, json_t *ssl_obj,
         json_t *routes_cfg, app_cfg_t *_app_cfg)
 { // TODO, currently only support TCP handle, would support UDP in future
-    struct addrinfo *curr_addr = NULL, *res_addr = NULL;
-    if(!host || port <= 0) {
+    struct addrinfo *curr_ainfo = NULL, *res_ainfo = NULL;
+    if(!host || port == 0) {
         goto error;
     }
-    res_addr = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, host, (uint16_t)port);
-    if(!res_addr) { goto error; }
-    for (curr_addr = res_addr; curr_addr != NULL; curr_addr = curr_addr->ai_next) {
-        app_cfg_listener_t *found = find_existing_listener(_app_cfg->listeners, curr_addr);
+    res_ainfo = resolve_net_addr(SOCK_STREAM, IPPROTO_TCP, host, (uint16_t)port);
+    if(!res_ainfo) {
+        h2o_error_printf("[parsing][tcp-listener] failed to resolve domain name: %s:%hu \n",
+                host, port);
+        goto error;
+    }
+    h2o_hostconf_t *hostcfg = h2o_config_register_host(
+            &_app_cfg->server_glb_cfg,
+            h2o_iovec_init(host, strlen(host)),
+            port
+        ); // shared among different resolved IP addresses
+    if(app_setup_apiview_routes(hostcfg, routes_cfg, _app_cfg->exe_path) != 0) {
+        goto error;
+    }
+    for (curr_ainfo = res_ainfo; curr_ainfo; curr_ainfo = curr_ainfo->ai_next) {
+        app_cfg_listener_t *found = find_existing_listener(_app_cfg->listeners, curr_ainfo);
         if(found) { continue; }
         // the default loop works with the 1st. thread of this application
         // (main thread in master mode, the 1st. worker thread in daemon mode)
-        uv_handle_t *handle = (uv_handle_t *)create_network_handle(uv_default_loop(), curr_addr,
-                 _dummy_cb_on_nt_accept, _app_cfg->tfo_q_len);
-        if(!handle) { goto error; }
+        uv_handle_t *handle = (uv_handle_t *)create_network_handle(uv_default_loop(),
+                curr_ainfo, _dummy_cb_on_nt_accept, _app_cfg->tfo_q_len);
+        if(!handle) {
+            goto error;
+        }
         app_cfg_listener_t *_new = create_new_listener(handle);
         if(parse_cfg_listener_ssl(&_new->security, (const json_t *)ssl_obj) != 0) {
             destroy_network_handle(handle, (uv_close_cb)free);
             free_listener(_new);
             goto error;
         }
-        h2o_hostconf_t *hostcfg = h2o_config_register_host(
-                &_app_cfg->server_glb_cfg,
-                h2o_iovec_init(host, strlen(host)),
-                port
-            );
-        if(app_setup_apiview_routes(hostcfg, routes_cfg, _app_cfg->exe_path) != 0) {
-            goto error;
-        } // preserve some network attributes which are NOT stored in `struct sockaddr`
+        // preserve some network attributes which are NOT stored in `struct sockaddr`
         uv_nt_handle_data *nt_attr = h2o_mem_alloc(sizeof(uv_nt_handle_data));
         *nt_attr = (uv_nt_handle_data){
-            .ai_flags = curr_addr->ai_flags,         .ai_family = curr_addr->ai_family,
-            .ai_socktype = curr_addr->ai_socktype,   .ai_protocol = curr_addr->ai_protocol
+            .ai_flags = curr_ainfo->ai_flags,         .ai_family = curr_ainfo->ai_family,
+            .ai_socktype = curr_ainfo->ai_socktype,   .ai_protocol = curr_ainfo->ai_protocol
         };
         handle->data = (void *)nt_attr;
         _new->hostconf = hostcfg;
         h2o_append_to_null_terminated_list((void ***)&_app_cfg->listeners, (void *)_new);
         _app_cfg->num_listeners += 1;
     } // end of address iteration
-    freeaddrinfo(res_addr);
+    freeaddrinfo(res_ainfo);
     return 0;
 error:
-    if(!res_addr) {
-        freeaddrinfo(res_addr);
+    if(!res_ainfo) {
+        freeaddrinfo(res_ainfo);
     }
+    h2o_error_printf("[parsing][tcp-listener] failed to create listener, num-listeners:%u \n",
+            _app_cfg->num_listeners);
     return EX_CONFIG;
 } // end of maybe_create_new_listener
 
 
 static int parse_cfg_listeners(const json_t *objs, app_cfg_t *_app_cfg) {
     if (!json_is_array(objs)) {
-        goto error;
+        return EX_CONFIG;
     }
     const json_t *obj = NULL;
     int num_objs = (int)json_array_size(objs);
@@ -243,16 +257,12 @@ static int parse_cfg_listeners(const json_t *objs, app_cfg_t *_app_cfg) {
         json_t *routes_obj  = json_object_get(obj, "routes");
         const char *host = json_string_value(host_obj);
         uint16_t  port = (uint16_t) json_integer_value(port_obj);
-        if(maybe_create_new_listener(host, port, ssl_obj, routes_obj, _app_cfg) != 0) {
+        int result_create = maybe_create_new_listener(host, port, ssl_obj, routes_obj, _app_cfg);
+        if(result_create != 0) {
             break;
         }
     } // end of iteration
-    if(num_objs > idx) {
-        goto error;
-    }
-    return 0;
-error:
-    return EX_CONFIG;
+    return (num_objs == idx) ? 0: EX_CONFIG;
 } // end of parse_cfg_listeners()
 
 
@@ -308,5 +318,7 @@ int parse_cfg_params(const char *cfg_file_path, app_cfg_t *_app_cfg)
 error:
     if (!root)
         json_decref(root);
+    h2o_error_printf("[parsing] failed to parse config file, result_error = %d \n",
+            result_error);
     return EX_CONFIG;
 } // end of parse_cfg_params()

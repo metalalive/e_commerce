@@ -240,16 +240,17 @@ static int _compare_from_longer_paths(const void *x, const void *y) {
 int app_setup_apiview_routes(h2o_hostconf_t *host, json_t *routes_cfg, const char *exe_path) {
     int num_routes = 0;
     if(!host || !exe_path) {
+        h2o_error_printf("[parsing][route] missing host\n");
         goto error;
     }
     if(routes_cfg) {
         if(!json_is_array(routes_cfg)) {
-            h2o_error_printf("[parsing] setup error, routes_cfg should be a list of json objects \n");
+            h2o_error_printf("[parsing][route] routes_cfg should be a list of json objects \n");
             goto error;
         }
         num_routes = (int)json_array_size(routes_cfg);
         if(num_routes < 0) {
-            h2o_error_printf("[parsing] setup error, num_routes should be positive integer , but got %d \n", num_routes);
+            h2o_error_printf("[parsing][route] num_routes should be positive integer , but got %d \n", num_routes);
             goto error;
         } else if(num_routes == 0) {
             return 0;

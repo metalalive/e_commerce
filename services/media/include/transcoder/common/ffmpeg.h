@@ -8,7 +8,7 @@ extern "C" {
 #include <libavfilter/buffersrc.h>
 #include <libavutil/opt.h>
 
-inline int  atfp_common__ffm_filter_processing (atfp_av_ctx_t *dst, AVFrame  *frame_origin, int8_t stream_idx)
+static inline int  atfp_common__ffm_filter_processing (atfp_av_ctx_t *dst, AVFrame  *frame_origin, int8_t stream_idx)
 {
     int ret = ATFP_AVCTX_RET__OK;
     AVFrame   *frame_filt   = &dst->intermediate_data.encode.frame;
@@ -41,7 +41,7 @@ done:
 } // end of  atfp_common__ffm_filter_processing
 
 
-inline  int  atfp_common__ffm_encode_processing (atfp_av_ctx_t *dst, AVFrame *frame, int8_t stream_idx)
+static inline  int  atfp_common__ffm_encode_processing (atfp_av_ctx_t *dst, AVFrame *frame, int8_t stream_idx)
 {
     int ret = 0;
     atfp_stream_enc_ctx_t  *st_encode_ctx = &dst->stream_ctx.encode[stream_idx];
