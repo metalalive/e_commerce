@@ -444,7 +444,7 @@ jobs:
             #LD_LIBRARY_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
             sudo apt-get install libelf-dev libmagic-dev uuid-dev libnghttp2-dev
             mkdir -p ./build && cd ./build
-            cmake -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} \
+            cmake -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} -DCMAKE_BUILD_TYPE=Debug \
                   -DCMAKE_PREFIX_PATH=${{ env.CGREEN_INSTALL_PATH }}  \
                   -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
                   -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
