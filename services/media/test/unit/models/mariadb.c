@@ -42,7 +42,7 @@ static uint8_t  mock_db_pool__is_closing_fn(struct db_pool_s *pool)
 static DBA_RES_CODE mock_db_conn__update_ready_queries(struct db_conn_s *conn)
 { return (DBA_RES_CODE) mock(conn); }
 
-static __attribute__((optimize("O0"))) void  mock_db_query__notify_callback(uv_async_t *handle)
+static void  mock_db_query__notify_callback(uv_async_t *handle)
 {
     db_query_t  *q_found = H2O_STRUCT_FROM_MEMBER(db_query_t, notification, handle);
     db_llnode_t *curr_node = NULL;
