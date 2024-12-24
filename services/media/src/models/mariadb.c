@@ -274,13 +274,17 @@ static  DBA_RES_CODE app_db_mariadb_conn_send_query_start(db_conn_t *conn, int *
     int my_err = 0;
     int my_evts = mysql_real_query_start(&my_err, (MYSQL *)conn->lowlvl.conn,
             &conn->bulk_query_rawbytes.data[0], conn->bulk_query_rawbytes.wr_sz);
-    fprintf(stderr, "[src][mariaDB] line:%d, my_err:%d, my_evts:%d \n",
-            __LINE__, my_err, my_evts);
+    fprintf(stderr, "[src][mariaDB] line:%d, my_err:%d, my_evts:%d, result:%d \n",
+            __LINE__, my_err, my_evts, result);
     if(my_evts == 0 && my_err) {
         result = _app_mariadb_convert_error_code((MYSQL *)conn->lowlvl.conn);
+        fprintf(stderr, "[src][mariaDB] line:%d \n", __LINE__);
     } else {
         *evt_flgs = _app_mariadb_convert_evt_to_uv(my_evts);
+        fprintf(stderr, "[src][mariaDB] line:%d \n", __LINE__);
     } // end of error handling
+    fprintf(stderr, "[src][mariaDB] line:%d, evt_flgs:%d, result:%d \n",
+            __LINE__, *evt_flgs, result);
     return result;
 } // end of app_db_mariadb_conn_send_query_start
 
