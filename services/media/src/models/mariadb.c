@@ -268,6 +268,11 @@ static DBA_RES_CODE app_db_mariadb_conn_connect_cont(db_conn_t *conn, int *evt_f
 } // end of app_db_mariadb_conn_connect_cont
 
 
+// TODO/FIXME
+// Cgreen mock functions might accidentally modify the local variables
+// `result` which cuases incorrect state transition flow. Upgrade to
+// latest version (currently v1.4.1) to see whether this issue is resolved yet
+
 static  DBA_RES_CODE app_db_mariadb_conn_send_query_start(db_conn_t *conn, int *evt_flgs)
 {
     DBA_RES_CODE result = DBA_RESULT_OK;
@@ -275,9 +280,6 @@ static  DBA_RES_CODE app_db_mariadb_conn_send_query_start(db_conn_t *conn, int *
     // fprintf(stderr, "[src][mariaDB] line:%d, result:%d \n", __LINE__, result);
     int my_evts = mysql_real_query_start(&my_err, (MYSQL *)conn->lowlvl.conn,
             &conn->bulk_query_rawbytes.data[0], conn->bulk_query_rawbytes.wr_sz);
-    // TODO, cgreen mock function above might accidentally modify the local variable
-    // `result` which cuases incorrect result , upgrade to latest version
-    // (currently v1.4.1)
     // fprintf(stderr, "[src][mariaDB] line:%d, my_err:%d, my_evts:%d, result:%d \n",
     //        __LINE__, my_err, my_evts, result);
     if(my_evts == 0 && my_err) {
@@ -326,6 +328,7 @@ static DBA_RES_CODE  app_db_mariadb_next_resultset_start(db_conn_t *conn, int *e
     if(my_evts) {
         // 0 and -1 means next result may exist or NOT, other return value means error
         *evt_flgs = _app_mariadb_convert_evt_to_uv(my_evts);
+        result = DBA_RESULT_OK;
     } else {
         _APP_DB_MARIADB_NEXT_RESULTSET___COMMON
     }
