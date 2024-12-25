@@ -382,7 +382,6 @@ Ensure(app_mariadb_test_query_failure_local_2) {
     for(q_node = conn.processing_queries; q_node; q_node = q_node->next) {
         db_query_t *q = (db_query_t *)&q_node->data[0];
         *q = (db_query_t) {.cfg = {.loop = &loop}, .notification = {.async_cb = mock_db_query__notify_callback }};
-        fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q);
     }
     expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK));
     expect(mysql_get_socket, will_return(expect_lowlvl_fd));
@@ -461,6 +460,7 @@ Ensure(app_mariadb_test_query_resultset_no_rows) {
         db_query_t *q = (db_query_t *) & mock_processing_nodes[0].node.data[0];
         *q = (db_query_t) {.cfg = {.loop = &loop}, .db_result = {.num_rs_remain = 0},
             .notification = {.async_cb = mock_db_query__notify_callback }};
+        fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q);
     }
     { // assume local app sent the queries successfully
         int mysql_query_ret = 0; // assume remote DB server completed query successfully
@@ -539,25 +539,23 @@ Ensure(app_mariadb_test_query_reach_end_of_resultsets) {
     db_conn_t conn = {.pool = &pool, .loop = &loop, .processing_queries = &mock_processing_nodes[0].node,
         .ops = {.timerpoll_stop = mock_app__timerpoll_stop, .timerpoll_start = mock_app__timerpoll_start,
             .update_ready_queries = mock_db_conn__update_ready_queries}, .state = DB_ASYNC_INITED};
-    {
-        uint64_t expect_timeout_ms = 149;
-        int mysql_nxt_rs_ret = -1; // no more result set in current query execution
-        int mysql_query_ret = 0;
-        conn.state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_WAITING;
-        expect(mysql_next_result_cont, will_return(0),
-                will_set_contents_of_parameter(ret, &mysql_nxt_rs_ret, sizeof(int *))  );
-        expect(mock_app__timerpoll_stop, will_return(0));
-        expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK)); // assume there is new pending query
-        expect(mysql_real_query_start, will_return(MYSQL_WAIT_READ), 
-                will_set_contents_of_parameter(ret, &mysql_query_ret, sizeof(int *))  );
-        expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
-        expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
-                when(event_flags, is_equal_to(UV_READABLE))  );
-        int evt_flgs = UV_READABLE;
-        int uv_status = 0;
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_QUERY_WAITING));
-    }
+    uint64_t expect_timeout_ms = 149;
+    int mysql_nxt_rs_ret = -1; // no more result set in current query execution
+    int mysql_query_ret = 0;
+    conn.state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_WAITING;
+    expect(mysql_next_result_cont, will_return(0),
+            will_set_contents_of_parameter(ret, &mysql_nxt_rs_ret, sizeof(int *))  );
+    expect(mock_app__timerpoll_stop, will_return(0));
+    expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK)); // assume there is new pending query
+    expect(mysql_real_query_start, will_return(MYSQL_WAIT_READ), 
+            will_set_contents_of_parameter(ret, &mysql_query_ret, sizeof(int *))  );
+    expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
+    expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
+            when(event_flags, is_equal_to(UV_READABLE))  );
+    int evt_flgs = UV_READABLE;
+    int uv_status = 0;
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_QUERY_WAITING));
 } // end of app_mariadb_test_query_reach_end_of_resultsets
 
 
@@ -571,38 +569,34 @@ Ensure(app_mariadb_test_rs_fetch_a_row) {
         .ops = {.timerpoll_stop = mock_app__timerpoll_stop, .timerpoll_start = mock_app__timerpoll_start,
         }, .state = DB_ASYNC_INITED,
     };
-    {
-        db_query_t *q = (db_query_t *) & mock_processing_nodes[0].node.data[0];
-        *q = (db_query_t) {.cfg = {.loop = &loop}, .db_result = {.num_rs_remain = 1},
-            .notification = {.async_cb = mock_db_query__notify_callback }};
+    db_query_t *q = (db_query_t *) & mock_processing_nodes[0].node.data[0];
+    *q = (db_query_t) {.cfg = {.loop = &loop}, .db_result = {.num_rs_remain = 1},
+        .notification = {.async_cb = mock_db_query__notify_callback }};
+    const char *expect_columns[EXPECT_NUM_COLUMNS] = {"oauth2", "gRPC", "docker"};
+    MYSQL_ROW  expect_mysql_rows[2] = {(MYSQL_ROW)expect_columns, NULL};
+    uint64_t expect_timeout_ms = 80;
+    conn.state = DB_ASYNC_FETCH_ROW_WAITING;
+    expect(mysql_fetch_row_cont, will_return(0),
+            will_set_contents_of_parameter(ret, &expect_mysql_rows[0], sizeof(MYSQL_ROW *))  );
+    expect(mock_app__timerpoll_stop, will_return(0));
+    expect(mysql_num_fields, will_return(EXPECT_NUM_COLUMNS));
+    expect(mock_db_query__notify_callback, when(app_result, is_equal_to(DBA_RESULT_OK)),
+            when(conn_state, is_equal_to(DB_ASYNC_FETCH_ROW_READY)), when(is_async, is_equal_to(0)),
+            when(is_final, is_equal_to(0)), when(num_cols, is_equal_to(EXPECT_NUM_COLUMNS)),
+            when(q_found, is_equal_to(&mock_processing_nodes[0].node.data)));
+    for(size_t idx = 0; idx < EXPECT_NUM_COLUMNS; idx++) {
+        expect(mock_db_query__notify_callback, when(col_value,
+                    is_equal_to_string(expect_mysql_rows[0][idx])));
     }
-    {
-        const char *expect_columns[EXPECT_NUM_COLUMNS] = {"oauth2", "gRPC", "docker"};
-        MYSQL_ROW  expect_mysql_rows[2] = {(MYSQL_ROW)expect_columns, NULL};
-        uint64_t expect_timeout_ms = 80;
-        conn.state = DB_ASYNC_FETCH_ROW_WAITING;
-        expect(mysql_fetch_row_cont, will_return(0),
-                will_set_contents_of_parameter(ret, &expect_mysql_rows[0], sizeof(MYSQL_ROW *))  );
-        expect(mock_app__timerpoll_stop, will_return(0));
-        expect(mysql_num_fields, will_return(EXPECT_NUM_COLUMNS));
-        expect(mock_db_query__notify_callback, when(app_result, is_equal_to(DBA_RESULT_OK)),
-                when(conn_state, is_equal_to(DB_ASYNC_FETCH_ROW_READY)), when(is_async, is_equal_to(0)),
-                when(is_final, is_equal_to(0)), when(num_cols, is_equal_to(EXPECT_NUM_COLUMNS)),
-                when(q_found, is_equal_to(&mock_processing_nodes[0].node.data)));
-        for(size_t idx = 0; idx < EXPECT_NUM_COLUMNS; idx++) {
-            expect(mock_db_query__notify_callback, when(col_value,
-                        is_equal_to_string(expect_mysql_rows[0][idx])));
-        }
-        expect(mysql_fetch_row_start, will_return(MYSQL_WAIT_READ),
-                will_set_contents_of_parameter(ret, &expect_mysql_rows[1], sizeof(MYSQL_ROW *))  );
-        expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
-        expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
-                when(event_flags, is_equal_to(UV_READABLE))  );
-        int evt_flgs = UV_READABLE;
-        int uv_status = 0;
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_FETCH_ROW_WAITING));
-    }
+    expect(mysql_fetch_row_start, will_return(MYSQL_WAIT_READ),
+            will_set_contents_of_parameter(ret, &expect_mysql_rows[1], sizeof(MYSQL_ROW *))  );
+    expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
+    expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
+            when(event_flags, is_equal_to(UV_READABLE))  );
+    int evt_flgs = UV_READABLE;
+    int uv_status = 0;
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_FETCH_ROW_WAITING));
 #undef  EXPECT_NUM_COLUMNS
 } // end of app_mariadb_test_rs_fetch_a_row
 
@@ -613,24 +607,23 @@ Ensure(app_mariadb_test_rs_end_of_row) {
     db_conn_t conn = {.pool = &pool, .state = DB_ASYNC_INITED,
         .ops = {.timerpoll_stop = mock_app__timerpoll_stop, .timerpoll_start = mock_app__timerpoll_start},
     };
-    { // for mariadb, end-of-row situation can be identified when (1) the handle cannot
-       // fetch new row (2) no error code returned from mysql_errno()
-        uint64_t expect_timeout_ms = 364;
-        MYSQL_ROW  expect_mysql_row = NULL;
-        conn.state = DB_ASYNC_FETCH_ROW_WAITING;
-        expect(mysql_fetch_row_cont, will_return(0),
-                will_set_contents_of_parameter(ret, &expect_mysql_row, sizeof(MYSQL_ROW *))  );
-        expect(mysql_errno, will_return(0));
-        expect(mock_app__timerpoll_stop, will_return(0));
-        expect(mysql_free_result_start, will_return(MYSQL_WAIT_READ));
-        expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
-        expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
-                when(event_flags, is_equal_to(UV_READABLE))  );
-        int evt_flgs = UV_READABLE;
-        int uv_status = 0;
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_FREE_RESULTSET_WAITING));
-    }
+    // for mariadb, end-of-row situation can be identified when (1) the handle cannot
+    // fetch new row (2) no error code returned from mysql_errno()
+    uint64_t expect_timeout_ms = 364;
+    MYSQL_ROW  expect_mysql_row = NULL;
+    conn.state = DB_ASYNC_FETCH_ROW_WAITING;
+    expect(mysql_fetch_row_cont, will_return(0),
+            will_set_contents_of_parameter(ret, &expect_mysql_row, sizeof(MYSQL_ROW *))  );
+    expect(mysql_errno, will_return(0));
+    expect(mock_app__timerpoll_stop, will_return(0));
+    expect(mysql_free_result_start, will_return(MYSQL_WAIT_READ));
+    expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
+    expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
+            when(event_flags, is_equal_to(UV_READABLE))  );
+    int evt_flgs = UV_READABLE;
+    int uv_status = 0;
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_FREE_RESULTSET_WAITING));
 } // end of app_mariadb_test_rs_end_of_row
 
 
@@ -835,25 +828,25 @@ Ensure(app_mariadb_test_notify_query_callback) {
 TestSuite *app_model_mariadb_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    // add_test(suite, app_mariadb_test_init_error);
-    // add_test(suite, app_mariadb_test_init_set_option_error);
-    // add_test(suite, app_mariadb_test_init_ok);
-    // add_test(suite, app_mariadb_test_acquire_state_change);
-    // add_test(suite, app_mariadb_test_start_connection_failure);
-    // add_test(suite, app_mariadb_test_connect_db_server_error);
-    // add_test(suite, app_mariadb_test_evict_all_queries_on_connection_failure);
-    // add_test(suite, app_mariadb_test_query_failure_local_1);
+    add_test(suite, app_mariadb_test_init_error);
+    add_test(suite, app_mariadb_test_init_set_option_error);
+    add_test(suite, app_mariadb_test_init_ok);
+    add_test(suite, app_mariadb_test_acquire_state_change);
+    add_test(suite, app_mariadb_test_start_connection_failure);
+    add_test(suite, app_mariadb_test_connect_db_server_error);
+    add_test(suite, app_mariadb_test_evict_all_queries_on_connection_failure);
+    add_test(suite, app_mariadb_test_query_failure_local_1);
     add_test(suite, app_mariadb_test_query_failure_local_2);
-    // add_test(suite, app_mariadb_test_query_failure_remote);
-    // add_test(suite, app_mariadb_test_query_resultset_no_rows); // FIXME, failures on github action
-    // add_test(suite, app_mariadb_test_query_next_resultset_found);
-    // add_test(suite, app_mariadb_test_query_reach_end_of_resultsets);
-    // add_test(suite, app_mariadb_test_rs_fetch_a_row);
-    // add_test(suite, app_mariadb_test_rs_end_of_row);
-    // add_test(suite, app_mariadb_test_free_resultset);
-    // add_test(suite, app_mariadb_test_deinit_start);
-    // add_test(suite, app_mariadb_test_deinit_ok);
-    // add_test(suite, app_mariadb_test_reconnecting);
-    // add_test(suite, app_mariadb_test_notify_query_callback);
+    add_test(suite, app_mariadb_test_query_failure_remote);
+    add_test(suite, app_mariadb_test_query_resultset_no_rows); // FIXME, failures on github action
+    add_test(suite, app_mariadb_test_query_next_resultset_found);
+    add_test(suite, app_mariadb_test_query_reach_end_of_resultsets);
+    add_test(suite, app_mariadb_test_rs_fetch_a_row);
+    add_test(suite, app_mariadb_test_rs_end_of_row);
+    add_test(suite, app_mariadb_test_free_resultset);
+    add_test(suite, app_mariadb_test_deinit_start);
+    add_test(suite, app_mariadb_test_deinit_ok);
+    add_test(suite, app_mariadb_test_reconnecting);
+    add_test(suite, app_mariadb_test_notify_query_callback);
     return suite;
 }
