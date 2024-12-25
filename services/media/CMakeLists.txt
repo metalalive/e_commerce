@@ -1,4 +1,4 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.5.0)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.12.0)
 PROJECT(media_app C)
 
 SET(VERSION_MAJOR "0")
@@ -69,6 +69,8 @@ MESSAGE(STATUS "CMAGIC_INCLUDE_DIR : ${CMAGIC_INCLUDE_DIR}")
 MESSAGE(STATUS "LIBCURL_INCLUDE_DIRS : ${LIBCURL_INCLUDE_DIRS}")
 MESSAGE(STATUS "LIBCURL_LIBRARY_DIRS : ${LIBCURL_LIBRARY_DIRS}")
 MESSAGE(STATUS "LIBNGHTTP2_INCLUDE_DIRS : ${LIBNGHTTP2_INCLUDE_DIRS}")
+MESSAGE(STATUS "AVFORMAT_LIBRARY_DIRS: ${AVFORMAT_LIBRARY_DIRS}")
+MESSAGE(STATUS "AVUTIL_LIBRARY_DIRS: ${AVUTIL_LIBRARY_DIRS}")
 
 # find out whether pthread provides function to set CPU affinity
 CMAKE_PUSH_CHECK_STATE()
@@ -195,6 +197,8 @@ LINK_DIRECTORIES(
     ${LIBUUID_LIBRARY_DIRS}
     ${LIBCURL_LIBRARY_DIRS}
     ${LIBNGHTTP2_LIBRARY_DIRS} )
+
+
 
 
 SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration -Werror=incompatible-pointer-types")
@@ -503,6 +507,12 @@ TARGET_INCLUDE_DIRECTORIES(${ITEST_RPC_CONSUMER_EXE_NAME}  PUBLIC  ${CGREEN_INCL
 TARGET_LINK_LIBRARIES(${ITEST_API_SERVER_EXE_NAME}    ${APP_SERVER_DEV_LIBRARIES}   ${CGREEN_LIBRARIES})
 TARGET_LINK_LIBRARIES(${ITEST_RPC_CONSUMER_EXE_NAME}  ${RPC_CONSUMER_DEV_LIBRARIES} ${CGREEN_LIBRARIES})
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # Add the linker option -rdynamic for the target
+    TARGET_LINK_OPTIONS(${ITEST_API_SERVER_EXE_NAME} PRIVATE -rdynamic)
+    MESSAGE(STATUS "symbols added to app-server executable")
+endif()
+
 # TODO, better way to scale app servers, without manually adding more custom targets
 SET(DEV_CDN_CFG_PATH   ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-cdn.json)
 SET(APP_REP1_CFG_PATH  ${CMAKE_CURRENT_SOURCE_DIR}/settings/dev-replica-1.json)
@@ -514,14 +524,6 @@ SET(PYVENV_SHELL_FILEPATH  $ENV{PWD}/tmp_shell)
 #FILE(WRITE  ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_shell "source ${PYVENV_BIN_PATH}/activate;")
 #FILE(APPEND ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_shell "python --version;")
     
-ADD_CUSTOM_TARGET(dev_db_init
-    COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  DatabaseMigrationSetup  ${DEV_APPCFG_PATH}  ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND bash ${PYVENV_SHELL_FILEPATH}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${LIQUIBASE_PATH} ${PYVENV_BIN_PATH}
-    VERBATIM)
-
 ADD_CUSTOM_TARGET(dev_app_server
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader DevAppSrvCertRenewal  ${DEV_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
@@ -581,14 +583,13 @@ ADD_CUSTOM_TARGET(itest_app_server
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  DatabaseMigrationSetup  ${ITEST_APPCFG_PATH}  ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND bash ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
+        "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
         ##gdb -args # uncomment this line for debugging
         ##valgrind --leak-check=full
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_API_SERVER_EXE_NAME}  ${ITEST_APPCFG_PATH}
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  DatabaseMigrationTeardown  ${ITEST_APPCFG_PATH} ${LIQUIBASE_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  FilechunkTeardown   ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
     COMMAND bash ${PYVENV_SHELL_FILEPATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -597,6 +598,7 @@ ADD_CUSTOM_TARGET(itest_app_server
 
 ADD_CUSTOM_TARGET(itest_rpc_worker
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
+        "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
         ##gdb -args
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_RPC_CONSUMER_EXE_NAME}  ${ITEST_APPCFG_PATH}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..

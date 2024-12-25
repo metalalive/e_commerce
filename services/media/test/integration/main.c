@@ -126,7 +126,8 @@ TestSuite *app_api_tests(json_t *root_cfg)
 
 static void run_app_server(void *data) {
     test_init_app_data_t *data1 = (test_init_app_data_t *)data;
-    start_application(data1->cfg_file_path, data1->exe_path);
+    int err = start_application(data1->cfg_file_path, data1->exe_path);
+    fprintf(stderr, "[test][integration] return from app servser, err:%d \n", err);
 } // end of run_app_server()
 
 
@@ -136,7 +137,7 @@ int main(int argc, char **argv) {
         .cfg_file_path = argv[argc - 1], // "./media/settings/test.json",
         .exe_path = argv[argc - 2] // "./media/build/integration_test.out"
     };
-    int result = 0;
+    int tst_result = -1, op_result = 0;
     uv_thread_t app_tid = 0;
     json_error_t  j_err = {0};
     json_t  *root_cfg = json_load_file( init_app_data.cfg_file_path, (size_t)0, &j_err);
@@ -144,36 +145,40 @@ int main(int argc, char **argv) {
         fprintf(stderr, "[test] failed to parse config file\n");
         goto done;
     }
-    result = uv_thread_create( &app_tid, run_app_server, (void *)&init_app_data );
-    assert(result == 0);
+    op_result = uv_thread_create( &app_tid, run_app_server, (void *)&init_app_data );
+    assert(op_result == 0);
     assert(app_tid > 0);
+    init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
     TestSuite *suite = create_named_test_suite("media_app_integration_test");
     TestReporter *reporter = create_text_reporter();
     add_suite(suite, app_api_tests(root_cfg));
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
-    do {
-        result = pthread_tryjoin_np(app_tid, NULL);
-        if(result == 0) {
-            fprintf(stderr, "[test] app server thread terminated due to some error\n");
-            goto done;
+    while(1) {
+        if(app_server_ready()) {
+            break;
+        } else {
+            op_result = pthread_tryjoin_np(app_tid, NULL);
+            if(op_result == 0) {
+                fprintf(stderr, "[test] app server thread terminated due to some error\n");
+                goto done;
+            } // unexpected early thread terminated
+            sleep(3);
         }
-        sleep(3);
-    } while(!app_server_ready());
+    }
     fprintf(stdout, "[test] curl version : %s \n", curl_version());
     fprintf(stdout, "[test] app server is ready, start integration test cases ...\n");
     // const char *test_name = argv[argc - 1];
     // result = run_single_test(suite, test_name, reporter);
-    result = run_test_suite(suite, reporter);
+    tst_result = run_test_suite(suite, reporter);
     pthread_kill(app_tid, SIGTERM);
-    result = ETIMEDOUT;
-    for (int idx = 0; (result != 0) && (idx < 10); idx++) {
-        result = pthread_tryjoin_np(app_tid, NULL);
-        if(result != 0)
+    op_result = ETIMEDOUT;
+    for (int idx = 0; (op_result != 0) && (idx < 10); idx++) {
+        op_result = pthread_tryjoin_np(app_tid, NULL);
+        if(op_result != 0)
             sleep(1);
     }
-    if(result != 0) {
-        fprintf(stderr, "[test] app server failed to terminate, error:%d \n", result);
+    if(op_result != 0) {
+        fprintf(stderr, "[test] app server failed to terminate, error:%d \n", op_result);
         pthread_kill(app_tid, SIGTERM); // forced shutdown
     }
 done:
@@ -184,5 +189,5 @@ done:
     destroy_reporter(reporter);
     if (!root_cfg)
         json_decref(root_cfg);
-    return result;
+    return tst_result;
 } // end of main()

@@ -26,6 +26,27 @@ env:
 jobs:
   init-env-then-tests:
     runs-on: ubuntu-24.04
+    services:
+      mariadb_primary:
+        image: mariadb:10.6.20
+        # official docker image only exposes default port 3306 to external world
+        # map any non-default port external clients will use to 3306
+        ports:
+          - 3306:3306
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
+          MARIADB_ROOT_PASSWORD: "sys-ci-dba"
+          MARIADB_ROOT_HOST: "localhost"
+          MARIADB_DATABASE: "test_ecommerce_media"
+          MARIADB_USER: "DB_USERNAME"
+          MARIADB_PASSWORD: "DB_PASSWORD"
+      rabbitmq_amqp:
+        image: rabbitmq:3-management
+        ports: ["5672:5672", "15672:15672"]
+        env:
+          RABBITMQ_DEFAULT_USER: "AMQP_ANOTHER_USERNAME"
+          RABBITMQ_DEFAULT_PASS: "AMQP_ANOTHER_PASSWORD"
+          RABBITMQ_DEFAULT_VHOST: "/integration_test"
     steps:
       - uses: actions/checkout@v4
 
@@ -45,8 +66,8 @@ jobs:
             # shared among rhonabwy and ffmpeg
             sudo apt-get install -y  nettle-dev  libgnutls28-dev
             sudo apt-get install -y  libcurl4-gnutls-dev
-            # TODO, run valgrind for comprehensive memory check
-
+            # valgrind for comprehensive memory check
+            sudo apt-get install -y valgrind
 
       - name: restore libuv library from cache
         id:   cachelibuv
@@ -407,12 +428,13 @@ jobs:
 
 
 
-      - name: install liquibase migration tool
-        uses: ./.github/actions/liquibase-install
-      
       - name: set up python virtual environment for some tasks
+        working-directory: services/media
         run: |
             python3 -m venv ${{ env.PY_LOCAL_VENV }}
+            source ${{ env.PY_LOCAL_VENV }}/bin/activate
+            pip3 install -r ./py_venv_requirement.txt
+            pip3 list
 
       - name: build media-processing applications
         working-directory: services/media
@@ -422,7 +444,7 @@ jobs:
             #LD_LIBRARY_PATH="${{ env.JANSSON_INSTALL_PATH }}/lib:${{ env.MARIADBCLIENT_INSTALL_PATH }}/lib/mariadb:/usr/lib:/usr/libexec:/usr/local/lib"
             sudo apt-get install libelf-dev libmagic-dev uuid-dev libnghttp2-dev
             mkdir -p ./build && cd ./build
-            cmake -DLIQUIBASE_PATH=$(which liquibase) -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} \
+            cmake -DPYVENV_PATH=${{ env.PY_LOCAL_VENV }} -DCMAKE_BUILD_TYPE=Debug \
                   -DCMAKE_PREFIX_PATH=${{ env.CGREEN_INSTALL_PATH }}  \
                   -DNGINX_INSTALL_PATH="/PATH/TO/nginx/server/install" \
                   -DCDN_USERNAME=username_notyet   -DCDN_USERGRP=group_notyet   ..
@@ -437,6 +459,67 @@ jobs:
       - name: run unit test for this app
         working-directory: services/media/build
         run: |
-            sudo apt-get install valgrind
             make unit_test
+
+
+      - name: download mock user asset for integration test
+        working-directory: services/media/test/integration/examples
+        run: |
+            source ${{ env.PY_LOCAL_VENV }}/bin/activate
+            gdown "${{ secrets.mediaMockUserAssetUrl }}" -O ./mock-usr-asset.tar
+            tar xvf ./mock-usr-asset.tar
+            mv ./mock-usr-media-asset/*  ./
+            rmdir ./mock-usr-media-asset
+            rm ./mock-usr-asset.tar
+            ls -lt
+
+      - name: initial setup in RabbitMQ
+        uses: ./.github/actions/rabbitmq-setup
+        with:
+            vhost: /integration_test
+            uname: AMQP_ANOTHER_USERNAME
+            passwd: AMQP_ANOTHER_PASSWORD
+
+      - name: install liquibase migration tool
+        uses: ./.github/actions/liquibase-install      
+
+      - name: run database schema migration
+        working-directory: services/media
+        run: |
+            liquibase  --changeLogFile=./migration/changelog_media.xml \
+                --url=jdbc:mariadb://localhost:3306/test_ecommerce_media \
+                --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
+
+
+      - name: build / launch RPC worker and app server for integration test
+        working-directory: services/media/build
+        run: |
+            make itest_rpc_consumer.out
+            make itest_app_server.out
+            make itest_rpc_worker &
+            make itest_app_server
+      
+      - name: examine app-server image stack trace
+        if: ${{ always() }}
+        working-directory: services/media/build
+        run: |
+            addr2line -e ./itest_app_server.out   0x26e17 
+
+      - name: terminate RPC worker after integration test
+        if: ${{ always() }}
+        working-directory: services/tmp/proc
+        run: |
+            kill -s SIGTERM $(cat ./media_itest_rpc_consumer.pid)
+            sleep 10
+
+      - name: dump error log files
+        if: ${{ always() }}
+        working-directory: services/tmp/log/test
+        run: |
+            echo -e "\n\n---- app server error log ----"
+            cat ./media_app_server.err
+            echo -e "\n\n---- RPC consumer error log ----"
+            cat ./media_rpc_consumer.err
+            echo -e "\n\n---- app server access log ----"
+            cat ./media_app_server.access.log
            

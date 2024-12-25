@@ -131,23 +131,25 @@ int add_auth_token_to_http_header(json_t *headers_kv_raw, unsigned int usr_id, c
 
 void init_mock_auth_server(const char *tmpfile_path) {
     unsigned int rsa_bits[NUM_KEY_PAIRS] = {2048, 3072}; // 256 / 384 bytes
-    r_jwks_init(&_mock_jwks.store.privkey);
-    r_jwks_init(&_mock_jwks.store.pubkey );
+    assert(r_jwks_init(&_mock_jwks.store.privkey) == RHN_OK);
+    assert(r_jwks_init(&_mock_jwks.store.pubkey) == RHN_OK);
     for(int idx = 0; idx < NUM_KEY_PAIRS; idx++) {
-        jwk_t *privkey = NULL;
-        jwk_t *pubkey  = NULL;
-        r_jwk_init(&privkey);
-        r_jwk_init(&pubkey );
-        r_jwks_append_jwk(_mock_jwks.store.privkey, privkey);
-        r_jwks_append_jwk(_mock_jwks.store.pubkey , pubkey );
-        r_jwk_generate_key_pair(privkey, pubkey, R_KEY_TYPE_RSA,
+        jwk_t *privkey = NULL, *pubkey = NULL;
+        assert(r_jwk_init(&privkey) == RHN_OK);
+        assert(r_jwk_init(&pubkey) == RHN_OK);
+        assert(r_jwks_append_jwk(_mock_jwks.store.privkey, privkey) == RHN_OK);
+        assert(r_jwks_append_jwk(_mock_jwks.store.pubkey , pubkey) == RHN_OK);
+        int ret = r_jwk_generate_key_pair(privkey, pubkey, R_KEY_TYPE_RSA,
                rsa_bits[idx], NULL); // set kid automatically by library
+        assert(ret == RHN_OK);
     } // end of loop
     size_t tmpfile_path_sz = strlen(tmpfile_path) + 1;
     _mock_jwks.filepath.pubkey = (char *) malloc(tmpfile_path_sz);
     memcpy(_mock_jwks.filepath.pubkey, &tmpfile_path[0], tmpfile_path_sz);
     int fd = mkstemp(_mock_jwks.filepath.pubkey);
+    assert(fd >= 0);
     char *serial_data = r_jwks_export_to_json_str(_mock_jwks.store.pubkey, JSON_COMPACT);
+    assert(serial_data != NULL);
     write(fd, serial_data, strlen(serial_data));
     lseek(fd, 0, SEEK_SET);
     free(serial_data);
@@ -161,8 +163,8 @@ void deinit_mock_auth_server(void) {
     while(r_jwks_size(_mock_jwks.store.privkey) > 0) {
         jwk_t *privkey = r_jwks_get_at(_mock_jwks.store.privkey, 0);
         jwk_t *pubkey  = r_jwks_get_at(_mock_jwks.store.pubkey , 0);
-        r_jwks_remove_at(_mock_jwks.store.privkey, 0);
-        r_jwks_remove_at(_mock_jwks.store.pubkey , 0);
+        assert(r_jwks_remove_at(_mock_jwks.store.privkey, 0) == RHN_OK);
+        assert(r_jwks_remove_at(_mock_jwks.store.pubkey , 0) == RHN_OK);
         r_jwk_free(privkey);
         r_jwk_free(pubkey );
     } // end of loop

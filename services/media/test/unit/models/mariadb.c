@@ -42,9 +42,10 @@ static uint8_t  mock_db_pool__is_closing_fn(struct db_pool_s *pool)
 static DBA_RES_CODE mock_db_conn__update_ready_queries(struct db_conn_s *conn)
 { return (DBA_RES_CODE) mock(conn); }
 
-static __attribute__((optimize("O0"))) void  mock_db_query__notify_callback(uv_async_t *handle)
+static void  mock_db_query__notify_callback(uv_async_t *handle)
 {
     db_query_t  *q_found = H2O_STRUCT_FROM_MEMBER(db_query_t, notification, handle);
+    //fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q_found);
     db_llnode_t *curr_node = NULL;
     db_llnode_t *next_node = NULL;
     for(curr_node = q_found->db_result.head ; curr_node; curr_node = next_node)
@@ -333,8 +334,29 @@ Ensure(app_mariadb_test_evict_all_queries_on_connection_failure) {
     assert_that(conn.state, is_equal_to(DB_ASYNC_CLOSE_WAITING));
 } // end of app_mariadb_test_evict_all_queries_on_connection_failure
 
+Ensure(app_mariadb_test_query_failure_local_1) {
+    uv_loop_t loop = {0};
+    db_pool_t pool = {.cfg = {.bulk_query_limit_kb = CONN_BULK_QUERY_LIMIT_KB, .alias = "unitest_db",
+        .ops = {.state_transition = app_mariadb_async_state_transition_handler,
+            .get_sock_fd = app_db_mariadb_get_sock_fd, .get_timeout_ms = app_db_mariadb_get_timeout_ms}},
+          .is_closing_fn = mock_db_pool__is_closing_fn};
+    db_conn_t conn = {.pool = &pool, .loop = &loop, .processing_queries = NULL,
+        .pending_queries = {.head = NULL, .tail = NULL},  .state = DB_ASYNC_INITED,  .lowlvl = {0},
+        .ops = {.timerpoll_stop = NULL, .timerpoll_start = NULL, .timerpoll_init = NULL,
+            .timerpoll_deinit = mock_app__timerpoll_deinit,
+            .update_ready_queries = mock_db_conn__update_ready_queries},
+    };
+    // assume no more pending query when transitting connection state
+    conn.state = DB_ASYNC_QUERY_START;
+    assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
+    expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_SKIPPED));
+    expect(mock_db_pool__is_closing_fn, will_return(0));
+    expect(mock_app__timerpoll_deinit, will_return(0));
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_QUERY_START)); // state NOT changed
+} // end of app_mariadb_test_query_failure_local_1
 
-Ensure(app_mariadb_test_query_failure_local) {
+Ensure(app_mariadb_test_query_failure_local_2) {
     uv_loop_t loop = {0};
     db_pool_t pool = {.cfg = {.bulk_query_limit_kb = CONN_BULK_QUERY_LIMIT_KB, .alias = "unitest_db",
         .ops = {.state_transition = app_mariadb_async_state_transition_handler,
@@ -346,54 +368,44 @@ Ensure(app_mariadb_test_query_failure_local) {
         .timerpoll_init = mock_app__timerpoll_init, .timerpoll_deinit = mock_app__timerpoll_deinit,
         .update_ready_queries = mock_db_conn__update_ready_queries},
     };
-    { // assume no more pending query when transitting connection state
-        conn.state = DB_ASYNC_QUERY_START;
-        assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
-        expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_SKIPPED));
-        expect(mock_db_pool__is_closing_fn, will_return(0));
-        expect(mock_app__timerpoll_deinit, will_return(0));
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_QUERY_START)); // state NOT changed
+    // assume error happenes in timer-poll handle
+    int expect_lowlvl_fd = 124;
+    uint64_t expect_timeout_ms = 166;
+    int mysql_query_ret = 0;
+    db_query_extend_t  mock_processing_nodes[2] = {0};
+    mock_processing_nodes[0].node = (db_llnode_t){.prev = NULL, .next = &mock_processing_nodes[1].node};
+    mock_processing_nodes[1].node = (db_llnode_t){.prev = &mock_processing_nodes[0].node, .next = NULL};
+    conn.state = DB_ASYNC_QUERY_START;
+    assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
+    conn.processing_queries = &mock_processing_nodes[0].node;
+    db_llnode_t *q_node = NULL;
+    for(q_node = conn.processing_queries; q_node; q_node = q_node->next) {
+        db_query_t *q = (db_query_t *)&q_node->data[0];
+        *q = (db_query_t) {.cfg = {.loop = &loop}, .notification = {.async_cb = mock_db_query__notify_callback }};
     }
-    { // assume error happenes in timer-poll handle
-        int expect_lowlvl_fd = 125;
-        uint64_t expect_timeout_ms = 166;
-        int mysql_query_ret = 0;
-        db_query_extend_t  mock_processing_nodes[2] = {0};
-        mock_processing_nodes[0].node = (db_llnode_t){.prev = NULL, .next = &mock_processing_nodes[1].node};
-        mock_processing_nodes[1].node = (db_llnode_t){.prev = &mock_processing_nodes[0].node, .next = NULL};
-        conn.state = DB_ASYNC_QUERY_START;
-        assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
-        conn.processing_queries = &mock_processing_nodes[0].node;
-        db_llnode_t *q_node = NULL;
-        for(q_node = conn.processing_queries; q_node; q_node = q_node->next) {
-            db_query_t *q = (db_query_t *)&q_node->data[0];
-            *q = (db_query_t) {.cfg = {.loop = &loop}, .notification = {.async_cb = mock_db_query__notify_callback }};
-        }
-        expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK));
-        expect(mysql_real_query_start, will_return(MYSQL_WAIT_READ), 
-                will_set_contents_of_parameter(ret, &mysql_query_ret, sizeof(int *))  );
-        expect(mysql_get_socket, will_return(expect_lowlvl_fd));
-        expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
-        expect(mock_app__timerpoll_init, will_return(0), when(fd, is_equal_to(expect_lowlvl_fd)) );
-        expect(mock_app__timerpoll_start, will_return(UV_EPERM),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
-                when(event_flags, is_equal_to(UV_READABLE))  );
-        expect(mock_app__timerpoll_stop, will_return(0));
-        expect(mock_db_query__notify_callback, when(app_result, is_equal_to(DBA_RESULT_OS_ERROR)),
-                when(conn_state, is_equal_to(DB_ASYNC_QUERY_READY)), when(is_async, is_equal_to(0)),
-                when(is_final, is_equal_to(1)), when(q_found, is_equal_to(&mock_processing_nodes[0].node.data)));
-        expect(mock_db_query__notify_callback, when(q_found, is_equal_to(&mock_processing_nodes[1].node.data)));
-        expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_SKIPPED));
-        expect(mock_db_pool__is_closing_fn, will_return(0));
-        expect(mock_app__timerpoll_deinit, will_return(0));
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_QUERY_START)); // state NOT changed
-        assert_that(conn.processing_queries, is_equal_to(NULL));
-        assert_that(conn.pending_queries.head, is_equal_to(NULL));
-        // assume next worker thread is trying to invoke the function
-        assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
-    }
-} // end of app_mariadb_test_query_failure_local
+    expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK));
+    expect(mysql_get_socket, will_return(expect_lowlvl_fd));
+    expect(mock_app__timerpoll_init, will_return(0), when(fd, is_equal_to(expect_lowlvl_fd)) );
+    expect(mysql_real_query_start, will_return(MYSQL_WAIT_READ), 
+            will_set_contents_of_parameter(ret, &mysql_query_ret, sizeof(int *))  );
+    expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
+    expect(mock_app__timerpoll_start, will_return(UV_EPERM),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
+            when(event_flags, is_equal_to(UV_READABLE))  );
+    expect(mock_app__timerpoll_stop, will_return(0));
+    expect(mock_db_query__notify_callback, when(app_result, is_equal_to(DBA_RESULT_OS_ERROR)),
+            when(conn_state, is_equal_to(DB_ASYNC_QUERY_READY)), when(is_async, is_equal_to(0)),
+            when(is_final, is_equal_to(1)), when(q_found, is_equal_to(&mock_processing_nodes[0].node.data)));
+    expect(mock_db_query__notify_callback, when(q_found, is_equal_to(&mock_processing_nodes[1].node.data)));
+    expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_SKIPPED));
+    expect(mock_db_pool__is_closing_fn, will_return(0));
+    expect(mock_app__timerpoll_deinit, will_return(0));
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_QUERY_START)); // state NOT changed
+    assert_that(conn.processing_queries, is_equal_to(NULL));
+    assert_that(conn.pending_queries.head, is_equal_to(NULL));
+    // assume next worker thread is trying to invoke the function
+    assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
+} // end of app_mariadb_test_query_failure_local_2
 
 
 Ensure(app_mariadb_test_query_failure_remote) {
@@ -448,6 +460,7 @@ Ensure(app_mariadb_test_query_resultset_no_rows) {
         db_query_t *q = (db_query_t *) & mock_processing_nodes[0].node.data[0];
         *q = (db_query_t) {.cfg = {.loop = &loop}, .db_result = {.num_rs_remain = 0},
             .notification = {.async_cb = mock_db_query__notify_callback }};
+        //fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q);
     }
     { // assume local app sent the queries successfully
         int mysql_query_ret = 0; // assume remote DB server completed query successfully
@@ -526,25 +539,23 @@ Ensure(app_mariadb_test_query_reach_end_of_resultsets) {
     db_conn_t conn = {.pool = &pool, .loop = &loop, .processing_queries = &mock_processing_nodes[0].node,
         .ops = {.timerpoll_stop = mock_app__timerpoll_stop, .timerpoll_start = mock_app__timerpoll_start,
             .update_ready_queries = mock_db_conn__update_ready_queries}, .state = DB_ASYNC_INITED};
-    {
-        uint64_t expect_timeout_ms = 149;
-        int mysql_nxt_rs_ret = -1; // no more result set in current query execution
-        int mysql_query_ret = 0;
-        conn.state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_WAITING;
-        expect(mysql_next_result_cont, will_return(0),
-                will_set_contents_of_parameter(ret, &mysql_nxt_rs_ret, sizeof(int *))  );
-        expect(mock_app__timerpoll_stop, will_return(0));
-        expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK)); // assume there is new pending query
-        expect(mysql_real_query_start, will_return(MYSQL_WAIT_READ), 
-                will_set_contents_of_parameter(ret, &mysql_query_ret, sizeof(int *))  );
-        expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
-        expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
-                when(event_flags, is_equal_to(UV_READABLE))  );
-        int evt_flgs = UV_READABLE;
-        int uv_status = 0;
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_QUERY_WAITING));
-    }
+    uint64_t expect_timeout_ms = 149;
+    int mysql_nxt_rs_ret = -1; // no more result set in current query execution
+    int mysql_query_ret = 0;
+    conn.state = DB_ASYNC_MOVE_TO_NEXT_RESULTSET_WAITING;
+    expect(mysql_next_result_cont, will_return(0),
+            will_set_contents_of_parameter(ret, &mysql_nxt_rs_ret, sizeof(int *))  );
+    expect(mock_app__timerpoll_stop, will_return(0));
+    expect(mock_db_conn__update_ready_queries, will_return(DBA_RESULT_OK)); // assume there is new pending query
+    expect(mysql_real_query_start, will_return(MYSQL_WAIT_READ), 
+            will_set_contents_of_parameter(ret, &mysql_query_ret, sizeof(int *))  );
+    expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
+    expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
+            when(event_flags, is_equal_to(UV_READABLE))  );
+    int evt_flgs = UV_READABLE;
+    int uv_status = 0;
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_QUERY_WAITING));
 } // end of app_mariadb_test_query_reach_end_of_resultsets
 
 
@@ -558,38 +569,34 @@ Ensure(app_mariadb_test_rs_fetch_a_row) {
         .ops = {.timerpoll_stop = mock_app__timerpoll_stop, .timerpoll_start = mock_app__timerpoll_start,
         }, .state = DB_ASYNC_INITED,
     };
-    {
-        db_query_t *q = (db_query_t *) & mock_processing_nodes[0].node.data[0];
-        *q = (db_query_t) {.cfg = {.loop = &loop}, .db_result = {.num_rs_remain = 1},
-            .notification = {.async_cb = mock_db_query__notify_callback }};
+    db_query_t *q = (db_query_t *) & mock_processing_nodes[0].node.data[0];
+    *q = (db_query_t) {.cfg = {.loop = &loop}, .db_result = {.num_rs_remain = 1},
+        .notification = {.async_cb = mock_db_query__notify_callback }};
+    const char *expect_columns[EXPECT_NUM_COLUMNS] = {"oauth2", "gRPC", "docker"};
+    MYSQL_ROW  expect_mysql_rows[2] = {(MYSQL_ROW)expect_columns, NULL};
+    uint64_t expect_timeout_ms = 80;
+    conn.state = DB_ASYNC_FETCH_ROW_WAITING;
+    expect(mysql_fetch_row_cont, will_return(0),
+            will_set_contents_of_parameter(ret, &expect_mysql_rows[0], sizeof(MYSQL_ROW *))  );
+    expect(mock_app__timerpoll_stop, will_return(0));
+    expect(mysql_num_fields, will_return(EXPECT_NUM_COLUMNS));
+    expect(mock_db_query__notify_callback, when(app_result, is_equal_to(DBA_RESULT_OK)),
+            when(conn_state, is_equal_to(DB_ASYNC_FETCH_ROW_READY)), when(is_async, is_equal_to(0)),
+            when(is_final, is_equal_to(0)), when(num_cols, is_equal_to(EXPECT_NUM_COLUMNS)),
+            when(q_found, is_equal_to(&mock_processing_nodes[0].node.data)));
+    for(size_t idx = 0; idx < EXPECT_NUM_COLUMNS; idx++) {
+        expect(mock_db_query__notify_callback, when(col_value,
+                    is_equal_to_string(expect_mysql_rows[0][idx])));
     }
-    {
-        const char *expect_columns[EXPECT_NUM_COLUMNS] = {"oauth2", "gRPC", "docker"};
-        MYSQL_ROW  expect_mysql_rows[2] = {(MYSQL_ROW)expect_columns, NULL};
-        uint64_t expect_timeout_ms = 80;
-        conn.state = DB_ASYNC_FETCH_ROW_WAITING;
-        expect(mysql_fetch_row_cont, will_return(0),
-                will_set_contents_of_parameter(ret, &expect_mysql_rows[0], sizeof(MYSQL_ROW *))  );
-        expect(mock_app__timerpoll_stop, will_return(0));
-        expect(mysql_num_fields, will_return(EXPECT_NUM_COLUMNS));
-        expect(mock_db_query__notify_callback, when(app_result, is_equal_to(DBA_RESULT_OK)),
-                when(conn_state, is_equal_to(DB_ASYNC_FETCH_ROW_READY)), when(is_async, is_equal_to(0)),
-                when(is_final, is_equal_to(0)), when(num_cols, is_equal_to(EXPECT_NUM_COLUMNS)),
-                when(q_found, is_equal_to(&mock_processing_nodes[0].node.data)));
-        for(size_t idx = 0; idx < EXPECT_NUM_COLUMNS; idx++) {
-            expect(mock_db_query__notify_callback, when(col_value,
-                        is_equal_to_string(expect_mysql_rows[0][idx])));
-        }
-        expect(mysql_fetch_row_start, will_return(MYSQL_WAIT_READ),
-                will_set_contents_of_parameter(ret, &expect_mysql_rows[1], sizeof(MYSQL_ROW *))  );
-        expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
-        expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
-                when(event_flags, is_equal_to(UV_READABLE))  );
-        int evt_flgs = UV_READABLE;
-        int uv_status = 0;
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_FETCH_ROW_WAITING));
-    }
+    expect(mysql_fetch_row_start, will_return(MYSQL_WAIT_READ),
+            will_set_contents_of_parameter(ret, &expect_mysql_rows[1], sizeof(MYSQL_ROW *))  );
+    expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
+    expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
+            when(event_flags, is_equal_to(UV_READABLE))  );
+    int evt_flgs = UV_READABLE;
+    int uv_status = 0;
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_FETCH_ROW_WAITING));
 #undef  EXPECT_NUM_COLUMNS
 } // end of app_mariadb_test_rs_fetch_a_row
 
@@ -600,24 +607,23 @@ Ensure(app_mariadb_test_rs_end_of_row) {
     db_conn_t conn = {.pool = &pool, .state = DB_ASYNC_INITED,
         .ops = {.timerpoll_stop = mock_app__timerpoll_stop, .timerpoll_start = mock_app__timerpoll_start},
     };
-    { // for mariadb, end-of-row situation can be identified when (1) the handle cannot
-       // fetch new row (2) no error code returned from mysql_errno()
-        uint64_t expect_timeout_ms = 364;
-        MYSQL_ROW  expect_mysql_row = NULL;
-        conn.state = DB_ASYNC_FETCH_ROW_WAITING;
-        expect(mysql_fetch_row_cont, will_return(0),
-                will_set_contents_of_parameter(ret, &expect_mysql_row, sizeof(MYSQL_ROW *))  );
-        expect(mysql_errno, will_return(0));
-        expect(mock_app__timerpoll_stop, will_return(0));
-        expect(mysql_free_result_start, will_return(MYSQL_WAIT_READ));
-        expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
-        expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
-                when(event_flags, is_equal_to(UV_READABLE))  );
-        int evt_flgs = UV_READABLE;
-        int uv_status = 0;
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_FREE_RESULTSET_WAITING));
-    }
+    // for mariadb, end-of-row situation can be identified when (1) the handle cannot
+    // fetch new row (2) no error code returned from mysql_errno()
+    uint64_t expect_timeout_ms = 364;
+    MYSQL_ROW  expect_mysql_row = NULL;
+    conn.state = DB_ASYNC_FETCH_ROW_WAITING;
+    expect(mysql_fetch_row_cont, will_return(0),
+            will_set_contents_of_parameter(ret, &expect_mysql_row, sizeof(MYSQL_ROW *))  );
+    expect(mysql_errno, will_return(0));
+    expect(mock_app__timerpoll_stop, will_return(0));
+    expect(mysql_free_result_start, will_return(MYSQL_WAIT_READ));
+    expect(mysql_get_timeout_value_ms, will_return(expect_timeout_ms));
+    expect(mock_app__timerpoll_start, will_return(0),  when(timeout_ms,  is_equal_to(expect_timeout_ms)),
+            when(event_flags, is_equal_to(UV_READABLE))  );
+    int evt_flgs = UV_READABLE;
+    int uv_status = 0;
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_FREE_RESULTSET_WAITING));
 } // end of app_mariadb_test_rs_end_of_row
 
 
@@ -829,7 +835,8 @@ TestSuite *app_model_mariadb_tests(void)
     add_test(suite, app_mariadb_test_start_connection_failure);
     add_test(suite, app_mariadb_test_connect_db_server_error);
     add_test(suite, app_mariadb_test_evict_all_queries_on_connection_failure);
-    add_test(suite, app_mariadb_test_query_failure_local);
+    add_test(suite, app_mariadb_test_query_failure_local_1);
+    add_test(suite, app_mariadb_test_query_failure_local_2);
     add_test(suite, app_mariadb_test_query_failure_remote);
     add_test(suite, app_mariadb_test_query_resultset_no_rows);
     add_test(suite, app_mariadb_test_query_next_resultset_found);

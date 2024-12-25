@@ -57,8 +57,12 @@ AVRational av_mul_q(AVRational b, AVRational c)
 const char *av_get_sample_fmt_name(enum AVSampleFormat sample_fmt)
 { return (const char *) mock(sample_fmt); }
 
+// Note
+// - `av_opt_set_int_list` will expand to `av_opt_set_bin()` and `av_int_list_length_for_size()`
+// - different optimization levels will cause different number of calls to this function, for
+//   test simplicity I don't mock this function
 unsigned int av_int_list_length_for_size(unsigned elsize, const void *list, uint64_t term)
-{ return (unsigned int) mock(elsize, list, term); }
+{ return (unsigned int) 0; }
 
 int64_t av_get_default_channel_layout(int nb_channels)
 { return (int64_t) mock(nb_channels); }

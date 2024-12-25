@@ -101,7 +101,6 @@ Ensure(atfp_hls_test__avfilter_init_ok) {
             // av_opt_set_int_list will expand to `av_opt_set_bin` and `av_int_list_length_for_size`
             expect(av_opt_set_bin, will_return(0),   when(name, is_equal_to_string("sample_rates")),
                     when(obj, is_equal_to(mock_filt_ctx_sink_p[2])));
-            expect(av_int_list_length_for_size, will_return(2));
         }
     }
     int err = atfp_hls__avfilter_init(&mock_fp_dst);
