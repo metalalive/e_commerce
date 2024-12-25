@@ -2,7 +2,6 @@
 #include <unistd.h>
 #include <sched.h>
 #include <signal.h>
-#include <dlfcn.h>
 #include <assert.h>
 #include <errno.h>
 #ifdef LIBC_HAS_BACKTRACE
@@ -148,26 +147,8 @@ static void on_sigfatal(int sig_num) {
     if(sig_num != SIGINT) { // flush stack backtrace to external error log
         const int num_frames = 68;
         void *frames[num_frames];
-        Dl_info info = {0};
         int num_used = backtrace(frames, num_frames);
-        dprintf(acfg->error_log_fd, "\n\n---- raw stack trace (address only) ----\n");
         backtrace_symbols_fd(frames, num_used, acfg->error_log_fd);
-        dprintf(acfg->error_log_fd, "\n\n---- stack trace with function name symbols ----\n");
-        for (int idx = 0; idx < num_used; ++idx) {
-            if (dladdr(frames[idx], &info)) {
-                void *relative_addr = (void *)((char *)frames[idx] - (char *)info.dli_fbase);
-                dprintf(acfg->error_log_fd,
-                        "Frame %d: %s (%s+%p) [%p]\n",
-                        idx,
-                        info.dli_fname ? info.dli_fname : "Unknown Library",
-                        info.dli_sname ? info.dli_sname : "Unknown Function Name",
-                        relative_addr,
-                        frames[idx]);
-            } else {
-                dprintf(acfg->error_log_fd,
-                        "Frame %d: [Unknown symbol at %p]\n", idx, frames[idx]);
-            }
-        }
     }
     raise(sig_num);
 } // end of on_sigfatal
