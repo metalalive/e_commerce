@@ -45,7 +45,7 @@ static DBA_RES_CODE mock_db_conn__update_ready_queries(struct db_conn_s *conn)
 static void  mock_db_query__notify_callback(uv_async_t *handle)
 {
     db_query_t  *q_found = H2O_STRUCT_FROM_MEMBER(db_query_t, notification, handle);
-    fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q_found);
+    //fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q_found);
     db_llnode_t *curr_node = NULL;
     db_llnode_t *next_node = NULL;
     for(curr_node = q_found->db_result.head ; curr_node; curr_node = next_node)
@@ -460,7 +460,7 @@ Ensure(app_mariadb_test_query_resultset_no_rows) {
         db_query_t *q = (db_query_t *) & mock_processing_nodes[0].node.data[0];
         *q = (db_query_t) {.cfg = {.loop = &loop}, .db_result = {.num_rs_remain = 0},
             .notification = {.async_cb = mock_db_query__notify_callback }};
-        fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q);
+        //fprintf(stderr, "[utest][mariaDB] line:%d, query-addr:%p \n", __LINE__, q);
     }
     { // assume local app sent the queries successfully
         int mysql_query_ret = 0; // assume remote DB server completed query successfully
@@ -838,7 +838,7 @@ TestSuite *app_model_mariadb_tests(void)
     add_test(suite, app_mariadb_test_query_failure_local_1);
     add_test(suite, app_mariadb_test_query_failure_local_2);
     add_test(suite, app_mariadb_test_query_failure_remote);
-    add_test(suite, app_mariadb_test_query_resultset_no_rows); // FIXME, failures on github action
+    add_test(suite, app_mariadb_test_query_resultset_no_rows);
     add_test(suite, app_mariadb_test_query_next_resultset_found);
     add_test(suite, app_mariadb_test_query_reach_end_of_resultsets);
     add_test(suite, app_mariadb_test_rs_fetch_a_row);
