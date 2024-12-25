@@ -29,6 +29,14 @@ typedef struct {
 static void  _api_edit_usrlvl_acl__deinit_primitives ( h2o_req_t *req, h2o_handler_t *hdlr,
         app_middleware_node_t *node, json_t *spec, json_t *err_info )
 {
+#if 1
+    int will_alloc_mem = (req->res.headers.size >= req->res.headers.capacity)
+        && (req->res.headers.size != 0) ;
+    if(will_alloc_mem) {
+        fprintf(stderr, "[api][edit_usrlvl_acl] line:%d, req:%p, header size:%ld, capacity:%ld \n",
+                __LINE__ , req, req->res.headers.size, req->res.headers.capacity );
+    }
+#endif
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
     json_t *resp_body =  json_object_size(err_info) > 0 ?  err_info: json_object_get(spec, "_http_resp_body");
     size_t  nb_required = json_dumpb(resp_body, NULL, 0, 0);
@@ -265,11 +273,13 @@ static void  api_edit_acl__verify_otherusers_exist (h2o_handler_t *hdlr, h2o_req
     uint32_t curr_usr_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
     ARPC_STATUS_CODE  result = _api_rpc__start_verify_usr_ids (req->conn->ctx->storage.entries[1].data , spec, curr_usr_id);
     if(result != APPRPC_RESP_ACCEPTED) {
-        h2o_error_printf("[api][edit_acl] line:%d, failed to publish RPC message:%d \n", __LINE__, result );
+        h2o_error_printf("[api][edit_usrlv_acl] line:%d, failed to publish RPC message:%d \n", __LINE__, result );
         json_object_set_new(err_info, "unknown", json_string("internal error"));
         req->res.status = 503;
     } else { // check RPC reply queue
         api_usr_data_t *usrdata = calloc(1, sizeof(api_usr_data_t));
+        //fprintf(stderr, "[api][edit_usrlvl_acl] line:%d, req:%p, header size:%ld, capacity:%ld \n",
+        //        __LINE__ , req, req->res.headers.size, req->res.headers.capacity );
         *usrdata = (api_usr_data_t) {.req=req, .hdlr=hdlr, .node=node, .spec=spec, .err_info=err_info};
         arpc_reply_cfg_t   rpc_cfg = { .usr_id = curr_usr_id, .loop=req->conn->ctx->loop,
               .conn=req->conn->ctx->storage.entries[1].data,  .usr_data=usrdata,  .max_num_msgs_fetched=3,
