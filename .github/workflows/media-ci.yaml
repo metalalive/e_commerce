@@ -503,7 +503,7 @@ jobs:
         if: ${{ always() }}
         working-directory: services/media/build
         run: |
-            addr2line -e ./itest_app_server.out  0x21dd2 0x555689180dd2 0x5d321 0x5556891bc321
+            addr2line -e ./itest_app_server.out  0x21dd2 0x5d321 0x27094 0x2564e 0x284da 0x4f037 0x4f2c4 0x428d3 0x4f11d 0x428d3 0x422a1 0x4f1f9 
 
       - name: terminate RPC worker after integration test
         if: ${{ always() }}
