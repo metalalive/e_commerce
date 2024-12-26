@@ -198,14 +198,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProductItemCreateReqDto'
+              $ref: '#/components/schemas/SaleItemCreateReqDto'
       responses:
         '201':
           description: Product item created successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductItemDto'
+                $ref: '#/components/schemas/SaleItemDto'
 
   /item/{prod_item_id}:
     get:
@@ -222,7 +222,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductItemDto'
+                $ref: '#/components/schemas/SaleItemDto'
 
     put:
       summary: update an existing product item
@@ -238,14 +238,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProductItemCreateReqDto'
+              $ref: '#/components/schemas/SaleItemCreateReqDto'
       responses:
         '200':
           description: Product item updated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductItemDto'
+                $ref: '#/components/schemas/SaleItemDto'
 
     delete:
       summary: discard a product item
@@ -386,7 +386,7 @@ components:
         - name
         - dtype
 
-    ProductAttributeReqDto:
+    SaleItemAttriReqDto:
       type: object
       properties:
         id_:
@@ -406,7 +406,7 @@ components:
         - id_
         - value
 
-    ProductItemCreateReqDto:
+    SaleItemCreateReqDto:
       type: object
       properties:
         name:
@@ -427,7 +427,7 @@ components:
           type: array
           description: List of product attributes.
           items:
-            $ref: '#/components/schemas/ProductAttributeReqDto'
+            $ref: '#/components/schemas/SaleItemAttriReqDto'
         media_set:
           type: array
           description: List of media resource IDs referencing external multimedia systems.
@@ -441,7 +441,7 @@ components:
         - attributes
         - media_set
 
-    ProductAttributeDto:
+    SaleItemAttriDto:
       type: object
       properties:
         label:
@@ -456,7 +456,7 @@ components:
             - type: string
               example: "example_value"
 
-    ProductItemDto:
+    SaleItemDto:
       type: object
       properties:
         id_:
@@ -484,7 +484,7 @@ components:
           type: array
           description: List of product attributes.
           items:
-            $ref: '#/components/schemas/ProductAttributeDto'
+            $ref: '#/components/schemas/SaleItemAttriDto'
         media_set:
           type: array
           description: List of media resource IDs referencing external multimedia systems.

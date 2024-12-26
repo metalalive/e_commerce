@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Optional, List, Union
+from pydantic import BaseModel, Field, NonNegativeInt
 
 
 class TagUpdateReqDto(BaseModel):
@@ -49,3 +49,34 @@ class AttrLabelDto(BaseModel):
 
 
 AttrUpdateReqDto = AttrLabelDto
+
+
+class SaleItemAttriReqDto(BaseModel):
+    id_: str  # References AttrLabelDto ID
+    value: Union[bool, NonNegativeInt, int, str] = Field(union_mode="left_to_right")
+
+
+class SaleItemCreateReqDto(BaseModel):
+    name: str
+    visible: bool
+    tags: List[str]  # List of IDs to TagNodeDto references
+    attributes: List[SaleItemAttriReqDto]
+    media_set: List[str]  # List of resource IDs to external multimedia systems
+
+
+SaleItemUpdateReqDto = SaleItemCreateReqDto
+
+
+class SaleItemAttriDto(BaseModel):
+    label: AttrLabelDto
+    value: Union[bool, NonNegativeInt, int, str] = Field(union_mode="left_to_right")
+
+
+class SaleItemDto(BaseModel):
+    id_: int
+    name: str
+    visible: bool
+    usrprof: int
+    tags: List[TagNodeDto]
+    attributes: List[SaleItemAttriDto]
+    media_set: List[str]
