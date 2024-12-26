@@ -18,7 +18,10 @@ tags:
     description: |
         labels for tagging / categorizing products
   - name: attribute-label
-    description: attribute label
+    description: labels for attributes of product items, e.g. color, material
+  - name: saleable
+    description: |
+        saleable items or packages (group of items)
 
 paths:
   /tag:
@@ -184,6 +187,77 @@ paths:
                 items:
                   $ref: '#/components/schemas/AttrLabelDto'
 
+  /item:
+    post:
+      summary: Create a new product item
+      description: Creates a new product item with attributes, tags, and media references.
+      tags:
+        - saleable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductItemCreateReqDto'
+      responses:
+        '201':
+          description: Product item created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItemDto'
+
+  /item/{prod_item_id}:
+    get:
+      summary: get a product item
+      description: |
+        TODO, add query parameters to show history data for past customer orders, which may be required to retrieve old product attribute snapshot
+      tags:
+        - saleable
+      parameters:
+        - $ref: '#/components/parameters/ProdItemId'
+      responses:
+        '200':
+          description: Product item loaded successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItemDto'
+
+    put:
+      summary: update an existing product item
+      description: |
+          Overwrite all the attributes, tags, and media references to the existing product information,
+          old one will become read-only records for future historical search.
+      tags:
+        - saleable
+      parameters:
+        - $ref: '#/components/parameters/ProdItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductItemCreateReqDto'
+      responses:
+        '200':
+          description: Product item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItemDto'
+
+    delete:
+      summary: discard a product item
+      tags:
+        - saleable
+      parameters:
+        - $ref: '#/components/parameters/ProdItemId'
+      responses:
+        '204':
+          description: Product item discarded successfully
+
+
 
 components:
   parameters:
@@ -194,11 +268,23 @@ components:
       schema:
         $ref: '#/components/schemas/TagNodeId'
 
+    ProdItemId:
+      name: prod_item_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ProductBaseId'
+
   schemas:
     TagNodeId:
       description: The ID of the tag node.
       type: string
       example: 4uXwI-560
+
+    ProductBaseId:
+      description: 8-bytes product base ID
+      type: integer
+      example: 103027494
 
     TagCreateReqDto:
       type: object
@@ -299,3 +385,118 @@ components:
         - id_
         - name
         - dtype
+
+    ProductAttributeReqDto:
+      type: object
+      properties:
+        id_:
+          type: string
+          description: References the ID of an attribute label.
+          example: "attr123"
+        value:
+          oneOf:
+            - type: boolean
+              example: true
+            - type: integer
+              minimum: 0
+              example: 10
+            - type: string
+              example: "example_value"
+      required:
+        - id_
+        - value
+
+    ProductItemCreateReqDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the product item.
+          example: "New Product"
+        visible:
+          type: boolean
+          description: Indicates whether the product is visible.
+          example: true
+        tags:
+          type: array
+          description: List of tag IDs referencing TagNodeDto.
+          items:
+            type: string
+            example: "tag123"
+        attributes:
+          type: array
+          description: List of product attributes.
+          items:
+            $ref: '#/components/schemas/ProductAttributeReqDto'
+        media_set:
+          type: array
+          description: List of media resource IDs referencing external multimedia systems.
+          items:
+            type: string
+            example: "media123"
+      required:
+        - name
+        - visible
+        - tags
+        - attributes
+        - media_set
+
+    ProductAttributeDto:
+      type: object
+      properties:
+        label:
+          $ref: '#/components/schemas/AttrLabelDto'
+        value:
+          oneOf:
+            - type: boolean
+              example: false
+            - type: integer
+              minimum: 0
+              example: 100
+            - type: string
+              example: "example_value"
+
+    ProductItemDto:
+      type: object
+      properties:
+        id_:
+          type: integer
+          description: Unique ID of the product item.
+          example: 12345
+        name:
+          type: string
+          description: The name of the product item.
+          example: "New Product"
+        visible:
+          type: boolean
+          description: Indicates whether the product is visible.
+          example: true
+        usrprof:
+          type: integer
+          description: User profile associated with the product item.
+          example: 56789
+        tags:
+          type: array
+          description: List of tag objects referencing TagNodeDto.
+          items:
+            $ref: '#/components/schemas/TagNodeDto'
+        attributes:
+          type: array
+          description: List of product attributes.
+          items:
+            $ref: '#/components/schemas/ProductAttributeDto'
+        media_set:
+          type: array
+          description: List of media resource IDs referencing external multimedia systems.
+          items:
+            type: string
+            example: "media456"
+      required:
+        - id_
+        - name
+        - visible
+        - usrprof
+        - tags
+        - attributes
+        - media_set
+
