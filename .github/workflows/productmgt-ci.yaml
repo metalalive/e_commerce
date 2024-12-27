@@ -1,8 +1,8 @@
 name: product management continuous integration
 on:
-  push:
-    branches:
-      - 'product-mgt-dev/**'
+  # push:
+  #   branches:
+  #     - 'product-mgt-dev/**'
   pull_request:
     branches:
       - 'master'

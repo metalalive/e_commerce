@@ -4,4 +4,12 @@ from .tag import (
     TagErrorModel as TagErrorModel,
     TagErrorReason as TagErrorReason,
 )
-from .attribute import AttrLabelModel as AttrLabelModel
+from .attribute import (
+    AttriLabelErrorReason as AttriLabelErrorReason,
+    AttrLabelModel as AttrLabelModel,
+    AttriLabelError as AttriLabelError,
+)
+from .saleable import (
+    SaleItemAttriModel as SaleItemAttriModel,
+    SaleableItemModel as SaleableItemModel,
+)

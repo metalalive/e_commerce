@@ -36,6 +36,20 @@ class AttrDataTypeDto(Enum):
     String = 3
     Boolean = 4
 
+    def validate(self, value) -> bool:
+        cls = type(self)
+        if self == cls.Integer:
+            expect = int
+        elif self == cls.UnsignedInteger:
+            expect = NonNegativeInt
+        elif self == cls.String:
+            expect = str
+        elif self == cls.Boolean:
+            expect = bool
+        else:
+            expect = Exception
+        return expect is type(value)
+
 
 class AttrCreateReqDto(BaseModel):
     name: str = Field(min_length=2, max_length=128)
