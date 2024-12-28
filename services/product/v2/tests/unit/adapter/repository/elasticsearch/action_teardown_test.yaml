@@ -8,4 +8,4 @@ actions:
     filters:
       - filtertype: pattern
         kind: regex
-        value: '^product-[tags,attribute-labels]'
+        value: '^product-[tags,attribute-labels,saleable-items]'

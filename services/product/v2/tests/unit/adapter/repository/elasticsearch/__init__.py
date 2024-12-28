@@ -6,7 +6,7 @@ import pytest_asyncio
 async def es_mapping_init(app_setting):
     base_path = app_setting.APP_BASE_PATH
     cfg_path = base_path.joinpath("settings/elastic_curator.yaml")
-    action_file_rel_paths = ["attri_label/action_0001.yaml", "tag/action_0001.yaml"]
+    action_file_rel_paths = ["attri_label/action_0001.yaml", "tag/action_0001.yaml", "saleable_item/action_0001.yaml", ]
 
     def _run_curator(relpath):
         app_path = "src/product/migrations/elastic_curator/%s" % relpath

@@ -63,6 +63,8 @@ class TestAttribute:
             ("rotation per second", AttrDataTypeDto.UnsignedInteger),
             ("digital color spectrum", AttrDataTypeDto.Integer),
             ("num seconds to max speed", AttrDataTypeDto.UnsignedInteger),
+            ("stress test qualified", AttrDataTypeDto.Boolean),
+            ("glue joint the components", AttrDataTypeDto.String),
         ]
         resp = await cls.setup_create_many(mock_client, mockdata, 201)
         respbody = await resp.json()

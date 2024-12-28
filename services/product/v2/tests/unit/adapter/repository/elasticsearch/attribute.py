@@ -144,6 +144,34 @@ class TestUpdate:
         assert result[0].dtype == AttrDataTypeDto.String
 
 
+class TestFetch:
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_by_ids_ok(self, es_repo_attri):
+        mockdata = [
+            ("amplifier distortion effect", AttrDataTypeDto.String),
+            ("amplifier decibels (dB)", AttrDataTypeDto.UnsignedInteger),
+            ("I/O impedance (ohm)", AttrDataTypeDto.Integer),
+            ("amplifier frequency response", AttrDataTypeDto.UnsignedInteger),
+            ("device power-on voltage", AttrDataTypeDto.Integer),
+        ]
+        ms = await TestCreate.setup_create_many(es_repo_attri, mockdata)
+        assert ms[1].name == "amplifier decibels (dB)"
+        assert ms[3].name == "amplifier frequency response"
+        ids = [ms[1].id_, ms[3].id_]
+        readback = await es_repo_attri.fetch_by_ids(ids)
+        expect = [(m.dtype, m.name) for m in ms if m.id_ in ids]
+        actual = [(m.dtype, m.name) for m in readback]
+        assert set(expect) == set(actual)
+
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_by_ids_empty_err(self, es_repo_attri):
+        with pytest.raises(AppRepoError) as e:
+            _ = await es_repo_attri.fetch_by_ids(ids=[])
+        e = e.value
+        assert e.fn_label == AppRepoFnLabel.AttrLabelFetchByID
+        assert e.reason["detail"] == "input-empty"
+
+
 class TestDelete:
     @pytest.mark.asyncio(loop_scope="session")
     async def test_ok(self, es_repo_attri):
