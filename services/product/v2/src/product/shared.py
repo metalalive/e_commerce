@@ -53,7 +53,7 @@ class AppDataStore:
 
     @property
     def saleable_item(self) -> AbstractSaleItemRepo:
-        raise NotImplementedError
+        return self._repo_map["saleable-item"]
 
 
 class SharedContext:

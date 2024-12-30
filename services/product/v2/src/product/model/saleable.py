@@ -53,6 +53,7 @@ class SaleableItemModel:
     tags: Dict[str, List[TagModel]]
     attributes: List[SaleItemAttriModel]
     media_set: List[str]  # List of resource IDs to external multimedia systems
+    # TODO, add timestamp field for recording last update time
 
     @classmethod
     def from_req(
@@ -74,6 +75,9 @@ class SaleableItemModel:
             attributes=attri_val_ms,
             media_set=req.media_set,
         )
+
+    def rotate_id(self):
+        self.id_ = gen_random_number(64)
 
     def to_dto(self) -> SaleItemDto:
         tags_d = [
