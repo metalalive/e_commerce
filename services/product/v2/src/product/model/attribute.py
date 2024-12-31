@@ -34,7 +34,8 @@ class AttriLabelError(Exception):
 
     @classmethod
     def missing_ids(cls, ids: List[str]) -> Self:
-        return cls(reason=AttriLabelErrorReason.MissingID, detail=ids)
+        detail = {"nonexist-attribute-labels": ids}
+        return cls(reason=AttriLabelErrorReason.MissingID, detail=detail)
 
     @classmethod
     def invalid_data(cls, e: List[Tuple[AttrLabelModel, SaleItemAttriReqDto]]) -> Self:

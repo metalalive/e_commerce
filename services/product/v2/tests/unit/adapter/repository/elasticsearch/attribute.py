@@ -162,6 +162,11 @@ class TestFetch:
         expect = [(m.dtype, m.name) for m in ms if m.id_ in ids]
         actual = [(m.dtype, m.name) for m in readback]
         assert set(expect) == set(actual)
+        ids = [ms[0].id_, "nonexist5566"]
+        readback = await es_repo_attri.fetch_by_ids(ids)
+        assert len(readback) == 1
+        assert readback[0].name == "amplifier distortion effect"
+        assert readback[0].dtype == AttrDataTypeDto.String
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_by_ids_empty_err(self, es_repo_attri):
@@ -170,6 +175,12 @@ class TestFetch:
         e = e.value
         assert e.fn_label == AppRepoFnLabel.AttrLabelFetchByID
         assert e.reason["detail"] == "input-empty"
+
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_by_ids_nonexist_err(self, es_repo_attri):
+        result = await es_repo_attri.fetch_by_ids(ids=["nonexist1", "nonexist2"])
+        assert not any(result)
+        assert len(result) == 0
 
 
 class TestDelete:

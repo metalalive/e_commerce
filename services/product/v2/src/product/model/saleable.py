@@ -26,7 +26,7 @@ class SaleItemAttriModel:
     ) -> List[Self]:
         req_ids: List[str] = [r.id_ for r in reqs]
         label_ids: List[str] = [a.id_ for a in labels]
-        missing_ids = set(req_ids) - set(label_ids)
+        missing_ids = list(set(req_ids) - set(label_ids))
         if len(missing_ids) > 0:
             raise AttriLabelError.missing_ids(missing_ids)
         objs: List[Self] = []

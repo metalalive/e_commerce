@@ -1,40 +1,18 @@
 import asyncio
 from typing import Tuple, List, Dict
-from blacksheep import Response
 from blacksheep.contents import JSONContent
 from blacksheep.testing import TestClient
 import pytest
 
-from product.api.dto import AttrDataTypeDto, AttrCreateReqDto, AttrUpdateReqDto
+from product.api.dto import AttrDataTypeDto, AttrUpdateReqDto
+from .common import create_many_attri_labels
 
 
 class TestAttribute:
     @staticmethod
-    def setup_create_req(d: Tuple[str, AttrDataTypeDto]) -> AttrCreateReqDto:
-        out = AttrCreateReqDto(name=d[0], dtype=d[1].value)
-        return out
-
-    @staticmethod
     def setup_update_req(d: Tuple[str, str, AttrDataTypeDto]) -> AttrUpdateReqDto:
         out = AttrUpdateReqDto(id_=d[0], name=d[1], dtype=d[2].value)
         return out
-
-    @classmethod
-    async def setup_create_many(
-        cls,
-        client: TestClient,
-        data: List[Tuple[str, AttrDataTypeDto]],
-        expect_status: int,
-    ) -> Response:
-        reqbody = list(map(cls.setup_create_req, data))
-        resp = await client.post(
-            path="/attributes",
-            headers=None,
-            content=JSONContent(reqbody),
-            cookies=None,
-        )
-        assert resp.status == expect_status
-        return resp
 
     @staticmethod
     async def search_then_verify(
@@ -66,7 +44,7 @@ class TestAttribute:
             ("stress test qualified", AttrDataTypeDto.Boolean),
             ("glue joint the components", AttrDataTypeDto.String),
         ]
-        resp = await cls.setup_create_many(mock_client, mockdata, 201)
+        resp = await create_many_attri_labels(mock_client, mockdata, 201)
         respbody = await resp.json()
         assert len(respbody) == len(mockdata)
         assert respbody[0].get("id_", None)
@@ -92,7 +70,7 @@ class TestAttribute:
             ("5urface cOLOr", AttrDataTypeDto.Boolean),
             ("inner diamEter", AttrDataTypeDto.Integer),
         ]
-        resp = await cls.setup_create_many(mock_client, mockdata, 201)
+        resp = await create_many_attri_labels(mock_client, mockdata, 201)
         respbody = await resp.json()
 
         def _setup_update_data(d: Dict):
@@ -123,14 +101,13 @@ class TestAttribute:
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_delete(self, mock_client):
-        cls = type(self)
         mockdata = [
             ("unknown despair lost", AttrDataTypeDto.Boolean),
             ("fearless ice climb", AttrDataTypeDto.String),
             ("everest base camp", AttrDataTypeDto.UnsignedInteger),
             ("meshed boiled pumpkin", AttrDataTypeDto.Integer),
         ]
-        resp = await cls.setup_create_many(mock_client, mockdata, 201)
+        resp = await create_many_attri_labels(mock_client, mockdata, 201)
         respbody = await resp.json()
         ids_to_delete = [
             d["id_"]

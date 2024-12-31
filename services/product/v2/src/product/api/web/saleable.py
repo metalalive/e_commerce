@@ -1,9 +1,17 @@
+import logging
 from collections import defaultdict
-from typing import Optional, List, Dict
+from typing import List, Dict
 
 from blacksheep import FromJSON, Response
 from blacksheep.server.controllers import APIController
-from blacksheep.server.responses import created, ok, no_content, forbidden
+from blacksheep.server.responses import (
+    created,
+    ok,
+    no_content,
+    not_found,
+    forbidden,
+    bad_request,
+)
 
 from product.model import (
     TagModel,
@@ -15,6 +23,7 @@ from product.model import (
 )
 from product.shared import SharedContext
 from product.adapter.repository import (
+    AppRepoError,
     AbstractTagRepo,
     AbstractAttrLabelRepo,
     AbstractSaleItemRepo,
@@ -23,8 +32,10 @@ from product.adapter.repository import (
 from . import router
 from ..dto import SaleItemCreateReqDto, SaleItemUpdateReqDto, SaleItemAttriReqDto
 
+_logger = logging.getLogger(__name__)
 
-class ProdItemController(APIController):
+
+class SaleItemController(APIController):
     @staticmethod
     async def load_tags(
         shr_ctx: SharedContext, tag_ids: List[str]
@@ -37,12 +48,17 @@ class ProdItemController(APIController):
             id_decomposed[tree_id].append(node_id)
         repo: AbstractTagRepo = shr_ctx.datastore.tag
         for tree_id, node_ids in id_decomposed.items():
-            tree = await repo.fetch_tree(tree_id)
-            (tag_ms, not_found) = tree.find_nodes(node_ids)
+            try:
+                tree = await repo.fetch_tree(tree_id)
+                (tag_ms, not_found) = tree.find_nodes(node_ids)
+            except AppRepoError as e:
+                _logger.info("%s", str(e))
+                (tag_ms, not_found) = ([], node_ids)
             if any(not_found):
                 ids_not_found[tree_id] = not_found
             else:
-                tag_acs_ms = tree.find_ancestors_many(tag_ms)
+                tag_acs_ms = tree.find_ancestors_bulk(tag_ms)
+                tag_acs_ms.extend(tag_ms)
                 out[tree_id] = tag_acs_ms
         if any(not_found):
             raise TagErrorModel.invalid_node_ids(ids_not_found)
@@ -54,22 +70,28 @@ class ProdItemController(APIController):
     ) -> List[SaleItemAttriModel]:
         repo: AbstractAttrLabelRepo = shr_ctx.datastore.prod_attri
         req_ids: List[str] = [a.id_ for a in attri_d]
-        labels_found: List[AttrLabelModel] = await repo.fetch_by_ids(req_ids)
-        return SaleItemAttriModel.from_parts(labels_found, attri_d)
+        try:
+            labels_found: List[AttrLabelModel] = await repo.fetch_by_ids(req_ids)
+        except AppRepoError as e:
+            _logger.info("%s", str(e))
+            labels_found: List[AttrLabelModel] = []
+        return SaleItemAttriModel.from_req(labels_found, attri_d)
 
     @router.post("/item")
     async def create(
         self, shr_ctx: SharedContext, reqbody: FromJSON[SaleItemCreateReqDto]
     ) -> Response:
-        cls = type(self)
+        assert self is None
         usr_prof_id: int = 123  # TODO: authorization
         reqbody = reqbody.value
         try:
-            tag_ms_map = await cls.load_tags(shr_ctx, reqbody.tags)
-            attri_val_ms = await cls.resolve_attributes(shr_ctx, reqbody.attributes)
+            tag_ms_map = await SaleItemController.load_tags(shr_ctx, reqbody.tags)
+            attri_val_ms = await SaleItemController.resolve_attributes(
+                shr_ctx, reqbody.attributes
+            )
         except (TagErrorModel, AttriLabelError) as e:
             return bad_request(message=e.detail)
-        item_m = SaleableItemModel.from_parts(
+        item_m = SaleableItemModel.from_req(
             reqbody,
             tag_ms_map=tag_ms_map,
             attri_val_ms=attri_val_ms,
@@ -87,15 +109,17 @@ class ProdItemController(APIController):
         item_id: int,
         reqbody: FromJSON[SaleItemUpdateReqDto],
     ) -> Response:
-        cls = type(self)
+        assert self is None
         usr_prof_id: int = 123  # TODO: authorization
         reqbody = reqbody.value
         try:
-            tag_ms_map = await cls.load_tags(shr_ctx, reqbody.tags)
-            attri_val_ms = await cls.resolve_attributes(shr_ctx, reqbody.attributes)
+            tag_ms_map = await SaleItemController.load_tags(shr_ctx, reqbody.tags)
+            attri_val_ms = await SaleItemController.resolve_attributes(
+                shr_ctx, reqbody.attributes
+            )
         except (TagErrorModel, AttriLabelError) as e:
             return bad_request(message=e.detail)
-        item_m = SaleableItemModel.from_parts(
+        item_m = SaleableItemModel.from_req(
             reqbody,
             tag_ms_map=tag_ms_map,
             attri_val_ms=attri_val_ms,
@@ -111,7 +135,15 @@ class ProdItemController(APIController):
     async def delete(self, shr_ctx: SharedContext, item_id: int) -> Response:
         usr_prof_id: int = 123  # TODO: authorization
         repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
-        maintainer_prof_id: int = await repo.get_maintainer(item_id)
+        try:
+            maintainer_prof_id: int = await repo.get_maintainer(item_id)
+        except AppRepoError as e:
+            db_exist = e.reason.get("remote_database_done", False)
+            data_found = e.reason.get("found", False)
+            if db_exist and data_found:
+                return not_found(message=None)
+            else:
+                raise e
         if usr_prof_id == maintainer_prof_id:
             await repo.delete(item_id)
             return no_content()
@@ -122,6 +154,14 @@ class ProdItemController(APIController):
     async def get_by_id(self, shr_ctx: SharedContext, item_id: int) -> Response:
         # TODO, optional specific time, to query historical data for existing orders
         repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
-        item_m: Optional[SaleableItemModel] = await repo.fetch(item_id)
-        item_d = item_m.to_dto()
-        return ok(message=item_d.model_dump())
+        try:
+            item_m: SaleableItemModel = await repo.fetch(item_id)
+            item_d = item_m.to_dto()
+            return ok(message=item_d.model_dump())
+        except AppRepoError as e:
+            db_exist = e.reason.get("remote_database_done", False)
+            data_found = e.reason.get("found", False)
+            if db_exist and not data_found:
+                return not_found(message=None)
+            else:
+                raise e

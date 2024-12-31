@@ -39,16 +39,15 @@ class AttrDataTypeDto(Enum):
     def validate(self, value) -> bool:
         cls = type(self)
         if self == cls.Integer:
-            expect = int
+            return int is type(value)
         elif self == cls.UnsignedInteger:
-            expect = NonNegativeInt
+            return (int is type(value)) and (value >= 0)
         elif self == cls.String:
-            expect = str
+            return str is type(value)
         elif self == cls.Boolean:
-            expect = bool
+            return bool is type(value)
         else:
-            expect = Exception
-        return expect is type(value)
+            return False
 
 
 class AttrCreateReqDto(BaseModel):

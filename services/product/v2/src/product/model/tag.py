@@ -1,7 +1,7 @@
 from enum import Enum
-from dataclasses import dataclass, field
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Tuple, Optional, List, Dict, Self
 
 from ..api.dto import TagCreateReqDto, TagUpdateRespDto, TagNodeDto

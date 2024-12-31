@@ -4,6 +4,7 @@ from blacksheep.testing import TestClient
 import pytest
 
 from product.api.dto import TagCreateReqDto, TagUpdateReqDto
+from .common import create_one_tag
 
 
 async def read_one_tag(
@@ -31,38 +32,18 @@ async def read_one_tag(
 
 
 class TestCreateTag:
-    async def create_one(
-        client: TestClient, body: TagCreateReqDto, expect_status: int
-    ) -> Dict:
-        expect_label = body.name
-        expect_parent = body.parent
-        resp = await client.post(
-            path="/tag",
-            headers=None,
-            query=None,
-            content=JSONContent(body),
-            cookies=None,
-        )
-        assert resp.status == expect_status
-        respbody = await resp.json()
-        assert respbody["node"].get("id_", None)
-        assert respbody["node"]["name"] == expect_label
-        assert respbody.get("parent", None) == expect_parent
-        return respbody
-
     @classmethod
     async def collect_node_id(
         cls, client: TestClient, name: str, parent_id: Optional[int]
     ) -> Optional[int]:
         reqbody = TagCreateReqDto(name=name, parent=parent_id)
-        respbody = await cls.create_one(client, reqbody, 201)
+        respbody = await create_one_tag(client, reqbody, 201)
         return respbody["node"]["id_"]
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_one_ok(self, mock_client):
-        cls = type(self)
         reqbody = TagCreateReqDto(name="footwear", parent=None)
-        respbody = await cls.create_one(mock_client, reqbody, 201)
+        respbody = await create_one_tag(mock_client, reqbody, 201)
         assert respbody["node"].get("id_")
 
     @pytest.mark.asyncio(loop_scope="session")

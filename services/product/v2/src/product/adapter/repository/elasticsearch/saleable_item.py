@@ -186,6 +186,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         async with resp:
             respbody = await resp.json()
             if resp.status != 200:
+                respbody["remote_database_done"] = True
                 raise AppRepoError(fn_label=fn_label, reason=respbody)
         return respbody["_source"]
 
@@ -257,6 +258,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         async with resp:
             respbody = await resp.json()
             if resp.status != 200:
+                respbody["remote_database_done"] = True
                 raise AppRepoError(
                     fn_label=AppRepoFnLabel.SaleItemGetMaintainer, reason=respbody
                 )

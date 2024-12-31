@@ -38,12 +38,13 @@ class TagController(APIController):
         repo = shr_ctx.datastore.tag
         reqbody = reqbody.value
         (orig_tree_id, orig_node_id) = TagModel.decode_req_id(tag_id)
+        # TODO, return 404 if not exists
         orig_tree = await repo.fetch_tree(orig_tree_id)
         if reqbody.parent:
             (dst_tree_id, dst_parent_node_id) = TagModel.decode_req_id(reqbody.parent)
             if orig_tree_id == dst_tree_id:
                 dst_tree = orig_tree
-            else:
+            else:  # TODO, return 404 if not exists
                 dst_tree = await repo.fetch_tree(dst_tree_id)
         else:
             dst_tree_id = await repo.new_tree_id()

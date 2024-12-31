@@ -45,7 +45,7 @@ class TestAttributeValue:
         with pytest.raises(AttriLabelError) as e:
             SaleItemAttriModel.from_req(labels, reqs)
         assert e.value.reason == AttriLabelErrorReason.MissingID
-        assert set(e.value.detail) == set(["g3", "g2"])
+        assert set(e.value.detail["nonexist-attribute-labels"]) == set(["g3", "g2"])
 
     def test_create_dtype_error(self):
         labels = [

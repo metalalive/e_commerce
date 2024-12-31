@@ -215,7 +215,7 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
             raise AppRepoError(
                 fn_label=AppRepoFnLabel.AttrLabelFetchByID, reason=reason
             )
-        fields_present = ["docs._id", "docs._source"]
+        fields_present = ["docs._id", "docs._source", "docs.found"]
         url = "/%s/the-only-type/_mget?filter_path=%s" % (
             self._index_name,
             ",".join(fields_present),
@@ -230,7 +230,10 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
                 fn_label=AppRepoFnLabel.AttrLabelFetchByID, reason=respbody
             )
         cls = type(self)
-        ms = list(map(cls.convert_from_doc, respbody["docs"]))
+        # if len(respbody["docs"]) > 0 and not respbody["docs"][0].get("_source"):
+        #     pass
+        iter0 = filter(lambda r: r["found"], respbody["docs"])
+        ms = list(map(cls.convert_from_doc, iter0))
         _logger.debug("ElasticSearchAttrLabelRepo.fetch_by_ids done successfully")
         return ms
 
