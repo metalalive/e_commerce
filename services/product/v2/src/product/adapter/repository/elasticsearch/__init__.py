@@ -1,2 +1,3 @@
 from .tag import ElasticSearchTagRepo as ElasticSearchTagRepo
 from .attribute import ElasticSearchAttrLabelRepo as ElasticSearchAttrLabelRepo
+from .saleable_item import ElasticSearchSaleItemRepo as ElasticSearchSaleItemRepo

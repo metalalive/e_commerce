@@ -43,5 +43,15 @@ DATABASES = {
         "num_conns": 6,
         "db_name": "product-attribute-labels",
     },
+    "saleable-item": {
+        "classpath": REPO_PKG_BASE + ".elasticsearch.ElasticSearchSaleItemRepo",
+        "ssl_enable": False,
+        "timeout_secs": 45,
+        "num_conns": 7,
+        "db_names": {
+            "latest": "product-saleable-items",
+            "history": "product-saleable-items-snapshot-%s",
+        },
+    },
     "confidential_path": None,
 }

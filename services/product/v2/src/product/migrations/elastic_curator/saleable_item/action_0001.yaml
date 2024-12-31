@@ -1,0 +1,114 @@
+actions:
+  1:
+    action: create_index
+    description: "Create an index for storing saleable items"
+    options:
+      name: "product-saleable-items"
+      continue_if_exception: False
+      disable_action: False
+      extra_settings:
+        settings:
+          number_of_shards: 1
+          number_of_replicas: 1
+        mappings:
+          the-only-type:
+            properties:
+              name:
+                type: text
+                fields:
+                  as_english:
+                    type: text
+                    analyzer: english
+              usr_prof:
+                type: integer
+              visible:
+                type: boolean
+              tags:
+                type: nested
+                properties:
+                  label:
+                    type: text
+                    fields:
+                      as_english:
+                        type: text
+                        analyzer: english
+                  node_id:
+                    type: integer
+                  tree_id:
+                    type: keyword
+              attributes:
+                type: nested
+                properties:
+                  label:
+                    type: object
+                    properties:
+                      id_:
+                        type: keyword
+                      name:
+                        type: text
+                        fields:
+                          as_english:
+                            type: text
+                            analyzer: english
+                      dtype:
+                        type: integer
+                  value:
+                    type: object
+                    properties:
+                      boolean_value:
+                        type: boolean
+                      integer_value:
+                        type: integer
+                      string_value:
+                        type: text
+                        fields:
+                          as_english:
+                            type: text
+                            analyzer: english
+              media_set:
+                type: keyword
+  2:
+    action: create_index
+    description: "Create an index for snapshot of saleable items at update points in time"
+    options:
+      name: "product-saleable-items-snapshot-2024"
+      continue_if_exception: False
+      disable_action: False
+      extra_settings:
+        settings:
+          number_of_shards: 1
+          number_of_replicas: 1
+        mappings:
+          the-only-type:
+            properties:
+              name:
+                type: text
+              usr_prof:
+                type: integer
+              visible:
+                type: boolean
+              tags:
+                type: nested
+                properties:
+                  label:
+                    type: text
+                  node_id:
+                    type: integer
+                  tree_id:
+                    type: keyword
+              attributes:
+                type: nested
+                properties:
+                  label:
+                    type: object
+                    properties:
+                      id_:
+                        type: keyword
+                      name:
+                        type: text
+                      dtype:
+                        type: integer
+                  value:
+                    type: text
+              media_set:
+                type: keyword

@@ -144,6 +144,45 @@ class TestUpdate:
         assert result[0].dtype == AttrDataTypeDto.String
 
 
+class TestFetch:
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_by_ids_ok(self, es_repo_attri):
+        mockdata = [
+            ("amplifier distortion effect", AttrDataTypeDto.String),
+            ("amplifier decibels (dB)", AttrDataTypeDto.UnsignedInteger),
+            ("I/O impedance (ohm)", AttrDataTypeDto.Integer),
+            ("amplifier frequency response", AttrDataTypeDto.UnsignedInteger),
+            ("device power-on voltage", AttrDataTypeDto.Integer),
+        ]
+        ms = await TestCreate.setup_create_many(es_repo_attri, mockdata)
+        assert ms[1].name == "amplifier decibels (dB)"
+        assert ms[3].name == "amplifier frequency response"
+        ids = [ms[1].id_, ms[3].id_]
+        readback = await es_repo_attri.fetch_by_ids(ids)
+        expect = [(m.dtype, m.name) for m in ms if m.id_ in ids]
+        actual = [(m.dtype, m.name) for m in readback]
+        assert set(expect) == set(actual)
+        ids = [ms[0].id_, "nonexist5566"]
+        readback = await es_repo_attri.fetch_by_ids(ids)
+        assert len(readback) == 1
+        assert readback[0].name == "amplifier distortion effect"
+        assert readback[0].dtype == AttrDataTypeDto.String
+
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_by_ids_empty_err(self, es_repo_attri):
+        with pytest.raises(AppRepoError) as e:
+            _ = await es_repo_attri.fetch_by_ids(ids=[])
+        e = e.value
+        assert e.fn_label == AppRepoFnLabel.AttrLabelFetchByID
+        assert e.reason["detail"] == "input-empty"
+
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_by_ids_nonexist_err(self, es_repo_attri):
+        result = await es_repo_attri.fetch_by_ids(ids=["nonexist1", "nonexist2"])
+        assert not any(result)
+        assert len(result) == 0
+
+
 class TestDelete:
     @pytest.mark.asyncio(loop_scope="session")
     async def test_ok(self, es_repo_attri):

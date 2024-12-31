@@ -3,7 +3,7 @@ from typing import Dict, List, Self
 from dataclasses import dataclass
 from asyncio.events import AbstractEventLoop
 
-from product.model import TagTreeModel, AttrLabelModel
+from product.model import TagTreeModel, AttrLabelModel, SaleableItemModel
 
 
 class AppRepoFnLabel(Enum):
@@ -15,6 +15,12 @@ class AppRepoFnLabel(Enum):
     AttrLabelUpdate = auto()
     AttrLabelDelete = auto()
     AttrLabelSearch = auto()
+    AttrLabelFetchByID = auto()
+    SaleItemCreate = auto()
+    SaleItemDelete = auto()
+    SaleItemArchiveUpdate = auto()
+    SaleItemFetchModel = auto()
+    SaleItemGetMaintainer = auto()
 
 
 @dataclass
@@ -61,3 +67,29 @@ class AbstractAttrLabelRepo:
 
     async def search(self, keyword: str) -> List[AttrLabelModel]:
         raise NotImplementedError("AbstractAttrLabelRepo.search")
+
+    async def fetch_by_ids(self, ids: List[str]) -> List[AttrLabelModel]:
+        raise NotImplementedError("AbstractAttrLabelRepo.fetch_by_ids")
+
+
+class AbstractSaleItemRepo:
+    async def init(setting: Dict, loop: AbstractEventLoop) -> Self:
+        raise NotImplementedError("AbstractSaleItemRepo.init")
+
+    async def deinit(self):
+        raise NotImplementedError("AbstractSaleItemRepo.deinit")
+
+    async def create(self, item_m: SaleableItemModel):
+        raise NotImplementedError("AbstractSaleItemRepo.create")
+
+    async def archive_and_update(self, item_m: SaleableItemModel):
+        raise NotImplementedError("AbstractSaleItemRepo.archive_and_update")
+
+    async def delete(self, id_: int):
+        raise NotImplementedError("AbstractSaleItemRepo.delete")
+
+    async def fetch(self, id_: int) -> SaleableItemModel:
+        raise NotImplementedError("AbstractSaleItemRepo.fetch")
+
+    async def get_maintainer(self, id_: int) -> int:
+        raise NotImplementedError("AbstractSaleItemRepo.get_maintainer")

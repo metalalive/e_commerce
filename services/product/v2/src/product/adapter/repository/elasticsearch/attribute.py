@@ -209,6 +209,34 @@ class ElasticSearchAttrLabelRepo(AbstractAttrLabelRepo):
         _logger.debug("ElasticSearchAttrLabelRepo.search done successfully")
         return ms
 
+    async def fetch_by_ids(self, ids: List[str]) -> List[AttrLabelModel]:
+        if not any(ids):
+            reason = {"detail": "input-empty"}
+            raise AppRepoError(
+                fn_label=AppRepoFnLabel.AttrLabelFetchByID, reason=reason
+            )
+        fields_present = ["docs._id", "docs._source", "docs.found"]
+        url = "/%s/the-only-type/_mget?filter_path=%s" % (
+            self._index_name,
+            ",".join(fields_present),
+        )
+        reqbody = {"docs": [{"_id": _id} for _id in ids]}
+        headers = {"content-type": "application/json"}
+        resp = await self._session.request("GET", url, json=reqbody, headers=headers)
+        async with resp:
+            respbody = await resp.json()
+        if resp.status >= 400:
+            raise AppRepoError(
+                fn_label=AppRepoFnLabel.AttrLabelFetchByID, reason=respbody
+            )
+        cls = type(self)
+        # if len(respbody["docs"]) > 0 and not respbody["docs"][0].get("_source"):
+        #     pass
+        iter0 = filter(lambda r: r["found"], respbody["docs"])
+        ms = list(map(cls.convert_from_doc, iter0))
+        _logger.debug("ElasticSearchAttrLabelRepo.fetch_by_ids done successfully")
+        return ms
+
     @staticmethod
     def convert_from_doc(d: Dict) -> AttrLabelModel:
         src = d["_source"]

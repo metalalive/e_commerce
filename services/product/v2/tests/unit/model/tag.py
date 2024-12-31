@@ -286,6 +286,43 @@ class TestCreate:
         assert mock_tree.find_node(node_id=7) is mock_tags[6]
         assert mock_tree.find_node(node_id=9999) is None
 
+    def test_find_nodes_bulk_ok(self):
+        (_, mock_tree) = TestRemoval.setup_treenode_insertions(num_nodes=31)
+        # ---- subcase 1 ----
+        req_ids = [16, 19, 24]
+        (actual_found, actual_missing) = mock_tree.find_nodes(req_ids)
+        assert not any(actual_missing)
+        assert len(req_ids) == len(actual_found)
+        labels_read = set([t._label for t in actual_found])
+        assert labels_read == set(["virus24", "virus19", "virus16"])
+        # ---- subcase 2 ----
+        req_ids = [26, 100, 5]
+        (actual_found, actual_missing) = mock_tree.find_nodes(req_ids)
+        assert actual_missing == [100]
+        assert len(actual_found) == 2
+        labels_read = [t._label for t in actual_found]
+        assert set(labels_read) == set(["virus5", "virus26"])
+
+    def test_find_ancestors_bulk_ok(self):
+        (mock_tags, mock_tree) = TestRemoval.setup_treenode_insertions(num_nodes=31)
+        # ---- subcase 1 ----
+        req_ids = [16, 19, 12]
+        (actual_found, actual_missing) = mock_tree.find_nodes(req_ids)
+        assert not any(actual_missing)
+        assert len(req_ids) == len(actual_found)
+        assert set([n._id for n in actual_found]) == set(req_ids)
+        result = mock_tree.find_ancestors_bulk(curr_nodes=actual_found)
+        expect = [n._id for n in mock_tags if n._id in [1, 2, 4, 8, 9, 3, 6]]
+        actual = [n._id for n in result]
+        assert set(actual) == set(expect)
+        # ---- subcase 2 ----
+        req_ids = [20, 21, 11]
+        (actual_found, _) = mock_tree.find_nodes(req_ids)
+        result = mock_tree.find_ancestors_bulk(curr_nodes=actual_found)
+        expect = [n._id for n in mock_tags if n._id in [1, 2, 5, 10]]
+        actual = [n._id for n in result]
+        assert set(actual) == set(expect)
+
     def test_find_ancestors_descendants_ok(self):
         cls = type(self)
         mock_tree = TagTreeModel(_id="winnnieTheFlu")
@@ -563,3 +600,11 @@ class TestRemoval:
         assert removed is mock_tags[2]
         asc = mock_tree.find_ancestors(mock_tags[6])
         cls.verify_labels(asc, ["virus1", "virus2", "virus4", "virus6"])
+
+
+class TestTagError:
+    def test_invalid_node_ids(self):
+        ids_decomposed = {"goat": [19, 30], "lamb": [45, 596]}
+        err = TagErrorModel.invalid_node_ids(ids_decomposed)
+        expect = ["lamb-45", "goat-30", "goat-19", "lamb-596"]
+        assert set(err.detail["tag_nonexist"]) == set(expect)

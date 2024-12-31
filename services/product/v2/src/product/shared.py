@@ -7,7 +7,11 @@ from ecommerce_common.util import (
     get_credential_from_secrets,
 )
 
-from product.adapter.repository import AbstractTagRepo, AbstractAttrLabelRepo
+from product.adapter.repository import (
+    AbstractTagRepo,
+    AbstractSaleItemRepo,
+    AbstractAttrLabelRepo,
+)
 
 
 class AppDataStore:
@@ -46,6 +50,10 @@ class AppDataStore:
     @property
     def prod_attri(self) -> AbstractAttrLabelRepo:
         return self._repo_map["attribute-label"]
+
+    @property
+    def saleable_item(self) -> AbstractSaleItemRepo:
+        return self._repo_map["saleable-item"]
 
 
 class SharedContext:

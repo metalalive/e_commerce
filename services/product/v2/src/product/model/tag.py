@@ -1,7 +1,7 @@
 from enum import Enum
-from dataclasses import dataclass, field
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Tuple, Optional, List, Dict, Self
 
 from ..api.dto import TagCreateReqDto, TagUpdateRespDto, TagNodeDto
@@ -15,6 +15,7 @@ class TagErrorReason(Enum):
     UnknownTree = 3
     DecodeInvalidId = 4
     InvalidNodeLimitRange = 5
+    InvalidNodeIDs = 6
 
 
 @dataclass
@@ -62,6 +63,17 @@ class TagErrorModel(Exception):
                 "tree_id": tree_id,
                 "node_id": node_id,
             },
+        )
+
+    @classmethod
+    def invalid_node_ids(cls, ids_decomposed: Dict[str, List[int]]) -> Self:
+        tag_ids_total = []
+        for tree_id, node_ids in ids_decomposed.items():
+            tag_ids = ["%s-%d" % (tree_id, nid) for nid in node_ids]
+            tag_ids_total.extend(tag_ids)
+
+        return cls(
+            reason=TagErrorReason.InvalidNodeIDs, detail={"tag_nonexist": tag_ids_total}
         )
 
 
@@ -170,9 +182,25 @@ class TagTreeModel:
             node = None
         return node
 
+    def find_nodes(self, node_ids: List[int]) -> Tuple[List[TagModel], List[int]]:
+        def _find_by_id(n: TagModel):
+            return n._id in node_ids
+
+        found = list(filter(_find_by_id, self.nodes))
+        found_ids = [n._id for n in found]
+        not_found = set(node_ids) - set(found_ids)
+        return (found, list(not_found))
+
     def find_ancestors(self, curr_node: TagModel) -> List[TagModel]:
         def find_by_limit(node: TagModel) -> bool:
             return node.is_ancestor_of(curr_node)
+
+        return list(filter(find_by_limit, self.nodes))
+
+    def find_ancestors_bulk(self, curr_nodes: List[TagModel]) -> List[TagModel]:
+        def find_by_limit(node: TagModel) -> bool:
+            acs_found = [node.is_ancestor_of(curr_node) for curr_node in curr_nodes]
+            return any(acs_found)
 
         return list(filter(find_by_limit, self.nodes))
 
