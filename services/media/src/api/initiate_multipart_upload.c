@@ -30,7 +30,7 @@
     "    SET result_code = %u;" \
     "  END IF;" \
     "  SELECT result_code, num_active_req;" \
-    "END;\x00"
+    "END;"
 
 
 void app_db_async_dummy_cb(db_query_t *target, db_query_result_t *detail);
@@ -42,6 +42,8 @@ static void initiate_multipart_upload__db_async_err(db_query_t *target, db_query
     h2o_req_t     *req  = (h2o_req_t *) target->cfg.usr_data.entry[0];
     h2o_handler_t *self = (h2o_handler_t *) target->cfg.usr_data.entry[1];
     app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
+    fprintf(stderr, "[api][init-multi-upld-req] line:%d, app-result:%d, conn-state:%d, async:%d \n",
+            __LINE__, detail->app_result, detail->conn.state, detail->conn.async);
     h2o_send_error_503(req, "server temporarily unavailable", "", H2O_SEND_ERROR_KEEP_HEADERS);
     app_run_next_middleware(self, req, node);
 }
@@ -52,6 +54,12 @@ static void initiate_multipart_upload__fetch_row(db_query_t *target, db_query_re
     app_middleware_node_t *node = (app_middleware_node_t *) target->cfg.usr_data.entry[2];
     char *ret_code_str     = row->values[0];
     char *n_active_req_str = row->values[1];
+#if 0
+    fprintf(stderr, "[api][init-multi-upld-req] line:%d, app-result:%d, conn-state:%d \
+           return-code:%s, num-active-reqs:%s  \n", __LINE__, detail->app_result,
+           detail->conn.state, ret_code_str, n_active_req_str
+        );
+#endif
     if(ret_code_str) {
         int db_result = (int) strtol(ret_code_str, NULL, 10);
         // I'm sure the value will be treated as scalar integer instead of pointer to some type
@@ -71,24 +79,22 @@ static void initiate_multipart_upload__finalize_response(h2o_handler_t *hdlr , h
     json_t *res_body = json_object();
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
     int db_result =  (int) app_fetch_from_hashmap(node->data, "db_result");
+    uint32_t req_seq = (uint32_t) app_fetch_from_hashmap(node->data, "upld_req_seq");
 #pragma GCC diagnostic pop
+    json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
+    uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
+    json_object_set_new(res_body, "usr_id",  json_integer(usr_prof_id));
     switch(db_result) {
         case SQL_RESULT_CODE__DB_ERROR:
+            fprintf(stderr, "[api][init-multi-upld-req] line:%d, usr-prof:%d, req-seq:%x \n",
+                __LINE__, usr_prof_id, req_seq);
             json_object_set_new(res_body, "detail", json_string("internal error"));
             req->res.status = 503;
             break;
         case SQL_RESULT_CODE__OK:
-            {
-#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
-                uint32_t req_seq = (uint32_t) app_fetch_from_hashmap(node->data, "upld_req_seq");
-#pragma GCC diagnostic pop
-                json_t *jwt_claims = (json_t *)app_fetch_from_hashmap(node->data, "auth");
-                uint32_t usr_prof_id = (uint32_t) json_integer_value(json_object_get(jwt_claims, "profile"));
-                json_object_set_new(res_body, "req_seq", json_integer(req_seq));
-                json_object_set_new(res_body, "usr_id",  json_integer(usr_prof_id));
-                req->res.status = 201;
-                break;
-            }
+            json_object_set_new(res_body, "req_seq", json_integer(req_seq));
+            req->res.status = 201;
+            break;
         case SQL_RESULT_CODE__LIMIT_EXCEEDED:
         default:
             {

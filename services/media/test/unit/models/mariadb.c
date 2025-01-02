@@ -95,10 +95,11 @@ Ensure(app_mariadb_test_init_set_option_error) {
     MYSQL expect_mysql = {0};
     expect(mysql_init,  will_return(&expect_mysql));
     expect(mysql_close, when(mysql, is_equal_to(&expect_mysql)));
-    expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
-    expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
-    expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
-    expect(mysql_options, will_return(1), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
+    expect(mysql_optionsv, will_return(1), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
     result = app_db_mariadb_conn_init(&conn, &pool);
     assert_that(result, is_equal_to(DBA_RESULT_CONFIG_ERROR));
     assert_that(conn.pool, is_equal_to(NULL));
@@ -112,11 +113,14 @@ Ensure(app_mariadb_test_init_ok) {
     db_pool_t pool = {0};
     MYSQL expect_mysql = {0};
     expect(mysql_init,  will_return(&expect_mysql));
-    expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
-    expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
-    expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
-    expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
-    expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
     result = app_db_mariadb_conn_init(&conn, &pool);
     assert_that(result, is_equal_to(DBA_RESULT_OK));
     assert_that(conn.pool, is_equal_to(&pool));
@@ -169,31 +173,35 @@ Ensure(app_mariadb_test_start_connection_failure) {
     };
     MYSQL  expect_mysql = {0};
     MYSQL *mysql_conn_ret = NULL;
-    { // assume connection error on client side
-        assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
-        assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(0));
-        expect(mysql_real_connect_start, will_return(0),
-                will_set_contents_of_parameter(ret, &mysql_conn_ret, sizeof(MYSQL *)));
-        // expect to invoke following sequence of functions 
-        expect(mysql_errno, will_return(ER_TOO_MANY_USER_CONNECTIONS));
-        expect(mock_app__timerpoll_stop, will_return(0));
-        // assume error happenes again when closing connection
-        expect(mysql_close_start, will_return(0));
-        expect(mysql_errno, will_return(ER_NET_READ_ERROR_FROM_PIPE));
-        expect(mock_app__timerpoll_stop, will_return(0));
-        // assume the app has NOT been closing the conneciton pool , reinit low-level handle
-        expect(mock_db_pool__is_closing_fn, will_return(0));
-        expect(mysql_init,  will_return(&expect_mysql));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
-        app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
-        assert_that(conn.state, is_equal_to(DB_ASYNC_CONN_START));
-        assert_that(conn.lowlvl.conn, is_equal_to(&expect_mysql));
-        assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
-    }
+    // assume connection error on client side
+    assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
+    assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(0));
+    expect(mysql_real_connect_start, will_return(0),
+            will_set_contents_of_parameter(ret, &mysql_conn_ret, sizeof(MYSQL *)));
+    // expect to invoke following sequence of functions 
+    expect(mysql_errno, will_return(ER_TOO_MANY_USER_CONNECTIONS));
+    expect(mysql_error, will_return("unit test mock error"));
+    expect(mock_app__timerpoll_stop, will_return(0));
+    // assume error happenes again when closing connection
+    expect(mysql_close_start, will_return(0));
+    expect(mysql_errno, will_return(ER_NET_READ_ERROR_FROM_PIPE));
+    expect(mysql_error, will_return("unit test mock error"));
+    expect(mock_app__timerpoll_stop, will_return(0));
+    // assume the app has NOT been closing the conneciton pool , reinit low-level handle
+    expect(mock_db_pool__is_closing_fn, will_return(0));
+    expect(mysql_init,  will_return(&expect_mysql));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
+    app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
+    assert_that(conn.state, is_equal_to(DB_ASYNC_CONN_START));
+    assert_that(conn.lowlvl.conn, is_equal_to(&expect_mysql));
+    assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
 } // end of  app_mariadb_test_start_connection_failure
 
 Ensure(app_mariadb_test_connect_db_server_error) {
@@ -238,6 +246,7 @@ Ensure(app_mariadb_test_connect_db_server_error) {
         expect(mysql_real_connect_cont, will_return(0),
                 will_set_contents_of_parameter(ret, &mysql_conn_ret, sizeof(MYSQL *)));
         expect(mysql_errno, will_return(ER_TOO_MANY_USER_CONNECTIONS));
+        expect(mysql_error, will_return("unit test mock error"));
         expect(mock_app__timerpoll_stop, will_return(0));
         // assume there's no pending or processing query in this case. Start closing connection
         expect(mysql_close_start, will_return(MYSQL_WAIT_READ),
@@ -261,11 +270,14 @@ Ensure(app_mariadb_test_connect_db_server_error) {
         expect(mock_app__timerpoll_stop, will_return(0));
         expect(mock_db_pool__is_closing_fn, will_return(0));
         expect(mysql_init,  will_return(&expect_mysql[1]));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
-        expect(mysql_options, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
         assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(0));
         app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
         assert_that(conn.state, is_equal_to(DB_ASYNC_CONN_START));
@@ -313,6 +325,7 @@ Ensure(app_mariadb_test_evict_all_queries_on_connection_failure) {
         expect(mysql_real_connect_cont, will_return(0),
                 will_set_contents_of_parameter(ret, &mysql_conn_ret, sizeof(MYSQL *)));
         expect(mysql_errno, will_return(ER_SERVER_SHUTDOWN));
+        expect(mysql_error, will_return("unit test mock error"));
         expect(mock_app__timerpoll_stop, will_return(0));
         expect(mock_db_query__notify_callback,  when(app_result, is_equal_to(DBA_RESULT_NETWORK_ERROR)),
                 when(conn_state, is_equal_to(DB_ASYNC_CONN_DONE)), when(is_async, is_equal_to(0)),
@@ -430,6 +443,7 @@ Ensure(app_mariadb_test_query_failure_remote) {
         expect(mysql_real_query_cont, will_return(0),
                 will_set_contents_of_parameter(ret, &mysql_query_ret, sizeof(int *)));
         expect(mysql_errno, will_return(ER_TOO_MANY_FIELDS));
+        expect(mysql_error, will_return("unit test mock error"));
         expect(mock_app__timerpoll_stop, will_return(0));
         expect(mock_db_query__notify_callback, when(app_result, is_equal_to(DBA_RESULT_MEMORY_ERROR)),
                 when(conn_state, is_equal_to(DB_ASYNC_QUERY_READY)), when(is_async, is_equal_to(0)),
@@ -744,16 +758,22 @@ Ensure(app_mariadb_test_reconnecting) {
         expect(mock_app__timerpoll_stop, will_return(0));
         expect(mock_db_pool__is_closing_fn, will_return(0));
         expect(mysql_init, will_return(&expect_mysql_handle));
-        expect(mysql_options, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+                when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
                 when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
-        expect(mysql_options, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
                 when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
-        expect(mysql_options, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
                 when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
-        expect(mysql_options, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
                 when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
-        expect(mysql_options, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
                 when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+                when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+                when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
         expect(mysql_real_connect_start, will_return(MYSQL_WAIT_READ),
                 will_set_contents_of_parameter(ret, &mysql_conn_ret, sizeof(MYSQL *)));
         expect(mysql_get_socket, will_return(expect_lowlvl_fd));

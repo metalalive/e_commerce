@@ -11,7 +11,7 @@ static void test_verify__initiate_multipart_upload_ok(CURL *handle, test_setup_p
     long actual_resp_code = 0;
     res = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &actual_resp_code);
     assert_that(res, is_equal_to(CURLE_OK));
-    assert_that((long)privdata->expect_resp_code, is_equal_to(actual_resp_code));
+    assert_that(actual_resp_code, is_equal_to((long)privdata->expect_resp_code));
     // analyza response body
     json_t *resp_obj = json_loadfd(privdata->fds.resp_body, 0, NULL);
     assert_that(resp_obj, is_not_equal_to(NULL));
@@ -64,10 +64,9 @@ Ensure(api_test_initiate_multipart_upload_ok) {
     uint32_t *usr_prof_ids = malloc(NUM_USERS * sizeof(uint32_t));
     for(idx = 0; idx < NUM_USERS; idx++)
         usr_prof_ids[idx] = 125 + idx;
-    // assume a user sent multiple upload requests
+    // assume one of the users sent multiple upload requests
     usr_prof_ids[ITEST_UPLD_REQ__SAME_USER__IDX_2] = usr_prof_ids[ITEST_UPLD_REQ__SAME_USER__IDX_1];
-    json_t *header_kv_serials = json_array();
-    json_t *quota = json_array();
+    json_t *header_kv_serials = json_array(), *quota = json_array();
     json_array_append_new(header_kv_serials, json_string("Content-Type:application/json"));
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     test_setup_pub_t  setup_data = {
@@ -78,7 +77,8 @@ Ensure(api_test_initiate_multipart_upload_ok) {
     for(idx = 0; idx < (NUM_USERS - 1); idx++) {
         add_auth_token_to_http_header(header_kv_serials, usr_prof_ids[idx], codename_list, quota);
         run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
-        sleep(1); // then clean previous auth token and create new one
+        sleep(1); // delay to prevent users from sending too many requests at a time
+        // then clean previous auth token and create new one
         json_array_remove(header_kv_serials, (json_array_size(header_kv_serials) - 1));
     } { // subcase : number of initiated updaate requests exceeded
         add_auth_token_to_http_header(header_kv_serials, usr_prof_ids[NUM_USERS - 1], codename_list, quota);
@@ -88,7 +88,6 @@ Ensure(api_test_initiate_multipart_upload_ok) {
             sleep(1);
         } // app server does NOT allow users to send several valid requests in one second
         setup_data.expect_resp_code = 400;
-        sleep(1);
         for(idx = 0; idx < 6; idx++)
             run_client_request(&setup_data, test_verify__initiate_multipart_upload_ok, NULL);
     }

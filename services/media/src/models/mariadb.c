@@ -119,22 +119,29 @@ static void _app_mariadb_error_reset_all_pending_query(db_conn_t *conn, DBA_RES_
 } // end of _app_mariadb_error_reset_all_pending_query
 
 
-static DBA_RES_CODE  _app_mariadb_gen_new_handle(MYSQL **handle, uint32_t timeout) {
+static DBA_RES_CODE  _app_mariadb_gen_new_handle(MYSQL **handle, db_pool_cfg_t *pcfg) {
     DBA_RES_CODE result = DBA_RESULT_OK;
     MYSQL *tmp = mysql_init(NULL);
     if(!tmp) {
         result = DBA_RESULT_MEMORY_ERROR;
         goto error;
     }
-    mysql_options(tmp, MYSQL_READ_DEFAULT_GROUP, "async_queries");
-    if(mysql_options(tmp, MYSQL_OPT_NONBLOCK, NULL) != 0) {
+    mysql_optionsv(tmp, MYSQL_READ_DEFAULT_FILE, NULL);
+    mysql_optionsv(tmp, MYSQL_READ_DEFAULT_GROUP, NULL);
+    if(mysql_optionsv(tmp, MYSQL_OPT_NONBLOCK, NULL) != 0) {
         result = DBA_RESULT_CONFIG_ERROR;
         goto error;
     }
-    if(mysql_options(tmp, MYSQL_OPT_CONNECT_TIMEOUT, &timeout) ||
-            mysql_options(tmp, MYSQL_OPT_READ_TIMEOUT, &timeout) ||
-            mysql_options(tmp, MYSQL_OPT_WRITE_TIMEOUT, &timeout)) {
+    if(mysql_optionsv(tmp, MYSQL_OPT_CONNECT_TIMEOUT, &pcfg->idle_timeout) ||
+       mysql_optionsv(tmp, MYSQL_OPT_READ_TIMEOUT, &pcfg->idle_timeout) ||
+       mysql_optionsv(tmp, MYSQL_OPT_WRITE_TIMEOUT, &pcfg->idle_timeout)) {
         result = DBA_RESULT_CONFIG_ERROR;
+        goto error;
+    }
+    my_bool  use_ssl = pcfg->skip_tls ? 0: 1;
+    if(mysql_optionsv(tmp, MYSQL_OPT_SSL_ENFORCE, &use_ssl) ||
+       mysql_optionsv(tmp, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &use_ssl)) {
+        result = DBA_RESULT_NETWORK_ERROR;
         goto error;
     }
     *handle = tmp;
@@ -159,7 +166,8 @@ DBA_RES_CODE app_db_mariadb_conn_init(db_conn_t *conn, db_pool_t *pool)
     if(result != DBA_RESULT_OK) {
         goto error;
     }
-    result = _app_mariadb_gen_new_handle(&handle, conn->pool->cfg.idle_timeout);
+    assert(conn->pool == pool);
+    result = _app_mariadb_gen_new_handle(&handle, &conn->pool->cfg);
     if(result != DBA_RESULT_OK) {
         goto error;
     }
@@ -184,7 +192,7 @@ DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
             mysql_close((MYSQL *)conn->lowlvl.conn);
         conn->lowlvl = (db_lowlvl_t){0};
     } else {
-        fprintf(stderr, "[model][mariadb] line:%d, lowlvl.conn:%p, result:%d \n",
+        fprintf(stderr, "[db][mariadb] line:%d, lowlvl.conn:%p, result:%d \n",
                 __LINE__, conn->lowlvl.conn, result);
     }
     return result;
@@ -192,36 +200,33 @@ DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
 
 
 static  DBA_RES_CODE _app_mariadb_convert_error_code(MYSQL *handle) {
-    DBA_RES_CODE result = DBA_RESULT_OK;
     unsigned int error_code = mysql_errno(handle);
-    if(!error_code) {
-        // pass
+    if(error_code) { // use mysql_error() to check detail description
+        fprintf(stderr, "[db][mariaDB] line:%d, error code: %d, detail:%s \n",
+                __LINE__, error_code, mysql_error(handle));
+    }
+    if(!error_code) { // pass
+        return DBA_RESULT_OK;
     } else if(error_code == ER_BAD_HOST_ERROR || error_code == ER_DBACCESS_DENIED_ERROR
             || error_code == ER_ACCESS_DENIED_ERROR || error_code == ER_BAD_DB_ERROR
             || error_code == ER_NO_SUCH_TABLE || error_code == ER_WRONG_COLUMN_NAME ) {
-        result = DBA_RESULT_ERROR_ARG;
+        return DBA_RESULT_ERROR_ARG;
     } else if(error_code == ER_CON_COUNT_ERROR || error_code == ER_SERVER_SHUTDOWN
             || error_code == ER_NORMAL_SHUTDOWN || error_code == ER_ABORTING_CONNECTION
             || error_code == ER_NET_READ_ERROR_FROM_PIPE || error_code == ER_NET_FCNTL_ERROR
             || error_code == ER_NET_READ_ERROR || error_code == ER_NET_READ_INTERRUPTED
             || error_code == ER_NET_ERROR_ON_WRITE || error_code == ER_NET_WRITE_INTERRUPTED) {
-        result = DBA_RESULT_NETWORK_ERROR;
+        return DBA_RESULT_NETWORK_ERROR;
     } else if(error_code == ER_USER_LIMIT_REACHED || error_code == ER_TOO_MANY_USER_CONNECTIONS) {
-        // use mysql_error() to check detail description
-        result = DBA_RESULT_REMOTE_RESOURCE_ERROR;
-#if  0
-        fprintf(stderr, "[mariaDB] line:%d, error code: %d, detail:%s \n", __LINE__,
-            error_code, mysql_error(handle));
-#endif
+        return DBA_RESULT_REMOTE_RESOURCE_ERROR;
     } else if(error_code == ER_DISK_FULL || error_code == ER_OUTOFMEMORY
             || error_code == ER_OUT_OF_RESOURCES || error_code == ER_NET_PACKET_TOO_LARGE
             || error_code == ER_TOO_MANY_TABLES || error_code == ER_TOO_MANY_FIELDS
             || error_code == ER_TOO_LONG_STRING) {
-        result = DBA_RESULT_MEMORY_ERROR;
+        return DBA_RESULT_MEMORY_ERROR;
     } else {
-        result = DBA_RESULT_UNKNOWN_ERROR;
+        return DBA_RESULT_UNKNOWN_ERROR;
     }
-    return result;
 } // end of _app_mariadb_convert_error_code
 
 
@@ -936,7 +941,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     conn->ops.timerpoll_deinit(&conn->timer_poll);
                     continue_checking = 0;
                 } else {
-                    _app_mariadb_gen_new_handle((MYSQL **)&conn->lowlvl.conn, conn->pool->cfg.idle_timeout);
+                    _app_mariadb_gen_new_handle((MYSQL **)&conn->lowlvl.conn, &conn->pool->cfg);
                     conn->state =  DB_ASYNC_CONN_START;
                 }
                 if(!continue_checking) {

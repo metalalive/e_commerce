@@ -199,7 +199,7 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
     }
     pool->cfg = (db_pool_cfg_t) {
         .alias = strdup(opts->alias),   .capacity = opts->capacity,
-        .idle_timeout = opts->idle_timeout,
+        .idle_timeout = opts->idle_timeout, .skip_tls = opts->skip_tls,
         .bulk_query_limit_kb = opts->bulk_query_limit_kb,
         .conn_detail = {
             .db_name   = strdup(opts->conn_detail.db_name), 

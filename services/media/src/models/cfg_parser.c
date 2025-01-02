@@ -70,21 +70,17 @@ static  int parse_cfg_db_credential(json_t *in, db_conn_cfg_t *out)
     const char *db_user = json_string_value(json_object_get(dst, "USER"));
     const char *db_passwd = json_string_value(json_object_get(dst, "PASSWORD"));
     const char *db_host = json_string_value(json_object_get(dst, "HOST"));
-    const char *db_port = json_string_value(json_object_get(dst, "PORT"));
-    if(!db_user || !db_passwd || !db_host || !db_port) {
-        h2o_error_printf("[parsing] invalid database credential: db_user(%s), db_passwd(%s), db_host(%s), db_port(%s) \n",
+    json_int_t  db_port = json_integer_value(json_object_get(dst, "PORT"));
+    int invalid_port_num = (db_port >= 0xFFFF) || (db_port <= 0) ;
+    if(!db_user || !db_passwd || !db_host || invalid_port_num) {
+        h2o_error_printf("[parsing] invalid database credential: db_user(%s), db_passwd(%s), db_host(%s), db_port(%lld) \n",
                     (db_user?"not null":"null"), (db_passwd?"not null":"null"), db_host, db_port);
         goto error;
     }
-    uint16_t  db_port_int = (uint16_t) strtol(db_port, (char **)NULL, 10);
-    if(db_port_int == 0) {
-        h2o_error_printf("[parsing] invalid port for database connection: %s \n", db_port);
-        goto error;
-    } // no  conversion could be performed
     out->db_user = strdup(db_user);
     out->db_passwd = strdup(db_passwd);
     out->db_host = strdup(db_host);
-    out->db_port = db_port_int;
+    out->db_port = (uint16_t) (db_port & 0xFFFF);
     json_decref(root);
     return 0;
 error:
@@ -111,6 +107,7 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg)
         uint32_t max_conns    = (uint32_t)json_integer_value(json_object_get(obj, "max_connections"));
         uint32_t idle_timeout = (uint32_t)json_integer_value(json_object_get(obj, "idle_timeout"));
         uint32_t bulk_query_limit_kb = (uint32_t)json_integer_value(json_object_get(obj, "bulk_query_limit_kb"));
+        uint8_t  skip_tls = (uint32_t)json_boolean_value(json_object_get(obj, "skip_tls"));
         json_t  *credential = json_object_get(obj, "credential");
         if(!alias || !db_name || !init_cfg_ops_label || max_conns == 0 || idle_timeout == 0
                 || bulk_query_limit_kb == 0) {
@@ -122,7 +119,7 @@ int parse_cfg_databases(json_t *objs, app_cfg_t *app_cfg)
         }
         db_pool_cfg_t cfg_opts = { .alias=(char *)alias, .capacity=max_conns, .idle_timeout=idle_timeout,
             .bulk_query_limit_kb=bulk_query_limit_kb, .conn_detail={.db_name = (char *)db_name},
-            .ops = {0}};
+            .ops = {0}, .skip_tls=skip_tls };
         app_internal_cb_arg_t  probe_args = {.cfg=&cfg_opts.ops, .done=0, .fn_label=init_cfg_ops_label};
         int err = app_elf_traverse_functions(app_cfg->exe_path, _app_elf_gather_db_operation_cb,
                 (void *)&probe_args);

@@ -60,7 +60,8 @@
             "alias": "db_server_1",
             "db_name": "ecommerce_media",
             "max_connections": 3,
-            "idle_timeout": 15,
+            "idle_timeout": 16,
+            "skip_tls": true,
             "bulk_query_limit_kb": 4,
             "credential": {
                 "hierarchy": ["backend_apps","databases","media_service"],

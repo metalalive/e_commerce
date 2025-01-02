@@ -74,6 +74,7 @@
             "db_name": "ecommerce_media",
             "max_connections": 3,
             "idle_timeout": 15,
+            "skip_tls": true,
             "bulk_query_limit_kb": 4,
             "credential": {
                 "hierarchy": ["backend_apps","databases","media_service"],
@@ -86,9 +87,10 @@
             "db_name": "ecommerce_media",
             "max_connections": 1,
             "idle_timeout": 20,
+            "skip_tls": true,
             "bulk_query_limit_kb": 2,
             "credential": {
-                "hierarchy": ["backend_apps","databases","site_dba"],
+                "hierarchy": ["backend_apps","databases","site2_dba"],
                 "filepath":"common/data/secrets.json"
             },
             "init_cfg_ops": "app_db_mariadb__cfg_ops"

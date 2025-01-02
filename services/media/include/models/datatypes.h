@@ -73,6 +73,7 @@ typedef struct {
     size_t  bulk_query_limit_kb; // size limit of bulk queries in KBytes for each connection object
     db_conn_cfg_t  conn_detail;
     db_3rdparty_ops_t  ops;
+    uint8_t  skip_tls:1; // whether to enable secure connection between this app and databse server
 } db_pool_cfg_t;
 
 typedef struct { // handle for specific database e.g. MariaDB, postgreSQL

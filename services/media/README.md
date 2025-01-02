@@ -27,7 +27,7 @@
 | | [gnutls](https://github.com/gnutls/gnutls) | `>= 3.7.2` |
 | | [nettle](https://github.com/gnutls/nettle) | `>= 3.7.2` |
 | | [p11-kit](https://github.com/p11-glue/p11-kit) | `>= 0.24.0` |
-| | [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) | `>= 3.1.7` |
+| | [MariaDB connector/C](https://github.com/mariadb-corporation/mariadb-connector-c) | `>= 3.4.1` |
 | | [Rabbitmq/C](https://github.com/alanxz/rabbitmq-c) | `>= 0.11.0` |
 | | [FFMpeg](https://github.com/FFmpeg/FFmpeg) | `>= 4.3.3` |
 | | [libcurl](https://github.com/curl/curl) | `>= 7.69.1` |
