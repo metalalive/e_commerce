@@ -75,6 +75,9 @@ done:
 
 int app_timer_poll_deinit(app_timer_poll_t *handle)
 {
+    if(!handle->poll.loop || !handle->timeout.loop) {
+        return UV_EINVAL;
+    }
     if(!uv_is_closing((const uv_handle_t *)&handle->poll)) {
         uv_close((uv_handle_t *)&handle->poll, _app_timerpoll_close_poll_cb);
     }
@@ -136,7 +139,8 @@ done:
 int app_timer_poll_start(app_timer_poll_t *handle, uint64_t timeout_ms, uint32_t events, timerpoll_poll_cb poll_cb)
 {
     int ret = 0;
-    if(!poll_cb || !handle || timeout_ms == 0 || events == 0) {
+    if(!poll_cb || !handle || !handle->timeout.loop || !handle->poll.loop
+            || timeout_ms == 0 || events == 0) {
         ret = UV_EINVAL; // error cuased by argument
         goto done;
     }
@@ -157,7 +161,8 @@ done:
 
 int app_timer_poll_stop(app_timer_poll_t *handle)
 {
-    if(!handle || uv_is_closing((const uv_handle_t *)&handle->poll)
+    if(!handle || !handle->timeout.loop || !handle->poll.loop
+            || uv_is_closing((const uv_handle_t *)&handle->poll)
             || uv_is_closing((const uv_handle_t *)&handle->timeout)) {
         return UV_EINVAL;
     }
