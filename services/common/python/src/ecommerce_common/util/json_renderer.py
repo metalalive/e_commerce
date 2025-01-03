@@ -13,11 +13,12 @@ import os
 #     "active": True
 # }
 
+
 def render_json_template(input_template_path, output_file_path, parameters):
     if not os.path.exists(input_template_path):
         raise FileNotFoundError(f"Template file not found: {input_template_path}")
 
-    with open(input_template_path, 'r') as f:
+    with open(input_template_path, "r") as f:
         try:
             json_data = json.load(f)
         except json.JSONDecodeError as e:
@@ -29,20 +30,27 @@ def render_json_template(input_template_path, output_file_path, parameters):
         data[keys[-1]] = value
 
     for json_path, value in parameters.items():
-        keys = json_path.split('/')
+        keys = json_path.split("/")
         set_nested_value(json_data, keys, value)
 
-    with open(output_file_path, 'w') as f:
+    with open(output_file_path, "w") as f:
         json.dump(json_data, f, indent=4)
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Render a JSON template with parameters.")
-    parser.add_argument("--template", required=True, help="Path to the input JSON template file.")
-    parser.add_argument("--output", required=True, help="Path to the output rendered JSON file.")
+    parser = argparse.ArgumentParser(
+        description="Render a JSON template with parameters."
+    )
+    parser.add_argument(
+        "--template", required=True, help="Path to the input JSON template file."
+    )
+    parser.add_argument(
+        "--output", required=True, help="Path to the output rendered JSON file."
+    )
     parser.add_argument(
         "--parameters",
         required=True,
-        help='Parameters as a single string, e.g., "key1=value1 key2=value2 key3=value3".'
+        help='Parameters as a single string, e.g., "key1=value1 key2=value2 key3=value3".',
     )
     args = parser.parse_args()
     # Resolve relative paths to absolute paths
@@ -64,6 +72,7 @@ def main():
 
     # Call the main function
     render_json_template(input_template_path, output_file_path, parameters)
+
 
 if __name__ == "__main__":
     main()
