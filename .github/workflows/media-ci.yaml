@@ -455,9 +455,11 @@ jobs:
             make rpc_consumer.out
     
       - name: set up mock credentials for test
-        working-directory: services/common/data
+        working-directory: services/common
         run: |
-            ln -s ./secrets_template.json  ./secrets.json
+            python3 ./python/src/ecommerce_common/util/json_renderer.py \
+                --template=./data/secrets_template.json   --output=./data/secrets.json \
+                --parameters="backend_apps/databases/media_service/HOST=127.0.0.1"
 
       #- name: run unit test for this app
       #  working-directory: services/media/build
