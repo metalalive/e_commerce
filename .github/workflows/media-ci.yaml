@@ -1,5 +1,8 @@
 name: media continuous integration
 on:
+  push:
+    branches:
+      - 'media-dev/experiment/**'
   pull_request:
     branches:
       - 'master'
