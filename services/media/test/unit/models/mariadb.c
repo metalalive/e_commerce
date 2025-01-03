@@ -118,6 +118,7 @@ Ensure(app_mariadb_test_init_ok) {
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_PROTOCOL)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
     result = app_db_mariadb_conn_init(&conn);
@@ -195,6 +196,7 @@ Ensure(app_mariadb_test_start_connection_failure) {
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+    expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_PROTOCOL)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
     app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
@@ -275,6 +277,7 @@ Ensure(app_mariadb_test_connect_db_server_error) {
         expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
         expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
         expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_PROTOCOL)));
         expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
         expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
         assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(0));
@@ -769,6 +772,8 @@ Ensure(app_mariadb_test_reconnecting) {
                 when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
         expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
                 when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
+                when(option, is_equal_to(MYSQL_OPT_PROTOCOL)));
         expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
                 when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
         expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),

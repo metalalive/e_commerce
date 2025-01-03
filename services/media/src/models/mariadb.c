@@ -138,8 +138,10 @@ static DBA_RES_CODE  _app_mariadb_gen_new_handle(MYSQL **handle, db_pool_cfg_t *
         result = DBA_RESULT_CONFIG_ERROR;
         goto error;
     }
+    enum mysql_protocol_type  default_proto = MYSQL_PROTOCOL_TCP;
     my_bool  use_ssl = pcfg->skip_tls ? 0: 1;
-    if(mysql_optionsv(tmp, MYSQL_OPT_SSL_ENFORCE, &use_ssl) ||
+    if(mysql_optionsv(tmp, MYSQL_OPT_PROTOCOL, &default_proto) ||
+       mysql_optionsv(tmp, MYSQL_OPT_SSL_ENFORCE, &use_ssl) ||
        mysql_optionsv(tmp, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &use_ssl)) {
         result = DBA_RESULT_NETWORK_ERROR;
         goto error;
@@ -172,8 +174,10 @@ DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
 {
     if(!conn)
         return  DBA_RESULT_ERROR_ARG;
+#if 0
     fprintf(stderr, "[db][mariaDB] line:%d, lowlvl.conn:%p \n",  __LINE__, conn->lowlvl.conn);
-    // close and de-init a connection in  blocking manner, in case the API server
+#endif
+    // close a connection in  blocking manner, in case the API server
     // and RPC consumer terminated and never launched database operations.
     if(conn->lowlvl.conn)
         mysql_close((MYSQL *)conn->lowlvl.conn);
