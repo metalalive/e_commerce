@@ -1,6 +1,17 @@
 import logging
 from typing import Optional, List
 
+from jwt.exceptions import (
+    DecodeError,
+    ExpiredSignatureError,
+    ImmatureSignatureError,
+    InvalidAudienceError,
+    InvalidIssuedAtError,
+    InvalidIssuerError,
+    MissingRequiredClaimError,
+    InvalidKeyError,
+    PyJWKClientConnectionError,
+)
 from fastapi import APIRouter, Depends as FastapiDepends
 from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
 from fastapi.security import OAuth2AuthorizationCodeBearer
@@ -8,7 +19,7 @@ from pydantic import PositiveInt
 from sqlalchemy import delete as SqlAlDelete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ecommerce_common.auth.fastapi import base_authentication, base_permission_check
+from ecommerce_common.auth.auth import base_authentication, base_permission_check
 from ecommerce_common.models.constants import ROLE_ID_SUPERUSER
 from ecommerce_common.models.enums.base import AppCodeOptions
 
@@ -59,10 +70,38 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
 
 
 async def common_authentication(encoded_token: str = FastapiDepends(oauth2_scheme)):
-    audience = ["store"]
-    return base_authentication(
-        token=encoded_token, audience=audience, keystore=shared_ctx["auth_keystore"]
-    )
+    try:
+        return base_authentication(
+            token=encoded_token,
+            audience=["store"],
+            keystore=shared_ctx["auth_keystore"],
+        )
+    except PyJWKClientConnectionError as e:
+        log_args = ["action", "jwt-auth-error", "detail", str(e)]
+        _logger.warning(None, *log_args)
+        raise FastApiHTTPException(
+            status_code=FastApiHTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="internal-error",
+            headers={"www-Authenticate": "Bearer"},
+        )
+    except (
+        TypeError,
+        DecodeError,
+        ExpiredSignatureError,
+        ImmatureSignatureError,
+        InvalidAudienceError,
+        InvalidIssuedAtError,
+        InvalidIssuerError,
+        MissingRequiredClaimError,
+        InvalidKeyError,
+    ) as e:
+        log_args = ["action", "jwt-auth-error", "detail", str(e)]
+        _logger.warning(None, *log_args)
+        raise FastApiHTTPException(
+            status_code=FastApiHTTPstatus.HTTP_401_UNAUTHORIZED,
+            detail="authentication-failure",
+            headers={"www-Authenticate": "Bearer"},
+        )
 
 
 class Authorization:
