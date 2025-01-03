@@ -35,7 +35,7 @@ jobs:
         # official docker image only exposes default port 3306 to external world
         # map any non-default port external clients will use to 3306
         ports:
-          - 3306:3306
+          - 3307:3306
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
           MARIADB_ROOT_PASSWORD: "sys-ci-dba"
@@ -455,11 +455,9 @@ jobs:
             make rpc_consumer.out
     
       - name: set up mock credentials for test
-        working-directory: services/common
+        working-directory: services/common/data
         run: |
-            python3 ./python/src/ecommerce_common/util/json_renderer.py \
-                --template=./data/secrets_template.json   --output=./data/secrets.json \
-                --parameters="backend_apps/databases/media_service/HOST=127.0.0.1"
+            ln -s ./secrets_template.json  ./secrets.json
 
       #- name: run unit test for this app
       #  working-directory: services/media/build
