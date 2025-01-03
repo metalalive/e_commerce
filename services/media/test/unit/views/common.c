@@ -12,16 +12,16 @@
 #define UTEST_DB_ASYNC_FETCH_ROW_READY      1
 #define UTEST_DB_ASYNC_FREE_RESULTSET_DONE  2
 
-static DBA_RES_CODE mock_dbpool__init_fn(db_conn_t *conn, db_pool_t *pool)
-{ return app_db_conn_init(conn, pool); }
+static DBA_RES_CODE mock_dbpool_3pty_init_fn(db_conn_t *conn)
+{ return DBA_RESULT_OK; }
 
-static DBA_RES_CODE mock_dbpool__deinit_fn(db_conn_t *conn)
-{ return app_db_conn_deinit(conn); }
+static DBA_RES_CODE mock_dbpool_3pty_deinit_fn(db_conn_t *conn)
+{ return DBA_RESULT_OK; }
 
 static uint8_t mock_dbpool__can_change_state(db_conn_t *conn)
 { return 1; }
 
-static void  mock_dbpool__state_transition (app_timer_poll_t *target, int uv_status, int event_flags)
+static void  mock_dbpool_3pty_state_transition (app_timer_poll_t *target, int uv_status, int event_flags)
 {
     uint8_t  has_row = 0;
     uint8_t *has_row_ptr = &has_row;
@@ -64,7 +64,7 @@ static void  mock_dbpool__state_transition (app_timer_poll_t *target, int uv_sta
     }
     uv_run(curr_query->cfg.loop, UV_RUN_NOWAIT);
     { conn->ops.update_ready_queries(conn); }
-} // end of mock_dbpool__state_transition
+} // end of mock_dbpool_3pty_state_transition
 
 static uint8_t mock_dbpool__notify_query(db_query_t *query, db_query_result_t *rs)
 {
@@ -94,8 +94,8 @@ static uint8_t   mock_dbpool__is_conn_closed(db_conn_t *conn)
 static db_pool_cfg_t  utest_db_pool_cfg = {
     .alias=UTEST_DBPOOL_ALIAS, .capacity=1, .idle_timeout=13, .bulk_query_limit_kb=3,
     .conn_detail = {.db_name="x", .db_user="x", .db_passwd="x", .db_host="x", .db_port=4567},
-    .ops = {.conn_init_fn=mock_dbpool__init_fn, .conn_deinit_fn=mock_dbpool__deinit_fn,
-        .state_transition=mock_dbpool__state_transition, .notify_query=mock_dbpool__notify_query,
+    .ops = {.conn_init_fn=mock_dbpool_3pty_init_fn, .conn_deinit_fn=mock_dbpool_3pty_deinit_fn,
+        .state_transition=mock_dbpool_3pty_state_transition, .notify_query=mock_dbpool__notify_query,
         .is_conn_closed=mock_dbpool__is_conn_closed, .get_sock_fd=mock_dbpool__get_sock_fd,
         .get_timeout_ms=mock_dbpool__get_timeout_ms, .can_change_state=mock_dbpool__can_change_state }
 };
@@ -128,7 +128,7 @@ Ensure(apiview_common_test__upload_request_found) {
     {
         uint8_t mock_has_row = 1;
         size_t  mock_num_cols = 0;
-        expect(mock_dbpool__state_transition,
+        expect(mock_dbpool_3pty_state_transition,
                 will_set_contents_of_parameter(has_row_ptr, &mock_has_row, sizeof(uint8_t)),
                 will_set_contents_of_parameter(num_cols_ptr, &mock_num_cols, sizeof(size_t)));
         expect(utest__uncommitted_upld_req_success);
@@ -141,7 +141,7 @@ Ensure(apiview_common_test__upload_request_found) {
     {
         uint8_t mock_has_row = 0;
         size_t  mock_num_cols = 0;
-        expect(mock_dbpool__state_transition,
+        expect(mock_dbpool_3pty_state_transition,
                 will_set_contents_of_parameter(has_row_ptr, &mock_has_row, sizeof(uint8_t)),
                 will_set_contents_of_parameter(num_cols_ptr, &mock_num_cols, sizeof(size_t)));
         expect(utest__uncommitted_upld_req_failure);
@@ -163,7 +163,8 @@ Ensure(apiview_common_test__resource_id_format) {
     assert_that(app_verify_printable_string("",0), is_not_equal_to(0));
     assert_that(app_verify_printable_string("abcde", 5), is_equal_to(0));
     assert_that(app_verify_printable_string("abc e", 5), is_not_equal_to(0));
-    assert_that(app_verify_printable_string("a\x01cde", 5), is_not_equal_to(0));
+    int ret = app_verify_printable_string("a\x01cde", 5);
+    assert_that(ret, is_not_equal_to(0));
     char _res_id[APP_RESOURCE_ID_SIZE + 5] = {0};
     memset(&_res_id[0], 0x61, sizeof(char) * (APP_RESOURCE_ID_SIZE + 3));
     assert_that(app_verify_printable_string(&_res_id[0], APP_RESOURCE_ID_SIZE), is_not_equal_to(0));

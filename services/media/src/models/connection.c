@@ -1,4 +1,5 @@
 #include <h2o/memory.h>
+#include "models/pool.h"
 #include "models/connection.h"
 
 static DBA_RES_CODE app_db_conn__append_pending_query(db_conn_t *conn, db_query_t *query)
@@ -214,16 +215,18 @@ static uint8_t  _app_db_conn__check_is_closed(db_conn_t *conn)
 } // end of _app_db_conn__check_is_closed
 
 
-DBA_RES_CODE app_db_conn_init(db_conn_t *conn, db_pool_t *pool)
+DBA_RES_CODE app_db_conn_init(db_pool_t *pool, db_conn_t **conn_created)
 {
-    DBA_RES_CODE result = DBA_RESULT_OK;
-    if(!conn || !pool) {
-        result = DBA_RESULT_ERROR_ARG;
-        goto done;
+    if(!pool) {
+        return DBA_RESULT_ERROR_ARG;
     }
-    size_t bulk_query_rawbytes_sz = (pool->cfg.bulk_query_limit_kb << 10) + 1;
-    memset(conn, 0, sizeof(db_conn_t));
-    memset(&conn->bulk_query_rawbytes.data[0], 0, sizeof(char) * bulk_query_rawbytes_sz);
+    size_t conn_sz = sizeof(db_conn_t) + (pool->cfg.bulk_query_limit_kb << 10) + 1; // including NULL-terminated byte
+    size_t conn_node_sz = sizeof(db_llnode_t) + conn_sz;
+    db_llnode_t *new_conn_node = malloc(conn_node_sz);
+    db_conn_t   *conn = (db_conn_t *) new_conn_node->data;
+    assert(conn == (db_conn_t *)&new_conn_node->data[0]);
+    memset(new_conn_node, 0, sizeof(char) * conn_node_sz);
+
     pthread_mutex_init(&conn->lock, NULL);
     conn->pool = pool;
     conn->ops.add_new_query = app_db_conn__append_pending_query;
@@ -238,31 +241,49 @@ DBA_RES_CODE app_db_conn_init(db_conn_t *conn, db_pool_t *pool)
     conn->ops.timerpoll_stop  = app_timer_poll_stop;
     conn->flags.state_changing = (atomic_flag) ATOMIC_FLAG_INIT;
     conn->flags.has_ready_query_to_process = ATOMIC_VAR_INIT(0);
-done:
+        
+    DBA_RES_CODE result = pool->cfg.ops.conn_init_fn(conn);
+    if(result == DBA_RESULT_OK) {
+        app_db_pool_insert_conn(pool, new_conn_node);
+        if(conn_created) {
+            *conn_created = conn;
+        }
+    } else {
+        app_db_conn_deinit(conn);
+    }
     return result;
 } // end of app_db_conn_init
 
 
 DBA_RES_CODE app_db_conn_deinit(db_conn_t *conn)
 {
-    DBA_RES_CODE result = DBA_RESULT_OK;
     if(!conn) {
-        result = DBA_RESULT_ERROR_ARG;
-        goto done;
+        return DBA_RESULT_ERROR_ARG;
+    }
+    if(!conn->pool) {
+        return DBA_RESULT_MEMORY_ERROR;
     }
     // application caller should close the connection first, then call this de-init function
     if(conn->processing_queries || conn->pending_queries.head) {
-        result = DBA_RESULT_CONNECTION_BUSY;
-        goto done;
+        return DBA_RESULT_CONNECTION_BUSY;
     }
+    db_llnode_t *node = H2O_STRUCT_FROM_MEMBER(db_llnode_t, data, conn);
+    assert(conn == (db_conn_t *)&node->data[0]);
+    app_db_pool_remove_conn(conn->pool, node);
+    DBA_RES_CODE result = conn->pool->cfg.ops.conn_deinit_fn(conn);
     pthread_mutex_destroy(&conn->lock);
     conn->ops.add_new_query = NULL;
     conn->ops.update_ready_queries = NULL;
     conn->ops.try_process_queries = NULL;
     conn->ops.try_close = NULL;
     conn->ops.is_closed = NULL;
+    conn->ops.timerpoll_init   = NULL;
+    conn->ops.timerpoll_deinit = NULL;
+    conn->ops.timerpoll_change_fd = NULL;
+    conn->ops.timerpoll_start = NULL;
+    conn->ops.timerpoll_stop  = NULL;
     conn->pool = NULL;
-done:
+    free(node);
     return result;
 } // end of app_db_conn_deinit
 

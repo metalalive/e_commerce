@@ -17,11 +17,11 @@ static  DBA_RES_CODE  mock_db__global_init (db_pool_t *pool)
 static  DBA_RES_CODE  mock_db__global_deinit (db_pool_t *pool)
 { return (DBA_RES_CODE) mock(pool); }
 
-static  DBA_RES_CODE mock_db_conn_init(db_conn_t *conn, db_pool_t *pool)
+static  DBA_RES_CODE mock_db_conn_init(db_conn_t *conn)
 {
     conn->ops.try_close = mock_db_conn__try_close;
     conn->ops.is_closed = mock_db_conn__is_closed;
-    return (DBA_RES_CODE)mock(conn, pool);
+    return (DBA_RES_CODE)mock(conn);
 }
 
 static  DBA_RES_CODE mock_db_conn_deinit(db_conn_t *conn)
@@ -139,8 +139,6 @@ Ensure(app_model_pool_init_one_test_ok) {
 
 
 Ensure(app_model_pool_init_one_test_error_init_conns) {
-    DBA_RES_CODE result = DBA_RESULT_OK;
-    db_pool_t *pool_found = NULL;
     db_pool_cfg_t cfg_opts = {
         .alias="db_primary", .capacity=5, .idle_timeout=80, .bulk_query_limit_kb=2,
         .conn_detail={.db_name = "ecommerce_media_123", .db_user="username",
@@ -162,9 +160,10 @@ Ensure(app_model_pool_init_one_test_error_init_conns) {
     expect(mock_db_conn_deinit, will_return(DBA_RESULT_OK));
     expect(mock_db_conn_deinit, will_return(DBA_RESULT_OK));
     expect(mock_db_conn_deinit, will_return(DBA_RESULT_OK));
-    result = app_db_pool_init(&cfg_opts);
+    expect(mock_db_conn_deinit, will_return(DBA_RESULT_OK));
+    DBA_RES_CODE result = app_db_pool_init(&cfg_opts);
     assert_that(result, is_equal_to(DBA_RESULT_UNKNOWN_ERROR));
-    pool_found = app_db_pool_get_pool("db_primary");
+    db_pool_t *pool_found = app_db_pool_get_pool("db_primary");
     assert_that(pool_found, is_null);
 } // end of app_model_pool_init_one_test_error_init_conns
 

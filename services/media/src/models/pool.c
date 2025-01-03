@@ -1,5 +1,6 @@
 #include <h2o/memory.h>
 #include "models/pool.h"
+#include "models/connection.h"
 
 static db_llnode_t *_app_db_pools_map = NULL;
 
@@ -32,7 +33,7 @@ static void app_db_poolmap_remove_pool(db_llnode_t *node)
     }
 } // end of app_db_poolmap_remove_pool
 
-static void app_db_pool_insert_conn(db_pool_t *pool, db_llnode_t *new)
+void app_db_pool_insert_conn(db_pool_t *pool, db_llnode_t *new)
 {
     db_llnode_t *old_head = pool->conns.head;
     new->next = NULL;
@@ -44,7 +45,7 @@ static void app_db_pool_insert_conn(db_pool_t *pool, db_llnode_t *new)
     }
 } // end of app_db_pool_insert_conn
 
-static void app_db_pool_remove_conn(db_pool_t *pool, db_llnode_t *node)
+void app_db_pool_remove_conn(db_pool_t *pool, db_llnode_t *node)
 {
     db_llnode_t *n1 = node->next;
     app_llnode_unlink(node);
@@ -82,13 +83,11 @@ static void _app_db_pool_conns_deinit(db_pool_t *pool) {
     db_llnode_t *node = NULL;
     while(pool->conns.head) {
         node = pool->conns.head;
-        app_db_pool_remove_conn(pool, node);
         db_conn_t  *conn = (db_conn_t *) node->data;
-        DBA_RES_CODE result = pool->cfg.ops.conn_deinit_fn(conn);
+        DBA_RES_CODE result = app_db_conn_deinit(conn);
         if(result != DBA_RESULT_OK)
-            fprintf(stderr, "[model][pool] line:%d, cfg.alias:%s, result:%d \n",
+            fprintf(stderr, "[db][pool] line:%d, cfg.alias:%s, result:%d \n",
                      __LINE__, pool->cfg.alias, result);
-        free(node);
     }
     pool->conns.tail = NULL;
 }
@@ -163,7 +162,6 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
 {
     DBA_RES_CODE result = DBA_RESULT_OK;
     db_llnode_t *new_pool_node = NULL;
-    db_llnode_t *new_conn_node = NULL;
     db_pool_t   *pool = NULL;
     size_t idx = 0;
     if(!opts || !opts->alias || opts->capacity == 0 || opts->idle_timeout == 0
@@ -227,17 +225,11 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
         if(result != DBA_RESULT_OK)
             goto error; 
     }
-    size_t conn_sz = sizeof(db_conn_t) + (pool->cfg.bulk_query_limit_kb << 10) + 1; // including NULL-terminated byte
-    size_t conn_node_sz = sizeof(db_llnode_t) + conn_sz;
     for(idx = 0; idx < pool->cfg.capacity; idx++) {   // initalize list of connections
-        new_conn_node = malloc(conn_node_sz);
-        db_conn_t   *new_conn = (db_conn_t *) new_conn_node->data;
-        result = pool->cfg.ops.conn_init_fn(new_conn, pool);
+        result = app_db_conn_init(pool, NULL);
         if(result != DBA_RESULT_OK) {
-            free(new_conn_node);
-            goto error; 
+            goto error;
         }
-        app_db_pool_insert_conn(pool, new_conn_node);
     } // end of loop
     app_db_poolmap_insert_pool(new_pool_node);
     goto done;

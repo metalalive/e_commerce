@@ -55,7 +55,7 @@ typedef struct {
 typedef struct { // connection operations for specific database API, registered in pool object
     DBA_RES_CODE (*global_init_fn)(struct db_pool_s *);
     DBA_RES_CODE (*global_deinit_fn)(struct db_pool_s *);
-    DBA_RES_CODE (*conn_init_fn)(struct db_conn_s *, struct db_pool_s *);
+    DBA_RES_CODE (*conn_init_fn)(struct db_conn_s *);
     DBA_RES_CODE (*conn_deinit_fn)(struct db_conn_s *);
     void  (*error_cb)(struct db_conn_s *, db_conn_err_detail_t *detail);
     uint8_t   (*can_change_state)(struct db_conn_s *);

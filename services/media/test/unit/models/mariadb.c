@@ -78,20 +78,20 @@ static void  mock_db_query__notify_callback(uv_async_t *handle)
 
 Ensure(app_mariadb_test_init_error) {
     DBA_RES_CODE result = DBA_RESULT_OK;
-    db_conn_t conn = {0};
     db_pool_t pool = {0};
+    db_conn_t conn = {.pool = &pool};
     expect(mysql_init,  will_return(NULL));
-    result = app_db_mariadb_conn_init(&conn, &pool);
+    result = app_db_mariadb_conn_init(&conn);
     assert_that(result, is_equal_to(DBA_RESULT_MEMORY_ERROR));
-    assert_that(conn.pool, is_equal_to(NULL));
+    assert_that(conn.pool, is_equal_to(&pool));
     assert_that(conn.lowlvl.conn, is_equal_to(NULL));
 } // end of app_mariadb_test_init_error
 
 
 Ensure(app_mariadb_test_init_set_option_error) {
     DBA_RES_CODE result = DBA_RESULT_OK;
-    db_conn_t conn = {0};
     db_pool_t pool = {0};
+    db_conn_t conn = {.pool = &pool};
     MYSQL expect_mysql = {0};
     expect(mysql_init,  will_return(&expect_mysql));
     expect(mysql_close, when(mysql, is_equal_to(&expect_mysql)));
@@ -100,17 +100,16 @@ Ensure(app_mariadb_test_init_set_option_error) {
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
     expect(mysql_optionsv, will_return(1), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
-    result = app_db_mariadb_conn_init(&conn, &pool);
+    result = app_db_mariadb_conn_init(&conn);
     assert_that(result, is_equal_to(DBA_RESULT_CONFIG_ERROR));
-    assert_that(conn.pool, is_equal_to(NULL));
     assert_that(conn.lowlvl.conn, is_equal_to(NULL));
 } // end of app_mariadb_test_init_set_option_error
 
 
 Ensure(app_mariadb_test_init_ok) {
     DBA_RES_CODE result = DBA_RESULT_OK;
-    db_conn_t conn = {0};
     db_pool_t pool = {0};
+    db_conn_t conn = {.pool = &pool};
     MYSQL expect_mysql = {0};
     expect(mysql_init,  will_return(&expect_mysql));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
@@ -121,7 +120,7 @@ Ensure(app_mariadb_test_init_ok) {
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
-    result = app_db_mariadb_conn_init(&conn, &pool);
+    result = app_db_mariadb_conn_init(&conn);
     assert_that(result, is_equal_to(DBA_RESULT_OK));
     assert_that(conn.pool, is_equal_to(&pool));
     assert_that(conn.lowlvl.conn, is_equal_to(&expect_mysql));

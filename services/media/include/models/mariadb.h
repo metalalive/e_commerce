@@ -38,7 +38,7 @@ DBA_RES_CODE  app_db_mariadb__global_init(db_pool_t *);
 
 DBA_RES_CODE  app_db_mariadb__global_deinit(db_pool_t *);
 
-DBA_RES_CODE app_db_mariadb_conn_init(db_conn_t *, db_pool_t *);
+DBA_RES_CODE app_db_mariadb_conn_init(db_conn_t *);
 
 DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *);
 

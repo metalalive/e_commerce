@@ -154,28 +154,16 @@ done:
 } // end of _app_mariadb_gen_new_handle
 
 
-DBA_RES_CODE app_db_mariadb_conn_init(db_conn_t *conn, db_pool_t *pool)
+DBA_RES_CODE app_db_mariadb_conn_init(db_conn_t *conn)
 {
-    DBA_RES_CODE result = DBA_RESULT_OK;
     MYSQL *handle = NULL;
-    if(!conn || !pool) {
-        result = DBA_RESULT_ERROR_ARG;
-        goto done;
+    if(!conn || !conn->pool) {
+        return DBA_RESULT_ERROR_ARG;
     }
-    result = app_db_conn_init(conn, pool);
-    if(result != DBA_RESULT_OK) {
-        goto error;
+    DBA_RES_CODE result = _app_mariadb_gen_new_handle(&handle, &conn->pool->cfg);
+    if(result == DBA_RESULT_OK) {
+        conn->lowlvl = (db_lowlvl_t){.conn = (void *)handle, .resultset = NULL, .row = NULL};
     }
-    assert(conn->pool == pool);
-    result = _app_mariadb_gen_new_handle(&handle, &conn->pool->cfg);
-    if(result != DBA_RESULT_OK) {
-        goto error;
-    }
-    conn->lowlvl = (db_lowlvl_t){.conn = (void *)handle, .resultset = NULL, .row = NULL};
-    goto done;
-error:
-    app_db_conn_deinit(conn);
-done:
     return result;
 } // end of app_db_mariadb_conn_init
 
@@ -184,18 +172,13 @@ DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
 {
     if(!conn)
         return  DBA_RESULT_ERROR_ARG;
-    DBA_RES_CODE result = app_db_conn_deinit(conn);
-    if(result == DBA_RESULT_OK) {
-        // close and de-init a connection in  blocking manner, in case the API server
-        // and RPC consumer terminated and never launched database operations.
-        if(conn->lowlvl.conn)
-            mysql_close((MYSQL *)conn->lowlvl.conn);
-        conn->lowlvl = (db_lowlvl_t){0};
-    } else {
-        fprintf(stderr, "[db][mariadb] line:%d, lowlvl.conn:%p, result:%d \n",
-                __LINE__, conn->lowlvl.conn, result);
-    }
-    return result;
+    fprintf(stderr, "[db][mariaDB] line:%d, lowlvl.conn:%p \n",  __LINE__, conn->lowlvl.conn);
+    // close and de-init a connection in  blocking manner, in case the API server
+    // and RPC consumer terminated and never launched database operations.
+    if(conn->lowlvl.conn)
+        mysql_close((MYSQL *)conn->lowlvl.conn);
+    conn->lowlvl = (db_lowlvl_t){0};
+    return DBA_RESULT_OK;
 } // end of app_db_mariadb_conn_deinit
 
 
