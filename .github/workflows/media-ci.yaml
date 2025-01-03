@@ -261,7 +261,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
             path: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
-            key: prebuilt-mariadb-client-3.1.13
+            key: prebuilt-mariadb-client-3.4.1
 
       - name: download mariaDB connector/C source
         if: steps.cacheMariaDBclient.outputs.cache-hit != 'true'
@@ -269,7 +269,7 @@ jobs:
         with:
             repository: mariadb-corporation/mariadb-connector-c
             # cmake syntax error fixed
-            ref: v3.1.13
+            ref: v3.4.1
             path: deps/mariadb-connector-c
 
       - name: build mariaDB connector/C  from source
@@ -277,10 +277,10 @@ jobs:
         working-directory: deps/mariadb-connector-c
         run: |
             mkdir -p ./build && cd ./build
-            cmake -DWITH_DYNCOL=OFF  -DCMAKE_BUILD_TYPE=Release  -DWITH_UNIT_TESTS=OFF \
-                -DCMAKE_INSTALL_PREFIX=${{ env.MARIADBCLIENT_INSTALL_PATH }} \
-                -DBUILD_SHARED_LIBS=ON ..
-            make
+            cmake -DCMAKE_INSTALL_PREFIX=${{ env.MARIADBCLIENT_INSTALL_PATH }} \
+                  -DCMAKE_BUILD_TYPE=Release  -DWITH_UNIT_TESTS=OFF \
+                  -DBUILD_SHARED_LIBS=ON   ..
+            make libmariadb 
             rm -rf ${{ env.MARIADBCLIENT_INSTALL_PATH }} && mkdir -p ${{ env.MARIADBCLIENT_INSTALL_PATH }}
             make install
 
@@ -295,7 +295,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
             path: ${{ env.MARIADBCLIENT_INSTALL_PATH }}
-            key: prebuilt-mariadb-client-3.1.13
+            key: prebuilt-mariadb-client-3.4.1
 
 
       - name: restore ffmpeg libraries from cache
@@ -409,7 +409,7 @@ jobs:
             cmake -DCMAKE_INSTALL_PREFIX=${{ env.RABBITMQC_INSTALL_PATH }} -DBUILD_SHARED_LIBS=ON \
                   -DBUILD_STATIC_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TOOLS=OFF -DBUILD_TOOLS_DOCS=OFF \
                   -DBUILD_TESTS=OFF -DBUILD_API_DOCS=OFF  ..
-            make
+            make rabbitmq
             rm -rf ${{ env.RABBITMQC_INSTALL_PATH }} && mkdir -p ${{ env.RABBITMQC_INSTALL_PATH }}
             make install
 

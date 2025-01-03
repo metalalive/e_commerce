@@ -55,7 +55,7 @@ typedef struct {
 typedef struct { // connection operations for specific database API, registered in pool object
     DBA_RES_CODE (*global_init_fn)(struct db_pool_s *);
     DBA_RES_CODE (*global_deinit_fn)(struct db_pool_s *);
-    DBA_RES_CODE (*conn_init_fn)(struct db_conn_s *, struct db_pool_s *);
+    DBA_RES_CODE (*conn_init_fn)(struct db_conn_s *);
     DBA_RES_CODE (*conn_deinit_fn)(struct db_conn_s *);
     void  (*error_cb)(struct db_conn_s *, db_conn_err_detail_t *detail);
     uint8_t   (*can_change_state)(struct db_conn_s *);
@@ -73,6 +73,7 @@ typedef struct {
     size_t  bulk_query_limit_kb; // size limit of bulk queries in KBytes for each connection object
     db_conn_cfg_t  conn_detail;
     db_3rdparty_ops_t  ops;
+    uint8_t  skip_tls:1; // whether to enable secure connection between this app and databse server
 } db_pool_cfg_t;
 
 typedef struct { // handle for specific database e.g. MariaDB, postgreSQL

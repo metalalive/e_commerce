@@ -16,6 +16,9 @@ DBA_RES_CODE app_db_pool_map_deinit(void);
 // Note these 2 functions below are  NOT thread-safe
 DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts);
 
+void app_db_pool_insert_conn(db_pool_t *, db_llnode_t *new_node);
+void app_db_pool_remove_conn(db_pool_t *, db_llnode_t *new_node);
+
 // entry function to try closing all connections within all pools
 void app_db_pool_map_signal_closing(void);
 

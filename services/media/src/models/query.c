@@ -172,6 +172,10 @@ DBA_RES_CODE app_db_query_start(db_query_cfg_t *cfg)
         if(query) { // try connecting database and perform queries
             result = free_conn->ops.try_process_queries(free_conn, cfg->loop);
         }
+        if(result != DBA_RESULT_OK) {
+            fprintf(stderr, "[db][query] line:%d, free-conn:%p, query:%p, result:%d \n",
+                    __LINE__, free_conn, query, result );
+        }
     } else {
         result = DBA_RESULT_POOL_BUSY;
     }

@@ -7,7 +7,7 @@ extern "C" {
 #include "models/datatypes.h"
 
 // initalize a connection with given pool, and initialization callback for specific database
-DBA_RES_CODE app_db_conn_init(db_conn_t *conn, db_pool_t *pool);
+DBA_RES_CODE app_db_conn_init(db_pool_t *pool, db_conn_t **created);
 
 // destroy a given connection object, disconnect remote database server and free up memory
 // space allocated to each member of db_conn_t

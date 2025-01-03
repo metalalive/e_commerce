@@ -94,6 +94,17 @@ static void mock_timerpoll_data_ready_cb(app_timer_poll_t *target, int status, i
     }
 }
 
+Ensure(app_timerpoll_uninit_failure_test) {
+    app_timer_poll_t handle = {0};
+    int err = 0;
+    err = app_timer_poll_start(&handle, 123, UV_READABLE,  mock_timerpoll_data_ready_cb);
+    assert_that(err, is_equal_to(UV_EINVAL));
+    err = app_timer_poll_stop(&handle);
+    assert_that(err, is_equal_to(UV_EINVAL));
+    err = app_timer_poll_deinit(&handle);
+    assert_that(err, is_equal_to(UV_EINVAL));
+} // end of app_timerpoll_uninit_failure_test
+
 Ensure(app_timerpoll_target_fd_working_test) {
     uv_loop_t *loop = uv_default_loop();
     test_timerpoll_t handle = {0};
@@ -168,6 +179,7 @@ TestSuite *app_timer_poll_tests(void)
     TestSuite *suite = create_test_suite();
     add_test(suite, app_timerpoll_init_failure_test);
     add_test(suite, app_timerpoll_init_success_test);
+    add_test(suite, app_timerpoll_uninit_failure_test);
     add_test(suite, app_timerpoll_target_fd_working_test);
     add_test(suite, app_timerpoll_target_fd_timeout_test);
     return suite;

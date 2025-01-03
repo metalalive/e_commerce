@@ -9,8 +9,8 @@ void mysql_server_end(void) {}
 MYSQL* mysql_init(MYSQL *in)
 { return (MYSQL *)mock(in); }
 
-int  mysql_options(MYSQL *mysql,enum mysql_option option, const void *arg)
-{ return (int)mock(mysql, option, arg); }
+int  mysql_optionsv(MYSQL *mysql, enum mysql_option option, ...)
+{ return (int)mock(mysql, option); }
 
 void mysql_close(MYSQL *mysql)
 { mock(mysql); }
