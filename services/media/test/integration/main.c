@@ -187,7 +187,7 @@ done:
     curl_global_cleanup();
     destroy_test_suite(suite);
     destroy_reporter(reporter);
-    if (!root_cfg)
+    if (root_cfg)
         json_decref(root_cfg);
     return tst_result;
 } // end of main()

@@ -78,8 +78,10 @@ int gen_signed_access_token(unsigned int usr_id, json_t *perm_codes, json_t *quo
     json_t *claims  = json_object();
     time_t issued_time = time(NULL); // TODO, find more reliable way of reading current time in seconds
     time_t expiry_time = issued_time + 600; // 10 minutes available by default
-    json_object_set(headers, "typ", json_string("JWT"));
-    json_object_set(claims, "profile", json_integer(usr_id));
+    json_t *val_typ = json_string("JWT");
+    json_t *val_profile = json_integer(usr_id);
+    json_object_set(headers, "typ", val_typ);
+    json_object_set(claims, "profile", val_profile);
     json_object_set(claims, "iat", json_integer(issued_time));
     json_object_set(claims, "exp", json_integer(expiry_time));
     {
@@ -95,6 +97,8 @@ int gen_signed_access_token(unsigned int usr_id, json_t *perm_codes, json_t *quo
     result = gen_signed_access_token_helper(headers, claims, out);
     json_decref(headers);
     json_decref(claims );
+    json_decref(val_typ );
+    json_decref(val_profile );
     return result;
 } // end of gen_signed_access_token
 
@@ -163,10 +167,10 @@ void deinit_mock_auth_server(void) {
     while(r_jwks_size(_mock_jwks.store.privkey) > 0) {
         jwk_t *privkey = r_jwks_get_at(_mock_jwks.store.privkey, 0);
         jwk_t *pubkey  = r_jwks_get_at(_mock_jwks.store.pubkey , 0);
-        assert(r_jwks_remove_at(_mock_jwks.store.privkey, 0) == RHN_OK);
-        assert(r_jwks_remove_at(_mock_jwks.store.pubkey , 0) == RHN_OK);
         r_jwk_free(privkey);
         r_jwk_free(pubkey );
+        assert(r_jwks_remove_at(_mock_jwks.store.privkey, 0) == RHN_OK);
+        assert(r_jwks_remove_at(_mock_jwks.store.pubkey , 0) == RHN_OK);
     } // end of loop
     free(_mock_jwks.filepath.pubkey);
     _mock_jwks.filepath.pubkey = NULL;
