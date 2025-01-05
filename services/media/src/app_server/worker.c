@@ -310,7 +310,7 @@ static void run_loop(void *data) {
     if(thread_index == 0) {
         h2o_error_printf("[system] graceful shutdown starts \n");
     }
-    for(idx=0; idx < 10; idx++) {
+    for(idx=0; idx < 100; idx++) {
         uv_run(init_data->loop, UV_RUN_NOWAIT);
     }
     h2o_context_request_shutdown(&server_ctx);
