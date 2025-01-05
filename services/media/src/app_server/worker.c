@@ -320,6 +320,9 @@ static void run_loop(void *data) {
     h2o_context_dispose(&server_ctx);
     worker_deinit_context(&ctx_worker);
     uv_run(init_data->loop, UV_RUN_ONCE);
+    for(idx=0; idx < 5; idx++) {
+        uv_run(init_data->loop, UV_RUN_NOWAIT);
+    }
 } // end of run_loop
 
 
