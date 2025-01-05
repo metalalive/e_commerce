@@ -188,10 +188,10 @@ DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
 
 static  DBA_RES_CODE _app_mariadb_convert_error_code(MYSQL *handle) {
     unsigned int error_code = mysql_errno(handle);
-    //if(error_code) { // use mysql_error() to check detail description
+    if(error_code) { // use mysql_error() to check detail description
         fprintf(stderr, "[db][mariaDB] line:%d, error code: %d, detail:%s \n",
                 __LINE__, error_code, mysql_error(handle));
-    //}
+    }
     if(!error_code) { // pass
         return DBA_RESULT_OK;
     } else if(error_code == ER_BAD_HOST_ERROR || error_code == ER_DBACCESS_DENIED_ERROR

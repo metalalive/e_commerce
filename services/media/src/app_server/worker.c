@@ -310,6 +310,9 @@ static void run_loop(void *data) {
     if(thread_index == 0) {
         h2o_error_printf("[system] graceful shutdown starts \n");
     }
+    for(idx=0; idx < 10; idx++) {
+        uv_run(init_data->loop, UV_RUN_NOWAIT);
+    }
     h2o_context_request_shutdown(&server_ctx);
     while((atomic_num_connections(app_cfg, 0) > 0) && (app_cfg->shutdown_requested != APP_HARD_SHUTDOWN))
     {
@@ -320,9 +323,6 @@ static void run_loop(void *data) {
     h2o_context_dispose(&server_ctx);
     worker_deinit_context(&ctx_worker);
     uv_run(init_data->loop, UV_RUN_ONCE);
-    for(idx=0; idx < 5; idx++) {
-        uv_run(init_data->loop, UV_RUN_NOWAIT);
-    }
 } // end of run_loop
 
 
