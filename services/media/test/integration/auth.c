@@ -28,14 +28,15 @@ static mock_jwks_t _mock_jwks = {0};
 
 RESTAPI_ENDPOINT_HANDLER(get_jwks_pubkey, GET, self, req)
 {
-    int flags = 0;
+    int flags = 0, result = 0;
     if(_mock_jwks.fd.pubkey) {
         h2o_iovec_t  mime_type = {.base = "application/json", .len = sizeof("application/json") - 1};
-        return h2o_file_send(req, 200, "OK", _mock_jwks.filepath.pubkey,  mime_type, flags);
-    } else {    // jwks file hasn't been prepared yet
+        result = h2o_file_send(req, 200, "OK", _mock_jwks.filepath.pubkey,  mime_type, flags);
+    } else {  // jwks file hasn't been prepared yet
         h2o_send_error_404(req, "JWKS internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);
-       return 0; 
     }
+    app_run_next_middleware(self, req, node);
+    return result;
 } // end of get_jwks_pubkey
 
 
@@ -74,31 +75,26 @@ int gen_signed_access_token(unsigned int usr_id, json_t *perm_codes, json_t *quo
     if(!json_is_array(perm_codes) || !json_is_array(quota) || !out) {
         return result;
     }
-    json_t *headers = json_object();
-    json_t *claims  = json_object();
+    json_t *headers = json_object(), *claims  = json_object();
     time_t issued_time = time(NULL); // TODO, find more reliable way of reading current time in seconds
     time_t expiry_time = issued_time + 600; // 10 minutes available by default
-    json_t *val_typ = json_string("JWT");
-    json_t *val_profile = json_integer(usr_id);
-    json_object_set(headers, "typ", val_typ);
-    json_object_set(claims, "profile", val_profile);
-    json_object_set(claims, "iat", json_integer(issued_time));
-    json_object_set(claims, "exp", json_integer(expiry_time));
+    json_object_set_new(headers, "typ", json_string("JWT"));
+    json_object_set_new(claims, "profile", json_integer(usr_id));
+    json_object_set_new(claims, "iat", json_integer(issued_time));
+    json_object_set_new(claims, "exp", json_integer(expiry_time));
     {
         json_t *audience = json_array();
-        json_array_append(audience, json_string("service1"));
-        json_array_append(audience, json_string("service2"));
-        json_array_append(audience, json_string(APP_LABEL));
-        json_array_append(audience, json_string("service3"));
-        json_object_set(claims, "aud", audience);
+        json_array_append_new(audience, json_string("service1"));
+        json_array_append_new(audience, json_string("service2"));
+        json_array_append_new(audience, json_string(APP_LABEL));
+        json_array_append_new(audience, json_string("service3"));
+        json_object_set_new(claims, "aud", audience);
     }
     json_object_set(claims, "perms", perm_codes);
     json_object_set(claims, "quota", quota);
     result = gen_signed_access_token_helper(headers, claims, out);
     json_decref(headers);
     json_decref(claims );
-    json_decref(val_typ );
-    json_decref(val_profile );
     return result;
 } // end of gen_signed_access_token
 
@@ -111,13 +107,12 @@ int add_auth_token_to_http_header(json_t *headers_kv_raw, unsigned int usr_id, c
     assert(json_is_array(quota));
     assert(usr_id > 0);
     json_t *perm_codes = json_array();
-    char *signed_access_token = NULL;
-    char *auth_header_raw = NULL;
+    char *signed_access_token = NULL, *auth_header_raw = NULL;
     for(int idx = 0; codename_list && codename_list[idx] ; idx++) {
         json_t *perm_code = json_object();
-        json_object_set(perm_code, "app_code", json_integer(APP_CODE));
-        json_object_set(perm_code, "codename", json_string(codename_list[idx]));
-        json_array_append(perm_codes, perm_code);
+        json_object_set_new(perm_code, "app_code", json_integer(APP_CODE));
+        json_object_set_new(perm_code, "codename", json_string(codename_list[idx]));
+        json_array_append_new(perm_codes, perm_code);
     }
     int result = gen_signed_access_token(usr_id, perm_codes, quota, &signed_access_token);
     assert_that(result , is_equal_to(RHN_OK));
@@ -141,11 +136,15 @@ void init_mock_auth_server(const char *tmpfile_path) {
         jwk_t *privkey = NULL, *pubkey = NULL;
         assert(r_jwk_init(&privkey) == RHN_OK);
         assert(r_jwk_init(&pubkey) == RHN_OK);
-        assert(r_jwks_append_jwk(_mock_jwks.store.privkey, privkey) == RHN_OK);
-        assert(r_jwks_append_jwk(_mock_jwks.store.pubkey , pubkey) == RHN_OK);
         int ret = r_jwk_generate_key_pair(privkey, pubkey, R_KEY_TYPE_RSA,
                rsa_bits[idx], NULL); // set kid automatically by library
         assert(ret == RHN_OK);
+        assert(r_jwks_append_jwk(_mock_jwks.store.privkey, privkey) == RHN_OK);
+        assert(r_jwks_append_jwk(_mock_jwks.store.pubkey , pubkey) == RHN_OK);
+        // `r_jwks_append_jwk` internally increment refcnt of jwk object, it is necessary to
+        // decrement the refcnt at here to avoid memory leak
+        r_jwk_free(privkey);
+        r_jwk_free(pubkey );
     } // end of loop
     size_t tmpfile_path_sz = strlen(tmpfile_path) + 1;
     _mock_jwks.filepath.pubkey = (char *) malloc(tmpfile_path_sz);
