@@ -1,8 +1,8 @@
 name: media continuous integration
 on:
-  push:
-    branches:
-      - 'media-dev/experiment/**'
+  #push:
+  #  branches:
+  #    - 'media-dev/experiment/**'
   pull_request:
     branches:
       - 'master'
@@ -459,10 +459,10 @@ jobs:
         run: |
             ln -s ./secrets_template.json  ./secrets.json
 
-      #- name: run unit test for this app
-      #  working-directory: services/media/build
-      #  run: |
-      #      make unit_test
+      - name: run unit test for this app
+        working-directory: services/media/build
+        run: |
+            make unit_test
 
 
       - name: download mock user asset for integration test
