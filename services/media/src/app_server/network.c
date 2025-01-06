@@ -156,8 +156,14 @@ h2o_socket_t *init_client_tcp_socket(uv_stream_t *server, uv_close_cb on_close) 
     }
     ret = uv_accept(server, (uv_stream_t *)client_conn);
     if(ret != 0) {
-        h2o_error_printf("[network] server failed to accept client connection, reason:%s \n",
+        // TODO, improve logging info here, EAGAIN may be returned with different reasons
+        // , in this application, this happens when another thread already took connection
+        // from a shared listening server socket (using accept()) and the connection queue
+        // inside the server socket is empty
+        if(ret != UV_EAGAIN) {
+            h2o_error_printf("[network] server failed to accept client connection, reason:%s \n",
                  uv_strerror(ret));
+        }
         goto error;
     }
     return  h2o_uv_socket_create((uv_handle_t *)client_conn, on_close);

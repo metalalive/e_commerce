@@ -76,10 +76,16 @@ static void deinit_app_server_cfg(app_cfg_t *app_cfg) {
 } // end of deinit_app_server_cfg
 
 
-static  void on_tcp_close(uv_handle_t *client_conn) {
-    atomic_num_connections(app_get_global_cfg(), -1);
+static  void on_tcp_close(uv_handle_t *handle) {
     // the handle created in init_client_tcp_socket has to be freed if it is already closed
-    free(client_conn);
+    // handle dataa should be pointer  to h2o socket object already freed ,
+    // no longer accessible.
+    //
+    // h2o_error_printf("[app-server][worker] line = %d, handle:%p, data:%p \n",
+    //     __LINE__, handle, handle->data);
+    handle->data = NULL;
+    free(handle);
+    atomic_num_connections(app_get_global_cfg(), -1);
 }
 
 
@@ -310,6 +316,9 @@ static void run_loop(void *data) {
     if(thread_index == 0) {
         h2o_error_printf("[system] graceful shutdown starts \n");
     }
+    // for(idx=0; idx < 100; idx++) {
+    //     uv_run(init_data->loop, UV_RUN_NOWAIT);
+    // }
     h2o_context_request_shutdown(&server_ctx);
     while((atomic_num_connections(app_cfg, 0) > 0) && (app_cfg->shutdown_requested != APP_HARD_SHUTDOWN))
     {

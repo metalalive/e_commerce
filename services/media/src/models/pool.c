@@ -203,7 +203,7 @@ DBA_RES_CODE app_db_pool_init(db_pool_cfg_t *opts)
             .db_name   = strdup(opts->conn_detail.db_name), 
             .db_user   = strdup(opts->conn_detail.db_user),
             .db_passwd = strdup(opts->conn_detail.db_passwd), 
-            .db_host   = strdup(opts->conn_detail.db_host), 
+            .db_host   = strdup(opts->conn_detail.db_host), // FIXME, valgrind invalid read ?
             .db_port = opts->conn_detail.db_port 
         },
         .ops = {

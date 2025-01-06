@@ -112,6 +112,10 @@ static void initiate_multipart_upload__finalize_response(h2o_handler_t *hdlr , h
     size_t nwrite = json_dumpb((const json_t *)res_body, &body_raw[0],  MAX_BYTES_RESP_BODY, JSON_COMPACT);
     h2o_iovec_t body = h2o_strdup(&req->pool, &body_raw[0], nwrite);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("application/json"));    
+    
+    req->res.content_length = body.len;
+    req->res.reason = "";
+
     h2o_generator_t  generator = {0};
     h2o_start_response(req, &generator);
     h2o_send(req, &body, 1, H2O_SEND_STATE_FINAL);

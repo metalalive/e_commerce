@@ -222,7 +222,6 @@ static DBA_RES_CODE app_db_mariadb_conn_connect_start(db_conn_t *conn, int *evt_
     if(!conn || !evt_flgs) {
         return DBA_RESULT_ERROR_ARG;
     }
-    DBA_RES_CODE result = DBA_RESULT_OK;
     db_conn_cfg_t *credential = &conn->pool->cfg.conn_detail;
     unsigned long client_flags = CLIENT_REMEMBER_OPTIONS | CLIENT_MULTI_STATEMENTS;
     MYSQL *my_ret = NULL;
@@ -230,11 +229,11 @@ static DBA_RES_CODE app_db_mariadb_conn_connect_start(db_conn_t *conn, int *evt_
            credential->db_host, credential->db_user, credential->db_passwd,
            credential->db_name, (unsigned int)credential->db_port, NULL, client_flags);
     if(my_evts == 0 && !my_ret) { // complete immediately without blocking, there should be error
-        result = _app_mariadb_convert_error_code((MYSQL *)conn->lowlvl.conn);
+        return _app_mariadb_convert_error_code((MYSQL *)conn->lowlvl.conn);
     } else { // my_evts should contain event flags, operation sent successfully
         *evt_flgs = _app_mariadb_convert_evt_to_uv(my_evts);
+        return DBA_RESULT_OK;
     }
-    return result;
 } // end of app_db_mariadb_conn_connect_start
 
 

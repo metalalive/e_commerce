@@ -1,5 +1,8 @@
 name: media continuous integration
 on:
+  #push:
+  #  branches:
+  #    - 'media-dev/experiment/**'
   pull_request:
     branches:
       - 'master'
@@ -32,7 +35,7 @@ jobs:
         # official docker image only exposes default port 3306 to external world
         # map any non-default port external clients will use to 3306
         ports:
-          - 3306:3306
+          - 3307:3306
         env:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 0
           MARIADB_ROOT_PASSWORD: "sys-ci-dba"
@@ -487,7 +490,7 @@ jobs:
         working-directory: services/media
         run: |
             liquibase  --changeLogFile=./migration/changelog_media.xml \
-                --url=jdbc:mariadb://localhost:3306/test_ecommerce_media \
+                --url=jdbc:mariadb://localhost:3307/test_ecommerce_media \
                 --username=DB_USERNAME  --password=DB_PASSWORD  --log-level=info   update
 
 
