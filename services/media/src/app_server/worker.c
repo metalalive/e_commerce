@@ -78,17 +78,13 @@ static void deinit_app_server_cfg(app_cfg_t *app_cfg) {
 
 static  void on_tcp_close(uv_handle_t *handle) {
     // the handle created in init_client_tcp_socket has to be freed if it is already closed
-    uv_stream_t *client_conn = (uv_stream_t *)handle;
-    int ret = uv_read_stop(client_conn);
-    if(ret != 0) {
-         h2o_error_printf("[app-server][worker] line = %d, handle:%p, err:%s \n",
-             __LINE__, handle, uv_strerror(ret));
-    } else {
-        h2o_error_printf("[app-server][worker] line = %d, handle:%p, data:%p \n",
-             __LINE__, handle, handle->data);
-        handle->data = NULL;
-        destroy_network_handle(handle, (uv_close_cb)free);
-    }
+    // handle dataa should be pointer  to h2o socket object already freed ,
+    // no longer accessible.
+    //
+    // h2o_error_printf("[app-server][worker] line = %d, handle:%p, data:%p \n",
+    //     __LINE__, handle, handle->data);
+    handle->data = NULL;
+    free(handle);
     atomic_num_connections(app_get_global_cfg(), -1);
 }
 
