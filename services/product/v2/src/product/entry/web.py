@@ -2,7 +2,12 @@ import logging
 import os
 from importlib import import_module
 from typing import Dict
+
 from blacksheep import Application, Router
+from blacksheep.server.authentication.jwt import JWTBearerAuthentication
+from guardpost import Policy
+from guardpost.common import AuthenticatedRequirement
+
 from ecommerce_common.util import import_module_string
 
 _logger = logging.getLogger(__name__)
@@ -33,6 +38,16 @@ def init_app(setting) -> Application:
         max_age=CorsConfig.PREFLIGHT_MAX_AGE,
     )
     _app.middlewares.extend(middlewares)
+    key_provider_cls = import_module_string(dotted_path=setting.AUTH_KEY_PROVIDER)
+    jwtauth = JWTBearerAuthentication(
+        valid_audiences=["web", "product"],
+        authority=setting.JWT_ISSUER,
+        keys_provider=key_provider_cls(setting.KEYSTORE),
+    )
+    _app.use_authentication().add(jwtauth)
+    authorization = _app.use_authorization()
+    authorization += Policy("authed_staff_only", AuthenticatedRequirement())
+    # TODO, permission check
     return _app
 
 

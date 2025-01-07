@@ -1,14 +1,13 @@
 from typing import Optional, Dict
 from blacksheep.contents import JSONContent
-from blacksheep.testing import TestClient
 import pytest
 
 from product.api.dto import TagCreateReqDto, TagUpdateReqDto
-from .common import create_one_tag
+from .common import ITestClient, add_auth_header, create_one_tag
 
 
 async def read_one_tag(
-    client: TestClient,
+    client: ITestClient,
     tag_id: str,
     acs: Optional[int] = None,
     desc_lvl: Optional[int] = None,
@@ -34,7 +33,7 @@ async def read_one_tag(
 class TestCreateTag:
     @classmethod
     async def collect_node_id(
-        cls, client: TestClient, name: str, parent_id: Optional[int]
+        cls, client: ITestClient, name: str, parent_id: Optional[int]
     ) -> Optional[int]:
         reqbody = TagCreateReqDto(name=name, parent=parent_id)
         respbody = await create_one_tag(client, reqbody, 201)
@@ -94,13 +93,15 @@ class TestCreateTag:
 
 class TestUpdateTag:
     async def update_one(
-        client: TestClient, node_id: int, body: TagUpdateReqDto
+        client: ITestClient, node_id: int, body: TagUpdateReqDto
     ) -> Dict:
+        headers: Dict[str, str] = {}
+        add_auth_header(client, headers)
         expect_label = body.name
         expect_parent = body.parent
         resp = await client.patch(
             path="/tag/%s" % (node_id),
-            headers=None,
+            headers=headers,
             query=None,
             content=JSONContent(body),
             cookies=None,
@@ -215,10 +216,12 @@ class TestUpdateTag:
 
 
 class TestDeleteTag:
-    async def delete_one(client: TestClient, node_id: int, expect_status: int):
+    async def delete_one(client: ITestClient, node_id: int, expect_status: int):
+        headers: Dict[str, str] = {}
+        add_auth_header(client, headers)
         resp = await client.delete(
             path="/tag/%s" % (node_id),
-            headers=None,
+            headers=headers,
             query=None,
             content=None,
             cookies=None,

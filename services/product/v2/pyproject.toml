@@ -14,12 +14,15 @@ blacksheep = "2.0.6"
 pydantic = "2.10.1"
 elasticsearch-curator = {git = "https://github.com/metalalive/curator.git",  branch = "5.5"}
 aiohttp = "~3.10.0"
+PyJWT = "^2.10.0"
+cryptography = "^44.0.0"
 ecommerce-common = {path = "../../common/python"}
 my-c-extension-lib = {path = "../../common/python/c_exts"}
 
 [tool.poetry.group.test.dependencies]
 pytest = ">=8.2.0"
 pytest-asyncio = ">=0.24.0"
+ijson = ">= 3.2.*" # for mocking jwks source
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.7.2"

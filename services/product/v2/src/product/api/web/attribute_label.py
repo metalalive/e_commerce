@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from blacksheep import Response, Request, Content
+from blacksheep.server.authorization import auth
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import created, ok, no_content  # status_code
 from blacksheep.server.bindings import FromJSON, FromQuery, QueryBinder, BoundValue
@@ -26,6 +27,7 @@ class ListStrQueryBinder(QueryBinder):
 
 
 class AttrLabelController(APIController):
+    @auth("authed_staff_only")
     @router.post("/attributes")
     async def create(
         self, shr_ctx: SharedContext, reqbody: FromJSON[List[AttrCreateReqDto]]
@@ -37,6 +39,7 @@ class AttrLabelController(APIController):
         respbody = AttrLabelModel.to_resps(ms)
         return created(message=respbody)
 
+    @auth("authed_staff_only")
     @router.put("/attributes")
     async def update(
         self, shr_ctx: SharedContext, reqbody: FromJSON[List[AttrUpdateReqDto]]
@@ -48,6 +51,7 @@ class AttrLabelController(APIController):
         respbody = AttrLabelModel.to_resps(ms)
         return ok(message=respbody)
 
+    @auth("authed_staff_only")
     @router.delete("/attributes")
     async def delete(self, shr_ctx: SharedContext, ids: FromQueryListStr) -> Response:
         repo = shr_ctx.datastore.prod_attri

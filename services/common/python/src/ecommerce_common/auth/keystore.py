@@ -1,10 +1,11 @@
-from datetime import timedelta, datetime, date, UTC
-from types import GeneratorType
 import os
 import random
 import logging
 import uuid
 import json
+from datetime import timedelta, datetime, date, UTC
+from types import GeneratorType
+from typing import List
 
 from ecommerce_common.util import string_unprintable_check
 
@@ -13,13 +14,16 @@ _logger = logging.getLogger(__name__)
 
 class AbstractKeystorePersistReadMixin:
     def __len__(self):
-        raise NotImplementedError
+        raise NotImplementedError()
+
+    def __iter__(self):
+        raise NotImplementedError()
 
     def __getitem__(self, key_id):
         """
         look for valid crypto-key item, clone it then return
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
 
 class AbstractCryptoKeyPersistHandler(AbstractKeystorePersistReadMixin):
@@ -662,6 +666,10 @@ class BaseAuthKeyStore:
             persist_handler=self._persistence["secret"], kid=kid, randonly=randonly
         )
         return item
+
+    def all_pubkeys(self) -> List:
+        self._check_persist_pubkey_handler_exists()
+        return list(iter(self._persistence["pubkey"]))
 
 
 ## end of BaseAuthKeyStore

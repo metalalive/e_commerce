@@ -1,7 +1,12 @@
 import asyncio
 from types import ModuleType
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 
+from guardpost.jwks import KeysProvider, JWKS, JWK as GuardPostJWK
+from jwt.api_jwk import PyJWK
+from jwt.utils import base64url_encode
+
+from ecommerce_common.auth.keystore import create_keystore_helper
 from ecommerce_common.util import (
     import_module_string,
     get_credential_from_secrets,
@@ -72,3 +77,33 @@ class SharedContext:
     @property
     def datastore(self) -> AppDataStore:
         return self._dstore
+
+
+class ExtendedKeysProvider(KeysProvider):
+    def __init__(self, ks_setting: Dict):
+        self._kstore = create_keystore_helper(
+            cfg=ks_setting, import_fn=import_module_string
+        )
+
+    async def get_keys(self) -> JWKS:
+        keyset: List[PyJWK] = self._kstore.all_pubkeys()
+        _jwks = list(map(type(self).to_guardpost_jwk, keyset))
+        return JWKS(_jwks)
+
+    @staticmethod
+    def to_guardpost_jwk(wrapper: PyJWK) -> GuardPostJWK:
+        key_in = wrapper.key
+        pubnum = key_in.public_numbers()
+
+        def encode_with_base64url(x: int) -> str:
+            nbytes = (x.bit_length() + 7) >> 3
+            seq = x.to_bytes(nbytes, byteorder="big")
+            return base64url_encode(seq).decode("utf-8")
+
+        raw = {
+            "kty": wrapper.key_type,
+            "kid": wrapper.key_id,
+            "n": encode_with_base64url(pubnum.n),
+            "e": encode_with_base64url(pubnum.e),
+        }
+        return GuardPostJWK.from_dict(raw)

@@ -54,4 +54,19 @@ DATABASES = {
         },
     },
     "confidential_path": None,
+}  # --- end of DATABASE clause
+
+KEYSTORE = {
+    "keystore": "ecommerce_common.auth.keystore.BaseAuthKeyStore",
+    "persist_pubkey_handler": {
+        "module_path": "ecommerce_common.auth.jwt.RemoteJWKSPersistHandler",
+        "init_kwargs": {
+            "url": "http://localhost:8008/jwks",
+            "name": "remote_pubkey",
+            "lifespan_hrs": 13,
+        },
+    },
 }
+
+AUTH_KEY_PROVIDER = "product.shared.ExtendedKeysProvider"
+JWT_ISSUER = "http://localhost:8008/login"

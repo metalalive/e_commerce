@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import List, Dict
 
 from blacksheep import FromJSON, Response
+from blacksheep.server.authorization import auth
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import (
     created,
@@ -12,6 +13,7 @@ from blacksheep.server.responses import (
     forbidden,
     bad_request,
 )
+from guardpost import User as AuthUser
 
 from product.model import (
     TagModel,
@@ -77,12 +79,17 @@ class SaleItemController(APIController):
             labels_found: List[AttrLabelModel] = []
         return SaleItemAttriModel.from_req(labels_found, attri_d)
 
+    @auth("authed_staff_only")
     @router.post("/item")
     async def create(
-        self, shr_ctx: SharedContext, reqbody: FromJSON[SaleItemCreateReqDto]
+        self,
+        shr_ctx: SharedContext,
+        reqbody: FromJSON[SaleItemCreateReqDto],
+        authed_user: AuthUser,
     ) -> Response:
         assert self is None
-        usr_prof_id: int = 123  # TODO: authorization
+        usr_prof_id: int = authed_user.claims.get("profile", -1)
+        # TODO: authorization
         reqbody = reqbody.value
         try:
             tag_ms_map = await SaleItemController.load_tags(shr_ctx, reqbody.tags)
@@ -102,15 +109,17 @@ class SaleItemController(APIController):
         item_d = item_m.to_dto()
         return created(message=item_d.model_dump())
 
+    @auth("authed_staff_only")
     @router.put("/item/{item_id}")
     async def modify(
         self,
         shr_ctx: SharedContext,
         item_id: int,
         reqbody: FromJSON[SaleItemUpdateReqDto],
+        authed_user: AuthUser,
     ) -> Response:
         assert self is None
-        usr_prof_id: int = 123  # TODO: authorization
+        usr_prof_id: int = authed_user.claims.get("profile", -1)
         reqbody = reqbody.value
         try:
             tag_ms_map = await SaleItemController.load_tags(shr_ctx, reqbody.tags)
@@ -131,9 +140,12 @@ class SaleItemController(APIController):
         item_d = item_m.to_dto()
         return ok(message=item_d.model_dump())
 
+    @auth("authed_staff_only")
     @router.delete("/item/{item_id}")
-    async def delete(self, shr_ctx: SharedContext, item_id: int) -> Response:
-        usr_prof_id: int = 123  # TODO: authorization
+    async def delete(
+        self, shr_ctx: SharedContext, item_id: int, authed_user: AuthUser
+    ) -> Response:
+        usr_prof_id: int = authed_user.claims.get("profile", -1)
         repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
         try:
             maintainer_prof_id: int = await repo.get_maintainer(item_id)
