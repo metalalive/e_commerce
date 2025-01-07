@@ -410,7 +410,12 @@ class KeystoreMixin:
         return out
 
     def gen_access_token(
-        self, profile, audience, ks_cfg=None, access_token_valid_seconds=300
+        self,
+        profile,
+        audience,
+        issuer=None,
+        ks_cfg=None,
+        access_token_valid_seconds=300,
     ):
         from ecommerce_common.auth.jwt import JWT
 
@@ -428,6 +433,8 @@ class KeystoreMixin:
             "iat": now_time,
             "exp": expiry,
         }
+        if issuer:
+            payload["iss"] = issuer
         payload.update(profile_serial)  # roles, quota
         token.payload.update(payload)
         return token.encode(keystore=keystore)

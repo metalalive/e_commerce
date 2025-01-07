@@ -1,6 +1,7 @@
 from typing import Optional
 
 from blacksheep import FromJSON, Response
+from blacksheep.server.authorization import auth
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import created, ok, no_content
 
@@ -12,6 +13,7 @@ from ..dto import TagCreateReqDto, TagUpdateReqDto, TagReadRespDto
 
 
 class TagController(APIController):
+    @auth("authed_staff_only")
     @router.post("/tag")
     async def create(
         self, shr_ctx: SharedContext, reqbody: FromJSON[TagCreateReqDto]
@@ -31,6 +33,7 @@ class TagController(APIController):
         tag_d = newnode.to_resp(tree_id, parent_node_id)
         return created(message=tag_d.model_dump())
 
+    @auth("authed_staff_only")
     @router.patch("/tag/{tag_id}")
     async def modify(
         self, shr_ctx: SharedContext, tag_id: str, reqbody: FromJSON[TagUpdateReqDto]
@@ -62,6 +65,7 @@ class TagController(APIController):
         tag_d = tag_m.to_resp(dst_tree_id, dst_parent_node_id)
         return ok(message=tag_d.model_dump())
 
+    @auth("authed_staff_only")
     @router.delete("/tag/{tag_id}")
     async def remove(self, shr_ctx: SharedContext, tag_id: str) -> Response:
         (tree_id, node_id) = TagModel.decode_req_id(tag_id)

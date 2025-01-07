@@ -2,7 +2,6 @@ from typing import List, Tuple, Dict, Optional
 
 from blacksheep import Response
 from blacksheep.contents import JSONContent
-from blacksheep.testing import TestClient
 from pydantic import NonNegativeInt
 import pytest
 
@@ -13,13 +12,18 @@ from product.api.dto import (
     SaleItemAttriReqDto,
 )
 
-from .common import create_one_tag, create_many_attri_labels
+from .common import (
+    ITestClient,
+    add_auth_header,
+    create_one_tag,
+    create_many_attri_labels,
+)
 
 
 class TestSaleableItem:
     @staticmethod
     async def create_tag_bulk(
-        client: TestClient, reqdata: List[Tuple[str, Optional[str]]]
+        client: ITestClient, reqdata: List[Tuple[str, Optional[str]]]
     ) -> List[str]:
         async def setup_one_tag(label: str, parent: Optional[str]) -> str:
             reqbody = TagCreateReqDto(name=label, parent=parent)
@@ -30,13 +34,15 @@ class TestSaleableItem:
 
     @staticmethod
     async def setup_create_one(
-        client: TestClient,
+        client: ITestClient,
         reqbody: SaleItemCreateReqDto,
         expect_status: int,
     ) -> Response:
+        headers: Dict[str, str] = {}
+        add_auth_header(client, headers)
         resp = await client.post(
             path="/item",
-            headers=None,
+            headers=headers,
             content=JSONContent(reqbody),
             cookies=None,
         )
@@ -45,14 +51,16 @@ class TestSaleableItem:
 
     @staticmethod
     async def setup_update_one(
-        client: TestClient,
+        client: ITestClient,
         existing_saleitem_id: int,
         reqbody: SaleItemCreateReqDto,
         expect_status: int,
     ) -> Response:
+        headers: Dict[str, str] = {}
+        add_auth_header(client, headers)
         resp = await client.put(
             path="/item/%d" % existing_saleitem_id,
-            headers=None,
+            headers=headers,
             content=JSONContent(reqbody),
             cookies=None,
         )
@@ -119,6 +127,7 @@ class TestSaleableItem:
             media_set=["resource-video-id-999", "resource-image-id-888"],
         )
         respdata = await cls.setup_create_one(mock_client, reqdata, 201)
+        assert respdata["usrprof"] == 1234  # TODO, parameter
         assert respdata["name"] == "Bluetooth Headphones"
         assert respdata["visible"] is True
         assert "resource-video-id-999" in respdata["media_set"]
@@ -156,6 +165,7 @@ class TestSaleableItem:
         respdata2 = await cls.setup_update_one(
             mock_client, existing_saleitem_id, reqdata2, 200
         )
+        assert respdata2["usrprof"] == 1234  # TODO, parameter
         assert respdata2["name"] == "LoRa brain wave remote controller"
         assert respdata2["visible"] is False
         assert "resource-video-id-9487" in respdata2["media_set"]
@@ -211,7 +221,11 @@ class TestSaleableItem:
         assert "resource-id-video" in fetched_data["media_set"]
         assert "resource-id-image" in fetched_data["media_set"]
 
-        delete_resp = await mock_client.delete(f"/item/{created_item_id}")
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers)
+        delete_resp = await mock_client.delete(
+            f"/item/{created_item_id}", headers=headers
+        )
         assert delete_resp.status == 204
 
         fetch_deleted_resp = await mock_client.get(f"/item/{created_item_id}")

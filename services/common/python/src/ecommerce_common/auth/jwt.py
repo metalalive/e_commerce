@@ -274,6 +274,10 @@ class RemoteJWKSPersistHandler(AbstractKeystorePersistReadMixin):
             raise e
         return keys
 
+    def __iter__(self):
+        signing_keys = self._get_signing_keys()
+        return iter(signing_keys)
+
     def __len__(self):
         signing_keys = self._get_signing_keys()
         return len(signing_keys)

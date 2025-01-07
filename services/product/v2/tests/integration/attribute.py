@@ -1,11 +1,10 @@
 import asyncio
 from typing import Tuple, List, Dict
 from blacksheep.contents import JSONContent
-from blacksheep.testing import TestClient
 import pytest
 
 from product.api.dto import AttrDataTypeDto, AttrUpdateReqDto
-from .common import create_many_attri_labels
+from .common import ITestClient, add_auth_header, create_many_attri_labels
 
 
 class TestAttribute:
@@ -16,7 +15,7 @@ class TestAttribute:
 
     @staticmethod
     async def search_then_verify(
-        client: TestClient,
+        client: ITestClient,
         req_keyword: str,
         expect_data: List[Tuple[str, AttrDataTypeDto]],
     ):
@@ -84,10 +83,12 @@ class TestAttribute:
                 d["dtype"] = AttrDataTypeDto.UnsignedInteger
             return cls.setup_update_req((d["id_"], d["name"], d["dtype"]))
 
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers)
         reqbody = list(map(_setup_update_data, respbody))
         resp = await mock_client.put(
             path="/attributes",
-            headers=None,
+            headers=headers,
             query=None,
             content=JSONContent(reqbody),
             cookies=None,
@@ -115,9 +116,11 @@ class TestAttribute:
             if d["name"] in ("fearless ice climb", "meshed boiled pumpkin")
         ]
         query = {"ids": ",".join(ids_to_delete)}
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers)
         resp = await mock_client.delete(
             path="/attributes",
-            headers=None,
+            headers=headers,
             query=query,
         )
         assert resp.status == 204
