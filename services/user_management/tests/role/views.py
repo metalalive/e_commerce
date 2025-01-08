@@ -1,7 +1,8 @@
 from datetime import timedelta
-from typing import Dict
+from typing import Dict, List
 
 from django.test import TransactionTestCase
+from django.db.models import Q
 from django.utils import timezone as django_timezone
 from django.contrib.auth.models import Permission
 from rest_framework.settings import api_settings as drf_settings
@@ -122,6 +123,8 @@ class PermissionTestCase(
 class RoleCreationTestCase(
     TransactionTestCase, _BaseMockTestClientInfoMixin, AuthenticateUserMixin
 ):
+    reset_sequences = True
+    fixtures = ["remoteapps_quota_perm_fixtures.json"]
     path = "/roles"
 
     def setUp(self):
@@ -140,13 +143,14 @@ class RoleCreationTestCase(
         self._client.cookies.clear()
         self._teardown_keystore()
 
-    def _prepare_access_token(self, new_perms_info):
-        qset = Permission.objects.filter(
-            content_type__app_label="user_management", codename__in=new_perms_info
-        )
+    def _prepare_access_token(self, new_perms_info: Dict[str, List[str]]):
+        q_cond = Q()
+        for applabel, codenames in new_perms_info.items():
+            q_cond |= Q(content_type__app_label=applabel, codename__in=codenames)
+        qset = Permission.objects.filter(q_cond)
         self._roles[1].permissions.set(qset)
         acs_tok_resp = self._refresh_access_token(
-            testcase=self, audience=["user_management"]
+            testcase=self, audience=new_perms_info.keys()
         )
         access_token = acs_tok_resp["access_token"]
         self.api_call_kwargs["headers"]["HTTP_AUTHORIZATION"] = " ".join(
@@ -154,12 +158,14 @@ class RoleCreationTestCase(
         )
 
     def test_no_permission(self):
-        self._prepare_access_token(new_perms_info=["view_quotamaterial", "view_role"])
+        data = {"user_management": ["view_quotamaterial", "view_role"]}
+        self._prepare_access_token(new_perms_info=data)
         response = self._send_request_to_backend(**self.api_call_kwargs)
         self.assertEqual(int(response.status_code), 403)
 
     def test_input_error(self):
-        self._prepare_access_token(new_perms_info=["view_role", "add_role"])
+        data = {"user_management": ["view_role", "add_role"]}
+        self._prepare_access_token(new_perms_info=data)
         # subcase #1, empty request data
         self.api_call_kwargs["body"] = []
         response = self._send_request_to_backend(**self.api_call_kwargs)
@@ -168,9 +174,7 @@ class RoleCreationTestCase(
         self.assertEqual("request data should not be empty", err_info["detail"])
         # subcase #2, lacking essential fields
         body = [
-            {
-                "name": "security vendor",
-            },
+            {"name": "security vendor"},
             {},
         ]
         self.api_call_kwargs["body"] = body
@@ -216,14 +220,28 @@ class RoleCreationTestCase(
         )
 
     def test_bulk_ok(self):
-        self._prepare_access_token(new_perms_info=["view_role", "add_role"])
+        data = {
+            "user_management": [
+                "view_role",
+                "add_role",
+            ],
+            "product": ["add_saleableitem", "view_saleablepackage"],
+            "payment": ["can_create_return_req"],
+        }
+        self._prepare_access_token(new_perms_info=data)
         perms = self._permissions.filter(codename__contains="generic")
         perms = perms.values_list("id", flat=True)
         perms = list(perms)
+        perms_remoteapps = self._permissions.filter(
+            codename__in=["can_create_return_req", "add_saleableitem"]
+        )
+        perms_remoteapps = perms_remoteapps.values_list("id", flat=True)
+        perms_remoteapps = list(perms_remoteapps)
         body = [
             {"name": "security vendor", "permissions": perms[0:2]},
             {"name": "SoC emulator", "permissions": perms[2:4]},
             {"name": "Human Resource team", "permissions": perms[4:6]},
+            {"name": "base merchant", "permissions": perms_remoteapps},
         ]
         self.api_call_kwargs["body"] = body
         # subcase #1: add roles without specifying id
@@ -238,6 +256,7 @@ class RoleCreationTestCase(
         actual_result = sort_nested_object(actual_result)
         self.assertListEqual(expect_result, actual_result)
         # subcase #2: add roles with specified id, attempts to overwrite reserved roles , but ignore at backend
+        body.pop()
         body[0].update({"id": ROLE_ID_SUPERUSER, "name": "malicious superuser"})
         body[1].update({"id": ROLE_ID_STAFF, "name": "fake staff"})
         body[2].update({"id": 5566, "name": "internship"})

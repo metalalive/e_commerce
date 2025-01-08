@@ -13,9 +13,6 @@
 |Python | 3.12.0 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/build_python_from_source.md) |
 |MariaDB| 11.2.3 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/mariaDB/server_setup_11.2.md) |
 |RabbitMQ| 3.2.4 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/rabbitmq_setup.md) |
-|Elasticsearch| 5.6.16 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/ELK_setup.md#elasticsearch) | 
-|Logstash| 5.6.16 | [see here](https://github.com/metalalive/EnvToolSetupJunkBox/blob/master/ELK_setup.md#logstash) |
-|Kibana| 5.6.16 | N/A |
 |pipenv | 2023.12.1 | [see here](https://pip.pypa.io/en/stable/) |
 |pip| 24.0 | [see here](https://pip.pypa.io/en/stable/) |
 |OpenSSL| 3.1.4 | [see here](https://raspberrypi.stackexchange.com/a/105663/86878) |
@@ -74,11 +71,20 @@ pipenv run python3 manage.py makemigrations user_management  --settings settings
 pipenv run python3 manage.py migrate user_management  <LATEST_MIGRATION_VERSION>  --settings settings.migration  --database site2_dba
 ```
 
-For initial data setup to the schema, run following script
+##### default user setup
+For default user setup (staff, superuser) to the schema, run following script
 ```bash
 pipenv run python3 -m  user_management.init_users
 ```
-which automatically generates default fixture records (which includes default roles, default login users ... etc.) for data migrations in `user_management` application
+which automatically generates default fixture records (which includes default roles, default login users ... etc.) for data migrations in `user_management` application.
+
+##### Permissions / quota code setup
+Permissions / quota code setup for other remote applications can be done with following command
+
+```bash
+pipenv run python3 ./manage.py  loaddata  --database usermgt_service  --settings settings.development
+    [-v {0,1,2,3}]  fixture  remoteapps_quota_perm_fixtures.json
+```
 
 
 ## Run
