@@ -1,0 +1,33 @@
+name: Payment 3rd-party processor Stripe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/payment-3pty-stripe.yaml'
+      - 'services/payment/src/adapter/processor/mod.rs'
+      - 'services/payment/src/adapter/processor/base_client.rs'
+      - 'services/payment/src/adapter/processor/stripe/**'
+      - 'services/payment/tests/unit/adapter/processor/stripe/**'
+  schedule:
+    - cron: '59 10 * * 2,5'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  init-env-test:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: downgrade rust toolchain to v1.77
+      uses: ./.github/actions/rust-downgrade
+      with:
+        version-request: 1.77
+
+    - name: install headless firefox driver for mocking client
+      working-directory: services/payment
+      run: |
+          cargo  install  geckodriver
+          ~/.cargo/bin/geckodriver &
+          echo "[debug] gecko driver started"
+
