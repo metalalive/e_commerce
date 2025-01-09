@@ -40,6 +40,7 @@ jobs:
             pipenv run python3 manage.py makemigrations user_management  --settings settings.migration
             pipenv run python3 manage.py migrate user_management  0002  --settings settings.migration  --database site2_dba
             pipenv run python3 -m  user_management.init_users
+            pipenv run python3 ./manage.py  loaddata  --database usermgt_service  --settings settings.development -v 2  remoteapps_quota_perm_fixtures.json
 
       # Note / TODO
       # Unfortunately , following step does not work well in github action workflow
@@ -61,7 +62,6 @@ jobs:
 
 
     init-env-then-test:
-      if: startsWith(github.head_ref, 'usermgt-dev/')
       runs-on: ubuntu-24.04
       services:
         mariadb_v11:

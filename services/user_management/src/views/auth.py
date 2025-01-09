@@ -509,11 +509,16 @@ class RefreshAccessTokenView(APIView):
             seconds=django_settings.JWT_ACCESS_TOKEN_VALID_PERIOD
         )
         token = JWT()
+        issuer_url = "%s/%s" % (
+            cors_cfg.ALLOWED_ORIGIN[UserMgtCfg.name],
+            UserMgtCfg.api_url[LoginView.__name__],
+        )
         payload = {
             "profile": profile_serial.pop("id"),
             "aud": audience,
             "iat": now_time,
             "exp": expiry,
+            "iss": issuer_url,
         }
         payload.update(profile_serial)  # roles, quota
         token.payload.update(payload)

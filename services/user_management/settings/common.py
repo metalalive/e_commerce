@@ -19,7 +19,9 @@ from ecommerce_common.logging.logger import ExtendedLogger  # noqa : F401
 from ecommerce_common.util.django.setup import setup_secrets
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
+APP_DIR = Path(__file__).resolve(strict=True).parent.parent
+BASE_DIR = APP_DIR.parent
+os.environ["APP_BASE_PATH"] = str(APP_DIR)
 os.environ["SYS_BASE_PATH"] = str(BASE_DIR)
 
 
@@ -58,9 +60,7 @@ TEMPLATES = [
     }
 ]
 
-FIXTURE_DIRS = [
-    "migrations/django/user_management",
-]
+FIXTURE_DIRS = [APP_DIR.joinpath("data")]
 
 # referenced only by development server (`runserver` command)
 WSGI_APPLICATION = "ecommerce_common.util.django.wsgi.application"
