@@ -24,10 +24,61 @@ jobs:
       with:
         version-request: 1.77
 
+    - name: set up mock credentials for test
+      working-directory: services/common
+      run: |
+          python3 ./python/src/ecommerce_common/util/json_renderer.py \
+              --template=./data/secrets_template.json   --output=./data/secrets.json \
+              --parameters="backend_apps/secret_key/staff/Stripe=${{ secrets.StripeApiKey4Test }}"
+          echo "[debug] secret setup completed"
+
+    - name: Run onboarding test
+      working-directory: services/payment
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+      run: |
+          cargo test --test unit -- adapter::processor::stripe::onboard  --test-threads=1
+
+    - name: set up Stripe account
+      working-directory: services
+      run: |
+          python3 ./common/python/src/ecommerce_common/util/json_renderer.py \
+              --template=./payment/tests/unit/examples/app-usr-id-to-stripe-account.json \
+              --output=./payment/tests/unit/examples/app-usr-id-to-stripe-account.json \
+              --parameters="12=${{ secrets.StripeAccountID4Test }}"
+          echo "[debug] Stripe account setup completed"
+
     - name: install headless firefox driver for mocking client
       working-directory: services/payment
       run: |
           cargo  install  geckodriver
           ~/.cargo/bin/geckodriver &
           echo "[debug] gecko driver started"
+
+    - name: Run pay-in / pay-out test
+      working-directory: services/payment
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+      run: |
+          cargo test --test unit -- adapter::processor::stripe::pay_in  --test-threads=1
+          cargo test --test unit -- adapter::processor::stripe::pay_out --test-threads=1
+
+    - name: set up existing Stripe payment
+      working-directory: services
+      run: |
+          python3 ./common/python/src/ecommerce_common/util/json_renderer.py \
+              --template=./payment/tests/unit/examples/processor-stripe-refund-ok.json \
+              --output=./payment/tests/unit/examples/processor-stripe-refund-ok.json \
+              --parameters="payment_intent=${{ secrets.StripePayIntentID4Test }}"
+          echo "[debug] Stripe payment intent setup completed"
+
+    - name: Run refund test
+      working-directory: services/payment
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+      run: |
+          cargo test --test unit -- adapter::processor::stripe::refund  --test-threads=1
 
