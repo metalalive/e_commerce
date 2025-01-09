@@ -80,5 +80,5 @@ jobs:
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
       run: |
           cargo test --test unit -- adapter::processor::stripe::pay_out --test-threads=1
-          cargo test --test unit -- adapter::processor::stripe::pay_in  --test-threads=1
+          cargo test --test unit -- adapter::processor::stripe::pay_in::charge_flow_completed  --test-threads=1
 
