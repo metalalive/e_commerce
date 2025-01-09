@@ -49,22 +49,6 @@ jobs:
               --parameters="12=${{ secrets.StripeAccountID4Test }}"
           echo "[debug] Stripe account setup completed"
 
-    - name: install headless firefox driver for mocking client
-      working-directory: services/payment
-      run: |
-          cargo  install  geckodriver
-          ~/.cargo/bin/geckodriver &
-          echo "[debug] gecko driver started"
-
-    - name: Run pay-in / pay-out test
-      working-directory: services/payment
-      env:
-          SYS_BASE_PATH: "${{ github.workspace }}/services"
-          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
-      run: |
-          cargo test --test unit -- adapter::processor::stripe::pay_in  --test-threads=1
-          cargo test --test unit -- adapter::processor::stripe::pay_out --test-threads=1
-
     - name: set up existing Stripe payment
       working-directory: services
       run: |
@@ -81,4 +65,20 @@ jobs:
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
       run: |
           cargo test --test unit -- adapter::processor::stripe::refund  --test-threads=1
+
+    - name: install headless firefox driver for mocking client
+      working-directory: services/payment
+      run: |
+          cargo  install  geckodriver
+          ~/.cargo/bin/geckodriver &
+          echo "[debug] gecko driver started"
+
+    - name: Run pay-in / pay-out test
+      working-directory: services/payment
+      env:
+          SYS_BASE_PATH: "${{ github.workspace }}/services"
+          SERVICE_BASE_PATH: "${{ github.workspace }}/services/payment"
+      run: |
+          cargo test --test unit -- adapter::processor::stripe::pay_out --test-threads=1
+          cargo test --test unit -- adapter::processor::stripe::pay_in  --test-threads=1
 
