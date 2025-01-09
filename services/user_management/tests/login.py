@@ -185,24 +185,14 @@ class RefreshAccessTokenTestCase(
     path = "/refresh_access_token"
 
     def _setup_role(self, profile, approved_by):
+        # fmt: off
         role_data = [
-            {
-                "id": ROLE_ID_STAFF,
-                "name": "base staff",
-            },
-            {
-                "id": 4,
-                "name": "my role on auth",
-            },
-            {
-                "id": 5,
-                "name": "my role on usrmgt",
-            },
+            {"id": ROLE_ID_STAFF, "name": "base staff",},
+            {"id": 4, "name": "my role on auth",},
+            {"id": 5, "name": "my role on usrmgt",},
         ]
-        app_labels = (
-            "auth",
-            "user_management",
-        )
+        app_labels = ("auth", "user_management",)
+        # fmt: on
         roles = tuple(map(lambda d: Role.objects.create(**d), role_data))
         roles_iter = iter(roles[1:])
         for app_label in app_labels:
@@ -271,6 +261,8 @@ class RefreshAccessTokenTestCase(
         payld_verified = self._verify_recv_jwt(
             actual_token, expect_audience=expect_audience
         )
+        expect_issuer_url = "%s/login" % (cors_cfg.ALLOWED_ORIGIN["user_management"])
+        self.assertEqual(expect_issuer_url, payld_verified["iss"])
         self.assertEqual(self._profile.id, payld_verified["profile"])
         self.assertEqual(ROLE_ID_STAFF, payld_verified["priv_status"])
         self.assertListEqual(expect_audience, payld_verified["aud"])
