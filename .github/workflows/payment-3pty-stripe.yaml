@@ -1,4 +1,4 @@
-name: Payment 3rd-party processor Stripe
+name: Stripe 3rd-party processor test in Payment application
 
 on:
   push:
