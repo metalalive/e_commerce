@@ -30,6 +30,7 @@ from product.adapter.repository import (
     AbstractAttrLabelRepo,
     AbstractSaleItemRepo,
 )
+from product.util import PriviledgeLevel, permission_check
 
 from . import router
 from ..dto import SaleItemCreateReqDto, SaleItemUpdateReqDto, SaleItemAttriReqDto
@@ -79,7 +80,7 @@ class SaleItemController(APIController):
             labels_found: List[AttrLabelModel] = []
         return SaleItemAttriModel.from_req(labels_found, attri_d)
 
-    @auth("authed_staff_only")
+    @auth(PriviledgeLevel.AuthedUser.value)
     @router.post("/item")
     async def create(
         self,
@@ -88,8 +89,11 @@ class SaleItemController(APIController):
         authed_user: AuthUser,
     ) -> Response:
         assert self is None
+        perm_err = permission_check(authed_user.claims, ["add_saleableitem"])
+        if perm_err:
+            return forbidden(message=perm_err)
         usr_prof_id: int = authed_user.claims.get("profile", -1)
-        # TODO: authorization
+        # TODO: quota check
         reqbody = reqbody.value
         try:
             tag_ms_map = await SaleItemController.load_tags(shr_ctx, reqbody.tags)
@@ -109,7 +113,7 @@ class SaleItemController(APIController):
         item_d = item_m.to_dto()
         return created(message=item_d.model_dump())
 
-    @auth("authed_staff_only")
+    @auth(PriviledgeLevel.AuthedUser.value)
     @router.put("/item/{item_id}")
     async def modify(
         self,
@@ -119,6 +123,9 @@ class SaleItemController(APIController):
         authed_user: AuthUser,
     ) -> Response:
         assert self is None
+        perm_err = permission_check(authed_user.claims, ["change_saleableitem"])
+        if perm_err:
+            return forbidden(message=perm_err)
         usr_prof_id: int = authed_user.claims.get("profile", -1)
         reqbody = reqbody.value
         try:
@@ -140,11 +147,14 @@ class SaleItemController(APIController):
         item_d = item_m.to_dto()
         return ok(message=item_d.model_dump())
 
-    @auth("authed_staff_only")
+    @auth(PriviledgeLevel.AuthedUser.value)
     @router.delete("/item/{item_id}")
     async def delete(
         self, shr_ctx: SharedContext, item_id: int, authed_user: AuthUser
     ) -> Response:
+        perm_err = permission_check(authed_user.claims, ["delete_saleableitem"])
+        if perm_err:
+            return forbidden(message=perm_err)
         usr_prof_id: int = authed_user.claims.get("profile", -1)
         repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
         try:

@@ -11,13 +11,15 @@ from blacksheep.testing.helpers import HeadersType
 from blacksheep.contents import JSONContent
 from curator.cli import run as run_curator
 
-from ecommerce_common.tests.common import KeystoreMixin
 from ecommerce_common.models.constants import ROLE_ID_STAFF
+from ecommerce_common.tests.common import KeystoreMixin
 from product.entry.web import app
 from product.api.dto import TagCreateReqDto, AttrDataTypeDto, AttrCreateReqDto
 
 app_setting_path = os.environ["APP_SETTINGS"]
 app_setting = import_module(app_setting_path)
+
+from ecommerce_common.models.enums.base import AppCodeOptions  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -93,13 +95,17 @@ class ITestClient(TestClient):
             return await super().delete(*args, **kwargs)
 
 
-def add_auth_header(client: ITestClient, headers: HeadersType):
+def add_auth_header(
+    client: ITestClient, headers: HeadersType, usr_id: int, perms: List[str]
+):
+    app_code = AppCodeOptions.product.value[0]
     auth_data = {
-        "id": 1234,
+        "id": usr_id,
         "privilege_status": ROLE_ID_STAFF,
-        "quotas": [{"app_code": 5566, "mat_code": 1, "maxnum": -1}],
-        "roles": [{"app_code": 5566, "codename": "add_saleableitem"}],
-    }  # TODO: complete quota and roles from different use cases
+        "quotas": [{"app_code": app_code, "mat_code": 1, "maxnum": -1}],
+        "roles": [{"app_code": app_code, "codename": p} for p in perms],
+        # [{"app_code": 5566, "codename": "add_saleableitem"}],
+    }  # TODO: complete quota from different use cases
     encoded_token = client.keystore.gen_access_token(
         auth_data, audience=["product"], issuer=app_setting.JWT_ISSUER
     )
@@ -113,10 +119,10 @@ async def mock_client(es_mapping_init, itest_keystore) -> ITestClient:
 
 
 async def create_one_tag(
-    client: ITestClient, body: TagCreateReqDto, expect_status: int
+    client: ITestClient, usr_id: int, body: TagCreateReqDto, expect_status: int
 ) -> Dict:
     headers: Dict[str, str] = {}
-    add_auth_header(client, headers)
+    add_auth_header(client, headers, usr_id, ["add_producttag"])
     expect_label = body.name
     expect_parent = body.parent
     resp = await client.post(
@@ -136,11 +142,12 @@ async def create_one_tag(
 
 async def create_many_attri_labels(
     client: ITestClient,
+    usr_id: int,
     data: List[Tuple[str, AttrDataTypeDto]],
     expect_status: int,
 ) -> Response:
     headers: Dict[str, str] = {}
-    add_auth_header(client, headers)
+    add_auth_header(client, headers, usr_id, ["add_productattributetype"])
 
     def setup_create_req(d: Tuple[str, AttrDataTypeDto]) -> AttrCreateReqDto:
         out = AttrCreateReqDto(name=d[0], dtype=d[1].value)

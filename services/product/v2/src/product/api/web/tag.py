@@ -3,21 +3,29 @@ from typing import Optional
 from blacksheep import FromJSON, Response
 from blacksheep.server.authorization import auth
 from blacksheep.server.controllers import APIController
-from blacksheep.server.responses import created, ok, no_content
+from blacksheep.server.responses import created, forbidden, ok, no_content
+from guardpost import User as AuthUser
 
 from product.model import TagModel, TagTreeModel
 from product.shared import SharedContext
+from product.util import PriviledgeLevel, permission_check
 
 from . import router
 from ..dto import TagCreateReqDto, TagUpdateReqDto, TagReadRespDto
 
 
 class TagController(APIController):
-    @auth("authed_staff_only")
+    @auth(PriviledgeLevel.AuthedUser.value)
     @router.post("/tag")
     async def create(
-        self, shr_ctx: SharedContext, reqbody: FromJSON[TagCreateReqDto]
+        self,
+        shr_ctx: SharedContext,
+        reqbody: FromJSON[TagCreateReqDto],
+        authed_user: AuthUser,
     ) -> Response:
+        perm_err = permission_check(authed_user.claims, ["add_producttag"])
+        if perm_err:
+            return forbidden(message=perm_err)
         reqbody = reqbody.value
         repo = shr_ctx.datastore.tag
         newnode = TagModel.from_req(reqbody)
@@ -33,13 +41,20 @@ class TagController(APIController):
         tag_d = newnode.to_resp(tree_id, parent_node_id)
         return created(message=tag_d.model_dump())
 
-    @auth("authed_staff_only")
+    @auth(PriviledgeLevel.AuthedUser.value)
     @router.patch("/tag/{tag_id}")
     async def modify(
-        self, shr_ctx: SharedContext, tag_id: str, reqbody: FromJSON[TagUpdateReqDto]
+        self,
+        shr_ctx: SharedContext,
+        tag_id: str,
+        authed_user: AuthUser,
+        reqbody: FromJSON[TagUpdateReqDto],
     ) -> Response:
-        repo = shr_ctx.datastore.tag
+        perm_err = permission_check(authed_user.claims, ["change_producttag"])
+        if perm_err:
+            return forbidden(message=perm_err)
         reqbody = reqbody.value
+        repo = shr_ctx.datastore.tag
         (orig_tree_id, orig_node_id) = TagModel.decode_req_id(tag_id)
         # TODO, return 404 if not exists
         orig_tree = await repo.fetch_tree(orig_tree_id)
@@ -65,9 +80,14 @@ class TagController(APIController):
         tag_d = tag_m.to_resp(dst_tree_id, dst_parent_node_id)
         return ok(message=tag_d.model_dump())
 
-    @auth("authed_staff_only")
+    @auth(PriviledgeLevel.AuthedUser.value)
     @router.delete("/tag/{tag_id}")
-    async def remove(self, shr_ctx: SharedContext, tag_id: str) -> Response:
+    async def remove(
+        self, shr_ctx: SharedContext, authed_user: AuthUser, tag_id: str
+    ) -> Response:
+        perm_err = permission_check(authed_user.claims, ["delete_producttag"])
+        if perm_err:
+            return forbidden(message=perm_err)
         (tree_id, node_id) = TagModel.decode_req_id(tag_id)
         repo = shr_ctx.datastore.tag
         tree = await repo.fetch_tree(tree_id)  # TODO, return 410 if not exists

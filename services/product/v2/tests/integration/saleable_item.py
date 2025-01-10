@@ -23,11 +23,11 @@ from .common import (
 class TestSaleableItem:
     @staticmethod
     async def create_tag_bulk(
-        client: ITestClient, reqdata: List[Tuple[str, Optional[str]]]
+        client: ITestClient, usr_id: int, reqdata: List[Tuple[str, Optional[str]]]
     ) -> List[str]:
         async def setup_one_tag(label: str, parent: Optional[str]) -> str:
             reqbody = TagCreateReqDto(name=label, parent=parent)
-            respbody = await create_one_tag(client, reqbody, 201)
+            respbody = await create_one_tag(client, usr_id, reqbody, 201)
             return respbody["node"]
 
         return [await setup_one_tag(label, parent) for label, parent in reqdata]
@@ -35,11 +35,12 @@ class TestSaleableItem:
     @staticmethod
     async def setup_create_one(
         client: ITestClient,
+        usr_id: int,
         reqbody: SaleItemCreateReqDto,
         expect_status: int,
     ) -> Response:
         headers: Dict[str, str] = {}
-        add_auth_header(client, headers)
+        add_auth_header(client, headers, usr_id, ["add_saleableitem"])
         resp = await client.post(
             path="/item",
             headers=headers,
@@ -52,12 +53,13 @@ class TestSaleableItem:
     @staticmethod
     async def setup_update_one(
         client: ITestClient,
+        usr_id: int,
         existing_saleitem_id: int,
         reqbody: SaleItemCreateReqDto,
         expect_status: int,
     ) -> Response:
         headers: Dict[str, str] = {}
-        add_auth_header(client, headers)
+        add_auth_header(client, headers, usr_id, ["change_saleableitem"])
         resp = await client.put(
             path="/item/%d" % existing_saleitem_id,
             headers=headers,
@@ -70,13 +72,16 @@ class TestSaleableItem:
     @pytest.mark.asyncio(loop_scope="session")
     async def test_create_update_ok(self, mock_client):
         cls = type(self)
+        mock_usr_id = 110
         total_tags = []
-        tags = await cls.create_tag_bulk(mock_client, [("consumer electronics", None)])
+        tags = await cls.create_tag_bulk(
+            mock_client, mock_usr_id, [("consumer electronics", None)]
+        )
         total_tags.extend(tags)
 
         chosen_tag = tags[0]["id_"]
         reqdata = [("watches", chosen_tag), ("smartphones", chosen_tag)]
-        tags = await cls.create_tag_bulk(mock_client, reqdata)
+        tags = await cls.create_tag_bulk(mock_client, mock_usr_id, reqdata)
         total_tags.extend(tags)
 
         chosen_tag = next(filter(lambda t: t["name"] == "smartphones", tags))
@@ -85,7 +90,7 @@ class TestSaleableItem:
             ("Samsung", chosen_tag["id_"]),
             ("Google", chosen_tag["id_"]),
         ]
-        tags = await cls.create_tag_bulk(mock_client, reqdata)
+        tags = await cls.create_tag_bulk(mock_client, mock_usr_id, reqdata)
         total_tags.extend(tags)
 
         mockdata = [
@@ -98,7 +103,7 @@ class TestSaleableItem:
             ("CPU vendor", AttrDataTypeDto.String),
             ("Supports 5G", AttrDataTypeDto.Boolean),
         ]
-        resp = await create_many_attri_labels(mock_client, mockdata, 201)
+        resp = await create_many_attri_labels(mock_client, mock_usr_id, mockdata, 201)
         total_attr_lablels: List[Dict] = await resp.json()
 
         def setup_tag_vals(data: List[Dict]) -> List[str]:
@@ -126,8 +131,8 @@ class TestSaleableItem:
             attributes=setup_attr_vals(total_attr_lablels),
             media_set=["resource-video-id-999", "resource-image-id-888"],
         )
-        respdata = await cls.setup_create_one(mock_client, reqdata, 201)
-        assert respdata["usrprof"] == 1234  # TODO, parameter
+        respdata = await cls.setup_create_one(mock_client, mock_usr_id, reqdata, 201)
+        assert respdata["usrprof"] == mock_usr_id
         assert respdata["name"] == "Bluetooth Headphones"
         assert respdata["visible"] is True
         assert "resource-video-id-999" in respdata["media_set"]
@@ -163,9 +168,9 @@ class TestSaleableItem:
             media_set=["resource-video-id-9487", "resource-image-id-888"],
         )
         respdata2 = await cls.setup_update_one(
-            mock_client, existing_saleitem_id, reqdata2, 200
+            mock_client, mock_usr_id, existing_saleitem_id, reqdata2, 200
         )
-        assert respdata2["usrprof"] == 1234  # TODO, parameter
+        assert respdata2["usrprof"] == mock_usr_id
         assert respdata2["name"] == "LoRa brain wave remote controller"
         assert respdata2["visible"] is False
         assert "resource-video-id-9487" in respdata2["media_set"]
@@ -181,13 +186,16 @@ class TestSaleableItem:
     @pytest.mark.asyncio(loop_scope="session")
     async def test_delete_fetch_ok(self, mock_client):
         cls = type(self)
-        total_tags = await cls.create_tag_bulk(mock_client, [("home appliances", None)])
+        mock_usr_id = 112
+        total_tags = await cls.create_tag_bulk(
+            mock_client, mock_usr_id, [("home appliances", None)]
+        )
         chosen_tag = total_tags[0]["id_"]
         mockdata = [
             ("motor type", AttrDataTypeDto.String),
             ("capacity liter", AttrDataTypeDto.UnsignedInteger),
         ]
-        resp = await create_many_attri_labels(mock_client, mockdata, 201)
+        resp = await create_many_attri_labels(mock_client, mock_usr_id, mockdata, 201)
         total_attr_lablels: List[Dict] = await resp.json()
 
         def setup_attr_vals(data: List[Dict]) -> List[SaleItemAttriReqDto]:
@@ -210,7 +218,7 @@ class TestSaleableItem:
             attributes=setup_attr_vals(total_attr_lablels),
             media_set=["resource-id-video", "resource-id-image"],
         )
-        respdata = await cls.setup_create_one(mock_client, reqdata, 201)
+        respdata = await cls.setup_create_one(mock_client, mock_usr_id, reqdata, 201)
         created_item_id = respdata["id_"]
 
         fetch_resp = await mock_client.get(f"/item/{created_item_id}")
@@ -222,7 +230,7 @@ class TestSaleableItem:
         assert "resource-id-image" in fetched_data["media_set"]
 
         headers: Dict[str, str] = {}
-        add_auth_header(mock_client, headers)
+        add_auth_header(mock_client, headers, mock_usr_id, ["delete_saleableitem"])
         delete_resp = await mock_client.delete(
             f"/item/{created_item_id}", headers=headers
         )
@@ -234,6 +242,7 @@ class TestSaleableItem:
     @pytest.mark.asyncio(loop_scope="session")
     async def test_create_invalid_tag(self, mock_client):
         cls = type(self)
+        mock_usr_id = 113
         reqdata = SaleItemCreateReqDto(
             name="illegal drug",
             visible=False,
@@ -241,13 +250,16 @@ class TestSaleableItem:
             attributes=[],
             media_set=["resource-video-id-9487", "resource-image-id-888"],
         )
-        respdata = await cls.setup_create_one(mock_client, reqdata, 400)
+        respdata = await cls.setup_create_one(mock_client, mock_usr_id, reqdata, 400)
         assert "nonexist-9876" in respdata["tag_nonexist"]
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_create_invalid_attribute(self, mock_client):
         cls = type(self)
-        total_tags = await cls.create_tag_bulk(mock_client, [("healthcare", None)])
+        mock_usr_id = 114
+        total_tags = await cls.create_tag_bulk(
+            mock_client, mock_usr_id, [("healthcare", None)]
+        )
         chosen_tag = total_tags[0]["id_"]
         reqdata = SaleItemCreateReqDto(
             name="no-magic mushr0om",
@@ -256,5 +268,5 @@ class TestSaleableItem:
             attributes=[SaleItemAttriReqDto(id_="nonexist567", value="illusion")],
             media_set=["resource-video-id-9487", "resource-image-id-888"],
         )
-        respdata = await cls.setup_create_one(mock_client, reqdata, 400)
+        respdata = await cls.setup_create_one(mock_client, mock_usr_id, reqdata, 400)
         assert "nonexist567" in respdata["nonexist-attribute-labels"]

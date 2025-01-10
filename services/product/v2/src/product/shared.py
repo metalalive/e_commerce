@@ -12,7 +12,7 @@ from ecommerce_common.util import (
     get_credential_from_secrets,
 )
 
-from product.adapter.repository import (
+from .adapter.repository import (
     AbstractTagRepo,
     AbstractSaleItemRepo,
     AbstractAttrLabelRepo,
