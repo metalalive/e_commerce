@@ -9,6 +9,7 @@ from guardpost import Policy
 from guardpost.common import AuthenticatedRequirement
 
 from ecommerce_common.util import import_module_string
+from ..util import PriviledgeLevel
 
 _logger = logging.getLogger(__name__)
 
@@ -46,8 +47,9 @@ def init_app(setting) -> Application:
     )
     _app.use_authentication().add(jwtauth)
     authorization = _app.use_authorization()
-    authorization += Policy("authed_staff_only", AuthenticatedRequirement())
-    # TODO, permission check
+    authorization += Policy(
+        PriviledgeLevel.AuthedUser.value, AuthenticatedRequirement()
+    )
     return _app
 
 

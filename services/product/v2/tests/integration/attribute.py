@@ -3,7 +3,7 @@ from typing import Tuple, List, Dict
 from blacksheep.contents import JSONContent
 import pytest
 
-from product.api.dto import AttrDataTypeDto, AttrUpdateReqDto
+from product.api.dto import AttrDataTypeDto, AttrUpdateReqDto, AttrCreateReqDto
 from .common import ITestClient, add_auth_header, create_many_attri_labels
 
 
@@ -32,7 +32,23 @@ class TestAttribute:
         assert set(expect_attrs) == set(actual_attrs)
 
     @pytest.mark.asyncio(loop_scope="session")
+    async def test_auth_failure(self, mock_client):
+        mock_usr_id = 107
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers, mock_usr_id, ["useless"])
+        reqbody = AttrCreateReqDto(name="woha", dtype=AttrDataTypeDto.String)
+        resp = await mock_client.post(
+            path="/attributes",
+            headers=headers,
+            query=None,
+            content=JSONContent([reqbody]),
+            cookies=None,
+        )
+        assert resp.status == 403
+
+    @pytest.mark.asyncio(loop_scope="session")
     async def test_create(self, mock_client):
+        mock_usr_id = 107
         cls = type(self)
         mockdata = [
             ("inner colored meat", AttrDataTypeDto.String),
@@ -43,7 +59,7 @@ class TestAttribute:
             ("stress test qualified", AttrDataTypeDto.Boolean),
             ("glue joint the components", AttrDataTypeDto.String),
         ]
-        resp = await create_many_attri_labels(mock_client, mockdata, 201)
+        resp = await create_many_attri_labels(mock_client, mock_usr_id, mockdata, 201)
         respbody = await resp.json()
         assert len(respbody) == len(mockdata)
         assert respbody[0].get("id_", None)
@@ -65,11 +81,12 @@ class TestAttribute:
     @pytest.mark.asyncio(loop_scope="session")
     async def test_update(self, mock_client):
         cls = type(self)
+        mock_usr_id = 108
         mockdata = [
             ("5urface cOLOr", AttrDataTypeDto.Boolean),
             ("inner diamEter", AttrDataTypeDto.Integer),
         ]
-        resp = await create_many_attri_labels(mock_client, mockdata, 201)
+        resp = await create_many_attri_labels(mock_client, mock_usr_id, mockdata, 201)
         respbody = await resp.json()
 
         def _setup_update_data(d: Dict):
@@ -84,7 +101,9 @@ class TestAttribute:
             return cls.setup_update_req((d["id_"], d["name"], d["dtype"]))
 
         headers: Dict[str, str] = {}
-        add_auth_header(mock_client, headers)
+        add_auth_header(
+            mock_client, headers, mock_usr_id, ["change_productattributetype"]
+        )
         reqbody = list(map(_setup_update_data, respbody))
         resp = await mock_client.put(
             path="/attributes",
@@ -102,13 +121,14 @@ class TestAttribute:
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_delete(self, mock_client):
+        mock_usr_id = 109
         mockdata = [
             ("unknown despair lost", AttrDataTypeDto.Boolean),
             ("fearless ice climb", AttrDataTypeDto.String),
             ("everest base camp", AttrDataTypeDto.UnsignedInteger),
             ("meshed boiled pumpkin", AttrDataTypeDto.Integer),
         ]
-        resp = await create_many_attri_labels(mock_client, mockdata, 201)
+        resp = await create_many_attri_labels(mock_client, mock_usr_id, mockdata, 201)
         respbody = await resp.json()
         ids_to_delete = [
             d["id_"]
@@ -117,7 +137,9 @@ class TestAttribute:
         ]
         query = {"ids": ",".join(ids_to_delete)}
         headers: Dict[str, str] = {}
-        add_auth_header(mock_client, headers)
+        add_auth_header(
+            mock_client, headers, mock_usr_id, ["delete_productattributetype"]
+        )
         resp = await mock_client.delete(
             path="/attributes",
             headers=headers,

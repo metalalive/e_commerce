@@ -21,6 +21,7 @@ class AppRepoFnLabel(Enum):
     SaleItemArchiveUpdate = auto()
     SaleItemFetchModel = auto()
     SaleItemGetMaintainer = auto()
+    SaleItemNumCreated = auto()
 
 
 @dataclass
@@ -93,3 +94,6 @@ class AbstractSaleItemRepo:
 
     async def get_maintainer(self, id_: int) -> int:
         raise NotImplementedError("AbstractSaleItemRepo.get_maintainer")
+
+    async def num_items_created(self, usr_id: int) -> int:
+        raise NotImplementedError("AbstractSaleItemRepo.num_items_created")

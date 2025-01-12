@@ -112,6 +112,12 @@ class TestCreate:
     async def test_ok(self, es_repo_saleitem):
         cls = type(self)
         expect_usr_prof = 12345
+
+        num_items_saved = await es_repo_saleitem.num_items_created(
+            usr_id=expect_usr_prof
+        )
+        assert num_items_saved == 0
+
         req_data = SaleItemCreateReqDto(
             name="Sample Item",
             visible=True,
@@ -166,6 +172,11 @@ class TestCreate:
         assert another_item_created.id_ < pow(2, 64)
 
         await asyncio.sleep(1)  # wait for ElasticSearch refresh documents
+
+        num_items_saved = await es_repo_saleitem.num_items_created(
+            usr_id=expect_usr_prof
+        )
+        assert num_items_saved == 2
 
         readback = await es_repo_saleitem.fetch(saleitem_m_created.id_)
         verify_items_equlity(readback, saleitem_m_created)
