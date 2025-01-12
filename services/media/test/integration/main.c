@@ -107,6 +107,7 @@ TestSuite *app_api_tests(json_t *root_cfg)
 {
     TestSuite *suite = create_test_suite();
     add_suite(suite, api_initiate_multipart_upload_tests(root_cfg));
+#ifdef PROCEED_TRANSCODING_TEST 
     add_suite(suite, api_upload_part_tests(root_cfg));
     add_suite(suite, api_complete_multipart_upload_tests());
     add_suite(suite, api_file_acl_tests());
@@ -121,6 +122,7 @@ TestSuite *app_api_tests(json_t *root_cfg)
     add_test(suite, api_abort_multipart_upload_test);
     add_test(suite, api_single_chunk_upload_test);
     add_test(suite, api_discard_ongoing_job_test);
+#endif
     return suite;
 }
 

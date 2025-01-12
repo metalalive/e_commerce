@@ -126,9 +126,11 @@ static DBA_RES_CODE  _app_mariadb_gen_new_handle(MYSQL **handle, db_pool_cfg_t *
         result = DBA_RESULT_MEMORY_ERROR;
         goto error;
     }
-    mysql_optionsv(tmp, MYSQL_READ_DEFAULT_FILE, NULL);
-    mysql_optionsv(tmp, MYSQL_READ_DEFAULT_GROUP, NULL);
-    if(mysql_optionsv(tmp, MYSQL_OPT_NONBLOCK, NULL) != 0) {
+    const size_t stack_nbytes = 4096 * 15;
+    if((mysql_optionsv(tmp, MYSQL_READ_DEFAULT_FILE, NULL) != 0) ||
+       (mysql_optionsv(tmp, MYSQL_READ_DEFAULT_GROUP, NULL) != 0)
+       || (mysql_optionsv(tmp, MYSQL_OPT_NONBLOCK, &stack_nbytes) != 0)
+       ) {
         result = DBA_RESULT_CONFIG_ERROR;
         goto error;
     }
