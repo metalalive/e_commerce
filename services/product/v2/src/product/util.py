@@ -1,8 +1,9 @@
 import random
 import string
 from datetime import datetime
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Self
 
 
 def gen_random_string(max_length: int) -> str:
@@ -20,6 +21,38 @@ def gen_random_number(num_bits: int) -> int:
 
 class PriviledgeLevel(Enum):
     AuthedUser = "authed_user"
+
+
+class QuotaMaterialCode(Enum):
+    NumSaleItem = 2
+    NumAttributesPerItem = 3
+
+
+@dataclass
+class QuotaMaterial:
+    mat_code: QuotaMaterialCode
+    maxnum: Optional[int] = 0
+
+    @classmethod
+    def extract(cls, claims: Dict) -> List[Self]:
+        from ecommerce_common.models.enums.base import AppCodeOptions
+
+        return [
+            cls(mat_code=QuotaMaterialCode(q["mat_code"]), maxnum=q["maxnum"])
+            for q in claims["quota"]
+            if q["app_code"] == AppCodeOptions.product.value[0]
+        ]
+
+    @staticmethod
+    def find_maxnum(quotas: List[Self], code_req: QuotaMaterialCode) -> int:
+        def filter_fn(q: Self) -> int:
+            return q.mat_code == code_req
+
+        quota = next(filter(filter_fn, quotas), None)
+        if quota:
+            return quota.maxnum
+        else:
+            return 0
 
 
 """

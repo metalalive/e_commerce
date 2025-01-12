@@ -3,7 +3,7 @@ from typing import Tuple, List, Dict
 from blacksheep.contents import JSONContent
 import pytest
 
-from product.api.dto import AttrDataTypeDto, AttrUpdateReqDto
+from product.api.dto import AttrDataTypeDto, AttrUpdateReqDto, AttrCreateReqDto
 from .common import ITestClient, add_auth_header, create_many_attri_labels
 
 
@@ -30,6 +30,21 @@ class TestAttribute:
         expect_attrs = [(d[0], d[1].value) for d in expect_data]
         actual_attrs = [(r["name"], r["dtype"]) for r in respbody]
         assert set(expect_attrs) == set(actual_attrs)
+
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_auth_failure(self, mock_client):
+        mock_usr_id = 107
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers, mock_usr_id, ["useless"])
+        reqbody = AttrCreateReqDto(name="woha", dtype=AttrDataTypeDto.String)
+        resp = await mock_client.post(
+            path="/attributes",
+            headers=headers,
+            query=None,
+            content=JSONContent([reqbody]),
+            cookies=None,
+        )
+        assert resp.status == 403
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_create(self, mock_client):

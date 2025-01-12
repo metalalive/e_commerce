@@ -11,6 +11,7 @@ from product.api.dto import (
     SaleItemCreateReqDto,
     SaleItemAttriReqDto,
 )
+from product.util import QuotaMaterialCode
 
 from .common import (
     ITestClient,
@@ -18,6 +19,8 @@ from .common import (
     create_one_tag,
     create_many_attri_labels,
 )
+
+from ecommerce_common.models.enums.base import AppCodeOptions
 
 
 class TestSaleableItem:
@@ -38,9 +41,20 @@ class TestSaleableItem:
         usr_id: int,
         reqbody: SaleItemCreateReqDto,
         expect_status: int,
+        num_items_limit: Optional[int] = 0,
     ) -> Response:
+        app_code = AppCodeOptions.product.value[0]
         headers: Dict[str, str] = {}
-        add_auth_header(client, headers, usr_id, ["add_saleableitem"])
+        quota_required = [
+            {
+                "app_code": app_code,
+                "mat_code": QuotaMaterialCode.NumSaleItem.value,
+                "maxnum": num_items_limit,
+            }
+        ]
+        add_auth_header(
+            client, headers, usr_id, ["add_saleableitem"], quotas=quota_required
+        )
         resp = await client.post(
             path="/item",
             headers=headers,
@@ -131,7 +145,9 @@ class TestSaleableItem:
             attributes=setup_attr_vals(total_attr_lablels),
             media_set=["resource-video-id-999", "resource-image-id-888"],
         )
-        respdata = await cls.setup_create_one(mock_client, mock_usr_id, reqdata, 201)
+        respdata = await cls.setup_create_one(
+            mock_client, mock_usr_id, reqdata, 201, num_items_limit=5
+        )
         assert respdata["usrprof"] == mock_usr_id
         assert respdata["name"] == "Bluetooth Headphones"
         assert respdata["visible"] is True
@@ -218,7 +234,9 @@ class TestSaleableItem:
             attributes=setup_attr_vals(total_attr_lablels),
             media_set=["resource-id-video", "resource-id-image"],
         )
-        respdata = await cls.setup_create_one(mock_client, mock_usr_id, reqdata, 201)
+        respdata = await cls.setup_create_one(
+            mock_client, mock_usr_id, reqdata, 201, num_items_limit=5
+        )
         created_item_id = respdata["id_"]
 
         fetch_resp = await mock_client.get(f"/item/{created_item_id}")
@@ -250,7 +268,9 @@ class TestSaleableItem:
             attributes=[],
             media_set=["resource-video-id-9487", "resource-image-id-888"],
         )
-        respdata = await cls.setup_create_one(mock_client, mock_usr_id, reqdata, 400)
+        respdata = await cls.setup_create_one(
+            mock_client, mock_usr_id, reqdata, 400, num_items_limit=2
+        )
         assert "nonexist-9876" in respdata["tag_nonexist"]
 
     @pytest.mark.asyncio(loop_scope="session")
@@ -268,5 +288,24 @@ class TestSaleableItem:
             attributes=[SaleItemAttriReqDto(id_="nonexist567", value="illusion")],
             media_set=["resource-video-id-9487", "resource-image-id-888"],
         )
-        respdata = await cls.setup_create_one(mock_client, mock_usr_id, reqdata, 400)
+        respdata = await cls.setup_create_one(
+            mock_client, mock_usr_id, reqdata, 400, num_items_limit=2
+        )
         assert "nonexist567" in respdata["nonexist-attribute-labels"]
+
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_create_permission_failure(self, mock_client):
+        cls = type(self)
+        mock_usr_id = 114
+        reqdata = SaleItemCreateReqDto(
+            name="no-magic mushr0om",
+            visible=True,
+            tags=["whatever-tag-id"],
+            attributes=[SaleItemAttriReqDto(id_="nonexist567", value="illusion")],
+            media_set=["resource-video-id-9487"],
+        )
+        respdata = await cls.setup_create_one(
+            mock_client, mock_usr_id, reqdata, 403, num_items_limit=0
+        )
+        assert respdata["mat_code"] == QuotaMaterialCode.NumSaleItem.value
+        assert respdata["limit"] == 0

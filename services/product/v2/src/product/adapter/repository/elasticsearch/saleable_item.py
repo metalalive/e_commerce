@@ -264,3 +264,28 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                 )
         _logger.debug("ElasticSearchSaleItemRepo.get_maintainer done successfully")
         return respbody["_source"]["usr_prof"]
+
+    async def num_items_created(self, usr_id: int) -> int:
+        fields_present = [
+            "hits.total",
+        ]
+        url = "/%s/the-only-type/_search?filter_path=%s" % (
+            self._index_primary_name,
+            ",".join(fields_present),
+        )
+        reqbody = {
+            "_source": False,
+            "size": 0,
+            "query": {"match": {"usr_prof": usr_id}},
+        }
+        headers = {"content-type": "application/json"}
+        resp = await self._session.request("GET", url, json=reqbody, headers=headers)
+        async with resp:
+            respbody = await resp.json()
+            if resp.status != 200:
+                respbody["remote_database_done"] = True
+                raise AppRepoError(
+                    fn_label=AppRepoFnLabel.SaleItemNumCreated, reason=respbody
+                )
+        _logger.debug("ElasticSearchSaleItemRepo.num_items_created done successfully")
+        return respbody["hits"]["total"]
