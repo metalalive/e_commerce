@@ -38,19 +38,6 @@
                 {"path":"/file/acl/usr", "entry_fn":"edit_usrlvl_acl"},
                 {"path":"/file/acl/usr", "entry_fn":"read_usrlvl_acl"}
             ]
-        },
-        {
-            "port": 8008,
-            "host":"localhost",
-            "ssl":{
-                "cert_file"   : "media/data/certs/test/localhost_8008.crt",
-                "privkey_file": "media/data/certs/test/localhost_8008.private.key",
-                "cipher_suites": "TLS_AES_128_CCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_8_SHA256",
-                "min_version": 772
-            },
-            "routes": [
-                {"path":"/jwks", "entry_fn":"get_jwks_pubkey"}
-            ]
         }
     ],
     "ca":{
@@ -59,7 +46,7 @@
     },
     "max_connections": 64,
     "limit_req_body_in_bytes": 10485760,
-    "num_workers": 1,
+    "num_workers": 0,
     "tcp_fastopen_queue_size": 104,
     "auth_keystore": {
         "url":"https://localhost:8008/jwks",

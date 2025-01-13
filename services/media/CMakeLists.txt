@@ -585,8 +585,10 @@ ADD_CUSTOM_TARGET(unit_test
 ADD_CUSTOM_TARGET(itest_app_server
     ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python3 ${CMAKE_CURRENT_SOURCE_DIR}/test/integration/auth.py  --host=localhost --port=8008  --path2privkey=${CMAKE_CURRENT_SOURCE_DIR}/../tmp/cache/test/jwks/media-rsa-privkey.json  --sslcertfile=${CMAKE_CURRENT_SOURCE_DIR}/data/certs/test/localhost_8008.crt  --sslkeyfile=${CMAKE_CURRENT_SOURCE_DIR}/data/certs/test/localhost_8008.private.key & " >>  ${PYVENV_SHELL_FILEPATH}
+
     COMMAND bash ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
         "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"

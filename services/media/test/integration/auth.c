@@ -2,42 +2,16 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "api/setup.h"
+// #include "api/setup.h"
 #include "../test/integration/test.h"
 
 #define NUM_KEY_PAIRS 2
 
 typedef struct {
-    struct {
-        jwks_t *privkey;
-        jwks_t *pubkey;
-    } store;
-    struct {
-        char *pubkey;
-    } filepath;
-    struct {
-        int pubkey;
-    } fd;
+    jwks_t *privkey;
 } mock_jwks_t;
 
 static mock_jwks_t _mock_jwks = {0};
-
-#define _API_MIDDLEWARE_CHAIN_get_jwks_pubkey  2, API_FINAL_HANDLER_get_jwks_pubkey, 1
-#define _RESTAPI_PERM_CODES_get_jwks_pubkey    NULL
-
-
-RESTAPI_ENDPOINT_HANDLER(get_jwks_pubkey, GET, self, req)
-{
-    int flags = 0, result = 0;
-    if(_mock_jwks.fd.pubkey) {
-        h2o_iovec_t  mime_type = {.base = "application/json", .len = sizeof("application/json") - 1};
-        result = h2o_file_send(req, 200, "OK", _mock_jwks.filepath.pubkey,  mime_type, flags);
-    } else {  // jwks file hasn't been prepared yet
-        h2o_send_error_404(req, "JWKS internal error", "", H2O_SEND_ERROR_KEEP_HEADERS);
-    }
-    app_run_next_middleware(self, req, node);
-    return result;
-} // end of get_jwks_pubkey
 
 
 static int gen_signed_access_token_helper(json_t *headers, json_t *claims, char **out) {
@@ -50,7 +24,7 @@ static int gen_signed_access_token_helper(json_t *headers, json_t *claims, char 
     if(result != RHN_OK) { goto done; }
     result = r_jwt_set_full_claims_json_t(jwt, claims);
     if(result != RHN_OK) { goto done; }
-    privkey = r_jwks_get_at(_mock_jwks.store.privkey, 0);
+    privkey = r_jwks_get_at(_mock_jwks.privkey, 0);
     if(!privkey) { goto done; }
     result = r_jwt_set_sign_alg(jwt, R_JWA_ALG_RS256);
     if(result != RHN_OK) { goto done; }
@@ -129,52 +103,17 @@ int add_auth_token_to_http_header(json_t *headers_kv_raw, unsigned int usr_id, c
 
 
 void init_mock_auth_server(const char *tmpfile_path) {
-    unsigned int rsa_bits[NUM_KEY_PAIRS] = {2048, 3072}; // 256 / 384 bytes
-    assert(r_jwks_init(&_mock_jwks.store.privkey) == RHN_OK);
-    assert(r_jwks_init(&_mock_jwks.store.pubkey) == RHN_OK);
-    for(int idx = 0; idx < NUM_KEY_PAIRS; idx++) {
-        jwk_t *privkey = NULL, *pubkey = NULL;
-        assert(r_jwk_init(&privkey) == RHN_OK);
-        assert(r_jwk_init(&pubkey) == RHN_OK);
-        int ret = r_jwk_generate_key_pair(privkey, pubkey, R_KEY_TYPE_RSA,
-               rsa_bits[idx], NULL); // set kid automatically by library
-        assert(ret == RHN_OK);
-        assert(r_jwks_append_jwk(_mock_jwks.store.privkey, privkey) == RHN_OK);
-        assert(r_jwks_append_jwk(_mock_jwks.store.pubkey , pubkey) == RHN_OK);
-        // `r_jwks_append_jwk` internally increment refcnt of jwk object, it is necessary to
-        // decrement the refcnt at here to avoid memory leak
-        r_jwk_free(privkey);
-        r_jwk_free(pubkey );
-    } // end of loop
-    size_t tmpfile_path_sz = strlen(tmpfile_path) + 1;
-    _mock_jwks.filepath.pubkey = (char *) malloc(tmpfile_path_sz);
-    memcpy(_mock_jwks.filepath.pubkey, &tmpfile_path[0], tmpfile_path_sz);
-    int fd = mkstemp(_mock_jwks.filepath.pubkey);
-    assert(fd >= 0);
-    char *serial_data = r_jwks_export_to_json_str(_mock_jwks.store.pubkey, JSON_COMPACT);
-    assert(serial_data != NULL);
-    write(fd, serial_data, strlen(serial_data));
-    lseek(fd, 0, SEEK_SET);
-    free(serial_data);
-    _mock_jwks.fd.pubkey = fd;
+    json_error_t jerr = {0};
+    json_t * jsnobj = json_load_file(tmpfile_path, O_RDONLY, &jerr);
+    assert(jsnobj);
+    assert(r_jwks_init(&_mock_jwks.privkey) == RHN_OK);
+    assert(r_jwks_import_from_json_t(_mock_jwks.privkey, jsnobj) == RHN_OK);
+    json_decref(jsnobj);
 } // end of init_mock_auth_server
 
 
 void deinit_mock_auth_server(void) {
-    unlink(_mock_jwks.filepath.pubkey);
-    close(_mock_jwks.fd.pubkey);
-    while(r_jwks_size(_mock_jwks.store.privkey) > 0) {
-        jwk_t *privkey = r_jwks_get_at(_mock_jwks.store.privkey, 0);
-        jwk_t *pubkey  = r_jwks_get_at(_mock_jwks.store.pubkey , 0);
-        r_jwk_free(privkey);
-        r_jwk_free(pubkey );
-        assert(r_jwks_remove_at(_mock_jwks.store.privkey, 0) == RHN_OK);
-        assert(r_jwks_remove_at(_mock_jwks.store.pubkey , 0) == RHN_OK);
-    } // end of loop
-    free(_mock_jwks.filepath.pubkey);
-    _mock_jwks.filepath.pubkey = NULL;
-    r_jwks_free(_mock_jwks.store.pubkey);
-    r_jwks_free(_mock_jwks.store.privkey);
+    r_jwks_free(_mock_jwks.privkey);
 } // end of deinit_mock_auth_server
 
 
