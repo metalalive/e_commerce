@@ -87,15 +87,11 @@ if __name__ == "__main__":
     with open(PATH_TO_PRIVKEY, "w") as priv_file:
         json.dump(serial_privkeys, priv_file, indent=4)
 
+    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_ctx.load_cert_chain(certfile=CERTFILE, keyfile=KEYFILE)
     # Run the HTTP server
     with socketserver.TCPServer((HOST, PORT), JWKSHandler) as httpd:
-        httpd.socket = ssl.wrap_socket(
-            httpd.socket,
-            server_side=True,
-            certfile=CERTFILE,
-            keyfile=KEYFILE,
-            ssl_version=ssl.PROTOCOL_TLS
-        )
+        httpd.socket = ssl_ctx.wrap_socket(httpd.socket, server_side=True)
         print(f"Serving JWKS on https://{HOST}:{PORT}...")
         httpd.serve_forever()
 
