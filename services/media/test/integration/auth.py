@@ -4,11 +4,14 @@ import socketserver
 import argparse
 import os
 import ssl
+from pathlib import Path
 from typing import Dict, Tuple
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from jwt.utils import base64url_encode
+
+from media.renew_certs import check_cert_expiry, DevCertRenewal
 
 def gen_rsa_keys(num: int, keysize: int) -> Tuple[Dict, Dict]:
     """Generate a specified number of RSA keys and return them as public and private JWKS objects."""
@@ -68,28 +71,40 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run a mock JWKS server.")
     parser.add_argument("--host", type=str, required=True, default="localhost")
     parser.add_argument("--port", type=int, required=True, default=8008)
-    parser.add_argument("--path2privkey", type=str, required=True)
-    parser.add_argument("--sslcertfile", type=str, required=True, help="Path to the server certificate.")
-    parser.add_argument("--sslkeyfile", type=str, required=True, help="Path to the server private key.")
+    parser.add_argument("--path2privkey", type=str, required=True, help="Path to private keys for JWK.")
+    parser.add_argument("--sslcertpath", type=str, required=True, help="Path to the server certificate.")
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
     HOST = args.host
     PORT = args.port
-    PATH_TO_PRIVKEY = args.path2privkey
-    CERTFILE = args.sslcertfile
-    KEYFILE = args.sslkeyfile
+    PATH_JWKS_PRIVKEY = args.path2privkey
+    cert_path = Path(args.sslcertpath).resolve(strict=True)
+    ca_cfg = {
+        "cert_file": cert_path.joinpath("ca.crt"),
+        "privkey_file": cert_path.joinpath("ca.private.key"),
+    }
+    server_cert_cfg = {"host": HOST, "port": PORT, "ssl": {
+        "cert_file": cert_path.joinpath("%s_%d.crt" % (HOST, PORT)),
+        "privkey_file": cert_path.joinpath("%s_%d.private.key" % (HOST, PORT)),
+    }}
+    renewal = DevCertRenewal()
+    renew_ca = renewal.check_ca_renew(ca_cfg)
+    renew_auth_server = check_cert_expiry(listen=server_cert_cfg)
+    renewal.run_renewal([renew_auth_server], renew_ca)
 
+    # ------ key pairs for JWKS ------
     serial_pubkeys, serial_privkeys = gen_rsa_keys(num=3, keysize=2048)
 
-    # Save private keys to the specified file
-    with open(PATH_TO_PRIVKEY, "w") as priv_file:
+    with open(PATH_JWKS_PRIVKEY, "w") as priv_file:
         json.dump(serial_privkeys, priv_file, indent=4)
 
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ssl_ctx.load_cert_chain(certfile=CERTFILE, keyfile=KEYFILE)
-    # Run the HTTP server
+    ssl_ctx.load_cert_chain(
+        certfile=server_cert_cfg["ssl"]["cert_file"],
+        keyfile=server_cert_cfg["ssl"]["privkey_file"]
+    )
     with socketserver.TCPServer((HOST, PORT), JWKSHandler) as httpd:
         httpd.socket = ssl_ctx.wrap_socket(httpd.socket, server_side=True)
         print(f"Serving JWKS on https://{HOST}:{PORT}...")
