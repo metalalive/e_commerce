@@ -102,7 +102,6 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
           curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
       }
       if (curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L) != CURLE_OK) {
-        h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
         break;
       }
       if(x5u->ca_path) {
@@ -125,7 +124,9 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
           break;
         }
       }
-      if (curl_easy_perform(curl) != CURLE_OK) {
+      op_ret = curl_easy_perform(curl);
+      if (op_ret != CURLE_OK) {
+        h2o_error_printf("[3pty][rhonabwy] line: %d, op_ret:%d \n", __LINE__, op_ret);
         break;
       }
       op_ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
