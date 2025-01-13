@@ -108,7 +108,7 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
           if (curl_easy_setopt(curl, CURLOPT_CAPATH, x5u->ca_path) == CURLE_OK) {
               curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, x5u->ca_format);
               curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, 1L); // forced to be HTTP/2
-              curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
+              curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_NONE);
           } else {
               h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
               break;
