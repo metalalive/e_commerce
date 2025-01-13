@@ -55,7 +55,7 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
   struct curl_slist *list = NULL;
   struct _r_response_str resp = {.ptr = NULL, .len = 0};
   struct _r_expected_content_type ct = {.found = 0, .expected = expected_content_type};
-  int status = 0;
+  int status = 0, op_ret = 0;
 
   curl = curl_easy_init();
   if(curl != NULL) {
@@ -128,7 +128,9 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
       if (curl_easy_perform(curl) != CURLE_OK) {
         break;
       }
-      if (curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &status) != CURLE_OK) {
+      op_ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+      if (op_ret != CURLE_OK) {
+        h2o_error_printf("[3pty][rhonabwy] line: %d, op_ret:%d \n", __LINE__, op_ret);
         break;
       }
     } while (0);
@@ -147,7 +149,8 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
         }
       }
     } else {
-      h2o_error_printf("[3pty][rhonabwy] line: %d, status:%d \n", __LINE__, status);
+      h2o_error_printf("[3pty][rhonabwy] line: %d, status:%d, raw-resp-body:%s \n"
+              , __LINE__, status, (char *)resp.ptr);
       o_free(resp.ptr);
     }
   }
