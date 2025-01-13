@@ -590,6 +590,7 @@ ADD_CUSTOM_TARGET(itest_app_server
     COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.test.integration.auth  --host=localhost --port=8008  --path2privkey=${CMAKE_CURRENT_SOURCE_DIR}/../tmp/cache/test/jwks/media-rsa-privkey.json  --sslcertpath=${CMAKE_CURRENT_SOURCE_DIR}/data/certs/test &" >>  ${PYVENV_SHELL_FILEPATH}
 
     COMMAND bash ${PYVENV_SHELL_FILEPATH}
+    COMMAND sleep 5
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
         "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
         ##gdb -args # uncomment this line for debugging

@@ -172,12 +172,14 @@ int DEV_r_jwks_import_from_uri(jwks_t * jwks, const char * uri, app_x5u_t *x5u) 
       if (j_result != NULL) {
         ret = r_jwks_import_from_json_t(jwks, j_result);
       } else {
+        y_log_message(Y_LOG_LEVEL_ERROR, "DEV_r_jwks_import_from_uri - Error DEV_r_get_http_content\n");
         h2o_error_printf("[3pty][rhonabwy] line: %d, Error DEV_r_get_http_content\n", __LINE__);
         ret = RHN_ERROR;
       }
       json_decref(j_result);
       o_free(x5u_content);
     } else {
+      y_log_message(Y_LOG_LEVEL_ERROR, "DEV_r_jwks_import_from_uri x5u - Error getting x5u content\n");
       h2o_error_printf("[3pty][rhonabwy] line: %d, x5u - Error getting x5u content\n", __LINE__);
       ret = RHN_ERROR;
     }
