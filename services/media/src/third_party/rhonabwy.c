@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <orcania.h>
 #include <yder.h>
+#include <h2o.h>
 #include "third_party/rhonabwy.h"
 
 #ifdef R_WITH_CURL
@@ -72,6 +73,7 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
         break;
       }
       if (curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list) != CURLE_OK) {
+        h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
         break;
       }
       if (curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L) != CURLE_OK) {
@@ -87,9 +89,11 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
           // and use of valid pre-shared key in subsequent connection,
           // so peers can skip verifying each other's certificate
         if (curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0) != CURLE_OK) {
+          h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
           break;
         }
         if (curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0) != CURLE_OK) {
+          h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
           break;
         }
       } else { // by default , this server only verifies cert from auth server
@@ -98,6 +102,7 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
           curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
       }
       if (curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L) != CURLE_OK) {
+        h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
         break;
       }
       if(x5u->ca_path) {
@@ -106,14 +111,17 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
               curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, 1L); // forced to be HTTP/2
               curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
           } else {
+              h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
               break;
           }
       }
       if (o_strlen(expected_content_type)) {
         if (curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, write_header) != CURLE_OK) {
+          h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
           break;
         }
         if (curl_easy_setopt(curl, CURLOPT_WRITEHEADER, &ct) != CURLE_OK) {
+          h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
           break;
         }
       }
@@ -139,6 +147,7 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
         }
       }
     } else {
+      h2o_error_printf("[3pty][rhonabwy] line: %d, status:%d \n", __LINE__, status);
       o_free(resp.ptr);
     }
   }
@@ -146,6 +155,7 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
   (void)url;
   (void)x5u;
   (void)expected_content_type;
+  h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
 #endif
   return to_return;
 } // end of DEV_r_get_http_content
@@ -162,13 +172,13 @@ int DEV_r_jwks_import_from_uri(jwks_t * jwks, const char * uri, app_x5u_t *x5u) 
       if (j_result != NULL) {
         ret = r_jwks_import_from_json_t(jwks, j_result);
       } else {
-        y_log_message(Y_LOG_LEVEL_ERROR, "DEV_r_jwks_import_from_uri - Error DEV_r_get_http_content\n");
+        h2o_error_printf("[3pty][rhonabwy] line: %d, Error DEV_r_get_http_content\n", __LINE__);
         ret = RHN_ERROR;
       }
       json_decref(j_result);
       o_free(x5u_content);
     } else {
-      y_log_message(Y_LOG_LEVEL_ERROR, "DEV_r_jwks_import_from_uri x5u - Error getting x5u content\n");
+      h2o_error_printf("[3pty][rhonabwy] line: %d, x5u - Error getting x5u content\n", __LINE__);
       ret = RHN_ERROR;
     }
   } else {

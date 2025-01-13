@@ -285,7 +285,7 @@ int app_rotate_jwks_store(struct app_jwks_t *jwks) {
         // FIXME : figure out when data corruption occurs ?
         if(load_result != RHN_OK)
         {
-            h2o_error_printf("[parsing] failed to preload JWKS from given URI: %s \n", url);
+            h2o_error_printf("[parsing] failed to preload JWKS from given URI: %s , result:%d \n", url, load_result);
             r_jwks_free(new_handle);
             goto end_of_cs;
         }
