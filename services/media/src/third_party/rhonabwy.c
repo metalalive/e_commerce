@@ -60,6 +60,9 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
   curl = curl_easy_init();
   if(curl != NULL) {
     do {
+      if (curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L) != CURLE_OK) {
+        break;
+      }
       if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) {
         break;
       }
@@ -97,20 +100,23 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
           break;
         }
       } else { // by default , this server only verifies cert from auth server
-          curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L);
+          op_ret = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
           // server sends CertificateRequest in TLS 1.3 handshake
-          curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+          int op_ret2 = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+          h2o_error_printf("[3pty][rhonabwy] line: %d, verify-server:%d verify-client:%d \n",
+                  __LINE__, op_ret, op_ret2);
       }
-      if (curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L) != CURLE_OK) {
+      if (curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L) != CURLE_OK) {
         break;
       }
       if(x5u->ca_path) {
           if (curl_easy_setopt(curl, CURLOPT_CAPATH, x5u->ca_path) == CURLE_OK) {
               curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, x5u->ca_format);
               curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, 1L); // forced to be HTTP/2
-              curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_NONE);
+              curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
           } else {
-              h2o_error_printf("[3pty][rhonabwy] line: %d \n", __LINE__);
+              h2o_error_printf("[3pty][rhonabwy] line: %d, cert path:%s \n",
+                      __LINE__, x5u->ca_path);
               break;
           }
       }
@@ -154,7 +160,7 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
               , __LINE__, status, (char *)resp.ptr);
       o_free(resp.ptr);
     }
-  }
+  } // end if curl handle created
 #else
   (void)url;
   (void)x5u;
