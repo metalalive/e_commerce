@@ -6,14 +6,18 @@ int STDCALL mysql_server_init(int argc, char **argv, char **groups)
 
 void mysql_server_end(void) {}
 
-MYSQL* mysql_init(MYSQL *in)
-{ return (MYSQL *)mock(in); }
+MYSQL* mysql_init(MYSQL *in) {
+    mock();
+    return in;
+}
 
 int  mysql_optionsv(MYSQL *mysql, enum mysql_option option, ...)
 { return (int)mock(mysql, option); }
 
-void mysql_close(MYSQL *mysql)
-{ mock(mysql); }
+void mysql_close(MYSQL *mysql) {
+    mysql->net.pvio = NULL;
+    mock(mysql);
+}
 
 unsigned int STDCALL mysql_errno(MYSQL *mysql)
 { return (unsigned int)mock(mysql); }
@@ -60,11 +64,13 @@ int STDCALL mysql_real_connect_start(MYSQL **ret, MYSQL *mysql, const char *host
 int STDCALL mysql_real_connect_cont(MYSQL **ret, MYSQL *mysql, int status)
 { return (int)mock(ret, mysql, status); }
 
-int STDCALL mysql_close_start(MYSQL *sock)
-{ return (int)mock(sock); }
+int STDCALL mysql_close_start(MYSQL *sock) {
+    return (int)mock(sock);
+}
 
-int STDCALL mysql_close_cont(MYSQL *sock, int status)
-{ return (int)mock(sock, status); }
+int STDCALL mysql_close_cont(MYSQL *sock, int status) {
+    return (int)mock(sock, status);
+}
 
 int  STDCALL mysql_real_query_start(int *ret, MYSQL *mysql, const char *q, unsigned long length)
 { return (int)mock(ret, mysql, q, length); }

@@ -121,14 +121,19 @@ static void _app_mariadb_error_reset_all_pending_query(db_conn_t *conn, DBA_RES_
 
 static DBA_RES_CODE  _app_mariadb_gen_new_handle(MYSQL **handle, db_pool_cfg_t *pcfg) {
     DBA_RES_CODE result = DBA_RESULT_OK;
-    MYSQL *tmp = mysql_init(NULL);
+    MYSQL *allocated = (MYSQL*) calloc(1, sizeof(MYSQL));
+    MYSQL *tmp = mysql_init(allocated);
     if(!tmp) {
         result = DBA_RESULT_MEMORY_ERROR;
         goto error;
     }
-    mysql_optionsv(tmp, MYSQL_READ_DEFAULT_FILE, NULL);
-    mysql_optionsv(tmp, MYSQL_READ_DEFAULT_GROUP, NULL);
-    if(mysql_optionsv(tmp, MYSQL_OPT_NONBLOCK, NULL) != 0) {
+    assert(allocated == tmp);
+    assert(tmp->free_me == 0);
+    const size_t stack_nbytes = 4096 * 15;
+    if((mysql_optionsv(tmp, MYSQL_READ_DEFAULT_FILE, NULL) != 0) ||
+       (mysql_optionsv(tmp, MYSQL_READ_DEFAULT_GROUP, NULL) != 0)
+       || (mysql_optionsv(tmp, MYSQL_OPT_NONBLOCK, &stack_nbytes) != 0)
+       ) {
         result = DBA_RESULT_CONFIG_ERROR;
         goto error;
     }
@@ -149,8 +154,10 @@ static DBA_RES_CODE  _app_mariadb_gen_new_handle(MYSQL **handle, db_pool_cfg_t *
     *handle = tmp;
     goto done;
 error:
-    if(tmp)
+    if(tmp) 
         mysql_close(tmp);
+    if(allocated)
+        free(allocated);
 done:
     return result;
 } // end of _app_mariadb_gen_new_handle
@@ -177,10 +184,13 @@ DBA_RES_CODE app_db_mariadb_conn_deinit(db_conn_t *conn)
 #if 0
     fprintf(stderr, "[db][mariaDB] line:%d, lowlvl.conn:%p \n",  __LINE__, conn->lowlvl.conn);
 #endif
+    assert(conn->lowlvl.resultset == NULL);
     // close a connection in  blocking manner, in case the API server
     // and RPC consumer terminated and never launched database operations.
-    if(conn->lowlvl.conn)
+    if(conn->lowlvl.conn) {
         mysql_close((MYSQL *)conn->lowlvl.conn);
+        free(conn->lowlvl.conn);
+    }
     conn->lowlvl = (db_lowlvl_t){0};
     return DBA_RESULT_OK;
 } // end of app_db_mariadb_conn_deinit
@@ -416,12 +426,14 @@ static DBA_RES_CODE  app_db_mariadb_free_resultset_cont(db_conn_t *conn, int *ev
 static DBA_RES_CODE app_db_mariadb_conn_close_start(db_conn_t *conn, int *evt_flgs)
 {
     DBA_RES_CODE result = DBA_RESULT_OK;
-    int my_evts = mysql_close_start((MYSQL *)conn->lowlvl.conn);
+    MYSQL *handle = (MYSQL *)conn->lowlvl.conn;
+    int my_evts = mysql_close_start(handle);
     *evt_flgs = my_evts;
     if(my_evts) {
         *evt_flgs = _app_mariadb_convert_evt_to_uv(my_evts);
-    } else {
-        result = _app_mariadb_convert_error_code((MYSQL *)conn->lowlvl.conn);
+    } else if(handle->net.pvio) {
+        // if not yet close and free memory, TODO, improve, currently the code is hacky
+        result = _app_mariadb_convert_error_code(handle);
     }
     return result;
 } // end of app_db_mariadb_conn_close_start
@@ -728,7 +740,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                     };
                     if(conn->lowlvl.resultset) {
                         db_query_rs_info_t *cloned_rs_info = (db_query_rs_info_t *) &rs->data[0];
-                        cloned_rs_info->num_rows.affected = (size_t)mysql_affected_rows(conn->lowlvl.resultset);
+                        cloned_rs_info->num_rows.affected = (size_t)mysql_affected_rows((MYSQL *)conn->lowlvl.conn);
                         rs->app_result = DBA_RESULT_OK;
                     } else {
                         app_db_conn_try_evict_current_processing_query(conn);
@@ -911,6 +923,8 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 }
             case DB_ASYNC_CLOSE_DONE:
                 conn->ops.timerpoll_stop(target);
+                //assert(((MYSQL *)conn->lowlvl.conn)->net.pvio  == NULL);
+                free(conn->lowlvl.conn);
                 conn->lowlvl.conn = (void *)NULL; // closed async, memory should be freed
                 continue_checking = app_db_conn_get_first_query(conn) != NULL;
                 is_app_closing = conn->pool->is_closing_fn(conn->pool);

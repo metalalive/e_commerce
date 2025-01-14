@@ -68,7 +68,9 @@ jobs:
             apt-cache show libgnutls28-dev
             # shared among rhonabwy and ffmpeg
             sudo apt-get install -y  nettle-dev  libgnutls28-dev
-            sudo apt-get install -y  libcurl4-gnutls-dev
+            # current version of libcurl4-gnutls-dev introduces SSL termination error in libcurl
+            # , temporarily switch to curl-openssl library
+            sudo apt-get install -y  libcurl4-openssl-dev
             # valgrind for comprehensive memory check
             sudo apt-get install -y valgrind
 

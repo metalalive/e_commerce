@@ -231,6 +231,10 @@ IF (NOT CMAKE_BUILD_TYPE)
     SET(CMAKE_BUILD_TYPE Release)
 ENDIF(NOT CMAKE_BUILD_TYPE)
 
+if(DEFINED PROCEED_TRANSCODING_TEST)
+    add_compile_definitions(PROCEED_TRANSCODING_TEST=${PROCEED_TRANSCODING_TEST})
+endif()
+
 SET(CMAKE_C_FLAGS_DEBUG  "-O0")
 SET(CMAKE_C_FLAGS_RELEASE  "-O2")
 
@@ -581,13 +585,16 @@ ADD_CUSTOM_TARGET(unit_test
 ADD_CUSTOM_TARGET(itest_app_server
     ##${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=/path/to/somewhere/else/lib:$ENV{$LD_LIBRARY_PATH}"
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
-    COMMAND ${CMAKE_COMMAND} -E echo "python -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.task_loader  TestAppSrvCertRenewal ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.task_loader  FilechunkSetup  ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}
+    COMMAND ${CMAKE_COMMAND} -E echo "python3 -m media.test.integration.auth  --host=localhost --port=8008  --path2privkey=${CMAKE_CURRENT_SOURCE_DIR}/../tmp/cache/test/jwks/media-rsa-privkey.json  --sslcertpath=${CMAKE_CURRENT_SOURCE_DIR}/data/certs/test &" >>  ${PYVENV_SHELL_FILEPATH}
+
     COMMAND bash ${PYVENV_SHELL_FILEPATH}
+    COMMAND sleep 5
     COMMAND ${CMAKE_COMMAND} -E env "CGREEN_NO_FORK=xxx"
         "LD_LIBRARY_PATH=${AVFORMAT_LIBRARY_DIRS}:$ENV{$LD_LIBRARY_PATH}"
         ##gdb -args # uncomment this line for debugging
-        ##valgrind --leak-check=full
+        valgrind --leak-check=full
         ${CMAKE_CURRENT_SOURCE_DIR}/build/${ITEST_API_SERVER_EXE_NAME}  ${ITEST_APPCFG_PATH}
     COMMAND ${CMAKE_COMMAND} -E echo "source ${PYVENV_BIN_PATH}/activate;" >  ${PYVENV_SHELL_FILEPATH}
     COMMAND ${CMAKE_COMMAND} -E echo "python -m  media.task_loader  FilechunkTeardown   ${ITEST_APPCFG_PATH};" >>  ${PYVENV_SHELL_FILEPATH}

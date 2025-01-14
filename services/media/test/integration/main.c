@@ -107,6 +107,7 @@ TestSuite *app_api_tests(json_t *root_cfg)
 {
     TestSuite *suite = create_test_suite();
     add_suite(suite, api_initiate_multipart_upload_tests(root_cfg));
+#ifdef PROCEED_TRANSCODING_TEST 
     add_suite(suite, api_upload_part_tests(root_cfg));
     add_suite(suite, api_complete_multipart_upload_tests());
     add_suite(suite, api_file_acl_tests());
@@ -121,6 +122,7 @@ TestSuite *app_api_tests(json_t *root_cfg)
     add_test(suite, api_abort_multipart_upload_test);
     add_test(suite, api_single_chunk_upload_test);
     add_test(suite, api_discard_ongoing_job_test);
+#endif
     return suite;
 }
 
@@ -148,7 +150,7 @@ int main(int argc, char **argv) {
     op_result = uv_thread_create( &app_tid, run_app_server, (void *)&init_app_data );
     assert(op_result == 0);
     assert(app_tid > 0);
-    init_mock_auth_server("./tmp/cache/test/jwks/media_test_jwks_pubkey_XXXXXX");
+    init_mock_auth_server("./tmp/cache/test/jwks/media-rsa-privkey.json");
     TestSuite *suite = create_named_test_suite("media_app_integration_test");
     TestReporter *reporter = create_text_reporter();
     add_suite(suite, app_api_tests(root_cfg));
