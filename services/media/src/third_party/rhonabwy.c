@@ -59,7 +59,7 @@ static char * DEV_r_get_http_content(const char * url, app_x5u_t *x5u, const cha
   curl = curl_easy_init();
   if(curl != NULL) {
     do {
-#if 1
+#if 0
       if (curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L) != CURLE_OK) {
         break;
       }

@@ -1,8 +1,8 @@
 name: media continuous integration
 on:
-  push:
-    branches:
-      - 'media-dev/experiment/**'
+  #push:
+  #  branches:
+  #    - 'media-dev/experiment/**'
   pull_request:
     branches:
       - 'master'
@@ -68,6 +68,8 @@ jobs:
             apt-cache show libgnutls28-dev
             # shared among rhonabwy and ffmpeg
             sudo apt-get install -y  nettle-dev  libgnutls28-dev
+            # current version of libcurl4-gnutls-dev introduces SSL termination error in libcurl
+            # , temporarily switch to curl-openssl library
             sudo apt-get install -y  libcurl4-openssl-dev
             # valgrind for comprehensive memory check
             sudo apt-get install -y valgrind
