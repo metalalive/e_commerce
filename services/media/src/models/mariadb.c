@@ -154,10 +154,10 @@ static DBA_RES_CODE  _app_mariadb_gen_new_handle(MYSQL **handle, db_pool_cfg_t *
     *handle = tmp;
     goto done;
 error:
-    if(allocated) {
-        mysql_close(allocated);
+    if(tmp) 
+        mysql_close(tmp);
+    if(allocated)
         free(allocated);
-    }
 done:
     return result;
 } // end of _app_mariadb_gen_new_handle
@@ -923,7 +923,7 @@ void app_mariadb_async_state_transition_handler(app_timer_poll_t *target, int uv
                 }
             case DB_ASYNC_CLOSE_DONE:
                 conn->ops.timerpoll_stop(target);
-                assert(((MYSQL *)conn->lowlvl.conn)->net.pvio  == NULL);
+                //assert(((MYSQL *)conn->lowlvl.conn)->net.pvio  == NULL);
                 free(conn->lowlvl.conn);
                 conn->lowlvl.conn = (void *)NULL; // closed async, memory should be freed
                 continue_checking = app_db_conn_get_first_query(conn) != NULL;

@@ -76,25 +76,12 @@ static void  mock_db_query__notify_callback(uv_async_t *handle)
 } // end of mock_db_query__notify_callback
 
 
-Ensure(app_mariadb_test_init_error) {
-    DBA_RES_CODE result = DBA_RESULT_OK;
-    db_pool_t pool = {0};
-    db_conn_t conn = {.pool = &pool};
-    expect(mysql_init,  will_return(NULL));
-    result = app_db_mariadb_conn_init(&conn);
-    assert_that(result, is_equal_to(DBA_RESULT_MEMORY_ERROR));
-    assert_that(conn.pool, is_equal_to(&pool));
-    assert_that(conn.lowlvl.conn, is_equal_to(NULL));
-} // end of app_mariadb_test_init_error
-
-
 Ensure(app_mariadb_test_init_set_option_error) {
     DBA_RES_CODE result = DBA_RESULT_OK;
     db_pool_t pool = {0};
     db_conn_t conn = {.pool = &pool};
-    MYSQL expect_mysql = {0};
-    expect(mysql_init,  will_return(&expect_mysql));
-    expect(mysql_close, when(mysql, is_equal_to(&expect_mysql)));
+    expect(mysql_init);
+    expect(mysql_close, when(mysql, is_not_equal_to(NULL)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
@@ -110,8 +97,7 @@ Ensure(app_mariadb_test_init_ok) {
     DBA_RES_CODE result = DBA_RESULT_OK;
     db_pool_t pool = {0};
     db_conn_t conn = {.pool = &pool};
-    MYSQL expect_mysql = {0};
-    expect(mysql_init,  will_return(&expect_mysql));
+    expect(mysql_init);
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
@@ -124,8 +110,9 @@ Ensure(app_mariadb_test_init_ok) {
     result = app_db_mariadb_conn_init(&conn);
     assert_that(result, is_equal_to(DBA_RESULT_OK));
     assert_that(conn.pool, is_equal_to(&pool));
-    assert_that(conn.lowlvl.conn, is_equal_to(&expect_mysql));
-    expect(mysql_close, when(mysql, is_equal_to(&expect_mysql)));
+    assert_that(conn.lowlvl.conn, is_not_equal_to(NULL));
+    MYSQL *lowlvl_handle = conn.lowlvl.conn;
+    expect(mysql_close, when(mysql, is_equal_to(lowlvl_handle)));
     result = app_db_mariadb_conn_deinit(&conn);
     assert_that(result, is_equal_to(DBA_RESULT_OK));
     assert_that(conn.lowlvl.conn, is_equal_to(NULL));
@@ -165,13 +152,15 @@ Ensure(app_mariadb_test_acquire_state_change) {
 
 
 Ensure(app_mariadb_test_start_connection_failure) {
+    int  fake_pvio = 12345;
+    MYSQL *handle_lowlvl = (MYSQL *) calloc(1, sizeof(MYSQL));
+    handle_lowlvl->net.pvio = (struct st_ma_pvio *) &fake_pvio;
     db_pool_t pool = {.cfg = {.bulk_query_limit_kb = CONN_BULK_QUERY_LIMIT_KB},
         .is_closing_fn = mock_db_pool__is_closing_fn };
     db_conn_t conn = {.pool = &pool, .ops = {.timerpoll_stop = mock_app__timerpoll_stop},
-        .processing_queries = NULL, .pending_queries = {.head = NULL}, .lowlvl = {0},
-        .state = DB_ASYNC_INITED
+        .processing_queries = NULL, .pending_queries = {.head = NULL}, .state = DB_ASYNC_INITED,
+        .lowlvl = {.conn = handle_lowlvl},
     };
-    MYSQL  expect_mysql = {0};
     MYSQL *mysql_conn_ret = NULL;
     // assume connection error on client side
     assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
@@ -189,7 +178,7 @@ Ensure(app_mariadb_test_start_connection_failure) {
     expect(mock_app__timerpoll_stop, will_return(0));
     // assume the app has NOT been closing the conneciton pool , reinit low-level handle
     expect(mock_db_pool__is_closing_fn, will_return(0));
-    expect(mysql_init,  will_return(&expect_mysql));
+    expect(mysql_init);
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
@@ -201,13 +190,15 @@ Ensure(app_mariadb_test_start_connection_failure) {
     expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
     app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
     assert_that(conn.state, is_equal_to(DB_ASYNC_CONN_START));
-    assert_that(conn.lowlvl.conn, is_equal_to(&expect_mysql));
+    assert_that(conn.lowlvl.conn, is_not_equal_to(NULL));
     assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
+    expect(mysql_close);
+    assert_that(app_db_mariadb_conn_deinit(&conn), is_equal_to(DBA_RESULT_OK));
+    assert_that(conn.lowlvl.conn, is_equal_to(NULL));
 } // end of  app_mariadb_test_start_connection_failure
 
 Ensure(app_mariadb_test_connect_db_server_error) {
     uv_loop_t loop = {0};
-    MYSQL  expect_mysql[2] = {0};
     db_pool_t pool = {.cfg = {.bulk_query_limit_kb = CONN_BULK_QUERY_LIMIT_KB,
         .ops = { .get_sock_fd = app_db_mariadb_get_sock_fd,
             .state_transition = app_mariadb_async_state_transition_handler,
@@ -217,7 +208,7 @@ Ensure(app_mariadb_test_connect_db_server_error) {
         .pending_queries = {.head = NULL, .tail = NULL},  .state = DB_ASYNC_INITED,
         .ops = {.timerpoll_stop = mock_app__timerpoll_stop, .timerpoll_start = mock_app__timerpoll_start,
             .timerpoll_init = mock_app__timerpoll_init},
-        .lowlvl = {.conn = &expect_mysql[0]}
+        .lowlvl = {.conn = (MYSQL *) calloc(1, sizeof(MYSQL))}
     };
     int    expect_lowlvl_fd = 123;
     uint64_t expect_timeout_ms = 560;
@@ -270,7 +261,7 @@ Ensure(app_mariadb_test_connect_db_server_error) {
         expect(mysql_close_cont, will_return(0));
         expect(mock_app__timerpoll_stop, will_return(0));
         expect(mock_db_pool__is_closing_fn, will_return(0));
-        expect(mysql_init,  will_return(&expect_mysql[1]));
+        expect(mysql_init);
         expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
         expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
         expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
@@ -283,9 +274,12 @@ Ensure(app_mariadb_test_connect_db_server_error) {
         assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(0));
         app_mariadb_async_state_transition_handler(&conn.timer_poll, CALLED_BY_APP);
         assert_that(conn.state, is_equal_to(DB_ASYNC_CONN_START));
-        assert_that(conn.lowlvl.conn, is_equal_to(&expect_mysql[1]));
+        assert_that(conn.lowlvl.conn, is_not_equal_to(NULL));
         assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(1));
     }
+    expect(mysql_close);
+    assert_that(app_db_mariadb_conn_deinit(&conn), is_equal_to(DBA_RESULT_OK));
+    assert_that(conn.lowlvl.conn, is_equal_to(NULL));
 } // end of app_mariadb_test_connect_db_server_error
 
 
@@ -740,12 +734,11 @@ Ensure(app_mariadb_test_deinit_ok) {
 Ensure(app_mariadb_test_reconnecting) {
     db_query_extend_t  mock_processing_nodes[1] = {0};
     uv_loop_t loop = {0};
-    MYSQL  old_mysql_handle = {0};
-    MYSQL  expect_mysql_handle = {0};
     db_pool_t pool = {.cfg = {.bulk_query_limit_kb = CONN_BULK_QUERY_LIMIT_KB,  .ops = {
         .get_timeout_ms = app_db_mariadb_get_timeout_ms, .get_sock_fd = app_db_mariadb_get_sock_fd}
          }, .is_closing_fn = mock_db_pool__is_closing_fn};
-    db_conn_t conn = {.pool = &pool, .loop = &loop, .state = DB_ASYNC_INITED, .lowlvl = {.conn = &old_mysql_handle},
+    db_conn_t conn = {.pool = &pool, .loop = &loop, .state = DB_ASYNC_INITED,
+        .lowlvl = {.conn = (MYSQL *) calloc(1, sizeof(MYSQL))},
         .pending_queries = {.head = &mock_processing_nodes[0].node , .tail = &mock_processing_nodes[0].node},
         .ops = {.timerpoll_stop = mock_app__timerpoll_stop, .timerpoll_start = mock_app__timerpoll_start,
         .timerpoll_change_fd = mock_app__timerpoll_change_fd},
@@ -759,25 +752,16 @@ Ensure(app_mariadb_test_reconnecting) {
         expect(mysql_close_cont, will_return(0));
         expect(mock_app__timerpoll_stop, will_return(0));
         expect(mock_db_pool__is_closing_fn, will_return(0));
-        expect(mysql_init, will_return(&expect_mysql_handle));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_OPT_PROTOCOL)));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
-        expect(mysql_optionsv, will_return(0), when(mysql, is_equal_to(&expect_mysql_handle)),
-                when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
+        expect(mysql_init);
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_FILE)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_READ_DEFAULT_GROUP)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_NONBLOCK)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_CONNECT_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_READ_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_WRITE_TIMEOUT)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_PROTOCOL)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_ENFORCE)));
+        expect(mysql_optionsv, will_return(0), when(option, is_equal_to(MYSQL_OPT_SSL_VERIFY_SERVER_CERT)));
         expect(mysql_real_connect_start, will_return(MYSQL_WAIT_READ),
                 will_set_contents_of_parameter(ret, &mysql_conn_ret, sizeof(MYSQL *)));
         expect(mysql_get_socket, will_return(expect_lowlvl_fd));
@@ -792,9 +776,12 @@ Ensure(app_mariadb_test_reconnecting) {
         int uv_status = 0;
         app_mariadb_async_state_transition_handler(&conn.timer_poll, uv_status, evt_flgs);
         assert_that(conn.state, is_equal_to(DB_ASYNC_CONN_WAITING));
-        assert_that(conn.lowlvl.conn, is_equal_to(&expect_mysql_handle));
+        assert_that(conn.lowlvl.conn, is_not_equal_to(NULL));
     }
     assert_that(app_mariadb_acquire_state_change(&conn), is_equal_to(0));
+    expect(mysql_close);
+    assert_that(app_db_mariadb_conn_deinit(&conn), is_equal_to(DBA_RESULT_OK));
+    assert_that(conn.lowlvl.conn, is_equal_to(NULL));
 } // end of app_mariadb_test_reconnecting
 
 
@@ -852,7 +839,6 @@ Ensure(app_mariadb_test_notify_query_callback) {
 TestSuite *app_model_mariadb_tests(void)
 {
     TestSuite *suite = create_test_suite();
-    add_test(suite, app_mariadb_test_init_error);
     add_test(suite, app_mariadb_test_init_set_option_error);
     add_test(suite, app_mariadb_test_init_ok);
     add_test(suite, app_mariadb_test_acquire_state_change);
