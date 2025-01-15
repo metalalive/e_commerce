@@ -153,9 +153,7 @@ TestSuite *api_initiate_multipart_upload_tests(json_t *root_cfg)
     TestSuite *suite = create_test_suite();
     add_test(suite, api_test_initiate_multipart_upload_auth_token_fail);
     add_test(suite, api_test_initiate_multipart_upload_insufficient_permission);
-#ifdef PROCEED_TRANSCODING_TEST 
     add_test(suite, api_test_initiate_multipart_upload_ok);
-#endif 
     return suite;
 } // end of  api_initiate_multipart_upload_tests
 
