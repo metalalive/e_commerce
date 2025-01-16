@@ -2,7 +2,7 @@ import logging
 from copy import copy
 from datetime import datetime, UTC
 from collections import defaultdict
-from typing import Any, Dict, Self, Tuple
+from typing import Any, Dict, Self, Tuple, Optional
 from asyncio.events import AbstractEventLoop
 
 from aiohttp import TCPConnector, ClientSession
@@ -190,6 +190,33 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                 raise AppRepoError(fn_label=fn_label, reason=respbody)
         return respbody["_source"]
 
+    async def fetch_doc_primary_visible(
+        self, id_: int, fn_label: AppRepoFnLabel
+    ) -> Dict:
+        fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "_shards"]
+        url = "/%s/the-only-type/_search?filter_path=%s" % (
+            self._index_primary_name,
+            ",".join(fields_present),
+        )
+        reqbody = {
+            "query": {
+                "bool": {
+                    "filter": [{"ids": {"values": [id_]}}, {"term": {"visible": True}}]
+                }
+            }
+        }
+        headers = {"content-type": "application/json"}
+        resp = await self._session.request("GET", url, json=reqbody, headers=headers)
+        async with resp:
+            respbody = await resp.json()
+            if resp.status != 200:
+                respbody["remote_database_done"] = True
+                raise AppRepoError(fn_label=fn_label, reason=respbody)
+            if respbody["hits"]["total"] != 1:
+                respbody["remote_database_done"] = True
+                raise AppRepoError(fn_label=fn_label, reason=respbody)
+        return respbody["hits"]["hits"][0]["_source"]
+
     @staticmethod
     def convert_from_primary_doc(id_: int, raw: Dict) -> SaleableItemModel:
         def cvt_attri(attr: Dict[str, Any]) -> SaleItemAttriModel:
@@ -230,12 +257,21 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             media_set=raw["media_set"],
         )
 
-    async def fetch(self, id_: int) -> SaleableItemModel:
+    async def fetch(
+        self, id_: int, visible_only: Optional[bool] = None
+    ) -> SaleableItemModel:
         cls = type(self)
         # TODO, optional timestamp to retrieve snapshot
-        rawdoc = await self.fetch_doc_primary(
-            id_=id_, fn_label=AppRepoFnLabel.SaleItemFetchModel
-        )
+        if visible_only:
+            rawdoc = await self.fetch_doc_primary_visible(
+                id_=id_,
+                fn_label=AppRepoFnLabel.SaleItemFetchModel,
+            )
+        else:
+            rawdoc = await self.fetch_doc_primary(
+                id_=id_,
+                fn_label=AppRepoFnLabel.SaleItemFetchModel,
+            )
         try:
             obj = cls.convert_from_primary_doc(id_, rawdoc)
         except (ValueError, ValidationError) as e:

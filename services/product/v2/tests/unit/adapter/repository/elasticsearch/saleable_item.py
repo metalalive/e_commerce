@@ -264,3 +264,49 @@ class TestDelete:
         assert e.fn_label == AppRepoFnLabel.SaleItemFetchModel
         assert not e.reason["found"]
         assert int(e.reason["_id"]) == saleitem_m_created.id_
+
+
+class TestFetchOne:
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_visibility_ok(self, es_repo_saleitem):
+        expect_usr_prof = 12351
+        mock_visible = True
+        saleitem_ms_created = []
+        for i in range(1, 5):
+            req_data = SaleItemCreateReqDto(
+                name=f"Earbuds {i}",
+                visible=mock_visible,
+                media_set=[f"resource-visible-{i}"],
+                tags=[f"xuirRg-{i}"],
+                attributes=[],
+            )
+            tag_data = {f"xuirRg-{i}": [(i, f"Label {i}")]}
+            attr_data = []
+            obj = await TestCreate.setup_create_one(
+                es_repo_saleitem,
+                usr_prof=expect_usr_prof,
+                req_data=req_data,
+                tag_data=tag_data,
+                attr_data=attr_data,
+            )
+            saleitem_ms_created.append(obj)
+            mock_visible = not mock_visible
+
+        await asyncio.sleep(1)  # wait for ElasticSearch refresh documents
+        expect_visible = [saleitem_ms_created[0], saleitem_ms_created[2]]
+        expect_invisible = [saleitem_ms_created[1], saleitem_ms_created[3]]
+
+        for obj in expect_visible:
+            readback = await es_repo_saleitem.fetch(obj.id_, visible_only=True)
+            verify_items_equlity(readback, obj)
+            readback = await es_repo_saleitem.fetch(obj.id_, visible_only=False)
+            verify_items_equlity(readback, obj)
+
+        for obj in expect_invisible:
+            with pytest.raises(AppRepoError) as e:
+                await es_repo_saleitem.fetch(obj.id_, visible_only=True)
+            e = e.value
+            assert e.fn_label == AppRepoFnLabel.SaleItemFetchModel
+            assert e.reason["remote_database_done"]
+            readback = await es_repo_saleitem.fetch(obj.id_, visible_only=False)
+            verify_items_equlity(readback, obj)

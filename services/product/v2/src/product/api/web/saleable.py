@@ -205,12 +205,14 @@ class SaleItemController(APIController):
         else:
             return forbidden()
 
+    # TODO,
+    # - optional specific time, to query historical data for existing orders
+    # - consider visibility, create extra GET API to seperate privileged sellers / product maintainers
     @router.get("/item/{item_id}")
-    async def get_by_id(self, shr_ctx: SharedContext, item_id: int) -> Response:
-        # TODO, optional specific time, to query historical data for existing orders
+    async def get_by_id_unauth(self, shr_ctx: SharedContext, item_id: int) -> Response:
         repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
         try:
-            item_m: SaleableItemModel = await repo.fetch(item_id)
+            item_m: SaleableItemModel = await repo.fetch(item_id, visible_only=True)
             item_d = item_m.to_dto()
             return ok(message=item_d.model_dump())
         except AppRepoError as e:

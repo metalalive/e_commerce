@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import Dict, List, Self
+from typing import Dict, List, Self, Optional
 from dataclasses import dataclass
 from asyncio.events import AbstractEventLoop
 
@@ -89,7 +89,9 @@ class AbstractSaleItemRepo:
     async def delete(self, id_: int):
         raise NotImplementedError("AbstractSaleItemRepo.delete")
 
-    async def fetch(self, id_: int) -> SaleableItemModel:
+    async def fetch(
+        self, id_: int, visible_only: Optional[bool] = None
+    ) -> SaleableItemModel:
         raise NotImplementedError("AbstractSaleItemRepo.fetch")
 
     async def get_maintainer(self, id_: int) -> int:

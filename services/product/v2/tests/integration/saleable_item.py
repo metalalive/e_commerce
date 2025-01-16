@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Tuple, Dict, Optional
 
 from blacksheep import Response
@@ -178,7 +179,7 @@ class TestSaleableItem:
 
         reqdata2 = SaleItemCreateReqDto(
             name="LoRa brain wave remote controller",
-            visible=False,
+            visible=True,
             tags=setup_tag_vals(total_tags),
             attributes=setup_attr_vals(total_attr_lablels),
             media_set=["resource-video-id-9487", "resource-image-id-888"],
@@ -188,7 +189,7 @@ class TestSaleableItem:
         )
         assert respdata2["usrprof"] == mock_usr_id
         assert respdata2["name"] == "LoRa brain wave remote controller"
-        assert respdata2["visible"] is False
+        assert respdata2["visible"] is True
         assert "resource-video-id-9487" in respdata2["media_set"]
         assert "resource-image-id-888" in respdata2["media_set"]
         expect = [
@@ -238,6 +239,7 @@ class TestSaleableItem:
             mock_client, mock_usr_id, reqdata, 201, num_items_limit=5
         )
         created_item_id = respdata["id_"]
+        await asyncio.sleep(1)
 
         fetch_resp = await mock_client.get(f"/item/{created_item_id}")
         assert fetch_resp.status == 200
@@ -253,6 +255,7 @@ class TestSaleableItem:
             f"/item/{created_item_id}", headers=headers
         )
         assert delete_resp.status == 204
+        await asyncio.sleep(1)
 
         fetch_deleted_resp = await mock_client.get(f"/item/{created_item_id}")
         assert fetch_deleted_resp.status == 404
