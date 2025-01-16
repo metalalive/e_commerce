@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import List, Dict, Optional
 
 from blacksheep import FromJSON, Response
+from blacksheep.exceptions import NotFound
 from blacksheep.server.authorization import auth
 from blacksheep.server.controllers import APIController
 from blacksheep.server.responses import (
@@ -180,6 +181,22 @@ class SaleItemController(APIController):
         item_d = item_m.to_dto()
         return ok(message=item_d.model_dump())
 
+    @staticmethod
+    async def validate_maintainer(
+        repo: AbstractSaleItemRepo, item_id: int, authed_user: AuthUser
+    ) -> bool:
+        usr_prof_id: int = authed_user.claims.get("profile", -1)
+        try:
+            maintainer_prof_id: int = await repo.get_maintainer(item_id)
+        except AppRepoError as e:
+            db_exist = e.reason.get("remote_database_done", False)
+            data_found = e.reason.get("found", False)
+            if db_exist and data_found:
+                raise NotFound()
+            else:
+                raise e
+        return usr_prof_id == maintainer_prof_id
+
     @auth(PriviledgeLevel.AuthedUser.value)
     @router.delete("/item/{item_id}")
     async def delete(
@@ -188,31 +205,23 @@ class SaleItemController(APIController):
         perm_err = permission_check(authed_user.claims, ["delete_saleableitem"])
         if perm_err:
             return forbidden(message=perm_err)
-        usr_prof_id: int = authed_user.claims.get("profile", -1)
+
         repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
-        try:
-            maintainer_prof_id: int = await repo.get_maintainer(item_id)
-        except AppRepoError as e:
-            db_exist = e.reason.get("remote_database_done", False)
-            data_found = e.reason.get("found", False)
-            if db_exist and data_found:
-                return not_found(message=None)
-            else:
-                raise e
-        if usr_prof_id == maintainer_prof_id:
+        match = await SaleItemController.validate_maintainer(repo, item_id, authed_user)
+        if match:
             await repo.delete(item_id)
             return no_content()
         else:
             return forbidden()
 
-    # TODO,
-    # - optional specific time, to query historical data for existing orders
-    # - consider visibility, create extra GET API to seperate privileged sellers / product maintainers
-    @router.get("/item/{item_id}")
-    async def get_by_id_unauth(self, shr_ctx: SharedContext, item_id: int) -> Response:
-        repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
+    @staticmethod
+    async def get_by_id_common(
+        repo: AbstractSaleItemRepo, item_id: int, visible_only: bool
+    ) -> Response:
         try:
-            item_m: SaleableItemModel = await repo.fetch(item_id, visible_only=True)
+            item_m: SaleableItemModel = await repo.fetch(
+                item_id, visible_only=visible_only
+            )
             item_d = item_m.to_dto()
             return ok(message=item_d.model_dump())
         except AppRepoError as e:
@@ -222,3 +231,26 @@ class SaleItemController(APIController):
                 return not_found(message=None)
             else:
                 raise e
+
+    # TODO,
+    # - optional specific time, to query historical data for existing orders
+    @router.get("/item/{item_id}")
+    async def get_by_id_unauth(self, shr_ctx: SharedContext, item_id: int) -> Response:
+        assert self is None
+        return await SaleItemController.get_by_id_common(
+            shr_ctx.datastore.saleable_item, item_id, visible_only=True
+        )
+
+    @router.get("/item/{item_id}/private")
+    async def get_by_id_privileged(
+        self, shr_ctx: SharedContext, item_id: int, authed_user: AuthUser
+    ) -> Response:
+        assert self is None
+        repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
+        match = await SaleItemController.validate_maintainer(repo, item_id, authed_user)
+        if match:
+            return await SaleItemController.get_by_id_common(
+                repo, item_id, visible_only=False
+            )
+        else:
+            return forbidden()

@@ -201,6 +201,49 @@ class TestSaleableItem:
         assert set(expect) == set(actual)
 
     @pytest.mark.asyncio(loop_scope="session")
+    async def test_create_invisible_ok(self, mock_client):
+        cls = type(self)
+        mock_usr_id = 115
+        mock_another_usr_id = 116
+        reqdata = [("audio-equipment", None), ("wireless-device", None)]
+        tags = await cls.create_tag_bulk(mock_client, mock_usr_id, reqdata)
+        reqdata = [("LoRa supported", AttrDataTypeDto.Boolean)]
+        resp = await create_many_attri_labels(mock_client, mock_usr_id, reqdata, 201)
+        attr_lablels: List[Dict] = await resp.json()
+
+        reqdata = SaleItemCreateReqDto(
+            name="Flight Simulator Panel",
+            visible=False,
+            tags=[t["id_"] for t in tags],
+            attributes=[SaleItemAttriReqDto(id_=attr_lablels[0]["id_"], value=True)],
+            media_set=["resource-image-id-001", "resource-video-id-002"],
+        )
+        created_data = await cls.setup_create_one(
+            mock_client, mock_usr_id, reqdata, 201, num_items_limit=4
+        )
+        created_item_id = created_data["id_"]
+        resp = await mock_client.get(f"/item/{created_item_id}")
+        assert resp.status == 404
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers, mock_another_usr_id, ["add_saleableitem"])
+        resp = await mock_client.get(
+            f"/item/{created_item_id}/private", headers=headers
+        )
+        assert resp.status == 403
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers, mock_usr_id, ["add_saleableitem"])
+        resp = await mock_client.get(
+            f"/item/{created_item_id}/private", headers=headers
+        )
+        assert resp.status == 200
+        readback = await resp.json()
+        assert readback["name"] == "Flight Simulator Panel"
+        assert readback["name"] == created_data["name"]
+        assert readback["visible"] is False
+        assert "resource-video-id-002" in readback["media_set"]
+        assert any(filter(lambda t: t["name"] == "audio-equipment", readback["tags"]))
+
+    @pytest.mark.asyncio(loop_scope="session")
     async def test_delete_fetch_ok(self, mock_client):
         cls = type(self)
         mock_usr_id = 112
