@@ -2,7 +2,7 @@ import logging
 from copy import copy
 from datetime import datetime, UTC
 from collections import defaultdict
-from typing import Any, Dict, Self, Tuple, Optional
+from typing import Any, Dict, Self, Tuple, Optional, List
 from asyncio.events import AbstractEventLoop
 
 from aiohttp import TCPConnector, ClientSession
@@ -302,9 +302,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         return respbody["_source"]["usr_prof"]
 
     async def num_items_created(self, usr_id: int) -> int:
-        fields_present = [
-            "hits.total",
-        ]
+        fields_present = ["hits.total"]
         url = "/%s/the-only-type/_search?filter_path=%s" % (
             self._index_primary_name,
             ",".join(fields_present),
@@ -325,3 +323,84 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                 )
         _logger.debug("ElasticSearchSaleItemRepo.num_items_created done successfully")
         return respbody["hits"]["total"]
+
+    @staticmethod
+    def base_search_query(keywords: List[str]) -> Dict:
+        # fmt: off
+        tags_clause = {"nested": {
+            "path": "tags",
+            "query": {"bool": {
+                "should": [{"match": {"tags.label.as_english": k}} for k in keywords],
+                "minimum_should_match": 1,
+            }},
+        }}
+        item_name_clause = {"bool": {
+            "should": [{"match": {"name.as_english": k}} for k in keywords],
+            "minimum_should_match": 1,
+        }}
+        attris_clause = {"nested": {
+            "path": "attributes",
+            "query": {"bool": {
+                "should": [
+                    {"multi_match": {
+                        "query": k,
+                        "fields": [
+                            "attributes.label.name.as_english",
+                            "attributes.value.string_value.as_english",
+                        ],
+                        "operator": "or",
+                    }}
+                    for k in keywords
+                ],
+                "minimum_should_match": 1,
+            }},
+        }}
+        return {
+            "query": {
+                "bool": {
+                    "should": [tags_clause, item_name_clause, attris_clause],
+                    "minimum_should_match": 1,
+                }
+            },
+            "size": 30,  # TODO, pagination
+        }
+        # fmt: on
+
+    async def search(
+        self,
+        keywords: List[str],
+        visible_only: Optional[bool] = None,
+        usr_id: Optional[int] = None,
+    ) -> List[SaleableItemModel]:
+        cls = type(self)
+        # fmt: off
+        fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "hits.hits._score", "_shards"]
+        url = "/%s/the-only-type/_search?filter_path=%s" % (
+            self._index_primary_name, ",".join(fields_present),
+        )
+        # fmt: on
+        reqbody = cls.base_search_query(keywords)
+        if visible_only:
+            reqbody["query"]["bool"]["filter"] = [{"term": {"visible": True}}]
+        elif usr_id:
+            reqbody["query"]["bool"]["filter"] = [{"term": {"usr_prof": usr_id}}]
+        headers = {"content-type": "application/json"}
+        resp = await self._session.request("GET", url, json=reqbody, headers=headers)
+        async with resp:
+            respbody = await resp.json()
+            if resp.status != 200:
+                respbody["remote_database_done"] = True
+                raise AppRepoError(
+                    fn_label=AppRepoFnLabel.SaleItemSearch, reason=respbody
+                )
+        try:
+            result = [
+                cls.convert_from_primary_doc(int(d["_id"]), d["_source"])
+                for d in respbody["hits"]["hits"]
+            ]
+        except (ValueError, ValidationError) as e:
+            _logger.error("corruption detail: %s" % str(e))
+            reason = {"detail": "data-corruption"}
+            raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemSearch, reason=reason)
+        _logger.debug("ElasticSearchSaleItemRepo.search")
+        return result

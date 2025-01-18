@@ -22,6 +22,7 @@ class AppRepoFnLabel(Enum):
     SaleItemFetchModel = auto()
     SaleItemGetMaintainer = auto()
     SaleItemNumCreated = auto()
+    SaleItemSearch = auto()
 
 
 @dataclass
@@ -99,3 +100,11 @@ class AbstractSaleItemRepo:
 
     async def num_items_created(self, usr_id: int) -> int:
         raise NotImplementedError("AbstractSaleItemRepo.num_items_created")
+
+    async def search(
+        self,
+        keywords: List[str],
+        visible_only: Optional[bool] = None,
+        usr_id: Optional[int] = None,
+    ) -> List[SaleableItemModel]:
+        raise NotImplementedError("AbstractSaleItemRepo.search")

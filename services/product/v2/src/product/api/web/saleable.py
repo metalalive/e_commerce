@@ -254,3 +254,22 @@ class SaleItemController(APIController):
             )
         else:
             return forbidden()
+
+    @router.get("/items/search")
+    async def search_unauth(self, shr_ctx: SharedContext, k: str) -> Response:
+        repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
+        keywords: List[str] = k.rsplit()
+        ms: List[SaleableItemModel] = await repo.search(keywords, visible_only=True)
+        items_d = [m.to_dto() for m in ms]
+        return ok(message=items_d.model_dump())
+
+    @router.get("/items/search/private")
+    async def search_priviledged(
+        self, shr_ctx: SharedContext, k: str, authed_user: AuthUser
+    ) -> Response:
+        usr_prof_id: int = authed_user.claims.get("profile", -1)
+        repo: AbstractSaleItemRepo = shr_ctx.datastore.saleable_item
+        keywords: List[str] = k.rsplit()
+        ms: List[SaleableItemModel] = await repo.search(keywords, usr_id=usr_prof_id)
+        items_d = [m.to_dto() for m in ms]
+        return ok(message=items_d.model_dump())
