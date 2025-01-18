@@ -9,7 +9,7 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 2.0.1
+  version: 2.0.2
 
 servers:
   - url: https://doc.site.not.ready/api/v2.0.1
@@ -30,6 +30,8 @@ paths:
       description: Creates a new tag with an optional parent.
       tags:
       - tagging
+      security:
+      - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -52,6 +54,8 @@ paths:
       - tagging
       parameters:
         - $ref: '#/components/parameters/TagNodeId'
+      security:
+      - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -71,6 +75,8 @@ paths:
       - tagging
       parameters:
         - $ref: '#/components/parameters/TagNodeId'
+      security:
+      - BearerAuth: []
       responses:
         '204':
           description: Tag deleted successfully
@@ -110,6 +116,8 @@ paths:
       description: Creates multiple attribute labels.
       tags:
       - attribute-label
+      security:
+      - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -132,6 +140,8 @@ paths:
       description: Bulk Update attribute labels.
       tags:
       - attribute-label
+      security:
+      - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -161,6 +171,8 @@ paths:
             type: string
           description: list of attribute label IDs delimited by character `,`
           example: 'In1nDer,TaiGG,o9ur3'
+      security:
+      - BearerAuth: []
       responses:
         '204':
           description: Attributes deleted successfully
@@ -193,6 +205,8 @@ paths:
       description: Creates a new product item with attributes, tags, and media references.
       tags:
         - saleable
+      security:
+      - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -207,11 +221,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/SaleItemDto'
 
-  /item/{prod_item_id}:
+  /item/{prod_item_id}/private:
     get:
-      summary: get a product item
+      summary: get a saleable item for maintainer regardless of its visibility state
       description: |
         TODO, add query parameters to show history data for past customer orders, which may be required to retrieve old product attribute snapshot
+      tags:
+        - saleable
+      parameters:
+        - $ref: '#/components/parameters/ProdItemId'
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Product item loaded successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleItemDto'
+
+  /item/{prod_item_id}:
+    get:
+      summary: get a visible saleable item for everyone
       tags:
         - saleable
       parameters:
@@ -233,6 +264,8 @@ paths:
         - saleable
       parameters:
         - $ref: '#/components/parameters/ProdItemId'
+      security:
+      - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -253,10 +286,49 @@ paths:
         - saleable
       parameters:
         - $ref: '#/components/parameters/ProdItemId'
+      security:
+      - BearerAuth: []
       responses:
         '204':
           description: Product item discarded successfully
 
+  /items/search:
+    get:
+      summary: saleable items search for everyone
+      description: Retrieve a list of visible saleable items based on search keywords.
+      tags:
+        - saleable
+      parameters:
+        - $ref: '#/components/parameters/SearchKeyword'
+      responses:
+        '200':
+          description: Search results returned successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SaleItemDto'
+
+  /items/search/private:
+    get:
+      summary: saleable items search for privileged maintainers
+      description: Retrieve a list of saleable items based on search keywords.
+      tags:
+        - saleable
+      parameters:
+        - $ref: '#/components/parameters/SearchKeyword'
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Search results returned successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SaleItemDto'
 
 
 components:
@@ -274,6 +346,15 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ProductBaseId'
+
+    SearchKeyword:
+      name: k
+      in: query
+      required: true
+      schema:
+        type: string
+      description: The keyword used to search for products.
+      example: "laptop"
 
   schemas:
     TagNodeId:
@@ -500,3 +581,8 @@ components:
         - attributes
         - media_set
 
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

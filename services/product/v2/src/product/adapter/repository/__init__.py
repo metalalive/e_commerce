@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import Dict, List, Self
+from typing import Dict, List, Self, Optional
 from dataclasses import dataclass
 from asyncio.events import AbstractEventLoop
 
@@ -22,6 +22,7 @@ class AppRepoFnLabel(Enum):
     SaleItemFetchModel = auto()
     SaleItemGetMaintainer = auto()
     SaleItemNumCreated = auto()
+    SaleItemSearch = auto()
 
 
 @dataclass
@@ -89,7 +90,9 @@ class AbstractSaleItemRepo:
     async def delete(self, id_: int):
         raise NotImplementedError("AbstractSaleItemRepo.delete")
 
-    async def fetch(self, id_: int) -> SaleableItemModel:
+    async def fetch(
+        self, id_: int, visible_only: Optional[bool] = None
+    ) -> SaleableItemModel:
         raise NotImplementedError("AbstractSaleItemRepo.fetch")
 
     async def get_maintainer(self, id_: int) -> int:
@@ -97,3 +100,11 @@ class AbstractSaleItemRepo:
 
     async def num_items_created(self, usr_id: int) -> int:
         raise NotImplementedError("AbstractSaleItemRepo.num_items_created")
+
+    async def search(
+        self,
+        keywords: List[str],
+        visible_only: Optional[bool] = None,
+        usr_id: Optional[int] = None,
+    ) -> List[SaleableItemModel]:
+        raise NotImplementedError("AbstractSaleItemRepo.search")

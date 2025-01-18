@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Tuple, Dict, Optional
 
 from blacksheep import Response
@@ -178,7 +179,7 @@ class TestSaleableItem:
 
         reqdata2 = SaleItemCreateReqDto(
             name="LoRa brain wave remote controller",
-            visible=False,
+            visible=True,
             tags=setup_tag_vals(total_tags),
             attributes=setup_attr_vals(total_attr_lablels),
             media_set=["resource-video-id-9487", "resource-image-id-888"],
@@ -188,7 +189,7 @@ class TestSaleableItem:
         )
         assert respdata2["usrprof"] == mock_usr_id
         assert respdata2["name"] == "LoRa brain wave remote controller"
-        assert respdata2["visible"] is False
+        assert respdata2["visible"] is True
         assert "resource-video-id-9487" in respdata2["media_set"]
         assert "resource-image-id-888" in respdata2["media_set"]
         expect = [
@@ -198,6 +199,49 @@ class TestSaleableItem:
         ]
         actual = [(a["label"]["name"], a["value"]) for a in respdata2["attributes"]]
         assert set(expect) == set(actual)
+
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_create_invisible_ok(self, mock_client):
+        cls = type(self)
+        mock_usr_id = 115
+        mock_another_usr_id = 116
+        reqdata = [("audio-equipment", None), ("wireless-device", None)]
+        tags = await cls.create_tag_bulk(mock_client, mock_usr_id, reqdata)
+        reqdata = [("LoRa supported", AttrDataTypeDto.Boolean)]
+        resp = await create_many_attri_labels(mock_client, mock_usr_id, reqdata, 201)
+        attr_lablels: List[Dict] = await resp.json()
+
+        reqdata = SaleItemCreateReqDto(
+            name="Flight Simulator Panel",
+            visible=False,
+            tags=[t["id_"] for t in tags],
+            attributes=[SaleItemAttriReqDto(id_=attr_lablels[0]["id_"], value=True)],
+            media_set=["resource-image-id-001", "resource-video-id-002"],
+        )
+        created_data = await cls.setup_create_one(
+            mock_client, mock_usr_id, reqdata, 201, num_items_limit=4
+        )
+        created_item_id = created_data["id_"]
+        resp = await mock_client.get(f"/item/{created_item_id}")
+        assert resp.status == 404
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers, mock_another_usr_id, ["add_saleableitem"])
+        resp = await mock_client.get(
+            f"/item/{created_item_id}/private", headers=headers
+        )
+        assert resp.status == 403
+        headers: Dict[str, str] = {}
+        add_auth_header(mock_client, headers, mock_usr_id, ["add_saleableitem"])
+        resp = await mock_client.get(
+            f"/item/{created_item_id}/private", headers=headers
+        )
+        assert resp.status == 200
+        readback = await resp.json()
+        assert readback["name"] == "Flight Simulator Panel"
+        assert readback["name"] == created_data["name"]
+        assert readback["visible"] is False
+        assert "resource-video-id-002" in readback["media_set"]
+        assert any(filter(lambda t: t["name"] == "audio-equipment", readback["tags"]))
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_delete_fetch_ok(self, mock_client):
@@ -238,6 +282,7 @@ class TestSaleableItem:
             mock_client, mock_usr_id, reqdata, 201, num_items_limit=5
         )
         created_item_id = respdata["id_"]
+        await asyncio.sleep(1)
 
         fetch_resp = await mock_client.get(f"/item/{created_item_id}")
         assert fetch_resp.status == 200
@@ -253,6 +298,7 @@ class TestSaleableItem:
             f"/item/{created_item_id}", headers=headers
         )
         assert delete_resp.status == 204
+        await asyncio.sleep(1)
 
         fetch_deleted_resp = await mock_client.get(f"/item/{created_item_id}")
         assert fetch_deleted_resp.status == 404

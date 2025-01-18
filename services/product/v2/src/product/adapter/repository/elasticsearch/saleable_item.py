@@ -2,7 +2,7 @@ import logging
 from copy import copy
 from datetime import datetime, UTC
 from collections import defaultdict
-from typing import Any, Dict, Self, Tuple
+from typing import Any, Dict, Self, Tuple, Optional, List
 from asyncio.events import AbstractEventLoop
 
 from aiohttp import TCPConnector, ClientSession
@@ -190,6 +190,33 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                 raise AppRepoError(fn_label=fn_label, reason=respbody)
         return respbody["_source"]
 
+    async def fetch_doc_primary_visible(
+        self, id_: int, fn_label: AppRepoFnLabel
+    ) -> Dict:
+        fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "_shards"]
+        url = "/%s/the-only-type/_search?filter_path=%s" % (
+            self._index_primary_name,
+            ",".join(fields_present),
+        )
+        reqbody = {
+            "query": {
+                "bool": {
+                    "filter": [{"ids": {"values": [id_]}}, {"term": {"visible": True}}]
+                }
+            }
+        }
+        headers = {"content-type": "application/json"}
+        resp = await self._session.request("GET", url, json=reqbody, headers=headers)
+        async with resp:
+            respbody = await resp.json()
+            if resp.status != 200:
+                respbody["remote_database_done"] = True
+                raise AppRepoError(fn_label=fn_label, reason=respbody)
+            if respbody["hits"]["total"] != 1:
+                respbody["remote_database_done"] = True
+                raise AppRepoError(fn_label=fn_label, reason=respbody)
+        return respbody["hits"]["hits"][0]["_source"]
+
     @staticmethod
     def convert_from_primary_doc(id_: int, raw: Dict) -> SaleableItemModel:
         def cvt_attri(attr: Dict[str, Any]) -> SaleItemAttriModel:
@@ -230,12 +257,21 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             media_set=raw["media_set"],
         )
 
-    async def fetch(self, id_: int) -> SaleableItemModel:
+    async def fetch(
+        self, id_: int, visible_only: Optional[bool] = None
+    ) -> SaleableItemModel:
         cls = type(self)
         # TODO, optional timestamp to retrieve snapshot
-        rawdoc = await self.fetch_doc_primary(
-            id_=id_, fn_label=AppRepoFnLabel.SaleItemFetchModel
-        )
+        if visible_only:
+            rawdoc = await self.fetch_doc_primary_visible(
+                id_=id_,
+                fn_label=AppRepoFnLabel.SaleItemFetchModel,
+            )
+        else:
+            rawdoc = await self.fetch_doc_primary(
+                id_=id_,
+                fn_label=AppRepoFnLabel.SaleItemFetchModel,
+            )
         try:
             obj = cls.convert_from_primary_doc(id_, rawdoc)
         except (ValueError, ValidationError) as e:
@@ -266,9 +302,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         return respbody["_source"]["usr_prof"]
 
     async def num_items_created(self, usr_id: int) -> int:
-        fields_present = [
-            "hits.total",
-        ]
+        fields_present = ["hits.total"]
         url = "/%s/the-only-type/_search?filter_path=%s" % (
             self._index_primary_name,
             ",".join(fields_present),
@@ -289,3 +323,84 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                 )
         _logger.debug("ElasticSearchSaleItemRepo.num_items_created done successfully")
         return respbody["hits"]["total"]
+
+    @staticmethod
+    def base_search_query(keywords: List[str]) -> Dict:
+        # fmt: off
+        tags_clause = {"nested": {
+            "path": "tags",
+            "query": {"bool": {
+                "should": [{"match": {"tags.label.as_english": k}} for k in keywords],
+                "minimum_should_match": 1,
+            }},
+        }}
+        item_name_clause = {"bool": {
+            "should": [{"match": {"name.as_english": k}} for k in keywords],
+            "minimum_should_match": 1,
+        }}
+        attris_clause = {"nested": {
+            "path": "attributes",
+            "query": {"bool": {
+                "should": [
+                    {"multi_match": {
+                        "query": k,
+                        "fields": [
+                            "attributes.label.name.as_english",
+                            "attributes.value.string_value.as_english",
+                        ],
+                        "operator": "or",
+                    }}
+                    for k in keywords
+                ],
+                "minimum_should_match": 1,
+            }},
+        }}
+        return {
+            "query": {
+                "bool": {
+                    "should": [tags_clause, item_name_clause, attris_clause],
+                    "minimum_should_match": 1,
+                }
+            },
+            "size": 30,  # TODO, pagination
+        }
+        # fmt: on
+
+    async def search(
+        self,
+        keywords: List[str],
+        visible_only: Optional[bool] = None,
+        usr_id: Optional[int] = None,
+    ) -> List[SaleableItemModel]:
+        cls = type(self)
+        # fmt: off
+        fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "hits.hits._score", "_shards"]
+        url = "/%s/the-only-type/_search?filter_path=%s" % (
+            self._index_primary_name, ",".join(fields_present),
+        )
+        # fmt: on
+        reqbody = cls.base_search_query(keywords)
+        if visible_only:
+            reqbody["query"]["bool"]["filter"] = [{"term": {"visible": True}}]
+        elif usr_id:
+            reqbody["query"]["bool"]["filter"] = [{"term": {"usr_prof": usr_id}}]
+        headers = {"content-type": "application/json"}
+        resp = await self._session.request("GET", url, json=reqbody, headers=headers)
+        async with resp:
+            respbody = await resp.json()
+            if resp.status != 200:
+                respbody["remote_database_done"] = True
+                raise AppRepoError(
+                    fn_label=AppRepoFnLabel.SaleItemSearch, reason=respbody
+                )
+        try:
+            result = [
+                cls.convert_from_primary_doc(int(d["_id"]), d["_source"])
+                for d in respbody["hits"]["hits"]
+            ]
+        except (ValueError, ValidationError) as e:
+            _logger.error("corruption detail: %s" % str(e))
+            reason = {"detail": "data-corruption"}
+            raise AppRepoError(fn_label=AppRepoFnLabel.SaleItemSearch, reason=reason)
+        _logger.debug("ElasticSearchSaleItemRepo.search")
+        return result

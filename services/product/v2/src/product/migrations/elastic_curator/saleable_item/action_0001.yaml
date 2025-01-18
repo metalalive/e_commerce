@@ -71,7 +71,7 @@ actions:
     action: create_index
     description: "Create an index for snapshot of saleable items at update points in time"
     options:
-      name: "product-saleable-items-snapshot-2024"
+      name: "product-saleable-items-snapshot-2025"
       continue_if_exception: False
       disable_action: False
       extra_settings:

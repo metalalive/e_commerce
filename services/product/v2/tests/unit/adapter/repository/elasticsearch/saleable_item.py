@@ -264,3 +264,155 @@ class TestDelete:
         assert e.fn_label == AppRepoFnLabel.SaleItemFetchModel
         assert not e.reason["found"]
         assert int(e.reason["_id"]) == saleitem_m_created.id_
+
+
+class TestFetchOne:
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_visibility_ok(self, es_repo_saleitem):
+        expect_usr_prof = 12351
+        mock_visible = True
+        saleitem_ms_created = []
+        for i in range(1, 5):
+            req_data = SaleItemCreateReqDto(
+                name=f"Earbuds {i}",
+                visible=mock_visible,
+                media_set=[f"resource-visible-{i}"],
+                tags=[f"xuirRg-{i}"],
+                attributes=[],
+            )
+            tag_data = {f"xuirRg-{i}": [(i, f"Label {i}")]}
+            attr_data = []
+            obj = await TestCreate.setup_create_one(
+                es_repo_saleitem,
+                usr_prof=expect_usr_prof,
+                req_data=req_data,
+                tag_data=tag_data,
+                attr_data=attr_data,
+            )
+            saleitem_ms_created.append(obj)
+            mock_visible = not mock_visible
+
+        await asyncio.sleep(1)  # wait for ElasticSearch refresh documents
+        expect_visible = [saleitem_ms_created[0], saleitem_ms_created[2]]
+        expect_invisible = [saleitem_ms_created[1], saleitem_ms_created[3]]
+
+        for obj in expect_visible:
+            readback = await es_repo_saleitem.fetch(obj.id_, visible_only=True)
+            verify_items_equlity(readback, obj)
+            readback = await es_repo_saleitem.fetch(obj.id_, visible_only=False)
+            verify_items_equlity(readback, obj)
+
+        for obj in expect_invisible:
+            with pytest.raises(AppRepoError) as e:
+                await es_repo_saleitem.fetch(obj.id_, visible_only=True)
+            e = e.value
+            assert e.fn_label == AppRepoFnLabel.SaleItemFetchModel
+            assert e.reason["remote_database_done"]
+            readback = await es_repo_saleitem.fetch(obj.id_, visible_only=False)
+            verify_items_equlity(readback, obj)
+
+
+class TestSearch:
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_visibleonly_ok(self, es_repo_saleitem):
+        usr_prof = 12352
+        tag_data = {
+            "elety": [(1, "Electronics")],
+            "oioiu": [(2, "smarT little things")],
+            "homie": [(3, "HomeSteading")],
+        }
+        req_data_1 = SaleItemCreateReqDto(
+            name="Electrical Chain Saw",
+            visible=True,
+            media_set=["resource-image-smartphone-1", "resource-video-smartphone-1"],
+            tags=["elety-1", "homie-3"],
+            attributes=[],
+        )
+        attr_data_1 = [
+            ("attr301", "bllade length", AttrDataTypeDto.String, "16 inches"),
+            ("attr302", "Motor power", AttrDataTypeDto.UnsignedInteger, 4500),
+        ]
+        chainsaw = await TestCreate.setup_create_one(
+            repo=es_repo_saleitem,
+            usr_prof=usr_prof,
+            req_data=req_data_1,
+            tag_data={k: v for k, v in tag_data.items() if k in ["elety", "homie"]},
+            attr_data=attr_data_1,
+        )
+        # Saleable Item 2: Wireless Headphones
+        req_data_2 = SaleItemCreateReqDto(
+            name="EleTriCity SmArT solar power generator",
+            visible=False,
+            media_set=["resource-image-headphones", "resource-video-headphones"],
+            tags=["oioiu-2", "homie-3"],
+            attributes=[],
+        )
+        attr_data_2 = [
+            ("attr401", "Battery discharge hours", AttrDataTypeDto.Integer, 85),
+            (
+                "attr403",
+                "Cheep Vendor",
+                AttrDataTypeDto.String,
+                "Huge panel Digital Crab",
+            ),
+            ("attr402", "Noise Cancellation", AttrDataTypeDto.Boolean, True),
+        ]
+        solarpowerboard = await TestCreate.setup_create_one(
+            repo=es_repo_saleitem,
+            usr_prof=usr_prof,
+            req_data=req_data_2,
+            tag_data={k: v for k, v in tag_data.items() if k in ["oioiu", "homie"]},
+            attr_data=attr_data_2,
+        )
+
+        req_data_3 = SaleItemCreateReqDto(
+            name="Cordless Drill",
+            visible=True,
+            media_set=["resource-image-smartwatch", "resource-video-smartwatch"],
+            tags=["elety-1", "oioiu-2"],
+            attributes=[],
+        )
+        attr_data_3 = [
+            ("attr501", "Working voltage", AttrDataTypeDto.Integer, 20),
+            ("attr502", "Digital mode", AttrDataTypeDto.UnsignedInteger, 5),
+            ("attr503", "Water Resistance", AttrDataTypeDto.String, "50 cheeps DeMax"),
+            (
+                "attr504",
+                "nail provider",
+                AttrDataTypeDto.String,
+                "TaiGG electronics fab",
+            ),
+            ("attr505", "battery holder included", AttrDataTypeDto.Boolean, True),
+        ]
+        drill = await TestCreate.setup_create_one(
+            repo=es_repo_saleitem,
+            usr_prof=usr_prof,
+            req_data=req_data_3,
+            tag_data={k: v for k, v in tag_data.items() if k in ["elety", "oioiu"]},
+            attr_data=attr_data_3,
+        )
+        await asyncio.sleep(1)  # wait for ElasticSearch refresh documents
+
+        def verify_fetched_items(expect: List, actual: List):
+            expect = [(e.id_, e.name) for e in expect]
+            actual = [(a.id_, a.name) for a in actual]
+            diff = set(expect) - set(actual)
+            assert not diff
+
+        result = await es_repo_saleitem.search(keywords=["electronic", "smart"])
+        assert len(result) >= 3
+        verify_fetched_items([solarpowerboard, chainsaw, drill], result)
+
+        result = await es_repo_saleitem.search(
+            keywords=["electronic", "smart"], usr_id=usr_prof
+        )
+        assert len(result) == 3
+        verify_fetched_items([solarpowerboard, chainsaw, drill], result)
+
+        result = await es_repo_saleitem.search(keywords=["cheep"])
+        assert len(result) == 2
+        verify_fetched_items([drill, solarpowerboard], result)
+
+        result = await es_repo_saleitem.search(keywords=["cheep"], visible_only=True)
+        assert len(result) == 1
+        verify_fetched_items([drill], result)
