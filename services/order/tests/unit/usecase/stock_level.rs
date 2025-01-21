@@ -47,7 +47,7 @@ fn ut_setup_data() -> Vec<InventoryEditStockLevelDto> {
 
 #[tokio::test]
 async fn edit_ok() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let init_data = ut_setup_data();
     let expect_fetch_res = Ok(StockLevelModelSet {
         stores: vec![StoreStockModel {
@@ -83,7 +83,7 @@ async fn edit_ok() {
 
 #[tokio::test]
 async fn edit_fetch_error() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let init_data = ut_setup_data();
     let expect_fetch_res = Err(AppError {
         code: AppErrorCode::DataCorruption,
@@ -115,7 +115,7 @@ async fn edit_fetch_error() {
 
 #[tokio::test]
 async fn edit_save_error() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let init_data = ut_setup_data();
     let expect_fetch_res = Ok(StockLevelModelSet {
         stores: vec![StoreStockModel {

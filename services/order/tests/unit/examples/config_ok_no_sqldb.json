@@ -1,0 +1,86 @@
+{
+    "pid_file" : {
+        "web_api"     :"tmp/proc/order_itest_app_server.pid",
+        "rpc_consumer":"tmp/proc/order_itest_rpc_consumer.pid"
+    },
+    "logging" : {
+        "handlers" : [
+            {"alias": "std-output-forall",
+             "min_level": "WARNING",
+             "destination": "console"},
+            {"alias": "errlog-file-web-api",
+             "min_level": "WARNING",
+             "path": "tmp/log/test/order_app_server.err",
+             "destination": "localfs"}
+        ],
+        "loggers" : [
+            {"alias": "order::adapter::datastore",
+             "handlers": ["std-output-forall"],
+             "level": "ERROR"},
+            {"alias": "order::adapter::datastore::sql_db",
+             "handlers": ["std-output-forall"],
+             "level": "ERROR"},
+            {"alias": "order::adapter::thirdparty::base_client",
+             "handlers": ["std-output-forall"],
+             "level": "INFO"},
+            {"alias": "order::usecase::stock_level",
+             "handlers": ["std-output-forall"],
+             "level": "DEBUG"},
+            {"alias": "order::usecase::manage_order",
+             "handlers": ["std-output-forall"],
+             "level": "WARNING"},
+            {"alias": "order::api::web::order",
+             "handlers": ["errlog-file-web-api"],
+             "level": "INFO"},
+            {"alias": "order::api::web::product_policy",
+             "handlers": ["errlog-file-web-api"],
+             "level": "INFO"},
+            {"alias": "web",
+             "handlers": ["std-output-forall"] }
+        ]
+    },
+    "listen": {
+        "port": 8013,
+        "host":"localhost",
+        "max_failures": 5,
+        "api_version": "1.0.33",
+        "cors": "order/tests/unit/examples/cors_ok.json",
+	"max_connections": 50,
+        "routes": [
+            {"path":"/gram/increment", "handler":"gram_increment"},
+            {"path":"/policy/products", "handler":"modify_product_policy"},
+            {"path":"/order",  "handler":"create_new_order"},
+            {"path":"/order/:oid", "handler":"access_existing_order"}
+        ]
+    },
+    "limit_req_body_in_bytes": 10485760,
+    "num_workers": 1,
+    "stack_sz_kb": 128,
+    "data_store": [
+	{
+	    "_type": "InMemory",
+	    "alias": "keep-123-mem",
+	    "max_items": 99
+	}
+    ],
+    "rpc": {
+	 "handler_type": "dummy"
+    },
+    "auth": {
+	"keystore_url": "http://localhost:12345",
+	"update_interval_minutes": 15
+    },
+    "third_parties": [
+        {
+            "name": "OpenExchangeRates",
+            "mode": "dev",
+            "host": "openexchangerates.org",
+            "port": 443,
+	        "confidentiality_path": "backend_apps/secret_key/staff/OpenExchangeRates"
+        }
+    ],
+    "confidentiality": {
+	"source": "UserSpace",
+	"sys_path": "/path/to/secret.file"
+    }
+}
