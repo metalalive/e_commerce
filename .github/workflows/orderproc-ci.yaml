@@ -38,7 +38,7 @@ jobs:
       env:
           SYS_BASE_PATH: "${{ github.workspace }}/services"
           SERVICE_BASE_PATH: "${{ github.workspace }}/services/order"
-          CONFIG_FILE_PATH: "settings/test.json"
+          CONFIG_FILE_PATH: "settings/test-inmem-only.json"
       working-directory: services/order/tests/integration
       run: |
           cargo test --test web  --  --test-threads=1
