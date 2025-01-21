@@ -1154,11 +1154,12 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
         StatusCode::OK,
     )
     .await;
+    let time_after_req1 = Local::now().fixed_offset();
     let resp_body = itest_setup_get_order_refund(
         shrstate.clone(),
         oid.clone(),
         time_now - Duration::seconds(2),
-        time_now + Duration::seconds(3),
+        time_after_req1,
     )
     .await;
     itest_verify_order_refund(
@@ -1183,11 +1184,12 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
         StatusCode::OK,
     )
     .await;
+    let time_after_req2 = Local::now().fixed_offset();
     let resp_body = itest_setup_get_order_refund(
         shrstate,
         oid.clone(),
-        time_now + Duration::seconds(3),
-        time_now + Duration::seconds(3i64 + 1 + hard_limit::MIN_SECS_INTVL_REQ as i64),
+        time_after_req1,
+        time_after_req2,
     )
     .await;
     itest_verify_order_refund(
@@ -1229,10 +1231,10 @@ async fn itest_setup_get_order_inventory(
     let raw = result.unwrap();
     let result = serde_json::from_slice(&raw);
     assert!(result.is_ok());
-    println!(
-        "[debug] itest-setup-get-order-inventory , raw : {:?}",
-        String::from_utf8(raw).unwrap()
-    );
+    // println!(
+    //     "[debug] itest-setup-get-order-inventory , raw : {:?}",
+    //     String::from_utf8(raw).unwrap()
+    // );
     result.unwrap()
 } // end of fn itest_setup_get_order_inventory
 
@@ -1316,11 +1318,12 @@ async fn replica_order_rsv_inventory() -> DefaultResult<(), AppError> {
         FPATH_NEW_ORDER,
     )
     .await;
+    let time_after_req1 = Local::now().fixed_offset();
     {
         let resp_body = itest_setup_get_order_inventory(
             shrstate.clone(),
             time_now - Duration::seconds(1),
-            time_now + Duration::seconds(2),
+            time_after_req1,
         )
         .await;
         let toplvl_map = resp_body.as_object().unwrap();
@@ -1345,12 +1348,12 @@ async fn replica_order_rsv_inventory() -> DefaultResult<(), AppError> {
         StatusCode::OK,
     )
     .await;
+    let time_after_req2 = Local::now().fixed_offset();
     {
-        // Note, since all the test cases run asynchronously, the time range might be large
         let resp_body = itest_setup_get_order_inventory(
             shrstate.clone(),
             time_now - Duration::seconds(10),
-            time_now + Duration::seconds(10),
+            time_after_req2,
         )
         .await;
         let toplvl_map = resp_body.as_object().unwrap();

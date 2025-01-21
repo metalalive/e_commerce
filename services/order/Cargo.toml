@@ -43,7 +43,8 @@ ecommerce-common = {version="^0.1.0", path="../common/rust"}
 #   this issue when number of connections increases,
 # - [reference] issues 2567, discussion 3232 in sqlx github
 # - TODO, upgrade directly to v8.x 
-sqlx = {version="=0.6.3", features=["runtime-tokio-native-tls", "chrono", "decimal"]}
+sqlx = {version="=0.8.3", default-features=false, features=["any", "json", "macros", "runtime-tokio-native-tls", "chrono", "rust_decimal"]}
+deadpool = {version="^0.12", default-features=false, features=["managed", "rt_tokio_1"]}
 
 # TODO, due to hardware memory constraint, currently I do not use migrate
 # feature, instead I use external tool `liquibase` for db migration.

@@ -4,7 +4,7 @@ use std::vec::Vec;
 
 use async_trait::async_trait;
 use rust_decimal::Decimal;
-use sqlx::database::HasArguments;
+use sqlx::database::Database as AbstractDatabase;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement};
 
@@ -34,7 +34,7 @@ impl UpdateArgs {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for UpdateArgs {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let CurrencyModelSet {
             base: _,
             exchange_rates,
@@ -47,14 +47,14 @@ impl<'q> IntoArguments<'q, MySql> for UpdateArgs {
         exchange_rates
             .into_iter()
             .map(|m| {
-                args.add(m.name.to_string());
-                args.add(m.rate);
+                args.add(m.name.to_string()).unwrap();
+                args.add(m.rate).unwrap();
             })
             .count();
         curr_labels
             .into_iter()
             .map(|label| {
-                args.add(label);
+                args.add(label).unwrap();
             })
             .count();
         args
@@ -81,7 +81,7 @@ impl From<FetchArgs> for (String, MySqlArguments) {
             .0
             .into_iter()
             .map(|m| {
-                args.add(m.to_string());
+                args.add(m.to_string()).unwrap();
             })
             .count();
         (sql_patt, args)
@@ -91,7 +91,13 @@ impl From<FetchArgs> for (String, MySqlArguments) {
 impl TryFrom<MySqlRow> for CurrencyModel {
     type Error = AppError;
     fn try_from(value: MySqlRow) -> Result<Self, Self::Error> {
-        let name_serial = value.try_get::<String, usize>(0)?;
+        let name_raw = value.try_get::<&[u8], usize>(0)?;
+        let name_serial = std::str::from_utf8(name_raw)
+            .map_err(|e| AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(e.to_string()),
+            })?
+            .to_string();
         let name = (&name_serial).into();
         if matches!(name, CurrencyDto::Unknown) {
             Err(AppError {

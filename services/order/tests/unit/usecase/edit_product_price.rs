@@ -123,7 +123,7 @@ impl MockRepository {
 
 #[tokio::test]
 async fn create_ok() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, mocked_currency) = (12345, CurrencyDto::TWD);
     let mocked_ppset = ProductPriceModelSet {
@@ -176,7 +176,7 @@ async fn create_ok() {
 
 #[tokio::test]
 async fn update_ok() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, mocked_currency) = (12345, CurrencyDto::USD);
     let mocked_ppset = ProductPriceModelSet {
@@ -281,7 +281,7 @@ async fn update_ok() {
 
 #[tokio::test]
 async fn fetch_error() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-1");
     let mocked_currency = CurrencyDto::THB;
@@ -329,7 +329,7 @@ async fn fetch_error() {
 
 #[tokio::test]
 async fn save_error() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-2");
     let mocked_currency = CurrencyDto::TWD;
@@ -394,7 +394,7 @@ async fn save_error() {
 
 #[tokio::test]
 async fn delete_subset_ok() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {
@@ -422,7 +422,7 @@ async fn delete_subset_ok() {
 
 #[tokio::test]
 async fn delete_subset_error() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let (mocked_store_id, expect_errmsg) = (12345, "unit-test-set-error-1");
     let mocked_ppset = ProductPriceModelSet {
@@ -463,7 +463,7 @@ async fn delete_subset_error() {
 
 #[tokio::test]
 async fn delete_all_ok() {
-    let app_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let app_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = app_state.log_context().clone();
     let mocked_store_id = 12345;
     let mocked_ppset = ProductPriceModelSet {

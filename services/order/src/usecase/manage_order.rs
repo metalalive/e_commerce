@@ -91,6 +91,7 @@ impl CreateOrderUseCase {
         self,
         req: OrderCreateReqData,
     ) -> DefaultResult<OrderCreateRespOkDto, CreateOrderUsKsErr> {
+        let logctx_p = self.glb_state.log_context().clone();
         let OrderCreateReqData {
             billing: bl_d,
             shipping: sh_d,
@@ -108,7 +109,12 @@ impl CreateOrderUseCase {
         let (o_bl, o_sh) = Self::validate_metadata(sh_d, bl_d)?;
         let (ms_policy, ms_price) = self.load_product_properties(&ol_d).await?;
         let o_currency =
-            Self::snapshot_currencies(self.repo_currex.as_ref(), currency_buyer, &ms_price).await?;
+            Self::snapshot_currencies(self.repo_currex.as_ref(), currency_buyer, &ms_price)
+                .await
+                .map_err(|es| {
+                    app_log_event!(logctx_p, AppLogLevel::ERROR, "error: {:?}", es);
+                    CreateOrderUsKsErr::Server(es)
+                })?;
         let o_items = Self::validate_orderline(ms_policy, ms_price, ol_d)?;
         let oid = OrderLineModel::generate_order_id(app_meta::MACHINE_CODE);
         let timenow = LocalTime::now().fixed_offset();
@@ -130,7 +136,6 @@ impl CreateOrderUseCase {
             .save_contact(ol_set.order_id.as_str(), o_bl, o_sh)
             .await
             .map_err(|e| {
-                let logctx_p = self.glb_state.log_context().clone();
                 app_log_event!(logctx_p, AppLogLevel::ERROR, "repo-fail-save: {e}");
                 CreateOrderUsKsErr::Server(vec![e])
             })?;
@@ -282,23 +287,19 @@ impl CreateOrderUseCase {
         repo_currex_p: &dyn AbsCurrencyRepo,
         label_buyer: CurrencyDto,
         seller_mset_price: &[ProductPriceModelSet],
-    ) -> DefaultResult<OrderCurrencyModel, CreateOrderUsKsErr> {
+    ) -> DefaultResult<OrderCurrencyModel, Vec<AppError>> {
         let mut labels = seller_mset_price
             .iter()
             .map(|ms| ms.currency.clone())
             .collect::<Vec<_>>();
         labels.push(label_buyer.clone());
-        let exrate_avail = repo_currex_p
-            .fetch(labels)
-            .await
-            .map_err(|e| CreateOrderUsKsErr::Server(vec![e]))?;
+        let exrate_avail = repo_currex_p.fetch(labels).await.map_err(|e| vec![e])?;
         let label_sellers = seller_mset_price
             .iter()
             .map(|ms| (ms.store_id, ms.currency.clone()))
             .collect::<Vec<_>>();
         let args = (exrate_avail, label_buyer, label_sellers);
-        let out = OrderCurrencyModel::try_from(args).map_err(CreateOrderUsKsErr::Server)?;
-        Ok(out)
+        OrderCurrencyModel::try_from(args)
     } // end of fn snapshot_currencies
 
     pub fn validate_orderline(
@@ -492,6 +493,18 @@ impl OrderReplicaInventoryUseCase {
         start: DateTime<FixedOffset>,
         end: DateTime<FixedOffset>,
     ) -> DefaultResult<Vec<OrderReplicaStockReservingDto>, AppError> {
+        let result = self._load_reserving(start, end).await;
+        if let Err(e) = &result {
+            let logctx_p = &self.logctx;
+            app_log_event!(logctx_p, AppLogLevel::ERROR, "replica: {:?}", e);
+        }
+        result
+    }
+    async fn _load_reserving(
+        &self,
+        start: DateTime<FixedOffset>,
+        end: DateTime<FixedOffset>,
+    ) -> DefaultResult<Vec<OrderReplicaStockReservingDto>, AppError> {
         let mut out = vec![];
         let order_ids = self.o_repo.fetch_ids_by_created_time(start, end).await?;
         for oid in order_ids {
@@ -523,7 +536,7 @@ impl OrderReplicaInventoryUseCase {
             app_log_event!(
                 logctx_p,
                 AppLogLevel::DEBUG,
-                "oid :{}, usr_id :{}",
+                "oid:{}, usr:{}",
                 oid.as_str(),
                 usr_id
             );
@@ -546,7 +559,7 @@ impl OrderReplicaInventoryUseCase {
                 app_log_event!(
                     logctx_p,
                     AppLogLevel::DEBUG,
-                    "oid :{}, model-to-dto size :{}",
+                    "oid :{}, dto size :{}",
                     oid.as_str(),
                     ret_dtos.len()
                 );

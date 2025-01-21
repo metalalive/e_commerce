@@ -149,7 +149,8 @@ SYS_BASE_PATH="${PWD}/../../.."  SERVICE_BASE_PATH="${PWD}/../.." \
 
 Note :
 - remind the option `--features mariadb` can be used for integration test, once added to the command, this option will propagate to `order` crate .
-
+- with the feature `mariadb`, the configuration file `settings/test.json` contains essential settings for mariaDB database
+- for test with in-memory data store, use the configuration file `settings/test-inmem-only.json` without the feature `mariadb`;
 
 ### Reference
 - [Web API documentation (OpenAPI v3.0 specification)](./doc/api/openapi.yaml)

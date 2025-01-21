@@ -102,12 +102,12 @@ impl ProductPolicyMariaDbRepo {
                     item.min_num_rsv,
                 );
                 let prodtypenum: u8 = prod_typ.into();
-                args.add(prodtypenum.to_string());
-                args.add(prod_id);
-                args.add(auto_cancel);
-                args.add(warranty);
-                args.add(max_rsv);
-                args.add(min_rsv);
+                args.add(prodtypenum.to_string()).unwrap();
+                args.add(prod_id).unwrap();
+                args.add(auto_cancel).unwrap();
+                args.add(warranty).unwrap();
+                args.add(max_rsv).unwrap();
+                args.add(min_rsv).unwrap();
             })
             .count();
         let sql_patt = Self::prep_stmt_patt_read(SQL_PATTERN_BLOCKS, num_batch);
@@ -121,9 +121,9 @@ impl ProductPolicyMariaDbRepo {
             .map(|item| {
                 let prod_typ: u8 = item.product_type.clone().into();
                 let (prod_id, auto_cancel) = (item.product_id, item.auto_cancel_secs);
-                args.add(prod_typ.to_string());
-                args.add(prod_id);
-                args.add(auto_cancel);
+                args.add(prod_typ.to_string()).unwrap();
+                args.add(prod_id).unwrap();
+                args.add(auto_cancel).unwrap();
             })
             .count();
         items
@@ -131,9 +131,9 @@ impl ProductPolicyMariaDbRepo {
             .map(|item| {
                 let prod_typ: u8 = item.product_type.clone().into();
                 let (prod_id, warranty) = (item.product_id, item.warranty_hours);
-                args.add(prod_typ.to_string());
-                args.add(prod_id);
-                args.add(warranty);
+                args.add(prod_typ.to_string()).unwrap();
+                args.add(prod_id).unwrap();
+                args.add(warranty).unwrap();
             })
             .count();
         items
@@ -141,9 +141,9 @@ impl ProductPolicyMariaDbRepo {
             .map(|item| {
                 let prod_typ: u8 = item.product_type.clone().into();
                 let (prod_id, max_rsv) = (item.product_id, item.max_num_rsv);
-                args.add(prod_typ.to_string());
-                args.add(prod_id);
-                args.add(max_rsv);
+                args.add(prod_typ.to_string()).unwrap();
+                args.add(prod_id).unwrap();
+                args.add(max_rsv).unwrap();
             })
             .count();
         items
@@ -151,9 +151,9 @@ impl ProductPolicyMariaDbRepo {
             .map(|item| {
                 let prod_typ: u8 = item.product_type.clone().into();
                 let (prod_id, min_rsv) = (item.product_id, item.min_num_rsv);
-                args.add(prod_typ.to_string());
-                args.add(prod_id);
-                args.add(min_rsv);
+                args.add(prod_typ.to_string()).unwrap();
+                args.add(prod_id).unwrap();
+                args.add(min_rsv).unwrap();
             })
             .count();
         items
@@ -161,8 +161,8 @@ impl ProductPolicyMariaDbRepo {
             .map(|item| {
                 let (prod_typ, prod_id): (u8, u64) =
                     (item.product_type.clone().into(), item.product_id);
-                args.add(prod_typ.to_string());
-                args.add(prod_id);
+                args.add(prod_typ.to_string()).unwrap();
+                args.add(prod_id).unwrap();
             })
             .count();
         let sql_patt = {
@@ -226,11 +226,10 @@ impl AbstProductPolicyRepo for ProductPolicyMariaDbRepo {
                 .map(|_| {
                     let (prod_typ, prod_id) = _ids.remove(0);
                     let prodtypenum: u8 = prod_typ.into();
-                    args.add(prodtypenum.to_string());
-                    args.add(prod_id);
+                    args.add(prodtypenum.to_string()).unwrap();
+                    args.add(prod_id).unwrap();
                 })
                 .count();
-            // let exec = &mut *conn ;
             let exec = conn.as_mut();
             let query = stmt.query_with(args);
             let rows = query.fetch_all(exec).await?;
@@ -254,13 +253,7 @@ impl AbstProductPolicyRepo for ProductPolicyMariaDbRepo {
                     code: AppErrorCode::DataCorruption,
                 });
             } // TODO, logging error
-            policies.extend(portions.into_iter().filter_map(|r| {
-                if let Ok(v) = r {
-                    Some(v)
-                } else {
-                    None
-                }
-            }));
+            policies.extend(portions.into_iter().filter_map(|r| r.ok()));
             num_iter += 1;
         } // end of loop
         Ok(ProductPolicyModelSet { policies })
@@ -293,7 +286,10 @@ impl AbstProductPolicyRepo for ProductPolicyMariaDbRepo {
 impl TryFrom<MySqlRow> for ProductPolicyModel {
     type Error = AppError;
     fn try_from(value: MySqlRow) -> DefaultResult<Self, Self::Error> {
-        let product_type = value.try_get::<&str, usize>(0)?.parse::<ProductType>()?;
+        let prodtyp_raw = value.try_get::<&[u8], usize>(0)?;
+        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
+        let product_type = prodtyp_raw.parse::<ProductType>()?;
+        assert!(!matches!(product_type, ProductType::Unknown(_)));
         // note, the code here implicitly converts the error type received `sqlx::Error`
         // into the error type `AppError`, on immediately returning the error
         let product_id = value.try_get::<u64, usize>(1)?;

@@ -289,7 +289,7 @@ async fn create_order_snapshot_currency_err() {
     )
     .await;
     assert!(result.is_err());
-    if let Err(CreateOrderUsKsErr::Server(es)) = result {
+    if let Err(es) = result {
         assert_eq!(es.len(), 2);
         es.into_iter()
             .map(|e| {
@@ -407,7 +407,7 @@ async fn discard_unpaid_items_common(
     stock_return_results: Vec<DefaultResult<Vec<StockReturnErrorDto>, AppError>>,
     fetched_ol_sets: Vec<OrderLineModelSet>,
 ) -> DefaultResult<(), AppError> {
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = shr_state.log_context().clone();
     let not_impl_err = AppError {
         detail: None,
@@ -536,7 +536,7 @@ async fn return_lines_request_common(
     req_usr_id: u32,
     owner_usr_id: u32,
 ) -> DefaultResult<ReturnLinesReqUcOutput, AppError> {
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = shr_state.log_context().clone();
     let mocked_seller_ids = fetched_olines
         .iter()
@@ -682,7 +682,7 @@ async fn replica_inventory_common(
 
 #[tokio::test]
 async fn replica_inventory_ok() {
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = shr_state.log_context().clone();
     let fetched_olines = ut_setup_orderlines();
     let fetched_oids_ctime = vec!["order739".to_string()];
@@ -728,7 +728,7 @@ async fn replica_inventory_ok() {
 
 #[tokio::test]
 async fn replica_inventory_err() {
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let logctx = shr_state.log_context().clone();
     let fetched_olines = ut_setup_orderlines();
     let fetched_oids_ctime = vec!["order739".to_string()];

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{FixedOffset, NaiveDateTime};
+use sqlx::database::Database as AbstractDatabase;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
@@ -42,7 +43,7 @@ impl InsertProductArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for InsertProductArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         let (store_id, items) = (self.0, self.1);
         items
@@ -60,14 +61,16 @@ impl<'q> IntoArguments<'q, MySql> for InsertProductArg {
                 let start_tz_utc = tz.local_minus_utc() / 60;
                 let tz = end_before.fixed_offset().timezone();
                 let end_tz_utc = tz.local_minus_utc() / 60;
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(p_id);
-                out.add(price);
-                out.add(format!("{}", start_after.format(DATETIME_FORMAT)));
-                out.add(format!("{}", end_before.format(DATETIME_FORMAT)));
-                out.add(start_tz_utc as i16);
-                out.add(end_tz_utc as i16);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(p_id).unwrap();
+                out.add(price).unwrap();
+                let t0 = format!("{}", start_after.format(DATETIME_FORMAT));
+                let t1 = format!("{}", end_before.format(DATETIME_FORMAT));
+                out.add(t0).unwrap();
+                out.add(t1).unwrap();
+                out.add(start_tz_utc as i16).unwrap();
+                out.add(end_tz_utc as i16).unwrap();
             })
             .count();
         out
@@ -97,7 +100,7 @@ impl UpdateProductArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         let (store_id, items) = (self.0, self.1);
         items
@@ -105,9 +108,9 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
             .map(|item| {
                 let (p_id, p_typ, price) = (item.product_id, item.product_type.clone(), item.price);
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(prod_typ_num.to_string());
-                out.add(p_id);
-                out.add(price);
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(p_id).unwrap();
+                out.add(price).unwrap();
             })
             .count();
         items
@@ -116,9 +119,10 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
                 let (p_id, p_typ, start_after) =
                     (item.product_id, item.product_type.clone(), item.start_after);
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(prod_typ_num.to_string());
-                out.add(p_id);
-                out.add(start_after.format(DATETIME_FORMAT).to_string());
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(p_id).unwrap();
+                let t = start_after.format(DATETIME_FORMAT).to_string();
+                out.add(t).unwrap();
             })
             .count();
         items
@@ -127,9 +131,10 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
                 let (p_id, p_typ, end_before) =
                     (item.product_id, item.product_type.clone(), item.end_before);
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(prod_typ_num.to_string());
-                out.add(p_id);
-                out.add(end_before.format(DATETIME_FORMAT).to_string());
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(p_id).unwrap();
+                let t = end_before.format(DATETIME_FORMAT).to_string();
+                out.add(t).unwrap();
             })
             .count();
         items
@@ -139,9 +144,9 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
                     (item.product_id, item.product_type.clone(), item.start_after);
                 let prod_typ_num: u8 = p_typ.into();
                 let start_tz_utc = start_after.fixed_offset().timezone().local_minus_utc() / 60;
-                out.add(prod_typ_num.to_string());
-                out.add(p_id);
-                out.add(start_tz_utc as i16);
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(p_id).unwrap();
+                out.add(start_tz_utc as i16).unwrap();
             })
             .count();
         items
@@ -151,19 +156,19 @@ impl<'q> IntoArguments<'q, MySql> for UpdateProductArg {
                     (item.product_id, item.product_type.clone(), item.end_before);
                 let prod_typ_num: u8 = p_typ.into();
                 let end_tz_utc = end_before.fixed_offset().timezone().local_minus_utc() / 60;
-                out.add(prod_typ_num.to_string());
-                out.add(p_id);
-                out.add(end_tz_utc as i16);
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(p_id).unwrap();
+                out.add(end_tz_utc as i16).unwrap();
             })
             .count();
-        out.add(store_id);
+        out.add(store_id).unwrap();
         items
             .into_iter()
             .map(|item| {
                 let (p_id, p_typ) = (item.product_id, item.product_type);
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(prod_typ_num.to_string());
-                out.add(p_id);
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(p_id).unwrap();
             })
             .count();
         out
@@ -185,9 +190,9 @@ impl From<InsertUpdateMetaArg> for (String, MySqlArguments) {
                         ON DUPLICATE KEY UPDATE `currency`=?"
             .to_string();
         let mut args = MySqlArguments::default();
-        args.add(store_id);
-        args.add(currency.to_string());
-        args.add(currency.to_string());
+        args.add(store_id).unwrap();
+        args.add(currency.to_string()).unwrap();
+        args.add(currency.to_string()).unwrap();
         (sql_patt, args)
     }
 }
@@ -207,16 +212,16 @@ impl FetchProductOneSellerArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchProductOneSellerArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         let (store_id, items) = (self.0, self.1);
-        out.add(store_id);
+        out.add(store_id).unwrap();
         items
             .into_iter()
             .map(|(product_type, product_id)| {
                 let prod_typ_num: u8 = product_type.into();
-                out.add(prod_typ_num.to_string());
-                out.add(product_id);
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(product_id).unwrap();
             })
             .count();
         out
@@ -238,7 +243,7 @@ impl From<FetchMetaOneSellerArg> for (String, MySqlArguments) {
         let store_id = value.0;
         let sql_patt = "SELECT `id`,`currency` FROM `seller_price_meta` WHERE `id`=?".to_string();
         let mut args = MySqlArguments::default();
-        args.add(store_id);
+        args.add(store_id).unwrap();
         (sql_patt, args)
     }
 }
@@ -258,7 +263,7 @@ impl FetchProductManySellersArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchProductManySellersArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         let pids = self.0;
         pids.into_iter()
@@ -266,9 +271,9 @@ impl<'q> IntoArguments<'q, MySql> for FetchProductManySellersArg {
                 let (store_id, prod_type, prod_id) =
                     (id_.store_id, id_.product_type, id_.product_id);
                 let prod_typ_num: u8 = prod_type.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
             })
             .count();
         out
@@ -296,12 +301,12 @@ impl FetchMetaManySellersArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchMetaManySellersArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         self.0
             .into_iter()
             .map(|store_id| {
-                out.add(store_id);
+                out.add(store_id).unwrap();
             })
             .count();
         out
@@ -326,26 +331,26 @@ impl DeleteSomeArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for DeleteSomeArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         let (store_id, data) = (self.0, self.1);
-        out.add(store_id);
+        out.add(store_id).unwrap();
         let item_typ: u8 = data.item_type.into();
-        out.add(item_typ.to_string());
+        out.add(item_typ.to_string()).unwrap();
         data.items
             .unwrap()
             .iter()
             .map(|product_id| {
-                out.add(*product_id);
+                out.add(*product_id).unwrap();
             })
             .count();
         let pkg_typ: u8 = data.pkg_type.into();
-        out.add(pkg_typ.to_string());
+        out.add(pkg_typ.to_string()).unwrap();
         data.pkgs
             .unwrap()
             .iter()
             .map(|product_id| {
-                out.add(*product_id);
+                out.add(*product_id).unwrap();
             })
             .count();
         out
@@ -377,7 +382,7 @@ impl From<DeleteStoreAllProductsArg> for (String, MySqlArguments) {
         let sql_patt = "DELETE FROM `product_price` WHERE `store_id`=?";
         let mut args = MySqlArguments::default();
         let store_id = value.0;
-        args.add(store_id);
+        args.add(store_id).unwrap();
         (sql_patt.to_string(), args)
     }
 }
@@ -387,7 +392,7 @@ impl From<DeleteStoreMetaArg> for (String, MySqlArguments) {
         let sql_patt = "DELETE FROM `seller_price_meta` WHERE `id`=?";
         let mut args = MySqlArguments::default();
         let store_id = value.0;
-        args.add(store_id);
+        args.add(store_id).unwrap();
         (sql_patt.to_string(), args)
     }
 }
@@ -397,7 +402,9 @@ impl TryFrom<MySqlRow> for ProductPriceModel {
     fn try_from(value: MySqlRow) -> DefaultResult<Self, Self::Error> {
         // TODO, discard fetching `store-id` column, the index of subsequent
         // columns should be decremented by one
-        let product_type = value.try_get::<&str, usize>(0)?.parse::<ProductType>()?;
+        let prodtyp_raw = value.try_get::<&[u8], usize>(0)?;
+        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
+        let product_type = prodtyp_raw.parse::<ProductType>()?;
         let product_id = value.try_get::<u64, usize>(1)?;
         let price = value.try_get::<u32, usize>(2)?;
         let start_after = value.try_get::<NaiveDateTime, usize>(3)?;
@@ -432,7 +439,13 @@ impl TryFrom<MySqlRow> for ProductPriceModelSet {
     type Error = AppError;
     fn try_from(value: MySqlRow) -> DefaultResult<Self, Self::Error> {
         let store_id = value.try_get::<u32, usize>(0)?;
-        let raw_currency = value.try_get::<String, usize>(1)?;
+        let raw_currency = value.try_get::<&[u8], usize>(1)?;
+        let raw_currency = std::str::from_utf8(raw_currency)
+            .map_err(|e| AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(e.to_string()),
+            })?
+            .to_string();
         let currency = CurrencyDto::from(&raw_currency);
         if matches!(currency, CurrencyDto::Unknown) {
             return Err(AppError {

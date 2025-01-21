@@ -2,6 +2,7 @@ use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use sqlx::database::Database as AbstractDatabase;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement};
 
@@ -31,10 +32,10 @@ impl<'a> From<InsertUpdateTopLvlArg<'a>> for (String, MySqlArguments) {
         let sql_patt = "INSERT INTO `cart_toplvl_meta`(`usr_id`,`seq`,`title`) VALUES (?,?,?) \
                         ON DUPLICATE KEY UPDATE `title`=?";
         let mut args = MySqlArguments::default();
-        args.add(value.0.owner);
-        args.add(value.0.seq_num);
-        args.add(value.0.title.clone());
-        args.add(value.0.title.clone());
+        args.add(value.0.owner).unwrap();
+        args.add(value.0.seq_num).unwrap();
+        args.add(value.0.title.clone()).unwrap();
+        args.add(value.0.title.clone()).unwrap();
         (sql_patt.to_string(), args)
     }
 }
@@ -52,7 +53,7 @@ impl InsertLineArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for InsertLineArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut args = MySqlArguments::default();
         let (usr_id, seq_num, lines) = (self.0, self.1, self.2);
         lines
@@ -65,12 +66,12 @@ impl<'q> IntoArguments<'q, MySql> for InsertLineArg {
                     product_id,
                 } = id_;
                 let prod_typ_num: u8 = product_type.into();
-                args.add(usr_id);
-                args.add(seq_num);
-                args.add(store_id);
-                args.add(prod_typ_num.to_string());
-                args.add(product_id);
-                args.add(quantity);
+                args.add(usr_id).unwrap();
+                args.add(seq_num).unwrap();
+                args.add(store_id).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(product_id).unwrap();
+                args.add(quantity).unwrap();
             })
             .count();
         args
@@ -104,7 +105,7 @@ impl UpdateLineArg {
     }
 }
 impl<'a> IntoArguments<'a, MySql> for UpdateLineArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'a>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'a> {
         let mut args = MySqlArguments::default();
         let (usr_id, seq, lines) = (self.0, self.1, self.2);
         lines
@@ -112,22 +113,22 @@ impl<'a> IntoArguments<'a, MySql> for UpdateLineArg {
             .map(|line| {
                 let prod_typ_num: u8 = line.id_.product_type.clone().into();
                 let (seller, p_id, qty) = (line.id_.store_id, line.id_.product_id, line.qty_req);
-                args.add(seller);
-                args.add(prod_typ_num.to_string());
-                args.add(p_id);
-                args.add(qty);
+                args.add(seller).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(p_id).unwrap();
+                args.add(qty).unwrap();
             })
             .count();
-        args.add(usr_id);
-        args.add(seq);
+        args.add(usr_id).unwrap();
+        args.add(seq).unwrap();
         lines
             .into_iter()
             .map(|line| {
                 let prod_typ_num: u8 = line.id_.product_type.clone().into();
                 let (seller, p_id) = (line.id_.store_id, line.id_.product_id);
-                args.add(seller);
-                args.add(prod_typ_num.to_string());
-                args.add(p_id);
+                args.add(seller).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(p_id).unwrap();
             })
             .count();
         args
@@ -147,8 +148,8 @@ impl From<DiscardTopLvlArg> for (String, MySqlArguments) {
         let (usr_id, seq_num) = (value.0, value.1);
         let sql_patt = "DELETE FROM `cart_toplvl_meta` WHERE `usr_id`=? AND `seq`=?";
         let mut args = MySqlArguments::default();
-        args.add(usr_id);
-        args.add(seq_num);
+        args.add(usr_id).unwrap();
+        args.add(seq_num).unwrap();
         (sql_patt.to_string(), args)
     }
 }
@@ -158,8 +159,8 @@ impl From<DiscardLineArg> for (String, MySqlArguments) {
         let (usr_id, seq_num) = (value.0, value.1);
         let sql_patt = "DELETE FROM `cart_line_detail` WHERE `usr_id`=? AND `seq`=?";
         let mut args = MySqlArguments::default();
-        args.add(usr_id);
-        args.add(seq_num);
+        args.add(usr_id).unwrap();
+        args.add(seq_num).unwrap();
         (sql_patt.to_string(), args)
     }
 }
@@ -169,8 +170,8 @@ impl From<FetchTotNumLinesArg> for (String, MySqlArguments) {
         let (usr_id, seq_num) = (value.0, value.1);
         let sql_patt = "SELECT COUNT(*) FROM `cart_line_detail` WHERE `usr_id`=? AND `seq`=?";
         let mut args = MySqlArguments::default();
-        args.add(usr_id);
-        args.add(seq_num);
+        args.add(usr_id).unwrap();
+        args.add(seq_num).unwrap();
         (sql_patt.to_string(), args)
     }
 }
@@ -181,8 +182,8 @@ impl From<FetchTopLvlArg> for (String, MySqlArguments) {
         let sql_patt = "SELECT `usr_id`,`seq`,`title` FROM `cart_toplvl_meta` \
                         WHERE `usr_id`=? AND `seq`=?";
         let mut args = MySqlArguments::default();
-        args.add(usr_id);
-        args.add(seq_num);
+        args.add(usr_id).unwrap();
+        args.add(seq_num).unwrap();
         (sql_patt.to_string(), args)
     }
 }
@@ -204,19 +205,19 @@ impl FetchLinesArg {
     }
 }
 impl<'a> IntoArguments<'a, MySql> for FetchLinesArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'a>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'a> {
         let (usr_id, seq_num, opt_pids) = (self.0, self.1, self.2);
         let mut args = MySqlArguments::default();
-        args.add(usr_id);
-        args.add(seq_num);
+        args.add(usr_id).unwrap();
+        args.add(seq_num).unwrap();
         if let Some(pids) = opt_pids {
             pids.into_iter()
                 .map(|id_| {
                     let prod_typ_num: u8 = id_.product_type.into();
                     let (seller, p_id) = (id_.store_id, id_.product_id);
-                    args.add(seller);
-                    args.add(prod_typ_num.to_string());
-                    args.add(p_id);
+                    args.add(seller).unwrap();
+                    args.add(prod_typ_num.to_string()).unwrap();
+                    args.add(p_id).unwrap();
                 })
                 .count();
         }
@@ -256,7 +257,9 @@ impl TryFrom<MySqlRow> for CartLineModel {
     type Error = AppError;
     fn try_from(row: MySqlRow) -> DefaultResult<Self, Self::Error> {
         let store_id = row.try_get::<u32, usize>(0)?;
-        let product_type = row.try_get::<&str, usize>(1)?.parse::<ProductType>()?;
+        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
+        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
+        let product_type = prodtyp_raw.parse::<ProductType>()?;
         let product_id = row.try_get::<u64, usize>(2)?;
         let qty_req = row.try_get::<u32, usize>(3)?;
         Ok(Self {

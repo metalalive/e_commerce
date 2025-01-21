@@ -681,7 +681,7 @@ async fn server_run_rpc_ok() {
         _ctx.mock_recv_req(m).await;
         Arc::new(Box::new(_ctx))
     };
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let result = rctx
         .server_start(shr_state, mock_route_handler_ok_wrapper)
         .await;
@@ -708,7 +708,7 @@ fn mock_route_handler_fail_wrapper(
 }
 #[tokio::test]
 async fn server_run_rpc_receive_request_error() {
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let rctx: Arc<Box<dyn AbstractRpcContext>> = {
         let cfg = AppRpcCfg::dummy;
         let _ctx = MockRpcContext::_build(&cfg);
