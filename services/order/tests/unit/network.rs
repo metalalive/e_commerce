@@ -61,7 +61,7 @@ fn ut_service_req_setup(method: &str, uri: &str) -> Request<HyperBody> {
 #[tokio::test]
 async fn app_web_service_ok() {
     type UTestHttpBody = HyperBody;
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let cfg = shr_state.config().clone();
     let rtable: ApiRouteTableType<UTestHttpBody> =
         HashMap::from([("gram_increment", routing::post(ut_endpoint_handler))]);
@@ -128,7 +128,7 @@ fn middleware_cors_error_cfg() {
 #[tokio::test]
 async fn middleware_req_body_limit() {
     type UTestHttpBody = Limited<HyperBody>;
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let cfg = shr_state.config().clone();
     let rtable: ApiRouteTableType<UTestHttpBody> =
         HashMap::from([("gram_increment", routing::post(ut_endpoint_handler))]);
@@ -149,7 +149,7 @@ async fn middleware_req_body_limit() {
 #[tokio::test]
 async fn middleware_shutdown_detection() {
     type UTestHttpBody = HyperBody;
-    let shr_state = ut_setup_share_state("config_ok.json", Box::new(MockConfidential {}));
+    let shr_state = ut_setup_share_state("config_ok_no_sqldb.json", Box::new(MockConfidential {}));
     let cfg = shr_state.config().clone();
     let (mock_flag, mock_num_reqs) = (shr_state.shutdown(), shr_state.num_requests());
     let rtable: ApiRouteTableType<UTestHttpBody> =
