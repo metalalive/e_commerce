@@ -289,7 +289,7 @@ async fn create_order_snapshot_currency_err() {
     )
     .await;
     assert!(result.is_err());
-    if let Err(CreateOrderUsKsErr::Server(es)) = result {
+    if let Err(es) = result {
         assert_eq!(es.len(), 2);
         es.into_iter()
             .map(|e| {

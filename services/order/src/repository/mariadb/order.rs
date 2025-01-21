@@ -9,9 +9,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Local, NaiveDateTime};
 use futures_util::stream::StreamExt;
 use rust_decimal::Decimal;
-use sqlx::database::HasArguments;
-use sqlx::mysql::{MySqlArguments, MySqlRow};
-use sqlx::pool::PoolConnection;
+use sqlx::database::Database as AbstractDatabase;
+use sqlx::mysql::{MySqlArguments, MySqlConnection, MySqlRow};
 use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
 use ecommerce_common::adapter::repository::OidBytes;
@@ -72,11 +71,11 @@ impl<'a, 'b, 'c> From<InsertTopMetaArg<'a, 'b, 'c>> for (String, MySqlArguments)
                     `buyer_currency`,`buyer_ex_rate`) VALUES (?,?,?,?,?)";
         let ctime_utc = value.2.clone().naive_utc();
         let mut args = MySqlArguments::default();
-        args.add(value.1);
-        args.add(value.0.as_column());
-        args.add(ctime_utc);
-        args.add(value.3.name.to_string());
-        args.add(value.3.rate); // copy trait implemented in Decimal type
+        args.add(value.1).unwrap();
+        args.add(value.0.as_column()).unwrap();
+        args.add(ctime_utc).unwrap();
+        args.add(value.3.name.to_string()).unwrap();
+        args.add(value.3.rate).unwrap(); // copy trait implemented in Decimal type
         (patt.to_string(), args)
     }
 }
@@ -94,15 +93,15 @@ impl<'a, 'b> InsertSellerCurrencyArg<'a, 'b> {
     }
 }
 impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertSellerCurrencyArg<'a, 'b> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut args = MySqlArguments::default();
         self.1
             .iter()
             .map(|(seller_id, v)| {
-                args.add(seller_id);
-                args.add(self.0.as_column());
-                args.add(v.name.to_string());
-                args.add(v.rate);
+                args.add(seller_id).unwrap();
+                args.add(self.0.as_column()).unwrap();
+                args.add(v.name.to_string()).unwrap();
+                args.add(v.rate).unwrap();
             })
             .count();
         args
@@ -133,7 +132,7 @@ impl<'a, 'b> InsertOLineArg<'a, 'b> {
     }
 }
 impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut args = MySqlArguments::default();
         let (oid, mut seq, lines) = (self.0, self.1, self.2);
         lines
@@ -142,17 +141,17 @@ impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertOLineArg<'a, 'b> {
                 let prod_typ_num: u8 = o.id_.product_type.clone().into();
                 let rsved_until = o.policy.reserved_until.naive_utc();
                 let warranty_until = o.policy.warranty_until.naive_utc();
-                args.add(oid.as_column());
-                args.add(seq as u16); // match the column type in db table
+                args.add(oid.as_column()).unwrap();
+                args.add(seq as u16).unwrap(); // match the column type in db table
                 seq += 1;
-                args.add(o.id_.store_id);
-                args.add(prod_typ_num.to_string());
-                args.add(o.id_.product_id);
-                args.add(o.price.unit);
-                args.add(o.price.total);
-                args.add(o.qty.reserved);
-                args.add(rsved_until);
-                args.add(warranty_until);
+                args.add(o.id_.store_id).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(o.id_.product_id).unwrap();
+                args.add(o.price.unit).unwrap();
+                args.add(o.price.total).unwrap();
+                args.add(o.qty.reserved).unwrap();
+                args.add(rsved_until).unwrap();
+                args.add(warranty_until).unwrap();
             })
             .count();
         args
@@ -176,9 +175,9 @@ impl<'a, 'b> From<InsertContactMeta<'a, 'b>> for (String, MySqlArguments) {
             table_opt
         );
         let mut args = MySqlArguments::default();
-        args.add(oid.as_column());
-        args.add(first_name);
-        args.add(last_name);
+        args.add(oid.as_column()).unwrap();
+        args.add(first_name).unwrap();
+        args.add(last_name).unwrap();
         (patt, args)
     }
 }
@@ -195,16 +194,16 @@ impl<'a, 'b> InsertContactEmail<'a, 'b> {
     }
 }
 impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactEmail<'a, 'b> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let (oid, mails, mut seq) = (self.1, self.2, 0u16);
         let oid = oid.as_column();
         let mut args = MySqlArguments::default();
         mails
             .into_iter()
             .map(|mail| {
-                args.add(&oid);
-                args.add(seq);
-                args.add(mail);
+                args.add(&oid).unwrap();
+                args.add(seq).unwrap();
+                args.add(mail).unwrap();
                 seq += 1;
             })
             .count();
@@ -229,17 +228,17 @@ impl<'a, 'b> InsertContactPhone<'a, 'b> {
     }
 }
 impl<'a, 'b, 'q> IntoArguments<'q, MySql> for InsertContactPhone<'a, 'b> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let (oid, phones, mut seq) = (self.1, self.2, 0u16);
         let oid = oid.as_column();
         let mut args = MySqlArguments::default();
         phones
             .into_iter()
             .map(|phone| {
-                args.add(&oid);
-                args.add(seq);
-                args.add(phone.nation);
-                args.add(phone.number);
+                args.add(&oid).unwrap();
+                args.add(seq).unwrap();
+                args.add(phone.nation).unwrap();
+                args.add(phone.number).unwrap();
                 seq += 1;
             })
             .count();
@@ -261,13 +260,13 @@ impl<'a, 'b> From<InsertPhyAddr<'a, 'b>> for (String, MySqlArguments) {
         );
         let country: String = addr.country.into();
         let mut args = MySqlArguments::default();
-        args.add(oid.as_column());
-        args.add(country);
-        args.add(addr.region);
-        args.add(addr.city);
-        args.add(addr.distinct);
-        args.add(addr.street_name);
-        args.add(addr.detail);
+        args.add(oid.as_column()).unwrap();
+        args.add(country).unwrap();
+        args.add(addr.region).unwrap();
+        args.add(addr.city).unwrap();
+        args.add(addr.distinct).unwrap();
+        args.add(addr.street_name).unwrap();
+        args.add(addr.detail).unwrap();
         (patt, args)
     }
 }
@@ -281,7 +280,7 @@ impl<'a> InsertShipOption<'a> {
     }
 }
 impl<'a, 'q> IntoArguments<'q, MySql> for InsertShipOption<'a> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let (oid, options) = (self.0, self.1);
         let oid = oid.as_column();
         let mut args = MySqlArguments::default();
@@ -289,9 +288,9 @@ impl<'a, 'q> IntoArguments<'q, MySql> for InsertShipOption<'a> {
             .into_iter()
             .map(|so| {
                 let method: String = so.method.into();
-                args.add(&oid);
-                args.add(so.seller_id);
-                args.add(method);
+                args.add(&oid).unwrap();
+                args.add(so.seller_id).unwrap();
+                args.add(method).unwrap();
             })
             .count();
         args
@@ -330,17 +329,17 @@ impl<'a> UpdateOLinePayArg<'a> {
     }
 }
 impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let (oid, lines) = (self.0, self.1);
         let mut args = MySqlArguments::default();
         lines
             .iter()
             .map(|line| {
                 let prod_typ_num: u8 = line.id_.product_type.clone().into();
-                args.add(line.id_.store_id);
-                args.add(prod_typ_num.to_string());
-                args.add(line.id_.product_id);
-                args.add(line.qty.paid);
+                args.add(line.id_.store_id).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(line.id_.product_id).unwrap();
+                args.add(line.qty.paid).unwrap();
             })
             .count();
         lines
@@ -348,21 +347,21 @@ impl<'a, 'q> IntoArguments<'q, MySql> for UpdateOLinePayArg<'a> {
             .map(|line| {
                 let prod_typ_num: u8 = line.id_.product_type.clone().into();
                 let time = line.qty.paid_last_update.as_ref().unwrap();
-                args.add(line.id_.store_id);
-                args.add(prod_typ_num.to_string());
-                args.add(line.id_.product_id);
-                args.add(time.naive_utc());
+                args.add(line.id_.store_id).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(line.id_.product_id).unwrap();
+                args.add(time.naive_utc()).unwrap();
             })
             .count();
-        args.add(oid.as_column());
+        args.add(oid.as_column()).unwrap();
         lines
             .into_iter()
             .map(|line| {
                 let id_ = line.id_;
                 let prod_typ_num: u8 = id_.product_type.into();
-                args.add(id_.store_id);
-                args.add(prod_typ_num.to_string());
-                args.add(id_.product_id);
+                args.add(id_.store_id).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(id_.product_id).unwrap();
             })
             .count();
         args
@@ -388,7 +387,7 @@ impl From<FetchAllLinesArg> for (String, MySqlArguments) {
         let sql_patt = format!("{OLINE_SELECT_PREFIX} WHERE `o_id`=?");
         let mut args = MySqlArguments::default();
         let oid = value.0;
-        args.add(oid.as_column());
+        args.add(oid.as_column()).unwrap();
         (sql_patt, args)
     }
 }
@@ -404,16 +403,16 @@ impl<'a> FetchLineByIdArg<'a> {
     }
 }
 impl<'a, 'q> IntoArguments<'q, MySql> for FetchLineByIdArg<'a> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let (oid_b, pids) = (self.0, self.1);
         let mut args = MySqlArguments::default();
-        args.add(oid_b.as_column());
+        args.add(oid_b.as_column()).unwrap();
         pids.into_iter()
             .map(|id_| {
                 let prod_typ_num: u8 = id_.product_type.into();
-                args.add(id_.store_id);
-                args.add(prod_typ_num.to_string());
-                args.add(id_.product_id);
+                args.add(id_.store_id).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(id_.product_id).unwrap();
             })
             .count();
         args
@@ -435,7 +434,12 @@ impl<'a> TryInto<CurrencyModel> for BuyerCurrencyRow<'a> {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<CurrencyModel, Self::Error> {
         let Self(row, start_idx) = self;
-        let name_raw = row.try_get::<String, usize>(start_idx)?;
+        let name_raw = row.try_get::<&[u8], usize>(start_idx)?;
+        let name_raw = std::str::from_utf8(name_raw)
+            .map_err(|e| AppError {
+                code: AppErrorCode::DataCorruption,
+                detail: Some(e.to_string()),
+            })? .to_string();
         let name = CurrencyDto::from(&name_raw);
         if matches!(name, CurrencyDto::Unknown) {
             let msg = format!("buyer-currency-label, raw-saved:{name_raw}");
@@ -482,7 +486,9 @@ impl TryFrom<OLineRow> for OrderLineModel {
     fn try_from(value: OLineRow) -> DefaultResult<Self, Self::Error> {
         let row = value.0;
         let store_id = row.try_get::<u32, usize>(0)?;
-        let product_type = row.try_get::<&str, usize>(1)?.parse::<ProductType>()?;
+        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
+        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
+        let product_type = prodtyp_raw.parse::<ProductType>()?;
         let product_id = row.try_get::<u64, usize>(2)?;
         let unit = row.try_get::<u32, usize>(3)?;
         let total = row.try_get::<u32, usize>(4)?;
@@ -540,8 +546,13 @@ impl TryInto<PhyAddrModel> for PhyAddrrRow {
     fn try_into(self) -> DefaultResult<PhyAddrModel, Self::Error> {
         let row = self.0;
         let country = {
-            let c = row.try_get::<String, usize>(0)?;
-            CountryCode::from(c)
+            let c_raw = row.try_get::<&[u8], usize>(0)?;
+            let c = std::str::from_utf8(c_raw)
+                .map_err(|e| AppError {
+                    code: AppErrorCode::DataCorruption,
+                    detail: Some(e.to_string()),
+                }) ?;
+            CountryCode::from(c.to_string())
         };
         let region = row.try_get::<String, usize>(1)?;
         let city = row.try_get::<String, usize>(2)?;
@@ -558,8 +569,12 @@ impl TryInto<ShippingOptionModel> for ShipOptionRow {
     fn try_into(self) -> DefaultResult<ShippingOptionModel, Self::Error> {
         let row = self.0;
         let seller_id = row.try_get::<u32, usize>(0)?;
-        let method = row.try_get::<String, usize>(1)?;
-        let method = ShippingMethod::from(method);
+        let mthd_raw = row.try_get::<&[u8], usize>(1)?;
+        let mthd_raw = std::str::from_utf8(mthd_raw).map_err(|e| AppError {
+            code: AppErrorCode::DataCorruption,
+            detail: Some(e.to_string()),
+        })?;
+        let method = ShippingMethod::from(mthd_raw.to_string());
         Ok(ShippingOptionModel { seller_id, method })
     }
 }
@@ -618,24 +633,24 @@ impl AbsOrderRepo for OrderMariaDbRepo {
     async fn fetch_billing(&self, oid: String) -> DefaultResult<BillingModel, AppError> {
         let oid_b = OidBytes::try_from(oid.as_str())?;
         let mut conn = self._db.acquire().await?;
-        let emails = Self::_fetch_mails(&mut conn, "bill", &oid_b).await?;
-        let phones = Self::_fetch_phones(&mut conn, "bill", &oid_b).await?;
-        let mut contact = Self::_fetch_contact_meta(&mut conn, "bill", &oid_b).await?;
+        let emails = Self::_fetch_mails(conn.as_mut(), "bill", &oid_b).await?;
+        let phones = Self::_fetch_phones(conn.as_mut(), "bill", &oid_b).await?;
+        let mut contact = Self::_fetch_contact_meta(conn.as_mut(), "bill", &oid_b).await?;
         contact.emails = emails;
         contact.phones = phones;
-        let address = Self::_fetch_phyaddr(&mut conn, "bill", &oid_b).await?;
+        let address = Self::_fetch_phyaddr(conn.as_mut(), "bill", &oid_b).await?;
         Ok(BillingModel { contact, address })
     }
     async fn fetch_shipping(&self, oid: String) -> DefaultResult<ShippingModel, AppError> {
         let oid_b = OidBytes::try_from(oid.as_str())?;
         let mut conn = self._db.acquire().await?;
-        let emails = Self::_fetch_mails(&mut conn, "ship", &oid_b).await?;
-        let phones = Self::_fetch_phones(&mut conn, "ship", &oid_b).await?;
-        let mut contact = Self::_fetch_contact_meta(&mut conn, "ship", &oid_b).await?;
+        let emails = Self::_fetch_mails(conn.as_mut(), "ship", &oid_b).await?;
+        let phones = Self::_fetch_phones(conn.as_mut(), "ship", &oid_b).await?;
+        let mut contact = Self::_fetch_contact_meta(conn.as_mut(), "ship", &oid_b).await?;
         contact.emails = emails;
         contact.phones = phones;
-        let option = Self::_fetch_ship_option(&mut conn, &oid_b).await?;
-        let address = Self::_fetch_phyaddr(&mut conn, "ship", &oid_b).await?;
+        let option = Self::_fetch_ship_option(conn.as_mut(), &oid_b).await?;
+        let address = Self::_fetch_phyaddr(conn.as_mut(), "ship", &oid_b).await?;
         Ok(ShippingModel {
             contact,
             address,
@@ -698,18 +713,15 @@ impl AbsOrderRepo for OrderMariaDbRepo {
         while let Some(result) = stream.next().await {
             let row = result?;
             let oid_raw = row.try_get::<Vec<u8>, usize>(0)?;
-            let sellers_currency = Self::_fetch_seller_exrates(&mut conn1, oid_raw.clone()).await?;
+            let sellers_currency =
+                Self::_fetch_seller_exrates(conn1.as_mut(), oid_raw.clone()).await?;
             let mut ol_set: OrderLineModelSet = TopLvlMetaRow(row, sellers_currency).try_into()?;
             let sql_patt = format!(
                 "{OLINE_SELECT_PREFIX} WHERE `o_id`=? AND \
-                                   (? < `rsved_until` AND `rsved_until` < ?)"
+                    (? < `rsved_until` AND `rsved_until` < ?)"
             );
             let stmt = conn1.prepare(sql_patt.as_str()).await?;
-            let query = stmt
-                .query()
-                .bind(oid_raw.clone())
-                .bind(time_start)
-                .bind(time_end);
+            let query = stmt.query().bind(oid_raw).bind(time_start).bind(time_end);
             let exec = &mut *conn1;
             let rows = exec.fetch_all(query).await?;
             let results = rows
@@ -798,7 +810,7 @@ impl AbsOrderRepo for OrderMariaDbRepo {
             let row = exec.fetch_one(query).await?;
             BuyerCurrencyRow(&row, 0).try_into()?
         };
-        let sellers = Self::_fetch_seller_exrates(&mut conn, oid_b.as_column()).await?;
+        let sellers = Self::_fetch_seller_exrates(conn.as_mut(), oid_b.as_column()).await?;
         Ok(OrderCurrencyModel { buyer, sellers })
     }
 
@@ -977,7 +989,7 @@ impl OrderMariaDbRepo {
         }
     }
     async fn _fetch_mails(
-        conn: &mut PoolConnection<MySql>,
+        conn: &mut MySqlConnection,
         table_opt: &str,
         oid_b: &OidBytes,
     ) -> DefaultResult<Vec<String>, AppError> {
@@ -987,8 +999,7 @@ impl OrderMariaDbRepo {
         );
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query().bind(oid_b.as_column());
-        let exec = conn.as_mut();
-        let rows = exec.fetch_all(query).await?;
+        let rows = conn.fetch_all(query).await?;
         let results = rows
             .into_iter()
             .map(|row| EmailRow(row).try_into())
@@ -1001,7 +1012,7 @@ impl OrderMariaDbRepo {
         }
     }
     async fn _fetch_phones(
-        conn: &mut PoolConnection<MySql>,
+        conn: &mut MySqlConnection,
         table_opt: &str,
         oid_b: &OidBytes,
     ) -> DefaultResult<Vec<PhoneNumberDto>, AppError> {
@@ -1011,8 +1022,7 @@ impl OrderMariaDbRepo {
         );
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query().bind(oid_b.as_column());
-        let exec = conn.as_mut();
-        let rows = exec.fetch_all(query).await?;
+        let rows = conn.fetch_all(query).await?;
         let results = rows
             .into_iter()
             .map(|row| PhoneRow(row).try_into())
@@ -1025,7 +1035,7 @@ impl OrderMariaDbRepo {
         }
     }
     async fn _fetch_contact_meta(
-        conn: &mut PoolConnection<MySql>,
+        conn: &mut MySqlConnection,
         table_opt: &str,
         oid_b: &OidBytes,
     ) -> DefaultResult<ContactModel, AppError> {
@@ -1035,25 +1045,23 @@ impl OrderMariaDbRepo {
         );
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query().bind(oid_b.as_column());
-        let exec = conn.as_mut();
-        let row = exec.fetch_one(query).await?;
+        let row = conn.fetch_one(query).await?;
         let out = ContactMetaRow(row).try_into()?;
         Ok(out)
     }
     async fn _fetch_phyaddr(
-        conn: &mut PoolConnection<MySql>,
+        conn: &mut MySqlConnection,
         table_opt: &str,
         oid_b: &OidBytes,
     ) -> DefaultResult<Option<PhyAddrModel>, AppError> {
         let sql_patt = format!(
             "SELECT `country`,`region`,`city`,`distinct`,`street`,\
-                               `detail` FROM `{}_phyaddr` WHERE `o_id`=?",
+                `detail` FROM `{}_phyaddr` WHERE `o_id`=?",
             table_opt
         );
         let stmt = conn.prepare(sql_patt.as_str()).await?;
         let query = stmt.query().bind(oid_b.as_column());
-        let exec = conn.as_mut();
-        let result = exec.fetch_optional(query).await?;
+        let result = conn.fetch_optional(query).await?;
         if let Some(row) = result {
             let out = PhyAddrrRow(row).try_into()?;
             Ok(Some(out))
@@ -1062,14 +1070,13 @@ impl OrderMariaDbRepo {
         }
     }
     async fn _fetch_ship_option(
-        conn: &mut PoolConnection<MySql>,
+        conn: &mut MySqlConnection,
         oid_b: &OidBytes,
     ) -> DefaultResult<Vec<ShippingOptionModel>, AppError> {
         let sql_patt = "SELECT `seller_id`,`method` FROM `ship_option` WHERE `o_id`=?";
         let stmt = conn.prepare(sql_patt).await?;
         let query = stmt.query().bind(oid_b.as_column());
-        let exec = conn.as_mut();
-        let rows = exec.fetch_all(query).await?;
+        let rows = conn.fetch_all(query).await?;
         let results = rows
             .into_iter()
             .map(|row| ShipOptionRow(row).try_into())
@@ -1083,15 +1090,14 @@ impl OrderMariaDbRepo {
     }
 
     async fn _fetch_seller_exrates(
-        conn: &mut PoolConnection<MySql>,
+        conn: &mut MySqlConnection,
         oid_raw: Vec<u8>,
     ) -> DefaultResult<HashMap<u32, CurrencyModel>, AppError> {
         let sql_patt =
             "SELECT `seller_id`,`label`,`ex_rate` FROM `oseller_currency_snapshot` WHERE `o_id`=?";
         let stmt = conn.prepare(sql_patt).await?;
         let query = stmt.query().bind(oid_raw);
-        let exec = conn.as_mut();
-        let rows = exec.fetch_all(query).await?;
+        let rows = conn.fetch_all(query).await?;
         let mut errors = Vec::new();
         let iter = rows.into_iter().filter_map(|row| {
             SellerCurrencyRow(row)

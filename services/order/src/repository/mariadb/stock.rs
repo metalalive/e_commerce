@@ -7,7 +7,7 @@ use std::vec::Vec;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
-use sqlx::database::HasArguments;
+use sqlx::database::Database as AbstractDatabase;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
@@ -57,7 +57,7 @@ impl InsertQtyArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for InsertQtyArg {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         self.0
             .into_iter()
@@ -70,12 +70,12 @@ impl<'q> IntoArguments<'q, MySql> for InsertQtyArg {
                     p.quantity.cancelled,
                 );
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
-                out.add(q_total);
-                out.add(q_cancelled);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
+                out.add(q_total).unwrap();
+                out.add(q_cancelled).unwrap();
             })
             .count();
         out
@@ -113,7 +113,7 @@ impl UpdateQtyArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         self.0
             .iter()
@@ -125,11 +125,11 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg {
                     p.quantity.total,
                 );
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
-                out.add(q_total);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
+                out.add(q_total).unwrap();
             })
             .count();
         self.0
@@ -142,11 +142,11 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg {
                     p.quantity.cancelled,
                 );
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
-                out.add(q_cancelled);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
+                out.add(q_cancelled).unwrap();
             })
             .count();
         self.0
@@ -155,10 +155,10 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg {
                 let (expiry, p_typ, prod_id) =
                     (p.expiry_without_millis().naive_utc(), p.type_, p.id_);
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
             })
             .count();
         out
@@ -214,11 +214,11 @@ impl ReserveArg {
                     p.quantity.booked,
                 );
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
-                out.add(q_booked);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
+                out.add(q_booked).unwrap();
             })
             .count();
         stores
@@ -230,10 +230,10 @@ impl ReserveArg {
                     p.id_,
                 );
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
             })
             .count();
         out
@@ -250,15 +250,15 @@ impl ReserveArg {
                     p.quantity.rsv_detail.unwrap(),
                 );
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
                 let (oid, rsv_per_item) = (detail.oid, detail.reserved);
                 // TODO, move to beginning of `reserve()`
                 let oid_b = OidBytes::try_from(oid.as_str()).unwrap();
-                out.add(oid_b.as_column());
-                out.add(rsv_per_item);
+                out.add(oid_b.as_column()).unwrap();
+                out.add(rsv_per_item).unwrap();
             })
             .count();
         out
@@ -305,14 +305,14 @@ impl ReturnArg {
                 let _rsv_detail = p.quantity.rsv_detail.as_ref().unwrap();
                 let qty_rsv_o = _rsv_detail.reserved;
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
-                out.add(qty_rsv_o);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
+                out.add(qty_rsv_o).unwrap();
             })
             .count();
-        out.add(oid_b.as_column());
+        out.add(oid_b.as_column()).unwrap();
         self.0
             .iter()
             .map(|(store_id, p)| {
@@ -322,10 +322,10 @@ impl ReturnArg {
                     p.id_,
                 );
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
             })
             .count();
         out
@@ -360,7 +360,7 @@ impl FetchQtyArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchQtyArg {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         self.0
             .into_iter()
@@ -368,10 +368,10 @@ impl<'q> IntoArguments<'q, MySql> for FetchQtyArg {
                 let expiry = co.expiry_without_millis().naive_utc();
                 let (store_id, p_typ, prod_id) = (co.store_id, co.product_type, co.product_id);
                 let prod_typ_num: u8 = p_typ.into();
-                out.add(store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(prod_id);
-                out.add(expiry);
+                out.add(store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(prod_id).unwrap();
+                out.add(expiry).unwrap();
             })
             .count();
         out
@@ -399,15 +399,15 @@ impl<'a> FetchQtyForRsvArg<'a> {
     }
 }
 impl<'a, 'q> IntoArguments<'q, MySql> for FetchQtyForRsvArg<'a> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let mut out = MySqlArguments::default();
         self.0
             .iter()
             .map(|o| {
                 let prod_typ_num: u8 = o.id_.product_type.clone().into();
-                out.add(o.id_.store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(o.id_.product_id);
+                out.add(o.id_.store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(o.id_.product_id).unwrap();
             })
             .count();
         out
@@ -439,17 +439,17 @@ impl<'a> FetchRsvOrderArg<'a> {
     }
 }
 impl<'a, 'q> IntoArguments<'q, MySql> for FetchRsvOrderArg<'a> {
-    fn into_arguments(self) -> <MySql as HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let (oid_b, items) = (self.0, self.1);
         let mut out = MySqlArguments::default();
-        out.add(oid_b.as_column());
+        out.add(oid_b.as_column()).unwrap();
         items
             .iter()
             .map(|o| {
                 let prod_typ_num: u8 = o.product_type.clone().into();
-                out.add(o.store_id);
-                out.add(prod_typ_num.to_string());
-                out.add(o.product_id);
+                out.add(o.store_id).unwrap();
+                out.add(prod_typ_num.to_string()).unwrap();
+                out.add(o.product_id).unwrap();
             })
             .count();
         out
@@ -518,7 +518,9 @@ impl TryInto<ProductStockModel> for StkProdRow {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<ProductStockModel, Self::Error> {
         let row = self.0;
-        let prod_typ = row.try_get::<&str, usize>(1)?.parse::<ProductType>()?;
+        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
+        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
+        let prod_typ = prodtyp_raw.parse::<ProductType>()?;
         let prod_id = row.try_get::<u64, usize>(2)?;
         let expiry = row.try_get::<NaiveDateTime, usize>(3)?.and_utc();
         let total = row.try_get::<u32, usize>(4)?;
@@ -546,7 +548,9 @@ impl TryInto<ProductStockModel> for StkRsvDetailRow {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<ProductStockModel, Self::Error> {
         let row = self.0;
-        let prod_typ = row.try_get::<&str, usize>(1)?.parse::<ProductType>()?;
+        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
+        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
+        let prod_typ = prodtyp_raw.parse::<ProductType>()?;
         let prod_id = row.try_get::<u64, usize>(2)?;
         let expiry = row.try_get::<NaiveDateTime, usize>(3)?.and_utc();
         let rsv_detail = {
@@ -653,7 +657,8 @@ impl AbsOrderStockRepo for StockMariaDbRepo {
         cb: AppStockRepoReturnUserFunc,
         data: StockLevelReturnDto,
     ) -> DefaultResult<Vec<StockReturnErrorDto>, AppError> {
-        let mut conn = self._db.acquire().await?;
+        let mut objconn = self._db.acquire().await?;
+        let conn = objconn.as_mut();
         let mut tx = conn.begin().await?;
         let mut mset = {
             let oid_b = OidBytes::try_from(data.order_id.as_str())?;

@@ -2,21 +2,17 @@ use std::boxed::Box;
 use std::result::Result as DefaultResult;
 use std::sync::Arc;
 
-#[cfg(feature = "mariadb")]
+use serde::Deserialize;
 use std::time::Duration;
 
-#[cfg(feature = "mariadb")]
-use serde::Deserialize;
-#[cfg(feature = "mariadb")]
-use sqlx::mysql::MySqlConnectOptions;
-#[cfg(feature = "mariadb")]
-use sqlx::pool::{PoolConnection, PoolOptions};
-#[cfg(feature = "mariadb")]
-use sqlx::MySql;
-#[cfg(feature = "mariadb")]
-use sqlx::Pool;
-
-use tokio::sync::OnceCell;
+use chrono::Local;
+use deadpool::managed::{
+    Manager, Metrics, Object, Pool, PoolConfig, QueueMode, RecycleError, Timeouts,
+};
+use deadpool::Runtime;
+use sqlx::error::Error as SqlxError;
+use sqlx::mysql::{MySqlConnectOptions, MySqlConnection};
+use sqlx::{ConnectOptions, Connection}; //traits for generic connection methods
 
 use ecommerce_common::confidentiality::AbstractConfidentiality;
 use ecommerce_common::config::{AppDbServerCfg, AppDbServerType};
@@ -25,7 +21,6 @@ use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
 use crate::error::AppError;
 
-#[cfg(feature = "mariadb")]
 #[allow(non_snake_case)]
 #[derive(Deserialize)]
 struct DbSecret {
@@ -35,20 +30,53 @@ struct DbSecret {
     PASSWORD: String,
 }
 
-#[cfg(feature = "mariadb")]
+struct MariaDbManager {
+    conn_opts: MySqlConnectOptions,
+    logctx: Arc<AppLogContext>,
+    idle_timeout: Duration,
+}
+
 pub struct AppMariaDbStore {
     pub alias: String,
-    max_conns: u32,
-    acquire_timeout_secs: u16,
-    idle_timeout_secs: u16,
-    conn_opts: MySqlConnectOptions,
-    pool: OnceCell<Pool<MySql>>,
+    pool: Pool<MariaDbManager>,
     logctx: Arc<AppLogContext>,
 }
-#[cfg(not(feature = "mariadb"))]
-pub struct AppMariaDbStore {}
 
-#[cfg(feature = "mariadb")]
+impl Manager for MariaDbManager {
+    type Type = MySqlConnection;
+    type Error = SqlxError;
+
+    async fn create(&self) -> DefaultResult<Self::Type, Self::Error> {
+        self.conn_opts.connect().await
+    }
+    async fn recycle(
+        &self,
+        obj: &mut Self::Type,
+        metrics: &Metrics,
+    ) -> DefaultResult<(), RecycleError<SqlxError>> {
+        let last_time_used = metrics.last_used();
+        if last_time_used > self.idle_timeout {
+            let msg = std::borrow::Cow::Owned("idle-timed-out".to_string());
+            return Err(RecycleError::Message(msg));
+        }
+        let t0 = Local::now().fixed_offset();
+        let result = obj.ping().await;
+        let t1 = Local::now().fixed_offset();
+        let lctx = self.logctx.as_ref();
+        if let Err(e) = &result {
+            let td = t1 - t0;
+            app_log_event!(lctx, AppLogLevel::WARNING, "{:?}, td: {:?}", e, td);
+        }
+        result.map_err(RecycleError::Backend)
+    }
+}
+
+impl std::fmt::Debug for MariaDbManager {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
+
 impl AppMariaDbStore {
     pub fn try_build(
         cfg: &AppDbServerCfg,
@@ -78,59 +106,56 @@ impl AppMariaDbStore {
                 });
             }
         };
-        Ok(Self {
+
+        let mgr = MariaDbManager {
             conn_opts,
-            max_conns: cfg.max_conns,
-            idle_timeout_secs: cfg.idle_timeout_secs,
-            acquire_timeout_secs: cfg.acquire_timeout_secs,
-            pool: OnceCell::new(),
+            idle_timeout: Duration::new(cfg.idle_timeout_secs as u64, 0),
+            logctx: logctx.clone(),
+        };
+        let timeouts = Timeouts {
+            wait: Some(Duration::new(cfg.acquire_timeout_secs as u64, 0)), // wait for internal slots available
+            create: Some(Duration::new(cfg.acquire_timeout_secs as u64, 0)),
+            recycle: Some(Duration::new(5u64, 0)),
+        };
+        let queue_mode = QueueMode::Fifo;
+        let poolcfg = PoolConfig {
+            timeouts,
+            queue_mode,
+            max_size: cfg.max_conns as usize,
+        };
+        let pool = Pool::builder(mgr)
+            .config(poolcfg)
+            .runtime(Runtime::Tokio1)
+            .build()
+            .map_err(|e| AppError {
+                code: AppErrorCode::MissingDataStore,
+                detail: Some(e.to_string()),
+            })?;
+        Ok(Self {
+            pool,
+            logctx,
             alias: cfg.alias.clone(),
-            logctx: logctx,
         })
     } // end of fn try-build
 
-    pub async fn acquire(&self) -> DefaultResult<PoolConnection<MySql>, AppError> {
+    pub async fn acquire(
+        &self,
+    ) -> DefaultResult<Object<impl Manager<Type = MySqlConnection, Error = SqlxError>>, AppError>
+    {
         // Note
-        // `sqlx` requires to get (mutable) reference the pool-connection
-        // instance in order to get low-level connection for query execution.
-        let pl = self
-            .pool
-            .get_or_init(|| async {
-                let pol_opts = PoolOptions::<MySql>::new()
-                    .max_connections(self.max_conns)
-                    .idle_timeout(Some(Duration::new(self.idle_timeout_secs as u64, 0)))
-                    .acquire_timeout(Duration::new(self.acquire_timeout_secs as u64, 0))
-                    .min_connections(0);
-                let _conn_opts = self.conn_opts.clone();
-                // the following connect method will spawn new task for maintain connection lifetime
-                // , this part of code has to run after tokio runtime executor is ready
-                pol_opts.connect_lazy_with(_conn_opts)
-            })
-            .await;
+        // due to unknown timeout issue in `sqlx` pool,  as discussed in the github repo,
+        // https://github.com/launchbadge/sqlx/discussions/3232 ,
+        // this application switches to `deadpool` for connection management
+        let result = self.pool.get().await;
         let lctx = &self.logctx;
-        app_log_event!(lctx, AppLogLevel::DEBUG, "acquire-op-done");
-        pl.acquire().await.map_err(|e| {
-            app_log_event!(lctx, AppLogLevel::ERROR, "pool:{:?}, e:{:?}", pl, e);
-            e.into()
-        })
-    }
-} // end of impl AppMariaDbStore
-
-#[cfg(not(feature = "mariadb"))]
-impl AppMariaDbStore {
-    pub fn try_build(
-        cfg: &AppDbServerCfg,
-        _confidential: Arc<Box<dyn AbstractConfidentiality>>,
-        _logctx: Arc<AppLogContext>,
-    ) -> DefaultResult<Self, AppError> {
-        let detail = format!(
-            "sql-db, type:{:?}, alias:{}",
-            cfg.srv_type,
-            cfg.alias.as_str()
-        );
-        Err(AppError {
-            code: AppErrorCode::FeatureDisabled,
-            detail: Some(detail),
+        let status = &self.pool.status();
+        app_log_event!(lctx, AppLogLevel::DEBUG, "pool:{:?}", status,);
+        result.map_err(|e| {
+            app_log_event!(lctx, AppLogLevel::ERROR, "pool:{:?}, e:{:?}", status, e);
+            AppError {
+                code: AppErrorCode::DatabaseServerBusy,
+                detail: Some(e.to_string()),
+            }
         })
     }
 } // end of impl AppMariaDbStore

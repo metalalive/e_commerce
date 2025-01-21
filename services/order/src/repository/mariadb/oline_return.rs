@@ -5,6 +5,7 @@ use std::vec::Vec;
 
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
+use sqlx::database::Database as AbstractDatabase;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
@@ -45,7 +46,7 @@ impl InsertReqArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for InsertReqArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let (oid_b, mut seq_start, reqs) = (self.0, self.1, self.2);
         let oid = oid_b.as_column();
         let mut args = MySqlArguments::default();
@@ -58,15 +59,15 @@ impl<'q> IntoArguments<'q, MySql> for InsertReqArg {
                 qty_map
                     .into_iter()
                     .map(|(ctime, (qty, refund))| {
-                        args.add(oid.clone());
-                        args.add(seq_start);
-                        args.add(seller_id);
-                        args.add(prod_typ_num.to_string());
-                        args.add(prod_id);
-                        args.add(ctime.naive_utc());
-                        args.add(qty);
-                        args.add(refund.unit);
-                        args.add(refund.total);
+                        args.add(oid.clone()).unwrap();
+                        args.add(seq_start).unwrap();
+                        args.add(seller_id).unwrap();
+                        args.add(prod_typ_num.to_string()).unwrap();
+                        args.add(prod_id).unwrap();
+                        args.add(ctime.naive_utc()).unwrap();
+                        args.add(qty).unwrap();
+                        args.add(refund.unit).unwrap();
+                        args.add(refund.total).unwrap();
                         seq_start += 1;
                     })
                     .count();
@@ -97,18 +98,18 @@ impl FetchByIdArg {
     }
 }
 impl<'q> IntoArguments<'q, MySql> for FetchByIdArg {
-    fn into_arguments(self) -> <MySql as sqlx::database::HasArguments<'q>>::Arguments {
+    fn into_arguments(self) -> <MySql as AbstractDatabase>::Arguments<'q> {
         let (oid_b, pids) = (self.0, self.1);
         let mut args = MySqlArguments::default();
-        args.add(oid_b.as_column());
+        args.add(oid_b.as_column()).unwrap();
         pids.into_iter()
             .map(|id_| {
                 let (seller_id, prod_typ, prod_id) =
                     (id_.store_id, id_.product_type, id_.product_id);
                 let prod_typ_num: u8 = prod_typ.into();
-                args.add(seller_id);
-                args.add(prod_typ_num.to_string());
-                args.add(prod_id);
+                args.add(seller_id).unwrap();
+                args.add(prod_typ_num.to_string()).unwrap();
+                args.add(prod_id).unwrap();
             })
             .count();
         args
@@ -137,8 +138,8 @@ impl From<FetchByTimeArg> for (String, MySqlArguments) {
                                 WHERE `create_time` > ? AND `create_time` <= ?"
         );
         let mut args = MySqlArguments::default();
-        args.add(start.naive_utc());
-        args.add(end.naive_utc());
+        args.add(start.naive_utc()).unwrap();
+        args.add(end.naive_utc()).unwrap();
         (sql_patt, args)
     }
 }
@@ -151,9 +152,9 @@ impl From<FetchByIdAndTimeArg> for (String, MySqlArguments) {
                                 WHERE `o_id`=? AND `create_time` > ? AND `create_time` <= ?"
         );
         let mut args = MySqlArguments::default();
-        args.add(oid_b.as_column());
-        args.add(start.naive_utc());
-        args.add(end.naive_utc());
+        args.add(oid_b.as_column()).unwrap();
+        args.add(start.naive_utc()).unwrap();
+        args.add(end.naive_utc()).unwrap();
         (sql_patt, args)
     }
 }
@@ -164,7 +165,9 @@ impl ReturnsPerOrder {
     }
     fn try_merge(&mut self, row: MySqlRow) -> DefaultResult<(), AppError> {
         let store_id = row.try_get::<u32, usize>(0)?;
-        let product_type = row.try_get::<&str, usize>(1)?.parse::<ProductType>()?;
+        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
+        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
+        let product_type = prodtyp_raw.parse::<ProductType>()?;
         let product_id = row.try_get::<u64, usize>(2)?;
         let id_ = OrderLineIdentity {
             store_id,

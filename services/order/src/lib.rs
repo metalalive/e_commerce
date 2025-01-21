@@ -72,7 +72,8 @@ impl AppSharedState {
             log.clone(),
             &cfg.api_server.data_store,
             confidential.clone(),
-        );
+        )
+        .unwrap();
         let in_mem = in_mem.map(Arc::new);
         let sql_dbs = sql_dbs.map(|m| m.into_iter().map(Arc::new).collect());
         let ds_ctx = Arc::new(AppDataStoreContext { in_mem, sql_dbs });
