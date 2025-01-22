@@ -71,6 +71,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             for tree_id, nodes in item_m.tags.items()
             for node in nodes
         ]
+        t0 = item_m.last_update.astimezone(UTC)
         out = {
             "usr_prof": item_m.usr_prof,
             "name": item_m.name,
@@ -78,6 +79,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             "tags": tags,
             "attributes": list(map(convert_attribute, item_m.attributes)),
             "media_set": item_m.media_set,
+            "last_update": t0.strftime(SaleableItemModel.STRING_DATETIME_FORMAT()),
         }
         return out
 
@@ -140,11 +142,14 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         list(map(cvt_attri, raw["attributes"]))
 
     async def do_archive(self, saleitem_id: int):
-        # TODO, get last-update timestamp from SaleableItemModel
-        snapshot_ts = datetime.now(UTC)
         olditem_rawdoc = await self.fetch_doc_primary(
             id_=saleitem_id, fn_label=AppRepoFnLabel.SaleItemArchiveUpdate
         )
+        snapshot_ts: str = olditem_rawdoc.pop("last_update")
+        assert snapshot_ts
+        snapshot_ts: datetime = datetime.strptime(
+            snapshot_ts, SaleableItemModel.STRING_DATETIME_FORMAT()
+        ).replace(tzinfo=UTC)
         cls = type(self)
         cls.rawdoc_primary_to_snapshot(olditem_rawdoc)
         idx_name = self.snapshot_index_name(snapshot_ts)
@@ -247,6 +252,11 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         for t in raw["tags"]:
             m = TagModel(_id=t["node_id"], _label=t["label"])
             tag_map[t["tree_id"]].append(m)
+
+        last_update: datetime = datetime.strptime(
+            raw["last_update"], SaleableItemModel.STRING_DATETIME_FORMAT()
+        ).replace(tzinfo=UTC)
+
         return SaleableItemModel(
             id_=id_,
             usr_prof=raw["usr_prof"],
@@ -255,6 +265,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             tags=tag_map,
             attributes=list(map(cvt_attri, raw["attributes"])),
             media_set=raw["media_set"],
+            last_update=last_update,
         )
 
     async def fetch(

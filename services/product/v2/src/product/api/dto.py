@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Union
 from pydantic import BaseModel, Field, NonNegativeInt
@@ -93,3 +94,4 @@ class SaleItemDto(BaseModel):
     tags: List[TagNodeDto]
     attributes: List[SaleItemAttriDto]
     media_set: List[str]
+    last_update: datetime

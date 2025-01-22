@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 from typing import List, Dict, Tuple, Any, Optional
 
 import pytest
@@ -45,6 +46,7 @@ def verify_items_equlity(item1: SaleableItemModel, item2: SaleableItemModel):
     assert item1.usr_prof == item2.usr_prof
     assert item1.visible == item2.visible
     assert set(item1.media_set) == set(item2.media_set)
+    assert item1.last_update == item2.last_update
 
     expect = build_verify_tag_data(item2.tags)
     actual = build_verify_tag_data(item1.tags)
@@ -171,7 +173,7 @@ class TestCreate:
         assert another_item_created.id_ > 0
         assert another_item_created.id_ < pow(2, 64)
 
-        await asyncio.sleep(1)  # wait for ElasticSearch refresh documents
+        await asyncio.sleep(2)  # wait for ElasticSearch refresh documents
 
         num_items_saved = await es_repo_saleitem.num_items_created(
             usr_id=expect_usr_prof
@@ -219,6 +221,7 @@ class TestUpdate:
         ]
         saleitem_m.tags["xiug"].extend(new_tags)
         saleitem_m.name = "Fabulous Coat"
+        saleitem_m.last_update += timedelta(seconds=5)
         old_attr = next(
             filter(lambda a: a.label.id_ == "attr4id", saleitem_m.attributes)
         )

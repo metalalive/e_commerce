@@ -1,3 +1,4 @@
+from datetime import datetime, UTC
 from dataclasses import dataclass
 from typing import Optional, Self, Dict, List, Tuple, Union
 
@@ -53,7 +54,7 @@ class SaleableItemModel:
     tags: Dict[str, List[TagModel]]
     attributes: List[SaleItemAttriModel]
     media_set: List[str]  # List of resource IDs to external multimedia systems
-    # TODO, add timestamp field for recording last update time
+    last_update: datetime
 
     @classmethod
     def from_req(
@@ -74,6 +75,7 @@ class SaleableItemModel:
             tags=tag_ms_map,
             attributes=attri_val_ms,
             media_set=req.media_set,
+            last_update=datetime.now(UTC).replace(microsecond=0),
         )
 
     def rotate_id(self):
@@ -97,4 +99,9 @@ class SaleableItemModel:
             tags=tags_d,
             attributes=attris_d,
             media_set=self.media_set,
+            last_update=self.last_update,
         )
+
+    @staticmethod
+    def STRING_DATETIME_FORMAT():
+        return "%Y-%m-%d %H:%M:%S"
