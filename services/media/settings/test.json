@@ -46,7 +46,7 @@
     },
     "max_connections": 64,
     "limit_req_body_in_bytes": 10485760,
-    "num_workers": 0,
+    "num_workers": 1,
     "tcp_fastopen_queue_size": 104,
     "auth_keystore": {
         "url":"https://localhost:8008/jwks",

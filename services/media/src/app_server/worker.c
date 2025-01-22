@@ -289,7 +289,7 @@ static void run_loop(void *data) {
         .listeners = &ctx_listeners[0],
         .num_listeners = app_cfg->num_listeners,
         .thread_id=uv_thread_self() };
-    h2o_context_t server_ctx; // shared among listeners
+    h2o_context_t server_ctx = {0}; // shared among listeners
     unsigned int thread_index = init_data->cfg_thrd_idx;
     size_t num_cpus = h2o_numproc();
     int idx = 0;
@@ -311,19 +311,23 @@ static void run_loop(void *data) {
     while (!app_cfg->shutdown_requested) {
         // TODO, refine a design for application-defined hook functions in this run loop
         app_rotate_jwks_store(&app_cfg->jwks);
+        h2o_cleanup_thread(h2o_now(server_ctx.loop), &server_ctx);        
         uv_run(init_data->loop, UV_RUN_ONCE);
     } // end of main event loop
     if(thread_index == 0) {
         h2o_error_printf("[system] graceful shutdown starts \n");
     }
-    // for(idx=0; idx < 100; idx++) {
-    //     uv_run(init_data->loop, UV_RUN_NOWAIT);
-    // }
     h2o_context_request_shutdown(&server_ctx);
     while((atomic_num_connections(app_cfg, 0) > 0) && (app_cfg->shutdown_requested != APP_HARD_SHUTDOWN))
     {
         uv_run(init_data->loop, UV_RUN_ONCE);
     } // wait until all client requests are handled & connection closed
+    uint32_t max_wait = 0;
+    do {
+        max_wait = h2o_cleanup_thread(h2o_now(server_ctx.loop), &server_ctx);        
+        uv_run(init_data->loop, UV_RUN_NOWAIT);
+        // if not waiting for 1000 milliseconds, that means all internal buffers / allocators are cleaned
+    } while(max_wait == 1000);
     // close internal timer used only for timeout on graceful shutdown,
     h2o_multithread_unregister_receiver(server_ctx.queue, &ctx_worker.server_notifications);
     h2o_context_dispose(&server_ctx);
