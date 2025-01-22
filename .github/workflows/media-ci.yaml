@@ -1,8 +1,8 @@
 name: media continuous integration
 on:
-  push:
-    branches:
-      - 'media-dev/experiment/**'
+  # push:
+  #   branches:
+  #     - 'media-dev/experiment/**'
   pull_request:
     branches:
       - 'master'
@@ -113,29 +113,29 @@ jobs:
             key: prebuilt-libuv
 
 
-      #- name: restore libh2o library from cache
-      #  id:   cachelibh2o
-      #  uses: actions/cache/restore@v4
-      #  with:
-      #      path: |
-      #          ${{ env.BROTLI_INSTALL_PATH }}
-      #          ${{ env.H2O_INSTALL_PATH }}
-      #      key: prebuilt-h2o-0002
+      - name: restore libh2o library from cache
+        id:   cachelibh2o
+        uses: actions/cache/restore@v4
+        with:
+            path: |
+                ${{ env.BROTLI_INSTALL_PATH }}
+                ${{ env.H2O_INSTALL_PATH }}
+            key: prebuilt-h2o-0003
 
       - name: download HTTP h2o source
-        #if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
             repository: metalalive/h2o # h2o/h2o
             # always clone from master branch, libh2o maintainers no longer use release tags / branches
-            # , without versioning tags, every commit might be breaking change
+            # , however without versioning tags, every commit might contain breaking change
             
             #ref: 93f4294757bb4c06e0a738b877b0a4c931a8922f
             ref: b49276113a92d6866d0e09d8dafb11341647bebe
             path: deps/h2o
 
       - name: build brotli from source as H2O dependency
-        #if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
         working-directory: deps/h2o/deps/brotli
         run: |
             mkdir -p ./build && cd build
@@ -149,7 +149,7 @@ jobs:
             ls -lt ./  ./lib
 
       - name: build libh2o from source
-        #if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
         working-directory: deps/h2o
         env:
             PKG_CONFIG_PATH: "${{ env.LIBUV_INSTALL_PATH }}/lib/pkgconfig:${{ env.BROTLI_INSTALL_PATH }}/lib/pkgconfig"
@@ -166,14 +166,14 @@ jobs:
         run: |
             ls -lt ./  ./lib
 
-      #- name: save libh2o library to cache
-      #  if: steps.cachelibh2o.outputs.cache-hit != 'true'
-      #  uses: actions/cache/save@v4
-      #  with:
-      #      path: |
-      #          ${{ env.BROTLI_INSTALL_PATH }}
-      #          ${{ env.H2O_INSTALL_PATH }}
-      #      key: prebuilt-h2o-0002
+      - name: save libh2o library to cache
+        if: steps.cachelibh2o.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: |
+                ${{ env.BROTLI_INSTALL_PATH }}
+                ${{ env.H2O_INSTALL_PATH }}
+            key: prebuilt-h2o-0003
 
 
       - name: restore jansson library from cache
