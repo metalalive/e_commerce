@@ -59,10 +59,10 @@ Ensure(api_test_upload_part__singlechunk_ok) {
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     {
         json_t *item = json_object();
-        json_object_set(item, "app_code", json_integer(APP_CODE));
-        json_object_set(item, "mat_code", json_integer(QUOTA_MATERIAL__MAX_UPLOAD_KBYTES_PER_USER));
-        json_object_set(item, "maxnum", json_integer(200));
-        json_array_append(quota, item);
+        json_object_set_new(item, "app_code", json_integer(APP_CODE));
+        json_object_set_new(item, "mat_code", json_integer(QUOTA_MATERIAL__MAX_UPLOAD_KBYTES_PER_USER));
+        json_object_set_new(item, "maxnum", json_integer(200));
+        json_array_append_new(quota, item);
     }
     add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
     test_setup_pub_t  setup_data = {
@@ -80,6 +80,7 @@ Ensure(api_test_upload_part__singlechunk_ok) {
     //  previously uploaded part and update the database table.
     json_decref(header_kv_serials);
     json_decref(quota);
+    free(setup_data.upload_filepaths.entries);
 } // end of api_test_upload_part__singlechunk_ok
 #undef EXPECT_PART
 #undef CHUNK_FILE_PATH
@@ -168,10 +169,10 @@ Ensure(api_test_upload_part__invalid_req) {
     json_array_append_new(header_kv_serials, json_string("Accept:application/json"));
     {
         json_t *item = json_object();
-        json_object_set(item, "app_code", json_integer(APP_CODE));
-        json_object_set(item, "mat_code", json_integer(QUOTA_MATERIAL__MAX_UPLOAD_KBYTES_PER_USER));
-        json_object_set(item, "maxnum", json_integer(1));
-        json_array_append(quota, item);
+        json_object_set_new(item, "app_code", json_integer(APP_CODE));
+        json_object_set_new(item, "mat_code", json_integer(QUOTA_MATERIAL__MAX_UPLOAD_KBYTES_PER_USER));
+        json_object_set_new(item, "maxnum", json_integer(1));
+        json_array_append_new(quota, item);
     }
     add_auth_token_to_http_header(header_kv_serials, usr_id, codename_list, quota);
     test_setup_pub_t  setup_data = {
@@ -234,6 +235,7 @@ Ensure(api_test_upload_part__quota_exceed) {
     } // end of loop
     json_decref(header_kv_serials);
     json_decref(quota);
+    free(setup_data.upload_filepaths.entries);
 } // end of api_test_upload_part__quota_exceed
 #undef  CHUNK_FILE_PATH_1  
 #undef  CHUNK_FILE_PATH_2  
@@ -340,6 +342,8 @@ done:
     json_decref(usr_upload_quota);
     if(_itest_filechunk_metadata)
         free(_itest_filechunk_metadata);
+    if(setup_data.upload_filepaths.entries)
+        free(setup_data.upload_filepaths.entries);
 } // end of api_test_upload_part__multichunk_outoforder
 
 
