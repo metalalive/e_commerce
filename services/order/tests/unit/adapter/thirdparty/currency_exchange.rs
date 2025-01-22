@@ -16,7 +16,7 @@ fn ut_appstate_setup() -> AppSharedState {
         let path = sys_basepath.clone() + "/common/data/secrets.json";
         UserSpaceConfidentiality::build(path)
     };
-    ut_setup_share_state("config_ok.json", Box::new(cfdntl))
+    ut_setup_share_state("config_ok_no_sqldb.json", Box::new(cfdntl))
 }
 
 /// Note I use free plan in `openexchangerates.org` service, that means this project
