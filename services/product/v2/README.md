@@ -63,6 +63,13 @@ APP_SETTINGS="settings.development" poetry run granian --host 127.0.0.1 --port 8
     --interface asgi  product.entry.web:app
 ```
 
+### RPC consumer
+```bash
+SERVICE_BASE_PATH="${PWD}/../.."  poetry run celery --app=ecommerce_common.util  \
+    --config=settings.development  --workdir ./src  worker --concurrency 1 --loglevel=INFO \
+    --hostname=productmgt@%h  -E
+```
+
 ## Test
 ```bash
 APP_SETTINGS="settings.test"  ./run_unit_test

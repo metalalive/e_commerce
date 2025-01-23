@@ -264,7 +264,7 @@ class TestDelete:
         with pytest.raises(AppRepoError) as e:
             await es_repo_saleitem.fetch(saleitem_m_created.id_)
         e = e.value
-        assert e.fn_label == AppRepoFnLabel.SaleItemFetchModel
+        assert e.fn_label == AppRepoFnLabel.SaleItemFetchOneModel
         assert not e.reason["found"]
         assert int(e.reason["_id"]) == saleitem_m_created.id_
 
@@ -309,16 +309,100 @@ class TestFetchOne:
             with pytest.raises(AppRepoError) as e:
                 await es_repo_saleitem.fetch(obj.id_, visible_only=True)
             e = e.value
-            assert e.fn_label == AppRepoFnLabel.SaleItemFetchModel
+            assert e.fn_label == AppRepoFnLabel.SaleItemFetchOneModel
             assert e.reason["remote_database_done"]
             readback = await es_repo_saleitem.fetch(obj.id_, visible_only=False)
             verify_items_equlity(readback, obj)
 
 
+class TestFetchMany:
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_visibility_ok(self, es_repo_saleitem):
+        usrs_prof = [12352, 12353]
+        saleitem_ms_created = {u: [] for u in usrs_prof}
+        product_labels = [
+            "degradable Bio insect repellent",
+            "EcoGuard bug removal",
+            "BioBanish: Nature-Friendly Bug Defense",
+            "GreenShield slug Repellent",
+            "EcoDefense: Biodegradable Aphids Control",
+            "NatureSafe: Degradable Locust Repellent",
+            "BioBarrier: Planet-Friendly Pest Solution",
+            "PureProtect: Bettle Repellent",
+        ]
+        iter0 = iter(product_labels)
+
+        for usr_prof in usrs_prof:
+            for i in range(1, 5):
+                req_data = SaleItemCreateReqDto(
+                    name=next(iter0),
+                    visible=(i % 2 == 1),
+                    media_set=[f"resource-tool-{i}"],
+                    tags=[f"gardening-{i}"],
+                    attributes=[],
+                )
+                tag_data = {f"gardening-{i}": [(i, f"Tool Label {i}")]}
+                attr_data = [
+                    ("attr1", "Material", AttrDataTypeDto.String, "Jalapeno"),
+                    ("attr2", "Weight", AttrDataTypeDto.Integer, i * 2),
+                ]
+                obj = await TestCreate.setup_create_one(
+                    es_repo_saleitem,
+                    usr_prof=usr_prof,
+                    req_data=req_data,
+                    tag_data=tag_data,
+                    attr_data=attr_data,
+                )
+                saleitem_ms_created[usr_prof].append(obj)
+
+        await asyncio.sleep(2)  # Wait for ElasticSearch refresh documents
+
+        all_item_ids = [m.id_ for _, ms in saleitem_ms_created.items() for m in ms]
+        readback = await es_repo_saleitem.fetch_many(
+            all_item_ids, usrs_prof[0], visible_only=False
+        )
+        assert len(readback) == 4
+        expect_labels = product_labels[:4]
+        actual_labels = [r.name for r in readback]
+        assert set(expect_labels) == set(actual_labels)
+
+        readback = await es_repo_saleitem.fetch_many(
+            all_item_ids, usrs_prof[0], visible_only=True
+        )
+        assert len(readback) == 2
+        expect_labels = [product_labels[0], product_labels[2]]
+        actual_labels = [r.name for r in readback]
+        assert set(expect_labels) == set(actual_labels)
+
+        readback = await es_repo_saleitem.fetch_many(
+            all_item_ids, usrs_prof[1], visible_only=True
+        )
+        assert len(readback) == 2
+        expect_labels = [product_labels[4], product_labels[6]]
+        actual_labels = [r.name for r in readback]
+        assert set(expect_labels) == set(actual_labels)
+
+    @pytest.mark.asyncio(loop_scope="session")
+    async def test_empty(self, es_repo_saleitem):
+        usr_prof = 12354
+        readback = await es_repo_saleitem.fetch_many([], usr_prof, visible_only=True)
+        assert len(readback) == 0
+        readback = await es_repo_saleitem.fetch_many([], usr_prof)
+        assert len(readback) == 0
+        readback = await es_repo_saleitem.fetch_many(
+            [5566], usr_prof, visible_only=True
+        )
+        assert len(readback) == 0
+        readback = await es_repo_saleitem.fetch_many(
+            [7788], usr_prof, visible_only=False
+        )
+        assert len(readback) == 0
+
+
 class TestSearch:
     @pytest.mark.asyncio(loop_scope="session")
     async def test_visibleonly_ok(self, es_repo_saleitem):
-        usr_prof = 12352
+        usr_prof = 12355
         tag_data = {
             "elety": [(1, "Electronics")],
             "oioiu": [(2, "smarT little things")],
@@ -394,7 +478,7 @@ class TestSearch:
             tag_data={k: v for k, v in tag_data.items() if k in ["elety", "oioiu"]},
             attr_data=attr_data_3,
         )
-        await asyncio.sleep(1)  # wait for ElasticSearch refresh documents
+        await asyncio.sleep(2)  # wait for ElasticSearch refresh documents
 
         def verify_fetched_items(expect: List, actual: List):
             expect = [(e.id_, e.name) for e in expect]

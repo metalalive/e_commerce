@@ -19,7 +19,8 @@ class AppRepoFnLabel(Enum):
     SaleItemCreate = auto()
     SaleItemDelete = auto()
     SaleItemArchiveUpdate = auto()
-    SaleItemFetchModel = auto()
+    SaleItemFetchOneModel = auto()
+    SaleItemFetchManyModel = auto()
     SaleItemGetMaintainer = auto()
     SaleItemNumCreated = auto()
     SaleItemSearch = auto()
@@ -94,6 +95,16 @@ class AbstractSaleItemRepo:
         self, id_: int, visible_only: Optional[bool] = None
     ) -> SaleableItemModel:
         raise NotImplementedError("AbstractSaleItemRepo.fetch")
+
+    # TODO, optional timestamp to retrieve snapshot
+
+    async def fetch_many(
+        self,
+        ids: List[int],
+        usrprof: int,
+        visible_only: Optional[bool] = None,
+    ) -> List[SaleableItemModel]:
+        raise NotImplementedError("AbstractSaleItemRepo.fetch_many")
 
     async def get_maintainer(self, id_: int) -> int:
         raise NotImplementedError("AbstractSaleItemRepo.get_maintainer")

@@ -44,6 +44,9 @@ class SaleItemAttriModel:
             raise AttriLabelError.invalid_data(errors)
         return objs
 
+    def to_dto(self) -> SaleItemAttriDto:
+        return SaleItemAttriDto(label=self.label.to_dto(), value=self.value)
+
 
 @dataclass
 class SaleableItemModel:
@@ -87,10 +90,7 @@ class SaleableItemModel:
             for tree_id, nodes in self.tags.items()
             for node in nodes
         ]
-        attris_d = [
-            SaleItemAttriDto(label=a.label.to_dto(), value=a.value)
-            for a in self.attributes
-        ]
+        attris_d = [a.to_dto() for a in self.attributes]
         return SaleItemDto(
             id_=self.id_,
             name=self.name,
