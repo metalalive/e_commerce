@@ -49,7 +49,7 @@ DATABASES = {
         "timeout_secs": 45,
         "num_conns": 7,
         "db_names": {
-            "latest": "product-saleable-items",
+            "latest": "product-saleable-items-v0.0.1",
             "history": "product-saleable-items-snapshot-%s",
         },
     },

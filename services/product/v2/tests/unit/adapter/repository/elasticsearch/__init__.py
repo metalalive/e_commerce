@@ -10,6 +10,7 @@ async def es_mapping_init(app_setting):
         "attri_label/action_0001.yaml",
         "tag/action_0001.yaml",
         "saleable_item/action_0001.yaml",
+        "saleable_item/action_0002.yaml",
     ]
 
     def _run_curator(relpath):

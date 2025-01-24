@@ -71,6 +71,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             for tree_id, nodes in item_m.tags.items()
             for node in nodes
         ]
+        t0 = item_m.last_update.astimezone(UTC)
         out = {
             "usr_prof": item_m.usr_prof,
             "name": item_m.name,
@@ -78,6 +79,7 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             "tags": tags,
             "attributes": list(map(convert_attribute, item_m.attributes)),
             "media_set": item_m.media_set,
+            "last_update": t0.strftime(SaleableItemModel.STRING_DATETIME_FORMAT()),
         }
         return out
 
@@ -140,11 +142,14 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         list(map(cvt_attri, raw["attributes"]))
 
     async def do_archive(self, saleitem_id: int):
-        # TODO, get last-update timestamp from SaleableItemModel
-        snapshot_ts = datetime.now(UTC)
-        olditem_rawdoc = await self.fetch_doc_primary(
+        olditem_rawdoc = await self.fetch_doc_primary_single_id(
             id_=saleitem_id, fn_label=AppRepoFnLabel.SaleItemArchiveUpdate
         )
+        snapshot_ts: str = olditem_rawdoc.pop("last_update")
+        assert snapshot_ts
+        snapshot_ts: datetime = datetime.strptime(
+            snapshot_ts, SaleableItemModel.STRING_DATETIME_FORMAT()
+        ).replace(tzinfo=UTC)
         cls = type(self)
         cls.rawdoc_primary_to_snapshot(olditem_rawdoc)
         idx_name = self.snapshot_index_name(snapshot_ts)
@@ -180,7 +185,9 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                 )
         _logger.debug("ElasticSearchSaleItemRepo.delete done successfully")
 
-    async def fetch_doc_primary(self, id_: int, fn_label: AppRepoFnLabel) -> Dict:
+    async def fetch_doc_primary_single_id(
+        self, id_: int, fn_label: AppRepoFnLabel
+    ) -> Dict:
         url = "/%s/the-only-type/%d" % (self._index_primary_name, id_)
         resp = await self._session.get(url)
         async with resp:
@@ -190,21 +197,26 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
                 raise AppRepoError(fn_label=fn_label, reason=respbody)
         return respbody["_source"]
 
-    async def fetch_doc_primary_visible(
-        self, id_: int, fn_label: AppRepoFnLabel
-    ) -> Dict:
+    async def fetch_doc_primary_multi_id(
+        self,
+        ids: List[int],
+        visible: Optional[bool],
+        fn_label: AppRepoFnLabel,
+        usrprof: Optional[int] = None,
+    ) -> List[Tuple[int, Dict]]:
         fields_present = ["hits.total", "hits.hits._id", "hits.hits._source", "_shards"]
         url = "/%s/the-only-type/_search?filter_path=%s" % (
             self._index_primary_name,
             ",".join(fields_present),
         )
-        reqbody = {
-            "query": {
-                "bool": {
-                    "filter": [{"ids": {"values": [id_]}}, {"term": {"visible": True}}]
-                }
-            }
-        }
+        reqbody = {"query": {"bool": {"filter": [{"ids": {"values": ids}}]}}}
+        if visible:
+            term = {"term": {"visible": True}}
+            reqbody["query"]["bool"]["filter"].append(term)
+        if usrprof is not None:
+            term = {"term": {"usr_prof": usrprof}}
+            reqbody["query"]["bool"]["filter"].append(term)
+
         headers = {"content-type": "application/json"}
         resp = await self._session.request("GET", url, json=reqbody, headers=headers)
         async with resp:
@@ -212,10 +224,8 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             if resp.status != 200:
                 respbody["remote_database_done"] = True
                 raise AppRepoError(fn_label=fn_label, reason=respbody)
-            if respbody["hits"]["total"] != 1:
-                respbody["remote_database_done"] = True
-                raise AppRepoError(fn_label=fn_label, reason=respbody)
-        return respbody["hits"]["hits"][0]["_source"]
+        fetched_docs = respbody["hits"].get("hits", [])
+        return [(int(r["_id"]), r["_source"]) for r in fetched_docs]
 
     @staticmethod
     def convert_from_primary_doc(id_: int, raw: Dict) -> SaleableItemModel:
@@ -247,6 +257,11 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
         for t in raw["tags"]:
             m = TagModel(_id=t["node_id"], _label=t["label"])
             tag_map[t["tree_id"]].append(m)
+
+        last_update: datetime = datetime.strptime(
+            raw["last_update"], SaleableItemModel.STRING_DATETIME_FORMAT()
+        ).replace(tzinfo=UTC)
+
         return SaleableItemModel(
             id_=id_,
             usr_prof=raw["usr_prof"],
@@ -255,22 +270,33 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             tags=tag_map,
             attributes=list(map(cvt_attri, raw["attributes"])),
             media_set=raw["media_set"],
+            last_update=last_update,
         )
 
     async def fetch(
         self, id_: int, visible_only: Optional[bool] = None
     ) -> SaleableItemModel:
         cls = type(self)
-        # TODO, optional timestamp to retrieve snapshot
         if visible_only:
-            rawdoc = await self.fetch_doc_primary_visible(
-                id_=id_,
-                fn_label=AppRepoFnLabel.SaleItemFetchModel,
+            rawdocs = await self.fetch_doc_primary_multi_id(
+                ids=[id_],
+                visible=True,
+                fn_label=AppRepoFnLabel.SaleItemFetchOneModel,
             )
+            if len(rawdocs) != 1:
+                reason = {
+                    "remote_database_done": True,
+                    "num_docs_fetched": len(rawdocs),
+                }
+                raise AppRepoError(
+                    fn_label=AppRepoFnLabel.SaleItemFetchOneModel, reason=reason
+                )
+            fetched_id, rawdoc = rawdocs[0]
+            assert fetched_id == id_
         else:
-            rawdoc = await self.fetch_doc_primary(
+            rawdoc = await self.fetch_doc_primary_single_id(
                 id_=id_,
-                fn_label=AppRepoFnLabel.SaleItemFetchModel,
+                fn_label=AppRepoFnLabel.SaleItemFetchOneModel,
             )
         try:
             obj = cls.convert_from_primary_doc(id_, rawdoc)
@@ -278,10 +304,34 @@ class ElasticSearchSaleItemRepo(AbstractSaleItemRepo):
             _logger.error("corruption detail: %s" % str(e))
             reason = {"detail": "data-corruption"}
             raise AppRepoError(
-                fn_label=AppRepoFnLabel.SaleItemFetchModel, reason=reason
+                fn_label=AppRepoFnLabel.SaleItemFetchOneModel, reason=reason
             )
         _logger.debug("ElasticSearchSaleItemRepo.fetch done successfully")
         return obj
+
+    async def fetch_many(
+        self,
+        ids: List[int],
+        usrprof: int,
+        visible_only: Optional[bool] = None,
+    ) -> List[SaleableItemModel]:
+        cls = type(self)
+        rawdocs = await self.fetch_doc_primary_multi_id(
+            ids=ids,
+            visible=visible_only,
+            usrprof=usrprof,
+            fn_label=AppRepoFnLabel.SaleItemFetchManyModel,
+        )
+        try:
+            objs = [cls.convert_from_primary_doc(id_, doc) for id_, doc in rawdocs]
+        except (ValueError, ValidationError) as e:
+            _logger.error("corruption detail: %s" % str(e))
+            reason = {"detail": "data-corruption"}
+            raise AppRepoError(
+                fn_label=AppRepoFnLabel.SaleItemFetchManyModel, reason=reason
+            )
+        _logger.debug("ElasticSearchSaleItemRepo.fetch_many done successfully")
+        return objs
 
     async def get_maintainer(self, id_: int) -> int:
         fields_present = ["_source.usr_prof", "_id"]

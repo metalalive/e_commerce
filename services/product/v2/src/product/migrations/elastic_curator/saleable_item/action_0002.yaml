@@ -1,0 +1,96 @@
+actions:
+  1:
+    action: create_index
+    description: "Create an index for storing saleable items"
+    options:
+      name: "product-saleable-items-v0.0.1"
+      continue_if_exception: False
+      disable_action: False
+      extra_settings:
+        settings:
+          number_of_shards: 1
+          number_of_replicas: 1
+        mappings:
+          the-only-type:
+            properties:
+              name:
+                type: text
+                fields:
+                  as_english:
+                    type: text
+                    analyzer: english
+              usr_prof:
+                type: integer
+              visible:
+                type: boolean
+              tags:
+                type: nested
+                properties:
+                  label:
+                    type: text
+                    fields:
+                      as_english:
+                        type: text
+                        analyzer: english
+                  node_id:
+                    type: integer
+                  tree_id:
+                    type: keyword
+              attributes:
+                type: nested
+                properties:
+                  label:
+                    type: object
+                    properties:
+                      id_:
+                        type: keyword
+                      name:
+                        type: text
+                        fields:
+                          as_english:
+                            type: text
+                            analyzer: english
+                      dtype:
+                        type: integer
+                  value:
+                    type: object
+                    properties:
+                      boolean_value:
+                        type: boolean
+                      integer_value:
+                        type: integer
+                      string_value:
+                        type: text
+                        fields:
+                          as_english:
+                            type: text
+                            analyzer: english
+              media_set:
+                type: keyword
+              last_update:
+                type: date
+                format: "yyyy-MM-dd HH:mm:ss" # auto convert to UTC timezone at app tier
+  2:
+    action: reindex
+    description: "Create an index for snapshot of saleable items at update points in time"
+    options:
+      wait_interval: 9
+      max_wait: 38
+      request_body:
+        source:
+          index: "product-saleable-items"
+        dest:
+          index: "product-saleable-items-v0.0.1"
+    filters:
+      - filtertype: none
+  3:
+    action: delete_indices
+    description: "Delete old saleable item index"
+    options:
+      timeout_override: 65
+      continue_if_exception: True
+    filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^product-saleable-items$'
+

@@ -572,6 +572,10 @@ components:
           items:
             type: string
             example: "media456"
+        last_update:
+          type: string
+          format: datetime
+          example: "2014-06-29 15:22:58"
       required:
         - id_
         - name
@@ -580,6 +584,7 @@ components:
         - tags
         - attributes
         - media_set
+        - last_update
 
   securitySchemes:
     BearerAuth:

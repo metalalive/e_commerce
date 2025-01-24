@@ -1,3 +1,4 @@
+from datetime import datetime, UTC
 import pytest
 
 from product.api.dto import AttrDataTypeDto, SaleItemAttriReqDto, SaleItemCreateReqDto
@@ -68,6 +69,7 @@ class TestAttributeValue:
 
 class TestSaleableItem:
     def test_create_from_req_ok(self):
+        t0 = datetime.now(UTC).replace(second=0)
         req = SaleItemCreateReqDto(
             name="Sample Item",
             visible=True,
@@ -103,6 +105,9 @@ class TestSaleableItem:
         assert item1.tags == tag_ms_map
         assert item1.attributes == attri_val_ms
         assert item1.media_set == req.media_set
+        assert item1.last_update >= t0
+        assert item2.last_update >= t0
 
         dto2 = item2.to_dto()
         assert dto2.id_ == id_
+        assert dto2.last_update == item2.last_update

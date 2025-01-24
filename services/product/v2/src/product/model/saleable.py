@@ -1,3 +1,4 @@
+from datetime import datetime, UTC
 from dataclasses import dataclass
 from typing import Optional, Self, Dict, List, Tuple, Union
 
@@ -43,6 +44,9 @@ class SaleItemAttriModel:
             raise AttriLabelError.invalid_data(errors)
         return objs
 
+    def to_dto(self) -> SaleItemAttriDto:
+        return SaleItemAttriDto(label=self.label.to_dto(), value=self.value)
+
 
 @dataclass
 class SaleableItemModel:
@@ -53,7 +57,7 @@ class SaleableItemModel:
     tags: Dict[str, List[TagModel]]
     attributes: List[SaleItemAttriModel]
     media_set: List[str]  # List of resource IDs to external multimedia systems
-    # TODO, add timestamp field for recording last update time
+    last_update: datetime
 
     @classmethod
     def from_req(
@@ -74,6 +78,7 @@ class SaleableItemModel:
             tags=tag_ms_map,
             attributes=attri_val_ms,
             media_set=req.media_set,
+            last_update=datetime.now(UTC).replace(microsecond=0),
         )
 
     def rotate_id(self):
@@ -85,10 +90,7 @@ class SaleableItemModel:
             for tree_id, nodes in self.tags.items()
             for node in nodes
         ]
-        attris_d = [
-            SaleItemAttriDto(label=a.label.to_dto(), value=a.value)
-            for a in self.attributes
-        ]
+        attris_d = [a.to_dto() for a in self.attributes]
         return SaleItemDto(
             id_=self.id_,
             name=self.name,
@@ -97,4 +99,9 @@ class SaleableItemModel:
             tags=tags_d,
             attributes=attris_d,
             media_set=self.media_set,
+            last_update=self.last_update,
         )
+
+    @staticmethod
+    def STRING_DATETIME_FORMAT():
+        return "%Y-%m-%d %H:%M:%S"
