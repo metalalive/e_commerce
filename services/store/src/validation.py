@@ -16,7 +16,6 @@ from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTP
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
 from .shared import shared_ctx
 from .models import (
-    SaleableTypeEnum,
     StoreEmail,
     StorePhone,
     OutletLocation,
@@ -344,7 +343,6 @@ class BusinessHoursDaysReqBody(PydanticRootModel[List[BusinessHoursDayReqBody]])
 
 
 class EditProductReqBody(PydanticBaseModel):
-    product_type: SaleableTypeEnum
     product_id: PositiveInt
     price: PositiveInt
     start_after: datetime
@@ -373,11 +371,9 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
 
     @field_validator("root")
     def validate_list_items(cls, values):
-        prod_ids = set(
-            map(lambda obj: (obj.product_type.value, obj.product_id), values)
-        )
+        prod_ids = set(map(lambda obj: obj.product_id, values))
         if len(prod_ids) != len(values):
-            err_detail = {"code": "duplicate", "field": ["product_type", "product_id"]}
+            err_detail = {"code": "duplicate", "field": ["product_id"]}
             raise FastApiHTTPException(
                 detail=err_detail,
                 headers={},
@@ -386,23 +382,9 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
         return values
 
     def validate_products(self, staff_id: int):
-        filtered = filter(
-            lambda obj: obj.product_type == SaleableTypeEnum.ITEM, self.root
-        )
-        item_ids = list(map(lambda obj: obj.product_id, filtered))
-        filtered = filter(
-            lambda obj: obj.product_type == SaleableTypeEnum.PACKAGE, self.root
-        )
-        pkg_ids = list(map(lambda obj: obj.product_id, filtered))
-        fields_present = [
-            "id",
-        ]
+        item_ids = list(map(lambda obj: obj.product_id, self.root))
         reply_evt = shared_ctx["product_app_rpc"].get_product(
-            item_ids=item_ids,
-            pkg_ids=pkg_ids,
-            profile=staff_id,
-            item_fields=fields_present,
-            pkg_fields=fields_present,
+            item_ids=item_ids, profile=staff_id
         )
         if not reply_evt.finished:
             for _ in range(
@@ -420,30 +402,13 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
                 headers={},
                 detail={"app_code": [AppCodeOptions.product.value[0]]},
             )
-        validated_data = rpc_response["result"]
-        validated_item_ids = set(map(lambda d: d["id"], validated_data["item"]))
-        validated_pkg_ids = set(map(lambda d: d["id"], validated_data["pkg"]))
+        validated_data = rpc_response["result"]["result"]
+        validated_item_ids = set(map(lambda d: d["id_"], validated_data))
         diff_item = set(item_ids) - validated_item_ids
-        diff_pkg = set(pkg_ids) - validated_pkg_ids
         err_detail = {"code": "invalid", "field": []}
         if any(diff_item):
-            diff_item = map(
-                lambda v: {
-                    "product_type": SaleableTypeEnum.ITEM.value,
-                    "product_id": v,
-                },
-                diff_item,
-            )
+            diff_item = map(lambda v: {"product_id": v}, diff_item)
             err_detail["field"].extend(list(diff_item))
-        if any(diff_pkg):
-            diff_pkg = map(
-                lambda v: {
-                    "product_type": SaleableTypeEnum.PACKAGE.value,
-                    "product_id": v,
-                },
-                diff_pkg,
-            )
-            err_detail["field"].extend(list(diff_pkg))
         if any(err_detail["field"]):
             raise FastApiHTTPException(
                 detail=err_detail,

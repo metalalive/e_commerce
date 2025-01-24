@@ -11,7 +11,7 @@ from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.models.enums.base import AppCodeOptions
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
-from store.models import SaleableTypeEnum, StoreProductAvailable
+from store.models import StoreProductAvailable
 
 from .common import _saved_obj_gen
 
@@ -44,21 +44,11 @@ class TestUpdate:
     def _setup_mock_rpc_reply(
         self, body, timeout_sec=7, status=RpcReplyEvent.status_opt.SUCCESS
     ):
-        # mock reply from `product` service
-        sale_items_d = filter(
-            lambda d: d["product_type"] == SaleableTypeEnum.ITEM.value, body
-        )
-        sale_pkgs_d = filter(
-            lambda d: d["product_type"] == SaleableTypeEnum.PACKAGE.value, body
-        )
-        sale_items_d = map(lambda d: {"id": d["product_id"]}, sale_items_d)
-        sale_pkgs_d = map(lambda d: {"id": d["product_id"]}, sale_pkgs_d)
+        # TODO, add attributes and last-update fields to test
+        sale_items_d = map(lambda d: {"id_": d["product_id"]}, body)
         reply_event = RpcReplyEvent(listener=self, timeout_s=timeout_sec)
         reply_event.resp_body["status"] = status
-        reply_event.resp_body["result"] = {
-            "item": list(sale_items_d),
-            "pkg": list(sale_pkgs_d),
-        }
+        reply_event.resp_body["result"] = {"result": list(sale_items_d)}
         return reply_event
 
     def _setup_base_req_body(
@@ -67,7 +57,6 @@ class TestUpdate:
         body = [
             {
                 "product_id": p.product_id,
-                "product_type": p.product_type.value,
                 "start_after": p.start_after.astimezone().isoformat(),
                 "end_before": p.end_before.astimezone().isoformat(),
                 "price": p.price,
@@ -77,7 +66,6 @@ class TestUpdate:
         if product_avail_gen is not None:
             new_product_d = [next(product_avail_gen) for _ in range(num_new_items)]
             for item in new_product_d:
-                item["product_type"] = item["product_type"].value
                 item["start_after"] = item["start_after"].astimezone().isoformat()
                 item["end_before"] = item["end_before"].astimezone().isoformat()
             body.extend(new_product_d)
@@ -140,7 +128,7 @@ class TestUpdate:
         for item in actual_value:
             item.pop("_sa_instance_state", None)
             item.pop("store_id", None)
-            item["product_type"] = item["product_type"].value
+            item.pop("product_type", None)
             item["start_after"] = item["start_after"].astimezone().isoformat()
             item["end_before"] = item["end_before"].astimezone().isoformat()
         assert expect_value == actual_value
@@ -171,7 +159,7 @@ class TestUpdate:
         assert result["detail"]["code"] == "invalid"
         err_detail = result["detail"]["field"]
         assert err_detail and any(err_detail)
-        expect_value = {k: body[0].get(k) for k in ("product_id", "product_type")}
+        expect_value = {k: body[0].get(k) for k in ("product_id",)}
         actual_value = err_detail[0]
         assert expect_value == actual_value
 
@@ -236,10 +224,11 @@ class TestUpdate:
         mocked_rpc_fn.assert_called_once()
         assert expect_store_id == mocked_rpc_fn.call_args.kwargs["s_id"]
         assert not mocked_rpc_fn.call_args.kwargs["rm_all"]
-        assert expect_updating == mocked_rpc_fn.call_args.kwargs["updating"]
-        assert expect_creating == mocked_rpc_fn.call_args.kwargs["creating"]
+        actual_updating = mocked_rpc_fn.call_args.kwargs["updating"]
+        assert expect_updating == actual_updating
+        actual_updating = mocked_rpc_fn.call_args.kwargs["creating"]
+        assert expect_creating == actual_updating
         assert mocked_rpc_fn.call_args.kwargs["deleting"].get("items") is None
-        assert mocked_rpc_fn.call_args.kwargs["deleting"].get("pkgs") is None
         # subcase 2
         expect_deleting = {"items": [2, 3, 4, 5], "pkgs": [16, 79, 203]}
         emit_event_edit_products(
@@ -248,12 +237,6 @@ class TestUpdate:
         assert expect_store_id == mocked_rpc_fn.call_args.kwargs["s_id"]
         assert [] == mocked_rpc_fn.call_args.kwargs["updating"]
         assert [] == mocked_rpc_fn.call_args.kwargs["creating"]
-        expect_deleting.update(
-            {
-                "item_type": SaleableTypeEnum.ITEM.value,
-                "pkg_type": SaleableTypeEnum.PACKAGE.value,
-            }
-        )
         assert expect_deleting == mocked_rpc_fn.call_args.kwargs["deleting"]
 
 
@@ -261,7 +244,7 @@ class TestUpdate:
 
 
 class TestDiscard:
-    url = "/profile/{store_id}/products?pitems={ids1}&ppkgs={ids2}"
+    url = "/profile/{store_id}/products?pitems={ids1}"
     _auth_data_pattern = {
         "id": -1,
         "privilege_status": ROLE_ID_STAFF,
@@ -282,30 +265,13 @@ class TestDiscard:
     def _setup_deleting_items(
         self, products: Iterable[StoreProductAvailable], num_deleting: int
     ):
-        def is_pkg_check(d) -> bool:
-            return d.product_type is SaleableTypeEnum.PACKAGE
-
-        def is_item_check(d) -> bool:
-            return d.product_type is SaleableTypeEnum.ITEM
-
         def get_prod_id_fn(d) -> int:
             return d.product_id
 
-        prod_item_ids = list(map(get_prod_id_fn, filter(is_item_check, products)))
-        prod_pkg_ids = list(map(get_prod_id_fn, filter(is_pkg_check, products)))
+        prod_item_ids = list(map(get_prod_id_fn, products))
         deleting_pitems = prod_item_ids[:num_deleting]
-        deleting_ppkgs = prod_pkg_ids[:num_deleting]
-        remaining_pitems = [
-            (SaleableTypeEnum.ITEM, i)
-            for i in prod_item_ids
-            if i not in deleting_pitems
-        ]
-        remaining_ppkgs = [
-            (SaleableTypeEnum.PACKAGE, i)
-            for i in prod_pkg_ids
-            if i not in deleting_ppkgs
-        ]
-        return (deleting_pitems, deleting_ppkgs, remaining_pitems, remaining_ppkgs)
+        remaining_pitems = [(i,) for i in prod_item_ids if i not in deleting_pitems]
+        return (deleting_pitems, remaining_pitems)
 
     @pytest.mark.asyncio(loop_scope="session")
     async def test_ok(
@@ -332,13 +298,11 @@ class TestDiscard:
         auth_data["id"] = obj.staff[0].staff_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
-        deleting_pitems, deleting_ppkgs, remaining_pitems, remaining_ppkgs = (
-            self._setup_deleting_items(obj.products, num_deleting)
+        deleting_pitems, remaining_pitems = self._setup_deleting_items(
+            obj.products, num_deleting
         )
         renderred_url = self.url.format(
-            store_id=obj.id,
-            ids1=",".join(map(str, deleting_pitems)),
-            ids2=",".join(map(str, deleting_ppkgs)),
+            store_id=obj.id, ids1=",".join(map(str, deleting_pitems))
         )
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
@@ -356,13 +320,13 @@ class TestDiscard:
 
         # SQLALchemy does not seem to allow original session to retrieve up-to-date
         # records after previous deletion.
-        stmt = sa_select(
-            StoreProductAvailable.product_type, StoreProductAvailable.product_id
-        ).where(StoreProductAvailable.store_id == store_id)
+        stmt = sa_select(StoreProductAvailable.product_id).where(
+            StoreProductAvailable.store_id == store_id
+        )
         resultset = await session_for_verify.execute(stmt)
         actual_remain = resultset.all()
-        expect_remain = [*remaining_ppkgs, *remaining_pitems]
-        assert len(actual_remain) == num_total - 2 * num_deleting
+        expect_remain = remaining_pitems
+        assert len(actual_remain) == num_total - num_deleting
         assert set(actual_remain) == set(expect_remain)
 
     @pytest.mark.asyncio(loop_scope="session")
@@ -390,13 +354,11 @@ class TestDiscard:
         auth_data["id"] = obj.staff[0].staff_id
         encoded_token = keystore.gen_access_token(profile=auth_data, audience=["store"])
         headers = {"Authorization": "Bearer %s" % encoded_token}
-        deleting_pitems, deleting_ppkgs, remaining_pitems, remaining_ppkgs = (
-            self._setup_deleting_items(obj.products, num_deleting)
+        deleting_pitems, remaining_pitems = self._setup_deleting_items(
+            obj.products, num_deleting
         )
         renderred_url = self.url.format(
-            store_id=obj.id,
-            ids1=",".join(map(str, deleting_pitems)),
-            ids2=",".join(map(str, deleting_ppkgs)),
+            store_id=obj.id, ids1=",".join(map(str, deleting_pitems))
         )
         with patch("jwt.PyJWKClient.fetch_data", keystore._mocked_get_jwks):
             reply_evt_order = RpcReplyEvent(listener=self, timeout_s=1)
@@ -413,9 +375,9 @@ class TestDiscard:
                 response = test_client.delete(renderred_url, headers=headers)
                 assert response.status_code == 500
 
-        stmt = sa_select(
-            StoreProductAvailable.product_type, StoreProductAvailable.product_id
-        ).where(StoreProductAvailable.store_id == obj.id)
+        stmt = sa_select(StoreProductAvailable.product_id).where(
+            StoreProductAvailable.store_id == obj.id
+        )
         resultset = await session_for_verify.execute(stmt)
         actual_remain = resultset.all()
         assert len(actual_remain) == num_total
@@ -468,10 +430,8 @@ class TestRead:
             response = test_client.get(url, headers=headers)
         assert response.status_code == 200
         result = response.json()
-        expect_sale_types = [opt.value for opt in SaleableTypeEnum]
         for item in result:
             assert item.get("product_id") > 0
-            assert item.get("product_type") in expect_sale_types
             start_after = datetime.fromisoformat(result[-1]["start_after"])
             end_before = datetime.fromisoformat(result[-1]["end_before"])
             assert start_after < end_before

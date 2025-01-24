@@ -29,7 +29,6 @@ from ..models import (
     StorePhone,
     StoreStaff,
     HourOfOperation,
-    SaleableTypeEnum,
     StoreProductAvailable,
 )
 from ..shared import shared_ctx
@@ -398,19 +397,12 @@ def emit_event_edit_products(
             "price": obj.price,
             "start_after": obj.start_after.astimezone().isoformat(),
             "end_before": obj.end_before.astimezone().isoformat(),
-            "product_type": obj.product_type.value,
             "product_id": obj.product_id,
         }
 
     _updating = map(convertor, updating) if updating else []
     _creating = map(convertor, creating) if creating else []
     _deleting = deleting or {}
-    _deleting.update(
-        {
-            "item_type": SaleableTypeEnum.ITEM.value,
-            "pkg_type": SaleableTypeEnum.PACKAGE.value,
-        }
-    )
     kwargs = {
         "s_id": _store_id,
         "currency": s_currency,
@@ -464,7 +456,7 @@ async def edit_products_available(
         new_products = [
             StoreProductAvailable(store_id=saved_obj.id, **d.model_dump())
             for d in request.root
-            if (d.product_type, d.product_id) not in updatelist
+            if d.product_id not in updatelist
         ]
         session.add_all([*new_products])
         emit_event_edit_products(
@@ -492,13 +484,11 @@ async def edit_products_available(
 async def discard_store_products(
     store_id: PositiveInt,
     pitems: str,
-    ppkgs: str,
     user: dict = FastapiDepends(edit_products_authorization),
 ):
     try:
         pitems = list(map(int, pitems.split(",")))
-        ppkgs = list(map(int, ppkgs.split(",")))
-        if len(pitems) == 0 and len(ppkgs) == 0:
+        if len(pitems) == 0:
             raise FastApiHTTPException(
                 detail={"ids": "empty"},
                 headers={},
@@ -516,13 +506,13 @@ async def discard_store_products(
             _session, store_id, usr_auth=user
         )
         num_deleted = await StoreProductAvailable.bulk_delete(
-            _session, saved_store.id, pitems, ppkgs
+            _session, saved_store.id, pitems
         )
         emit_event_edit_products(
             store_id,
             s_currency=saved_store.currency.value,
             rpc_hdlr=shared_ctx["order_app_rpc"],
-            deleting={"items": pitems, "pkgs": ppkgs},
+            deleting={"items": pitems},
         )
         # print generated raw SOL with actual values
         # str(stmt.compile(compile_kwargs={"literal_binds": True}))

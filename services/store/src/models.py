@@ -1,6 +1,5 @@
 import enum
-from functools import partial
-from typing import List, Optional, Tuple, Self, TYPE_CHECKING
+from typing import List, Optional, Self, TYPE_CHECKING
 from sqlalchemy import (
     Column,
     Boolean,
@@ -373,11 +372,6 @@ class OutletLocation(Base, LocationMixin):
     store_applied = relationship("StoreProfile", back_populates="location")
 
 
-class SaleableTypeEnum(enum.Enum):
-    ITEM = 1
-    PACKAGE = 2
-
-
 class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
     quota_material = _MatCodeOptions.MAX_NUM_PRODUCTS
     __tablename__ = "store_product_available"
@@ -386,13 +380,10 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
         ForeignKey("store_profile.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    # following 2 fields come from product app
-    product_type = Column(sqlalchemy_enum(SaleableTypeEnum), primary_key=True)
     product_id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True)
     price = Column(MYSQL_INTEGER(unsigned=True), nullable=False)
     store_applied = relationship("StoreProfile", back_populates="products")
 
-    # NOTE, don't record inventory data at this app, do it in inventory app
     @classmethod
     async def quota_stats(cls, objs, session, target_ids):
         return await super().quota_stats(objs, session, target_ids, attname="store_id")
@@ -402,10 +393,7 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
         cls, session, store_id: int, reqdata: List["EditProductsReqBody"]
     ) -> List[Self]:
         def cond_clause_and(d):
-            return SqlAlAnd(
-                cls.product_type == d.product_type,
-                cls.product_id == d.product_id,
-            )
+            return SqlAlAnd(True, cls.product_id == d.product_id)
 
         product_id_cond = map(cond_clause_and, reqdata)
         find_product_condition = SqlAlOr(*product_id_cond)
@@ -423,33 +411,27 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
     @staticmethod
     def bulk_update(
         objs: List[Self], reqdata: List["EditProductsReqBody"]
-    ) -> List[Tuple[enum.Enum, int]]:
+    ) -> List[int]:
         def _do_update(obj):
             def check_prod_id(d) -> bool:
-                return (
-                    d.product_type is obj.product_type
-                    and d.product_id == obj.product_id
-                )
+                return d.product_id == obj.product_id
 
             newdata = next(filter(check_prod_id, reqdata))
             assert newdata is not None
             obj.price = newdata.price
             obj.start_after = newdata.start_after
             obj.end_before = newdata.end_before
-            return (newdata.product_type, newdata.product_id)
+            return newdata.product_id
 
         return list(map(_do_update, objs))
 
     @classmethod
-    async def bulk_delete(
-        cls, session, store_id: int, item_ids: List[int], pkg_ids: List[int]
-    ) -> int:
-        def _cond_fn(d, t):
-            return SqlAlAnd(cls.product_type == t, cls.product_id == d)
+    async def bulk_delete(cls, session, store_id: int, item_ids: List[int]) -> int:
+        def _cond_fn(d):
+            return SqlAlAnd(True, cls.product_id == d)
 
-        pitem_cond = map(partial(_cond_fn, t=SaleableTypeEnum.ITEM), item_ids)
-        ppkg_cond = map(partial(_cond_fn, t=SaleableTypeEnum.PACKAGE), pkg_ids)
-        find_product_condition = SqlAlOr(*pitem_cond, *ppkg_cond)
+        pitem_cond = map(_cond_fn, item_ids)
+        find_product_condition = SqlAlOr(*pitem_cond)
         stmt = (
             SqlAlDelete(cls)
             .where(cls.store_id == store_id)

@@ -26,7 +26,6 @@ from store.models import (
     StoreStaff,
     StoreProductAvailable,
     EnumWeekDay,
-    SaleableTypeEnum,
 )
 
 
@@ -243,7 +242,6 @@ def staff_data():
 
 
 def _product_avail_data_gen():
-    sale_types = [opt for opt in SaleableTypeEnum]
     base_range = 10
     price_range = 10000
     product_id_start = 1
@@ -251,7 +249,6 @@ def _product_avail_data_gen():
         product_id_end = product_id_start + base_range
         start_after, end_before = _gen_time_period()
         new_data = {
-            "product_type": random.choice(sale_types),
             # AppIdGapNumberFinder.MAX_GAP_VALUE
             "product_id": random.randrange(product_id_start, product_id_end),
             "start_after": start_after,
