@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from jwt.exceptions import (
     DecodeError,
@@ -38,6 +38,7 @@ from ..validation import (
     StoreSupervisorReqBody,
     StoreStaffsReqBody,
     BusinessHoursDaysReqBody,
+    EditProductReqBody,
     EditProductsReqBody,
 )
 from ..dto import StoreProfileDto, StoreProfileCreatedDto
@@ -386,18 +387,22 @@ def emit_event_edit_products(
     rpc_hdlr,
     remove_all: bool = False,
     s_currency: Optional[str] = None,
-    updating: Optional[List[StoreProductAvailable]] = None,
-    creating: Optional[List[StoreProductAvailable]] = None,
-    deleting: Optional[dict] = None,
+    updating: Optional[List[EditProductReqBody]] = None,
+    creating: Optional[List[EditProductReqBody]] = None,
+    deleting: Optional[Dict] = None,
 ):
     # currently this service uses server-side timezone
-    # TODO, switch to the time zones provided from client if required
-    def convertor(obj):
+    # TODO, switch to UTC or time zone specified by client if required
+    def convertor(req: EditProductReqBody):
         return {
-            "price": obj.price,
-            "start_after": obj.start_after.astimezone().isoformat(),
-            "end_before": obj.end_before.astimezone().isoformat(),
-            "product_id": obj.product_id,
+            "price": req.base_price,
+            "attributes": {
+                "extra_charge": [r.model_dump() for r in req.attrs_charge],
+                "last_update": req.attribute_lastupdate.astimezone().isoformat(),
+            },
+            "start_after": req.start_after.astimezone().isoformat(),
+            "end_before": req.end_before.astimezone().isoformat(),
+            "product_id": req.product_id,
         }
 
     _updating = map(convertor, updating) if updating else []
@@ -447,23 +452,32 @@ async def edit_products_available(
     user: dict = FastapiDepends(edit_products_authorization),
 ):
     request.validate_products(staff_id=user["profile"])
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
         saved_obj = await _storefront_staff_validity(session, store_id, usr_auth=user)
-        updating_products = await StoreProductAvailable.try_load(
-            session, store_id=saved_obj.id, reqdata=request.root
+        updating_products: List[StoreProductAvailable] = (
+            await StoreProductAvailable.try_load(
+                session, store_id=saved_obj.id, reqdata=request.root
+            )
         )
-        updatelist = StoreProductAvailable.bulk_update(updating_products, request.root)
-        new_products = [
-            StoreProductAvailable(store_id=saved_obj.id, **d.model_dump())
-            for d in request.root
-            if d.product_id not in updatelist
-        ]
-        session.add_all([*new_products])
+        updatelist: Dict[int, EditProductReqBody] = (
+            await StoreProductAvailable.bulk_update(
+                session, updating_products, request.root
+            )
+        )
+        new_products: List[EditProductReqBody] = list(
+            filter(lambda d: d.product_id not in updatelist.keys(), request.root)
+        )
+        product_ms = map(
+            lambda d: StoreProductAvailable.from_req(saved_obj.id, d), new_products
+        )
+
+        session.add_all([*product_ms])
         emit_event_edit_products(
             store_id,
             s_currency=saved_obj.currency.value,
             rpc_hdlr=shared_ctx["order_app_rpc"],
-            updating=updating_products,
+            updating=updatelist.values(),
             creating=new_products,
         )
         try:
@@ -476,6 +490,7 @@ async def edit_products_available(
                 headers={},
                 status_code=FastApiHTTPstatus.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.ERROR)
 
 
 @router.delete(

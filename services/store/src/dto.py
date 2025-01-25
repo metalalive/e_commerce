@@ -1,7 +1,7 @@
 import calendar
 import enum
 from datetime import datetime, time as py_time
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 from typing_extensions import Annotated
 
 from pydantic import (
@@ -9,6 +9,7 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     PositiveInt,
+    NonNegativeInt,
     StringConstraints,
 )
 
@@ -115,3 +116,10 @@ class StoreProfileDto(PydanticBaseModel):
     location: Optional[ShopLocationDto] = None
     staff: Optional[List[StoreStaffDto]] = []
     open_days: Optional[List[BusinessHoursDayDto]] = []
+
+
+class ProductAttrPriceDto(PydanticBaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    label_id: str
+    value: Union[bool, NonNegativeInt, int, str]
+    price: NonNegativeInt  # extra amount to charge

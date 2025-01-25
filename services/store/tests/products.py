@@ -1,5 +1,5 @@
 import random
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import List, Dict, Iterable
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -11,6 +11,7 @@ from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.models.enums.base import AppCodeOptions
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
+from store.validation import EditProductReqBody
 from store.models import StoreProductAvailable
 
 from .common import _saved_obj_gen
@@ -42,13 +43,28 @@ class TestUpdate:
         pass
 
     def _setup_mock_rpc_reply(
-        self, body, timeout_sec=7, status=RpcReplyEvent.status_opt.SUCCESS
+        self, sale_items_d, timeout_sec=7, status=RpcReplyEvent.status_opt.SUCCESS
     ):
-        # TODO, add attributes and last-update fields to test
-        sale_items_d = map(lambda d: {"id_": d["product_id"]}, body)
+        t0 = datetime.now(UTC).replace(microsecond=0).isoformat()
+
+        def _build_reply_attributes(d: Dict) -> Dict:
+            attrs_d = [
+                {
+                    "label": {"id_": "yght9Fx", "name": "developer"},
+                    "value": "environmental",
+                },
+                {"label": {"id_": "j8KhoHs", "name": "trimmed"}, "value": -19},
+                {"label": {"id_": "mviBur8", "name": "flyflee"}, "value": False},
+                {"label": {"id_": "su4vu2p", "name": "traveler"}, "value": 180},
+                {"label": {"id_": "treekey", "name": "censor"}, "value": "wach"},
+                {"label": {"id_": "nvrMor", "name": "speedo"}, "value": 239},
+            ]
+            return {"id_": d["product_id"], "attributes": attrs_d, "last_update": t0}
+
+        msg = list(map(_build_reply_attributes, sale_items_d))
         reply_event = RpcReplyEvent(listener=self, timeout_s=timeout_sec)
         reply_event.resp_body["status"] = status
-        reply_event.resp_body["result"] = {"result": list(sale_items_d)}
+        reply_event.resp_body["result"] = {"result": msg}
         return reply_event
 
     def _setup_base_req_body(
@@ -56,18 +72,20 @@ class TestUpdate:
     ) -> List[Dict]:
         body = [
             {
-                "product_id": p.product_id,
-                "start_after": p.start_after.astimezone().isoformat(),
-                "end_before": p.end_before.astimezone().isoformat(),
-                "price": p.price,
+                "product_id": obj.product_id,
+                "start_after": obj.start_after.astimezone().isoformat(),
+                "end_before": obj.end_before.astimezone().isoformat(),
+                "base_price": obj.base_price,
+                "attrs_charge": obj.attrs_charge,
             }
-            for p in objs
+            for obj in objs
         ]
         if product_avail_gen is not None:
             new_product_d = [next(product_avail_gen) for _ in range(num_new_items)]
             for item in new_product_d:
                 item["start_after"] = item["start_after"].astimezone().isoformat()
                 item["end_before"] = item["end_before"].astimezone().isoformat()
+                item.pop("attrs_last_update")
             body.extend(new_product_d)
         return body
 
@@ -86,8 +104,22 @@ class TestUpdate:
     ):
         obj = await anext(saved_store_objs)
         num_new, num_unmodified = 2, 2
+        updating_products = obj.products[num_unmodified:]
+        updating_products[0].attrs_charge.pop(0)
+        updating_products[0].attrs_charge[0]["price"] -= 1
+        updating_products[1].attrs_charge.pop(1)
+        updating_products[1].attrs_charge[0]["price"] += 1
+        updating_products[2].attrs_charge.pop()
+        updating_products[2].attrs_charge.append(
+            {"label_id": "treekey", "value": "wach", "price": 151}
+        )
+        updating_products[0].base_price += 4
+        updating_products[4].start_after = datetime.now(UTC).replace(microsecond=0)
+        updating_products[4].end_before = updating_products[4].start_after + timedelta(
+            minutes=27
+        )
         body = self._setup_base_req_body(
-            objs=obj.products[num_unmodified:],
+            objs=updating_products,
             product_avail_gen=product_avail_data,
             num_new_items=num_new,
         )
@@ -128,7 +160,7 @@ class TestUpdate:
         for item in actual_value:
             item.pop("_sa_instance_state", None)
             item.pop("store_id", None)
-            item.pop("product_type", None)
+            item.pop("attrs_last_update", None)
             item["start_after"] = item["start_after"].astimezone().isoformat()
             item["end_before"] = item["end_before"].astimezone().isoformat()
         assert expect_value == actual_value
@@ -193,20 +225,22 @@ class TestUpdate:
 
         # subcase 1
         expect_store_id, num_new, num_unmodified = 2345, 3, 2
-        arg_creating = list(
-            map(
-                lambda d: StoreProductAvailable(**next(product_avail_data)),
-                range(num_new),
-            )
-        )
-        expect_creating = self._setup_base_req_body(
-            objs=arg_creating, product_avail_gen=None, num_new_items=num_new
-        )
-        obj = await anext(saved_store_objs)
-        arg_updating = obj.products[:num_unmodified]
-        expect_updating = self._setup_base_req_body(
-            objs=arg_updating, product_avail_gen=None, num_new_items=num_unmodified
-        )
+
+        def gen_req_body(_) -> EditProductReqBody:
+            raw = next(product_avail_data)
+            limit = {
+                "attributes": {
+                    (v["label_id"], v["value"]) for v in raw["attrs_charge"]
+                },
+                "last_update": raw.pop("attrs_last_update"),
+            }
+            d = EditProductReqBody(**raw)
+            d.validate_attr(limit)
+            return d
+
+        expect_creating = list(map(gen_req_body, range(num_new)))
+        expect_updating = list(map(gen_req_body, range(num_unmodified)))
+
         mocked_rpc = MagicMock()
         mocked_rpc_fn = mocked_rpc.update_store_products
         mocked_evt = mocked_rpc_fn.return_value
@@ -218,16 +252,30 @@ class TestUpdate:
         emit_event_edit_products(
             expect_store_id,
             rpc_hdlr=mocked_rpc,
-            updating=arg_updating,
-            creating=arg_creating,
+            updating=expect_updating,
+            creating=expect_creating,
         )
         mocked_rpc_fn.assert_called_once()
         assert expect_store_id == mocked_rpc_fn.call_args.kwargs["s_id"]
         assert not mocked_rpc_fn.call_args.kwargs["rm_all"]
+
+        def do_verify(_expect_updating, _actual_updating, n):
+            for idx in range(n):
+                expect = _expect_updating[idx]
+                actual = _actual_updating[idx]
+                assert expect.product_id == actual["product_id"]
+                assert expect.base_price == actual["price"]
+                attr_exp = expect.attrs_charge[0]
+                attr_act = actual["attributes"]["extra_charge"][0]
+                assert attr_exp.model_dump() == attr_act
+                attr_exp = expect.attrs_charge[-1]
+                attr_act = actual["attributes"]["extra_charge"][-1]
+                assert attr_exp.model_dump() == attr_act
+
         actual_updating = mocked_rpc_fn.call_args.kwargs["updating"]
-        assert expect_updating == actual_updating
-        actual_updating = mocked_rpc_fn.call_args.kwargs["creating"]
-        assert expect_creating == actual_updating
+        do_verify(expect_updating, actual_updating, num_unmodified)
+        actual_creating = mocked_rpc_fn.call_args.kwargs["creating"]
+        do_verify(expect_creating, actual_creating, num_new)
         assert mocked_rpc_fn.call_args.kwargs["deleting"].get("items") is None
         # subcase 2
         expect_deleting = {"items": [2, 3, 4, 5], "pkgs": [16, 79, 203]}

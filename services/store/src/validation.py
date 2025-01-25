@@ -29,6 +29,7 @@ from .dto import (
     StoreStaffDto,
     StoreDtoError,
     BusinessHoursDayDto,
+    ProductAttrPriceDto,
 )
 
 _logger = logging.getLogger(__name__)
@@ -344,19 +345,29 @@ class BusinessHoursDaysReqBody(PydanticRootModel[List[BusinessHoursDayReqBody]])
 
 class EditProductReqBody(PydanticBaseModel):
     product_id: PositiveInt
-    price: PositiveInt
+    base_price: PositiveInt
     start_after: datetime
     end_before: datetime
+    attrs_charge: List[ProductAttrPriceDto]
     model_config = ConfigDict(from_attributes=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        NUM_ATTR_HARD_LIMIT = 20
+        if len(self.attrs_charge) > NUM_ATTR_HARD_LIMIT:
+            err_detail = {"code": "num_attrs_exceed", "limit": NUM_ATTR_HARD_LIMIT}
+            raise FastApiHTTPException(
+                detail=err_detail,
+                headers={},
+                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
+            )
         # MariaDB DATETIME is not allowed to save time zone, currently should be removed.
         # TODO, keep the time zone of invididual product if required
         # self._tz_start_after = self.start_after.tzinfo
         # self._tz_end_before  = self.end_before.tzinfo
         self.start_after = self.start_after.replace(tzinfo=None)
         self.end_before = self.end_before.replace(tzinfo=None)
+        self._attr_last_update = None
         if self.start_after > self.end_before:
             err_detail = {"code": "invalid_time_period"}
             raise FastApiHTTPException(
@@ -364,6 +375,22 @@ class EditProductReqBody(PydanticBaseModel):
                 headers={},
                 status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
             )
+
+    def validate_attr(self, limit: Dict):
+        total_req = {(a.label_id, a.value) for a in self.attrs_charge}
+        diff = total_req - limit["attributes"]
+        if any(diff):
+            err_detail = [{"label_id": d[0], "value": d[1]} for d in diff]
+            raise FastApiHTTPException(
+                detail={"code": "invalid", "field": {"attributes": err_detail}},
+                headers={},
+                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
+            )
+        self._attr_last_update = limit["last_update"]
+
+    @property
+    def attribute_lastupdate(self) -> Optional[datetime]:
+        return self._attr_last_update
 
 
 class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
@@ -382,9 +409,33 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
         return values
 
     def validate_products(self, staff_id: int):
+        # TODO, refactor RPC and relevant validation
         item_ids = list(map(lambda obj: obj.product_id, self.root))
+        cls = type(self)
+        valid_data = cls.refresh_product_attributes(
+            product_ids=item_ids, staff_id=staff_id
+        )
+        diff_item = set(item_ids) - set(valid_data.keys())
+        err_detail = {"code": "invalid", "field": []}
+        if any(diff_item):
+            diff_item = map(lambda v: {"product_id": v}, diff_item)
+            err_detail["field"].extend(list(diff_item))
+        if any(err_detail["field"]):
+            raise FastApiHTTPException(
+                detail=err_detail,
+                headers={},
+                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
+            )
+        for obj in self.root:
+            valid_attris = valid_data.get(obj.product_id)
+            obj.validate_attr(valid_attris)
+
+    @staticmethod
+    def refresh_product_attributes(
+        product_ids: List[int], staff_id: int
+    ) -> Dict[int, Dict]:
         reply_evt = shared_ctx["product_app_rpc"].get_product(
-            item_ids=item_ids, profile=staff_id
+            item_ids=product_ids, profile=staff_id
         )
         if not reply_evt.finished:
             for _ in range(
@@ -402,19 +453,16 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
                 headers={},
                 detail={"app_code": [AppCodeOptions.product.value[0]]},
             )
-        validated_data = rpc_response["result"]["result"]
-        validated_item_ids = set(map(lambda d: d["id_"], validated_data))
-        diff_item = set(item_ids) - validated_item_ids
-        err_detail = {"code": "invalid", "field": []}
-        if any(diff_item):
-            diff_item = map(lambda v: {"product_id": v}, diff_item)
-            err_detail["field"].extend(list(diff_item))
-        if any(err_detail["field"]):
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+        raw = rpc_response["result"]["result"]
+        return {
+            d["id_"]: {
+                "attributes": {
+                    (v["label"]["id_"], v["value"]) for v in d["attributes"]
+                },
+                "last_update": datetime.fromisoformat(d["last_update"]),
+            }
+            for d in raw
+        }
 
 
 ## end of class EditProductsReqBody
