@@ -1,95 +1,36 @@
 import logging
 from datetime import datetime
 from functools import partial
-from typing import Optional, List, Dict, Union
+from typing import List, Dict
 
 from pydantic import (
     BaseModel as PydanticBaseModel,
     RootModel as PydanticRootModel,
     PositiveInt,
     field_validator,
-    SkipValidation,
     ConfigDict,
 )
-from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
 
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
-from .shared import shared_ctx
-from .models import (
-    StoreEmail,
-    StorePhone,
-    OutletLocation,
-    StoreCurrency,
-    StoreProfile,
-)
 from .dto import (
-    StoreEmailDto,
-    StorePhoneDto,
-    ShopLocationDto,
+    NewStoreProfileDto,
     StoreStaffDto,
     StoreDtoError,
     BusinessHoursDayDto,
-    ProductAttrPriceDto,
+    EditProductDto,
+    QuotaMatCode,
 )
 
 _logger = logging.getLogger(__name__)
 
 
-class StoreStaffReqBody(StoreStaffDto):
-    def __init__(self, *args, **kwargs):
-        try:
-            super().__init__(*args, **kwargs)
-        except StoreDtoError as e:
-            raise FastApiHTTPException(
-                detail=e.detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
-
-
-class BusinessHoursDayReqBody(BusinessHoursDayDto):
-    def __init__(self, *args, **kwargs):
-        try:
-            super().__init__(*args, **kwargs)
-        except StoreDtoError as e:
-            raise FastApiHTTPException(
-                detail=e.detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
-
-
-class NewStoreProfileReqBody(PydanticBaseModel):
-    label: str
-    supervisor_id: PositiveInt
-    currency: StoreCurrency
-    active: Optional[bool] = False
-    emails: Optional[List[StoreEmailDto]] = []
-    phones: Optional[List[StorePhoneDto]] = []
-    location: Optional[ShopLocationDto] = None
-    quota: SkipValidation[Optional[Dict]] = (
-        None  # should be updated by `NewStoreProfilesReqBody`
-    )
-
-    def _pydantic_to_sqlalchemy(item):
-        item = item.model_dump()  # convert to pure `dict` type
-        item.pop("quota")
-        item["emails"] = list(map(lambda d: StoreEmail(**d), item.get("emails", [])))
-        item["phones"] = list(map(lambda d: StorePhone(**d), item.get("phones", [])))
-        if item.get("location"):
-            item["location"] = OutletLocation(**item["location"])
-        obj = StoreProfile(**item)
-        return obj
-
-
-def _get_supervisor_auth(prof_ids):  # TODO, async operation
-    reply_evt = shared_ctx["auth_app_rpc"].get_profile(
+def _get_supervisor_auth(prof_ids, shr_ctx):  # TODO, async operation
+    reply_evt = shr_ctx["auth_app_rpc"].get_profile(
         ids=prof_ids, fields=["id", "auth", "quota"]
     )
+    num_entry = shr_ctx["settings"].NUM_RETRY_RPC_RESPONSE
     if not reply_evt.finished:
-        for _ in range(
-            shared_ctx["settings"].NUM_RETRY_RPC_RESPONSE
-        ):  # TODO, async task
+        for _ in range(num_entry):  # TODO, async task
             reply_evt.refresh(retry=False, timeout=0.5, num_of_msgs_fetch=1)
             if reply_evt.finished:
                 break
@@ -97,30 +38,34 @@ def _get_supervisor_auth(prof_ids):  # TODO, async operation
                 pass
     rpc_response = reply_evt.result
     if rpc_response["status"] != reply_evt.status_opt.SUCCESS:
-        raise FastApiHTTPException(
-            status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,
-            headers={},
-            detail={"app_code": [AppCodeOptions.user_management.value[0]]},
+        raise shr_ctx.rpc_error(
+            detail={"app_code": [AppCodeOptions.user_management.value[0]]}
         )
     return rpc_response["result"]
 
 
-class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
+class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileDto]]):
     @field_validator("root")  # map to default field name in the root-model
     def validate_list_items(cls, values):
         assert values and any(values), "Empty request body Not Allowed"
-        req_prof_ids = list(set(map(lambda obj: obj.supervisor_id, values)))
-        supervisor_verified = _get_supervisor_auth(req_prof_ids)
-        quota_arrangement = cls._estimate_quota(values, supervisor_verified)
-        cls._contact_common_quota_check(
-            values, quota_arrangement, label="emails", mat_model_cls=StoreEmail
-        )
-        cls._contact_common_quota_check(
-            values, quota_arrangement, label="phones", mat_model_cls=StorePhone
-        )
         return values
 
-    def _estimate_quota(values, supervisor_verified):
+    def check_existence(self, shr_ctx):
+        req_prof_ids = self.supervisor_profile_ids()
+        supervisor_verified = _get_supervisor_auth(req_prof_ids, shr_ctx)
+        quota_arrangement = self._estimate_quota(supervisor_verified)
+        self._contact_common_quota_check(
+            quota_arrangement,
+            label="emails",
+            mat_code=QuotaMatCode.MAX_NUM_EMAILS,
+        )
+        self._contact_common_quota_check(
+            quota_arrangement,
+            label="phones",
+            mat_code=QuotaMatCode.MAX_NUM_PHONES,
+        )
+
+    def _estimate_quota(self, supervisor_verified):
         supervisor_verified = {item["id"]: item for item in supervisor_verified}
         out = {}
 
@@ -132,27 +77,21 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
                 item.quota = out[item.supervisor_id]
             return err
 
-        err_content = list(map(_fn, values))
+        err_content = list(map(_fn, self.root))
         if any(err_content):
-            raise FastApiHTTPException(
-                detail=err_content,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+            raise StoreDtoError(detail=err_content, perm=False)
         return out
 
-    @classmethod
     def _contact_common_quota_check(
-        cls,
-        req,
+        self,
         quota_arrangement: dict,
         label: str,
-        mat_model_cls: Union[StoreEmail, StorePhone],
+        mat_code: QuotaMatCode,
     ):
         def _inner_chk(item):
             err = {}
             num_new_items = len(getattr(item, label))
-            max_limit = quota_arrangement[item.supervisor_id][mat_model_cls]
+            max_limit = quota_arrangement[item.supervisor_id][mat_code]
             if max_limit < num_new_items:
                 err["supervisor_id"] = item.supervisor_id
                 err[label] = {
@@ -162,24 +101,16 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
                 }
             return err
 
-        err_content = list(map(_inner_chk, req))
+        err_content = list(map(_inner_chk, self.root))
         if any(err_content):
-            raise FastApiHTTPException(
-                detail=err_content,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN,
-            )
+            raise StoreDtoError(detail=err_content, perm=True)
 
-    async def validate_quota(self, session):
+    def supervisor_profile_ids(self) -> List[int]:
+        return list(map(lambda obj: obj.supervisor_id, self.root))
+
+    def validate_quota(self, quota_chk_result: Dict):
         # quota check, for current user who adds these new items
-        new_stores = list(
-            map(NewStoreProfileReqBody._pydantic_to_sqlalchemy, self.root)
-        )
-        profile_ids = list(map(lambda obj: obj.supervisor_id, self.root))
         quota_arrangement = {obj.supervisor_id: obj.quota for obj in self.root}
-        quota_chk_result = await StoreProfile.quota_stats(
-            new_stores, session=session, target_ids=profile_ids
-        )
 
         def _inner_chk(item):
             err = {}
@@ -188,7 +119,9 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
             ]
             num_new_items = quota_chk_result[item.supervisor_id]["num_new_items"]
             curr_used = num_existing_items + num_new_items
-            max_limit = quota_arrangement[item.supervisor_id][StoreProfile]
+            max_limit = quota_arrangement[item.supervisor_id][
+                QuotaMatCode.MAX_NUM_STORES
+            ]
             if max_limit < curr_used:
                 err["supervisor_id"] = item.supervisor_id
                 err["store_profile"] = {
@@ -201,33 +134,18 @@ class NewStoreProfilesReqBody(PydanticRootModel[List[NewStoreProfileReqBody]]):
 
         err_content = list(map(_inner_chk, self.root))
         if any(err_content):
-            raise FastApiHTTPException(
-                detail=err_content,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN,
-            )
-        return new_stores
+            raise StoreDtoError(detail=err_content, perm=True)
 
 
 ## end of class NewStoreProfilesReqBody()
 
 
-class ExistingStoreProfileReqBody(PydanticBaseModel):
-    label: str
-    active: bool
-    currency: StoreCurrency
-    emails: Optional[List[StoreEmailDto]] = []
-    phones: Optional[List[StorePhoneDto]] = []
-    location: Optional[ShopLocationDto] = None
-
-
 class StoreSupervisorReqBody(PydanticBaseModel):
     supervisor_id: PositiveInt  # for new supervisor
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def check_existence(self, shr_ctx):
         req_prof_id = self.supervisor_id
-        supervisor_verified = _get_supervisor_auth([req_prof_id])
+        supervisor_verified = _get_supervisor_auth([req_prof_id], shr_ctx)
         quota_arrangement = self._estimate_quota(supervisor_verified, req_prof_id)
         self.metadata = {"quota_arrangement": quota_arrangement}
 
@@ -245,24 +163,17 @@ class StoreSupervisorReqBody(PydanticBaseModel):
             supervisor_verified, req_prof_id=req_prof_id, out=out
         )
         if any(err_detail):
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+            raise StoreDtoError(detail=err_detail, perm=False)
         return out
 
-    async def validate_quota(self, session):
+    def validate_quota(self, quota_chk_result):
         prof_id = self.supervisor_id
         quota_arrangement = self.metadata["quota_arrangement"]
-        quota_chk_result = await StoreProfile.quota_stats(
-            [], session=session, target_ids=[prof_id]
-        )
         err = {}
         num_existing_items = quota_chk_result[prof_id]["num_existing_items"]
         num_new_items = 1
         curr_used = num_existing_items + num_new_items
-        max_limit = quota_arrangement[prof_id][StoreProfile]
+        max_limit = quota_arrangement[prof_id][QuotaMatCode.MAX_NUM_STORES]
         if max_limit < curr_used:
             err["supervisor_id"] = prof_id
             err["store_profile"] = {
@@ -272,43 +183,32 @@ class StoreSupervisorReqBody(PydanticBaseModel):
                 "num_existing_items": num_existing_items,
             }
         if any(err):
-            raise FastApiHTTPException(
-                detail=err, headers={}, status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN
-            )
+            raise StoreDtoError(detail=err, perm=True)
 
 
-class StoreStaffsReqBody(PydanticRootModel[List[StoreStaffReqBody]]):
+class StoreStaffsReqBody(PydanticRootModel[List[StoreStaffDto]]):
     @field_validator("root")
     def validate_list_items(cls, values):
         staff_ids = set(map(lambda obj: obj.staff_id, values))
         if len(staff_ids) != len(values):
             err_detail = {"code": "duplicate", "field": ["staff_id"]}
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+            raise StoreDtoError(detail=err_detail, perm=False)
         return values
 
-    def validate_staff(self, supervisor_id: int):
+    def validate_staff(self, shr_ctx, supervisor_id: int):
         staff_ids = list(map(lambda obj: obj.staff_id, self.root))
-        reply_evt = shared_ctx["auth_app_rpc"].profile_descendant_validity(
+        reply_evt = shr_ctx["auth_app_rpc"].profile_descendant_validity(
             asc=supervisor_id, descs=staff_ids
         )
+        num_retry = shr_ctx["settings"].NUM_RETRY_RPC_RESPONSE
         if not reply_evt.finished:
-            for _ in range(
-                shared_ctx["settings"].NUM_RETRY_RPC_RESPONSE
-            ):  # TODO, async task
+            for _ in range(num_retry):  # TODO, async task
                 reply_evt.refresh(retry=False, timeout=0.4, num_of_msgs_fetch=1)
                 if reply_evt.finished:
                     break
-                else:
-                    pass
         rpc_response = reply_evt.result
         if rpc_response["status"] != reply_evt.status_opt.SUCCESS:
-            raise FastApiHTTPException(
-                status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,
-                headers={},
+            raise shr_ctx.rpc_error(
                 detail={"app_code": [AppCodeOptions.user_management.value[0]]},
             )
         validated_staff_ids = rpc_response["result"]
@@ -319,15 +219,11 @@ class StoreStaffsReqBody(PydanticRootModel[List[StoreStaffReqBody]]):
                 "supervisor_id": supervisor_id,
                 "staff_ids": list(diff),
             }
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+            raise StoreDtoError(detail=err_detail, perm=False)
         return validated_staff_ids
 
 
-class BusinessHoursDaysReqBody(PydanticRootModel[List[BusinessHoursDayReqBody]]):
+class BusinessHoursDaysReqBody(PydanticRootModel[List[BusinessHoursDayDto]]):
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("root")
@@ -335,65 +231,11 @@ class BusinessHoursDaysReqBody(PydanticRootModel[List[BusinessHoursDayReqBody]])
         days = set(map(lambda obj: obj.day, values))
         if len(days) != len(values):
             err_detail = {"code": "duplicate", "field": ["day"]}
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+            raise StoreDtoError(detail=err_detail, perm=False)
         return values
 
 
-class EditProductReqBody(PydanticBaseModel):
-    product_id: PositiveInt
-    base_price: PositiveInt
-    start_after: datetime
-    end_before: datetime
-    attrs_charge: List[ProductAttrPriceDto]
-    model_config = ConfigDict(from_attributes=True)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        NUM_ATTR_HARD_LIMIT = 20
-        if len(self.attrs_charge) > NUM_ATTR_HARD_LIMIT:
-            err_detail = {"code": "num_attrs_exceed", "limit": NUM_ATTR_HARD_LIMIT}
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
-        # MariaDB DATETIME is not allowed to save time zone, currently should be removed.
-        # TODO, keep the time zone of invididual product if required
-        # self._tz_start_after = self.start_after.tzinfo
-        # self._tz_end_before  = self.end_before.tzinfo
-        self.start_after = self.start_after.replace(tzinfo=None)
-        self.end_before = self.end_before.replace(tzinfo=None)
-        self._attr_last_update = None
-        if self.start_after > self.end_before:
-            err_detail = {"code": "invalid_time_period"}
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
-
-    def validate_attr(self, limit: Dict):
-        total_req = {(a.label_id, a.value) for a in self.attrs_charge}
-        diff = total_req - limit["attributes"]
-        if any(diff):
-            err_detail = [{"label_id": d[0], "value": d[1]} for d in diff]
-            raise FastApiHTTPException(
-                detail={"code": "invalid", "field": {"attributes": err_detail}},
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
-        self._attr_last_update = limit["last_update"]
-
-    @property
-    def attribute_lastupdate(self) -> Optional[datetime]:
-        return self._attr_last_update
-
-
-class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
+class EditProductsReqBody(PydanticRootModel[List[EditProductDto]]):
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("root")
@@ -401,19 +243,17 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
         prod_ids = set(map(lambda obj: obj.product_id, values))
         if len(prod_ids) != len(values):
             err_detail = {"code": "duplicate", "field": ["product_id"]}
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+            raise StoreDtoError(detail=err_detail, perm=False)
         return values
 
-    def validate_products(self, staff_id: int):
+    def validate_products(self, shr_ctx, staff_id: int):
         # TODO, refactor RPC and relevant validation
         item_ids = list(map(lambda obj: obj.product_id, self.root))
         cls = type(self)
         valid_data = cls.refresh_product_attributes(
-            product_ids=item_ids, staff_id=staff_id
+            shr_ctx,
+            product_ids=item_ids,
+            staff_id=staff_id,
         )
         diff_item = set(item_ids) - set(valid_data.keys())
         err_detail = {"code": "invalid", "field": []}
@@ -421,37 +261,28 @@ class EditProductsReqBody(PydanticRootModel[List[EditProductReqBody]]):
             diff_item = map(lambda v: {"product_id": v}, diff_item)
             err_detail["field"].extend(list(diff_item))
         if any(err_detail["field"]):
-            raise FastApiHTTPException(
-                detail=err_detail,
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+            raise StoreDtoError(detail=err_detail, perm=False)
         for obj in self.root:
             valid_attris = valid_data.get(obj.product_id)
             obj.validate_attr(valid_attris)
 
     @staticmethod
     def refresh_product_attributes(
-        product_ids: List[int], staff_id: int
+        shr_ctx, product_ids: List[int], staff_id: int
     ) -> Dict[int, Dict]:
-        reply_evt = shared_ctx["product_app_rpc"].get_product(
+        reply_evt = shr_ctx["product_app_rpc"].get_product(
             item_ids=product_ids, profile=staff_id
         )
+        num_retry = shr_ctx["settings"].NUM_RETRY_RPC_RESPONSE
         if not reply_evt.finished:
-            for _ in range(
-                shared_ctx["settings"].NUM_RETRY_RPC_RESPONSE
-            ):  # TODO, async task
+            for _ in range(num_retry):  # TODO, async task
                 reply_evt.refresh(retry=False, timeout=0.4, num_of_msgs_fetch=1)
                 if reply_evt.finished:
                     break
-                else:
-                    pass
         rpc_response = reply_evt.result
         if rpc_response["status"] != reply_evt.status_opt.SUCCESS:
-            raise FastApiHTTPException(
-                status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,
-                headers={},
-                detail={"app_code": [AppCodeOptions.product.value[0]]},
+            raise shr_ctx.rpc_error(
+                detail={"app_code": [AppCodeOptions.product.value[0]]}
             )
         raw = rpc_response["result"]["result"]
         return {
@@ -481,18 +312,22 @@ def _get_quota_arrangement_helper(
             log_args = ["action", "duplicate-quota", "req_prof_id", str(req_prof_id)]
             _logger.warning(None, *log_args)
         else:
-            quota_material_models = (StoreProfile, StoreEmail, StorePhone)
+            quota_material_codes = (
+                QuotaMatCode.MAX_NUM_STORES,
+                QuotaMatCode.MAX_NUM_EMAILS,
+                QuotaMatCode.MAX_NUM_PHONES,
+            )
             out[req_prof_id] = {}
             quota = item.get("quota", [])
 
-            def filter_fn(d, model_cls) -> bool:
-                return d["mat_code"] == model_cls.quota_material.value
+            def filter_fn(d, given_code) -> bool:
+                return d["mat_code"] == given_code.value
 
-            for model_cls in quota_material_models:
-                bound_filter_fn = partial(filter_fn, model_cls=model_cls)
+            for code in quota_material_codes:
+                bound_filter_fn = partial(filter_fn, given_code=code)
                 filtered = tuple(filter(bound_filter_fn, quota))
                 maxnum = filtered[0]["maxnum"] if any(filtered) else 0
-                out[req_prof_id][model_cls] = maxnum
+                out[req_prof_id][code] = maxnum
     else:
         err_detail.append("non-existent user profile")
     err_detail = {"supervisor_id": err_detail} if any(err_detail) else {}

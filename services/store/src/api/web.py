@@ -12,7 +12,7 @@ from jwt.exceptions import (
     InvalidKeyError,
     PyJWKClientConnectionError,
 )
-from fastapi import APIRouter, Depends as FastapiDepends
+from fastapi import APIRouter, Depends as FastapiDepends, Request
 from fastapi import HTTPException as FastApiHTTPException, status as FastApiHTTPstatus
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from pydantic import PositiveInt
@@ -31,17 +31,21 @@ from ..models import (
     HourOfOperation,
     StoreProductAvailable,
 )
-from ..shared import shared_ctx
+from ..dto import (
+    StoreDtoError,
+    StoreProfileDto,
+    StoreProfileCreatedDto,
+    EditProductDto,
+    EditExistingStoreProfileDto,
+)
 from ..validation import (
     NewStoreProfilesReqBody,
-    ExistingStoreProfileReqBody,
     StoreSupervisorReqBody,
     StoreStaffsReqBody,
     BusinessHoursDaysReqBody,
-    EditProductReqBody,
     EditProductsReqBody,
 )
-from ..dto import StoreProfileDto, StoreProfileCreatedDto
+from ..shared import shared_ctx, AppRpcError
 
 app_code = AppCodeOptions.store.value[0]
 
@@ -147,6 +151,25 @@ edit_products_authorization = Authorization(
 )
 
 
+def request_error_handler(request: Request, exc: StoreDtoError):
+    if exc.permission:
+        status = FastApiHTTPstatus.HTTP_403_FORBIDDEN
+    else:
+        status = FastApiHTTPstatus.HTTP_400_BAD_REQUEST
+    raise FastApiHTTPException(
+        detail=exc.detail, headers={}, status_code=status
+    )  # alternatively , fastAPI build-in JSONResponse can also be applied,
+    # if you dont need to customize response body,
+
+
+def rpc_error_handler(request: Request, exc: AppRpcError):
+    raise FastApiHTTPException(
+        detail=exc.detail,
+        headers={},
+        status_code=FastApiHTTPstatus.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
+
 async def _storefront_existence_validity(
     session: AsyncSession,
     store_id: PositiveInt,
@@ -216,8 +239,14 @@ async def add_profiles(
     request: NewStoreProfilesReqBody,
     user: dict = FastapiDepends(add_profile_authorization),
 ):
+    request.check_existence(shared_ctx)
+    profile_ids = request.supervisor_profile_ids()
+    sa_new_stores = list(map(StoreProfile.from_req, request.root))
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
-        sa_new_stores = await request.validate_quota(session)
+        quota_chk_result = await StoreProfile.quota_stats(
+            sa_new_stores, session=session, target_ids=profile_ids
+        )
+        request.validate_quota(quota_chk_result)
         await StoreProfile.bulk_insert(objs=sa_new_stores, session=session)
         for obj in sa_new_stores:
             await session.refresh(obj, attribute_names=["id", "supervisor_id"])
@@ -235,7 +264,7 @@ async def add_profiles(
 @router.patch("/profile/{store_id}")
 async def edit_profile(
     store_id: PositiveInt,
-    request: ExistingStoreProfileReqBody,
+    request: EditExistingStoreProfileDto,
     user: dict = FastapiDepends(edit_profile_authorization),
 ):
     # part of authorization has to be handled at here because it requires all these arguments
@@ -247,11 +276,7 @@ async def edit_profile(
             num_new_items,
             max_limit,
         )
-        raise FastApiHTTPException(
-            detail={"emails": [err_msg]},
-            headers={},
-            status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN,
-        )
+        raise StoreDtoError(detail={"emails": [err_msg]}, perm=True)
     num_new_items = len(request.phones)
     max_limit = quota_arrangement.get(StorePhone.quota_material.value, 0)
     if max_limit < num_new_items:
@@ -259,11 +284,7 @@ async def edit_profile(
             num_new_items,
             max_limit,
         )
-        raise FastApiHTTPException(
-            detail={"phones": [err_msg]},
-            headers={},
-            status_code=FastApiHTTPstatus.HTTP_403_FORBIDDEN,
-        )
+        raise StoreDtoError(detail={"phones": [err_msg]}, perm=True)
     # TODO, figure out better way to authorize with database connection
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
         related_attributes = [
@@ -285,8 +306,12 @@ async def switch_supervisor(
     request: StoreSupervisorReqBody,
     user: dict = FastapiDepends(switch_supervisor_authorization),
 ):
+    request.check_existence(shared_ctx)
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
-        await request.validate_quota(session)
+        quota_chk_result = await StoreProfile.quota_stats(
+            [], session=session, target_ids=[request.supervisor_id]
+        )
+        request.validate_quota(quota_chk_result)
         saved_obj = await _storefront_supervisor_validity(
             session, store_id, usr_auth=user
         )
@@ -302,17 +327,9 @@ async def delete_profile(
     try:
         ids = list(map(int, ids.split(",")))
         if len(ids) == 0:
-            raise FastApiHTTPException(
-                detail={"ids": "empty"},
-                headers={},
-                status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-            )
+            raise StoreDtoError(detail={"ids": "empty"}, perm=False)
     except ValueError:
-        raise FastApiHTTPException(
-            detail={"ids": "invalid-id"},
-            headers={},
-            status_code=FastApiHTTPstatus.HTTP_400_BAD_REQUEST,
-        )
+        raise StoreDtoError(detail={"ids": "invalid-id"}, perm=False)
     async with AsyncSession(bind=shared_ctx["db_engine"]) as _session:
         # TODO, staff validity check if any staff member of the shop exists
         stmt = SqlAlDelete(StoreProfile).where(StoreProfile.id.in_(ids))
@@ -337,7 +354,7 @@ async def edit_staff(
     request: StoreStaffsReqBody,
     user: dict = FastapiDepends(edit_profile_authorization),
 ):
-    request.validate_staff(supervisor_id=user["profile"])
+    request.validate_staff(shared_ctx, supervisor_id=user["profile"])
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
         saved_obj = await _storefront_supervisor_validity(
             session, store_id, usr_auth=user, eager_load_columns=[StoreProfile.staff]
@@ -387,13 +404,13 @@ def emit_event_edit_products(
     rpc_hdlr,
     remove_all: bool = False,
     s_currency: Optional[str] = None,
-    updating: Optional[List[EditProductReqBody]] = None,
-    creating: Optional[List[EditProductReqBody]] = None,
+    updating: Optional[List[EditProductDto]] = None,
+    creating: Optional[List[EditProductDto]] = None,
     deleting: Optional[Dict] = None,
 ):
     # currently this service uses server-side timezone
     # TODO, switch to UTC or time zone specified by client if required
-    def convertor(req: EditProductReqBody):
+    def convertor(req: EditProductDto):
         return {
             "price": req.base_price,
             "attributes": {
@@ -451,7 +468,7 @@ async def edit_products_available(
     request: EditProductsReqBody,
     user: dict = FastapiDepends(edit_products_authorization),
 ):
-    request.validate_products(staff_id=user["profile"])
+    request.validate_products(shared_ctx, staff_id=user["profile"])
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     async with AsyncSession(bind=shared_ctx["db_engine"]) as session:
         saved_obj = await _storefront_staff_validity(session, store_id, usr_auth=user)
@@ -460,12 +477,10 @@ async def edit_products_available(
                 session, store_id=saved_obj.id, reqdata=request.root
             )
         )
-        updatelist: Dict[int, EditProductReqBody] = (
-            await StoreProductAvailable.bulk_update(
-                session, updating_products, request.root
-            )
+        updatelist: Dict[int, EditProductDto] = await StoreProductAvailable.bulk_update(
+            session, updating_products, request.root
         )
-        new_products: List[EditProductReqBody] = list(
+        new_products: List[EditProductDto] = list(
             filter(lambda d: d.product_id not in updatelist.keys(), request.root)
         )
         product_ms = map(

@@ -1,6 +1,7 @@
 import os
 import logging
 
+from collections import UserDict
 from importlib import import_module
 from typing import Optional, Dict
 
@@ -26,7 +27,62 @@ cfg_mod_path = os.getenv(
 )
 
 _settings = import_module(cfg_mod_path)
-shared_ctx = {"settings": _settings}
+
+
+class AppRpcError(Exception):
+    def __init__(self, detail: Dict):
+        self.detail = detail
+
+
+class AppSharedContext(UserDict):
+    async def init(self):
+        settings = self["settings"]
+        data = {
+            "auth_app_rpc": RPCproxy(
+                dst_app_name="user_management",
+                src_app_name="store",
+                srv_basepath=str(settings.SYS_BASE_PATH),
+            ),
+            "product_app_rpc": RPCproxy(
+                dst_app_name="product",
+                src_app_name="store",
+                srv_basepath=str(settings.SYS_BASE_PATH),
+            ),
+            "order_app_rpc": RPCproxy(
+                dst_app_name="order",
+                src_app_name="store",
+                srv_basepath=str(settings.SYS_BASE_PATH),
+            ),
+            "auth_keystore": create_keystore_helper(
+                cfg=settings.KEYSTORE, import_fn=import_module_string
+            ),
+            # the engine is the most efficient when created at module-level of application
+            # , not per function or per request, modify the implementation in this app.
+            "db_engine": _init_db_engine(conn_args={"client_flag": MULTI_STATEMENTS}),
+        }
+        self.update(data)
+
+    async def deinit(self):
+        try:
+            _db_engine = self.pop("db_engine")
+            await _db_engine.dispose()
+        except Exception as e:
+            log_args = ["action", "deinit-db-error-caught", "detail", ",".join(e.args)]
+            _logger.error(None, *log_args)
+        rpcobj = self.pop("order_app_rpc")
+        del rpcobj
+        rpcobj = self.pop("auth_app_rpc")
+        del rpcobj
+        rpcobj = self.pop("product_app_rpc")
+        del rpcobj
+        # note intepreter might not invoke `__del__()` for some cases
+        # e.g. dependency cycle
+
+    def rpc_error(self, detail: Dict) -> AppRpcError:
+        return AppRpcError(detail=detail)
+
+
+shared_ctx = AppSharedContext(settings=_settings)
 
 
 def _init_db_engine(conn_args: Optional[dict] = None):
@@ -50,52 +106,11 @@ def _init_db_engine(conn_args: Optional[dict] = None):
     return sqlalchemy_init_engine(**kwargs)
 
 
-def init_shared_context() -> Dict:
-    data = {
-        "auth_app_rpc": RPCproxy(
-            dst_app_name="user_management",
-            src_app_name="store",
-            srv_basepath=str(_settings.SYS_BASE_PATH),
-        ),
-        "product_app_rpc": RPCproxy(
-            dst_app_name="product",
-            src_app_name="store",
-            srv_basepath=str(_settings.SYS_BASE_PATH),
-        ),
-        "order_app_rpc": RPCproxy(
-            dst_app_name="order",
-            src_app_name="store",
-            srv_basepath=str(_settings.SYS_BASE_PATH),
-        ),
-        "auth_keystore": create_keystore_helper(
-            cfg=_settings.KEYSTORE, import_fn=import_module_string
-        ),
-        # the engine is the most efficient when created at module-level of application
-        # , not per function or per request, modify the implementation in this app.
-        "db_engine": _init_db_engine(conn_args={"client_flag": MULTI_STATEMENTS}),
-    }
-    shared_ctx.update(data)
+async def app_shared_context_start(_app: Optional[FastAPI]):
+    await shared_ctx.init()
+    _logger.debug(None, "action", "init-shared-ctx-done")
     return shared_ctx
 
 
-async def app_shared_context_start(_app: FastAPI):
-    shr_ctx = init_shared_context()
-    _logger.debug(None, "action", "init-shared-ctx-done")
-    return shr_ctx
-
-
 async def app_shared_context_destroy(_app: FastAPI):
-    try:
-        _db_engine = shared_ctx.pop("db_engine")
-        await _db_engine.dispose()
-    except Exception as e:
-        log_args = ["action", "deinit-db-error-caught", "detail", ",".join(e.args)]
-        _logger.error(None, *log_args)
-    rpcobj = shared_ctx.pop("order_app_rpc")
-    del rpcobj
-    rpcobj = shared_ctx.pop("auth_app_rpc")
-    del rpcobj
-    rpcobj = shared_ctx.pop("product_app_rpc")
-    del rpcobj
-    # note intepreter might not invoke `__del__()` for some cases
-    # e.g. dependency cycle
+    await shared_ctx.deinit()

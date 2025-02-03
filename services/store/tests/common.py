@@ -16,14 +16,13 @@ from ecommerce_common.util import import_module_string
 from ecommerce_common.tests.common import KeystoreMixin
 
 from store.db import sqlalchemy_init_engine
-from store.dto import CountryCodeEnum, ProductAttrPriceDto
+from store.dto import CountryCodeEnum, ProductAttrPriceDto, StoreCurrency
 from store.entry.web import app
 from store.models import (
     StoreProfile,
     StoreEmail,
     StorePhone,
     OutletLocation,
-    StoreCurrency,
     StoreStaff,
     StoreProductAvailable,
     EnumWeekDay,

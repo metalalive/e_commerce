@@ -11,7 +11,7 @@ from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.models.enums.base import AppCodeOptions
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
-from store.validation import EditProductReqBody
+from store.validation import EditProductDto
 from store.models import StoreProductAvailable
 
 from .common import _saved_obj_gen
@@ -226,7 +226,7 @@ class TestUpdate:
         # subcase 1
         expect_store_id, num_new, num_unmodified = 2345, 3, 2
 
-        def gen_req_body(_) -> EditProductReqBody:
+        def gen_req_body(_) -> EditProductDto:
             raw = next(product_avail_data)
             limit = {
                 "attributes": {
@@ -234,7 +234,7 @@ class TestUpdate:
                 },
                 "last_update": raw.pop("attrs_last_update"),
             }
-            d = EditProductReqBody(**raw)
+            d = EditProductDto(**raw)
             d.validate_attr(limit)
             return d
 

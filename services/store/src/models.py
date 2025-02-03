@@ -1,4 +1,3 @@
-import enum
 from typing import Dict, Tuple, List, Optional, Self, TYPE_CHECKING
 from sqlalchemy import (
     Column,
@@ -28,26 +27,23 @@ from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER
 
 from ecommerce_common.models.mixins import IdGapNumberFinder
 
-from .dto import EnumWeekDay, CountryCodeEnum
+from .dto import (
+    EnumWeekDay,
+    CountryCodeEnum,
+    QuotaMatCode,
+    EditProductDto,
+    StoreCurrency,
+    NewStoreProfileDto,
+    EditExistingStoreProfileDto,
+)
 
 if TYPE_CHECKING:
     from .validation import (
-        ExistingStoreProfileReqBody,
         StoreStaffsReqBody,
-        EditProductReqBody,
         EditProductsReqBody,
     )
 
 Base = declarative_base()
-
-
-# TODO, make the material code configurable
-class _MatCodeOptions(enum.Enum):
-    MAX_NUM_STORES = 1
-    MAX_NUM_STAFF = 2
-    MAX_NUM_EMAILS = 3
-    MAX_NUM_PHONES = 4
-    MAX_NUM_PRODUCTS = 5
 
 
 class EmailMixin:
@@ -165,17 +161,9 @@ class QuotaStatisticsMixin:
         return result
 
 
-class StoreCurrency(enum.Enum):
-    TWD = "TWD"
-    INR = "INR"
-    IDR = "IDR"
-    THB = "THB"
-    USD = "USD"
-
-
 # note that an organization (e.g. a company) can have several stores (either outlet or online)
 class StoreProfile(Base, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_STORES
+    quota_material = QuotaMatCode.MAX_NUM_STORES
     __tablename__ = "store_profile"
 
     id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True, autoincrement=False)
@@ -218,6 +206,16 @@ class StoreProfile(Base, QuotaStatisticsMixin):
     )
 
     @classmethod
+    def from_req(cls, data: NewStoreProfileDto) -> Self:
+        item = data.model_dump()  # convert to pure `dict` type
+        item.pop("quota")
+        item["emails"] = list(map(lambda d: StoreEmail(**d), item.get("emails", [])))
+        item["phones"] = list(map(lambda d: StorePhone(**d), item.get("phones", [])))
+        if item.get("location"):
+            item["location"] = OutletLocation(**item["location"])
+        return cls(**item)
+
+    @classmethod
     async def quota_stats(cls, objs, session, target_ids):
         return await super().quota_stats(
             objs, session, target_ids, attname="supervisor_id"
@@ -253,7 +251,7 @@ class StoreProfile(Base, QuotaStatisticsMixin):
         _id_gap_finder = AppIdGapNumberFinder(orm_model_class=cls, session=session)
         await _id_gap_finder.async_save_with_rand_id(save_instance_fn, objs=objs)
 
-    def update(self, request: "ExistingStoreProfileReqBody"):
+    def update(self, request: EditExistingStoreProfileDto):
         self.label = request.label
         self.active = request.active
         self.emails.clear()
@@ -289,7 +287,7 @@ class TimePeriodValidMixin:
 
 
 class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_STAFF
+    quota_material = QuotaMatCode.MAX_NUM_STAFF
     __tablename__ = "store_staff"
     store_id = Column(
         MYSQL_INTEGER(unsigned=True),
@@ -334,7 +332,7 @@ class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
 
 
 class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_EMAILS
+    quota_material = QuotaMatCode.MAX_NUM_EMAILS
     __tablename__ = "store_email"
     store_id = Column(
         MYSQL_INTEGER(unsigned=True),
@@ -350,7 +348,7 @@ class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
 
 
 class StorePhone(Base, PhoneMixin, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_PHONES
+    quota_material = QuotaMatCode.MAX_NUM_PHONES
     __tablename__ = "store_phone"
     store_id = Column(
         MYSQL_INTEGER(unsigned=True),
@@ -377,7 +375,7 @@ class OutletLocation(Base, LocationMixin):
 
 
 class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_PRODUCTS
+    quota_material = QuotaMatCode.MAX_NUM_PRODUCTS
     __tablename__ = "store_product_available"
     store_id = Column(
         MYSQL_INTEGER(unsigned=True),
@@ -445,9 +443,9 @@ class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
 
     @classmethod
     async def bulk_update(
-        cls, session, objs: List[Self], reqs: List["EditProductReqBody"]
-    ) -> Dict[int, "EditProductReqBody"]:
-        def _find_matched_item(obj: Self) -> Tuple["EditProductReqBody", Self]:
+        cls, session, objs: List[Self], reqs: List[EditProductDto]
+    ) -> Dict[int, EditProductDto]:
+        def _find_matched_item(obj: Self) -> Tuple[EditProductDto, Self]:
             def check_prod_id(d) -> bool:
                 return d.product_id == obj.product_id
 

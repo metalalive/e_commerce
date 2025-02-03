@@ -12,13 +12,15 @@ from ecommerce_common.logging.util import log_fn_wrapper
 
 from ..dto import StoreProfileDto
 from ..models import StoreProfile
-from ..shared import init_shared_context
+from ..shared import app_shared_context_start
 
 _logger = logging.getLogger(__name__)
 
-_shr_ctx = init_shared_context()
+evloop = asyncio.new_event_loop()
 
-_shr_ctx["evt_loop"] = asyncio.new_event_loop()
+_shr_ctx = evloop.run_until_complete(app_shared_context_start(None))
+
+_shr_ctx["evt_loop"] = evloop
 
 # NOTE:
 # Celery currently does not support async task-handling function,
