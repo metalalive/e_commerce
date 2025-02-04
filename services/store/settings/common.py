@@ -34,6 +34,10 @@ INIT_SHARED_CONTEXT_FN = "store.shared.app_shared_context_start"
 DEINIT_SHARED_CONTEXT_FN = "store.shared.app_shared_context_destroy"
 
 ROUTERS = ["store.api.web.router"]
+EXCEPTION_HANDLERS = [
+    ("store.api.web.request_error_handler", "store.dto.StoreDtoError"),
+    ("store.api.web.rpc_error_handler", "store.shared.AppRpcError"),
+]
 
 KEYSTORE = {
     "keystore": "ecommerce_common.auth.keystore.BaseAuthKeyStore",

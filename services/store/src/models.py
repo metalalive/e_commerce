@@ -1,9 +1,8 @@
-import enum
-from functools import partial
-from typing import List, Optional, Tuple, Self, TYPE_CHECKING
+from typing import Dict, Tuple, List, Optional, Self, TYPE_CHECKING
 from sqlalchemy import (
     Column,
     Boolean,
+    JSON as JsonColType,
     SmallInteger,
     Enum as sqlalchemy_enum,
     String,
@@ -13,12 +12,14 @@ from sqlalchemy import (
     ForeignKey,
     delete as SqlAlDelete,
     select as SqlAlSelect,
+    update as SqlAlUpdate,
     or_ as SqlAlOr,
     and_ as SqlAlAnd,
 )
 from sqlalchemy import func as sa_func, select as sa_select
 from sqlalchemy.event import listens_for
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import declarative_base, relationship, selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.inspection import inspect as sa_inspect
@@ -26,25 +27,23 @@ from sqlalchemy.dialects.mysql import INTEGER as MYSQL_INTEGER
 
 from ecommerce_common.models.mixins import IdGapNumberFinder
 
-from .dto import EnumWeekDay, CountryCodeEnum
+from .dto import (
+    EnumWeekDay,
+    CountryCodeEnum,
+    QuotaMatCode,
+    EditProductDto,
+    StoreCurrency,
+    NewStoreProfileDto,
+    EditExistingStoreProfileDto,
+)
 
 if TYPE_CHECKING:
     from .validation import (
-        ExistingStoreProfileReqBody,
         StoreStaffsReqBody,
         EditProductsReqBody,
     )
 
 Base = declarative_base()
-
-
-# TODO, make the material code configurable
-class _MatCodeOptions(enum.Enum):
-    MAX_NUM_STORES = 1
-    MAX_NUM_STAFF = 2
-    MAX_NUM_EMAILS = 3
-    MAX_NUM_PHONES = 4
-    MAX_NUM_PRODUCTS = 5
 
 
 class EmailMixin:
@@ -162,17 +161,9 @@ class QuotaStatisticsMixin:
         return result
 
 
-class StoreCurrency(enum.Enum):
-    TWD = "TWD"
-    INR = "INR"
-    IDR = "IDR"
-    THB = "THB"
-    USD = "USD"
-
-
 # note that an organization (e.g. a company) can have several stores (either outlet or online)
 class StoreProfile(Base, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_STORES
+    quota_material = QuotaMatCode.MAX_NUM_STORES
     __tablename__ = "store_profile"
 
     id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True, autoincrement=False)
@@ -215,6 +206,16 @@ class StoreProfile(Base, QuotaStatisticsMixin):
     )
 
     @classmethod
+    def from_req(cls, data: NewStoreProfileDto) -> Self:
+        item = data.model_dump()  # convert to pure `dict` type
+        item.pop("quota")
+        item["emails"] = list(map(lambda d: StoreEmail(**d), item.get("emails", [])))
+        item["phones"] = list(map(lambda d: StorePhone(**d), item.get("phones", [])))
+        if item.get("location"):
+            item["location"] = OutletLocation(**item["location"])
+        return cls(**item)
+
+    @classmethod
     async def quota_stats(cls, objs, session, target_ids):
         return await super().quota_stats(
             objs, session, target_ids, attname="supervisor_id"
@@ -250,7 +251,7 @@ class StoreProfile(Base, QuotaStatisticsMixin):
         _id_gap_finder = AppIdGapNumberFinder(orm_model_class=cls, session=session)
         await _id_gap_finder.async_save_with_rand_id(save_instance_fn, objs=objs)
 
-    def update(self, request: "ExistingStoreProfileReqBody"):
+    def update(self, request: EditExistingStoreProfileDto):
         self.label = request.label
         self.active = request.active
         self.emails.clear()
@@ -286,7 +287,7 @@ class TimePeriodValidMixin:
 
 
 class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_STAFF
+    quota_material = QuotaMatCode.MAX_NUM_STAFF
     __tablename__ = "store_staff"
     store_id = Column(
         MYSQL_INTEGER(unsigned=True),
@@ -331,7 +332,7 @@ class StoreStaff(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
 
 
 class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_EMAILS
+    quota_material = QuotaMatCode.MAX_NUM_EMAILS
     __tablename__ = "store_email"
     store_id = Column(
         MYSQL_INTEGER(unsigned=True),
@@ -347,7 +348,7 @@ class StoreEmail(Base, EmailMixin, QuotaStatisticsMixin):
 
 
 class StorePhone(Base, PhoneMixin, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_PHONES
+    quota_material = QuotaMatCode.MAX_NUM_PHONES
     __tablename__ = "store_phone"
     store_id = Column(
         MYSQL_INTEGER(unsigned=True),
@@ -373,83 +374,113 @@ class OutletLocation(Base, LocationMixin):
     store_applied = relationship("StoreProfile", back_populates="location")
 
 
-class SaleableTypeEnum(enum.Enum):
-    ITEM = 1
-    PACKAGE = 2
-
-
 class StoreProductAvailable(Base, TimePeriodValidMixin, QuotaStatisticsMixin):
-    quota_material = _MatCodeOptions.MAX_NUM_PRODUCTS
+    quota_material = QuotaMatCode.MAX_NUM_PRODUCTS
     __tablename__ = "store_product_available"
     store_id = Column(
         MYSQL_INTEGER(unsigned=True),
         ForeignKey("store_profile.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    # following 2 fields come from product app
-    product_type = Column(sqlalchemy_enum(SaleableTypeEnum), primary_key=True)
     product_id = Column(MYSQL_INTEGER(unsigned=True), primary_key=True)
-    price = Column(MYSQL_INTEGER(unsigned=True), nullable=False)
+    base_price = Column(MYSQL_INTEGER(unsigned=True), nullable=False)
     store_applied = relationship("StoreProfile", back_populates="products")
 
-    # NOTE, don't record inventory data at this app, do it in inventory app
+    # currently number of attributes for each saleable item which requires extra amount
+    # should not be large, also there should be small enough hard limit to avoid too much
+    # settings cramming to a single column.
+    attrs_charge = Column(MutableList.as_mutable(JsonColType), nullable=False)
+    attrs_last_update = Column(DateTime, nullable=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __eq__(self, other: Self) -> bool:
+        attrs_update = {
+            (a["label_id"], a["value"], a["price"]) for a in other.attrs_charge
+        }
+        attrs_saved = {
+            (a["label_id"], a["value"], a["price"]) for a in self.attrs_charge
+        }
+        return (
+            (attrs_update == attrs_saved)
+            and (self.store_id == other.store_id)
+            and (self.product_id == other.product_id)
+            and (self.base_price == other.base_price)
+            and (self.start_after == other.start_after)
+            and (self.end_before == other.end_before)
+        )  # skip checking  `attrs_last_update`
+
     @classmethod
-    async def quota_stats(cls, objs, session, target_ids):
+    async def quota_stats(cls, objs: List[Self], session, target_ids):
         return await super().quota_stats(objs, session, target_ids, attname="store_id")
+
+    @classmethod
+    def from_req(cls, store_id: int, req: "EditProductsReqBody") -> Self:
+        return cls(
+            store_id=store_id,
+            product_id=req.product_id,
+            base_price=req.base_price,
+            start_after=req.start_after,
+            end_before=req.end_before,
+            attrs_last_update=req.attribute_lastupdate,
+            attrs_charge=[a.model_dump() for a in req.attrs_charge],
+        )
 
     @classmethod
     async def try_load(
         cls, session, store_id: int, reqdata: List["EditProductsReqBody"]
     ) -> List[Self]:
-        def cond_clause_and(d):
-            return SqlAlAnd(
-                cls.product_type == d.product_type,
-                cls.product_id == d.product_id,
-            )
-
-        product_id_cond = map(cond_clause_and, reqdata)
-        find_product_condition = SqlAlOr(*product_id_cond)
+        product_ids = list(map(lambda d: d.product_id, reqdata))
+        product_cond = cls.product_id.in_(product_ids)
         ## Don't use `saved_obj.products` generated by SQLAlchemy legacy Query API
         ## , instead I use `select` function to query relation fields
-        stmt = (
-            SqlAlSelect(cls)
-            .where(cls.store_id == store_id)
-            .where(find_product_condition)
-        )
+        final_cond = SqlAlAnd(cls.store_id == store_id, product_cond)
+        stmt = SqlAlSelect(cls).where(final_cond)
         resultset = await session.execute(stmt)
         objs = [p[0] for p in resultset]  # tuple
         return objs
 
-    @staticmethod
-    def bulk_update(
-        objs: List[Self], reqdata: List["EditProductsReqBody"]
-    ) -> List[Tuple[enum.Enum, int]]:
-        def _do_update(obj):
+    @classmethod
+    async def bulk_update(
+        cls, session, objs: List[Self], reqs: List[EditProductDto]
+    ) -> Dict[int, EditProductDto]:
+        def _find_matched_item(obj: Self) -> Tuple[EditProductDto, Self]:
             def check_prod_id(d) -> bool:
-                return (
-                    d.product_type is obj.product_type
-                    and d.product_id == obj.product_id
-                )
+                return d.product_id == obj.product_id
 
-            newdata = next(filter(check_prod_id, reqdata))
-            assert newdata is not None
-            obj.price = newdata.price
-            obj.start_after = newdata.start_after
-            obj.end_before = newdata.end_before
-            return (newdata.product_type, newdata.product_id)
+            req = next(filter(check_prod_id, reqs))
+            assert req is not None
+            return (req, obj)
 
-        return list(map(_do_update, objs))
+        def _extract_update_item(req, obj_saved: Self) -> Optional[Dict]:
+            obj_fromreq = cls.from_req(obj_saved.store_id, req)
+            if obj_fromreq != obj_saved:
+                arg = {
+                    "store_id": obj_saved.store_id,
+                    "product_id": obj_saved.product_id,
+                    "base_price": req.base_price,
+                    "start_after": req.start_after,
+                    "end_before": req.end_before,
+                    "attrs_charge": [a.model_dump() for a in req.attrs_charge],
+                    "attrs_last_update": req.attribute_lastupdate,
+                }
+                return arg
+
+        result1 = list(map(_find_matched_item, objs))
+        updating_reqs = [a[0] for a in result1]
+        result2 = [_extract_update_item(req, obj) for req, obj in result1]
+        args = [a for a in result2 if a is not None]
+        _ = await session.execute(SqlAlUpdate(cls), args)
+        return {d.product_id: d for d in updating_reqs}
 
     @classmethod
-    async def bulk_delete(
-        cls, session, store_id: int, item_ids: List[int], pkg_ids: List[int]
-    ) -> int:
-        def _cond_fn(d, t):
-            return SqlAlAnd(cls.product_type == t, cls.product_id == d)
+    async def bulk_delete(cls, session, store_id: int, item_ids: List[int]) -> int:
+        def _cond_fn(d):
+            return SqlAlAnd(True, cls.product_id == d)
 
-        pitem_cond = map(partial(_cond_fn, t=SaleableTypeEnum.ITEM), item_ids)
-        ppkg_cond = map(partial(_cond_fn, t=SaleableTypeEnum.PACKAGE), pkg_ids)
-        find_product_condition = SqlAlOr(*pitem_cond, *ppkg_cond)
+        pitem_cond = map(_cond_fn, item_ids)
+        find_product_condition = SqlAlOr(*pitem_cond)
         stmt = (
             SqlAlDelete(cls)
             .where(cls.store_id == store_id)

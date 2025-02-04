@@ -1,6 +1,7 @@
 import random
 import string
 from datetime import time, datetime, timedelta, UTC
+from typing import Tuple
 
 import pytest
 import pytest_asyncio
@@ -15,18 +16,16 @@ from ecommerce_common.util import import_module_string
 from ecommerce_common.tests.common import KeystoreMixin
 
 from store.db import sqlalchemy_init_engine
-from store.dto import CountryCodeEnum
+from store.dto import CountryCodeEnum, ProductAttrPriceDto, StoreCurrency
 from store.entry.web import app
 from store.models import (
     StoreProfile,
     StoreEmail,
     StorePhone,
     OutletLocation,
-    StoreCurrency,
     StoreStaff,
     StoreProductAvailable,
     EnumWeekDay,
-    SaleableTypeEnum,
 )
 
 
@@ -88,7 +87,7 @@ async def clean_test_data(conn, metadatas):
 # all fixtures / test cases require this fixture, set `autouse` to `True`
 # reference :
 # https://docs.sqlalchemy.org/en/14/orm/extensions/asyncio.html#using-multiple-asyncio-event-loops
-@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="function", loop_scope="session", autouse=True)
 async def session_for_test(db_engine_resource):
     async with db_engine_resource.connect() as conn:
         try:
@@ -243,20 +242,31 @@ def staff_data():
 
 
 def _product_avail_data_gen():
-    sale_types = [opt for opt in SaleableTypeEnum]
     base_range = 10
     price_range = 10000
     product_id_start = 1
+    attrs_charge_raw = [
+        ("yght9Fx", "environmental", 29),
+        ("j8KhoHs", -19, 39),
+        ("mviBur8", False, 49),
+        ("su4vu2p", 180, 59),
+    ]
+
+    def gen_attr_price(d: Tuple) -> ProductAttrPriceDto:
+        m = ProductAttrPriceDto(label_id=d[0], value=d[1], price=d[2])
+        return m.model_dump()
+
     while True:
         product_id_end = product_id_start + base_range
         start_after, end_before = _gen_time_period()
         new_data = {
-            "product_type": random.choice(sale_types),
             # AppIdGapNumberFinder.MAX_GAP_VALUE
             "product_id": random.randrange(product_id_start, product_id_end),
             "start_after": start_after,
             "end_before": end_before,
-            "price": random.randrange(0, price_range),
+            "base_price": random.randrange(0, price_range),
+            "attrs_charge": list(map(gen_attr_price, attrs_charge_raw)),
+            "attrs_last_update": datetime.now(UTC).replace(microsecond=0),
         }
         yield new_data
         product_id_start += base_range
@@ -288,7 +298,7 @@ async def _saved_obj_gen(
     num_emails_per_store=2,
     num_phones_per_store=3,
     num_staff_per_store=4,
-    num_products_per_store=5,
+    num_products_per_store=9,
 ):
     _objs = []
     while True:

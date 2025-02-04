@@ -1,6 +1,7 @@
 import os
 from importlib import import_module
 from contextlib import asynccontextmanager
+from typing import Callable, Tuple
 
 app_setting_path = os.environ["APP_SETTINGS"]
 settings = import_module(app_setting_path)
@@ -35,8 +36,16 @@ async def toplvl_lifespan_cb(app: FastAPI):
     await fn(app)
 
 
+def load_exc_hdlr(raw: Tuple[str, str]) -> Tuple[Exception, Callable]:
+    path_hdlr, path_exc = raw
+    hdlr = import_module_string(dotted_path=path_hdlr)
+    exc_cls = import_module_string(dotted_path=path_exc)
+    return (exc_cls, hdlr)
+
+
 def _init_app(_setting):
-    out = FastAPI(lifespan=toplvl_lifespan_cb)
+    exc_hdlrs = dict(map(load_exc_hdlr, _setting.EXCEPTION_HANDLERS))
+    out = FastAPI(lifespan=toplvl_lifespan_cb, exception_handlers=exc_hdlrs)
     for path in _setting.ROUTERS:
         router = import_module_string(dotted_path=path)
         out.include_router(router)

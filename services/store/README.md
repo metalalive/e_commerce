@@ -49,6 +49,11 @@ pipenv run pip uninstall my-c-extention-lib
 
 ### Database Migration
 ```bash
+
+// generate migration script template (not stable)
+APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini  revision --autogenerate \
+    --rev-id <VERSION_NUMBER>  --depends-on  <PREVIOUS_VERSION_NUMBER>  -m "whatever_message"
+
 // update
 APP_SETTINGS="settings.test" pipenv run alembic --config alembic_app.ini upgrade  <VERSION_NUMBER>
 

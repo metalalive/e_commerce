@@ -9,7 +9,8 @@ from ecommerce_common.models.constants import ROLE_ID_STAFF
 from ecommerce_common.models.enums.base import AppCodeOptions, ActivationStatus
 from ecommerce_common.util.messaging.rpc import RpcReplyEvent
 
-from store.models import StoreProfile, StorePhone, StoreEmail, StoreCurrency
+from store.dto import StoreCurrency
+from store.models import StoreProfile, StorePhone, StoreEmail
 from store.api.rpc import _get_shop_profile
 
 app_code = AppCodeOptions.store.value[0]

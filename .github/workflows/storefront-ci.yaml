@@ -73,7 +73,7 @@ jobs:
             cd services/common/data
             ln -s ./secrets_template.json  ./secrets.json
             cd ../../store
-            pipenv run alembic --config ./alembic_app.ini upgrade  000002
+            pipenv run alembic --config ./alembic_app.ini upgrade  000004
 
       - name: run linter
         run: |
