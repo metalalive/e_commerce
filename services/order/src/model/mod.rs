@@ -28,7 +28,6 @@ impl From<&OrderLineReqDto> for BaseProductIdentity {
         Self {
             store_id: value.seller_id,
             product_id: value.product_id,
-            product_type: value.product_type.clone(),
         }
     }
 }

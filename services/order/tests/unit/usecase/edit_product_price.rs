@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use chrono::DateTime;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::{ut_setup_share_state, MockConfidential};
@@ -18,7 +17,7 @@ use order::model::{ProductPriceModel, ProductPriceModelSet};
 use order::repository::AbsProductPriceRepo;
 use order::usecase::EditProductPriceUseCase;
 
-type RepoFetchCallArgType = (u32, Vec<(ProductType, u64)>);
+type RepoFetchCallArgType = (u32, Vec<u64>);
 
 struct MockRepository {
     _mocked_del_all: DefaultResult<(), AppError>,
@@ -46,7 +45,7 @@ impl AbsProductPriceRepo for MockRepository {
     async fn fetch(
         &self,
         store_id: u32,
-        ids: Vec<(ProductType, u64)>,
+        ids: Vec<u64>,
     ) -> DefaultResult<ProductPriceModelSet, AppError> {
         if let Ok(g) = self._callargs_fetch_actual.lock() {
             g.set((store_id, ids));
@@ -63,7 +62,7 @@ impl AbsProductPriceRepo for MockRepository {
 
     async fn fetch_many(
         &self,
-        _ids: Vec<(u32, ProductType, u64)>,
+        _ids: Vec<(u32, u64)>,
     ) -> DefaultResult<Vec<ProductPriceModelSet>, AppError> {
         Err(AppError {
             code: AppErrorCode::NotImplemented,
@@ -111,7 +110,6 @@ impl MockRepository {
                 start_after: g.start_after,
                 end_before: g.end_before,
                 product_id: g.product_id,
-                product_type: g.product_type.clone(),
                 is_create: g.is_create,
             })
             .collect()
@@ -135,7 +133,6 @@ async fn create_ok() {
     let creating_products = vec![
         ProductPriceEditDto {
             price: 389,
-            product_type: ProductType::Item,
             product_id: 2379,
             start_after: DateTime::parse_from_rfc3339("2022-11-25T09:13:39+05:00")
                 .unwrap()
@@ -146,7 +143,6 @@ async fn create_ok() {
         },
         ProductPriceEditDto {
             price: 51,
-            product_type: ProductType::Package,
             product_id: 2642,
             start_after: DateTime::parse_from_rfc3339("2022-11-24T09:13:39+05:00")
                 .unwrap()
@@ -160,12 +156,7 @@ async fn create_ok() {
         s_id: mocked_store_id,
         rm_all: false,
         currency: Some(mocked_currency),
-        deleting: ProductPriceDeleteDto {
-            items: None,
-            pkgs: None,
-            item_type: ProductType::Item,
-            pkg_type: ProductType::Package,
-        },
+        deleting: ProductPriceDeleteDto { items: None },
         updating: Vec::new(),
         creating: creating_products,
     };
@@ -185,7 +176,6 @@ async fn update_ok() {
         items: vec![
             ProductPriceModel {
                 price: 1009,
-                product_type: ProductType::Package,
                 product_id: 2613,
                 is_create: false,
                 start_after: DateTime::parse_from_rfc3339("2022-04-26T08:15:47+01:00")
@@ -197,7 +187,6 @@ async fn update_ok() {
             },
             ProductPriceModel {
                 price: 1010,
-                product_type: ProductType::Item,
                 product_id: 3072,
                 is_create: false,
                 start_after: DateTime::parse_from_rfc3339("2021-03-20T10:58:39-06:00")
@@ -213,7 +202,6 @@ async fn update_ok() {
     let updating_products = vec![
         ProductPriceEditDto {
             price: 1322,
-            product_type: ProductType::Item,
             product_id: 3072,
             start_after: DateTime::parse_from_rfc3339("2021-03-29T10:58:39-06:00")
                 .unwrap()
@@ -224,7 +212,6 @@ async fn update_ok() {
         },
         ProductPriceEditDto {
             price: 1155,
-            product_type: ProductType::Package,
             product_id: 2613,
             start_after: DateTime::parse_from_rfc3339("2022-04-27T07:15:47+01:00")
                 .unwrap()
@@ -237,7 +224,6 @@ async fn update_ok() {
     let creating_products = vec![
         ProductPriceEditDto {
             price: 452,
-            product_type: ProductType::Item,
             product_id: 8299,
             start_after: DateTime::parse_from_rfc3339("2022-11-27T09:13:39+05:00")
                 .unwrap()
@@ -248,7 +234,6 @@ async fn update_ok() {
         },
         ProductPriceEditDto {
             price: 6066,
-            product_type: ProductType::Package,
             product_id: 1712,
             start_after: DateTime::parse_from_rfc3339("2022-01-19T06:05:39+05:00")
                 .unwrap()
@@ -262,19 +247,11 @@ async fn update_ok() {
         s_id: mocked_store_id,
         rm_all: false,
         currency: Some(mocked_currency),
-        deleting: ProductPriceDeleteDto {
-            items: None,
-            pkgs: None,
-            item_type: ProductType::Item,
-            pkg_type: ProductType::Package,
-        },
+        deleting: ProductPriceDeleteDto { items: None },
         updating: updating_products,
         creating: creating_products,
     };
-    repo.expect_callargs_fetch((
-        mocked_store_id,
-        vec![(ProductType::Item, 3072), (ProductType::Package, 2613)],
-    ));
+    repo.expect_callargs_fetch((mocked_store_id, vec![3072, 2613]));
     let result = EditProductPriceUseCase::execute(Box::new(repo), data, logctx).await;
     assert!(result.is_ok());
 } // end of fn update_ok
@@ -296,7 +273,6 @@ async fn fetch_error() {
     );
     let creating_products = vec![ProductPriceEditDto {
         price: 389,
-        product_type: ProductType::Item,
         product_id: 2379,
         start_after: DateTime::parse_from_rfc3339("2022-11-25T09:13:39+05:00")
             .unwrap()
@@ -309,12 +285,7 @@ async fn fetch_error() {
         s_id: mocked_store_id,
         rm_all: false,
         currency: Some(mocked_currency),
-        deleting: ProductPriceDeleteDto {
-            items: None,
-            pkgs: None,
-            item_type: ProductType::Item,
-            pkg_type: ProductType::Package,
-        },
+        deleting: ProductPriceDeleteDto { items: None },
         updating: Vec::new(),
         creating: creating_products,
     };
@@ -339,7 +310,6 @@ async fn save_error() {
         items: vec![ProductPriceModel {
             is_create: false,
             price: 4810,
-            product_type: ProductType::Package,
             product_id: 9914,
             start_after: DateTime::parse_from_rfc3339("2022-11-23T09:13:41+07:00")
                 .unwrap()
@@ -360,7 +330,6 @@ async fn save_error() {
     );
     let updating_products = vec![ProductPriceEditDto {
         price: 183,
-        product_type: ProductType::Package,
         product_id: 9914,
         start_after: DateTime::parse_from_rfc3339("2022-11-23T09:13:41+07:00")
             .unwrap()
@@ -373,16 +342,11 @@ async fn save_error() {
         s_id: mocked_store_id,
         rm_all: false,
         currency: Some(mocked_currency),
-        deleting: ProductPriceDeleteDto {
-            items: None,
-            pkgs: None,
-            item_type: ProductType::Item,
-            pkg_type: ProductType::Package,
-        },
+        deleting: ProductPriceDeleteDto { items: None },
         updating: updating_products,
         creating: Vec::new(),
     };
-    repo.expect_callargs_fetch((mocked_store_id, vec![(ProductType::Package, 9914)]));
+    repo.expect_callargs_fetch((mocked_store_id, vec![9914]));
     let result = EditProductPriceUseCase::execute(Box::new(repo), data, logctx).await;
     assert!(result.is_err());
     let actual_err = result.unwrap_err();
@@ -408,10 +372,7 @@ async fn delete_subset_ok() {
         rm_all: false,
         currency: None,
         deleting: ProductPriceDeleteDto {
-            item_type: ProductType::Item,
-            pkg_type: ProductType::Package,
             items: Some(vec![23, 45, 67]),
-            pkgs: Some(vec![8, 90, 123]),
         },
         updating: Vec::new(),
         creating: Vec::new(),
@@ -444,10 +405,7 @@ async fn delete_subset_error() {
         currency: None,
         rm_all: false,
         deleting: ProductPriceDeleteDto {
-            item_type: ProductType::Item,
-            pkg_type: ProductType::Package,
             items: Some(vec![23, 45, 67]),
-            pkgs: Some(vec![8, 90, 123]),
         },
         updating: Vec::new(),
         creating: Vec::new(),
@@ -476,12 +434,7 @@ async fn delete_all_ok() {
         s_id: mocked_store_id,
         rm_all: true,
         currency: None,
-        deleting: ProductPriceDeleteDto {
-            items: None,
-            pkgs: None,
-            item_type: ProductType::Item,
-            pkg_type: ProductType::Package,
-        },
+        deleting: ProductPriceDeleteDto { items: None },
         updating: Vec::new(),
         creating: Vec::new(),
     };

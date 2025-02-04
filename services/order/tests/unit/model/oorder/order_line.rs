@@ -3,7 +3,6 @@ use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::api::rpc::dto::{OrderLinePaidUpdateDto, OrderLinePayUpdateErrorReason};
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use order::api::web::dto::OrderLineReqDto;
@@ -15,8 +14,7 @@ use order::model::{
 #[rustfmt::skip]
 pub(super) fn ut_setup_order_lines(
     data : Vec<(
-        u32, u64, ProductType,
-        u32, u32, u32, u32,
+        u32, u64, u32, u32, u32, u32,
         Option<DateTime<FixedOffset>>,
         DateTime<FixedOffset>,
         DateTime<FixedOffset>
@@ -27,17 +25,16 @@ pub(super) fn ut_setup_order_lines(
             id_: OrderLineIdentity {
                 store_id: d.0,
                 product_id: d.1,
-                product_type: d.2,
             },
-            price: OrderLinePriceModel {unit: d.3, total: d.4},
+            price: OrderLinePriceModel {unit: d.2, total: d.3},
             qty: OrderLineQuantityModel {
-                reserved: d.5,
-                paid: d.6,
-                paid_last_update: d.7,
+                reserved: d.4,
+                paid: d.5,
+                paid_last_update: d.6,
             },
             policy: OrderLineAppliedPolicyModel {
-                reserved_until: d.8,
-                warranty_until: d.9,
+                reserved_until: d.7,
+                warranty_until: d.8,
             },
         })
         .collect::<Vec<_>>()
@@ -45,9 +42,8 @@ pub(super) fn ut_setup_order_lines(
 
 #[test]
 fn convert_from_req_dto_without_rsv_limit_ok() {
-    let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
+    let (seller_id, product_id) = (19, 146);
     let policym = ProductPolicyModel {
-        product_type: product_type.clone(),
         product_id,
         is_create: false,
         auto_cancel_secs: 69,
@@ -57,7 +53,6 @@ fn convert_from_req_dto_without_rsv_limit_ok() {
     };
     let pricem = ProductPriceModel {
         product_id,
-        product_type: product_type.clone(),
         price: 1015,
         is_create: false,
         start_after: DateTime::parse_from_rfc3339("2023-07-31T10:16:54+05:00")
@@ -70,7 +65,6 @@ fn convert_from_req_dto_without_rsv_limit_ok() {
     let data = OrderLineReqDto {
         seller_id,
         product_id,
-        product_type,
         quantity: 26,
     };
     let result = OrderLineModel::try_from(data, &policym, &pricem);
@@ -85,9 +79,8 @@ fn convert_from_req_dto_without_rsv_limit_ok() {
 
 #[test]
 fn convert_from_req_dto_with_rsv_limit_ok() {
-    let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
+    let (seller_id, product_id) = (19, 146);
     let policym = ProductPolicyModel {
-        product_type: product_type.clone(),
         product_id,
         is_create: false,
         auto_cancel_secs: 69,
@@ -97,7 +90,6 @@ fn convert_from_req_dto_with_rsv_limit_ok() {
     };
     let pricem = ProductPriceModel {
         product_id,
-        product_type: product_type.clone(),
         price: 987,
         is_create: false,
         start_after: DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00")
@@ -110,7 +102,6 @@ fn convert_from_req_dto_with_rsv_limit_ok() {
     let data = OrderLineReqDto {
         seller_id,
         product_id,
-        product_type,
         quantity: 9,
     };
     let result = OrderLineModel::try_from(data, &policym, &pricem);
@@ -122,9 +113,8 @@ fn convert_from_req_dto_with_rsv_limit_ok() {
 
 #[test]
 fn convert_from_req_dto_violate_rsv_limit() {
-    let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
+    let (seller_id, product_id) = (19, 146);
     let policym = ProductPolicyModel {
-        product_type: product_type.clone(),
         product_id,
         is_create: false,
         auto_cancel_secs: 180,
@@ -134,7 +124,6 @@ fn convert_from_req_dto_violate_rsv_limit() {
     };
     let pricem = ProductPriceModel {
         product_id,
-        product_type: product_type.clone(),
         price: 987,
         is_create: false,
         start_after: DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00")
@@ -147,7 +136,6 @@ fn convert_from_req_dto_violate_rsv_limit() {
     let data = OrderLineReqDto {
         seller_id,
         product_id,
-        product_type,
         quantity: 11,
     };
     let result = OrderLineModel::try_from(data, &policym, &pricem);
@@ -159,9 +147,8 @@ fn convert_from_req_dto_violate_rsv_limit() {
 
 #[test]
 fn convert_from_req_dto_product_id_mismatch() {
-    let (seller_id, product_id, product_type) = (19, 146, ProductType::Item);
+    let (seller_id, product_id) = (19, 146);
     let policym = ProductPolicyModel {
-        product_type: product_type.clone(),
         product_id,
         is_create: false,
         auto_cancel_secs: 180,
@@ -171,7 +158,6 @@ fn convert_from_req_dto_product_id_mismatch() {
     };
     let pricem = ProductPriceModel {
         product_id: 1466,
-        product_type: product_type.clone(),
         price: 60,
         is_create: false,
         start_after: DateTime::parse_from_rfc3339("2022-10-28T10:16:54+05:00")
@@ -184,7 +170,6 @@ fn convert_from_req_dto_product_id_mismatch() {
     let data = OrderLineReqDto {
         seller_id,
         product_id,
-        product_type,
         quantity: 2,
     };
     let result = OrderLineModel::try_from(data, &policym, &pricem);
@@ -200,9 +185,8 @@ fn convert_to_pay_dto_ok() {
     let reserved_until = DateTime::parse_from_rfc3339("2023-01-15T09:23:50+08:00").unwrap();
     let warranty_until = DateTime::parse_from_rfc3339("2023-04-24T13:39:41+08:00").unwrap();
     let mocked_data = vec![
-        (123u32, 124u64, ProductType::Package, 7u32, 173u32,
-         25u32, 4u32, Some(reserved_until.clone()),
-         reserved_until, warranty_until,)
+        (123u32, 124u64, 7u32, 173u32, 25u32, 4u32,
+         Some(reserved_until.clone()),  reserved_until, warranty_until,)
     ];
     let oline_m = ut_setup_order_lines(mocked_data).remove(0);
     let ex_rate = CurrencyModel {
@@ -211,7 +195,6 @@ fn convert_to_pay_dto_ok() {
     }; // this test case assumes seller labels prices in different currency
     let payline = oline_m.into_paym_dto(ex_rate);
     assert_eq!(payline.seller_id, 123);
-    assert_eq!(payline.product_type, ProductType::Package);
     assert_eq!(payline.product_id, 124);
     assert_eq!(payline.quantity, 25);
     assert_eq!(payline.amount.unit.as_str(), "322.12"); // "322.12663000"
@@ -242,19 +225,16 @@ fn update_payments_ok() {
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
     let mocked_data = vec![
-        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
-         10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, ProductType::Item, 10, 90, 9, 1,
-         Some(paid_last_update), reserved_until, warranty_until,)
+        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until),
+        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until,)
     ];
     let mut models = ut_setup_order_lines(mocked_data);
     let d_lines = [
-            (seller_id, 890u64, ProductType::Item, 7u32),
-            (seller_id, 812, ProductType::Package, 4),
+            (seller_id, 890u64, 7u32),
+            (seller_id, 812, 4),
         ].into_iter()
         .map(|d| OrderLinePaidUpdateDto {
-            seller_id: d.0, product_id:  d.1,
-            product_type:  d.2, qty: d.3,
+            seller_id: d.0, product_id:  d.1, qty: d.2,
         })
         .collect::<Vec<_>>();
     let d_charge_time = [
@@ -264,10 +244,9 @@ fn update_payments_ok() {
     let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time[0]);
     assert_eq!(errors.len(), 0);
     models.iter().map(|m| {
-        let key = (&m.id_.product_type, m.id_.product_id);
-        let expect = match key {
-            (ProductType::Package, 812u64) => (4u32, d_charge_time[0]),
-            (ProductType::Item, 890) => (8, d_charge_time[0]),
+        let expect = match m.id_.product_id {
+            812u64 => (4u32, d_charge_time[0]),
+            890 => (8, d_charge_time[0]),
             _others => (99999, paid_last_update),
         };
         assert_eq!(m.qty.paid, expect.0);
@@ -276,20 +255,18 @@ fn update_payments_ok() {
     }).count();
     
     let d_lines = vec![
-            (seller_id, 812u64, ProductType::Package, 1u32),
+            (seller_id, 812u64, 1u32),
         ].into_iter()
         .map(|d| OrderLinePaidUpdateDto {
-            seller_id: d.0, product_id:  d.1,
-            product_type:  d.2, qty: d.3,
+            seller_id: d.0, product_id:  d.1, qty: d.2,
         })
         .collect::<Vec<_>>();
     let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time[1]);
     assert_eq!(errors.len(), 0);
     models.iter().map(|m| {
-        let key = (&m.id_.product_type, m.id_.product_id);
-        let expect = match key {
-            (ProductType::Package, 812u64) => (5u32, d_charge_time[1]),
-            (ProductType::Item, 890) => (8, d_charge_time[0]),
+        let expect = match m.id_.product_id {
+            812u64 => (5u32, d_charge_time[1]),
+            890 => (8, d_charge_time[0]),
             _others => (99999, paid_last_update),
         };
         assert_eq!(m.qty.paid, expect.0);
@@ -307,19 +284,16 @@ fn update_payments_nonexist() {
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
     let mocked_data = vec![
-        (seller_id, 812u64, ProductType::Package, 7u32, 69u32,
-         10u32, 0u32, None, reserved_until, warranty_until),
-        (seller_id, 890, ProductType::Item, 10, 90, 9, 1,
-         Some(paid_last_update), reserved_until, warranty_until,)
+        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until),
+        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until,)
     ];
     let mut models = ut_setup_order_lines(mocked_data);
     let d_lines = [
-            (seller_id, 889u64, ProductType::Item, 7u32),
-            (seller_id, 812, ProductType::Package, 4),
+            (seller_id, 889u64, 7u32),
+            (seller_id, 812, 4),
         ].into_iter()
         .map(|d| OrderLinePaidUpdateDto {
-            seller_id: d.0, product_id:  d.1,
-            product_type:  d.2, qty: d.3,
+            seller_id: d.0, product_id:  d.1, qty: d.2,
         })
         .collect::<Vec<_>>();
     let d_charge_time = paid_last_update + Duration::minutes(5);
@@ -341,23 +315,16 @@ fn update_payments_invalid_quantity() {
     let paid_last_update = dt_now - Duration::minutes(10);
     let seller_id = 123;
     let mocked_data = vec![
-        (
-            seller_id, 812u64, ProductType::Package, 7u32, 69u32, 10u32, 0u32,
-            None, reserved_until, warranty_until,
-        ),
-        (
-            seller_id, 890, ProductType::Item, 10, 90, 9, 1,
-            Some(paid_last_update), reserved_until, warranty_until,
-        ),
+        (seller_id, 812u64, 7u32, 69u32, 10u32, 0u32, None, reserved_until, warranty_until),
+        (seller_id, 890, 10, 90, 9, 1, Some(paid_last_update), reserved_until, warranty_until),
     ];
     let mut models = ut_setup_order_lines(mocked_data);
     let d_lines = [
-            (seller_id, 890u64, ProductType::Item, 8u32),
-            (seller_id, 812, ProductType::Package, models[0].qty.reserved + 1),
+            (seller_id, 890u64, 8u32),
+            (seller_id, 812, models[0].qty.reserved + 1),
         ].into_iter()
         .map(|d| OrderLinePaidUpdateDto {
-            seller_id: d.0, product_id:  d.1,
-            product_type:  d.2, qty: d.3,
+            seller_id: d.0, product_id:  d.1, qty: d.2,
         })
         .collect::<Vec<_>>();
     let d_charge_time = paid_last_update + Duration::minutes(2);
@@ -382,27 +349,23 @@ fn update_payments_old_record_omitted() {
     #[rustfmt::skip]
     let mocked_data = vec![
         (
-            seller_id, 812u64, ProductType::Package, 7u32, 69u32, 10u32, 0u32,
+            seller_id, 812u64, 7u32, 69u32, 10u32, 0u32,
             Some(dt_now + Duration::minutes(8)), reserved_until, warranty_until,
         ),
         (
-            seller_id, 890, ProductType::Item, 10, 90, 9, 1,
+            seller_id, 890, 10, 90, 9, 1,
             Some(dt_now + Duration::minutes(10)), reserved_until, warranty_until,
         ),
     ];
     let mut models = ut_setup_order_lines(mocked_data);
-    let d_lines = [
-        (seller_id, 890u64, ProductType::Item, 7u32),
-        (seller_id, 812, ProductType::Package, 4),
-    ]
-    .into_iter()
-    .map(|d| OrderLinePaidUpdateDto {
-        seller_id: d.0,
-        product_id: d.1,
-        product_type: d.2,
-        qty: d.3,
-    })
-    .collect::<Vec<_>>();
+    let d_lines = [(seller_id, 890u64, 7u32), (seller_id, 812, 4)]
+        .into_iter()
+        .map(|d| OrderLinePaidUpdateDto {
+            seller_id: d.0,
+            product_id: d.1,
+            qty: d.2,
+        })
+        .collect::<Vec<_>>();
     let d_charge_time = dt_now + Duration::minutes(9);
     let errors = OrderLineModel::update_payments(&mut models, d_lines, d_charge_time);
     assert_eq!(errors.len(), 1);

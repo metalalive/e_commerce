@@ -12,7 +12,6 @@ use ecommerce_common::api::rpc::dto::{
     OrderLinePaidUpdateDto, OrderLinePayUpdateErrorDto, OrderLinePayUpdateErrorReason,
     OrderPaymentUpdateDto,
 };
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use order::datastore::AppInMemoryDStore;
@@ -43,7 +42,7 @@ fn ut_setup_order_currency(mock_seller_ids: [u32; 2]) -> OrderCurrencyModel {
 
 async fn ut_setup_saved_order(
     o_repo: &OrderInMemRepo,
-    mock_oid: String,
+    mock_oid: &str,
     mock_usr_id: u32,
     lines: Vec<OrderLineModel>,
     mock_seller_ids: [u32; 2],
@@ -54,7 +53,7 @@ async fn ut_setup_saved_order(
     assert!(!billings.is_empty());
     assert!(!shippings.is_empty());
     let ol_set = OrderLineModelSet {
-        order_id: mock_oid,
+        order_id: mock_oid.to_string(),
         lines,
         owner_id: mock_usr_id,
         currency: ut_setup_order_currency(mock_seller_ids),
@@ -77,19 +76,16 @@ fn ut_setup_oline_new_payment(sellers_id: [u32; 2]) -> Vec<OrderLinePaidUpdateDt
     vec![
         OrderLinePaidUpdateDto {
             seller_id: sellers_id[1],
-            product_type: ProductType::Item,
             product_id: 192,
             qty: 1,
         },
         OrderLinePaidUpdateDto {
             seller_id: sellers_id[0],
-            product_type: ProductType::Item,
             product_id: 193,
             qty: 1,
         },
         OrderLinePaidUpdateDto {
             seller_id: sellers_id[0],
-            product_type: ProductType::Package,
             product_id: 190,
             qty: 2,
         },
@@ -111,11 +107,9 @@ fn ut_usr_cb_ok_1(
     lines
         .into_iter()
         .map(|d| {
-            let result = models.iter_mut().find(|m| {
-                m.id_.store_id == d.seller_id
-                    && m.id_.product_id == d.product_id
-                    && m.id_.product_type == d.product_type
-            });
+            let result = models
+                .iter_mut()
+                .find(|m| m.id_.store_id == d.seller_id && m.id_.product_id == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, 0);
@@ -140,11 +134,9 @@ fn ut_usr_cb_ok_2(
     lines
         .into_iter()
         .map(|d| {
-            let result = models.iter().find(|m| {
-                m.id_.store_id == d.seller_id
-                    && m.id_.product_id == d.product_id
-                    && m.id_.product_type == d.product_type
-            });
+            let result = models
+                .iter()
+                .find(|m| m.id_.store_id == d.seller_id && m.id_.product_id == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, d.qty);
@@ -166,7 +158,7 @@ async fn in_mem_update_lines_payment_ok() {
     let o_repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(60, Some(mock_repo_time)).await;
     let lines = ut_setup_orderlines(&mock_seller_ids);
     ut_setup_save_stock(o_repo.stock(), mock_repo_time, &lines).await;
-    ut_setup_saved_order(&o_repo, oid.clone(), 124, lines, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, oid.as_str(), 124, lines, mock_seller_ids).await;
     let data = OrderPaymentUpdateDto {
         oid: oid.clone(),
         charge_time: mock_charge_time.clone(),
@@ -216,7 +208,6 @@ fn ut_usr_cb_err_1(
         .into_iter()
         .map(|d| OrderLinePayUpdateErrorDto {
             seller_id: d.seller_id,
-            product_type: d.product_type,
             product_id: d.product_id,
             reason: err_reasons.remove(0),
         })
@@ -231,11 +222,9 @@ fn ut_usr_cb_err_2(
     data.lines
         .into_iter()
         .map(|d| {
-            let result = models.iter().find(|m| {
-                m.id_.store_id == d.seller_id
-                    && m.id_.product_id == d.product_id
-                    && m.id_.product_type == d.product_type
-            });
+            let result = models
+                .iter()
+                .find(|m| m.id_.store_id == d.seller_id && m.id_.product_id == d.product_id);
             assert!(result.is_some());
             let saved = result.unwrap();
             assert_eq!(saved.qty.paid, 0);
@@ -253,7 +242,7 @@ async fn in_mem_update_lines_payment_usr_cb_err() {
     let o_repo = in_mem_repo_ds_setup::<AppInMemoryDStore>(30, Some(mock_repo_time)).await;
     let lines = ut_setup_orderlines(&mock_seller_ids);
     ut_setup_save_stock(o_repo.stock(), mock_repo_time, &lines).await;
-    ut_setup_saved_order(&o_repo, oid.clone(), 124, lines, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, oid.as_str(), 124, lines, mock_seller_ids).await;
     let mut lines = ut_setup_oline_new_payment(mock_seller_ids);
     lines[0].qty = 9998;
     lines[1].qty = 9999;
@@ -287,26 +276,16 @@ fn ut_rd_oline_set_usr_cb<'a>(
                 assert_eq!(ol_set.lines.len(), 3);
                 (
                     126u32,
-                    vec![
-                        (576u32, ProductType::Item, 190u64),
-                        (576u32, ProductType::Item, 192u64),
-                        (117u32, ProductType::Item, 193u64),
-                    ],
+                    vec![(576u32, 190u64), (576u32, 192u64), (117u32, 193u64)],
                 )
             }
             "OrderIDtwo" => {
                 assert_eq!(ol_set.lines.len(), 1);
-                (127u32, vec![(117u32, ProductType::Package, 190)])
+                (127u32, vec![(117, 1190)])
             }
             "OrderIDthree" => {
                 assert_eq!(ol_set.lines.len(), 2);
-                (
-                    128u32,
-                    vec![
-                        (576u32, ProductType::Package, 190),
-                        (576u32, ProductType::Package, 194),
-                    ],
-                )
+                (128u32, vec![(576, 1190), (576, 194)])
             }
             "OrderIDfive" => {
                 return Err(AppError {
@@ -320,10 +299,9 @@ fn ut_rd_oline_set_usr_cb<'a>(
             }
         };
         assert_eq!(ol_set.owner_id, owner_id);
-        let mut product_id_set: HashSet<(u32, ProductType, u64)> =
-            HashSet::from_iter(product_ids.into_iter());
+        let mut product_id_set: HashSet<(u32, u64)> = HashSet::from_iter(product_ids.into_iter());
         let all_items_found = ol_set.lines.iter().all(|m| {
-            let key = (m.id_.store_id, m.id_.product_type.clone(), m.id_.product_id);
+            let key = (m.id_.store_id, m.id_.product_id);
             product_id_set.remove(&key)
         });
         assert!(all_items_found);
@@ -364,38 +342,10 @@ async fn in_mem_fetch_lines_rsvtime_ok() {
         lines.0[5].policy.reserved_until = start_time + ChronoDuration::minutes(13);
         lines.2[6].policy.reserved_until = start_time + ChronoDuration::minutes(17);
     }
-    ut_setup_saved_order(
-        &o_repo,
-        format!("OrderIDone"),
-        126,
-        lines.0,
-        mock_seller_ids,
-    )
-    .await;
-    ut_setup_saved_order(
-        &o_repo,
-        format!("OrderIDtwo"),
-        127,
-        lines.1,
-        mock_seller_ids,
-    )
-    .await;
-    ut_setup_saved_order(
-        &o_repo,
-        format!("OrderIDthree"),
-        128,
-        lines.2,
-        mock_seller_ids,
-    )
-    .await;
-    ut_setup_saved_order(
-        &o_repo,
-        format!("OrderIDfour"),
-        129,
-        lines.3,
-        mock_seller_ids,
-    )
-    .await;
+    ut_setup_saved_order(&o_repo, "OrderIDone", 126, lines.0, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, "OrderIDtwo", 127, lines.1, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, "OrderIDthree", 128, lines.2, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, "OrderIDfour", 129, lines.3, mock_seller_ids).await;
     let result = o_repo
         .fetch_lines_by_rsvtime(start_time, end_time, ut_rd_oline_set_usr_cb)
         .await;
@@ -428,22 +378,8 @@ async fn in_mem_fetch_lines_rsvtime_usrcb_err() {
         lines.0[5].policy.reserved_until = start_time + ChronoDuration::minutes(45);
         lines.1[2].policy.reserved_until = start_time + ChronoDuration::minutes(18);
     }
-    ut_setup_saved_order(
-        &o_repo,
-        format!("OrderIDfive"),
-        130,
-        lines.0,
-        mock_seller_ids,
-    )
-    .await;
-    ut_setup_saved_order(
-        &o_repo,
-        format!("OrderIDtwo"),
-        127,
-        lines.1,
-        mock_seller_ids,
-    )
-    .await;
+    ut_setup_saved_order(&o_repo, "OrderIDfive", 130, lines.0, mock_seller_ids).await;
+    ut_setup_saved_order(&o_repo, "OrderIDtwo", 127, lines.1, mock_seller_ids).await;
     let result = o_repo
         .fetch_lines_by_rsvtime(start_time, end_time, ut_rd_oline_set_usr_cb)
         .await;

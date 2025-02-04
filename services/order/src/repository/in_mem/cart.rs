@@ -52,11 +52,7 @@ mod CartLineTable {
     pub(super) struct UpdateArg(pub(super) CartModel);
 
     fn pkey(usr_id: u32, seq: u8, id_: BaseProductIdentity) -> String {
-        let prod_typ_num: u8 = id_.product_type.into();
-        format!(
-            "{}-{}-{}-{}-{}",
-            usr_id, seq, id_.store_id, prod_typ_num, id_.product_id
-        )
+        format!("{}-{}-{}-{}", usr_id, seq, id_.store_id, id_.product_id)
     }
 
     impl From<UpdateArg> for AppInMemFetchedSingleTable {
@@ -93,14 +89,12 @@ impl AbsDStoreFilterKeyOp for InnerFilterKeyOp {
         );
         let mut cond = curr_usr == self.usr_id && curr_seq_num == self.seq_num;
         if let Some(prod_ids) = self.pids.as_ref() {
-            let (store_id, product_type, product_id) = (
-                tokens.next().unwrap().parse().unwrap(),
+            let (store_id, product_id) = (
                 tokens.next().unwrap().parse().unwrap(),
                 tokens.next().unwrap().parse().unwrap(),
             );
             let curr_p_id = BaseProductIdentity {
                 store_id,
-                product_type,
                 product_id,
             };
             let extra = prod_ids.contains(&curr_p_id);
@@ -118,8 +112,7 @@ impl TryFrom<(String, Vec<String>)> for CartLineModel {
         // skip first two token, user-id and seq-num
         let _usr_id = tokens.next();
         let _seq_num = tokens.next();
-        let (store_id, product_type, product_id) = (
-            tokens.next().unwrap().parse().unwrap(),
+        let (store_id, product_id) = (
             tokens.next().unwrap().parse().unwrap(),
             tokens.next().unwrap().parse().unwrap(),
         );
@@ -127,7 +120,6 @@ impl TryFrom<(String, Vec<String>)> for CartLineModel {
         let out = CartLineModel {
             id_: BaseProductIdentity {
                 store_id,
-                product_type,
                 product_id,
             },
             qty_req,

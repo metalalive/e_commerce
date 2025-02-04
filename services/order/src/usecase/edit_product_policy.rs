@@ -9,7 +9,6 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::web::dto::QuotaResourceErrorDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 
@@ -27,26 +26,17 @@ use super::{initiate_rpc_request, AppUCrunRPCfn, AppUseKsRPCreply};
 #[derive(Serialize)]
 pub struct ProductInfoReq {
     item_ids: Vec<u64>,
-    pkg_ids: Vec<u64>,
-    item_fields: Vec<String>,
-    pkg_fields: Vec<String>,
     profile: u32,
 }
 
 #[derive(Deserialize)]
 pub struct ProductItemResp {
-    id: u64,
-}
-
-#[derive(Deserialize)]
-pub struct ProductPkgResp {
-    id: u64,
+    id_: u64,
 }
 
 #[derive(Deserialize)]
 pub struct ProductInfoResp {
-    item: Vec<ProductItemResp>,
-    pkg: Vec<ProductPkgResp>,
+    result: Vec<ProductItemResp>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -128,9 +118,8 @@ impl EditProductPolicyUseCase {
                 );
                 let c_err = missing_prod_ids
                     .into_iter()
-                    .map(|(product_type, product_id)| ProductPolicyClientErrorDto {
+                    .map(|product_id| ProductPolicyClientErrorDto {
                         product_id,
-                        product_type,
                         err_type: format!("{:?}", AppErrorCode::ProductNotExist),
                         warranty_hours: None,
                         auto_cancel_secs: None,
@@ -159,23 +148,14 @@ impl EditProductPolicyUseCase {
         run_rpc_fn: AppUCrunRPCfn<impl Future<Output = AppUseKsRPCreply>>,
         rpc_serialize_msg: fn(ProductInfoReq) -> DefaultResult<Vec<u8>, AppError>,
         rpc_deserialize_msg: fn(&Vec<u8>) -> DefaultResult<ProductInfoResp, AppError>,
-    ) -> DefaultResult<Vec<(ProductType, u64)>, (EditProductPolicyResult, String)> {
+    ) -> DefaultResult<Vec<u64>, (EditProductPolicyResult, String)> {
         let mut msg_req = ProductInfoReq {
-            pkg_ids: Vec::new(),
-            pkg_fields: vec!["id".to_string()],
             profile: usr_prof_id,
             item_ids: Vec::new(),
-            item_fields: vec!["id".to_string()],
         };
         data.iter()
-            .map(|item| match &item.product_type {
-                ProductType::Item => {
-                    msg_req.item_ids.push(item.product_id);
-                }
-                ProductType::Package => {
-                    msg_req.pkg_ids.push(item.product_id);
-                }
-                _others => {}
+            .map(|item| {
+                msg_req.item_ids.push(item.product_id);
             })
             .count();
         let msgbody = match rpc_serialize_msg(msg_req) {
@@ -205,20 +185,12 @@ impl EditProductPolicyUseCase {
         }
     } // end of check_product_existence
 
-    fn _compare_rpc_reply(
-        reply: ProductInfoResp,
-        req: &[ProductPolicyDto],
-    ) -> Vec<(ProductType, u64)> {
-        let (r_items, r_pkgs) = (reply.item, reply.pkg);
-        let iter_item = r_items.into_iter().map(|x| (ProductType::Item, x.id));
-        let iter_pkg = r_pkgs.into_iter().map(|x| (ProductType::Package, x.id));
-        let iter_req = req.iter().map(|x| (x.product_type.clone(), x.product_id));
-        let mut c1: HashSet<(ProductType, u64), RandomState> = HashSet::from_iter(iter_item);
-        c1.extend(iter_pkg);
+    fn _compare_rpc_reply(reply: ProductInfoResp, req: &[ProductPolicyDto]) -> Vec<u64> {
+        let iter_item = reply.result.into_iter().map(|x| x.id_);
+        let iter_req = req.iter().map(|x| x.product_id);
+        let c1: HashSet<u64, RandomState> = HashSet::from_iter(iter_item);
         let c2 = HashSet::from_iter(iter_req);
-        c2.difference(&c1)
-            .map(|(typ_, id_)| (typ_.clone(), *id_))
-            .collect()
+        c2.difference(&c1).copied().collect()
     }
 
     async fn _save_to_repo(
@@ -226,10 +198,7 @@ impl EditProductPolicyUseCase {
         data: Vec<ProductPolicyDto>,
     ) -> DefaultResult<(), AppError> {
         let repo = app_repo_product_policy(ds).await?;
-        let ids = data
-            .iter()
-            .map(|d| (d.product_type.clone(), d.product_id))
-            .collect();
+        let ids = data.iter().map(|d| d.product_id).collect();
         let previous_saved = repo.fetch(ids).await?;
         let updated = previous_saved.update(data)?;
         repo.save(updated).await?;

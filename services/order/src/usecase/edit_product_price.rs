@@ -22,20 +22,18 @@ impl EditProductPriceUseCase {
         let (num_insert, num_update) = (data.creating.len(), data.updating.len());
         let rm_all = data.rm_all;
         let rm_items = data.deleting.items.is_some();
-        let rm_pkgs = data.deleting.pkgs.is_some();
         let result = Self::_execute(repo, data).await;
         if let Err(e) = &result {
             app_log_event!(
                 logctx,
                 AppLogLevel::ERROR,
                 "detail:{}, num_insert:{}, num_update:{},\
-                           rm_all:{}, rm_items:{}, rm_pkgs:{}",
+                           rm_all:{}, rm_items:{}",
                 e,
                 num_insert,
                 num_update,
                 rm_all,
                 rm_items,
-                rm_pkgs
             );
         }
         result
@@ -47,10 +45,9 @@ impl EditProductPriceUseCase {
     ) -> DefaultResult<(), AppError> {
         let rm_all = data.rm_all;
         let rm_items = data.deleting.items.is_some();
-        let rm_pkgs = data.deleting.pkgs.is_some();
         if rm_all {
             repo.delete_all(data.s_id).await
-        } else if rm_items || rm_pkgs {
+        } else if rm_items {
             // currently the storefront service separates delete operation from
             // create and update operations, we can expect there is no product overlapped
             // in the `deleting`, `creating`, and `updating` lists
@@ -69,10 +66,7 @@ impl EditProductPriceUseCase {
                 code: AppErrorCode::InvalidInput,
                 detail: Some("missing-currency".to_string()),
             })?;
-            let ids = updating
-                .iter()
-                .map(|d| (d.product_type.clone(), d.product_id))
-                .collect();
+            let ids = updating.iter().map(|d| d.product_id).collect();
             let pre_saved = match repo.fetch(s_id, ids).await {
                 Ok(v) => Ok(v),
                 Err(e) => {

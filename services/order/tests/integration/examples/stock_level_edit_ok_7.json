@@ -1,8 +1,8 @@
 [
-    {"qty_add":33, "store_id":543, "product_type": 1, "product_id": 20095,
+    {"qty_add":33, "store_id":543, "product_id": 20095,
      "expiry": "2022-12-26T08:15:58.137110+07:00"},
-    {"qty_add":50, "store_id":543, "product_type": 2, "product_id": 20096,
+    {"qty_add":50, "store_id":543, "product_id": 20096,
      "expiry": "2022-12-26T08:15:58.137110+07:00"},
-    {"qty_add":43, "store_id":543, "product_type": 1, "product_id": 20097,
+    {"qty_add":43, "store_id":543, "product_id": 20097,
      "expiry": "2022-12-27T22:19:13.911935+05:00"}
 ]

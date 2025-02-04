@@ -1,12 +1,12 @@
 [
      [],
-     {"s_id": 1007, "rm_all": false, "deleting": {"item_type":1, "pkg_type":2},
+     {"s_id": 1007, "rm_all": false, "deleting": {},
       "currency": "USD",
       "updating": [],
       "creating": [
-	  {"price": 89, "start_after": "2021-05-31T09:30:35+07:30", "product_type": 2,
+	  {"price": 89, "start_after": "2021-05-31T09:30:35+07:30",
 	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20912},
-	  {"price": 404, "start_after": "2021-05-31T09:30:35+07:30", "product_type": 2,
+	  {"price": 404, "start_after": "2021-05-31T09:30:35+07:30",
 	   "end_before": "2021-10-24T18:50:04.119199+07:30", "product_id": 20911}
       ]
      },

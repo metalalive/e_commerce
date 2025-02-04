@@ -1,7 +1,7 @@
 asyncapi: 3.0.0
 info:
   title: Order-Processing RPC API
-  version: 1.1.0
+  version: 1.2.0
   description: |-
     RPC API endpoints for order-processing service
 
@@ -370,12 +370,6 @@ components:
               $ref: '#/components/schemas/OrderLinePayUpdateErrorDto'
 
   schemas:
-    ProductType:
-      type: integer
-      format: uint8
-      enum: [1, 2]
-      description: 1 indicates product item, 2 indicates product package
-
     SellerId:
       type: integer
       format: uint32
@@ -394,8 +388,6 @@ components:
         end_before:
           type: string
           format: date-time
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         product_id:
           type: integer
           format: uint64
@@ -408,16 +400,6 @@ components:
           items:
             type: integer
             format: uint64
-        pkgs:
-          type: array
-          description: list of IDs that incidate specific product packages
-          items:
-            type: integer
-            format: uint64
-        item_type:
-          $ref: '#/components/schemas/ProductType'
-        pkg_type:
-          $ref: '#/components/schemas/ProductType'
     ProductPriceDto:
       type: object
       properties:
@@ -448,8 +430,6 @@ components:
         store_id:
           type: integer
           format: uint32
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         product_id:
           type: integer
           format: uint64
@@ -477,8 +457,6 @@ components:
         store_id:
           type: integer
           format: uint32
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         product_id:
           type: integer
           format: uint64
@@ -497,8 +475,6 @@ components:
         product_id:
           type: integer
           format: uint64
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         reason:
           $ref: '#/components/schemas/StockReturnErrorReason'
 
@@ -605,8 +581,6 @@ components:
         product_id:
           type: integer
           format: uint64
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         qty:
           type: integer
           format: uint32
@@ -618,8 +592,6 @@ components:
         product_id:
           type: integer
           format: uint64
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         create_time:
           type: string
           format: date-time
@@ -693,8 +665,6 @@ components:
         product_id:
           type: integer
           format: uint64
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         reserved_until:
           type: string
           format: date-time
@@ -712,8 +682,6 @@ components:
         product_id:
           type: integer
           format: uint64
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         create_time:
           type: string
           format: date-time
@@ -731,8 +699,6 @@ components:
         product_id:
           type: integer
           format: uint64
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         time:
           type: string
           format: date-time
@@ -754,8 +720,6 @@ components:
         product_id:
           type: integer
           format: uint64
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         reason:
           $ref: '#/components/schemas/OrderLinePayUpdateErrorReason'
 

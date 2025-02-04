@@ -8,7 +8,6 @@ use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::api::rpc::dto::OrderReplicaRefundReqDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::AppLogContext;
 
@@ -38,20 +37,19 @@ use crate::{ut_setup_share_state, MockConfidential};
 fn ut_setup_prod_policies() -> ProductPolicyModelSet {
     let policies = [
         #[cfg_attr(rustfmt, rustfmt_skip)]
-        (ProductType::Package, 168u64, 0u16, 127u32, 1008u32, false, 0u16),
-        (ProductType::Item, 168, 0, 20000, 1250, false, 0),
-        (ProductType::Package, 174, 0, 30000, 2255, false, 0),
-        (ProductType::Item, 169, 1, 21000, 150, false, 5),
+        (1168u64, 0u16, 127u32, 1008u32, false, 0u16),
+        (168, 0, 20000, 1250, false, 0),
+        (174, 0, 30000, 2255, false, 0),
+        (169, 1, 21000, 150, false, 5),
     ]
     .into_iter()
     .map(|d| ProductPolicyModel {
-        product_type: d.0,
-        product_id: d.1,
-        min_num_rsv: d.2,
-        warranty_hours: d.3,
-        auto_cancel_secs: d.4,
-        is_create: d.5,
-        max_num_rsv: d.6,
+        product_id: d.0,
+        min_num_rsv: d.1,
+        warranty_hours: d.2,
+        auto_cancel_secs: d.3,
+        is_create: d.4,
+        max_num_rsv: d.5,
     })
     .collect::<Vec<_>>();
     ProductPolicyModelSet { policies }
@@ -64,16 +62,15 @@ fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
             store_id: 51,
             currency: CurrencyDto::THB,
             items: [
-                (ProductType::Item, 168u64, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", false, 510u32),
-                (ProductType::Package, 168, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", false, 1130),
-                (ProductType::Item, 169, "2022-12-02T14:29:54+05:00", "2023-01-15T19:01:31+02:00", false, 190),
+                (168u64, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", false, 510u32),
+                (1168, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00", false, 1130),
+                (169, "2022-12-02T14:29:54+05:00", "2023-01-15T19:01:31+02:00", false, 190),
             ]
             .into_iter()
             .map(|d| ProductPriceModel {
-                product_type: d.0, product_id: d.1,
-                start_after: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
-                end_before: DateTime::parse_from_rfc3339(d.3).unwrap().into(),
-                is_create: d.4,  price: d.5,
+                product_id: d.0, is_create: d.3,  price: d.4,
+                start_after: DateTime::parse_from_rfc3339(d.1).unwrap().into(),
+                end_before: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
             })
             .collect::<Vec<_>>(),
         },
@@ -81,16 +78,15 @@ fn ut_setup_prod_prices() -> Vec<ProductPriceModelSet> {
             store_id: 52,
             currency: CurrencyDto::TWD,
             items: [
-                (ProductType::Item, 168u64,"2023-07-31T11:29:04+02:00", "2023-08-30T09:01:31-08:00", false, 480u32),
-                (ProductType::Package, 900, "2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", false, 490),
-                (ProductType::Item, 901,"2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", false, 399),
+                (168u64,"2023-07-31T11:29:04+02:00", "2023-08-30T09:01:31-08:00", false, 480u32),
+                (900, "2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", false, 490),
+                (901,"2023-05-01T21:49:04+02:00", "2023-07-31T09:01:55-10:00", false, 399),
             ]
             .into_iter()
             .map(|d| ProductPriceModel {
-                product_type: d.0, product_id: d.1,
-                start_after: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
-                end_before: DateTime::parse_from_rfc3339(d.3).unwrap().into(),
-                is_create: d.4,  price: d.5,
+                product_id: d.0, is_create: d.3,  price: d.4,
+                start_after: DateTime::parse_from_rfc3339(d.1).unwrap().into(),
+                end_before: DateTime::parse_from_rfc3339(d.2).unwrap().into(),
             })
             .collect::<Vec<_>>(),
         },
@@ -130,19 +126,14 @@ fn ut_setup_order_currency(seller_ids: Vec<u32>) -> OrderCurrencyModel {
 fn validate_orderline_ok() {
     let ms_policy = ut_setup_prod_policies();
     let ms_price = ut_setup_prod_prices();
-    let data = [
-        (52u32, ProductType::Item, 168u64, 6u32),
-        (51, ProductType::Package, 168, 1),
-        (51, ProductType::Item, 168, 10),
-    ]
-    .into_iter()
-    .map(|d| OrderLineReqDto {
-        seller_id: d.0,
-        product_type: d.1,
-        product_id: d.2,
-        quantity: d.3,
-    })
-    .collect::<Vec<_>>();
+    let data = [(52u32, 168u64, 6u32), (51, 1168, 1), (51, 168, 10)]
+        .into_iter()
+        .map(|d| OrderLineReqDto {
+            seller_id: d.0,
+            product_id: d.1,
+            quantity: d.2,
+        })
+        .collect::<Vec<_>>();
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
     assert!(result.is_ok());
     if let Ok(v) = result {
@@ -150,11 +141,11 @@ fn validate_orderline_ok() {
         v.into_iter()
             .map(|m| {
                 let id = m.id_;
-                let search_key = (id.store_id, id.product_id, id.product_type);
+                let search_key = (id.store_id, id.product_id);
                 let found = match search_key {
-                    (52, 168, ProductType::Item) => true,
-                    (51, 168, ProductType::Item) => true,
-                    (51, 168, ProductType::Package) => true,
+                    (52, 168) => true,
+                    (51, 168) => true,
+                    (51, 1168) => true,
                     _others => false,
                 };
                 assert!(found);
@@ -168,18 +159,17 @@ fn validate_orderline_client_errors() {
     let ms_policy = ut_setup_prod_policies();
     let ms_price = ut_setup_prod_prices();
     let data = [
-        (51u32, ProductType::Item, 169u64, 6u32),
-        (52, ProductType::Package, 174, 4),
-        (52, ProductType::Package, 900, 2),
-        (51, ProductType::Package, 168, 11),
-        (52, ProductType::Item, 901, 9),
+        (51u32, 169u64, 6u32),
+        (52, 174, 4),
+        (52, 900, 2),
+        (51, 1168, 11),
+        (52, 901, 9),
     ]
     .into_iter()
     .map(|d| OrderLineReqDto {
         seller_id: d.0,
-        product_type: d.1,
-        product_id: d.2,
-        quantity: d.3,
+        product_id: d.1,
+        quantity: d.2,
     })
     .collect::<Vec<_>>();
     let result = CreateOrderUseCase::validate_orderline(ms_policy, ms_price, data);
@@ -189,9 +179,7 @@ fn validate_orderline_client_errors() {
         assert_eq!(errs.len(), 4);
         let found = errs
             .iter()
-            .find(|e| {
-                e.seller_id == 52 && e.product_type == ProductType::Package && e.product_id == 900
-            })
+            .find(|e| e.seller_id == 52 && e.product_id == 900)
             .unwrap();
         if let Some(v) = found.nonexist.as_ref() {
             assert!(v.product_policy);
@@ -199,9 +187,7 @@ fn validate_orderline_client_errors() {
         }
         let found = errs
             .iter()
-            .find(|e| {
-                e.seller_id == 52 && e.product_type == ProductType::Item && e.product_id == 901
-            })
+            .find(|e| e.seller_id == 52 && e.product_id == 901)
             .unwrap();
         if let Some(v) = found.nonexist.as_ref() {
             assert!(v.product_policy);
@@ -209,9 +195,7 @@ fn validate_orderline_client_errors() {
         }
         let found = errs
             .iter()
-            .find(|e| {
-                e.seller_id == 52 && e.product_type == ProductType::Package && e.product_id == 174
-            })
+            .find(|e| e.seller_id == 52 && e.product_id == 174)
             .unwrap();
         if let Some(v) = found.nonexist.as_ref() {
             assert!(!v.product_policy);
@@ -219,9 +203,7 @@ fn validate_orderline_client_errors() {
         }
         let found = errs
             .iter()
-            .find(|e| {
-                e.seller_id == 51 && e.product_type == ProductType::Item && e.product_id == 169
-            })
+            .find(|e| e.seller_id == 51 && e.product_id == 169)
             .unwrap();
         if let Some(v) = found.rsv_limit.as_ref() {
             assert_eq!(v.max_, 5);
@@ -303,22 +285,22 @@ async fn create_order_snapshot_currency_err() {
     }
 } // end of fn create_order_snapshot_currency_err
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 fn ut_setup_orderlines() -> Vec<OrderLineModel> {
     let base_time = Local::now().fixed_offset();
     let paid_last_update = Some(base_time + Duration::minutes(4));
     let reserved_until = base_time + Duration::minutes(5);
     let warranty_until = base_time + Duration::days(14);
     [
-        (108u32, ProductType::Item, 190u64, 10u32, 139u32, 14u32, 13u32),
-        (800, ProductType::Item, 191, 12, 180, 15, 15),
-        (426, ProductType::Package, 192, 12, 216, 18, 15),
+        (108u32, 190u64, 10u32, 139u32, 14u32, 13u32),
+        (800, 191, 12, 180, 15, 15),
+        (426, 192, 12, 216, 18, 15),
     ]
     .into_iter()
     .map(|d| OrderLineModel {
-        id_: OrderLineIdentity {store_id: d.0, product_type: d.1, product_id: d.2},
-        price: OrderLinePriceModel {unit: d.3, total: d.4},
-        qty: OrderLineQuantityModel {reserved: d.5, paid: d.6, paid_last_update},
+        id_: OrderLineIdentity {store_id: d.0, product_id: d.1},
+        price: OrderLinePriceModel {unit: d.2, total: d.3},
+        qty: OrderLineQuantityModel {reserved: d.4, paid: d.5, paid_last_update},
         policy: OrderLineAppliedPolicyModel {reserved_until, warranty_until},
     })
     .collect::<Vec<_>>()
@@ -329,9 +311,7 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
     let return_time = DateTime::parse_from_rfc3339("2023-11-18T02:39:04+02:00").unwrap();
     vec![
         OrderReturnModel {
-            id_: OrderLineIdentity {
-                store_id: 108, product_id: 190, product_type: ProductType::Item,
-            },
+            id_: OrderLineIdentity { store_id: 108, product_id: 190 },
             qty: HashMap::from([
                 (
                     return_time + Duration::seconds(11),
@@ -344,9 +324,7 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
             ]),
         },
         OrderReturnModel {
-            id_: OrderLineIdentity {
-                store_id: 800, product_id: 191, product_type: ProductType::Item,
-            },
+            id_: OrderLineIdentity { store_id: 800, product_id: 191 },
             qty: HashMap::from([
                 (
                     return_time + Duration::seconds(6),
@@ -367,9 +345,7 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
             ]),
         },
         OrderReturnModel {
-            id_: OrderLineIdentity {
-                store_id: 426, product_id: 192, product_type: ProductType::Package,
-            },
+            id_: OrderLineIdentity { store_id: 426, product_id: 192 },
             qty: HashMap::from([
                 (
                     return_time + Duration::seconds(12),
@@ -386,9 +362,7 @@ fn ut_setup_olines_returns() -> Vec<OrderReturnModel> {
             ]),
         },
         OrderReturnModel {
-            id_: OrderLineIdentity {
-                store_id: 426, product_id: 8964, product_type: ProductType::Item,
-            },
+            id_: OrderLineIdentity { store_id: 426, product_id: 8964 },
             qty: HashMap::from([
                 (
                     return_time + Duration::seconds(10),
@@ -554,7 +528,6 @@ async fn return_lines_request_common(
     let mock_order_id = "SomebodyOrderedThis".to_string();
     let mock_return_req = vec![OrderLineReqDto {
         seller_id: 800,
-        product_type: ProductType::Item,
         product_id: 191,
         quantity: 2,
     }];

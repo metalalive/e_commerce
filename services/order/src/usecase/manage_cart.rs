@@ -68,7 +68,6 @@ impl ModifyCartLineUseCase {
             .iter()
             .map(|cl| BaseProductIdentity {
                 store_id: cl.seller_id,
-                product_type: cl.product_type.clone(),
                 product_id: cl.product_id,
             })
             .collect::<Vec<_>>();

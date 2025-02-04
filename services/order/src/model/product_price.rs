@@ -5,7 +5,6 @@ use std::result::Result as DefaultResult;
 use std::vec::Vec;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::api::rpc::dto::ProductPriceEditDto;
@@ -13,19 +12,17 @@ use crate::error::AppError;
 
 #[derive(Debug, Eq)]
 pub struct ProductPriceModel {
-    pub price: u32,
+    pub price: u32, // TODO, rename to base-price
     pub start_after: DateTime<FixedOffset>,
     pub end_before: DateTime<FixedOffset>,
     pub product_id: u64,
-    pub product_type: ProductType,
     pub is_create: bool,
-}
+} // TODO, extra pricing from product attributes
 
 impl PartialEq for ProductPriceModel {
     fn eq(&self, other: &Self) -> bool {
         (self.price == other.price)
             && (self.product_id == other.product_id)
-            && (self.product_type == other.product_type)
             && (self.start_after == other.start_after)
             && (self.end_before == other.end_before)
     }
@@ -47,11 +44,10 @@ impl ProductPriceModelSet {
         let num_updated = updating
             .iter()
             .filter_map(|d| {
-                let result = self.items.iter_mut().find(|obj| {
-                    obj.product_type == d.product_type
-                        && obj.product_id == d.product_id
-                        && !obj.is_create
-                });
+                let result = self
+                    .items
+                    .iter_mut()
+                    .find(|obj| obj.product_id == d.product_id && !obj.is_create);
                 if let Some(obj) = result {
                     (obj.price, obj.end_before) = (d.price, d.end_before);
                     obj.start_after = d.start_after;
@@ -71,7 +67,6 @@ impl ProductPriceModelSet {
             .iter()
             .map(|d| ProductPriceModel {
                 price: d.price,
-                product_type: d.product_type.clone(),
                 product_id: d.product_id,
                 start_after: d.start_after,
                 is_create: true,

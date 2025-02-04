@@ -1,13 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 use ecommerce_common::api::dto::{
-    jsn_serialize_product_type, jsn_validate_product_type, BillingDto, CurrencyDto,
-    GenericRangeErrorDto, OrderCurrencySnapshotDto, OrderLinePayDto,
+    BillingDto, CurrencyDto, GenericRangeErrorDto, OrderCurrencySnapshotDto, OrderLinePayDto,
 };
 use ecommerce_common::api::web::dto::{
     BillingErrorDto, ContactErrorDto, PhyAddrErrorDto, QuotaResourceErrorDto,
 };
-use ecommerce_common::constant::ProductType;
 
 use crate::api::dto::ShippingDto;
 
@@ -15,11 +13,6 @@ use crate::api::dto::ShippingDto;
 pub struct OrderLineReqDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(
-        deserialize_with = "jsn_validate_product_type",
-        serialize_with = "jsn_serialize_product_type"
-    )]
-    pub product_type: ProductType,
     pub quantity: u32,
 }
 
@@ -59,11 +52,6 @@ pub struct OrderLineCreateErrNonExistDto {
 pub struct OrderLineCreateErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(
-        deserialize_with = "jsn_validate_product_type",
-        serialize_with = "jsn_serialize_product_type"
-    )]
-    pub product_type: ProductType,
     pub reason: OrderLineCreateErrorReason,
     pub nonexist: Option<OrderLineCreateErrNonExistDto>,
     pub shortage: Option<u32>,
@@ -74,11 +62,6 @@ pub struct OrderLineCreateErrorDto {
 pub struct OrderLineReturnErrorDto {
     pub seller_id: u32,
     pub product_id: u64,
-    #[serde(
-        deserialize_with = "jsn_validate_product_type",
-        serialize_with = "jsn_serialize_product_type"
-    )]
-    pub product_type: ProductType,
     pub reason: OrderLineReturnErrorReason,
 }
 
@@ -145,12 +128,7 @@ pub struct OrderEditReqData {
 
 #[derive(Deserialize)]
 pub struct ProductPolicyDto {
-    #[serde(
-        deserialize_with = "jsn_validate_product_type",
-        serialize_with = "jsn_serialize_product_type"
-    )]
-    pub product_type: ProductType,
-    pub product_id: u64,
+    pub product_id: u64, // TODO, new field `seller_id` u32
     pub auto_cancel_secs: u32,
     pub warranty_hours: u32,
     pub max_num_rsv: Option<u16>,
@@ -170,8 +148,6 @@ pub struct ProductPolicyNumRsvLimitDto {
 
 #[derive(Serialize, PartialEq, Debug)]
 pub struct ProductPolicyClientErrorDto {
-    #[serde(serialize_with = "jsn_serialize_product_type")]
-    pub product_type: ProductType,
     pub product_id: u64,
     pub err_type: String, // convert from AppError
     pub auto_cancel_secs: Option<ProductPolicyClientLimitDto>,

@@ -11,7 +11,6 @@ use tokio::sync::Mutex;
 
 use ecommerce_common::api::dto::{CurrencyDto, PhoneNumberDto};
 use ecommerce_common::api::rpc::dto::{OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto};
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::{BillingModel, ContactModel, PhyAddrModel};
 
@@ -125,53 +124,41 @@ mod _ship_opt {
 } // end of inner module _ship_opt
 
 mod _orderline {
-    use super::{AppInMemFetchedSingleRow, HashMap, ProductType};
+    use super::{AppInMemFetchedSingleRow, HashMap};
     use crate::model::OrderLineModel;
 
     pub(super) const TABLE_LABEL: &str = "order_line_reserved";
     #[rustfmt::skip]
     pub(super) enum InMemColIdx {
-        SellerID, ProductType, ProductId, QtyReserved,
-        PriceUnit, PriceTotal, PolicyReserved, PolicyWarranty,
-        QtyPaid, QtyPaidLastUpdate, TotNumColumns,
+        SellerID, ProductId, QtyReserved, PriceUnit, PriceTotal,
+        PolicyReserved, PolicyWarranty, QtyPaid, QtyPaidLastUpdate,
+        TotNumColumns,
     }
     impl From<InMemColIdx> for usize {
         fn from(value: InMemColIdx) -> usize {
             match value {
                 InMemColIdx::SellerID => 0,
-                InMemColIdx::ProductType => 1,
-                InMemColIdx::ProductId => 2,
-                InMemColIdx::QtyReserved => 3,
-                InMemColIdx::QtyPaid => 4,
-                InMemColIdx::QtyPaidLastUpdate => 5,
-                InMemColIdx::PriceUnit => 6,
-                InMemColIdx::PriceTotal => 7,
-                InMemColIdx::PolicyReserved => 8,
-                InMemColIdx::PolicyWarranty => 9,
-                InMemColIdx::TotNumColumns => 10,
+                InMemColIdx::ProductId => 1,
+                InMemColIdx::QtyReserved => 2,
+                InMemColIdx::QtyPaid => 3,
+                InMemColIdx::QtyPaidLastUpdate => 4,
+                InMemColIdx::PriceUnit => 5,
+                InMemColIdx::PriceTotal => 6,
+                InMemColIdx::PolicyReserved => 7,
+                InMemColIdx::PolicyWarranty => 8,
+                InMemColIdx::TotNumColumns => 9,
             }
         }
     }
-    pub(super) fn inmem_pkey(
-        oid: &str,
-        seller_id: u32,
-        prod_typ: ProductType,
-        prod_id: u64,
-    ) -> String {
-        let prod_typ = <ProductType as Into<u8>>::into(prod_typ);
-        format!("{oid}-{seller_id}-{prod_typ}-{prod_id}")
+    pub(super) fn inmem_pkey(oid: &str, seller_id: u32, prod_id: u64) -> String {
+        format!("{oid}-{seller_id}-{prod_id}")
     }
     pub(super) fn to_inmem_tbl(
         oid: &str,
         data: &[OrderLineModel],
     ) -> HashMap<String, AppInMemFetchedSingleRow> {
         let kv_iter = data.iter().map(|m| {
-            let pkey = inmem_pkey(
-                oid,
-                m.id_.store_id,
-                m.id_.product_type.clone(),
-                m.id_.product_id,
-            );
+            let pkey = inmem_pkey(oid, m.id_.store_id, m.id_.product_id);
             (pkey, m.into())
         });
         HashMap::from_iter(kv_iter)
@@ -303,7 +290,6 @@ pub struct OrderInMemRepo {
 impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
     fn from(value: &OrderLineModel) -> Self {
         let seller_id_s = value.id_.store_id.to_string();
-        let prod_typ = <ProductType as Into<u8>>::into(value.id_.product_type.clone()).to_string();
         let prod_id = value.id_.product_id.to_string();
         let _paid_last_update = if let Some(v) = value.qty.paid_last_update.as_ref() {
             v.to_rfc3339()
@@ -340,7 +326,6 @@ impl From<&OrderLineModel> for AppInMemFetchedSingleRow {
                 _orderline::InMemColIdx::PolicyWarranty,
                 value.policy.warranty_until.to_rfc3339(),
             ),
-            (_orderline::InMemColIdx::ProductType, prod_typ),
             (_orderline::InMemColIdx::ProductId, prod_id),
             (_orderline::InMemColIdx::SellerID, seller_id_s),
         ]
@@ -360,9 +345,6 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
         let seller_id = row
             .get::<usize>(_orderline::InMemColIdx::SellerID.into())
             .unwrap().parse().unwrap();
-        let prod_typ = row
-            .get::<usize>(_orderline::InMemColIdx::ProductType.into())
-            .unwrap().parse::<u8>().unwrap();
         let product_id = row
             .get::<usize>(_orderline::InMemColIdx::ProductId.into())
             .unwrap().parse().unwrap();
@@ -408,7 +390,6 @@ impl From<AppInMemFetchedSingleRow> for OrderLineModel {
             id_: OrderLineIdentity {
                 store_id: seller_id,
                 product_id,
-                product_type: ProductType::from(prod_typ),
             },
             price, policy, qty,
         }
@@ -803,14 +784,7 @@ impl AbsOrderRepo for OrderInMemRepo {
             let pids = data
                 .lines
                 .iter()
-                .map(|d| {
-                    _orderline::inmem_pkey(
-                        oid.as_ref(),
-                        d.seller_id,
-                        d.product_type.clone(),
-                        d.product_id,
-                    )
-                })
+                .map(|d| _orderline::inmem_pkey(oid.as_ref(), d.seller_id, d.product_id))
                 .collect();
             let info = HashMap::from([(table_name.to_string(), pids)]);
             let (mut rawdata, lock) = self.datastore.fetch_acquire(info).await?;
@@ -881,7 +855,7 @@ impl AbsOrderRepo for OrderInMemRepo {
     ) -> DefaultResult<Vec<OrderLineModel>, AppError> {
         let keys = pids
             .into_iter()
-            .map(|d| _orderline::inmem_pkey(oid, d.store_id, d.product_type, d.product_id))
+            .map(|d| _orderline::inmem_pkey(oid, d.store_id, d.product_id))
             .collect();
         self.fetch_lines_common(keys).await
     }

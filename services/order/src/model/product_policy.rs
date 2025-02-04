@@ -2,7 +2,6 @@ use std::cmp::PartialEq;
 use std::result::Result as DefaultResult;
 use std::vec::Vec;
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::api::web::dto::{
@@ -13,7 +12,6 @@ use crate::error::AppError;
 
 #[derive(Debug)]
 pub struct ProductPolicyModel {
-    pub product_type: ProductType,
     pub product_id: u64,
     pub auto_cancel_secs: u32,
     pub warranty_hours: u32,
@@ -29,10 +27,7 @@ pub struct ProductPolicyModel {
 
 impl PartialEq for ProductPolicyModel {
     fn eq(&self, other: &Self) -> bool {
-        let p_typ_self: u8 = self.product_type.clone().into();
-        let p_typ_other: u8 = other.product_type.clone().into();
         (self.product_id == other.product_id)
-            && (p_typ_self == p_typ_other)
             && (self.auto_cancel_secs == other.auto_cancel_secs)
             && (self.warranty_hours == other.warranty_hours)
             && (self.max_num_rsv == other.max_num_rsv)
@@ -53,7 +48,6 @@ impl ProductPolicyModelSet {
     ) -> DefaultResult<(), Vec<ProductPolicyClientErrorDto>> {
         if newdata.is_empty() {
             let ce = ProductPolicyClientErrorDto {
-                product_type: ProductType::Unknown(0),
                 product_id: 0u64,
                 auto_cancel_secs: None,
                 warranty_hours: None,
@@ -96,7 +90,6 @@ impl ProductPolicyModelSet {
                 if num_rsv.is_some() || auto_cancel_secs.is_some() || warranty_hours.is_some() {
                     let ce = ProductPolicyClientErrorDto {
                         product_id: item.product_id,
-                        product_type: item.product_type.clone(),
                         auto_cancel_secs,
                         warranty_hours,
                         num_rsv,
@@ -122,9 +115,10 @@ impl ProductPolicyModelSet {
             .filter_map(|mut item| {
                 let max_num_rsv = item.max_num_rsv.take().unwrap_or(zero_num_rsv);
                 let min_num_rsv = item.min_num_rsv.take().unwrap_or(zero_num_rsv);
-                let result = self.policies.iter_mut().find(|o| {
-                    o.product_id == item.product_id && o.product_type == item.product_type
-                });
+                let result = self
+                    .policies
+                    .iter_mut()
+                    .find(|o| o.product_id == item.product_id);
                 if let Some(obj) = result {
                     obj.auto_cancel_secs = item.auto_cancel_secs;
                     obj.warranty_hours = item.warranty_hours;
@@ -136,7 +130,6 @@ impl ProductPolicyModelSet {
                         is_create: true,
                         product_id: item.product_id,
                         max_num_rsv,
-                        product_type: item.product_type,
                         min_num_rsv,
                         auto_cancel_secs: item.auto_cancel_secs,
                         warranty_hours: item.warranty_hours,

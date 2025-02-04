@@ -26,7 +26,6 @@ use crate::api::web::dto::{
     OrderLineReqDto, OrderLineReturnErrorDto, ShippingErrorDto, ShippingReqDto,
 };
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::logging::{app_log_event, AppLogContext, AppLogLevel};
 use ecommerce_common::model::order::BillingModel;
@@ -240,14 +239,11 @@ impl CreateOrderUseCase {
         &self,
         data: &[OrderLineReqDto],
     ) -> DefaultResult<(ProductPolicyModelSet, Vec<ProductPriceModelSet>), CreateOrderUsKsErr> {
-        let req_ids_policy = data
-            .iter()
-            .map(|d| (d.product_type.clone(), d.product_id))
-            .collect::<Vec<(ProductType, u64)>>();
+        let req_ids_policy = data.iter().map(|d| d.product_id).collect::<Vec<u64>>();
         let req_ids_price = data
             .iter()
-            .map(|d| (d.seller_id, d.product_type.clone(), d.product_id))
-            .collect::<Vec<(u32, ProductType, u64)>>();
+            .map(|d| (d.seller_id, d.product_id))
+            .collect::<Vec<(u32, u64)>>();
         // TODO, limit number of distinct product items to load for each order
         let rs_policy = self.repo_policy.fetch(req_ids_policy.clone()).await;
         let rs_price = self.repo_price.fetch_many(req_ids_price.clone()).await;
@@ -314,24 +310,17 @@ impl CreateOrderUseCase {
                 let result1 = ms_policy
                     .policies
                     .iter()
-                    .find(|m| m.product_type == d.product_type && m.product_id == d.product_id);
+                    .find(|m| m.product_id == d.product_id);
                 let result2 = ms_price.iter().find_map(|ms| {
                     if ms.store_id == d.seller_id {
-                        ms.items.iter().find(|m| {
-                            m.product_type == d.product_type && m.product_id == d.product_id
-                        }) // TODO, validate expiry of the pricing rule
+                        ms.items.iter().find(|m| m.product_id == d.product_id) // TODO, validate expiry of the pricing rule
                     } else {
                         None
                     }
                 });
                 let (plc_nonexist, price_nonexist) = (result1.is_none(), result2.is_none());
                 if let (Some(plc), Some(price)) = (result1, result2) {
-                    let (seller_id, product_id, product_type, req_qty) = (
-                        d.seller_id,
-                        d.product_id,
-                        d.product_type.clone(),
-                        d.quantity,
-                    );
+                    let (seller_id, product_id, req_qty) = (d.seller_id, d.product_id, d.quantity);
                     OrderLineModel::try_from(d, plc, price)
                         .map_err(|e| {
                             if e.code == AppErrorCode::ExceedingMaxLimit {
@@ -343,7 +332,6 @@ impl CreateOrderUseCase {
                                 let e = OrderLineCreateErrorDto {
                                     seller_id,
                                     product_id,
-                                    product_type,
                                     rsv_limit: Some(rsv_limit),
                                     nonexist: None,
                                     shortage: None,
@@ -366,7 +354,6 @@ impl CreateOrderUseCase {
                         product_id: d.product_id,
                         rsv_limit: None,
                         reason: OrderLineCreateErrorReason::NotExist,
-                        product_type: d.product_type,
                         nonexist: Some(nonexist),
                         shortage: None,
                     };

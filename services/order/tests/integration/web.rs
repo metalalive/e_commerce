@@ -9,7 +9,6 @@ use hyper::Body as HyperBody;
 use serde_json::{Map, Value as JsnVal};
 
 use ecommerce_common::api::web::dto::{ContactErrorReason, PhoneNumNationErrorReason};
-use ecommerce_common::constant::ProductType;
 
 use order::api::rpc;
 use order::api::web::dto::{
@@ -113,7 +112,6 @@ async fn itest_setup_currency_exrate(shrstate: AppSharedState) {
 fn verify_reply_stock_level(
     objs: &Vec<JsnVal>,
     expect_product_id: u64,
-    expect_product_type: u8,
     expect_qty_total: u32,
     expect_qty_cancelled: u32,
     expect_qty_booked: u32,
@@ -123,19 +121,12 @@ fn verify_reply_stock_level(
         .find(|d| {
             if let JsnVal::Object(item) = d {
                 let prod_id_v = item.get("product_id").unwrap();
-                let prod_typ_v = item.get("product_type").unwrap();
                 let actual_product_id = if let JsnVal::Number(id_) = prod_id_v {
                     id_.as_u64().unwrap()
                 } else {
                     0
                 };
-                let actual_product_type = if let JsnVal::Number(typ_) = prod_typ_v {
-                    typ_.as_u64().unwrap()
-                } else {
-                    0
-                };
                 expect_product_id == actual_product_id
-                    && expect_product_type as u64 == actual_product_type
             } else {
                 false
             }
@@ -396,16 +387,16 @@ async fn update_stock_level_ok() -> DefaultResult<(), AppError> {
             itest_setup_stock_level(shrstate.clone(), expiry, FPATH_EDIT_STOCK_LVL_OK[0]).await;
         let items = resp_body.as_array().unwrap();
         assert_eq!(items.len(), 3);
-        verify_reply_stock_level(&items, 7001, 2, 18, 0, 0);
-        verify_reply_stock_level(&items, 9200125, 1, 12, 0, 0);
-        verify_reply_stock_level(&items, 20911, 2, 50, 0, 0);
+        verify_reply_stock_level(&items, 7001, 18, 0, 0);
+        verify_reply_stock_level(&items, 9200125, 12, 0, 0);
+        verify_reply_stock_level(&items, 20911, 50, 0, 0);
         let resp_body =
             itest_setup_stock_level(shrstate.clone(), expiry, FPATH_EDIT_STOCK_LVL_OK[1]).await;
         let items = resp_body.as_array().unwrap();
         assert_eq!(items.len(), 3);
-        verify_reply_stock_level(&items, 9200125, 1, 14, 0, 0);
-        verify_reply_stock_level(&items, 7001, 2, 18, 2, 0);
-        verify_reply_stock_level(&items, 20912, 2, 19, 0, 0);
+        verify_reply_stock_level(&items, 9200125, 14, 0, 0);
+        verify_reply_stock_level(&items, 7001, 18, 2, 0);
+        verify_reply_stock_level(&items, 20912, 19, 0, 0);
     }
     let mock_authed_usr = 186;
     let authed_claim = setup_mock_authed_claim(mock_authed_usr);
@@ -436,8 +427,8 @@ async fn update_stock_level_ok() -> DefaultResult<(), AppError> {
             itest_setup_stock_level(shrstate.clone(), expiry, FPATH_EDIT_STOCK_LVL_OK[2]).await;
         let items = resp_body.as_array().unwrap();
         assert_eq!(items.len(), 2);
-        verify_reply_stock_level(&items, 9200125, 1, 44, 0, 3);
-        verify_reply_stock_level(&items, 7001, 2, 28, 2, 5);
+        verify_reply_stock_level(&items, 9200125, 44, 0, 3);
+        verify_reply_stock_level(&items, 7001, 28, 2, 5);
         let resp_body = itest_setup_stock_level(
             shrstate.clone(),
             expiry + Duration::minutes(2),
@@ -446,8 +437,8 @@ async fn update_stock_level_ok() -> DefaultResult<(), AppError> {
         .await;
         let items = resp_body.as_array().unwrap();
         assert_eq!(items.len(), 2);
-        verify_reply_stock_level(&items, 9200125, 1, 30, 0, 0);
-        verify_reply_stock_level(&items, 7001, 2, 10, 0, 0);
+        verify_reply_stock_level(&items, 9200125, 30, 0, 0);
+        verify_reply_stock_level(&items, 7001, 10, 0, 0);
     }
     let _oid = place_new_order_ok(
         top_lvl_cfg.clone(),
@@ -461,10 +452,10 @@ async fn update_stock_level_ok() -> DefaultResult<(), AppError> {
             itest_setup_stock_level(shrstate.clone(), expiry, FPATH_EDIT_STOCK_LVL_OK[3]).await;
         let items = resp_body.as_array().unwrap();
         assert_eq!(items.len(), 4);
-        verify_reply_stock_level(&items, 9200125, 1, 45, 0, 14);
-        verify_reply_stock_level(&items, 7001, 2, 29, 2, 8);
-        verify_reply_stock_level(&items, 20911, 2, 51, 0, 4);
-        verify_reply_stock_level(&items, 20912, 2, 20, 0, 6);
+        verify_reply_stock_level(&items, 9200125, 45, 0, 14);
+        verify_reply_stock_level(&items, 7001, 29, 2, 8);
+        verify_reply_stock_level(&items, 20911, 51, 0, 4);
+        verify_reply_stock_level(&items, 20912, 20, 0, 6);
     }
     Ok(())
 } // end of fn update_stock_level_ok
@@ -781,11 +772,9 @@ async fn add_product_policy_request_error() -> DefaultResult<(), AppError> {
         let errors = resp.as_array_mut().unwrap();
         assert_eq!(errors.len(), 1);
         let map = errors.remove(0);
-        let prod_typ = map.get("product_type").unwrap().as_u64().unwrap();
         let prod_id = map.get("product_id").unwrap().as_u64().unwrap();
         let _err_typ = map.get("err_type").unwrap().as_str().unwrap();
         let _warranty = map.get("warranty_hours").unwrap().as_object().unwrap();
-        assert_eq!(prod_typ, 1u64);
         assert_eq!(prod_id, 10093183u64);
     }
     Ok(())
@@ -857,7 +846,7 @@ fn itest_verify_order_billing(
     actual: JsnVal,
     expect_oid: &str,
     expect_usr_id: u32,
-    expect_lines: Vec<(u32, ProductType, u64, u32)>,
+    expect_lines: Vec<(u32, u64, u32)>,
 ) {
     let actual = actual.as_object().unwrap();
     let oid = actual.get("oid").unwrap().as_str().unwrap();
@@ -880,13 +869,7 @@ fn itest_verify_order_billing(
                         u32::try_from(s).unwrap()
                     };
                     let product_id = map.get("product_id").unwrap().as_u64().unwrap();
-                    let product_type = {
-                        let p = map.get("product_type").unwrap().as_u64().unwrap();
-                        ProductType::from(p as u8)
-                    };
-                    let cond = (store_id == expect.0)
-                        && (product_id == expect.2)
-                        && (product_type == expect.1);
+                    let cond = (store_id == expect.0) && (product_id == expect.1);
                     if cond {
                         Some(map)
                     } else {
@@ -898,7 +881,7 @@ fn itest_verify_order_billing(
                 let q = actual_line.get("quantity").unwrap().as_u64().unwrap();
                 u32::try_from(q).unwrap()
             };
-            assert_eq!(qty, expect.3);
+            assert_eq!(qty, expect.2);
             // this test case simply ensures the fields exist without inspecting the
             // precise amount and its decimal value
             {
@@ -913,7 +896,7 @@ async fn itest_update_payment_status(
     shrstate: AppSharedState,
     oid: String,
     charge_time: DateTime<FixedOffset>,
-    last_paid: Vec<(u32, ProductType, u64, u32)>,
+    last_paid: Vec<(u32, u64, u32)>,
 ) {
     const FPATH_UPDATE_PAYMENT_TEMPLATE: &str =
         "/tests/integration/examples/update_payment_template.json";
@@ -936,11 +919,9 @@ async fn itest_update_payment_status(
             .into_iter()
             .map(|item| {
                 let mut info = Map::new();
-                let prod_typ: u8 = item.1.clone().into();
                 info.insert("seller_id".to_string(), JsnVal::Number(item.0.into()));
-                info.insert("product_type".to_string(), JsnVal::Number(prod_typ.into()));
-                info.insert("product_id".to_string(), JsnVal::Number(item.2.into()));
-                info.insert("qty".to_string(), JsnVal::Number(item.3.into()));
+                info.insert("product_id".to_string(), JsnVal::Number(item.1.into()));
+                info.insert("qty".to_string(), JsnVal::Number(item.2.into()));
                 lines.push(JsnVal::Object(info));
             })
             .count();
@@ -993,33 +974,27 @@ async fn replica_update_order_payment() -> DefaultResult<(), AppError> {
         resp_body,
         oid.as_str(),
         mock_authed_usr,
-        vec![
-            (mock_seller, ProductType::Package, 20094, 19),
-            (mock_seller, ProductType::Item, 20092, 13),
-        ],
+        vec![(mock_seller, 20094, 19), (mock_seller, 20092, 13)],
     );
     itest_update_payment_status(
         shrstate.clone(),
         oid.clone(),
         time_now + Duration::seconds(5),
-        vec![
-            (mock_seller, ProductType::Package, 20094, 1),
-            (mock_seller, ProductType::Item, 20092, 1),
-        ],
+        vec![(mock_seller, 20094, 1), (mock_seller, 20092, 1)],
     )
     .await;
     itest_update_payment_status(
         shrstate.clone(),
         oid.clone(),
         time_now + Duration::seconds(11),
-        vec![(mock_seller, ProductType::Item, 20092, 7)],
+        vec![(mock_seller, 20092, 7)],
     )
     .await;
     itest_update_payment_status(
         shrstate,
         oid,
         time_now + Duration::seconds(12),
-        vec![(mock_seller, ProductType::Package, 20094, 5)],
+        vec![(mock_seller, 20094, 5)],
     )
     .await;
     Ok(())
@@ -1059,11 +1034,7 @@ async fn itest_setup_get_order_refund(
     result.unwrap()
 } // end of fn itest_setup_get_order_refund
 
-fn itest_verify_order_refund(
-    actual: JsnVal,
-    oid: &str,
-    expect_lines: Vec<(u32, ProductType, u64)>,
-) {
+fn itest_verify_order_refund(actual: JsnVal, oid: &str, expect_lines: Vec<(u32, u64)>) {
     let olines = actual.as_object().unwrap().get(oid).unwrap();
     let olines = olines.as_array().unwrap();
     assert_eq!(olines.len(), expect_lines.len());
@@ -1079,13 +1050,7 @@ fn itest_verify_order_refund(
                         u32::try_from(s).unwrap()
                     };
                     let product_id = map.get("product_id").unwrap().as_u64().unwrap();
-                    let product_type = {
-                        let p = map.get("product_type").unwrap().as_u64().unwrap();
-                        ProductType::from(p as u8)
-                    };
-                    let cond = (store_id == expect.0)
-                        && (product_id == expect.2)
-                        && (product_type == expect.1);
+                    let cond = (store_id == expect.0) && (product_id == expect.1);
                     if cond {
                         Some(map)
                     } else {
@@ -1138,9 +1103,9 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
         oid.clone(),
         time_now + Duration::seconds(2),
         vec![
-            (mock_seller, ProductType::Item, 20097, 11),
-            (mock_seller, ProductType::Item, 20095, 16),
-            (mock_seller, ProductType::Package, 20096, 14),
+            (mock_seller, 20097, 11),
+            (mock_seller, 20095, 16),
+            (mock_seller, 20096, 14),
         ],
     )
     .await;
@@ -1166,9 +1131,9 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
         resp_body,
         oid.as_str(),
         vec![
-            (mock_seller, ProductType::Item, 20095),
-            (mock_seller, ProductType::Package, 20096),
-            (mock_seller, ProductType::Item, 20097),
+            (mock_seller, 20095),
+            (mock_seller, 20096),
+            (mock_seller, 20097),
         ],
     );
     sleep(std::time::Duration::from_secs(
@@ -1185,20 +1150,12 @@ async fn replica_order_refund() -> DefaultResult<(), AppError> {
     )
     .await;
     let time_after_req2 = Local::now().fixed_offset();
-    let resp_body = itest_setup_get_order_refund(
-        shrstate,
-        oid.clone(),
-        time_after_req1,
-        time_after_req2,
-    )
-    .await;
+    let resp_body =
+        itest_setup_get_order_refund(shrstate, oid.clone(), time_after_req1, time_after_req2).await;
     itest_verify_order_refund(
         resp_body,
         oid.as_str(),
-        vec![
-            (mock_seller, ProductType::Item, 20095),
-            (mock_seller, ProductType::Item, 20097),
-        ],
+        vec![(mock_seller, 20095), (mock_seller, 20097)],
     );
     Ok(())
 } // end of fn replica_order_refund
@@ -1241,7 +1198,7 @@ async fn itest_setup_get_order_inventory(
 fn itest_verify_rsv_inventory(
     actual: &Vec<JsnVal>,
     expect_oid: &str,
-    expect_rsv: Vec<(u32, ProductType, u64, u32)>,
+    expect_rsv: Vec<(u32, u64, u32)>,
 ) {
     let olines = actual
         .iter()
@@ -1268,13 +1225,7 @@ fn itest_verify_rsv_inventory(
                         u32::try_from(s).unwrap()
                     };
                     let product_id = map.get("product_id").unwrap().as_u64().unwrap();
-                    let product_type = {
-                        let p = map.get("product_type").unwrap().as_u64().unwrap();
-                        ProductType::from(p as u8)
-                    };
-                    let cond = (store_id == expect.0)
-                        && (product_id == expect.2)
-                        && (product_type == expect.1);
+                    let cond = (store_id == expect.0) && (product_id == expect.1);
                     if cond {
                         Some(map)
                     } else {
@@ -1286,7 +1237,7 @@ fn itest_verify_rsv_inventory(
                 let q = actual_line.get("qty").unwrap().as_u64().unwrap();
                 u32::try_from(q).unwrap()
             };
-            assert_eq!(qty, expect.3);
+            assert_eq!(qty, expect.2);
         })
         .count();
 } // end of fn itest_verify_rsv_inventory
@@ -1332,9 +1283,9 @@ async fn replica_order_rsv_inventory() -> DefaultResult<(), AppError> {
             rsv_all,
             oid.as_str(),
             vec![
-                (mock_seller, ProductType::Package, 20101, 17),
-                (mock_seller, ProductType::Item, 20100, 16),
-                (mock_seller, ProductType::Package, 20099, 15),
+                (mock_seller, 20101, 17),
+                (mock_seller, 20100, 16),
+                (mock_seller, 20099, 15),
             ],
         );
     }
@@ -1361,10 +1312,7 @@ async fn replica_order_rsv_inventory() -> DefaultResult<(), AppError> {
         itest_verify_rsv_inventory(
             returns,
             oid.as_str(),
-            vec![
-                (mock_seller, ProductType::Package, 20101, 4),
-                (mock_seller, ProductType::Item, 20100, 6),
-            ],
+            vec![(mock_seller, 20101, 4), (mock_seller, 20100, 6)],
         );
     }
     Ok(())
@@ -1491,11 +1439,6 @@ fn _cart_line_dto_sort_helper(x: &JsnVal, y: &JsnVal) -> std::cmp::Ordering {
     let seller_x = map_x.get("seller_id").unwrap().as_u64().unwrap();
     let seller_y = map_y.get("seller_id").unwrap().as_u64().unwrap();
     let mut c = seller_x.cmp(&seller_y);
-    if c == std::cmp::Ordering::Equal {
-        let prod_typ_num_x = map_x.get("product_type").unwrap().as_u64().unwrap();
-        let prod_typ_num_y = map_y.get("product_type").unwrap().as_u64().unwrap();
-        c = prod_typ_num_x.cmp(&prod_typ_num_y);
-    }
     if c == std::cmp::Ordering::Equal {
         let prod_id_x = map_x.get("product_id").unwrap().as_u64().unwrap();
         let prod_id_y = map_y.get("product_id").unwrap().as_u64().unwrap();

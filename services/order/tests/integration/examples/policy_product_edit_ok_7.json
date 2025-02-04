@@ -1,18 +1,15 @@
 [
   {
-    "product_type": 2,
     "product_id": 20099,
     "auto_cancel_secs": 1830,
     "warranty_hours": 148
   },
   {
-    "product_type": 1,
     "product_id": 20100,
     "auto_cancel_secs": 616,
     "warranty_hours": 47
   },
   {
-    "product_type": 2,
     "product_id": 20101,
     "auto_cancel_secs": 882,
     "warranty_hours": 500

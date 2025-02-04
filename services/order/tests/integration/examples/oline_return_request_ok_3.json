@@ -1,13 +1,11 @@
 [
     {
       "seller_id": 543,
-      "product_type": 1,
       "product_id": 20095,
       "quantity": 1
     },
     {
       "seller_id": 543,
-      "product_type": 1,
       "product_id": 20097,
       "quantity": 1
     }

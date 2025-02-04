@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
-use ecommerce_common::constant::ProductType;
 
 use order::api::web::dto::{OrderLineReqDto, OrderLineReturnErrorReason};
 use order::constant::hard_limit;
@@ -19,8 +18,7 @@ fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec
             price: OrderLinePriceModel { unit: 7, total: 70 },
             id_: OrderLineIdentity {
                 store_id,
-                product_id: 812,
-                product_type: ProductType::Package,
+                product_id: 812, // type: Package,
             },
             qty: OrderLineQuantityModel {
                 reserved: 10,
@@ -39,8 +37,7 @@ fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec
             },
             id_: OrderLineIdentity {
                 store_id,
-                product_id: 890,
-                product_type: ProductType::Item,
+                product_id: 890, // type: Item,
             },
             qty: OrderLineQuantityModel {
                 reserved: 9,
@@ -56,8 +53,7 @@ fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec
             price: OrderLinePriceModel { unit: 5, total: 80 },
             id_: OrderLineIdentity {
                 store_id,
-                product_id: 574,
-                product_type: ProductType::Package,
+                product_id: 574, // type: Package,
             },
             qty: OrderLineQuantityModel {
                 reserved: 16,
@@ -76,8 +72,7 @@ fn ut_saved_orderline_setup(dt_now: DateTime<FixedOffset>, store_id: u32) -> Vec
             },
             id_: OrderLineIdentity {
                 store_id,
-                product_id: 257,
-                product_type: ProductType::Item,
+                product_id: 257, // type: Item,
             },
             qty: OrderLineQuantityModel {
                 reserved: 10,
@@ -107,8 +102,7 @@ fn ut_saved_oline_return_setup(
         OrderReturnModel {
             id_: OrderLineIdentity {
                 store_id,
-                product_id: 257,
-                product_type: ProductType::Item,
+                product_id: 257, // type: Item,
             },
             qty: HashMap::from([
                 (
@@ -136,8 +130,7 @@ fn ut_saved_oline_return_setup(
         OrderReturnModel {
             id_: OrderLineIdentity {
                 store_id,
-                product_id: 574,
-                product_type: ProductType::Package,
+                product_id: 574, // type: Package,
             },
             qty: HashMap::from([(
                 last_returned[0].clone(),
@@ -164,19 +157,16 @@ fn filter_request_ok() {
         OrderLineReqDto {
             seller_id,
             product_id: 890,
-            product_type: ProductType::Item,
             quantity: 4,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 574,
-            product_type: ProductType::Package,
             quantity: 1,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 257,
-            product_type: ProductType::Item,
             quantity: 3,
         },
     ];
@@ -211,19 +201,16 @@ fn filter_request_err_nonexist() {
         OrderLineReqDto {
             seller_id,
             product_id: 890,
-            product_type: ProductType::Item,
             quantity: 4,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 574,
-            product_type: ProductType::Package,
             quantity: 1,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 1888,
-            product_type: ProductType::Item,
             quantity: 666,
         },
     ];
@@ -255,19 +242,16 @@ fn filter_request_warranty_expired() {
         OrderLineReqDto {
             seller_id,
             product_id: 890,
-            product_type: ProductType::Item,
             quantity: 1,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 574,
-            product_type: ProductType::Package,
             quantity: 1,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 257,
-            product_type: ProductType::Item,
             quantity: 2,
         },
     ];
@@ -293,25 +277,21 @@ fn filter_request_invalid_qty() {
         OrderLineReqDto {
             seller_id,
             product_id: 9999,
-            product_type: ProductType::Package,
             quantity: 1,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 890,
-            product_type: ProductType::Item,
             quantity: 3,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 574,
-            product_type: ProductType::Package,
             quantity: 16,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 257,
-            product_type: ProductType::Item,
             quantity: 2,
         },
     ];
@@ -351,19 +331,16 @@ fn filter_request_err_duplicate() {
         OrderLineReqDto {
             seller_id,
             product_id: 890,
-            product_type: ProductType::Item,
             quantity: 3,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 574,
-            product_type: ProductType::Package,
             quantity: 1,
         },
         OrderLineReqDto {
             seller_id,
             product_id: 257,
-            product_type: ProductType::Item,
             quantity: 1,
         },
     ];

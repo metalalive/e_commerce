@@ -1,7 +1,6 @@
 use chrono::DateTime;
 use std::vec::Vec;
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use order::api::rpc::dto::InventoryEditStockLevelDto;
@@ -17,28 +16,24 @@ fn ut_setup_data() -> Vec<InventoryEditStockLevelDto> {
         InventoryEditStockLevelDto {
             qty_add: 13,
             store_id: 91,
-            product_type: ProductType::Item,
             product_id: 210094,
             expiry: DateTime::parse_from_rfc3339("2023-01-19T06:05:39.001+05:00").unwrap(),
         },
         InventoryEditStockLevelDto {
             qty_add: 2,
             store_id: 91,
-            product_type: ProductType::Package,
             product_id: 210095,
             expiry: DateTime::parse_from_rfc3339("2023-01-19T06:05:39.002+05:00").unwrap(),
         },
         InventoryEditStockLevelDto {
             qty_add: -9,
             store_id: 99,
-            product_type: ProductType::Item,
             product_id: 210096,
             expiry: DateTime::parse_from_rfc3339("2023-01-19T06:05:40.003+05:00").unwrap(),
         },
         InventoryEditStockLevelDto {
             qty_add: 5,
             store_id: 101,
-            product_type: ProductType::Package,
             product_id: 210097,
             expiry: DateTime::parse_from_rfc3339("2023-01-29T06:05:47.001+05:00").unwrap(),
         },
@@ -53,7 +48,6 @@ async fn edit_ok() {
         stores: vec![StoreStockModel {
             store_id: init_data[2].store_id,
             products: vec![ProductStockModel {
-                type_: init_data[2].product_type.clone(),
                 id_: init_data[2].product_id,
                 is_create: false,
                 expiry: init_data[2].expiry.into(),
@@ -121,7 +115,6 @@ async fn edit_save_error() {
         stores: vec![StoreStockModel {
             store_id: init_data[2].store_id,
             products: vec![ProductStockModel {
-                type_: init_data[2].product_type.clone(),
                 id_: init_data[2].product_id,
                 expiry: init_data[2].expiry.into(),
                 is_create: false,

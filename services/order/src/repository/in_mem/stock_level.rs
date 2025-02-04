@@ -6,7 +6,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::api::rpc::dto::{StockLevelReturnDto, StockReturnErrorDto};
@@ -52,19 +51,18 @@ mod _stockm {
     }
     pub(super) struct InMemDStoreFiltKeyOp {
         // it is combo of seller-id, product-type as u8, product-id
-        options: HashSet<(u32, u8, u64)>,
+        options: HashSet<(u32, u64)>,
         timenow: Option<DateTime<FixedOffset>>,
     }
     impl AbsDStoreFilterKeyOp for InMemDStoreFiltKeyOp {
         fn filter(&self, k: &String, _v: &Vec<String>) -> bool {
             let id_elms = k.split('/').collect::<Vec<&str>>();
-            let (store_id, prod_typ, prod_id, exp_from_combo) = (
+            let (store_id, prod_id, exp_from_combo) = (
                 id_elms[0].parse().unwrap(),
                 id_elms[1].parse().unwrap(),
-                id_elms[2].parse().unwrap(),
-                DateTime::parse_from_str(id_elms[3], EXPIRY_KEY_FORMAT).unwrap(),
+                DateTime::parse_from_str(id_elms[2], EXPIRY_KEY_FORMAT).unwrap(),
             );
-            if self.options.contains(&(store_id, prod_typ, prod_id)) {
+            if self.options.contains(&(store_id, prod_id)) {
                 // business logic in domain model should include more advanced expiry check,
                 // this repository simply filters out the stock items which have expired
                 if let Some(v) = self.timenow.as_ref() {
@@ -82,10 +80,7 @@ mod _stockm {
             pids: Vec<ProductStockIdentity2>,
             timenow: Option<DateTime<FixedOffset>>,
         ) -> Self {
-            let iter = pids.into_iter().map(|d| {
-                let prod_typ_num: u8 = d.product_type.into();
-                (d.store_id, prod_typ_num, d.product_id)
-            });
+            let iter = pids.into_iter().map(|d| (d.store_id, d.product_id));
             Self {
                 timenow,
                 options: HashSet::from_iter(iter),
@@ -117,7 +112,6 @@ impl FetchArg {
         })
     }
     fn to_product_stock(
-        prod_typ: ProductType,
         prod_id: u64,
         row: Vec<String>,
         maybe_order_id: &Option<String>,
@@ -150,7 +144,6 @@ impl FetchArg {
         let expiry = DateTime::parse_from_rfc3339(expiry).unwrap();
         ProductStockModel {
             is_create: false,
-            type_: prod_typ,
             id_: prod_id,
             expiry: expiry.into(),
             quantity: StockQuantityModel::new(total, cancelled, booked, rsv_detail),
@@ -165,12 +158,10 @@ impl Into<StockLevelModelSet> for FetchArg {
         rows.into_iter()
             .map(|(key, row)| {
                 let id_elms = key.split('/').collect::<Vec<&str>>();
-                let prod_typ_num: u8 = id_elms[1].parse().unwrap();
-                let (store_id, prod_typ, prod_id, exp_from_combo) = (
+                let (store_id, prod_id, exp_from_combo) = (
                     id_elms[0].parse().unwrap(),
-                    ProductType::from(prod_typ_num),
-                    id_elms[2].parse::<u64>().unwrap(),
-                    id_elms[3],
+                    id_elms[1].parse::<u64>().unwrap(),
+                    id_elms[2],
                 );
                 let result = out.stores.iter_mut().find(|m| m.store_id == store_id);
                 let store_rd = if let Some(m) = result {
@@ -185,17 +176,16 @@ impl Into<StockLevelModelSet> for FetchArg {
                 };
                 let result = store_rd.products.iter().find(|m| {
                     let exp_fmt_verify = m.expiry.format(_stockm::EXPIRY_KEY_FORMAT).to_string();
-                    m.type_ == prod_typ && m.id_ == prod_id && exp_fmt_verify == exp_from_combo
+                    m.id_ == prod_id && exp_fmt_verify == exp_from_combo
                 });
-                if let Some(_product_rd) = result {
+                if let Some(product_rd) = result {
                     // TODO, return error instead
-                    let _prod_typ_num: u8 = _product_rd.type_.clone().into();
                     panic!(
-                        "report error, data corruption, store:{}, product: ({}, {})",
-                        store_rd.store_id, _prod_typ_num, _product_rd.id_
+                        "report error, data corruption, store:{}, product: {}",
+                        store_rd.store_id, product_rd.id_
                     );
                 } else {
-                    let m = Self::to_product_stock(prod_typ, prod_id, row, &maybe_order_id);
+                    let m = Self::to_product_stock(prod_id, row, &maybe_order_id);
                     store_rd.products.push(m);
                 }
             })
@@ -223,8 +213,7 @@ impl From<SaveArg> for AppInMemFetchedSingleTable {
                 let exp_fmt = m2
                     .expiry_without_millis()
                     .format(_stockm::EXPIRY_KEY_FORMAT);
-                let prod_typ_num: u8 = m2.type_.clone().into();
-                let pkey = format!("{}/{}/{}/{}", m1.store_id, prod_typ_num, m2.id_, exp_fmt);
+                let pkey = format!("{}/{}/{}", m1.store_id, m2.id_, exp_fmt);
                 let rsv_prod = if let Some(r) = rsv_set.get(pkey.as_str()) {
                     r.clone()
                 } else {
@@ -295,12 +284,8 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
         let ids = pids
             .into_iter()
             .map(|d| {
-                let prod_typ_num: u8 = d.product_type.into();
                 let exp_fmt = d.expiry.format(_stockm::EXPIRY_KEY_FORMAT);
-                format!(
-                    "{}/{}/{}/{}",
-                    d.store_id, prod_typ_num, d.product_id, exp_fmt
-                )
+                format!("{}/{}/{}", d.store_id, d.product_id, exp_fmt)
             })
             .collect();
         let info = HashMap::from([(_stockm::TABLE_LABEL.to_string(), ids)]);
@@ -315,9 +300,8 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
                 .iter()
                 .flat_map(|s| {
                     s.products.iter().map(|p| {
-                        let prod_typ_num: u8 = p.type_.clone().into();
                         let exp_fmt = p.expiry.format(_stockm::EXPIRY_KEY_FORMAT);
-                        format!("{}/{}/{}/{}", s.store_id, prod_typ_num, p.id_, exp_fmt)
+                        format!("{}/{}/{}", s.store_id, p.id_, exp_fmt)
                     })
                 })
                 .collect();
@@ -342,7 +326,6 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
             .lines
             .iter()
             .map(|d| ProductStockIdentity2 {
-                product_type: d.id_.product_type.clone(),
                 store_id: d.id_.store_id,
                 product_id: d.id_.product_id,
             })
@@ -379,7 +362,6 @@ impl AbsOrderStockRepo for StockLvlInMemRepo {
             .items
             .iter()
             .map(|d| ProductStockIdentity2 {
-                product_type: d.product_type.clone(),
                 store_id: d.store_id,
                 product_id: d.product_id,
             })

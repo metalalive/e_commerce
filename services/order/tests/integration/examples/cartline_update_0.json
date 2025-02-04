@@ -1,8 +1,8 @@
 {
     "title": "black Fri. shop list",
     "lines": [
-        {"seller_id":57, "product_type":1, "product_id":1948, "quantity":15},
-        {"seller_id":58, "product_type":1, "product_id":1948, "quantity":12},
-        {"seller_id":57, "product_type":2, "product_id":1964, "quantity":6}
+        {"seller_id":57, "product_id":1948, "quantity":15},
+        {"seller_id":58, "product_id":1948, "quantity":12},
+        {"seller_id":57, "product_id":1964, "quantity":6}
     ]
 }

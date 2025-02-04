@@ -1,8 +1,8 @@
 {
     "title": "black-friday wish list",
     "lines": [
-        {"seller_id":59, "product_type":2, "product_id":11081, "quantity":12},
-        {"seller_id":57, "product_type":2, "product_id":1964,  "quantity":6},
-        {"seller_id":60, "product_type":2, "product_id":9002, "quantity":7}
+        {"seller_id":59, "product_id":11081, "quantity":12},
+        {"seller_id":57, "product_id":1964,  "quantity":6},
+        {"seller_id":60, "product_id":9002, "quantity":7}
     ]
 }

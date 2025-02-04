@@ -29,7 +29,6 @@ impl From<CartLineDto> for CartLineModel {
         Self {
             id_: BaseProductIdentity {
                 store_id: value.seller_id,
-                product_type: value.product_type,
                 product_id: value.product_id,
             },
             qty_req: value.quantity,
@@ -41,7 +40,6 @@ impl From<CartLineModel> for CartLineDto {
     fn from(value: CartLineModel) -> CartLineDto {
         CartLineDto {
             product_id: value.id_.product_id,
-            product_type: value.id_.product_type,
             seller_id: value.id_.store_id,
             quantity: value.qty_req,
         }
@@ -82,9 +80,7 @@ impl CartModel {
 
     fn get_line_mut(&mut self, item: &CartLineDto) -> Option<&mut CartLineModel> {
         let result = self.saved_lines.iter_mut().find(|obj| {
-            obj.id_.store_id == item.seller_id
-                && obj.id_.product_type == item.product_type
-                && obj.id_.product_id == item.product_id
+            obj.id_.store_id == item.seller_id && obj.id_.product_id == item.product_id
         });
         result
     }

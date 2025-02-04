@@ -11,7 +11,6 @@ use ecommerce_common::api::dto::CurrencyDto;
 use ecommerce_common::api::rpc::dto::{
     OrderLinePayUpdateErrorDto, OrderPaymentUpdateDto, OrderPaymentUpdateErrorDto,
 };
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::order::BillingModel;
 use ecommerce_common::model::BaseProductIdentity;
@@ -61,10 +60,7 @@ use mariadb::cart::CartMariaDbRepo;
 // , it is the reason to add `Send` and `Sync` as super-traits
 #[async_trait]
 pub trait AbstProductPolicyRepo: Sync + Send {
-    async fn fetch(
-        &self,
-        ids: Vec<(ProductType, u64)>,
-    ) -> DefaultResult<ProductPolicyModelSet, AppError>;
+    async fn fetch(&self, ids: Vec<u64>) -> DefaultResult<ProductPolicyModelSet, AppError>;
     async fn save(&self, ppset: ProductPolicyModelSet) -> DefaultResult<(), AppError>;
     // TODO, delete operation
 }
@@ -80,14 +76,14 @@ pub trait AbsProductPriceRepo: Sync + Send {
     async fn fetch(
         &self,
         store_id: u32,
-        ids: Vec<(ProductType, u64)>,
+        ids: Vec<u64>,
     ) -> DefaultResult<ProductPriceModelSet, AppError>;
     // fetch prices of products from different sellers  at a time, the
     // first element of the `ids` tuple should be valid seller ID
     // TODO, switch argumen type to `crate::model::BaseProductIdentity`
     async fn fetch_many(
         &self,
-        ids: Vec<(u32, ProductType, u64)>,
+        ids: Vec<(u32, u64)>,
     ) -> DefaultResult<Vec<ProductPriceModelSet>, AppError>;
     async fn save(&self, updated: ProductPriceModelSet) -> DefaultResult<(), AppError>;
 }

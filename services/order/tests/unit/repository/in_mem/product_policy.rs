@@ -1,6 +1,5 @@
 use std::boxed::Box;
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use order::datastore::{AbstInMemoryDStore, AppInMemoryDStore};
@@ -12,7 +11,6 @@ use crate::model::ut_clone_productpolicy;
 
 const UTEST_INIT_DATA: [ProductPolicyModel; 7] = [
     ProductPolicyModel {
-        product_type: ProductType::Item,
         product_id: 1556,
         min_num_rsv: 0,
         auto_cancel_secs: 309,
@@ -21,7 +19,6 @@ const UTEST_INIT_DATA: [ProductPolicyModel; 7] = [
         max_num_rsv: 2,
     },
     ProductPolicyModel {
-        product_type: ProductType::Package,
         product_id: 9273,
         min_num_rsv: 3,
         auto_cancel_secs: 900,
@@ -30,7 +27,6 @@ const UTEST_INIT_DATA: [ProductPolicyModel; 7] = [
         max_num_rsv: 6,
     },
     ProductPolicyModel {
-        product_type: ProductType::Item,
         product_id: 40051,
         min_num_rsv: 0,
         auto_cancel_secs: 707,
@@ -39,7 +35,6 @@ const UTEST_INIT_DATA: [ProductPolicyModel; 7] = [
         max_num_rsv: 0,
     },
     ProductPolicyModel {
-        product_type: ProductType::Package,
         product_id: 1620,
         min_num_rsv: 3,
         auto_cancel_secs: 1645,
@@ -48,7 +43,6 @@ const UTEST_INIT_DATA: [ProductPolicyModel; 7] = [
         max_num_rsv: 20,
     },
     ProductPolicyModel {
-        product_type: ProductType::Item,
         product_id: 14005,
         min_num_rsv: 0,
         auto_cancel_secs: 77,
@@ -57,7 +51,6 @@ const UTEST_INIT_DATA: [ProductPolicyModel; 7] = [
         max_num_rsv: 91,
     },
     ProductPolicyModel {
-        product_type: ProductType::Item,
         product_id: 1622,
         min_num_rsv: 15,
         auto_cancel_secs: 6451,
@@ -66,7 +59,6 @@ const UTEST_INIT_DATA: [ProductPolicyModel; 7] = [
         max_num_rsv: 57,
     },
     ProductPolicyModel {
-        product_type: ProductType::Item,
         product_id: 1622,
         min_num_rsv: 6,
         auto_cancel_secs: 1178,
@@ -98,11 +90,7 @@ pub(crate) async fn save_fetch_ok_common(repo: Box<dyn AbstProductPolicyRepo>) {
     };
     let result = repo.save(ppset).await;
     assert_eq!(result.is_ok(), true);
-    let chosen_ids = vec![
-        (ProductType::Item, 14005),
-        (ProductType::Item, 1556),
-        (ProductType::Item, 40051),
-    ];
+    let chosen_ids = vec![14005, 1556, 40051];
     let result = repo.fetch(chosen_ids).await;
     {
         assert_eq!(result.is_ok(), true);
@@ -125,11 +113,7 @@ pub(crate) async fn save_fetch_ok_common(repo: Box<dyn AbstProductPolicyRepo>) {
     };
     let result = repo.save(ppset).await;
     assert_eq!(result.is_ok(), true);
-    let chosen_ids = vec![
-        (ProductType::Item, 1622),
-        (ProductType::Package, 1620),
-        (ProductType::Package, 9273),
-    ];
+    let chosen_ids = vec![1622, 1620, 9273];
     let result = repo.fetch(chosen_ids).await;
     let modelset = result.unwrap();
     [
@@ -174,7 +158,7 @@ async fn save_fetch_ok_2() {
     let result = repo.save(ppset).await;
     assert_eq!(result.is_ok(), true);
 
-    let result = repo.fetch(vec![(ProductType::Item, 1622u64)]).await;
+    let result = repo.fetch(vec![1622u64]).await;
     {
         assert_eq!(result.is_ok(), true);
         let modelset = result.unwrap();
@@ -219,7 +203,7 @@ async fn save_dstore_error() {
 #[tokio::test]
 async fn fetch_dstore_error() {
     let repo = in_mem_repo_ds_setup::<MockInMemDeadDataStore>(10).await;
-    let result = repo.fetch(vec![(ProductType::Item, 1622u64)]).await;
+    let result = repo.fetch(vec![1622u64]).await;
     assert_eq!(result.is_err(), true);
     let error = result.err().unwrap();
     assert_eq!(error.code, AppErrorCode::AcquireLockFailure);

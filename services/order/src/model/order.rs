@@ -224,12 +224,8 @@ impl OrderLineModel {
         policym: &ProductPolicyModel,
         pricem: &ProductPriceModel,
     ) -> DefaultResult<(), AppError> {
-        let id_mismatch = if data.product_type != policym.product_type {
-            Some("product-policy, type")
-        } else if data.product_id != policym.product_id {
+        let id_mismatch = if data.product_id != policym.product_id {
             Some("product-policy, id")
-        } else if data.product_type != pricem.product_type {
-            Some("product-price, type")
         } else if data.product_id != pricem.product_id {
             Some("product-price, id")
         } else {
@@ -281,7 +277,6 @@ impl OrderLineModel {
         let price_total = pricem.price * data.quantity;
         Ok(Self {
             id_: OrderLineIdentity {
-                product_type: data.product_type,
                 store_id: data.seller_id,
                 product_id: data.product_id,
             },
@@ -321,9 +316,7 @@ impl OrderLineModel {
         data.into_iter()
             .filter_map(|d| {
                 let result = models.iter_mut().find(|m| {
-                    (m.id_.store_id == d.seller_id)
-                        && (m.id_.product_id == d.product_id)
-                        && (m.id_.product_type == d.product_type)
+                    (m.id_.store_id == d.seller_id) && (m.id_.product_id == d.product_id)
                 });
                 let possible_error = if let Some(m) = result {
                     let new_paid_qty = m.qty.paid + d.qty;
@@ -347,16 +340,11 @@ impl OrderLineModel {
                 } else {
                     Some(OrderLinePayUpdateErrorReason::NotExist)
                 };
-                if let Some(reason) = possible_error {
-                    Some(OrderLinePayUpdateErrorDto {
-                        seller_id: d.seller_id,
-                        reason,
-                        product_id: d.product_id,
-                        product_type: d.product_type,
-                    })
-                } else {
-                    None
-                }
+                possible_error.map(|reason| OrderLinePayUpdateErrorDto {
+                    seller_id: d.seller_id,
+                    product_id: d.product_id,
+                    reason,
+                })
             })
             .collect()
     } // end of update_payments
@@ -379,7 +367,6 @@ impl OrderLineModel {
         OrderLinePayDto {
             seller_id: id_.store_id,
             product_id: id_.product_id,
-            product_type: id_.product_type,
             quantity: qty.reserved,
             reserved_until: policy.reserved_until.to_rfc3339(),
             amount: price.into_paym_dto(curr_m),
@@ -392,7 +379,6 @@ impl From<OrderLineModel> for OrderLineStockReservingDto {
         OrderLineStockReservingDto {
             seller_id: value.id_.store_id,
             product_id: value.id_.product_id,
-            product_type: value.id_.product_type,
             qty: value.qty.reserved,
         }
     }
@@ -406,7 +392,6 @@ impl From<OrderLineModel> for InventoryEditStockLevelDto {
             store_id: value.id_.store_id,
             product_id: value.id_.product_id,
             qty_add: num_returning,
-            product_type: value.id_.product_type.clone(),
             expiry: value.policy.reserved_until,
         } // NOTE, the field `expiry` should NOT be referenced by the entire application
           // , becuase the editing data, converted from order line, does NOT really reflect
@@ -491,7 +476,6 @@ impl From<OrderReturnModel> for Vec<OrderLineStockReturningDto> {
                 product_id: id_.product_id,
                 create_time,
                 qty,
-                product_type: id_.product_type.clone(),
             })
             .collect()
     }
@@ -528,9 +512,7 @@ impl OrderReturnModel {
             .iter()
             .filter_map(|d| {
                 let result = o_lines.iter().find(|oline| {
-                    d.seller_id == oline.id_.store_id
-                        && d.product_id == oline.id_.product_id
-                        && d.product_type == oline.id_.product_type
+                    d.seller_id == oline.id_.store_id && d.product_id == oline.id_.product_id
                 });
                 let opt = if let Some(oline) = result {
                     if oline.policy.warranty_until > time_now {
@@ -563,7 +545,6 @@ impl OrderReturnModel {
                         seller_id: d.seller_id,
                         reason,
                         product_id: d.product_id,
-                        product_type: d.product_type.clone(),
                     };
                     Some(e)
                 } else {
@@ -579,16 +560,12 @@ impl OrderReturnModel {
             .into_iter()
             .filter_map(|d| {
                 let result = o_returns.iter_mut().find(|ret| {
-                    d.seller_id == ret.id_.store_id
-                        && d.product_id == ret.id_.product_id
-                        && d.product_type == ret.id_.product_type
+                    d.seller_id == ret.id_.store_id && d.product_id == ret.id_.product_id
                 });
                 let oline = o_lines
                     .iter()
                     .find(|item| {
-                        d.seller_id == item.id_.store_id
-                            && d.product_id == item.id_.product_id
-                            && d.product_type == item.id_.product_type
+                        d.seller_id == item.id_.store_id && d.product_id == item.id_.product_id
                     })
                     .unwrap();
                 let total = oline.price.unit * d.quantity;
@@ -605,7 +582,6 @@ impl OrderReturnModel {
                     let id_ = OrderLineIdentity {
                         store_id: d.seller_id,
                         product_id: d.product_id,
-                        product_type: d.product_type,
                     };
                     let qty = HashMap::from([(time_now, val)]);
                     Some(OrderReturnModel { id_, qty })
@@ -627,7 +603,6 @@ impl OrderReturnModel {
             .map(|(ctime, (q, refund))| OrderLineReplicaRefundDto {
                 seller_id: pid.store_id,
                 product_id: pid.product_id,
-                product_type: pid.product_type.clone(),
                 create_time: ctime.to_rfc3339(),
                 amount: refund.into_paym_dto(curr_ex.clone()),
                 qty: q,

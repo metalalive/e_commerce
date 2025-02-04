@@ -6,7 +6,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use super::super::AbsOrderReturnRepo;
@@ -15,7 +14,7 @@ use crate::error::AppError;
 use crate::model::{OrderLineIdentity, OrderReturnModel};
 
 mod _oline_return {
-    use super::{DateTime, FixedOffset, HashMap, OrderReturnModel, ProductType};
+    use super::{DateTime, FixedOffset, HashMap, OrderReturnModel};
     use crate::datastore::AbsDStoreFilterKeyOp;
     use crate::model::{OrderLinePriceModel, OrderReturnQuantityModel};
 
@@ -27,7 +26,6 @@ mod _oline_return {
 
     pub(super) enum InMemColIdx {
         SellerID,
-        ProductType,
         ProductId,
         QtyRefund,
         TotNumColumns,
@@ -36,21 +34,14 @@ mod _oline_return {
         fn from(value: InMemColIdx) -> usize {
             match value {
                 InMemColIdx::SellerID => 0,
-                InMemColIdx::ProductType => 1,
-                InMemColIdx::ProductId => 2,
-                InMemColIdx::QtyRefund => 3,
-                InMemColIdx::TotNumColumns => 4,
+                InMemColIdx::ProductId => 1,
+                InMemColIdx::QtyRefund => 2,
+                InMemColIdx::TotNumColumns => 3,
             }
         }
     }
-    pub(super) fn inmem_pkey(
-        oid: &str,
-        seller_id: u32,
-        prod_typ: ProductType,
-        prod_id: u64,
-    ) -> String {
-        let prod_typ: u8 = prod_typ.into();
-        format!("{oid}-{seller_id}-{prod_typ}-{prod_id}")
+    pub(super) fn inmem_pkey(oid: &str, seller_id: u32, prod_id: u64) -> String {
+        format!("{oid}-{seller_id}-{prod_id}")
     }
     pub(super) fn inmem_get_oid(pkey: &str) -> &str {
         pkey.split('-').next().unwrap()
@@ -150,10 +141,6 @@ impl From<InsertOpArg> for AppInMemFetchedSingleRow {
                 _oline_return::InMemColIdx::ProductId,
                 id_.product_id.to_string(),
             ),
-            (
-                _oline_return::InMemColIdx::ProductType,
-                <ProductType as Into<u8>>::into(id_.product_type).to_string(),
-            ),
             (_oline_return::InMemColIdx::QtyRefund, qty_serial),
         ]
         .into_iter()
@@ -168,7 +155,7 @@ impl From<InsertOpArg> for AppInMemFetchedSingleRow {
 
 impl From<AppInMemFetchedSingleRow> for OrderReturnModel {
     fn from(value: AppInMemFetchedSingleRow) -> OrderReturnModel {
-        let (store_id, product_id, prod_typ_num, qty_serial) = (
+        let (store_id, product_id, qty_serial) = (
             value
                 .get::<usize>(_oline_return::InMemColIdx::SellerID.into())
                 .unwrap()
@@ -182,22 +169,14 @@ impl From<AppInMemFetchedSingleRow> for OrderReturnModel {
                 .parse()
                 .unwrap(),
             value
-                .get::<usize>(_oline_return::InMemColIdx::ProductType.into())
-                .unwrap()
-                .to_owned()
-                .parse::<u8>()
-                .unwrap(),
-            value
                 .get::<usize>(_oline_return::InMemColIdx::QtyRefund.into())
                 .unwrap()
                 .to_owned(),
         );
-        let product_type = ProductType::from(prod_typ_num);
         OrderReturnModel {
             id_: OrderLineIdentity {
                 store_id,
                 product_id,
-                product_type,
             },
             qty: _oline_return::inmem_col2qty(qty_serial),
         }
@@ -214,7 +193,7 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
         let table_name = _oline_return::TABLE_LABEL;
         let pkeys = pids
             .into_iter()
-            .map(|p| _oline_return::inmem_pkey(oid, p.store_id, p.product_type, p.product_id))
+            .map(|p| _oline_return::inmem_pkey(oid, p.store_id, p.product_id))
             .collect();
         let info = HashMap::from([(table_name.to_string(), pkeys)]);
         let mut data = self.datastore.fetch(info).await?;
@@ -286,8 +265,8 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
         let qty_empty = reqs.iter().find_map(|req| {
             if req.qty.is_empty() {
                 let detail = format!(
-                    "return-req, in-mem-repo, prod-id: {} {:?} {}",
-                    req.id_.store_id, req.id_.product_type, req.id_.product_id
+                    "return-req, in-mem-repo, prod-id: {} {}",
+                    req.id_.store_id, req.id_.product_id
                 );
                 Some(detail)
             } else {
@@ -304,12 +283,7 @@ impl AbsOrderReturnRepo for OrderReturnInMemRepo {
         let num_saved = reqs.iter().map(|r| r.qty.len()).sum();
         let mut info = vec![];
         for req in reqs {
-            let pkey = _oline_return::inmem_pkey(
-                oid,
-                req.id_.store_id,
-                req.id_.product_type.clone(),
-                req.id_.product_id,
-            );
+            let pkey = _oline_return::inmem_pkey(oid, req.id_.store_id, req.id_.product_id);
             // load saved `qty` inner table
             let _info = HashMap::from([(table_name.clone(), vec![pkey.clone()])]);
             let mut _data = self.datastore.fetch(_info).await?;
