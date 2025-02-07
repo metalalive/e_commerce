@@ -10,7 +10,6 @@ use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
 use ecommerce_common::adapter::repository::OidBytes;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::constant::hard_limit;
@@ -34,10 +33,10 @@ struct ReturnOidMap {
 
 impl InsertReqArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let col_seq = "`o_id`,`seq`,`store_id`,`product_type`,`product_id`,\
-            `create_time`,`quantity`,`price_unit`,`price_total`";
+        let col_seq = "`o_id`,`seq`,`store_id`,`product_id`,`create_time`,\
+            `quantity`,`price_unit`,`price_total`";
         let items = (0..num_batch)
-            .map(|_| "(?,?,?,?,?,?,?,?,?)")
+            .map(|_| "(?,?,?,?,?,?,?,?)")
             .collect::<Vec<_>>();
         format!(
             "INSERT INTO `oline_return_req`({col_seq}) VALUES {}",
@@ -53,16 +52,13 @@ impl<'q> IntoArguments<'q, MySql> for InsertReqArg {
         reqs.into_iter()
             .map(|req| {
                 let (id_, qty_map) = (req.id_, req.qty);
-                let (seller_id, prod_typ, prod_id) =
-                    (id_.store_id, id_.product_type, id_.product_id);
-                let prod_typ_num: u8 = prod_typ.into();
+                let (seller_id, prod_id) = (id_.store_id, id_.product_id);
                 qty_map
                     .into_iter()
                     .map(|(ctime, (qty, refund))| {
                         args.add(oid.clone()).unwrap();
                         args.add(seq_start).unwrap();
                         args.add(seller_id).unwrap();
-                        args.add(prod_typ_num.to_string()).unwrap();
                         args.add(prod_id).unwrap();
                         args.add(ctime.naive_utc()).unwrap();
                         args.add(qty).unwrap();
@@ -83,13 +79,13 @@ impl From<InsertReqArg> for (String, MySqlArguments) {
     }
 }
 
-const COLUMN_SEQ_SELECT: &str = "`store_id`,`product_type`,`product_id`,\
-            `create_time`,`quantity`,`price_unit`,`price_total`";
+const COLUMN_SEQ_SELECT: &str = "`store_id`,`product_id`,`create_time`,\
+            `quantity`,`price_unit`,`price_total`";
 
 impl FetchByIdArg {
     fn sql_pattern(num_batch: usize) -> String {
         let items = (0..num_batch)
-            .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
+            .map(|_| "(`store_id`=? AND `product_id`=?)")
             .collect::<Vec<_>>();
         format!(
             "SELECT {COLUMN_SEQ_SELECT} FROM `oline_return_req` WHERE `o_id`=? AND ({})",
@@ -104,11 +100,8 @@ impl<'q> IntoArguments<'q, MySql> for FetchByIdArg {
         args.add(oid_b.as_column()).unwrap();
         pids.into_iter()
             .map(|id_| {
-                let (seller_id, prod_typ, prod_id) =
-                    (id_.store_id, id_.product_type, id_.product_id);
-                let prod_typ_num: u8 = prod_typ.into();
+                let (seller_id, prod_id) = (id_.store_id, id_.product_id);
                 args.add(seller_id).unwrap();
-                args.add(prod_typ_num.to_string()).unwrap();
                 args.add(prod_id).unwrap();
             })
             .count();
@@ -165,13 +158,9 @@ impl ReturnsPerOrder {
     }
     fn try_merge(&mut self, row: MySqlRow) -> DefaultResult<(), AppError> {
         let store_id = row.try_get::<u32, usize>(0)?;
-        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
-        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
-        let product_type = prodtyp_raw.parse::<ProductType>()?;
-        let product_id = row.try_get::<u64, usize>(2)?;
+        let product_id = row.try_get::<u64, usize>(1)?;
         let id_ = OrderLineIdentity {
             store_id,
-            product_type,
             product_id,
         };
         let result = self.0.iter_mut().find(|ret| ret.id_ == id_);
@@ -185,10 +174,10 @@ impl ReturnsPerOrder {
             self.0.push(item);
             self.0.last_mut().unwrap()
         };
-        let create_time = row.try_get::<NaiveDateTime, usize>(3)?.and_utc().into();
-        let quantity = row.try_get::<u32, usize>(4)?;
-        let unit = row.try_get::<u32, usize>(5)?;
-        let total = row.try_get::<u32, usize>(6)?;
+        let create_time = row.try_get::<NaiveDateTime, usize>(2)?.and_utc().into();
+        let quantity = row.try_get::<u32, usize>(3)?;
+        let unit = row.try_get::<u32, usize>(4)?;
+        let total = row.try_get::<u32, usize>(5)?;
         let refund = OrderLinePriceModel { unit, total };
         saved_ret.qty.insert(create_time, (quantity, refund));
         Ok(())
@@ -215,7 +204,7 @@ impl TryInto<Vec<(String, OrderReturnModel)>> for ReturnOidMap {
         let has_error = rows
             .into_iter()
             .map(|row| {
-                let oid = to_app_oid(&row, 7)?;
+                let oid = to_app_oid(&row, 6)?;
                 if !ret_map.contains_key(oid.as_str()) {
                     ret_map.insert(oid.clone(), ReturnsPerOrder::new());
                 }

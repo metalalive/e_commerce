@@ -12,7 +12,6 @@ use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Arguments, Connection, Executor, IntoArguments, MySql, Row, Statement, Transaction};
 
 use ecommerce_common::adapter::repository::OidBytes;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use crate::api::rpc::dto::{InventoryEditStockLevelDto, StockLevelReturnDto, StockReturnErrorDto};
@@ -47,8 +46,8 @@ struct StkRsvDetailRow(MySqlRow);
 
 impl InsertQtyArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`,`qty_cancelled`";
-        let items = (0..num_batch).map(|_| "(?,?,?,?,?,?)").collect::<Vec<_>>();
+        let col_seq = "`store_id`,`product_id`,`expiry`,`qty_total`,`qty_cancelled`";
+        let items = (0..num_batch).map(|_| "(?,?,?,?,?)").collect::<Vec<_>>();
         format!(
             "INSERT INTO `stock_level_inventory`({}) VALUES {}",
             col_seq,
@@ -62,16 +61,13 @@ impl<'q> IntoArguments<'q, MySql> for InsertQtyArg {
         self.0
             .into_iter()
             .map(|(store_id, p)| {
-                let (expiry, p_typ, prod_id, q_total, q_cancelled) = (
+                let (expiry, prod_id, q_total, q_cancelled) = (
                     p.expiry_without_millis().naive_utc(),
-                    p.type_,
                     p.id_,
                     p.quantity.total,
                     p.quantity.cancelled,
                 );
-                let prod_typ_num: u8 = p_typ.into();
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
                 out.add(q_total).unwrap();
@@ -93,7 +89,7 @@ impl From<InsertQtyArg> for Vec<(String, MySqlArguments)> {
 
 impl UpdateQtyArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=? AND `expiry`=?)";
+        let condition = "(`store_id`=? AND `product_id`=? AND `expiry`=?)";
         let case_ops = (0..num_batch)
             .flat_map(|_| ["WHEN", condition, "THEN", "?"])
             .collect::<Vec<_>>()
@@ -118,15 +114,12 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg {
         self.0
             .iter()
             .map(|(store_id, p)| {
-                let (p_typ, prod_id, expiry, q_total) = (
-                    p.type_.clone(),
+                let (prod_id, expiry, q_total) = (
                     p.id_,
                     p.expiry_without_millis().naive_utc(),
                     p.quantity.total,
                 );
-                let prod_typ_num: u8 = p_typ.into();
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
                 out.add(q_total).unwrap();
@@ -135,15 +128,12 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg {
         self.0
             .iter()
             .map(|(store_id, p)| {
-                let (p_typ, prod_id, expiry, q_cancelled) = (
-                    p.type_.clone(),
+                let (prod_id, expiry, q_cancelled) = (
                     p.id_,
                     p.expiry_without_millis().naive_utc(),
                     p.quantity.cancelled,
                 );
-                let prod_typ_num: u8 = p_typ.into();
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
                 out.add(q_cancelled).unwrap();
@@ -152,11 +142,8 @@ impl<'q> IntoArguments<'q, MySql> for UpdateQtyArg {
         self.0
             .into_iter()
             .map(|(store_id, p)| {
-                let (expiry, p_typ, prod_id) =
-                    (p.expiry_without_millis().naive_utc(), p.type_, p.id_);
-                let prod_typ_num: u8 = p_typ.into();
+                let (expiry, prod_id) = (p.expiry_without_millis().naive_utc(), p.id_);
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
             })
@@ -176,7 +163,7 @@ impl From<UpdateQtyArg> for Vec<(String, MySqlArguments)> {
 
 impl ReserveArg {
     fn pattern_update_block(num_batch: usize) -> (String, String) {
-        let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=? AND `expiry`=?)";
+        let condition = "(`store_id`=? AND `product_id`=? AND `expiry`=?)";
         let case_ops = (0..num_batch)
             .flat_map(|_| ["WHEN", condition, "THEN", "?"])
             .collect::<Vec<_>>()
@@ -195,8 +182,8 @@ impl ReserveArg {
         )
     }
     fn pattern_add_order_rsv(num_batch: usize) -> String {
-        let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`order_id`,`qty_reserved`";
-        let items = (0..num_batch).map(|_| "(?,?,?,?,?,?)").collect::<Vec<_>>();
+        let col_seq = "`store_id`,`product_id`,`expiry`,`order_id`,`qty_reserved`";
+        let items = (0..num_batch).map(|_| "(?,?,?,?,?)").collect::<Vec<_>>();
         format!(
             "INSERT INTO `stock_rsv_detail`({col_seq}) VALUES {}",
             items.join(",")
@@ -207,15 +194,12 @@ impl ReserveArg {
         stores
             .iter()
             .map(|(store_id, p)| {
-                let (p_typ, prod_id, expiry, q_booked) = (
-                    p.type_.clone(),
+                let (prod_id, expiry, q_booked) = (
                     p.id_,
                     p.expiry_without_millis().naive_utc(),
                     p.quantity.booked,
                 );
-                let prod_typ_num: u8 = p_typ.into();
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
                 out.add(q_booked).unwrap();
@@ -224,14 +208,8 @@ impl ReserveArg {
         stores
             .iter()
             .map(|(store_id, p)| {
-                let (expiry, p_typ, prod_id) = (
-                    p.expiry_without_millis().naive_utc(),
-                    p.type_.clone(),
-                    p.id_,
-                );
-                let prod_typ_num: u8 = p_typ.into();
+                let (expiry, prod_id) = (p.expiry_without_millis().naive_utc(), p.id_);
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
             })
@@ -243,15 +221,12 @@ impl ReserveArg {
         self.0
             .into_iter()
             .map(|(store_id, p)| {
-                let (expiry, p_typ, prod_id, detail) = (
+                let (expiry, prod_id, detail) = (
                     p.expiry_without_millis().naive_utc(),
-                    p.type_,
                     p.id_,
                     p.quantity.rsv_detail.unwrap(),
                 );
-                let prod_typ_num: u8 = p_typ.into();
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
                 let (oid, rsv_per_item) = (detail.oid, detail.reserved);
@@ -297,16 +272,10 @@ impl ReturnArg {
         self.0
             .iter()
             .map(|(store_id, p)| {
-                let (expiry, p_typ, prod_id) = (
-                    p.expiry_without_millis().naive_utc(),
-                    p.type_.clone(),
-                    p.id_,
-                );
+                let (expiry, prod_id) = (p.expiry_without_millis().naive_utc(), p.id_);
                 let _rsv_detail = p.quantity.rsv_detail.as_ref().unwrap();
                 let qty_rsv_o = _rsv_detail.reserved;
-                let prod_typ_num: u8 = p_typ.into();
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
                 out.add(qty_rsv_o).unwrap();
@@ -316,14 +285,8 @@ impl ReturnArg {
         self.0
             .iter()
             .map(|(store_id, p)| {
-                let (expiry, p_typ, prod_id) = (
-                    p.expiry_without_millis().naive_utc(),
-                    p.type_.clone(),
-                    p.id_,
-                );
-                let prod_typ_num: u8 = p_typ.into();
+                let (expiry, prod_id) = (p.expiry_without_millis().naive_utc(), p.id_);
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
             })
@@ -349,10 +312,9 @@ impl From<ReturnArg> for Vec<(String, MySqlArguments)> {
 
 impl FetchQtyArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=? AND `expiry`=?)";
+        let condition = "(`store_id`=? AND `product_id`=? AND `expiry`=?)";
         let pid_cmps = (0..num_batch).map(|_| condition).collect::<Vec<_>>();
-        let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`, \
-                       `qty_cancelled`,`qty_tot_rsv`";
+        let col_seq = "`store_id`,`product_id`,`expiry`,`qty_total`,`qty_cancelled`,`qty_tot_rsv`";
         format!(
             "SELECT {col_seq} FROM `stock_level_inventory` WHERE {}",
             pid_cmps.join("OR")
@@ -366,10 +328,8 @@ impl<'q> IntoArguments<'q, MySql> for FetchQtyArg {
             .into_iter()
             .map(|co| {
                 let expiry = co.expiry_without_millis().naive_utc();
-                let (store_id, p_typ, prod_id) = (co.store_id, co.product_type, co.product_id);
-                let prod_typ_num: u8 = p_typ.into();
+                let (store_id, prod_id) = (co.store_id, co.product_id);
                 out.add(store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(prod_id).unwrap();
                 out.add(expiry).unwrap();
             })
@@ -388,10 +348,9 @@ impl From<FetchQtyArg> for (String, MySqlArguments) {
 
 impl<'a> FetchQtyForRsvArg<'a> {
     fn sql_pattern(num_batch: usize) -> String {
-        let condition = "(`store_id`=? AND `product_type`=? AND `product_id`=?)";
+        let condition = "(`store_id`=? AND `product_id`=?)";
         let pid_cmps = (0..num_batch).map(|_| condition).collect::<Vec<_>>();
-        let col_seq = "`store_id`,`product_type`,`product_id`,`expiry`,`qty_total`, \
-                       `qty_cancelled`,`qty_tot_rsv`";
+        let col_seq = "`store_id`,`product_id`,`expiry`,`qty_total`, `qty_cancelled`,`qty_tot_rsv`";
         format!(
             "SELECT {col_seq} FROM `stock_level_inventory` WHERE {}",
             pid_cmps.join("OR")
@@ -404,9 +363,7 @@ impl<'a, 'q> IntoArguments<'q, MySql> for FetchQtyForRsvArg<'a> {
         self.0
             .iter()
             .map(|o| {
-                let prod_typ_num: u8 = o.id_.product_type.clone().into();
                 out.add(o.id_.store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(o.id_.product_id).unwrap();
             })
             .count();
@@ -424,16 +381,15 @@ impl<'a> From<FetchQtyForRsvArg<'a>> for (String, MySqlArguments) {
 
 impl<'a> FetchRsvOrderArg<'a> {
     fn sql_pattern(num_batch: usize) -> String {
-        let condition = "(`a`.`store_id`=? AND `a`.`product_type`=? AND `a`.`product_id`=?)";
+        let condition = "(`a`.`store_id`=? AND `a`.`product_id`=?)";
         let pid_cmps = (0..num_batch).map(|_| condition).collect::<Vec<_>>();
-        let col_seq = "`a`.`store_id`,`a`.`product_type`,`a`.`product_id`,`a`.`expiry`,\
-            `a`.`order_id`,`a`.`qty_reserved`,`b`.`qty_total`,`b`.`qty_cancelled`,\
-            `b`.`qty_tot_rsv`";
+        let col_seq = "`a`.`store_id`,`a`.`product_id`,`a`.`expiry`,`a`.`order_id`,\
+            `a`.`qty_reserved`,`b`.`qty_total`,`b`.`qty_cancelled`,`b`.`qty_tot_rsv`";
         format!(
             "SELECT {col_seq} FROM `stock_rsv_detail` AS `a` INNER JOIN \
             `stock_level_inventory` AS `b` ON (`a`.`store_id`=`b`.`store_id` AND \
-            `a`.`product_type`=`b`.`product_type` AND `a`.`product_id`=`b`.`product_id` \
-            AND `a`.`expiry`=`b`.`expiry`)  WHERE `a`.`order_id`=? AND ({})",
+            `a`.`product_id`=`b`.`product_id` AND `a`.`expiry`=`b`.`expiry`) \
+             WHERE `a`.`order_id`=? AND ({})",
             pid_cmps.join("OR")
         )
     }
@@ -446,9 +402,7 @@ impl<'a, 'q> IntoArguments<'q, MySql> for FetchRsvOrderArg<'a> {
         items
             .iter()
             .map(|o| {
-                let prod_typ_num: u8 = o.product_type.clone().into();
                 out.add(o.store_id).unwrap();
-                out.add(prod_typ_num.to_string()).unwrap();
                 out.add(o.product_id).unwrap();
             })
             .count();
@@ -518,18 +472,14 @@ impl TryInto<ProductStockModel> for StkProdRow {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<ProductStockModel, Self::Error> {
         let row = self.0;
-        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
-        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
-        let prod_typ = prodtyp_raw.parse::<ProductType>()?;
-        let prod_id = row.try_get::<u64, usize>(2)?;
-        let expiry = row.try_get::<NaiveDateTime, usize>(3)?.and_utc();
-        let total = row.try_get::<u32, usize>(4)?;
-        let cancelled = row.try_get::<u32, usize>(5)?;
-        let booked = row.try_get::<u32, usize>(6)?;
+        let prod_id = row.try_get::<u64, usize>(1)?;
+        let expiry = row.try_get::<NaiveDateTime, usize>(2)?.and_utc();
+        let total = row.try_get::<u32, usize>(3)?;
+        let cancelled = row.try_get::<u32, usize>(4)?;
+        let booked = row.try_get::<u32, usize>(5)?;
         // Note, the conversion does not include reservation detail
         let quantity = StockQuantityModel::new(total, cancelled, booked, None);
         Ok(ProductStockModel {
-            type_: prod_typ,
             id_: prod_id,
             expiry,
             quantity,
@@ -548,14 +498,11 @@ impl TryInto<ProductStockModel> for StkRsvDetailRow {
     type Error = AppError;
     fn try_into(self) -> DefaultResult<ProductStockModel, Self::Error> {
         let row = self.0;
-        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
-        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
-        let prod_typ = prodtyp_raw.parse::<ProductType>()?;
-        let prod_id = row.try_get::<u64, usize>(2)?;
-        let expiry = row.try_get::<NaiveDateTime, usize>(3)?.and_utc();
+        let prod_id = row.try_get::<u64, usize>(1)?;
+        let expiry = row.try_get::<NaiveDateTime, usize>(2)?.and_utc();
         let rsv_detail = {
-            let oid = to_app_oid(&row, 4)?;
-            let qty_rsv_o = row.try_get::<u32, usize>(5)?;
+            let oid = to_app_oid(&row, 3)?;
+            let qty_rsv_o = row.try_get::<u32, usize>(4)?;
             StockQtyRsvModel {
                 oid,
                 reserved: qty_rsv_o,
@@ -563,13 +510,12 @@ impl TryInto<ProductStockModel> for StkRsvDetailRow {
         };
         let quantity = {
             // quantity summary along with reservation detail
-            let total = row.try_get::<u32, usize>(6)?;
-            let cancelled = row.try_get::<u32, usize>(7)?;
-            let booked = row.try_get::<u32, usize>(8)?;
+            let total = row.try_get::<u32, usize>(5)?;
+            let cancelled = row.try_get::<u32, usize>(6)?;
+            let booked = row.try_get::<u32, usize>(7)?;
             StockQuantityModel::new(total, cancelled, booked, Some(rsv_detail))
         };
         Ok(ProductStockModel {
-            type_: prod_typ,
             id_: prod_id,
             expiry,
             quantity,

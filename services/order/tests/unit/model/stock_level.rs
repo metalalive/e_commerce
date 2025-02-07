@@ -281,57 +281,6 @@ fn reserve_ok_1() {
         ],
     };
     let mut expect_booked_qty = vec![13, 4, 10];
-    let reqs = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1014,
-                product_id: saved_products[5].id_,
-            },
-            price: OrderLinePriceModel { unit: 3, total: 35 },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[0],
-                paid: 0,
-                paid_last_update: None,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1013,
-                product_id: saved_products[3].id_,
-            },
-            price: OrderLinePriceModel { unit: 2, total: 8 },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[1],
-                paid: 0,
-                paid_last_update: None,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1014,
-                product_id: saved_products[7].id_,
-            },
-            price: OrderLinePriceModel { unit: 5, total: 48 },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[2],
-                paid: 0,
-                paid_last_update: None,
-            },
-        },
-    ];
-
     #[rustfmt::skip]
     let reqs: Vec<_> = {
         [
@@ -520,57 +469,6 @@ fn reserve_shortage() {
         qty_ref.reserve("anotherCustomer", qty_ref.total - qty_ref.cancelled);
     }
     let expect_booked_qty = vec![22, 4, 1];
-    let reqs = vec![
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1014,
-                product_id: saved_products[5].id_,
-            },
-            price: OrderLinePriceModel { unit: 3, total: 66 },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[0],
-                paid: 0,
-                paid_last_update: None,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1013,
-                product_id: saved_products[0].id_,
-            },
-            price: OrderLinePriceModel { unit: 2, total: 8 },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[1],
-                paid: 0,
-                paid_last_update: None,
-            },
-        },
-        OrderLineModel {
-            id_: OrderLineIdentity {
-                store_id: 1013,
-                product_id: saved_products[1].id_,
-            },
-            price: OrderLinePriceModel { unit: 5, total: 5 },
-            policy: OrderLineAppliedPolicyModel {
-                reserved_until: mock_warranty.clone(),
-                warranty_until: mock_warranty.clone(),
-            },
-            qty: OrderLineQuantityModel {
-                reserved: expect_booked_qty[2],
-                paid: 0,
-                paid_last_update: None,
-            },
-        },
-    ];
-
     #[rustfmt::skip]
     let reqs: Vec<_> = {
         [

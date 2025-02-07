@@ -7,7 +7,6 @@ use chrono::{DateTime, Duration, Local, SubsecRound};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{CountryCode, CurrencyDto};
-use ecommerce_common::constant::ProductType;
 
 use order::api::dto::ShippingMethod;
 use order::error::AppError;
@@ -30,21 +29,21 @@ pub(super) async fn ut_verify_fetch_all_olines_ok(o_repo: &Box<dyn AbsOrderRepo>
         .into_iter()
         .map(|o| {
             let (id_, price, qty, policy) = (o.id_, o.price, o.qty, o.policy);
-            let combo = (id_.store_id, id_.product_type, id_.product_id);
+            let combo = (id_.store_id, id_.product_id);
             let expect = match combo {
-                (1013, ProductType::Package, 9004) => (
+                (1013, 9004) => (
                     2, 0, 3, 6, true,
                     DateTime::parse_from_rfc3339("3015-11-29T15:07:30-03:00").unwrap(),
                 ),
-                (1013, ProductType::Item, 9006) => (
+                (1013, 9006) => (
                     3, 0, 4, 12, true,
                     DateTime::parse_from_rfc3339("3014-11-29T15:46:43-03:00").unwrap(),
                 ),
-                (1014, ProductType::Package, 9008) => (
+                (1014, 9008) => (
                     29, 0, 20, 580, true,
                     DateTime::parse_from_rfc3339("3015-11-29T15:09:30-03:00").unwrap(),
                 ),
-                (1014, ProductType::Item, 9009) => (
+                (1014, 9009) => (
                     6, 0, 15, 90, true,
                     DateTime::parse_from_rfc3339("3014-11-29T15:48:43-03:00").unwrap(),
                 ),
@@ -77,13 +76,12 @@ async fn save_contact_ok() {
     let ds = dstore_ctx_setup();
     let o_repo = app_repo_order(ds).await.unwrap();
     let (mock_oid, mock_store_id) = ("0e927003716a", 1021);
-    ut_setup_stock_product(o_repo.stock(), mock_store_id, ProductType::Item, 9003, 15).await;
+    ut_setup_stock_product(o_repo.stock(), mock_store_id, 9003, 15).await;
     ut_reserve_init_setup(
         o_repo.stock(),
         mock_reserve_usr_cb_0,
         mock_warranty,
         mock_store_id,
-        ProductType::Item,
         9003,
         3,
         mock_oid,
@@ -134,13 +132,12 @@ async fn save_contact_error() {
     let ds = dstore_ctx_setup();
     let o_repo = app_repo_order(ds).await.unwrap();
     let (mock_oid, mock_store_id) = ("a4190e9b4272", 1022);
-    ut_setup_stock_product(o_repo.stock(), mock_store_id, ProductType::Item, 9003, 15).await;
+    ut_setup_stock_product(o_repo.stock(), mock_store_id, 9003, 15).await;
     ut_reserve_init_setup(
         o_repo.stock(),
         mock_reserve_usr_cb_0,
         mock_warranty,
         mock_store_id,
-        ProductType::Item,
         9003,
         4,
         mock_oid,
@@ -201,13 +198,13 @@ async fn fetch_lines_by_rsvtime_ok() {
         ("0e927d74", CurrencyDto::THB, Decimal::new(38716, 3)),
         ("0e927d75", CurrencyDto::INR, Decimal::new(8011, 2)),
     ];
-    ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Package, 9012, 500).await;
-    ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Item, 9013, 500).await;
+    ut_setup_stock_product(o_repo.stock(), mock_seller, 9012, 500).await;
+    ut_setup_stock_product(o_repo.stock(), mock_seller, 9013, 500).await;
     for (mock_oid, mock_currency_label, mock_currency_rate) in mock_misc {
         rsv_time += Duration::days(2);
         let lines = vec![
-            (mock_seller, ProductType::Package, 9012, mock_rsv_qty, 29, rsv_time),
-            (mock_seller, ProductType::Item, 9013, mock_rsv_qty + 1, 25, rsv_time + Duration::days(1)),
+            (mock_seller, 9012, mock_rsv_qty, 29, rsv_time),
+            (mock_seller, 9013, mock_rsv_qty + 1, 25, rsv_time + Duration::days(1)),
         ];
         let mut ol_set = ut_oline_init_setup(mock_oid, 123, create_time, lines);
         ol_set.currency.sellers.get_mut(&mock_seller)
@@ -241,12 +238,12 @@ async fn fetch_toplvl_meta_ok() {
     let mut create_time = now.clone();
     let (mock_seller, mut mock_usr_id, mock_rsv_qty) = (1033, 126u32, 1u32);
     let mock_oids = ["0e927d76", "0e927d00", "0e927d78", "0e927d79", "0e927d8a"];
-    ut_setup_stock_product(o_repo.stock(), mock_seller, ProductType::Package, 9014, 50).await;
+    ut_setup_stock_product(o_repo.stock(), mock_seller, 9014, 50).await;
     for mock_oid in mock_oids {
         create_time += Duration::minutes(3);
         let rsv_time = now + Duration::days(1);
         let lines = vec![(
-            mock_seller, ProductType::Package, 9014, mock_rsv_qty, 29, rsv_time,
+            mock_seller, 9014, mock_rsv_qty, 29, rsv_time,
         )];
         let ol_set = ut_oline_init_setup(mock_oid, mock_usr_id, create_time, lines);
         let result = o_repo.stock().try_reserve(mock_reserve_usr_cb_0, &ol_set).await;
@@ -294,13 +291,13 @@ async fn fetch_seller_currency_ok() {
     let mock_buyer_id = 126u32;
     let mock_item_price = 100u32; // price in seller's currency
     let mock_oid = "0e927d8c";
-    ut_setup_stock_product(o_repo.stock(), mock_sellers[0], ProductType::Package, 1405, 14).await;
-    ut_setup_stock_product(o_repo.stock(), mock_sellers[1], ProductType::Item,  554, 10).await;
-    ut_setup_stock_product(o_repo.stock(), mock_sellers[2], ProductType::Package, 1492, 15).await;
+    ut_setup_stock_product(o_repo.stock(), mock_sellers[0], 1405, 14).await;
+    ut_setup_stock_product(o_repo.stock(), mock_sellers[1], 554, 10).await;
+    ut_setup_stock_product(o_repo.stock(), mock_sellers[2], 1492, 15).await;
     let lines = vec![
-        (mock_sellers[0], ProductType::Package, 1405, 8, mock_item_price, rsv_time),
-        (mock_sellers[1], ProductType::Item, 554, 9, mock_item_price, rsv_time),
-        (mock_sellers[2], ProductType::Package, 1492, 8, mock_item_price, rsv_time),
+        (mock_sellers[0], 1405, 8, mock_item_price, rsv_time),
+        (mock_sellers[1], 554, 9, mock_item_price, rsv_time),
+        (mock_sellers[2], 1492, 8, mock_item_price, rsv_time),
     ];
     let mut ol_set = ut_oline_init_setup(mock_oid, mock_buyer_id, create_time, lines);
     {

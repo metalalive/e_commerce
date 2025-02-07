@@ -4,7 +4,6 @@ use std::sync::Arc;
 use chrono::DateTime;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 
 use order::api::rpc::dto::ProductPriceDeleteDto;
@@ -14,90 +13,25 @@ use order::repository::{app_repo_product_price, AbsProductPriceRepo};
 use super::dstore_ctx_setup;
 use crate::model::ut_clone_productprice;
 
+#[rustfmt::skip]
 fn ut_pprice_data() -> [ProductPriceModel; 10] {
-    [
-        ProductPriceModel {
-            is_create: true,
-            product_type: ProductType::Item,
-            product_id: 1001,
-            price: 87,
-            start_after: DateTime::parse_from_rfc3339("2023-09-09T09:12:53.001985+08:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-06T09:00:32.001030+08:00").unwrap(),
-        },
-        ProductPriceModel {
-            is_create: true,
-            product_type: ProductType::Package,
-            product_id: 1002,
-            price: 94555,
-            start_after: DateTime::parse_from_rfc3339("2023-09-09T09:13:54+07:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-07T09:01:30+06:00").unwrap(),
-        },
-        ProductPriceModel {
-            is_create: true,
-            product_type: ProductType::Item,
-            product_id: 1003,
-            price: 28379,
-            start_after: DateTime::parse_from_rfc3339("2023-07-31T10:16:54+05:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-10T09:01:31+02:00").unwrap(),
-        },
-        ProductPriceModel {
-            is_create: true,
-            product_type: ProductType::Package,
-            product_id: 1004,
-            price: 3008,
-            start_after: DateTime::parse_from_rfc3339("2022-07-30T11:16:55.468-01:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-10T09:01:31.3310+03:00").unwrap(),
-        },
-        ProductPriceModel {
-            is_create: true,
-            product_type: ProductType::Item,
-            product_id: 1005,
-            price: 1389,
-            start_after: DateTime::parse_from_rfc3339("2023-07-29T10:17:04.1918+05:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-06T09:01:32.00012-06:30").unwrap(),
-        },
-        ProductPriceModel {
-            is_create: true,
-            product_type: ProductType::Package,
-            product_id: 1006,
-            price: 183,
-            start_after: DateTime::parse_from_rfc3339("2023-06-29T11:18:54.995+04:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-05T08:14:05.913+09:00").unwrap(),
-        },
-        ProductPriceModel {
-            is_create: true,
-            product_type: ProductType::Item,
-            product_id: 1007,
-            price: 666,
-            start_after: DateTime::parse_from_rfc3339("2022-07-28T12:24:47+08:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-12-26T16:58:00+09:00").unwrap(),
-        },
-        // -------- update --------
-        ProductPriceModel {
-            is_create: false,
-            product_type: ProductType::Item,
-            product_id: 1001,
-            price: 94,
-            start_after: DateTime::parse_from_rfc3339("2023-09-09T09:12:53.001905+08:30").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-06T09:00:30.10301+08:30").unwrap(),
-        },
-        ProductPriceModel {
-            is_create: false,
-            product_type: ProductType::Package,
-            product_id: 1002,
-            price: 515,
-            start_after: DateTime::parse_from_rfc3339("2023-09-10T11:14:54+07:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-07T09:01:30.000067+06:00").unwrap(),
-        },
-        ProductPriceModel {
-            is_create: false,
-            product_type: ProductType::Item,
-            product_id: 1003,
-            price: 28023,
-            start_after: DateTime::parse_from_rfc3339("2023-07-31T10:18:54+05:00").unwrap(),
-            end_before: DateTime::parse_from_rfc3339("2023-10-10T06:11:50+02:00").unwrap(),
-        },
-    ]
+    let rawdata = [
+        (true, 1001, 87, "2023-09-09T09:12:53.001985+08:00", "2023-10-06T09:00:32.001030+08:00"),
+        (true, 1002, 94555, "2023-09-09T09:13:54+07:00", "2023-10-07T09:01:30+06:00"),
+        (true, 1003, 28379, "2023-07-31T10:16:54+05:00", "2023-10-10T09:01:31+02:00"),
+        (true, 1004, 3008, "2022-07-30T11:16:55.468-01:00", "2023-10-10T09:01:31.3310+03:00"),
+        (true, 1005, 1389, "2023-07-29T10:17:04.1918+05:00", "2023-10-06T09:01:32.00012-06:30"),
+        (true, 1006, 183, "2023-06-29T11:18:54.995+04:00", "2023-10-05T08:14:05.913+09:00"),
+        (true, 1007, 666, "2022-07-28T12:24:47+08:00", "2023-12-26T16:58:00+09:00"),
+        (false, 1001, 94, "2023-09-09T09:12:53.001905+08:30", "2023-10-06T09:00:30.10301+08:30"),
+        (false, 1002, 515, "2023-09-10T11:14:54+07:00", "2023-10-07T09:01:30.000067+06:00"),
+        (false, 1003, 28023, "2023-07-31T10:18:54+05:00", "2023-10-10T06:11:50+02:00"),
+    ];
+    rawdata.map(|(is_create, product_id, price, start_after, end_before)| ProductPriceModel {
+        is_create, product_id, price,
+        start_after: DateTime::parse_from_rfc3339(start_after).unwrap(),
+        end_before: DateTime::parse_from_rfc3339(end_before).unwrap(),
+    })
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -119,12 +53,7 @@ async fn save_fetch_ok() {
     }; // TODO
     let result = repo.save(mset).await;
     assert!(result.is_ok());
-    let result = repo
-        .fetch(
-            store_id,
-            vec![(ProductType::Package, 1002), (ProductType::Item, 1003)],
-        )
-        .await;
+    let result = repo.fetch(store_id, vec![1002, 1003]).await;
     assert!(result.is_ok());
     if let Ok(ms) = result {
         assert_eq!(ms.items.len(), 2);
@@ -166,12 +95,7 @@ async fn save_fetch_ok() {
     }; // TODO
     let result = repo.save(mset).await;
     assert!(result.is_ok());
-    let result = repo
-        .fetch(
-            store_id,
-            vec![(ProductType::Item, 1005), (ProductType::Package, 1002)],
-        )
-        .await;
+    let result = repo.fetch(store_id, vec![1005, 1002]).await;
     assert!(result.is_ok());
     if let Ok(ms) = result {
         assert_eq!(ms.items.len(), 2);
@@ -219,12 +143,7 @@ async fn fetch_empty() {
     if let Err(e) = result {
         assert_eq!(e.code, AppErrorCode::ProductNotExist);
     }
-    let result = repo
-        .fetch(
-            store_id,
-            vec![(ProductType::Item, 2005), (ProductType::Package, 2002)],
-        )
-        .await;
+    let result = repo.fetch(store_id, vec![2005, 2002]).await;
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.code, AppErrorCode::ProductNotExist);
@@ -301,17 +220,7 @@ async fn ut_delete_common_setup(
     };
     let result = repo.save(mset).await;
     assert!(result.is_ok());
-    let result = repo
-        .fetch(
-            store_id,
-            vec![
-                (ProductType::Item, 1005),
-                (ProductType::Package, 1004),
-                (ProductType::Package, 1002),
-                (ProductType::Item, 1007),
-            ],
-        )
-        .await;
+    let result = repo.fetch(store_id, vec![1005, 1004, 1002, 1007]).await;
     assert!(result.is_ok());
     if let Ok(ms) = result {
         assert_eq!(ms.items.len(), 4);
@@ -326,22 +235,11 @@ async fn delete_some_ok() {
     ut_delete_common_setup(125, CurrencyDto::TWD, repo.clone()).await;
     ut_delete_common_setup(126, CurrencyDto::IDR, repo.clone()).await;
     let pids = ProductPriceDeleteDto {
-        items: Some(vec![1007, 1005]),
-        pkgs: Some(vec![1004, 1002]),
-        item_type: ProductType::Item,
-        pkg_type: ProductType::Package,
+        items: Some(vec![1004, 1002, 1007, 1005]),
     };
     let result = repo.delete(125, pids).await;
     assert!(result.is_ok());
-    let pids = vec![
-        (ProductType::Item, 1005),
-        (ProductType::Package, 1004),
-        (ProductType::Package, 1002),
-        (ProductType::Item, 1007),
-        (ProductType::Item, 1003),
-        (ProductType::Package, 1006),
-        (ProductType::Item, 1001),
-    ];
+    let pids = vec![1005, 1004, 1002, 1007, 1003, 1006, 1001];
     let result = repo.fetch(125, pids.clone()).await;
     assert!(result.is_ok());
     if let Ok(ms) = result {
@@ -370,9 +268,6 @@ async fn delete_some_empty() {
     let repo = app_repo_product_price(ds).await.unwrap();
     let pids = ProductPriceDeleteDto {
         items: Some(vec![]),
-        pkgs: None,
-        item_type: ProductType::Item,
-        pkg_type: ProductType::Package,
     };
     let result = repo.delete(126, pids).await;
     assert!(result.is_err());
@@ -390,14 +285,7 @@ async fn delete_all_ok() {
     ut_delete_common_setup(128, CurrencyDto::INR, repo.clone()).await;
     let result = repo.delete_all(128).await;
     assert!(result.is_ok());
-    let pids = vec![
-        (ProductType::Item, 1005),
-        (ProductType::Package, 1004),
-        (ProductType::Package, 1002),
-        (ProductType::Item, 1007),
-        (ProductType::Item, 1003),
-        (ProductType::Package, 1006),
-    ];
+    let pids = vec![1005, 1004, 1002, 1007, 1003, 1006];
     let result = repo.fetch(128, pids.clone()).await;
     assert!(result.is_err());
     if let Err(e) = result {
@@ -418,12 +306,12 @@ async fn fetch_many_ok() {
     ut_delete_common_setup(129, CurrencyDto::THB, repo.clone()).await;
     ut_delete_common_setup(130, CurrencyDto::TWD, repo.clone()).await;
     let pids = vec![
-        (129, ProductType::Item, 1005),
-        (130, ProductType::Package, 1004),
-        (129, ProductType::Package, 1002),
-        (130, ProductType::Item, 1007),
-        (129, ProductType::Item, 1003),
-        (130, ProductType::Package, 1006),
+        (129, 1005),
+        (130, 1004),
+        (129, 1002),
+        (130, 1007),
+        (129, 1003),
+        (130, 1006),
     ];
     let result = repo.fetch_many(pids).await;
     assert!(result.is_ok());

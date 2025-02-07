@@ -6,7 +6,6 @@ use sqlx::database::Database as AbstractDatabase;
 use sqlx::mysql::{MySqlArguments, MySqlRow};
 use sqlx::{Acquire, Arguments, Executor, IntoArguments, MySql, Row, Statement};
 
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
@@ -43,11 +42,11 @@ impl<'a> From<InsertUpdateTopLvlArg<'a>> for (String, MySqlArguments) {
 impl InsertLineArg {
     fn sql_pattern(num_batch: usize) -> String {
         let col_seq = (0..num_batch)
-            .map(|_| "(?,?,?,?,?,?)")
+            .map(|_| "(?,?,?,?,?)")
             .collect::<Vec<_>>()
             .join(",");
         format!(
-            "INSERT INTO `cart_line_detail`(`usr_id`,`seq`,`store_id`,`product_type`,\
+            "INSERT INTO `cart_line_detail`(`usr_id`,`seq`,`store_id`,\
             `product_id`,`quantity`) VALUES {col_seq}"
         )
     }
@@ -62,14 +61,11 @@ impl<'q> IntoArguments<'q, MySql> for InsertLineArg {
                 let (id_, quantity) = (line.id_, line.qty_req);
                 let BaseProductIdentity {
                     store_id,
-                    product_type,
                     product_id,
                 } = id_;
-                let prod_typ_num: u8 = product_type.into();
                 args.add(usr_id).unwrap();
                 args.add(seq_num).unwrap();
                 args.add(store_id).unwrap();
-                args.add(prod_typ_num.to_string()).unwrap();
                 args.add(product_id).unwrap();
                 args.add(quantity).unwrap();
             })
@@ -89,17 +85,16 @@ impl From<InsertLineArg> for (String, MySqlArguments) {
 impl UpdateLineArg {
     fn sql_pattern(num_batch: usize) -> String {
         let case_op = (0..num_batch)
-            .map(|_| "WHEN (`store_id`=? AND `product_type`=? AND `product_id`=?) THEN ? ")
+            .map(|_| "WHEN (`store_id`=? AND `product_id`=?) THEN ? ")
             .collect::<Vec<_>>()
             .join("");
         let where_op = (0..num_batch)
-            .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
+            .map(|_| "(`store_id`=? AND `product_id`=?)")
             .collect::<Vec<_>>()
             .join("OR");
-        // `usr_id`,`seq`,`store_id`,`product_type`,`product_id`
+        // `usr_id`,`seq`,`store_id`,`product_id`
         format!(
-            "UPDATE `cart_line_detail` SET \
-                `quantity` = CASE {case_op} ELSE `quantity` END \
+            "UPDATE `cart_line_detail` SET `quantity` = CASE {case_op} ELSE `quantity` END \
                 WHERE `usr_id`=? AND `seq`=?  AND ({where_op})"
         )
     }
@@ -111,10 +106,8 @@ impl<'a> IntoArguments<'a, MySql> for UpdateLineArg {
         lines
             .iter()
             .map(|line| {
-                let prod_typ_num: u8 = line.id_.product_type.clone().into();
                 let (seller, p_id, qty) = (line.id_.store_id, line.id_.product_id, line.qty_req);
                 args.add(seller).unwrap();
-                args.add(prod_typ_num.to_string()).unwrap();
                 args.add(p_id).unwrap();
                 args.add(qty).unwrap();
             })
@@ -124,10 +117,8 @@ impl<'a> IntoArguments<'a, MySql> for UpdateLineArg {
         lines
             .into_iter()
             .map(|line| {
-                let prod_typ_num: u8 = line.id_.product_type.clone().into();
                 let (seller, p_id) = (line.id_.store_id, line.id_.product_id);
                 args.add(seller).unwrap();
-                args.add(prod_typ_num.to_string()).unwrap();
                 args.add(p_id).unwrap();
             })
             .count();
@@ -190,12 +181,12 @@ impl From<FetchTopLvlArg> for (String, MySqlArguments) {
 
 impl FetchLinesArg {
     fn sql_pattern(num_batch: usize) -> String {
-        let mut sql_patt = "SELECT `store_id`,`product_type`,`product_id`,`quantity`\
+        let mut sql_patt = "SELECT `store_id`,`product_id`,`quantity`\
                         FROM `cart_line_detail` WHERE `usr_id`=? AND `seq`=?"
             .to_string();
         if num_batch > 0 {
             let where_op = (0..num_batch)
-                .map(|_| "(`store_id`=? AND `product_type`=? AND `product_id`=?)")
+                .map(|_| "(`store_id`=? AND `product_id`=?)")
                 .collect::<Vec<_>>()
                 .join("OR");
             let extra = format!(" AND ({where_op})");
@@ -213,10 +204,8 @@ impl<'a> IntoArguments<'a, MySql> for FetchLinesArg {
         if let Some(pids) = opt_pids {
             pids.into_iter()
                 .map(|id_| {
-                    let prod_typ_num: u8 = id_.product_type.into();
                     let (seller, p_id) = (id_.store_id, id_.product_id);
                     args.add(seller).unwrap();
-                    args.add(prod_typ_num.to_string()).unwrap();
                     args.add(p_id).unwrap();
                 })
                 .count();
@@ -257,15 +246,11 @@ impl TryFrom<MySqlRow> for CartLineModel {
     type Error = AppError;
     fn try_from(row: MySqlRow) -> DefaultResult<Self, Self::Error> {
         let store_id = row.try_get::<u32, usize>(0)?;
-        let prodtyp_raw = row.try_get::<&[u8], usize>(1)?;
-        let prodtyp_raw = std::str::from_utf8(prodtyp_raw).unwrap();
-        let product_type = prodtyp_raw.parse::<ProductType>()?;
-        let product_id = row.try_get::<u64, usize>(2)?;
-        let qty_req = row.try_get::<u32, usize>(3)?;
+        let product_id = row.try_get::<u64, usize>(1)?;
+        let qty_req = row.try_get::<u32, usize>(2)?;
         Ok(Self {
             id_: BaseProductIdentity {
                 store_id,
-                product_type,
                 product_id,
             },
             qty_req,

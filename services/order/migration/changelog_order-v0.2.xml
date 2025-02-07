@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.6.xsd
+    http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-4.6.xsd ">
+    <changeSet id="tag_version_0.1.9" author="Haam">
+        <tagDatabase tag="0.1.9" />
+    </changeSet>
+    <changeSet id="discard_prodtype__simple_case" author="T.H.">
+        <comment>
+            discard product type column in tables which do not affect any key or constraint
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `cart_line_detail` DROP COLUMN `product_type`;
+            ALTER TABLE `oline_return_req` DROP COLUMN `product_type`;
+            ALTER TABLE `order_line_detail` DROP COLUMN `product_type`;
+        </sql>
+        <rollback>
+            ALTER TABLE `cart_line_detail` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `oline_return_req` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `order_line_detail` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+        </rollback>
+    </changeSet>
+    <changeSet id="discard_prodtype__product_policy" author="T.H.">
+        <comment>
+            normally product-id must be inspected and adjusted properly before removing product type in order
+            to avoid duplicate product ids with originally different product types, in this project I skipped
+            such product-id change cuz this isn't real production system yet.
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `product_policy` DROP PRIMARY KEY;
+            ALTER TABLE `product_policy` DROP COLUMN `product_type`;
+            ALTER TABLE `product_policy` ADD PRIMARY KEY (`product_id`);
+        </sql>
+        <rollback>
+            ALTER TABLE `product_policy` DROP PRIMARY KEY;
+            ALTER TABLE `product_policy` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `product_policy` ADD PRIMARY KEY (`product_type`,`product_id`);
+        </rollback>
+    </changeSet>
+    <changeSet id="discard_prodtype__product_price" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `product_price` DROP PRIMARY KEY;
+            ALTER TABLE `product_price` DROP COLUMN `product_type`;
+            ALTER TABLE `product_price` ADD PRIMARY KEY (`store_id`,`product_id`);
+        </sql>
+        <rollback>
+            ALTER TABLE `product_price` DROP PRIMARY KEY;
+            ALTER TABLE `product_price` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `product_price` ADD PRIMARY KEY (`store_id`,`product_type`,`product_id`);
+        </rollback>
+    </changeSet>
+    <changeSet id="tmp_drop_fk__stock_rsv" author="T.H.">
+        <comment>
+            note mariaDB only drops the constraint on the syntax `drop foreign key`, it is essential
+            to explicitly drop the key `c_fk_stock_prod_id`
+        </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `stock_rsv_detail` DROP FOREIGN KEY `c_fk_stock_prod_id`;
+            ALTER TABLE `stock_rsv_detail` DROP KEY `c_fk_stock_prod_id`;
+        </sql>
+        <rollback>
+            ALTER TABLE `stock_rsv_detail` ADD CONSTRAINT `c_fk_stock_prod_id`  FOREIGN KEY
+                (`store_id`, `product_type`, `product_id`, `expiry`) 
+                REFERENCES `stock_level_inventory` (`store_id`, `product_type`, `product_id`, `expiry`)
+                ON DELETE CASCADE ON UPDATE CASCADE;
+        </rollback>
+    </changeSet>
+    <changeSet id="discard_prodtype__stock_rsv" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `stock_rsv_detail` DROP KEY `stk_rsv_idx_0_pid`;
+            ALTER TABLE `stock_rsv_detail` DROP COLUMN `product_type`;
+            ALTER TABLE `stock_rsv_detail` ADD KEY `stk_rsv_idx_0_pid` (`store_id`, `product_id`, `order_id`(2));
+        </sql>
+        <rollback>
+            ALTER TABLE `stock_rsv_detail` DROP KEY `stk_rsv_idx_0_pid`;
+            ALTER TABLE `stock_rsv_detail` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `stock_rsv_detail` ADD KEY `stk_rsv_idx_0_pid` (`store_id`,`product_type`,`product_id`,`order_id`(2));
+        </rollback>
+    </changeSet>
+    <changeSet id="discard_prodtype__stocklevel" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `stock_level_inventory` DROP PRIMARY KEY;
+            ALTER TABLE `stock_level_inventory` DROP COLUMN `product_type`;
+            ALTER TABLE `stock_level_inventory` ADD PRIMARY KEY (`store_id`,`product_id`,`expiry`);
+        </sql>
+        <rollback>
+            ALTER TABLE `stock_level_inventory` DROP PRIMARY KEY;
+            ALTER TABLE `stock_level_inventory` ADD COLUMN `product_type` enum('1','2') DEFAULT '1';
+            ALTER TABLE `stock_level_inventory` ADD PRIMARY KEY (`store_id`,`product_type`,`product_id`,`expiry`);
+        </rollback>
+    </changeSet>
+    <changeSet id="restore_fk__stock_rsv" author="T.H.">
+        <comment> </comment>
+        <sql dbms="mariadb">
+            ALTER TABLE `stock_rsv_detail` ADD CONSTRAINT `c_fk_stock_prod_id`  FOREIGN KEY (`store_id`, `product_id`, `expiry`) 
+                REFERENCES `stock_level_inventory` (`store_id`, `product_id`, `expiry`)  ON DELETE CASCADE ON UPDATE CASCADE;
+        </sql>
+        <rollback>
+            ALTER TABLE `stock_rsv_detail` DROP FOREIGN KEY `c_fk_stock_prod_id`;
+            ALTER TABLE `stock_rsv_detail` DROP KEY `c_fk_stock_prod_id`;
+        </rollback>
+    </changeSet> 
+
+    <changeSet id="tag_version_0.2.0" author="T.H.">
+        <tagDatabase tag="0.2.0" />
+    </changeSet>
+</databaseChangeLog>
