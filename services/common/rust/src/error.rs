@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::num::ParseIntError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppErrorCode {
@@ -42,9 +41,6 @@ pub enum AppErrorCode {
     ProductNotExist,
     IOerror(std::io::ErrorKind),
 } // end of AppErrorCode
-
-#[derive(Debug)]
-pub struct ProductTypeParseError(pub ParseIntError);
 
 #[derive(Debug, Clone)]
 pub struct AppCfgError {
