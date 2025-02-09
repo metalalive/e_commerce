@@ -9,10 +9,10 @@ info:
   license:
     name: MIT
     url: https://github.com/metalalive/e_commerce/blob/master/LICENSE
-  version: 0.0.8
+  version: 0.1.0
 
 servers:
-  - url: https://doc.site.not.ready/api/v0.0.8
+  - url: https://doc.site.not.ready/api/v0.1.0
 tags:
   - name: configuration
     description: |
@@ -265,10 +265,6 @@ components:
       format: uint32
       example: 560
       
-    ProductType:
-      type: integer
-      enum: [1,2]
-      
     ProductId:
       type: integer
       format: uint64
@@ -310,8 +306,6 @@ components:
     BaseProductIdCombo:
       type: object
       properties:
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         product_id:
           $ref: '#/components/schemas/ProductId'
         seller_id:
@@ -341,7 +335,6 @@ components:
           $ref: '#/components/schemas/PayAmountDto'
       required:
         - product_id
-        - product_type
         - seller_id
         - quantity
         - amount
@@ -441,7 +434,6 @@ components:
       required:
         - seller_id
         - product_id
-        - product_type
     
     ChargeRespErrorDto:
       type: object
@@ -582,8 +574,6 @@ components:
     RefundCompletionOlineReqDto:
       type: object
       properties:
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         product_id:
           $ref: '#/components/schemas/ProductId'
         time_issued:
@@ -594,7 +584,6 @@ components:
         approval:
           $ref: '#/components/schemas/RefundLineApprovalDto'
       required:
-      - product_type
       - product_id
       - time_issued
       - reject
@@ -641,8 +630,6 @@ components:
     ReportChargeLineRespDto:
       type: object
       properties:
-        product_type:
-          $ref: '#/components/schemas/ProductType'
         product_id:
           $ref: '#/components/schemas/ProductId'
         currency:

@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
 
-use ecommerce_common::{api::dto::CurrencyDto, constant::ProductType, error::AppErrorCode};
+use ecommerce_common::api::dto::CurrencyDto;
+use ecommerce_common::error::AppErrorCode;
 use payment::model::{
     BuyerPayInState, Charge3partyModel, ChargeBuyerModel, ChargeLineBuyerModel,
     Merchant3partyModel, MerchantProfileModel, OrderCurrencySnapshot, PayoutModel,
@@ -24,13 +25,13 @@ pub(crate) fn ut_setup_buyer_charge_inner(
     let merchant_ids = [1008u32, 1009];
     let order_id = "overlapping-camera-calibrate".to_string();
     let charge_lines = vec![
-        (merchant_ids[0], ProductType::Item, 19030u64, (502i64, 1u32), (2510i64, 1u32), 5u32,
+        (merchant_ids[0], 19030u64, (502i64, 1u32), (2510i64, 1u32), 5u32,
          (0i64, 0u32), (0i64, 0u32), 0u32, 0u32),
-        (merchant_ids[1], ProductType::Item, 9451, (1700, 1), (12600, 1), 8, (0,0), (0,0), 0, 0),
-        (merchant_ids[0], ProductType::Package, 6763, (9900, 2), (49500, 2), 5, (0,0), (0,0), 0, 0),
-        (merchant_ids[1], ProductType::Package, 8454, (3760, 1), (37600, 1), 10, (0,0), (0,0), 0, 0),
-        (merchant_ids[0], ProductType::Item, 9925, (411, 1), (3699, 1), 9, (0,0), (0,0), 0, 0),
-        (merchant_ids[1], ProductType::Item, 9914, (226, 0), (2486, 0), 11, (0,0), (0,0), 0, 0),
+        (merchant_ids[1], 9451, (1700, 1), (12600, 1), 8, (0,0), (0,0), 0, 0),
+        (merchant_ids[0], 6763, (9900, 2), (49500, 2), 5, (0,0), (0,0), 0, 0),
+        (merchant_ids[1], 8454, (3760, 1), (37600, 1), 10, (0,0), (0,0), 0, 0),
+        (merchant_ids[0], 9925, (411, 1), (3699, 1), 9, (0,0), (0,0), 0, 0),
+        (merchant_ids[1], 9914, (226, 0), (2486, 0), 11, (0,0), (0,0), 0, 0),
     ];
     let currency_snapshot = {
         let iter = [

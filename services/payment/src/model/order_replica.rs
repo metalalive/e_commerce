@@ -57,10 +57,9 @@ impl TryFrom<(OrderLinePayDto, CurrencyDto)> for OrderLineModel {
     {
         let (oline, currency_label) = value;
         let OrderLinePayDto {
-            seller_id, product_id, product_type,
-            reserved_until, quantity, amount: amount_dto,
+            seller_id, product_id, reserved_until, quantity, amount: amount_dto,
         } = oline;
-        let pid = BaseProductIdentity {store_id: seller_id, product_type, product_id};
+        let pid = BaseProductIdentity {store_id: seller_id, product_id};
         let rsv_parse_result = DateTime::parse_from_rfc3339(reserved_until.as_str());
         let now = Local::now().fixed_offset();
 

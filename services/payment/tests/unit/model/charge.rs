@@ -2,7 +2,6 @@ use chrono::{DateTime, Duration, Local, Utc};
 use rust_decimal::Decimal;
 
 use ecommerce_common::api::dto::{CurrencyDto, PayAmountDto};
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
 
@@ -25,19 +24,18 @@ fn buyer_convert_ok_1() {
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
     let mock_lines = [
-        (140, ProductType::Item, 1005, 6, "17.15", "102.9"),
-        (141, ProductType::Package, 1006, 1, "21", "21"),
-        (143, ProductType::Package, 1008, 4, "10", "40"),
+        (140, 1005, 6, "17.15", "102.9"),
+        (141, 1006, 1, "21", "21"),
+        (143, 1008, 4, "10", "40"),
     ]
     .into_iter()
     .map(|d| ChargeAmountOlineDto {
         seller_id: d.0,
-        product_id: d.2,
-        product_type: d.1,
-        quantity: d.3,
+        product_id: d.1,
+        quantity: d.2,
         amount: PayAmountDto {
-            unit: d.4.to_string(),
-            total: d.5.to_string(),
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
         },
     })
     .collect();
@@ -60,14 +58,13 @@ fn buyer_convert_ok_1() {
                     l.into_parts();
                 let BaseProductIdentity {
                     store_id,
-                    product_type,
                     product_id,
                 } = actual_pid;
                 let PayLineAmountModel { unit, total, qty } = actual_amt_orig;
-                let expect = match (store_id, product_type, product_id) {
-                    (140, ProductType::Item, 1005) => (6u32, (1715i64, 2u32), (1029i64, 1u32)),
-                    (141, ProductType::Package, 1006) => (1, (21, 0), (21, 0)),
-                    (143, ProductType::Package, 1008) => (4, (10, 0), (40, 0)),
+                let expect = match (store_id, product_id) {
+                    (140, 1005) => (6u32, (1715i64, 2u32), (1029i64, 1u32)),
+                    (141, 1006) => (1, (21, 0), (21, 0)),
+                    (143, 1008) => (4, (10, 0), (40, 0)),
                     _others => (0, (0, 0), (0, 0)),
                 };
                 let expect = (
@@ -104,19 +101,18 @@ fn buyer_convert_ok_2() {
         })
         .count();
     let mock_lines = [
-        (140, ProductType::Item, 1005, 9, "17.15", "154.35"),
-        (142, ProductType::Item, 1007, 14, "22.09", "309.26"),
-        (143, ProductType::Package, 1008, 7, "10", "70"),
+        (140, 1005, 9, "17.15", "154.35"),
+        (142, 1007, 14, "22.09", "309.26"),
+        (143, 1008, 7, "10", "70"),
     ]
     .into_iter()
     .map(|d| ChargeAmountOlineDto {
         seller_id: d.0,
-        product_id: d.2,
-        product_type: d.1,
-        quantity: d.3,
+        product_id: d.1,
+        quantity: d.2,
         amount: PayAmountDto {
-            unit: d.4.to_string(),
-            total: d.5.to_string(),
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
         },
     })
     .collect();
@@ -137,14 +133,13 @@ fn buyer_convert_ok_2() {
                     l.into_parts();
                 let BaseProductIdentity {
                     store_id,
-                    product_type,
                     product_id,
                 } = actual_pid;
                 let PayLineAmountModel { unit, total, qty } = actual_amt_orig;
-                let expect = match (store_id, product_type, product_id) {
-                    (140, ProductType::Item, 1005) => (9u32, 17150i64, 154350i64),
-                    (142, ProductType::Item, 1007) => (14, 22090, 309260),
-                    (143, ProductType::Package, 1008) => (7, 10000, 70000),
+                let expect = match (store_id, product_id) {
+                    (140, 1005) => (9u32, 17150i64, 154350i64),
+                    (142, 1007) => (14, 22090, 309260),
+                    (143, 1008) => (7, 10000, 70000),
                     _others => (0, 0, 0),
                 };
                 let expect = (
@@ -220,20 +215,19 @@ fn buyer_convert_expired() {
         })
         .count(); // assume expiry time reached
     let mock_lines = [
-        (140, ProductType::Item, 1005, 1, "17.15", "17.15"),
-        (141, ProductType::Package, 1006, 1, "21", "21"),
-        (142, ProductType::Item, 1007, 1, "22.09", "22.09"),
-        (143, ProductType::Package, 1008, 1, "10", "10"),
+        (140, 1005, 1, "17.15", "17.15"),
+        (141, 1006, 1, "21", "21"),
+        (142, 1007, 1, "22.09", "22.09"),
+        (143, 1008, 1, "10", "10"),
     ]
     .into_iter()
     .map(|d| ChargeAmountOlineDto {
         seller_id: d.0,
-        product_id: d.2,
-        product_type: d.1,
-        quantity: d.3,
+        product_id: d.1,
+        quantity: d.2,
         amount: PayAmountDto {
-            unit: d.4.to_string(),
-            total: d.5.to_string(),
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
         },
     })
     .collect();
@@ -249,11 +243,8 @@ fn buyer_convert_expired() {
             detail
                 .into_iter()
                 .map(|l| {
-                    let expect_pid = [
-                        (140u32, ProductType::Item, 1005u64),
-                        (141, ProductType::Package, 1006),
-                    ];
-                    let actual_pid = (l.seller_id, l.product_type, l.product_id);
+                    let expect_pid = [(140u32, 1005u64), (141, 1006)];
+                    let actual_pid = (l.seller_id, l.product_id);
                     assert!(expect_pid.contains(&actual_pid));
                     assert!(l.expired.unwrap());
                 })
@@ -279,20 +270,19 @@ fn buyer_convert_qty_exceed_limit() {
         })
         .count();
     let mock_lines = [
-        (140, ProductType::Item, 1005, 8, "17.15", "137.2"),
-        (141, ProductType::Package, 1006, 2, "21", "42"),
-        (142, ProductType::Item, 1007, 15, "22.09", "331.35"),
-        (143, ProductType::Package, 1008, 7, "10", "70"),
+        (140, 1005, 8, "17.15", "137.2"),
+        (141, 1006, 2, "21", "42"),
+        (142, 1007, 15, "22.09", "331.35"),
+        (143, 1008, 7, "10", "70"),
     ]
     .into_iter()
     .map(|d| ChargeAmountOlineDto {
         seller_id: d.0,
-        product_id: d.2,
-        product_type: d.1,
-        quantity: d.3,
+        product_id: d.1,
+        quantity: d.2,
         amount: PayAmountDto {
-            unit: d.4.to_string(),
-            total: d.5.to_string(),
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
         },
     })
     .collect();
@@ -308,10 +298,10 @@ fn buyer_convert_qty_exceed_limit() {
             detail
                 .into_iter()
                 .map(|l| {
-                    let actual_pid = (l.seller_id, l.product_type, l.product_id);
+                    let actual_pid = (l.seller_id, l.product_id);
                     let expect = match actual_pid {
-                        (142u32, ProductType::Item, 1007u64) => (14u16, 15u32),
-                        (141, ProductType::Package, 1006) => (0, 2),
+                        (142u32, 1007u64) => (14u16, 15u32),
+                        (141, 1006) => (0, 2),
                         _others => (0, 0),
                     };
                     // assert!(l.amount.is_none());
@@ -332,20 +322,19 @@ fn buyer_convert_amount_mismatch_1() {
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
     let mock_lines = [
-        (140, ProductType::Item, 1005, 9, "17.01", "159"),
-        (141, ProductType::Package, 1006, 2, "21", "42"),
-        (142, ProductType::Item, 1007, 15, "22.09", "333"),
-        (143, ProductType::Package, 1008, 7, "10", "70"),
+        (140, 1005, 9, "17.01", "159"),
+        (141, 1006, 2, "21", "42"),
+        (142, 1007, 15, "22.09", "333"),
+        (143, 1008, 7, "10", "70"),
     ]
     .into_iter()
     .map(|d| ChargeAmountOlineDto {
         seller_id: d.0,
-        product_id: d.2,
-        product_type: d.1,
-        quantity: d.3,
+        product_id: d.1,
+        quantity: d.2,
         amount: PayAmountDto {
-            unit: d.4.to_string(),
-            total: d.5.to_string(),
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
         },
     })
     .collect();
@@ -361,10 +350,10 @@ fn buyer_convert_amount_mismatch_1() {
             detail
                 .into_iter()
                 .map(|l| {
-                    let actual_pid = (l.seller_id, l.product_type, l.product_id);
+                    let actual_pid = (l.seller_id, l.product_id);
                     let expect = match actual_pid {
-                        (140u32, ProductType::Item, 1005u64) => (9u32, "17.01", "159"),
-                        (142, ProductType::Item, 1007) => (15, "22.09", "333"),
+                        (140u32, 1005u64) => (9u32, "17.01", "159"),
+                        (142, 1007) => (15, "22.09", "333"),
                         _others => (0, "0", "0"),
                     };
                     let expect = (expect.0, expect.1.to_string(), expect.2.to_string());
@@ -384,19 +373,18 @@ fn buyer_convert_amount_mismatch_2() {
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(2);
     let mock_order = ut_setup_order_replica(mock_usr_id, mock_oid.clone(), reserved_until);
     let mock_lines = [
-        (141, ProductType::Package, 1006, 2, "21", "42"),
-        (142, ProductType::Item, 1007, 15, "22.09", "331.35"),
-        (143, ProductType::Package, 1008, 7, "11", "77"),
+        (141, 1006, 2, "21", "42"),
+        (142, 1007, 15, "22.09", "331.35"),
+        (143, 1008, 7, "11", "77"),
     ]
     .into_iter()
     .map(|d| ChargeAmountOlineDto {
         seller_id: d.0,
-        product_id: d.2,
-        product_type: d.1,
-        quantity: d.3,
+        product_id: d.1,
+        quantity: d.2,
         amount: PayAmountDto {
-            unit: d.4.to_string(),
-            total: d.5.to_string(),
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
         },
     })
     .collect();
@@ -412,11 +400,9 @@ fn buyer_convert_amount_mismatch_2() {
             detail
                 .into_iter()
                 .map(|l| {
-                    let actual_pid = (l.seller_id, l.product_type, l.product_id);
+                    let actual_pid = (l.seller_id, l.product_id);
                     let expect = match actual_pid {
-                        (143u32, ProductType::Package, 1008u64) => {
-                            (11u32.to_string(), 77u32.to_string())
-                        }
+                        (143u32, 1008u64) => (11u32.to_string(), 77u32.to_string()),
                         _others => (0.to_string(), 0.to_string()),
                     };
                     assert!(l.quantity.is_none());

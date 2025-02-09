@@ -10,7 +10,6 @@ use ecommerce_common::api::dto::{
     OrderLinePayDto, OrderSellerCurrencyDto, PayAmountDto, PhoneNumberDto,
 };
 use ecommerce_common::api::rpc::dto::OrderReplicaPaymentDto;
-use ecommerce_common::constant::ProductType;
 
 use ecommerce_common::error::AppErrorCode;
 use ecommerce_common::model::BaseProductIdentity;
@@ -49,7 +48,6 @@ fn ut_saved_oline_set(mock_order_id: String, mock_usr_id: u32) -> OrderLineModel
     let line = OrderLineModel {
         pid: BaseProductIdentity {
             store_id: mock_seller_id,
-            product_type: ProductType::Item,
             product_id: 6741,
         },
         rsv_total: PayLineAmountModel {
@@ -97,7 +95,6 @@ fn ut_charge_req_dto(mock_order_id: String) -> ChargeReqDto {
             lines: vec![ChargeAmountOlineDto {
                 seller_id: 379,
                 product_id: 6741,
-                product_type: ProductType::Item,
                 quantity: 6,
                 amount: PayAmountDto {
                     unit: "300.01".to_string(),
@@ -127,7 +124,6 @@ fn ut_orderpay_replica(mock_usr_id: u32, mock_order_id: String) -> Vec<u8> {
         lines: vec![OrderLinePayDto {
             seller_id: mock_seller_id,
             product_id: 6741,
-            product_type: ProductType::Item,
             reserved_until,
             quantity: 6,
             amount: PayAmountDto {

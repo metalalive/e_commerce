@@ -2,7 +2,6 @@ use rust_decimal::Decimal;
 use std::collections::HashMap;
 
 use ecommerce_common::api::dto::CurrencyDto;
-use ecommerce_common::constant::ProductType;
 
 use crate::api::web::dto::{ReportChargeLineRespDto, ReportChargeRespDto, ReportTimeRangeDto};
 
@@ -20,7 +19,6 @@ pub enum ReportModelError {
 
 #[derive(Hash, Eq, PartialEq)]
 struct ReportChargeLineKey {
-    product_type: ProductType,
     product_id: u64,
     currency: CurrencyDto, // currency applied by merchant at that time
 }
@@ -41,8 +39,8 @@ pub struct MerchantReportChargeModel {
 
 impl ReportChargeLineKey {
     #[rustfmt::skip]
-    fn new(product_type:ProductType, product_id:u64, curr_label:&CurrencyDto) -> Self{
-        Self { product_type, product_id, currency: curr_label.clone() }
+    fn new(product_id:u64, curr_label:&CurrencyDto) -> Self {
+        Self { product_id, currency: curr_label.clone() }
     }
 }
 
@@ -96,7 +94,7 @@ impl MerchantReportChargeModel {
                     errors.push(e);
                     return None;
                 }
-                let key = ReportChargeLineKey::new(pid.product_type, pid.product_id, &curr_label);
+                let key = ReportChargeLineKey::new(pid.product_id, &curr_label);
                 let entry = self.linemap.entry(key).or_default();
                 rate.checked_mul(amt_orig.total)
                     .map(|amt_seller| {
@@ -143,8 +141,8 @@ impl From<(ReportChargeLineKey, ReportChargeLineEntry)> for ReportChargeLineResp
     fn from(value: (ReportChargeLineKey, ReportChargeLineEntry)) -> Self {
         let (k ,v) = value;
         Self {
-            product_type: k.product_type, product_id: k.product_id,
-            currency: k.currency, amount: v.amount.to_string(), qty: v.qty
+            product_id: k.product_id, currency: k.currency,
+            amount: v.amount.to_string(), qty: v.qty
         }
     }
 }

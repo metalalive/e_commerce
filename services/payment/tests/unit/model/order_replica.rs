@@ -5,7 +5,6 @@ use ecommerce_common::api::dto::{
     CurrencyDto, CurrencySnapshotDto, OrderCurrencySnapshotDto, OrderLinePayDto,
     OrderSellerCurrencyDto, PayAmountDto,
 };
-use ecommerce_common::constant::ProductType;
 use ecommerce_common::model::BaseProductIdentity;
 
 use payment::model::{OrderLineModelSet, OrderModelError, PayLineAmountError};
@@ -34,16 +33,16 @@ pub(super) fn ut_setup_order_replica(
     reserved_until: DateTime<FixedOffset>,
 ) -> OrderLineModelSet {
     let mock_lines = [
-        (140, ProductType::Item, 1005, 20, "17.15", "343", Duration::minutes(6)),
-        (141, ProductType::Package, 1006, 11, "21.0", "231.0", Duration::minutes(4)),
-        (142, ProductType::Item, 1007, 25, "22.09", "552.25", Duration::minutes(10)),
-        (143, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
+        (140,  1005, 20, "17.15", "343", Duration::minutes(6)),
+        (141,  1006, 11, "21.0", "231.0", Duration::minutes(4)),
+        (142,  1007, 25, "22.09", "552.25", Duration::minutes(10)),
+        (143,  1008, 18, "10.0", "180.0", Duration::minutes(9)),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: (reserved_until + d.6).to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
+        seller_id: d.0, product_id: d.1, quantity: d.2,
+        amount: PayAmountDto {unit: d.3.to_string(), total: d.4.to_string()},
+        reserved_until: (reserved_until + d.5).to_rfc3339(),
     })
     .collect::<Vec<_>>();
     let mock_currency_snapshot = {
@@ -107,20 +106,19 @@ fn convert_qty_zero() {
     let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(3);
     let mock_lines = [
-        (140, ProductType::Item, 1005, 0, 17, 85),
-        (141, ProductType::Package, 1006, 11, 21, 231),
-        (142, ProductType::Item, 1007, 10, 23, 230),
+        (140, 1005, 0, "17", "85"),
+        (141, 1006, 11, "21", "231"),
+        (142, 1007, 10, "23", "230"),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
         seller_id: d.0,
-        product_id: d.2,
-        product_type: d.1,
+        product_id: d.1,
         reserved_until: reserved_until.to_rfc3339(),
-        quantity: d.3,
+        quantity: d.2,
         amount: PayAmountDto {
-            unit: d.4.to_string(),
-            total: d.5.to_string(),
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
         },
     })
     .collect::<Vec<_>>();
@@ -132,7 +130,6 @@ fn convert_qty_zero() {
         assert_eq!(e.len(), 1);
         if let OrderModelError::ZeroQuantity(pid) = &e[0] {
             assert_eq!(pid.store_id, 140);
-            assert_eq!(pid.product_type, ProductType::Item);
             assert_eq!(pid.product_id, 1005);
         } else {
             assert!(false);
@@ -140,33 +137,35 @@ fn convert_qty_zero() {
     }
 } // end of fn convert_qty_zero
 
-#[rustfmt::skip]
 #[test]
 fn convert_line_expired() {
     let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
     let now = Local::now().fixed_offset();
     let mock_lines = [
-        (140, ProductType::Item, 1005, 5, 17, 85, Duration::minutes(3)),
-        (141, ProductType::Package, 1006, 11, 21, 231, Duration::seconds(19)),
-        (142, ProductType::Item, 1007, 10, 23, 230, Duration::seconds(-2)),
+        (140, 1005, 5, "17", "85", 180),
+        (141, 1006, 11, "21", "231", 19),
+        (142, 1007, 10, "23", "230", -2),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0,  product_id: d.2,  product_type: d.1,
-        reserved_until: (now + d.6).to_rfc3339(),  quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
+        seller_id: d.0,
+        product_id: d.1,
+        quantity: d.2,
+        reserved_until: (now + Duration::seconds(d.5)).to_rfc3339(),
+        amount: PayAmountDto {
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
+        },
     })
     .collect::<Vec<_>>();
-    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140,141,142]);
-    let result = OrderLineModelSet::try_from(
-        (mock_oid, mock_usr_id, mock_lines, mock_currency_snapshot)
-    );
+    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140, 141, 142]);
+    let result =
+        OrderLineModelSet::try_from((mock_oid, mock_usr_id, mock_lines, mock_currency_snapshot));
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.len(), 1);
         if let Some(OrderModelError::RsvExpired(pid)) = e.first() {
             assert_eq!(pid.store_id, 142);
-            assert_eq!(pid.product_type, ProductType::Item);
             assert_eq!(pid.product_id, 1007);
         } else {
             assert!(false);
@@ -180,15 +179,15 @@ fn convert_missing_currency_1() {
     let (mock_buyer_id, mock_oid) = (149, "9a800f71b".to_string());
     let now = Local::now().fixed_offset();
     let mock_lines = [
-        (141, ProductType::Package, 1006, 11, "21.0", "231.0", Duration::minutes(4)),
-        (142, ProductType::Item, 1007, 25, "22.0", "550.0", Duration::minutes(10)),
-        (143, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
+        (141, 1006, 11, "21.0", "231.0", Duration::minutes(4)),
+        (142, 1007, 25, "22.0", "550.0", Duration::minutes(10)),
+        (143, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: (now + d.6).to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
+        seller_id: d.0, product_id: d.1, quantity: d.2,
+        reserved_until: (now + d.5).to_rfc3339(),
+        amount: PayAmountDto {unit: d.3.to_string(), total: d.4.to_string()},
     })
     .collect::<Vec<_>>();
     let mock_currency_snapshot = {
@@ -212,27 +211,30 @@ fn convert_missing_currency_1() {
     }
 } // end of fn convert_missing_currency_1
 
-#[rustfmt::skip]
 #[test]
 fn convert_missing_currency_2() {
     let (mock_buyer_id, mock_oid) = (158, "9a800f71b".to_string());
     let now = Local::now().fixed_offset();
     let mock_lines = [
-        (143, ProductType::Package, 1006, 11, "21.0", "231.0", Duration::minutes(4)),
-        (144, ProductType::Item, 1007, 25, "22.0", "550.0", Duration::minutes(10)),
-        (145, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
+        (143, 1006, 11, "21.0", "231.0", 4),
+        (144, 1007, 25, "22.0", "550.0", 10),
+        (145, 1008, 18, "10.0", "180.0", 9),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: (now + d.6).to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
+        seller_id: d.0,
+        product_id: d.1,
+        quantity: d.2,
+        reserved_until: (now + Duration::minutes(d.5)).to_rfc3339(),
+        amount: PayAmountDto {
+            unit: d.3.to_string(),
+            total: d.4.to_string(),
+        },
     })
     .collect::<Vec<_>>();
-    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![143,145]);
-    let result = OrderLineModelSet::try_from(
-        (mock_oid, mock_buyer_id, mock_lines, mock_currency_snapshot)
-    );
+    let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![143, 145]);
+    let result =
+        OrderLineModelSet::try_from((mock_oid, mock_buyer_id, mock_lines, mock_currency_snapshot));
     assert!(result.is_err());
     if let Err(e) = result {
         assert_eq!(e.len(), 1);
@@ -251,14 +253,14 @@ fn convert_corrupted_currency_rate() {
     let (mock_buyer_id, mock_oid) = (558, "9a800f71b".to_string());
     let now = Local::now().fixed_offset();
     let mock_lines = [
-        (146, ProductType::Item, 1007, 25, "22.0", "550.0", Duration::minutes(10)),
-        (147, ProductType::Package, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
+        (146, 1007, 25, "22.0", "550.0", Duration::minutes(10)),
+        (147, 1008, 18, "10.0", "180.0", Duration::minutes(9)),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: (now + d.6).to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
+        seller_id: d.0, product_id: d.1, quantity: d.2,
+        reserved_until: (now + d.5).to_rfc3339(),
+        amount: PayAmountDto {unit: d.3.to_string(), total: d.4.to_string()},
     })
     .collect::<Vec<_>>();
     let mock_currency_snapshot = {
@@ -287,17 +289,17 @@ fn convert_invalid_amount() {
     let (mock_usr_id, mock_oid) = (456, "xyz987".to_string());
     let reserved_until = Local::now().fixed_offset() + Duration::minutes(3);
     let mock_lines = [
-        (140, ProductType::Item, 1005, 5, "L7", "85"),
-        (141, ProductType::Package, 1006, 11, "24", "261"),
-        (142, ProductType::Item, 1007, 10, "23", "230s"),
-        (143, ProductType::Package, 1011, u32::MAX, "1230045600789001230045600", "2900"),
-        (144, ProductType::Item, 1027, 4, "200.013", "800.052"),
+        (140, 1005, 5, "L7", "85"),
+        (141, 1006, 11, "24", "261"),
+        (142, 1007, 10, "23", "230s"),
+        (143, 1011, u32::MAX, "1230045600789001230045600", "2900"),
+        (144, 1027, 4, "200.013", "800.052"),
     ]
     .into_iter()
     .map(|d| OrderLinePayDto {
-        seller_id: d.0, product_id: d.2, product_type: d.1,
-        reserved_until: reserved_until.to_rfc3339(), quantity: d.3,
-        amount: PayAmountDto {unit: d.4.to_string(), total: d.5.to_string()},
+        seller_id: d.0, product_id: d.1, quantity: d.2,
+        reserved_until: reserved_until.to_rfc3339(),
+        amount: PayAmountDto {unit: d.3.to_string(), total: d.4.to_string()},
     })
     .collect::<Vec<_>>();
     let mock_currency_snapshot = ut_default_currency_snapshot_dto(vec![140, 141, 142, 143, 144]);
@@ -308,28 +310,28 @@ fn convert_invalid_amount() {
         assert_eq!(es.len(), 5);
         es.into_iter().map(|e| match e {
             OrderModelError::InvalidAmount(pid, pe) => {
-                let BaseProductIdentity { store_id, product_type, product_id } = pid;
-                match (store_id, product_type, product_id) {
-                    (141, ProductType::Package, 1006) =>
+                let BaseProductIdentity { store_id, product_id } = pid;
+                match (store_id, product_id) {
+                    (141, 1006) =>
                         if let PayLineAmountError::Mismatch(amount, qty) = pe {
                             assert_eq!(amount.unit.as_str(), "24");
                             assert_eq!(amount.total.as_str(), "261");
                             assert_eq!(qty, 11u32);
                         } else { assert!(false); },
-                    (140, ProductType::Item, 1005) =>
+                    (140, 1005) =>
                         if let PayLineAmountError::ParseUnit(value, _reason) = pe {
                             assert_eq!(value.as_str(), "L7");
                         } else { assert!(false); },
-                    (142, ProductType::Item, 1007) =>
+                    (142, 1007) =>
                         if let PayLineAmountError::ParseTotal(value, _reason) = pe {
                             assert_eq!(value.as_str(), "230s");
                         } else { assert!(false); },
-                    (143, ProductType::Package, 1011) =>
+                    (143, 1011) =>
                         if let PayLineAmountError::Overflow(amt_unit, qty) = pe {
                             assert_eq!(qty, u32::MAX);
                             assert_eq!(amt_unit.as_str(), "1230045600789001230045600");
                         } else { assert!(false); },
-                    (144, ProductType::Item, 1027) =>
+                    (144, 1027) =>
                         if let PayLineAmountError::PrecisionUnit(amt_unit, scale) = pe {
                             assert_eq!(amt_unit.as_str(), "200.013");
                             assert_eq!(scale, (2, 3));
